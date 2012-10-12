@@ -1,2 +1,1 @@
-
-from pyfr.backends.cuda import CudaBackend
+# -*- coding: utf-8 -*-

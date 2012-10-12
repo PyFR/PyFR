@@ -5,7 +5,7 @@
 Demonstrates key backend concepts
 """
 
-from pyfr.backends import CudaBackend
+from pyfr.backends.cuda import CudaBackend
 import numpy as np
 
 # Number of rows and columns in our matrices
