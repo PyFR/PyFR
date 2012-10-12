@@ -16,15 +16,9 @@ class CudaPackingKernels(CudaKernelProvider):
         return dict(view_order=view.order,
                     mat_ctype=npdtype_to_ctype(view.viewof.dtype))
 
-    def _packunpack(self, op, mpipreqfn, view, pid, tag):
-        # Get the CUDA pack/unpack kernel
+    def _packunpack(self, op, view):
+        # Get the CUDA pack/unpack kernel from the pack module
         fn = self._get_function('pack', op, 'PPiiiP', self._tplopts(view))
-
-        # Determine the MPI data type the view packs to/unpacks from
-        mpitype = npdtype_to_mpitype(view.viewof.dtype)
-
-        # Create a persistent MPI request to send/recv the pack
-        preq = mpipreqfn((view.hbuf, mpitype), pid, tag)
 
         # Compute the grid and thread-block size
         grid, block = self._get_2d_grid_block(fn, view.nrow, view.ncol)
@@ -44,19 +38,31 @@ class CudaPackingKernels(CudaKernelProvider):
                 if op == 'pack':
                     cuda.memcpy_dtoh_async(view.hbuf, view.gbuf, stream)
 
+        return PackUnpackKernel()
+
+    def _sendrecv(self, view, mpipreqfn, pid, tag):
+        # Determine the MPI data type the view packs to/unpacks from
+        mpitype = npdtype_to_mpitype(view.viewof.dtype)
+
+        # Create a persistent MPI request to send/recv the pack
+        preq = mpipreqfn((view.hbuf, mpitype), pid, tag)
+
         class SendRecvPackKernel(CudaMPIKernel):
             def __call__(self, reqlist):
                 # Start the request and append us to the list of requests
                 preq.Start()
                 reqlist.append(preq)
 
-        return PackUnpackKernel(), SendRecvPackKernel()
+        return SendRecvPackKernel()
 
-    def pack(self, view, mpicomm, pid, tag):
-        # Delegate; returning (PackUnpackKernel, SendRecvPackKernel)
-        return self._packunpack('pack', mpicomm.Send_init, view, pid, tag)
+    def pack(self, view):
+        return self._packunpack('pack', view)
 
-    def unpack(self, view, mpicomm, pid, tag):
-        # Delegate; returning (SendRecvPackKernel, PackUnpackKernel)
-        return self._packunpack('unpack', mpicomm.Recv_init, view, pid,
-                                tag)[::-1]
+    def send_pack(self, view, mpicomm, pid, tag):
+        return self._sendrecv(view, mpicomm.Send_init, pid, tag)
+
+    def recv_pack(self, view, mpicomm, pid, tag):
+        return self._sendrecv(view, mpicomm.Recv_init, pid, tag)
+
+    def unpack(self, view):
+        return self._packunpack('unpack', view)
