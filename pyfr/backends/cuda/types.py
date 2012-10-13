@@ -8,7 +8,7 @@ import pyfr.backends.base as base
 from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 class _CudaBase2D(object):
-    def __init__(self, backend, nrow, ncol, initval=None, tags={}):
+    def __init__(self, backend, nrow, ncol, initval=None, tags=set()):
         self._nrow = nrow
         self._ncol = ncol
         self.tags = tags
@@ -91,21 +91,21 @@ class CudaMatrix(_CudaBase2D, base.Matrix):
 
 
 class CudaMatrixBank(base.MatrixBank):
-    def __init__(self, backend, nrow, ncol, nbanks, initval=None, tags={}):
+    def __init__(self, backend, nrow, ncol, nbanks, initval=None, tags=set()):
         banks = [backend.matrix(nrow, ncol, initval, tags)
                  for i in xrange(0, nbanks)]
         super(CudaMatrixBank, self).__init__(banks)
 
 
 class CudaConstMatrix(CudaMatrix, base.ConstMatrix):
-    def __init__(self, backend, initval, tags={}):
+    def __init__(self, backend, initval, tags=set()):
         nrow, ncol = initval.shape
         return super(CudaMatrix, self).__init__(backend, nrow, ncol,
                                                 initval, tags)
 
 
 class CudaSparseMatrix(object):
-    def __init__(self, backend, initval, tags={}):
+    def __init__(self, backend, initval, tags=set()):
         raise NotImplementedError('SparseMatrix todo!')
 
 
@@ -113,7 +113,7 @@ class CudaView(_CudaBase2D, base.View):
     order = 'F'
     dtype = np.intp
 
-    def __init__(self, backend, mapping, tags={}):
+    def __init__(self, backend, mapping, tags=set()):
         nrow, ncol = mapping.shape[:2]
 
         # Get the different matrices which we map onto
@@ -144,7 +144,7 @@ class CudaView(_CudaBase2D, base.View):
 
 
 class CudaMPIView(CudaView, base.MPIView):
-    def __init__(self, backend, mapping, tags={}):
+    def __init__(self, backend, mapping, tags=set()):
         # Call the standard view constructor
         super(CudaMPIView, self).__init__(backend, mapping, tags)
 

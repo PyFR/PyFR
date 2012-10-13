@@ -8,7 +8,7 @@ class Backend(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def matrix(self, nrow, ncol, initval=None, tags={}):
+    def matrix(self, nrow, ncol, initval=None, tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
         If an inital value is specified the shape of the provided
@@ -28,7 +28,7 @@ class Backend(object):
         pass
 
     @abstractmethod
-    def matrix_bank(self, nrow, ncol, nbanks, initval=None, tags={}):
+    def matrix_bank(self, nrow, ncol, nbanks, initval=None, tags=set()):
         """Creates a bank of matrices each *nrow* by *ncol*
 
         A matrix bank can be thought of as a sequence of structurally
@@ -55,7 +55,7 @@ class Backend(object):
         pass
 
     @abstractmethod
-    def const_matrix(self, initval, tags={}):
+    def const_matrix(self, initval, tags=set()):
         """Creates a constant matrix from *initval*
 
         This should be preferred over :meth:`matrix` when it is known
@@ -76,7 +76,7 @@ class Backend(object):
         pass
 
     @abstractmethod
-    def sparse_matrix(self, initval, tags={}):
+    def sparse_matrix(self, initval, tags=set()):
         """Creates a sparse matrix from *initval*
 
         A *sparse matrix* is a special type of constant matrix
@@ -93,7 +93,7 @@ class Backend(object):
         pass
 
     @abstractmethod
-    def view(self, mapping, tags={}):
+    def view(self, mapping, tags=set()):
         """Uses mapping to create a view of mat
 
         :param mat: Matrix to create a view of.
@@ -108,7 +108,7 @@ class Backend(object):
         pass
 
     @abstractmethod
-    def mpi_view(self, mapping, tags={}):
+    def mpi_view(self, mapping, tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
         pass
 
