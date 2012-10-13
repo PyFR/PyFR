@@ -28,9 +28,9 @@ addkern = be.kernel('ipadd', m1, 2.0, m2)
 # Get a kernel queue from the backend
 q = be.queue()
 
-# Execute the `addkern` kernel twice
-q % addkern
-q % addkern
+# Execute the `addkern` kernel twice (or q % [addkern, addkern])
+q % [addkern]
+q % [addkern]
 
 # Get m1 back as a numpy array
 m1_n = m1.get()

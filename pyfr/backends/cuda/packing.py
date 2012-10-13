@@ -14,11 +14,11 @@ class CudaPackingKernels(CudaKernelProvider):
 
     def _tplopts(self, view):
         return dict(view_order=view.order,
-                    mat_ctype=npdtype_to_ctype(view.viewof.dtype))
+                    mat_ctype=npdtype_to_ctype(view.refdtype))
 
     def _packunpack(self, op, view):
         # Get the CUDA pack/unpack kernel from the pack module
-        fn = self._get_function('pack', op, 'PPiiiP', self._tplopts(view))
+        fn = self._get_function('pack', op, 'PiiiP', self._tplopts(view))
 
         # Compute the grid and thread-block size
         grid, block = self._get_2d_grid_block(fn, view.nrow, view.ncol)
@@ -30,9 +30,9 @@ class CudaPackingKernels(CudaKernelProvider):
                     cuda.memcpy_htod_async(view.gbuf, view.hbuf, stream)
 
                 # Call the CUDA kernel (pack or unpack)
-                fn.prepared_async_call(grid, block, stream, view.viewof.data,
-                                       view.data, view.nrow, view.ncol,
-                                       view.leaddim, view.gbuf)
+                fn.prepared_async_call(grid, block, stream, view.data,
+                                       view.nrow, view.ncol, view.leaddim,
+                                       view.gbuf)
 
                 # If we have been packing then copy the buffer to the host
                 if op == 'pack':
@@ -42,7 +42,7 @@ class CudaPackingKernels(CudaKernelProvider):
 
     def _sendrecv(self, view, mpipreqfn, pid, tag):
         # Determine the MPI data type the view packs to/unpacks from
-        mpitype = npdtype_to_mpitype(view.viewof.dtype)
+        mpitype = npdtype_to_mpitype(view.refdtype)
 
         # Create a persistent MPI request to send/recv the pack
         preq = mpipreqfn((view.hbuf, mpitype), pid, tag)

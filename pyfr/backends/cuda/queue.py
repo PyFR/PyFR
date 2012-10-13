@@ -18,10 +18,13 @@ class CudaMPIKernel(CudaKernel):
     pass
 
 
-def _is_compute_item(item):
+def _is_kernel(item):
+    return isinstance(item, CudaKernel)
+
+def _is_compute_kernel(item):
     return isinstance(item, CudaComputeKernel)
 
-def _is_mpi_item(item):
+def _is_mpi_kernel(item):
     return isinstance(item, CudaMPIKernel)
 
 class CudaQueue(object):
@@ -36,27 +39,24 @@ class CudaQueue(object):
         # Items waiting to be executed
         self._items = collections.deque()
 
-    def __lshift__(self, item):
-        self._items.append(item)
-        return self
+    def __lshift__(self, items):
+        self._items.extend(items)
 
-    def __mod__(self, item):
+    def __mod__(self, items):
         self.run()
-        self._items.append(item)
+        self._items.extend(items)
         self.run()
-        return self
 
     def _empty(self):
         return not self._items
 
     def _exec_item(self, item):
-        if _is_compute_item(item):
+        if _is_compute_kernel(item):
             item(self._stream)
-        elif _is_mpi_item(item):
+        elif _is_mpi_kernel(item):
             item(self._mpireqs)
         else:
             item()
-
         self._last = item
 
     def _exec_next(self):
@@ -74,16 +74,16 @@ class CudaQueue(object):
             self._exec_item(self._items.popleft())
 
     def _wait(self):
-        if _is_compute_item(self._last):
+        if _is_compute_kernel(self._last):
             self._stream.synchronize()
-        elif _is_mpi_item(self._last):
+        elif _is_mpi_kernel(self._last):
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
         self._last = None
 
     def _at_sequence_point(self, item):
-        if (_is_compute_item(self._last) and not _is_compute_item(item)) or\
-           (_is_mpi_item(self._last) and not _is_mpi_item(item)):
+        if (_is_compute_kernel(self._last) and not _is_compute_kernel(item)) or\
+           (_is_mpi_kernel(self._last) and not _is_mpi_kernel(item)):
             return True
         else:
             return False
