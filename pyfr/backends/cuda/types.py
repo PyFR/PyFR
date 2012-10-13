@@ -119,8 +119,6 @@ class CudaView(_CudaBase2D, base.View):
         # Get the different matrices which we map onto
         self._mats = list(np.unique(mapping[:,:,0]))
 
-        print len(self._mats)
-
         # Extract the data type and item size from the first matrix
         self.refdtype = self._mats[0].dtype
         self.refitemsize = self._mats[0].itemsize
@@ -143,7 +141,6 @@ class CudaView(_CudaBase2D, base.View):
     @staticmethod
     def _toptr(mat, i, j):
         return np.intp(int(mat.data) + mat.offsetof(i, j))
-
 
 
 class CudaMPIView(CudaView, base.MPIView):
