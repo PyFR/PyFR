@@ -21,7 +21,8 @@ install_requires = [
     'pycuda >= 2011.2',
     'mpi4py >= 1.3',
     'mako',
-    'numpy']
+    'numpy',
+    'sympy']
 
 # Info
 classifiers = [
