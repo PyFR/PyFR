@@ -40,11 +40,11 @@ class CudaQueue(object):
         self._items = collections.deque()
 
     def __lshift__(self, items):
-        self._items.extend(items)
+        self._items.extend(i for i in items if i is not None)
 
     def __mod__(self, items):
         self.run()
-        self._items.extend(items)
+        self << items
         self.run()
 
     def _empty(self):
