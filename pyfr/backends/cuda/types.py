@@ -60,6 +60,9 @@ class _CudaBase2D(object):
         return self.pitch*i + j*self.itemsize if self.order == 'C' else\
                self.pitch*j + i*self.itemsize
 
+    def addrof(self, i, j):
+        return np.intp(int(self.data) + self.offsetof(i, j))
+
     @property
     def nrow(self):
         return self._nrow
@@ -133,14 +136,11 @@ class CudaView(_CudaBase2D, base.View):
 
 
         # Convert the (mat, row, col) triplet to a device pointer
-        mappingptr = np.apply_along_axis(lambda x: self._toptr(*x), 2, mapping)
+        mappingptr = np.apply_along_axis(lambda x: x[0].addrof(x[1], x[2]),
+                                         2, mapping)
 
         # Create a matrix on the GPU of these pointers
         super(CudaView, self).__init__(backend, nrow, ncol, mappingptr, tags)
-
-    @staticmethod
-    def _toptr(mat, i, j):
-        return np.intp(int(mat.data) + mat.offsetof(i, j))
 
 
 class CudaMPIView(CudaView, base.MPIView):
