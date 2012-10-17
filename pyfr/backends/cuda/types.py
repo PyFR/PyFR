@@ -30,18 +30,9 @@ class _CudaBase2D(object):
 
         # Process any initial values
         if initval is not None:
-            # Check the sizes match up
-            if initval.shape != (nrow, ncol):
-                raise ValueError('Initial matrix has invalid dimensions')
+            self._set(initval)
 
-            # Convert
-            nary = np.asanyarray(initval, dtype=self.dtype, order=self.order)
-
-            # Copy
-            memcpy2d_htod(self.data, nary, mindimsz, self.pitch, mindimsz,
-                          self.majdim)
-
-    def get(self):
+    def _get(self):
         # Allocate an empty buffer
         buf = np.empty((self.nrow, self.ncol), dtype=self.dtype,
                        order=self.order)
@@ -51,6 +42,16 @@ class _CudaBase2D(object):
                       self.mindim*self.itemsize, self.majdim)
 
         return buf
+
+    def _set(self, ary):
+        if ary.shape != (self.nrow, self.ncol):
+            raise ValueError('Matrix has invalid dimensions')
+
+        nary = np.asanyarray(ary, dtype=self.dtype, order=self.order)
+
+        # Copy
+        memcpy2d_htod(self.data, nary, self.mindim*self.itemsize,
+                      self.pitch, self.mindim*self.itemsize, self.majdim)
 
     def offsetof(self, i, j):
         if i >= self._nrow or j >= self._ncol:
@@ -91,6 +92,12 @@ class _CudaBase2D(object):
 class CudaMatrix(_CudaBase2D, base.Matrix):
     order = 'F'
     dtype = np.float64
+
+    def get(self):
+        self._get()
+
+    def set(self, ary):
+        self._set(ary)
 
 
 class CudaMatrixBank(base.MatrixBank):

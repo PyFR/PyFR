@@ -171,7 +171,10 @@ class _MatrixBase(object):
 class Matrix(_MatrixBase):
     """Matrix abstract base class
     """
-    pass
+    @abstractmethod
+    def set(self, ary):
+        """Sets the contents of the matrix to be *ary*"""
+        pass
 
 
 class ConstMatrix(_MatrixBase):
@@ -204,6 +207,10 @@ class MatrixBank(_MatrixBase, Sequence):
     def get(self):
         """Contents of the current bank as an *numpy.ndarray*"""
         return self._curr.get()
+
+    def set(self, ary):
+        """Sets the contents of the current bank to be *ary*"""
+        self._curr.set(ary)
 
     @property
     def nrow(self):
