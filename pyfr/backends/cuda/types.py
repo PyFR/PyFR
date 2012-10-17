@@ -110,8 +110,8 @@ class CudaMatrixBank(base.MatrixBank):
 class CudaConstMatrix(CudaMatrix, base.ConstMatrix):
     def __init__(self, backend, initval, tags=set()):
         nrow, ncol = initval.shape
-        return super(CudaMatrix, self).__init__(backend, nrow, ncol,
-                                                initval, tags)
+        return super(CudaConstMatrix, self).__init__(backend, nrow, ncol,
+                                                     initval, tags)
 
 
 class CudaSparseMatrix(object):
