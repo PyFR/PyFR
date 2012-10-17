@@ -6,7 +6,7 @@ from pyfr.backends.base import Backend
 
 from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixBank,
                                       CudaConstMatrix, CudaSparseMatrix,
-                                      CudaView, CudaMPIView)
+                                      CudaView, CudaMPIMatrix, CudaMPIView)
 
 from pyfr.backends.cuda.packing import CudaPackingKernels
 from pyfr.backends.cuda.cublas import CudaCublasKernels
@@ -32,6 +32,9 @@ class CudaBackend(Backend):
 
     def sparse_matrix(self, *args, **kwargs):
         return CudaSparseMatrix(self, *args, **kwargs)
+
+    def mpi_matrix(self, *args, **kwargs):
+        return CudaMPIMatrix(self, *args, **kwargs)
 
     def view(self, *args, **kwargs):
         return CudaView(self, *args, **kwargs)

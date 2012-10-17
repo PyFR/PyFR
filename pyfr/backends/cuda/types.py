@@ -150,14 +150,26 @@ class CudaView(_CudaBase2D, base.View):
         super(CudaView, self).__init__(backend, nrow, ncol, mappingptr, tags)
 
 
-class CudaMPIView(CudaView, base.MPIView):
+class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
+    def __init__(self, backend, nrow, ncol, initval=None, tags=set()):
+        # Ensure that our CUDA buffer will not be padded
+        ntags = tags | {'nopad'}
+
+        # Call the standard matrix constructor
+        super(CudaMPIMatrix, self).__init__(backend, nrow, ncol, initval,
+                                            ntags)
+
+        # Allocate a page-locked buffer on the host for MPI to send/recv from
+        self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
+                                           self.dtype, self.order)
+
+
+class CudaMPIView(base.MPIView):
     def __init__(self, backend, mapping, tags=set()):
-        # Call the standard view constructor
-        super(CudaMPIView, self).__init__(backend, mapping, tags)
+        nrow, ncol = mapping.shape[:2]
 
-        # Allocate a packing buffer on the GPU
-        self.gbuf = cuda.mem_alloc(self.nrow*self.ncol*self.refitemsize)
+        # Create a normal CUDA view
+        self.view = backend.view(mapping, tags)
 
-        # Allocate an equiv page-locked buffer on the host for copying
-        self.hbuf = cuda.pagelocked_empty((self.nrow, self.ncol),
-                                          self.refdtype, self.order)
+        # Now create an MPI matrix so that the view contents may be packed
+        self.mpimat = backend.mpi_matrix(nrow, ncol, None, tags)

@@ -53,6 +53,10 @@ matrix multiplication::
     :members:
     :inherited-members:
 
+.. autoclass:: pyfr.backends.base.MPIMatrix
+    :members:
+    :inherited-members:
+
 .. autoclass:: pyfr.backends.base.MatrixBank()
     :members:
     :inherited-members:

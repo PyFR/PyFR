@@ -55,6 +55,26 @@ class Backend(object):
         pass
 
     @abstractmethod
+    def mpi_matrix(self, nrow, ncol, initval=None, tags=set()):
+        """Creates a matrix which can be exchanged over MPI
+
+        Since an MPI Matrix *is a* :class:`~pyfr.backends.base.Matrix`
+        it can be used in *any* kernel which accepts a regular Matrix.
+
+        :param nrow: Number of rows.
+        :param ncol: Number of columns.
+        :param initval: Initial value of the matrix.
+        :param tags: Implementation-specific metadata.
+
+        :type nrow: int
+        :type ncol: int
+        :type initval: numpy.ndarray, optional
+        :type tags: set of str, optional
+        :rtype: :class:`~pyfr.backends.base.MPIMatrix`
+        """
+        pass
+
+    @abstractmethod
     def const_matrix(self, initval, tags=set()):
         """Creates a constant matrix from *initval*
 
@@ -184,6 +204,11 @@ class ConstMatrix(_MatrixBase):
 
 class SparseMatrix(_MatrixBase):
     """Sparse matrix abstract base class"""
+    pass
+
+
+class MPIMatrix(Matrix):
+    """MPI matrix abstract base class"""
     pass
 
 
