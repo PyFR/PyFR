@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import functools
+import itertools
+
 import cPickle
 
 from mpi4py import MPI
@@ -38,3 +40,6 @@ def npdtype_to_ctype(dtype):
 _mpitype_map = { np.float32: MPI.FLOAT, np.float64: MPI.DOUBLE }
 def npdtype_to_mpitype(dtype):
     return _mpitype_map[np.dtype(dtype).type]
+
+def ndrange(*args):
+    return itertools.product(*map(xrange, args))

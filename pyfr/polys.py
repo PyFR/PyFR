@@ -27,3 +27,7 @@ def lobatto_points(n):
 
     roots = polyroots([float(c) for c in coeffs])
     return [-1.0] + [float(r) for r in roots] + [1.0]
+
+def sympeval(poly, symbols, vals):
+    """Evaluates a SymPy polynomial"""
+    return float(poly.eval(dict(zip(dims, vals))))
