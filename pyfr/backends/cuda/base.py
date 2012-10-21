@@ -33,6 +33,10 @@ class CudaBackend(Backend):
     def sparse_matrix(self, *args, **kwargs):
         return CudaSparseMatrix(self, *args, **kwargs)
 
+    def _is_sparse(self, mat, tags):
+        # Currently, no support for sparse matrices
+        return False
+
     def mpi_matrix(self, *args, **kwargs):
         return CudaMPIMatrix(self, *args, **kwargs)
 

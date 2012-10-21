@@ -112,6 +112,20 @@ class Backend(object):
         """
         pass
 
+    def auto_const_sparse_matrix(self, initval, tags=set()):
+        """Creates either a constant or sparse matrix from *initval*
+        """
+        if self._is_sparse(initval, tags):
+            return self.sparse_matrix(initval, tags)
+        else:
+            return self.const_matrix(initval, tags)
+
+    @abstractmethod
+    def _is_sparse(self, mat, tags):
+        """Determines if a *mat* is sparse or not
+        """
+        pass
+
     @abstractmethod
     def view(self, mapping, tags=set()):
         """Uses mapping to create a view of mat
