@@ -31,6 +31,13 @@ def gauss_lobatto_points(n):
     roots = mp.polyroots([float(c) for c in coeffs])
     return [-1.0] + [float(r) for r in roots] + [1.0]
 
+def gauss_chebyshev_points(n):
+    """Returns the Chebyshev quadrature points for order *n*
+
+    These are given by cos((2i - 1)/(2n) * pi) for i = 1..n
+    """
+    return [float(sy.cos((2*i - 1)*sy.pi/(2*n))) for i in xrange(n, 0, -1)]
+
 def sympeval(poly, symbols, vals):
     """Evaluates a SymPy polynomial"""
     return float(poly.eval(dict(zip(dims, vals))))
