@@ -8,7 +8,7 @@ import pyfr.backends.base as base
 from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 class _CudaBase2D(object):
-    def __init__(self, backend, nrow, ncol, initval=None, tags=set()):
+    def __init__(self, backend, nrow, ncol, initval, tags):
         self._nrow = nrow
         self._ncol = ncol
         self.tags = tags
@@ -101,21 +101,21 @@ class CudaMatrix(_CudaBase2D, base.Matrix):
 
 
 class CudaMatrixBank(base.MatrixBank):
-    def __init__(self, backend, nrow, ncol, nbanks, initval=None, tags=set()):
-        banks = [backend.matrix(nrow, ncol, initval, tags)
-                 for i in xrange(0, nbanks)]
+    def __init__(self, backend, nrow, ncol, nbanks, initval, tags):
+        banks = [backend._matrix(nrow, ncol, initval, tags)
+                 for i in xrange(nbanks)]
         super(CudaMatrixBank, self).__init__(banks)
 
 
 class CudaConstMatrix(CudaMatrix, base.ConstMatrix):
-    def __init__(self, backend, initval, tags=set()):
+    def __init__(self, backend, initval, tags):
         nrow, ncol = initval.shape
         return super(CudaConstMatrix, self).__init__(backend, nrow, ncol,
                                                      initval, tags)
 
 
 class CudaSparseMatrix(object):
-    def __init__(self, backend, initval, tags=set()):
+    def __init__(self, backend, initval, tags):
         raise NotImplementedError('SparseMatrix todo!')
 
 
@@ -123,7 +123,7 @@ class CudaView(_CudaBase2D, base.View):
     order = 'F'
     dtype = np.intp
 
-    def __init__(self, backend, mapping, tags=set()):
+    def __init__(self, backend, mapping, tags):
         nrow, ncol = mapping.shape[:2]
 
         # Get the different matrices which we map onto
@@ -151,7 +151,7 @@ class CudaView(_CudaBase2D, base.View):
 
 
 class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
-    def __init__(self, backend, nrow, ncol, initval=None, tags=set()):
+    def __init__(self, backend, nrow, ncol, initval, tags):
         # Ensure that our CUDA buffer will not be padded
         ntags = tags | {'nopad'}
 
@@ -165,7 +165,7 @@ class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
 
 
 class CudaMPIView(base.MPIView):
-    def __init__(self, backend, mapping, tags=set()):
+    def __init__(self, backend, mapping, tags):
         nrow, ncol = mapping.shape[:2]
 
         # Create a normal CUDA view
