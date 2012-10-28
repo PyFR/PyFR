@@ -19,8 +19,8 @@ def gauss_legendre_points(n):
     roots = mp.polyroots([float(c) for c in coeffs])
     return [float(r) for r in roots]
 
-def gauss_lobatto_points(n):
-    """Returns the Lobatto quadrature points for order *n*
+def gauss_legendre_lobatto_points(n):
+    """Returns the Gauss-Legendre-Lobatto quadrature points for order *n*
 
     These are defined as the roots of P'_(n-1) where P'_(n-1) is the
     first derivative of the n'th - 1 Legendre polynomial plus the
@@ -32,7 +32,7 @@ def gauss_lobatto_points(n):
     return [-1.0] + [float(r) for r in roots] + [1.0]
 
 def gauss_chebyshev_points(n):
-    """Returns the Chebyshev quadrature points for order *n*
+    """Returns the Gauss-Chebyshev quadrature points for order *n*
 
     These are given by cos((2i - 1)/(2n) * pi) for i = 1..n
     """
