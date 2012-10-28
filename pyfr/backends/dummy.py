@@ -30,11 +30,15 @@ class _DummyMatrix(_Dummy2DBase, base.Matrix):
 
 
 class _DummyConstMatrix(_Dummy2DBase, base.ConstMatrix):
-    pass
+    def __init__(self, initval, tags=set()):
+        nrow, ncol = initval.shape
+        super(_DummyConstMatrix, self).__init__(nrow, ncol, initval, tags)
 
 
 class _DummySparseMatrix(_Dummy2DBase, base.SparseMatrix):
-    pass
+    def __init__(self, initval, tags=set()):
+        nrow, ncol = initval.shape
+        super(_DummySparseMatrix, self).__init__(nrow, ncol, initval, tags)
 
 
 class _DummyMPIMatrix(_DummyMatrix, base.MPIMatrix):
