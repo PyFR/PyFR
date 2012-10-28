@@ -9,9 +9,10 @@ class _Dummy2DBase(object):
         self._nrow = nrow
         self._ncol = ncol
         self._tags = tags
+        self._data = initval if initval is not None else np.empty((nrow, ncol))
 
     def get(self):
-        return None
+        return self._data
 
     @property
     def nrow(self):
@@ -25,6 +26,7 @@ class _Dummy2DBase(object):
 class _DummyMatrix(_Dummy2DBase, base.Matrix):
     def set(self, arr):
         assert arr.shape == (self._nrow, self._ncol)
+        self._data = arr
 
 
 class _DummyConstMatrix(_Dummy2DBase, base.ConstMatrix):
