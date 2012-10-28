@@ -37,7 +37,3 @@ def gauss_chebyshev_points(n):
     These are given by cos((2i - 1)/(2n) * pi) for i = 1..n
     """
     return [float(sy.cos((2*i - 1)*sy.pi/(2*n))) for i in xrange(n, 0, -1)]
-
-def sympeval(poly, symbols, vals):
-    """Evaluates a SymPy polynomial"""
-    return float(poly.eval(dict(zip(dims, vals))))
