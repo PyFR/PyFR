@@ -16,40 +16,41 @@ from pyfr.backends.cuda.queue import CudaQueue
 
 class CudaBackend(Backend):
     def __init__(self):
+        super(CudaBackend, self).__init__()
         self._providers = [kprov(self) for kprov in [CudaSampleKernels,
                                                      CudaPackingKernels,
                                                      CudaCublasKernels]]
 
 
-    def matrix(self, *args, **kwargs):
+    def _matrix(self, *args, **kwargs):
         return CudaMatrix(self, *args, **kwargs)
 
-    def matrix_bank(self, *args, **kwargs):
+    def _matrix_bank(self, *args, **kwargs):
         return CudaMatrixBank(self, *args, **kwargs)
 
-    def const_matrix(self, *args, **kwargs):
+    def _const_matrix(self, *args, **kwargs):
         return CudaConstMatrix(self, *args, **kwargs)
 
-    def sparse_matrix(self, *args, **kwargs):
+    def _sparse_matrix(self, *args, **kwargs):
         return CudaSparseMatrix(self, *args, **kwargs)
 
     def _is_sparse(self, mat, tags):
         # Currently, no support for sparse matrices
         return False
 
-    def mpi_matrix(self, *args, **kwargs):
+    def _mpi_matrix(self, *args, **kwargs):
         return CudaMPIMatrix(self, *args, **kwargs)
 
-    def view(self, *args, **kwargs):
+    def _view(self, *args, **kwargs):
         return CudaView(self, *args, **kwargs)
 
-    def mpi_view(self, *args, **kwargs):
+    def _mpi_view(self, *args, **kwargs):
         return CudaMPIView(self, *args, **kwargs)
 
-    def queue(self):
+    def _queue(self):
         return CudaQueue()
 
-    def kernel(self, kname, *args, **kwargs):
+    def _kernel(self, kname, *args, **kwargs):
         for prov in reversed(self._providers):
             try:
                 return getattr(prov, kname)(*args, **kwargs)

@@ -67,19 +67,19 @@ class _DummyQueue(base.Queue):
         pass
 
 class DummyBackend(base.Backend):
-    def matrix(self, *args, **kwargs):
+    def _matrix(self, *args, **kwargs):
         return _DummyMatrix(*args, **kwargs)
 
-    def matrix_bank(self, *args, **kwargs):
+    def _matrix_bank(self, *args, **kwargs):
         return _DummyMatrixBank(*args, **kwargs)
 
-    def mpi_matrix(self, *args, **kwargs):
+    def _mpi_matrix(self, *args, **kwargs):
         return _DummyMPIMatrix(*args, **kwargs)
 
-    def const_matrix(self, *args, **kwargs):
+    def _const_matrix(self, *args, **kwargs):
         return _DummyConstMatrix(*args, **kwargs)
 
-    def sparse_matrix(self, *args, **kwargs):
+    def _sparse_matrix(self, *args, **kwargs):
         return _DummySparseMatrix(*args, **kwargs)
 
     def _is_sparse(self, mat, tags):
@@ -90,13 +90,13 @@ class DummyBackend(base.Backend):
         else:
             return False
 
-    def view(self, *args, **kwargs):
+    def _view(self, *args, **kwargs):
         return _DummyView(*args, **kwargs)
 
-    def mpi_view(self, *args, **kwargs):
+    def _mpi_view(self, *args, **kwargs):
         return _DummyMPIView(*args, **kwargs)
 
-    def kernel(self, name, *args, **kwargs):
+    def _kernel(self, name, *args, **kwargs):
         validateattr = '_validate_' + name
 
         # Check the kernel name
@@ -109,7 +109,7 @@ class DummyBackend(base.Backend):
 
         return _DummyKernel()
 
-    def queue(self, *args, **kwargs):
+    def _queue(self, *args, **kwargs):
         return _DummyQueue(*args, **kwargs)
 
     def runall(self, seq):

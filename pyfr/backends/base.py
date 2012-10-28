@@ -2,12 +2,25 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-from collections import Sequence
+from collections import Sequence, defaultdict
+from weakref import WeakSet
+
+def recordalloc(type):
+    def recordalloc_type(fn):
+        def newfn(self, *args, **kwargs):
+            rv = fn(self, *args, **kwargs)
+            self._allocs[type].add(rv)
+            return rv
+        return newfn
+    return recordalloc_type
 
 class Backend(object):
     __metaclass__ = ABCMeta
 
-    @abstractmethod
+    def __init__(self):
+        self._allocs = defaultdict(WeakSet)
+
+    @recordalloc('data')
     def matrix(self, nrow, ncol, initval=None, tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
@@ -25,9 +38,13 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.Matrix`
         """
-        pass
+        return self._matrix(nrow, ncol, initval, tags)
 
     @abstractmethod
+    def _matrix(self, nrow, ncol, initval, tags):
+        pass
+
+    @recordalloc('data')
     def matrix_bank(self, nrow, ncol, nbanks, initval=None, tags=set()):
         """Creates a bank of matrices each *nrow* by *ncol*
 
@@ -52,9 +69,13 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.MatrixBank`
         """
-        pass
+        return self._matrix_bank(nrow, ncol, nbanks, initval, tags)
 
     @abstractmethod
+    def _matrix_bank(self, nrow, ncol, nbanks, initval, tags):
+        pass
+
+    @recordalloc('data')
     def mpi_matrix(self, nrow, ncol, initval=None, tags=set()):
         """Creates a matrix which can be exchanged over MPI
 
@@ -72,9 +93,13 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.MPIMatrix`
         """
-        pass
+        return self._mpi_matrix(nrow, ncol, initval, tags)
 
     @abstractmethod
+    def _mpi_matrix(self, nrow, ncol, initval, tags):
+        pass
+
+    @recordalloc('data')
     def const_matrix(self, initval, tags=set()):
         """Creates a constant matrix from *initval*
 
@@ -93,9 +118,13 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.ConstMatrix`
         """
-        pass
+        return self._const_matrix(initval, tags)
 
     @abstractmethod
+    def _const_matrix(self, initval, tags):
+        pass
+
+    @recordalloc('data')
     def sparse_matrix(self, initval, tags=set()):
         """Creates a sparse matrix from *initval*
 
@@ -110,6 +139,10 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.SparseMatrix`
         """
+        return self._sparse_matrix(initval, tags)
+
+    @abstractmethod
+    def _sparse_matrix(self, initval, tags):
         pass
 
     def auto_const_sparse_matrix(self, initval, tags=set()):
@@ -126,7 +159,7 @@ class Backend(object):
         """
         pass
 
-    @abstractmethod
+    @recordalloc('data')
     def view(self, mapping, tags=set()):
         """Uses mapping to create a view of mat
 
@@ -139,14 +172,22 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.View`
         """
-        pass
+        return self._view(mapping, tags)
 
     @abstractmethod
+    def _view(self, mapping, tags):
+        pass
+
+    @recordalloc('data')
     def mpi_view(self, mapping, tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
-        pass
+        return self._mpi_view(mapping, tags)
 
     @abstractmethod
+    def _mpi_view(self, mapping, tags):
+        pass
+
+    @recordalloc('kern')
     def kernel(self, name, *args, **kwargs):
         """Locates and binds a kernel called *name*
 
@@ -160,14 +201,22 @@ class Backend(object):
 
         :rtype: :class:`~pyfr.backends.base.Kernel`
         """
-        pass
+        return self._kernel(name, *args, **kwargs)
 
     @abstractmethod
+    def _kernel(self, name, *args, **kwargs):
+        pass
+
+    @recordalloc('queue')
     def queue(self):
         """Creates a queue
 
         :rtype: :class:`~pyfr.backends.base.Queue`
         """
+        return self._queue()
+
+    @abstractmethod
+    def _queue(self):
         pass
 
     @abstractmethod
