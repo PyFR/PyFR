@@ -7,8 +7,8 @@ import sys
 
 # Python version
 if sys.version_info[:2] < (2,7):
-    print('PyFR requires Python 2.7 or newer.  Python {}.{} detected' %\
-          sys.version_info[:2])
+    print('PyFR requires Python 2.7 or newer.  Python {}.{} detected'\
+          .format(*sys.version_info[:2]))
     sys.exit(-1)
 
 # Modules
