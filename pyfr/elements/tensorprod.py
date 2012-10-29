@@ -141,7 +141,7 @@ class TensorProdBase(object):
                              .format(len(dims)))
 
         # Generate nsptsord equispaced points from (-1, 1)
-        pts1d = np.linspace(-1, 1, nsptsord+2)[1:-1]
+        pts1d = np.linspace(-1, 1, nsptsord)
 
         pts = cart_prod_points(pts1d, len(dims))
         basis = nodal_basis(pts1d, dims)
