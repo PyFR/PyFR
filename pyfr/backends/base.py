@@ -233,6 +233,11 @@ class Backend(object):
         """
         pass
 
+    @property
+    def nbytes(self):
+        """Number of data bytes currently allocated on the backend"""
+        return sum(d.nbytes for d in self._allocs['data'])
+
 
 class _MatrixBase(object):
     @abstractmethod
@@ -248,6 +253,11 @@ class _MatrixBase(object):
     @abstractproperty
     def ncol(self):
         """Number of columns"""
+        pass
+
+    @abstractproperty
+    def nbytes(self):
+        """Size in bytes"""
         pass
 
 
@@ -310,6 +320,10 @@ class MatrixBank(_MatrixBase, Sequence):
         """Number of columns"""
         return self._curr.ncol
 
+    @property
+    def nbytes(self):
+        return sum(m.nbytes for m in self._banks)
+
     def set_bank(self, idx):
         """Switches the currently active bank to *idx*"""
         self._curr = self._banks[idx]
@@ -318,6 +332,10 @@ class MatrixBank(_MatrixBase, Sequence):
 class View(object):
     """View abstract base class"""
     __metaclass__ = ABCMeta
+
+    @abstractproperty
+    def nbytes(self):
+        pass
 
 
 class MPIView(View):

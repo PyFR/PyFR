@@ -20,12 +20,14 @@ class _CudaBase2D(object):
             # Allocate a 2D array aligned to the major dimension
             self.data, self.pitch = cuda.mem_alloc_pitch(mindimsz, self.majdim,
                                                          self.itemsize)
+            self._nbytes = self.majdim*self.pitch
 
             # Ensure that the pitch is a multiple of itemsize
             assert (self.pitch % self.itemsize) == 0
         else:
             # Allocate a standard, tighly packed, array
-            self.data = cuda.mem_alloc(mindimsz*self.majdim)
+            self._nbytes = mindimsz*self.majdim
+            self.data = cuda.mem_alloc(self._nbytes)
             self.pitch = mindimsz
 
         # Process any initial values
@@ -71,6 +73,10 @@ class _CudaBase2D(object):
     @property
     def ncol(self):
         return self._ncol
+
+    @property
+    def nbytes(self):
+        return self._nbytes
 
     @property
     def itemsize(self):
@@ -173,3 +179,7 @@ class CudaMPIView(base.MPIView):
 
         # Now create an MPI matrix so that the view contents may be packed
         self.mpimat = backend.mpi_matrix(nrow, ncol, None, tags)
+
+    @property
+    def nbytes(self):
+        return self.view.nbytes + self.mpimat.nbytes

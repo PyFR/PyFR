@@ -22,6 +22,10 @@ class _Dummy2DBase(object):
     def ncol(self):
         return self._ncol
 
+    @property
+    def nbytes(self):
+        return self._data.nbytes
+
 
 class _DummyMatrix(_Dummy2DBase, base.Matrix):
     def set(self, arr):
