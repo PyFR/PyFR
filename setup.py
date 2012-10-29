@@ -14,7 +14,17 @@ if sys.version_info[:2] < (2,7):
 # Modules
 modules = [
     'pyfr.backends',
-    'pyfr.backends.cuda']
+    'pyfr.backends.cuda',
+    'pyfr.elements']
+
+# Tests
+tests = [
+    'pyfr.elements.tests']
+
+# Data
+package_data = {
+    'pyfr.backends.cuda': ['kernels/*'],
+    'pyfr.elements.tests': ['*.npz']}
 
 # Dependencies
 install_requires = [
@@ -28,7 +38,7 @@ install_requires = [
 classifiers = [
     'License :: OSI Approved :: BSD License',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 2.7'
+    'Programming Language :: Python :: 2.7',
     'Topic :: Scientific/Engineering']
 
 long_description = '''PyFR is a...'''
@@ -41,8 +51,8 @@ setup(
     author='Imperial College London',
     license='BSD',
     keywords='Math',
-    packages=['pyfr'] + modules,
-    package_data={'pyfr.backends.cuda': ['kernels/*']},
+    packages=['pyfr'] + modules + tests,
+    package_data=package_data,
     install_requires=install_requires,
     classifiers=classifiers
 )
