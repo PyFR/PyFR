@@ -15,7 +15,8 @@ if sys.version_info[:2] < (2,7):
 modules = [
     'pyfr.backends',
     'pyfr.backends.cuda',
-    'pyfr.elements']
+    'pyfr.elements',
+    'pyfr.scripts']
 
 # Tests
 tests = [
@@ -33,6 +34,13 @@ install_requires = [
     'mako',
     'numpy >= 1.6',
     'sympy >= 0.7.2']
+
+# Scripts
+console_scripts = [
+    'pyfr-mesh = pyfr.scripts.mesh:main',
+    'pyfr-ics = pyfr.scripts.ics:main',
+    'pyfr-run = pyfr.scripts.run:main',
+    'pyfr-postp = pyfr.scripts.postp:main']
 
 # Info
 classifiers = [
@@ -53,6 +61,7 @@ setup(
     keywords='Math',
     packages=['pyfr'] + modules + tests,
     package_data=package_data,
+    entry_points={'console_scripts': console_scripts},
     install_requires=install_requires,
     classifiers=classifiers
 )
