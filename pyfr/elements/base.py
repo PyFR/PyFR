@@ -169,37 +169,9 @@ class ElementsBase(object):
 
         return jac.reshape(-1, ndims, ndims)
 
+    @abstractmethod
     def _gen_smats(self, jac, retdets=False):
-        if jac.shape[-1] == 2:
-            return self._gen_smats_2d(jac, retdets)
-        else:
-            return self._gen_smats_3d(jac, retdets)
-
-    def _gen_smats_2d(self, jac, retdets=False):
-        a, b, c, d = [jac[:,i,j] for i,j in ndrange(2,2)]
-
-        smats = np.empty_like(jac)
-        smats[:,0,0], smats[:,0,1] =  d, -b
-        smats[:,1,0], smats[:,1,1] = -c,  a
-
-        if retdets:
-            return smats, a*c - b*d
-        else:
-            return smats
-
-    def _gen_smats_3d(self, jac, retdets=False):
-        smats = np.empty_like(jac)
-        smats[:,0,:] = np.cross(jac[:,:,1], jac[:,:,2])
-        smats[:,1,:] = np.cross(jac[:,:,2], jac[:,:,0])
-        smats[:,2,:] = np.cross(jac[:,:,0], jac[:,:,1])
-
-        if retdets:
-            # Exploit the fact that det(J) = x0 . (x1 ^ x2); J = [x0, x1, x2]
-            djacs = np.einsum('...i,...i', jac[:,:,0], smats[:,0,:])
-
-            return smats, djacs
-        else:
-            return smats
+        pass
 
     @abstractmethod
     def _gen_upts_basis(self, dims, order):
@@ -223,8 +195,34 @@ class ElementsBase2d(ElementsBase):
         super(ElementsBase2d, self).__init__(be, eles, sy.symbols('p q'),
                                              ndisubanks, ndivtconfbanks, cfg)
 
+    def _gen_smats(self, jac, retdets=False):
+        a, b, c, d = [jac[:,i,j] for i,j in ndrange(2,2)]
+
+        smats = np.empty_like(jac)
+        smats[:,0,0], smats[:,0,1] =  d, -b
+        smats[:,1,0], smats[:,1,1] = -c,  a
+
+        if retdets:
+            return smats, a*c - b*d
+        else:
+            return smats
+
 
 class ElementsBase3d(ElementsBase):
     def __init__(self, be, eles, ndisubanks, ndivtconfbanks, cfg):
         super(ElementsBase3d, self).__init__(be, eles, sy.symbols('p q r'),
                                              ndisubanks, ndivtconfbanks, cfg)
+
+    def _gen_smats(self, jac, retdets=False):
+        smats = np.empty_like(jac)
+        smats[:,0,:] = np.cross(jac[:,:,1], jac[:,:,2])
+        smats[:,1,:] = np.cross(jac[:,:,2], jac[:,:,0])
+        smats[:,2,:] = np.cross(jac[:,:,0], jac[:,:,1])
+
+        if retdets:
+            # Exploit the fact that det(J) = x0 . (x1 ^ x2); J = [x0, x1, x2]
+            djacs = np.einsum('...i,...i', jac[:,:,0], smats[:,0,:])
+
+            return smats, djacs
+        else:
+            return smats
