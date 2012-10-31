@@ -100,7 +100,7 @@ class CudaMatrix(_CudaBase2D, base.Matrix):
     dtype = np.float64
 
     def get(self):
-        self._get()
+        return self._get()
 
     def set(self, ary):
         self._set(ary)
