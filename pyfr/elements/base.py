@@ -12,9 +12,9 @@ class ElementsBase(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, be, eles, dims, ndisubanks, ndivtconfbanks, cfg):
+        self._be = be
         self._cfg = cfg
-
-        order = int(cfg.get('scheme', 'order'))
+        self._order = order = int(cfg.get('scheme', 'order'))
 
         # Interrogate eles to get our dimensions
         nspts, neles = eles.shape[:2]
@@ -65,6 +65,11 @@ class ElementsBase(object):
     def gen_disu_fpts_kern(self):
         return self._be.kernel('mul', self._m0, self._disu_upts,
                                out=self._disu_fpts)
+
+    def gen_tdisf_upts_kern(self):
+        gamma = float(self._cfg.get('constants', 'gamma'))
+        return self._be.kernel('tdisf_upts', self._disu_upts, gamma,
+                              out=self._tdisf_upts)
 
     def gen_divtdisf_upts_kern(self):
         return self._be.kernel('mul', self._m1, self._tdisf_upts,
