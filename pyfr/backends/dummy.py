@@ -124,7 +124,7 @@ class DummyBackend(base.Backend):
         for q in seq:
             assert isinstance(q, _DummyQueue)
 
-    def _validate_mul(self, a, b, out):
+    def _validate_mul(self, a, b, out, alpha=None, beta=None):
         assert a.nrow == out.nrow
         assert a.ncol == b.nrow
         assert b.ncol == out.ncol

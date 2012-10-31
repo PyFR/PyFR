@@ -145,7 +145,7 @@ class CudaCublasKernels(CudaKernelProvider):
         if pycuda.autoinit.context:
             _cublasDestroy(self._cublas)
 
-    def mul(self, a, b, out):
+    def mul(self, a, b, out, alpha=None, beta=None):
         # Ensure the matrices are compatible
         if a.order != b.order or a.order != out.order or\
            a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -161,13 +161,17 @@ class CudaCublasKernels(CudaKernelProvider):
             n, m, k = b.ncol, a.nrow, a.ncol
             A, B, C = b, a, out
 
+        # α and β factors for C = α*(A*B) + β*C
+        alpha_d = c_double(alpha) if alpha else self._one
+        beta_d = c_double(beta) if beta else self._zero
+
         class MulKernel(CudaComputeKernel):
             def __call__(iself, stream):
                 _cublasSetStream(self._cublas, stream.handle)
                 _cublasDgemm(self._cublas, CublasOp.NONE, CublasOp.NONE,
-                             n, m, k, byref(self._one),
+                             n, m, k, byref(alpha_d),
                              int(A.data), A.leaddim,
-                             int(B.data), B.leaddim, byref(self._zero),
+                             int(B.data), B.leaddim, byref(beta_d),
                              int(C.data), C.leaddim)
 
         return MulKernel()
