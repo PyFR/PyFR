@@ -129,11 +129,11 @@ class CudaView(_CudaBase2D, base.View):
     order = 'F'
     dtype = np.intp
 
-    def __init__(self, backend, mapping, tags):
-        nrow, ncol = mapping.shape[:2]
+    def __init__(self, backend, matmap, rcmap, tags):
+        nrow, ncol = matmap.shape
 
         # Get the different matrices which we map onto
-        self._mats = list(np.unique(mapping[:,:,0]))
+        self._mats = list(np.unique(matmap))
 
         # Extract the data type and item size from the first matrix
         self.refdtype = self._mats[0].dtype
@@ -147,13 +147,11 @@ class CudaView(_CudaBase2D, base.View):
             if m.dtype != self.refdtype:
                 raise TypeError('Mixed view matrix types are not supported')
 
-
-        # Convert the (mat, row, col) triplet to a device pointer
-        mappingptr = np.apply_along_axis(lambda x: x[0].addrof(x[1], x[2]),
-                                         2, mapping)
+        # Go from matrices and row/column indices to addresses
+        mapping = np.vectorize(lambda m, rc: m.addrof(*rc))(matmap, rcmap)
 
         # Create a matrix on the GPU of these pointers
-        super(CudaView, self).__init__(backend, nrow, ncol, mappingptr, tags)
+        super(CudaView, self).__init__(backend, nrow, ncol, mapping, tags)
 
 
 class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
@@ -171,11 +169,11 @@ class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
 
 
 class CudaMPIView(base.MPIView):
-    def __init__(self, backend, mapping, tags):
-        nrow, ncol = mapping.shape[:2]
+    def __init__(self, backend, matmap, rcmap, tags):
+        nrow, ncol = matmap.shape
 
         # Create a normal CUDA view
-        self.view = backend.view(mapping, tags)
+        self.view = backend.view(matmap, rcmap, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
         self.mpimat = backend.mpi_matrix(nrow, ncol, None, tags)

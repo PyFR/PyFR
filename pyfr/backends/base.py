@@ -160,11 +160,11 @@ class Backend(object):
         pass
 
     @recordalloc('data')
-    def view(self, mapping, tags=set()):
+    def view(self, matmap, rcmap, tags=set()):
         """Uses mapping to create a view of mat
 
-        :param mat: Matrix to create a view of.
-        :param mapping: Matrix of indicies, (mat, row, col).
+        :param matmap: Matrix of matrix objects.
+        :param rcmap: Matrix of (row, column) indicies.
         :param tags: Implementation-specific metadata.
 
         :type mat: :class:`~pyfr.backends.base.Matrix`
@@ -172,19 +172,19 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.View`
         """
-        return self._view(mapping, tags)
+        return self._view(matmap, rcmap, tags)
 
     @abstractmethod
-    def _view(self, mapping, tags):
+    def _view(self, matmap, rcmap, tags):
         pass
 
     @recordalloc('data')
-    def mpi_view(self, mapping, tags=set()):
+    def mpi_view(self, matmap, rcmap, tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
-        return self._mpi_view(mapping, tags)
+        return self._mpi_view(matmap, rcmap, tags)
 
     @abstractmethod
-    def _mpi_view(self, mapping, tags):
+    def _mpi_view(self, matmap, rcmap, tags):
         pass
 
     @recordalloc('kern')

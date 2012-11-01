@@ -55,12 +55,14 @@ class _DummyMatrixBank(base.MatrixBank):
         super(_DummyMatrixBank, self).__init__(mats)
 
 
-class _DummyView(_Dummy2DBase, base.View):
-    pass
+class _DummyView(base.View):
+    def __init__(self, matmap, rcmap, tags):
+        pass
 
 
-class _DummyMPIView(_DummyView, base.MPIView):
-    pass
+class _DummyMPIView(base.MPIView):
+    def __init__(self, matmap, rcmap, tags):
+        pass
 
 
 class _DummyKernel(base.Kernel):
