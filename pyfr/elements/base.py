@@ -11,7 +11,7 @@ import sympy as sy
 class ElementsBase(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, be, eles, dims, ndisubanks, ndivtconfbanks, cfg):
+    def __init__(self, be, eles, dims, nsubanks, cfg):
         self._be = be
         self._cfg = cfg
         self._order = order = int(cfg.get('scheme', 'order'))
@@ -37,8 +37,8 @@ class ElementsBase(object):
 
         # Generate the constant operator matrices
         m0 = self._gen_m0(dims, upts, ubasis, fpts)
-        m1 = self._gen_m1(dims, ubasis, fpts, normfpts)
-        m2 = self._gen_m2(dims, upts, ubasis)
+        m1 = self._gen_m1(dims, upts, ubasis)
+        m2 = self._gen_m2(dims, ubasis, fpts, normfpts)
         m3 = self._gen_m3(dims, upts, fbasis)
 
         djacupts, smatupts = self._gen_djac_smat_upts(dims, eles, sbasis, upts)
@@ -55,33 +55,36 @@ class ElementsBase(object):
         self._trans_fpts = be.const_matrix(transfpts)
 
         # Allocate general storage required for flux computation
-        self._disu_upts = be.matrix_bank(nupts, nvars*neles, ndisubanks)
-        self._disu_fpts = be.matrix(nfpts, nvars*neles)
-        self._tdisf_upts = be.matrix(nupts*ndims, nvars*neles)
-        self._normtcorf_fpts = be.matrix(nfpts, nvars*neles)
-        self._divtconf_upts = be.matrix_bank(nupts, nvars*neles, ndivtconfbanks)
+        self._scal_upts = [be.matrix(nupts, nvars*neles)
+                           for i in xrange(nsubanks)]
+        self._vect_upts = [be.matrix(nupts*ndims, nvars*neles)]
+        self._scal_fpts = [be.matrix(nfpts, nvars*neles)]
+
+        # Bank the scalar soln points (as required by the RK schemes)
+        self._scal_upts_inb = be.matrix_bank(self._scal_upts)
+        self._scal_upts_outb = be.matrix_bank(self._scal_upts)
 
 
     def gen_disu_fpts_kern(self):
-        return self._be.kernel('mul', self._m0, self._disu_upts,
-                               out=self._disu_fpts)
+        disu_upts, disu_fpts = self._scal_upts_inb, self._scal_fpts[0]
+        return self._be.kernel('mul', self._m0, disu_upts, disu_fpts)
 
     def gen_tdisf_upts_kern(self):
         gamma = float(self._cfg.get('constants', 'gamma'))
-        return self._be.kernel('tdisf_upts', self._disu_upts, gamma,
-                              out=self._tdisf_upts)
+        disu_upts, tdisf_upts = self._scal_upts_inb, self._vect_upts[0]
+        return self._be.kernel('tdisf_upts', disu_upts, gamma, tdisf_upts)
 
     def gen_divtdisf_upts_kern(self):
-        return self._be.kernel('mul', self._m1, self._tdisf_upts,
-                               out=self._divtconf_upts)
+        tdisf_upts, divtconf_upts = self._vect_upts[0], self._scal_upts_outb
+        return self._be.kernel('mul', self._m1, tdisf_upts, divtconf_upts)
 
     def gen_nrmtdisf_fpts_kern(self):
-        return self._be.kernel('mul', self._m2, self._tdisf_upts,
-                               out=self._nrmtcorf_fpts)
+        tdisf_upts, normtcorf_fpts = self._vect_upts[0], self._scal_fpts[0]
+        return self._be.kernel('mul', self._m2, tdisf_upts, normtcorf_fpts)
 
     def gen_divtconf_upts_kern(self):
-        return self._be.kernel('mul', self._m3, self._normtcorf_fpts,
-                               out=self._divtconf_upts)
+        normtcorf_fpts, divtconf_upts = self._scal_fpts[0], self._scal_upts_outb
+        return self._be.kernel('mul', self._m3, normtcorf_fpts, divtconf_upts)
 
     def _gen_m0(self, dims, upts, ubasis, fpts):
         """Discontinuous soln at upts to discontinuous soln at fpts"""
@@ -93,19 +96,7 @@ class ElementsBase(object):
 
         return m
 
-    def _gen_m1(self, dims, ubasis, fpts, normfpts):
-        """Trans discontinuous flux at upts to trans normal
-        discontinuous flux at fpts
-        """
-        m = np.empty((len(fpts), len(dims), len(ubasis)))
-
-        ubasis_l = [lambdify(dims, u) for u in ubasis]
-        for i,k in ndrange(len(fpts), len(ubasis)):
-            m[i,:,k] = normfpts[i,:]*ubasis_l[k](*fpts[i])
-
-        return m.reshape(len(fpts), -1)
-
-    def _gen_m2(self, dims, upts, ubasis):
+    def _gen_m1(self, dims, upts, ubasis):
         """Trans discontinuous flux at upts to trans divergence of
         trans discontinuous flux at upts
         """
@@ -117,6 +108,18 @@ class ElementsBase(object):
                 m[i,j,k] = p(*upts[i])
 
         return m.reshape(len(upts), -1)
+
+    def _gen_m2(self, dims, ubasis, fpts, normfpts):
+        """Trans discontinuous flux at upts to trans normal
+        discontinuous flux at fpts
+        """
+        m = np.empty((len(fpts), len(dims), len(ubasis)))
+
+        ubasis_l = [lambdify(dims, u) for u in ubasis]
+        for i,k in ndrange(len(fpts), len(ubasis)):
+            m[i,:,k] = normfpts[i,:]*ubasis_l[k](*fpts[i])
+
+        return m.reshape(len(fpts), -1)
 
     def _gen_m3(self, dims, upts, fbasis):
         """Trans normal correction flux at upts to trans divergence of
@@ -196,9 +199,9 @@ class ElementsBase(object):
 
 
 class ElementsBase2d(ElementsBase):
-    def __init__(self, be, eles, ndisubanks, ndivtconfbanks, cfg):
+    def __init__(self, be, eles, nsubanks, cfg):
         super(ElementsBase2d, self).__init__(be, eles, sy.symbols('p q'),
-                                             ndisubanks, ndivtconfbanks, cfg)
+                                             nsubanks, cfg)
 
     def _gen_smats(self, jac, retdets=False):
         a, b, c, d = [jac[:,i,j] for i,j in ndrange(2,2)]
@@ -214,9 +217,9 @@ class ElementsBase2d(ElementsBase):
 
 
 class ElementsBase3d(ElementsBase):
-    def __init__(self, be, eles, ndisubanks, ndivtconfbanks, cfg):
+    def __init__(self, be, eles, nsubanks, cfg):
         super(ElementsBase3d, self).__init__(be, eles, sy.symbols('p q r'),
-                                             ndisubanks, ndivtconfbanks, cfg)
+                                             nsubanks, cfg)
 
     def _gen_smats(self, jac, retdets=False):
         smats = np.empty_like(jac)

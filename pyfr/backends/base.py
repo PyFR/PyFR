@@ -44,35 +44,22 @@ class Backend(object):
     def _matrix(self, nrow, ncol, initval, tags):
         pass
 
-    @recordalloc('data')
-    def matrix_bank(self, nrow, ncol, nbanks, initval=None, tags=set()):
-        """Creates a bank of matrices each *nrow* by *ncol*
+    @recordalloc('banks')
+    def matrix_bank(self, mats, tags=set()):
+        """Creates a bank of matrices from *mats*
 
-        A matrix bank can be thought of as a sequence of structurally
-        identical matrices.  Each matrix in the bank is an
-        :class:`~pyfr.backends.base.Matrix` instance.
+        These matrices must be homogeneous.
 
-        It is expected that all kernels which accept a
-        :class:`~pyfr.backends.base.Matrix` instance will also accept
-        a matrix bank.
-
-        :param nrow: Number of rows.
-        :param ncol: Number of columns.
-        :param nbanks: Number of matrices to create for the bank.
-        :param initval: Initial value of the matrices.
+        :param mats: Matrices to bank.
         :param tags: Implementation-specific metadata.
 
-        :type nrow: int
-        :type ncol: int
-        :type nbanks: int
-        :type initval: numpy.ndarray, optional
-        :type tags: set of str, optional
+        :type mats: List of :class:`~pyfr.backends.base.Matrix`
         :rtype: :class:`~pyfr.backends.base.MatrixBank`
         """
-        return self._matrix_bank(nrow, ncol, nbanks, initval, tags)
+        return self._matrix_bank(mats, tags)
 
     @abstractmethod
-    def _matrix_bank(self, nrow, ncol, nbanks, initval, tags):
+    def _matrix_bank(self, mats, tags):
         pass
 
     @recordalloc('data')
@@ -319,10 +306,6 @@ class MatrixBank(_MatrixBase, Sequence):
     def ncol(self):
         """Number of columns"""
         return self._curr.ncol
-
-    @property
-    def nbytes(self):
-        return sum(m.nbytes for m in self._banks)
 
     def set_bank(self, idx):
         """Switches the currently active bank to *idx*"""

@@ -50,8 +50,7 @@ class _DummyMPIMatrix(_DummyMatrix, base.MPIMatrix):
 
 
 class _DummyMatrixBank(base.MatrixBank):
-    def __init__(self, nrow, ncol, nbanks, initval=None, tags=set()):
-        mats = [_DummyMatrix(nrow, ncol, initval, tags) for i in xrange(nbanks)]
+    def __init__(self, mats, tags=set()):
         super(_DummyMatrixBank, self).__init__(mats)
 
 

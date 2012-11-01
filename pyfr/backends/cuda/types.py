@@ -94,6 +94,10 @@ class _CudaBase2D(object):
     def leaddim(self):
         return self.pitch / self.itemsize
 
+    @property
+    def traits(self):
+        return self.leaddim, self.mindim, self.order, self.dtype
+
 
 class CudaMatrix(_CudaBase2D, base.Matrix):
     order = 'F'
@@ -107,10 +111,12 @@ class CudaMatrix(_CudaBase2D, base.Matrix):
 
 
 class CudaMatrixBank(base.MatrixBank):
-    def __init__(self, backend, nrow, ncol, nbanks, initval, tags):
-        banks = [backend._matrix(nrow, ncol, initval, tags)
-                 for i in xrange(nbanks)]
-        super(CudaMatrixBank, self).__init__(banks)
+    def __init__(self, backend, mats, tags):
+        for m in mats[1:]:
+            if m.traits != mats[0].traits:
+                raise ValueError('Matrices in a bank must be homogeneous')
+
+        super(CudaMatrixBank, self).__init__(mats)
 
 
 class CudaConstMatrix(CudaMatrix, base.ConstMatrix):
