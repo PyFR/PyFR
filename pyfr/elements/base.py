@@ -164,21 +164,6 @@ class ElementsBase(object):
 
         return pnormfpts, magpnormfpts
 
-    def _gen_trans_fpts(self, dims, eles, sbasis, fpts, normfpts):
-        jac = self._gen_jac_eles(dims, eles, sbasis, fpts)
-        smats = self._gen_smats(jac)
-
-        # Reshape (nfpts*neles, ndims, dims) => (nfpts, neles, ndims, ndims)
-        smats = smats.reshape(len(fpts), -1, len(dims), len(dims))
-
-        # We need to compute ||J|*[(J^{-1})^{T}.N]| where J is the
-        # Jacobian and N is the normal for each fpt.  Using
-        # J^{-1} = S/|J| where S are the smats, we have |S^{T}.N|.
-        tnormfpts = np.einsum('ijlk,il->ijk', smats, normfpts)
-        tnormfpts2 = np.einsum('...i,...i', tnormfpts, tnormfpts)
-
-        return np.sqrt(tnormfpts2)
-
     def _gen_jac_eles(self, dims, eles, basis, pts):
         nspts, neles, ndims = eles.shape
         npts = len(pts)
