@@ -41,24 +41,28 @@ class ElementsBase(object):
         m2 = self._gen_m2(dims, ubasis, fpts, normfpts)
         m3 = self._gen_m3(dims, upts, fbasis)
 
-        djacupts, smatupts = self._gen_djac_smat_upts(dims, eles, sbasis, upts)
-        transfpts = self._gen_trans_fpts(dims, eles, sbasis, fpts, normfpts)
-
         # Allocate these constant matrices on the backend
         self._m0 = be.auto_const_sparse_matrix(m0, tags={'M0'})
         self._m1 = be.auto_const_sparse_matrix(m1, tags={'M1'})
         self._m2 = be.auto_const_sparse_matrix(m2, tags={'M2'})
         self._m3 = be.auto_const_sparse_matrix(m3, tags={'M3'})
 
+        # Transform matrices at the soln points
+        djacupts, smatupts = self._gen_djac_smat_upts(dims, eles, sbasis, upts)
         self._djac_upts = be.const_matrix(djacupts)
         self._smat_upts = be.const_matrix(smatupts)
-        self._trans_fpts = be.const_matrix(transfpts)
+
+        # Normalized physical normals at the flux points; these are *not*
+        # allocated on the backend directly but are processed at the
+        # interfaces level (which handles allocation)
+        pnormfpts, magpnormfpts = self._gen_pnorm_fpts(dims, eles, sbasis,
+                                                       fpts, normfpts)
 
         # Allocate general storage required for flux computation
         self._scal_upts = [be.matrix(nupts, nvars*neles)
                            for i in xrange(nsubanks)]
-        self._vect_upts = [be.matrix(nupts*ndims, nvars*neles)]
-        self._scal_fpts = [be.matrix(nfpts, nvars*neles)]
+        self._vect_upts = be.matrix(nupts*ndims, nvars*neles)
+        self._scal_fpts = be.matrix(nfpts, nvars*neles)
 
         # Bank the scalar soln points (as required by the RK schemes)
         self._scal_upts_inb = be.matrix_bank(self._scal_upts)
@@ -66,24 +70,24 @@ class ElementsBase(object):
 
 
     def gen_disu_fpts_kern(self):
-        disu_upts, disu_fpts = self._scal_upts_inb, self._scal_fpts[0]
+        disu_upts, disu_fpts = self._scal_upts_inb, self._scal_fpts
         return self._be.kernel('mul', self._m0, disu_upts, disu_fpts)
 
     def gen_tdisf_upts_kern(self):
         gamma = float(self._cfg.get('constants', 'gamma'))
-        disu_upts, tdisf_upts = self._scal_upts_inb, self._vect_upts[0]
+        disu_upts, tdisf_upts = self._scal_upts_inb, self._vect_upts
         return self._be.kernel('tdisf_upts', disu_upts, gamma, tdisf_upts)
 
     def gen_divtdisf_upts_kern(self):
-        tdisf_upts, divtconf_upts = self._vect_upts[0], self._scal_upts_outb
+        tdisf_upts, divtconf_upts = self._vect_upts, self._scal_upts_outb
         return self._be.kernel('mul', self._m1, tdisf_upts, divtconf_upts)
 
     def gen_nrmtdisf_fpts_kern(self):
-        tdisf_upts, normtcorf_fpts = self._vect_upts[0], self._scal_fpts[0]
+        tdisf_upts, normtcorf_fpts = self._vect_upts, self._scal_fpts
         return self._be.kernel('mul', self._m2, tdisf_upts, normtcorf_fpts)
 
     def gen_divtconf_upts_kern(self):
-        normtcorf_fpts, divtconf_upts = self._scal_fpts[0], self._scal_upts_outb
+        normtcorf_fpts, divtconf_upts = self._scal_fpts, self._scal_upts_outb
         return self._be.kernel('mul', self._m3, normtcorf_fpts, divtconf_upts)
 
     def _gen_m0(self, dims, upts, ubasis, fpts):
@@ -139,6 +143,26 @@ class ElementsBase(object):
 
         neles, ndims = eles.shape[1:]
         return djacs.reshape(-1, neles), smats.reshape(-1, ndims**2)
+
+    def _gen_pnorm_fpts(self, dims, eles, sbasis, fpts, normfpts):
+        jac = self._gen_jac_eles(dims, eles, sbasis, fpts)
+        smats = self._gen_smats(jac)
+
+        # Reshape (nfpts*neles, ndims, dims) => (nfpts, neles, ndims, ndims)
+        smats = smats.reshape(len(fpts), -1, len(dims), len(dims))
+
+        # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
+        # Jacobian and N is the normal for each fpt.  Using
+        # J^{-1} = S/|J| where S are the smats, we have S^{T}.N.
+        pnormfpts = np.einsum('ijlk,il->ijk', smats, normfpts)
+
+        # Compute the length of these physical normals
+        magpnormfpts = np.sqrt(np.einsum('...i,...i', pnormfpts, pnormfpts))
+
+        # Use this length to normalize the physical normal vectors
+        pnormfpts = pnormfpts / magpnormfpts[...,None]
+
+        return pnormfpts, magpnormfpts
 
     def _gen_trans_fpts(self, dims, eles, sbasis, fpts, normfpts):
         jac = self._gen_jac_eles(dims, eles, sbasis, fpts)
