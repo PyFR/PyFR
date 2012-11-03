@@ -197,6 +197,11 @@ class ElementsBase(object):
     def _gen_norm_fpts(self, dims, order):
         pass
 
+    @abstractmethod
+    def name():
+        """Name of the element type e.g, 'hex' or 'tri'"""
+        pass
+
 
 class ElementsBase2d(ElementsBase):
     def __init__(self, be, eles, nsubanks, cfg):

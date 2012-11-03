@@ -194,3 +194,7 @@ class Hexahedra(TensorProdBase, ElementsBase3d):
 
         # Cube map to get the remaining face normals
         return cube_map_face(fonenorms).reshape(-1, 3)
+
+    @staticmethod
+    def name():
+        return 'hex'
