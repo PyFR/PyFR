@@ -153,6 +153,9 @@ class CudaView(_CudaBase2D, base.View):
             if m.dtype != self.refdtype:
                 raise TypeError('Mixed view matrix types are not supported')
 
+        # Fold rcmap from an N*M*2 array to a matrix of N*M 2-tuples
+        rcmap = rcmap.view(','.join((rcmap.dtype.char,)*2)).squeeze()
+
         # Go from matrices and row/column indices to addresses
         mapping = np.vectorize(lambda m, rc: m.addrof(*rc))(matmap, rcmap)
 
