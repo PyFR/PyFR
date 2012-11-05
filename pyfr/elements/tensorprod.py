@@ -105,15 +105,11 @@ def cube_map_face(fpoints):
 
     return mfpoints
 
-def diff_vcjh_correctionfn(k, c, sym):
-    # Expand shorthand forms of c for common schemes
-    ccommon = dict(dg='0',
-                   sd='2*k/((2*k+1)*(k+1)*(ak*k!)^2)',
-                   hu='2*(k+1)/(k*(2*k+1)*(ak*k!)^2)')
+def diff_vcjh_correctionfn(k, eta, sym):
+    # Expand shorthand forms of eta_k for common schemes
+    etacommon = dict(dg='0', sd='k/(k+1)', hu='(k+1)/k')
 
-    ak = sy.binomial(2*k, k)/2**k
-    c = sy.S(ccommon.get(c, c), locals=dict(k=k, ak=ak))
-    eta_k = c*(2*k + 1)*(ak*sy.factorial(k))**2/2
+    eta_k = sy.S(etacommon.get(eta, eta), locals=dict(k=k))
 
     lkm1, lk, lkp1 = [sy.legendre_poly(m, sym) for m in [k-1, k, k+1]]
 
@@ -174,8 +170,8 @@ class Hexahedra(TensorProdBase, ElementsBase3d):
             fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
 
 
-            c = self._cfg.get('scheme', 'c')
-            diffcorfn = diff_vcjh_correctionfn(order, c, sym)
+            eta = self._cfg.get('scheme', 'eta')
+            diffcorfn = diff_vcjh_correctionfn(order, eta, sym)
 
             for p,gfn in zip(fpair, diffcorfn):
                 if p in (0,3,4):

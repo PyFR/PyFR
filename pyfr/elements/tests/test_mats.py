@@ -14,10 +14,10 @@ def test_hex_gleg_ord2_csd():
     cfg = SafeConfigParser()
     cfg.add_section('scheme')
     cfg.set('scheme', 'order', '3')
-    cfg.set('scheme', 'c', 'sd')
+    cfg.set('scheme', 'eta', 'sd')
 
     # Hexahedra elements
-    hexes = Hexahedra(DummyBackend(), np.random.randn(8, 20, 3), 1, 1, cfg)
+    hexes = Hexahedra(DummyBackend(), np.random.randn(8, 20, 3), 1, cfg)
 
     # Load and import the reference values
     fobj = BytesIO(pkgutil.get_data(__name__, 'hex-gleg-ord3-csd.npz'))
