@@ -44,17 +44,20 @@ console_scripts = [
 
 # Info
 classifiers = [
-    'License :: OSI Approved :: BSD License',
+    'License :: OSI Approved :: New BSD License',
     'Programming Language :: Python',
     'Programming Language :: Python :: 2.7',
     'Topic :: Scientific/Engineering']
 
-long_description = '''PyFR is a...'''
+long_description = '''PyFR is a Python based high-order fluid flow
+solver based on energy stable Vincent-Castonguay-Jameson-Huynh schemes. 
+It is currently being developed in the department of Aeronautics at
+Imperial College London under the direction of Dr. Peter Vincent.'''
 
 setup(
     name='pyfr',
     version='0.1',
-    description='Flux reconstruction in Python',
+    description='Flux Reconstruction in Python',
     long_description=long_description,
     author='Imperial College London',
     license='BSD',
