@@ -1,0 +1,20 @@
+# Python crud
+*.pyc
+*.pyo
+
+# Distfiles related goo
+MANIFEST
+dist/
+build/
+
+# Documentation
+doc/build/
+
+# Mac OS X junk
+.DS_Store
+
+# Backup files
+*~
+
+# Hidden files
+.*
