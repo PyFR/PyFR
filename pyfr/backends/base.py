@@ -5,8 +5,13 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import Sequence, defaultdict
 from weakref import WeakSet
 
+from functools import wraps
+
+import numpy as np
+
 def recordalloc(type):
     def recordalloc_type(fn):
+        @wraps(fn)
         def newfn(self, *args, **kwargs):
             rv = fn(self, *args, **kwargs)
             self._allocs[type].add(rv)
@@ -17,7 +22,16 @@ def recordalloc(type):
 class Backend(object):
     __metaclass__ = ABCMeta
 
+    # Backend name
+    name = None
+
+    # SoA or AoS
+    packing = None
+
     def __init__(self):
+        assert self.name is not None
+        assert self.packing in ('SoA', 'AoS')
+
         self._allocs = defaultdict(WeakSet)
 
     @recordalloc('data')
@@ -147,7 +161,7 @@ class Backend(object):
         pass
 
     @recordalloc('data')
-    def view(self, matmap, rcmap, tags=set()):
+    def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Uses mapping to create a view of mat
 
         :param matmap: Matrix of matrix objects.
@@ -159,19 +173,23 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.View`
         """
-        return self._view(matmap, rcmap, tags)
+        if stridemap is None:
+            stridemap = np.ones(matmap.shape, dtype=np.int32)
+        return self._view(matmap, rcmap, stridemap, vlen, tags)
 
     @abstractmethod
-    def _view(self, matmap, rcmap, tags):
+    def _view(self, matmap, rcmap, stridemap, vlen, tags):
         pass
 
     @recordalloc('data')
-    def mpi_view(self, matmap, rcmap, tags=set()):
+    def mpi_view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
-        return self._mpi_view(matmap, rcmap, tags)
+        if stridemap is None:
+            stridemap = np.ones(matmap.shape, dtype=np.int32)
+        return self._mpi_view(matmap, rcmap, stridemap, vlen, tags)
 
     @abstractmethod
-    def _mpi_view(self, matmap, rcmap, tags):
+    def _mpi_view(self, matmap, rcmap, stridemap, vlen, tags):
         pass
 
     @recordalloc('kern')
@@ -225,6 +243,49 @@ class Backend(object):
         """Number of data bytes currently allocated on the backend"""
         return sum(d.nbytes for d in self._allocs['data'])
 
+    def from_aos_stride_to_native(self, a, s):
+        return (s, 1) if self.packing == 'AoS' else (1, a)
+
+    def from_soa_stride_to_native(self, s, a):
+        return (a, 1) if self.packing == 'SoA' else (1, s)
+
+    def _from_x_to_native(self, mat, cpacking):
+        # Reorder if packed differently
+        if self.packing != cpacking:
+            if mat.ndim == 3:
+                mat = mat.swapaxes(1, 2)
+            elif mat.ndim == 4:
+                mat = mat.swapaxes(0, 1).swapaxes(2, 3)
+
+        # Compact down to two dimensions
+        if mat.ndim == 3:
+            return mat.reshape(mat.shape[0], -1)
+        elif mat.ndim == 4:
+            return mat.reshape(mat.shape[0]*mat.shape[1], -1)
+
+
+    def _from_native_to_x(self, mat, nshape, npacking):
+        if self.packing != npacking:
+            n, nd = nshape, len(nshape)
+            if nd == 3:
+                mat = mat.reshape(n[0], n[2], n[1]).swapaxes(1, 2)
+            elif nd == 4:
+                mat = mat.reshape(n[1], n[0], n[3], n[2])\
+                         .swapaxes(0, 1).swapaxes(2, 3)
+
+        return mat.reshape(nshape)
+
+    def from_soa_to_native(self, mat):
+        return self._from_x_to_native(mat, 'SoA')
+
+    def from_aos_to_native(self, mat):
+        return self._from_x_to_native(mat, 'AoS')
+
+    def from_native_to_soa(self, mat, nshape):
+        return self._from_native_to_x(self, mat, nshape, 'SoA')
+
+    def from_native_to_aos(self, mat, nshape):
+        return self._from_native_to_x(mat, nshape, 'AoS')
 
 class _MatrixBase(object):
     @abstractmethod

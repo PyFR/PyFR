@@ -10,14 +10,17 @@ from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixBank,
 
 from pyfr.backends.cuda.packing import CudaPackingKernels
 from pyfr.backends.cuda.cublas import CudaCublasKernels
-from pyfr.backends.cuda.sample import CudaSampleKernels
+from pyfr.backends.cuda.pointwise import CudaPointwiseKernels
 
 from pyfr.backends.cuda.queue import CudaQueue
 
 class CudaBackend(Backend):
+    name = 'CUDA'
+    packing = 'SoA'
+
     def __init__(self):
         super(CudaBackend, self).__init__()
-        self._providers = [kprov(self) for kprov in [CudaSampleKernels,
+        self._providers = [kprov(self) for kprov in [CudaPointwiseKernels,
                                                      CudaPackingKernels,
                                                      CudaCublasKernels]]
 
@@ -53,9 +56,11 @@ class CudaBackend(Backend):
     def _kernel(self, kname, *args, **kwargs):
         for prov in reversed(self._providers):
             try:
-                return getattr(prov, kname)(*args, **kwargs)
-            except (AttributeError, TypeError, ValueError):
-                pass
+                kern = getattr(prov, kname)
+            except AttributeError:
+                continue
+
+            return kern(*args, **kwargs)
         else:
             raise PyFRInvalidKernelError("'{}' has no providers"\
                                          .format(kname))

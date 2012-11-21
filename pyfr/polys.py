@@ -8,7 +8,7 @@ try:
 except ImportError:
     import sympy.mpmath as mp
 
-def gauss_legendre_points(n):
+def gauss_legendre(n):
     """Returns the Gauss-Legendre quadrature points for order *n*
 
     These are defined as the roots of P_n where P_n is the n'th
@@ -19,7 +19,7 @@ def gauss_legendre_points(n):
     roots = mp.polyroots([float(c) for c in coeffs])
     return [float(r) for r in roots]
 
-def gauss_legendre_lobatto_points(n):
+def gauss_legendre_lobatto(n):
     """Returns the Gauss-Legendre-Lobatto quadrature points for order *n*
 
     These are defined as the roots of P'_(n-1) where P'_(n-1) is the
@@ -31,9 +31,16 @@ def gauss_legendre_lobatto_points(n):
     roots = mp.polyroots([float(c) for c in coeffs])
     return [-1.0] + [float(r) for r in roots] + [1.0]
 
-def gauss_chebyshev_points(n):
+def gauss_chebyshev(n):
     """Returns the Gauss-Chebyshev quadrature points for order *n*
 
     These are given by cos((2i - 1)/(2n) * pi) for i = 1..n
     """
     return [float(sy.cos((2*i - 1)*sy.pi/(2*n))) for i in xrange(n, 0, -1)]
+
+def gauss_chebyshev_lobatto(n):
+    """Returns the Gauss-Chebyshev-Lobatto quadrature points for order *n*
+
+    These are given by cos(i*pi/n) for i = 1..n
+    """
+    return [float(sy.cos((i-1)*sy.pi/(n-1))) for i in xrange(n, 0, -1)]

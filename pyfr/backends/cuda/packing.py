@@ -14,45 +14,56 @@ class CudaPackingKernels(CudaKernelProvider):
         pass
 
     def _packmodopts(self, mpiview):
-        return dict(view_order=mpiview.view.order,
-                    mat_ctype=npdtype_to_ctype(mpiview.mpimat.dtype))
+        return dict(dtype=npdtype_to_ctype(mpiview.mpimat.dtype),
+                    vlen=mpiview.view.vlen)
 
     def _packunpack_mpimat(self, op, mpimat):
         class PackUnpackKernel(CudaComputeKernel):
             if op == 'pack':
-                def __call__(self, stream):
-                    cuda.memcpy_dtoh_async(mpimat.hdata, mpimat.data, stream)
+                def __call__(self, scomp, scopy):
+                    cuda.memcpy_dtoh_async(mpimat.hdata, mpimat.data, scomp)
             else:
-                def __call__(self, stream):
-                    cuda.memcpy_htod_async(mpimat.data, mpimat.hdata, stream)
+                def __call__(self, scomp, scopy):
+                    cuda.memcpy_htod_async(mpimat.data, mpimat.hdata, scomp)
 
         return PackUnpackKernel()
 
     def _packunpack_mpiview(self, op, mpiview):
         # An MPI view is simply a regular view plus an MPI matrix
-        view, mpimat = mpiview.view, mpiview.mpimat
+        v, m = mpiview.view, mpiview.mpimat
 
         # Get the CUDA pack/unpack kernel from the pack module
-        fn = self._get_function('pack', op, 'PiiiP',
-                                self._packmodopts(mpiview))
+        fn = self._get_function('pack', op + '_view', 'iiPPPiii',
+                                tplparams=self._packmodopts(mpiview))
+
+        # We need all of the L1 we can get when packing
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         # Compute the grid and thread-block size
-        grid, block = self._get_2d_grid_block(fn, view.nrow, view.ncol)
+        grid, block = self._get_2d_grid_block(fn, v.nrow, v.ncol)
+
+        # Create a CUDA event
+        event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
 
         class ViewPackUnpackKernel(CudaComputeKernel):
-            def __call__(self, stream):
+            def __call__(self, scomp, scopy):
                 # If we are unpacking then copy the host buffer to the GPU
                 if op == 'unpack':
-                    cuda.memcpy_htod_async(mpimat.data, mpimat.hdata, stream)
+                    cuda.memcpy_htod_async(m.data, m.hdata, scopy)
+                    event.record(scopy)
+                    scomp.wait_for_event(event)
 
                 # Call the CUDA kernel (pack or unpack)
-                fn.prepared_async_call(grid, block, stream, view.data,
-                                       view.nrow, view.ncol, view.leaddim,
-                                       mpimat.data)
+                fn.prepared_async_call(grid, block, scomp, v.nrow, v.ncol,
+                                       v.mapping.data, v.strides.data, m.data,
+                                       v.mapping.leaddim, v.strides.leaddim,
+                                       m.leaddim)
 
                 # If we have been packing then copy the GPU buffer to the host
                 if op == 'pack':
-                    cuda.memcpy_dtoh_async(mpimat.hdata, mpimat.data, stream)
+                    event.record(scomp)
+                    scopy.wait_for_event(event)
+                    cuda.memcpy_dtoh_async(m.hdata, m.data, scopy)
 
         return ViewPackUnpackKernel()
 

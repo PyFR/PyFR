@@ -33,11 +33,40 @@ class memoize(object):
         return res
 
 
-_ctype_map = { np.float32: 'float', np.float64: 'double' }
+class proxylist(list):
+    def __init__(self, iterable):
+        super(proxylist, self).__init__(iterable)
+
+    def __getattr__(self, attr):
+        return proxylist([getattr(x, attr) for x in self])
+
+    def __call__(self, *args, **kwargs):
+        return proxylist([x(*args, **kwargs) for x in self])
+
+
+def all_subclasses(cls):
+    return cls.__subclasses__()\
+         + [g for s in cls.__subclasses__() for g in all_subclasses(s)]
+
+
+_npeval_syms = {'__builtins__': None,
+                'exp': np.exp, 'log': np.log,
+                'sin': np.sin, 'asin': np.arcsin,
+                'cos': np.cos, 'acos': np.arccos,
+                'tan': np.tan, 'atan': np.arctan, 'atan2': np.arctan2,
+                'abs': np.abs, 'pow': np.power, 'sqrt': np.sqrt,
+                'pi': np.pi}
+def npeval(expr, locals):
+    # Allow '^' to be used for exponentiation
+    expr = expr.replace('^', '**')
+
+    return eval(expr, _npeval_syms, locals)
+
+_ctype_map = {np.float32: 'float', np.float64: 'double'}
 def npdtype_to_ctype(dtype):
     return _ctype_map[np.dtype(dtype).type]
 
-_mpitype_map = { np.float32: MPI.FLOAT, np.float64: MPI.DOUBLE }
+_mpitype_map = {np.float32: MPI.FLOAT, np.float64: MPI.DOUBLE}
 def npdtype_to_mpitype(dtype):
     return _mpitype_map[np.dtype(dtype).type]
 

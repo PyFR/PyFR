@@ -7,10 +7,13 @@ import pyfr.backends.base as base
 
 from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
-class _CudaBase2D(object):
-    def __init__(self, backend, nrow, ncol, initval, tags):
+class CudaBase2D(object):
+    order = 'C'
+
+    def __init__(self, backend, dtype, nrow, ncol, initval, tags):
         self._nrow = nrow
         self._ncol = ncol
+        self.dtype = dtype
         self.tags = tags
 
         # Compute the size, in bytes, of the minor dimension
@@ -99,9 +102,10 @@ class _CudaBase2D(object):
         return self.leaddim, self.mindim, self.order, self.dtype
 
 
-class CudaMatrix(_CudaBase2D, base.Matrix):
-    order = 'F'
-    dtype = np.float64
+class CudaMatrix(CudaBase2D, base.Matrix):
+    def __init__(self, backend, nrow, ncol, initval, tags):
+        super(CudaMatrix, self).__init__(backend, np.float64, nrow, ncol,
+                                         initval, tags)
 
     def get(self):
         return self._get()
@@ -131,12 +135,20 @@ class CudaSparseMatrix(object):
         raise NotImplementedError('SparseMatrix todo!')
 
 
-class CudaView(_CudaBase2D, base.View):
-    order = 'F'
-    dtype = np.intp
+class CudaView(base.View):
+    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
+        self.nrow = nrow = matmap.shape[0]
+        self.ncol = ncol = matmap.shape[1]
+        self.vlen = vlen
 
-    def __init__(self, backend, matmap, rcmap, tags):
-        nrow, ncol = matmap.shape
+        # For vector views a stridemap is required
+        if vlen != 1 and np.any(stridemap == 0):
+            raise ValueError('Vector views require a non-zero stride map')
+
+        # Check all of the shapes match up
+        if matmap.shape != rcmap.shape[:2] or\
+           matmap.shape != stridemap.shape:
+            raise TypeError('Invalid matrix shapes')
 
         # Get the different matrices which we map onto
         self._mats = list(np.unique(matmap))
@@ -153,14 +165,17 @@ class CudaView(_CudaBase2D, base.View):
             if m.dtype != self.refdtype:
                 raise TypeError('Mixed view matrix types are not supported')
 
-        # Fold rcmap from an N*M*2 array to a matrix of N*M 2-tuples
-        rcmap = rcmap.view([('', rcmap.dtype)]*2).squeeze()
-
         # Go from matrices and row/column indices to addresses
-        mapping = np.vectorize(lambda m, rc: m.addrof(*rc))(matmap, rcmap)
+        r, c = rcmap[...,0], rcmap[...,1]
+        ptrmap = np.vectorize(lambda m, r, c: m.addrof(r, c))(matmap, r, c)
 
-        # Create a matrix on the GPU of these pointers
-        super(CudaView, self).__init__(backend, nrow, ncol, mapping, tags)
+        self.mapping = CudaBase2D(backend, np.intp, nrow, ncol, ptrmap, tags)
+        self.strides = CudaBase2D(backend, np.int32, nrow, ncol, stridemap,
+                                  tags)
+
+    @property
+    def nbytes(self):
+        return self.mapping.nbytes + self.strides.nbytes
 
 
 class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
@@ -178,14 +193,15 @@ class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
 
 
 class CudaMPIView(base.MPIView):
-    def __init__(self, backend, matmap, rcmap, tags):
-        nrow, ncol = matmap.shape
+    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
+        self.nrow = nrow = matmap.shape[0]
+        self.ncol = ncol = matmap.shape[1]
 
         # Create a normal CUDA view
-        self.view = backend.view(matmap, rcmap, tags)
+        self.view = backend._view(matmap, rcmap, stridemap, vlen, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix(nrow, ncol, None, tags)
+        self.mpimat = backend._mpi_matrix(nrow, ncol*vlen, None, tags)
 
     @property
     def nbytes(self):

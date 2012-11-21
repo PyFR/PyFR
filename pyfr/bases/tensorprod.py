@@ -1,20 +1,20 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.elements.base import ElementsBase3d
-
-from pyfr.polys import (gauss_legendre_points,
-                        gauss_legendre_lobatto_points)
+import itertools
 
 import numpy as np
 import sympy as sy
 
-import itertools
+from pyfr.bases.base import BasisBase
+from pyfr.polys import gauss_legendre, gauss_legendre_lobatto
+from pyfr.util import ndrange
+
 
 def cart_prod_points(points, ndim, compact=True):
     """Performs a cartesian product extension of *points* into *ndim*
 
     For idiosyncratic reason the counting order of indices is from
-    first to last, i.e, it is the first index the counts quickest,
+    first to last, i.e, it is the first index that counts quickest,
     followed by the second index and so on.
 
     **Example**
@@ -119,16 +119,18 @@ def diff_vcjh_correctionfn(k, eta, sym):
 
     return diffgl, diffgr
 
-class TensorProdBase(object):
-    def _gen_upts_basis(self, dims, order):
-        pts1d = gauss_legendre_points(order+1)
+class TensorProdBasis(object):
+    def get_upts(self):
+        pts1d = gauss_legendre(self._order + 1)
 
         pts = cart_prod_points(pts1d, 3)
-        basis = nodal_basis(pts1d, dims)
+        basis = nodal_basis(pts1d, self._dims)
 
         return pts, basis
 
-    def _gen_spts_basis(self, dims, nspts):
+    def get_spts(self, nspts):
+        dims, ndims = self._dims, len(self._dims)
+
         # Root the number of shape points to get the # in each dim
         nsptsord = sy.S(nspts)**(sy.S(1)/len(dims))
 
@@ -145,10 +147,36 @@ class TensorProdBase(object):
         return pts, basis
 
 
-class Hexahedra(TensorProdBase, ElementsBase3d):
-    def _gen_fpts_basis(self, dims, order):
+class HexBasis(TensorProdBasis, BasisBase):
+    name = 'hex'
+    ndims = 3
+
+    def __init__(self, *args, **kwargs):
+        super(HexBasis, self).__init__(*args, **kwargs)
+
+        k = self._order + 1
+
+        # Pre-compute all possible flux point rotation schemes
+        self._rschemes = rs = np.empty((6, 5), dtype=np.object)
+        for face,rtag in ndrange(*rs.shape):
+            fpts = np.arange(face*k*k, (face+1)*k*k).reshape(k,k)
+
+            if rtag == 0:
+                pass
+            elif rtag == 1:
+                fpts = np.fliplr(fpts)
+            elif rtag == 2:
+                fpts = np.fliplr(fpts)[::-1]
+            elif rtag == 3:
+                fpts = np.transpose(fpts)
+            elif rtag == 4:
+                fpts = np.transpose(fpts)[::-1]
+
+            rs[face,rtag] = fpts.ravel()
+
+    def get_fpts(self):
         # Get the 1D points
-        pts1d = gauss_legendre_points(order+1)
+        pts1d = gauss_legendre(self._order + 1)
 
         # Perform a 2D extension to get the (p,r) points of face one
         pts2d = cart_prod_points(pts1d, 2, compact=False)
@@ -165,13 +193,12 @@ class Hexahedra(TensorProdBase, ElementsBase3d):
         fbasis = np.empty(fpts.shape[:-1], dtype=np.object)
 
         # Pair up opposite faces with their associated (normal) dimension
-        for fpair,sym in zip([(4,2), (1,3), (0,5)], dims):
-            nbdims = [d for d in dims if d is not sym]
+        for fpair,sym in zip([(4,2), (1,3), (0,5)], self._dims):
+            nbdims = [d for d in self._dims if d is not sym]
             fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
 
-
             eta = self._cfg.get('scheme', 'eta')
-            diffcorfn = diff_vcjh_correctionfn(order, eta, sym)
+            diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
 
             for p,gfn in zip(fpair, diffcorfn):
                 if p in (0,3,4):
@@ -183,14 +210,16 @@ class Hexahedra(TensorProdBase, ElementsBase3d):
 
         return fpts.reshape(-1,3), fbasis.reshape(-1)
 
-    def _gen_norm_fpts(self, dims, order):
+    def get_norm_fpts(self):
         # Normals for face one are (0,-1,0)
-        fonenorms = np.zeros((order+1,)*2 + (3,))
+        fonenorms = np.zeros([self._order + 1]*2 + [3])
         fonenorms[...,1] = -1
 
         # Cube map to get the remaining face normals
         return cube_map_face(fonenorms).reshape(-1, 3)
 
-    @staticmethod
-    def name():
-        return 'hex'
+    def get_nfpts(self):
+        return [(self._order + 1)**2]*6
+
+    def get_fpts_for_face(self, face, rtag):
+        return self._rschemes[face, rtag]

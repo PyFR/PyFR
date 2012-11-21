@@ -1,33 +1,41 @@
 # -*- coding: utf-8 -*-
 
-<% minor_dim = 'nrow' if view_order == 'F' else 'ncol' %>
+#define IDX_OF(i, j, ldim) ((i)*(ldim) + (j))
 
-% if view_order == 'F':
-#define IDX_OFF(i, j, ldim) ((i) + (j)*(ldim))
-% else:
-#define IDX_OFF(i, j, ldim) ((i)*(ldim) + (j))
-% endif
-
-__global__ void pack(${mat_ctype} **view, int nrow, int ncol, int ldim,
-                     ${mat_ctype} *packbuf)
+__global__ void
+pack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri, ${dtype} *pmat,
+          int ldp, int lds, int ldm)
 {
-    const uint i = (blockIdx.x * blockDim.x) + threadIdx.x;
-    const uint j = (blockIdx.y * blockDim.y) + threadIdx.y;
+    uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    uint j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < nrow && j < ncol)
     {
-        packbuf[IDX_OFF(i, j, ${minor_dim})] = *view[IDX_OFF(i, j, ldim)];
+        ${dtype} *ptr = vptr[IDX_OF(i, j, ldp)];
+        uint stride = vstri[IDX_OF(i, j, lds)];
+
+    % for k in xrange(vlen):
+        pmat[IDX_OF(i, ${k}*ncol + j, ldm)] = ptr[${k}*stride];
+    % endfor
     }
 }
 
-__global__ void unpack(${mat_ctype} **view, int nrow, int ncol, int ldim,
-                       const ${mat_ctype} *unpackbuf)
+__global__ void
+unpack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri,
+            const ${dtype} *upmat, int ldp, int lds, int ldm)
 {
-    const uint i = (blockIdx.x * blockDim.x) + threadIdx.x;
-    const uint j = (blockIdx.y * blockDim.y) + threadIdx.y;
+    uint i = blockIdx.x * blockDim.x + threadIdx.x;
+    uint j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < nrow && j < ncol)
     {
-        *view[IDX_OFF(i, j, ldim)] = unpackbuf[IDX_OFF(i, j, ${minor_dim})];
+        ${dtype} *ptr = vptr[IDX_OF(i, j, ldp)];
+        uint stride = vstri[IDX_OF(i, j, lds)];
+
+    % for k in xrange(vlen):
+        ptr[${k}*stride] = upmat[IDX_OF(i, ${k}*ncol + j, ldm)];
+    % endfor
     }
 }
+
+#undef IDX_OF

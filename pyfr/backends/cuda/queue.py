@@ -33,7 +33,8 @@ class CudaQueue(object):
         self._last = None
 
         # CUDA stream and MPI request list
-        self._stream  = cuda.Stream()
+        self._stream_comp = cuda.Stream()
+        self._stream_copy = cuda.Stream()
         self._mpireqs = []
 
         # Items waiting to be executed
@@ -52,7 +53,7 @@ class CudaQueue(object):
 
     def _exec_item(self, item):
         if _is_compute_kernel(item):
-            item(self._stream)
+            item(self._stream_comp, self._stream_copy)
         elif _is_mpi_kernel(item):
             item(self._mpireqs)
         else:
@@ -75,7 +76,8 @@ class CudaQueue(object):
 
     def _wait(self):
         if _is_compute_kernel(self._last):
-            self._stream.synchronize()
+            self._stream_comp.synchronize()
+            self._stream_copy.synchronize()
         elif _is_mpi_kernel(self._last):
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []

@@ -2,13 +2,15 @@
 
 import sys
 
-from ctypes import CDLL, POINTER, byref, c_int, c_double, c_void_p
+from ctypes import CDLL, POINTER, byref, c_int, c_double, c_float, c_void_p
 from ctypes.util import find_library
 
 from pyfr.exc import PyFRError
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel
+
+import numpy as np
 
 # Find the CUBLAS library
 if sys.platform == 'linux2':
@@ -118,6 +120,17 @@ _cublasDgemm.argtypes = [cublas_handle_t,
                          c_void_p, c_void_p, c_int]
 _cublasDgemm.errcheck = _cublas_process_status
 
+# Wrap the cublasDgemm (double-precision general matrix multiply) function
+_cublasSgemm = _libcublas.cublasSgemm_v2
+_cublasSgemm.restype = c_int
+_cublasSgemm.argtypes = [cublas_handle_t,
+                         c_int, c_int,
+                         c_int, c_int, c_int,
+                         c_void_p, c_void_p, c_int,
+                         c_void_p, c_int,
+                         c_void_p, c_void_p, c_int]
+_cublasSgemm.errcheck = _cublas_process_status
+
 # Wrap the cublasDaxpy (y[i] += α*x[i]) function
 _cublasDaxpy = _libcublas.cublasDaxpy_v2
 _cublasDaxpy.restype  = c_int
@@ -125,12 +138,13 @@ _cublasDaxpy.argtypes = [cublas_handle_t, c_int, c_void_p,
                          c_void_p, c_int, c_void_p, c_int]
 _cublasDaxpy.errcheck = _cublas_process_status
 
+_cublasSaxpy = _libcublas.cublasSaxpy_v2
+_cublasSaxpy.restype  = c_int
+_cublasSaxpy.argtypes = [cublas_handle_t, c_int, c_void_p,
+                         c_void_p, c_int, c_void_p, c_int]
+_cublasSaxpy.errcheck = _cublas_process_status
 
 class CudaCublasKernels(CudaKernelProvider):
-    # Useful constants when making CUBLAS calls
-    _zero = c_double(0.0)
-    _one  = c_double(1.0)
-
     def __init__(self, backend):
         self._cublas = cublas_handle_t()
         _cublasCreate(byref(self._cublas))
@@ -145,11 +159,14 @@ class CudaCublasKernels(CudaKernelProvider):
         if pycuda.autoinit.context:
             _cublasDestroy(self._cublas)
 
-    def mul(self, a, b, out, alpha=None, beta=None):
+    def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
         if a.order != b.order or a.order != out.order or\
            a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
+
+        #if (a.dtype, b.dtype, out.dtype) != (np.float,)*3:
+        #    raise TypeError('Only double precision is supported')
 
         # CUBLAS expects inputs to be column-major (or Fortran order in numpy
         # parlance).  However as C = A*B => C^T = (A*B)^T = (B^T)*(A^T) with
@@ -162,17 +179,21 @@ class CudaCublasKernels(CudaKernelProvider):
             A, B, C = b, a, out
 
         # α and β factors for C = α*(A*B) + β*C
-        alpha_d = c_double(alpha) if alpha else self._one
-        beta_d = c_double(beta) if beta else self._zero
+        if a.dtype == np.float64:
+            cublasgemm = _cublasDgemm
+            alpha_ct, beta_ct = c_double(alpha), c_double(beta)
+        else:
+            cublasgemm = _cublasSgemm
+            alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(CudaComputeKernel):
-            def __call__(iself, stream):
-                _cublasSetStream(self._cublas, stream.handle)
-                _cublasDgemm(self._cublas, CublasOp.NONE, CublasOp.NONE,
-                             n, m, k, byref(alpha_d),
-                             int(A.data), A.leaddim,
-                             int(B.data), B.leaddim, byref(beta_d),
-                             int(C.data), C.leaddim)
+            def __call__(iself, scomp, scopy):
+                _cublasSetStream(self._cublas, scomp.handle)
+                cublasgemm(self._cublas, CublasOp.NONE, CublasOp.NONE,
+                           n, m, k, byref(alpha_ct),
+                           int(A.data), A.leaddim,
+                           int(B.data), B.leaddim, byref(beta_ct),
+                           int(C.data), C.leaddim)
 
         return MulKernel()
 
@@ -183,13 +204,15 @@ class CudaCublasKernels(CudaKernelProvider):
         if (y.majdim, y.mindim, y.leaddim) != (x.majdim, x.mindim, x.leaddim):
             raise TypeError('Incompatible matrix types for in-place addition')
 
-        elecnt  = y.leaddim*y.majdim
-        alpha_d = c_double(alpha)
+        elecnt = y.leaddim*y.majdim
+
+        cublasaxpy = _cublasDaxpy if y.dtype == np.float64 else _cublasSaxpy
+        alpha_ct = c_double(alpha) if y.dtype == np.float64 else c_float(alpha)
 
         class IpaddKernel(CudaComputeKernel):
-            def __call__(iself, stream):
-                _cublasSetStream(self._cublas, stream.handle)
-                _cublasDaxpy(self._cublas, elecnt, byref(alpha_d),
-                             int(x.data), 1, int(y.data), 1)
+            def __call__(iself, scomp, scopy):
+                _cublasSetStream(self._cublas, scomp.handle)
+                cublasaxpy(self._cublas, elecnt, byref(alpha_ct),
+                           int(x.data), 1, int(y.data), 1)
 
         return IpaddKernel()

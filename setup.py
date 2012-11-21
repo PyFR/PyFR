@@ -38,7 +38,6 @@ install_requires = [
 # Scripts
 console_scripts = [
     'pyfr-mesh = pyfr.scripts.mesh:main',
-    'pyfr-ics = pyfr.scripts.ics:main',
     'pyfr-run = pyfr.scripts.run:main',
     'pyfr-postp = pyfr.scripts.postp:main']
 
@@ -49,10 +48,10 @@ classifiers = [
     'Programming Language :: Python :: 2.7',
     'Topic :: Scientific/Engineering']
 
-long_description = '''PyFR is a Python based high-order compressible 
-fluid flow solver based on energy stable 
-Vincent-Castonguay-Jameson-Huynh schemes. It is currently being 
-developed in the department of Aeronautics at Imperial College London 
+long_description = '''PyFR is a Python based high-order compressible
+fluid flow solver based on energy stable
+Vincent-Castonguay-Jameson-Huynh schemes. It is currently being
+developed in the department of Aeronautics at Imperial College London
 under the direction of Dr. Peter Vincent.'''
 
 setup(
