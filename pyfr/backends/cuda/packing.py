@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from mpi4py import MPI
+
 import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 
@@ -96,11 +98,11 @@ class CudaPackingKernels(CudaKernelProvider):
     def pack(self, mv):
         return self._packunpack('pack', mv)
 
-    def send_pack(self, mv, mpicomm, pid, tag):
-        return self._sendrecv(mv, mpicomm.Send_init, pid, tag)
+    def send_pack(self, mv, pid, tag):
+        return self._sendrecv(mv, MPI.COMM_WORLD.Send_init, pid, tag)
 
-    def recv_pack(self, mv, mpicomm, pid, tag):
-        return self._sendrecv(mv, mpicomm.Recv_init, pid, tag)
+    def recv_pack(self, mv, pid, tag):
+        return self._sendrecv(mv, MPI.COMM_WORLD.Recv_init, pid, tag)
 
     def unpack(self, mv):
         return self._packunpack('unpack', mv)

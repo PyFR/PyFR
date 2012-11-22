@@ -3,6 +3,8 @@
 import re
 from collections import defaultdict
 
+from mpi4py import MPI
+
 from pyfr.bases import BasisBase
 from pyfr.elements import Elements
 from pyfr.interfaces import InternalInterfaces, MPIInterfaces
@@ -10,14 +12,13 @@ from pyfr.util import proxylist, all_subclasses
 
 
 class MeshPartition(object):
-    def __init__(self, be, comm, prankmap, mesh, nsubanks, cfg):
+    def __init__(self, be, prankmap, mesh, nsubanks, cfg):
         self._be = be
-        self._comm = comm
         self._cfg = cfg
         self._nsubanks = nsubanks
 
         # Obtain our physical rank from our MPI rank and invert the mapping
-        prank = prankmap[comm.rank]
+        prank = prankmap[MPI.COMM_WORLD.rank]
         mrankmap = {v: k for k,v in prankmap.items()}
 
         # Load the elements and interfaces from the mesh
@@ -60,8 +61,8 @@ class MeshPartition(object):
             m = re.match('con_p%dp(\d+)' % (prank), f)
             if m:
                 rhsrank = mrankmap[int(m.group(1))]
-                mpiface = MPIInterfaces(self._be, self._comm, mesh[m.string],
-                                        rhsrank, self._elemaps, self._cfg)
+                mpiface = MPIInterfaces(self._be, mesh[m.string], rhsrank,
+                                        self._elemaps, self._cfg)
                 self._mpi_inters.append(mpiface)
 
     def _gen_queues(self):
@@ -135,7 +136,7 @@ class MeshPartition(object):
         runall([q1])
 
         # Wait for all ranks to finish
-        self._comm.barrier()
+        MPI.COMM_WORLD.barrier()
 
     @property
     def ele_banks(self):

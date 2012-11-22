@@ -59,10 +59,8 @@ class MPIInterfaces(BaseInterfaces):
     # Tag used for MPI
     MPI_TAG = 2314
 
-    def __init__(self, be, comm, lhs, rhsrank, elemap, cfg):
+    def __init__(self, be, lhs, rhsrank, elemap, cfg):
         super(MPIInterfaces, self).__init__(be, elemap, cfg)
-
-        self._comm = comm
         self._rhsrank = rhsrank
 
         # Generate the left hand view matrices
@@ -89,11 +87,11 @@ class MPIInterfaces(BaseInterfaces):
         return self._be.kernel('pack', self._scal_lhs)
 
     def get_send_pack_kern(self):
-        return self._be.kernel('send_pack', self._scal_lhs, self._comm,
+        return self._be.kernel('send_pack', self._scal_lhs,
                                self._rhsrank, self.MPI_TAG)
 
     def get_recv_pack_kern(self):
-        return self._be.kernel('recv_pack', self._scal_rhs, self._comm,
+        return self._be.kernel('recv_pack', self._scal_rhs,
                                self._rhsrank, self.MPI_TAG)
 
     def get_unpack_kern(self):

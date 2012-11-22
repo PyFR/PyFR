@@ -34,7 +34,7 @@ def main():
     prank_map = get_prank_map()
 
     # Construct the mesh partition
-    mpt = MeshPartition(be, MPI.COMM_WORLD, prank_map, mesh, 2, cfg)
+    mpt = MeshPartition(be, prank_map, mesh, 2, cfg)
     ele_banks = mpt.ele_banks
 
     # Forwards Euler (u += Δt*f) on each element type
