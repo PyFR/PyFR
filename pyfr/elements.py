@@ -142,7 +142,7 @@ class Elements(object):
 
     def get_tdisf_upts_kern(self):
         # User-defined constant
-        gamma = float(self._cfg.get('constants', 'gamma'))
+        gamma = self._cfg.getfloat('constants', 'gamma')
 
         # Element specific constant data
         smats_upts = self._smat_upts

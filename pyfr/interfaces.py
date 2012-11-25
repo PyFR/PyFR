@@ -46,7 +46,7 @@ class InternalInterfaces(BaseInterfaces):
         self._pnorm_rhs = be.view(*pnorm_rhs, vlen=self.ndims, tags={'nopad'})
 
     def get_rsolve_kern(self):
-        gamma = float(self._cfg.get('constants', 'gamma'))
+        gamma = self._cfg.getfloat('constants', 'gamma')
 
         scal_lhs, scal_rhs = self._scal_lhs, self._scal_rhs
         pnorm_lhs, pnorm_rhs = self._pnorm_lhs, self._pnorm_rhs

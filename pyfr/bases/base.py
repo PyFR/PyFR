@@ -9,7 +9,7 @@ class BasisBase(object):
     def __init__(self, dims, cfg):
         self._dims = dims
         self._cfg = cfg
-        self._order = int(cfg.get('scheme', 'order'))
+        self._order = cfg.getint('scheme', 'order')
 
         if self.ndims != len(dims):
             raise ValueError('Invalid dimension symbols')
