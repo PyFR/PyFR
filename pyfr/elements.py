@@ -151,8 +151,8 @@ class Elements(object):
         disu_upts, tdisf_upts = self.scal_upts_inb, self._vect_upts
         smats = self._smat_upts
 
-        return self._be.kernel('tdisf_inv_3d', disu_upts, smats, tdisf_upts,
-                               gamma)
+        return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
+                               disu_upts, smats, tdisf_upts, gamma)
 
     def get_divtdisf_upts_kern(self):
         tdisf_upts, divtconf_upts = self._vect_upts, self.scal_upts_outb
@@ -170,7 +170,8 @@ class Elements(object):
 
     def get_divconf_upts_kern(self):
         tdivtconf_upts, rcpdjac_upts = self.scal_upts_outb, self._rcpdjac_upts
-        return self._be.kernel('divconf_3d', tdivtconf_upts, rcpdjac_upts)
+        return self._be.kernel('divconf', self.ndims, self.nvars,
+                               tdivtconf_upts, rcpdjac_upts)
 
     def _gen_m0(self, dims, upts, ubasis, fpts):
         """Discontinuous soln at upts to discontinuous soln at fpts"""

@@ -26,9 +26,9 @@ class BaseInterfaces(object):
         self._be = be
         self._cfg = cfg
 
-        # Get the number of variables and dimensions
-        self.nvars = next(iter(elemap.viewvalues())).nvars
+        # Get the number of dimensions and variables
         self.ndims = next(iter(elemap.viewvalues())).ndims
+        self.nvars = next(iter(elemap.viewvalues())).nvars
 
 
 class InternalInterfaces(BaseInterfaces):
@@ -51,8 +51,8 @@ class InternalInterfaces(BaseInterfaces):
         scal_lhs, scal_rhs = self._scal_lhs, self._scal_rhs
         pnorm_lhs, pnorm_rhs = self._pnorm_lhs, self._pnorm_rhs
 
-        return self._be.kernel('rsolve_rus_inv_3d_int', scal_lhs, pnorm_lhs,
-                               scal_rhs, pnorm_rhs, gamma)
+        return self._be.kernel('rsolve_rus_inv_int', self.ndims, self.nvars,
+                               scal_lhs, pnorm_lhs, scal_rhs, pnorm_rhs, gamma)
 
 
 class MPIInterfaces(BaseInterfaces):
@@ -80,8 +80,8 @@ class MPIInterfaces(BaseInterfaces):
         scal_lhs, scal_rhs = self._scal_lhs, self._scal_rhs
         pnorm_lhs = self._pnorm_lhs
 
-        return self._be.kernel('rsolve_rus_inv_3d_mpi', scal_lhs, scal_rhs,
-                               pnorm_lhs, gamma)
+        return self._be.kernel('rsolve_rus_inv_mpi', self.ndims, self.nvars,
+                               scal_lhs, scal_rhs, pnorm_lhs, gamma)
 
     def get_pack_kern(self):
         return self._be.kernel('pack', self._scal_lhs)

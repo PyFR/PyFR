@@ -6,7 +6,7 @@
 #define F_IDX_OF(upt, ele, fvar, var, nupt, nele, ldim) \
     IDX_OF(nupt*fvar + upt, nele*var + ele, ldim)
 #define SMAT_IDX_OF(upt, ele, row, col, nele, ldim) \
-    IDX_OF(upt, nele*(3*row + col) + ele, ldim)
+    IDX_OF(upt, nele*(${ndims}*row + col) + ele, ldim)
 
 #define READ_VIEW(dst, src_v, src_vstri, vidx, vstriidx, nvec) \
     for (int _i = 0; _i < nvec; ++_i)                          \
@@ -16,12 +16,13 @@
     for (int _i = 0; _i < nvec; ++_i)                           \
         dst_v[vidx][dst_vstri[vstriidx]*_i] = src[_i]
 
+% if ndims == 3:
 /**
- * Compute the inviscid 3D flux.
+ * Compute the inviscid flux.
  */
 inline __device__ void
-disf_inv_3d(const ${dtype} s[5], ${dtype} f[5][3],
-            ${dtype} gamma, ${dtype}* pout, ${dtype} vout[3])
+disf_inv(const ${dtype} s[5], ${dtype} f[5][3],
+         ${dtype} gamma, ${dtype}* pout, ${dtype} vout[3])
 {
     ${dtype} rho = s[0], rhou = s[1], rhov = s[2], rhow = s[3], E = s[4];
 
@@ -49,43 +50,45 @@ disf_inv_3d(const ${dtype} s[5], ${dtype} f[5][3],
         vout[0] = u; vout[1] = v; vout[2] = w;
     }
 }
+% endif
 
 /**
- * Computes the transformed inviscid 3D flux.
+ * Computes the transformed inviscid flux.
  */
 __global__ void
-tdisf_inv_3d(int nupts, int neles,
-             const ${dtype}* __restrict__ u,
-             const ${dtype}* __restrict__ smats,
-             ${dtype}* __restrict__ f,
-             ${dtype} gamma, int ldu, int lds, int ldf)
+tdisf_inv(int nupts, int neles,
+           const ${dtype}* __restrict__ u,
+           const ${dtype}* __restrict__ smats,
+           ${dtype}* __restrict__ f,
+           ${dtype} gamma, int ldu, int lds, int ldf)
 {
     int eidx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (eidx < neles)
     {
-        ${dtype} uin[5], ftmp[5][3];
+        ${dtype} uin[${nvars}], ftmp[${nvars}][${ndims}];
 
         for (int uidx = 0; uidx < nupts; ++uidx)
         {
             // Load in the soln
-            for (int i = 0; i < 5; ++i)
+            for (int i = 0; i < ${nvars}; ++i)
                 uin[i] = u[U_IDX_OF(uidx, eidx, i, neles, ldu)];
 
             // Compute the flux
-            disf_inv_3d(uin, ftmp, gamma, NULL, NULL);
+            disf_inv(uin, ftmp, gamma, NULL, NULL);
 
             // Transform and store
-            for (int i = 0; i < 3; ++i)
+            for (int i = 0; i < ${ndims}; ++i)
             {
-                ${dtype} s0 = smats[SMAT_IDX_OF(uidx, eidx, i, 0, neles, lds)];
-                ${dtype} s1 = smats[SMAT_IDX_OF(uidx, eidx, i, 1, neles, lds)];
-                ${dtype} s2 = smats[SMAT_IDX_OF(uidx, eidx, i, 2, neles, lds)];
+            % for k in range(ndims):
+                ${dtype} s${k} = smats[SMAT_IDX_OF(uidx, eidx, i, ${k}, neles, lds)];
+            % endfor
 
-                for (int j = 0; j < 5; ++j)
+                for (int j = 0; j < ${nvars}; ++j)
                 {
                     int fidx = F_IDX_OF(uidx, eidx, i, j, nupts, neles, ldf);
-                    f[fidx] = s0*ftmp[j][0] + s1*ftmp[j][1] + s2*ftmp[j][2];
+                    f[fidx] = ${' + '.join('s{0}*ftmp[j][{0}]'.format(k)\
+                                for k in range(ndims))};
                 }
             }
         }
@@ -93,140 +96,138 @@ tdisf_inv_3d(int nupts, int neles,
 }
 
 inline __device__ void
-rsolve_rus_inv_3d(const ${dtype} ul[5], const ${dtype} ur[5],
-                  const ${dtype} pnorm[3], ${dtype} fcomm[5], ${dtype} gamma)
+rsolve_rus_inv(const ${dtype} ul[${nvars}],
+               const ${dtype} ur[${nvars}],
+               const ${dtype} pnorm[${ndims}],
+               ${dtype} fcomm[${nvars}],
+               ${dtype} gamma)
 {
     // Compute the left and right fluxes + velocities and pressures
-    ${dtype} fl[5][3], fr[5][3];
-    ${dtype} vl[3], vr[3];
+    ${dtype} fl[${nvars}][${ndims}], fr[${nvars}][${ndims}];
+    ${dtype} vl[${ndims}], vr[${ndims}];
     ${dtype} pl, pr;
 
-    disf_inv_3d(ul, fl, gamma, &pl, vl);
-    disf_inv_3d(ur, fr, gamma, &pr, vr);
+    disf_inv(ul, fl, gamma, &pl, vl);
+    disf_inv(ur, fr, gamma, &pr, vr);
 
     // Compute the speed
     ${dtype} a = sqrt(gamma*(pl + pr)/(ul[0] + ur[0]))
-               + 0.5 * (pnorm[0]*(vl[0] + vr[0])
-                      + pnorm[1]*(vl[1] + vr[1])
-                      + pnorm[2]*(vl[2] + vr[2]));
+               + 0.5 * (${' + '.join('pnorm[{0}]*(vl[{0}] + vr[{0}])'.format(k)\
+                        for k in range(ndims))});
 
     // Output
-    for (int i = 0; i < 5; ++i)
-        fcomm[i] = 0.5 * ((pnorm[0]*(fl[i][0] + fr[i][0])
-                         + pnorm[1]*(fl[i][1] + fr[i][1])
-                         + pnorm[2]*(fl[i][2] + fr[i][2]))
+    for (int i = 0; i < ${nvars}; ++i)
+        fcomm[i] = 0.5 * ((${' + '.join('pnorm[{0}]*(fl[i][{0}] + fr[i][{0}])'.format(k)\
+                             for k in range(ndims))})
                         + a*(ur[i] - ul[i]));
 
 }
 
 
 __global__ void
-rsolve_rus_inv_3d_int(int ninters,
-                      ${dtype}** __restrict__ ul_v,
-                      const int* __restrict__ ul_vstri,
-                      ${dtype}** __restrict__ ur_v,
-                      const int* __restrict__ ur_vstri,
-                      ${dtype}** __restrict__ pnorml_v,
-                      const int* __restrict__ pnorm_lvstri,
-                      ${dtype}** __restrict__ pnormr_v,
-                      const int* __restrict__ pnorm_rvstri,
-                      ${dtype} gamma)
+rsolve_rus_inv_int(int ninters,
+                   ${dtype}** __restrict__ ul_v,
+                   const int* __restrict__ ul_vstri,
+                   ${dtype}** __restrict__ ur_v,
+                   const int* __restrict__ ur_vstri,
+                   ${dtype}** __restrict__ pnorml_v,
+                   const int* __restrict__ pnorm_lvstri,
+                   ${dtype}** __restrict__ pnormr_v,
+                   const int* __restrict__ pnorm_rvstri,
+                   ${dtype} gamma)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (iidx < ninters)
     {
         // Dereference the views into memory
-        ${dtype} pnorml[3], pnormr[3], ul[5], ur[5];
+        ${dtype} pnorml[${ndims}], pnormr[${ndims}], ul[${nvars}], ur[${nvars}];
 
-        READ_VIEW(pnorml, pnorml_v, pnorm_lvstri, iidx, iidx, 3);
-        READ_VIEW(pnormr, pnormr_v, pnorm_rvstri, iidx, iidx, 3);
-        READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, 5);
-        READ_VIEW(ur, ur_v, ur_vstri, iidx, iidx, 5);
+        READ_VIEW(pnorml, pnorml_v, pnorm_lvstri, iidx, iidx, ${ndims});
+        READ_VIEW(pnormr, pnormr_v, pnorm_rvstri, iidx, iidx, ${ndims});
+        READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, ${nvars});
+        READ_VIEW(ur, ur_v, ur_vstri, iidx, iidx, ${nvars});
 
 
         // Compute the magnitudes of the physical normals
-        ${dtype} magl = sqrt(pnorml[0]*pnorml[0]
-                           + pnorml[1]*pnorml[1]
-                           + pnorml[2]*pnorml[2]);
-        ${dtype} magr = sqrt(pnormr[0]*pnormr[0]
-                           + pnormr[1]*pnormr[1]
-                           + pnormr[2]*pnormr[2]);
+        ${dtype} magl = sqrt(${' + '.join('pnorml[{0}]*pnorml[{0}]'.format(k)\
+                             for k in range(ndims))});
+        ${dtype} magr = sqrt(${' + '.join('pnormr[{0}]*pnormr[{0}]'.format(k)\
+                             for k in range(ndims))});
 
         // Normalize the left physical normal
-        pnorml[0] *= 1.0 / magl;
-        pnorml[1] *= 1.0 / magl;
-        pnorml[2] *= 1.0 / magl;
+    % for i in range(ndims):
+        pnorml[${i}] *= 1.0 / magl;
+    % endfor
 
         // Perform the Riemann solve
-        ${dtype} fn[5];
-        rsolve_rus_inv_3d(ul, ur, pnorml, fn, gamma);
+        ${dtype} fn[${nvars}];
+        rsolve_rus_inv(ul, ur, pnorml, fn, gamma);
 
         // Write out the fluxes into ul and ur
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < ${nvars}; ++i)
         {
             ul[i] = magl*fn[i];
             ur[i] = -magr*fn[i];
         }
 
         // Copy back into the views
-        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, iidx, 5);
-        WRITE_VIEW(ur_v, ur_vstri, ur, iidx, iidx, 5);
+        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, iidx, ${nvars});
+        WRITE_VIEW(ur_v, ur_vstri, ur, iidx, iidx, ${nvars});
     }
 }
 
 __global__ void
-rsolve_rus_inv_3d_mpi(int ninters,
-                      ${dtype}** __restrict__ ul_v,
-                      const int* __restrict__ ul_vstri,
-                      ${dtype}* __restrict__ ur_m,
-                      ${dtype}** __restrict__ pnorml_v,
-                      const int* __restrict__ pnorml_vstri,
-                      ${dtype} gamma)
+rsolve_rus_inv_mpi(int ninters,
+                   ${dtype}** __restrict__ ul_v,
+                   const int* __restrict__ ul_vstri,
+                   ${dtype}* __restrict__ ur_m,
+                   ${dtype}** __restrict__ pnorml_v,
+                   const int* __restrict__ pnorml_vstri,
+                   ${dtype} gamma)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (iidx < ninters)
     {
-        ${dtype} pnorml[3], ul[5], ur[5];
+        ${dtype} pnorml[${ndims}], ul[${nvars}], ur[${nvars}];
 
         // Dereference the views into memory
-        READ_VIEW(pnorml, pnorml_v, pnorml_vstri, iidx, iidx, 3);
-        READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, 5);
+        READ_VIEW(pnorml, pnorml_v, pnorml_vstri, iidx, iidx, ${ndims});
+        READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, ${nvars});
 
         // Dereference the right hand (MPI) side solution matrix
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < ${nvars}; ++i)
             ur[i] = ur_m[ninters*i + iidx];
 
         // Compute the magnitudes of the physical normals
-        ${dtype} magl = sqrt(pnorml[0]*pnorml[0]
-                           + pnorml[1]*pnorml[1]
-                           + pnorml[2]*pnorml[2]);
+        ${dtype} magl = sqrt(${' + '.join('pnorml[{0}]*pnorml[{0}]'.format(k)\
+                             for k in range(ndims))});
 
         // Normalize the left physical normal
-        pnorml[0] *= 1.0 / magl;
-        pnorml[1] *= 1.0 / magl;
-        pnorml[2] *= 1.0 / magl;
+    % for i in range(ndims):
+        pnorml[${i}] *= 1.0 / magl;
+    % endfor
 
-        ${dtype} fn[5];
+        ${dtype} fn[${nvars}];
 
         // Perform the Riemann solve
-        rsolve_rus_inv_3d(ul, ur, pnorml, fn, gamma);
+        rsolve_rus_inv(ul, ur, pnorml, fn, gamma);
 
         // Write out the fluxes into ul
-        for (int i = 0; i < 5; ++i)
+        for (int i = 0; i < ${nvars}; ++i)
             ul[i] = magl*fn[i];
 
         // Copy these back into the view
-        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, iidx, 5);
+        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, iidx, ${nvars});
     }
 }
 
 __global__ void
-divconf_3d(int nupts, int neles,
-           ${dtype}* __restrict__ tdivtconf,
-           const ${dtype}* __restrict__ rcpdjac,
-           int ldt, int ldr)
+divconf(int nupts, int neles,
+        ${dtype}* __restrict__ tdivtconf,
+        const ${dtype}* __restrict__ rcpdjac,
+        int ldt, int ldr)
 {
     int uidx = blockIdx.x * blockDim.x + threadIdx.x;
     int eidx = blockIdx.y * blockDim.y + threadIdx.y;
@@ -235,7 +236,7 @@ divconf_3d(int nupts, int neles,
     {
         ${dtype} s = rcpdjac[IDX_OF(uidx, eidx, ldr)];
 
-    % for i in xrange(5):
+    % for i in range(nvars):
         tdivtconf[U_IDX_OF(uidx, eidx, ${i}, neles, ldt)] *= s;
     % endfor
     }

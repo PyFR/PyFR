@@ -12,39 +12,39 @@ class CudaPointwiseKernels(CudaKernelProvider):
     def __init__(self, backend):
         pass
 
-    def _modopts(self, dtype):
-        return dict(dtype=npdtype_to_ctype(dtype))
+    def _modopts(self, dtype, ndims, nvars):
+        return dict(dtype=npdtype_to_ctype(dtype), ndims=ndims, nvars=nvars)
 
-    def tdisf_inv_3d(self, u, smats, f, gamma):
-        nupts, neles = u.nrow, u.ncol / 5
+    def tdisf_inv(self, ndims, nvars, u, smats, f, gamma):
+        nupts, neles = u.nrow, u.ncol / nvars
 
-        fn = self._get_function('pointwise', 'tdisf_inv_3d', [np.int32]*2 +
+        fn = self._get_function('pointwise', 'tdisf_inv', [np.int32]*2 +
                                 [np.intp]*3 + [u.dtype] + [np.int32]*3,
-                                self._modopts(u.dtype))
+                                self._modopts(u.dtype, ndims, nvars))
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
 
-        class TdisInv3dKernel(CudaComputeKernel):
+        class TdisInvKernel(CudaComputeKernel):
             def __call__(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, nupts, neles,
                                        u.data, smats.data, f.data, gamma,
                                        u.leaddim, smats.leaddim, f.leaddim)
 
-        return TdisInv3dKernel()
+        return TdisInvKernel()
 
-    def rsolve_rus_inv_3d_int(self, ul_v, pnl_v, ur_v, pnr_v, gamma):
+    def rsolve_rus_inv_int(self, ndims, nvars, ul_v, pnl_v, ur_v, pnr_v, gamma):
         ninters = ul_v.ncol
         dtype = ul_v.refdtype
 
-        fn = self._get_function('pointwise', 'rsolve_rus_inv_3d_int',
+        fn = self._get_function('pointwise', 'rsolve_rus_inv_int',
                                 [np.int32] + [np.intp]*8 + [dtype],
-                                self._modopts(dtype))
+                                self._modopts(dtype, ndims, nvars))
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
 
-        class RsolveRusInv3dIntKernel(CudaComputeKernel):
+        class RsolveRusInvIntKernel(CudaComputeKernel):
             def __call__(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, ninters,
                                        ul_v.mapping.data, ul_v.strides.data,
@@ -53,21 +53,21 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                        pnr_v.mapping.data, pnr_v.strides.data,
                                        gamma)
 
-        return RsolveRusInv3dIntKernel()
+        return RsolveRusInvIntKernel()
 
-    def rsolve_rus_inv_3d_mpi(self, ul_mpiv, ur_mpim, pnl_v, gamma):
+    def rsolve_rus_inv_mpi(self, ndims, nvars, ul_mpiv, ur_mpim, pnl_v, gamma):
         ninters = ul_mpiv.ncol
         ul_v = ul_mpiv.view
         dtype = ul_v.refdtype
 
-        fn = self._get_function('pointwise', 'rsolve_rus_inv_3d_mpi',
+        fn = self._get_function('pointwise', 'rsolve_rus_inv_mpi',
                                 [np.int32] + [np.intp]*5 + [dtype],
-                                self._modopts(dtype))
+                                self._modopts(dtype, ndims, nvars))
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
 
-        class RsolveRusInv3dMPIKernel(CudaComputeKernel):
+        class RsolveRusInvMPIKernel(CudaComputeKernel):
             def __call__(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, ninters,
                                        ul_v.mapping.data, ul_v.strides.data,
@@ -75,20 +75,20 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                        pnl_v.mapping.data, pnl_v.strides.data,
                                        gamma)
 
-        return RsolveRusInv3dMPIKernel()
+        return RsolveRusInvMPIKernel()
 
-    def divconf_3d(self, dv, rcpdjac):
-        nupts, neles = dv.nrow, dv.ncol / 5
+    def divconf(self, ndims, nvars, dv, rcpdjac):
+        nupts, neles = dv.nrow, dv.ncol / nvars
 
-        fn = self._get_function('pointwise', 'divconf_3d', 'iiPPii',
-                                self._modopts(dv.dtype))
+        fn = self._get_function('pointwise', 'divconf', 'iiPPii',
+                                self._modopts(dv.dtype, ndims, nvars))
 
         grid, block = self._get_2d_grid_block(fn, nupts, neles)
 
-        class Divconf3d(CudaComputeKernel):
+        class Divconf(CudaComputeKernel):
             def __call__(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, nupts, neles,
                                        dv.data, rcpdjac.data,
                                        dv.leaddim, rcpdjac.leaddim)
 
-        return Divconf3d()
+        return Divconf()
