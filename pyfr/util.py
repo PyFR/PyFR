@@ -66,9 +66,5 @@ _ctype_map = {np.float32: 'float', np.float64: 'double'}
 def npdtype_to_ctype(dtype):
     return _ctype_map[np.dtype(dtype).type]
 
-_mpitype_map = {np.float32: MPI.FLOAT, np.float64: MPI.DOUBLE}
-def npdtype_to_mpitype(dtype):
-    return _mpitype_map[np.dtype(dtype).type]
-
 def ndrange(*args):
     return itertools.product(*map(xrange, args))

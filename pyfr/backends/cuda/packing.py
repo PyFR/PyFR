@@ -9,7 +9,7 @@ from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel, CudaMPIKernel
 from pyfr.backends.cuda.types import CudaMPIMatrix, CudaMPIView
 
-from pyfr.util import npdtype_to_ctype, npdtype_to_mpitype
+from pyfr.util import npdtype_to_ctype
 
 class CudaPackingKernels(CudaKernelProvider):
     def __init__(self, backend):
@@ -81,11 +81,8 @@ class CudaPackingKernels(CudaKernelProvider):
         # If we are an MPI view then extract the MPI matrix
         mpimat = mv.mpimat if isinstance(mv, CudaMPIView) else mv
 
-        # Determine the MPI data type of the matrix
-        mpitype = npdtype_to_mpitype(mpimat.dtype)
-
         # Create a persistent MPI request to send/recv the pack
-        preq = mpipreqfn((mpimat.hdata, mpitype), pid, tag)
+        preq = mpipreqfn(mpimat.hdata, pid, tag)
 
         class SendRecvPackKernel(CudaMPIKernel):
             def __call__(self, reqlist):
