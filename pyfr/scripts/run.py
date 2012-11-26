@@ -13,9 +13,10 @@ import numpy as np
 from pyfr.backends.cuda import CudaBackend
 from pyfr.mesh_partition import MeshPartition
 from pyfr.rank_allocator import get_rank_allocation
+from pyfr.util import proxylist
 
 def main():
-    t = 0.01
+    dt = 0.01
 
     be = CudaBackend()
 
@@ -35,7 +36,8 @@ def main():
     ele_banks = mpt.ele_banks
 
     # Forwards Euler (u += Δt*f) on each element type
-    euler_step = [be.kernel('ipadd', eb[0], t, eb[1]) for eb in ele_banks]
+    euler_step = proxylist([be.kernel('ipadd', eb[0], eb[1])
+                             for eb in ele_banks])
 
     # Get our own queue
     q = be.queue()
@@ -47,7 +49,7 @@ def main():
         print be.from_native_to_aos(ele_banks[0][1].get(), (8, 1, 5)).max()
 
         # An euler step on f
-        q % euler_step
+        q % euler_step(dt)
 
 
 if __name__ == '__main__':

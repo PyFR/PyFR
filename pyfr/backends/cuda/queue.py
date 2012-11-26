@@ -7,7 +7,8 @@ import pycuda.driver as cuda
 from mpi4py import MPI
 
 class CudaKernel(object):
-    pass
+    def __call__(self, *args):
+        return self, args
 
 
 class CudaComputeKernel(CudaKernel):
@@ -41,7 +42,7 @@ class CudaQueue(object):
         self._items = collections.deque()
 
     def __lshift__(self, items):
-        self._items.extend(i for i in items if i is not None)
+        self._items.extend(items)
 
     def __mod__(self, items):
         self.run()
@@ -51,28 +52,28 @@ class CudaQueue(object):
     def _empty(self):
         return not self._items
 
-    def _exec_item(self, item):
+    def _exec_item(self, item, rtargs):
         if _is_compute_kernel(item):
-            item.run(self._stream_comp, self._stream_copy)
+            item.run(self._stream_comp, self._stream_copy, *rtargs)
         elif _is_mpi_kernel(item):
-            item.run(self._mpireqs)
+            item.run(self._mpireqs, *rtargs)
         else:
             raise ValueError('Non compute/MPI kernel in queue')
         self._last = item
 
     def _exec_next(self):
-        item  = self._items.popleft()
+        item, rtargs  = self._items.popleft()
 
         # If we are at a sequence point then wait for current items
         if self._at_sequence_point(item):
             self._wait()
 
         # Execute the item
-        self._exec_item(item)
+        self._exec_item(item, rtargs)
 
     def _exec_nowait(self):
-        while self._items and not self._at_sequence_point(self._items[0]):
-            self._exec_item(self._items.popleft())
+        while self._items and not self._at_sequence_point(self._items[0][0]):
+            self._exec_item(*self._items.popleft())
 
     def _wait(self):
         if _is_compute_kernel(self._last):

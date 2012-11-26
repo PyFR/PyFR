@@ -197,7 +197,7 @@ class CudaCublasKernels(CudaKernelProvider):
 
         return MulKernel()
 
-    def ipadd(self, y, alpha, x):
+    def ipadd(self, y, x):
         # Ensure x and y have not only the same logical dimensions but also
         # the same layout in memory; this is required on account of vector
         # addition being used to add the matrices
@@ -207,12 +207,12 @@ class CudaCublasKernels(CudaKernelProvider):
         elecnt = y.leaddim*y.majdim
 
         cublasaxpy = _cublasDaxpy if y.dtype == np.float64 else _cublasSaxpy
-        alpha_ct = c_double(alpha) if y.dtype == np.float64 else c_float(alpha)
+        ctypescast = c_double if y.dtype == np.float64 else c_float
 
         class IpaddKernel(CudaComputeKernel):
-            def run(iself, scomp, scopy):
+            def run(iself, scomp, scopy, alpha):
                 _cublasSetStream(self._cublas, scomp.handle)
-                cublasaxpy(self._cublas, elecnt, byref(alpha_ct),
+                cublasaxpy(self._cublas, elecnt, byref(ctypescast(alpha)),
                            int(x.data), 1, int(y.data), 1)
 
         return IpaddKernel()

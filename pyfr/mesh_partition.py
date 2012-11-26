@@ -101,24 +101,24 @@ class MeshPartition(object):
         # Evaluate the solution at the flux points and pack up any
         # flux point solutions which are on our side of an MPI
         # interface
-        q1 << self._disu_fpts_kerns
-        q1 << self._mpi_inters_pack_kerns
+        q1 << self._disu_fpts_kerns()
+        q1 << self._mpi_inters_pack_kerns()
         runall([q1])
 
         # Evaluate the flux at each of the solution points; and take
         # the of this flux and with at the flux points.  Finally, use
         # this to solve the Riemann problem at each of the internal
         # interfaces to yield a common interface flux
-        q1 << self._tdisf_upts_kerns
-        q1 << self._divtdisf_upts_kerns
-        q1 << self._int_inters_rsolve_kerns
+        q1 << self._tdisf_upts_kerns()
+        q1 << self._divtdisf_upts_kerns()
+        q1 << self._int_inters_rsolve_kerns()
 
         # Send the MPI interface buffers we have just packed and
         # receive the corresponding buffers from our peers.  Then
         # proceed to unpack these received buffers
-        q2 << self._mpi_inters_send_kerns
-        q2 << self._mpi_inters_recv_kerns
-        q2 << self._mpi_inters_unpack_kerns
+        q2 << self._mpi_inters_send_kerns()
+        q2 << self._mpi_inters_recv_kerns()
+        q2 << self._mpi_inters_unpack_kerns()
 
         runall([q1, q2])
 
@@ -127,10 +127,10 @@ class MeshPartition(object):
         # common fluxes can then be used to correct the flux at each
         # of the solution points.  Finally, all that remains is to
         # suitably transform the flux.
-        q1 << self._mpi_inters_rsolve_kerns
-        q1 << self._nrmtdisf_fpts_kerns
-        q1 << self._tdivtconf_upts_kerns
-        q1 << self._divconf_upts_kerns
+        q1 << self._mpi_inters_rsolve_kerns()
+        q1 << self._nrmtdisf_fpts_kerns()
+        q1 << self._tdivtconf_upts_kerns()
+        q1 << self._divconf_upts_kerns()
         runall([q1])
 
         # Wait for all ranks to finish
