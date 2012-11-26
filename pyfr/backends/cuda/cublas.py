@@ -187,7 +187,7 @@ class CudaCublasKernels(CudaKernelProvider):
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(CudaComputeKernel):
-            def __call__(iself, scomp, scopy):
+            def run(iself, scomp, scopy):
                 _cublasSetStream(self._cublas, scomp.handle)
                 cublasgemm(self._cublas, CublasOp.NONE, CublasOp.NONE,
                            n, m, k, byref(alpha_ct),
@@ -210,7 +210,7 @@ class CudaCublasKernels(CudaKernelProvider):
         alpha_ct = c_double(alpha) if y.dtype == np.float64 else c_float(alpha)
 
         class IpaddKernel(CudaComputeKernel):
-            def __call__(iself, scomp, scopy):
+            def run(iself, scomp, scopy):
                 _cublasSetStream(self._cublas, scomp.handle)
                 cublasaxpy(self._cublas, elecnt, byref(alpha_ct),
                            int(x.data), 1, int(y.data), 1)

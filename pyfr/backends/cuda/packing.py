@@ -22,10 +22,10 @@ class CudaPackingKernels(CudaKernelProvider):
     def _packunpack_mpimat(self, op, mpimat):
         class PackUnpackKernel(CudaComputeKernel):
             if op == 'pack':
-                def __call__(self, scomp, scopy):
+                def run(self, scomp, scopy):
                     cuda.memcpy_dtoh_async(mpimat.hdata, mpimat.data, scomp)
             else:
-                def __call__(self, scomp, scopy):
+                def run(self, scomp, scopy):
                     cuda.memcpy_htod_async(mpimat.data, mpimat.hdata, scomp)
 
         return PackUnpackKernel()
@@ -48,7 +48,7 @@ class CudaPackingKernels(CudaKernelProvider):
         event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
 
         class ViewPackUnpackKernel(CudaComputeKernel):
-            def __call__(self, scomp, scopy):
+            def run(self, scomp, scopy):
                 # If we are unpacking then copy the host buffer to the GPU
                 if op == 'unpack':
                     cuda.memcpy_htod_async(m.data, m.hdata, scopy)
@@ -85,7 +85,7 @@ class CudaPackingKernels(CudaKernelProvider):
         preq = mpipreqfn(mpimat.hdata, pid, tag)
 
         class SendRecvPackKernel(CudaMPIKernel):
-            def __call__(self, reqlist):
+            def run(self, reqlist):
                 # Start the request and append us to the list of requests
                 preq.Start()
                 reqlist.append(preq)

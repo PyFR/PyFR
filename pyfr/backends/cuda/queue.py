@@ -53,11 +53,11 @@ class CudaQueue(object):
 
     def _exec_item(self, item):
         if _is_compute_kernel(item):
-            item(self._stream_comp, self._stream_copy)
+            item.run(self._stream_comp, self._stream_copy)
         elif _is_mpi_kernel(item):
-            item(self._mpireqs)
+            item.run(self._mpireqs)
         else:
-            item()
+            raise ValueError('Non compute/MPI kernel in queue')
         self._last = item
 
     def _exec_next(self):

@@ -26,7 +26,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         grid = self._get_grid_for_block(block, neles)
 
         class TdisInvKernel(CudaComputeKernel):
-            def __call__(self, scomp, scopy):
+            def run(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, nupts, neles,
                                        u.data, smats.data, f.data, gamma,
                                        u.leaddim, smats.leaddim, f.leaddim)
@@ -45,7 +45,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         grid = self._get_grid_for_block(block, ninters)
 
         class RsolveRusInvIntKernel(CudaComputeKernel):
-            def __call__(self, scomp, scopy):
+            def run(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, ninters,
                                        ul_v.mapping.data, ul_v.strides.data,
                                        ur_v.mapping.data, ur_v.strides.data,
@@ -68,7 +68,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         grid = self._get_grid_for_block(block, ninters)
 
         class RsolveRusInvMPIKernel(CudaComputeKernel):
-            def __call__(self, scomp, scopy):
+            def run(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, ninters,
                                        ul_v.mapping.data, ul_v.strides.data,
                                        ur_mpim.data,
@@ -86,7 +86,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         grid, block = self._get_2d_grid_block(fn, nupts, neles)
 
         class Divconf(CudaComputeKernel):
-            def __call__(self, scomp, scopy):
+            def run(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, nupts, neles,
                                        dv.data, rcpdjac.data,
                                        dv.leaddim, rcpdjac.leaddim)
