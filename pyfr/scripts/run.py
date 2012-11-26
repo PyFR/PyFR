@@ -8,14 +8,11 @@ from argparse import ArgumentParser
 from ConfigParser import SafeConfigParser
 
 from mpi4py import MPI
-
 import numpy as np
 
-from pyfr.mesh_partition import MeshPartition
 from pyfr.backends.cuda import CudaBackend
-
-def get_prank_map():
-    return {i: i for i in xrange(MPI.COMM_WORLD.size)}
+from pyfr.mesh_partition import MeshPartition
+from pyfr.rank_allocator import get_rank_allocation
 
 def main():
     t = 0.01
@@ -31,10 +28,10 @@ def main():
     mesh = np.load(os.path.join(os.path.dirname(sys.argv[1]), mfile))
 
     # Get the mapping from physical ranks to MPI ranks
-    prank_map = get_prank_map()
+    rallocs = get_rank_allocation(mesh, cfg)
 
     # Construct the mesh partition
-    mpt = MeshPartition(be, prank_map, mesh, 2, cfg)
+    mpt = MeshPartition(be, rallocs, mesh, 2, cfg)
     ele_banks = mpt.ele_banks
 
     # Forwards Euler (u += Δt*f) on each element type

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import re
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 
 from mpi4py import MPI
 
@@ -12,19 +11,18 @@ from pyfr.util import proxylist, all_subclasses
 
 
 class MeshPartition(object):
-    def __init__(self, be, prankmap, mesh, nsubanks, cfg):
+    def __init__(self, be, rallocs, mesh, nsubanks, cfg):
         self._be = be
         self._cfg = cfg
         self._nsubanks = nsubanks
 
-        # Obtain our physical rank from our MPI rank and invert the mapping
-        prank = prankmap[MPI.COMM_WORLD.rank]
-        mrankmap = {v: k for k,v in prankmap.items()}
+        # Map from our MPI rank to our physical mesh rank
+        prank = rallocs.mprankmap[MPI.COMM_WORLD.rank]
 
         # Load the elements and interfaces from the mesh
         self._load_eles(prank, mesh)
         self._load_int_inters(prank, mesh)
-        self._load_mpi_inters(prank, mrankmap, mesh)
+        self._load_mpi_inters(prank, rallocs, mesh)
 
         # Prepare the queues and kernels
         self._gen_queues()
@@ -34,7 +32,7 @@ class MeshPartition(object):
         # Automagically construct the bases map ('hex' => HexBasis &c)
         basiscls = {b.name: b for b in all_subclasses(BasisBase)}
 
-        self._elemaps = {}
+        self._elemaps = OrderedDict()
         for k in basiscls.keys():
             mk = 'spt_%s_p%d' % (k, prank)
             if mk in mesh:
@@ -55,15 +53,15 @@ class MeshPartition(object):
         # we wrap it in a proxylist for consistency
         self._int_inters = proxylist([int_inters])
 
-    def _load_mpi_inters(self, prank, mrankmap, mesh):
+    def _load_mpi_inters(self, prank, rallocs, mesh):
         self._mpi_inters = proxylist([])
-        for f in mesh:
-            m = re.match('con_p%dp(\d+)' % (prank), f)
-            if m:
-                rhsrank = mrankmap[int(m.group(1))]
-                mpiface = MPIInterfaces(self._be, mesh[m.string], rhsrank,
-                                        self._elemaps, self._cfg)
-                self._mpi_inters.append(mpiface)
+        for rhsprank in rallocs.prankconn[prank]:
+            rhsmrank = rallocs.pmrankmap[rhsprank]
+            interarr = mesh['con_p%dp%d' % (prank, rhsprank)]
+
+            mpiiface = MPIInterfaces(self._be, interarr, rhsmrank,
+                                     self._elemaps, self._cfg)
+            self._mpi_inters.append(mpiiface)
 
     def _gen_queues(self):
         self._queues = [self._be.queue(), self._be.queue()]
