@@ -13,8 +13,9 @@ def test_hex_gleg_ord2_csd():
     # Config for a third order spectral difference scheme
     cfg = SafeConfigParser()
     cfg.add_section('scheme')
+    cfg.set('scheme', 'quad-rule', 'gauss-legendre')
     cfg.set('scheme', 'order', '3')
-    cfg.set('scheme', 'eta', 'sd')
+    cfg.set('scheme', 'vcjh-eta', 'sd')
 
     # Generate the hexes
     hexes = Elements(HexBasis, np.random.randn(8, 20, 3), cfg)

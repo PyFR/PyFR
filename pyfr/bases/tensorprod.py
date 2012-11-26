@@ -201,7 +201,7 @@ class HexBasis(TensorProdBasis, BasisBase):
             nbdims = [d for d in self._dims if d is not sym]
             fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
 
-            eta = self._cfg.get('scheme', 'eta')
+            eta = self._cfg.get('scheme', 'vcjh-eta')
             diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
 
             for p,gfn in zip(fpair, diffcorfn):
