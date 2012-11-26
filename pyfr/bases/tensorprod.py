@@ -150,6 +150,9 @@ class TensorProdBasis(object):
 
         return pts, basis
 
+    def get_nfpts(self):
+        return [(self._order + 1)**(self.ndims - 1)] * (2*self.ndims)
+
 
 class HexBasis(TensorProdBasis, BasisBase):
     name = 'hex'
@@ -221,9 +224,6 @@ class HexBasis(TensorProdBasis, BasisBase):
 
         # Cube map to get the remaining face normals
         return cube_map_face(fonenorms).reshape(-1, 3)
-
-    def get_nfpts(self):
-        return [(self._order + 1)**2]*6
 
     def get_fpts_for_face(self, face, rtag):
         return self._rschemes[face, rtag]
