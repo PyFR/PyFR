@@ -8,6 +8,17 @@ try:
 except ImportError:
     import sympy.mpmath as mp
 
+def points_for_rule(name, n):
+    rules = {'equi-spaced': equi_spaced,
+             'gauss-legendre': gauss_legendre,
+             'gauss-legendre-lobatto': gauss_legendre_lobatto,
+             'gauss-chebyshev': gauss_chebyshev,
+             'gauss-chebyshev-lobatto': gauss_chebyshev_lobatto}
+    return rules[name](n)
+
+def equi_spaced(n):
+    return list(np.linspace(-1.0, 1.0, n))
+
 def gauss_legendre(n):
     """Returns the Gauss-Legendre quadrature points for order *n*
 

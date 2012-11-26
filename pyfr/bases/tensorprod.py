@@ -6,7 +6,7 @@ import numpy as np
 import sympy as sy
 
 from pyfr.bases.base import BasisBase
-from pyfr.polys import gauss_legendre, gauss_legendre_lobatto
+from pyfr.quad_points import points_for_rule
 from pyfr.util import ndrange
 
 
@@ -120,8 +120,12 @@ def diff_vcjh_correctionfn(k, eta, sym):
     return diffgl, diffgr
 
 class TensorProdBasis(object):
+    def _get_pts1d(self):
+        rule = self._cfg.get('scheme', 'quad-rule')
+        return points_for_rule(rule, self._order + 1)
+
     def get_upts(self):
-        pts1d = gauss_legendre(self._order + 1)
+        pts1d = self._get_pts1d()
 
         pts = cart_prod_points(pts1d, 3)
         basis = nodal_basis(pts1d, self._dims)
@@ -176,7 +180,7 @@ class HexBasis(TensorProdBasis, BasisBase):
 
     def get_fpts(self):
         # Get the 1D points
-        pts1d = gauss_legendre(self._order + 1)
+        pts1d = self._get_pts1d()
 
         # Perform a 2D extension to get the (p,r) points of face one
         pts2d = cart_prod_points(pts1d, 2, compact=False)
