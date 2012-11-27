@@ -12,10 +12,10 @@ import pkgutil
 def test_hex_gleg_ord2_csd():
     # Config for a third order spectral difference scheme
     cfg = SafeConfigParser()
-    cfg.add_section('scheme')
-    cfg.set('scheme', 'quad-rule', 'gauss-legendre')
-    cfg.set('scheme', 'order', '3')
-    cfg.set('scheme', 'vcjh-eta', 'sd')
+    cfg.add_section('mesh-elements')
+    cfg.set('mesh-elements', 'quad-rule', 'gauss-legendre')
+    cfg.set('mesh-elements', 'order', '3')
+    cfg.set('mesh-elements', 'vcjh-eta', 'sd')
 
     # Generate the hexes
     hexes = Elements(HexBasis, np.random.randn(8, 20, 3), cfg)

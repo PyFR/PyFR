@@ -68,7 +68,7 @@ class Elements(object):
 
         self._scal_upts = ics_upts = np.empty((nupts, neles, len(dvars)))
         for i,v in enumerate(dvars):
-            ics_upts[...,i] = npeval(self._cfg.get('ics', v), coords)
+            ics_upts[...,i] = npeval(self._cfg.get('mesh-ics', v), coords)
 
     def set_backend(self, be, nsubanks):
         # Ensure a backend has not already been set

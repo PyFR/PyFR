@@ -9,7 +9,7 @@ class BasisBase(object):
     def __init__(self, dims, cfg):
         self._dims = dims
         self._cfg = cfg
-        self._order = cfg.getint('scheme', 'order')
+        self._order = cfg.getint('mesh-elements', 'order')
 
         if self.ndims != len(dims):
             raise ValueError('Invalid dimension symbols')

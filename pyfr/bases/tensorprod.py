@@ -121,7 +121,7 @@ def diff_vcjh_correctionfn(k, eta, sym):
 
 class TensorProdBasis(object):
     def _get_pts1d(self):
-        rule = self._cfg.get('scheme', 'quad-rule')
+        rule = self._cfg.get('mesh-elements', 'quad-rule')
         return points_for_rule(rule, self._order + 1)
 
     def get_upts(self):
@@ -204,7 +204,7 @@ class HexBasis(TensorProdBasis, BasisBase):
             nbdims = [d for d in self._dims if d is not sym]
             fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
 
-            eta = self._cfg.get('scheme', 'vcjh-eta')
+            eta = self._cfg.get('mesh-elements', 'vcjh-eta')
             diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
 
             for p,gfn in zip(fpair, diffcorfn):
