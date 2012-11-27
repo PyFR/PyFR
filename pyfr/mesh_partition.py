@@ -16,25 +16,22 @@ class MeshPartition(object):
         self._cfg = cfg
         self._nsubanks = nsubanks
 
-        # Map from our MPI rank to our physical mesh rank
-        prank = rallocs.mprankmap[MPI.COMM_WORLD.rank]
-
         # Load the elements and interfaces from the mesh
-        self._load_eles(prank, mesh)
-        self._load_int_inters(prank, mesh)
-        self._load_mpi_inters(prank, rallocs, mesh)
+        self._load_eles(rallocs, mesh)
+        self._load_int_inters(rallocs, mesh)
+        self._load_mpi_inters(rallocs, mesh)
 
         # Prepare the queues and kernels
         self._gen_queues()
         self._gen_kernels()
 
-    def _load_eles(self, prank, mesh):
+    def _load_eles(self, rallocs, mesh):
         # Automagically construct the bases map ('hex' => HexBasis &c)
         basiscls = {b.name: b for b in all_subclasses(BasisBase)}
 
         self._elemaps = OrderedDict()
         for k in basiscls.keys():
-            mk = 'spt_%s_p%d' % (k, prank)
+            mk = 'spt_%s_p%d' % (k, rallocs.prank)
             if mk in mesh:
                 ele = Elements(basiscls[k], mesh[mk], self._cfg)
                 self._elemaps[k] = ele
@@ -44,8 +41,8 @@ class MeshPartition(object):
 
         self._eles = proxylist(self._elemaps.values())
 
-    def _load_int_inters(self, prank, mesh):
-        lhs, rhs = mesh['con_p%d' % (prank)]
+    def _load_int_inters(self, rallocs, mesh):
+        lhs, rhs = mesh['con_p%d' % rallocs.prank]
         int_inters = InternalInterfaces(self._be, lhs, rhs, self._elemaps,
                                         self._cfg)
 
@@ -53,11 +50,13 @@ class MeshPartition(object):
         # we wrap it in a proxylist for consistency
         self._int_inters = proxylist([int_inters])
 
-    def _load_mpi_inters(self, prank, rallocs, mesh):
+    def _load_mpi_inters(self, rallocs, mesh):
+        lhsprank = rallocs.prank
+
         self._mpi_inters = proxylist([])
-        for rhsprank in rallocs.prankconn[prank]:
+        for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
-            interarr = mesh['con_p%dp%d' % (prank, rhsprank)]
+            interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)]
 
             mpiiface = MPIInterfaces(self._be, interarr, rhsmrank,
                                      self._elemaps, self._cfg)

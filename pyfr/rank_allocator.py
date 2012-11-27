@@ -55,6 +55,9 @@ class BaseRankAllocator(object):
         # Invert this mapping
         self.pmrankmap = {v: k for k,v in self.mprankmap.items()}
 
+        # Compute the physical rank of ourself
+        self.prank = self.mprankmap[rank]
+
     def _get_mesh_connectivity(self, mesh):
         conn = defaultdict(list)
         for f in mesh:
