@@ -17,7 +17,6 @@ Contents:
    capabilities
    source
    examples
-   funding
 
 Indices and Tables
 ==================

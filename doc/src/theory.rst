@@ -29,21 +29,22 @@ flux function), which were originally proposed by Kopriva and Kolias
 In addition to recovering known methods, the FR approach also
 facilitates the definition of new schemes. Huynh previously identified
 several new unstructured high-order methods using the FR approach
-[H2007]_ [H2009]_. Of particular note is the so called :math:`g_2` method,
-which Huynh showed to be stable for various orders of accuracy (using
-von Neumann analysis), and which can be made more efficient than other
-FR methods via judicious placement of the solution points
-[H2007]_. Additionally, Huynh proposed various guidelines for
-selecting the so called flux correction function, which determines
-numerous properties of the associated FR scheme. In particular, for
+[H2007]_ [H2009]_. Of particular note is the so called :math:`g_2`
+method, which Huynh showed to be stable for various orders of accuracy
+(using von Neumann analysis), and which can be made more efficient than
+other FR methods via judicious placement of the solution points
+[H2007]_. Additionally, Huynh proposed various guidelines for selecting
+the so called flux correction function, which determines numerous
+properties of the associated FR scheme. In particular, for
 one-dimensional (1D) FR schemes, Huynh suggested (based on von Neumann
 analysis) that if a flux correction function of degree :math:`k+1` is
-orthogonal to all polynomials of degree :math:`k-2` then the resulting scheme
-will be linearly stable. Recently, Vincent, Castonguay and Jameson
-proved this assertion to be true using an energy method [VCJ2011]_, and
-consequently identified a range of FR schemes (parameterized by a single
-scalar), which are guaranteed to be linearly stable for all orders of
-accuracy. These linearly stable FR schemes are known as Vincent-Castonguay-Jameson-Huynh (VCJH) schemes.
+orthogonal to all polynomials of degree :math:`k-2` then the resulting
+scheme will be linearly stable. Recently, Vincent, Castonguay and
+Jameson proved this assertion to be true using an energy method
+[VCJ2011]_, and consequently identified a range of FR schemes
+(parameterized by a single scalar), which are guaranteed to be linearly
+stable for all orders of accuracy. These linearly stable FR schemes are
+known as Vincent-Castonguay-Jameson-Huynh (VCJH) schemes.
 
 Flux Reconstruction
 -------------------
@@ -344,4 +345,4 @@ details see the original paper of Huynh [H2007]_.
    
 .. [J2010] Jameson, A. (2010). A proof of the stability of the spectral
    difference method for all orders of accuracy. J Sci Comput, 45(1-3), 
-   348Ð358.
+   348-358.
