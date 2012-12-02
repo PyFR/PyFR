@@ -9,7 +9,7 @@ import numpy as np
 import pkgutil
 
 
-def test_hex_gleg_ord2_csd():
+def test_hex_gleg_ord3_csd():
     # Config for a third order spectral difference scheme
     cfg = SafeConfigParser()
     cfg.add_section('mesh-elements')
