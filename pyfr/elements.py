@@ -42,7 +42,7 @@ class Elements(object):
         # Generate the constant operator matrices
         self._gen_m0(dims, ubasis, fpts)
         self._gen_m1(dims, ubasis, upts)
-        self._gen_m2(dims, ubasis, fpts, normfpts)
+        self._gen_m2(self._m0, normfpts)
         self._gen_m3(dims, fbasis, upts)
 
         # Transform matrices at the soln points
@@ -192,15 +192,11 @@ class Elements(object):
             for i in xrange(len(upts)):
                 m[i,j,k] = p(*upts[i])
 
-    def _gen_m2(self, dims, ubasis, fpts, normfpts):
+    def _gen_m2(self, m0, normfpts):
         """Trans discontinuous flux at upts to trans normal
         discontinuous flux at fpts
         """
-        self._m2 = m = np.empty((len(fpts), len(ubasis), len(dims)))
-
-        ubasis_l = [lambdify(dims, u) for u in ubasis]
-        for i,j in ndrange(len(fpts), len(ubasis)):
-            m[i,j,:] = normfpts[i,:]*ubasis_l[j](*fpts[i])
+        self._m2 = normfpts[:,None,:]*m0[...,None]
 
     def _gen_m3(self, dims, fbasis, upts):
         """Trans normal correction flux at upts to trans divergence of
