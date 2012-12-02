@@ -3,6 +3,8 @@
 from abc import ABCMeta, abstractmethod
 
 class BasisBase(object):
+    __metaclass__ = ABCMeta
+
     name = None
     ndims = -1
 
@@ -19,19 +21,19 @@ class BasisBase(object):
         return self._dims
 
     @abstractmethod
-    def gen_upts(self):
+    def get_upts(self):
         pass
 
     @abstractmethod
-    def gen_fpts(self):
+    def get_fpts(self):
         pass
 
     @abstractmethod
-    def gen_spts(self):
+    def get_spts(self):
         pass
 
     @abstractmethod
-    def get_nfpts_for_face(self, face):
+    def get_nfpts(self):
         pass
 
     @abstractmethod
