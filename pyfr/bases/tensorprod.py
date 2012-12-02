@@ -49,8 +49,9 @@ def _nodal_basis1d(points, sym):
     where :math:`p_i` is the i'th entry in *points* and :math:`x \in p`.
     """
     n = len(points)
+    lagrange_poly = sy.interpolating_poly
 
-    return [sy.interpolating_poly(n, sym, points, (0,)*i + (1,) + (0,)*(n-i))
+    return [lagrange_poly(n, sym, points, (0,)*i + (1,) + (0,)*(n-i)).expand()
             for i in xrange(n)]
 
 def nodal_basis(points, dims, compact=True):
