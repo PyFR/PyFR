@@ -75,13 +75,6 @@ class Elements(object):
         assert self._be is None
         self._be = be
 
-        # Pack higher dimensional matrices down into two dimensions
-        self._m1 = be.from_aos_to_native(self._m1)
-        self._m2 = be.from_aos_to_native(self._m2)
-        self._smat_upts = be.from_aos_to_native(self._smat_upts)
-        self._pnorm_fpts = be.from_aos_to_native(self._pnorm_fpts)
-        self._scal_upts = be.from_aos_to_native(self._scal_upts)
-
         # Allocate the constant operator matrices
         self._m0 = be.auto_const_sparse_matrix(self._m0, tags={'M0'})
         self._m1 = be.auto_const_sparse_matrix(self._m1, tags={'M1'})
@@ -101,10 +94,10 @@ class Elements(object):
         neles = self.neles
 
         # Allocate general storage required for flux computation
-        self._scal_upts = [be.matrix(nupts, nvars*neles, self._scal_upts)
+        self._scal_upts = [be.matrix((nupts, neles, nvars), self._scal_upts)
                            for i in xrange(nsubanks)]
-        self._vect_upts = be.matrix(nupts*ndims, nvars*neles)
-        self._scal_fpts = be.matrix(nfpts, nvars*neles)
+        self._vect_upts = be.matrix((nupts, ndims, neles, nvars))
+        self._scal_fpts = be.matrix((nfpts, neles, nvars))
 
         # Bank the scalar soln points (as required by the RK schemes)
         self.scal_upts_inb = be.matrix_bank(self._scal_upts)

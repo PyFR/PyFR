@@ -4,71 +4,68 @@ import pyfr.backends.base as base
 
 import numpy as np
 
-class _Dummy2DBase(object):
-    def __init__(self, nrow, ncol, initval=None, tags=set()):
-        self._nrow = nrow
-        self._ncol = ncol
-        self._tags = tags
-        self._data = initval if initval is not None else np.empty((nrow, ncol))
+class DummyMatrixBase(base.MatrixBase):
+    def __init__(self, backend, ioshape, initval, iopacking, tags):
+        super(DummyMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
 
-    def get(self):
-        return self._data
+        if initval is not None:
+            self.data = initval
+        else:
+            self.data = np.empty((self.nrow, self.ncol))
 
-    @property
-    def nrow(self):
-        return self._nrow
+    def _get(self):
+        return self.data
 
-    @property
-    def ncol(self):
-        return self._ncol
+    def _set(self, buf):
+        self.data = buf
 
     @property
     def nbytes(self):
-        return self._data.nbytes
+        return self.data.nbytes
 
 
-class _DummyMatrix(_Dummy2DBase, base.Matrix):
-    def set(self, arr):
-        assert arr.shape == (self._nrow, self._ncol)
-        self._data = arr
-
-
-class _DummyConstMatrix(_Dummy2DBase, base.ConstMatrix):
-    def __init__(self, initval, tags=set()):
-        nrow, ncol = initval.shape
-        super(_DummyConstMatrix, self).__init__(nrow, ncol, initval, tags)
-
-
-class _DummySparseMatrix(_Dummy2DBase, base.SparseMatrix):
-    def __init__(self, initval, tags=set()):
-        nrow, ncol = initval.shape
-        super(_DummySparseMatrix, self).__init__(nrow, ncol, initval, tags)
-
-
-class _DummyMPIMatrix(_DummyMatrix, base.MPIMatrix):
+class DummyMatrix(DummyMatrixBase, base.Matrix):
     pass
 
 
-class _DummyMatrixBank(base.MatrixBank):
-    def __init__(self, mats, tags=set()):
-        super(_DummyMatrixBank, self).__init__(mats)
+class DummyConstMatrix(DummyMatrixBase, base.ConstMatrix):
+    def __init__(self, backend, initval, iopacking, tags):
+        ioshape = initval.shape
+        super(DummyConstMatrix, self).__init__(backend, ioshape, initval,
+                                               iopacking, tags)
 
 
-class _DummyView(base.View):
+class DummySparseMatrix(DummyMatrixBase, base.SparseMatrix):
+    def __init__(self, backend, initval, iopacking, tags):
+        ioshape = initval.shape
+        super(DummySparseMatrix, self).__init__(backend, ioshape, initval,
+                                                iopacking, tags)
+
+
+class DummyMPIMatrix(DummyMatrix, base.MPIMatrix):
+    pass
+
+
+class DummyMatrixBank(base.MatrixBank):
+    def __init__(self, mats, tags):
+        super(DummyMatrixBank, self).__init__(mats)
+
+
+class DummyView(base.View):
     def __init__(self, matmap, rcmap, tags):
         pass
 
 
-class _DummyMPIView(base.MPIView):
+class DummyMPIView(base.MPIView):
     def __init__(self, matmap, rcmap, tags):
         pass
 
 
-class _DummyKernel(base.Kernel):
+class DummyKernel(base.Kernel):
     pass
 
 
-class _DummyQueue(base.Queue):
+class DummyQueue(base.Queue):
     def __lshift__(self, iterable):
         pass
 
@@ -77,19 +74,19 @@ class _DummyQueue(base.Queue):
 
 class DummyBackend(base.Backend):
     def _matrix(self, *args, **kwargs):
-        return _DummyMatrix(*args, **kwargs)
+        return DummyMatrix(self, *args, **kwargs)
 
     def _matrix_bank(self, *args, **kwargs):
-        return _DummyMatrixBank(*args, **kwargs)
+        return DummyMatrixBank(self, *args, **kwargs)
 
     def _mpi_matrix(self, *args, **kwargs):
-        return _DummyMPIMatrix(*args, **kwargs)
+        return DummyMPIMatrix(self, *args, **kwargs)
 
     def _const_matrix(self, *args, **kwargs):
-        return _DummyConstMatrix(*args, **kwargs)
+        return DummyConstMatrix(self, *args, **kwargs)
 
     def _sparse_matrix(self, *args, **kwargs):
-        return _DummySparseMatrix(*args, **kwargs)
+        return DummySparseMatrix(self, *args, **kwargs)
 
     def _is_sparse(self, mat, tags):
         if 'sparse' in tags:
@@ -100,10 +97,10 @@ class DummyBackend(base.Backend):
             return False
 
     def _view(self, *args, **kwargs):
-        return _DummyView(*args, **kwargs)
+        return DummyView(*args, **kwargs)
 
     def _mpi_view(self, *args, **kwargs):
-        return _DummyMPIView(*args, **kwargs)
+        return DummyMPIView(*args, **kwargs)
 
     def _kernel(self, name, *args, **kwargs):
         validateattr = '_validate_' + name
@@ -116,10 +113,10 @@ class DummyBackend(base.Backend):
         # Call the validator method to check the arguments
         getattr(self, validateattr)(*args, **kwargs)
 
-        return _DummyKernel()
+        return DummyKernel()
 
     def _queue(self, *args, **kwargs):
-        return _DummyQueue(*args, **kwargs)
+        return DummyQueue(*args, **kwargs)
 
     def runall(self, seq):
         for q in seq:

@@ -19,8 +19,8 @@ np2 = np.random.randn(NROW, NCOL)
 be = CudaBackend()
 
 # Allocate matrices on the backend
-m1 = be.matrix(NROW, NCOL, np1)
-m2 = be.matrix(NROW, NCOL, np2)
+m1 = be.matrix((NROW, NCOL), np1)
+m2 = be.matrix((NROW, NCOL), np2)
 
 # Prepare the `ipadd` kernel which computes m1[i,j] = m1[i,j] + 2.0*m2[i,j]
 addkern = be.kernel('ipadd', m1, m2)

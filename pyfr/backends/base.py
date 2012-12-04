@@ -35,7 +35,7 @@ class Backend(object):
         self._allocs = defaultdict(WeakSet)
 
     @recordalloc('data')
-    def matrix(self, nrow, ncol, initval=None, tags=set()):
+    def matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
         If an inital value is specified the shape of the provided
@@ -52,10 +52,10 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.Matrix`
         """
-        return self._matrix(nrow, ncol, initval, tags)
+        return self._matrix(ioshape, initval, iopacking, tags)
 
     @abstractmethod
-    def _matrix(self, nrow, ncol, initval, tags):
+    def _matrix(self, ioshape, initval, iopacking, tags):
         pass
 
     @recordalloc('banks')
@@ -77,7 +77,7 @@ class Backend(object):
         pass
 
     @recordalloc('data')
-    def mpi_matrix(self, nrow, ncol, initval=None, tags=set()):
+    def mpi_matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
         """Creates a matrix which can be exchanged over MPI
 
         Since an MPI Matrix *is a* :class:`~pyfr.backends.base.Matrix`
@@ -94,14 +94,14 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.MPIMatrix`
         """
-        return self._mpi_matrix(nrow, ncol, initval, tags)
+        return self._mpi_matrix(ioshape, initval, iopacking, tags)
 
     @abstractmethod
-    def _mpi_matrix(self, nrow, ncol, initval, tags):
+    def _mpi_matrix(self, ioshape, iopacking, initval, tags):
         pass
 
     @recordalloc('data')
-    def const_matrix(self, initval, tags=set()):
+    def const_matrix(self, initval, iopacking='AoS', tags=set()):
         """Creates a constant matrix from *initval*
 
         This should be preferred over :meth:`matrix` when it is known
@@ -119,14 +119,14 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.ConstMatrix`
         """
-        return self._const_matrix(initval, tags)
+        return self._const_matrix(initval, iopacking, tags)
 
     @abstractmethod
     def _const_matrix(self, initval, tags):
         pass
 
     @recordalloc('data')
-    def sparse_matrix(self, initval, tags=set()):
+    def sparse_matrix(self, initval, iopacking='AoS', tags=set()):
         """Creates a sparse matrix from *initval*
 
         A *sparse matrix* is a special type of constant matrix
@@ -140,19 +140,19 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.SparseMatrix`
         """
-        return self._sparse_matrix(initval, tags)
+        return self._sparse_matrix(initval, iopacking, tags)
 
     @abstractmethod
-    def _sparse_matrix(self, initval, tags):
+    def _sparse_matrix(self, initval, iopacking, tags):
         pass
 
-    def auto_const_sparse_matrix(self, initval, tags=set()):
+    def auto_const_sparse_matrix(self, initval, iopacking='AoS', tags=set()):
         """Creates either a constant or sparse matrix from *initval*
         """
         if self._is_sparse(initval, tags):
-            return self.sparse_matrix(initval, tags)
+            return self.sparse_matrix(initval, iopacking, tags)
         else:
-            return self.const_matrix(initval, tags)
+            return self.const_matrix(initval, iopacking, tags)
 
     @abstractmethod
     def _is_sparse(self, mat, tags):
@@ -258,7 +258,9 @@ class Backend(object):
                 mat = mat.swapaxes(0, 1).swapaxes(2, 3)
 
         # Compact down to two dimensions
-        if mat.ndim == 3:
+        if mat.ndim == 2:
+            return mat
+        elif mat.ndim == 3:
             return mat.reshape(mat.shape[0], -1)
         elif mat.ndim == 4:
             return mat.reshape(mat.shape[0]*mat.shape[1], -1)
@@ -287,20 +289,49 @@ class Backend(object):
     def from_native_to_aos(self, mat, nshape):
         return self._from_native_to_x(mat, nshape, 'AoS')
 
-class _MatrixBase(object):
+class MatrixBase(object):
     @abstractmethod
+    def __init__(self, backend, ioshape, iopacking, tags):
+        self.backend = backend
+        self.ioshape = ioshape
+        self.iopacking = iopacking
+        self.tags = tags
+
+        if len(ioshape) == 2:
+            self.nrow = ioshape[0]
+            self.ncol = ioshape[1]
+        elif len(ioshape) == 3:
+            self.nrow = ioshape[0]
+            self.ncol = ioshape[1]*ioshape[2]
+        elif len(ioshape) == 4:
+            self.nrow = ioshape[0]*ioshape[1]
+            self.ncol = ioshape[2]*ioshape[3]
+        else:
+            raise ValueError('Invalid matrix I/O shape')
+
+    def _pack(self, buf):
+        if buf.shape != self.ioshape:
+            raise ValueError('Invalid matrix shape')
+
+        if self.iopacking == 'AoS':
+            return self.backend.from_aos_to_native(buf)
+        else:
+            return self.backend.from_soa_to_native(buf)
+
+    def _unpack(self, buf):
+        if buf.shape != (self.nrow, self.ncol):
+            raise ValueError('Invalid matrix shape')
+
+        if self.iopacking == 'AoS':
+            return self.backend.from_native_to_aos(buf, self.ioshape)
+        else:
+            return self.backend.from_native_to_soa(buf, self.ioshape)
+
     def get(self):
-        """Contents as an *numpy.ndarray*"""
-        pass
+        return self._unpack(self._get())
 
-    @abstractproperty
-    def nrow(self):
-        """Number of rows"""
-        pass
-
-    @abstractproperty
-    def ncol(self):
-        """Number of columns"""
+    @abstractmethod
+    def _get(self):
         pass
 
     @abstractproperty
@@ -309,21 +340,23 @@ class _MatrixBase(object):
         pass
 
 
-class Matrix(_MatrixBase):
+class Matrix(MatrixBase):
     """Matrix abstract base class
     """
+    def set(self, buf):
+        return self._set(self._pack(buf))
+
     @abstractmethod
-    def set(self, ary):
-        """Sets the contents of the matrix to be *ary*"""
+    def _set(self, buf):
         pass
 
 
-class ConstMatrix(_MatrixBase):
+class ConstMatrix(MatrixBase):
     """Constant matrix abstract base class"""
     pass
 
 
-class SparseMatrix(_MatrixBase):
+class SparseMatrix(MatrixBase):
     """Sparse matrix abstract base class"""
     pass
 
@@ -333,7 +366,7 @@ class MPIMatrix(Matrix):
     pass
 
 
-class MatrixBank(_MatrixBase, Sequence):
+class MatrixBank(MatrixBase, Sequence):
     """Matrix bank abstract base class"""
 
     @abstractmethod
@@ -357,16 +390,6 @@ class MatrixBank(_MatrixBase, Sequence):
     def set(self, ary):
         """Sets the contents of the current bank to be *ary*"""
         self._curr.set(ary)
-
-    @property
-    def nrow(self):
-        """Number of rows"""
-        return self._curr.nrow
-
-    @property
-    def ncol(self):
-        """Number of columns"""
-        return self._curr.ncol
 
     def set_bank(self, idx):
         """Switches the currently active bank to *idx*"""

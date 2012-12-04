@@ -71,7 +71,7 @@ class MPIInterfaces(BaseInterfaces):
 
         # Allocate on the backend
         self._scal_lhs = be.mpi_view(*scal_lhs, vlen=self.nvars, tags={'nopad'})
-        self._scal_rhs = be.mpi_matrix(1, nmpicol)
+        self._scal_rhs = be.mpi_matrix((1, nmpicol))
         self._pnorm_lhs = be.view(*pnorm_lhs, vlen=self.ndims, tags={'nopad'})
 
     def get_rsolve_kern(self):

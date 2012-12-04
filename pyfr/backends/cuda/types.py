@@ -7,14 +7,12 @@ import pyfr.backends.base as base
 
 from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
-class CudaBase2D(object):
+class CudaMatrixBase(base.MatrixBase):
     order = 'C'
 
-    def __init__(self, backend, dtype, nrow, ncol, initval, tags):
-        self._nrow = nrow
-        self._ncol = ncol
+    def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
+        super(CudaMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
         self.dtype = dtype
-        self.tags = tags
 
         # Compute the size, in bytes, of the minor dimension
         mindimsz = self.mindim*self.itemsize
@@ -35,7 +33,7 @@ class CudaBase2D(object):
 
         # Process any initial values
         if initval is not None:
-            self._set(initval)
+            self._set(self._pack(initval))
 
     def _get(self):
         # Allocate an empty buffer
@@ -49,9 +47,6 @@ class CudaBase2D(object):
         return buf
 
     def _set(self, ary):
-        if ary.shape != (self.nrow, self.ncol):
-            raise ValueError('Matrix has invalid dimensions')
-
         nary = np.asanyarray(ary, dtype=self.dtype, order=self.order)
 
         # Copy
@@ -59,23 +54,15 @@ class CudaBase2D(object):
                       self.pitch, self.mindim*self.itemsize, self.majdim)
 
     def offsetof(self, i, j):
-        if i >= self._nrow or j >= self._ncol:
+        if i >= self.nrow or j >= self.ncol:
             raise ValueError('Index ({},{}) out of bounds ({},{}))'.\
-                             format(i, j, self._nrow, self._ncol))
+                             format(i, j, self.nrow, self.ncol))
 
         return self.pitch*i + j*self.itemsize if self.order == 'C' else\
                self.pitch*j + i*self.itemsize
 
     def addrof(self, i, j):
         return np.intp(int(self.data) + self.offsetof(i, j))
-
-    @property
-    def nrow(self):
-        return self._nrow
-
-    @property
-    def ncol(self):
-        return self._ncol
 
     @property
     def nbytes(self):
@@ -87,11 +74,11 @@ class CudaBase2D(object):
 
     @property
     def majdim(self):
-        return self._nrow if self.order == 'C' else self._ncol
+        return self.nrow if self.order == 'C' else self.ncol
 
     @property
     def mindim(self):
-        return self._ncol if self.order == 'C' else self._nrow
+        return self.ncol if self.order == 'C' else self.nrow
 
     @property
     def leaddim(self):
@@ -102,16 +89,10 @@ class CudaBase2D(object):
         return self.leaddim, self.mindim, self.order, self.dtype
 
 
-class CudaMatrix(CudaBase2D, base.Matrix):
-    def __init__(self, backend, nrow, ncol, initval, tags):
-        super(CudaMatrix, self).__init__(backend, np.float64, nrow, ncol,
-                                         initval, tags)
-
-    def get(self):
-        return self._get()
-
-    def set(self, ary):
-        self._set(ary)
+class CudaMatrix(CudaMatrixBase, base.Matrix):
+    def __init__(self, backend, ioshape, initval, iopacking, tags):
+        super(CudaMatrix, self).__init__(backend, np.float64, ioshape,
+                                         initval, iopacking, tags)
 
 
 class CudaMatrixBank(base.MatrixBank):
@@ -123,11 +104,11 @@ class CudaMatrixBank(base.MatrixBank):
         super(CudaMatrixBank, self).__init__(mats)
 
 
-class CudaConstMatrix(CudaMatrix, base.ConstMatrix):
-    def __init__(self, backend, initval, tags):
-        nrow, ncol = initval.shape
-        return super(CudaConstMatrix, self).__init__(backend, nrow, ncol,
-                                                     initval, tags)
+class CudaConstMatrix(CudaMatrixBase, base.ConstMatrix):
+    def __init__(self, backend, initval, iopacking, tags):
+        ioshape = initval.shape
+        super(CudaConstMatrix, self).__init__(backend, np.float64, ioshape,
+                                              initval, iopacking, tags)
 
 
 class CudaSparseMatrix(object):
@@ -159,7 +140,7 @@ class CudaView(base.View):
 
         # Validate the matrices
         for m in self._mats:
-            if not isinstance(m, CudaMatrix):
+            if not isinstance(m, (CudaMatrix, CudaConstMatrix)):
                 raise TypeError('Incompatible matrix type for view')
 
             if m.dtype != self.refdtype:
@@ -169,9 +150,10 @@ class CudaView(base.View):
         r, c = rcmap[...,0], rcmap[...,1]
         ptrmap = np.vectorize(lambda m, r, c: m.addrof(r, c))(matmap, r, c)
 
-        self.mapping = CudaBase2D(backend, np.intp, nrow, ncol, ptrmap, tags)
-        self.strides = CudaBase2D(backend, np.int32, nrow, ncol, stridemap,
-                                  tags)
+        self.mapping = CudaMatrixBase(backend, np.intp, (nrow, ncol), ptrmap,
+                                      'AoS', tags)
+        self.strides = CudaMatrixBase(backend, np.int32, (nrow, ncol),
+                                      stridemap, 'AoS',tags)
 
     @property
     def nbytes(self):
@@ -179,13 +161,13 @@ class CudaView(base.View):
 
 
 class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
-    def __init__(self, backend, nrow, ncol, initval, tags):
+    def __init__(self, backend, ioshape, initval, iopacking, tags):
         # Ensure that our CUDA buffer will not be padded
         ntags = tags | {'nopad'}
 
         # Call the standard matrix constructor
-        super(CudaMPIMatrix, self).__init__(backend, nrow, ncol, initval,
-                                            ntags)
+        super(CudaMPIMatrix, self).__init__(backend, ioshape, initval,
+                                            iopacking, ntags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
@@ -201,7 +183,8 @@ class CudaMPIView(base.MPIView):
         self.view = backend._view(matmap, rcmap, stridemap, vlen, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend._mpi_matrix(nrow, ncol*vlen, None, tags)
+        self.mpimat = backend._mpi_matrix((nrow, ncol, vlen), None, 'AoS',
+                                          tags=tags)
 
     @property
     def nbytes(self):
