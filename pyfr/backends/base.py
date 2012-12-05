@@ -371,29 +371,36 @@ class MatrixBank(MatrixBase, Sequence):
 
     @abstractmethod
     def __init__(self, matrices):
-        self._banks = matrices
-        self._curr = self._banks[0]
+        self._mats = matrices
+
+        self._curr_idx = 0
+        self._curr_mat = self._mats[0]
 
     def __len__(self):
-        return len(self._banks)
+        return len(self._mats)
 
     def __getitem__(self, idx):
-        return self._banks[idx]
+        return self._mats[idx]
 
     def __getattr__(self, attr):
-        return getattr(self._curr, attr)
+        return getattr(self._curr_mat, attr)
 
     def get(self):
         """Contents of the current bank as an *numpy.ndarray*"""
-        return self._curr.get()
+        return self._curr_mat.get()
 
-    def set(self, ary):
-        """Sets the contents of the current bank to be *ary*"""
-        self._curr.set(ary)
+    def set(self, buf):
+        """Sets the contents of the current bank to be *buf*"""
+        self._curr_mat.set(buf)
 
-    def set_bank(self, idx):
-        """Switches the currently active bank to *idx*"""
-        self._curr = self._banks[idx]
+    @property
+    def bank(self):
+        return self._curr_idx
+
+    @bank.setter
+    def bank(self, idx):
+        self._curr_idx = idx
+        self._curr_mat = self._mats[idx]
 
 
 class View(object):

@@ -40,6 +40,10 @@ class proxylist(list):
     def __getattr__(self, attr):
         return proxylist([getattr(x, attr) for x in self])
 
+    def __setattr__(self, attr, val):
+        for x in self:
+            setattr(x, attr, val)
+
     def __call__(self, *args, **kwargs):
         return proxylist([x(*args, **kwargs) for x in self])
 
