@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import itertools
 import numpy as np
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
@@ -32,7 +31,7 @@ class CudaBlasExtKernels(CudaKernelProvider):
                 for x, alpha in zip(xn, alphan):
                     args.extend([x.data, alpha])
 
-                fn.prepared_async_call(grid, block, scomp, cnt, y.data, beta,
-                                       *args)
+                fn.prepared_async_call(grid, block, scomp,
+                                       cnt, y.data, beta, *args)
 
         return AxnpbyKernel()

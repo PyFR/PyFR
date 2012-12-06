@@ -120,7 +120,7 @@ _cublasDgemm.argtypes = [cublas_handle_t,
                          c_void_p, c_void_p, c_int]
 _cublasDgemm.errcheck = _cublas_process_status
 
-# Wrap the cublasDgemm (double-precision general matrix multiply) function
+# Wrap the cublasSgemm (double-precision general matrix multiply) function
 _cublasSgemm = _libcublas.cublasSgemm_v2
 _cublasSgemm.restype = c_int
 _cublasSgemm.argtypes = [cublas_handle_t,
@@ -130,19 +130,6 @@ _cublasSgemm.argtypes = [cublas_handle_t,
                          c_void_p, c_int,
                          c_void_p, c_void_p, c_int]
 _cublasSgemm.errcheck = _cublas_process_status
-
-# Wrap the cublasDaxpy (y[i] += α*x[i]) function
-_cublasDaxpy = _libcublas.cublasDaxpy_v2
-_cublasDaxpy.restype  = c_int
-_cublasDaxpy.argtypes = [cublas_handle_t, c_int, c_void_p,
-                         c_void_p, c_int, c_void_p, c_int]
-_cublasDaxpy.errcheck = _cublas_process_status
-
-_cublasSaxpy = _libcublas.cublasSaxpy_v2
-_cublasSaxpy.restype  = c_int
-_cublasSaxpy.argtypes = [cublas_handle_t, c_int, c_void_p,
-                         c_void_p, c_int, c_void_p, c_int]
-_cublasSaxpy.errcheck = _cublas_process_status
 
 class CudaCublasKernels(CudaKernelProvider):
     def __init__(self, backend):
@@ -196,23 +183,3 @@ class CudaCublasKernels(CudaKernelProvider):
                            int(C.data), C.leaddim)
 
         return MulKernel()
-
-    def ipadd(self, y, x):
-        # Ensure x and y have not only the same logical dimensions but also
-        # the same layout in memory; this is required on account of vector
-        # addition being used to add the matrices
-        if (y.majdim, y.mindim, y.leaddim) != (x.majdim, x.mindim, x.leaddim):
-            raise TypeError('Incompatible matrix types for in-place addition')
-
-        elecnt = y.leaddim*y.majdim
-
-        cublasaxpy = _cublasDaxpy if y.dtype == np.float64 else _cublasSaxpy
-        ctypescast = c_double if y.dtype == np.float64 else c_float
-
-        class IpaddKernel(CudaComputeKernel):
-            def run(iself, scomp, scopy, alpha):
-                _cublasSetStream(self._cublas, scomp.handle)
-                cublasaxpy(self._cublas, elecnt, byref(ctypescast(alpha)),
-                           int(x.data), 1, int(y.data), 1)
-
-        return IpaddKernel()
