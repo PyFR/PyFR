@@ -289,7 +289,10 @@ class Backend(object):
     def from_native_to_aos(self, mat, nshape):
         return self._from_native_to_x(mat, nshape, 'AoS')
 
+
 class MatrixBase(object):
+    __metaclass__ = ABCMeta
+
     @abstractmethod
     def __init__(self, backend, ioshape, iopacking, tags):
         self.backend = backend
@@ -366,7 +369,7 @@ class MPIMatrix(Matrix):
     pass
 
 
-class MatrixBank(MatrixBase, Sequence):
+class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
     @abstractmethod
@@ -385,14 +388,6 @@ class MatrixBank(MatrixBase, Sequence):
     def __getattr__(self, attr):
         return getattr(self._curr_mat, attr)
 
-    def get(self):
-        """Contents of the current bank as an *numpy.ndarray*"""
-        return self._curr_mat.get()
-
-    def set(self, buf):
-        """Sets the contents of the current bank to be *buf*"""
-        self._curr_mat.set(buf)
-
     @property
     def active(self):
         return self._curr_idx
@@ -401,6 +396,10 @@ class MatrixBank(MatrixBase, Sequence):
     def active(self, idx):
         self._curr_idx = idx
         self._curr_mat = self._mats[idx]
+
+    @property
+    def nbytes(self):
+        return sum(m.nbytes for m in self)
 
 
 class View(object):
