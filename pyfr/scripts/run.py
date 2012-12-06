@@ -36,7 +36,7 @@ def main():
     ele_banks = mpt.ele_banks
 
     # Forwards Euler (u += Δt*f) on each element type
-    euler_step = proxylist([be.kernel('ipadd', eb[0], eb[1])
+    euler_step = proxylist([be.kernel('axnpby', eb[0], eb[1])
                              for eb in ele_banks])
 
     # Get our own queue
@@ -46,10 +46,10 @@ def main():
         # [in] u(0), [out] f(1)
         mpt(0, 1)
 
-        print be.from_native_to_aos(ele_banks[0][1].get(), (8, 1, 5)).max()
+        print ele_banks[0][1].get().max()
 
         # An euler step on f
-        q % euler_step(dt)
+        q % euler_step(1.0, dt)
 
 
 if __name__ == '__main__':

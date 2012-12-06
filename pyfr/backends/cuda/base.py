@@ -9,6 +9,7 @@ from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixBank,
                                       CudaView, CudaMPIMatrix, CudaMPIView)
 
 from pyfr.backends.cuda.packing import CudaPackingKernels
+from pyfr.backends.cuda.blasext import CudaBlasExtKernels
 from pyfr.backends.cuda.cublas import CudaCublasKernels
 from pyfr.backends.cuda.pointwise import CudaPointwiseKernels
 
@@ -21,6 +22,7 @@ class CudaBackend(Backend):
     def __init__(self):
         super(CudaBackend, self).__init__()
         self._providers = [kprov(self) for kprov in [CudaPointwiseKernels,
+                                                     CudaBlasExtKernels,
                                                      CudaPackingKernels,
                                                      CudaCublasKernels]]
 
