@@ -93,8 +93,8 @@ class MeshPartition(object):
         q1, q2 = self._queues
 
         # Set the banks to use for each element type
-        self._eles.scal_upts_inb.bank = uinbank
-        self._eles.scal_upts_outb.bank = foutbank
+        self._eles.scal_upts_inb.active = uinbank
+        self._eles.scal_upts_outb.active = foutbank
 
 
         # Evaluate the solution at the flux points and pack up any

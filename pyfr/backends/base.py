@@ -394,11 +394,11 @@ class MatrixBank(MatrixBase, Sequence):
         self._curr_mat.set(buf)
 
     @property
-    def bank(self):
+    def active(self):
         return self._curr_idx
 
-    @bank.setter
-    def bank(self, idx):
+    @active.setter
+    def active(self, idx):
         self._curr_idx = idx
         self._curr_mat = self._mats[idx]
 
