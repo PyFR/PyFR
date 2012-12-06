@@ -96,12 +96,12 @@ class CudaMatrix(CudaMatrixBase, base.Matrix):
 
 
 class CudaMatrixBank(base.MatrixBank):
-    def __init__(self, backend, mats, tags):
+    def __init__(self, backend, mats, initbank, tags):
         for m in mats[1:]:
             if m.traits != mats[0].traits:
                 raise ValueError('Matrices in a bank must be homogeneous')
 
-        super(CudaMatrixBank, self).__init__(mats)
+        super(CudaMatrixBank, self).__init__(mats, initbank, tags)
 
 
 class CudaConstMatrix(CudaMatrixBase, base.ConstMatrix):

@@ -59,7 +59,7 @@ class Backend(object):
         pass
 
     @recordalloc('banks')
-    def matrix_bank(self, mats, tags=set()):
+    def matrix_bank(self, mats, initbank=0, tags=set()):
         """Creates a bank of matrices from *mats*
 
         These matrices must be homogeneous.
@@ -70,7 +70,7 @@ class Backend(object):
         :type mats: List of :class:`~pyfr.backends.base.Matrix`
         :rtype: :class:`~pyfr.backends.base.MatrixBank`
         """
-        return self._matrix_bank(mats, tags)
+        return self._matrix_bank(mats, initbank, tags)
 
     @abstractmethod
     def _matrix_bank(self, mats, tags):
@@ -373,11 +373,11 @@ class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
     @abstractmethod
-    def __init__(self, matrices):
+    def __init__(self, matrices, initbank, tags):
         self._mats = matrices
 
-        self._curr_idx = 0
-        self._curr_mat = self._mats[0]
+        self._curr_idx = initbank
+        self._curr_mat = self._mats[initbank]
 
     def __len__(self):
         return len(self._mats)
