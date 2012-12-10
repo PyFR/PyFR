@@ -47,15 +47,15 @@ class BaseIntegrator(object):
     def _controller_needs_errest(self):
         pass
 
-    @abstractmethod
+    @abstractproperty
     def _stepper_has_errest(self):
         pass
 
-    @abstractmethod
+    @abstractproperty
     def _stepper_order(self):
         pass
 
-    @abstractmethod
+    @abstractproperty
     def _stepper_nregs(self):
         pass
 
