@@ -7,7 +7,7 @@ from mpi4py import MPI
 from pyfr.bases import BasisBase
 from pyfr.elements import Elements
 from pyfr.interfaces import InternalInterfaces, MPIInterfaces
-from pyfr.util import proxylist, all_subclasses
+from pyfr.util import proxylist, subclass_map
 
 
 class MeshPartition(object):
@@ -27,13 +27,13 @@ class MeshPartition(object):
 
     def _load_eles(self, rallocs, mesh):
         # Automagically construct the bases map ('hex' => HexBasis &c)
-        basiscls = {b.name: b for b in all_subclasses(BasisBase)}
+        basismap = subclass_map(BasisBase, 'name')
 
         self._elemaps = OrderedDict()
-        for k in basiscls.keys():
+        for k in basismap.keys():
             mk = 'spt_%s_p%d' % (k, rallocs.prank)
             if mk in mesh:
-                ele = Elements(basiscls[k], mesh[mk], self._cfg)
+                ele = Elements(basismap[k], mesh[mk], self._cfg)
                 self._elemaps[k] = ele
 
                 ele.set_ics()

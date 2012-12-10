@@ -7,12 +7,12 @@ from collections import defaultdict
 
 from mpi4py import MPI
 
-from pyfr.util import all_subclasses, get_comm_rank_root
+from pyfr.util import subclass_map, get_comm_rank_root
 
 
 def get_rank_allocation(mesh, cfg):
-    allocators = {a.name: a for a in all_subclasses(BaseRankAllocator)}
-    return allocators[cfg.get('mesh', 'allocator')](mesh, cfg)
+    allocatormap = subclass_map(BaseRankAllocator, 'name')
+    return allocatormap[cfg.get('mesh', 'allocator')](mesh, cfg)
 
 class BaseRankAllocator(object):
     __metaclass__ = ABCMeta
