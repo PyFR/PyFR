@@ -20,6 +20,8 @@ class Inifile(object):
         return Inifile(open(fname).read())
 
     def set(self, section, option, value):
+        value = str(value)
+
         try:
             self._cp.set(section, option, value)
         except NoSectionError:
