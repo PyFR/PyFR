@@ -2,8 +2,7 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-from ConfigParser import SafeConfigParser
-
+from pyfr.inifile import Inifile
 from pyfr.mesh_partition import MeshPartition
 from pyfr.util import range_eval
 
@@ -20,7 +19,7 @@ class BaseIntegrator(object):
             raise TypeError('Incompatible stepper/controller combination')
 
         # Current times and output times
-        self._tcurr = cfg.getfloat('time-integration', 't0')
+        self._tcurr = cfg.getfloat('time-integration', 't0', 0.0)
         self._tout = range_eval(cfg.get('soln-output', 'times'))
 
         # Determine the amount of temp storage required by thus method
@@ -69,7 +68,7 @@ class BaseIntegrator(object):
             solnmap = dict(zip(self._meshp.ele_types, solns))
 
             # Collect statistics
-            stats = SafeConfigParser()
+            stats = Inifile()
             self.collect_stats(stats)
 
             # Output

@@ -17,9 +17,7 @@ class NoneController(BaseController):
     def __init__(self, *args, **kwargs):
         super(NoneController, self).__init__(*args, **kwargs)
 
-        cfg = self._cfg
-
-        self._dt = cfg.getfloat('time-integration', 'dt')
+        self._dt = self._cfg.getfloat('time-integration', 'dt')
         self._dtmin = 0.1*self._dt
 
     @property

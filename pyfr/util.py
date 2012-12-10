@@ -61,11 +61,6 @@ def get_comm_rank_root():
     comm = MPI.COMM_WORLD
     return comm, comm.rank, 0
 
-def cfg_to_str(cfg):
-    buf = io.BytesIO()
-    cfg.write(buf)
-    return buf.getvalue()
-
 _npeval_syms = {'__builtins__': None,
                 'exp': np.exp, 'log': np.log,
                 'sin': np.sin, 'asin': np.arcsin,

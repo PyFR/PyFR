@@ -5,11 +5,11 @@ import os
 import sys
 
 from argparse import ArgumentParser
-from ConfigParser import SafeConfigParser
 
 import numpy as np
 
 from pyfr.backends.cuda import CudaBackend
+from pyfr.inifile import Inifile
 from pyfr.integrators import get_integrator
 from pyfr.rank_allocator import get_rank_allocation
 
@@ -19,15 +19,13 @@ def main():
     os.chdir(cfg_dir)
 
     # Load the config file
-    cfg = SafeConfigParser()
-    cfg.readfp(open(cfg_fname))
+    cfg = Inifile.load(cfg_fname)
 
     # Create a backend
     backend = CudaBackend()
 
     # Open up the mesh
-    mfile = os.path.expanduser(os.path.expandvars(cfg.get('mesh', 'file')))
-    mesh = np.load(mfile)
+    mesh = np.load(cfg.getpath('mesh', 'file'))
 
     # Get the mapping from physical ranks to MPI ranks
     rallocs = get_rank_allocation(mesh, cfg)

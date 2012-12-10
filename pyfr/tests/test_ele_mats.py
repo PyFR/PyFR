@@ -1,18 +1,17 @@
+# -*- coding: utf-8 -*-
 
-from pyfr.bases.tensorprod import HexBasis
-from pyfr.elements import Elements
-
-from ConfigParser import SafeConfigParser
+import pkgutil
 from io import BytesIO
 
 import numpy as np
-import pkgutil
 
+from pyfr.bases.tensorprod import HexBasis
+from pyfr.elements import Elements
+from pyfr.inifile import Inifile
 
 def test_hex_gleg_ord3_csd():
     # Config for a third order spectral difference scheme
-    cfg = SafeConfigParser()
-    cfg.add_section('mesh-elements')
+    cfg = Inifile()
     cfg.set('mesh-elements', 'quad-rule', 'gauss-legendre')
     cfg.set('mesh-elements', 'order', '3')
     cfg.set('mesh-elements', 'vcjh-eta', 'sd')

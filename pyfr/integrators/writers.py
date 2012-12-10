@@ -11,17 +11,14 @@ from mpi4py import MPI
 import numpy as np
 
 from pyfr.integrators.base import BaseIntegrator
-from pyfr.util import get_comm_rank_root, cfg_to_str
+from pyfr.util import get_comm_rank_root
 
 class BaseWriter(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseWriter, self).__init__(*args, **kwargs)
 
         # Output base directory
-        basedir = self._cfg.get('soln-output', 'basedir')
-        basedir = os.path.expandvars(basedir)
-        basedir = os.path.expanduser(basedir)
-        self._basedir = basedir
+        self._basedir = self._cfg.getpath('soln-output', 'basedir', '.')
 
         # Output counter (incremented each time output() is called)
         self._nout = 0
@@ -31,8 +28,8 @@ class BaseWriter(BaseIntegrator):
 
         # Convert the config and stats objects to strings
         if rank == root:
-            cfg_s = cfg_to_str(self._cfg)
-            stats_s = cfg_to_str(stats)
+            cfg_s = self._cfg.tostr()
+            stats_s = stats.tostr()
         else:
             cfg_s = None
             stats_s = None
