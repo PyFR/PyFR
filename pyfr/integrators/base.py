@@ -52,7 +52,7 @@ class BaseIntegrator(object):
         pass
 
     @abstractproperty
-    def _stepper_order(self):
+    def _stepper_nfevals(self):
         pass
 
     @abstractproperty
@@ -75,4 +75,4 @@ class BaseIntegrator(object):
             self.output(solnmap, stats)
 
     def collect_stats(self, stats):
-        pass
+        stats.set('time-integration', 'tcurr', self._tcurr)

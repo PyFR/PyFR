@@ -1,11 +1,16 @@
 # -*- coding: utf-8 -*-
 
+from abc import abstractmethod
+
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.util import proxylist
 
 class BaseStepper(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseStepper, self).__init__(*args, **kwargs)
+
+        # Number of steps taken
+        self._nsteps = 0
 
         backend = self._backend
         elemats = self._meshp.ele_banks
@@ -20,6 +25,16 @@ class BaseStepper(BaseIntegrator):
 
         # Add kernel cache
         self._axnpby_kerns = {}
+
+    @abstractmethod
+    def step(self, t, dt):
+        self._nsteps += 1
+
+    def collect_stats(self, stats):
+        super(BaseStepper, self).collect_stats(stats)
+
+        stats.set('time-integration', 'nsteps', self._nsteps)
+        stats.set('time-integration', 'nfevals', self._stepper_nfevals)
 
     def _get_axnpby_kerns(self, n):
         try:
@@ -61,14 +76,16 @@ class RK4Stepper(BaseStepper):
         return False
 
     @property
-    def _stepper_order(self):
-        return 4
+    def _stepper_nfevals(self):
+        return 4*self._nsteps
 
     @property
     def _stepper_nregs(self):
         return 5
 
     def step(self, t, dt):
+        super(RK4Stepper, self).step(t, dt)
+
         add, flux = self._add, self._meshp
 
         # Get the bank indices for each register
@@ -97,4 +114,3 @@ class RK4Stepper(BaseStepper):
 
         # Return the index of the bank containing u(t + dt)
         return k4
-
