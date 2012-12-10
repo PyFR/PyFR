@@ -3,7 +3,8 @@
 import functools
 import itertools
 
-import cPickle
+import io
+import cPickle as pickle
 
 from mpi4py import MPI
 import numpy as np
@@ -24,7 +25,7 @@ class memoize(object):
         except AttributeError:
             cache = obj.__cache = {}
 
-        key = (self.func, cPickle.dumps(args[1:], 1), cPickle.dumps(kw, 1))
+        key = (self.func, pickle.dumps(args[1:], 1), pickle.dumps(kw, 1))
         try:
             res = cache[key]
         except KeyError:
@@ -52,6 +53,18 @@ def all_subclasses(cls):
     return cls.__subclasses__()\
          + [g for s in cls.__subclasses__() for g in all_subclasses(s)]
 
+def subclass_map(cls, attr):
+    subcls = all_subclasses(cls)
+    return {getattr(s, attr): s for s in subcls if hasattr(s, attr)}
+
+def get_comm_rank_root():
+    comm = MPI.COMM_WORLD
+    return comm, comm.rank, 0
+
+def cfg_to_str(cfg):
+    buf = io.BytesIO()
+    cfg.write(buf)
+    return buf.getvalue()
 
 _npeval_syms = {'__builtins__': None,
                 'exp': np.exp, 'log': np.log,
@@ -65,6 +78,12 @@ def npeval(expr, locals):
     expr = expr.replace('^', '**')
 
     return eval(expr, _npeval_syms, locals)
+
+
+_range_eval_syms = {'__builtins__': None,
+                    'range': lambda s,e,n: list(np.linspace(s, e, n))}
+def range_eval(expr):
+    return [float(t) for t in eval(expr, _range_eval_syms, None)]
 
 _ctype_map = {np.float32: 'float', np.float64: 'double'}
 def npdtype_to_ctype(dtype):

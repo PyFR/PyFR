@@ -7,7 +7,7 @@ from collections import defaultdict
 
 from mpi4py import MPI
 
-from pyfr.util import all_subclasses
+from pyfr.util import all_subclasses, get_comm_rank_root
 
 
 def get_rank_allocation(mesh, cfg):
@@ -22,19 +22,16 @@ class BaseRankAllocator(object):
     def __init__(self, mesh, cfg):
         self._cfg = cfg
 
-        comm = MPI.COMM_WORLD
-        size = comm.size
-        rank = comm.rank
-        root = 0
+        comm, rank, root = get_comm_rank_root()
 
         if rank == root:
             # Determine the (physical) connectivity of the mesh
             prankconn = self._get_mesh_connectivity(mesh)
             nparts = len(prankconn) or 1
 
-            if nparts != size:
+            if nparts != comm.size:
                 raise RuntimeError('Mesh has %d partitions but running with '
-                                   '%d MPI ranks' % (nparts, size))
+                                   '%d MPI ranks' % (nparts, comm.size))
         else:
             prankconn = None
 

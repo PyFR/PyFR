@@ -138,3 +138,14 @@ class MeshPartition(object):
     @property
     def ele_banks(self):
         return [list(b) for b in self._eles.scal_upts_inb]
+
+    @property
+    def ele_types(self):
+        return list(self._elemaps.keys())
+
+    @property
+    def ele_shapes(self):
+        return [(e.nupts, e.neles, e.nvars) for e in self._eles]
+
+    def ele_scal_upts(self, idx):
+        return list(self._eles.get_scal_upts_mat(idx))

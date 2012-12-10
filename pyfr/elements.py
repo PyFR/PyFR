@@ -129,6 +129,9 @@ class Elements(object):
         self._pnorm_fpts_vmats[:] = self._pnorm_fpts
         self._pnorm_fpts_vstri[:] = self._pnorm_fpts_strides[1]
 
+    def get_scal_upts_mat(self, idx):
+        return self._scal_upts[idx].get()
+
     def get_disu_fpts_kern(self):
         disu_upts, disu_fpts = self.scal_upts_inb, self._scal_fpts
         return self._be.kernel('mul', self._m0, disu_upts, disu_fpts)
