@@ -112,14 +112,14 @@ rsolve_rus_inv(const ${dtype} ul[${nvars}],
 
     // Compute the speed
     ${dtype} a = sqrt(gamma*(pl + pr)/(ul[0] + ur[0]))
-               + 0.5 * (${' + '.join('pnorm[{0}]*(vl[{0}] + vr[{0}])'.format(k)\
+         + 0.5 * fabs(${' + '.join('pnorm[{0}]*(vl[{0}] + vr[{0}])'.format(k)\
                         for k in range(ndims))});
 
     // Output
     for (int i = 0; i < ${nvars}; ++i)
         fcomm[i] = 0.5 * ((${' + '.join('pnorm[{0}]*(fl[i][{0}] + fr[i][{0}])'.format(k)\
                              for k in range(ndims))})
-                        + a*(ur[i] - ul[i]));
+                        - a*(ur[i] - ul[i]));
 
 }
 
