@@ -49,7 +49,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
                 fn.prepared_async_call(grid, block, scomp, ninters,
                                        ul_v.mapping.data, ul_v.strides.data,
                                        ur_v.mapping.data, ur_v.strides.data,
-                                       pnl_v.mapping.data, pnr_v.strides.data,
+                                       pnl_v.mapping.data, pnl_v.strides.data,
                                        pnr_v.mapping.data, pnr_v.strides.data,
                                        gamma)
 
