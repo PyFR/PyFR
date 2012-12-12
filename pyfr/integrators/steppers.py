@@ -95,9 +95,6 @@ class EulerStepper(BaseStepper):
 class RK4Stepper(BaseStepper):
     stepper_name = 'rk4'
 
-    def __init__(self, *args, **kwargs):
-        super(RK4Stepper, self).__init__(*args, **kwargs)
-
     @property
     def _stepper_has_errest(self):
         return False
