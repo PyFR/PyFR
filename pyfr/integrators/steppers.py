@@ -65,6 +65,33 @@ class BaseStepper(BaseIntegrator):
         self._queue % axnpby(*args[::2])
 
 
+class EulerStepper(BaseStepper):
+    stepper_name = 'euler'
+
+    @property
+    def _stepper_has_errest(self):
+        return False
+
+    @property
+    def _stepper_nfevals(self):
+        return self._nsteps
+
+    @property
+    def _stepper_nregs(self):
+        return 2
+
+    def step(self, t, dt):
+        super(EulerStepper, self).step(t, dt)
+
+        add, flux = self._add, self._meshp
+        ut, f = self._regidx
+
+        flux(ut, f)
+        add(1.0, ut, dt, f)
+
+        return ut
+
+
 class RK4Stepper(BaseStepper):
     stepper_name = 'rk4'
 
