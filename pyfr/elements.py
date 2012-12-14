@@ -3,9 +3,7 @@
 import numpy as np
 import sympy as sy
 
-from sympy.utilities.lambdify import lambdify
-
-from pyfr.util import ndrange, npeval
+from pyfr.util import ndrange, npeval, lazyprop
 
 class Elements(object):
     def __init__(self, basiscls, eles, cfg):
@@ -25,34 +23,20 @@ class Elements(object):
         dims = sy.symbols('p q r')[:ndims]
 
         # Instantiate the basis class
-        self._basis = basis = basiscls(dims, cfg)
-
-        # Get the locations of the soln, flux and shape points
-        upts, ubasis = basis.get_upts()
-        fpts, fbasis = basis.get_fpts()
-        spts, sbasis = basis.get_spts(nspts)
-
-        # Get the normals to the flux points
-        normfpts = basis.get_norm_fpts()
+        self._basis = basis = basiscls(dims, nspts, cfg)
 
         # Sizes
-        self.nupts = nupts = len(upts)
-        self.nfpts = nfpts = len(fpts)
-
-        # Generate the constant operator matrices
-        self._gen_m0(dims, ubasis, fpts)
-        self._gen_m1(dims, ubasis, upts)
-        self._gen_m2(self._m0, normfpts)
-        self._gen_m3(dims, fbasis, upts)
+        self.nupts = nupts = basis.nupts
+        self.nfpts = nfpts = sum(basis.nfpts)
 
         # Transform matrices at the soln points
-        self._gen_rcpdjac_smat_upts(dims, eles, sbasis, upts)
+        self._gen_rcpdjac_smat_upts(eles)
 
         # Physical normals at the flux points
-        self._gen_pnorm_fpts(dims, eles, sbasis, fpts, normfpts)
+        self._gen_pnorm_fpts(eles)
 
         # Physical locations of the solution points
-        self._gen_ploc_upts(dims, eles, sbasis, upts)
+        self._gen_ploc_upts(eles)
 
     def set_ics(self):
         nupts, neles, ndims = self._ploc_upts.shape
@@ -76,10 +60,10 @@ class Elements(object):
         self._be = be
 
         # Allocate the constant operator matrices
-        self._m0 = be.auto_const_sparse_matrix(self._m0, tags={'M0'})
-        self._m1 = be.auto_const_sparse_matrix(self._m1, tags={'M1'})
-        self._m2 = be.auto_const_sparse_matrix(self._m2, tags={'M2'})
-        self._m3 = be.auto_const_sparse_matrix(self._m3, tags={'M3'})
+        self._m0b = be.auto_const_sparse_matrix(self.m0, tags={'M0'})
+        self._m1b = be.auto_const_sparse_matrix(self.m1, tags={'M1'})
+        self._m2b = be.auto_const_sparse_matrix(self.m2, tags={'M2'})
+        self._m3b = be.auto_const_sparse_matrix(self.m3, tags={'M3'})
 
         # Allocate soln point transformation matrices
         self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts)
@@ -111,7 +95,7 @@ class Elements(object):
 
     def _gen_inter_view_mats(self, be, neles, nvars, ndims):
         # Get the number of flux points for each face of the element
-        self._nfacefpts = nfacefpts = self._basis.get_nfpts()
+        self._nfacefpts = nfacefpts = self._basis.nfpts
 
         # Get the relevant strides required for view construction
         self._scal_fpts_strides = be.from_aos_stride_to_native(neles, nvars)
@@ -134,7 +118,7 @@ class Elements(object):
 
     def get_disu_fpts_kern(self):
         disu_upts, disu_fpts = self.scal_upts_inb, self._scal_fpts
-        return self._be.kernel('mul', self._m0, disu_upts, disu_fpts)
+        return self._be.kernel('mul', self._m0b, disu_upts, disu_fpts)
 
     def get_tdisf_upts_kern(self):
         # User-defined constant
@@ -152,16 +136,16 @@ class Elements(object):
 
     def get_divtdisf_upts_kern(self):
         tdisf_upts, divtconf_upts = self._vect_upts, self.scal_upts_outb
-        return self._be.kernel('mul', self._m1, tdisf_upts, divtconf_upts)
+        return self._be.kernel('mul', self._m1b, tdisf_upts, divtconf_upts)
 
     def get_nrmtdisf_fpts_kern(self):
         tdisf_upts, normtcorf_fpts = self._vect_upts, self._scal_fpts
-        return self._be.kernel('mul', self._m2, tdisf_upts, normtcorf_fpts,
+        return self._be.kernel('mul', self._m2b, tdisf_upts, normtcorf_fpts,
                                beta=1.0, alpha=-1.0)
 
     def get_tdivtconf_upts_kern(self):
         normtcorf_fpts, tdivtconf_upts = self._scal_fpts, self.scal_upts_outb
-        return self._be.kernel('mul', self._m3, normtcorf_fpts, tdivtconf_upts,
+        return self._be.kernel('mul', self._m3b, normtcorf_fpts, tdivtconf_upts,
                                beta=1.0)
 
     def get_divconf_upts_kern(self):
@@ -169,43 +153,34 @@ class Elements(object):
         return self._be.kernel('divconf', self.ndims, self.nvars,
                                tdivtconf_upts, rcpdjac_upts)
 
-    def _gen_m0(self, dims, ubasis, fpts):
+    @lazyprop
+    def m0(self):
         """Discontinuous soln at upts to discontinuous soln at fpts"""
-        self._m0 = m = np.empty((len(fpts), len(ubasis)))
+        return self._basis.ubasis_at(self._basis.fpts)
 
-        ubasis_l = [lambdify(dims, u) for u in ubasis]
-        for i,j in ndrange(*m.shape):
-            m[i,j] = ubasis_l[j](*fpts[i])
-
-    def _gen_m1(self, dims, ubasis, upts):
+    @lazyprop
+    def m1(self):
         """Trans discontinuous flux at upts to trans divergence of
         trans discontinuous flux at upts
         """
-        self._m1 = m = np.empty((len(upts), len(upts), len(dims)))
+        return self._basis.jac_ubasis_at(self._basis.upts)
 
-        for j,k in ndrange(len(upts), len(dims)):
-            p = lambdify(dims, ubasis[j].diff(dims[k]))
-            for i in xrange(len(upts)):
-                m[i,j,k] = p(*upts[i])
-
-    def _gen_m2(self, m0, normfpts):
+    @lazyprop
+    def m2(self):
         """Trans discontinuous flux at upts to trans normal
         discontinuous flux at fpts
         """
-        self._m2 = normfpts[:,None,:]*m0[...,None]
+        return self._basis.norm_fpts[:,None,:]*self.m0[...,None]
 
-    def _gen_m3(self, dims, fbasis, upts):
+    @lazyprop
+    def m3(self):
         """Trans normal correction flux at upts to trans divergence of
         trans correction flux at upts
         """
-        self._m3 = m = np.empty((len(upts), len(fbasis)))
+        return self._basis.fbasis_at(self._basis.upts)
 
-        fbasis_l = [lambdify(dims, f) for f in fbasis]
-        for i,j in ndrange(*m.shape):
-            m[i,j] = fbasis_l[j](*upts[i])
-
-    def _gen_rcpdjac_smat_upts(self, dims, eles, sbasis, upts):
-        jacs = self._get_jac_eles(dims, eles, sbasis, upts)
+    def _gen_rcpdjac_smat_upts(self, eles):
+        jacs = self._get_jac_eles_at(eles, self._basis.upts)
         smats, djacs = self._get_smats(jacs, retdets=True)
 
         neles, ndims = eles.shape[1:]
@@ -213,43 +188,41 @@ class Elements(object):
         self._rcpdjac_upts = 1.0 / djacs.reshape(-1, neles)
         self._smat_upts = smats.reshape(-1, neles, ndims**2)
 
-    def _gen_ploc_upts(self, dims, eles, sbasis, upts):
+    def _gen_ploc_upts(self, eles):
         nspts, neles, ndims = eles.shape
-        nupts = len(upts)
+        nupts = self.nupts
 
-        # Form the operator matrix
-        op = np.empty((nupts, nspts))
-        for j in xrange(nspts):
-            sbasis_l = lambdify(dims, sbasis[j])
-            for i in xrange(nupts):
-                op[i,j] = sbasis_l(*upts[i])
+        # Construct the interpolation matrix
+        op = np.asanyarray(self._basis.sbasis_at(self._basis.upts),
+                           dtype=np.float)
 
         # Apply the operator and reshape
         self._ploc_upts = np.dot(op, eles.reshape(nspts, -1))\
                             .reshape(nupts, neles, ndims)
 
-    def _gen_pnorm_fpts(self, dims, eles, sbasis, fpts, normfpts):
-        jac = self._get_jac_eles(dims, eles, sbasis, fpts)
+    def _gen_pnorm_fpts(self, eles):
+        jac = self._get_jac_eles_at(eles, self._basis.fpts)
         smats = self._get_smats(jac)
 
+        normfpts = np.asanyarray(self._basis.norm_fpts, dtype=np.float)
+
         # Reshape (nfpts*neles, ndims, dims) => (nfpts, neles, ndims, ndims)
-        smats = smats.reshape(len(fpts), -1, len(dims), len(dims))
+        smats = smats.reshape(self.nfpts, -1, self.ndims, self.ndims)
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
         # Jacobian and N is the normal for each fpt.  Using
         # J^{-1} = S/|J| where S are the smats, we have S^{T}.N.
         self._pnorm_fpts = np.einsum('ijlk,il->ijk', smats, normfpts)
 
-    def _get_jac_eles(self, dims, eles, basis, pts):
+    def _get_jac_eles_at(self, eles, pts):
         nspts, neles, ndims = eles.shape
         npts = len(pts)
 
-        # Form the Jacobian operator (c.f, _gen_m2)
-        jacop = np.empty((npts, ndims, nspts))
-        for j,k in ndrange(ndims, nspts):
-            dm = lambdify(dims, basis[k].diff(dims[j]))
-            for i in xrange(npts):
-                jacop[i,j,k] = dm(*pts[i])
+        # Form the Jacobian operator (going from AoS to SoA)
+        jacop = self._basis.jac_sbasis_at(pts).swapaxes(1, 2)
+
+        # Convert to double precision
+        jacop = np.asanyarray(jacop, dtype=np.float)
 
         # Cast as a matrix multiply and apply to eles
         jac = np.dot(jacop.reshape(-1, nspts), eles.reshape(nspts, -1))
@@ -300,7 +273,7 @@ class Elements(object):
         n = self._nfacefpts[fidx]
 
         vrcidx = np.empty((n, 2), dtype=np.int32)
-        vrcidx[:,0] = self._basis.get_fpts_for_face(fidx, rtag)
+        vrcidx[:,0] = self._basis.fpts_idx_for_face(fidx, rtag)
         vrcidx[:,1] = eidx*self._pnorm_fpts_strides[0]
 
         return self._pnorm_fpts_vmats[:n], vrcidx, self._pnorm_fpts_vstri[:n]
@@ -309,7 +282,7 @@ class Elements(object):
         n = self._nfacefpts[fidx]
 
         vrcidx = np.empty((n, 2), dtype=np.int32)
-        vrcidx[:,0] = self._basis.get_fpts_for_face(fidx, rtag)
+        vrcidx[:,0] = self._basis.fpts_idx_for_face(fidx, rtag)
         vrcidx[:,1] = eidx*self._scal_fpts_strides[0]
 
         return self._scal_fpts_vmats[:n], vrcidx, self._scal_fpts_vstri[:n]

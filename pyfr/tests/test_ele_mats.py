@@ -23,7 +23,7 @@ def test_hex_gleg_ord3_csd():
     fobj = BytesIO(pkgutil.get_data(__name__, 'hex-gleg-ord3-csd.npz'))
     refm = np.load(fobj)
 
-    assert np.allclose(refm['m0'], hexes._m0)
-    assert np.allclose(refm['m1'], hexes._m1)
-    assert np.allclose(refm['m2'], hexes._m2)
-    assert np.allclose(refm['m3'], hexes._m3)
+    assert np.allclose(refm['m0'], np.asanyarray(hexes.m0, dtype=np.float))
+    assert np.allclose(refm['m1'], np.asanyarray(hexes.m1, dtype=np.float))
+    assert np.allclose(refm['m2'], np.asanyarray(hexes.m2, dtype=np.float))
+    assert np.allclose(refm['m3'], np.asanyarray(hexes.m3, dtype=np.float))

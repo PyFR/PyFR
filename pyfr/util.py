@@ -49,6 +49,19 @@ class proxylist(list):
         return proxylist([x(*args, **kwargs) for x in self])
 
 
+def lazyprop(fn):
+    attr = '_lazy_' + fn.__name__
+
+    @property
+    def newfn(self):
+        try:
+            return getattr(self, attr)
+        except AttributeError:
+            setattr(self, attr, fn(self))
+            return getattr(self, attr)
+    return newfn
+
+
 def all_subclasses(cls):
     return cls.__subclasses__()\
          + [g for s in cls.__subclasses__() for g in all_subclasses(s)]

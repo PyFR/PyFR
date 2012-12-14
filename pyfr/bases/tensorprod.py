@@ -6,8 +6,8 @@ import numpy as np
 import sympy as sy
 
 from pyfr.bases.base import BasisBase
-from pyfr.quad_points import points_for_rule
-from pyfr.util import ndrange
+from pyfr.quad_points import points_for_rule, equi_spaced
+from pyfr.util import ndrange, lazyprop
 
 
 def cart_prod_points(points, ndim, compact=True):
@@ -31,7 +31,7 @@ def cart_prod_points(points, ndim, compact=True):
     """
     npoints = len(points)
 
-    cprodpts = np.empty((npoints,)*ndim + (ndim,))
+    cprodpts = np.empty((npoints,)*ndim + (ndim,), dtype=np.object)
     for i,ax in enumerate(np.ix_(*(points,)*ndim)):
         # -i-1 ensures we count first-to-last
         cprodpts[...,-i-1] = ax
@@ -90,7 +90,7 @@ _cube_map_rots_sy = [sy.rot_axis2(-sy.pi)*sy.rot_axis1(sy.pi/2),
                      sy.rot_axis1(-sy.pi/2)]
 
 # Rotation scheme as numpy arrays
-_cube_map_rots_np = [np.asanyarray(sy.matrix2numpy(r), dtype=np.float64)
+_cube_map_rots_np = [np.asanyarray(sy.matrix2numpy(r), dtype=np.float)
                      for r in _cube_map_rots_sy]
 
 def cube_map_face(fpoints):
@@ -99,7 +99,7 @@ def cube_map_face(fpoints):
 
     On a cube parameterized by (p,q,r) -> (-1,-1,-1) × (1,1,1) face one
     is defined by (-1,-1,-1) × (1,-1,1)."""
-    mfpoints = np.empty((6,) + fpoints.shape)
+    mfpoints = np.empty((6,) + fpoints.shape, dtype=fpoints.dtype)
 
     for i,frot in enumerate(_cube_map_rots_np):
         mfpoints[i,...] = np.dot(fpoints, frot)
@@ -121,37 +121,43 @@ def diff_vcjh_correctionfn(k, eta, sym):
     return diffgl, diffgr
 
 class TensorProdBasis(object):
-    def _get_pts1d(self):
+    def __init__(self, *args, **kwargs):
+        super(TensorProdBasis, self).__init__(*args, **kwargs)
+
+        # Root the number of shape points to get the # in each dim
+        self._nsptsord = sy.S(self.nspts)**(sy.S(1)/self.ndims)
+
+        if not self._nsptsord.is_Number:
+            raise ValueError('Invalid number of shape points for {} dims'\
+                             .format(self.ndims))
+
+    @lazyprop
+    def _pts1d(self):
         rule = self._cfg.get('mesh-elements', 'quad-rule')
         return points_for_rule(rule, self._order + 1)
 
-    def get_upts(self):
-        pts1d = self._get_pts1d()
+    @lazyprop
+    def upts(self):
+        return cart_prod_points(self._pts1d, self.ndims)
 
-        pts = cart_prod_points(pts1d, 3)
-        basis = nodal_basis(pts1d, self._dims)
+    @lazyprop
+    def ubasis(self):
+        return nodal_basis(self._pts1d, self._dims)
 
-        return pts, basis
+    @lazyprop
+    def spts(self):
+        return cart_prod_points(equi_spaced(self._nsptsord), self.ndims)
 
-    def get_spts(self, nspts):
-        dims, ndims = self._dims, len(self._dims)
+    @lazyprop
+    def sbasis(self):
+        return nodal_basis(equi_spaced(self._nsptsord), self._dims)
 
-        # Root the number of shape points to get the # in each dim
-        nsptsord = sy.S(nspts)**(sy.S(1)/len(dims))
+    @property
+    def nupts(self):
+        return (self._order + 1)**self.ndims
 
-        if not nsptsord.is_Number:
-            raise ValueError('Invalid number of shape points for {} dims'\
-                             .format(len(dims)))
-
-        # Generate nsptsord equispaced points from (-1, 1)
-        pts1d = np.linspace(-1, 1, nsptsord)
-
-        pts = cart_prod_points(pts1d, len(dims))
-        basis = nodal_basis(pts1d, dims)
-
-        return pts, basis
-
-    def get_nfpts(self):
+    @property
+    def nfpts(self):
         return [(self._order + 1)**(self.ndims - 1)] * (2*self.ndims)
 
 
@@ -182,23 +188,29 @@ class HexBasis(TensorProdBasis, BasisBase):
 
             rs[face,rtag] = fpts.ravel()
 
-    def get_fpts(self):
+    @lazyprop
+    def fpts(self):
         # Get the 1D points
-        pts1d = self._get_pts1d()
+        pts1d = self._pts1d
 
         # Perform a 2D extension to get the (p,r) points of face one
         pts2d = cart_prod_points(pts1d, 2, compact=False)
 
         # 3D points are just (p,-1,r) for face one
-        fonepts = np.empty(pts2d.shape[:-1] + (3,))
+        fonepts = np.empty(pts2d.shape[:-1] + (3,), dtype=np.object)
         fonepts[...,(0,2)] = pts2d
         fonepts[...,1] = -1
 
         # Cube map face one to get faces zero through five
-        fpts = cube_map_face(fonepts)
+        return cube_map_face(fonepts).reshape(-1, 3)
+
+    @lazyprop
+    def fbasis(self):
+        # Get the 1D points
+        pts1d = self._pts1d
 
         # Allocate space for the flux points basis
-        fbasis = np.empty(fpts.shape[:-1], dtype=np.object)
+        fbasis = np.empty([6] + [self._order + 1]*2, dtype=np.object)
 
         # Pair up opposite faces with their associated (normal) dimension
         for fpair,sym in zip([(4,2), (1,3), (0,5)], self._dims):
@@ -216,15 +228,16 @@ class HexBasis(TensorProdBasis, BasisBase):
         # Correct faces with negative normals
         fbasis[(4,1,0),...] *= -1
 
-        return fpts.reshape(-1,3), fbasis.reshape(-1)
+        return fbasis.ravel()
 
-    def get_norm_fpts(self):
+    @lazyprop
+    def norm_fpts(self):
         # Normals for face one are (0,-1,0)
-        fonenorms = np.zeros([self._order + 1]*2 + [3])
+        fonenorms = np.zeros([self._order + 1]*2 + [3], dtype=np.int)
         fonenorms[...,1] = -1
 
         # Cube map to get the remaining face normals
         return cube_map_face(fonenorms).reshape(-1, 3)
 
-    def get_fpts_for_face(self, face, rtag):
+    def fpts_idx_for_face(self, face, rtag):
         return self._rschemes[face, rtag]

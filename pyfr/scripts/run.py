@@ -8,6 +8,11 @@ from argparse import ArgumentParser
 
 import numpy as np
 
+try:
+    from mpmath import mp
+except ImportError:
+    from sympy.mpmath import mp
+
 from pyfr.backends.cuda import CudaBackend
 from pyfr.inifile import Inifile
 from pyfr.integrators import get_integrator
@@ -20,6 +25,9 @@ def main():
 
     # Load the config file
     cfg = Inifile.load(cfg_fname)
+
+    # Boost the working precision
+    mp.dps = 60
 
     # Create a backend
     backend = CudaBackend()
