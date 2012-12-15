@@ -5,12 +5,9 @@ import re
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 import numpy as np
-from sympy.utilities.lambdify import lambdastr
 
-try:
-    from mpmath import mp
-except ImportError:
-    from sympy.mpmath import mp
+from mpmath import mp
+from sympy.utilities.lambdify import lambdastr
 
 from pyfr.util import lazyprop, ndrange
 

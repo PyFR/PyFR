@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import sympy as sy
-
-try:
-    from mpmath import mp
-except ImportError:
-    from sympy.mpmath import mp
+from mpmath import mp
 
 def points_for_rule(name, n):
     rules = {'equi-spaced': equi_spaced,
