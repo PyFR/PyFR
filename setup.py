@@ -15,17 +15,18 @@ if sys.version_info[:2] < (2,7):
 modules = [
     'pyfr.backends',
     'pyfr.backends.cuda',
-    'pyfr.elements',
+    'pyfr.bases',
+    'pyfr.integrators'
     'pyfr.scripts']
 
 # Tests
 tests = [
-    'pyfr.elements.tests']
+    'pyfr.tests']
 
 # Data
 package_data = {
     'pyfr.backends.cuda': ['kernels/*'],
-    'pyfr.elements.tests': ['*.npz']}
+    'pyfr.tests': ['*.npz']}
 
 # Dependencies
 install_requires = [
