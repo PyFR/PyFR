@@ -83,10 +83,10 @@ class EulerStepper(BaseStepper):
     def step(self, t, dt):
         super(EulerStepper, self).step(t, dt)
 
-        add, flux = self._add, self._meshp
+        add, negdivf = self._add, self._meshp
         ut, f = self._regidx
 
-        flux(ut, f)
+        negdivf(ut, f)
         add(1.0, ut, dt, f)
 
         return ut
@@ -110,25 +110,25 @@ class RK4Stepper(BaseStepper):
     def step(self, t, dt):
         super(RK4Stepper, self).step(t, dt)
 
-        add, flux = self._add, self._meshp
+        add, negdivf = self._add, self._meshp
 
         # Get the bank indices for each register
         ut,  k1,  k2,  k3,  k4 = self._regidx
 
         # First stage
-        flux(ut, k1)
+        negdivf(ut, k1)
 
         # Second stage (k2 = ut + dt/2*k1)
         add(0.0, k2, 1.0, ut, dt/2.0, k1)
-        flux(k2, k2)
+        negdivf(k2, k2)
 
         # Third stage (k3 = ut + dt/2*k2)
         add(0.0, k3, 1.0, ut, dt/2.0, k2)
-        flux(k3, k3)
+        negdivf(k3, k3)
 
         # Fourth stage (k4 = ut + dt*k3)
         add(0.0, k4, 1.0, ut, dt, k3)
-        flux(k4, k4)
+        negdivf(k4, k4)
 
         # Compute u(t+dt) as k4 = dt/6*k4 + dt/3*k3 + dt/2*k2 + dt/6*k1 + ut
         add(dt/6.0, k4, dt/3.0, k3, dt/3.0, k2, dt/6.0, k1, 1.0, ut)

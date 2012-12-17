@@ -30,7 +30,7 @@ class Elements(object):
         self.nfpts = nfpts = sum(basis.nfpts)
 
         # Transform matrices at the soln points
-        self._gen_rcpdjac_smat_upts(eles)
+        self._gen_negrcpdjac_smat_upts(eles)
 
         # Physical normals at the flux points
         self._gen_pnorm_fpts(eles)
@@ -66,7 +66,7 @@ class Elements(object):
         self._m3b = be.auto_const_sparse_matrix(self.m3, tags={'M3'})
 
         # Allocate soln point transformation matrices
-        self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts)
+        self._negrcpdjac_upts = be.const_matrix(self._negrcpdjac_upts)
         self._smat_upts = be.const_matrix(self._smat_upts)
 
         # Allocate the physical normals at the flux points
@@ -149,9 +149,10 @@ class Elements(object):
                                beta=1.0)
 
     def get_divconf_upts_kern(self):
-        tdivtconf_upts, rcpdjac_upts = self.scal_upts_outb, self._rcpdjac_upts
+        tdivtconf_upts = self.scal_upts_outb
+        negrcpdjac_upts = self._negrcpdjac_upts
         return self._be.kernel('divconf', self.ndims, self.nvars,
-                               tdivtconf_upts, rcpdjac_upts)
+                               tdivtconf_upts, negrcpdjac_upts)
 
     @lazyprop
     def m0(self):
@@ -179,13 +180,13 @@ class Elements(object):
         """
         return self._basis.fbasis_at(self._basis.upts)
 
-    def _gen_rcpdjac_smat_upts(self, eles):
+    def _gen_negrcpdjac_smat_upts(self, eles):
         jacs = self._get_jac_eles_at(eles, self._basis.upts)
         smats, djacs = self._get_smats(jacs, retdets=True)
 
         neles, ndims = eles.shape[1:]
 
-        self._rcpdjac_upts = 1.0 / djacs.reshape(-1, neles)
+        self._negrcpdjac_upts = -1.0 / djacs.reshape(-1, neles)
         self._smat_upts = smats.reshape(-1, neles, ndims**2)
 
     def _gen_ploc_upts(self, eles):
