@@ -39,7 +39,7 @@ install_requires = [
 # Scripts
 console_scripts = [
     'pyfr-mesh = pyfr.scripts.mesh:main',
-    'pyfr-run = pyfr.scripts.run:main',
+    'pyfr-sim = pyfr.scripts.sim:main',
     'pyfr-postp = pyfr.scripts.postp:main']
 
 # Info
