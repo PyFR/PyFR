@@ -28,23 +28,22 @@ class BaseWriter(BaseIntegrator):
 
         # Convert the config and stats objects to strings
         if rank == root:
-            cfg_s = self._cfg.tostr()
-            stats_s = stats.tostr()
+            metadata = dict(config=self._cfg.tostr(),
+                            stats=stats.tostr())
         else:
-            cfg_s = None
-            stats_s = None
+            metadata = None
 
         # Determine the output path
         path = self._get_output_path()
 
         # Delegate to _write to do the actual outputting
-        self._write(path, solnmap, cfg_s, stats_s)
+        self._write(path, solnmap, metadata)
 
         # Increment the output number
         self._nout += 1
 
     @abstractmethod
-    def _write(self, path, solnmap, cfg_s, stat_s):
+    def _write(self, path, solnmap, metadata):
         pass
 
     def _get_output_path(self):
@@ -71,6 +70,10 @@ class FileWriter(BaseWriter):
     def __init__(self, *args, **kwargs):
         super(FileWriter, self).__init__(*args, **kwargs)
 
+        # See if we should compress output files or not
+        self._compress = self._cfg.getbool('soln-output', 'compress', False)
+
+        # MPI info
         comm, rank, root = get_comm_rank_root()
 
         # Get the type and shape of each element in the partition
@@ -100,7 +103,7 @@ class FileWriter(BaseWriter):
                         mpi_rreqs.append(rreq)
                         mpi_names.append(name)
 
-    def _write(self, path, solnmap, cfg_s, stats_s):
+    def _write(self, path, solnmap, metadata):
         comm, rank, root = get_comm_rank_root()
 
         if rank != root:
@@ -115,15 +118,19 @@ class FileWriter(BaseWriter):
             names = itertools.chain(self._loc_names, self._mpi_names)
             solns = itertools.chain(solnmap.values(), self._mpi_rbufs)
 
-            with open(path, 'wb') as f:
-                np.savez(f, config=cfg_s, stats=stats_s,
-                         **dict(zip(names, solns)))
+            # Create the output dictionary
+            outdict = dict(zip(names, solns), **metadata)
 
+            with open(path, 'wb') as f:
+                if self._compress:
+                    np.savez_compressed(f, **outdict)
+                else:
+                    np.savez(f, **outdict)
 
 class DirWriter(BaseWriter):
     writer_name = 'pyfrs-dir'
 
-    def _write(self, path, solnmap, cfg_s, stats_s):
+    def _write(self, path, solnmap, metadata):
         comm, rank, root = get_comm_rank_root()
 
         # Create the output directory and save the config/status files
@@ -133,10 +140,9 @@ class DirWriter(BaseWriter):
 
             os.mkdir(path)
 
-            with open(os.path.join(path, 'config'), 'wb') as f:
-                f.write(np.asanyarray(cfg_s))
-            with open(os.path.join(path, 'stats'), 'wb') as f:
-                f.write(np.asanyarray(stats_s))
+            # Write out our metadata
+            for name, data in metadata.items():
+                np.save(os.path.join(path, name), data)
 
         # Wait for this to complete
         comm.barrier()
