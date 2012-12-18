@@ -6,18 +6,19 @@ from mpi4py import MPI
 
 from pyfr.bases import BasisBase
 from pyfr.elements import Elements
+from pyfr.inifile import Inifile
 from pyfr.interfaces import InternalInterfaces, MPIInterfaces
 from pyfr.util import proxylist, subclass_map
 
 
 class MeshPartition(object):
-    def __init__(self, be, rallocs, mesh, nsubanks, cfg):
-        self._be = be
+    def __init__(self, backend, rallocs, mesh, initsoln, nreg, cfg):
+        self._backend = backend
         self._cfg = cfg
-        self._nsubanks = nsubanks
+        self._nreg = nreg
 
         # Load the elements and interfaces from the mesh
-        self._load_eles(rallocs, mesh)
+        self._load_eles(rallocs, mesh, initsoln)
         self._load_int_inters(rallocs, mesh)
         self._load_mpi_inters(rallocs, mesh)
 
@@ -25,25 +26,38 @@ class MeshPartition(object):
         self._gen_queues()
         self._gen_kernels()
 
-    def _load_eles(self, rallocs, mesh):
-        # Automagically construct the bases map ('hex' => HexBasis &c)
+    def _load_eles(self, rallocs, mesh, initsoln):
         basismap = subclass_map(BasisBase, 'name')
 
-        self._elemaps = OrderedDict()
+        # Look for and load each element type from the mesh
+        self._elemaps = elemaps = OrderedDict()
         for k in basismap.keys():
             mk = 'spt_%s_p%d' % (k, rallocs.prank)
             if mk in mesh:
-                ele = Elements(basismap[k], mesh[mk], self._cfg)
-                self._elemaps[k] = ele
+                elemaps[k] = Elements(basismap[k], mesh[mk], self._cfg)
 
-                ele.set_ics()
-                ele.set_backend(self._be, self._nsubanks)
+        # Construct a proxylist to simplify collective operations
+        self._eles = eles = proxylist(elemaps.values())
 
-        self._eles = proxylist(self._elemaps.values())
+        # Set the initial conditions either from a pyfrs file or from
+        # explicit expressions in the config file
+        if initsoln:
+            # Load the config used to produce the solution
+            solncfg = Inifile(initsoln['config'].item())
+
+            # Process the solution
+            for k,ele in elemaps.items():
+                soln = initsoln['soln_%s_p%d' % (k, rallocs.prank)]
+                ele.set_ics_from_soln(soln, solncfg)
+        else:
+            eles.set_ics_from_expr()
+
+        # Allocate these elements on the backend
+        eles.set_backend(self._backend, self._nreg)
 
     def _load_int_inters(self, rallocs, mesh):
         lhs, rhs = mesh['con_p%d' % rallocs.prank]
-        int_inters = InternalInterfaces(self._be, lhs, rhs, self._elemaps,
+        int_inters = InternalInterfaces(self._backend, lhs, rhs, self._elemaps,
                                         self._cfg)
 
         # Although we only have a single internal interface instance
@@ -58,12 +72,12 @@ class MeshPartition(object):
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)]
 
-            mpiiface = MPIInterfaces(self._be, interarr, rhsmrank,
+            mpiiface = MPIInterfaces(self._backend, interarr, rhsmrank,
                                      self._elemaps, self._cfg)
             self._mpi_inters.append(mpiiface)
 
     def _gen_queues(self):
-        self._queues = [self._be.queue(), self._be.queue()]
+        self._queues = [self._backend.queue(), self._backend.queue()]
 
     def _gen_kernels(self):
         eles = self._eles
@@ -89,7 +103,7 @@ class MeshPartition(object):
         self._mpi_inters_rsolve_kerns = mpi_inters.get_rsolve_kern()
 
     def __call__(self, uinbank, foutbank):
-        runall = self._be.runall
+        runall = self._backend.runall
         q1, q2 = self._queues
 
         # Set the banks to use for each element type

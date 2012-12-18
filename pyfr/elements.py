@@ -38,7 +38,7 @@ class Elements(object):
         # Physical locations of the solution points
         self._gen_ploc_upts(eles)
 
-    def set_ics(self):
+    def set_ics_from_expr(self):
         nupts, neles, ndims = self._ploc_upts.shape
 
         # Extract the individual coordinates
@@ -53,6 +53,22 @@ class Elements(object):
         self._scal_upts = ics_upts = np.empty((nupts, neles, len(dvars)))
         for i,v in enumerate(dvars):
             ics_upts[...,i] = npeval(self._cfg.get('mesh-ics', v), coords)
+
+    def set_ics_from_soln(self, solnmat, solncfg):
+        # Recreate the existing solution basis
+        currb = self._basis
+        solnb = currb.__class__(currb._dims, None, solncfg)
+
+        # Form the interpolation operator
+        interp = solnb.ubasis_at(currb.upts)
+        interp = np.asanyarray(interp, dtype=np.float)
+
+        # Sizes
+        nupts, neles, nvars = self.nupts, self.neles, self.nvars
+
+        # Apply and reshape
+        self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
+        self._scal_upts = self._scal_upts.reshape(nupts, neles, nvars)
 
     def set_backend(self, be, nsubanks):
         # Ensure a backend has not already been set

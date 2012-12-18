@@ -9,7 +9,7 @@ from pyfr.util import range_eval
 class BaseIntegrator(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, backend, rallocs, mesh, cfg):
+    def __init__(self, backend, rallocs, mesh, initsoln, cfg):
         self._backend = backend
         self._rallocs = rallocs
         self._cfg = cfg
@@ -26,7 +26,7 @@ class BaseIntegrator(object):
         nreg = self._stepper_nregs
 
         # Construct the mesh partition
-        self._meshp = MeshPartition(backend, rallocs, mesh, nreg, cfg)
+        self._meshp = MeshPartition(backend, rallocs, mesh, initsoln, nreg, cfg)
 
         # Get a queue for subclasses to use
         self._queue = backend.queue()

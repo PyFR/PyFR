@@ -32,8 +32,14 @@ def main():
     # Get the mapping from physical ranks to MPI ranks
     rallocs = get_rank_allocation(mesh, cfg)
 
+    # Initial conditions
+    if len(sys.argv) == 3:
+        initsoln = np.load(sys.argv[2])
+    else:
+        initsoln = None
+
     # Construct the time integrator
-    integrator = get_integrator(backend, rallocs, mesh, cfg)
+    integrator = get_integrator(backend, rallocs, mesh, initsoln, cfg)
 
     # Execute!
     integrator.run()
