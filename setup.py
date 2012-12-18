@@ -4,12 +4,22 @@
 from setuptools import setup
 
 import sys
+import re
 
 # Python version
 if sys.version_info[:2] < (2,7):
     print('PyFR requires Python 2.7 or newer.  Python {}.{} detected'\
           .format(*sys.version_info[:2]))
     sys.exit(-1)
+
+# PyFR version
+vfile = open('pyfr/_version.py').read()
+vsrch = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", vstr, re.M)
+
+if vsrch:
+    version = vsrch.group(1)
+else:
+    print 'Unable to find a version string in pyfr/_version.py'
 
 # Modules
 modules = [
@@ -57,7 +67,7 @@ under the direction of Dr. Peter Vincent.'''
 
 setup(
     name='pyfr',
-    version='0.1',
+    version=version,
     description='Flux Reconstruction in Python',
     long_description=long_description,
     author='Imperial College London',
