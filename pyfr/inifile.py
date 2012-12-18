@@ -16,8 +16,11 @@ class Inifile(object):
             cp.readfp(io.BytesIO(inistr))
 
     @staticmethod
-    def load(fname):
-        return Inifile(open(fname).read())
+    def load(file):
+        if isinstance(file, basestring):
+            file = open(file)
+
+        return Inifile(file.read())
 
     def set(self, section, option, value):
         value = str(value)
