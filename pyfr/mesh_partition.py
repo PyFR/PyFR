@@ -90,7 +90,7 @@ class MeshPartition(object):
         self._divtdisf_upts_kerns = eles.get_divtdisf_upts_kern()
         self._nrmtdisf_fpts_kerns = eles.get_nrmtdisf_fpts_kern()
         self._tdivtconf_upts_kerns = eles.get_tdivtconf_upts_kern()
-        self._divconf_upts_kerns = eles.get_divconf_upts_kern()
+        self._negdivconf_upts_kerns = eles.get_negdivconf_upts_kern()
 
         # Generate MPI sending/recving kernels over each MPI interface
         self._mpi_inters_pack_kerns = mpi_inters.get_pack_kern()
@@ -143,7 +143,7 @@ class MeshPartition(object):
         q1 << self._mpi_inters_rsolve_kerns()
         q1 << self._nrmtdisf_fpts_kerns()
         q1 << self._tdivtconf_upts_kerns()
-        q1 << self._divconf_upts_kerns()
+        q1 << self._negdivconf_upts_kerns()
         runall([q1])
 
         # Wait for all ranks to finish

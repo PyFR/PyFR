@@ -224,17 +224,17 @@ rsolve_rus_inv_mpi(int ninters,
 }
 
 __global__ void
-divconf(int nupts, int neles,
-        ${dtype}* __restrict__ tdivtconf,
-        const ${dtype}* __restrict__ rcpdjac,
-        int ldt, int ldr)
+negdivconf(int nupts, int neles,
+           ${dtype}* __restrict__ tdivtconf,
+           const ${dtype}* __restrict__ negrcpdjac,
+           int ldt, int ldr)
 {
     int uidx = blockIdx.x * blockDim.x + threadIdx.x;
     int eidx = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (uidx < nupts && eidx < neles)
     {
-        ${dtype} s = rcpdjac[IDX_OF(uidx, eidx, ldr)];
+        ${dtype} s = negrcpdjac[IDX_OF(uidx, eidx, ldr)];
 
     % for i in range(nvars):
         tdivtconf[U_IDX_OF(uidx, eidx, ${i}, neles, ldt)] *= s;

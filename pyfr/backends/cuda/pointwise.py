@@ -77,18 +77,18 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
         return RsolveRusInvMPIKernel()
 
-    def divconf(self, ndims, nvars, dv, rcpdjac):
+    def negdivconf(self, ndims, nvars, dv, rcpdjac):
         nupts, neles = dv.nrow, dv.ncol / nvars
 
-        fn = self._get_function('pointwise', 'divconf', 'iiPPii',
+        fn = self._get_function('pointwise', 'negdivconf', 'iiPPii',
                                 self._modopts(dv.dtype, ndims, nvars))
 
         grid, block = self._get_2d_grid_block(fn, nupts, neles)
 
-        class Divconf(CudaComputeKernel):
+        class Negdivconf(CudaComputeKernel):
             def run(self, scomp, scopy):
                 fn.prepared_async_call(grid, block, scomp, nupts, neles,
                                        dv.data, rcpdjac.data,
                                        dv.leaddim, rcpdjac.leaddim)
 
-        return Divconf()
+        return Negdivconf()

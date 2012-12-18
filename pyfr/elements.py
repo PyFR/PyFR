@@ -164,10 +164,10 @@ class Elements(object):
         return self._be.kernel('mul', self._m3b, normtcorf_fpts, tdivtconf_upts,
                                beta=1.0)
 
-    def get_divconf_upts_kern(self):
+    def get_negdivconf_upts_kern(self):
         tdivtconf_upts = self.scal_upts_outb
         negrcpdjac_upts = self._negrcpdjac_upts
-        return self._be.kernel('divconf', self.ndims, self.nvars,
+        return self._be.kernel('negdivconf', self.ndims, self.nvars,
                                tdivtconf_upts, negrcpdjac_upts)
 
     @lazyprop
