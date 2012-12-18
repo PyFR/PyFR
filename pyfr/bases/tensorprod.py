@@ -124,12 +124,13 @@ class TensorProdBasis(object):
     def __init__(self, *args, **kwargs):
         super(TensorProdBasis, self).__init__(*args, **kwargs)
 
-        # Root the number of shape points to get the # in each dim
-        self._nsptsord = sy.S(self.nspts)**(sy.S(1)/self.ndims)
+        if self.nspts:
+            # Root the number of shape points to get the # in each dim
+            self._nsptsord = sy.S(self.nspts)**(sy.S(1)/self.ndims)
 
-        if not self._nsptsord.is_Number:
-            raise ValueError('Invalid number of shape points for {} dims'\
-                             .format(self.ndims))
+            if not self._nsptsord.is_Number:
+                raise ValueError('Invalid number of shape points for {} dims'\
+                                .format(self.ndims))
 
     @lazyprop
     def _pts1d(self):
