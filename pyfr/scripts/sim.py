@@ -19,6 +19,11 @@ def process_restart(args):
     mesh = np.load(args.mesh)
     soln = np.load(args.soln)
 
+    # Ensure the solution is from the mesh we are using
+    if soln['mesh_uuid'] != mesh['mesh_uuid']:
+        raise RuntimeError('Invalid solution for mesh.')
+
+    # Process the config file
     if args.cfg:
         cfg = Inifile.load(args.cfg)
     else:

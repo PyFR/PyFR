@@ -29,7 +29,8 @@ class BaseWriter(BaseIntegrator):
         # Convert the config and stats objects to strings
         if rank == root:
             metadata = dict(config=self._cfg.tostr(),
-                            stats=stats.tostr())
+                            stats=stats.tostr(),
+                            mesh_uuid=self._mesh_uuid)
         else:
             metadata = None
 
