@@ -52,6 +52,13 @@ class Inifile(object):
     def getint(self, section, option, default=None):
         return int(self.get(section, option, default))
 
+    _bool_states = {'1': True, 'yes': True, 'true': True, 'on': True,
+                    '0': False, 'no': False, 'false': False, 'off': False}
+
+    def getbool(self, section, option, default=None):
+        v = self.get(section, option, default)
+        return self._bool_states[v.lower()]
+
     def tostr(self):
         buf = io.BytesIO()
         self._cp.write(buf)
