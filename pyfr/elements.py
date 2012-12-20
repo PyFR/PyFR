@@ -77,8 +77,8 @@ class Elements(object):
 
         # Allocate the constant operator matrices
         self._m0b = be.auto_const_sparse_matrix(self.m0, tags={'M0'})
-        self._m1b = be.auto_const_sparse_matrix(self.m1, tags={'M1'})
-        self._m2b = be.auto_const_sparse_matrix(self.m2, tags={'M2'})
+        self._m1_sub_m3m2b = be.auto_const_sparse_matrix(self.m1_sub_m3m2,
+                                                         tags={'M1-M3M2'})
         self._m3b = be.auto_const_sparse_matrix(self.m3, tags={'M3'})
 
         # Allocate soln point transformation matrices
@@ -102,8 +102,6 @@ class Elements(object):
         # Bank the scalar soln points (as required by the RK schemes)
         self.scal_upts_inb = be.matrix_bank(self._scal_upts)
         self.scal_upts_outb = be.matrix_bank(self._scal_upts)
-
-        # TODO: Contract m2 m3
 
         # Pre-compute some of the matrices required for constructing views
         # onto scal_fpts and pnorm_fpts
@@ -150,14 +148,9 @@ class Elements(object):
         return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
                                disu_upts, smats, tdisf_upts, gamma)
 
-    def get_divtdisf_upts_kern(self):
-        tdisf_upts, divtconf_upts = self._vect_upts, self.scal_upts_outb
-        return self._be.kernel('mul', self._m1b, tdisf_upts, divtconf_upts)
-
-    def get_nrmtdisf_fpts_kern(self):
-        tdisf_upts, normtcorf_fpts = self._vect_upts, self._scal_fpts
-        return self._be.kernel('mul', self._m2b, tdisf_upts, normtcorf_fpts,
-                               beta=1.0, alpha=-1.0)
+    def get_tdivtpcorf_upts_kern(self):
+        return self._be.kernel('mul', self._m1_sub_m3m2b, self._vect_upts,
+                               self.scal_upts_outb)
 
     def get_tdivtconf_upts_kern(self):
         normtcorf_fpts, tdivtconf_upts = self._scal_fpts, self.scal_upts_outb
@@ -195,6 +188,11 @@ class Elements(object):
         trans correction flux at upts
         """
         return self._basis.fbasis_at(self._basis.upts)
+
+    @property
+    def m1_sub_m3m2(self):
+        m1, m2, m3 = self.m1, self.m2, self.m3
+        return m1 - np.dot(m3, m2.reshape(self.nfpts, -1)).reshape(m1.shape)
 
     def _gen_negrcpdjac_smat_upts(self, eles):
         jacs = self._get_jac_eles_at(eles, self._basis.upts)

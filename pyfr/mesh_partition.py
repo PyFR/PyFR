@@ -87,8 +87,7 @@ class MeshPartition(object):
         # Generate the kernels over each element type
         self._disu_fpts_kerns = eles.get_disu_fpts_kern()
         self._tdisf_upts_kerns = eles.get_tdisf_upts_kern()
-        self._divtdisf_upts_kerns = eles.get_divtdisf_upts_kern()
-        self._nrmtdisf_fpts_kerns = eles.get_nrmtdisf_fpts_kern()
+        self._tdivtpcorf_upts_kerns = eles.get_tdivtpcorf_upts_kern()
         self._tdivtconf_upts_kerns = eles.get_tdivtconf_upts_kern()
         self._negdivconf_upts_kerns = eles.get_negdivconf_upts_kern()
 
@@ -123,7 +122,7 @@ class MeshPartition(object):
         # this to solve the Riemann problem at each of the internal
         # interfaces to yield a common interface flux
         q1 << self._tdisf_upts_kerns()
-        q1 << self._divtdisf_upts_kerns()
+        q1 << self._tdivtpcorf_upts_kerns()
         q1 << self._int_inters_rsolve_kerns()
 
         # Send the MPI interface buffers we have just packed and
@@ -141,7 +140,6 @@ class MeshPartition(object):
         # of the solution points.  Finally, all that remains is to
         # suitably transform the flux.
         q1 << self._mpi_inters_rsolve_kerns()
-        q1 << self._nrmtdisf_fpts_kerns()
         q1 << self._tdivtconf_upts_kerns()
         q1 << self._negdivconf_upts_kerns()
         runall([q1])
