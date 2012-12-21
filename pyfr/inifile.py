@@ -34,6 +34,12 @@ class Inifile(object):
     def get(self, section, option, default=None, vars=None):
         try:
             return self._cp.get(section, option, vars=vars)
+        except NoSectionError:
+            if default is None:
+                raise
+
+            self._cp.add_section(section)
+            return self.get(section, option, default, vars)
         except NoOptionError:
             if default is None:
                 raise
