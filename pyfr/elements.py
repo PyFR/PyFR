@@ -143,10 +143,9 @@ class Elements(object):
 
         # Input solutions and output fluxes
         disu_upts, tdisf_upts = self.scal_upts_inb, self._vect_upts
-        smats = self._smat_upts
 
         return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
-                               disu_upts, smats, tdisf_upts, gamma)
+                               disu_upts, smats_upts, tdisf_upts, gamma)
 
     def get_tdivtpcorf_upts_kern(self):
         return self._be.kernel('mul', self._m1_sub_m3m2b, self._vect_upts,
