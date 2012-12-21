@@ -28,10 +28,11 @@ class Backend(object):
     # SoA or AoS
     packing = None
 
-    def __init__(self):
+    def __init__(self, cfg):
         assert self.name is not None
         assert self.packing in ('SoA', 'AoS')
 
+        self._cfg = cfg
         self._allocs = defaultdict(WeakSet)
 
     @recordalloc('data')

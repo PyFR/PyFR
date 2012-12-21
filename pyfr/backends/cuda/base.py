@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import numpy as np
+
 from pyfr.exc import PyFRInvalidKernelError
 
 from pyfr.backends.base import Backend
@@ -19,12 +21,22 @@ class CudaBackend(Backend):
     name = 'CUDA'
     packing = 'SoA'
 
-    def __init__(self):
-        super(CudaBackend, self).__init__()
-        self._providers = [kprov(self) for kprov in [CudaPointwiseKernels,
-                                                     CudaBlasExtKernels,
-                                                     CudaPackingKernels,
-                                                     CudaCublasKernels]]
+    def __init__(self, cfg):
+        super(CudaBackend, self).__init__(cfg)
+
+        # Kernel provider classes
+        kprovcls = [CudaPointwiseKernels, CudaBlasExtKernels,
+                    CudaPackingKernels, CudaCublasKernels]
+        self._providers = [k(self) for k in kprovcls]
+
+        # Numeric data type
+        prec = cfg.get('backend', 'precision', 'double')
+        if prec not in {'single', 'double'}:
+            raise ValueError('CUDA backend precision must be either single or'\
+                             'double')
+
+        # Convert to a numpy data type
+        self.fpdtype = np.dtype(prec).type
 
 
     def _matrix(self, *args, **kwargs):

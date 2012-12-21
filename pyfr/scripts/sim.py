@@ -55,7 +55,7 @@ def main():
     mesh, soln, cfg = args.process(args)
 
     # Create a backend
-    backend = CudaBackend()
+    backend = CudaBackend(cfg)
 
     # Get the mapping from physical ranks to MPI ranks
     rallocs = get_rank_allocation(mesh, cfg)

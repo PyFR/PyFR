@@ -91,7 +91,7 @@ class CudaMatrixBase(base.MatrixBase):
 
 class CudaMatrix(CudaMatrixBase, base.Matrix):
     def __init__(self, backend, ioshape, initval, iopacking, tags):
-        super(CudaMatrix, self).__init__(backend, np.float64, ioshape,
+        super(CudaMatrix, self).__init__(backend, backend.fpdtype, ioshape,
                                          initval, iopacking, tags)
 
 
@@ -107,7 +107,7 @@ class CudaMatrixBank(base.MatrixBank):
 class CudaConstMatrix(CudaMatrixBase, base.ConstMatrix):
     def __init__(self, backend, initval, iopacking, tags):
         ioshape = initval.shape
-        super(CudaConstMatrix, self).__init__(backend, np.float64, ioshape,
+        super(CudaConstMatrix, self).__init__(backend, backend.fpdtype, ioshape,
                                               initval, iopacking, tags)
 
 
