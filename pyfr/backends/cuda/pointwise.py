@@ -86,7 +86,8 @@ class CudaPointwiseKernels(CudaKernelProvider):
         fn = self._get_function('pointwise', 'negdivconf', 'iiPPii',
                                 self._modopts(dv.dtype, ndims, nvars))
 
-        grid, block = self._get_2d_grid_block(fn, nupts, neles)
+        block = (256, 1, 1)
+        grid = self._get_grid_for_block(block, neles)
 
         class Negdivconf(CudaComputeKernel):
             def run(self, scomp, scopy):

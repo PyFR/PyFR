@@ -229,15 +229,17 @@ negdivconf(int nupts, int neles,
            const ${dtype}* __restrict__ negrcpdjac,
            int ldt, int ldr)
 {
-    int uidx = blockIdx.x * blockDim.x + threadIdx.x;
-    int eidx = blockIdx.y * blockDim.y + threadIdx.y;
+    int eidx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (uidx < nupts && eidx < neles)
+    if (eidx < neles)
     {
-        ${dtype} s = negrcpdjac[IDX_OF(uidx, eidx, ldr)];
+        for (int uidx = 0; uidx < nupts; ++uidx)
+        {
+            ${dtype} s = negrcpdjac[IDX_OF(uidx, eidx, ldr)];
 
-    % for i in range(nvars):
-        tdivtconf[U_IDX_OF(uidx, eidx, ${i}, neles, ldt)] *= s;
-    % endfor
+        % for i in range(nvars):
+            tdivtconf[U_IDX_OF(uidx, eidx, ${i}, neles, ldt)] *= s;
+        % endfor
+        }
     }
 }
