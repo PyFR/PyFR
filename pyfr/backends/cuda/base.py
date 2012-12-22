@@ -2,6 +2,9 @@
 
 import numpy as np
 
+from pycuda.autoinit import context as cuda_ctx
+import pycuda.driver as cuda
+
 from pyfr.exc import PyFRInvalidKernelError
 
 from pyfr.backends.base import Backend
@@ -23,6 +26,14 @@ class CudaBackend(Backend):
 
     def __init__(self, cfg):
         super(CudaBackend, self).__init__(cfg)
+
+        # Some CUDA devices share L1 cache and shared memory; on these
+        # devices CUDA allows us to specify a preference between L1
+        # cache and shared memory.  For the benefit of CUBLAS (which
+        # benefits greatly from more shared memory but fails to
+        # declare its preference) we set the global default to
+        # PREFER_SHARED.
+        cuda_ctx.set_cache_config(cuda.func_cache.PREFER_SHARED)
 
         # Kernel provider classes
         kprovcls = [CudaPointwiseKernels, CudaBlasExtKernels,

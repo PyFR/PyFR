@@ -2,6 +2,7 @@
 
 import numpy as np
 
+import pycuda.driver as cuda
 from pycuda.compiler import SourceModule
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
@@ -40,6 +41,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         fn = self._get_function('pointwise', 'rsolve_rus_inv_int',
                                 [np.int32] + [np.intp]*8 + [dtype],
                                 self._modopts(dtype, ndims, nvars))
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -63,6 +65,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         fn = self._get_function('pointwise', 'rsolve_rus_inv_mpi',
                                 [np.int32] + [np.intp]*5 + [dtype],
                                 self._modopts(dtype, ndims, nvars))
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
