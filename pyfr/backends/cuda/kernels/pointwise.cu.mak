@@ -130,45 +130,35 @@ rsolve_rus_inv_int(int ninters,
                    const int* __restrict__ ul_vstri,
                    ${dtype}** __restrict__ ur_v,
                    const int* __restrict__ ur_vstri,
-                   ${dtype}** __restrict__ pnorml_v,
-                   const int* __restrict__ pnorm_lvstri,
-                   ${dtype}** __restrict__ pnormr_v,
-                   const int* __restrict__ pnorm_rvstri,
+                   const ${dtype}* __restrict__ magpnorml,
+                   const ${dtype}* __restrict__ magpnormr,
+                   const ${dtype}* __restrict__ normpnorml,
                    ${dtype} gamma)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (iidx < ninters)
     {
-        // Dereference the views into memory
-        ${dtype} pnorml[${ndims}], pnormr[${ndims}], ul[${nvars}], ur[${nvars}];
+        ${dtype} ul[${nvars}], ur[${nvars}];
 
-        READ_VIEW(pnorml, pnorml_v, pnorm_lvstri, iidx, iidx, ${ndims});
-        READ_VIEW(pnormr, pnormr_v, pnorm_rvstri, iidx, iidx, ${ndims});
+        // Dereference the views into memory
         READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, ${nvars});
         READ_VIEW(ur, ur_v, ur_vstri, iidx, iidx, ${nvars});
 
-
-        // Compute the magnitudes of the physical normals
-        ${dtype} magl = sqrt(${' + '.join('pnorml[{0}]*pnorml[{0}]'.format(k)\
-                             for k in range(ndims))});
-        ${dtype} magr = sqrt(${' + '.join('pnormr[{0}]*pnormr[{0}]'.format(k)\
-                             for k in range(ndims))});
-
-        // Normalize the left physical normal
-    % for i in range(ndims):
-        pnorml[${i}] *= 1.0 / magl;
-    % endfor
+        // Load the left normalized physical normal
+        ${dtype} ptemp[${ndims}];
+        for (int i = 0; i < ${ndims}; ++i)
+            ptemp[i] = normpnorml[ninters*i + iidx];
 
         // Perform the Riemann solve
         ${dtype} fn[${nvars}];
-        rsolve_rus_inv(ul, ur, pnorml, fn, gamma);
+        rsolve_rus_inv(ul, ur, ptemp, fn, gamma);
 
         // Write out the fluxes into ul and ur
         for (int i = 0; i < ${nvars}; ++i)
         {
-            ul[i] = magl*fn[i];
-            ur[i] = -magr*fn[i];
+            ul[i] =  magpnorml[iidx]*fn[i];
+            ur[i] = -magpnormr[iidx]*fn[i];
         }
 
         // Copy back into the views
@@ -181,42 +171,35 @@ __global__ void
 rsolve_rus_inv_mpi(int ninters,
                    ${dtype}** __restrict__ ul_v,
                    const int* __restrict__ ul_vstri,
-                   ${dtype}* __restrict__ ur_m,
-                   ${dtype}** __restrict__ pnorml_v,
-                   const int* __restrict__ pnorml_vstri,
+                   const ${dtype}* __restrict__ ur_m,
+                   const ${dtype}* __restrict__ magpnorml,
+                   const ${dtype}* __restrict__ normpnorml,
                    ${dtype} gamma)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (iidx < ninters)
     {
-        ${dtype} pnorml[${ndims}], ul[${nvars}], ur[${nvars}];
+        ${dtype} ptemp[${ndims}], ul[${nvars}], ur[${nvars}];
 
-        // Dereference the views into memory
-        READ_VIEW(pnorml, pnorml_v, pnorml_vstri, iidx, iidx, ${ndims});
+        // Load the left hand side (local) solution
         READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, ${nvars});
 
-        // Dereference the right hand (MPI) side solution matrix
+        // Load the left normalized physical normal
+        for (int i = 0; i < ${ndims}; ++i)
+            ptemp[i] = normpnorml[ninters*i + iidx];
+
+        // Load the right hand (MPI) side solution matrix
         for (int i = 0; i < ${nvars}; ++i)
             ur[i] = ur_m[ninters*i + iidx];
 
-        // Compute the magnitudes of the physical normals
-        ${dtype} magl = sqrt(${' + '.join('pnorml[{0}]*pnorml[{0}]'.format(k)\
-                             for k in range(ndims))});
-
-        // Normalize the left physical normal
-    % for i in range(ndims):
-        pnorml[${i}] *= 1.0 / magl;
-    % endfor
-
-        ${dtype} fn[${nvars}];
-
         // Perform the Riemann solve
-        rsolve_rus_inv(ul, ur, pnorml, fn, gamma);
+        ${dtype} fn[${nvars}];
+        rsolve_rus_inv(ul, ur, ptemp, fn, gamma);
 
         // Write out the fluxes into ul
         for (int i = 0; i < ${nvars}; ++i)
-            ul[i] = magl*fn[i];
+            ul[i] = magpnorml[iidx]*fn[i];
 
         // Copy these back into the view
         WRITE_VIEW(ul_v, ul_vstri, ul, iidx, iidx, ${nvars});

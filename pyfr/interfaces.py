@@ -2,24 +2,34 @@
 
 import numpy as np
 
-def gen_view_mats(interside, elemap):
+def get_view_mats(interside, elemap):
     ninters = len(interside)
 
-    scal, pnorm = [], []
+    scal = []
     for i in xrange(ninters):
         type, eidx, face, rtag = interside[i]
         ele = elemap[type]
 
         # After the += the length is increased by *three*
         scal += ele.get_scal_fpts_for_inter(eidx, face, rtag)
-        pnorm += ele.get_pnorm_fpts_for_inter(eidx, face, rtag)
 
     # Concat the various numpy arrays together to yield the three matrices
     # required in order to define a view
     scal_v = [np.concatenate(scal[i::3])[np.newaxis,...] for i in xrange(3)]
-    pnorm_v = [np.concatenate(pnorm[i::3])[np.newaxis,...] for i in xrange(3)]
 
-    return scal_v, pnorm_v
+    return scal_v
+
+def get_mag_pnorm_mat(interside, elemap):
+    mag_pnorms = [elemap[type].get_mag_pnorms_for_inter(eidx, fidx, rtag)
+                  for type, eidx, fidx, rtag in interside]
+
+    return np.concatenate(mag_pnorms)[None,...]
+
+def get_norm_pnorm_mat(interside, elemap):
+    norm_pnorms = [elemap[type].get_norm_pnorms_for_inter(eidx, fidx, rtag)
+                   for type, eidx, fidx, rtag in interside]
+
+    return np.concatenate(norm_pnorms)[None,...]
 
 class BaseInterfaces(object):
     def __init__(self, be, elemap, cfg):
@@ -36,23 +46,35 @@ class InternalInterfaces(BaseInterfaces):
         super(InternalInterfaces, self).__init__(be, elemap, cfg)
 
         # Generate the left and right hand side view matrices
-        scal_lhs, pnorm_lhs = gen_view_mats(lhs, elemap)
-        scal_rhs, pnorm_rhs = gen_view_mats(rhs, elemap)
+        scal_lhs = get_view_mats(lhs, elemap)
+        scal_rhs = get_view_mats(rhs, elemap)
 
-        # Allocate these on the backend
+        # Allocate these on the backend as views
         self._scal_lhs = be.view(*scal_lhs, vlen=self.nvars, tags={'nopad'})
         self._scal_rhs = be.view(*scal_rhs, vlen=self.nvars, tags={'nopad'})
-        self._pnorm_lhs = be.view(*pnorm_lhs, vlen=self.ndims, tags={'nopad'})
-        self._pnorm_rhs = be.view(*pnorm_rhs, vlen=self.ndims, tags={'nopad'})
+
+        # Get the left and right hand side physical normal magnitudes
+        mag_pnorm_lhs = get_mag_pnorm_mat(lhs, elemap)
+        mag_pnorm_rhs = get_mag_pnorm_mat(rhs, elemap)
+
+        # Allocate as a const matrix
+        self._mag_pnorm_lhs = be.const_matrix(mag_pnorm_lhs, tags={'nopad'})
+        self._mag_pnorm_rhs = be.const_matrix(mag_pnorm_rhs, tags={'nopad'})
+
+        # Get the left hand side normalized physical normals
+        norm_pnorm_lhs = get_norm_pnorm_mat(lhs, elemap)
+
+        # Allocate as a const matrix
+        self._norm_pnorm_lhs = be.const_matrix(norm_pnorm_lhs, tags={'nopad'})
+
 
     def get_rsolve_kern(self):
         gamma = self._cfg.getfloat('constants', 'gamma')
 
-        scal_lhs, scal_rhs = self._scal_lhs, self._scal_rhs
-        pnorm_lhs, pnorm_rhs = self._pnorm_lhs, self._pnorm_rhs
-
         return self._be.kernel('rsolve_rus_inv_int', self.ndims, self.nvars,
-                               scal_lhs, pnorm_lhs, scal_rhs, pnorm_rhs, gamma)
+                               self._scal_lhs, self._scal_rhs,
+                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
+                               self._norm_pnorm_lhs, gamma)
 
 
 class MPIInterfaces(BaseInterfaces):
@@ -64,7 +86,7 @@ class MPIInterfaces(BaseInterfaces):
         self._rhsrank = rhsrank
 
         # Generate the left hand view matrices
-        scal_lhs, pnorm_lhs = gen_view_mats(lhs, elemap)
+        scal_lhs = get_view_mats(lhs, elemap)
 
         # Compute the total amount of data we will be 'viewing'
         nmpicol = scal_lhs[0].shape[1] * self.nvars
@@ -72,16 +94,22 @@ class MPIInterfaces(BaseInterfaces):
         # Allocate on the backend
         self._scal_lhs = be.mpi_view(*scal_lhs, vlen=self.nvars, tags={'nopad'})
         self._scal_rhs = be.mpi_matrix((1, nmpicol))
-        self._pnorm_lhs = be.view(*pnorm_lhs, vlen=self.ndims, tags={'nopad'})
+
+        # Get the left hand side physical normal data
+        mag_pnorm_lhs = get_mag_pnorm_mat(lhs, elemap)
+        norm_pnorm_lhs = get_norm_pnorm_mat(lhs, elemap)
+
+        # Allocate
+        self._mag_pnorm_lhs = be.const_matrix(mag_pnorm_lhs, tags={'nopad'})
+        self._norm_pnorm_lhs = be.const_matrix(norm_pnorm_lhs, tags={'nopad'})
 
     def get_rsolve_kern(self):
         gamma = float(self._cfg.get('constants', 'gamma'))
 
-        scal_lhs, scal_rhs = self._scal_lhs, self._scal_rhs
-        pnorm_lhs = self._pnorm_lhs
-
         return self._be.kernel('rsolve_rus_inv_mpi', self.ndims, self.nvars,
-                               scal_lhs, scal_rhs, pnorm_lhs, gamma)
+                               self._scal_lhs, self._scal_rhs,
+                               self._mag_pnorm_lhs, self._norm_pnorm_lhs,
+                               gamma)
 
     def get_pack_kern(self):
         return self._be.kernel('pack', self._scal_lhs)

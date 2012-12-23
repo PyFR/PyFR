@@ -85,9 +85,6 @@ class Elements(object):
         self._negrcpdjac_upts = be.const_matrix(self._negrcpdjac_upts)
         self._smat_upts = be.const_matrix(self._smat_upts)
 
-        # Allocate the physical normals at the flux points
-        self._pnorm_fpts = be.const_matrix(self._pnorm_fpts)
-
         # Sizes
         nupts, nfpts = self.nupts, self.nfpts
         nvars, ndims = self.nvars, self.ndims
@@ -113,7 +110,6 @@ class Elements(object):
 
         # Get the relevant strides required for view construction
         self._scal_fpts_strides = be.from_aos_stride_to_native(neles, nvars)
-        self._pnorm_fpts_strides = be.from_aos_stride_to_native(neles, ndims)
 
         # Pre-compute for the max flux point count on a given face
         nmaxfpts = max(nfacefpts)
@@ -121,11 +117,6 @@ class Elements(object):
         self._scal_fpts_vstri = np.empty(nmaxfpts, dtype=np.int32)
         self._scal_fpts_vmats[:] = self._scal_fpts
         self._scal_fpts_vstri[:] = self._scal_fpts_strides[1]
-
-        self._pnorm_fpts_vmats = np.empty(nmaxfpts, dtype=np.object)
-        self._pnorm_fpts_vstri = np.empty(nmaxfpts, dtype=np.int32)
-        self._pnorm_fpts_vmats[:] = self._pnorm_fpts
-        self._pnorm_fpts_vstri[:] = self._pnorm_fpts_strides[1]
 
     def get_scal_upts_mat(self, idx):
         return self._scal_upts[idx].get()
@@ -226,7 +217,15 @@ class Elements(object):
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
         # Jacobian and N is the normal for each fpt.  Using
         # J^{-1} = S/|J| where S are the smats, we have S^{T}.N.
-        self._pnorm_fpts = np.einsum('ijlk,il->ijk', smats, normfpts)
+        pnorm_fpts = np.einsum('ijlk,il->ijk', smats, normfpts)
+
+        # Compute the magnitudes of these flux point normals
+        mag_pnorm_fpts = np.einsum('...i,...i', pnorm_fpts, pnorm_fpts)
+        mag_pnorm_fpts = np.sqrt(mag_pnorm_fpts)
+
+        # Normalize the physical normals at the flux points
+        self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[...,None]
+        self._mag_pnorm_fpts = mag_pnorm_fpts
 
     def _get_jac_eles_at(self, eles, pts):
         nspts, neles, ndims = eles.shape
@@ -283,14 +282,13 @@ class Elements(object):
         else:
             return smats
 
-    def get_pnorm_fpts_for_inter(self, eidx, fidx, rtag):
-        n = self._nfacefpts[fidx]
+    def get_mag_pnorms_for_inter(self, eidx, fidx, rtag):
+        fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
+        return self._mag_pnorm_fpts[fpts_idx, eidx]
 
-        vrcidx = np.empty((n, 2), dtype=np.int32)
-        vrcidx[:,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[:,1] = eidx*self._pnorm_fpts_strides[0]
-
-        return self._pnorm_fpts_vmats[:n], vrcidx, self._pnorm_fpts_vstri[:n]
+    def get_norm_pnorms_for_inter(self, eidx, fidx, rtag):
+        fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
+        return self._norm_pnorm_fpts[fpts_idx, eidx]
 
     def get_scal_fpts_for_inter(self, eidx, fidx, rtag):
         n = self._nfacefpts[fidx]

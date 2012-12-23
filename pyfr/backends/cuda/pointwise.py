@@ -34,14 +34,14 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
         return TdisInvKernel()
 
-    def rsolve_rus_inv_int(self, ndims, nvars, ul_v, pnl_v, ur_v, pnr_v, gamma):
+    def rsolve_rus_inv_int(self, ndims, nvars, ul_v, ur_v, magl, magr,
+                           normpnorml, gamma):
         ninters = ul_v.ncol
         dtype = ul_v.refdtype
 
         fn = self._get_function('pointwise', 'rsolve_rus_inv_int',
-                                [np.int32] + [np.intp]*8 + [dtype],
+                                [np.int32] + [np.intp]*7 + [dtype],
                                 self._modopts(dtype, ndims, nvars))
-        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -51,13 +51,13 @@ class CudaPointwiseKernels(CudaKernelProvider):
                 fn.prepared_async_call(grid, block, scomp, ninters,
                                        ul_v.mapping.data, ul_v.strides.data,
                                        ur_v.mapping.data, ur_v.strides.data,
-                                       pnl_v.mapping.data, pnl_v.strides.data,
-                                       pnr_v.mapping.data, pnr_v.strides.data,
-                                       gamma)
+                                       magl.data, magr.data,
+                                       normpnorml.data, gamma)
 
         return RsolveRusInvIntKernel()
 
-    def rsolve_rus_inv_mpi(self, ndims, nvars, ul_mpiv, ur_mpim, pnl_v, gamma):
+    def rsolve_rus_inv_mpi(self, ndims, nvars, ul_mpiv, ur_mpim, magl,
+                           normpnorml, gamma):
         ninters = ul_mpiv.ncol
         ul_v = ul_mpiv.view
         dtype = ul_v.refdtype
@@ -65,7 +65,6 @@ class CudaPointwiseKernels(CudaKernelProvider):
         fn = self._get_function('pointwise', 'rsolve_rus_inv_mpi',
                                 [np.int32] + [np.intp]*5 + [dtype],
                                 self._modopts(dtype, ndims, nvars))
-        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -75,8 +74,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
                 fn.prepared_async_call(grid, block, scomp, ninters,
                                        ul_v.mapping.data, ul_v.strides.data,
                                        ur_mpim.data,
-                                       pnl_v.mapping.data, pnl_v.strides.data,
-                                       gamma)
+                                       magl.data, normpnorml.data, gamma)
 
         return RsolveRusInvMPIKernel()
 

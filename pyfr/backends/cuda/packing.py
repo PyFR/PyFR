@@ -38,9 +38,6 @@ class CudaPackingKernels(CudaKernelProvider):
         fn = self._get_function('pack', op + '_view', 'iiPPPiii',
                                 tplparams=self._packmodopts(mpiview))
 
-        # We need all of the L1 we can get when packing
-        fn.set_cache_config(cuda.func_cache.PREFER_L1)
-
         # Compute the grid and thread-block size
         grid, block = self._get_2d_grid_block(fn, v.nrow, v.ncol)
 
