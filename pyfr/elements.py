@@ -77,9 +77,8 @@ class Elements(object):
 
         # Allocate the constant operator matrices
         self._m0b = be.auto_const_sparse_matrix(self.m0, tags={'M0'})
-        self._m1_sub_m3m2b = be.auto_const_sparse_matrix(self.m1_sub_m3m2,
-                                                         tags={'M1-M3M2'})
         self._m3b = be.auto_const_sparse_matrix(self.m3, tags={'M3'})
+        self._m132b = be.auto_const_sparse_matrix(self.m132, tags={'M132'})
 
         # Allocate soln point transformation matrices
         self._negrcpdjac_upts = be.const_matrix(self._negrcpdjac_upts)
@@ -139,7 +138,7 @@ class Elements(object):
                                disu_upts, smats_upts, tdisf_upts, gamma)
 
     def get_tdivtpcorf_upts_kern(self):
-        return self._be.kernel('mul', self._m1_sub_m3m2b, self._vect_upts,
+        return self._be.kernel('mul', self._m132b, self._vect_upts,
                                self.scal_upts_outb)
 
     def get_tdivtconf_upts_kern(self):
@@ -180,7 +179,7 @@ class Elements(object):
         return self._basis.fbasis_at(self._basis.upts)
 
     @property
-    def m1_sub_m3m2(self):
+    def m132(self):
         m1, m2, m3 = self.m1, self.m2, self.m3
         return m1 - np.dot(m3, m2.reshape(self.nfpts, -1)).reshape(m1.shape)
 
