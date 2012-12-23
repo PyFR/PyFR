@@ -5,12 +5,10 @@ import sys
 from ctypes import CDLL, POINTER, byref, c_int, c_double, c_float, c_void_p
 from ctypes.util import find_library
 
-from pyfr.exc import PyFRError
+import numpy as np
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel
-
-import numpy as np
 
 # Find the CUBLAS library
 if sys.platform == 'linux2':
@@ -31,7 +29,7 @@ except OSError:
     raise ImportError('Library not found')
 
 
-class CublasError(PyFRError):
+class CublasError(Exception):
     pass
 
 
