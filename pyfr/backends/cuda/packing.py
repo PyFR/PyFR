@@ -3,7 +3,6 @@
 from mpi4py import MPI
 
 import pycuda.driver as cuda
-from pycuda.compiler import SourceModule
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel, CudaMPIKernel

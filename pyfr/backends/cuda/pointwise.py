@@ -3,7 +3,6 @@
 import numpy as np
 
 import pycuda.driver as cuda
-from pycuda.compiler import SourceModule
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel
