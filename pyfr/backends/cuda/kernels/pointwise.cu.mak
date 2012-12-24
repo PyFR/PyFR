@@ -209,7 +209,7 @@ rsolve_rus_inv_mpi(int ninters,
 __global__ void
 negdivconf(int nupts, int neles,
            ${dtype}* __restrict__ tdivtconf,
-           const ${dtype}* __restrict__ negrcpdjac,
+           const ${dtype}* __restrict__ rcpdjac,
            int ldt, int ldr)
 {
     int eidx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -218,7 +218,7 @@ negdivconf(int nupts, int neles,
     {
         for (int uidx = 0; uidx < nupts; ++uidx)
         {
-            ${dtype} s = negrcpdjac[IDX_OF(uidx, eidx, ldr)];
+            ${dtype} s = -rcpdjac[IDX_OF(uidx, eidx, ldr)];
 
         % for i in range(nvars):
             tdivtconf[U_IDX_OF(uidx, eidx, ${i}, neles, ldt)] *= s;
