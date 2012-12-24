@@ -178,6 +178,7 @@ class CudaMPIView(base.MPIView):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
         self.nrow = nrow = matmap.shape[0]
         self.ncol = ncol = matmap.shape[1]
+        self.vlen = vlen
 
         # Create a normal CUDA view
         self.view = backend._view(matmap, rcmap, stridemap, vlen, tags)

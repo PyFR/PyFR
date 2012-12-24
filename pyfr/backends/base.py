@@ -97,6 +97,9 @@ class Backend(object):
         """
         return self._mpi_matrix(ioshape, initval, iopacking, tags)
 
+    def mpi_matrix_for_view(self, view, tags=set()):
+        return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
+
     @abstractmethod
     def _mpi_matrix(self, ioshape, iopacking, initval, tags):
         pass

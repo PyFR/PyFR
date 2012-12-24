@@ -4,16 +4,14 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 
-def get_view_mats(interside, elemap):
-    ninters = len(interside)
+def get_view_mats(interside, mat, elemap):
+    # Map from element type to view mat getter
+    viewmatmap = {type: getattr(ele, mat) for type, ele in elemap.items()}
 
     scal = []
-    for i in xrange(ninters):
-        type, eidx, face, rtag = interside[i]
-        ele = elemap[type]
-
+    for type, eidx, face, rtag in interside:
         # After the += the length is increased by *three*
-        scal += ele.get_scal_fpts0_for_inter(eidx, face, rtag)
+        scal += viewmatmap[type](eidx, face, rtag)
 
     # Concat the various numpy arrays together to yield the three matrices
     # required in order to define a view
@@ -54,8 +52,8 @@ class BaseInternalInterfaces(BaseInterfaces):
         super(BaseInternalInterfaces, self).__init__(be, elemap, cfg)
 
         # Generate the left and right hand side view matrices
-        scal_lhs = get_view_mats(lhs, elemap)
-        scal_rhs = get_view_mats(rhs, elemap)
+        scal_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
+        scal_rhs = get_view_mats(rhs, 'get_scal_fpts0_for_inter', elemap)
 
         # Allocate these on the backend as views
         self._scal_lhs = be.view(*scal_lhs, vlen=self.nvars, tags={'nopad'})
@@ -85,14 +83,11 @@ class BaseMPIInterfaces(BaseInterfaces):
         self._rhsrank = rhsrank
 
         # Generate the left hand view matrices
-        scal_lhs = get_view_mats(lhs, elemap)
-
-        # Compute the total amount of data we will be 'viewing'
-        nmpicol = scal_lhs[0].shape[1] * self.nvars
+        scal_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
 
         # Allocate on the backend
         self._scal_lhs = be.mpi_view(*scal_lhs, vlen=self.nvars, tags={'nopad'})
-        self._scal_rhs = be.mpi_matrix((1, nmpicol))
+        self._scal_rhs = be.mpi_matrix_for_view(self._scal_lhs)
 
         # Get the left hand side physical normal data
         mag_pnorm_lhs = get_mag_pnorm_mat(lhs, elemap)
