@@ -150,9 +150,6 @@ class CudaCublasKernels(CudaKernelProvider):
            a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
 
-        #if (a.dtype, b.dtype, out.dtype) != (np.float,)*3:
-        #    raise TypeError('Only double precision is supported')
-
         # CUBLAS expects inputs to be column-major (or Fortran order in numpy
         # parlance).  However as C = A*B => C^T = (A*B)^T = (B^T)*(A^T) with
         # a little trickery we can multiply row-major matrices directly
