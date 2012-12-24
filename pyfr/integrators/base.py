@@ -3,7 +3,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from pyfr.inifile import Inifile
-from pyfr.mesh_partition import MeshPartition
+from pyfr.mesh_partition import get_mesh_partition
 from pyfr.util import range_eval
 
 class BaseIntegrator(object):
@@ -25,8 +25,9 @@ class BaseIntegrator(object):
         # Determine the amount of temp storage required by thus method
         nreg = self._stepper_nregs
 
-        # Construct the mesh partition
-        self._meshp = MeshPartition(backend, rallocs, mesh, initsoln, nreg, cfg)
+        # Construct the relevant mesh partition
+        self._meshp = get_mesh_partition(backend, rallocs, mesh, initsoln,
+                                         nreg, cfg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
         self._mesh_uuid = mesh['mesh_uuid'].item()

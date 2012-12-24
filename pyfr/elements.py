@@ -1,11 +1,19 @@
 # -*- coding: utf-8 -*-
 
+from abc import ABCMeta, abstractmethod
+
 import numpy as np
 import sympy as sy
 
 from pyfr.util import ndrange, npeval, lazyprop
 
-class Elements(object):
+class BaseElements(object):
+    __metaclass__ = ABCMeta
+
+    _nscal_fpts = None
+    _nvect_upts = None
+    _nvect_fpts = None
+
     def __init__(self, basiscls, eles, cfg):
         self._be = None
         self._cfg = cfg
@@ -18,6 +26,11 @@ class Elements(object):
         # Checks
         if ndims != basiscls.ndims:
             raise ValueError('Invalid element matrix dimensions')
+
+        # Subclass checks
+        assert self._nscal_fpts >= 1
+        assert self._nvect_upts >= 1
+        assert self._nvect_fpts >= 0
 
         # Generate a symbol for each dimension (p,q or p,q,r)
         dims = sy.symbols('p q r')[:ndims]
@@ -70,7 +83,8 @@ class Elements(object):
         self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
         self._scal_upts = self._scal_upts.reshape(nupts, neles, nvars)
 
-    def set_backend(self, be, nsubanks):
+    @abstractmethod
+    def set_backend(self, be, nscal_upts):
         # Ensure a backend has not already been set
         assert self._be is None
         self._be = be
@@ -91,9 +105,13 @@ class Elements(object):
 
         # Allocate general storage required for flux computation
         self._scal_upts = [be.matrix((nupts, neles, nvars), self._scal_upts)
-                           for i in xrange(nsubanks)]
-        self._vect_upts = be.matrix((nupts, ndims, neles, nvars))
-        self._scal_fpts = be.matrix((nfpts, neles, nvars))
+                           for i in xrange(nscal_upts)]
+        self._vect_upts = [be.matrix((nupts, ndims, neles, nvars))
+                           for i in xrange(self._nvect_upts)]
+        self._scal_fpts = [be.matrix((nfpts, neles, nvars))
+                           for i in xrange(self._nscal_fpts)]
+        self._vect_fpts = [be.matrix((nfpts, neles, nvars))
+                           for i in xrange(self._nvect_fpts)]
 
         # Bank the scalar soln points (as required by the RK schemes)
         self.scal_upts_inb = be.matrix_bank(self._scal_upts)
@@ -108,49 +126,39 @@ class Elements(object):
         self._nfacefpts = nfacefpts = self._basis.nfpts
 
         # Get the relevant strides required for view construction
-        self._scal_fpts_strides = be.from_aos_stride_to_native(neles, nvars)
+        self._scal_fpts0_strides = be.from_aos_stride_to_native(neles, nvars)
 
         # Pre-compute for the max flux point count on a given face
         nmaxfpts = max(nfacefpts)
-        self._scal_fpts_vmats = np.empty(nmaxfpts, dtype=np.object)
-        self._scal_fpts_vstri = np.empty(nmaxfpts, dtype=np.int32)
-        self._scal_fpts_vmats[:] = self._scal_fpts
-        self._scal_fpts_vstri[:] = self._scal_fpts_strides[1]
+
+        # View info
+        self._scal_fpts0_vmats = np.empty(nmaxfpts, dtype=np.object)
+        self._scal_fpts0_vstri = np.empty(nmaxfpts, dtype=np.int32)
+        self._scal_fpts0_vmats[:] = self._scal_fpts[0]
+        self._scal_fpts0_vstri[:] = self._scal_fpts0_strides[1]
 
     def get_scal_upts_mat(self, idx):
         return self._scal_upts[idx].get()
 
-    def get_disu_fpts_kern(self):
-        disu_upts, disu_fpts = self.scal_upts_inb, self._scal_fpts
-        return self._be.kernel('mul', self._m0b, disu_upts, disu_fpts)
-
+    @abstractmethod
     def get_tdisf_upts_kern(self):
-        # User-defined constant
-        gamma = self._cfg.getfloat('constants', 'gamma')
+        pass
 
-        # Element specific constant data
-        smats_upts = self._smat_upts
-
-        # Input solutions and output fluxes
-        disu_upts, tdisf_upts = self.scal_upts_inb, self._vect_upts
-
-        return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
-                               disu_upts, smats_upts, tdisf_upts, gamma)
+    def get_disu_fpts_kern(self):
+        return self._be.kernel('mul', self._m0b, self.scal_upts_inb,
+                               out=self._scal_fpts[0])
 
     def get_tdivtpcorf_upts_kern(self):
-        return self._be.kernel('mul', self._m132b, self._vect_upts,
-                               self.scal_upts_outb)
+        return self._be.kernel('mul', self._m132b, self._vect_upts[0],
+                               out=self.scal_upts_outb)
 
     def get_tdivtconf_upts_kern(self):
-        normtcorf_fpts, tdivtconf_upts = self._scal_fpts, self.scal_upts_outb
-        return self._be.kernel('mul', self._m3b, normtcorf_fpts, tdivtconf_upts,
-                               beta=1.0)
+        return self._be.kernel('mul', self._m3b, self._scal_fpts[0],
+                               out=self.scal_upts_outb, beta=1.0)
 
     def get_negdivconf_upts_kern(self):
-        tdivtconf_upts = self.scal_upts_outb
-        negrcpdjac_upts = self._negrcpdjac_upts
         return self._be.kernel('negdivconf', self.ndims, self.nvars,
-                               tdivtconf_upts, negrcpdjac_upts)
+                               self.scal_upts_outb, self._negrcpdjac_upts)
 
     @lazyprop
     def m0(self):
@@ -289,11 +297,62 @@ class Elements(object):
         fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
         return self._norm_pnorm_fpts[fpts_idx, eidx]
 
-    def get_scal_fpts_for_inter(self, eidx, fidx, rtag):
+    def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
         n = self._nfacefpts[fidx]
 
         vrcidx = np.empty((n, 2), dtype=np.int32)
         vrcidx[:,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[:,1] = eidx*self._scal_fpts_strides[0]
+        vrcidx[:,1] = eidx*self._scal_fpts0_strides[0]
 
-        return self._scal_fpts_vmats[:n], vrcidx, self._scal_fpts_vstri[:n]
+        return self._scal_fpts0_vmats[:n], vrcidx, self._scal_fpts0_vstri[:n]
+
+
+class EulerElements(BaseElements):
+    _nscal_fpts = 1
+    _nvect_upts = 1
+    _nvect_fpts = 0
+
+    def set_backend(self, be, nsureg):
+        super(EulerElements, self).set_backend(be, nsureg)
+
+    def get_tdisf_upts_kern(self):
+        gamma = self._cfg.getfloat('constants', 'gamma')
+
+        return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
+                               self.scal_upts_inb, self._smat_upts,
+                               self._vect_upts[0], gamma)
+
+
+class NavierStokesElements(BaseElements):
+    @lazyprop
+    def m4(self):
+        """Discontinuous soln at upts to trans gradient of discontinuous
+        solution at upts
+        """
+        return self.m1.swapaxes(2, 1)[...,None]
+
+    @lazyprop
+    def m5(self):
+        """Trans grad discontinuous soln at upts to trans gradient of
+        discontinuous solution at fpts
+        """
+        nfpts, ndims, nupts = self.nfpts, self.ndims, self.nupts
+        m = np.zeros((nfpts, ndims, nupts, ndims), dtype=self.m0.dtype)
+
+        for i in xrange(ndims):
+            m[:,i,:,i] = self.m0
+
+        return m
+
+    @lazyprop
+    def m6(self):
+        """Correction soln at fpts to trans gradient of correction
+        solution at upts
+        """
+        m = self._basis.norm_fpts.T[:,None,:]*self.m3
+        return m.swapaxes(0, 1)[...,None]
+
+    @property
+    def m460(self):
+        m4, m6, m0 = self.m4, self.m6, self.m0
+        return m4 - np.dot(m6.reshape(-1, self.nfpts), m0).reshape(m4.shape)
