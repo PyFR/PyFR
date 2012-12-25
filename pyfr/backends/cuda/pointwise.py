@@ -18,7 +18,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
     def tdisf_inv(self, ndims, nvars, u, smats, f, gamma):
         nupts, neles = u.nrow, u.ncol / nvars
 
-        fn = self._get_function('pointwise', 'tdisf_inv', [np.int32]*2 +
+        fn = self._get_function('tflux_inv', 'tdisf_inv', [np.int32]*2 +
                                 [np.intp]*3 + [u.dtype] + [np.int32]*3,
                                 self._modopts(u.dtype, ndims, nvars))
 
@@ -38,7 +38,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         ninters = ul_v.ncol
         dtype = ul_v.refdtype
 
-        fn = self._get_function('pointwise', 'rsolve_rus_inv_int',
+        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_int',
                                 [np.int32] + [np.intp]*7 + [dtype],
                                 self._modopts(dtype, ndims, nvars))
 
@@ -61,7 +61,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         ul_v = ul_mpiv.view
         dtype = ul_v.refdtype
 
-        fn = self._get_function('pointwise', 'rsolve_rus_inv_mpi',
+        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_mpi',
                                 [np.int32] + [np.intp]*5 + [dtype],
                                 self._modopts(dtype, ndims, nvars))
 
@@ -80,7 +80,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
     def negdivconf(self, ndims, nvars, dv, rcpdjac):
         nupts, neles = dv.nrow, dv.ncol / nvars
 
-        fn = self._get_function('pointwise', 'negdivconf', 'iiPPii',
+        fn = self._get_function('negdivconf', 'negdivconf', 'iiPPii',
                                 self._modopts(dv.dtype, ndims, nvars))
 
         block = (256, 1, 1)
