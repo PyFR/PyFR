@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 
-import pkgutil
-
-from mako.template import Template
-
 import pycuda.compiler as compiler
 
+from pyfr.template import PkgTemplateLookup
 from pyfr.util import memoize
 
 class CudaKernelProvider(object):
     KERNEL_EXT = '.cu.mak'
+
+    lookup = PkgTemplateLookup(__name__, 'kernels')
 
     def _get_2d_grid_block(self, function, nrow, ncol):
         # TODO: Write a totally bitchin' method which uses info from the
@@ -25,10 +24,10 @@ class CudaKernelProvider(object):
     @memoize
     def _get_module(self, module, tplparams={}, nvccopts=None):
         # Get the template file
-        tpl = pkgutil.get_data(__name__, 'kernels/' + module + self.KERNEL_EXT)
+        tpl = self.lookup.get_template(module + self.KERNEL_EXT)
 
         # Render the template
-        mod = Template(tpl).render(**tplparams)
+        mod = tpl.render(**tplparams)
 
         # Compile
         return compiler.SourceModule(mod, options=nvccopts)

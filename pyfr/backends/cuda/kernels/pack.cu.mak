@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-#define IDX_OF(i, j, ldim) ((i)*(ldim) + (j))
+<%include file='idx_of.cu.mak' />
 
 __global__ void
 pack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri, ${dtype} *pmat,
@@ -37,5 +37,3 @@ unpack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri,
     % endfor
     }
 }
-
-#undef IDX_OF

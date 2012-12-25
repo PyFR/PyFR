@@ -1,12 +1,6 @@
 # -*- coding: utf-8 -*-
 
-#define IDX_OF(i, j, ldim) ((i)*(ldim) + (j))
-#define U_IDX_OF(upt, ele, var, nele, ldim) \
-    IDX_OF(upt, nele*var + ele, ldim)
-#define F_IDX_OF(upt, ele, fvar, var, nupt, nele, ldim) \
-    IDX_OF(nupt*fvar + upt, nele*var + ele, ldim)
-#define SMAT_IDX_OF(upt, ele, row, col, nele, ldim) \
-    IDX_OF(upt, nele*(${ndims}*row + col) + ele, ldim)
+<%include file='idx_of.cu.mak' />
 
 #define READ_VIEW(dst, src_v, src_vstri, vidx, vstriidx, nvec) \
     for (int _i = 0; _i < nvec; ++_i)                          \
