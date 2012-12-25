@@ -97,7 +97,7 @@ class FileWriter(BaseWriter):
                     if mrank == root:
                         loc_names.append(name)
                     else:
-                        rbuf = np.empty(dims)
+                        rbuf = np.empty(dims, dtype=self._backend.fpdtype)
                         rreq = comm.Recv_init(rbuf, mrank, tag)
 
                         mpi_rbufs.append(rbuf)
