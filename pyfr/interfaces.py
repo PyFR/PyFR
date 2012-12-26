@@ -52,12 +52,12 @@ class BaseInternalInterfaces(BaseInterfaces):
         super(BaseInternalInterfaces, self).__init__(be, elemap, cfg)
 
         # Generate the left and right hand side view matrices
-        scal_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
-        scal_rhs = get_view_mats(rhs, 'get_scal_fpts0_for_inter', elemap)
+        scal0_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
+        scal0_rhs = get_view_mats(rhs, 'get_scal_fpts0_for_inter', elemap)
 
         # Allocate these on the backend as views
-        self._scal_lhs = be.view(*scal_lhs, vlen=self.nvars, tags={'nopad'})
-        self._scal_rhs = be.view(*scal_rhs, vlen=self.nvars, tags={'nopad'})
+        self._scal0_lhs = be.view(*scal0_lhs, vlen=self.nvars, tags={'nopad'})
+        self._scal0_rhs = be.view(*scal0_rhs, vlen=self.nvars, tags={'nopad'})
 
         # Get the left and right hand side physical normal magnitudes
         mag_pnorm_lhs = get_mag_pnorm_mat(lhs, elemap)
@@ -83,11 +83,12 @@ class BaseMPIInterfaces(BaseInterfaces):
         self._rhsrank = rhsrank
 
         # Generate the left hand view matrices
-        scal_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
+        scal0_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
 
         # Allocate on the backend
-        self._scal_lhs = be.mpi_view(*scal_lhs, vlen=self.nvars, tags={'nopad'})
-        self._scal_rhs = be.mpi_matrix_for_view(self._scal_lhs)
+        self._scal0_lhs = be.mpi_view(*scal0_lhs, vlen=self.nvars,
+                                      tags={'nopad'})
+        self._scal0_rhs = be.mpi_matrix_for_view(self._scal0_lhs)
 
         # Get the left hand side physical normal data
         mag_pnorm_lhs = get_mag_pnorm_mat(lhs, elemap)
@@ -99,18 +100,18 @@ class BaseMPIInterfaces(BaseInterfaces):
 
 
     def get_scal_fpts0_pack_kern(self):
-        return self._be.kernel('pack', self._scal_lhs)
+        return self._be.kernel('pack', self._scal0_lhs)
 
     def get_scal_fpts0_send_pack_kern(self):
-        return self._be.kernel('send_pack', self._scal_lhs,
+        return self._be.kernel('send_pack', self._scal0_lhs,
                                self._rhsrank, self.MPI_TAG)
 
     def get_scal_fpts0_recv_pack_kern(self):
-        return self._be.kernel('recv_pack', self._scal_rhs,
+        return self._be.kernel('recv_pack', self._scal0_rhs,
                                self._rhsrank, self.MPI_TAG)
 
     def get_scal_fpts0_unpack_kern(self):
-        return self._be.kernel('unpack', self._scal_rhs)
+        return self._be.kernel('unpack', self._scal0_rhs)
 
 
 class EulerInternalInterfaces(BaseInternalInterfaces):
@@ -118,7 +119,7 @@ class EulerInternalInterfaces(BaseInternalInterfaces):
         gamma = self._cfg.getfloat('constants', 'gamma')
 
         return self._be.kernel('rsolve_rus_inv_int', self.ndims, self.nvars,
-                               self._scal_lhs, self._scal_rhs,
+                               self._scal0_lhs, self._scal0_rhs,
                                self._mag_pnorm_lhs, self._mag_pnorm_rhs,
                                self._norm_pnorm_lhs, gamma)
 
@@ -128,6 +129,6 @@ class EulerMPIInterfaces(BaseMPIInterfaces):
         gamma = float(self._cfg.get('constants', 'gamma'))
 
         return self._be.kernel('rsolve_rus_inv_mpi', self.ndims, self.nvars,
-                               self._scal_lhs, self._scal_rhs,
+                               self._scal0_lhs, self._scal0_rhs,
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs,
                                gamma)
