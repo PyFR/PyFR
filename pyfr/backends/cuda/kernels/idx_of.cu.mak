@@ -17,6 +17,8 @@
 % if ndims is not UNDEFINED:
 #define SMAT_IDX_OF(upt, ele, row, col, nele, ldim) \
     IDX_OF(upt, nele*(${ndims}*row + col) + ele, ldim)
+
+#define JMAT_IDX_OF SMAT_IDX_OF
 % endif
 
 #endif // _PYFR_IDX_OF
