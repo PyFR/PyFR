@@ -17,7 +17,7 @@ tdisf_inv(int nupts, int neles,
 
     if (eidx < neles)
     {
-        ${dtype} uin[${nvars}], ftmp[${nvars}][${ndims}];
+        ${dtype} uin[${nvars}], ftmp[${ndims}][${nvars}];
 
         for (int uidx = 0; uidx < nupts; ++uidx)
         {
@@ -38,7 +38,7 @@ tdisf_inv(int nupts, int neles,
                 for (int j = 0; j < ${nvars}; ++j)
                 {
                     int fidx = F_IDX_OF(uidx, eidx, i, j, nupts, neles, ldf);
-                    f[fidx] = ${' + '.join('s{0}*ftmp[j][{0}]'.format(k)\
+                    f[fidx] = ${' + '.join('s{0}*ftmp[{0}][j]'.format(k)\
                                 for k in range(ndims))};
                 }
             }

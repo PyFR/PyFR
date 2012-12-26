@@ -19,7 +19,7 @@ rsolve_rus_inv(const ${dtype} ul[${nvars}],
                ${dtype} gamma)
 {
     // Compute the left and right fluxes + velocities and pressures
-    ${dtype} fl[${nvars}][${ndims}], fr[${nvars}][${ndims}];
+    ${dtype} fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
     ${dtype} vl[${ndims}], vr[${ndims}];
     ${dtype} pl, pr;
 
@@ -33,7 +33,7 @@ rsolve_rus_inv(const ${dtype} ul[${nvars}],
 
     // Output
     for (int i = 0; i < ${nvars}; ++i)
-        fcomm[i] = 0.5 * ((${' + '.join('pnorm[{0}]*(fl[i][{0}] + fr[i][{0}])'.format(k)\
+        fcomm[i] = 0.5 * ((${' + '.join('pnorm[{0}]*(fl[{0}][i] + fr[{0}][i])'.format(k)\
                              for k in range(ndims))})
                         - a*(ur[i] - ul[i]));
 
