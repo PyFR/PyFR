@@ -26,7 +26,7 @@ gradcoru(int nfpts, int neles,
             {
                 // Get the indices
             % for i in range(ndims):
-                int gidx${i} = GRAD_U_IDX_OF(fidx, eidx, ${i}, j, neles, ldg);
+                int gidx${i} = GRAD_U_IDX_OF(fidx, eidx, ${i}, j, nfpts, neles, ldg);
             % endfor
 
                 // Load the solution gradients

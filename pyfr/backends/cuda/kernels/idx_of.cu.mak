@@ -8,11 +8,10 @@
 #define U_IDX_OF(upt, ele, var, nele, ldim) \
     IDX_OF(upt, nele*var + ele, ldim)
 
-#define GRAD_U_IDX_OF(upt, ele, dim, var, nele, ldim) \
-    IDX_OF(upt*var + upt, nele*dim + ele, ldim)
+#define F_IDX_OF(upt, ele, dim, var, nupt, nele, ldim) \
+    IDX_OF(nupt*dim + upt, nele*var + ele, ldim)
 
-#define F_IDX_OF(upt, ele, fvar, var, nupt, nele, ldim) \
-    IDX_OF(nupt*fvar + upt, nele*var + ele, ldim)
+#define GRAD_U_IDX_OF F_IDX_OF
 
 % if ndims is not UNDEFINED:
 #define SMAT_IDX_OF(upt, ele, row, col, nele, ldim) \
