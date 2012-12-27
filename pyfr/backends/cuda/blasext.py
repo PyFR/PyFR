@@ -27,11 +27,7 @@ class CudaBlasExtKernels(CudaKernelProvider):
 
         class AxnpbyKernel(CudaComputeKernel):
             def run(self, scomp, scopy, beta, *alphan):
-                args = []
-                for x, alpha in zip(xn, alphan):
-                    args.extend([x.data, alpha])
-
-                fn.prepared_async_call(grid, block, scomp,
-                                       cnt, y.data, beta, *args)
+                args = [i for axn in zip(xn, alphan) for i in axn]
+                fn.prepared_async_call(grid, block, scomp, cnt, y, beta, *args)
 
         return AxnpbyKernel()

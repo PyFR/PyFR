@@ -53,7 +53,7 @@ class CudaPackingKernels(CudaKernelProvider):
 
                 # Call the CUDA kernel (pack or unpack)
                 fn.prepared_async_call(grid, block, scomp, v.nrow, v.ncol,
-                                       v.mapping.data, v.strides.data, m.data,
+                                       v.mapping, v.strides, m,
                                        v.mapping.leaddim, v.strides.leaddim,
                                        m.leaddim)
 

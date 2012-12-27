@@ -2,6 +2,7 @@
 
 import pycuda.compiler as compiler
 
+from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.template import PkgTemplateLookup
 from pyfr.util import memoize
 
@@ -43,3 +44,10 @@ class CudaKernelProvider(object):
 
         # Prepare it for execution
         return func.prepare(argtypes)
+
+    def _basic_kernel(self, fn, grid, block, *args):
+        class BasicKernel(CudaComputeKernel):
+            def run(self, scomp, scopy):
+                fn.prepared_async_call(grid, block, scomp, *args)
+
+        return BasicKernel()

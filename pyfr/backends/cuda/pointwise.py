@@ -25,13 +25,9 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
 
-        class TdisInvKernel(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, nupts, neles,
-                                       u, smats, f, gamma, u.leaddim,
-                                       smats.leaddim, f.leaddim)
-
-        return TdisInvKernel()
+        return self._basic_kernel(fn, grid, block, nupts, neles,
+                                  u, smats, f, gamma, u.leaddim,
+                                  smats.leaddim, f.leaddim)
 
     def tdisf_vis(self, ndims, nvars, u, smats, rcpdjac, tgradu,
                   gamma, mu, pr):
@@ -45,14 +41,10 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
 
-        class TFluxVisKernel(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, nupts, neles,
-                                       u, smats, rcpdjac, tgradu, gamma,
-                                       mu, rcppr, u.leaddim, smats.leaddim,
-                                       rcpdjac.leaddim, tgradu.leaddim)
-
-        return TFluxVisKernel()
+        return self._basic_kernel(fn, grid, block, nupts, neles,
+                                  u, smats, rcpdjac, tgradu, gamma,
+                                  mu, rcppr, u.leaddim, smats.leaddim,
+                                  rcpdjac.leaddim, tgradu.leaddim)
 
     def conu_int(self, ndims, nvars, ul_vin, ur_vin, ul_vout, ur_vout, beta):
         ninters = ul_vin.ncol
@@ -65,14 +57,10 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
 
-        class ConUIntKernel(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, ninters,
-                                       ul_vin.mapping, ul_vin.strides,
-                                       ur_vin.mapping, ur_vin.strides,
-                                       ul_vout.mapping, ur_vout.mapping, beta)
-
-        return ConUIntKernel()
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_vin.mapping, ul_vin.strides,
+                                  ur_vin.mapping, ur_vin.strides,
+                                  ul_vout.mapping, ur_vout.mapping, beta)
 
     def conu_mpi(self, ndims, nvars, ul_vin, ul_vout, ur_mpim, beta):
         ninters = ul_vin.ncol
@@ -85,13 +73,9 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
 
-        class ConUMPIKernel(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, ninters,
-                                       ul_vin.mapping, ul_vin.strides,
-                                       ul_vout.mapping, ur_mpim, beta)
-
-        return ConUMPIKernel()
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_vin.mapping, ul_vin.strides,
+                                  ul_vout.mapping, ur_mpim, beta)
 
     def gradcoru(self, ndims, nvars, jmats, gradu):
         nfpts, neles = jmats.nrow, gradu.ncol / nvars
@@ -102,13 +86,8 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
 
-        class GradCorUKernel(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, nfpts, neles,
-                                       jmats, gradu, jmats.leaddim,
-                                       gradu.leaddim)
-
-        return GradCorUKernel()
+        return self._basic_kernel(fn, grid, block, nfpts, neles,
+                                  jmats, gradu, jmats.leaddim, gradu.leaddim)
 
     def rsolve_rus_inv_int(self, ndims, nvars, ul_v, ur_v, magl, magr,
                            normpnorml, gamma):
@@ -122,14 +101,10 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
 
-        class RsolveRusInvIntKernel(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, ninters,
-                                       ul_v.mapping, ul_v.strides,
-                                       ur_v.mapping, ur_v.strides,
-                                       magl, magr, normpnorml, gamma)
-
-        return RsolveRusInvIntKernel()
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_v.mapping, ul_v.strides,
+                                  ur_v.mapping, ur_v.strides,
+                                  magl, magr, normpnorml, gamma)
 
     def rsolve_rus_inv_mpi(self, ndims, nvars, ul_mpiv, ur_mpim, magl,
                            normpnorml, gamma):
@@ -144,13 +119,9 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
 
-        class RsolveRusInvMPIKernel(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, ninters,
-                                       ul_v.mapping, ul_v.strides, ur_mpim,
-                                       magl, normpnorml, gamma)
-
-        return RsolveRusInvMPIKernel()
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_v.mapping, ul_v.strides, ur_mpim,
+                                  magl, normpnorml, gamma)
 
     def negdivconf(self, ndims, nvars, dv, rcpdjac):
         nupts, neles = dv.nrow, dv.ncol / nvars
@@ -161,9 +132,5 @@ class CudaPointwiseKernels(CudaKernelProvider):
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
 
-        class Negdivconf(CudaComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, nupts, neles,
-                                       dv, rcpdjac, dv.leaddim, rcpdjac.leaddim)
-
-        return Negdivconf()
+        return self._basic_kernel(fn, grid, block, nupts, neles, dv, rcpdjac,
+                                  dv.leaddim, rcpdjac.leaddim)
