@@ -110,7 +110,7 @@ class BaseElements(object):
                            for i in xrange(self._nvect_upts)]
         self._scal_fpts = [be.matrix((nfpts, neles, nvars))
                            for i in xrange(self._nscal_fpts)]
-        self._vect_fpts = [be.matrix((nfpts, neles, nvars))
+        self._vect_fpts = [be.matrix((nfpts, ndims, neles, nvars))
                            for i in xrange(self._nvect_fpts)]
 
         # Bank the scalar soln points (as required by the RK schemes)
@@ -126,16 +126,17 @@ class BaseElements(object):
         self._nfacefpts = nfacefpts = self._basis.nfpts
 
         # Get the relevant strides required for view construction
-        self._scal_fpts0_strides = be.from_aos_stride_to_native(neles, nvars)
+        self._scal_fpts_strides = be.from_aos_stride_to_native(neles, nvars)
 
         # Pre-compute for the max flux point count on a given face
         nmaxfpts = max(nfacefpts)
 
-        # View info
-        self._scal_fpts0_vmats = np.empty(nmaxfpts, dtype=np.object)
-        self._scal_fpts0_vstri = np.empty(nmaxfpts, dtype=np.int32)
-        self._scal_fpts0_vmats[:] = self._scal_fpts[0]
-        self._scal_fpts0_vstri[:] = self._scal_fpts0_strides[1]
+        # View stride info (common to all scal_fpts mats)
+        self._scal_fpts_vstri = np.empty(nmaxfpts, dtype=np.int32)
+        self._scal_fpts_vstri[:] = self._scal_fpts_strides[1]
+
+        # View matrix info
+        self._scal_fpts_vmats = [np.tile(m, nmaxfpts) for m in self._scal_fpts]
 
     def get_scal_upts_mat(self, idx):
         return self._scal_upts[idx].get()
@@ -297,14 +298,18 @@ class BaseElements(object):
         fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
         return self._norm_pnorm_fpts[fpts_idx, eidx]
 
-    def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
-        n = self._nfacefpts[fidx]
+    def _get_scal_fptsn_for_inter(self, n, eidx, fidx, rtag):
+        nfp = self._nfacefpts[fidx]
 
-        vrcidx = np.empty((n, 2), dtype=np.int32)
+        vrcidx = np.empty((nfp, 2), dtype=np.int32)
         vrcidx[:,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[:,1] = eidx*self._scal_fpts0_strides[0]
+        vrcidx[:,1] = eidx*self._scal_fpts_strides[0]
 
-        return self._scal_fpts0_vmats[:n], vrcidx, self._scal_fpts0_vstri[:n]
+        return (self._scal_fpts_vmats[n][:nfp], vrcidx,
+                self._scal_fpts_vstri[:nfp])
+
+    def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
+        return self._get_scal_fptsn_for_inter(0, eidx, fidx, rtag)
 
 
 class EulerElements(BaseElements):
@@ -324,6 +329,32 @@ class EulerElements(BaseElements):
 
 
 class NavierStokesElements(BaseElements):
+    _nscal_fpts = 2
+    _nvect_upts = 1
+    _nvect_fpts = 1
+
+    def set_backend(self, be, nscal_upts):
+        super(NavierStokesElements, self).set_backend(be, nscal_upts)
+
+        # Allocate the additional operator matrices
+        self._m5b = be.auto_const_sparse_matrix(self.m5, tags={'M5'})
+        self._m6b = be.auto_const_sparse_matrix(self.m6, tags={'M6'})
+        self._m460b = be.auto_const_sparse_matrix(self.m460, tags={'M460'})
+
+        # Flux point transformation matrices
+        self._jmat_fpts = be.const_matrix(self._jmat_fpts)
+
+    def _gen_inter_view_mats(self, be, neles, nvars, ndims):
+        super(NavierStokesElements, self)._gen_inter_view_mats(be, neles,
+                                                               nvars, ndims)
+
+        # Vector-view stride info
+        self._vect_fpts_vstri = np.tile(self._scal_fpts_vstri, (self.ndims, 1))
+
+        # Vector view matrix info
+        self._vect_fpts_vmats = [np.tile(m, self._vect_fpts_vstri.shape)
+                                 for m in self._vect_fpts]
+
     @lazyprop
     def m4(self):
         """Discontinuous soln at upts to trans gradient of discontinuous
@@ -356,3 +387,42 @@ class NavierStokesElements(BaseElements):
     def m460(self):
         m4, m6, m0 = self.m4, self.m6, self.m0
         return m4 - np.dot(m6.reshape(-1, self.nfpts), m0).reshape(m4.shape)
+
+    def _gen_jmats_fpts(self, eles):
+        jac = self._get_jac_eles_at(eles, self._basis.fpts)
+        smats, djacs = self._get_smats(jac)
+
+        # Use J^-1 = S/|J| hence J^-T = S^T/|J|
+        jmat_fpts = smats.swapaxes(1, 2) / djacs[...,None,None]
+
+        self._jmat_fpts = jmat_fpts.reshape(self.nfpts, -1, self.ndims**2)
+
+    def get_tdisf_upts_kern(self):
+        gamma = self._cfg.getfloat('constants', 'gamma')
+        mu = self._cfg.getfloat('constants', 'mu')
+        pr = self._cfg.getfloat('constants', 'Pr')
+
+        return self._be.kernel('tdisf_vis', self.ndims, self.nvars,
+                               self.scal_upts_inb, self._smat_upts,
+                               self._rcpdjac_upts, self._vect_upts[0],
+                               gamma, mu, pr)
+
+
+    def get_tgradpcoru_upts_kern(self):
+        return self._be.kernel('mul', self._m460b, self.scal_upts_inb,
+                               out=self._vect_upts[0])
+
+    def get_tgradcoru_upts_kern(self):
+        return self._be.kernel('mul', self._m6b, self._scal_fpts[1],
+                               out=self._vect_upts[0], beta=1.0)
+
+    def get_tgradcoru_fpts_kern(self):
+        return self._be.kernel('mul', self._m5b, self._vect_upts[0],
+                               out=self._vect_fpts[0])
+
+    def get_gradcoru_fpts_kern(self):
+        return self._be.kernel('gradcoru', self.ndims, self.nvars,
+                               self._jmat_fpts, self._vect_fpts[0])
+
+    def get_scal_fpts1_for_inter(self, eidx, fidx, rtag):
+        return self._get_scal_fptsn_for_inter(1, eidx, fidx, rtag)

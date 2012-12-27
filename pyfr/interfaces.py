@@ -132,3 +132,39 @@ class EulerMPIInterfaces(BaseMPIInterfaces):
                                self._scal0_lhs, self._scal0_rhs,
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs,
                                gamma)
+
+
+class NavierStokesInternalInterfaces(BaseInternalInterfaces):
+    def __init__(self, be, lhs, rhs, elemap, cfg):
+        super(NavierStokesInternalInterfaces, self).__init__(be, lhs, rhs,
+                                                             elemap, cfg)
+
+        # Generate the second set of scalar view matrices
+        scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
+        scal1_rhs = get_view_mats(rhs, 'get_scal_fpts1_for_inter', elemap)
+
+        # Allocate these on the backend as views
+        self._scal1_lhs = be.view(*scal1_lhs, vlen=self.nvars, tags={'nopad'})
+        self._scal1_rhs = be.view(*scal1_rhs, vlen=self.nvars, tags={'nopad'})
+
+    def get_conu_fpts_kern(self):
+        return self._be.kernel('conu_int', self.ndims, self.nvars,
+                               self._scal0_lhs, self._scal0_rhs,
+                               self._scal1_lhs, self._scal1_rhs,
+                               self._beta)
+
+
+class NavierStokesMPIInterfaces(BaseMPIInterfaces):
+    def __init__(self, be, lhs, rhsrank, elemap, cfg):
+        super(NavierStokesMPIInterfaces, self).__init__(be, lhs, rhsrank,
+                                                        elemap, cfg)
+
+        # Generate the second scalar left hand view matrix
+        scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
+        self._scal1_lhs = be.mpi_view(*scal1_lhs, vlen=self.nvars,
+                                      tags={'nopad'})
+
+    def get_conu_fpts_kern(self):
+        return self._be.kernel('conu_mpi', self.ndims, self.nvars,
+                               self._scal0_lhs, self._scal0_rhs,
+                               self._scal1_lhs)
