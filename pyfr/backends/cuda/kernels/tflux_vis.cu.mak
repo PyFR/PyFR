@@ -18,8 +18,8 @@ tdisf_vis(int nupts, int neles,
 
     if (eidx < neles)
     {
-        ${dtype} u[${nvars}], grad_u[${nvars}][${ndims}];
-        ${dtype} s[${ndims}][${ndims}], f[${nvars}][${ndims}];
+        ${dtype} u[${nvars}], grad_u[${ndims}][${nvars}];
+        ${dtype} s[${ndims}][${ndims}], f[${ndims}][${nvars}];
 
         for (int uidx = 0; uidx < nupts; ++uidx)
         {
@@ -44,7 +44,7 @@ tdisf_vis(int nupts, int neles,
 
                 for (int i = 0; i < ${ndims}; ++i)
                 {
-                    grad_u[j][i] = (${' + '.join('s[{0}][i]*gu{0}'.format(k)\
+                    grad_u[i][j] = (${' + '.join('s[{0}][i]*gu{0}'.format(k)\
                                      for k in range(ndims))})
                                  * rcpdjac;
                 }
@@ -58,7 +58,7 @@ tdisf_vis(int nupts, int neles,
                 for (int j = 0; j < ${nvars}; ++j)
                 {
                     int fidx = F_IDX_OF(uidx, eidx, i, j, nupts, neles, ldg);
-                    tgrad_u[fidx] = ${' + '.join('s[i][{0}]*f[j][{0}]'.format(k)\
+                    tgrad_u[fidx] = ${' + '.join('s[i][{0}]*f[{0}][j]'.format(k)\
                                       for k in range(ndims))};
                 }
         }
