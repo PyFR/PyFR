@@ -12,47 +12,50 @@ class CudaPointwiseKernels(CudaKernelProvider):
     def __init__(self, backend):
         pass
 
-    def _modopts(self, dtype, ndims, nvars):
-        return dict(dtype=npdtype_to_ctype(dtype), ndims=ndims, nvars=nvars)
+    def _get_function(self, mod, func, argt, opts, nvccopts=None):
+        basefn = super(CudaPointwiseKernels, self)._get_function
+
+        # Map dtype
+        nopts = {k: v for k,v in opts.items()}
+        nopts['dtype'] = npdtype_to_ctype(nopts['dtype'])
+
+        return basefn(mod, func, argt, nopts, nvccopts)
 
     def tdisf_inv(self, ndims, nvars, u, smats, f, gamma):
         nupts, neles = u.nrow, u.ncol / nvars
+        opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, gamma=gamma)
 
-        fn = self._get_function('tflux_inv', 'tdisf_inv', [np.int32]*2 +
-                                [np.intp]*3 + [u.dtype] + [np.int32]*3,
-                                self._modopts(u.dtype, ndims, nvars))
+        fn = self._get_function('tflux_inv', 'tdisf_inv', 'iiPPPiii', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
 
         return self._basic_kernel(fn, grid, block, nupts, neles,
-                                  u, smats, f, gamma, u.leaddim,
+                                  u, smats, f, u.leaddim,
                                   smats.leaddim, f.leaddim)
 
     def tdisf_vis(self, ndims, nvars, u, smats, rcpdjac, tgradu,
                   gamma, mu, pr):
         nupts, neles = u.nrow, u.ncol / nvars
-        rcppr = 1.0 / pr
+        opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars,
+                    gamma=gamma, mu=mu, pr=pr)
 
-        fn = self._get_function('tflux_vis', 'tdisf_vis', [np.int32]*2 +
-                                [np.intp]*4 + [u.dtype]*3 + [np.int32]*4,
-        self._modopts(u.dtype, ndims, nvars))
+        fn = self._get_function('tflux_vis', 'tdisf_vis', 'iiPPPPiiii', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
 
         return self._basic_kernel(fn, grid, block, nupts, neles,
-                                  u, smats, rcpdjac, tgradu, gamma,
-                                  mu, rcppr, u.leaddim, smats.leaddim,
+                                  u, smats, rcpdjac, tgradu,
+                                  u.leaddim, smats.leaddim,
                                   rcpdjac.leaddim, tgradu.leaddim)
 
-    def conu_int(self, ndims, nvars, ul_vin, ur_vin, ul_vout, ur_vout, beta):
+    def conu_int(self, nvars, ul_vin, ur_vin, ul_vout, ur_vout, beta):
         ninters = ul_vin.ncol
         dtype = ul_vin.refdtype
+        opts = dict(dtype=dtype, nvars=nvars, beta=beta)
 
-        fn = self._get_function('coru', 'coru_int', [np.int32] +
-                                [np.intp]*6 + [dtype],
-                                self._modopts(dtype, ndims, nvars))
+        fn = self._get_function('conu', 'conu_int', 'iPPPPPP', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -60,15 +63,14 @@ class CudaPointwiseKernels(CudaKernelProvider):
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_vin.mapping, ul_vin.strides,
                                   ur_vin.mapping, ur_vin.strides,
-                                  ul_vout.mapping, ur_vout.mapping, beta)
+                                  ul_vout.mapping, ur_vout.mapping)
 
-    def conu_mpi(self, ndims, nvars, ul_vin, ul_vout, ur_mpim, beta):
+    def conu_mpi(self, nvars, ul_vin, ul_vout, ur_mpim, beta):
         ninters = ul_vin.ncol
         dtype = ul_vin.refdtype
+        opts = dict(dtype=dtype, nvars=nvars, beta=beta)
 
-        fn = self._get_function('coru', 'coru_mpi', [np.int32] +
-                                [np.intp]*4 + [dtype],
-                                self._modopts(dtype, ndims, nvars))
+        fn = self._get_function('conu', 'conu_mpi', 'iPPPP', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -79,9 +81,9 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
     def gradcoru(self, ndims, nvars, jmats, gradu):
         nfpts, neles = jmats.nrow, gradu.ncol / nvars
+        opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars)
 
-        fn = self._get_function('gradcoru', 'gradcoru', 'iiPPii',
-                                self._modopts(u.dtype, ndims, nvars))
+        fn = self._get_function('gradcoru', 'gradcoru', 'iiPPii', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
@@ -93,10 +95,10 @@ class CudaPointwiseKernels(CudaKernelProvider):
                            normpnorml, gamma):
         ninters = ul_v.ncol
         dtype = ul_v.refdtype
+        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma)
 
-        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_int',
-                                [np.int32] + [np.intp]*7 + [dtype],
-                                self._modopts(dtype, ndims, nvars))
+        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_int', 'iPPPPPPP',
+                                opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -104,30 +106,30 @@ class CudaPointwiseKernels(CudaKernelProvider):
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides,
                                   ur_v.mapping, ur_v.strides,
-                                  magl, magr, normpnorml, gamma)
+                                  magl, magr, normpnorml)
 
     def rsolve_rus_inv_mpi(self, ndims, nvars, ul_mpiv, ur_mpim, magl,
                            normpnorml, gamma):
         ninters = ul_mpiv.ncol
         ul_v = ul_mpiv.view
         dtype = ul_v.refdtype
+        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma)
 
-        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_mpi',
-                                [np.int32] + [np.intp]*5 + [dtype],
-                                self._modopts(dtype, ndims, nvars))
+        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_mpi', 'iPPPPP',
+                                opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides, ur_mpim,
-                                  magl, normpnorml, gamma)
+                                  magl, normpnorml)
 
-    def negdivconf(self, ndims, nvars, dv, rcpdjac):
+    def negdivconf(self, nvars, dv, rcpdjac):
         nupts, neles = dv.nrow, dv.ncol / nvars
+        opts = dict(dtype=dv.dtype, nvars=nvars)
 
-        fn = self._get_function('negdivconf', 'negdivconf', 'iiPPii',
-                                self._modopts(dv.dtype, ndims, nvars))
+        fn = self._get_function('negdivconf', 'negdivconf', 'iiPPii', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)

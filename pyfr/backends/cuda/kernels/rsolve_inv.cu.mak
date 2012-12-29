@@ -47,8 +47,7 @@ rsolve_rus_inv_int(int ninters,
                    const int* __restrict__ ur_vstri,
                    const ${dtype}* __restrict__ magpnorml,
                    const ${dtype}* __restrict__ magpnormr,
-                   const ${dtype}* __restrict__ normpnorml,
-                   ${dtype} gamma)
+                   const ${dtype}* __restrict__ normpnorml)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -67,7 +66,7 @@ rsolve_rus_inv_int(int ninters,
 
         // Perform the Riemann solve
         ${dtype} fn[${nvars}];
-        rsolve_rus_inv(ul, ur, ptemp, fn, gamma);
+        rsolve_rus_inv(ul, ur, ptemp, fn, ${gamma});
 
         // Write out the fluxes into ul and ur
         for (int i = 0; i < ${nvars}; ++i)
@@ -88,8 +87,7 @@ rsolve_rus_inv_mpi(int ninters,
                    const int* __restrict__ ul_vstri,
                    const ${dtype}* __restrict__ ur_m,
                    const ${dtype}* __restrict__ magpnorml,
-                   const ${dtype}* __restrict__ normpnorml,
-                   ${dtype} gamma)
+                   const ${dtype}* __restrict__ normpnorml)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -110,7 +108,7 @@ rsolve_rus_inv_mpi(int ninters,
 
         // Perform the Riemann solve
         ${dtype} fn[${nvars}];
-        rsolve_rus_inv(ul, ur, ptemp, fn, gamma);
+        rsolve_rus_inv(ul, ur, ptemp, fn, ${gamma});
 
         // Write out the fluxes into ul
         for (int i = 0; i < ${nvars}; ++i)

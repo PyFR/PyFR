@@ -7,8 +7,7 @@ conu_int(int ninters,
          ${dtype}** __restrict__ ur_vin,
          const int* __restrict__ ur_vstri,
          ${dtype}** __restrict__ ul_vout,
-         ${dtype}** __restrict__ ur_vout,
-         ${dtype} beta)
+         ${dtype}** __restrict__ ur_vout)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -19,10 +18,14 @@ conu_int(int ninters,
 
         for (int i = 0; i < ${nvars}; ++i)
         {
-            ${dtype} l = ul_vin[iidx][lstri*i];
-            ${dtype} r = ur_vin[iidx][rstri*i];
-
-            ${dtype} con = r*(beta + 0.5) + l*(0.5 - beta);
+        % if beta == -0.5:
+            ${dtype} con = ul_vin[iidx][lstri*i];
+        % elif beta == 0.5:
+            ${dtype} con = ur_vin[iidx][rstri*i];
+        % else:
+            ${dtype} con = ur_vin[iidx][rstri*i]*(${beta} + 0.5)
+                         + ul_vin[iidx][lstri*i]*(0.5 - ${beta});
+        % endif
 
             ul_vout[iidx][lstri*i] = con;
             ur_vout[iidx][rstri*i] = con;
@@ -35,8 +38,7 @@ conu_mpi(int ninters,
          ${dtype}** __restrict__ ul_vin,
          const int* __restrict__ ul_vstri,
          ${dtype}** __restrict__ ul_vout,
-         const ${dtype}* __restrict__ ur_m,
-         ${dtype} beta)
+         const ${dtype}* __restrict__ ur_m)
 {
     int iidx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -46,10 +48,16 @@ conu_mpi(int ninters,
 
         for (int i = 0; i < ${nvars}; ++i)
         {
-            ${dtype} l = ul_vin[iidx][lstri*i];
-            ${dtype} r = ur_m[ninters*i + iidx];
+        % if beta == -0.5:
+            ${dtype} con = ul_vin[iidx][lstri*i];
+        % elif beta == 0.5:
+            ${dtype} con = ur_m[ninters*i + iidx];
+        % else:
+            ${dtype} con = ur_m[ninters*i + iidx]*(${beta} + 0.5)
+                         + ul_vin[iidx][lstri*i]*(0.5 - ${beta});
+        % endif
 
-            ul_vout[iidx][lstri*i] = r*(beta + 0.5) + l*(0.5 - beta);
+            ul_vout[iidx][lstri*i] = con;
         }
     }
 }

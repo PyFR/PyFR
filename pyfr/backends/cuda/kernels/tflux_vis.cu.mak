@@ -12,7 +12,6 @@ tdisf_vis(int nupts, int neles,
           const ${dtype}* __restrict__ smats,
           const ${dtype}* __restrict__ rcpdjacs,
           ${dtype}* __restrict__ tgrad_u,
-          ${dtype} gamma, ${dtype} mu, ${dtype} rcppr,
           int ldu, int lds, int ldr, int ldg)
 {
     int eidx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -52,7 +51,7 @@ tdisf_vis(int nupts, int neles,
             }
 
             // Compute the flux
-            disf_vis(u, grad_u, f, NULL, NULL, gamma, mu, rcppr);
+            disf_vis(u, grad_u, f, ${gamma}, ${mu}, ${pr});
 
             // Transform and store
             for (int i = 0; i < ${ndims}; ++i)

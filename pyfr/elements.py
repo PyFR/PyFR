@@ -158,7 +158,7 @@ class BaseElements(object):
                                out=self.scal_upts_outb, beta=1.0)
 
     def get_negdivconf_upts_kern(self):
-        return self._be.kernel('negdivconf', self.ndims, self.nvars,
+        return self._be.kernel('negdivconf', self.nvars,
                                self.scal_upts_outb, self._rcpdjac_upts)
 
     @lazyprop

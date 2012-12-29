@@ -6,8 +6,7 @@
  */
 inline __device__ void
 disf_vis(const ${dtype} uin[5], const ${dtype} grad_uin[5][3],
-         ${dtype} fout[5][3], ${dtype}* pout, ${dtype} vout[3],
-         ${dtype} gamma, ${dtype} mu, ${dtype} rcppr)
+         ${dtype} fout[5][3], ${dtype} gamma, ${dtype} mu, ${dtype} pr)
 {
     ${dtype} rho  = uin[0];
     ${dtype} rhou = uin[1], rhov = uin[2], rhow = uin[3];
@@ -67,19 +66,8 @@ disf_vis(const ${dtype} uin[5], const ${dtype} grad_uin[5][3],
     fout[3][1] = rhov*w - t_yz;
     fout[3][2] = rhow*w + p - t_zz;
 
-    fout[4][0] = (E + p)*u - (u*t_xx + v*t_xy + w*t_xz + mu*rcppr*gamma*T_x);
-    fout[4][1] = (E + p)*v - (u*t_xy + v*t_yy + w*t_yz + mu*rcppr*gamma*T_y);
-    fout[4][2] = (E + p)*w - (u*t_xz + v*t_yz + w*t_zz + mu*rcppr*gamma*T_z);
-
-
-    if (pout != NULL)
-    {
-        *pout = p;
-    }
-
-    if (vout != NULL)
-    {
-        vout[0] = u; vout[1] = v; vout[2] = w;
-    }
+    fout[4][0] = (E + p)*u - (u*t_xx + v*t_xy + w*t_xz + mu*gamma/pr*T_x);
+    fout[4][1] = (E + p)*v - (u*t_xy + v*t_yy + w*t_yz + mu*gamma/pr*T_y);
+    fout[4][2] = (E + p)*w - (u*t_xz + v*t_yz + w*t_zz + mu*gamma/pr*T_z);
 }
 % endif
