@@ -125,6 +125,44 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   ul_v.mapping, ul_v.strides, ur_mpim,
                                   magl, normpnorml)
 
+    def rsolve_ldg_vis_int(self, ndims, nvars, ul_v, gul_v, ur_v, gur_v, magl,
+                           magr, normpnorml, gamma, mu, pr, beta, tau):
+        ninters = ul_v.ncol
+        opts = dict(dtype=ul_v.refdtype, ndims=ndims, nvars=nvars, gamma=gamma,
+                    mu=mu, pr=pr, beta=beta, tau=tau)
+
+        fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_int',
+                                'iPPPPPPPPPPP', opts)
+
+        block = (256, 1, 1)
+        grid = self._get_grid_for_block(block, ninters)
+
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_v.mapping, ul_v.strides,
+                                  gul_v.mapping, gul_v.strides,
+                                  ur_v.mapping, ur_v.strides,
+                                  gur_v.mapping, gur_v.strides,
+                                  magl, magr, normpnorml)
+
+    def rsolve_ldg_vis_mpi(self, ndims, nvars, ul_mpiv, gul_mpiv, ur_mpim,
+                           gur_mpim, magl, normpnorml, gamma, mu, pr, beta,
+                           tau):
+        ninters = ul_mpiv.ncol
+        ul_v, gul_v = ul_mpiv.view, gul_mpiv.view
+        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma,
+                    mu=mu, pr=pr, beta=beta, tau=tau)
+
+        fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_mpi',
+                                'iPPPPPPPP', opts)
+
+        block = (256, 1, 1)
+        grid = self._get_grid_for_block(block, ninters)
+
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_v.mapping, ul_v.strides,
+                                  gul_v.mapping, gul_v.strides,
+                                  ur_mpim, gur_mpim, magl, normpnorml)
+
     def negdivconf(self, nvars, dv, rcpdjac):
         nupts, neles = dv.nrow, dv.ncol / nvars
         opts = dict(dtype=dv.dtype, nvars=nvars)

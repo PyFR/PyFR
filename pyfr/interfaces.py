@@ -78,9 +78,10 @@ class BaseMPIInterfaces(BaseInterfaces):
     # Tag used for MPI
     MPI_TAG = 2314
 
-    def __init__(self, be, lhs, rhsrank, elemap, cfg):
+    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
         super(BaseMPIInterfaces, self).__init__(be, elemap, cfg)
         self._rhsrank = rhsrank
+        self._rallocs = rallocs
 
         # Generate the left hand view matrices
         scal0_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
@@ -148,16 +149,45 @@ class NavierStokesInternalInterfaces(BaseInternalInterfaces):
         self._scal1_rhs = be.view(*scal1_rhs, vlen=self.nvars, tags={'nopad'})
 
     def get_conu_fpts_kern(self):
+        beta = self._cfg.getfloat('constants', 'beta')
+
         return self._be.kernel('conu_int', self.ndims, self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
-                               self._scal1_lhs, self._scal1_rhs,
-                               self._beta)
+                               self._scal1_lhs, self._scal1_rhs, beta)
+
+    def get_rsolve_kern(self):
+        # Flux function constants
+        gamma = self._cfg.getfloat('constants', 'gamma')
+        mu = self._cfg.getfloat('constants', 'mu')
+        pr = self._cfg.getfloat('constants', 'Pr')
+
+        # Riemann solver constants
+        beta = self._cfg.getfloat('constants', 'beta')
+        tau = self._cfg.getfloat('constants', 'tau')
+
+        return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
+                               self._scal0_lhs, self._vect0_lhs,
+                               self._scal0_rhs, self._vect0_rhs,
+                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
+                               self._norm_pnorm_lhs, gamma, mu, pr, beta, tau)
 
 
 class NavierStokesMPIInterfaces(BaseMPIInterfaces):
-    def __init__(self, be, lhs, rhsrank, elemap, cfg):
+    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
         super(NavierStokesMPIInterfaces, self).__init__(be, lhs, rhsrank,
-                                                        elemap, cfg)
+                                                        rallocs, elemap, cfg)
+
+        lhsprank = rallocs.prank
+        rhsprank = rallocs.mprankmap[rhsrank]
+
+        # We require rsolve(l,r,n_l) = -rsolve(r,l,n_r) and
+        # conu(l,r) = conu(r,l) and where l and r are left and right
+        # solutions at an interface and n_[l,r] are physical normals.
+        # The simplest way to enforce this at an MPI interface is for
+        # one side to take β = -β for the rsolve and conu kernels. We
+        # pick this side (arbitrarily) by comparing the physical ranks
+        # of the two partitions.
+        self._sign = 1.0 if lhsprank > rhsprank else -1.0
 
         # Generate the second scalar left hand view matrix
         scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
@@ -165,6 +195,25 @@ class NavierStokesMPIInterfaces(BaseMPIInterfaces):
                                       tags={'nopad'})
 
     def get_conu_fpts_kern(self):
+        # Multiply beta by our sign to account for (potential) interchange
+        beta = self._cfg.getfloat('constants', 'beta')*self._sign
+
         return self._be.kernel('conu_mpi', self.ndims, self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
-                               self._scal1_lhs)
+                               self._scal1_lhs, beta)
+
+    def get_rsolve_kern(self):
+        # Flux function constants
+        gamma = self._cfg.getfloat('constants', 'gamma')
+        mu = self._cfg.getfloat('constants', 'mu')
+        pr = self._cfg.getfloat('constants', 'Pr')
+
+        # Riemann solver constants
+        beta = self._cfg.getfloat('constants', 'beta')*self._sign
+        tau = self._cfg.getfloat('constants', 'tau')
+
+        return self._be.kernel('rsolve_ldg_vis_mpi', self.ndims, self.nvars,
+                               self._scal0_lhs, self._vect0_lhs,
+                               self._scal0_rhs, self._vect0_rhs,
+                               self._mag_pnorm_lhs, self._norm_pnorm_lhs,
+                               gamma, mu, pr, beta, tau)

@@ -83,7 +83,7 @@ class BaseMeshPartition(object):
             interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)]
 
             mpiiface = self.mpiinterscls(self._backend, interarr, rhsmrank,
-                                         self._elemaps, self._cfg)
+                                         rallocs, self._elemaps, self._cfg)
             self._mpi_inters.append(mpiiface)
 
     def _gen_queues(self):
