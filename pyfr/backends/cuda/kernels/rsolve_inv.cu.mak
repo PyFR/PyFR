@@ -96,8 +96,7 @@ rsolve_rus_inv_mpi(int ninters,
             ptemp[i] = normpnorml[ninters*i + iidx];
 
         // Load the right hand (MPI) side solution matrix
-        for (int i = 0; i < ${nvars}; ++i)
-            ur[i] = ur_m[ninters*i + iidx];
+        READ_MPIM(ur, ur_m, iidx, ninters, ${nvars});
 
         // Perform the Riemann solve
         ${dtype} fn[${nvars}];
