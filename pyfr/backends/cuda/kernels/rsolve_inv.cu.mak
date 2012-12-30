@@ -1,15 +1,8 @@
 # -*- coding: utf-8 -*-
 
 <%include file='idx_of.cu.mak' />
+<%include file='views.cu.mak' />
 <%include file='flux_inv.cu.mak' />
-
-#define READ_VIEW(dst, src_v, src_vstri, vidx, vstriidx, nvec) \
-    for (int _i = 0; _i < nvec; ++_i)                          \
-        dst[_i] = src_v[vidx][src_vstri[vstriidx]*_i]
-
-#define WRITE_VIEW(dst_v, dst_vstri, src, vidx, vstriidx, nvec) \
-    for (int _i = 0; _i < nvec; ++_i)                           \
-        dst_v[vidx][dst_vstri[vstriidx]*_i] = src[_i]
 
 inline __device__ void
 rsolve_rus_inv(const ${dtype} ul[${nvars}],
@@ -56,8 +49,8 @@ rsolve_rus_inv_int(int ninters,
         ${dtype} ul[${nvars}], ur[${nvars}];
 
         // Dereference the views into memory
-        READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, ${nvars});
-        READ_VIEW(ur, ur_v, ur_vstri, iidx, iidx, ${nvars});
+        READ_VIEW(ul, ul_v, ul_vstri, iidx, ${nvars});
+        READ_VIEW(ur, ur_v, ur_vstri, iidx, ${nvars});
 
         // Load the left normalized physical normal
         ${dtype} ptemp[${ndims}];
@@ -76,8 +69,8 @@ rsolve_rus_inv_int(int ninters,
         }
 
         // Copy back into the views
-        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, iidx, ${nvars});
-        WRITE_VIEW(ur_v, ur_vstri, ur, iidx, iidx, ${nvars});
+        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
+        WRITE_VIEW(ur_v, ur_vstri, ur, iidx, ${nvars});
     }
 }
 
@@ -96,7 +89,7 @@ rsolve_rus_inv_mpi(int ninters,
         ${dtype} ptemp[${ndims}], ul[${nvars}], ur[${nvars}];
 
         // Load the left hand side (local) solution
-        READ_VIEW(ul, ul_v, ul_vstri, iidx, iidx, ${nvars});
+        READ_VIEW(ul, ul_v, ul_vstri, iidx, ${nvars});
 
         // Load the left normalized physical normal
         for (int i = 0; i < ${ndims}; ++i)
@@ -115,6 +108,6 @@ rsolve_rus_inv_mpi(int ninters,
             ul[i] = magpnorml[iidx]*fn[i];
 
         // Copy these back into the view
-        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, iidx, ${nvars});
+        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
     }
 }
