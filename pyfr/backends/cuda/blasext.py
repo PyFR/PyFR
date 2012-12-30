@@ -8,7 +8,7 @@ from pyfr.util import npdtype_to_ctype
 
 class CudaBlasExtKernels(CudaKernelProvider):
     def __init__(self, backend):
-        pass
+        super(CudaBlasExtKernels, self).__init__()
 
     def axnpby(self, y, *xn):
         if any(y.traits != x.traits for x in xn):

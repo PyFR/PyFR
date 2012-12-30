@@ -12,7 +12,7 @@ from pyfr.util import npdtype_to_ctype
 
 class CudaPackingKernels(CudaKernelProvider):
     def __init__(self, backend):
-        pass
+        super(CudaPackingKernels, self).__init__()
 
     def _packmodopts(self, mpiview):
         return dict(dtype=npdtype_to_ctype(mpiview.mpimat.dtype),
