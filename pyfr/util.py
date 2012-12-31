@@ -2,7 +2,9 @@
 
 import functools
 import itertools
+import contextlib
 
+import os
 import io
 import cPickle as pickle
 
@@ -49,6 +51,17 @@ class proxylist(list):
         return proxylist([x(*args, **kwargs) for x in self])
 
 
+@contextlib.contextmanager
+def setenv(**kwargs):
+    _env = os.environ.copy()
+    os.environ.update(kwargs)
+
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(_env)
+
 def lazyprop(fn):
     attr = '_lazy_' + fn.__name__
 
@@ -61,6 +74,10 @@ def lazyprop(fn):
             return getattr(self, attr)
     return newfn
 
+def purge_lazyprops(obj):
+    for attr in obj.__dict__:
+        if attr.startswith('_lazy_'):
+            del obj.__dict__[attr]
 
 def all_subclasses(cls):
     return cls.__subclasses__()\
@@ -73,6 +90,15 @@ def subclass_map(cls, attr):
 def get_comm_rank_root():
     comm = MPI.COMM_WORLD
     return comm, comm.rank, 0
+
+def get_local_rank():
+    envs = ['OMPI_COMM_WORLD_LOCAL_RANK', 'MV2_COMM_WORLD_LOCAL_RANK']
+
+    for ev in envs:
+        if ev in os.environ:
+            return int(os.environ[ev])
+    else:
+        raise RuntimeError('Unknown/unsupported MPI implementation')
 
 _npeval_syms = {'__builtins__': None,
                 'exp': np.exp, 'log': np.log,
