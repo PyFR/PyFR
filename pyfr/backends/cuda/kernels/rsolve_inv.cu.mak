@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-<%include file='idx_of.cu.mak' />
 <%include file='views.cu.mak' />
 <%include file='flux_inv.cu.mak' />
 
@@ -19,16 +18,16 @@ rsolve_rus_inv(const ${dtype} ul[${nvars}],
     disf_inv(ul, fl, gamma, &pl, vl);
     disf_inv(ur, fr, gamma, &pr, vr);
 
-    // Compute the speed
-    ${dtype} a = sqrt(gamma*(pl + pr)/(ul[0] + ur[0]))
-         + 0.5 * fabs(${' + '.join('pnorm[{0}]*(vl[{0}] + vr[{0}])'.format(k)\
+    // Compute the speed/2
+    ${dtype} a = sqrt(0.25*gamma*(pl + pr)/(ul[0] + ur[0]))
+         + 0.25 * fabs(${' + '.join('pnorm[{0}]*(vl[{0}] + vr[{0}])'.format(k)\
                         for k in range(ndims))});
 
     // Output
     for (int i = 0; i < ${nvars}; ++i)
-        fcomm[i] = 0.5 * ((${' + '.join('pnorm[{0}]*(fl[{0}][i] + fr[{0}][i])'.format(k)\
+        fcomm[i] = 0.5 * (${' + '.join('pnorm[{0}]*(fl[{0}][i] + fr[{0}][i])'.format(k)\
                              for k in range(ndims))})
-                        - a*(ur[i] - ul[i]));
+                 + a*(ul[i] - ur[i]);
 
 }
 

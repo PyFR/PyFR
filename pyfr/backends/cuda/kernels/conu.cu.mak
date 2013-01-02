@@ -23,7 +23,7 @@ conu_int(int ninters,
         % elif beta == 0.5:
             ${dtype} con = ur_vin[iidx][rstri*i];
         % else:
-            ${dtype} con = ur_vin[iidx][rstri*i]*(${beta} + 0.5)
+            ${dtype} con = ur_vin[iidx][rstri*i]*(0.5 + ${beta})
                          + ul_vin[iidx][lstri*i]*(0.5 - ${beta});
         % endif
 
