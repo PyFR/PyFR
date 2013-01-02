@@ -6,9 +6,12 @@ from collections import defaultdict, OrderedDict
 from mpi4py import MPI
 
 from pyfr.bases import BasisBase
-from pyfr.elements import EulerElements
+from pyfr.elements import EulerElements, NavierStokesElements
 from pyfr.inifile import Inifile
-from pyfr.interfaces import EulerInternalInterfaces, EulerMPIInterfaces
+from pyfr.interfaces import (EulerInternalInterfaces,
+                             EulerMPIInterfaces,
+                             NavierStokesInternalInterfaces,
+                             NavierStokesMPIInterfaces)
 from pyfr.util import proxylist, subclass_map
 
 def get_mesh_partition(backend, rallocs, mesh, initsoln, nreg, cfg):
@@ -198,6 +201,10 @@ class EulerMeshPartition(BaseMeshPartition):
 
 class NavierStokesMeshPartition(BaseMeshPartition):
     name = 'navier-stokes'
+
+    elementscls = NavierStokesElements
+    intinterscls = NavierStokesInternalInterfaces
+    mpiinterscls = NavierStokesMPIInterfaces
 
     def _gen_kernels(self):
         super(NavierStokesMeshPartition, self)._gen_kernels()

@@ -132,11 +132,12 @@ class BaseElements(object):
         nmaxfpts = max(nfacefpts)
 
         # View stride info (common to all scal_fpts mats)
-        self._scal_fpts_vstri = np.empty(nmaxfpts, dtype=np.int32)
+        self._scal_fpts_vstri = np.empty((1, nmaxfpts), dtype=np.int32)
         self._scal_fpts_vstri[:] = self._scal_fpts_strides[1]
 
         # View matrix info
-        self._scal_fpts_vmats = [np.tile(m, nmaxfpts) for m in self._scal_fpts]
+        self._scal_fpts_vmats = [np.tile(m, (1, nmaxfpts))
+                                 for m in self._scal_fpts]
 
     def get_scal_upts_mat(self, idx):
         return self._scal_upts[idx].get()
@@ -301,12 +302,26 @@ class BaseElements(object):
     def _get_scal_fptsn_for_inter(self, n, eidx, fidx, rtag):
         nfp = self._nfacefpts[fidx]
 
-        vrcidx = np.empty((nfp, 2), dtype=np.int32)
-        vrcidx[:,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[:,1] = eidx*self._scal_fpts_strides[0]
+        vrcidx = np.empty((1, nfp, 2), dtype=np.int32)
+        vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
+        vrcidx[...,1] = eidx*self._scal_fpts_strides[0]
 
         return (self._scal_fpts_vmats[n][:nfp], vrcidx,
                 self._scal_fpts_vstri[:nfp])
+
+    def _get_vect_fptsn_for_inter(self, n, eidx, fidx, rtag):
+        nfp = self._nfacefpts[fidx]
+
+        vrcidx = np.empty((self.ndims, nfp, 2), dtype=np.int32)
+        vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
+        vrcidx[...,1] = eidx*self._scal_fpts_strides[0]
+
+        # Correct the row indicies
+        for i in range(self.ndims):
+            vrcidx[i,:,0] += i*self.nfpts
+
+        return (self._vect_fpts_vmats[n][:nfp], vrcidx,
+                self._vect_fpts_vstri[:nfp])
 
     def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
         return self._get_scal_fptsn_for_inter(0, eidx, fidx, rtag)
@@ -332,6 +347,11 @@ class NavierStokesElements(BaseElements):
     _nscal_fpts = 2
     _nvect_upts = 1
     _nvect_fpts = 1
+
+    def __init__(self, basiscls, eles, cfg):
+        super(NavierStokesElements, self).__init__(basiscls, eles, cfg)
+
+        self._gen_jmats_fpts(eles)
 
     def set_backend(self, be, nscal_upts):
         super(NavierStokesElements, self).set_backend(be, nscal_upts)
@@ -390,7 +410,7 @@ class NavierStokesElements(BaseElements):
 
     def _gen_jmats_fpts(self, eles):
         jac = self._get_jac_eles_at(eles, self._basis.fpts)
-        smats, djacs = self._get_smats(jac)
+        smats, djacs = self._get_smats(jac, retdets=True)
 
         # Use J^-1 = S/|J| hence J^-T = S^T/|J|
         jmat_fpts = smats.swapaxes(1, 2) / djacs[...,None,None]
@@ -426,3 +446,6 @@ class NavierStokesElements(BaseElements):
 
     def get_scal_fpts1_for_inter(self, eidx, fidx, rtag):
         return self._get_scal_fptsn_for_inter(1, eidx, fidx, rtag)
+
+    def get_vect_fpts0_for_inter(self, eidx, fidx, rtag):
+        return self._get_vect_fptsn_for_inter(0, eidx, fidx, rtag)

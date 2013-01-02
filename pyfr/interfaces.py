@@ -15,7 +15,7 @@ def get_view_mats(interside, mat, elemap):
 
     # Concat the various numpy arrays together to yield the three matrices
     # required in order to define a view
-    scal_v = [np.concatenate(scal[i::3])[np.newaxis,...] for i in xrange(3)]
+    scal_v = [np.hstack(scal[i::3]) for i in xrange(3)]
 
     return scal_v
 
@@ -144,14 +144,20 @@ class NavierStokesInternalInterfaces(BaseInternalInterfaces):
         scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
         scal1_rhs = get_view_mats(rhs, 'get_scal_fpts1_for_inter', elemap)
 
+        # And the vector view matrices
+        vect0_lhs = get_view_mats(lhs, 'get_vect_fpts0_for_inter', elemap)
+        vect0_rhs = get_view_mats(rhs, 'get_vect_fpts0_for_inter', elemap)
+
         # Allocate these on the backend as views
         self._scal1_lhs = be.view(*scal1_lhs, vlen=self.nvars, tags={'nopad'})
         self._scal1_rhs = be.view(*scal1_rhs, vlen=self.nvars, tags={'nopad'})
+        self._vect0_lhs = be.view(*vect0_lhs, vlen=self.nvars, tags={'nopad'})
+        self._vect0_rhs = be.view(*vect0_rhs, vlen=self.nvars, tags={'nopad'})
 
     def get_conu_fpts_kern(self):
         beta = self._cfg.getfloat('constants', 'beta')
 
-        return self._be.kernel('conu_int', self.ndims, self.nvars,
+        return self._be.kernel('conu_int', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
                                self._scal1_lhs, self._scal1_rhs, beta)
 
@@ -189,16 +195,38 @@ class NavierStokesMPIInterfaces(BaseMPIInterfaces):
         # of the two partitions.
         self._sign = 1.0 if lhsprank > rhsprank else -1.0
 
-        # Generate the second scalar left hand view matrix
+        # Generate the second set of scalar view matrices
         scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
-        self._scal1_lhs = be.mpi_view(*scal1_lhs, vlen=self.nvars,
+        scal1_rhs = get_view_mats(rhs, 'get_scal_fpts1_for_inter', elemap)
+
+        self._scal1_lhs = be.view(*scal1_lhs, vlen=self.nvars, tags={'nopad'})
+        self._scal1_rhs = be.view(*scal1_rhs, vlen=self.nvars, tags={'nopad'})
+
+        vect0_lhs = get_vect_mats(lhs, 'get_vect_fpts0_for_inter', elemap)
+
+        self._vect0_lhs = be.mpi_view(*vect0_lhs, vlen=self.nvars,
                                       tags={'nopad'})
+        self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
+
+    def get_vect_fpts0_pack_kern(self):
+        return self._be.kernel('pack', self._vect0_lhs)
+
+    def get_vect_fpts0_send_pack_kern(self):
+        return self._be.kernel('send_pack', self._vect0_lhs,
+                               self._rhsrank, self.MPI_TAG)
+
+    def get_vect_fpts0_recv_pack_kern(self):
+        return self._be.kernel('recv_pack', self._vect0_rhs,
+                               self._rhsrank, self.MPI_TAG)
+
+    def get_vect_fpts0_unpack_kern(self):
+        return self._be.kernel('unpack', self._vect0_rhs)
 
     def get_conu_fpts_kern(self):
         # Multiply beta by our sign to account for (potential) interchange
         beta = self._cfg.getfloat('constants', 'beta')*self._sign
 
-        return self._be.kernel('conu_mpi', self.ndims, self.nvars,
+        return self._be.kernel('conu_mpi', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
                                self._scal1_lhs, beta)
 
