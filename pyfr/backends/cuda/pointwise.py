@@ -80,7 +80,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
     def gradcoru(self, ndims, nvars, jmats, gradu):
         nfpts, neles = jmats.nrow, gradu.ncol / nvars
-        opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars)
+        opts = dict(dtype=gradu.dtype, ndims=ndims, nvars=nvars)
 
         fn = self._get_function('gradcoru', 'gradcoru', 'iiPPii', opts)
 
