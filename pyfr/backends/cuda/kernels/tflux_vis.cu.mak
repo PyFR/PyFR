@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 <%include file='idx_of.cu.mak' />
+<%include file='flux_inv.cu.mak' />
 <%include file='flux_vis.cu.mak' />
 
 /**
@@ -50,8 +51,9 @@ tdisf_vis(int nupts, int neles,
                 }
             }
 
-            // Compute the flux
-            disf_vis(u, grad_u, f, ${gamma}, ${mu}, ${pr});
+            // Compute the flux (F = Fi + Fv)
+            disf_inv(u, f, ${gamma}, NULL, NULL);
+            disf_vis_add(u, grad_u, f, ${gamma}, ${mu}, ${pr});
 
             // Transform and store
             for (int i = 0; i < ${ndims}; ++i)

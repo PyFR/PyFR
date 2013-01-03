@@ -1,31 +1,31 @@
 # -*- coding: utf-8 -*-
 
-<%include file='idx_of.cu.mak' />
 <%include file='views.cu.mak' />
+<%include file='rsolve_inv.cu.mak' />
 <%include file='flux_vis.cu.mak' />
 
 <%
-# Special-case beta
+# Special-case beta for the viscous flux expression
 if beta == -0.5:
-    need_fl, need_fr = False, True
-    nfexpr = ' + '.join('pnorml[{0}]*fr[{0}][i]'.format(k)
+    need_fvl, need_fvr = False, True
+    fvcomm = ' + '.join('pnorml[{0}]*fvr[{0}][i]'.format(k)
                         for k in range(ndims))
 elif beta == 0.5:
-    need_fl, need_fr = True, False
-    nfexpr = ' + '.join('pnorml[{0}]*fl[{0}][i]'.format(k)
+    need_fvl, need_fvr = True, False
+    fvcomm = ' + '.join('pnorml[{0}]*fvl[{0}][i]'.format(k)
                         for k in range(ndims))
 else:
-    need_fl, need_fr = True, True
-    nfexpr = ' + '.join('pnorml[{0}]*(fl[{0}][i]*(0.5 + {1})'
-                                  ' + fr[{0}][i]*(0.5 - {1}))'.format(k, beta)
+    need_fvl, need_fvr = True, True
+    fvcomm = ' + '.join('pnorml[{0}]*(fvl[{0}][i]*(0.5 + {1})'
+                                  ' + fvr[{0}][i]*(0.5 - {1}))'.format(k, beta)
                         for k in range(ndims))
 
 # Special-case tau
-if tau == 0.0:
-    need_ul, need_ur = need_fl, need_fr
-else:
-    need_ul, need_ur = True, True
-    nfexpr += ' + {0}*(ul[i] - ur[i])'.format(tau)
+if tau != 0.0:
+    fvcomm += ' + {0}*(ul[i] - ur[i])'.format(tau)
+
+# Encase
+fvcomm = '(' + fvcomm + ')'
 %>
 
 __global__ void
@@ -46,44 +46,44 @@ rsolve_ldg_vis_int(int ninters,
 
     if (iidx < ninters)
     {
-    % if need_ul:
-        // Load in the LHS soln
-        ${dtype} ul[${nvars}];
+        ${dtype} ul[${nvars}], ur[${nvars}];
+
+        // Load in the solutions
         READ_VIEW(ul, ul_v, ul_vstri, iidx, ${nvars});
-    % endif
-
-    % if need_ur:
-        // Load in the RHS soln
-        ${dtype} ur[${nvars}];
         READ_VIEW(ur, ur_v, ur_vstri, iidx, ${nvars});
-    % endif
-
-    % if need_fl:
-        // Compute the LHS flux
-        ${dtype} gul[${ndims}][${nvars}], fl[${ndims}][${nvars}];
-        READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
-        disf_vis(ul, gul, fl, ${gamma}, ${mu}, ${pr});
-    % endif
-
-    % if need_fr:
-        // Compute the RHS flux
-        ${dtype} gur[${ndims}][${nvars}], fr[${ndims}][${nvars}];
-        READ_VIEW_V(gur, gur_v, gur_vstri, iidx, ninters, ${ndims}, ${nvars});
-        disf_vis(ur, gur, fr, ${gamma}, ${mu}, ${pr});
-    % endif
 
         // Load the left normalized physical normal
         ${dtype} pnorml[${ndims}];
         for (int i = 0; i < ${ndims}; ++i)
             pnorml[i] = normpnorml[ninters*i + iidx];
 
-        // Determine the common normal flux
+        // Perform a standard, inviscid Riemann solve
+        ${dtype} ficomm[${nvars}];
+        rsolve_rus_inv(ul, ur, pnorml, ficomm, ${gamma});
+
+    % if need_fvl:
+        ${dtype} gul[${ndims}][${nvars}];
+        READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
+
+        ${dtype} fvl[${ndims}][${nvars}] = {};
+        disf_vis_add(ul, gul, fvl, ${gamma}, ${mu}, ${pr});
+    % endif
+
+    % if need_fvr:
+        ${dtype} gur[${ndims}][${nvars}];
+        READ_VIEW_V(gur, gur_v, gur_vstri, iidx, ninters, ${ndims}, ${nvars});
+
+        ${dtype} fvr[${ndims}][${nvars}] = {};
+        disf_vis_add(ur, gur, fvr, ${gamma}, ${mu}, ${pr});
+    % endif
+
         for (int i = 0; i < ${nvars}; ++i)
         {
-            ${dtype} fcomm = ${nfexpr};
+            // Evaluate the common viscous flux
+            ${dtype} fvcommi = ${fvcomm};
 
-            ul[i] =  magpnorml[iidx]*fcomm;
-            ur[i] = -magpnormr[iidx]*fcomm;
+            ul[i] =  magpnorml[iidx]*(ficomm[i] + fvcommi);
+            ur[i] = -magpnormr[iidx]*(ficomm[i] + fvcommi);
         }
 
         // Copy back into the views
@@ -107,41 +107,45 @@ rsolve_ldg_vis_mpi(int ninters,
 
     if (iidx < ninters)
     {
-    % if need_ul:
-        // Load in the LHS soln
-        ${dtype} ul[${nvars}];
+        ${dtype} ul[${nvars}], ur[${nvars}];
+
+        // Load in the solutions
         READ_VIEW(ul, ul_v, ul_vstri, iidx, ${nvars});
-    % endif
-
-    % if need_ur:
-        // Load in the RHS soln
-        ${dtype} ur[${nvars}];
-        for (int i = 0; i < ${nvars}; ++i)
-            ur[i] = ur_m[ninters*i + iidx];
-    % endif
-
-    % if need_fl:
-        // Compute the LHS flux
-        ${dtype} gul[${ndims}][${nvars}], fl[${ndims}][${nvars}];
-        READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
-        disf_vis(ul, gul, fl, ${gamma}, ${mu}, ${pr});
-    % endif
-
-    % if need_fr:
-        // Compute the RHS flux
-        ${dtype} gur[${ndims}][${nvars}], fr[${ndims}][${nvars}];
-        READ_MPIM_V(gur, gur_m, iidx, ninters, ${ndims}, ${nvars});
-        disf_vis(ur, gur, fr, ${gamma}, ${mu}, ${pr});
-    % endif
+        READ_MPIM(ur, ur_m, iidx, ninters, ${nvars});
 
         // Load the left normalized physical normal
         ${dtype} pnorml[${ndims}];
         for (int i = 0; i < ${ndims}; ++i)
             pnorml[i] = normpnorml[ninters*i + iidx];
 
+        // Perform a standard, inviscid Riemann solve
+        ${dtype} ficomm[${nvars}];
+        rsolve_rus_inv(ul, ur, pnorml, ficomm, ${gamma});
+
+    % if need_fvl:
+        ${dtype} gul[${ndims}][${nvars}];
+        READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
+
+        ${dtype} fvl[${ndims}][${nvars}] = {};
+        disf_vis_add(ul, gul, fvl, ${gamma}, ${mu}, ${pr});
+    % endif
+
+    % if need_fvr:
+        ${dtype} gur[${ndims}][${nvars}];
+        READ_MPIM_V(gur, gur_m, iidx, ninters, ${ndims}, ${nvars});
+
+        ${dtype} fvr[${ndims}][${nvars}] = {};
+        disf_vis_add(ur, gur, fvr, ${gamma}, ${mu}, ${pr});
+    % endif
+
         // Determine the common normal flux
         for (int i = 0; i < ${nvars}; ++i)
-            ul[i] = magpnorml[iidx]*(${nfexpr});
+        {
+            // Evaluate the common viscous flux
+            ${dtype} fvcommi = ${fvcomm};
+
+            ul[i] = magpnorml[iidx]*(ficomm[i] + fvcommi);
+        }
 
         // Copy back into the views
         WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
