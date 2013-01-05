@@ -11,6 +11,8 @@ from pyfr.backends.cuda import CudaBackend
 from pyfr.inifile import Inifile
 from pyfr.integrators import get_integrator
 from pyfr.rank_allocator import get_rank_allocation
+from pyfr.progress_bar import ProgressBar
+from pyfr.util import get_comm_rank_root
 
 def process_run(args):
     return np.load(args.mesh), None, Inifile.load(args.cfg)
@@ -35,6 +37,8 @@ def process_restart(args):
 def main():
     ap = ArgumentParser(prog='pyfr-sim', description='Runs a PyFR simulation')
     ap.add_argument('--verbose', '-v', action='count')
+    ap.add_argument('--progress', '-p', action='store_true',
+                    help='show a progress bar')
 
     sp = ap.add_subparsers(help='sub-command help')
 
@@ -63,9 +67,16 @@ def main():
     # Construct the time integrator
     integrator = get_integrator(backend, rallocs, mesh, soln, cfg)
 
+    # If we are running interactively then create a progress bar
+    if args.progress and get_comm_rank_root()[1] == 0:
+        pb = ProgressBar(integrator.tstart, integrator.tcurr, integrator.tend)
+
+        # Register a callback to update the bar after each step
+        callb = lambda intg: pb.advance_to(intg.tcurr)
+        integrator.completed_step_handlers.append(callb)
+
     # Execute!
     integrator.run()
-
 
 if __name__ == '__main__':
     main()

@@ -21,7 +21,7 @@ class BaseWriter(BaseIntegrator):
         self._basedir = self._cfg.getpath('soln-output', 'basedir', '.')
 
         # Output counter (incremented each time output() is called)
-        self._nout = 0
+        self.nout = 0
 
     def output(self, solnmap, stats):
         comm, rank, root = get_comm_rank_root()
@@ -41,7 +41,7 @@ class BaseWriter(BaseIntegrator):
         self._write(path, solnmap, metadata)
 
         # Increment the output number
-        self._nout += 1
+        self.nout += 1
 
     @abstractmethod
     def _write(self, path, solnmap, metadata):
@@ -52,8 +52,8 @@ class BaseWriter(BaseIntegrator):
         d = self._basedir
 
         # Current time and output number
-        t = format(self._tcurr)
-        n = format(self._nout)
+        t = format(self.tcurr)
+        n = format(self.nout)
 
         # File/dir to write the solution to
         f = self._cfg.get('soln-output', 'basename', vars=dict(t=t, n=n))

@@ -18,9 +18,22 @@ class BaseIntegrator(object):
         if self._controller_needs_errest and not self._stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
-        # Current times and output times
-        self._tcurr = cfg.getfloat('time-integration', 't0', 0.0)
-        self._tout = range_eval(cfg.get('soln-output', 'times'))
+        # Start time
+        self.tstart = cfg.getfloat('time-integration', 't0', 0.0)
+
+        # Current time; defaults to tstart unless resuming a simulation
+        if initsoln is None or 'stats' not in initsoln:
+            self.tcurr = self.tstart
+        else:
+            stats = Inifile(initsoln['stats'])
+            self.tcurr = stats.getfloat('time-integration', 'tcurr')
+
+        # Output times
+        self.tout = sorted(range_eval(cfg.get('soln-output', 'times')))
+        self.tend = self.tout[-1]
+
+        if self.tout[0] < self.tcurr:
+            raise ValueError('Output times must be in the future')
 
         # Determine the amount of temp storage required by thus method
         nreg = self._stepper_nregs
@@ -64,7 +77,7 @@ class BaseIntegrator(object):
         pass
 
     def run(self):
-        for t in self._tout:
+        for t in self.tout:
             # Advance to time t
             solns = self.advance_to(t)
 
@@ -79,4 +92,4 @@ class BaseIntegrator(object):
             self.output(solnmap, stats)
 
     def collect_stats(self, stats):
-        stats.set('time-integration', 'tcurr', self._tcurr)
+        stats.set('time-integration', 'tcurr', self.tcurr)
