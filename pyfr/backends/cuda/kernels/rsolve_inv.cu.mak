@@ -7,19 +7,18 @@ inline __device__ void
 rsolve_rus_inv(const ${dtype} ul[${nvars}],
                const ${dtype} ur[${nvars}],
                const ${dtype} pnorm[${ndims}],
-               ${dtype} fcomm[${nvars}],
-               ${dtype} gamma)
+               ${dtype} fcomm[${nvars}])
 {
     // Compute the left and right fluxes + velocities and pressures
     ${dtype} fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
     ${dtype} vl[${ndims}], vr[${ndims}];
     ${dtype} pl, pr;
 
-    disf_inv(ul, fl, gamma, &pl, vl);
-    disf_inv(ur, fr, gamma, &pr, vr);
+    disf_inv(ul, fl, &pl, vl);
+    disf_inv(ur, fr, &pr, vr);
 
     // Compute the speed/2
-    ${dtype} a = sqrt(0.25*gamma*(pl + pr)/(ul[0] + ur[0]))
+    ${dtype} a = sqrt(${0.25*gamma}*(pl + pr)/(ul[0] + ur[0]))
          + 0.25 * fabs(${' + '.join('pnorm[{0}]*(vl[{0}] + vr[{0}])'.format(k)\
                         for k in range(ndims))});
 
@@ -58,7 +57,7 @@ rsolve_rus_inv_int(int ninters,
 
         // Perform the Riemann solve
         ${dtype} fn[${nvars}];
-        rsolve_rus_inv(ul, ur, ptemp, fn, ${gamma});
+        rsolve_rus_inv(ul, ur, ptemp, fn);
 
         // Write out the fluxes into ul and ur
         for (int i = 0; i < ${nvars}; ++i)
@@ -99,7 +98,7 @@ rsolve_rus_inv_mpi(int ninters,
 
         // Perform the Riemann solve
         ${dtype} fn[${nvars}];
-        rsolve_rus_inv(ul, ur, ptemp, fn, ${gamma});
+        rsolve_rus_inv(ul, ur, ptemp, fn);
 
         // Write out the fluxes into ul
         for (int i = 0; i < ${nvars}; ++i)

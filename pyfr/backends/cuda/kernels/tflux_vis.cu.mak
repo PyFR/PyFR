@@ -52,8 +52,8 @@ tdisf_vis(int nupts, int neles,
             }
 
             // Compute the flux (F = Fi + Fv)
-            disf_inv(u, f, ${gamma}, NULL, NULL);
-            disf_vis_add(u, grad_u, f, ${gamma}, ${mu}, ${pr});
+            disf_inv(u, f, NULL, NULL);
+            disf_vis_add(u, grad_u, f);
 
             // Transform and store
             for (int i = 0; i < ${ndims}; ++i)

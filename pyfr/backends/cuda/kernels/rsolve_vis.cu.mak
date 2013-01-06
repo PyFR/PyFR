@@ -59,14 +59,14 @@ rsolve_ldg_vis_int(int ninters,
 
         // Perform a standard, inviscid Riemann solve
         ${dtype} ficomm[${nvars}];
-        rsolve_rus_inv(ul, ur, pnorml, ficomm, ${gamma});
+        rsolve_rus_inv(ul, ur, pnorml, ficomm);
 
     % if need_fvl:
         ${dtype} gul[${ndims}][${nvars}];
         READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvl[${ndims}][${nvars}] = {};
-        disf_vis_add(ul, gul, fvl, ${gamma}, ${mu}, ${pr});
+        disf_vis_add(ul, gul, fvl);
     % endif
 
     % if need_fvr:
@@ -74,7 +74,7 @@ rsolve_ldg_vis_int(int ninters,
         READ_VIEW_V(gur, gur_v, gur_vstri, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvr[${ndims}][${nvars}] = {};
-        disf_vis_add(ur, gur, fvr, ${gamma}, ${mu}, ${pr});
+        disf_vis_add(ur, gur, fvr);
     % endif
 
         for (int i = 0; i < ${nvars}; ++i)
@@ -120,14 +120,14 @@ rsolve_ldg_vis_mpi(int ninters,
 
         // Perform a standard, inviscid Riemann solve
         ${dtype} ficomm[${nvars}];
-        rsolve_rus_inv(ul, ur, pnorml, ficomm, ${gamma});
+        rsolve_rus_inv(ul, ur, pnorml, ficomm);
 
     % if need_fvl:
         ${dtype} gul[${ndims}][${nvars}];
         READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvl[${ndims}][${nvars}] = {};
-        disf_vis_add(ul, gul, fvl, ${gamma}, ${mu}, ${pr});
+        disf_vis_add(ul, gul, fvl);
     % endif
 
     % if need_fvr:
@@ -135,7 +135,7 @@ rsolve_ldg_vis_mpi(int ninters,
         READ_MPIM_V(gur, gur_m, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvr[${ndims}][${nvars}] = {};
-        disf_vis_add(ur, gur, fvr, ${gamma}, ${mu}, ${pr});
+        disf_vis_add(ur, gur, fvr);
     % endif
 
         // Determine the common normal flux

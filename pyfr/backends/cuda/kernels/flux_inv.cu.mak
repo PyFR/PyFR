@@ -8,7 +8,7 @@
  */
 inline __device__ void
 disf_inv(const ${dtype} s[5], ${dtype} f[3][5],
-         ${dtype} gamma, ${dtype}* pout, ${dtype} vout[3])
+         ${dtype}* pout, ${dtype} vout[3])
 {
     ${dtype} rho = s[0], rhou = s[1], rhov = s[2], rhow = s[3], E = s[4];
 
@@ -16,7 +16,7 @@ disf_inv(const ${dtype} s[5], ${dtype} f[3][5],
     ${dtype} u = invrho*rhou, v = invrho*rhov, w = invrho*rhow;
 
     // Compute the pressure
-    ${dtype} p = (gamma - 1.0)*(E - 0.5*(rhou*u + rhov*v + rhow*w));
+    ${dtype} p = ${gamma - 1.0}*(E - 0.5*(rhou*u + rhov*v + rhow*w));
 
     f[0][0] = rhou;         f[1][0] = rhov;         f[2][0] = rhow;
 

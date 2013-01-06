@@ -6,7 +6,7 @@
  */
 inline __device__ void
 disf_vis_add(const ${dtype} uin[5], const ${dtype} grad_uin[3][5],
-             ${dtype} fout[3][5], ${dtype} gamma, ${dtype} mu, ${dtype} pr)
+             ${dtype} fout[3][5])
 {
     ${dtype} rho  = uin[0];
     ${dtype} rhou = uin[1], rhov = uin[2], rhow = uin[3];
@@ -40,19 +40,19 @@ disf_vis_add(const ${dtype} uin[5], const ${dtype} grad_uin[3][5],
     ${dtype} T_z = rcprho*(E_z - rcprho*rho_z*E) - (u*u_z + v*v_z + w*w_z);
 
     // Stress tensor (can be optimized, mu = -mu!)
-    ${dtype} t_xx = 2*mu*(u_x - (1.0/3.0)*(u_x + v_y + w_z));
-    ${dtype} t_yy = 2*mu*(v_y - (1.0/3.0)*(u_x + v_y + w_z));
-    ${dtype} t_zz = 2*mu*(w_z - (1.0/3.0)*(u_x + v_y + w_z));
-    ${dtype} t_xy = mu*(v_x + u_y);
-    ${dtype} t_xz = mu*(u_z + w_x);
-    ${dtype} t_yz = mu*(w_y + v_z);
+    ${dtype} t_xx = 2*${mu}*(u_x - (1.0/3.0)*(u_x + v_y + w_z));
+    ${dtype} t_yy = 2*${mu}*(v_y - (1.0/3.0)*(u_x + v_y + w_z));
+    ${dtype} t_zz = 2*${mu}*(w_z - (1.0/3.0)*(u_x + v_y + w_z));
+    ${dtype} t_xy = ${mu}*(v_x + u_y);
+    ${dtype} t_xz = ${mu}*(u_z + w_x);
+    ${dtype} t_yz = ${mu}*(w_y + v_z);
 
     fout[0][1] += -t_xx;    fout[1][1] += -t_xy;    fout[2][1] += -t_xz;
     fout[0][2] += -t_xy;    fout[1][2] += -t_yy;    fout[2][2] += -t_yz;
     fout[0][3] += -t_xz;    fout[1][3] += -t_yz;    fout[2][3] += -t_zz;
 
-    fout[0][4] += -(u*t_xx + v*t_xy + w*t_xz + mu*gamma/pr*T_x);
-    fout[1][4] += -(u*t_xy + v*t_yy + w*t_yz + mu*gamma/pr*T_y);
-    fout[2][4] += -(u*t_xz + v*t_yz + w*t_zz + mu*gamma/pr*T_z);
+    fout[0][4] += -(u*t_xx + v*t_xy + w*t_xz + ${mu*gamma/pr}*T_x);
+    fout[1][4] += -(u*t_xy + v*t_yy + w*t_yz + ${mu*gamma/pr}*T_y);
+    fout[2][4] += -(u*t_xz + v*t_yz + w*t_zz + ${mu*gamma/pr}*T_z);
 }
 % endif

@@ -26,7 +26,7 @@ tdisf_inv(int nupts, int neles,
                 uin[i] = u[U_IDX_OF(uidx, eidx, i, neles, ldu)];
 
             // Compute the flux
-            disf_inv(uin, ftmp, ${gamma}, NULL, NULL);
+            disf_inv(uin, ftmp, NULL, NULL);
 
             // Transform and store
             for (int i = 0; i < ${ndims}; ++i)
