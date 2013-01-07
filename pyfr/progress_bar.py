@@ -26,7 +26,7 @@ class ProgressBar(object):
     _dispfmt = '{:7.1%} [{}{}>{}] {:.2f}/{:.2f} ela: {} rem: {}'
 
     # Minimum time in seconds between updates
-    _mindelay = 0.1
+    _mindelta = 0.1
 
     def __init__(self, start, curr, end):
         self.ststrt = start
@@ -37,9 +37,9 @@ class ProgressBar(object):
         self._wstart = time.time()
 
         self._ncol = get_terminal_size()[1]
-        self._nbarcol = self._ncol - 60
+        self._nbarcol = self._ncol - 40 - 2*len(format(end, '.2f'))
 
-        self._last_render = 0.0
+        self._last_wallt = 0.0
         self._render()
 
     def advance_to(self, t):
@@ -56,8 +56,11 @@ class ProgressBar(object):
         return time.time() - self._wstart
 
     def _render(self):
+        wallt = self.walltime
+        delta = wallt - self._last_wallt
+
         # If we have rendered recently then do not do so again
-        if (self.walltime - self._last_render) < self._mindelay:
+        if delta < self._mindelta and self.stcurr != self.stend:
             return
 
         # Curr, elapsed and ending simulation times
@@ -69,15 +72,15 @@ class ProgressBar(object):
         # Decide how many '+', '=' and ' ' to output for the progress bar
         n = self._nbarcol - 1;
         nps = int(n * (cu - el)/en)
-        neq = int(n * el/en)
-        nsp = n - nps - neq;
+        nsp = int(n * (1 - cu/en))
+        neq = n - nps - nsp
 
         # Elapsed wall time
-        wela = format_hms(self.walltime)
+        wela = format_hms(wallt)
 
         # Remaining wall time
         if self.stelap > 0:
-            trem = self.walltime*(en - cu)/el
+            trem = wallt*(en - cu)/el
         else:
             trem = None
         wrem = format_hms(trem)
@@ -87,10 +90,9 @@ class ProgressBar(object):
                                  wela, wrem)
 
         # Write the progress bar and pad the remaining columns
-        sys.stderr.write(chr(27) + '[2K' + chr(27) +'[G')
+        sys.stderr.write(chr(27) + '[2K' + chr(27) + '[G')
         sys.stderr.write(s)
-        sys.stderr.write(' '*(self._ncol - len(s)))
         sys.stderr.flush()
 
         # Update the last render time
-        self._last_render = self.walltime
+        self._last_wallt = wallt
