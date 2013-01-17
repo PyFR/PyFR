@@ -127,7 +127,7 @@ class EulerInternalInterfaces(BaseInternalInterfaces):
 
 class EulerMPIInterfaces(BaseMPIInterfaces):
     def get_rsolve_kern(self):
-        gamma = float(self._cfg.get('constants', 'gamma'))
+        gamma = self._cfg.getfloat('constants', 'gamma')
 
         return self._be.kernel('rsolve_rus_inv_mpi', self.ndims, self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
