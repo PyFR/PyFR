@@ -7,12 +7,15 @@ import sympy as sy
 
 from pyfr.util import ndrange, npeval, lazyprop
 
-class BaseElements(object):
+class BaseAdvectionElements(object):
     __metaclass__ = ABCMeta
 
-    _nscal_fpts = None
-    _nvect_upts = None
-    _nvect_fpts = None
+    # Map from dimension number to list of dynamical variables
+    _dynvarmap = None
+
+    _nscal_fpts = 1
+    _nvect_upts = 1
+    _nvect_fpts = 0
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
@@ -21,16 +24,19 @@ class BaseElements(object):
         self.nspts = nspts = eles.shape[0]
         self.neles = neles = eles.shape[1]
         self.ndims = ndims = eles.shape[2]
-        self.nvars = nvars = ndims + 2
-
-        # Checks
-        if ndims != basiscls.ndims:
-            raise ValueError('Invalid element matrix dimensions')
 
         # Subclass checks
+        assert self._dynvarmap
         assert self._nscal_fpts >= 1
         assert self._nvect_upts >= 1
         assert self._nvect_fpts >= 0
+
+        # Check the dimensionality of the problem
+        if ndims != basiscls.ndims or ndims not in self._dynvarmap:
+            raise ValueError('Invalid element matrix dimensions')
+
+        # Determine the number of dynamical variables
+        self.nvars = len(self._dynvarmap[ndims])
 
         # Generate a symbol for each dimension (p,q or p,q,r)
         dims = sy.symbols('p q r')[:ndims]
@@ -57,14 +63,11 @@ class BaseElements(object):
         # Extract the individual coordinates
         coords = dict(zip(['x', 'y', 'z'], self._ploc_upts.transpose(2, 0, 1)))
 
-        # Determine the dynamical variables in the simulation
-        if self.nvars == 5:
-            dvars = ('rho', 'rhou', 'rhov', 'rhow', 'E')
-        else:
-            dvars = ('rho', 'rhou', 'rhov', 'E')
+        # Get the list of dynamical variables in the simulation
+        dynvars = self._dynvarmap[ndims]
 
-        self._scal_upts = ics_upts = np.empty((nupts, neles, len(dvars)))
-        for i,v in enumerate(dvars):
+        self._scal_upts = ics_upts = np.empty((nupts, neles, len(dynvars)))
+        for i,v in enumerate(dynvars):
             ics_upts[...,i] = npeval(self._cfg.get('mesh-ics', v), coords)
 
     def set_ics_from_soln(self, solnmat, solncfg):
@@ -83,7 +86,6 @@ class BaseElements(object):
         self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
         self._scal_upts = self._scal_upts.reshape(nupts, neles, nvars)
 
-    @abstractmethod
     def set_backend(self, be, nscal_upts):
         # Ensure a backend has not already been set
         assert self._be is None
@@ -327,34 +329,19 @@ class BaseElements(object):
         return self._get_scal_fptsn_for_inter(0, eidx, fidx, rtag)
 
 
-class EulerElements(BaseElements):
-    _nscal_fpts = 1
-    _nvect_upts = 1
-    _nvect_fpts = 0
-
-    def set_backend(self, be, nsureg):
-        super(EulerElements, self).set_backend(be, nsureg)
-
-    def get_tdisf_upts_kern(self):
-        gamma = self._cfg.getfloat('constants', 'gamma')
-
-        return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
-                               self.scal_upts_inb, self._smat_upts,
-                               self._vect_upts[0], gamma)
-
-
-class NavierStokesElements(BaseElements):
+class BaseAdvectionDiffusionElements(BaseAdvectionElements):
     _nscal_fpts = 2
     _nvect_upts = 1
     _nvect_fpts = 1
 
     def __init__(self, basiscls, eles, cfg):
-        super(NavierStokesElements, self).__init__(basiscls, eles, cfg)
+        super(BaseAdvectionDiffusionElements, self).__init__(basiscls, eles,
+                                                             cfg)
 
         self._gen_jmats_fpts(eles)
 
     def set_backend(self, be, nscal_upts):
-        super(NavierStokesElements, self).set_backend(be, nscal_upts)
+        super(BaseAdvectionDiffusionElements, self).set_backend(be, nscal_upts)
 
         # Allocate the additional operator matrices
         self._m5b = be.auto_const_sparse_matrix(self.m5, tags={'M5'})
@@ -365,8 +352,8 @@ class NavierStokesElements(BaseElements):
         self._jmat_fpts = be.const_matrix(self._jmat_fpts)
 
     def _gen_inter_view_mats(self, be, neles, nvars, ndims):
-        super(NavierStokesElements, self)._gen_inter_view_mats(be, neles,
-                                                               nvars, ndims)
+        base = super(BaseAdvectionDiffusionElements, self)._gen_inter_view_mats
+        base(be, neles, nvars, ndims)
 
         # Vector-view stride info
         self._vect_fpts_vstri = np.tile(self._scal_fpts_vstri, (self.ndims, 1))
@@ -417,16 +404,6 @@ class NavierStokesElements(BaseElements):
 
         self._jmat_fpts = jmat_fpts.reshape(self.nfpts, -1, self.ndims**2)
 
-    def get_tdisf_upts_kern(self):
-        gamma = self._cfg.getfloat('constants', 'gamma')
-        mu = self._cfg.getfloat('constants', 'mu')
-        pr = self._cfg.getfloat('constants', 'Pr')
-
-        return self._be.kernel('tdisf_vis', self.ndims, self.nvars,
-                               self.scal_upts_inb, self._smat_upts,
-                               self._rcpdjac_upts, self._vect_upts[0],
-                               gamma, mu, pr)
-
 
     def get_tgradpcoru_upts_kern(self):
         return self._be.kernel('mul', self._m460b, self.scal_upts_inb,
@@ -449,3 +426,30 @@ class NavierStokesElements(BaseElements):
 
     def get_vect_fpts0_for_inter(self, eidx, fidx, rtag):
         return self._get_vect_fptsn_for_inter(0, eidx, fidx, rtag)
+
+
+class EulerElements(BaseAdvectionElements):
+    _dynvarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
+                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+
+    def get_tdisf_upts_kern(self):
+        gamma = self._cfg.getfloat('constants', 'gamma')
+
+        return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
+                               self.scal_upts_inb, self._smat_upts,
+                               self._vect_upts[0], gamma)
+
+
+class NavierStokesElements(BaseAdvectionDiffusionElements):
+    _dynvarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
+                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+
+    def get_tdisf_upts_kern(self):
+        gamma = self._cfg.getfloat('constants', 'gamma')
+        mu = self._cfg.getfloat('constants', 'mu')
+        pr = self._cfg.getfloat('constants', 'Pr')
+
+        return self._be.kernel('tdisf_vis', self.ndims, self.nvars,
+                               self.scal_upts_inb, self._smat_upts,
+                               self._rcpdjac_upts, self._vect_upts[0],
+                               gamma, mu, pr)

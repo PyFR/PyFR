@@ -64,9 +64,9 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   ur_vin.mapping, ur_vin.strides,
                                   ul_vout.mapping, ur_vout.mapping)
 
-    def conu_mpi(self, nvars, ul_vin, ul_vout, ur_mpim, beta):
+    def conu_mpi(self, nvars, ul_vin, ur_mpim, ul_vout, beta):
         ninters = ul_vin.ncol
-        dtype = ul_vin.refdtype
+        dtype = ul_vin.view.refdtype
         opts = dict(dtype=dtype, nvars=nvars, beta=beta)
 
         fn = self._get_function('conu', 'conu_mpi', 'iPPPP', opts)
@@ -75,8 +75,8 @@ class CudaPointwiseKernels(CudaKernelProvider):
         grid = self._get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
-                                  ul_vin.mapping, ul_vin.strides,
-                                  ul_vout.mapping, ur_mpim, beta)
+                                  ul_vin.view.mapping, ul_vin.view.strides,
+                                  ul_vout.mapping, ur_mpim)
 
     def gradcoru(self, ndims, nvars, jmats, gradu):
         nfpts, neles = jmats.nrow, gradu.ncol / nvars
@@ -148,8 +148,8 @@ class CudaPointwiseKernels(CudaKernelProvider):
                            tau):
         ninters = ul_mpiv.ncol
         ul_v, gul_v = ul_mpiv.view, gul_mpiv.view
-        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma,
-                    mu=mu, pr=pr, beta=beta, tau=tau)
+        opts = dict(dtype=ul_v.refdtype, ndims=ndims, nvars=nvars,
+                    gamma=gamma, mu=mu, pr=pr, beta=beta, tau=tau)
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_mpi',
                                 'iPPPPPPPP', opts)

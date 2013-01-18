@@ -31,7 +31,7 @@ def get_norm_pnorm_mat(interside, elemap):
 
     return np.concatenate(norm_pnorms)[None,...]
 
-class BaseInterfaces(object):
+class BaseInters(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, be, elemap, cfg):
@@ -47,9 +47,9 @@ class BaseInterfaces(object):
         pass
 
 
-class BaseInternalInterfaces(BaseInterfaces):
+class BaseAdvectionIntInters(BaseInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
-        super(BaseInternalInterfaces, self).__init__(be, elemap, cfg)
+        super(BaseAdvectionIntInters, self).__init__(be, elemap, cfg)
 
         # Generate the left and right hand side view matrices
         scal0_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
@@ -74,12 +74,12 @@ class BaseInternalInterfaces(BaseInterfaces):
         self._norm_pnorm_lhs = be.const_matrix(norm_pnorm_lhs, tags={'nopad'})
 
 
-class BaseMPIInterfaces(BaseInterfaces):
+class BaseAdvectionMPIInters(BaseInters):
     # Tag used for MPI
     MPI_TAG = 2314
 
     def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
-        super(BaseMPIInterfaces, self).__init__(be, elemap, cfg)
+        super(BaseAdvectionMPIInters, self).__init__(be, elemap, cfg)
         self._rhsrank = rhsrank
         self._rallocs = rallocs
 
@@ -115,30 +115,10 @@ class BaseMPIInterfaces(BaseInterfaces):
         return self._be.kernel('unpack', self._scal0_rhs)
 
 
-class EulerInternalInterfaces(BaseInternalInterfaces):
-    def get_rsolve_kern(self):
-        gamma = self._cfg.getfloat('constants', 'gamma')
-
-        return self._be.kernel('rsolve_rus_inv_int', self.ndims, self.nvars,
-                               self._scal0_lhs, self._scal0_rhs,
-                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
-                               self._norm_pnorm_lhs, gamma)
-
-
-class EulerMPIInterfaces(BaseMPIInterfaces):
-    def get_rsolve_kern(self):
-        gamma = self._cfg.getfloat('constants', 'gamma')
-
-        return self._be.kernel('rsolve_rus_inv_mpi', self.ndims, self.nvars,
-                               self._scal0_lhs, self._scal0_rhs,
-                               self._mag_pnorm_lhs, self._norm_pnorm_lhs,
-                               gamma)
-
-
-class NavierStokesInternalInterfaces(BaseInternalInterfaces):
+class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
-        super(NavierStokesInternalInterfaces, self).__init__(be, lhs, rhs,
-                                                             elemap, cfg)
+        base = super(BaseAdvectionDiffusionIntInters, self)
+        base.__init__(be, lhs, rhs, elemap, cfg)
 
         # Generate the second set of scalar view matrices
         scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
@@ -161,27 +141,11 @@ class NavierStokesInternalInterfaces(BaseInternalInterfaces):
                                self._scal0_lhs, self._scal0_rhs,
                                self._scal1_lhs, self._scal1_rhs, beta)
 
-    def get_rsolve_kern(self):
-        # Flux function constants
-        gamma = self._cfg.getfloat('constants', 'gamma')
-        mu = self._cfg.getfloat('constants', 'mu')
-        pr = self._cfg.getfloat('constants', 'Pr')
 
-        # Riemann solver constants
-        beta = self._cfg.getfloat('constants', 'beta')
-        tau = self._cfg.getfloat('constants', 'tau')
-
-        return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
-                               self._scal0_lhs, self._vect0_lhs,
-                               self._scal0_rhs, self._vect0_rhs,
-                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
-                               self._norm_pnorm_lhs, gamma, mu, pr, beta, tau)
-
-
-class NavierStokesMPIInterfaces(BaseMPIInterfaces):
+class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
     def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
-        super(NavierStokesMPIInterfaces, self).__init__(be, lhs, rhsrank,
-                                                        rallocs, elemap, cfg)
+        base = super(BaseAdvectionDiffusionMPIInters, self)
+        base.__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
 
         lhsprank = rallocs.prank
         rhsprank = rallocs.mprankmap[rhsrank]
@@ -195,14 +159,11 @@ class NavierStokesMPIInterfaces(BaseMPIInterfaces):
         # of the two partitions.
         self._sign = 1.0 if lhsprank > rhsprank else -1.0
 
-        # Generate the second set of scalar view matrices
+        # Generate second scalar view matrix
         scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
-        scal1_rhs = get_view_mats(rhs, 'get_scal_fpts1_for_inter', elemap)
-
         self._scal1_lhs = be.view(*scal1_lhs, vlen=self.nvars, tags={'nopad'})
-        self._scal1_rhs = be.view(*scal1_rhs, vlen=self.nvars, tags={'nopad'})
 
-        vect0_lhs = get_vect_mats(lhs, 'get_vect_fpts0_for_inter', elemap)
+        vect0_lhs = get_view_mats(lhs, 'get_vect_fpts0_for_inter', elemap)
 
         self._vect0_lhs = be.mpi_view(*vect0_lhs, vlen=self.nvars,
                                       tags={'nopad'})
@@ -230,6 +191,46 @@ class NavierStokesMPIInterfaces(BaseMPIInterfaces):
                                self._scal0_lhs, self._scal0_rhs,
                                self._scal1_lhs, beta)
 
+
+class EulerIntInters(BaseAdvectionIntInters):
+    def get_rsolve_kern(self):
+        gamma = self._cfg.getfloat('constants', 'gamma')
+
+        return self._be.kernel('rsolve_rus_inv_int', self.ndims, self.nvars,
+                               self._scal0_lhs, self._scal0_rhs,
+                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
+                               self._norm_pnorm_lhs, gamma)
+
+
+class EulerMPIInters(BaseAdvectionMPIInters):
+    def get_rsolve_kern(self):
+        gamma = self._cfg.getfloat('constants', 'gamma')
+
+        return self._be.kernel('rsolve_rus_inv_mpi', self.ndims, self.nvars,
+                               self._scal0_lhs, self._scal0_rhs,
+                               self._mag_pnorm_lhs, self._norm_pnorm_lhs,
+                               gamma)
+
+
+class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
+    def get_rsolve_kern(self):
+        # Flux function constants
+        gamma = self._cfg.getfloat('constants', 'gamma')
+        mu = self._cfg.getfloat('constants', 'mu')
+        pr = self._cfg.getfloat('constants', 'Pr')
+
+        # Riemann solver constants
+        beta = self._cfg.getfloat('constants', 'beta')
+        tau = self._cfg.getfloat('constants', 'tau')
+
+        return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
+                               self._scal0_lhs, self._vect0_lhs,
+                               self._scal0_rhs, self._vect0_rhs,
+                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
+                               self._norm_pnorm_lhs, gamma, mu, pr, beta, tau)
+
+
+class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
     def get_rsolve_kern(self):
         # Flux function constants
         gamma = self._cfg.getfloat('constants', 'gamma')

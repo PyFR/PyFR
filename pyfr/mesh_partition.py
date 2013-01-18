@@ -8,10 +8,8 @@ from mpi4py import MPI
 from pyfr.bases import BasisBase
 from pyfr.elements import EulerElements, NavierStokesElements
 from pyfr.inifile import Inifile
-from pyfr.interfaces import (EulerInternalInterfaces,
-                             EulerMPIInterfaces,
-                             NavierStokesInternalInterfaces,
-                             NavierStokesMPIInterfaces)
+from pyfr.interfaces import (EulerIntInters, EulerMPIInters,
+                             NavierStokesIntInters, NavierStokesMPIInters)
 from pyfr.util import proxylist, subclass_map
 
 def get_mesh_partition(backend, rallocs, mesh, initsoln, nreg, cfg):
@@ -154,8 +152,8 @@ class EulerMeshPartition(BaseMeshPartition):
     name = 'euler'
 
     elementscls = EulerElements
-    intinterscls = EulerInternalInterfaces
-    mpiinterscls = EulerMPIInterfaces
+    intinterscls = EulerIntInters
+    mpiinterscls = EulerMPIInters
 
     def _gen_kernels(self):
         super(EulerMeshPartition, self)._gen_kernels()
@@ -203,8 +201,8 @@ class NavierStokesMeshPartition(BaseMeshPartition):
     name = 'navier-stokes'
 
     elementscls = NavierStokesElements
-    intinterscls = NavierStokesInternalInterfaces
-    mpiinterscls = NavierStokesMPIInterfaces
+    intinterscls = NavierStokesIntInters
+    mpiinterscls = NavierStokesMPIInters
 
     def _gen_kernels(self):
         super(NavierStokesMeshPartition, self)._gen_kernels()
