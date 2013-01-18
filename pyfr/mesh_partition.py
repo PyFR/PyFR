@@ -219,7 +219,7 @@ class NavierStokesMeshPartition(BaseMeshPartition):
         self._gradcoru_fpts_kerns = eles.get_gradcoru_fpts_kern()
 
         self._mpi_inters_vect_fpts0_pack_kerns = \
-            mpi_inters.get_ve_fpts0_pack_kern()
+            mpi_inters.get_vect_fpts0_pack_kern()
         self._mpi_inters_vect_fpts0_send_kerns = \
             mpi_inters.get_vect_fpts0_send_pack_kern()
         self._mpi_inters_vect_fpts0_recv_kerns = \
