@@ -6,9 +6,15 @@ import time
 
 def get_terminal_size():
     if sys.platform in ('linux2', 'darwin'):
-        return map(int, os.popen('stty size', 'r').read().split())
-    else:
-        return 24, 80
+        import fcntl, termios, struct
+        try:
+            s = struct.unpack('hh', fcntl.ioctl(0, termios.TIOCGWINSZ, '1234'))
+            return s
+        except IOError:
+            pass
+
+    # Default to 24 by 80
+    return 24, 80
 
 def to_hms(delta):
     hours, remainder = divmod(int(delta), 3600)
