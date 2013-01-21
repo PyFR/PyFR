@@ -22,15 +22,18 @@ def lambdify_mpf(dims, exprs):
             if m not in csf:
                 csf[m] = mp.mpf(m)
 
+    # Sort the keys by their length to prevent erroneous substitutions
+    cs = sorted(csf.iterkeys(), key=len, reverse=True)
+
     # Name these constants
-    csn = {s: '__c%d' % i for i,s in enumerate(csf.iterkeys())}
+    csn = {s: '__c%d' % i for i,s in enumerate(cs)}
     cnf = {n: csf[s] for s,n in csn.iteritems()}
 
     # Substitute
     lex = []
     for l in ls:
-        for s,n in csn.iteritems():
-            l = l.replace(s, n)
+        for s in cs:
+            l = l.replace(s, csn[s])
         lex.append(eval(l, cnf))
 
     return lex
