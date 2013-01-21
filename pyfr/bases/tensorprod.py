@@ -9,6 +9,11 @@ from pyfr.bases.base import BasisBase
 from pyfr.quad_points import points_for_rule, equi_spaced
 from pyfr.util import ndrange, lazyprop
 
+def gen_std_hex(sptord):
+    return cart_prod_points(equi_spaced(sptord + 1), 3, compact=False)
+
+def gen_std_quad(sptord):
+    return cart_prod_points(equi_spaced(sptord + 1), 2, compact=False)
 
 def cart_prod_points(points, ndim, compact=True):
     """Performs a cartesian product extension of *points* into *ndim*
