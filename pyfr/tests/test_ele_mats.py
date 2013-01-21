@@ -6,7 +6,7 @@ from io import BytesIO
 import numpy as np
 
 from pyfr.bases.tensorprod import HexBasis
-from pyfr.elements import Elements
+from pyfr.elements import EulerElements
 from pyfr.inifile import Inifile
 
 def test_hex_gleg_ord3_csd():
@@ -17,7 +17,7 @@ def test_hex_gleg_ord3_csd():
     cfg.set('mesh-elements', 'vcjh-eta', 'sd')
 
     # Generate the hexes
-    hexes = Elements(HexBasis, np.random.randn(8, 20, 3), cfg)
+    hexes = EulerElements(HexBasis, np.random.randn(8, 20, 3), cfg)
 
     # Load and import the reference values
     fobj = BytesIO(pkgutil.get_data(__name__, 'hex-gleg-ord3-csd.npz'))
