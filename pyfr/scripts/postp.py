@@ -10,7 +10,7 @@ import numpy as np
 
 from pyfr.util import rm
 
-def process_merge(args):
+def process_pack(args):
     # List the contents of the directory
     relnames = os.listdir(args.indir)
 
@@ -55,15 +55,16 @@ def main():
 
     sp = ap.add_subparsers(help='sub-command help')
 
-    ap_merge = sp.add_parser('merge', help='merge --help', description=
-                             'Converts a pyfrs-directory to a pyfrs-file.  '
-                             'If no output file name is provided then that of '
-                             'input directory is taken (which is removed).')
-    ap_merge.add_argument('indir', metavar='in.dir',  help='Input PyFR '
-                          'solution directory')
-    ap_merge.add_argument('outf', metavar='out.file', nargs='?',
+    ap_merge = sp.add_parser('pack', help='pack --help', description='Packs a '
+                             'pyfrs-directory into a pyfrs-file.  If no '
+                             'output file is specified then that of the '
+                             'input directory is taken.  This command will '
+                             'replace any existing file or directory.')
+    ap_merge.add_argument('indir', metavar='in',
+                          help='Input PyFR solution directory')
+    ap_merge.add_argument('outf', metavar='out', nargs='?',
                           help='Out PyFR solution file')
-    ap_merge.set_defaults(process=process_merge)
+    ap_merge.set_defaults(process=process_pack)
 
     # Parse the arguments
     args = ap.parse_args()
