@@ -137,7 +137,10 @@ class DirWriter(BaseWriter):
         # Create the output directory and save the config/status files
         if rank == root:
             if os.path.exists(path):
-                shutil.rmtree(path)
+                if os.path.isfile(path) or os.path.islink(path):
+                    os.remove(path)
+                else:
+                    shutil.rmtree(path)
 
             os.mkdir(path)
 
