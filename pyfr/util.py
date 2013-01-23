@@ -3,6 +3,7 @@
 import functools
 import itertools
 import contextlib
+import shutil
 
 import os
 import io
@@ -125,3 +126,9 @@ def npdtype_to_ctype(dtype):
 
 def ndrange(*args):
     return itertools.product(*map(xrange, args))
+
+def rm(path):
+    if os.path.isfile(path) or os.path.islink(path):
+        os.remove(path)
+    else:
+        shutil.rmtree(path)
