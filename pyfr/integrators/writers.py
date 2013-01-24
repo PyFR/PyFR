@@ -11,7 +11,7 @@ from mpi4py import MPI
 import numpy as np
 
 from pyfr.integrators.base import BaseIntegrator
-from pyfr.util import get_comm_rank_root
+from pyfr.util import get_comm_rank_root, rm
 
 class BaseWriter(BaseIntegrator):
     def __init__(self, *args, **kwargs):
@@ -137,10 +137,7 @@ class DirWriter(BaseWriter):
         # Create the output directory and save the config/status files
         if rank == root:
             if os.path.exists(path):
-                if os.path.isfile(path) or os.path.islink(path):
-                    os.remove(path)
-                else:
-                    shutil.rmtree(path)
+                rm(path)
 
             os.mkdir(path)
 
