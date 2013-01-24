@@ -22,7 +22,7 @@ def process_pack(args):
     files = [np.load(f, mmap_mode='r') for f in absnames]
 
     # Get the output pyfrs file name
-    outname = args.outf or args.indir
+    outname = args.outf or args.indir.rstrip('/')
 
     # Determine the dir and prefix of the temp file
     dirname, basename = os.path.split(outname)
