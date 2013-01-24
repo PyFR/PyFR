@@ -3,7 +3,7 @@
 
 import os
 
-from tempfile import NamedTemporaryFile
+from tempfile import NamedTemporaryFile, mkdtemp
 from argparse import ArgumentParser, FileType
 
 import numpy as np
@@ -49,6 +49,38 @@ def process_pack(args):
         # Re-raise
         raise
 
+def process_unpack(args):
+    # Load the file
+    inf = np.load(args.inf)
+
+    # Determine the dir and prefix of the input file
+    dirname, basename = os.path.split(args.inf.name)
+
+    # Get the output pyfrs directory name
+    outdir = args.outdir or args.inf.name
+
+    # Create a temporary directory
+    tmpdir = mkdtemp(prefix=basename, dir=dirname)
+
+    # Write out the files to this temporary directory
+    try:
+        for n,d in inf.iteritems():
+            np.save(os.path.join(tmpdir, n), d)
+
+        # Remove the output path if it should exist
+        if os.path.exists(outdir):
+            os.remove(outdir)
+
+        # Rename the temporary directory into place
+        os.rename(tmpdir, outdir)
+    except:
+        # Clean up the temporary directory
+        if os.path.exists(tmpdir):
+            rm(tmpdir)
+
+        # Re-raise
+        raise
+
 def main():
     ap = ArgumentParser(prog='pyfr-postp', description='Post processes a '
                         'PyFR simulation')
@@ -65,6 +97,18 @@ def main():
     ap_pack.add_argument('outf', metavar='out', nargs='?',
                          help='Out PyFR solution file')
     ap_pack.set_defaults(process=process_pack)
+
+    ap_unpack = sp.add_parser('unpack', help='unpack --help', description=
+                              'Unpacks a pyfrs-file into a pyfrs-directory.  '
+                              'If no output directory name is specified then '
+                              'a directory named after the input file is '
+                              'taken. This command will remove any existing '
+                              'output file or directory.')
+    ap_unpack.add_argument('inf', metavar='in', type=FileType('rb'),
+                           help='Input PyFR file')
+    ap_unpack.add_argument('outdir', metavar='out', nargs='?',
+                           help='Out PyFR solution directory')
+    ap_unpack.set_defaults(process=process_unpack)
 
     # Parse the arguments
     args = ap.parse_args()
