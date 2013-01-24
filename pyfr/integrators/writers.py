@@ -11,7 +11,8 @@ from mpi4py import MPI
 import numpy as np
 
 from pyfr.integrators.base import BaseIntegrator
-from pyfr.util import get_comm_rank_root, rm
+from pyfr.mpiutil import get_comm_rank_root
+from pyfr.util import rm
 
 class BaseWriter(BaseIntegrator):
     def __init__(self, *args, **kwargs):

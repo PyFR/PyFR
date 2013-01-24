@@ -7,7 +7,8 @@ from collections import defaultdict
 
 from mpi4py import MPI
 
-from pyfr.util import subclass_map, get_comm_rank_root
+from pyfr.mpiutil import get_comm_rank_root
+from pyfr.util import subclass_map
 
 
 def get_rank_allocation(mesh, cfg):

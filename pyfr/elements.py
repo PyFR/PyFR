@@ -5,7 +5,8 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import sympy as sy
 
-from pyfr.util import ndrange, npeval, lazyprop
+from pyfr.nputil import npeval
+from pyfr.util import ndrange, lazyprop
 
 class BaseAdvectionElements(object):
     __metaclass__ = ABCMeta

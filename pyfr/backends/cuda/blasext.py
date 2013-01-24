@@ -4,7 +4,7 @@ import numpy as np
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel
-from pyfr.util import npdtype_to_ctype
+from pyfr.nputil import npdtype_to_ctype
 
 class CudaBlasExtKernels(CudaKernelProvider):
     def __init__(self, backend):

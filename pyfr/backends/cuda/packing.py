@@ -8,7 +8,7 @@ from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel, CudaMPIKernel
 from pyfr.backends.cuda.types import CudaMPIMatrix, CudaMPIView
 
-from pyfr.util import npdtype_to_ctype
+from pyfr.nputil import npdtype_to_ctype
 
 class CudaPackingKernels(CudaKernelProvider):
     def __init__(self, backend):
