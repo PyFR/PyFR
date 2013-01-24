@@ -88,26 +88,27 @@ def main():
     sp = ap.add_subparsers(help='sub-command help')
 
     ap_pack = sp.add_parser('pack', help='pack --help', description='Packs a '
-                            'pyfrs-directory into a pyfrs-file.  If no '
+                            'pyfr[ms]-directory into a pyfr[ms]-file.  If no '
                             'output file is specified then that of the '
                             'input directory is taken.  This command will '
                             'replace any existing file or directory.')
     ap_pack.add_argument('indir', metavar='in',
-                         help='Input PyFR solution directory')
+                         help='Input PyFR mesh/solution directory')
     ap_pack.add_argument('outf', metavar='out', nargs='?',
-                         help='Out PyFR solution file')
+                         help='Out PyFR mesh/solution file')
     ap_pack.set_defaults(process=process_pack)
 
     ap_unpack = sp.add_parser('unpack', help='unpack --help', description=
-                              'Unpacks a pyfrs-file into a pyfrs-directory.  '
-                              'If no output directory name is specified then '
-                              'a directory named after the input file is '
-                              'taken. This command will remove any existing '
-                              'output file or directory.')
+                              'Unpacks a pyfr[ms]-file into a '
+                              'pyfr[ms]-directory. If no output directory '
+                              'name is specified then a directory named '
+                              'after the input file is taken. This command '
+                              'will remove any existing output file or '
+                              'directory.')
     ap_unpack.add_argument('inf', metavar='in', type=FileType('rb'),
-                           help='Input PyFR file')
+                           help='Input PyFR mesh/solution file')
     ap_unpack.add_argument('outdir', metavar='out', nargs='?',
-                           help='Out PyFR solution directory')
+                           help='Out PyFR mesh/solution directory')
     ap_unpack.set_defaults(process=process_unpack)
 
     # Parse the arguments
