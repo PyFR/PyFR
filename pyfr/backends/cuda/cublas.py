@@ -146,19 +146,15 @@ class CudaCublasKernels(CudaKernelProvider):
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
-        if a.order != b.order or a.order != out.order or\
-           a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
+        if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
 
-        # CUBLAS expects inputs to be column-major (or Fortran order in numpy
-        # parlance).  However as C = A*B => C^T = (A*B)^T = (B^T)*(A^T) with
-        # a little trickery we can multiply row-major matrices directly
-        if a.order == 'F':
-            n, m, k = a.nrow, b.ncol, a.ncol
-            A, B, C = a, b, out
-        else:
-            n, m, k = b.ncol, a.nrow, a.ncol
-            A, B, C = b, a, out
+        # CUBLAS expects inputs to be column-major (or Fortran order in
+        # numpy parlance).  However as C = A*B => C^T = (A*B)^T
+        # = (B^T)*(A^T) with a little trickery we can multiply our
+        # row-major matrices directly.
+        n, m, k = b.ncol, a.nrow, a.ncol
+        A, B, C = b, a, out
 
         # α and β factors for C = α*(A*B) + β*C
         if a.dtype == np.float64:
