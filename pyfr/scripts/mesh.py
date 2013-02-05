@@ -186,11 +186,11 @@ def process_gen(args):
     ndim = len(args.dmin)
     if ndim < 2 or ndim > 3:
         raise ArgumentError('domain must have dimensions "x y [z]"')
-    if len(args.dmax) != ndim or len(args.epp) != ndim or len(args.p) !=ndim:
+    if len(args.dmax) != ndim or len(args.epp) != ndim or len(args.prt) !=ndim:
         raise ArgumentError('dimension mismatch in mesh definition')
 
     m_cdef = np.vstack((args.dmin, args.dmax)).T
-    m_ddef = np.vstack((args.epp, args.p)).T
+    m_ddef = np.vstack((args.epp, args.prt)).T
     sord, ele_type = args.sord, args.ele_type
 
     if (m_cdef[:,1]-m_cdef[:,0]).any() <= 0 or m_ddef.any() <= 0:
