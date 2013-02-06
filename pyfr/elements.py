@@ -256,7 +256,7 @@ class BaseAdvectionElements(object):
         jac = jac.reshape(npts, ndims, neles, ndims)
 
         # Transpose to get (npts, neles, ndims, ndims) ≅ (npts, neles, J)
-        jac = jac.transpose(0, 2, 1, 3)
+        jac = jac.transpose(0, 2, 3, 1)
 
         return jac.reshape(-1, ndims, ndims)
 
