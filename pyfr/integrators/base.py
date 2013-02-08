@@ -21,6 +21,10 @@ class BaseIntegrator(object):
         # Start time
         self.tstart = cfg.getfloat('time-integration', 't0', 0.0)
 
+        # Output times
+        self.tout = sorted(range_eval(cfg.get('soln-output', 'times')))
+        self.tend = self.tout[-1]
+
         # Current time; defaults to tstart unless resuming a simulation
         if initsoln is None or 'stats' not in initsoln:
             self.tcurr = self.tstart
@@ -28,10 +32,10 @@ class BaseIntegrator(object):
             stats = Inifile(initsoln['stats'])
             self.tcurr = stats.getfloat('time-integration', 'tcurr')
 
-        # Output times
-        self.tout = sorted(range_eval(cfg.get('soln-output', 'times')))
-        self.tend = self.tout[-1]
+            # Cull already written output times
+            self.tout = [t for t in self.tout if t > self.tcurr]
 
+        # Ensure no time steps are in the past
         if self.tout[0] < self.tcurr:
             raise ValueError('Output times must be in the future')
 
