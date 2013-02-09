@@ -10,7 +10,7 @@ class BaseController(BaseIntegrator):
 
         # Current and minimum time steps
         self._dt = self._cfg.getfloat('time-integration', 'dt')
-        self._dtmin = 0.1*self._dt
+        self._dtmin = 1.0e-14
 
         # Bank index of solution
         self._idxcurr = 0

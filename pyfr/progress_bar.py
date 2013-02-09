@@ -36,21 +36,20 @@ class ProgressBar(object):
 
     def __init__(self, start, curr, end):
         self.ststrt = start
-        self.stelap = 0.0
-        self.stcurr = curr
+        self.strtrt = curr
         self.stend = end
 
         self._wstart = time.time()
+        self._last_wallt = 0.0
 
         self._ncol = get_terminal_size()[1]
         self._nbarcol = self._ncol - 40 - 2*len(format(end, '.2f'))
 
-        self._last_wallt = 0.0
-        self._render()
+        self.advance_to(curr)
 
     def advance_to(self, t):
-        self.stelap = min(t, self.stend) - self.ststrt
         self.stcurr = min(t, self.stend)
+        self.stelap = self.stcurr - self.strtrt
 
         self._render()
 
@@ -69,16 +68,19 @@ class ProgressBar(object):
         if delta < self._mindelta and self.stcurr != self.stend:
             return
 
-        # Curr, elapsed and ending simulation times
-        cu, el, en = self.stcurr, self.stelap, self.stend
+        # Starting, current, elapsed and ending simulation times
+        st, cu, el, en = self.ststrt, self.stcurr, self.stelap, self.stend
+
+        # Relative times
+        rcu, ren = cu - st,  en - st
 
         # Fraction of the simulation we've completed
-        frac = cu / en
+        frac = rcu / ren
 
         # Decide how many '+', '=' and ' ' to output for the progress bar
         n = self._nbarcol - 1;
-        nps = int(n * (cu - el)/en)
-        nsp = int(n * (1 - cu/en))
+        nps = int(n * (rcu - el)/ren)
+        nsp = int(n * (1 - frac))
         neq = n - nps - nsp
 
         # Elapsed wall time
