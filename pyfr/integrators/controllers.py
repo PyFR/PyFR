@@ -10,7 +10,7 @@ class BaseController(BaseIntegrator):
 
         # Current and minimum time steps
         self._dt = self._cfg.getfloat('time-integration', 'dt')
-        self._dtmin = 0.1*self._dt
+        self._dtmin = 1.0e-14
 
         # Bank index of solution
         self._idxcurr = 0
@@ -32,9 +32,9 @@ class NoneController(BaseController):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        while (t - self.tcurr) > self._dtmin:
+        while self.tcurr < t:
             # Decide on the time step
-            dt = min(t - self.tcurr, self._dt)
+            dt = max(min(t - self.tcurr, self._dt), self._dtmin)
 
             # Take the step
             self._idxcurr = self.step(self.tcurr, dt)
