@@ -18,8 +18,9 @@ class BaseWriter(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseWriter, self).__init__(*args, **kwargs)
 
-        # Output base directory
+        # Base output directory and file name
         self._basedir = self._cfg.getpath('soln-output', 'basedir', '.')
+        self._basename = self._cfg.get('soln-output', 'basename', raw=True)
 
         # Output counter (incremented each time output() is called)
         self.nout = 0
@@ -49,17 +50,14 @@ class BaseWriter(BaseIntegrator):
         pass
 
     def _get_output_path(self):
-        # Get the output directory
-        d = self._basedir
+        # Substitute %(t) and %(n) for the current time and output number
+        fname = self._basename % dict(t=self.tcurr, n=self.nout)
 
-        # Current time and output number
-        t = format(self.tcurr)
-        n = format(self.nout)
+        # Append the '.pyfrs' extension
+        if not fname.endswith('.pyfrs'):
+            fname += '.pyfrs'
 
-        # File/dir to write the solution to
-        f = self._cfg.get('soln-output', 'basename', vars=dict(t=t, n=n))
-
-        return os.path.join(d, f + '.pyfrs')
+        return os.path.join(self._basedir, fname)
 
     def _get_name_for_soln(self, type, prank=None):
         prank = prank or self._rallocs.prank
