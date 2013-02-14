@@ -1,13 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import uuid
+import os
 import sys
-import numpy as np
+import uuid
 
 from argparse import ArgumentParser, FileType, ArgumentTypeError
 from collections import defaultdict, OrderedDict
+
+import numpy as np
+
 from pyfr.bases.tensorprod import gen_std_hex, gen_std_quad
+from pyfr.readers import get_reader_by_name, get_reader_by_extn, BaseReader
+from pyfr.util import all_subclasses
+
+# TODO: This needs to be sorted out.  "My eyes!  The goggles do nothing!"
 
 def _gen_pdef(m_cdef, m_ddef, ndim):
     '''Returns two arrays, which specify the domain and
@@ -215,12 +222,37 @@ def process_gen(args):
     print 'Mesh generation complete; writing to disk.'
     np.savez_compressed(args.meshfile, **mesh)  #save to disk (compressed)
 
-def main():
+def process_convert(args):
+    # Get a suitable mesh reader instance
+    if args.type:
+        reader = get_reader_by_name(args.type, args.inmesh)
+    else:
+        extn = os.path.splitext(args.inmesh.name)[1]
+        reader = get_reader_by_extn(extn, args.inmesh)
 
-    ap = ArgumentParser(prog='pyfr-mesh', description='Generates a' \
-                        ' PyFR test mesh.')
+    # Get the mesh in the PyFR format
+    mesh = reader.to_pyfrm()
+
+    # Save to disk
+    np.savez_compressed(args.outmesh, **mesh)
+
+def main():
+    ap = ArgumentParser(prog='pyfr-mesh', description='Generates and '
+                        'manipulates PyFR mesh files')
 
     sp = ap.add_subparsers(help='sub-command help')
+
+    # Mesh format conversion
+    ap_convert = sp.add_parser('convert', help='convert --help')
+    ap_convert.add_argument('inmesh', type=FileType('r'),
+                            help='Input mesh file')
+    ap_convert.add_argument('outmesh', type=FileType('wb'),
+                            help='Output PyFR mesh file')
+    types = [cls.name for cls in all_subclasses(BaseReader)]
+    ap_convert.add_argument('-t', dest='type', choices=types, required=False,
+                            help='Input file type; this is usually inferred '
+                            'from the extension of inmesh')
+    ap_convert.set_defaults(process=process_convert)
 
     ap_gen = sp.add_parser('gen', help='gen --help')
     ap_gen.add_argument('ele_type', choices=['quad', 'tri', 'hex', 'tet',
