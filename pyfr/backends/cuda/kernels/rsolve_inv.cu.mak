@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%namespace name='util' file='util.cu.mak' />
+<%namespace name='util' file='util.mak' />
 
 <%include file='views.cu.mak' />
 <%include file='flux_inv.cu.mak' />
