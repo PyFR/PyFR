@@ -59,7 +59,7 @@ rsolve_ldg_vis_int(int ninters,
 
         // Perform a standard, inviscid Riemann solve
         ${dtype} ficomm[${nvars}];
-        rsolve_rus_inv(ul, ur, pnorml, ficomm);
+        ${rsinv}(ul, ur, pnorml, ficomm);
 
     % if need_fvl:
         ${dtype} gul[${ndims}][${nvars}];
@@ -120,7 +120,7 @@ rsolve_ldg_vis_mpi(int ninters,
 
         // Perform a standard, inviscid Riemann solve
         ${dtype} ficomm[${nvars}];
-        rsolve_rus_inv(ul, ur, pnorml, ficomm);
+        ${rsinv}(ul, ur, pnorml, ficomm);
 
     % if need_fvl:
         ${dtype} gul[${ndims}][${nvars}];

@@ -135,7 +135,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         self._vect0_rhs = be.view(*vect0_rhs, vlen=self.nvars, tags={'nopad'})
 
     def get_conu_fpts_kern(self):
-        beta = self._cfg.getfloat('constants', 'beta')
+        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')
 
         return self._be.kernel('conu_int', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
@@ -185,7 +185,7 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
 
     def get_conu_fpts_kern(self):
         # Multiply beta by our sign to account for (potential) interchange
-        beta = self._cfg.getfloat('constants', 'beta')*self._sign
+        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')*self._sign
 
         return self._be.kernel('conu_mpi', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
@@ -194,37 +194,41 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
 
 class EulerIntInters(BaseAdvectionIntInters):
     def get_rsolve_kern(self):
+        rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
         gamma = self._cfg.getfloat('constants', 'gamma')
 
-        return self._be.kernel('rsolve_rus_inv_int', self.ndims, self.nvars,
-                               self._scal0_lhs, self._scal0_rhs,
+        return self._be.kernel('rsolve_inv_int', self.ndims, self.nvars,
+                               rsinv, self._scal0_lhs, self._scal0_rhs,
                                self._mag_pnorm_lhs, self._mag_pnorm_rhs,
                                self._norm_pnorm_lhs, gamma)
 
 
 class EulerMPIInters(BaseAdvectionMPIInters):
     def get_rsolve_kern(self):
+        rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
         gamma = self._cfg.getfloat('constants', 'gamma')
 
-        return self._be.kernel('rsolve_rus_inv_mpi', self.ndims, self.nvars,
-                               self._scal0_lhs, self._scal0_rhs,
+        return self._be.kernel('rsolve_inv_mpi', self.ndims, self.nvars,
+                               rsinv, self._scal0_lhs, self._scal0_rhs,
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs,
                                gamma)
 
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
     def get_rsolve_kern(self):
+        rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
+
         # Flux function constants
         gamma = self._cfg.getfloat('constants', 'gamma')
         mu = self._cfg.getfloat('constants', 'mu')
         pr = self._cfg.getfloat('constants', 'Pr')
 
         # Riemann solver constants
-        beta = self._cfg.getfloat('constants', 'beta')
-        tau = self._cfg.getfloat('constants', 'tau')
+        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')
+        tau = self._cfg.getfloat('mesh-interfaces', 'ldg-tau')
 
         return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
-                               self._scal0_lhs, self._vect0_lhs,
+                               rsinv, self._scal0_lhs, self._vect0_lhs,
                                self._scal0_rhs, self._vect0_rhs,
                                self._mag_pnorm_lhs, self._mag_pnorm_rhs,
                                self._norm_pnorm_lhs, gamma, mu, pr, beta, tau)
@@ -232,17 +236,19 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
     def get_rsolve_kern(self):
+        rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
+
         # Flux function constants
         gamma = self._cfg.getfloat('constants', 'gamma')
         mu = self._cfg.getfloat('constants', 'mu')
         pr = self._cfg.getfloat('constants', 'Pr')
 
         # Riemann solver constants
-        beta = self._cfg.getfloat('constants', 'beta')*self._sign
-        tau = self._cfg.getfloat('constants', 'tau')
+        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')*self._sign
+        tau = self._cfg.getfloat('mesh-interfaces', 'ldg-tau')
 
         return self._be.kernel('rsolve_ldg_vis_mpi', self.ndims, self.nvars,
-                               self._scal0_lhs, self._vect0_lhs,
+                               rsinv, self._scal0_lhs, self._vect0_lhs,
                                self._scal0_rhs, self._vect0_rhs,
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs,
                                gamma, mu, pr, beta, tau)

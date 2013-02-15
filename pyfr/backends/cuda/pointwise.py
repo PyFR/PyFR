@@ -9,6 +9,8 @@ from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 class CudaPointwiseKernels(CudaKernelProvider):
+    _rsinv_map = {'rusanov': 'rsolve_inv_rus', 'hll': 'rsolve_inv_hll'}
+
     def __init__(self, backend):
         pass
 
@@ -90,13 +92,14 @@ class CudaPointwiseKernels(CudaKernelProvider):
         return self._basic_kernel(fn, grid, block, nfpts, neles,
                                   jmats, gradu, jmats.leaddim, gradu.leaddim)
 
-    def rsolve_rus_inv_int(self, ndims, nvars, ul_v, ur_v, magl, magr,
-                           normpnorml, gamma):
+    def rsolve_inv_int(self, ndims, nvars, rsinv, ul_v, ur_v, magl, magr,
+                       normpnorml, gamma):
         ninters = ul_v.ncol
         dtype = ul_v.refdtype
-        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma)
+        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma,
+                    rsinv=self._rsinv_map[rsinv])
 
-        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_int', 'iPPPPPPP',
+        fn = self._get_function('rsolve_inv', 'rsolve_inv_int', 'iPPPPPPP',
                                 opts)
 
         block = (256, 1, 1)
@@ -107,14 +110,15 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   ur_v.mapping, ur_v.strides,
                                   magl, magr, normpnorml)
 
-    def rsolve_rus_inv_mpi(self, ndims, nvars, ul_mpiv, ur_mpim, magl,
+    def rsolve_inv_mpi(self, ndims, nvars, rsinv, ul_mpiv, ur_mpim, magl,
                            normpnorml, gamma):
         ninters = ul_mpiv.ncol
         ul_v = ul_mpiv.view
         dtype = ul_v.refdtype
-        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma)
+        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma,
+                    rsinv=self._rsinv_map[rsinv])
 
-        fn = self._get_function('rsolve_inv', 'rsolve_rus_inv_mpi', 'iPPPPP',
+        fn = self._get_function('rsolve_inv', 'rsolve_inv_mpi', 'iPPPPP',
                                 opts)
 
         block = (256, 1, 1)
@@ -124,11 +128,12 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   ul_v.mapping, ul_v.strides, ur_mpim,
                                   magl, normpnorml)
 
-    def rsolve_ldg_vis_int(self, ndims, nvars, ul_v, gul_v, ur_v, gur_v, magl,
-                           magr, normpnorml, gamma, mu, pr, beta, tau):
+    def rsolve_ldg_vis_int(self, ndims, nvars, rsinv, ul_v, gul_v, ur_v, gur_v,
+                           magl, magr, normpnorml, gamma, mu, pr, beta, tau):
         ninters = ul_v.ncol
         opts = dict(dtype=ul_v.refdtype, ndims=ndims, nvars=nvars, gamma=gamma,
-                    mu=mu, pr=pr, beta=beta, tau=tau)
+                    mu=mu, pr=pr, beta=beta, tau=tau,
+                    rsinv=self._rsinv_map[rsinv])
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_int',
                                 'iPPPPPPPPPPP', opts)
@@ -143,13 +148,14 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   gur_v.mapping, gur_v.strides,
                                   magl, magr, normpnorml)
 
-    def rsolve_ldg_vis_mpi(self, ndims, nvars, ul_mpiv, gul_mpiv, ur_mpim,
-                           gur_mpim, magl, normpnorml, gamma, mu, pr, beta,
-                           tau):
+    def rsolve_ldg_vis_mpi(self, ndims, nvars, rsinv, ul_mpiv, gul_mpiv,
+                           ur_mpim, gur_mpim, magl, normpnorml, gamma, mu, pr,
+                           beta, tau):
         ninters = ul_mpiv.ncol
         ul_v, gul_v = ul_mpiv.view, gul_mpiv.view
         opts = dict(dtype=ul_v.refdtype, ndims=ndims, nvars=nvars,
-                    gamma=gamma, mu=mu, pr=pr, beta=beta, tau=tau)
+                    gamma=gamma, mu=mu, pr=pr, beta=beta, tau=tau,
+                    rsinv=self._rsinv_map[rsinv])
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_mpi',
                                 'iPPPPPPPP', opts)
