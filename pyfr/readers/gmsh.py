@@ -52,7 +52,10 @@ class GmshReader(BaseReader):
                    'isothermal_noslip': 'isotherm_noslip'}
 
     # Remappers (Gmsh node ordering to PyFR node ordering)
-    _node_maps = {('hex', 8): np.array([0, 1, 3, 2, 4, 5, 7, 6])}
+    _node_maps = {('hex',  8): np.array([ 0,  1,  3,  2,  4,  5,  7,  6]),
+                  ('hex', 27): np.array([ 0,  2,  8,  6, 18, 20, 26, 24,  1,
+                                          3,  9,  5, 11,  7, 17, 15, 19, 21,
+                                         23, 25,  4, 10, 12, 14, 16, 22, 13])}
 
     def __init__(self, msh):
         if isinstance(msh, basestring):
