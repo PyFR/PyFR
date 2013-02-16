@@ -33,7 +33,8 @@ class GmshReader(BaseReader):
     extn = ['.msh']
 
     # Gmsh element types to PyFR type (petype) + sizes
-    _etype_map = {3: ('quad', 4), 5: ('hex', 8), 12: ('hex', 27)}
+    _etype_map = {3: ('quad', 4), 10: ('quad',9), 5: ('hex', 8),
+						12: ('hex', 27)}
 
     # Number of nodes per first-order element of each type
     _petype_focount = {'quad': 4, 'hex': 8, 'tet': 4, 'pri': 6, 'pyr': 5}
@@ -51,12 +52,12 @@ class GmshReader(BaseReader):
                    'subsonic_outflow': 'sub_outflow',
                    'isothermal_noslip': 'isotherm_noslip'}
 
-    # Remappers (Gmsh node ordering to PyFR node ordering)
+    # Remappers (PyFR node ordering to Gmsh node ordering)
     _node_maps = {('hex',  8): np.array([ 0,  1,  3,  2,  4,  5,  7,  6]),
-                  ('hex', 27): np.array([ 0,  2,  8,  6, 18, 20, 26, 24,  1,
-                                          3,  9,  5, 11,  7, 17, 15, 19, 21,
-                                         23, 25,  4, 10, 12, 14, 16, 22, 13])}
-
+                  ('hex', 27): np.array([ 0,  8,  1,  9, 20, 11,  3, 13,  2,
+                                         10, 21, 12, 22, 26, 23, 15, 24, 14,
+                                          4, 16,  5, 17, 25, 18,  7, 19,  6])}
+                                          
     def __init__(self, msh):
         if isinstance(msh, basestring):
             msh = open(msh)
