@@ -22,7 +22,7 @@ class CudaBlasExtKernels(CudaKernelProvider):
         cnt = y.leaddim*y.majdim
 
         # Compute a suitable block and grid
-        block = (512, 1, 1)
+        block = (1024, 1, 1)
         grid = self._get_grid_for_block(block, cnt)
 
         class AxnpbyKernel(CudaComputeKernel):
