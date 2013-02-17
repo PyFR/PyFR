@@ -1,39 +1,47 @@
 # -*- coding: utf-8 -*-
 
 <%include file='idx_of.cu.mak' />
+<%include file='flux_inv_impl.cu.mak' />
 
-% if ndims == 3:
 /**
- * Compute the inviscid flux.
+ * Computes the transformed inviscid flux.
  */
-inline __device__ void
-disf_inv(const ${dtype} s[5], ${dtype} f[3][5],
-         ${dtype}* pout, ${dtype} vout[3])
+__global__ void
+tdisf_inv(int nupts, int neles,
+          const ${dtype}* __restrict__ u,
+          const ${dtype}* __restrict__ smats,
+          ${dtype}* __restrict__ f,
+          int ldu, int lds, int ldf)
 {
-    ${dtype} rho = s[0], rhou = s[1], rhov = s[2], rhow = s[3], E = s[4];
+    int eidx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    ${dtype} invrho = 1.0/rho;
-    ${dtype} u = invrho*rhou, v = invrho*rhov, w = invrho*rhow;
-
-    // Compute the pressure
-    ${dtype} p = ${gamma - 1.0}*(E - 0.5*(rhou*u + rhov*v + rhow*w));
-
-    f[0][0] = rhou;         f[1][0] = rhov;         f[2][0] = rhow;
-
-    f[0][1] = rhou*u + p;   f[1][1] = rhov*u;       f[2][1] = rhow*u;
-    f[0][2] = rhou*v;       f[1][2] = rhov*v + p;   f[2][2] = rhow*v;
-    f[0][3] = rhou*w;       f[1][3] = rhov*w;       f[2][3] = rhow*w + p;
-
-    f[0][4] = (E + p)*u;    f[1][4] = (E + p)*v;    f[2][4] = (E + p)*w;
-
-    if (pout != NULL)
+    if (eidx < neles)
     {
-        *pout = p;
-    }
+        ${dtype} uin[${nvars}], ftmp[${ndims}][${nvars}];
 
-    if (vout != NULL)
-    {
-        vout[0] = u; vout[1] = v; vout[2] = w;
+        for (int uidx = 0; uidx < nupts; ++uidx)
+        {
+            // Load in the soln
+            for (int i = 0; i < ${nvars}; ++i)
+                uin[i] = u[U_IDX_OF(uidx, eidx, i, neles, ldu)];
+
+            // Compute the flux
+            disf_inv_impl(uin, ftmp, NULL, NULL);
+
+            // Transform and store
+            for (int i = 0; i < ${ndims}; ++i)
+            {
+            % for k in range(ndims):
+                ${dtype} s${k} = smats[SMAT_IDX_OF(uidx, eidx, i, ${k}, neles, lds)];
+            % endfor
+
+                for (int j = 0; j < ${nvars}; ++j)
+                {
+                    int fidx = F_IDX_OF(uidx, eidx, i, j, nupts, neles, ldf);
+                    f[fidx] = ${' + '.join('s{0}*ftmp[{0}][j]'.format(k)\
+                                for k in range(ndims))};
+                }
+            }
+        }
     }
 }
-% endif

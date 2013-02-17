@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 <%include file='views.cu.mak' />
-<%include file='rsolve_inv.cu.mak' />
-<%include file='flux_vis.cu.mak' />
+<%include file='rsolve_inv_impl.cu.mak' />
+<%include file='flux_vis_impl.cu.mak' />
 
 <%
 # Special-case beta for the viscous flux expression
@@ -59,14 +59,14 @@ rsolve_ldg_vis_int(int ninters,
 
         // Perform a standard, inviscid Riemann solve
         ${dtype} ficomm[${nvars}];
-        ${rsinv}(ul, ur, pnorml, ficomm);
+        rsolve_inv_impl(ul, ur, pnorml, ficomm);
 
     % if need_fvl:
         ${dtype} gul[${ndims}][${nvars}];
         READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvl[${ndims}][${nvars}] = {};
-        disf_vis_add(ul, gul, fvl);
+        disf_vis_impl_add(ul, gul, fvl);
     % endif
 
     % if need_fvr:
@@ -74,7 +74,7 @@ rsolve_ldg_vis_int(int ninters,
         READ_VIEW_V(gur, gur_v, gur_vstri, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvr[${ndims}][${nvars}] = {};
-        disf_vis_add(ur, gur, fvr);
+        disf_vis_impl_add(ur, gur, fvr);
     % endif
 
         for (int i = 0; i < ${nvars}; ++i)
@@ -120,14 +120,14 @@ rsolve_ldg_vis_mpi(int ninters,
 
         // Perform a standard, inviscid Riemann solve
         ${dtype} ficomm[${nvars}];
-        ${rsinv}(ul, ur, pnorml, ficomm);
+        rsolve_inv_impl(ul, ur, pnorml, ficomm);
 
     % if need_fvl:
         ${dtype} gul[${ndims}][${nvars}];
         READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvl[${ndims}][${nvars}] = {};
-        disf_vis_add(ul, gul, fvl);
+        disf_vis_impl_add(ul, gul, fvl);
     % endif
 
     % if need_fvr:
@@ -135,7 +135,7 @@ rsolve_ldg_vis_mpi(int ninters,
         READ_MPIM_V(gur, gur_m, iidx, ninters, ${ndims}, ${nvars});
 
         ${dtype} fvr[${ndims}][${nvars}] = {};
-        disf_vis_add(ur, gur, fvr);
+        disf_vis_impl_add(ur, gur, fvr);
     % endif
 
         // Determine the common normal flux

@@ -9,8 +9,6 @@ from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 class CudaPointwiseKernels(CudaKernelProvider):
-    _rsinv_map = {'rusanov': 'rsolve_inv_rus', 'hll': 'rsolve_inv_hll'}
-
     def __init__(self, backend):
         pass
 
@@ -27,7 +25,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         nupts, neles = u.nrow, u.ncol / nvars
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, gamma=gamma)
 
-        fn = self._get_function('tflux_inv', 'tdisf_inv', 'iiPPPiii', opts)
+        fn = self._get_function('flux_inv', 'tdisf_inv', 'iiPPPiii', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
@@ -41,7 +39,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars,
                     gamma=gamma, mu=mu, pr=pr)
 
-        fn = self._get_function('tflux_vis', 'tdisf_vis', 'iiPPPPiiii', opts)
+        fn = self._get_function('flux_vis', 'tdisf_vis', 'iiPPPPiiii', opts)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
@@ -97,7 +95,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         ninters = ul_v.ncol
         dtype = ul_v.refdtype
         opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma,
-                    rsinv=self._rsinv_map[rsinv])
+                    rsinv=rsinv)
 
         fn = self._get_function('rsolve_inv', 'rsolve_inv_int', 'iPPPPPPP',
                                 opts)
@@ -116,7 +114,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         ul_v = ul_mpiv.view
         dtype = ul_v.refdtype
         opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, gamma=gamma,
-                    rsinv=self._rsinv_map[rsinv])
+                    rsinv=rsinv)
 
         fn = self._get_function('rsolve_inv', 'rsolve_inv_mpi', 'iPPPPP',
                                 opts)
@@ -132,8 +130,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
                            magl, magr, normpnorml, gamma, mu, pr, beta, tau):
         ninters = ul_v.ncol
         opts = dict(dtype=ul_v.refdtype, ndims=ndims, nvars=nvars, gamma=gamma,
-                    mu=mu, pr=pr, beta=beta, tau=tau,
-                    rsinv=self._rsinv_map[rsinv])
+                    mu=mu, pr=pr, beta=beta, tau=tau, rsinv=rsinv)
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_int',
                                 'iPPPPPPPPPPP', opts)

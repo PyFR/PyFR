@@ -1,58 +1,68 @@
 # -*- coding: utf-8 -*-
 
-% if ndims == 3:
+<%include file='idx_of.cu.mak' />
+<%include file='flux_inv_impl.cu.mak' />
+<%include file='flux_vis_impl.cu.mak' />
+
 /**
- * Computes the viscous flux and adds it to fout.
+ * Computes the transformed viscous flux.
  */
-inline __device__ void
-disf_vis_add(const ${dtype} uin[5], const ${dtype} grad_uin[3][5],
-             ${dtype} fout[3][5])
+__global__ void
+tdisf_vis(int nupts, int neles,
+          const ${dtype}* __restrict__ uin,
+          const ${dtype}* __restrict__ smats,
+          const ${dtype}* __restrict__ rcpdjacs,
+          ${dtype}* __restrict__ tgrad_u,
+          int ldu, int lds, int ldr, int ldg)
 {
-    ${dtype} rho  = uin[0];
-    ${dtype} rhou = uin[1], rhov = uin[2], rhow = uin[3];
-    ${dtype} E    = uin[4];
+    int eidx = blockIdx.x * blockDim.x + threadIdx.x;
 
-    ${dtype} rcprho = 1.0/rho;
-    ${dtype} u = rcprho*rhou, v = rcprho*rhov, w = rcprho*rhow;
+    if (eidx < neles)
+    {
+        ${dtype} u[${nvars}], grad_u[${ndims}][${nvars}];
+        ${dtype} s[${ndims}][${ndims}], f[${ndims}][${nvars}];
 
-    ${dtype} rho_x = grad_uin[0][0];
-    ${dtype} rho_y = grad_uin[1][0];
-    ${dtype} rho_z = grad_uin[2][0];
+        for (int uidx = 0; uidx < nupts; ++uidx)
+        {
+            // Load in the solution
+            for (int i = 0; i < ${nvars}; ++i)
+                u[i] = uin[U_IDX_OF(uidx, eidx, i, neles, ldu)];
 
-    // Velocity derivatives (rho*grad[u,v,w])
-    ${dtype} u_x = grad_uin[0][1] - u*rho_x;
-    ${dtype} u_y = grad_uin[1][1] - u*rho_y;
-    ${dtype} u_z = grad_uin[2][1] - u*rho_z;
-    ${dtype} v_x = grad_uin[0][2] - v*rho_x;
-    ${dtype} v_y = grad_uin[1][2] - v*rho_y;
-    ${dtype} v_z = grad_uin[2][2] - v*rho_z;
-    ${dtype} w_x = grad_uin[0][3] - w*rho_x;
-    ${dtype} w_y = grad_uin[1][3] - w*rho_y;
-    ${dtype} w_z = grad_uin[2][3] - w*rho_z;
+            // Load in the S-matrices
+            for (int i = 0; i < ${ndims}; ++i)
+                for (int j = 0; j < ${ndims}; ++j)
+                    s[i][j] = smats[SMAT_IDX_OF(uidx, eidx, i, j, neles, lds)];
 
-    ${dtype} E_x = grad_uin[0][4];
-    ${dtype} E_y = grad_uin[1][4];
-    ${dtype} E_z = grad_uin[2][4];
+            // Get the reciprocal of the Jacobian
+            ${dtype} rcpdjac = rcpdjacs[IDX_OF(uidx, eidx, ldr)];
 
-    // Compute temperature derivatives (c_p*dT/d[x,y,z])
-    ${dtype} T_x = rcprho*(E_x - (rcprho*rho_x*E + u*u_x + v*v_x + w*w_x));
-    ${dtype} T_y = rcprho*(E_y - (rcprho*rho_y*E + u*u_y + v*v_y + w*w_y));
-    ${dtype} T_z = rcprho*(E_z - (rcprho*rho_z*E + u*u_z + v*v_z + w*w_z));
+            // Un-transform the solution gradient
+            for (int j = 0; j < ${nvars}; ++j)
+            {
+            % for k in range(ndims):
+                ${dtype} gu${k} = tgrad_u[F_IDX_OF(uidx, eidx, ${k}, j, nupts, neles, ldg)];
+            % endfor
 
-    // Negated stress tensor elements
-    ${dtype} t_xx = ${-2*mu}*rcprho*(u_x - (1.0/3.0)*(u_x + v_y + w_z));
-    ${dtype} t_yy = ${-2*mu}*rcprho*(v_y - (1.0/3.0)*(u_x + v_y + w_z));
-    ${dtype} t_zz = ${-2*mu}*rcprho*(w_z - (1.0/3.0)*(u_x + v_y + w_z));
-    ${dtype} t_xy = ${-mu}*rcprho*(v_x + u_y);
-    ${dtype} t_xz = ${-mu}*rcprho*(u_z + w_x);
-    ${dtype} t_yz = ${-mu}*rcprho*(w_y + v_z);
+                for (int i = 0; i < ${ndims}; ++i)
+                {
+                    grad_u[i][j] = (${' + '.join('s[{0}][i]*gu{0}'.format(k)\
+                                     for k in range(ndims))})
+                                 * rcpdjac;
+                }
+            }
 
-    fout[0][1] += t_xx;     fout[1][1] += t_xy;     fout[2][1] += t_xz;
-    fout[0][2] += t_xy;     fout[1][2] += t_yy;     fout[2][2] += t_yz;
-    fout[0][3] += t_xz;     fout[1][3] += t_yz;     fout[2][3] += t_zz;
+            // Compute the flux (F = Fi + Fv)
+            disf_inv_impl(u, f, NULL, NULL);
+            disf_vis_impl_add(u, grad_u, f);
 
-    fout[0][4] += u*t_xx + v*t_xy + w*t_xz + ${-mu*gamma/pr}*T_x;
-    fout[1][4] += u*t_xy + v*t_yy + w*t_yz + ${-mu*gamma/pr}*T_y;
-    fout[2][4] += u*t_xz + v*t_yz + w*t_zz + ${-mu*gamma/pr}*T_z;
+            // Transform and store
+            for (int i = 0; i < ${ndims}; ++i)
+                for (int j = 0; j < ${nvars}; ++j)
+                {
+                    int fidx = F_IDX_OF(uidx, eidx, i, j, nupts, neles, ldg);
+                    tgrad_u[fidx] = ${' + '.join('s[i][{0}]*f[{0}][j]'.format(k)\
+                                      for k in range(ndims))};
+                }
+        }
+    }
 }
-% endif
