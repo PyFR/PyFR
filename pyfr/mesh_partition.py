@@ -42,10 +42,10 @@ class BaseMeshPartition(object):
 
         # Look for and load each element type from the mesh
         self._elemaps = elemaps = OrderedDict()
-        for k in basismap.keys():
-            mk = 'spt_%s_p%d' % (k, rallocs.prank)
+        for bname, bcls in basismap.iteritems():
+            mk = 'spt_%s_p%d' % (bname, rallocs.prank)
             if mk in mesh:
-                elemaps[k] = self.elementscls(basismap[k], mesh[mk], self._cfg)
+                elemaps[bname] = self.elementscls(bcls, mesh[mk], self._cfg)
 
         # Construct a proxylist to simplify collective operations
         self._eles = eles = proxylist(elemaps.values())
