@@ -152,7 +152,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         ul_v, gul_v = ul_mpiv.view, gul_mpiv.view
         opts = dict(dtype=ul_v.refdtype, ndims=ndims, nvars=nvars,
                     gamma=gamma, mu=mu, pr=pr, beta=beta, tau=tau,
-                    rsinv=self._rsinv_map[rsinv])
+                    rsinv=rsinv)
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_mpi',
                                 'iPPPPPPPP', opts)
