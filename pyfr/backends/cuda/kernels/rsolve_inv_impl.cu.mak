@@ -45,8 +45,8 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
     ${dtype} vl[${ndims}], vr[${ndims}];
     ${dtype} pl, pr;
 
-    disf_inv(ul, fl, &pl, vl);
-    disf_inv(ur, fr, &pr, vr);
+    disf_inv_impl(ul, fl, &pl, vl);
+    disf_inv_impl(ur, fr, &pr, vr);
 
     // Get the normal left and right velocities
     ${dtype} nvl = ${util.dot('pnorm[{0}]', 'vl[{0}]')};
