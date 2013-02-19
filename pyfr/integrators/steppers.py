@@ -10,7 +10,7 @@ class BaseStepper(BaseIntegrator):
         super(BaseStepper, self).__init__(*args, **kwargs)
 
         # Number of steps taken
-        self._nsteps = 0
+        self.nsteps = 0
 
         backend = self._backend
         elemats = self._meshp.ele_banks
@@ -28,12 +28,12 @@ class BaseStepper(BaseIntegrator):
 
     @abstractmethod
     def step(self, t, dt):
-        self._nsteps += 1
+        self.nsteps += 1
 
     def collect_stats(self, stats):
         super(BaseStepper, self).collect_stats(stats)
 
-        stats.set('time-integration', 'nsteps', self._nsteps)
+        stats.set('time-integration', 'nsteps', self.nsteps)
         stats.set('time-integration', 'nfevals', self._stepper_nfevals)
 
     def _get_axnpby_kerns(self, n):
@@ -74,7 +74,7 @@ class EulerStepper(BaseStepper):
 
     @property
     def _stepper_nfevals(self):
-        return self._nsteps
+        return self.nsteps
 
     @property
     def _stepper_nregs(self):
@@ -101,7 +101,7 @@ class RK4Stepper(BaseStepper):
 
     @property
     def _stepper_nfevals(self):
-        return 4*self._nsteps
+        return 4*self.nsteps
 
     @property
     def _stepper_nregs(self):

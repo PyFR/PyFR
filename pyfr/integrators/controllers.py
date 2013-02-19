@@ -18,6 +18,10 @@ class BaseController(BaseIntegrator):
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
 
+    @property
+    def soln(self):
+        return self._meshp.ele_scal_upts(self._idxcurr)
+
 class NoneController(BaseController):
     controller_name = 'none'
 
@@ -46,4 +50,4 @@ class NoneController(BaseController):
             self.completed_step_handlers(self)
 
         # Return the solution matrices
-        return self._meshp.ele_scal_upts(self._idxcurr)
+        return self.soln

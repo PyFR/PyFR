@@ -39,6 +39,8 @@ def main():
     ap.add_argument('--verbose', '-v', action='count')
     ap.add_argument('--progress', '-p', action='store_true',
                     help='show a progress bar')
+    ap.add_argument('--nansweep', '-n', metavar='N', type=int,
+                    help='check for NaNs every N steps')
 
     sp = ap.add_subparsers(help='sub-command help')
 
@@ -74,6 +76,15 @@ def main():
         # Register a callback to update the bar after each step
         callb = lambda intg: pb.advance_to(intg.tcurr)
         integrator.completed_step_handlers.append(callb)
+
+    # NaN sweeping
+    if args.nansweep:
+        def nansweep(intg):
+            if intg.nsteps % args.nansweep == 0:
+                if any(np.isnan(np.sum(s)) for s in intg.soln):
+                    raise RuntimeError('NaNs detected at t = {}'
+                                       .format(intg.tcurr))
+        integrator.completed_step_handlers.append(nansweep)
 
     # Execute!
     integrator.run()
