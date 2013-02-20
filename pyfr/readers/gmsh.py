@@ -61,7 +61,7 @@ class GmshReader(BaseReader):
                   ('hex', 27): np.array([ 0,  8,  1,  9, 20, 11,  3, 13,  2,
                                          10, 21, 12, 22, 26, 23, 15, 24, 14,
                                           4, 16,  5, 17, 25, 18,  7, 19,  6])}
-                                          
+
     def __init__(self, msh):
         if isinstance(msh, basestring):
             msh = open(msh)
@@ -132,7 +132,7 @@ class GmshReader(BaseReader):
 
         # Extract the physical names
         for l in msh_section(msh, 'PhysicalNames'):
-            m = re.match(r'^(\d+) (\d+) "((?:[^"\\]|\\.)*)"$', l)
+            m = re.match(r'(\d+) (\d+) "((?:[^"\\]|\\.)*)"$', l)
             if not m:
                 raise ValueError('Malformed physical entity')
 
@@ -147,7 +147,7 @@ class GmshReader(BaseReader):
                 self._bfacespents[bctype] = pent
             # Periodic boundary faces
             elif name.startswith('periodic'):
-                p = re.match(r'periodic[ -_]([a-z0-9]+)[ -_](l|r)', name)
+                p = re.match(r'periodic[ -_]([a-z0-9]+)[ -_](l|r)$', name)
                 if not p:
                     raise ValueError('Invalid periodic boundary condition')
 
