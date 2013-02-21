@@ -87,8 +87,7 @@ class CudaBackend(Backend):
 
             return kern(*args, **kwargs)
         else:
-            raise PyFRInvalidKernelError("'{}' has no providers"\
-                                         .format(kname))
+            raise PyFRInvalidKernelError("'{}' has no providers".format(kname))
 
     def runall(self, queues):
         CudaQueue.runall(queues)

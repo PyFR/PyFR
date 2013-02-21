@@ -66,7 +66,7 @@ class BaseRankAllocator(object):
 
                 if 'con_p%dp%d' % (rhs, lhs) not in mesh:
                     raise ValueError('MPI interface (%d, %d) is not symmetric'
-                                   % (lhs, rhs))
+                                     % (lhs, rhs))
 
         if list(sorted(conn.keys())) != list(range(len(conn))):
             raise ValueError('Mesh has invalid partition numbers')
