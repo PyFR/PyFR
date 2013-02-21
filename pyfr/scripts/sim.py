@@ -1,16 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import atexit
+
 from argparse import ArgumentParser, FileType
 
 import numpy as np
 from mpmath import mp
 
+import mpi4py.rc
+mpi4py.rc.initialize = False
+mpi4py.rc.finalize = False
+
+from pyfr import mpiutil
+atexit.register(mpiutil.atexit)
+
 from pyfr import __version__ as version
 from pyfr.backends.cuda import CudaBackend
 from pyfr.inifile import Inifile
 from pyfr.integrators import get_integrator
-from pyfr.mpiutil import get_comm_rank_root
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.progress_bar import ProgressBar
 
@@ -63,6 +71,9 @@ def main():
     # Create a backend
     backend = CudaBackend(cfg)
 
+    # Bring up MPI (this must be done after we have created a backend)
+    mpiutil.init()
+
     # Get the mapping from physical ranks to MPI ranks
     rallocs = get_rank_allocation(mesh, cfg)
 
@@ -70,7 +81,7 @@ def main():
     integrator = get_integrator(backend, rallocs, mesh, soln, cfg)
 
     # If we are running interactively then create a progress bar
-    if args.progress and get_comm_rank_root()[1] == 0:
+    if args.progress and mpiutil.get_comm_rank_root()[1] == 0:
         pb = ProgressBar(integrator.tstart, integrator.tcurr, integrator.tend)
 
         # Register a callback to update the bar after each step
