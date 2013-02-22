@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+<%namespace name='util' file='util.mak' />
 <%include file='idx_of.cu.mak' />
 <%include file='flux_inv_impl.cu.mak' />
 
@@ -38,8 +39,7 @@ tdisf_inv(int nupts, int neles,
                 for (int j = 0; j < ${nvars}; ++j)
                 {
                     int fidx = F_IDX_OF(uidx, eidx, i, j, nupts, neles, ldf);
-                    f[fidx] = ${' + '.join('s{0}*ftmp[{0}][j]'.format(k)\
-                                for k in range(ndims))};
+                    f[fidx] = ${util.dot('s{0}', 'ftmp[{0}][j]')};
                 }
             }
         }

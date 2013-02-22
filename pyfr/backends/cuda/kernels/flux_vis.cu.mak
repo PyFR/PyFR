@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+<%namespace name='util' file='util.mak' />
 <%include file='idx_of.cu.mak' />
 <%include file='flux_inv_impl.cu.mak' />
 <%include file='flux_vis_impl.cu.mak' />
@@ -44,11 +45,7 @@ tdisf_vis(int nupts, int neles,
             % endfor
 
                 for (int i = 0; i < ${ndims}; ++i)
-                {
-                    grad_u[i][j] = (${' + '.join('s[{0}][i]*gu{0}'.format(k)\
-                                     for k in range(ndims))})
-                                 * rcpdjac;
-                }
+                    grad_u[i][j] = rcpdjac*${util.dot('gu{0}', 's[{0}][i]')};
             }
 
             // Compute the flux (F = Fi + Fv)
@@ -60,8 +57,7 @@ tdisf_vis(int nupts, int neles,
                 for (int j = 0; j < ${nvars}; ++j)
                 {
                     int fidx = F_IDX_OF(uidx, eidx, i, j, nupts, neles, ldg);
-                    tgrad_u[fidx] = ${' + '.join('s[i][{0}]*f[{0}][j]'.format(k)\
-                                      for k in range(ndims))};
+                    tgrad_u[fidx] = ${util.dot('s[i][{0}]', 'f[{0}][j]')};
                 }
         }
     }
