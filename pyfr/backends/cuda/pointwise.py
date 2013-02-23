@@ -9,9 +9,6 @@ from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 class CudaPointwiseKernels(CudaKernelProvider):
-    def __init__(self, backend):
-        pass
-
     def _get_function(self, mod, func, argt, opts, nvccopts=None):
         basefn = super(CudaPointwiseKernels, self)._get_function
 

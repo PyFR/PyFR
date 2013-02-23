@@ -11,9 +11,6 @@ from pyfr.backends.cuda.types import CudaMPIMatrix, CudaMPIView
 from pyfr.nputil import npdtype_to_ctype
 
 class CudaPackingKernels(CudaKernelProvider):
-    def __init__(self, backend):
-        super(CudaPackingKernels, self).__init__()
-
     def _packmodopts(self, mpiview):
         return dict(dtype=npdtype_to_ctype(mpiview.mpimat.dtype),
                     vlen=mpiview.view.vlen)

@@ -7,9 +7,6 @@ from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 class CudaBlasExtKernels(CudaKernelProvider):
-    def __init__(self, backend):
-        super(CudaBlasExtKernels, self).__init__()
-
     def axnpby(self, y, *xn):
         if any(y.traits != x.traits for x in xn):
             raise ValueError('Incompatible matrix types')
