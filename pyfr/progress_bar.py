@@ -98,7 +98,7 @@ class ProgressBar(object):
                                  wela, wrem)
 
         # Write the progress bar and pad the remaining columns
-        sys.stderr.write(chr(27) + '[2K' + chr(27) + '[G')
+        sys.stderr.write('\x1b[2K\x1b[G')
         sys.stderr.write(s)
         sys.stderr.flush()
 
