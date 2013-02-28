@@ -5,6 +5,7 @@ import pkgutil
 from mako.lookup import TemplateLookup
 from mako.template import Template
 
+
 class PkgTemplateLookup(TemplateLookup):
     def __init__(self, pkg, basedir):
         self.pkg = pkg

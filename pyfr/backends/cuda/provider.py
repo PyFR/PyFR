@@ -6,6 +6,7 @@ from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.template import PkgTemplateLookup
 from pyfr.util import memoize
 
+
 class CudaKernelProvider(object):
     KERNEL_EXT = '.cu.mak'
 

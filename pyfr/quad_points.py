@@ -3,6 +3,7 @@
 import sympy as sy
 from mpmath import mp
 
+
 def points_for_rule(name, n):
     rules = {'equi-spaced': equi_spaced,
              'gauss-legendre': gauss_legendre,
@@ -11,8 +12,10 @@ def points_for_rule(name, n):
              'gauss-chebyshev-lobatto': gauss_chebyshev_lobatto}
     return rules[name](n)
 
+
 def equi_spaced(n):
     return [mp.mpf(-1) + mp.mpf(2*i)/(n-1) for i in xrange(n)]
+
 
 def gauss_legendre(n):
     """Returns the Gauss-Legendre quadrature points for order *n*
@@ -22,6 +25,7 @@ def gauss_legendre(n):
     """
     coeffs = sy.Poly(sy.legendre_poly(n)).all_coeffs()
     return mp.polyroots([float(c) for c in coeffs])
+
 
 def gauss_legendre_lobatto(n):
     """Returns the Gauss-Legendre-Lobatto quadrature points for order *n*
@@ -34,12 +38,14 @@ def gauss_legendre_lobatto(n):
     roots = mp.polyroots([float(c) for c in coeffs])
     return [mp.mpf(-1)] + roots + [mp.mpf(1)]
 
+
 def gauss_chebyshev(n):
     """Returns the Gauss-Chebyshev quadrature points for order *n*
 
     These are given by cos((2i - 1)/(2n) * pi) for i = 1..n
     """
     return [mp.cos((2*i - 1)*mp.pi/(2*n)) for i in xrange(n, 0, -1)]
+
 
 def gauss_chebyshev_lobatto(n):
     """Returns the Gauss-Chebyshev-Lobatto quadrature points for order *n*

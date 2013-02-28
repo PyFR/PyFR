@@ -2,6 +2,7 @@
 
 import pycuda.driver as cuda
 
+
 def memcpy2d_htod(dev, host, spitch, dpitch, width, height):
     copy = cuda.Memcpy2D()
     copy.set_src_host(host)
@@ -11,6 +12,7 @@ def memcpy2d_htod(dev, host, spitch, dpitch, width, height):
     copy.width_in_bytes = width
     copy.height = height
     copy(aligned=True)
+
 
 def memcpy2d_dtoh(host, dev, spitch, dpitch, width, height):
     copy = cuda.Memcpy2D()

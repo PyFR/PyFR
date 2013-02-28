@@ -2,6 +2,7 @@
 
 import sys
 
+
 class _ExceptHook(object):
     def __init__(self):
         self.exception = None

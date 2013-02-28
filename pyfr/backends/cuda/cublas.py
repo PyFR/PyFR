@@ -62,13 +62,14 @@ class CublasInternalError(CublasError):
 
 
 # Mapping between status codes and exceptions
-_libcublas_status_map = { 0x1: CublasNotInitialized,
-                          0x3: CublasAllocFailed,
-                          0x7: CublasInvalidValue,
-                          0x8: CublasArchMismatch,
-                          0xb: CublasMappingError,
-                          0xd: CublasExecutionFailed,
-                          0xe: CublasInternalError }
+_libcublas_status_map = {0x1: CublasNotInitialized,
+                         0x3: CublasAllocFailed,
+                         0x7: CublasInvalidValue,
+                         0x8: CublasArchMismatch,
+                         0xb: CublasMappingError,
+                         0xd: CublasExecutionFailed,
+                         0xe: CublasInternalError}
+
 
 # Error handling
 def _cublas_process_status(status, fn, args):
@@ -78,34 +79,39 @@ def _cublas_process_status(status, fn, args):
         except KeyError:
             raise CublasError
 
+
 # Opaque CUBLAS handle pointer
 class cublas_handle_t(c_void_p):
     pass
 
+
 # Matrix operation types
 class CublasOp(object):
-    NONE       = 0
-    TRANS      = 1
+    NONE = 0
+    TRANS = 1
     CONJ_TRANS = 2
 
 
 # Wrap the cublasCreate function
 _cublasCreate = _libcublas.cublasCreate_v2
-_cublasCreate.restype  = c_int
+_cublasCreate.restype = c_int
 _cublasCreate.argtypes = [POINTER(cublas_handle_t)]
 _cublasCreate.errcheck = _cublas_process_status
 
+
 # Wrap the cublasDestroy function
 _cublasDestroy = _libcublas.cublasDestroy_v2
-_cublasDestroy.restype  = c_int
+_cublasDestroy.restype = c_int
 _cublasDestroy.argtypes = [cublas_handle_t]
 _cublasDestroy.errcheck = _cublas_process_status
 
+
 # Wrap the cublasSetStream function
 _cublasSetStream = _libcublas.cublasSetStream_v2
-_cublasSetStream.restype  = c_int
+_cublasSetStream.restype = c_int
 _cublasSetStream.argtypes = [cublas_handle_t, c_void_p]
 _cublasSetStream.errcheck = _cublas_process_status
+
 
 # Wrap the cublasDgemm (double-precision general matrix multiply) function
 _cublasDgemm = _libcublas.cublasDgemm_v2
@@ -118,6 +124,7 @@ _cublasDgemm.argtypes = [cublas_handle_t,
                          c_void_p, c_void_p, c_int]
 _cublasDgemm.errcheck = _cublas_process_status
 
+
 # Wrap the cublasSgemm (double-precision general matrix multiply) function
 _cublasSgemm = _libcublas.cublasSgemm_v2
 _cublasSgemm.restype = c_int
@@ -128,6 +135,7 @@ _cublasSgemm.argtypes = [cublas_handle_t,
                          c_void_p, c_int,
                          c_void_p, c_void_p, c_int]
 _cublasSgemm.errcheck = _cublas_process_status
+
 
 class CudaCublasKernels(CudaKernelProvider):
     def __init__(self, backend):

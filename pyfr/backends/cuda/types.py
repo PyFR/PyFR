@@ -7,6 +7,7 @@ import pyfr.backends.base as base
 
 from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
+
 class CudaMatrixBase(base.MatrixBase):
     order = 'C'
 
@@ -55,8 +56,8 @@ class CudaMatrixBase(base.MatrixBase):
 
     def offsetof(self, i, j):
         if i >= self.nrow or j >= self.ncol:
-            raise ValueError('Index ({},{}) out of bounds ({},{}))'.\
-                             format(i, j, self.nrow, self.ncol))
+            raise ValueError('Index ({},{}) out of bounds ({},{}))'
+                             .format(i, j, self.nrow, self.ncol))
 
         return self.pitch*i + j*self.itemsize if self.order == 'C' else\
                self.pitch*j + i*self.itemsize
@@ -113,8 +114,9 @@ class CudaMatrixBank(base.MatrixBank):
 class CudaConstMatrix(CudaMatrixBase, base.ConstMatrix):
     def __init__(self, backend, initval, iopacking, tags):
         ioshape = initval.shape
-        super(CudaConstMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                              initval, iopacking, tags)
+        super(CudaConstMatrix, self).__init__(backend, backend.fpdtype,
+                                              ioshape, initval, iopacking,
+                                              tags)
 
 
 class CudaSparseMatrix(object):

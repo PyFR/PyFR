@@ -5,6 +5,7 @@ from abc import abstractmethod
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.util import proxylist
 
+
 class BaseStepper(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseStepper, self).__init__(*args, **kwargs)

@@ -9,6 +9,7 @@ from functools import wraps
 
 import numpy as np
 
+
 def recordalloc(type):
     def recordalloc_type(fn):
         @wraps(fn)
@@ -18,6 +19,7 @@ def recordalloc(type):
             return rv
         return newfn
     return recordalloc_type
+
 
 class Backend(object):
     __metaclass__ = ABCMeta
@@ -268,7 +270,6 @@ class Backend(object):
             return mat.reshape(mat.shape[0], -1)
         elif mat.ndim == 4:
             return mat.reshape(mat.shape[0]*mat.shape[1], -1)
-
 
     def _from_native_to_x(self, mat, nshape, npacking):
         if self.packing != npacking:

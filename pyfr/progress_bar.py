@@ -4,6 +4,7 @@ import os
 import sys
 import time
 
+
 def get_terminal_size():
     if sys.platform in ('linux2', 'darwin'):
         import fcntl, termios, struct
@@ -16,17 +17,20 @@ def get_terminal_size():
     # Default to 24 by 80
     return 24, 80
 
+
 def to_hms(delta):
     hours, remainder = divmod(int(delta), 3600)
     minutes, seconds = divmod(remainder, 60)
 
     return hours, minutes, seconds
 
+
 def format_hms(delta):
     if delta is not None:
         return '{:02d}:{:02d}:{:02d}'.format(*to_hms(delta))
     else:
         return '--:--:--'
+
 
 class ProgressBar(object):
     _dispfmt = '{:7.1%} [{}{}>{}] {:.2f}/{:.2f} ela: {} rem: {}'
@@ -78,7 +82,7 @@ class ProgressBar(object):
         frac = rcu / ren
 
         # Decide how many '+', '=' and ' ' to output for the progress bar
-        n = self._nbarcol - 1;
+        n = self._nbarcol - 1
         nps = int(n * (rcu - el)/ren)
         nsp = int(n * (1 - frac))
         neq = n - nps - nsp

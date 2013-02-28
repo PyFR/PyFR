@@ -9,11 +9,14 @@ from pyfr.bases.base import BasisBase
 from pyfr.quad_points import points_for_rule, equi_spaced
 from pyfr.util import ndrange, lazyprop
 
+
 def gen_std_hex(sptord):
     return cart_prod_points(equi_spaced(sptord + 1), 3, compact=False)
 
+
 def gen_std_quad(sptord):
     return cart_prod_points(equi_spaced(sptord + 1), 2, compact=False)
+
 
 def cart_prod_points(points, ndim, compact=True):
     """Performs a cartesian product extension of *points* into *ndim*
@@ -47,6 +50,7 @@ def cart_prod_points(points, ndim, compact=True):
     else:
         return cprodpts
 
+
 def _nodal_basis1d(points, sym):
     """Generates a basis of polynomials, :math:`l_i(x)`, such that
     .. math::
@@ -58,6 +62,7 @@ def _nodal_basis1d(points, sym):
 
     return [lagrange_poly(n, sym, points, [0]*i + [1] + [0]*(n-i-1)).expand()
             for i in xrange(n)]
+
 
 def nodal_basis(points, dims, compact=True):
     """Generates a nodal basis for *points* over *dims*
@@ -86,6 +91,7 @@ def nodal_basis(points, dims, compact=True):
 
     return cpbasis if compact else cpbasis.reshape((len(p),)*len(dims))
 
+
 # Cube map face rotation scheme to go from face 1 -> 0..5
 _cube_map_rots_sy = [sy.rot_axis2(-sy.pi)*sy.rot_axis1(sy.pi/2),
                      sy.eye(3),
@@ -94,9 +100,11 @@ _cube_map_rots_sy = [sy.rot_axis2(-sy.pi)*sy.rot_axis1(sy.pi/2),
                      sy.rot_axis3(-sy.pi/2),
                      sy.rot_axis1(-sy.pi/2)]
 
+
 # Rotation scheme as numpy arrays
 _cube_map_rots_np = [np.asanyarray(sy.matrix2numpy(r), dtype=np.float)
                      for r in _cube_map_rots_sy]
+
 
 def cube_map_face(fpoints):
     """Given a matrix of points (p,q,r) corresponding to face one of
@@ -110,6 +118,7 @@ def cube_map_face(fpoints):
         mfpoints[i,...] = np.dot(fpoints, frot)
 
     return mfpoints
+
 
 def diff_vcjh_correctionfn(k, eta, sym):
     # Expand shorthand forms of eta_k for common schemes
@@ -125,6 +134,7 @@ def diff_vcjh_correctionfn(k, eta, sym):
 
     return diffgl, diffgr
 
+
 class TensorProdBasis(object):
     def __init__(self, *args, **kwargs):
         super(TensorProdBasis, self).__init__(*args, **kwargs)
@@ -134,8 +144,8 @@ class TensorProdBasis(object):
             self._nsptsord = sy.S(self.nspts)**(sy.S(1)/self.ndims)
 
             if not self._nsptsord.is_Number:
-                raise ValueError('Invalid number of shape points for {} dims'\
-                                .format(self.ndims))
+                raise ValueError('Invalid number of shape points for {} dims'
+                                 .format(self.ndims))
 
     @lazyprop
     def _pts1d(self):
@@ -178,7 +188,7 @@ class HexBasis(TensorProdBasis, BasisBase):
 
         # Pre-compute all possible flux point rotation schemes
         self._rschemes = rs = np.empty((6, 5), dtype=np.object)
-        for face,rtag in ndrange(*rs.shape):
+        for face, rtag in ndrange(*rs.shape):
             fpts = np.arange(face*k*k, (face+1)*k*k).reshape(k,k)
 
             if rtag == 0:
@@ -219,14 +229,14 @@ class HexBasis(TensorProdBasis, BasisBase):
         fbasis = np.empty([6] + [self._order + 1]*2, dtype=np.object)
 
         # Pair up opposite faces with their associated (normal) dimension
-        for fpair,sym in zip([(4,2), (1,3), (0,5)], self._dims):
+        for fpair, sym in zip([(4,2), (1,3), (0,5)], self._dims):
             nbdims = [d for d in self._dims if d is not sym]
             fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
 
             eta = self._cfg.get('mesh-elements', 'vcjh-eta')
             diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
 
-            for p,gfn in zip(fpair, diffcorfn):
+            for p, gfn in zip(fpair, diffcorfn):
                 if p in (0,3,4):
                     fbasis[p] = np.fliplr(fbasis[p])
                 fbasis[p,...] *= gfn

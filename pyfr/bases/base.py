@@ -11,6 +11,7 @@ from sympy.utilities.lambdify import lambdastr
 
 from pyfr.util import lazyprop, ndrange
 
+
 def lambdify_mpf(dims, exprs):
     # Perform the initial lambdification
     ls = [lambdastr(dims, ex.evalf(mp.dps)) for ex in exprs]
@@ -26,8 +27,8 @@ def lambdify_mpf(dims, exprs):
     cs = sorted(csf.iterkeys(), key=len, reverse=True)
 
     # Name these constants
-    csn = {s: '__c%d' % i for i,s in enumerate(cs)}
-    cnf = {n: csf[s] for s,n in csn.iteritems()}
+    csn = {s: '__c%d' % i for i, s in enumerate(cs)}
+    cnf = {n: csf[s] for s, n in csn.iteritems()}
 
     # Substitute
     lex = []
@@ -37,6 +38,7 @@ def lambdify_mpf(dims, exprs):
         lex.append(eval(l, cnf))
 
     return lex
+
 
 def lambdify_jac_mpf(dims, exprs):
     jac_exprs = [ex.diff(d) for ex in exprs for d in dims]
@@ -69,7 +71,7 @@ class BasisBase(object):
     def _eval_lbasis_at(self, lbasis, pts):
         m = np.empty((len(pts), len(lbasis)), dtype=np.object)
 
-        for i,j in ndrange(*m.shape):
+        for i, j in ndrange(*m.shape):
             m[i,j] = lbasis[j](*pts[i])
 
         m[abs(m) < 1e-14] = 0
@@ -79,7 +81,7 @@ class BasisBase(object):
         npts, nbasis = len(pts), len(jlbasis)
         m = np.empty((npts, nbasis), dtype=np.object)
 
-        for i,j in ndrange(*m.shape):
+        for i, j in ndrange(*m.shape):
             m[i,j] = jlbasis[j](*pts[i])
 
         m[abs(m) < 1e-14] = 0

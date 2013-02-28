@@ -9,11 +9,12 @@ import numpy as np
 
 from pyfr.readers import BaseReader
 
+
 def msh_section(mshit, section):
     endln = '$End%s\n' % section
     count = int(next(mshit))
 
-    for i,l in enumerate(mshit):
+    for i, l in enumerate(mshit):
         if l == endln:
             raise ValueError('Unexpected end of section $%s' % section)
 
@@ -26,6 +27,7 @@ def msh_section(mshit, section):
 
     if next(mshit) != endln:
         raise ValueError('Expected $End%s' % section)
+
 
 class GmshReader(BaseReader):
     # Supported file types and extensions
@@ -164,7 +166,7 @@ class GmshReader(BaseReader):
     def _read_nodes(self, msh):
         self._nodepts = nodepts = {}
 
-        for i,l in enumerate(msh_section(msh, 'Nodes')):
+        for i, l in enumerate(msh_section(msh, 'Nodes')):
             nv = l.split()
             nodepts[int(nv[0])] = [float(x) for x in nv[1:]]
 
@@ -190,8 +192,8 @@ class GmshReader(BaseReader):
             elenodes[(etype, epent)].append(enodes)
             eleparts[(etype, epent)].append(epart)
 
-        self._elenodes = {k: np.array(v) for k,v in elenodes.iteritems()}
-        self._eleparts = {k: np.array(v) for k,v in eleparts.iteritems()}
+        self._elenodes = {k: np.array(v) for k, v in elenodes.iteritems()}
+        self._eleparts = {k: np.array(v) for k, v in eleparts.iteritems()}
 
     def _to_first_order(self, elemap):
         foelemap = {}
@@ -213,7 +215,6 @@ class GmshReader(BaseReader):
             selemap[epent][petype] = eles
 
         return selemap.pop(self._felespent), selemap
-
 
     def _extract_faces(self, foeles):
         extractors = {'hex': self._extract_faces_hex}
@@ -447,4 +448,3 @@ class GmshReader(BaseReader):
         rawm.update(self._gen_connectivity())
         rawm.update(self._gen_shape_points())
         return rawm
-

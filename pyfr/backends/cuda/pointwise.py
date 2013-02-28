@@ -8,12 +8,13 @@ from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
+
 class CudaPointwiseKernels(CudaKernelProvider):
     def _get_function(self, mod, func, argt, opts, nvccopts=None):
         basefn = super(CudaPointwiseKernels, self)._get_function
 
         # Map dtype
-        nopts = {k: v for k,v in opts.items()}
+        nopts = {k: v for k, v in opts.items()}
         nopts['dtype'] = npdtype_to_ctype(nopts['dtype'])
 
         return basefn(mod, func, argt, nopts, nvccopts)
@@ -31,7 +32,8 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   u, smats, f, u.leaddim,
                                   smats.leaddim, f.leaddim)
 
-    def tdisf_vis(self, ndims, nvars, u, smats, rcpdjac, tgradu, gamma, mu, pr):
+    def tdisf_vis(self, ndims, nvars, u, smats, rcpdjac, tgradu, gamma, mu,
+                  pr):
         nupts, neles = u.nrow, u.ncol / nvars
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars,
                     gamma=gamma, mu=mu, pr=pr)
@@ -106,7 +108,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   magl, magr, normpnorml)
 
     def rsolve_inv_mpi(self, ndims, nvars, rsinv, ul_mpiv, ur_mpim, magl,
-                           normpnorml, gamma):
+                       normpnorml, gamma):
         ninters = ul_mpiv.ncol
         ul_v = ul_mpiv.view
         dtype = ul_v.refdtype

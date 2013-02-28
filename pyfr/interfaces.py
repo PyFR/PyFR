@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 
+
 def get_view_mats(interside, mat, elemap):
     # Map from element type to view mat getter
     viewmatmap = {type: getattr(ele, mat) for type, ele in elemap.items()}
@@ -19,17 +20,20 @@ def get_view_mats(interside, mat, elemap):
 
     return scal_v
 
+
 def get_mag_pnorm_mat(interside, elemap):
     mag_pnorms = [elemap[type].get_mag_pnorms_for_inter(eidx, fidx, rtag)
                   for type, eidx, fidx, rtag in interside]
 
     return np.concatenate(mag_pnorms)[None,...]
 
+
 def get_norm_pnorm_mat(interside, elemap):
     norm_pnorms = [elemap[type].get_norm_pnorms_for_inter(eidx, fidx, rtag)
                    for type, eidx, fidx, rtag in interside]
 
     return np.concatenate(norm_pnorms)[None,...]
+
 
 class BaseInters(object):
     __metaclass__ = ABCMeta
@@ -98,7 +102,6 @@ class BaseAdvectionMPIInters(BaseInters):
         # Allocate
         self._mag_pnorm_lhs = be.const_matrix(mag_pnorm_lhs, tags={'nopad'})
         self._norm_pnorm_lhs = be.const_matrix(norm_pnorm_lhs, tags={'nopad'})
-
 
     def get_scal_fpts0_pack_kern(self):
         return self._be.kernel('pack', self._scal0_lhs)

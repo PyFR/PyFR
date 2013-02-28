@@ -6,6 +6,7 @@ import pycuda.driver as cuda
 
 from mpi4py import MPI
 
+
 class CudaKernel(object):
     def __call__(self, *args):
         return self, args
@@ -22,11 +23,14 @@ class CudaMPIKernel(CudaKernel):
 def _is_kernel(item):
     return isinstance(item, CudaKernel)
 
+
 def _is_compute_kernel(item):
     return isinstance(item, CudaComputeKernel)
 
+
 def _is_mpi_kernel(item):
     return isinstance(item, CudaMPIKernel)
+
 
 class CudaQueue(object):
     def __init__(self):
@@ -62,7 +66,7 @@ class CudaQueue(object):
         self._last = item
 
     def _exec_next(self):
-        item, rtargs  = self._items.popleft()
+        item, rtargs = self._items.popleft()
 
         # If we are at a sequence point then wait for current items
         if self._at_sequence_point(item):
@@ -85,8 +89,8 @@ class CudaQueue(object):
         self._last = None
 
     def _at_sequence_point(self, item):
-        if (_is_compute_kernel(self._last) and not _is_compute_kernel(item)) or\
-           (_is_mpi_kernel(self._last) and not _is_mpi_kernel(item)):
+        if (_is_compute_kernel(self._last) and not _is_compute_kernel(item))\
+           or (_is_mpi_kernel(self._last) and not _is_mpi_kernel(item)):
             return True
         else:
             return False

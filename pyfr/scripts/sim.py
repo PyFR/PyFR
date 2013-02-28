@@ -22,8 +22,10 @@ from pyfr.integrators import get_integrator
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.progress_bar import ProgressBar
 
+
 def process_run(args):
     return np.load(args.mesh), None, Inifile.load(args.cfg)
+
 
 def process_restart(args):
     mesh = np.load(args.mesh)
@@ -40,6 +42,7 @@ def process_restart(args):
         cfg = Inifile(soln['config'].item())
 
     return mesh, soln, cfg
+
 
 @mp.workdps(60)
 def main():

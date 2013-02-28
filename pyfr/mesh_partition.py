@@ -12,11 +12,13 @@ from pyfr.interfaces import (EulerIntInters, EulerMPIInters,
                              NavierStokesIntInters, NavierStokesMPIInters)
 from pyfr.util import proxylist, subclass_map
 
+
 def get_mesh_partition(backend, rallocs, mesh, initsoln, nreg, cfg):
     mpmap = subclass_map(BaseMeshPartition, 'name')
     mpcls = mpmap[cfg.get('mesh', 'system')]
 
     return mpcls(backend, rallocs, mesh, initsoln, nreg, cfg)
+
 
 class BaseMeshPartition(object):
     elementscls = None

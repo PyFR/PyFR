@@ -15,6 +15,7 @@ def get_rank_allocation(mesh, cfg):
     allocatormap = subclass_map(BaseRankAllocator, 'name')
     return allocatormap[cfg.get('mesh', 'allocator')](mesh, cfg)
 
+
 class BaseRankAllocator(object):
     __metaclass__ = ABCMeta
 
@@ -51,7 +52,7 @@ class BaseRankAllocator(object):
         self.mprankmap = comm.bcast(mprankmap, root=root)
 
         # Invert this mapping
-        self.pmrankmap = {v: k for k,v in self.mprankmap.items()}
+        self.pmrankmap = {v: k for k, v in self.mprankmap.items()}
 
         # Compute the physical rank of ourself
         self.prank = self.mprankmap[rank]

@@ -10,6 +10,7 @@ import numpy as np
 
 from pyfr.util import rm
 
+
 def process_pack(args):
     # List the contents of the directory
     relnames = os.listdir(args.indir)
@@ -49,6 +50,7 @@ def process_pack(args):
         # Re-raise
         raise
 
+
 def process_unpack(args):
     # Load the file
     inf = np.load(args.inf)
@@ -64,7 +66,7 @@ def process_unpack(args):
 
     # Write out the files to this temporary directory
     try:
-        for n,d in inf.iteritems():
+        for n, d in inf.iteritems():
             np.save(os.path.join(tmpdir, n), d)
 
         # Remove the output path if it should exist
@@ -80,6 +82,7 @@ def process_unpack(args):
 
         # Re-raise
         raise
+
 
 def main():
     ap = ArgumentParser(prog='pyfr-postp', description='Post processes a '

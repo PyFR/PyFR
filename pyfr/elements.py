@@ -8,6 +8,7 @@ import sympy as sy
 from pyfr.nputil import npeval
 from pyfr.util import ndrange, lazyprop
 
+
 class BaseAdvectionElements(object):
     __metaclass__ = ABCMeta
 
@@ -269,7 +270,7 @@ class BaseAdvectionElements(object):
             raise ValueError('Invalid basis dimension')
 
     def _get_smats2d(self, jac, retdets):
-        a, b, c, d = [jac[:,i,j] for i,j in ndrange(2,2)]
+        a, b, c, d = [jac[:,i,j] for i, j in ndrange(2,2)]
 
         smats = np.empty_like(jac)
         smats[:,0,0], smats[:,0,1] =  d, -b
@@ -404,7 +405,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         jmat_fpts = smats.swapaxes(1, 2) / djacs[...,None,None]
 
         self._jmat_fpts = jmat_fpts.reshape(self.nfpts, -1, self.ndims**2)
-
 
     def get_tgradpcoru_upts_kern(self):
         return self._be.kernel('mul', self._m460b, self.scal_upts_inb,

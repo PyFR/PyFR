@@ -5,6 +5,7 @@ import io
 
 from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
 
+
 class Inifile(object):
     def __init__(self, inistr=None):
         self._cp = cp = SafeConfigParser()

@@ -14,6 +14,7 @@ from pyfr.integrators.base import BaseIntegrator
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.util import rm
 
+
 class BaseWriter(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseWriter, self).__init__(*args, **kwargs)
@@ -126,6 +127,7 @@ class FileWriter(BaseWriter):
                     np.savez_compressed(f, **outdict)
                 else:
                     np.savez(f, **outdict)
+
 
 class DirWriter(BaseWriter):
     writer_name = 'pyfrs-dir'

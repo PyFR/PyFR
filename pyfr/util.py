@@ -61,6 +61,7 @@ def setenv(**kwargs):
         os.environ.clear()
         os.environ.update(_env)
 
+
 def lazyprop(fn):
     attr = '_lazy_' + fn.__name__
 
@@ -73,21 +74,26 @@ def lazyprop(fn):
             return getattr(self, attr)
     return newfn
 
+
 def purge_lazyprops(obj):
     for attr in obj.__dict__:
         if attr.startswith('_lazy_'):
             del obj.__dict__[attr]
 
+
 def all_subclasses(cls):
     return cls.__subclasses__()\
          + [g for s in cls.__subclasses__() for g in all_subclasses(s)]
+
 
 def subclass_map(cls, attr):
     subcls = all_subclasses(cls)
     return {getattr(s, attr): s for s in subcls if hasattr(s, attr)}
 
+
 def ndrange(*args):
     return itertools.product(*map(xrange, args))
+
 
 def rm(path):
     if os.path.isfile(path) or os.path.islink(path):

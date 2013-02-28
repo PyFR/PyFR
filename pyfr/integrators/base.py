@@ -6,6 +6,7 @@ from pyfr.inifile import Inifile
 from pyfr.mesh_partition import get_mesh_partition
 from pyfr.nputil import range_eval
 
+
 class BaseIntegrator(object):
     __metaclass__ = ABCMeta
 

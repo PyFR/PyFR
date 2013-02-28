@@ -6,6 +6,7 @@ from pyfr.backends.cuda.provider import CudaKernelProvider
 from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
+
 class CudaBlasExtKernels(CudaKernelProvider):
     def axnpby(self, y, *xn):
         if any(y.traits != x.traits for x in xn):

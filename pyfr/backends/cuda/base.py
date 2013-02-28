@@ -20,6 +20,7 @@ from pyfr.backends.cuda.pointwise import CudaPointwiseKernels
 
 from pyfr.backends.cuda.queue import CudaQueue
 
+
 class CudaBackend(Backend):
     name = 'CUDA'
     packing = 'SoA'
@@ -43,12 +44,11 @@ class CudaBackend(Backend):
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')
         if prec not in {'single', 'double'}:
-            raise ValueError('CUDA backend precision must be either single or'\
+            raise ValueError('CUDA backend precision must be either single or'
                              'double')
 
         # Convert to a numpy data type
         self.fpdtype = np.dtype(prec).type
-
 
     def _matrix(self, *args, **kwargs):
         return CudaMatrix(self, *args, **kwargs)
