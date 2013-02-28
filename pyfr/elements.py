@@ -59,18 +59,27 @@ class BaseAdvectionElements(object):
         # Physical locations of the solution points
         self._gen_ploc_upts(eles)
 
+    def _process_ics(self, ics):
+        return ics
+
     def set_ics_from_expr(self):
         nupts, neles, ndims = self._ploc_upts.shape
 
-        # Extract the individual coordinates
-        coords = dict(zip(['x', 'y', 'z'], self._ploc_upts.transpose(2, 0, 1)))
+        # Bring simulation constants into scope
+        vars = {k: float(v) for k, v in self._cfg.items('constants')}
 
-        # Get the list of dynamical variables in the simulation
-        dynvars = self._dynvarmap[ndims]
+        if any(d in vars for d in 'xyz'):
+            raise ValueError('Invalid constants (x, y, or z) in config file')
 
-        self._scal_upts = ics_upts = np.empty((nupts, neles, len(dynvars)))
-        for i,v in enumerate(dynvars):
-            ics_upts[...,i] = npeval(self._cfg.get('mesh-ics', v), coords)
+        # Extract the physical mesh coordinates
+        vars.update(dict(zip('xyz', self._ploc_upts.transpose(2, 0, 1))))
+
+        # Evaluate the ICs from the config file
+        ics = [npeval(self._cfg.get('mesh-ics', dv), vars)
+               for dv in self._dynvarmap[ndims]]
+
+        # Allow subclasses to process these ICS
+        self._scal_upts = np.dstack(self._process_ics(ics))
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -429,10 +438,24 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         return self._get_vect_fptsn_for_inter(0, eidx, fidx, rtag)
 
 
-class EulerElements(BaseAdvectionElements):
-    _dynvarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
-                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+class BaseFluidElements(object):
+    _dynvarmap = {2: ['rho', 'u', 'v', 'p'],
+                  3: ['rho', 'u', 'v', 'w', 'p']}
 
+    def _process_ics(self, ics):
+        rho, p = ics[0], ics[-1]
+
+        # Multiply velocity components by rho
+        rhovs = [rho*c for c in ics[1:-1]]
+
+        # Compute the energy
+        gamma = self._cfg.getfloat('constants', 'gamma')
+        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in ics[1:-1])
+
+        return [rho] + rhovs + [E]
+
+
+class EulerElements(BaseFluidElements, BaseAdvectionElements):
     def get_tdisf_upts_kern(self):
         gamma = self._cfg.getfloat('constants', 'gamma')
 
@@ -441,10 +464,7 @@ class EulerElements(BaseAdvectionElements):
                                self._vect_upts[0], gamma)
 
 
-class NavierStokesElements(BaseAdvectionDiffusionElements):
-    _dynvarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
-                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
-
+class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     def get_tdisf_upts_kern(self):
         gamma = self._cfg.getfloat('constants', 'gamma')
         mu = self._cfg.getfloat('constants', 'mu')

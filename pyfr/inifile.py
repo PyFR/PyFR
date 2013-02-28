@@ -62,6 +62,9 @@ class Inifile(object):
     def getint(self, section, option, default=None):
         return int(self.get(section, option, default))
 
+    def items(self, section):
+        return self._cp.items(section)
+
     _bool_states = {'1': True, 'yes': True, 'true': True, 'on': True,
                     '0': False, 'no': False, 'false': False, 'off': False}
 
