@@ -84,8 +84,8 @@ class ProgressBar(object):
         # Decide how many '+', '=' and ' ' to output for the progress bar
         n = self._nbarcol - 1
         nps = int(n * (rcu - el)/ren)
-        nsp = int(n * (1 - frac))
-        neq = n - nps - nsp
+        neq = int(n * el/ren)
+        nsp = n - nps - neq
 
         # Elapsed wall time
         wela = format_hms(wallt)
