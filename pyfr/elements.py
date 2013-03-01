@@ -71,8 +71,9 @@ class BaseAdvectionElements(object):
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
-        # Extract the physical mesh coordinates
-        vars.update(dict(zip('xyz', self._ploc_upts.transpose(2, 0, 1))))
+        # Extract the components of the mesh coordinates
+        coords = np.rollaxis(self._ploc_upts, 2)
+        vars.update(dict(zip('xyz', coords)))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self._cfg.get('mesh-ics', dv), vars)
