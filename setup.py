@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from setuptools import setup
-
-import sys
 import re
+import sys
+
+from setuptools import setup
 
 # Python version
 if sys.version_info[:2] < (2,7):
@@ -26,7 +26,8 @@ modules = [
     'pyfr.backends',
     'pyfr.backends.cuda',
     'pyfr.bases',
-    'pyfr.integrators'
+    'pyfr.integrators',
+    'pyfr.readers',
     'pyfr.scripts']
 
 # Tests
