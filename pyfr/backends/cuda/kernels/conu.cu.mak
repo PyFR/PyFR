@@ -23,8 +23,8 @@ conu_int(int ninters,
         % elif beta == 0.5:
             ${dtype} con = ur_vin[iidx][rstri*i];
         % else:
-            ${dtype} con = ur_vin[iidx][rstri*i]*(0.5 + ${beta})
-                         + ul_vin[iidx][lstri*i]*(0.5 - ${beta});
+            ${dtype} con = ur_vin[iidx][rstri*i]*${0.5 + beta|f}
+                         + ul_vin[iidx][lstri*i]*${0.5 - beta|f};
         % endif
 
             ul_vout[iidx][lstri*i] = con;
@@ -53,8 +53,8 @@ conu_mpi(int ninters,
         % elif beta == 0.5:
             ${dtype} con = ur_m[ninters*i + iidx];
         % else:
-            ${dtype} con = ur_m[ninters*i + iidx]*(${beta} + 0.5)
-                         + ul_vin[iidx][lstri*i]*(0.5 - ${beta});
+            ${dtype} con = ur_m[ninters*i + iidx]*${beta + 0.5|f}
+                         + ul_vin[iidx][lstri*i]*${0.5 - beta|f};
         % endif
 
             ul_vout[iidx][lstri*i] = con;

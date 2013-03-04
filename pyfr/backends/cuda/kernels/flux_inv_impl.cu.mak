@@ -12,11 +12,11 @@ disf_inv_impl(const ${dtype} s[5], ${dtype} f[3][5],
 {
     ${dtype} rho = s[0], rhou = s[1], rhov = s[2], rhow = s[3], E = s[4];
 
-    ${dtype} invrho = 1.0/rho;
+    ${dtype} invrho = ${1.0|f}/rho;
     ${dtype} u = invrho*rhou, v = invrho*rhov, w = invrho*rhow;
 
     // Compute the pressure
-    ${dtype} p = ${gamma - 1.0}*(E - 0.5*(rhou*u + rhov*v + rhow*w));
+    ${dtype} p = ${gamma - 1.0|f}*(E - ${0.5|f}*(rhou*u + rhov*v + rhow*w));
 
     f[0][0] = rhou;         f[1][0] = rhov;         f[2][0] = rhow;
 

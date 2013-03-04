@@ -31,8 +31,14 @@ class CudaKernelProvider(object):
         # Get the template file
         tpl = self.lookup.get_template(module + self.KERNEL_EXT)
 
+        # Filter floating point constants
+        if tplparams['dtype'] == 'float':
+            fpfilt = lambda v: v + 'f'
+        else:
+            fpfilt = lambda v: v
+
         # Render the template
-        mod = tpl.render(**tplparams)
+        mod = tpl.render(f=fpfilt, **tplparams)
 
         # Compile
         return compiler.SourceModule(mod, options=nvccopts)

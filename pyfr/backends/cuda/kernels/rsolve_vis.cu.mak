@@ -16,13 +16,13 @@ elif beta == 0.5:
                         for k in range(ndims))
 else:
     need_fvl, need_fvr = True, True
-    fvcomm = ' + '.join('pnorml[{0}]*(fvl[{0}][i]*(0.5 + {1})'
-                                  ' + fvr[{0}][i]*(0.5 - {1}))'.format(k, beta)
-                        for k in range(ndims))
+    cvl, cvr = f(format(0.5 + beta)), f(format(0.5 - beta))
+    fvcomm = ' + '.join('pnorml[{0}]*(fvl[{0}][i]*{1} + fvr[{0}][i]*{2})'
+                        .format(k, cvl, cvr) for k in range(ndims))
 
 # Special-case tau
 if tau != 0.0:
-    fvcomm += ' + {0}*(ul[i] - ur[i])'.format(tau)
+    fvcomm += ' + ' + f(format(tau)) + '*(ul[i] - ur[i])'
 
 # Encase
 fvcomm = '(' + fvcomm + ')'
