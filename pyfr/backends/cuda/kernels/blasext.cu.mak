@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+<%namespace name='util' module='pyfr.backends.cuda.makoutil' />
+
 __global__ void
 axnpby(int n, ${dtype}* y, ${dtype} beta,
        ${', '.join('const {0}* x{1}, {0} a{1}'.format(dtype, i)
@@ -9,8 +11,7 @@ axnpby(int n, ${dtype}* y, ${dtype} beta,
 
     if (i < n)
     {
-        ${dtype} axn = ${' + '.join('a{0}*x{0}[i]'.format(i)\
-                         for i in range(n))};
+        ${dtype} axn = ${util.dot('a{0}', 'x{0}[i]', len='n')};
 
         if (beta == 0.0)
             y[i] = axn;

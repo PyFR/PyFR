@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%namespace name='util' file='util.mak' />
+<%namespace name='util' module='pyfr.backends.cuda.makoutil' />
 <%include file='idx_of.cu.mak' />
 <%include file='flux_inv_impl.cu.mak' />
 

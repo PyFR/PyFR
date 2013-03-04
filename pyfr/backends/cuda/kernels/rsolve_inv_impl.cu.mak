@@ -1,4 +1,6 @@
-<%namespace name='util' file='util.mak' />
+# -*- coding: utf-8 -*-
+
+<%namespace name='util' module='pyfr.backends.cuda.makoutil' />
 <%include file='flux_inv_impl.cu.mak' />
 
 % if rsinv == 'rusanov':
