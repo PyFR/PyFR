@@ -14,7 +14,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         basefn = super(CudaPointwiseKernels, self)._get_function
 
         # Map dtype
-        nopts = {k: v for k, v in opts.items()}
+        nopts = opts.copy()
         nopts['dtype'] = npdtype_to_ctype(nopts['dtype'])
 
         return basefn(mod, func, argt, nopts, nvccopts)
