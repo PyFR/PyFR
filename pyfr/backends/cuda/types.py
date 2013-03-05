@@ -65,6 +65,10 @@ class CudaMatrixBase(base.MatrixBase):
     def addrof(self, i, j):
         return np.intp(int(self.data) + self.offsetof(i, j))
 
+    @property
+    def _as_parameter_(self):
+        return long(self.data)
+
     def __long__(self):
         return long(self.data)
 
@@ -106,6 +110,10 @@ class CudaMatrixBank(base.MatrixBank):
                 raise ValueError('Matrices in a bank must be homogeneous')
 
         super(CudaMatrixBank, self).__init__(mats, initbank, tags)
+
+    @property
+    def _as_parameter_(self):
+        return long(self._curr_mat)
 
     def __long__(self):
         return long(self._curr_mat)

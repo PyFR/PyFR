@@ -125,7 +125,7 @@ _cublasDgemm.argtypes = [cublas_handle_t,
 _cublasDgemm.errcheck = _cublas_process_status
 
 
-# Wrap the cublasSgemm (double-precision general matrix multiply) function
+# Wrap the cublasSgemm (single-precision general matrix multiply) function
 _cublasSgemm = _libcublas.cublasSgemm_v2
 _cublasSgemm.restype = c_int
 _cublasSgemm.argtypes = [cublas_handle_t,
@@ -175,10 +175,8 @@ class CudaCublasKernels(CudaKernelProvider):
         class MulKernel(CudaComputeKernel):
             def run(iself, scomp, scopy):
                 _cublasSetStream(self._cublas, scomp.handle)
-                cublasgemm(self._cublas, CublasOp.NONE, CublasOp.NONE,
-                           n, m, k, byref(alpha_ct),
-                           int(A.data), A.leaddim,
-                           int(B.data), B.leaddim, byref(beta_ct),
-                           int(C.data), C.leaddim)
+                cublasgemm(self._cublas, CublasOp.NONE, CublasOp.NONE, n, m, k,
+                           byref(alpha_ct), A, A.leaddim, B, B.leaddim,
+                           byref(beta_ct), C, C.leaddim)
 
         return MulKernel()
