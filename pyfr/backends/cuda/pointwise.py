@@ -24,6 +24,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, gamma=gamma)
 
         fn = self._get_function('flux_inv', 'tdisf_inv', 'iiPPPiii', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
@@ -39,6 +40,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
                     gamma=gamma, mu=mu, pr=pr)
 
         fn = self._get_function('flux_vis', 'tdisf_vis', 'iiPPPPiiii', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
@@ -54,6 +56,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         opts = dict(dtype=dtype, nvars=nvars, beta=beta)
 
         fn = self._get_function('conu', 'conu_int', 'iPPPPPP', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -69,6 +72,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         opts = dict(dtype=dtype, nvars=nvars, beta=beta)
 
         fn = self._get_function('conu', 'conu_mpi', 'iPPPP', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -82,6 +86,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
         opts = dict(dtype=gradu.dtype, ndims=ndims, nvars=nvars)
 
         fn = self._get_function('gradcoru', 'gradcoru', 'iiPPii', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, neles)
@@ -98,6 +103,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
         fn = self._get_function('rsolve_inv', 'rsolve_inv_int', 'iPPPPPPP',
                                 opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -117,6 +123,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
         fn = self._get_function('rsolve_inv', 'rsolve_inv_mpi', 'iPPPPP',
                                 opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -133,6 +140,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_int',
                                 'iPPPPPPPPPPP', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
@@ -155,6 +163,7 @@ class CudaPointwiseKernels(CudaKernelProvider):
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_mpi',
                                 'iPPPPPPPP', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
         grid = self._get_grid_for_block(block, ninters)
