@@ -21,18 +21,13 @@ def get_view_mats(interside, mat, elemap):
     return scal_v
 
 
-def get_mag_pnorm_mat(interside, elemap):
-    mag_pnorms = [elemap[type].get_mag_pnorms_for_inter(eidx, fidx, rtag)
-                  for type, eidx, fidx, rtag in interside]
+def get_mat(interside, mat, elemap):
+    # Map from element type to view mat getter
+    emap = {type: getattr(ele, mat) for type, ele in elemap.items()}
 
-    return np.concatenate(mag_pnorms)[None,...]
-
-
-def get_norm_pnorm_mat(interside, elemap):
-    norm_pnorms = [elemap[type].get_norm_pnorms_for_inter(eidx, fidx, rtag)
-                   for type, eidx, fidx, rtag in interside]
-
-    return np.concatenate(norm_pnorms)[None,...]
+    # Form the matrix
+    m = [emap[type](eidx, fidx, rtag) for type, eidx, fidx, rtag in interside]
+    return np.concatenate(m)[None,...]
 
 
 class BaseInters(object):
@@ -40,11 +35,24 @@ class BaseInters(object):
 
     def __init__(self, be, elemap, cfg):
         self._be = be
+        self._elemap = elemap
         self._cfg = cfg
 
         # Get the number of dimensions and variables
         self.ndims = next(iter(elemap.viewvalues())).ndims
         self.nvars = next(iter(elemap.viewvalues())).nvars
+
+    def _const_mat(self, inter, meth):
+        m = get_mat(inter, meth, self._elemap)
+        return self._be.const_matrix(m, tags={'nopad'})
+
+    def _view_onto(self, inter, meth):
+        vm = get_view_mats(inter, meth, self._elemap)
+        return self._be.view(*vm, vlen=self.nvars, tags={'nopad'})
+
+    def _mpi_view_onto(self, inter, meth):
+        vm = get_view_mats(inter, meth, self._elemap)
+        return self._be.mpi_view(*vm, vlen=self.nvars, tags={'nopad'})
 
     @abstractmethod
     def get_rsolve_kern(self):
@@ -55,27 +63,16 @@ class BaseAdvectionIntInters(BaseInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super(BaseAdvectionIntInters, self).__init__(be, elemap, cfg)
 
+        view_onto, const_mat = self._view_onto, self._const_mat
+
         # Generate the left and right hand side view matrices
-        scal0_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
-        scal0_rhs = get_view_mats(rhs, 'get_scal_fpts0_for_inter', elemap)
+        self._scal0_lhs = view_onto(lhs, 'get_scal_fpts0_for_inter')
+        self._scal0_rhs = view_onto(rhs, 'get_scal_fpts0_for_inter')
 
-        # Allocate these on the backend as views
-        self._scal0_lhs = be.view(*scal0_lhs, vlen=self.nvars, tags={'nopad'})
-        self._scal0_rhs = be.view(*scal0_rhs, vlen=self.nvars, tags={'nopad'})
-
-        # Get the left and right hand side physical normal magnitudes
-        mag_pnorm_lhs = get_mag_pnorm_mat(lhs, elemap)
-        mag_pnorm_rhs = get_mag_pnorm_mat(rhs, elemap)
-
-        # Allocate as a const matrix
-        self._mag_pnorm_lhs = be.const_matrix(mag_pnorm_lhs, tags={'nopad'})
-        self._mag_pnorm_rhs = be.const_matrix(mag_pnorm_rhs, tags={'nopad'})
-
-        # Get the left hand side normalized physical normals
-        norm_pnorm_lhs = get_norm_pnorm_mat(lhs, elemap)
-
-        # Allocate as a const matrix
-        self._norm_pnorm_lhs = be.const_matrix(norm_pnorm_lhs, tags={'nopad'})
+        # Generate the constant matrices
+        self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
+        self._mag_pnorm_rhs = const_mat(rhs, 'get_mag_pnorms_for_inter')
+        self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
 
 class BaseAdvectionMPIInters(BaseInters):
@@ -87,21 +84,14 @@ class BaseAdvectionMPIInters(BaseInters):
         self._rhsrank = rhsrank
         self._rallocs = rallocs
 
-        # Generate the left hand view matrices
-        scal0_lhs = get_view_mats(lhs, 'get_scal_fpts0_for_inter', elemap)
+        mpi_view_onto, const_mat = self._mpi_view_onto, self._const_mat
 
-        # Allocate on the backend
-        self._scal0_lhs = be.mpi_view(*scal0_lhs, vlen=self.nvars,
-                                      tags={'nopad'})
+        # Generate the left hand view matrix and its dual
+        self._scal0_lhs = mpi_view_onto(lhs, 'get_scal_fpts0_for_inter')
         self._scal0_rhs = be.mpi_matrix_for_view(self._scal0_lhs)
 
-        # Get the left hand side physical normal data
-        mag_pnorm_lhs = get_mag_pnorm_mat(lhs, elemap)
-        norm_pnorm_lhs = get_norm_pnorm_mat(lhs, elemap)
-
-        # Allocate
-        self._mag_pnorm_lhs = be.const_matrix(mag_pnorm_lhs, tags={'nopad'})
-        self._norm_pnorm_lhs = be.const_matrix(norm_pnorm_lhs, tags={'nopad'})
+        self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
+        self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
     def get_scal_fpts0_pack_kern(self):
         return self._be.kernel('pack', self._scal0_lhs)
@@ -123,19 +113,11 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         base = super(BaseAdvectionDiffusionIntInters, self)
         base.__init__(be, lhs, rhs, elemap, cfg)
 
-        # Generate the second set of scalar view matrices
-        scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
-        scal1_rhs = get_view_mats(rhs, 'get_scal_fpts1_for_inter', elemap)
-
-        # And the vector view matrices
-        vect0_lhs = get_view_mats(lhs, 'get_vect_fpts0_for_inter', elemap)
-        vect0_rhs = get_view_mats(rhs, 'get_vect_fpts0_for_inter', elemap)
-
-        # Allocate these on the backend as views
-        self._scal1_lhs = be.view(*scal1_lhs, vlen=self.nvars, tags={'nopad'})
-        self._scal1_rhs = be.view(*scal1_rhs, vlen=self.nvars, tags={'nopad'})
-        self._vect0_lhs = be.view(*vect0_lhs, vlen=self.nvars, tags={'nopad'})
-        self._vect0_rhs = be.view(*vect0_rhs, vlen=self.nvars, tags={'nopad'})
+        # Generate the additional view matrices
+        self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
+        self._scal1_rhs = self._view_onto(rhs, 'get_scal_fpts1_for_inter')
+        self._vect0_lhs = self._view_onto(lhs, 'get_vect_fpts0_for_inter')
+        self._vect0_rhs = self._view_onto(rhs, 'get_vect_fpts0_for_inter')
 
     def get_conu_fpts_kern(self):
         beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')
@@ -163,13 +145,8 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         self._sign = 1.0 if lhsprank > rhsprank else -1.0
 
         # Generate second scalar view matrix
-        scal1_lhs = get_view_mats(lhs, 'get_scal_fpts1_for_inter', elemap)
-        self._scal1_lhs = be.view(*scal1_lhs, vlen=self.nvars, tags={'nopad'})
-
-        vect0_lhs = get_view_mats(lhs, 'get_vect_fpts0_for_inter', elemap)
-
-        self._vect0_lhs = be.mpi_view(*vect0_lhs, vlen=self.nvars,
-                                      tags={'nopad'})
+        self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
+        self._vect0_lhs = self._mpi_view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
 
     def get_vect_fpts0_pack_kern(self):
