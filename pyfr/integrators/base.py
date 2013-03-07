@@ -53,6 +53,9 @@ class BaseIntegrator(object):
         # Get a queue for subclasses to use
         self._queue = backend.queue()
 
+        # Determine the total number of degrees of freedom
+        self._ndofs = sum(self._meshp.ele_ndofs)
+
     @abstractmethod
     def step(self, t, dt):
         pass

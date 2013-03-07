@@ -146,6 +146,10 @@ class BaseMeshPartition(object):
     def ele_shapes(self):
         return [(e.nupts, e.neles, e.nvars) for e in self._eles]
 
+    @property
+    def ele_ndofs(self):
+        return [e.neles*e.nupts*e.nvars for e in self._eles]
+
     def ele_scal_upts(self, idx):
         return list(self._eles.get_scal_upts_mat(idx))
 
