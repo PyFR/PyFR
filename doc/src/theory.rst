@@ -70,11 +70,12 @@ Consider solving the following 1D scalar conservation law
 
 .. math:: \frac{\partial u}{\partial t}+\frac{\partial f}{\partial x}=0
 
-within an arbitrary domain :math:`\Omega`, where :math:`x` is a spatial coordinate, :math:`t` is time, :math:`u=u(x,t)`
-is a conserved scalar quantity and :math:`f=f(u)` is the flux of :math:`u` in the
-:math:`x` direction. Additionally, consider partitioning :math:`\Omega` into :math:`N`
-distinct elements, each denoted :math:`\Omega_n=\{x|x_n<x<x_{n+1}\}`, such
-that
+within an arbitrary domain :math:`\Omega`, where :math:`x` is a spatial
+coordinate, :math:`t` is time, :math:`u=u(x,t)` is a conserved scalar
+quantity and :math:`f=f(u)` is the flux of :math:`u` in the :math:`x`
+direction. Additionally, consider partitioning :math:`\Omega` into
+:math:`N` distinct elements, each denoted
+:math:`\Omega_n=\{x|x_n<x<x_{n+1}\}`, such that
 
 .. math:: \Omega=\bigcup_{n=0}^{N-1}\Omega_n,\hspace{1cm}\bigcap_{n=0}^{N-1}\Omega_n=\emptyset.
 

@@ -1,14 +1,38 @@
-======
-Source
-======
+=============
+Documentation
+=============
 
 Introduction
 ------------
 
-This describes the source code ...
+Detailed documentation is provided below.
+
+File Formats
+------------
+
+Configuration Format (.ini)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Mesh Format (.pyfrm)
+~~~~~~~~~~~~~~~~~~~~
+
+Solution Format (.pyfrs)
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+PyFR-Mesh
+---------
+
+PyFR-Sim
+--------
+
+PyFR-Postp
+----------
+
+Code
+----
 
 Backend Interface
------------------
+~~~~~~~~~~~~~~~~~
 
 All of the backends in PyFR implement a common interface.  This
 interface is based around the `factory method pattern
