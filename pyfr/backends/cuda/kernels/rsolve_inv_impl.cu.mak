@@ -22,7 +22,7 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
     disf_inv_impl(ur, fr, &pr, vr);
 
     // Compute the speed/2
-    ${dtype} a = sqrt(${0.25*gamma|f}*(pl + pr)/(ul[0] + ur[0]))
+    ${dtype} a = sqrt(${0.25*c['gamma']|f}*(pl + pr)/(ul[0] + ur[0]))
                + ${0.25|f}*fabs(${util.dot('pnorm[{0}]', 'vl[{0}] + vr[{0}]')});
 
 
@@ -65,7 +65,7 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
     ${dtype} v = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)/(sqrt(ul[0]) + sqrt(ur[0]));
 
     // Use these to compute the Roe-averaged sound speed
-    ${dtype} a = sqrt(${gamma - 1.0|f}*(H - ${0.5|f}*v*v));
+    ${dtype} a = sqrt(${c['gamma'] - 1.0|f}*(H - ${0.5|f}*v*v));
 
     // Compute Sl and Sr
     ${dtype} Sl = v - a;

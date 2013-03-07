@@ -3,6 +3,7 @@
 import os
 import io
 
+from collections import OrderedDict
 from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
 
 
@@ -63,7 +64,18 @@ class Inifile(object):
         return int(self.get(section, option, default))
 
     def items(self, section):
-        return self._cp.items(section)
+        return OrderedDict(self._cp.items(section))
+
+    def items_as(self, section, type):
+        iv = []
+
+        for k, v in self._cp.items(section):
+            try:
+                iv.append((k, type(v)))
+            except ValueError:
+                pass
+
+        return OrderedDict(iv)
 
     _bool_states = {'1': True, 'yes': True, 'true': True, 'on': True,
                     '0': False, 'no': False, 'false': False, 'off': False}

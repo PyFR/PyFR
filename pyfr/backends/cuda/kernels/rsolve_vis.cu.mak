@@ -5,6 +5,8 @@
 <%include file='flux_vis_impl.cu.mak' />
 
 <%
+beta, tau = c['ldg-beta'], c['ldg-tau']
+
 # Special-case beta for the viscous flux expression
 if beta == -0.5:
     need_fvl, need_fvr = False, True

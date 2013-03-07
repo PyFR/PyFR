@@ -66,7 +66,7 @@ class BaseAdvectionElements(object):
         nupts, neles, ndims = self._ploc_upts.shape
 
         # Bring simulation constants into scope
-        vars = {k: float(v) for k, v in self._cfg.items('constants')}
+        vars = self._cfg.items_as('constants', float)
 
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
@@ -458,20 +458,17 @@ class BaseFluidElements(object):
 
 class EulerElements(BaseFluidElements, BaseAdvectionElements):
     def get_tdisf_upts_kern(self):
-        gamma = self._cfg.getfloat('constants', 'gamma')
+        kc = self._cfg.items_as('constants', float)
 
         return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
                                self.scal_upts_inb, self._smat_upts,
-                               self._vect_upts[0], gamma)
+                               self._vect_upts[0], kc)
 
 
 class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     def get_tdisf_upts_kern(self):
-        gamma = self._cfg.getfloat('constants', 'gamma')
-        mu = self._cfg.getfloat('constants', 'mu')
-        pr = self._cfg.getfloat('constants', 'Pr')
+        kc = self._cfg.items_as('constants', float)
 
         return self._be.kernel('tdisf_vis', self.ndims, self.nvars,
                                self.scal_upts_inb, self._smat_upts,
-                               self._rcpdjac_upts, self._vect_upts[0],
-                               gamma, mu, pr)
+                               self._rcpdjac_upts, self._vect_upts[0], kc)

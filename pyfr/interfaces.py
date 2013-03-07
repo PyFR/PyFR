@@ -54,6 +54,9 @@ class BaseInters(object):
         vm = get_view_mats(inter, meth, self._elemap)
         return self._be.mpi_view(*vm, vlen=self.nvars, tags={'nopad'})
 
+    def _kernel_constants(self):
+        return self._cfg.items_as('constants', float)
+
     @abstractmethod
     def get_rsolve_kern(self):
         pass
@@ -119,12 +122,19 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         self._vect0_lhs = self._view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = self._view_onto(rhs, 'get_vect_fpts0_for_inter')
 
-    def get_conu_fpts_kern(self):
-        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')
+    def _kernel_constants(self):
+        kc = super(BaseAdvectionDiffusionIntInters, self)._kernel_constants()
 
+        # Bring LDG-specific constants into scope
+        kc.update(self._cfg.items_as('mesh-interfaces', float))
+
+        return kc
+
+    def get_conu_fpts_kern(self):
+        kc = self._kernel_constants()
         return self._be.kernel('conu_int', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
-                               self._scal1_lhs, self._scal1_rhs, beta)
+                               self._scal1_lhs, self._scal1_rhs, kc)
 
 
 class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
@@ -142,12 +152,21 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         # one side to take β = -β for the rsolve and conu kernels. We
         # pick this side (arbitrarily) by comparing the physical ranks
         # of the two partitions.
-        self._sign = 1.0 if lhsprank > rhsprank else -1.0
+        self._beta_sgn = 1.0 if lhsprank > rhsprank else -1.0
 
         # Generate second scalar view matrix
         self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
         self._vect0_lhs = self._mpi_view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
+
+    def _kernel_constants(self):
+        kc = super(BaseAdvectionDiffusionMPIInters, self)._kernel_constants()
+
+        # Bring LDG-specific constants into scope
+        kc.update(self._cfg.items_as('mesh-interfaces', float))
+        kc['ldg-beta'] *= self._beta_sgn
+
+        return kc
 
     def get_vect_fpts0_pack_kern(self):
         return self._be.kernel('pack', self._vect0_lhs)
@@ -164,71 +183,51 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         return self._be.kernel('unpack', self._vect0_rhs)
 
     def get_conu_fpts_kern(self):
-        # Multiply beta by our sign to account for (potential) interchange
-        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')*self._sign
-
+        kc = self._kernel_constants()
         return self._be.kernel('conu_mpi', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
-                               self._scal1_lhs, beta)
+                               self._scal1_lhs, kc)
 
 
 class EulerIntInters(BaseAdvectionIntInters):
     def get_rsolve_kern(self):
         rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
-        gamma = self._cfg.getfloat('constants', 'gamma')
+        kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_inv_int', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._scal0_rhs,
                                self._mag_pnorm_lhs, self._mag_pnorm_rhs,
-                               self._norm_pnorm_lhs, gamma)
+                               self._norm_pnorm_lhs, kc)
 
 
 class EulerMPIInters(BaseAdvectionMPIInters):
     def get_rsolve_kern(self):
         rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
-        gamma = self._cfg.getfloat('constants', 'gamma')
+        kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_inv_mpi', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._scal0_rhs,
-                               self._mag_pnorm_lhs, self._norm_pnorm_lhs,
-                               gamma)
+                               self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
 
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
     def get_rsolve_kern(self):
         rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
-
-        # Flux function constants
-        gamma = self._cfg.getfloat('constants', 'gamma')
-        mu = self._cfg.getfloat('constants', 'mu')
-        pr = self._cfg.getfloat('constants', 'Pr')
-
-        # Riemann solver constants
-        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')
-        tau = self._cfg.getfloat('mesh-interfaces', 'ldg-tau')
+        kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._vect0_lhs,
                                self._scal0_rhs, self._vect0_rhs,
                                self._mag_pnorm_lhs, self._mag_pnorm_rhs,
-                               self._norm_pnorm_lhs, gamma, mu, pr, beta, tau)
+                               self._norm_pnorm_lhs, kc)
 
 
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
     def get_rsolve_kern(self):
         rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
-
-        # Flux function constants
-        gamma = self._cfg.getfloat('constants', 'gamma')
-        mu = self._cfg.getfloat('constants', 'mu')
-        pr = self._cfg.getfloat('constants', 'Pr')
-
-        # Riemann solver constants
-        beta = self._cfg.getfloat('mesh-interfaces', 'ldg-beta')*self._sign
-        tau = self._cfg.getfloat('mesh-interfaces', 'ldg-tau')
+        kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_ldg_vis_mpi', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._vect0_lhs,
                                self._scal0_rhs, self._vect0_rhs,
-                               self._mag_pnorm_lhs, self._norm_pnorm_lhs,
-                               gamma, mu, pr, beta, tau)
+                               self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)

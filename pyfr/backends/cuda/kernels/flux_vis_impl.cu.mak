@@ -40,19 +40,19 @@ disf_vis_impl_add(const ${dtype} uin[5], const ${dtype} grad_uin[3][5],
     ${dtype} T_z = rcprho*(E_z - (rcprho*rho_z*E + u*u_z + v*v_z + w*w_z));
 
     // Negated stress tensor elements
-    ${dtype} t_xx = ${-2*mu|f}*rcprho*(u_x - ${1.0/3.0|f}*(u_x + v_y + w_z));
-    ${dtype} t_yy = ${-2*mu|f}*rcprho*(v_y - ${1.0/3.0|f}*(u_x + v_y + w_z));
-    ${dtype} t_zz = ${-2*mu|f}*rcprho*(w_z - ${1.0/3.0|f}*(u_x + v_y + w_z));
-    ${dtype} t_xy = ${-mu|f}*rcprho*(v_x + u_y);
-    ${dtype} t_xz = ${-mu|f}*rcprho*(u_z + w_x);
-    ${dtype} t_yz = ${-mu|f}*rcprho*(w_y + v_z);
+    ${dtype} t_xx = ${-2*c['mu']|f}*rcprho*(u_x - ${1.0/3.0|f}*(u_x + v_y + w_z));
+    ${dtype} t_yy = ${-2*c['mu']|f}*rcprho*(v_y - ${1.0/3.0|f}*(u_x + v_y + w_z));
+    ${dtype} t_zz = ${-2*c['mu']|f}*rcprho*(w_z - ${1.0/3.0|f}*(u_x + v_y + w_z));
+    ${dtype} t_xy = ${-c['mu']|f}*rcprho*(v_x + u_y);
+    ${dtype} t_xz = ${-c['mu']|f}*rcprho*(u_z + w_x);
+    ${dtype} t_yz = ${-c['mu']|f}*rcprho*(w_y + v_z);
 
     fout[0][1] += t_xx;     fout[1][1] += t_xy;     fout[2][1] += t_xz;
     fout[0][2] += t_xy;     fout[1][2] += t_yy;     fout[2][2] += t_yz;
     fout[0][3] += t_xz;     fout[1][3] += t_yz;     fout[2][3] += t_zz;
 
-    fout[0][4] += u*t_xx + v*t_xy + w*t_xz + ${-mu*gamma/pr|f}*T_x;
-    fout[1][4] += u*t_xy + v*t_yy + w*t_yz + ${-mu*gamma/pr|f}*T_y;
-    fout[2][4] += u*t_xz + v*t_yz + w*t_zz + ${-mu*gamma/pr|f}*T_z;
+    fout[0][4] += u*t_xx + v*t_xy + w*t_xz + ${-c['mu']*c['gamma']/c['Pr']|f}*T_x;
+    fout[1][4] += u*t_xy + v*t_yy + w*t_yz + ${-c['mu']*c['gamma']/c['Pr']|f}*T_y;
+    fout[2][4] += u*t_xz + v*t_yz + w*t_zz + ${-c['mu']*c['gamma']/c['Pr']|f}*T_z;
 }
 % endif

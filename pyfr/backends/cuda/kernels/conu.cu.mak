@@ -18,13 +18,13 @@ conu_int(int ninters,
 
         for (int i = 0; i < ${nvars}; ++i)
         {
-        % if beta == -0.5:
+        % if c['ldg-beta'] == -0.5:
             ${dtype} con = ul_vin[iidx][lstri*i];
-        % elif beta == 0.5:
+        % elif c['ldg-beta'] == 0.5:
             ${dtype} con = ur_vin[iidx][rstri*i];
         % else:
-            ${dtype} con = ur_vin[iidx][rstri*i]*${0.5 + beta|f}
-                         + ul_vin[iidx][lstri*i]*${0.5 - beta|f};
+            ${dtype} con = ur_vin[iidx][rstri*i]*${0.5 + c['ldg-beta']|f}
+                         + ul_vin[iidx][lstri*i]*${0.5 - c['ldg-beta']|f};
         % endif
 
             ul_vout[iidx][lstri*i] = con;
@@ -48,13 +48,13 @@ conu_mpi(int ninters,
 
         for (int i = 0; i < ${nvars}; ++i)
         {
-        % if beta == -0.5:
+        % if c['ldg-beta'] == -0.5:
             ${dtype} con = ul_vin[iidx][lstri*i];
-        % elif beta == 0.5:
+        % elif c['ldg-beta'] == 0.5:
             ${dtype} con = ur_m[ninters*i + iidx];
         % else:
-            ${dtype} con = ur_m[ninters*i + iidx]*${beta + 0.5|f}
-                         + ul_vin[iidx][lstri*i]*${0.5 - beta|f};
+            ${dtype} con = ur_m[ninters*i + iidx]*${0.5 + c['ldg-beta']|f}
+                         + ul_vin[iidx][lstri*i]*${0.5 - c['ldg-beta']|f};
         % endif
 
             ul_vout[iidx][lstri*i] = con;
