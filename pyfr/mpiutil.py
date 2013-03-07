@@ -20,7 +20,7 @@ def atexit():
     if MPI.COMM_WORLD.size > 1 and exc is not None and\
        not isinstance(exc, KeyboardInterrupt) and\
        (not isinstance(exc, SystemExit) or exc.code != 0):
-        MPI.COMM_WORLD.Abort()
+        MPI.COMM_WORLD.Abort(1)
     else:
         MPI.Finalize()
 
