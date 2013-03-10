@@ -79,8 +79,14 @@ class BaseAdvectionElements(object):
         ics = [npeval(self._cfg.get('mesh-ics', dv), vars)
                for dv in self._dynvarmap[ndims]]
 
-        # Allow subclasses to process these ICS
-        self._scal_upts = np.dstack(self._process_ics(ics))
+        # Allow subclasses to process these ICs
+        ics = np.dstack(self._process_ics(ics))
+
+        # Handle the case of uniform (scalar) ICs
+        if ics.shape[:2] == (1, 1):
+            ics = ics*np.ones((nupts, neles, 1))
+
+        self._scal_upts = ics
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
