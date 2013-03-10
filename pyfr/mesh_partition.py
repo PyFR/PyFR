@@ -8,8 +8,9 @@ from mpi4py import MPI
 from pyfr.bases import BasisBase
 from pyfr.elements import EulerElements, NavierStokesElements
 from pyfr.inifile import Inifile
-from pyfr.interfaces import (EulerIntInters, EulerMPIInters,
-                             NavierStokesIntInters, NavierStokesMPIInters)
+from pyfr.interfaces import (EulerIntInters, EulerMPIInters, EulerBaseBCInters,
+                             NavierStokesIntInters, NavierStokesBaseBCInters,
+                             NavierStokesMPIInters)
 from pyfr.util import proxylist, subclass_map
 
 
@@ -24,6 +25,7 @@ class BaseMeshPartition(object):
     elementscls = None
     intinterscls = None
     mpiinterscls = None
+    bbcinterscls = None
 
     def __init__(self, backend, rallocs, mesh, initsoln, nreg, cfg):
         self._backend = backend
@@ -34,6 +36,7 @@ class BaseMeshPartition(object):
         self._load_eles(rallocs, mesh, initsoln)
         self._load_int_inters(rallocs, mesh)
         self._load_mpi_inters(rallocs, mesh)
+        self._load_bc_inters(rallocs, mesh)
 
         # Prepare the queues and kernels
         self._gen_queues()
@@ -89,6 +92,19 @@ class BaseMeshPartition(object):
                                          rallocs, self._elemaps, self._cfg)
             self._mpi_inters.append(mpiiface)
 
+    def _load_bc_inters(self, rallocs, mesh):
+        bcmap = subclass_map(self.bbcinterscls, 'name')
+
+        self._bc_inters = proxylist([])
+        for bcname, bccls in bcmap.iteritems():
+            mk = 'bcon_%s_p%d' % (bcname, rallocs.prank)
+            if mk in mesh:
+                bciface = bccls(self._backend, mesh[mk], self._elemaps,
+                                self._cfg)
+                self._bc_inters.append(bciface)
+
+        return self._bc_inters
+
     def _gen_queues(self):
         self._queues = [self._backend.queue(), self._backend.queue()]
 
@@ -97,6 +113,7 @@ class BaseMeshPartition(object):
         eles = self._eles
         int_inters = self._int_inters
         mpi_inters = self._mpi_inters
+        bc_inters = self._bc_inters
 
         # Generate the kernels over each element type
         self._disu_fpts_kerns = eles.get_disu_fpts_kern()
@@ -115,9 +132,10 @@ class BaseMeshPartition(object):
         self._mpi_inters_scal_fpts0_unpack_kerns = \
             mpi_inters.get_scal_fpts0_unpack_kern()
 
-        # Generate the Riemann solvers for internal and MPI interfaces
+        # Generate the Riemann solvers for the various interface types
         self._int_inters_rsolve_kerns = int_inters.get_rsolve_kern()
         self._mpi_inters_rsolve_kerns = mpi_inters.get_rsolve_kern()
+        self._bc_inters_rsolve_kerns = bc_inters.get_rsolve_kern()
 
     @abstractmethod
     def _get_negdivf(self):
@@ -160,6 +178,7 @@ class EulerMeshPartition(BaseMeshPartition):
     elementscls = EulerElements
     intinterscls = EulerIntInters
     mpiinterscls = EulerMPIInters
+    bbcinterscls = EulerBaseBCInters
 
     def _gen_kernels(self):
         super(EulerMeshPartition, self)._gen_kernels()
@@ -178,11 +197,11 @@ class EulerMeshPartition(BaseMeshPartition):
         # Evaluate the flux at each of the solution points and take the
         # divergence of this to yield the transformed, partially
         # corrected, flux divergence.  Finally, solve the Riemann
-        # problem at each of the internal interfaces to yield a common
-        # interface flux
+        # problem at each interface to yield a common flux
         q1 << self._tdisf_upts_kerns()
         q1 << self._tdivtpcorf_upts_kerns()
         q1 << self._int_inters_rsolve_kerns()
+        q1 << self._bc_inters_rsolve_kerns()
 
         # Send the MPI interface buffers we have just packed and
         # receive the corresponding buffers from our peers.  Then
@@ -209,12 +228,14 @@ class NavierStokesMeshPartition(BaseMeshPartition):
     elementscls = NavierStokesElements
     intinterscls = NavierStokesIntInters
     mpiinterscls = NavierStokesMPIInters
+    bbcinterscls = NavierStokesBaseBCInters
 
     def _gen_kernels(self):
         super(NavierStokesMeshPartition, self)._gen_kernels()
         eles = self._eles
         int_inters = self._int_inters
         mpi_inters = self._mpi_inters
+        bc_inters = self._bc_inters
 
         # Element-local kernels
         self._tgradpcoru_upts_kerns = eles.get_tgradpcoru_upts_kern()
@@ -233,6 +254,7 @@ class NavierStokesMeshPartition(BaseMeshPartition):
 
         self._int_inters_conu_fpts_kerns = int_inters.get_conu_fpts_kern()
         self._mpi_inters_conu_fpts_kerns = mpi_inters.get_conu_fpts_kern()
+        self._bc_inters_conu_fpts_kerns = bc_inters.get_conu_fpts_kern()
 
     def _get_negdivf(self):
         runall = self._backend.runall
@@ -243,6 +265,7 @@ class NavierStokesMeshPartition(BaseMeshPartition):
         runall([q1])
 
         q1 << self._int_inters_conu_fpts_kerns()
+        q1 << self._bc_inters_conu_fpts_kerns()
         q1 << self._tgradpcoru_upts_kerns()
 
         q2 << self._mpi_inters_scal_fpts0_send_kerns()
@@ -261,6 +284,7 @@ class NavierStokesMeshPartition(BaseMeshPartition):
         q1 << self._tdisf_upts_kerns()
         q1 << self._tdivtpcorf_upts_kerns()
         q1 << self._int_inters_rsolve_kerns()
+        q1 << self._bc_inters_rsolve_kerns()
 
         q2 << self._mpi_inters_vect_fpts0_send_kerns()
         q2 << self._mpi_inters_vect_fpts0_recv_kerns()

@@ -81,3 +81,46 @@ rsolve_inv_mpi(int ninters,
         WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
     }
 }
+
+% if bctype:
+<%include file='bc_impl.cu.mak' />
+
+__global__ void
+rsolve_inv_bc(int ninters,
+              ${dtype}** __restrict__ ul_v,
+              const int* __restrict__ ul_vstri,
+              const ${dtype}* __restrict__ magpnorml,
+              const ${dtype}* __restrict__ normpnorml)
+{
+    int iidx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (iidx < ninters)
+    {
+        ${dtype} ul[${nvars}], ur[${nvars}];
+
+        // Dereference the view into memory
+        READ_VIEW(ul, ul_v, ul_vstri, iidx, ${nvars});
+
+        // Compute the RHS (boundary) solution from this
+        bc_u_impl(ul, ur);
+
+        // Load the left normalized physical normal
+        ${dtype} ptemp[${ndims}];
+        for (int i = 0; i < ${ndims}; ++i)
+            ptemp[i] = normpnorml[ninters*i + iidx];
+
+        // Perform the Riemann solve
+        ${dtype} fn[${nvars}];
+        rsolve_inv_impl(ul, ur, ptemp, fn);
+
+        // Write out the fluxes into ul
+        for (int i = 0; i < ${nvars}; ++i)
+        {
+            ul[i] =  magpnorml[iidx]*fn[i];
+        }
+
+        // Copy back into the view
+        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
+    }
+}
+% endif

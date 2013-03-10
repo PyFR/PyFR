@@ -153,3 +153,69 @@ rsolve_ldg_vis_mpi(int ninters,
         WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
     }
 }
+
+% if bctype:
+<%include file='bc_impl.cu.mak' />
+
+__global__ void
+rsolve_ldg_vis_bc(int ninters,
+                  ${dtype}** __restrict__ ul_v,
+                  const int* __restrict__ ul_vstri,
+                  ${dtype}** __restrict__ gul_v,
+                  const int* __restrict__ gul_vstri,
+                  const ${dtype}* __restrict__ magpnorml,
+                  const ${dtype}* __restrict__ normpnorml)
+{
+    int iidx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (iidx < ninters)
+    {
+        ${dtype} ul[${nvars}], ur[${nvars}];
+
+        // Load in the LHS solution
+        READ_VIEW(ul, ul_v, ul_vstri, iidx, ${nvars});
+
+        // Compute the RHS (boundary) solution from this
+        bc_u_impl(ul, ur);
+
+        // Load the left normalized physical normal
+        ${dtype} pnorml[${ndims}];
+        for (int i = 0; i < ${ndims}; ++i)
+            pnorml[i] = normpnorml[ninters*i + iidx];
+
+        // Perform a standard, inviscid Riemann solve
+        ${dtype} ficomm[${nvars}];
+        rsolve_inv_impl(ul, ur, pnorml, ficomm);
+
+        // Load in the LHS gradient
+        ${dtype} gul[${ndims}][${nvars}];
+        READ_VIEW_V(gul, gul_v, gul_vstri, iidx, ninters, ${ndims}, ${nvars});
+
+    % if need_fvl:
+        ${dtype} fvl[${ndims}][${nvars}] = {};
+        disf_vis_impl_add(ul, gul, fvl);
+    % endif
+
+    % if need_fvr:
+        // Compute the RHS gradient from the LHS soln and gradient
+        ${dtype} gur[${ndims}][${nvars}];
+        bc_grad_u_impl(ul, gul, gur);
+
+        ${dtype} fvr[${ndims}][${nvars}] = {};
+        disf_vis_impl_add(ur, gur, fvr);
+    % endif
+
+        // Determine the common normal flux
+        for (int i = 0; i < ${nvars}; ++i)
+        {
+            // Evaluate the common viscous flux
+            ${dtype} fvcommi = ${fvcomm};
+
+            ul[i] = magpnorml[iidx]*(ficomm[i] + fvcommi);
+        }
+
+        // Copy back into the view
+        WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
+    }
+}
+% endif

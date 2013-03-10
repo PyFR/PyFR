@@ -61,3 +61,33 @@ conu_mpi(int ninters,
         }
     }
 }
+
+% if bctype:
+<%include file='views.cu.mak' />
+<%include file='bc_impl.cu.mak' />
+
+__global__ void
+conu_bc(int ninters,
+        ${dtype}** __restrict__ ul_vin,
+        const int* __restrict__ ul_vstri,
+        ${dtype}** __restrict__ ul_vout)
+{
+    int iidx = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (iidx < ninters)
+    {
+        int lstri = ul_vstri[iidx];
+        ${dtype} ul[${nvars}], ur[${nvars}];
+
+        // Load in the LHS soln from the view
+        READ_VIEW(ul, ul_vin, ul_vstri, iidx, ${nvars});
+
+        // Compute the RHS (boundary) soln from the LHS
+        bc_u_impl(ul, ur);
+
+        for (int i = 0; i < ${nvars}; ++i)
+            ul_vout[iidx][lstri*i] = ur[i]*(${0.5 + c['ldg-beta']|f})
+                                   + ul[i]*(${0.5 - c['ldg-beta']|f});
+    }
+}
+% endif

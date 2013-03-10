@@ -154,7 +154,7 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         # of the two partitions.
         self._beta_sgn = 1.0 if lhsprank > rhsprank else -1.0
 
-        # Generate second scalar view matrix
+        # Generate second set of view matrices
         self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
         self._vect0_lhs = self._mpi_view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
@@ -189,6 +189,52 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
                                self._scal1_lhs, kc)
 
 
+class BaseAdvectionBCInters(BaseInters):
+    name = None
+
+    def __init__(self, be, lhs, elemap, cfg):
+        super(BaseAdvectionBCInters, self).__init__(be, elemap, cfg)
+
+        view_onto, const_mat = self._view_onto, self._const_mat
+
+        # LHS view and constant matrices
+        self._scal0_lhs = view_onto(lhs, 'get_scal_fpts0_for_inter')
+        self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
+        self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
+
+    def _kernel_constants(self):
+        kc = super(BaseAdvectionBCInters, self)._kernel_constants()
+
+        # Bring BC-specific constants into scope
+        kc.update(self._cfg.items_as('mesh-bcs', float))
+
+        return kc
+
+
+class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
+    def __init__(self, be, lhs, elemap, cfg):
+        super(BaseAdvectionDiffusionBCInters, self).__init__(be, lhs,
+                                                             elemap, cfg)
+
+        # Additional view matrices
+        self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
+        self._vect0_lhs = self._view_onto(lhs, 'get_vect_fpts0_for_inter')
+
+
+    def _kernel_constants(self):
+        kc = super(BaseAdvectionDiffusionBCInters, self)._kernel_constants()
+
+        # Bring LDG-specific constants into scope
+        kc.update(self._cfg.items_as('mesh-interfaces', float))
+
+        return kc
+
+    def get_conu_fpts_kern(self):
+        kc = self._kernel_constants()
+        return self._be.kernel('conu_bc', self.ndims, self.nvars, self.name,
+                               self._scal0_lhs, self._scal1_lhs, kc)
+
+
 class EulerIntInters(BaseAdvectionIntInters):
     def get_rsolve_kern(self):
         rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
@@ -207,6 +253,16 @@ class EulerMPIInters(BaseAdvectionMPIInters):
 
         return self._be.kernel('rsolve_inv_mpi', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._scal0_rhs,
+                               self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
+
+
+class EulerBaseBCInters(BaseAdvectionBCInters):
+    def get_rsolve_kern(self):
+        rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
+        kc = self._kernel_constants()
+
+        return self._be.kernel('rsolve_inv_bc', self.ndims, self.nvars,
+                               rsinv, self.name, self._scal0_lhs,
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
 
 
@@ -231,3 +287,34 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
                                rsinv, self._scal0_lhs, self._vect0_lhs,
                                self._scal0_rhs, self._vect0_rhs,
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
+
+
+class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
+    def get_rsolve_kern(self):
+        rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
+        kc = self._kernel_constants()
+
+        return self._be.kernel('rsolve_ldg_vis_bc', self.ndims, self.nvars,
+                               rsinv, self.name, self._scal0_lhs,
+                               self._vect0_lhs, self._mag_pnorm_lhs,
+                               self._norm_pnorm_lhs, kc)
+
+
+class NavierStokesIsoThermNoslipBCInters(NavierStokesBaseBCInters):
+    name = 'isotherm_noslip'
+
+
+class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
+    name = 'sup_inflow'
+
+
+class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
+    name = 'sup_outflow'
+
+
+class NavierStokesSubInflowBCInters(NavierStokesBaseBCInters):
+    name = 'sub_inflow'
+
+
+class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
+    name = 'sub_outflow'

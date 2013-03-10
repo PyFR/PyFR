@@ -79,6 +79,21 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   ul_vin.view.mapping, ul_vin.view.strides,
                                   ul_vout.mapping, ur_mpim)
 
+    def conu_bc(self, ndims, nvars, bctype, ul_vin, ul_vout, c):
+        ninters = ul_vin.ncol
+        dtype = ul_vin.refdtype
+        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, c=c, bctype=bctype)
+
+        fn = self._get_function('conu', 'conu_bc', 'iPPP', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
+
+        block = (256, 1, 1)
+        grid = self._get_grid_for_block(block, ninters)
+
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_vin.mapping, ul_vin.strides,
+                                  ul_vout.mapping)
+
     def gradcoru(self, ndims, nvars, jmats, gradu):
         nfpts, neles = jmats.nrow, gradu.ncol / nvars
         opts = dict(dtype=gradu.dtype, ndims=ndims, nvars=nvars)
@@ -129,6 +144,23 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   ul_v.mapping, ul_v.strides, ur_mpim,
                                   magl, normpnorml)
 
+    def rsolve_inv_bc(self, ndims, nvars, rsinv, bctype, ul_v, magl,
+                      normpnorml, c):
+        ninters = ul_v.ncol
+        dtype = ul_v.refdtype
+        opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, c=c, rsinv=rsinv,
+                    bctype=bctype)
+
+        fn = self._get_function('rsolve_inv', 'rsolve_inv_bc', 'iPPPP', opts)
+        fn.set_cache_config(cuda.func_cache.PREFER_L1)
+
+        block = (256, 1, 1)
+        grid = self._get_grid_for_block(block, ninters)
+
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_v.mapping, ul_v.strides,
+                                  magl, normpnorml)
+
     def rsolve_ldg_vis_int(self, ndims, nvars, rsinv, ul_v, gul_v, ur_v, gur_v,
                            magl, magr, normpnorml, c):
         ninters = ul_v.ncol
@@ -167,6 +199,23 @@ class CudaPointwiseKernels(CudaKernelProvider):
                                   ul_v.mapping, ul_v.strides,
                                   gul_v.mapping, gul_v.strides,
                                   ur_mpim, gur_mpim, magl, normpnorml)
+
+    def rsolve_ldg_vis_bc(self, ndims, nvars, rsinv, bctype, ul_v, gul_v, magl,
+                          normpnorml, c):
+        ninters = ul_v.ncol
+        opts = dict(dtype=ul_v.refdtype, ndims=ndims, nvars=nvars, c=c,
+                    rsinv=rsinv, bctype=bctype)
+
+        fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_bc', 'iPPPPPP',
+                                opts)
+
+        block = (256, 1, 1)
+        grid = self._get_grid_for_block(block, ninters)
+
+        return self._basic_kernel(fn, grid, block, ninters,
+                                  ul_v.mapping, ul_v.strides,
+                                  gul_v.mapping, gul_v.strides,
+                                  magl, normpnorml)
 
     def negdivconf(self, nvars, dv, rcpdjac):
         nupts, neles = dv.nrow, dv.ncol / nvars
