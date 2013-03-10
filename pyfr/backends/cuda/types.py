@@ -9,8 +9,6 @@ from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
 class CudaMatrixBase(base.MatrixBase):
-    order = 'C'
-
     def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
         super(CudaMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
         self.dtype = dtype
@@ -38,8 +36,7 @@ class CudaMatrixBase(base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty((self.nrow, self.ncol), dtype=self.dtype,
-                       order=self.order)
+        buf = np.empty((self.nrow, self.ncol), dtype=self.dtype)
 
         # Copy
         memcpy2d_dtoh(buf, self.data, self.pitch, self.mindim*self.itemsize,
@@ -48,7 +45,7 @@ class CudaMatrixBase(base.MatrixBase):
         return buf
 
     def _set(self, ary):
-        nary = np.asanyarray(ary, dtype=self.dtype, order=self.order)
+        nary = np.asanyarray(ary, dtype=self.dtype, order='C')
 
         # Copy
         memcpy2d_htod(self.data, nary, self.mindim*self.itemsize,
@@ -59,8 +56,7 @@ class CudaMatrixBase(base.MatrixBase):
             raise ValueError('Index ({},{}) out of bounds ({},{}))'
                              .format(i, j, self.nrow, self.ncol))
 
-        return self.pitch*i + j*self.itemsize if self.order == 'C' else\
-               self.pitch*j + i*self.itemsize
+        return self.pitch*i + j*self.itemsize
 
     def addrof(self, i, j):
         return np.intp(int(self.data) + self.offsetof(i, j))
@@ -82,11 +78,11 @@ class CudaMatrixBase(base.MatrixBase):
 
     @property
     def majdim(self):
-        return self.nrow if self.order == 'C' else self.ncol
+        return self.nrow
 
     @property
     def mindim(self):
-        return self.ncol if self.order == 'C' else self.nrow
+        return self.ncol
 
     @property
     def leaddim(self):
@@ -94,7 +90,7 @@ class CudaMatrixBase(base.MatrixBase):
 
     @property
     def traits(self):
-        return self.leaddim, self.mindim, self.order, self.dtype
+        return self.leaddim, self.mindim, self.dtype
 
 
 class CudaMatrix(CudaMatrixBase, base.Matrix):
@@ -187,7 +183,7 @@ class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
-                                           self.dtype, self.order)
+                                           self.dtype, 'C')
 
 
 class CudaMPIView(base.MPIView):
