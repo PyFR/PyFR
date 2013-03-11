@@ -126,8 +126,6 @@ class GmshReader(BaseReader):
         #  - fluid elements ('the mesh')
         #  - boundary faces
         #  - periodic faces
-        # with each mesh having one set of fluid elements, zero or more
-        # boundary faces and up to three periodic boundary face pairs.
         self._felespent = None
         self._bfacespents = {}
         self._pfacespents = defaultdict(list)
