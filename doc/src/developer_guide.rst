@@ -1,32 +1,20 @@
-=============
-Documentation
-=============
+===============
+Developer Guide
+===============
 
 Introduction
 ------------
 
-Detailed documentation is provided below.
+A detailed developer guide is provided below
 
-File Formats
-------------
-
-Configuration Format (.ini)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Internal File Formats
+---------------------
 
 Mesh Format (.pyfrm)
 ~~~~~~~~~~~~~~~~~~~~
 
 Solution Format (.pyfrs)
 ~~~~~~~~~~~~~~~~~~~~~~~~
-
-PyFR-Mesh
----------
-
-PyFR-Sim
---------
-
-PyFR-Postp
-----------
 
 Code
 ----

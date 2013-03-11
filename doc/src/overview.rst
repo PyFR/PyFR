@@ -11,6 +11,9 @@ is currently being developed in the department of Aeronautics at
 `Imperial College London <https://www.imperial.ac.uk>`_ under the
 direction of Dr. Peter Vincent.
 
+Ethos
+-----
+
 Capabilities
 ------------
 
@@ -24,9 +27,6 @@ PyFR has the folllowing capabilities:
 - Temporal discretisation - Explicit Runge-Kutta schemes
 - Mesh files read - Gmsh (.msh)
 - Solution files written - Paraview (.vtu)
-
-Coding Ethos
---------------
 
 Authors
 -------
