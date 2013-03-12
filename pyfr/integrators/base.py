@@ -2,6 +2,8 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
+from mpi4py import MPI
+
 from pyfr.inifile import Inifile
 from pyfr.mesh_partition import get_mesh_partition
 from pyfr.nputil import range_eval
@@ -53,8 +55,11 @@ class BaseIntegrator(object):
         # Get a queue for subclasses to use
         self._queue = backend.queue()
 
-        # Determine the total number of degrees of freedom
-        self._ndofs = sum(self._meshp.ele_ndofs)
+        # Get the number of degrees of freedom in this partition
+        ndofs = sum(self._meshp.ele_ndofs)
+
+        # Sum to get the global number over all partitions
+        self._gndofs = MPI.COMM_WORLD.allreduce(ndofs, op=MPI.SUM)
 
     @abstractmethod
     def step(self, t, dt):
