@@ -85,6 +85,29 @@ class CudaMatrix(CudaMatrixBase, base.Matrix):
                                          initval, iopacking, tags)
 
 
+class CudaMatrixRSlice(base.MatrixRSlice):
+    def __init__(self, backend, mat, p, q):
+        super(CudaMatrixRSlice, self).__init__(mat, p, q)
+
+        # Copy over common attributes
+        self.dtype, self.itemsize = mat.dtype, mat.itemsize
+        self.pitch, self.leaddim = mat.pitch, mat.leaddim
+
+        # Traits are those of a thinner matrix
+        self.traits = (self.nrow, self.leaddim, self.dtype)
+
+        # Starting offset of our row
+        self._soffset = mat.offsetof(p, 0)
+
+    @property
+    def _as_parameter_(self):
+        return long(self.parent) + self._soffset
+
+    @property
+    def __long__(self):
+        return long(self.parent) + self._soffset
+
+
 class CudaMatrixBank(base.MatrixBank):
     def __init__(self, backend, mats, initbank, tags):
         for m in mats[1:]:

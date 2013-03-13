@@ -9,9 +9,10 @@ from pyfr.exc import PyFRInvalidKernelError
 
 from pyfr.backends.base import Backend
 
-from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixBank,
-                                      CudaConstMatrix, CudaSparseMatrix,
-                                      CudaView, CudaMPIMatrix, CudaMPIView)
+from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixRSlice,
+                                      CudaMatrixBank, CudaConstMatrix,
+                                      CudaSparseMatrix, CudaView,
+                                      CudaMPIMatrix, CudaMPIView)
 
 from pyfr.backends.cuda.packing import CudaPackingKernels
 from pyfr.backends.cuda.blasext import CudaBlasExtKernels
@@ -52,6 +53,9 @@ class CudaBackend(Backend):
 
     def _matrix(self, *args, **kwargs):
         return CudaMatrix(self, *args, **kwargs)
+
+    def _matrix_rslice(self, *args, **kwargs):
+        return CudaMatrixRSlice(self, *args, **kwargs)
 
     def _matrix_bank(self, *args, **kwargs):
         return CudaMatrixBank(self, *args, **kwargs)

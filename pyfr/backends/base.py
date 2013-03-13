@@ -61,6 +61,14 @@ class Backend(object):
     def _matrix(self, ioshape, initval, iopacking, tags):
         pass
 
+    @recordalloc('rslices')
+    def matrix_rslice(self, mat, p, q):
+        return self._matrix_rslice(mat, p, q)
+
+    @abstractmethod
+    def _matrix_rslice(self, mat, p, q):
+        pass
+
     @recordalloc('banks')
     def matrix_bank(self, mats, initbank=0, tags=set()):
         """Creates a bank of matrices from *mats*
@@ -354,9 +362,29 @@ class Matrix(MatrixBase):
     def set(self, buf):
         return self._set(self._pack(buf))
 
+    def rslice(self, p, q):
+        return self.backend.matrix_rslice(self, p, q)
+
     @abstractmethod
     def _set(self, buf):
         pass
+
+
+class MatrixRSlice(object):
+    """Slice of a matrix abstract base class"""
+    __metaclass__ = ABCMeta
+
+    @abstractmethod
+    def __init__(self, mat, p, q):
+        self.parent = mat
+        self.backend = mat.backend
+
+        if p < 0 or q > mat.nrow or q < p:
+            raise ValueError('Invalid row slice')
+
+        self.nrow = q - p
+        self.ncol = mat.ncol
+        self.tags = mat.tags
 
 
 class ConstMatrix(MatrixBase):
