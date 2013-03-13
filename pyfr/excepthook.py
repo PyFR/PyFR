@@ -14,5 +14,6 @@ class _ExceptHook(object):
         self.exception = exc
         self._orig_excepthook(exc_type, exc, *args)
 
+
 # Global instance
 excepthook = _ExceptHook()
