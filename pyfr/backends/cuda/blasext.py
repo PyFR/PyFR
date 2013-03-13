@@ -17,7 +17,7 @@ class CudaBlasExtKernels(CudaKernelProvider):
                                 [np.intp, y.dtype]*(1 + len(xn)), opts)
 
         # Determine the total element count in the matrices
-        cnt = y.leaddim*y.majdim
+        cnt = y.leaddim*y.nrow
 
         # Compute a suitable block and grid
         block = (1024, 1, 1)

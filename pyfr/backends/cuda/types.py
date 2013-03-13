@@ -11,24 +11,30 @@ from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 class CudaMatrixBase(base.MatrixBase):
     def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
         super(CudaMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
+
+        # Data type info
         self.dtype = dtype
+        self.itemsize = np.dtype(dtype).itemsize
 
         # Compute the size, in bytes, of the minor dimension
-        mindimsz = self.mindim*self.itemsize
+        colsz = self.ncol*self.itemsize
 
         if 'nopad' not in tags:
             # Allocate a 2D array aligned to the major dimension
-            self.data, self.pitch = cuda.mem_alloc_pitch(mindimsz, self.majdim,
+            self.data, self.pitch = cuda.mem_alloc_pitch(colsz, self.nrow,
                                                          self.itemsize)
-            self._nbytes = self.majdim*self.pitch
+            self._nbytes = self.nrow*self.pitch
 
             # Ensure that the pitch is a multiple of itemsize
             assert (self.pitch % self.itemsize) == 0
         else:
             # Allocate a standard, tighly packed, array
-            self._nbytes = mindimsz*self.majdim
+            self._nbytes = colsz*self.nrow
             self.data = cuda.mem_alloc(self._nbytes)
-            self.pitch = mindimsz
+            self.pitch = colsz
+
+        self.leaddim = self.pitch / self.itemsize
+        self.traits = (self.nrow, self.leaddim, self.dtype)
 
         # Process any initial values
         if initval is not None:
@@ -39,8 +45,8 @@ class CudaMatrixBase(base.MatrixBase):
         buf = np.empty((self.nrow, self.ncol), dtype=self.dtype)
 
         # Copy
-        memcpy2d_dtoh(buf, self.data, self.pitch, self.mindim*self.itemsize,
-                      self.mindim*self.itemsize, self.majdim)
+        memcpy2d_dtoh(buf, self.data, self.pitch, self.ncol*self.itemsize,
+                      self.ncol*self.itemsize, self.nrow)
 
         return buf
 
@@ -48,18 +54,18 @@ class CudaMatrixBase(base.MatrixBase):
         nary = np.asanyarray(ary, dtype=self.dtype, order='C')
 
         # Copy
-        memcpy2d_htod(self.data, nary, self.mindim*self.itemsize,
-                      self.pitch, self.mindim*self.itemsize, self.majdim)
+        memcpy2d_htod(self.data, nary, self.ncol*self.itemsize,
+                      self.pitch, self.ncol*self.itemsize, self.nrow)
 
     def offsetof(self, i, j):
-        if i >= self.nrow or j >= self.ncol:
+        if i < 0 or i >= self.nrow or j < 0 or j >= self.ncol:
             raise ValueError('Index ({},{}) out of bounds ({},{}))'
                              .format(i, j, self.nrow, self.ncol))
 
         return self.pitch*i + j*self.itemsize
 
     def addrof(self, i, j):
-        return np.intp(int(self.data) + self.offsetof(i, j))
+        return np.intp(long(self.data) + self.offsetof(i, j))
 
     @property
     def _as_parameter_(self):
@@ -71,26 +77,6 @@ class CudaMatrixBase(base.MatrixBase):
     @property
     def nbytes(self):
         return self._nbytes
-
-    @property
-    def itemsize(self):
-        return np.dtype(self.dtype).itemsize
-
-    @property
-    def majdim(self):
-        return self.nrow
-
-    @property
-    def mindim(self):
-        return self.ncol
-
-    @property
-    def leaddim(self):
-        return self.pitch / self.itemsize
-
-    @property
-    def traits(self):
-        return self.leaddim, self.mindim, self.dtype
 
 
 class CudaMatrix(CudaMatrixBase, base.Matrix):
