@@ -44,7 +44,7 @@ class CudaBackend(Backend):
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')
         if prec not in {'single', 'double'}:
-            raise ValueError('CUDA backend precision must be either single or'
+            raise ValueError('CUDA backend precision must be either single or '
                              'double')
 
         # Convert to a numpy data type
