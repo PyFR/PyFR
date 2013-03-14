@@ -263,7 +263,7 @@ class Backend(object):
     def from_soa_stride_to_native(self, s, a):
         return (a, 1) if self.packing == 'SoA' else (1, s)
 
-    def _from_x_to_native(self, mat, cpacking):
+    def from_x_to_native(self, mat, cpacking):
         # Reorder if packed differently
         if self.packing != cpacking:
             if mat.ndim == 3:
@@ -279,7 +279,7 @@ class Backend(object):
         elif mat.ndim == 4:
             return mat.reshape(mat.shape[0]*mat.shape[1], -1)
 
-    def _from_native_to_x(self, mat, nshape, npacking):
+    def from_native_to_x(self, mat, nshape, npacking):
         if self.packing != npacking:
             n, nd = nshape, len(nshape)
             if nd == 3:
@@ -289,18 +289,6 @@ class Backend(object):
                          .swapaxes(0, 1).swapaxes(2, 3)
 
         return mat.reshape(nshape)
-
-    def from_soa_to_native(self, mat):
-        return self._from_x_to_native(mat, 'SoA')
-
-    def from_aos_to_native(self, mat):
-        return self._from_x_to_native(mat, 'AoS')
-
-    def from_native_to_soa(self, mat, nshape):
-        return self._from_native_to_x(self, mat, nshape, 'SoA')
-
-    def from_native_to_aos(self, mat, nshape):
-        return self._from_native_to_x(mat, nshape, 'AoS')
 
 
 class MatrixBase(object):
@@ -329,19 +317,13 @@ class MatrixBase(object):
         if buf.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
 
-        if self.iopacking == 'AoS':
-            return self.backend.from_aos_to_native(buf)
-        else:
-            return self.backend.from_soa_to_native(buf)
+        return self.backend.from_x_to_native(buf, self.iopacking)
 
     def _unpack(self, buf):
         if buf.shape != (self.nrow, self.ncol):
             raise ValueError('Invalid matrix shape')
 
-        if self.iopacking == 'AoS':
-            return self.backend.from_native_to_aos(buf, self.ioshape)
-        else:
-            return self.backend.from_native_to_soa(buf, self.ioshape)
+        return self.backend.from_native_to_x(buf, self.ioshape, self.iopacking)
 
     def get(self):
         return self._unpack(self._get())
