@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-
 from collections import Sequence, defaultdict
+from functools import wraps
+from inspect import getcallargs
 from weakref import WeakSet
 
-from functools import wraps
-
 import numpy as np
+
+from pyfr.util import proxylist
 
 
 def recordalloc(type):
@@ -19,6 +20,27 @@ def recordalloc(type):
             return rv
         return newfn
     return recordalloc_type
+
+
+def traits(**tr):
+    def traits_tr(fn):
+        fn._traits = tr
+        return fn
+    return traits_tr
+
+
+def issuitable(kern, *args, **kwargs):
+    kernt = getattr(kern, '_traits', {})
+    kargs = getcallargs(kern, *args, **kwargs)
+
+    for k, tags in kernt.iteritems():
+        argt = argd[k].tags
+        for t in tags:
+            if (t[0] == '!' and t[1:] in argt) or\
+               (t[0] != '!' and t not in argt):
+                return False
+
+    return True
 
 
 class Backend(object):
@@ -220,13 +242,10 @@ class Backend(object):
 
         :rtype: :class:`~pyfr.backends.base.Kernel`
         """
-        for prov in reversed(self._providers):
-            try:
-                kern = getattr(prov, name)
-            except AttributeError:
-                continue
-
-            return kern(*args, **kwargs)
+        for prov in self._providers:
+            kern = getattr(prov, name, None)
+            if kern and issuitable(kern, *args, **kwargs):
+                return kern(*args, **kwargs)
         else:
             raise KeyError("'{}' has no providers".format(name))
 
@@ -445,6 +464,14 @@ class Kernel(object):
     @abstractmethod
     def run(self, *args, **kwargs):
         pass
+
+
+class ProxyKernel(Kernel):
+    def __init__(self, kernels):
+        self._kernels = proxylist(kernels)
+
+    def run(self, *args, **kwargs):
+        self._kernels.run(*args, **kwargs)
 
 
 class Queue(object):
