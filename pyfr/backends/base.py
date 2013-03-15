@@ -34,10 +34,10 @@ def issuitable(kern, *args, **kwargs):
     kargs = getcallargs(kern, *args, **kwargs)
 
     for k, tags in kernt.iteritems():
-        argt = argd[k].tags
+        argtags = kargs[k].tags
         for t in tags:
-            if (t[0] == '!' and t[1:] in argt) or\
-               (t[0] != '!' and t not in argt):
+            if (t[0] == '!' and t[1:] in argtags) or\
+               (t[0] != '!' and t not in argtags):
                 return False
 
     return True
