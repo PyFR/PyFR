@@ -87,7 +87,7 @@ class CudaMatrix(CudaMatrixBase, base.Matrix):
 
 class CudaMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
-        super(CudaMatrixRSlice, self).__init__(mat, p, q)
+        super(CudaMatrixRSlice, self).__init__(backend, mat, p, q)
 
         # Copy over common attributes
         self.dtype, self.itemsize = mat.dtype, mat.itemsize

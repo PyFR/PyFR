@@ -220,11 +220,15 @@ class Backend(object):
 
         :rtype: :class:`~pyfr.backends.base.Kernel`
         """
-        return self._kernel(name, *args, **kwargs)
+        for prov in reversed(self._providers):
+            try:
+                kern = getattr(prov, name)
+            except AttributeError:
+                continue
 
-    @abstractmethod
-    def _kernel(self, name, *args, **kwargs):
-        pass
+            return kern(*args, **kwargs)
+        else:
+            raise KeyError("'{}' has no providers".format(name))
 
     @recordalloc('queue')
     def queue(self):
@@ -357,9 +361,9 @@ class MatrixRSlice(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def __init__(self, mat, p, q):
+    def __init__(self, backend, mat, p, q):
+        self.backend = backend
         self.parent = mat
-        self.backend = mat.backend
 
         if p < 0 or q > mat.nrow or q < p:
             raise ValueError('Invalid row slice')
@@ -434,6 +438,13 @@ class MPIView(View):
 class Kernel(object):
     """Bound kernel abstract base class"""
     __metaclass__ = ABCMeta
+
+    def __call__(self, *args):
+        return self, args
+
+    @abstractmethod
+    def run(self, *args, **kwargs):
+        pass
 
 
 class Queue(object):

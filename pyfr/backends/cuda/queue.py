@@ -6,17 +6,14 @@ import pycuda.driver as cuda
 
 from mpi4py import MPI
 
-
-class CudaKernel(object):
-    def __call__(self, *args):
-        return self, args
+import pyfr.backends.base as base
 
 
-class CudaComputeKernel(CudaKernel):
+class CudaComputeKernel(base.Kernel):
     pass
 
 
-class CudaMPIKernel(CudaKernel):
+class CudaMPIKernel(base.Kernel):
     pass
 
 

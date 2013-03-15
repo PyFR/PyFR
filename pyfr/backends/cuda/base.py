@@ -5,20 +5,15 @@ import numpy as np
 from pycuda.autoinit import context as cuda_ctx
 import pycuda.driver as cuda
 
-from pyfr.exc import PyFRInvalidKernelError
-
 from pyfr.backends.base import Backend
-
 from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixRSlice,
                                       CudaMatrixBank, CudaConstMatrix,
                                       CudaSparseMatrix, CudaView,
                                       CudaMPIMatrix, CudaMPIView)
-
 from pyfr.backends.cuda.packing import CudaPackingKernels
 from pyfr.backends.cuda.blasext import CudaBlasExtKernels
 from pyfr.backends.cuda.cublas import CudaCublasKernels
 from pyfr.backends.cuda.pointwise import CudaPointwiseKernels
-
 from pyfr.backends.cuda.queue import CudaQueue
 
 
@@ -81,17 +76,6 @@ class CudaBackend(Backend):
 
     def _queue(self):
         return CudaQueue()
-
-    def _kernel(self, kname, *args, **kwargs):
-        for prov in reversed(self._providers):
-            try:
-                kern = getattr(prov, kname)
-            except AttributeError:
-                continue
-
-            return kern(*args, **kwargs)
-        else:
-            raise PyFRInvalidKernelError("'{}' has no providers".format(kname))
 
     def runall(self, queues):
         CudaQueue.runall(queues)
