@@ -119,9 +119,9 @@ _cublasDgemm.restype = c_int
 _cublasDgemm.argtypes = [cublas_handle_t,
                          c_int, c_int,
                          c_int, c_int, c_int,
-                         c_void_p, c_void_p, c_int,
+                         POINTER(c_double), c_void_p, c_int,
                          c_void_p, c_int,
-                         c_void_p, c_void_p, c_int]
+                         POINTER(c_double), c_void_p, c_int]
 _cublasDgemm.errcheck = _cublas_process_status
 
 
@@ -131,16 +131,16 @@ _cublasSgemm.restype = c_int
 _cublasSgemm.argtypes = [cublas_handle_t,
                          c_int, c_int,
                          c_int, c_int, c_int,
-                         c_void_p, c_void_p, c_int,
+                         POINTER(c_float), c_void_p, c_int,
                          c_void_p, c_int,
-                         c_void_p, c_void_p, c_int]
+                         POINTER(c_float), c_void_p, c_int]
 _cublasSgemm.errcheck = _cublas_process_status
 
 
 class CudaCublasKernels(CudaKernelProvider):
     def __init__(self, backend):
         self._cublas = cublas_handle_t()
-        _cublasCreate(byref(self._cublas))
+        _cublasCreate(self._cublas)
 
     def __del__(self):
         # PyCUDA registers an atexit handler to destroy the CUDA context
@@ -176,7 +176,7 @@ class CudaCublasKernels(CudaKernelProvider):
             def run(iself, scomp, scopy):
                 _cublasSetStream(self._cublas, scomp.handle)
                 cublasgemm(self._cublas, CublasOp.NONE, CublasOp.NONE, n, m, k,
-                           byref(alpha_ct), A, A.leaddim, B, B.leaddim,
-                           byref(beta_ct), C, C.leaddim)
+                           alpha_ct, A, A.leaddim, B, B.leaddim,
+                           beta_ct, C, C.leaddim)
 
         return MulKernel()
