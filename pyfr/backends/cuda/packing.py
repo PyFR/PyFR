@@ -4,8 +4,8 @@ from mpi4py import MPI
 
 import pycuda.driver as cuda
 
+from pyfr.backends.base import ComputeKernel, MPIKernel
 from pyfr.backends.cuda.provider import CudaKernelProvider
-from pyfr.backends.cuda.queue import CudaComputeKernel, CudaMPIKernel
 from pyfr.backends.cuda.types import CudaMPIMatrix, CudaMPIView
 
 from pyfr.nputil import npdtype_to_ctype
@@ -17,7 +17,7 @@ class CudaPackingKernels(CudaKernelProvider):
                     vlen=mpiview.view.vlen)
 
     def _packunpack_mpimat(self, op, mpimat):
-        class PackUnpackKernel(CudaComputeKernel):
+        class PackUnpackKernel(ComputeKernel):
             if op == 'pack':
                 def run(self, scomp, scopy):
                     cuda.memcpy_dtoh_async(mpimat.hdata, mpimat.data, scomp)
@@ -41,7 +41,7 @@ class CudaPackingKernels(CudaKernelProvider):
         # Create a CUDA event
         event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
 
-        class ViewPackUnpackKernel(CudaComputeKernel):
+        class ViewPackUnpackKernel(ComputeKernel):
             def run(self, scomp, scopy):
                 # If we are unpacking then copy the host buffer to the GPU
                 if op == 'unpack':
@@ -78,7 +78,7 @@ class CudaPackingKernels(CudaKernelProvider):
         # Create a persistent MPI request to send/recv the pack
         preq = mpipreqfn(mpimat.hdata, pid, tag)
 
-        class SendRecvPackKernel(CudaMPIKernel):
+        class SendRecvPackKernel(MPIKernel):
             def run(self, reqlist):
                 # Start the request and append us to the list of requests
                 preq.Start()

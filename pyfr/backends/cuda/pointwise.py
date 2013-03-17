@@ -5,7 +5,6 @@ import numpy as np
 import pycuda.driver as cuda
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
-from pyfr.backends.cuda.queue import CudaComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 

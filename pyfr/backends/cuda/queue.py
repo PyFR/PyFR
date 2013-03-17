@@ -6,28 +6,7 @@ import pycuda.driver as cuda
 
 from mpi4py import MPI
 
-import pyfr.backends.base as base
-
-
-class CudaComputeKernel(base.Kernel):
-    pass
-
-
-class CudaMPIKernel(base.Kernel):
-    pass
-
-
-def _is_kernel(item):
-    return isinstance(item, CudaKernel)
-
-
-def _is_compute_kernel(item):
-    return isinstance(item, CudaComputeKernel)
-
-
-def _is_mpi_kernel(item):
-    return isinstance(item, CudaMPIKernel)
-
+from pyfr.backends.base import iscomputekernel, ismpikernel
 
 class CudaQueue(object):
     def __init__(self):
@@ -54,9 +33,9 @@ class CudaQueue(object):
         return not self._items
 
     def _exec_item(self, item, rtargs):
-        if _is_compute_kernel(item):
+        if iscomputekernel(item):
             item.run(self._stream_comp, self._stream_copy, *rtargs)
-        elif _is_mpi_kernel(item):
+        elif ismpikernel(item):
             item.run(self._mpireqs, *rtargs)
         else:
             raise ValueError('Non compute/MPI kernel in queue')
@@ -77,17 +56,17 @@ class CudaQueue(object):
             self._exec_item(*self._items.popleft())
 
     def _wait(self):
-        if _is_compute_kernel(self._last):
+        if iscomputekernel(self._last):
             self._stream_comp.synchronize()
             self._stream_copy.synchronize()
-        elif _is_mpi_kernel(self._last):
+        elif ismpikernel(self._last):
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
         self._last = None
 
     def _at_sequence_point(self, item):
-        if (_is_compute_kernel(self._last) and not _is_compute_kernel(item))\
-           or (_is_mpi_kernel(self._last) and not _is_mpi_kernel(item)):
+        if (iscomputekernel(self._last) and not iscomputekernel(item)) or\
+           (ismpikernel(self._last) and not ismpikernel(item)):
             return True
         else:
             return False

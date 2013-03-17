@@ -136,11 +136,6 @@ class CudaConstMatrix(CudaMatrixBase, base.ConstMatrix):
                                               tags)
 
 
-class CudaSparseMatrix(object):
-    def __init__(self, backend, initval, tags):
-        raise NotImplementedError('SparseMatrix todo!')
-
-
 class CudaView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
         self.nrow = nrow = matmap.shape[0]

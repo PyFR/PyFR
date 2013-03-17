@@ -6,10 +6,10 @@ from pycuda.autoinit import context as cuda_ctx
 import pycuda.driver as cuda
 
 from pyfr.backends.base import Backend
+from pyfr.backends.blockmats import BlockDiagMatrixKernels
 from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixRSlice,
                                       CudaMatrixBank, CudaConstMatrix,
-                                      CudaSparseMatrix, CudaView,
-                                      CudaMPIMatrix, CudaMPIView)
+                                      CudaView, CudaMPIMatrix, CudaMPIView)
 from pyfr.backends.cuda.packing import CudaPackingKernels
 from pyfr.backends.cuda.blasext import CudaBlasExtKernels
 from pyfr.backends.cuda.cublas import CudaCublasKernels
@@ -33,8 +33,8 @@ class CudaBackend(Backend):
         cuda_ctx.set_cache_config(cuda.func_cache.PREFER_SHARED)
 
         # Kernel provider classes
-        kprovcls = [CudaPointwiseKernels, CudaBlasExtKernels,
-                    CudaPackingKernels, CudaCublasKernels]
+        kprovcls = [BlockDiagMatrixKernels, CudaPointwiseKernels,
+                    CudaBlasExtKernels, CudaPackingKernels, CudaCublasKernels]
         self._providers = [k(self) for k in kprovcls]
 
         # Numeric data type
@@ -57,13 +57,6 @@ class CudaBackend(Backend):
 
     def _const_matrix(self, *args, **kwargs):
         return CudaConstMatrix(self, *args, **kwargs)
-
-    def _sparse_matrix(self, *args, **kwargs):
-        return CudaSparseMatrix(self, *args, **kwargs)
-
-    def _is_sparse(self, mat, tags):
-        # Currently, no support for sparse matrices
-        return False
 
     def _mpi_matrix(self, *args, **kwargs):
         return CudaMPIMatrix(self, *args, **kwargs)

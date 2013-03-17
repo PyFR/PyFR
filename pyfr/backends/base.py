@@ -8,7 +8,7 @@ from weakref import WeakSet
 
 import numpy as np
 
-from pyfr.util import proxylist
+from pyfr.util import ndrange, proxylist
 
 
 def recordalloc(type):
@@ -161,7 +161,6 @@ class Backend(object):
     def _const_matrix(self, initval, tags):
         pass
 
-    @recordalloc('data')
     def sparse_matrix(self, initval, iopacking='AoS', tags=set()):
         """Creates a sparse matrix from *initval*
 
@@ -176,25 +175,36 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.SparseMatrix`
         """
-        return self._sparse_matrix(initval, iopacking, tags)
-
-    @abstractmethod
-    def _sparse_matrix(self, initval, iopacking, tags):
         pass
+
+    def block_diag_matrix(self, initval, brange, iopacking='AoS', tags=set()):
+        return BlockDiagMatrix(self, initval, brange, iopacking, tags)
 
     def auto_matrix(self, initval, iopacking='AoS', tags=set()):
         """Creates either a constant or sparse matrix from *initval*
         """
-        if self._is_sparse(initval, tags):
-            return self.sparse_matrix(initval, iopacking, tags)
-        else:
-            return self.const_matrix(initval, iopacking, tags)
+        # HACK: The following code attempts to identify one special-
+        # case of block diagonal matrices;  while it is currently
+        # sufficient a more robust methodology is desirable.
+        shape = initval.shape
+        if iopacking == 'AoS' and len(shape) == 4 and shape[1] == shape[3]:
+            for i, j in ndrange(shape[1], shape[1]):
+                if i == j:
+                    continue
 
-    @abstractmethod
-    def _is_sparse(self, mat, tags):
-        """Determines if a *mat* is sparse or not
-        """
-        pass
+                if np.any(initval[:,i,:,j] != 0):
+                    break
+            else:
+                # Block spans are trivial
+                brange = [(i*shape[0], (i + 1)*shape[0],
+                           i*shape[2], (i + 1)*shape[2])
+                          for i in xrange(shape[1])]
+
+                return self.block_diag_matrix(initval, brange, iopacking,
+                                              tags)
+
+        # Not block-diagonal; return a constant matrix
+        return self.const_matrix(initval, iopacking, tags)
 
     @recordalloc('data')
     def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
@@ -406,6 +416,24 @@ class SparseMatrix(MatrixBase):
     _base_tags = {'const', 'sparse'}
 
 
+class BlockDiagMatrix(MatrixBase):
+    _base_tags = {'const', 'blockdiag'}
+
+    def __init__(self, backend, initval, brange, iopacking, tags):
+        super(BlockDiagMatrix, self).__init__(backend, initval.shape,
+                                              iopacking, tags)
+
+        # Unpack into a dense matrix and extract the blocks
+        self.matrix = matrix = self._pack(initval)
+        self.blocks = [matrix[ri:rj,ci:cj] for ri, rj, ci, cj in brange]
+        self.ranges = brange
+
+    def _get(self):
+        return self.matrix
+
+    @property
+    def nbytes(self):
+        return 0
 
 
 class MPIMatrix(Matrix):
@@ -476,12 +504,36 @@ class Kernel(object):
         pass
 
 
-class ProxyKernel(Kernel):
+class ComputeKernel(Kernel):
+    pass
+
+
+class MPIKernel(Kernel):
+    pass
+
+
+def iscomputekernel(kernel):
+    return isinstance(kernel, ComputeKernel)
+
+
+def ismpikernel(kernel):
+    return isinstance(kernel, MPIKernel)
+
+
+class _MetaKernel(object):
     def __init__(self, kernels):
         self._kernels = proxylist(kernels)
 
     def run(self, *args, **kwargs):
         self._kernels.run(*args, **kwargs)
+
+
+class ComputeMetaKernel(_MetaKernel, ComputeKernel):
+    pass
+
+
+class MPIMetaKernel(_MetaKernel, MPIKernel):
+    pass
 
 
 class Queue(object):

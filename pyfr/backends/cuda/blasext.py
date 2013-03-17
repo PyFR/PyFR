@@ -3,7 +3,7 @@
 import numpy as np
 
 from pyfr.backends.cuda.provider import CudaKernelProvider
-from pyfr.backends.cuda.queue import CudaComputeKernel
+from pyfr.backends.base import ComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 
@@ -23,7 +23,7 @@ class CudaBlasExtKernels(CudaKernelProvider):
         block = (1024, 1, 1)
         grid = self._get_grid_for_block(block, cnt)
 
-        class AxnpbyKernel(CudaComputeKernel):
+        class AxnpbyKernel(ComputeKernel):
             def run(self, scomp, scopy, beta, *alphan):
                 args = [i for axn in zip(xn, alphan) for i in axn]
                 fn.prepared_async_call(grid, block, scomp, cnt, y, beta, *args)

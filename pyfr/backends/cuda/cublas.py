@@ -7,8 +7,8 @@ from ctypes.util import find_library
 
 import numpy as np
 
+from pyfr.backends.base import ComputeKernel, traits
 from pyfr.backends.cuda.provider import CudaKernelProvider
-from pyfr.backends.cuda.queue import CudaComputeKernel
 
 # Find the CUBLAS library
 if sys.platform == 'linux2':
@@ -168,6 +168,7 @@ class CudaCublasKernels(CudaKernelProvider):
         if pycuda.autoinit.context:
             _cublasDestroy(self._cublas)
 
+    @traits(a={'dense'})
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -188,7 +189,7 @@ class CudaCublasKernels(CudaKernelProvider):
             cublasgemm = _cublasSgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        class MulKernel(CudaComputeKernel):
+        class MulKernel(ComputeKernel):
             def run(iself, scomp, scopy):
                 _cublasSetStream(self._cublas, scomp.handle)
                 cublasgemm(self._cublas, CublasOp.NONE, CublasOp.NONE, n, m, k,
@@ -208,7 +209,7 @@ class CudaCublasKernels(CudaKernelProvider):
         # Total number of elements (incl. slack)
         n = x.leaddim*x.nrow
 
-        class Nrm2Kernel(CudaComputeKernel):
+        class Nrm2Kernel(ComputeKernel):
             @property
             def retval(iself):
                 return result.value
