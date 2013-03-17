@@ -36,6 +36,10 @@ class CudaMatrixBase(base.MatrixBase):
         self.leaddim = self.pitch / self.itemsize
         self.traits = (self.nrow, self.leaddim, self.dtype)
 
+        # Zero the entire matrix (incl. slack)
+        assert (self._nbytes % 4) == 0
+        cuda.memset_d32(self.data, 0, self._nbytes/4)
+
         # Process any initial values
         if initval is not None:
             self._set(self._pack(initval))
