@@ -317,12 +317,14 @@ class Backend(object):
 class MatrixBase(object):
     __metaclass__ = ABCMeta
 
+    _base_tags = set()
+
     @abstractmethod
     def __init__(self, backend, ioshape, iopacking, tags):
         self.backend = backend
         self.ioshape = ioshape
         self.iopacking = iopacking
-        self.tags = tags
+        self.tags = self._base_tags | tags
 
         if len(ioshape) == 2:
             self.nrow = ioshape[0]
@@ -364,6 +366,8 @@ class MatrixBase(object):
 class Matrix(MatrixBase):
     """Matrix abstract base class
     """
+    _base_tags = {'dense'}
+
     def set(self, buf):
         return self._set(self._pack(buf))
 
@@ -389,17 +393,19 @@ class MatrixRSlice(object):
 
         self.nrow = q - p
         self.ncol = mat.ncol
-        self.tags = mat.tags
+        self.tags = mat.tags | {'slice'}
 
 
 class ConstMatrix(MatrixBase):
     """Constant matrix abstract base class"""
-    pass
+    _base_tags = {'const', 'dense'}
 
 
 class SparseMatrix(MatrixBase):
     """Sparse matrix abstract base class"""
-    pass
+    _base_tags = {'const', 'sparse'}
+
+
 
 
 class MPIMatrix(Matrix):
