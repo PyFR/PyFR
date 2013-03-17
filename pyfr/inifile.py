@@ -7,6 +7,9 @@ from collections import OrderedDict
 from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
 
 
+_sentinel = object()
+
+
 class Inifile(object):
     def __init__(self, inistr=None):
         self._cp = cp = SafeConfigParser()
@@ -33,23 +36,23 @@ class Inifile(object):
             self._cp.add_section(section)
             self._cp.set(section, option, value)
 
-    def get(self, section, option, default=None, raw=False, vars=None):
+    def get(self, section, option, default=_sentinel, raw=False, vars=None):
         try:
             return self._cp.get(section, option, raw=raw, vars=vars)
         except NoSectionError:
-            if default is None:
+            if default is _sentinel:
                 raise
 
             self._cp.add_section(section)
             return self.get(section, option, default, raw, vars)
         except NoOptionError:
-            if default is None:
+            if default is _sentinel:
                 raise
 
             self._cp.set(section, option, str(default))
             return self._cp.get(section, option, raw=raw, vars=vars)
 
-    def getpath(self, section, option, default=None, vars=None):
+    def getpath(self, section, option, default=_sentinel, vars=None):
         path = self.get(section, option, default, vars)
         path = os.path.expandvars(path)
         path = os.path.expanduser(path)
@@ -57,10 +60,10 @@ class Inifile(object):
 
         return path
 
-    def getfloat(self, section, option, default=None):
+    def getfloat(self, section, option, default=_sentinel):
         return float(self.get(section, option, default))
 
-    def getint(self, section, option, default=None):
+    def getint(self, section, option, default=_sentinel):
         return int(self.get(section, option, default))
 
     def items(self, section):
@@ -80,7 +83,7 @@ class Inifile(object):
     _bool_states = {'1': True, 'yes': True, 'true': True, 'on': True,
                     '0': False, 'no': False, 'false': False, 'off': False}
 
-    def getbool(self, section, option, default=None):
+    def getbool(self, section, option, default=_sentinel):
         v = self.get(section, option, default)
         return self._bool_states[v.lower()]
 
