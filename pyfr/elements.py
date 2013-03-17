@@ -110,9 +110,9 @@ class BaseAdvectionElements(object):
         self._be = be
 
         # Allocate the constant operator matrices
-        self._m0b = be.auto_const_sparse_matrix(self.m0, tags={'M0'})
-        self._m3b = be.auto_const_sparse_matrix(self.m3, tags={'M3'})
-        self._m132b = be.auto_const_sparse_matrix(self.m132, tags={'M132'})
+        self._m0b = be.auto_matrix(self.m0, tags={'M0'})
+        self._m3b = be.auto_matrix(self.m3, tags={'M3'})
+        self._m132b = be.auto_matrix(self.m132, tags={'M132'})
 
         # Allocate soln point transformation matrices
         self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts)
@@ -362,9 +362,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         super(BaseAdvectionDiffusionElements, self).set_backend(be, nscal_upts)
 
         # Allocate the additional operator matrices
-        self._m5b = be.auto_const_sparse_matrix(self.m5, tags={'M5'})
-        self._m6b = be.auto_const_sparse_matrix(self.m6, tags={'M6'})
-        self._m460b = be.auto_const_sparse_matrix(self.m460, tags={'M460'})
+        self._m5b = be.auto_matrix(self.m5, tags={'M5'})
+        self._m6b = be.auto_matrix(self.m6, tags={'M6'})
+        self._m460b = be.auto_matrix(self.m460, tags={'M460'})
 
         # Flux point transformation matrices
         self._jmat_fpts = be.const_matrix(self._jmat_fpts)

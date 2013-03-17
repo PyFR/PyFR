@@ -182,7 +182,7 @@ class Backend(object):
     def _sparse_matrix(self, initval, iopacking, tags):
         pass
 
-    def auto_const_sparse_matrix(self, initval, iopacking='AoS', tags=set()):
+    def auto_matrix(self, initval, iopacking='AoS', tags=set()):
         """Creates either a constant or sparse matrix from *initval*
         """
         if self._is_sparse(initval, tags):
