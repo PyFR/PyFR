@@ -461,6 +461,10 @@ class Kernel(object):
     def __call__(self, *args):
         return self, args
 
+    @property
+    def retval(self):
+        return None
+
     @abstractmethod
     def run(self, *args, **kwargs):
         pass

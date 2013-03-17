@@ -137,6 +137,22 @@ _cublasSgemm.argtypes = [cublas_handle_t,
 _cublasSgemm.errcheck = _cublas_process_status
 
 
+# Wrap the cublasDnrm2 (double-precision Euler norm) function
+_cublasDnrm2 = _libcublas.cublasDnrm2_v2
+_cublasDnrm2.restype = c_int
+_cublasDnrm2.argtypes = [cublas_handle_t,
+                         c_int, c_void_p, c_int, POINTER(c_double)]
+_cublasDnrm2.errcheck = _cublas_process_status
+
+
+# Wrap the cublasSnrm2 (single-precision Euler norm) function
+_cublasSnrm2 = _libcublas.cublasSnrm2_v2
+_cublasSnrm2.restype = c_int
+_cublasSnrm2.argtypes = [cublas_handle_t,
+                         c_int, c_void_p, c_int, POINTER(c_float)]
+_cublasSnrm2.errcheck = _cublas_process_status
+
+
 class CudaCublasKernels(CudaKernelProvider):
     def __init__(self, backend):
         self._cublas = cublas_handle_t()
@@ -180,3 +196,25 @@ class CudaCublasKernels(CudaKernelProvider):
                            beta_ct, C, C.leaddim)
 
         return MulKernel()
+
+    def nrm2(self, x):
+        if x.dtype == np.float64:
+            cublasnrm2 = _cublasDnrm2
+            result = c_double()
+        else:
+            cublasnrm2 = _cublasSnrm2
+            result = c_float()
+
+        # Total number of elements (incl. slack)
+        n = x.leaddim*x.nrow
+
+        class Nrm2Kernel(CudaComputeKernel):
+            @property
+            def retval(iself):
+                return result.value
+
+            def run(iself, scomp, scopy):
+                _cublasSetStream(self._cublas, scomp.handle)
+                cublasnrm2(self._cublas, n, x, 1, result)
+
+        return Nrm2Kernel()
