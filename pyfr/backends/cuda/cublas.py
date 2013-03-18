@@ -71,7 +71,7 @@ class CublasWrappers(object):
         try:
             lib = CDLL(libname)
         except OSError:
-            raise ImportError('Unable to load CUBLAS')
+            raise RuntimeError('Unable to load CUBLAS')
 
         # cublasCreate
         self.cublasCreate = lib.cublasCreate_v2
@@ -90,8 +90,7 @@ class CublasWrappers(object):
 
         # cublasDgemm
         self.cublasDgemm = lib.cublasDgemm_v2
-        self.cublasDgemm.argtypes = [CublasHandle,
-                                     c_int, c_int,
+        self.cublasDgemm.argtypes = [CublasHandle, c_int, c_int,
                                      c_int, c_int, c_int,
                                      POINTER(c_double), c_void_p, c_int,
                                      c_void_p, c_int,
@@ -100,8 +99,7 @@ class CublasWrappers(object):
 
         # cublasSgemm
         self.cublasSgemm = lib.cublasSgemm_v2
-        self.cublasSgemm.argtypes = [CublasHandle,
-                                     c_int, c_int,
+        self.cublasSgemm.argtypes = [CublasHandle, c_int, c_int,
                                      c_int, c_int, c_int,
                                      POINTER(c_float), c_void_p, c_int,
                                      c_void_p, c_int,
