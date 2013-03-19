@@ -118,11 +118,7 @@ class CudaMatrixBank(base.MatrixBank):
             if m.traits != mats[0].traits:
                 raise ValueError('Matrices in a bank must be homogeneous')
 
-        super(CudaMatrixBank, self).__init__(mats, initbank, tags)
-
-    @property
-    def _as_parameter_(self):
-        return long(self._curr_mat)
+        super(CudaMatrixBank, self).__init__(backend, mats, initbank, tags)
 
     def __long__(self):
         return long(self._curr_mat)
