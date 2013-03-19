@@ -8,7 +8,6 @@ from ctypes.util import find_library
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
-from pyfr.backends.cuda.provider import CudaKernelProvider
 
 
 class CublasError(Exception):
@@ -142,7 +141,7 @@ class CublasWrappers(object):
             return libname
 
 
-class CudaCublasKernels(CudaKernelProvider):
+class CudaCublasKernels(object):
     def __init__(self, backend):
         # Load and wrap cublas
         self._wrappers = CublasWrappers()

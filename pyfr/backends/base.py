@@ -405,6 +405,10 @@ class MatrixRSlice(object):
         self.ncol = mat.ncol
         self.tags = mat.tags | {'slice'}
 
+    @property
+    def nbytes(self):
+        return 0
+
 
 class ConstMatrix(MatrixBase):
     """Constant matrix abstract base class"""
@@ -445,9 +449,11 @@ class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
     @abstractmethod
-    def __init__(self, matrices, initbank, tags):
-        self._mats = matrices
+    def __init__(self, backend, matrices, initbank, tags):
+        self.backend = backend
+        self.tags = tags
 
+        self._mats = matrices
         self._curr_idx = initbank
         self._curr_mat = self._mats[initbank]
 
@@ -459,6 +465,9 @@ class MatrixBank(Sequence):
 
     def __getattr__(self, attr):
         return getattr(self._curr_mat, attr)
+
+    def rslice(self, p, q):
+        raise RuntimeError('Matrix banks can not be sliced')
 
     @property
     def active(self):
