@@ -5,7 +5,7 @@ Tutorials
 Introduction
 ------------
 
-The following tutorials are designed to get you familiar with PyFR and
+The following tutorials will help you gain familiar with PyFR and
 its range of functionality.
 
 3D Euler Vortex
@@ -15,13 +15,13 @@ Proceed with the following steps to run a 3D Euler vortex simulation:
 
 1. Create a working directory called ``euler_vortex/``
 2. Copy the file ``PyFR/examples/euler_vortex/euler_vortex.ini`` into ``euler_vortex/``
-3. Run pyfr-mesh to generate a single partition hexahedral mesh called ``euler_vortex.pyfrm``
+3. Run pyfr-mesh to generate a hexahedral mesh with a single partition called ``euler_vortex.pyfrm``
 
     ``pyfr-mesh .... euler_vortex.pyfrm``
 
 4. Run pyfr-sim to solve Euler's equations on the mesh, generating a series of solution files called ``euler_vortex_*.pyfrs``
 
-    ``pyfr-sim .... euler_vortex.pyfrm euler_vortex.ini``
+    ``pyfr-sim -p run euler_vortex.pyfrm euler_vortex.ini``
 
 5. Run pyfr-postp to generate a series of VTK files called ``euler_vortex_*.vtu``
 
@@ -49,9 +49,9 @@ Proceed with the following steps to run a 3D cylinder flow simulation:
 
     ``pyfr-mesh .... cylinder_flow.pyfrm``
 
-4. Run pyfr-sim to solve the compressible Navier-Stokes equations on the mesh, generating a series of solution files called ``cylinder_flow_*.pyfrs``
+4. Run pyfr-sim on four nodes to solve the compressible Navier-Stokes equations on the mesh, generating a series of solution files called ``cylinder_flow_*.pyfrs``
 
-    ``pyfr-sim .... cylinder_flow.pyfrm cylinder_flow.ini``
+    ``mpirun -n 4 pyfr-sim -p run cylinder_flow.pyfrm cylinder_flow.ini``
 
 5. Run pyfr-postp to generate a series of VTK files called ``cylinder_flow_*.vtu``
 
