@@ -49,12 +49,8 @@ class Backend(object):
     # Backend name
     name = None
 
-    # SoA or AoS
-    packing = None
-
     def __init__(self, cfg):
         assert self.name is not None
-        assert self.packing in ('SoA', 'AoS')
 
         self._cfg = cfg
         self._allocs = defaultdict(WeakSet)
@@ -291,14 +287,14 @@ class Backend(object):
         return sum(d.nbytes for d in self._allocs['data'])
 
     def from_aos_stride_to_native(self, a, s):
-        return (s, 1) if self.packing == 'AoS' else (1, a)
+        return 1, a
 
     def from_soa_stride_to_native(self, s, a):
-        return (a, 1) if self.packing == 'SoA' else (1, s)
+        return a, 1
 
     def from_x_to_native(self, mat, cpacking):
         # Reorder if packed differently
-        if self.packing != cpacking:
+        if cpacking != 'SoA':
             if mat.ndim == 3:
                 mat = mat.swapaxes(1, 2)
             elif mat.ndim == 4:
@@ -313,7 +309,7 @@ class Backend(object):
             return mat.reshape(mat.shape[0]*mat.shape[1], -1)
 
     def from_native_to_x(self, mat, nshape, npacking):
-        if self.packing != npacking:
+        if npacking != 'SoA':
             n, nd = nshape, len(nshape)
             if nd == 3:
                 mat = mat.reshape(n[0], n[2], n[1]).swapaxes(1, 2)

@@ -19,7 +19,6 @@ from pyfr.backends.cuda.queue import CudaQueue
 
 class CudaBackend(Backend):
     name = 'CUDA'
-    packing = 'SoA'
 
     def __init__(self, cfg):
         super(CudaBackend, self).__init__(cfg)
