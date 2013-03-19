@@ -6,10 +6,10 @@ import pycuda.driver as cuda
 
 from mpi4py import MPI
 
-from pyfr.backends.base import iscomputekernel, ismpikernel
+from pyfr.backends.base import iscomputekernel, ismpikernel, Queue
 
 
-class CudaQueue(object):
+class CudaQueue(Queue):
     def __init__(self):
         # Last kernel we executed
         self._last = None
