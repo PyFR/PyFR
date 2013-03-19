@@ -8,6 +8,7 @@ from mpi4py import MPI
 
 from pyfr.backends.base import iscomputekernel, ismpikernel
 
+
 class CudaQueue(object):
     def __init__(self):
         # Last kernel we executed
