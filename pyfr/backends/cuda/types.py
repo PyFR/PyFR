@@ -61,16 +61,6 @@ class CudaMatrixBase(base.MatrixBase):
         memcpy2d_htod(self.data, nary, self.ncol*self.itemsize,
                       self.pitch, self.ncol*self.itemsize, self.nrow)
 
-    def offsetof(self, i, j):
-        if i < 0 or i >= self.nrow or j < 0 or j >= self.ncol:
-            raise ValueError('Index ({},{}) out of bounds ({},{}))'
-                             .format(i, j, self.nrow, self.ncol))
-
-        return self.pitch*i + j*self.itemsize
-
-    def addrof(self, i, j):
-        return np.intp(long(self.data) + self.offsetof(i, j))
-
     @property
     def _as_parameter_(self):
         return long(self.data)
@@ -101,7 +91,7 @@ class CudaMatrixRSlice(base.MatrixRSlice):
         self.traits = (self.nrow, self.leaddim, self.dtype)
 
         # Starting offset of our row
-        self._soffset = mat.offsetof(p, 0)
+        self._soffset = p*mat.pitch
 
     @property
     def _as_parameter_(self):
@@ -162,9 +152,16 @@ class CudaView(base.View):
             if m.dtype != self.refdtype:
                 raise TypeError('Mixed view matrix types are not supported')
 
-        # Go from matrices and row/column indices to addresses
+        # Row/column indcies of each view element
         r, c = rcmap[...,0], rcmap[...,1]
-        ptrmap = np.vectorize(lambda m, r, c: m.addrof(r, c))(matmap, r, c)
+
+        # We want to go from matrix objects and row/column indicies
+        # to memory addresses.  The algorithm for this is:
+        # ptr = m.base + r*m.pitch + c*itemsize
+        ptrmap = np.array(c*self.refitemsize, dtype=np.intp)
+        for m in self._mats:
+            ix = np.where(matmap == m)
+            ptrmap[ix] += long(m) + r[ix]*m.pitch
 
         self.mapping = CudaMatrixBase(backend, np.intp, (nrow, ncol), ptrmap,
                                       'AoS', tags)
