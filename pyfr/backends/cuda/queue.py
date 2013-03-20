@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import collections
+import itertools as it
 
 import pycuda.driver as cuda
 
@@ -30,8 +31,8 @@ class CudaQueue(Queue):
         self << items
         self.run()
 
-    def _empty(self):
-        return not self._items
+    def __nonzero__(self):
+        return bool(self._items)
 
     def _exec_item(self, item, rtargs):
         if iscomputekernel(item):
@@ -84,9 +85,9 @@ class CudaQueue(Queue):
             q._exec_nowait()
 
         # So long as there are items remaining in the queues
-        while any(not q._empty() for q in queues):
+        while any(queues):
             # Execute a (potentially) blocking item from each queue
-            for q in [q for q in queues if not q._empty()]:
+            for q in it.ifilter(None, queues):
                 q._exec_next()
                 q._exec_nowait()
 
