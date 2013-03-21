@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import ctypes as ct
+
 import numpy as np
 
 
@@ -39,3 +41,13 @@ _ctype_map = {np.float32: 'float', np.float64: 'double'}
 
 def npdtype_to_ctype(dtype):
     return _ctype_map[np.dtype(dtype).type]
+
+
+_ctypestype_map = {
+    np.int32: ct.c_int32, np.uint32: ct.c_uint32,
+    np.int64: ct.c_int64, np.uint64: ct.c_uint64,
+    np.float32: ct.c_float, np.float64: ct.c_double}
+
+
+def npdtype_to_ctypestype(dtype):
+    return _ctypestype_map[np.dtype(dtype).type]
