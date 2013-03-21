@@ -12,7 +12,7 @@ class CudaKernelProvider(object):
 
     lookup = PkgTemplateLookup(__name__, 'kernels')
 
-    def __init__(self, backend):
+    def __init__(self, backend, cfg):
         pass
 
     def _get_2d_grid_block(self, function, nrow, ncol):

@@ -34,7 +34,7 @@ class CudaBackend(Backend):
         # Kernel provider classes
         kprovcls = [BlockDiagMatrixKernels, CudaPointwiseKernels,
                     CudaBlasExtKernels, CudaPackingKernels, CudaCublasKernels]
-        self._providers = [k(self) for k in kprovcls]
+        self._providers = [k(self, cfg) for k in kprovcls]
 
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')

@@ -4,7 +4,7 @@ from pyfr.backends.base import traits, ComputeMetaKernel
 
 
 class BlockDiagMatrixKernels(object):
-    def __init__(self, backend):
+    def __init__(self, backend, cfg):
         self.backend = backend
 
     @traits(a={'blockdiag'})
