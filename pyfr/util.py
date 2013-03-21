@@ -62,6 +62,18 @@ def setenv(**kwargs):
         os.environ.update(_env)
 
 
+@contextlib.contextmanager
+def chdir(dirname):
+    cdir = os.getcwd()
+
+    try:
+        if dirname:
+            os.chdir(dirname)
+        yield
+    finally:
+        os.chdir(cdir)
+
+
 def lazyprop(fn):
     attr = '_lazy_' + fn.__name__
 
