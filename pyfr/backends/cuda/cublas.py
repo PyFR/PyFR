@@ -8,6 +8,7 @@ from ctypes.util import find_library
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
+from pyfr.ctypesutil import platform_libname
 
 
 class CublasError(Exception):
@@ -65,7 +66,7 @@ class CublasWrappers(object):
                  0xe: CublasInternalError}
 
     def __init__(self, libname=None):
-        libname = libname or self._find_cublas()
+        libname = libname or platform_libname('cublas')
 
         try:
             lib = CDLL(libname)
@@ -124,21 +125,6 @@ class CublasWrappers(object):
                 raise self._statuses[status]
             except KeyError:
                 raise CublasError
-
-    def _find_cublas(self):
-        if sys.platform == 'linux2':
-            return 'libcublas.so'
-        elif sys.platform == 'darwin':
-            return 'libcublas.dylib'
-        elif sys.platform == 'Windows':
-            return 'cublas.lib'
-        else:
-            libname = find_library('cublas')
-
-            if not libname:
-                raise RuntimeError('Unsupported platform')
-
-            return libname
 
 
 class CudaCublasKernels(object):
