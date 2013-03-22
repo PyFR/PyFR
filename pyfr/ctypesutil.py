@@ -2,6 +2,7 @@
 
 import sys
 
+
 def platform_libname(ln):
     # Mac OS X
     if sys.platform == 'darwin':
