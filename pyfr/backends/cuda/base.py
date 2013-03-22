@@ -7,7 +7,7 @@ from pyfr.backends import blockmats
 
 
 class CudaBackend(Backend):
-    name = 'CUDA'
+    name = 'cuda'
 
     def __init__(self, cfg):
         super(CudaBackend, self).__init__(cfg)

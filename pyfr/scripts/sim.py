@@ -16,7 +16,7 @@ from pyfr import mpiutil
 atexit.register(mpiutil.atexit)
 
 from pyfr import __version__ as version
-from pyfr.backends.cuda import CudaBackend
+from pyfr.backends import get_backend
 from pyfr.inifile import Inifile
 from pyfr.integrators import get_integrator
 from pyfr.rank_allocator import get_rank_allocation
@@ -48,6 +48,7 @@ def process_restart(args):
 def main():
     ap = ArgumentParser(prog='pyfr-sim', description='Runs a PyFR simulation')
     ap.add_argument('--verbose', '-v', action='count')
+    ap.add_argument('--backend', '-b', default='cuda', help='Backend to use')
     ap.add_argument('--progress', '-p', action='store_true',
                     help='show a progress bar')
     ap.add_argument('--nansweep', '-n', metavar='N', type=int,
@@ -72,7 +73,7 @@ def main():
     mesh, soln, cfg = args.process(args)
 
     # Create a backend
-    backend = CudaBackend(cfg)
+    backend = get_backend(args.backend, cfg)
 
     # Bring up MPI (this must be done after we have created a backend)
     mpiutil.init()
