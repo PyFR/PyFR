@@ -194,10 +194,10 @@ class CudaMPIView(base.MPIView):
         self.vlen = vlen
 
         # Create a normal CUDA view
-        self.view = backend._view(matmap, rcmap, stridemap, vlen, tags)
+        self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend._mpi_matrix((nrow, ncol, vlen), None, 'AoS',
+        self.mpimat = backend.mpi_matrix((nrow, ncol, vlen), None, 'AoS',
                                           tags=tags)
 
     @property

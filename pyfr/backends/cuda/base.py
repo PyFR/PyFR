@@ -2,19 +2,8 @@
 
 import numpy as np
 
-from pycuda.autoinit import context as cuda_ctx
-import pycuda.driver as cuda
-
 from pyfr.backends.base import Backend
-from pyfr.backends.blockmats import BlockDiagMatrixKernels
-from pyfr.backends.cuda.types import (CudaMatrix, CudaMatrixRSlice,
-                                      CudaMatrixBank, CudaConstMatrix,
-                                      CudaView, CudaMPIMatrix, CudaMPIView)
-from pyfr.backends.cuda.packing import CudaPackingKernels
-from pyfr.backends.cuda.blasext import CudaBlasExtKernels
-from pyfr.backends.cuda.cublas import CudaCublasKernels
-from pyfr.backends.cuda.pointwise import CudaPointwiseKernels
-from pyfr.backends.cuda.queue import CudaQueue
+from pyfr.backends import blockmats
 
 
 class CudaBackend(Backend):
@@ -23,18 +12,43 @@ class CudaBackend(Backend):
     def __init__(self, cfg):
         super(CudaBackend, self).__init__(cfg)
 
+        # Create a CUDA context
+        from pycuda.autoinit import context as cuda_ctx
+
         # Some CUDA devices share L1 cache and shared memory; on these
         # devices CUDA allows us to specify a preference between L1
-        # cache and shared memory.  For the benefit of CUBLAS (which
+        # cache and shared memory.  For the sake of CUBLAS (which
         # benefits greatly from more shared memory but fails to
         # declare its preference) we set the global default to
         # PREFER_SHARED.
-        cuda_ctx.set_cache_config(cuda.func_cache.PREFER_SHARED)
+        from pycuda.driver import func_cache
+        cuda_ctx.set_cache_config(func_cache.PREFER_SHARED)
 
-        # Kernel provider classes
-        kprovcls = [BlockDiagMatrixKernels, CudaPointwiseKernels,
-                    CudaBlasExtKernels, CudaPackingKernels, CudaCublasKernels]
-        self._providers = [k(self, cfg) for k in kprovcls]
+        # For introspection to work it must always be possible to
+        # import the CudaBackend (even if CUDA is unavailable on the
+        # system).  As many of our types/providers depend on the CUDA
+        # runtime we import these here, locally, at the time of
+        # instantiation.
+        from pyfr.backends.cuda import (blasext, cublas, packing, pointwise,
+                                        queue, types)
+
+        # Register our data types
+        self.const_matrix_cls = types.CudaConstMatrix
+        self.matrix_cls = types.CudaMatrix
+        self.matrix_bank_cls = types.CudaMatrixBank
+        self.matrix_rslice_cls = types.CudaMatrixRSlice
+        self.mpi_matrix_cls = types.CudaMPIMatrix
+        self.mpi_view_cls = types.CudaMPIView
+        self.queue_cls = queue.CudaQueue
+        self.view_cls = types.CudaView
+
+        # Instantiate the kernel providers
+        kprovs = [blockmats.BlockDiagMatrixKernels,
+                  pointwise.CudaPointwiseKernels,
+                  blasext.CudaBlasExtKernels,
+                  packing.CudaPackingKernels,
+                  cublas.CudaCublasKernels]
+        self._providers = [k(self, cfg) for k in kprovs]
 
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')
@@ -44,30 +58,3 @@ class CudaBackend(Backend):
 
         # Convert to a numpy data type
         self.fpdtype = np.dtype(prec).type
-
-    def _matrix(self, *args, **kwargs):
-        return CudaMatrix(self, *args, **kwargs)
-
-    def _matrix_rslice(self, *args, **kwargs):
-        return CudaMatrixRSlice(self, *args, **kwargs)
-
-    def _matrix_bank(self, *args, **kwargs):
-        return CudaMatrixBank(self, *args, **kwargs)
-
-    def _const_matrix(self, *args, **kwargs):
-        return CudaConstMatrix(self, *args, **kwargs)
-
-    def _mpi_matrix(self, *args, **kwargs):
-        return CudaMPIMatrix(self, *args, **kwargs)
-
-    def _view(self, *args, **kwargs):
-        return CudaView(self, *args, **kwargs)
-
-    def _mpi_view(self, *args, **kwargs):
-        return CudaMPIView(self, *args, **kwargs)
-
-    def _queue(self):
-        return CudaQueue()
-
-    def runall(self, queues):
-        CudaQueue.runall(queues)

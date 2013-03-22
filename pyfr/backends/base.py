@@ -49,6 +49,7 @@ class Backend(object):
     # Backend name
     name = None
 
+    @abstractmethod
     def __init__(self, cfg):
         assert self.name is not None
 
@@ -73,19 +74,11 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.Matrix`
         """
-        return self._matrix(ioshape, initval, iopacking, tags)
-
-    @abstractmethod
-    def _matrix(self, ioshape, initval, iopacking, tags):
-        pass
+        return self.matrix_cls(self, ioshape, initval, iopacking, tags)
 
     @recordalloc('rslices')
     def matrix_rslice(self, mat, p, q):
-        return self._matrix_rslice(mat, p, q)
-
-    @abstractmethod
-    def _matrix_rslice(self, mat, p, q):
-        pass
+        return self.matrix_rslice_cls(self, mat, p, q)
 
     @recordalloc('banks')
     def matrix_bank(self, mats, initbank=0, tags=set()):
@@ -99,11 +92,7 @@ class Backend(object):
         :type mats: List of :class:`~pyfr.backends.base.Matrix`
         :rtype: :class:`~pyfr.backends.base.MatrixBank`
         """
-        return self._matrix_bank(mats, initbank, tags)
-
-    @abstractmethod
-    def _matrix_bank(self, mats, tags):
-        pass
+        return self.matrix_bank_cls(self, mats, initbank, tags)
 
     @recordalloc('data')
     def mpi_matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
@@ -123,14 +112,10 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.MPIMatrix`
         """
-        return self._mpi_matrix(ioshape, initval, iopacking, tags)
+        return self.mpi_matrix_cls(self, ioshape, initval, iopacking, tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
         return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
-
-    @abstractmethod
-    def _mpi_matrix(self, ioshape, iopacking, initval, tags):
-        pass
 
     @recordalloc('data')
     def const_matrix(self, initval, iopacking='AoS', tags=set()):
@@ -151,11 +136,7 @@ class Backend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.ConstMatrix`
         """
-        return self._const_matrix(initval, iopacking, tags)
-
-    @abstractmethod
-    def _const_matrix(self, initval, tags):
-        pass
+        return self.const_matrix_cls(self, initval, iopacking, tags)
 
     def sparse_matrix(self, initval, iopacking='AoS', tags=set()):
         """Creates a sparse matrix from *initval*
@@ -202,7 +183,7 @@ class Backend(object):
         # Not block-diagonal; return a constant matrix
         return self.const_matrix(initval, iopacking, tags)
 
-    @recordalloc('data')
+    @recordalloc('view')
     def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Uses mapping to create a view of mat
 
@@ -217,22 +198,14 @@ class Backend(object):
         """
         if stridemap is None:
             stridemap = np.ones(matmap.shape, dtype=np.int32)
-        return self._view(matmap, rcmap, stridemap, vlen, tags)
+        return self.view_cls(self, matmap, rcmap, stridemap, vlen, tags)
 
-    @abstractmethod
-    def _view(self, matmap, rcmap, stridemap, vlen, tags):
-        pass
-
-    @recordalloc('data')
+    @recordalloc('view')
     def mpi_view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
         if stridemap is None:
             stridemap = np.ones(matmap.shape, dtype=np.int32)
-        return self._mpi_view(matmap, rcmap, stridemap, vlen, tags)
-
-    @abstractmethod
-    def _mpi_view(self, matmap, rcmap, stridemap, vlen, tags):
-        pass
+        return self.mpi_view_cls(self, matmap, rcmap, stridemap, vlen, tags)
 
     @recordalloc('kern')
     def kernel(self, name, *args, **kwargs):
@@ -261,13 +234,8 @@ class Backend(object):
 
         :rtype: :class:`~pyfr.backends.base.Queue`
         """
-        return self._queue()
+        return self.queue_cls()
 
-    @abstractmethod
-    def _queue(self):
-        pass
-
-    @abstractmethod
     def runall(self, sequence):
         """Executes all of the kernels in the provided sequence of queues
 
@@ -279,7 +247,7 @@ class Backend(object):
         will be executed in the order in which they were added to the
         queue.
         """
-        pass
+        self.queue_cls.runall(sequence)
 
     @property
     def nbytes(self):
