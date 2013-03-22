@@ -67,17 +67,15 @@ Vincent-Castonguay-Jameson-Huynh schemes. It is currently being
 developed in the department of Aeronautics at Imperial College London
 under the direction of Dr. Peter Vincent.'''
 
-setup(
-    name='pyfr',
-    version=version,
-    description='Flux Reconstruction in Python',
-    long_description=long_description,
-    author='Imperial College London',
-    license='BSD',
-    keywords='Math',
-    packages=['pyfr'] + modules + tests,
-    package_data=package_data,
-    entry_points={'console_scripts': console_scripts},
-    install_requires=install_requires,
-    classifiers=classifiers
-)
+setup(name='pyfr',
+      version=version,
+      description='Flux Reconstruction in Python',
+      long_description=long_description,
+      author='Imperial College London',
+      license='BSD',
+      keywords='Math',
+      packages=['pyfr'] + modules + tests,
+      package_data=package_data,
+      entry_points={'console_scripts': console_scripts},
+      install_requires=install_requires,
+      classifiers=classifiers)
