@@ -104,9 +104,8 @@ class CudaMatrixRSlice(base.MatrixRSlice):
 
 class CudaMatrixBank(base.MatrixBank):
     def __init__(self, backend, mats, initbank, tags):
-        for m in mats[1:]:
-            if m.traits != mats[0].traits:
-                raise ValueError('Matrices in a bank must be homogeneous')
+        if any(m.traits != mats[0].traits for m in mats[1:]):
+            raise ValueError('Matrices in a bank must be homogeneous')
 
         super(CudaMatrixBank, self).__init__(backend, mats, initbank, tags)
 
