@@ -191,20 +191,8 @@ class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
 
 class CudaMPIView(base.MPIView):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
-
-        # Create a normal CUDA view
-        self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
-
-        # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, ncol, vlen), None, 'AoS',
-                                          tags=tags)
-
-    @property
-    def nbytes(self):
-        return self.view.nbytes + self.mpimat.nbytes
+        super(CudaMPIView, self).__init__(backend, matmap, rcmap, stridemap,
+                                          vlen, tags)
 
 
 class CudaQueue(base.Queue):

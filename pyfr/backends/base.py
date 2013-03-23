@@ -457,8 +457,22 @@ class View(object):
 
 
 class MPIView(View):
-    """MPI view abstract base class"""
-    pass
+    @abstractmethod
+    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
+        self.nrow = nrow = matmap.shape[0]
+        self.ncol = ncol = matmap.shape[1]
+        self.vlen = vlen
+
+        # Create a normal view
+        self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
+
+        # Now create an MPI matrix so that the view contents may be packed
+        self.mpimat = backend.mpi_matrix((nrow, ncol, vlen), None, 'AoS',
+                                          tags=tags)
+
+    @property
+    def nbytes(self):
+        return self.view.nbytes + self.mpimat.nbytes
 
 
 class Kernel(object):
