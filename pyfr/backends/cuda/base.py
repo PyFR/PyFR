@@ -30,7 +30,7 @@ class CudaBackend(Backend):
         # runtime we import these here, locally, at the time of
         # instantiation.
         from pyfr.backends.cuda import (blasext, cublas, packing, pointwise,
-                                        queue, types)
+                                        types)
 
         # Register our data types
         self.const_matrix_cls = types.CudaConstMatrix
@@ -39,7 +39,7 @@ class CudaBackend(Backend):
         self.matrix_rslice_cls = types.CudaMatrixRSlice
         self.mpi_matrix_cls = types.CudaMPIMatrix
         self.mpi_view_cls = types.CudaMPIView
-        self.queue_cls = queue.CudaQueue
+        self.queue_cls = types.CudaQueue
         self.view_cls = types.CudaView
 
         # Instantiate the kernel providers

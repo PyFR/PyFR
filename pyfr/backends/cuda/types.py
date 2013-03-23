@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 
-import pycuda.driver as cuda
+import collections
+import itertools as it
+
+from mpi4py import MPI
 import numpy as np
+import pycuda.driver as cuda
 
 import pyfr.backends.base as base
-
 from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
@@ -202,3 +205,91 @@ class CudaMPIView(base.MPIView):
     @property
     def nbytes(self):
         return self.view.nbytes + self.mpimat.nbytes
+
+
+class CudaQueue(base.Queue):
+    def __init__(self):
+        # Last kernel we executed
+        self._last = None
+
+        # CUDA stream and MPI request list
+        self._stream_comp = cuda.Stream()
+        self._stream_copy = cuda.Stream()
+        self._mpireqs = []
+
+        # Items waiting to be executed
+        self._items = collections.deque()
+
+    def __lshift__(self, items):
+        self._items.extend(items)
+
+    def __mod__(self, items):
+        self.run()
+        self << items
+        self.run()
+
+    def __nonzero__(self):
+        return bool(self._items)
+
+    def _exec_item(self, item, rtargs):
+        if base.iscomputekernel(item):
+            item.run(self._stream_comp, self._stream_copy, *rtargs)
+        elif base.ismpikernel(item):
+            item.run(self._mpireqs, *rtargs)
+        else:
+            raise ValueError('Non compute/MPI kernel in queue')
+        self._last = item
+
+    def _exec_next(self):
+        item, rtargs = self._items.popleft()
+
+        # If we are at a sequence point then wait for current items
+        if self._at_sequence_point(item):
+            self._wait()
+
+        # Execute the item
+        self._exec_item(item, rtargs)
+
+    def _exec_nowait(self):
+        while self._items and not self._at_sequence_point(self._items[0][0]):
+            self._exec_item(*self._items.popleft())
+
+    def _wait(self):
+        if base.iscomputekernel(self._last):
+            self._stream_comp.synchronize()
+            self._stream_copy.synchronize()
+        elif base.ismpikernel(self._last):
+            MPI.Prequest.Waitall(self._mpireqs)
+            self._mpireqs = []
+        self._last = None
+
+    def _at_sequence_point(self, item):
+        iscompute, ismpi = base.iscomputekernel, base.ismpikernel
+
+        if (iscompute(self._last) and not iscompute(item)) or\
+           (ismpi(self._last) and not ismpi(item)):
+            return True
+        else:
+            return False
+
+    def run(self):
+        while self._items:
+            self._exec_next()
+        self._wait()
+
+    @staticmethod
+    def runall(queues):
+        # First run any items which will not result in an implicit wait
+        for q in queues:
+            q._exec_nowait()
+
+        # So long as there are items remaining in the queues
+        while any(queues):
+            # Execute a (potentially) blocking item from each queue
+            for q in it.ifilter(None, queues):
+                q._exec_next()
+                q._exec_nowait()
+
+        # Wait for all tasks to complete
+        for q in queues:
+            q._wait()
