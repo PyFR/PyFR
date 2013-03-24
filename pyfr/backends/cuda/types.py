@@ -126,21 +126,8 @@ class CudaConstMatrix(CudaMatrixBase, base.ConstMatrix):
 
 class CudaView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
-
-        # For vector views a stridemap is required
-        if vlen != 1 and np.any(stridemap == 0):
-            raise ValueError('Vector views require a non-zero stride map')
-
-        # Check all of the shapes match up
-        if matmap.shape != rcmap.shape[:2] or\
-           matmap.shape != stridemap.shape:
-            raise TypeError('Invalid matrix shapes')
-
-        # Get the different matrices which we map onto
-        self._mats = list(np.unique(matmap))
+        super(CudaView, self).__init__(backend, matmap, rcmap, stridemap,
+                                       vlen, tags)
 
         # Extract the data type and item size from the first matrix
         self.refdtype = self._mats[0].dtype

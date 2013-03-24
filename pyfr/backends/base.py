@@ -451,12 +451,30 @@ class View(object):
     """View abstract base class"""
     __metaclass__ = ABCMeta
 
+    @abstractmethod
+    def __init__(self, backends, matmap, rcmap, stridemap, vlen, tags):
+        self.nrow = nrow = matmap.shape[0]
+        self.ncol = ncol = matmap.shape[1]
+        self.vlen = vlen
+
+        # For vector views a stridemap is required
+        if vlen != 1 and np.any(stridemap == 0):
+            raise ValueError('Vector views require a non-zero stride map')
+
+        # Check all of the shapes match up
+        if matmap.shape != rcmap.shape[:2] or\
+           matmap.shape != stridemap.shape:
+            raise TypeError('Invalid matrix shapes')
+
+        # Get the different matrices which we map onto
+        self._mats = list(np.unique(matmap))
+
     @abstractproperty
     def nbytes(self):
         pass
 
 
-class MPIView(View):
+class MPIView(object):
     @abstractmethod
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
         self.nrow = nrow = matmap.shape[0]
