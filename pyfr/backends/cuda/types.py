@@ -152,10 +152,11 @@ class CudaView(base.View):
             ix = np.where(matmap == m)
             ptrmap[ix] += long(m) + r[ix]*m.pitch
 
-        self.mapping = CudaMatrixBase(backend, np.intp, (nrow, ncol), ptrmap,
-                                      'AoS', tags)
-        self.strides = CudaMatrixBase(backend, np.int32, (nrow, ncol),
-                                      stridemap, 'AoS',tags)
+        shape = (self.nrow, self.ncol)
+        self.mapping = CudaMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
+                                      tags)
+        self.strides = CudaMatrixBase(backend, np.int32, shape, stridemap,
+                                      'AoS',tags)
 
     @property
     def nbytes(self):
