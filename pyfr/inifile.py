@@ -52,11 +52,13 @@ class Inifile(object):
             self._cp.set(section, option, str(default))
             return self._cp.get(section, option, raw=raw, vars=vars)
 
-    def getpath(self, section, option, default=_sentinel, vars=None):
+    def getpath(self, section, option, default=_sentinel, vars=None, abs=True):
         path = self.get(section, option, default, vars)
         path = os.path.expandvars(path)
         path = os.path.expanduser(path)
-        path = os.path.abspath(path)
+
+        if abs:
+            path = os.path.abspath(path)
 
         return path
 
