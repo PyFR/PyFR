@@ -254,13 +254,16 @@ class Backend(object):
         """Number of data bytes currently allocated on the backend"""
         return sum(d.nbytes for d in self._allocs['data'])
 
-    def from_aos_stride_to_native(self, a, s):
+    @staticmethod
+    def from_aos_stride_to_native(a, s):
         return 1, a
 
-    def from_soa_stride_to_native(self, s, a):
+    @staticmethod
+    def from_soa_stride_to_native(s, a):
         return a, 1
 
-    def from_x_to_native(self, mat, cpacking):
+    @staticmethod
+    def from_x_to_native(mat, cpacking):
         # Reorder if packed differently
         if cpacking != 'SoA':
             if mat.ndim == 3:
@@ -276,16 +279,54 @@ class Backend(object):
         elif mat.ndim == 4:
             return mat.reshape(mat.shape[0]*mat.shape[1], -1)
 
-    def from_native_to_x(self, mat, nshape, npacking):
+    @staticmethod
+    def from_native_to_x(mat, nshape, npacking):
         if npacking != 'SoA':
             n, nd = nshape, len(nshape)
             if nd == 3:
                 mat = mat.reshape(n[0], n[2], n[1]).swapaxes(1, 2)
             elif nd == 4:
                 mat = mat.reshape(n[1], n[0], n[3], n[2])\
-                         .swapaxes(0, 1).swapaxes(2, 3)
+                            .swapaxes(0, 1).swapaxes(2, 3)
 
         return mat.reshape(nshape)
+
+    @staticmethod
+    def _to_shape(shape, currpacking, newpacking):
+        if currpacking not in ('AoS', 'SoA'):
+            raise ValueError('Invalid matrix packing')
+
+        if len(shape) == 2 or currpacking == newpacking:
+            return shape
+        elif len(shape) == 3:
+            return shape[0], shape[2], shape[1]
+        elif len(shape) == 4:
+            return shape[1], shape[0], shape[3], shape[2]
+        else:
+            raise ValueError('Invalid matrix shape')
+
+    @staticmethod
+    def aos_shape(shape, packing):
+        return Backend._to_shape(shape, packing, 'AoS')
+
+    @staticmethod
+    def soa_shape(shape, packing):
+        return Backend._to_shape(shape, packing, 'SoA')
+
+    @staticmethod
+    def compact_shape(shape, packing, subcolmod=1):
+        sshape = Backend.soa_shape(shape, packing)
+
+        if len(sshape) == 2:
+            return sshape[0], sshape[1], sshape[1]
+        else:
+            nrow = sshape[0] if len(sshape) == 3 else sshape[0]*sshape[1]
+
+            # Align sub-columns
+            lsd = sshape[-1] - (sshape[-1] % -subcolmod)
+            ncol = sshape[-2]*lsd
+
+            return nrow, ncol, lsd
 
 
 class MatrixBase(object):
@@ -299,18 +340,6 @@ class MatrixBase(object):
         self.ioshape = ioshape
         self.iopacking = iopacking
         self.tags = self._base_tags | tags
-
-        if len(ioshape) == 2:
-            self.nrow = ioshape[0]
-            self.ncol = ioshape[1]
-        elif len(ioshape) == 3:
-            self.nrow = ioshape[0]
-            self.ncol = ioshape[1]*ioshape[2]
-        elif len(ioshape) == 4:
-            self.nrow = ioshape[0]*ioshape[1]
-            self.ncol = ioshape[2]*ioshape[3]
-        else:
-            raise ValueError('Invalid matrix I/O shape')
 
     def _pack(self, buf):
         if buf.shape != self.ioshape:
@@ -335,6 +364,14 @@ class MatrixBase(object):
     def nbytes(self):
         """Size in bytes"""
         pass
+
+    @property
+    def aos_shape(self):
+        return aos_shape(self.ioshape, self.iopacking)
+
+    @property
+    def soa_shape(self):
+        return soa_shape(self.ioshape, self.iopacking)
 
 
 class Matrix(MatrixBase):
