@@ -7,6 +7,9 @@ Introduction
 
 A detailed developer guide is provided below
 
+
+.. _devg-internal-file-formats:
+
 Internal File Formats
 ---------------------
 
@@ -95,3 +98,24 @@ matrix multiplication::
 
 .. autoclass:: pyfr.backends.base.Queue
     :members: __lshift__, __mod__
+
+Readers
+~~~~~~~
+
+Functionality for PyFR to read internal and external file formats is provided
+here.
+
+:ref:`devg-internal-file-formats` have two base structures; file and directory.
+These structures allow for convenience and performance respectively, but
+require different treatments. It is the purpose of the
+:py:mod:`pyfr.readers.native` module to present a common and convenient
+interface for general use in PyFR.
+
+Native
+~~~~~~
+
+.. automodule:: pyfr.readers.native
+    :members:
+
+Gmsh
+~~~~
