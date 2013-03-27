@@ -39,6 +39,16 @@ def range_eval(expr):
     return [float(t) for t in eval(expr, _range_eval_syms, None)]
 
 
+_ctype_map = {
+    np.int32: 'int', np.uint32: 'unsigned int',
+    np.int64: 'long long', np.uint64: 'unsigned long long',
+    np.float32: 'float', np.float64: 'double'}
+
+
+def npdtype_to_ctype(dtype):
+    return _ctype_map[np.dtype(dtype).type]
+
+
 _ctypestype_map = {
     np.int32: ct.c_int32, np.uint32: ct.c_uint32,
     np.int64: ct.c_int64, np.uint64: ct.c_uint64,
@@ -46,4 +56,8 @@ _ctypestype_map = {
 
 
 def npdtype_to_ctypestype(dtype):
-    return _ctypestype_map[np.dtype(dtype).type]
+    # Special-case None which otherwise expands to np.float
+    if dtype is None:
+        return None
+    else:
+        return _ctypestype_map[np.dtype(dtype).type]
