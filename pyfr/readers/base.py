@@ -2,7 +2,6 @@
 
 import re
 import uuid
-import itertools as it
 
 from abc import ABCMeta, abstractmethod
 
@@ -22,7 +21,7 @@ class BaseReader(object):
 
     def _optimize(self, mesh):
         # Sort interior interfaces
-        for f in it.ifilter(lambda f: re.match('con_p\d+', f), mesh):
+        for f in filter(lambda f: re.match(r'^con_p\d+$', f), mesh):
             mesh[f] = mesh[f][:,np.argsort(mesh[f][0])]
 
     def to_pyfrm(self):
