@@ -114,8 +114,7 @@ class PyFRDirReader(PyFRBaseReader):
         self.fname = fname
 
     def __getitem__(self, aname):
-        return np.load('/'.join((self.fname, '.'.join((aname, 'npy')))),
-                       mmap_mode='r')
+        return np.load(os.path.join(self.fname, aname + '.npy'), mmap_mode='r')
 
     def __iter__(self):
         return iter([name.rsplit('.')[0] for name in os.listdir(self.fname)])

@@ -78,6 +78,7 @@ def lazyprop(fn):
     attr = '_lazy_' + fn.__name__
 
     @property
+    @functools.wraps(fn)
     def newfn(self):
         try:
             return getattr(self, attr)
