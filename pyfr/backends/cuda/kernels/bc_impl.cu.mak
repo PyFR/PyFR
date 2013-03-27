@@ -1,7 +1,7 @@
 <%namespace name='util' module='pyfr.backends.cuda.makoutil' />
 
 inline __device__ void
-_bc_grad_u_zero(const ${dtype}* ul[${ndims}],
+_bc_grad_u_zero(const ${dtype} ul[${ndims}],
                 const ${dtype} grad_ul[${ndims}][${nvars}],
                 ${dtype} grad_ur[${ndims}][${nvars}])
 {
@@ -11,7 +11,7 @@ _bc_grad_u_zero(const ${dtype}* ul[${ndims}],
 }
 
 inline __device__ void
-_bc_grad_u_copy(const ${dtype}* ul[${ndims}],
+_bc_grad_u_copy(const ${dtype} ul[${ndims}],
                 const ${dtype} grad_ul[${ndims}][${nvars}],
                 ${dtype} grad_ur[${ndims}][${nvars}])
 {
