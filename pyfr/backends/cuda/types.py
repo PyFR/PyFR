@@ -20,7 +20,7 @@ class CudaMatrixBase(base.MatrixBase):
         self.itemsize = np.dtype(dtype).itemsize
 
         # Dimensions
-        nrow, ncol, lsdc = backend.compact_shape(ioshape, iopacking)
+        nrow, ncol = backend.compact_shape(ioshape, iopacking)
         self.nrow = nrow
         self.ncol = ncol
 
@@ -50,9 +50,9 @@ class CudaMatrixBase(base.MatrixBase):
 
         # Process any initial values
         if initval is not None:
-            self._set(self._pack(initval))
+            self.set(initval)
 
-    def _get(self):
+    def get(self):
         # Allocate an empty buffer
         buf = np.empty((self.nrow, self.ncol), dtype=self.dtype)
 
@@ -60,14 +60,26 @@ class CudaMatrixBase(base.MatrixBase):
         memcpy2d_dtoh(buf, self.data, self.pitch, self.ncol*self.itemsize,
                       self.ncol*self.itemsize, self.nrow)
 
+        # Reshape from a matrix to an SoA-packed array
+        buf = buf.reshape(self.soa_shape)
+
+        # Repack if the IO format is AoS
+        if self.iopacking == 'AoS':
+            buf = self.backend.aos_arr(buf, 'SoA')
+
         return buf
 
-    def _set(self, ary):
+    def set(self, ary):
+        if ary.shape != self.ioshape:
+            raise ValueError('Invalid matrix shape')
+
+        # Cast and repack into the SoA format
         nary = np.asanyarray(ary, dtype=self.dtype, order='C')
+        nary = self.backend.compact_arr(nary, self.iopacking)
 
         # Copy
-        memcpy2d_htod(self.data, nary, self.ncol*self.itemsize,
-                      self.pitch, self.ncol*self.itemsize, self.nrow)
+        memcpy2d_htod(self.data, nary, self.ncol*self.itemsize, self.pitch,
+                      self.ncol*self.itemsize, self.nrow)
 
     @property
     def _as_parameter_(self):

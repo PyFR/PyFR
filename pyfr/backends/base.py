@@ -263,33 +263,35 @@ class Backend(object):
         return a, 1
 
     @staticmethod
-    def from_x_to_native(mat, cpacking):
-        # Reorder if packed differently
-        if cpacking != 'SoA':
-            if mat.ndim == 3:
-                mat = mat.swapaxes(1, 2)
-            elif mat.ndim == 4:
-                mat = mat.swapaxes(0, 1).swapaxes(2, 3)
+    def _to_arr(mat, currpacking, newpacking):
+        if currpacking not in ('AoS', 'SoA'):
+            raise ValueError('Invalid matrix packing')
 
-        # Compact down to two dimensions
-        if mat.ndim == 2:
+        if mat.ndim == 2 or currpacking == newpacking:
             return mat
         elif mat.ndim == 3:
-            return mat.reshape(mat.shape[0], -1)
+            return mat.swapaxes(1, 2)
         elif mat.ndim == 4:
-            return mat.reshape(mat.shape[0]*mat.shape[1], -1)
+            return mat.swapaxes(0, 1).swapaxes(2, 3)
+        else:
+            raise ValueError('Invalid matrix shape')
 
     @staticmethod
-    def from_native_to_x(mat, nshape, npacking):
-        if npacking != 'SoA':
-            n, nd = nshape, len(nshape)
-            if nd == 3:
-                mat = mat.reshape(n[0], n[2], n[1]).swapaxes(1, 2)
-            elif nd == 4:
-                mat = mat.reshape(n[1], n[0], n[3], n[2])\
-                            .swapaxes(0, 1).swapaxes(2, 3)
+    def aos_arr(mat, packing):
+        return Backend._to_arr(mat, packing, 'AoS')
 
-        return mat.reshape(nshape)
+    @staticmethod
+    def soa_arr(mat, packing):
+        return Backend._to_arr(mat, packing, 'SoA')
+
+    @staticmethod
+    def compact_arr(mat, packing):
+        # Convert to SoA and get the compacted shape
+        soamat = Backend.soa_arr(mat, packing)
+        cshape = Backend.compact_shape(mat.shape, packing)
+
+        return soamat.reshape(cshape[0], cshape[1])
+
 
     @staticmethod
     def _to_shape(shape, currpacking, newpacking):
@@ -314,19 +316,15 @@ class Backend(object):
         return Backend._to_shape(shape, packing, 'SoA')
 
     @staticmethod
-    def compact_shape(shape, packing, subcolmod=1):
+    def compact_shape(shape, packing):
         sshape = Backend.soa_shape(shape, packing)
 
         if len(sshape) == 2:
-            return sshape[0], sshape[1], sshape[1]
+            return sshape[0], sshape[1]
+        elif len(sshape) == 3:
+            return sshape[0], sshape[1]*sshape[2]
         else:
-            nrow = sshape[0] if len(sshape) == 3 else sshape[0]*sshape[1]
-
-            # Align sub-columns
-            lsd = sshape[-1] - (sshape[-1] % -subcolmod)
-            ncol = sshape[-2]*lsd
-
-            return nrow, ncol, lsd
+            return sshape[0]*sshape[1], sshape[2]*sshape[3]
 
 
 class MatrixBase(object):
@@ -341,24 +339,9 @@ class MatrixBase(object):
         self.iopacking = iopacking
         self.tags = self._base_tags | tags
 
-    def _pack(self, buf):
-        if buf.shape != self.ioshape:
-            raise ValueError('Invalid matrix shape')
-
-        return self.backend.from_x_to_native(buf, self.iopacking)
-
-    def _unpack(self, buf):
-        if buf.shape != (self.nrow, self.ncol):
-            raise ValueError('Invalid matrix shape')
-
-        return self.backend.from_native_to_x(buf, self.ioshape, self.iopacking)
-
+    @abstractmethod
     def get(self):
         return self._unpack(self._get())
-
-    @abstractmethod
-    def _get(self):
-        pass
 
     @abstractproperty
     def nbytes(self):
@@ -367,11 +350,11 @@ class MatrixBase(object):
 
     @property
     def aos_shape(self):
-        return aos_shape(self.ioshape, self.iopacking)
+        return self.backend.aos_shape(self.ioshape, self.iopacking)
 
     @property
     def soa_shape(self):
-        return soa_shape(self.ioshape, self.iopacking)
+        return self.backend.soa_shape(self.ioshape, self.iopacking)
 
 
 class Matrix(MatrixBase):
@@ -379,15 +362,12 @@ class Matrix(MatrixBase):
     """
     _base_tags = {'dense'}
 
+    @abstractmethod
     def set(self, buf):
-        return self._set(self._pack(buf))
+        pass
 
     def rslice(self, p, q):
         return self.backend.matrix_rslice(self, p, q)
-
-    @abstractmethod
-    def _set(self, buf):
-        pass
 
 
 class MatrixRSlice(object):
@@ -427,14 +407,15 @@ class BlockDiagMatrix(MatrixBase):
     def __init__(self, backend, initval, brange, iopacking, tags):
         super(BlockDiagMatrix, self).__init__(backend, initval.shape,
                                               iopacking, tags)
+        self.initval = initval
 
-        # Unpack into a dense matrix and extract the blocks
-        self.matrix = matrix = self._pack(initval)
-        self.blocks = [matrix[ri:rj,ci:cj] for ri, rj, ci, cj in brange]
+        # Compact down to a Matrix and extract the blocks
+        mat = Backend.compact_arr(initval, iopacking)
+        self.blocks = [mat[ri:rj,ci:cj] for ri, rj, ci, cj in brange]
         self.ranges = brange
 
-    def _get(self):
-        return self.matrix
+    def get(self):
+        return self.initval
 
     @property
     def nbytes(self):
