@@ -123,14 +123,18 @@ class BaseAdvectionElements(object):
         nvars, ndims = self.nvars, self.ndims
         neles = self.neles
 
+        # Tags for flux matrices
+        tags = {'align'}
+
         # Allocate general storage required for flux computation
-        self._scal_upts = [be.matrix((nupts, neles, nvars), self._scal_upts)
+        self._scal_upts = [be.matrix((nupts, neles, nvars), self._scal_upts,
+                                     tags=tags)
                            for i in xrange(nscal_upts)]
-        self._vect_upts = [be.matrix((nupts, ndims, neles, nvars))
+        self._vect_upts = [be.matrix((nupts, ndims, neles, nvars), tags=tags)
                            for i in xrange(self._nvect_upts)]
-        self._scal_fpts = [be.matrix((nfpts, neles, nvars))
+        self._scal_fpts = [be.matrix((nfpts, neles, nvars), tags=tags)
                            for i in xrange(self._nscal_fpts)]
-        self._vect_fpts = [be.matrix((nfpts, ndims, neles, nvars))
+        self._vect_fpts = [be.matrix((nfpts, ndims, neles, nvars), tags=tags)
                            for i in xrange(self._nvect_fpts)]
 
         # Bank the scalar soln points (as required by the RK schemes)

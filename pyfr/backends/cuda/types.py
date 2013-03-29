@@ -27,7 +27,7 @@ class CudaMatrixBase(base.MatrixBase):
         # Compute the size, in bytes, of the minor dimension
         colsz = self.ncol*self.itemsize
 
-        if 'nopad' not in tags:
+        if 'align' in tags:
             # Allocate a 2D array aligned to the major dimension
             self.data, self.pitch = cuda.mem_alloc_pitch(colsz, nrow,
                                                          self.itemsize)
@@ -182,12 +182,9 @@ class CudaView(base.View):
 
 class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
     def __init__(self, backend, ioshape, initval, iopacking, tags):
-        # Ensure that our CUDA buffer will not be padded
-        ntags = tags | {'nopad'}
-
         # Call the standard matrix constructor
         super(CudaMPIMatrix, self).__init__(backend, ioshape, initval,
-                                            iopacking, ntags)
+                                            iopacking, tags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),

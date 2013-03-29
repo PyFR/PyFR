@@ -44,15 +44,15 @@ class BaseInters(object):
 
     def _const_mat(self, inter, meth):
         m = get_mat(inter, meth, self._elemap)
-        return self._be.const_matrix(m, tags={'nopad'})
+        return self._be.const_matrix(m)
 
     def _view_onto(self, inter, meth):
         vm = get_view_mats(inter, meth, self._elemap)
-        return self._be.view(*vm, vlen=self.nvars, tags={'nopad'})
+        return self._be.view(*vm, vlen=self.nvars)
 
     def _mpi_view_onto(self, inter, meth):
         vm = get_view_mats(inter, meth, self._elemap)
-        return self._be.mpi_view(*vm, vlen=self.nvars, tags={'nopad'})
+        return self._be.mpi_view(*vm, vlen=self.nvars)
 
     def _kernel_constants(self):
         return self._cfg.items_as('constants', float)
