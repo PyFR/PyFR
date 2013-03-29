@@ -59,5 +59,9 @@ def npdtype_to_ctypestype(dtype):
     # Special-case None which otherwise expands to np.float
     if dtype is None:
         return None
+    # Special case size_t (not yet mapped by NumPy)
+    elif dtype == 'N':
+        return ct.c_size_t
+    # Use the standard type map
     else:
         return _ctypestype_map[np.dtype(dtype).type]
