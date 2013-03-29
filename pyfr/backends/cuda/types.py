@@ -173,7 +173,7 @@ class CudaView(base.View):
         self.mapping = CudaMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
                                       tags)
         self.strides = CudaMatrixBase(backend, np.int32, shape, stridemap,
-                                      'AoS',tags)
+                                      'AoS', tags)
 
     @property
     def nbytes(self):
