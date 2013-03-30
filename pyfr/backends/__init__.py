@@ -8,4 +8,4 @@ from pyfr.util import subclass_map
 def get_backend(name, cfg):
     backend_map = subclass_map(BaseBackend, 'name')
 
-    return backend_map[name](cfg)
+    return backend_map[name.lower()](cfg)
