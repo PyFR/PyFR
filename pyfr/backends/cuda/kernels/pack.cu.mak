@@ -3,7 +3,7 @@
 <%include file='idx_of.cu.mak' />
 
 __global__ void
-pack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri, ${dtype} *pmat,
+pack_view(int nrow, int ncol, ${dtype}** vptr, int* vstri, ${dtype}* pmat,
           int ldp, int lds, int ldm)
 {
     uint i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -11,7 +11,7 @@ pack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri, ${dtype} *pmat,
 
     if (i < nrow && j < ncol)
     {
-        ${dtype} *ptr = vptr[IDX_OF(i, j, ldp)];
+        ${dtype}* ptr = vptr[IDX_OF(i, j, ldp)];
         uint stride = vstri[IDX_OF(i, j, lds)];
 
     % for k in xrange(vlen):
@@ -21,15 +21,15 @@ pack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri, ${dtype} *pmat,
 }
 
 __global__ void
-unpack_view(int nrow, int ncol, ${dtype} **vptr, int *vstri,
-            const ${dtype} *upmat, int ldp, int lds, int ldm)
+unpack_view(int nrow, int ncol, ${dtype}** vptr, int* vstri,
+            const ${dtype}* upmat, int ldp, int lds, int ldm)
 {
     uint i = blockIdx.x * blockDim.x + threadIdx.x;
     uint j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < nrow && j < ncol)
     {
-        ${dtype} *ptr = vptr[IDX_OF(i, j, ldp)];
+        ${dtype}* ptr = vptr[IDX_OF(i, j, ldp)];
         uint stride = vstri[IDX_OF(i, j, lds)];
 
     % for k in xrange(vlen):
