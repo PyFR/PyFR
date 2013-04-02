@@ -4,7 +4,7 @@
 /**
  * Compute the inviscid flux.
  */
-inline void
+static inline void
 disf_inv_impl(const ${dtype} s[5], ${dtype} f[3][5],
               ${dtype}* pout, ${dtype} vout[3])
 {

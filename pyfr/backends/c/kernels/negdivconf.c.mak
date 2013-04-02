@@ -24,14 +24,11 @@ negdivconf(size_t nupts, size_t neles,
            ${dtype} *tdivtconf, const ${dtype} *rcpdjac,
            size_t ldt, size_t ldr, size_t lsdt)
 {
-    ${dtype} *tvars[] = { ${', '.join('tdivtconf + {}*lsdt'.format(i)
-                                      for i in range(nvars))} };
-
     #pragma omp parallel for
-    for (size_t uidx = 0; uidx < nupts; ++uidx)
+    for (size_t uidx = 0; uidx < nupts; uidx++)
     {
         negdivconf_aux(neles,
-                       ${', '.join('tvars[{}] + uidx*ldt'.format(i)
+                       ${', '.join('tdivtconf + uidx*ldt + {}*lsdt'.format(i)
                                    for i in range(nvars))},
                        rcpdjac + uidx*ldr);
     }
