@@ -284,7 +284,6 @@ class Backend(object):
 
         return soamat.reshape(cshape[0], cshape[1])
 
-
     @staticmethod
     def _to_shape(shape, currpacking, newpacking):
         if currpacking not in ('AoS', 'SoA'):
