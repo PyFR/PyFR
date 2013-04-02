@@ -431,13 +431,17 @@ class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
     @abstractmethod
-    def __init__(self, backend, matrices, initbank, tags):
+    def __init__(self, backend, mats, initbank, tags):
         self.backend = backend
-        self.tags = tags
 
-        self._mats = matrices
+        self._mats = mats
         self._curr_idx = initbank
         self._curr_mat = self._mats[initbank]
+
+        # Process tags
+        if any(mats[0].tags != m.tags for m in mats[1:]):
+            raise ValueError('Banked matrices must share tags')
+        self.tags = tags | mats[0].tags
 
     def __len__(self):
         return len(self._mats)

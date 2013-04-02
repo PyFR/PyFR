@@ -114,17 +114,17 @@ class BaseAdvectionElements(object):
         self._m3b = be.auto_matrix(self.m3, tags={'M3'})
         self._m132b = be.auto_matrix(self.m132, tags={'M132'})
 
+        # Tags to ensure alignment of multi-dimensional matrices
+        tags = {'align'}
+
         # Allocate soln point transformation matrices
         self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts)
-        self._smat_upts = be.const_matrix(self._smat_upts)
+        self._smat_upts = be.const_matrix(self._smat_upts, tags=tags)
 
         # Sizes
         nupts, nfpts = self.nupts, self.nfpts
         nvars, ndims = self.nvars, self.ndims
         neles = self.neles
-
-        # Tags for flux matrices
-        tags = {'align'}
 
         # Allocate general storage required for flux computation
         self._scal_upts = [be.matrix((nupts, neles, nvars), self._scal_upts,
@@ -371,7 +371,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         self._m460b = be.auto_matrix(self.m460, tags={'M460'})
 
         # Flux point transformation matrices
-        self._jmat_fpts = be.const_matrix(self._jmat_fpts)
+        self._jmat_fpts = be.const_matrix(self._jmat_fpts, tags={'align'})
 
     def _gen_inter_view_mats(self, be, neles, nvars, ndims):
         base = super(BaseAdvectionDiffusionElements, self)._gen_inter_view_mats
