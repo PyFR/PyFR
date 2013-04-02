@@ -150,7 +150,7 @@ class BaseAdvectionElements(object):
         self._nfacefpts = nfacefpts = self._basis.nfpts
 
         # Get the relevant strides required for view construction
-        self._scal_fpts_strides = be.from_aos_stride_to_native(neles, nvars)
+        self._scal_fpts_strides = (1, self._scal_fpts[0].soa_shape[-1])
 
         # Pre-compute for the max flux point count on a given face
         nmaxfpts = max(nfacefpts)

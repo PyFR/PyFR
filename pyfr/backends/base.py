@@ -255,14 +255,6 @@ class Backend(object):
         return sum(d.nbytes for d in self._allocs['data'])
 
     @staticmethod
-    def from_aos_stride_to_native(a, s):
-        return 1, a
-
-    @staticmethod
-    def from_soa_stride_to_native(s, a):
-        return a, 1
-
-    @staticmethod
     def _to_arr(mat, currpacking, newpacking):
         if currpacking not in ('AoS', 'SoA'):
             raise ValueError('Invalid matrix packing')
