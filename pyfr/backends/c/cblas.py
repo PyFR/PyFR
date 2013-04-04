@@ -73,7 +73,7 @@ class CBlasKernels(object):
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
 
-        n, m, k = a.nrow, b.ncol, a.ncol
+        m, n, k = a.nrow, b.ncol, a.ncol
 
         if a.dtype == np.float64:
             cblas_gemm = self._wrappers.cblas_dgemm
@@ -83,7 +83,7 @@ class CBlasKernels(object):
         class MulKernel(ComputeKernel):
             def run(self):
                 cblas_gemm(CBlasOrder.ROW_MAJOR, CBlasTranspose.NO_TRANS,
-                           CBlasTranspose.NO_TRANS, n, m, k,
+                           CBlasTranspose.NO_TRANS, m, n, k,
                            alpha, a, a.leaddim, b, b.leaddim,
                            beta, out, out.leaddim)
 

@@ -25,7 +25,6 @@ class CKernelProvider(object):
 
         # Render the template
         mod = tpl.render(f=fpfilt, **tplparams)
-        #print mod
 
         # Compile
         return GccSourceModule(mod, self._cfg)
