@@ -156,7 +156,7 @@ class CudaCublasKernels(object):
         # numpy parlance).  However as C = A*B => C^T = (A*B)^T
         # = (B^T)*(A^T) with a little trickery we can multiply our
         # row-major matrices directly.
-        n, m, k = b.ncol, a.nrow, a.ncol
+        m, n, k = b.ncol, a.nrow, a.ncol
         A, B, C = b, a, out
 
         # α and β factors for C = α*(A*B) + β*C
@@ -170,7 +170,7 @@ class CudaCublasKernels(object):
         class MulKernel(ComputeKernel):
             def run(iself, scomp, scopy):
                 self._wrappers.cublasSetStream(self._handle, scomp.handle)
-                cublasgemm(self._handle, CublasOp.NONE, CublasOp.NONE, n, m, k,
+                cublasgemm(self._handle, CublasOp.NONE, CublasOp.NONE, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 
