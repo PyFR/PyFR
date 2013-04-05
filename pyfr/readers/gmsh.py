@@ -197,7 +197,7 @@ class GmshReader(BaseReader):
             # Number of nodes in the first-order representation
             focount = self._petype_focount[petype]
 
-            foelemap[(petype, epent)] = eles[:, :focount]
+            foelemap[(petype, epent)] = eles[:,:focount]
 
         return foelemap
 
@@ -240,9 +240,9 @@ class GmshReader(BaseReader):
 
         qf = self._foface_array('hex', 'quad', len(fohexes))
 
-        qf.eidx = np.arange(len(fohexes))[..., None]
+        qf.eidx = np.arange(len(fohexes))[...,None]
         qf.fidx = np.arange(6)
-        qf.nodes = fohexes[:, fnmap]
+        qf.nodes = fohexes[:,fnmap]
 
         return [('quad', qf)]
 
@@ -428,7 +428,7 @@ class GmshReader(BaseReader):
             petype, nnodes = self._etype_map[etype]
 
             # Go from Gmsh to PyFR node ordering
-            peles = eles[:, GmshNodeMaps.pyfr_to_gmsh[(petype, nnodes)]]
+            peles = eles[:,GmshNodeMaps.pyfr_to_gmsh[(petype, nnodes)]]
 
             for n, p in izip(peles, prts):
                 spts[(petype, p)].append([nodepts[i] for i in n])
