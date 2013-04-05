@@ -1,4 +1,4 @@
-# -*msh- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 """Mappings between the ordering of PyFR nodes, and those of external formats
 
