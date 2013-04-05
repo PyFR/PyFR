@@ -8,6 +8,7 @@ from itertools import chain, ifilter, izip
 import numpy as np
 
 from pyfr.readers import BaseReader
+from pyfr.readers.nodemaps import GmshNodeMaps
 
 
 def msh_section(mshit, section):
@@ -57,12 +58,6 @@ class GmshReader(BaseReader):
                    'subsonic_inflow': 'sub_inflow',
                    'subsonic_outflow': 'sub_outflow',
                    'isothermal_noslip': 'isotherm_noslip'}
-
-    # Remappers (PyFR node ordering to Gmsh node ordering)
-    _node_maps = {('hex',  8): np.array([ 0,  1,  3,  2,  4,  5,  7,  6]),
-                  ('hex', 27): np.array([ 0,  8,  1,  9, 20, 11,  3, 13,  2,
-                                         10, 21, 12, 22, 26, 23, 15, 24, 14,
-                                          4, 16,  5, 17, 25, 18,  7, 19,  6])}
 
     def __init__(self, msh):
         if isinstance(msh, basestring):
@@ -202,7 +197,7 @@ class GmshReader(BaseReader):
             # Number of nodes in the first-order representation
             focount = self._petype_focount[petype]
 
-            foelemap[(petype, epent)] = eles[:,:focount]
+            foelemap[(petype, epent)] = eles[:, :focount]
 
         return foelemap
 
@@ -245,9 +240,9 @@ class GmshReader(BaseReader):
 
         qf = self._foface_array('hex', 'quad', len(fohexes))
 
-        qf.eidx = np.arange(len(fohexes))[...,None]
+        qf.eidx = np.arange(len(fohexes))[..., None]
         qf.fidx = np.arange(6)
-        qf.nodes = fohexes[:,fnmap]
+        qf.nodes = fohexes[:, fnmap]
 
         return [('quad', qf)]
 
@@ -284,7 +279,7 @@ class GmshReader(BaseReader):
             ordr = r.nodes[hexlut[r.fidx]]
 
             # Rotation tag is index of ordl[0] in ordr mod four
-            r.rtag = np.where(ordr==ordl[0])[0][0] % 4
+            r.rtag = np.where(ordr == ordl[0])[0][0] % 4
 
     def _pair_periodic_fluid_faces(self, bpart, resid):
         pfaces = defaultdict(list)
@@ -433,7 +428,7 @@ class GmshReader(BaseReader):
             petype, nnodes = self._etype_map[etype]
 
             # Go from Gmsh to PyFR node ordering
-            peles = eles[:,self._node_maps[(petype, nnodes)]]
+            peles = eles[:, GmshNodeMaps.pyfr_to_gmsh[(petype, nnodes)]]
 
             for n, p in izip(peles, prts):
                 spts[(petype, p)].append([nodepts[i] for i in n])
