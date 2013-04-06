@@ -93,31 +93,27 @@ def nodal_basis(points, dims, compact=True):
 
 
 # Cube map face rotation scheme to go from face 1 -> 0..5
-_cube_map_rots_sy = [sy.rot_axis2(-sy.pi)*sy.rot_axis1(sy.pi/2),
-                     sy.eye(3),
-                     sy.rot_axis3(sy.pi/2),
-                     sy.rot_axis3(sy.pi),
-                     sy.rot_axis3(-sy.pi/2),
-                     sy.rot_axis1(-sy.pi/2)]
+_cube_map_rots = np.array([
+    [[-1,  0,  0], [ 0,  0,  1], [ 0,  1,  0]],   # 1 -> 0
+    [[ 1,  0,  0], [ 0,  1,  0], [ 0,  0,  1]],   # 1 -> 1 (ident)
+    [[ 0,  1,  0], [-1,  0,  0], [ 0,  0,  1]],   # 1 -> 2
+    [[-1,  0,  0], [ 0, -1,  0], [ 0,  0,  1]],   # 1 -> 3
+    [[ 0, -1,  0], [ 1,  0,  0], [ 0,  0,  1]],   # 1 -> 4
+    [[ 1,  0,  0], [ 0,  0, -1], [ 0,  1,  0]]])  # 1 -> 5
 
 
-# Rotation scheme as numpy arrays
-_cube_map_rots_np = [np.asanyarray(sy.matrix2numpy(r), dtype=np.float)
-                     for r in _cube_map_rots_sy]
-
-
-def cube_map_face(fpoints):
+def cube_map_face(fpts):
     """Given a matrix of points (p,q,r) corresponding to face one of
     `the cube' this method maps these points onto the remaining faces
 
     On a cube parameterized by (p,q,r) -> (-1,-1,-1) × (1,1,1) face one
     is defined by (-1,-1,-1) × (1,-1,1)."""
-    mfpoints = np.empty((6,) + fpoints.shape, dtype=fpoints.dtype)
+    mfpts = np.empty((6,) + fpts.shape, dtype=fpts.dtype)
 
-    for i,frot in enumerate(_cube_map_rots_np):
-        mfpoints[i,...] = np.dot(fpoints, frot)
+    for i, frot in enumerate(_cube_map_rots):
+        mfpts[i,...] = np.dot(fpts, frot)
 
-    return mfpoints
+    return mfpts
 
 
 def diff_vcjh_correctionfn(k, eta, sym):
@@ -189,7 +185,7 @@ class HexBasis(TensorProdBasis, BasisBase):
         # Pre-compute all possible flux point rotation schemes
         self._rschemes = rs = np.empty((6, 5), dtype=np.object)
         for face, rtag in ndrange(*rs.shape):
-            fpts = np.arange(face*k*k, (face+1)*k*k).reshape(k,k)
+            fpts = np.arange(face*k*k, (face + 1)*k*k).reshape(k,k)
 
             if rtag == 0:
                 pass
