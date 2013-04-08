@@ -1,9 +1,9 @@
-======
+******
 Theory
-======
+******
 
 Introduction
-------------
+============
 
 Theoretical studies and numerical experiments suggest that high-order
 methods for unstructured grids can provide solutions to otherwise
@@ -47,10 +47,10 @@ stable for all orders of accuracy. These linearly stable FR schemes are
 known as Vincent-Castonguay-Jameson-Huynh (VCJH) schemes.
 
 Flux Reconstruction
--------------------
+===================
 
 Overview
-~~~~~~~~
+--------
 
 FR schemes are similar to nodal DG schemes, which are arguably the most
 popular type of unstructured high-order method (at least in the field of
@@ -64,7 +64,7 @@ approach in 1D is presented below. For further information see the
 original paper of Huynh [H2007]_.
 
 Preliminaries
-~~~~~~~~~~~~~
+-------------
 
 Consider solving the following 1D scalar conservation law
 
@@ -103,7 +103,7 @@ each :math:`u^{\delta}_n`, which consequently ensures the divergence of
 :math:`\Omega_n`.
 
 Stages
-~~~~~~
+------
 
 From an implementation perspective, it is advantageous to transform each
 :math:`\Omega_n` to a standard element :math:`\Omega_S=\{\hat{x}|-1\leq
@@ -141,15 +141,17 @@ first stage involves representing :math:`\hat{u}^{\delta}` in terms of a nodal
 basis as follows
 
 .. math:: \hat{u}^{\delta}=\sum_{i=0}^{k}\hat{u}^{\delta}_{i}\;l_i,
-    
+
 where :math:`l_i` are Lagrange polynomials defined as
 
 .. math:: l_i=\prod_{j=0, j\neq
     i}^{k}\left(\frac{\hat{x}-\hat{x}_j}{\hat{x}_i-\hat{x}_j}\right),
 
-:math:`\hat{x}_i` (`i=0` to :math:`k`) are :math:`k+1` distinct solution points within
+:math:`\hat{x}_i` (`i=0` to :math:`k`) are :math:`k+1` distinct solution points
+within
 :math:`\Omega_S`, and :math:`\hat{u}^{\delta}_{i}=\hat{u}^{\delta}_{i}(t)`
-(`i=0` to :math:`k`) are values of :math:`\hat{u}^{\delta}` at the solution points
+(`i=0` to :math:`k`) are values of :math:`\hat{u}^{\delta}` at the solution
+points
 :math:`\hat{x}_i`.
 
 The second stage of the FR approach involves constructing a degree :math:`k`
@@ -174,20 +176,25 @@ analogous information from adjoining elements, are then used to
 calculate numerical interface fluxes. The exact methodology for
 calculating such numerical interface fluxes will depend on the nature of
 the equations being solved. For example, when solving the Euler
-equations one may use a Roe type approximate Riemann solver, or any other two-point flux formula that provides for an
+equations one may use a Roe type approximate Riemann solver, or any other
+two-point flux formula that provides for an
 upwind bias. In what follows the numerical interface fluxes associated
 with the left and right hand ends of :math:`\Omega_S` (and transformed
-appropriately for use in :math:`\Omega_S`) will be denoted :math:`\hat{f}^{I}_L`
+appropriately for use in :math:`\Omega_S`) will be denoted
+:math:`\hat{f}^{I}_L`
 and :math:`\hat{f}^{I}_R` respectively.
 
 The penultimate stage of the FR approach involves constructing the
-degree :math:`k+1` polynomial :math:`\hat{f}^{\delta}`, by adding a correction flux
-:math:`\hat{f}^{C}=\hat{f}^{C}(\hat{x},t)` of degree :math:`k+1` to :math:`\hat{f}^{D}`,
+degree :math:`k+1` polynomial :math:`\hat{f}^{\delta}`, by adding a correction
+flux
+:math:`\hat{f}^{C}=\hat{f}^{C}(\hat{x},t)` of degree :math:`k+1` to
+:math:`\hat{f}^{D}`,
 such that their sum equals the transformed numerical interface flux at
 :math:`\hat{x}=\pm 1`, yet in some sense follows :math:`\hat{f}^{D}` within the
 interior of :math:`\Omega_S`. In order to define :math:`\hat{f}^{C}` such that
 it satisfies the above requirements, consider first defining degree
-:math:`k+1` correction functions :math:`g_L=g_L(\hat{x})` and :math:`g_R=g_R(\hat{x})` to
+:math:`k+1` correction functions :math:`g_L=g_L(\hat{x})` and
+:math:`g_R=g_R(\hat{x})` to
 approximate zero (in some sense) within :math:`\Omega_S`, as well as
 satisfying
 
@@ -202,7 +209,8 @@ and
 A suitable expression for :math:`\hat{f}^{C}` can now be written in terms of
 :math:`g_L` and :math:`g_R` as
 
-.. math:: \hat{f}^{C}=(\hat{f}^{I}_L-\hat{f}^{D}_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R,
+.. math::
+\hat{f}^{C}=(\hat{f}^{I}_L-\hat{f}^{D}_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R,
 
 where :math:`\hat{f}^{D}_L=\hat{f}^{D}(-1,t)` and
 :math:`\hat{f}^{D}_R=\hat{f}^{D}(1,t)`. Using this expression, the degree
@@ -210,55 +218,70 @@ where :math:`\hat{f}^{D}_L=\hat{f}^{D}(-1,t)` and
 :math:`\Omega_S` can be constructed from the discontinuous and correction
 fluxes as follows
 
-.. math:: \hat{f}^{\delta}=\hat{f}^{D}+\hat{f}^{C}=\hat{f}^{D}+(\hat{f}^{I}_L-\hat{f}^{D}_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R.
+.. math::
+\hat{f}^{\delta}=\hat{f}^{D}+\hat{f}^{C}=\hat{f}^{D}+(\hat{f}^{I}_L-\hat{f}^{D}
+_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R.
 
 The final stage of the FR approach involves evaluating the divergence of
 :math:`\hat{f}^{\delta}` at each solution point :math:`\hat{x}_i` using the
 expression
 
-.. math:: \frac{\partial\hat{f}^{\delta}}{\partial\hat{x}}(\hat{x}_i)=\sum_{j=0}^{k}\hat{f}^{D}_j\;\frac{\mathrm{d}l_j}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}_L-\hat{f}^{D}_L)\frac{\mathrm{d}g_{L}}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}_R-\hat{f}^{D}_R)\frac{\mathrm{d}g_{R}}{\mathrm{d}\hat{x}}(\hat{x}_i).
+.. math::
+\frac{\partial\hat{f}^{\delta}}{\partial\hat{x}}(\hat{x}_i)=\sum_{j=0}^{k}\hat{
+f}^{D}_j\;\frac{\mathrm{d}l_j}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}_L-\
+hat{f}^{D}_L)\frac{\mathrm{d}g_{L}}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}
+_R-\hat{f}^{D}_R)\frac{\mathrm{d}g_{R}}{\mathrm{d}\hat{x}}(\hat{x}_i).
 
 These values can then be used to advance :math:`\hat{u}^{\delta}` in time via
 a suitable temporal discretization of the following semi-discrete
 expression
 
-.. math:: \frac{\mathrm{d}\hat{u}^{\delta}_i}{\mathrm{d}t}=-\frac{\partial\hat{f}^{\delta}}{\partial
+.. math::
+\frac{\mathrm{d}\hat{u}^{\delta}_i}{\mathrm{d}t}=-\frac{\partial\hat{f}^{\delta
+}}{\partial
     \hat{x}}(\hat{x}_i).
 
 Comments
-~~~~~~~~
+--------
 
 The nature of a particular FR scheme depends solely on three factors,
 namely the location of the solution points :math:`\hat{x}_i`, the methodology
 for calculating the interface fluxes :math:`\hat{f}^{I}_L` and
-:math:`\hat{f}^{I}_R`, and the form of the flux correction functions :math:`g_L`
+:math:`\hat{f}^{I}_R`, and the form of the flux correction functions
+:math:`g_L`
 (and thus :math:`g_R`). Huynh [H2007]_ showed previously that a
 collocation based nodal DG scheme is recovered in 1D if the corrections
 functions :math:`g_L` and :math:`g_R` are the right and left Radau polynomials
 respectively. Also, Huynh [H2007]_ showed that SD type methods can
 be recovered (at least for a linear flux function) if the correction
-functions :math:`g_L` and :math:`g_R` are set to zero at a set of :math:`k` points within
+functions :math:`g_L` and :math:`g_R` are set to zero at a set of :math:`k`
+points within
 :math:`\Omega_S` (located symmetrically about the origin). Several
-additional forms of :math:`g_L` (and thus :math:`g_R`) have also suggested by Huynh
+additional forms of :math:`g_L` (and thus :math:`g_R`) have also suggested by
+Huynh
 [H2007]_ [H2009]_, leading to the development of new schemes with
 various stability and accuracy properties.
 
 .. _VCJH:
 
 Vincent-Castonguay-Jameson-Huynh Schemes
-----------------------------------------
+========================================
 
 Overview
-~~~~~~~~
+--------
 
 VCJH schemes can be recovered if the corrections functions :math:`g_L` and
 :math:`g_R` are defined as
 
-.. math:: g_L=\frac{(-1)^{k}}{2}\left[L_{k}-\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k}\right)\right],
-  
+.. math::
+g_L=\frac{(-1)^{k}}{2}\left[L_{k}-\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k
+}\right)\right],
+
 and
 
-.. math:: g_R=\frac{1}{2}\left[L_{k}+\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k}\right)\right],
+.. math::
+g_R=\frac{1}{2}\left[L_{k}+\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k}\right
+)\right],
 
 where
 
@@ -266,7 +289,7 @@ where
 
 .. math:: a_{k}=\frac{(2k)!}{2^{k}(k!)^2},
 
-:math:`L_k` is a Legendre polynomial of degree :math:`k` (normalized to 
+:math:`L_k` is a Legendre polynomial of degree :math:`k` (normalized to
 equal unity at :math:`\hat{x}=1`), and :math:`c` is a free scalar
 parameter that must lie within the range
 
@@ -275,19 +298,22 @@ parameter that must lie within the range
 where
 
 .. math:: c_{-}=\frac{-2}{(2k+1)(a_kk!)^2},
-    
-and :math:`c_{\infty}=\infty`. Such correction functions ensure that if :math:`\Omega` is periodic the
+
+and :math:`c_{\infty}=\infty`. Such correction functions ensure that if
+:math:`\Omega` is periodic the
 resulting FR scheme will be linearly stable for any :math:`k` in the broken
 Sobolev type norm :math:`||u^{\delta}||_{k,2}`, defined as
 
-.. math:: ||u^{\delta}||_{k,2}=\left[\sum_{n=1}^{N}\int_{x_n}^{x_{n+1}}(u_n^{\delta})^2+\frac{c}{2}(h_n)^{2k}\left(\frac{\partial^k
+.. math::
+||u^{\delta}||_{k,2}=\left[\sum_{n=1}^{N}\int_{x_n}^{x_{n+1}}(u_n^{\delta})^2+\
+frac{c}{2}(h_n)^{2k}\left(\frac{\partial^k
     u_n^{\delta}}{\partial x^k}\right)^2\mathrm{d}x\right]^{1/2}.
 
 For full details of how these schemes are derived see the
 original paper of Vincent, Castonguay and Jameson [VCJ2011]_.
 
 Recovery of Known Methods
-~~~~~~~~~~~~~~~~~~~~~~~~~
+-------------------------
 
 Several known methods can be recovered from the range of VCJH schemes.
 In particular if :math:`c=c_{DG}`, where
@@ -337,13 +363,13 @@ details see the original paper of Huynh [H2007]_.
    Comput Phys, 216(2), 780-801.
 
 .. [VJ2011] Vincent, P. E., & Jameson, A. (2011). Facilitating the
-   adoption of unstructured high-order methods amongst a wider community 
+   adoption of unstructured high-order methods amongst a wider community
    of fluid dynamicists. Math Mod Nat Phenom, 6(3), 97-140.
 
 .. [VCJ2011] Vincent, P. E., Castonguay, P., & Jameson, A. (2011). A new
    class of high-order energy stable flux reconstruction schemes. J Sci
    Comput, 47(1), 50-72.
-   
+
 .. [J2010] Jameson, A. (2010). A proof of the stability of the spectral
-   difference method for all orders of accuracy. J Sci Comput, 45(1-3), 
+   difference method for all orders of accuracy. J Sci Comput, 45(1-3),
    348-358.

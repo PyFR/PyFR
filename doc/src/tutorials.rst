@@ -1,15 +1,15 @@
-=========
+*********
 Tutorials
-=========
+*********
 
 Introduction
-------------
+============
 
 The following tutorials will help you gain familiar with PyFR and
 its range of functionality.
 
 3D Euler Vortex
----------------
+===============
 
 Proceed with the following steps to run a 3D Euler vortex simulation:
 
@@ -38,7 +38,7 @@ Proceed with the following steps to run a 3D Euler vortex simulation:
    Colour map of density.
 
 3D Cylinder Flow
-----------------
+================
 
 Proceed with the following steps to run a 3D cylinder flow simulation:
 

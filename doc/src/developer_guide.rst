@@ -1,32 +1,36 @@
-===============
+###############
 Developer Guide
-===============
+###############
 
+************
 Introduction
-------------
+************
 
 A detailed developer guide is provided below
 
 
 .. _devg-internal-file-formats:
 
+*********************
 Internal File Formats
----------------------
+*********************
 
 Mesh Format (.pyfrm)
-~~~~~~~~~~~~~~~~~~~~
+====================
 
 Solution Format (.pyfrs)
-~~~~~~~~~~~~~~~~~~~~~~~~
+========================
 
+**********
 Unit Tests
-----------
+**********
 
+****
 Code
-----
+****
 
 Backend Interface
-~~~~~~~~~~~~~~~~~
+=================
 
 All of the backends in PyFR implement a common interface.  This
 interface is based around the `factory method pattern
@@ -100,7 +104,7 @@ matrix multiplication::
     :members: __lshift__, __mod__
 
 Readers
-~~~~~~~
+=======
 
 Functionality for PyFR to read internal and external file formats is provided
 here.
@@ -112,10 +116,21 @@ require different treatments. It is the purpose of the
 interface for general use in PyFR.
 
 Native
-~~~~~~
+------
 
 .. automodule:: pyfr.readers.native
     :members:
 
 Gmsh
-~~~~
+----
+
+Utilities
+---------
+
+Documentation for the utility modules contained in the readers folder.
+
+Node Maps
+^^^^^^^^^
+
+.. automodule:: pyfr.readers.nodemaps
+    :members:

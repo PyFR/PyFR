@@ -1,9 +1,9 @@
-========
+********
 Overview
-========
+********
 
 Introduction
-------------
+============
 
 PyFR is a Python based high-order compressible fluid flow solver based
 on energy stable Vincent-Castonguay-Jameson-Huynh (VCJH) schemes
@@ -12,7 +12,7 @@ Aeronautics at `Imperial College London <https://www.imperial.ac.uk>`_
 under the direction of Dr. Peter Vincent.
 
 Ethos
------
+=====
 
 Our objective is to develop a compact and efficient codebase that can
 target multiple hardware platforms. High-level platform independent code
@@ -22,7 +22,7 @@ VCJH schemes [VCJ2011]_ have been abstracted, the majority of backend
 kernels consitute only simple matrix multiply operations.
 
 Capabilities
-------------
+============
 
 PyFR has the folllowing capabilities:
 
@@ -36,17 +36,17 @@ PyFR has the folllowing capabilities:
 - Solution files written - Paraview (.vtu)
 
 Authors
--------
+=======
 
 See the AUTHORS file for full details.
 
 Licensing
----------
+=========
 
 See the LICENSE file for full details.
 
 Funding
--------
+=======
 
 Development of PyFR is supported by the Engineering and Physical
 Sciences Research Council.
