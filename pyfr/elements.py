@@ -297,7 +297,7 @@ class BaseAdvectionElements(object):
         smats[:,1,0], smats[:,1,1] = -c,  a
 
         if retdets:
-            return smats, a*c - b*d
+            return smats, a*d - b*c
         else:
             return smats
 

@@ -92,6 +92,21 @@ def nodal_basis(points, dims, compact=True):
     return cpbasis if compact else cpbasis.reshape((len(p),)*len(dims))
 
 
+_quad_map_rots_np = np.array([[[ 1,  0], [ 0,  1]],
+                              [[ 0,  1], [-1,  0]],
+                              [[-1,  0], [ 0, -1]],
+                              [[ 0, -1], [ 1,  0]]])
+
+
+def quad_map_edge(fpts):
+    mfpts = np.empty((4,) + fpts.shape, dtype=fpts.dtype)
+
+    for i, frot in enumerate(_quad_map_rots_np):
+        mfpts[i,...] = np.dot(fpts, frot)
+
+    return mfpts
+
+
 # Cube map face rotation scheme to go from face 1 -> 0..5
 _cube_map_rots = np.array([
     [[-1,  0,  0], [ 0,  0,  1], [ 0,  1,  0]],   # 1 -> 0
@@ -171,6 +186,82 @@ class TensorProdBasis(object):
     @property
     def nfpts(self):
         return [(self._order + 1)**(self.ndims - 1)] * (2*self.ndims)
+
+
+class QuadBasis(TensorProdBasis, BasisBase):
+    name = 'quad'
+    ndims = 2
+
+    def __init__(self, *args, **kwargs):
+        super(QuadBasis, self).__init__(*args, **kwargs)
+
+        k = self._order + 1
+
+        # Pre-compute all possible flux point rotation schemes
+        self._rschemes = rs = np.empty((4, 2), dtype=np.object)
+        for face, rtag in ndrange(*rs.shape):
+            fpts = np.arange(face*k, (face + 1)*k)
+
+            if rtag == 0:
+                pass
+            elif rtag == 1:
+                fpts = fpts[::-1]
+
+            rs[face,rtag] = fpts
+
+    @lazyprop
+    def fpts(self):
+        # Get the 1D points
+        pts1d = self._pts1d
+
+        # Edge zero has points (q,-1)
+        ezeropts = np.empty((len(pts1d), 2), dtype=np.object)
+        ezeropts[:,0] = pts1d
+        ezeropts[:,1] = -1
+
+        #print np.asanyarray(quad_map_edge(ezeropts).reshape(-1, 2),
+                            #dtype=np.float)
+
+        # Quad map edge zero to get the full set
+        return quad_map_edge(ezeropts).reshape(-1, 2)
+
+    @lazyprop
+    def fbasis(self):
+        # Get the 1D points
+        pts1d = self._pts1d
+
+        # Allocate space for the flux basis
+        fbasis = np.empty((4, len(pts1d)), dtype=np.object)
+
+        # Pair up opposite edges with their associated (normal) dimension
+        for epair, sym in zip([(3,1), (0,2)], self._dims):
+            nbdim = [d for d in self._dims if d is not sym]
+            fbasis[epair,...] = nodal_basis(pts1d, nbdim, compact=False)
+
+            eta = self._cfg.get('mesh-elements', 'vcjh-eta')
+            diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
+
+            for p, gfn in zip(epair, diffcorfn):
+                if p in (2,3):
+                    fbasis[p] = fbasis[p,::-1]
+                fbasis[p,...] *= gfn
+
+        # Correct faces with negative normals
+        fbasis[(3,0),...] *= -1
+
+        return fbasis.ravel()
+
+    @lazyprop
+    def norm_fpts(self):
+        # Normals for edge zero are (0,-1)
+        ezeronorms = np.zeros((self._order + 1, 2), dtype=np.int)
+        ezeronorms[:,1] = -1
+
+        # Edge map
+        return quad_map_edge(ezeronorms).reshape(-1, 2)
+
+    def fpts_idx_for_face(self, face, rtag):
+        return self._rschemes[face, rtag]
 
 
 class HexBasis(TensorProdBasis, BasisBase):

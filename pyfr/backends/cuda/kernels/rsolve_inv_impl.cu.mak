@@ -55,8 +55,8 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
     ${dtype} nvr = ${util.dot('pnorm[{0}]', 'vr[{0}]')};
 
     // Compute the enthalpies
-    ${dtype} Hl = (ul[4] + pl)/ul[0];
-    ${dtype} Hr = (ur[4] + pr)/ur[0];
+    ${dtype} Hl = (ul[${nvars - 1}] + pl)/ul[0];
+    ${dtype} Hr = (ur[${nvars - 1}] + pr)/ur[0];
 
     // Compute the Roe-averaged enthalpy
     ${dtype} H = (sqrt(ul[0])*Hl + sqrt(ur[0])*Hr)/(sqrt(ul[0]) + sqrt(ur[0]));
