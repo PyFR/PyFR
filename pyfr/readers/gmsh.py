@@ -432,7 +432,7 @@ class GmshReader(BaseReader):
             petype, nnodes = self._etype_map[etype]
 
             # Go from Gmsh to PyFR node ordering
-            peles = eles[:,GmshNodeMaps.pyfr_to_gmsh[(petype, nnodes)]]
+            peles = eles[:,GmshNodeMaps.from_pyfr[(petype, nnodes)]]
 
             for n, p in izip(peles, prts):
                 spts[(petype, p)].append([nodepts[i] for i in n])
