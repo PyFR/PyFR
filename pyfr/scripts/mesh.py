@@ -212,10 +212,6 @@ def process_gen(args):
     if args.curve != None:
         _curve_mesh(mesh, m_cdef, npart, ele_type, args.curve)
 
-    if ele_type != 'hex':
-        raise ArgumentError('PyFR is currently compatible with hex elements \
-                             only')
-
     mesh_uuid = str(uuid.uuid4())  #Mesh unique identifier.
     mesh['mesh_uuid'] = mesh_uuid
     mesh.update(cons)
