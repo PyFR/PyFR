@@ -36,19 +36,22 @@ class GmshReader(BaseReader):
     extn = ['.msh']
 
     # Gmsh element types to PyFR type (petype) + sizes
-    _etype_map = {2: ('tri', 3),   9: ('tri', 6),
+    _etype_map = {1: ('line', 2),  8: ('line', 3),
+                  2: ('tri', 3),   9: ('tri', 6),
                   3: ('quad', 4), 10: ('quad', 9),
                   4: ('tet', 4),  11: ('tet', 10),
                   5: ('hex', 8),  12: ('hex', 27), 92: ('hex', 64),
                   6: ('pri', 6),  13: ('pri', 18),
                   7: ('pyr', 5),  14: ('pyr', 15)}
 
-    # Number of nodes per first-order element of each type
-    _petype_focount = {'quad': 4, 'hex': 8, 'tet': 4, 'pri': 6, 'pyr': 5}
+    # Number of nodes in the first-order representation an element
+    _petype_focount = {v[0]: v[1] for k, v in _etype_map.items() if k < 8}
 
     # Number of faces of each type per element
-    _petype_ftcount = {'hex': {'quad': 6},
+    _petype_ftcount = {'tri': {'line': 3},
+                       'quad': {'line': 4},
                        'tet': {'tri': 4},
+                       'hex': {'quad': 6},
                        'pri': {'quad': 3, 'tri': 2},
                        'pyr': {'quad': 1, 'tri': 4}}
 
@@ -278,7 +281,8 @@ class GmshReader(BaseReader):
             ordl = l.nodes[hexlut[l.fidx]]
             ordr = r.nodes[hexlut[r.fidx]]
 
-            # Rotation tag is index of ordl[0] in ordr mod four
+            # RHS rotation tag is index of ordl[0] in ordr mod four
+            l.rtag = 0
             r.rtag = np.where(ordr == ordl[0])[0][0] % 4
 
     def _pair_periodic_fluid_faces(self, bpart, resid):
