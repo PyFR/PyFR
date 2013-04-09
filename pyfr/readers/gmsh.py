@@ -36,9 +36,9 @@ class GmshReader(BaseReader):
     extn = ['.msh']
 
     # Gmsh element types to PyFR type (petype) + sizes
-    _etype_map = {1: ('line', 2),  8: ('line', 3),
+    _etype_map = {1: ('line', 2),  8: ('line', 3), 26: ('line', 4),
                   2: ('tri', 3),   9: ('tri', 6),
-                  3: ('quad', 4), 10: ('quad', 9),
+                  3: ('quad', 4), 10: ('quad', 9), 36: ('quad', 16),
                   4: ('tet', 4),  11: ('tet', 10),
                   5: ('hex', 8),  12: ('hex', 27), 92: ('hex', 64),
                   6: ('pri', 6),  13: ('pri', 18),
@@ -46,6 +46,10 @@ class GmshReader(BaseReader):
 
     # Number of nodes in the first-order representation an element
     _petype_focount = {v[0]: v[1] for k, v in _etype_map.items() if k < 8}
+
+    # Dimensionality of each element type
+    _petype_ndim = {'tri': 2, 'quad': 2,
+                    'tet': 3, 'hex': 3, 'pri': 3, 'pyr': 3}
 
     # Number of faces of each type per element
     _petype_ftcount = {'tri': {'line': 3},
@@ -213,7 +217,8 @@ class GmshReader(BaseReader):
         return selemap.pop(self._felespent), selemap
 
     def _extract_faces(self, foeles):
-        extractors = {'hex': self._extract_faces_hex}
+        extractors = {'quad': self._extract_faces_quad,
+                      'hex': self._extract_faces_hex}
 
         fofaces = defaultdict(list)
         for petype, eles in foeles.iteritems():
@@ -235,6 +240,18 @@ class GmshReader(BaseReader):
         arr.rtag = 0
 
         return arr
+
+    def _extract_faces_quad(self, foquads):
+        # Gmsh node offsets for the four `faces'
+        fnmap = np.array([[0, 1], [1, 2], [2, 3], [3, 0]])
+
+        lf = self._foface_array('quad', 'line', len(foquads))
+
+        lf.eidx = np.arange(len(foquads))[...,None]
+        lf.fidx = np.arange(4)
+        lf.nodes = foquads[:,fnmap]
+
+        return [('line', lf)]
 
     def _extract_faces_hex(self, fohexes):
         # Gmsh nodes offsets for each of the six faces
@@ -267,10 +284,16 @@ class GmshReader(BaseReader):
         return pairs, resid
 
     def _calc_fluid_rtags(self, fpairs):
-        rtaggers = {'quad': self._calc_fluid_rtags_quad}
+        rtaggers = {'line': self._calc_fluid_rtags_line,
+                    'quad': self._calc_fluid_rtags_quad}
 
         for pftype, pairs in fpairs.iteritems():
             rtaggers[pftype](pairs)
+
+    def _calc_fluid_rtags_line(self, lpairs):
+        # In 2D there is only one possible arrangement
+        for l, r in lpairs:
+            l.rtag, r.rtag = 0, 1
 
     def _calc_fluid_rtags_quad(self, qpairs):
         # To standard order
@@ -302,10 +325,15 @@ class GmshReader(BaseReader):
         return pfaces
 
     def _calc_periodic_fluid_rtags(self, pfpairs):
-        rtaggers = {'quad': self._calc_periodic_fluid_rtags_quad}
+        rtaggers = {'line': self._calc_periodic_fluid_rtags_line,
+                    'quad': self._calc_periodic_fluid_rtags_quad}
 
         for pftype, pairs in pfpairs.iteritems():
             rtaggers[pftype](pairs)
+
+    def _calc_periodic_fluid_rtags_line(self, lpairs):
+        for l, r in lpairs:
+            l.rtag, r.rtag = 0, 1
 
     def _calc_periodic_fluid_rtags_quad(self, qpairs):
         # TODO: Compute this properly
@@ -434,8 +462,11 @@ class GmshReader(BaseReader):
             # Go from Gmsh to PyFR node ordering
             peles = eles[:,GmshNodeMaps.from_pyfr[(petype, nnodes)]]
 
-            for n, p in izip(peles, prts):
-                spts[(petype, p)].append([nodepts[i] for i in n])
+            # Obtain the dimensionality of the element type
+            ndim = self._petype_ndim[petype]
+
+            for nn, p in izip(peles, prts):
+                spts[(petype, p)].append([nodepts[i][:ndim] for i in nn])
 
         return {'spt_%s_p%d' % k: np.array(arr).swapaxes(0, 1)
                 for k, arr in spts.iteritems()}
