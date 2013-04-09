@@ -219,9 +219,6 @@ class QuadBasis(TensorProdBasis, BasisBase):
         ezeropts[:,0] = pts1d
         ezeropts[:,1] = -1
 
-        #print np.asanyarray(quad_map_edge(ezeropts).reshape(-1, 2),
-                            #dtype=np.float)
-
         # Quad map edge zero to get the full set
         return quad_map_edge(ezeropts).reshape(-1, 2)
 

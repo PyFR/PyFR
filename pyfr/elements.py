@@ -294,7 +294,7 @@ class BaseAdvectionElements(object):
             raise ValueError('Invalid basis dimension')
 
     def _get_smats2d(self, jac, retdets):
-        a, b, c, d = [jac[:,i,j] for i, j in ndrange(2,2)]
+        a, b, c, d = [jac[:,i,j] for i, j in ndrange(2, 2)]
 
         smats = np.empty_like(jac)
         smats[:,0,0], smats[:,0,1] =  d, -b
