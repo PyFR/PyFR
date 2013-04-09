@@ -221,6 +221,10 @@ class BaseAdvectionElements(object):
         jacs = self._get_jac_eles_at(eles, self._basis.upts)
         smats, djacs = self._get_smats(jacs, retdets=True)
 
+        # Check for negative Jacobians
+        if np.any(djacs < -1e-5):
+            raise RuntimeError('Negative mesh Jacobians detected')
+
         neles, ndims = eles.shape[1:]
 
         self._rcpdjac_upts = 1.0 / djacs.reshape(-1, neles)
