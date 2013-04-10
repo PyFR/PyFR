@@ -25,7 +25,7 @@ rsolve_inv_int(size_t ninters,
 
         // Load the left normalized physical normal
         ${dtype} ptemp[${ndims}];
-        for (int i = 0; i < ${ndims}; ++i)
+        for (int i = 0; i < ${ndims}; i++)
             ptemp[i] = normpnorml[ninters*i + iidx];
 
         // Perform the Riemann solve
@@ -33,7 +33,7 @@ rsolve_inv_int(size_t ninters,
         rsolve_inv_impl(ul, ur, ptemp, fn);
 
         // Write out the fluxes into ul and ur
-        for (int i = 0; i < ${nvars}; ++i)
+        for (int i = 0; i < ${nvars}; i++)
         {
             ul[i] =  magpnorml[iidx]*fn[i];
             ur[i] = -magpnormr[iidx]*fn[i];
