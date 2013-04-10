@@ -42,7 +42,8 @@ class CudaMatrixBase(base.MatrixBase):
             self.pitch = colsz
 
         self.leaddim = self.pitch / self.itemsize
-        self.traits = (nrow, self.leaddim, self.dtype)
+        self.leadsubdim = self.soa_shape[-1]
+        self.traits = (nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Zero the entire matrix (incl. slack)
         assert (self._nbytes % 4) == 0

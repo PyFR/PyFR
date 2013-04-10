@@ -27,7 +27,7 @@ class CPointwiseKernels(CKernelProvider):
                                   u.leaddim, smats.leaddim, f.leaddim,
                                   u.leadsubdim, smats.leadsubdim, f.leadsubdim)
 
-    @traits(u={'align'}, smats={'align'}, tgradu={'align'})
+    @traits(u={'align'}, smats={'align'}, rcpdjac={'align'}, tgradu={'align'})
     def tdisf_vis(self, ndims, nvars, u, smats, rcpdjac, tgradu, c):
         nupts, neles = u.nrow, u.soa_shape[2]
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, c=c)
@@ -171,7 +171,7 @@ class CPointwiseKernels(CKernelProvider):
                                   gul_v.mapping, gul_v.strides,
                                   magl, normpnorml)
 
-    @traits(dv={'align'})
+    @traits(dv={'align'}, rcpdjac={'align'})
     def negdivconf(self, nvars, dv, rcpdjac):
         nupts, neles = dv.nrow, dv.soa_shape[2]
         opts = dict(dtype=dv.dtype, nvars=nvars)

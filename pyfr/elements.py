@@ -118,7 +118,7 @@ class BaseAdvectionElements(object):
         tags = {'align'}
 
         # Allocate soln point transformation matrices
-        self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts)
+        self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts, tags=tags)
         self._smat_upts = be.const_matrix(self._smat_upts, tags=tags)
 
         # Sizes
@@ -150,7 +150,7 @@ class BaseAdvectionElements(object):
         self._nfacefpts = nfacefpts = self._basis.nfpts
 
         # Get the relevant strides required for view construction
-        self._scal_fpts_strides = (1, self._scal_fpts[0].soa_shape[-1])
+        self._scal_fpts_strides = (1, self._scal_fpts[0].leadsubdim)
 
         # Pre-compute for the max flux point count on a given face
         nmaxfpts = max(nfacefpts)

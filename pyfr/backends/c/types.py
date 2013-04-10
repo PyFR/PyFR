@@ -43,7 +43,7 @@ class CMatrixBase(base.MatrixBase):
         # Columns
         if ndim == 2:
             ncol = shape[1]
-            datashape += [ncol]
+            datashape += [ncol - (ncol % -ldmod)]
         else:
             ncols = shape[-2]
             ncola = shape[-1] - (shape[-1] % -ldmod)
@@ -52,7 +52,9 @@ class CMatrixBase(base.MatrixBase):
 
         # Assign
         self.nrow, self.ncol = nrow, ncol
-        self.leaddim, self.leadsubdim = ncol, datashape[-1]
+
+        self.leaddim = ncol - (ncol % -ldmod)
+        self.leadsubdim = datashape[-1]
         self.pitch = self.leaddim*self.itemsize
 
         self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
