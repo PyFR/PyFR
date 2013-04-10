@@ -36,6 +36,9 @@ class Inifile(object):
             self._cp.add_section(section)
             self._cp.set(section, option, value)
 
+    def hasopt(self, section, option):
+        return self._cp.has_option(section, option)
+
     def get(self, section, option, default=_sentinel, raw=False, vars=None):
         try:
             return self._cp.get(section, option, raw=raw, vars=vars)

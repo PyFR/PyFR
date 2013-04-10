@@ -2,13 +2,16 @@
 
 import os
 
-from ctypes import CDLL, POINTER, byref, c_int, c_double, c_float, c_void_p
+from ctypes import (CDLL, POINTER, byref, cast, c_int, c_double, c_float,
+                    c_void_p)
 from ctypes.util import find_library
 
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
+from pyfr.backends.c.provider import CKernelProvider
 from pyfr.ctypesutil import platform_libname
+from pyfr.nputil import npdtype_to_ctype
 
 
 # Matrix orderings
@@ -60,9 +63,24 @@ class CBlasWrappers(object):
 
 
 
-class CBlasKernels(object):
+class CBlasKernels(CKernelProvider):
     def __init__(self, backend, cfg):
-        libname = cfg.getpath('backend-c', 'cblas', abs=False)
+        super(CBlasKernels, self).__init__(backend, cfg)
+
+        # Look for single and multi-threaded BLAS libraries
+        hasst = cfg.hasopt('backend-c', 'cblas-st')
+        hasmt = cfg.hasopt('backend-c', 'cblas-mt')
+
+        if hasst and hasmt:
+            raise RuntimeError('cblas-st and cblas-mt are mutually exclusive')
+        elif hasst:
+            self._cblas_type = 'cblas-st'
+        elif hasmt:
+            self._cblas_type = 'cblas-mt'
+        else:
+            raise RuntimeError('No cblas library specified')
+
+        libname = cfg.getpath('backend-c', self._cblas_type, abs=False)
 
         # Load and wrap cblas
         self._wrappers = CBlasWrappers(libname)
@@ -80,12 +98,36 @@ class CBlasKernels(object):
         else:
             cblas_gemm = self._wrappers.cblas_sgemm
 
-        class MulKernel(ComputeKernel):
-            def run(self):
-                cblas_gemm(CBlasOrder.ROW_MAJOR, CBlasTranspose.NO_TRANS,
-                           CBlasTranspose.NO_TRANS, m, n, k,
-                           alpha, a, a.leaddim, b, b.leaddim,
-                           beta, out, out.leaddim)
+        # If our BLAS library is single threaded then invoke our own
+        # parallelization kernel which uses OpenMP to partition the
+        # operation along b.ncol (which works extremely well for the
+        # extremely long matrices encountered by PyFR).  Otherwise, we
+        # let the BLAS library handle parallelization itself (which
+        # may, or may not, use OpenMP).
+        if self._cblas_type == 'cblas-st':
+            # Argument types and template params for par_gemm
+            argt = [np.intp, np.int32, np.int32, np.int32,
+                    a.dtype, np.intp, np.int32, np.intp, np.int32,
+                    a.dtype, np.intp, np.int32]
+            opts = dict(dtype=npdtype_to_ctype(a.dtype))
+
+            par_gemm = self._get_function('par_gemm', 'par_gemm', None, argt,
+                                          opts)
+
+            # Pointer to the BLAS library GEMM function
+            cblas_gemm_ptr = cast(cblas_gemm, c_void_p).value
+
+            class MulKernel(ComputeKernel):
+                def run(self):
+                    par_gemm(cblas_gemm_ptr, m, n, k, alpha, a, a.leaddim,
+                             b, b.leaddim, beta, out, out.leaddim)
+        else:
+            class MulKernel(ComputeKernel):
+                def run(self):
+                    cblas_gemm(CBlasOrder.ROW_MAJOR, CBlasTranspose.NO_TRANS,
+                               CBlasTranspose.NO_TRANS, m, n, k,
+                               alpha, a, a.leaddim, b, b.leaddim,
+                               beta, out, out.leaddim)
 
         return MulKernel()
 
