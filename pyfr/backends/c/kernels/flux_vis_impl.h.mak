@@ -1,9 +1,46 @@
 # -*- coding: utf-8 -*-
 
-% if ndims == 3:
 /**
  * Computes the viscous flux and adds it to fout.
  */
+% if ndims == 2:
+static inline void
+disf_vis_impl_add(const ${dtype} uin[4], ${dtype} grad_uin[2][4],
+                  ${dtype} fout[2][4])
+{
+    ${dtype} rho = uin[0], rhou = uin[1], rhov = uin[2], E = uin[3];
+
+    ${dtype} rcprho = ${1.0|f}/rho;
+    ${dtype} u = rcprho*rhou, v = rcprho*rhov;
+
+    ${dtype} rho_x = grad_uin[0][0];
+    ${dtype} rho_y = grad_uin[1][0];
+
+    // Velocity derivatives (rho*grad[u,v])
+    ${dtype} u_x = grad_uin[0][1] - u*rho_x;
+    ${dtype} u_y = grad_uin[1][1] - u*rho_y;
+    ${dtype} v_x = grad_uin[0][2] - v*rho_x;
+    ${dtype} v_y = grad_uin[1][2] - v*rho_y;
+
+    ${dtype} E_x = grad_uin[0][3];
+    ${dtype} E_y = grad_uin[1][3];
+
+    // Compute temperature derivatives (c_p*dT/d[x,y])
+    ${dtype} T_x = rcprho*(E_x - (rcprho*rho_x*E + u*u_x + v*v_x));
+    ${dtype} T_y = rcprho*(E_y - (rcprho*rho_y*E + u*u_y + v*v_y));
+
+    // Negated stress tensor elements
+    ${dtype} t_xx = ${-2*c['mu']|f}*rcprho*(u_x - ${1.0/3.0|f}*(u_x + v_y));
+    ${dtype} t_yy = ${-2*c['mu']|f}*rcprho*(v_y - ${1.0/3.0|f}*(u_x + v_y));
+    ${dtype} t_xy = ${-c['mu']|f}*rcprho*(v_x + u_y);
+
+    fout[0][1] += t_xx;     fout[1][1] += t_xy;
+    fout[0][2] += t_xy;     fout[1][2] += t_yy;
+
+    fout[0][3] += u*t_xx + v*t_xy + ${-c['mu']*c['gamma']/c['Pr']|f}*T_x;
+    fout[1][3] += u*t_xy + v*t_yy + ${-c['mu']*c['gamma']/c['Pr']|f}*T_y;
+}
+% elif ndims == 3:
 static inline void
 disf_vis_impl_add(const ${dtype} uin[5], ${dtype} grad_uin[3][5],
                   ${dtype} fout[3][5])
