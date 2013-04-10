@@ -9,8 +9,8 @@ from pyfr.nputil import npdtype_to_ctype
 
 class CBlasExtKernels(CKernelProvider):
     def axnpby(self, y, *xn):
-        #if any(y.traits != x.traits for x in xn):
-        #    raise ValueError('Incompatible matrix types')
+        if any(y.traits != x.traits for x in xn):
+            raise ValueError('Incompatible matrix types')
 
         opts = dict(n=len(xn), dtype=npdtype_to_ctype(y.dtype))
         fn = self._get_function('blasext', 'axnpby', None,
