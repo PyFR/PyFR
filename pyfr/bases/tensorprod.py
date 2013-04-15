@@ -184,7 +184,7 @@ class TensorProdBasis(object):
         return (self._order + 1)**self.ndims
 
     @property
-    def nfpts(self):
+    def nfacefpts(self):
         return [(self._order + 1)**(self.ndims - 1)] * (2*self.ndims)
 
 

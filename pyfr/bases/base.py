@@ -64,6 +64,70 @@ class BasisBase(object):
     def dims(self):
         return self._dims
 
+    @lazyprop
+    def m0(self):
+        """Discontinuous soln at upts to discontinuous soln at fpts"""
+        return self.ubasis_at(self.fpts)
+
+    @lazyprop
+    def m1(self):
+        """Trans discontinuous flux at upts to trans divergence of
+        trans discontinuous flux at upts
+        """
+        return self.jac_ubasis_at(self.upts)
+
+    @lazyprop
+    def m2(self):
+        """Trans discontinuous flux at upts to trans normal
+        discontinuous flux at fpts
+        """
+        return self.norm_fpts[:,None,:]*self.m0[...,None]
+
+    @lazyprop
+    def m3(self):
+        """Trans normal correction flux at upts to trans divergence of
+        trans correction flux at upts
+        """
+        return self.fbasis_at(self.upts)
+
+    @property
+    def m132(self):
+        m1, m2, m3 = self.m1, self.m2, self.m3
+        return m1 - np.dot(m3, m2.reshape(self.nfpts, -1)).reshape(m1.shape)
+
+    @lazyprop
+    def m4(self):
+        """Discontinuous soln at upts to trans gradient of discontinuous
+        solution at upts
+        """
+        return self.m1.swapaxes(2, 1)[...,None]
+
+    @lazyprop
+    def m5(self):
+        """Trans grad discontinuous soln at upts to trans gradient of
+        discontinuous solution at fpts
+        """
+        nfpts, ndims, nupts = self.nfpts, self.ndims, self.nupts
+        m = np.zeros((nfpts, ndims, nupts, ndims), dtype=self.m0.dtype)
+
+        for i in xrange(ndims):
+            m[:,i,:,i] = self.m0
+
+        return m
+
+    @lazyprop
+    def m6(self):
+        """Correction soln at fpts to trans gradient of correction
+        solution at upts
+        """
+        m = self.norm_fpts.T[:,None,:]*self.m3
+        return m.swapaxes(0, 1)[...,None]
+
+    @property
+    def m460(self):
+        m4, m6, m0 = self.m4, self.m6, self.m0
+        return m4 - np.dot(m6.reshape(-1, self.nfpts), m0).reshape(m4.shape)
+
     @property
     def nspts(self):
         return self._nspts
@@ -155,8 +219,12 @@ class BasisBase(object):
         return self._eval_jac_lbasis_at(self._jac_sbasis_lamb, pts)
 
     @abstractproperty
-    def nfpts(self):
+    def nfacefpts(self):
         pass
+
+    @property
+    def nfpts(self):
+        return sum(self.nfacefpts)
 
     @abstractmethod
     def fpts_idx_for_face(self, face, rtag):

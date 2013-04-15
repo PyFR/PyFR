@@ -6,7 +6,7 @@ import numpy as np
 import sympy as sy
 
 from pyfr.nputil import npeval
-from pyfr.util import ndrange, lazyprop
+from pyfr.util import ndrange
 
 
 class BaseAdvectionElements(object):
@@ -48,7 +48,7 @@ class BaseAdvectionElements(object):
 
         # Sizes
         self.nupts = nupts = basis.nupts
-        self.nfpts = nfpts = sum(basis.nfpts)
+        self.nfpts = nfpts = basis.nfpts
 
         # Transform matrices at the soln points
         self._gen_rcpdjac_smat_upts(eles)
@@ -110,9 +110,9 @@ class BaseAdvectionElements(object):
         self._be = be
 
         # Allocate the constant operator matrices
-        self._m0b = be.auto_matrix(self.m0, tags={'M0'})
-        self._m3b = be.auto_matrix(self.m3, tags={'M3'})
-        self._m132b = be.auto_matrix(self.m132, tags={'M132'})
+        self._m0b = be.auto_matrix(self._basis.m0, tags={'M0'})
+        self._m3b = be.auto_matrix(self._basis.m3, tags={'M3'})
+        self._m132b = be.auto_matrix(self._basis.m132, tags={'M132'})
 
         # Tags to ensure alignment of multi-dimensional matrices
         tags = {'align'}
@@ -147,7 +147,7 @@ class BaseAdvectionElements(object):
 
     def _gen_inter_view_mats(self, be, neles, nvars, ndims):
         # Get the number of flux points for each face of the element
-        self._nfacefpts = nfacefpts = self._basis.nfpts
+        self._nfacefpts = nfacefpts = self._basis.nfacefpts
 
         # Get the relevant strides required for view construction
         self._scal_fpts_strides = (1, self._scal_fpts[0].leadsubdim)
@@ -185,37 +185,6 @@ class BaseAdvectionElements(object):
     def get_negdivconf_upts_kern(self):
         return self._be.kernel('negdivconf', self.nvars,
                                self.scal_upts_outb, self._rcpdjac_upts)
-
-    @lazyprop
-    def m0(self):
-        """Discontinuous soln at upts to discontinuous soln at fpts"""
-        return self._basis.ubasis_at(self._basis.fpts)
-
-    @lazyprop
-    def m1(self):
-        """Trans discontinuous flux at upts to trans divergence of
-        trans discontinuous flux at upts
-        """
-        return self._basis.jac_ubasis_at(self._basis.upts)
-
-    @lazyprop
-    def m2(self):
-        """Trans discontinuous flux at upts to trans normal
-        discontinuous flux at fpts
-        """
-        return self._basis.norm_fpts[:,None,:]*self.m0[...,None]
-
-    @lazyprop
-    def m3(self):
-        """Trans normal correction flux at upts to trans divergence of
-        trans correction flux at upts
-        """
-        return self._basis.fbasis_at(self._basis.upts)
-
-    @property
-    def m132(self):
-        m1, m2, m3 = self.m1, self.m2, self.m3
-        return m1 - np.dot(m3, m2.reshape(self.nfpts, -1)).reshape(m1.shape)
 
     def _gen_rcpdjac_smat_upts(self, eles):
         jacs = self._get_jac_eles_at(eles, self._basis.upts)
@@ -370,9 +339,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         super(BaseAdvectionDiffusionElements, self).set_backend(be, nscal_upts)
 
         # Allocate the additional operator matrices
-        self._m5b = be.auto_matrix(self.m5, tags={'M5'})
-        self._m6b = be.auto_matrix(self.m6, tags={'M6'})
-        self._m460b = be.auto_matrix(self.m460, tags={'M460'})
+        self._m5b = be.auto_matrix(self._basis.m5, tags={'M5'})
+        self._m6b = be.auto_matrix(self._basis.m6, tags={'M6'})
+        self._m460b = be.auto_matrix(self._basis.m460, tags={'M460'})
 
         # Flux point transformation matrices
         self._jmat_fpts = be.const_matrix(self._jmat_fpts, tags={'align'})
@@ -387,39 +356,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Vector view matrix info
         self._vect_fpts_vmats = [np.tile(m, self._vect_fpts_vstri.shape)
                                  for m in self._vect_fpts]
-
-    @lazyprop
-    def m4(self):
-        """Discontinuous soln at upts to trans gradient of discontinuous
-        solution at upts
-        """
-        return self.m1.swapaxes(2, 1)[...,None]
-
-    @lazyprop
-    def m5(self):
-        """Trans grad discontinuous soln at upts to trans gradient of
-        discontinuous solution at fpts
-        """
-        nfpts, ndims, nupts = self.nfpts, self.ndims, self.nupts
-        m = np.zeros((nfpts, ndims, nupts, ndims), dtype=self.m0.dtype)
-
-        for i in xrange(ndims):
-            m[:,i,:,i] = self.m0
-
-        return m
-
-    @lazyprop
-    def m6(self):
-        """Correction soln at fpts to trans gradient of correction
-        solution at upts
-        """
-        m = self._basis.norm_fpts.T[:,None,:]*self.m3
-        return m.swapaxes(0, 1)[...,None]
-
-    @property
-    def m460(self):
-        m4, m6, m0 = self.m4, self.m6, self.m0
-        return m4 - np.dot(m6.reshape(-1, self.nfpts), m0).reshape(m4.shape)
 
     def _gen_jmats_fpts(self, eles):
         jac = self._get_jac_eles_at(eles, self._basis.fpts)
