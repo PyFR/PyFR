@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import sympy as sy
-from mpmath import mp
+from sympy.mpmath import mp
 
 
 def points_for_rule(name, n):

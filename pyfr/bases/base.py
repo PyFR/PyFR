@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 import numpy as np
 
-from mpmath import mp
+from sympy.mpmath import mp
 from sympy.utilities.lambdify import lambdastr
 
 from pyfr.util import lazyprop, ndrange

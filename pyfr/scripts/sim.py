@@ -6,7 +6,7 @@ import atexit
 from argparse import ArgumentParser, FileType
 
 import numpy as np
-from mpmath import mp
+from sympy.mpmath import mp
 
 import mpi4py.rc
 mpi4py.rc.initialize = False

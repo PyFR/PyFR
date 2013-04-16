@@ -46,7 +46,6 @@ install_requires = [
     'pycuda >= 2011.2',
     'mpi4py >= 1.3',
     'mako',
-    'mpmath >= 0.17',
     'numpy >= 1.6',
     'sympy >= 0.7.2']
 
