@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from abc import abstractproperty
 import itertools
 
 import numpy as np
@@ -187,27 +188,17 @@ class TensorProdBasis(object):
     def nfacefpts(self):
         return [(self._order + 1)**(self.ndims - 1)] * (2*self.ndims)
 
+    @abstractproperty
+    def _rschemes(self):
+        pass
+
+    def fpts_idx_for_face(self, face, rtag):
+        return self._rschemes[face, rtag]
+
 
 class QuadBasis(TensorProdBasis, BasisBase):
     name = 'quad'
     ndims = 2
-
-    def __init__(self, *args, **kwargs):
-        super(QuadBasis, self).__init__(*args, **kwargs)
-
-        k = self._order + 1
-
-        # Pre-compute all possible flux point rotation schemes
-        self._rschemes = rs = np.empty((4, 2), dtype=np.object)
-        for face, rtag in ndrange(*rs.shape):
-            fpts = np.arange(face*k, (face + 1)*k)
-
-            if rtag == 0:
-                pass
-            elif rtag == 1:
-                fpts = fpts[::-1]
-
-            rs[face,rtag] = fpts
 
     @lazyprop
     def fpts(self):
@@ -257,36 +248,28 @@ class QuadBasis(TensorProdBasis, BasisBase):
         # Edge map
         return quad_map_edge(ezeronorms).reshape(-1, 2)
 
-    def fpts_idx_for_face(self, face, rtag):
-        return self._rschemes[face, rtag]
+    @lazyprop
+    def _rschemes(self):
+        k = self._order + 1
+
+        # Pre-compute all possible flux point rotation schemes
+        rs = np.empty((4, 2), dtype=np.object)
+        for face, rtag in ndrange(*rs.shape):
+            fpts = np.arange(face*k, (face + 1)*k)
+
+            if rtag == 0:
+                pass
+            elif rtag == 1:
+                fpts = fpts[::-1]
+
+            rs[face,rtag] = fpts
+
+        return rs
 
 
 class HexBasis(TensorProdBasis, BasisBase):
     name = 'hex'
     ndims = 3
-
-    def __init__(self, *args, **kwargs):
-        super(HexBasis, self).__init__(*args, **kwargs)
-
-        k = self._order + 1
-
-        # Pre-compute all possible flux point rotation schemes
-        self._rschemes = rs = np.empty((6, 5), dtype=np.object)
-        for face, rtag in ndrange(*rs.shape):
-            fpts = np.arange(face*k*k, (face + 1)*k*k).reshape(k,k)
-
-            if rtag == 0:
-                pass
-            elif rtag == 1:
-                fpts = np.fliplr(fpts)
-            elif rtag == 2:
-                fpts = np.fliplr(fpts)[::-1]
-            elif rtag == 3:
-                fpts = np.transpose(fpts)
-            elif rtag == 4:
-                fpts = np.transpose(fpts)[::-1]
-
-            rs[face,rtag] = fpts.ravel()
 
     @lazyprop
     def fpts(self):
@@ -339,5 +322,26 @@ class HexBasis(TensorProdBasis, BasisBase):
         # Cube map to get the remaining face normals
         return cube_map_face(fonenorms).reshape(-1, 3)
 
-    def fpts_idx_for_face(self, face, rtag):
-        return self._rschemes[face, rtag]
+    @lazyprop
+    def _rschemes(self):
+        k = self._order + 1
+
+        # Compute all possible flux point rotation schemes
+        rs = np.empty((6, 5), dtype=np.object)
+        for face, rtag in ndrange(*rs.shape):
+            fpts = np.arange(face*k*k, (face + 1)*k*k).reshape(k,k)
+
+            if rtag == 0:
+                pass
+            elif rtag == 1:
+                fpts = np.fliplr(fpts)
+            elif rtag == 2:
+                fpts = np.fliplr(fpts)[::-1]
+            elif rtag == 3:
+                fpts = np.transpose(fpts)
+            elif rtag == 4:
+                fpts = np.transpose(fpts)[::-1]
+
+            rs[face,rtag] = fpts.ravel()
+
+        return rs
