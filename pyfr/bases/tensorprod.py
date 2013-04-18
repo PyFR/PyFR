@@ -232,10 +232,10 @@ class QuadBasis(TensorProdBasis, BasisBase):
             for p, gfn in zip(epair, diffcorfn):
                 if p in (2,3):
                     fbasis[p] = fbasis[p,::-1]
-                fbasis[p,...] *= gfn
+                fbasis[p,:] *= gfn
 
         # Correct faces with negative normals
-        fbasis[(3,0),...] *= -1
+        fbasis[(3,0),:] *= -1
 
         return fbasis.ravel()
 
