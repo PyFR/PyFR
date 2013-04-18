@@ -142,14 +142,8 @@ class BasisBase(object):
         return m
 
     def _eval_jac_lbasis_at(self, jlbasis, pts):
-        npts, nbasis = len(pts), len(jlbasis)
-        m = np.empty((npts, nbasis), dtype=np.object)
-
-        for i, j in ndrange(*m.shape):
-            m[i,j] = jlbasis[j](*pts[i])
-
-        m[abs(m) < 1e-14] = 0
-        return m.reshape(npts, -1, self.ndims)
+        m = self._eval_lbasis_at(jlbasis, pts)
+        return m.reshape(len(pts), -1, self.ndims)
 
     @abstractproperty
     def nupts(self):
