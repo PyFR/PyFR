@@ -4,6 +4,8 @@ from abc import ABCMeta, abstractmethod
 
 import numpy as np
 
+from pyfr.nputil import npeval
+
 
 def get_view_mats(interside, mat, elemap):
     # Map from element type to view mat getter
@@ -205,8 +207,14 @@ class BaseAdvectionBCInters(BaseInters):
     def _kernel_constants(self):
         kc = super(BaseAdvectionBCInters, self)._kernel_constants()
 
-        # Bring BC-specific constants into scope
-        kc.update(self._cfg.items_as('mesh-bcs', float))
+        # Boundary conditions, much like initial conditions, can be
+        # parameterized by values in [constants] so we must bring these
+        # into scope when evaluating the boundary conditions
+        cc = self._cfg.items_as('constants', float)
+
+        # Evaluate the BC expressions to yield the relevant constants
+        for k, v in self._cfg.items('mesh-bcs').iteritems():
+            kc[k] = npeval(v, cc)
 
         return kc
 
