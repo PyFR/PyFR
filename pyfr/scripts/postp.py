@@ -4,11 +4,12 @@
 import os
 
 from tempfile import NamedTemporaryFile, mkdtemp
-from argparse import ArgumentParser, FileType
+from argparse import ArgumentParser, FileType, ArgumentTypeError
 
 import numpy as np
 
-from pyfr.util import rm
+from pyfr.util import rm, all_subclasses
+from pyfr.writers import get_writer_by_name, get_writer_by_extn, BaseWriter
 
 
 def process_pack(args):
@@ -84,6 +85,20 @@ def process_unpack(args):
         raise
 
 
+def process_convert(args):
+    # Get writer instance by specified type or outf extension
+    if args.type:
+        writer = get_writer_by_name(args.type, args)
+    else:
+        extn = os.path.splitext(args.outf.name)[1]
+        writer = get_writer_by_extn(extn, args)
+
+    # Write the output file
+    writer.write_out()
+
+    args.outf.close()
+
+
 def main():
     ap = ArgumentParser(prog='pyfr-postp', description='Post processes a '
                         'PyFR simulation')
@@ -114,10 +129,54 @@ def main():
                            help='Out PyFR mesh/solution directory')
     ap_unpack.set_defaults(process=process_unpack)
 
+    ap_conv = sp.add_parser('convert', help='convert --help', description=
+                            'Converts .pyfr[ms] files for visualisation '
+                            'in external software.')
+    ap_conv.add_argument('meshf', help='PyFR mesh file to be converted')
+    ap_conv.add_argument('solnf', help='PyFR solution file to be converted')
+    ap_conv.add_argument('outf', type=FileType('wb'), help='Output filename')
+    types = [cls.name for cls in all_subclasses(BaseWriter)]
+    ap_conv.add_argument('-t', dest='type', choices=types, required=False,
+                         help='Output file type; this is usually inferred '
+                         'from the extension of outf')
+
+    ap_pop = ap_conv.add_subparsers(help='Choose output mode for high-order '
+                                    'data.')
+
+    ap_pdiv = ap_pop.add_parser('divide', help='paraview *args divide --help',
+                                description='Divides high-order elements '
+                                'into multiple low-order elements.  All '
+                                'elements are split to the same level.')
+
+    ap_pdiv.add_argument('-d', '--divisor', type=int, choices=range(1, 17),
+                         default=0, help='Sets the level to which high '
+                         'order elements are divided along each edge. The '
+                         'total node count produced by divisor is equivalent '
+                         'to that of solution order, which is used as the '
+                         'default. Note: the output is linear between '
+                         'nodes, so increased resolution may be required.')
+    ap_pdiv.add_argument('-p', '--precision', choices=['single', 'double'],
+                         default='single', help='Selects the precision of '
+                         'floating point numbers written to the output file; '
+                         'single is the default.')
+    ap_pdiv.set_defaults(process=process_convert)
+
+    ap_pap = ap_pop.add_parser('append', help='paraview *args append --help',
+                               description='High-order solutions are written '
+                               'as high-order data appended to low-order '
+                               'elements.  A Paraview plugin recursively '
+                               'bisects each element to achieve a requirement '
+                               'on the relative error of a solution variable. '
+                               'Paraview requires the high-order plugin '
+                               'written by Sébastien Blaise, available from: '
+                               'http://perso.uclouvain.be/sebastien.blaise/'
+                               'tools.html')
+    ap_pap.set_defaults(divisor=None, precision='double',
+                        process=process_convert)
+
     # Parse the arguments
     args = ap.parse_args()
     args.process(args)
-
 
 if __name__ == '__main__':
     main()
