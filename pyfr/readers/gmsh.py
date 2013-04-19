@@ -217,7 +217,8 @@ class GmshReader(BaseReader):
         return selemap.pop(self._felespent), selemap
 
     def _extract_faces(self, foeles):
-        extractors = {'quad': self._extract_faces_quad,
+        extractors = {'tri': self._extract_faces_tri,
+                      'quad': self._extract_faces_quad,
                       'hex': self._extract_faces_hex}
 
         fofaces = defaultdict(list)
@@ -241,8 +242,20 @@ class GmshReader(BaseReader):
 
         return arr
 
+    def _extract_faces_tri(self, fotris):
+        # Gmsh node offsets for the three edges
+        fnmap = np.array([[0, 1], [1, 2], [2, 0]])
+
+        lf = self._foface_array('tri', 'line', len(fotris))
+
+        lf.eidx = np.arange(len(fotris))[...,None]
+        lf.fidx = np.arange(3)
+        lf.nodes = fotris[:fnmap]
+
+        return [('line', lf)]
+
     def _extract_faces_quad(self, foquads):
-        # Gmsh node offsets for the four `faces'
+        # Gmsh node offsets for the four edges
         fnmap = np.array([[0, 1], [1, 2], [2, 3], [3, 0]])
 
         lf = self._foface_array('quad', 'line', len(foquads))
