@@ -32,20 +32,19 @@ class ParaviewWriter(BaseWriter):
 
         Writes .vtu pieces for each element type, in each partition of
         the PyFR files.  The Paraview data type used is "appended",
-        which involves concatenating all data into a single block
-        written in binary at the end of the file.  ASCII headers
-        written at the top of the file describe the structure of this
-        data.
+        which concatenates all data into a single block of binary data
+        at the end of the file.  ASCII headers written at the top of
+        the file describe the structure of this data.
 
         Two different methods for outputting the data are used; one
-        which involves subdividing a high order element into low
-        order elements at the shape points, and another which appends
+        that involves subdividing a high order element into low
+        order elements (at the shape points), and another that appends
         high-order data to be read by an external plugin detailed here:
         http://perso.uclouvain.be/sebastien.blaise/tools.html
 
         The methods are switched such that the latter is used when
         self.args.divisor is None. When it is not none, the former
-        methods is used on a high order element of shape order =
+        method is used on a high order element of shape order =
         self.args.divsior. An initial 0 value sets itself to the
         solution order.
 
@@ -153,12 +152,13 @@ def _npts_from_order(order, m_inf, total=True):
     :type ms_inf: tuple: (str, list)
     :type total: bool
     :rtype: integer
+    
     """
     # Calculate number of nodes in element of type and order
     if m_inf[0] in ['quad', 'hex']:
-        gen_npts = (order + 1) ** m_inf[1][2]
+        gen_npts = (order + 1)**m_inf[1][2]
     elif m_inf[0] in ['tri', 'pri']:
-        gen_npts = (order + 2) * (order + 1) ** 2 / 2
+        gen_npts = (order + 2) * (order + 1)**(m_inf[1][2] - 1) / 2
     elif m_inf[0] == 'tet':
         gen_npts = (order + 1) * (order + 2) * (order + 3) / 6
     elif m_inf == 'pyr':
