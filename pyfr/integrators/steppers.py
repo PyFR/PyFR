@@ -10,9 +10,6 @@ class BaseStepper(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseStepper, self).__init__(*args, **kwargs)
 
-        # Number of steps taken
-        self.nsteps = 0
-
         backend = self._backend
         elemats = self._meshp.ele_banks
 
@@ -26,10 +23,6 @@ class BaseStepper(BaseIntegrator):
 
         # Add kernel cache
         self._axnpby_kerns = {}
-
-    @abstractmethod
-    def step(self, t, dt):
-        self.nsteps += 1
 
     def collect_stats(self, stats):
         super(BaseStepper, self).collect_stats(stats)
@@ -82,8 +75,6 @@ class EulerStepper(BaseStepper):
         return 2
 
     def step(self, t, dt):
-        super(EulerStepper, self).step(t, dt)
-
         add, negdivf = self._add, self._meshp
         ut, f = self._regidx
 
@@ -109,8 +100,6 @@ class RK4Stepper(BaseStepper):
         return 5
 
     def step(self, t, dt):
-        super(RK4Stepper, self).step(t, dt)
-
         add, negdivf = self._add, self._meshp
 
         # Get the bank indices for each register
@@ -150,25 +139,22 @@ class DOPRI5Stepper(BaseStepper):
 
     @property
     def _stepper_nfevals(self):
-        return 6*self.nsteps + (self.nsteps >= 1)
+        return 6*self.nsteps + self.nrjctsteps + 1
 
     @property
     def _stepper_nregs(self):
         return 7
 
     def step(self, t, dt):
-        super(DOPRI5Stepper, self).step(t, dt)
-
         add, negdivf = self._add, self._meshp
 
         # Register bank indices (r0 = u(t); r1..6 = temp RK 'k' stages)
         r0, r1, r2, r3, r4, r5, r6 = self._regidx
 
-        # First stage; as we are an FSAL (first same as last) method
-        # the first stage, -∇·f(r0 = u(t)), is usually already
-        # available in r1.  The exception is on the first step of a
-        # simulation where it must be explicitly calculated.
-        if self.nsteps == 1:
+        # Usually the first stage, -∇·f(r0 = u(t)), is available in
+        # r1 (this is as the scheme is FSAL), except when the last step
+        # was rejected.  In this case we compute it here.
+        if not self.lastacpted:
             negdivf(r0, r1)
 
         # Second stage; r2 = r0 + dt/5*r1; r2 = -∇·f(r2)

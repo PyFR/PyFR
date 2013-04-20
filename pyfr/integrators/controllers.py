@@ -15,8 +15,19 @@ class BaseController(BaseIntegrator):
         # Bank index of solution
         self._idxcurr = 0
 
+        # Accepted and rejected step counters
+        self.nacptsteps = 0
+        self.nrjctsteps = 0
+
+        # If the last step was accepted or not
+        self.lastacpted = False
+
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
+
+    @property
+    def nsteps(self):
+        return self.nacptsteps + self.nrjctsteps
 
     @property
     def soln(self):
@@ -46,6 +57,10 @@ class NoneController(BaseController):
 
             # Increment the time
             self.tcurr += dt
+
+            # Update status
+            self.nacptsteps += 1
+            self.lastacpted = True
 
             # Fire off any event handlers
             self.completed_step_handlers(self)
