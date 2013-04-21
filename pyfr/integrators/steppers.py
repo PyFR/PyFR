@@ -103,31 +103,35 @@ class RK4Stepper(BaseStepper):
         add, negdivf = self._add, self._meshp
 
         # Get the bank indices for each register
-        ut, k1, k2, k3, k4 = self._regidx
+        r0, r1, r2, r3, r4 = self._regidx
 
-        # First stage; k1 = -∇·f(ut)
-        negdivf(ut, k1)
+        # Ensure r0 references the bank containing u(t)
+        if r0 != self._idxcurr:
+            r0, r4 = r4, r0
 
-        # Second stage; k2 = ut + dt/2*k1; k2 = -∇·f(k2)
-        add(0.0, k2, 1.0, ut, dt/2.0, k1)
-        negdivf(k2, k2)
+        # First stage; r1 = -∇·f(r0)
+        negdivf(r0, r1)
 
-        # Third stage; k3 = ut + dt/2*k2; k3 = -∇·f(k3)
-        add(0.0, k3, 1.0, ut, dt/2.0, k2)
-        negdivf(k3, k3)
+        # Second stage; r2 = r0 + dt/2*r1; r2 = -∇·f(r2)
+        add(0.0, r2, 1.0, r0, dt/2.0, r1)
+        negdivf(r2, r2)
 
-        # Fourth stage; k4 = ut + dt*k3; k4 = -∇·f(k4)
-        add(0.0, k4, 1.0, ut, dt, k3)
-        negdivf(k4, k4)
+        # Third stage; r3 = r0 + dt/2*r2; r3 = -∇·f(r3)
+        add(0.0, r3, 1.0, r0, dt/2.0, r2)
+        negdivf(r3, r3)
 
-        # Compute u(t + dt) as k4 = dt/6*k4 + dt/3*k3 + dt/2*k2 + dt/6*k1 + ut
-        add(dt/6.0, k4, dt/3.0, k3, dt/3.0, k2, dt/6.0, k1, 1.0, ut)
+        # Fourth stage; r4 = r0 + dt*r3; r4 = -∇·f(r4)
+        add(0.0, r4, 1.0, r0, dt, r3)
+        negdivf(r4, r4)
 
-        # Swizzle k4 and u(t)
-        self._regidx[0], self._regidx[4] = k4, ut
+        # Compute u(t + dt) as r4 = dt/6*r4 + dt/3*r3 + dt/3*r2 + dt/6*r1 + r0
+        add(dt/6.0, r4, dt/3.0, r3, dt/3.0, r2, dt/6.0, r1, 1.0, r0)
+
+        # Swizzle r4 and u(t)
+        self._regidx[0], self._regidx[4] = r4, r0
 
         # Return the index of the bank containing u(t + dt)
-        return k4
+        return r4
 
 
 class DOPRI5Stepper(BaseStepper):
