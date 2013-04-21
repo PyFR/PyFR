@@ -13,7 +13,7 @@ class CudaBlasExtKernels(CudaKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         opts = dict(n=len(xn), dtype=npdtype_to_ctype(y.dtype))
-        fn = self._get_function('blasext', 'axnpby', [np.int32] +
+        fn = self._get_function('axnpby', 'axnpby', [np.int32] +
                                 [np.intp, y.dtype]*(1 + len(xn)), opts)
 
         # Determine the total element count in the matrices

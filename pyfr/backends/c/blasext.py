@@ -13,7 +13,7 @@ class CBlasExtKernels(CKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         opts = dict(n=len(xn), dtype=npdtype_to_ctype(y.dtype))
-        fn = self._get_function('blasext', 'axnpby', None,
+        fn = self._get_function('axnpby', 'axnpby', None,
                                 [np.uintp] + [np.uintp, y.dtype]*(1 + len(xn)),
                                 opts)
 
