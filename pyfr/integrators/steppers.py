@@ -34,26 +34,18 @@ class BaseStepper(BaseIntegrator):
         try:
             return self._axnpby_kerns[n]
         except KeyError:
-            # Transpose from [nregs][neletypes] to [neletypes][nregs]
-            transregs = zip(*self._regs)
+            k = self._kernel('axnpby', nargs=n)
 
-            # Generate an axnpby kernel for each element type
-            kerns = proxylist([])
-            for tr in transregs:
-                kerns.append(self._backend.kernel('axnpby', *tr[:n]))
-
-            # Cache
-            self._axnpby_kerns[n] = kerns
-
-            return kerns
+            # Cache and return
+            self._axnpby_kerns[n] = k
+            return k
 
     def _add(self, *args):
-        # Configure the register banks
-        for reg, bidx in zip(self._regs, args[1::2]):
-            reg.active = bidx
-
         # Get a suitable set of axnpby kernels
         axnpby = self._get_axnpby_kerns(len(args)/2)
+
+        # Bank indices are in odd-numbered arguments
+        self._prepare_reg_banks(*args[1::2])
 
         # Bind and run the axnpby kernels
         self._queue % axnpby(*args[::2])

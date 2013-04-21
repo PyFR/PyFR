@@ -7,6 +7,7 @@ from mpi4py import MPI
 from pyfr.inifile import Inifile
 from pyfr.mesh_partition import get_mesh_partition
 from pyfr.nputil import range_eval
+from pyfr.util import proxylist
 
 
 class BaseIntegrator(object):
@@ -60,6 +61,21 @@ class BaseIntegrator(object):
 
         # Sum to get the global number over all partitions
         self._gndofs = MPI.COMM_WORLD.allreduce(ndofs, op=MPI.SUM)
+
+    def _kernel(self, name, nargs):
+        # Transpose from [nregs][neletypes] to [neletypes][nregs]
+        transregs = zip(*self._regs)
+
+        # Generate an kernel for each element type
+        kerns = proxylist([])
+        for tr in transregs:
+            kerns.append(self._backend.kernel(name, *tr[:nargs]))
+
+        return kerns
+
+    def _prepare_reg_banks(self, *bidxes):
+        for reg, ix in zip(self._regs, bidxes):
+            reg.active = ix
 
     @abstractmethod
     def step(self, t, dt):
