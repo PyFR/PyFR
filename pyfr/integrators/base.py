@@ -89,6 +89,10 @@ class BaseIntegrator(object):
     def _stepper_nregs(self):
         pass
 
+    @abstractproperty
+    def _stepper_order(self):
+        pass
+
     def run(self):
         for t in self.tout:
             # Advance to time t

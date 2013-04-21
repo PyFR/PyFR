@@ -74,6 +74,10 @@ class EulerStepper(BaseStepper):
     def _stepper_nregs(self):
         return 2
 
+    @property
+    def _stepper_order(self):
+        return 1
+
     def step(self, t, dt):
         add, negdivf = self._add, self._meshp
         ut, f = self._regidx
@@ -98,6 +102,10 @@ class RK4Stepper(BaseStepper):
     @property
     def _stepper_nregs(self):
         return 5
+
+    @property
+    def _stepper_order(self):
+        return 4
 
     def step(self, t, dt):
         add, negdivf = self._add, self._meshp
@@ -144,6 +152,10 @@ class DOPRI5Stepper(BaseStepper):
     @property
     def _stepper_nregs(self):
         return 7
+
+    @property
+    def _stepper_order(self):
+        return 5
 
     def step(self, t, dt):
         add, negdivf = self._add, self._meshp
