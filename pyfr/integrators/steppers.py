@@ -93,7 +93,7 @@ class RK4Stepper(BaseStepper):
 
     @property
     def _stepper_nregs(self):
-        return 5
+        return 3
 
     @property
     def _stepper_order(self):
@@ -103,11 +103,11 @@ class RK4Stepper(BaseStepper):
         add, negdivf = self._add, self._meshp
 
         # Get the bank indices for each register
-        r0, r1, r2, r3, r4 = self._regidx
+        r0, r1, r2 = self._regidx
 
         # Ensure r0 references the bank containing u(t)
         if r0 != self._idxcurr:
-            r0, r4 = r4, r0
+            r0, r1 = r1, r0
 
         # First stage; r1 = -∇·f(r0)
         negdivf(r0, r1)
@@ -116,22 +116,31 @@ class RK4Stepper(BaseStepper):
         add(0.0, r2, 1.0, r0, dt/2.0, r1)
         negdivf(r2, r2)
 
-        # Third stage; r3 = r0 + dt/2*r2; r3 = -∇·f(r3)
-        add(0.0, r3, 1.0, r0, dt/2.0, r2)
-        negdivf(r3, r3)
+        # As no subsequent stages depend on the first stage we can
+        # reuse its register to start accumulating the solution with
+        # r1 = r0 + dt/6*r1 + dt/3*r2
+        add(dt/6.0, r1, 1.0, r0, dt/3.0, r2)
 
-        # Fourth stage; r4 = r0 + dt*r3; r4 = -∇·f(r4)
-        add(0.0, r4, 1.0, r0, dt, r3)
-        negdivf(r4, r4)
+        # Third stage; here we reuse the r2 register
+        # r2 = r0 + dt/2*r2
+        # r2 = -∇·f(r2)
+        add(dt/2.0, r2, 1.0, r0)
+        negdivf(r2, r2)
 
-        # Compute u(t + dt) as r4 = dt/6*r4 + dt/3*r3 + dt/3*r2 + dt/6*r1 + r0
-        add(dt/6.0, r4, dt/3.0, r3, dt/3.0, r2, dt/6.0, r1, 1.0, r0)
+        # Accumulate; r1 = r1 + dt/3*r2
+        add(1.0, r1, dt/3.0, r2)
 
-        # Swizzle r4 and u(t)
-        self._regidx[0], self._regidx[4] = r4, r0
+        # Fourth stage; again we reuse r2
+        # r2 = r0 + dt*r2
+        # r2 = -∇·f(r2)
+        add(dt, r2, 1.0, r0)
+        negdivf(r2, r2)
+
+        # Final accumulation r1 = r1 + dt/6*r2 = u(t + dt)
+        add(1.0, r1, dt/6.0, r2)
 
         # Return the index of the bank containing u(t + dt)
-        return r4
+        return r1
 
 
 class DOPRI5Stepper(BaseStepper):
