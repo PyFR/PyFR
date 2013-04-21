@@ -158,7 +158,7 @@ class DOPRI5Stepper(BaseStepper):
         # Usually the first stage, -∇·f(r0 = u(t)), is available in
         # r1 (this is as the scheme is FSAL), except when the last step
         # was rejected.  In this case we compute it here.
-        if not self.lastacpted:
+        if not self.nacptchain:
             negdivf(r0, r1)
 
         # Second stage; r2 = r0 + dt/5*r1; r2 = -∇·f(r2)

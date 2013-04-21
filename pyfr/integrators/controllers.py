@@ -18,9 +18,7 @@ class BaseController(BaseIntegrator):
         # Accepted and rejected step counters
         self.nacptsteps = 0
         self.nrjctsteps = 0
-
-        # If the last step was accepted or not
-        self.lastacpted = False
+        self.nacptchain = 0
 
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
@@ -60,7 +58,7 @@ class NoneController(BaseController):
 
             # Update status
             self.nacptsteps += 1
-            self.lastacpted = True
+            self.nacptchain += 1
 
             # Fire off any event handlers
             self.completed_step_handlers(self)
