@@ -115,9 +115,7 @@ rsolve_inv_bc(int ninters,
 
         // Write out the fluxes into ul
         for (int i = 0; i < ${nvars}; ++i)
-        {
             ul[i] =  magpnorml[iidx]*fn[i];
-        }
 
         // Copy back into the view
         WRITE_VIEW(ul_v, ul_vstri, ul, iidx, ${nvars});
