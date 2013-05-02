@@ -274,6 +274,10 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
 
 
+class EulerSupInflowBCInters(EulerBaseBCInters):
+    name = 'sup_inflow'
+
+
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
     def get_rsolve_kern(self):
         rsinv = self._cfg.get('mesh-interfaces', 'riemann-solver')
