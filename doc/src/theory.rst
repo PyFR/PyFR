@@ -209,8 +209,7 @@ and
 A suitable expression for :math:`\hat{f}^{C}` can now be written in terms of
 :math:`g_L` and :math:`g_R` as
 
-.. math::
-\hat{f}^{C}=(\hat{f}^{I}_L-\hat{f}^{D}_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R,
+.. math:: \hat{f}^{C}=(\hat{f}^{I}_L-\hat{f}^{D}_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R,
 
 where :math:`\hat{f}^{D}_L=\hat{f}^{D}(-1,t)` and
 :math:`\hat{f}^{D}_R=\hat{f}^{D}(1,t)`. Using this expression, the degree
@@ -218,28 +217,19 @@ where :math:`\hat{f}^{D}_L=\hat{f}^{D}(-1,t)` and
 :math:`\Omega_S` can be constructed from the discontinuous and correction
 fluxes as follows
 
-.. math::
-\hat{f}^{\delta}=\hat{f}^{D}+\hat{f}^{C}=\hat{f}^{D}+(\hat{f}^{I}_L-\hat{f}^{D}
-_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R.
+.. math:: \hat{f}^{\delta}=\hat{f}^{D}+\hat{f}^{C}=\hat{f}^{D}+(\hat{f}^{I}_L-\hat{f}^{D}_L)g_L+(\hat{f}^{I}_R-\hat{f}^{D}_R)g_R.
 
 The final stage of the FR approach involves evaluating the divergence of
 :math:`\hat{f}^{\delta}` at each solution point :math:`\hat{x}_i` using the
 expression
 
-.. math::
-\frac{\partial\hat{f}^{\delta}}{\partial\hat{x}}(\hat{x}_i)=\sum_{j=0}^{k}\hat{
-f}^{D}_j\;\frac{\mathrm{d}l_j}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}_L-\
-hat{f}^{D}_L)\frac{\mathrm{d}g_{L}}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}
-_R-\hat{f}^{D}_R)\frac{\mathrm{d}g_{R}}{\mathrm{d}\hat{x}}(\hat{x}_i).
+.. math:: \frac{\partial\hat{f}^{\delta}}{\partial\hat{x}}(\hat{x}_i)=\sum_{j=0}^{k}\hat{f}^{D}_j\;\frac{\mathrm{d}l_j}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}_L-\hat{f}^{D}_L)\frac{\mathrm{d}g_{L}}{\mathrm{d}\hat{x}}(\hat{x}_i)+(\hat{f}^{I}_R-\hat{f}^{D}_R)\frac{\mathrm{d}g_{R}}{\mathrm{d}\hat{x}}(\hat{x}_i).
 
 These values can then be used to advance :math:`\hat{u}^{\delta}` in time via
 a suitable temporal discretization of the following semi-discrete
 expression
 
-.. math::
-\frac{\mathrm{d}\hat{u}^{\delta}_i}{\mathrm{d}t}=-\frac{\partial\hat{f}^{\delta
-}}{\partial
-    \hat{x}}(\hat{x}_i).
+.. math:: \frac{\mathrm{d}\hat{u}^{\delta}_i}{\mathrm{d}t}=-\frac{\partial\hat{f}^{\delta}}{\partial\hat{x}}(\hat{x}_i).
 
 Comments
 --------
@@ -273,15 +263,11 @@ Overview
 VCJH schemes can be recovered if the corrections functions :math:`g_L` and
 :math:`g_R` are defined as
 
-.. math::
-g_L=\frac{(-1)^{k}}{2}\left[L_{k}-\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k
-}\right)\right],
+.. math:: g_L=\frac{(-1)^{k}}{2}\left[L_{k}-\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k}\right)\right],
 
 and
 
-.. math::
-g_R=\frac{1}{2}\left[L_{k}+\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k}\right
-)\right],
+.. math:: g_R=\frac{1}{2}\left[L_{k}+\left(\frac{\eta_{k}L_{k-1}+L_{k+1}}{1+\eta_k}\right)\right],
 
 where
 
@@ -304,10 +290,7 @@ and :math:`c_{\infty}=\infty`. Such correction functions ensure that if
 resulting FR scheme will be linearly stable for any :math:`k` in the broken
 Sobolev type norm :math:`||u^{\delta}||_{k,2}`, defined as
 
-.. math::
-||u^{\delta}||_{k,2}=\left[\sum_{n=1}^{N}\int_{x_n}^{x_{n+1}}(u_n^{\delta})^2+\
-frac{c}{2}(h_n)^{2k}\left(\frac{\partial^k
-    u_n^{\delta}}{\partial x^k}\right)^2\mathrm{d}x\right]^{1/2}.
+.. math:: ||u^{\delta}||_{k,2}=\left[\sum_{n=1}^{N}\int_{x_n}^{x_{n+1}}(u_n^{\delta})^2+\frac{c}{2}(h_n)^{2k}\left(\frac{\partial^ku_n^{\delta}}{\partial x^k}\right)^2\mathrm{d}x\right]^{1/2}.
 
 For full details of how these schemes are derived see the
 original paper of Vincent, Castonguay and Jameson [VCJ2011]_.

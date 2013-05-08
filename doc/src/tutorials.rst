@@ -29,7 +29,7 @@ Proceed with the following steps to run a 3D Euler vortex simulation:
 
 6. Visualise the VTK files in `Paraview <http://www.paraview.org/>`_
 
-.. figure:: ../../examples/euler_vortex/euler_vortex.jpg
+.. figure:: ../fig/euler_vortex/euler_vortex.jpg
    :width: 450px
    :figwidth: 450px
    :alt: cylinder flow
@@ -59,7 +59,7 @@ Proceed with the following steps to run a 3D cylinder flow simulation:
 
 6. Visualise the VTK files in `Paraview <http://www.paraview.org/>`_
 
-.. figure:: ../../examples/cylinder_flow/cylinder_flow.jpg
+.. figure:: ../fig/cylinder_flow/cylinder_flow.jpg
    :width: 450px
    :figwidth: 450px
    :alt: cylinder flow
