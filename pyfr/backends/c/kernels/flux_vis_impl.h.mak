@@ -25,7 +25,7 @@ disf_vis_impl_add(const ${dtype} uin[4], ${dtype} grad_uin[2][4],
     ${dtype} E_x = grad_uin[0][3];
     ${dtype} E_y = grad_uin[1][3];
 
-    // Compute temperature derivatives (c_p*dT/d[x,y])
+    // Compute temperature derivatives (c_v*dT/d[x,y])
     ${dtype} T_x = rcprho*(E_x - (rcprho*rho_x*E + u*u_x + v*v_x));
     ${dtype} T_y = rcprho*(E_y - (rcprho*rho_y*E + u*u_y + v*v_y));
 
@@ -71,7 +71,7 @@ disf_vis_impl_add(const ${dtype} uin[5], ${dtype} grad_uin[3][5],
     ${dtype} E_y = grad_uin[1][4];
     ${dtype} E_z = grad_uin[2][4];
 
-    // Compute temperature derivatives (c_p*dT/d[x,y,z])
+    // Compute temperature derivatives (c_v*dT/d[x,y,z])
     ${dtype} T_x = rcprho*(E_x - (rcprho*rho_x*E + u*u_x + v*v_x + w*w_x));
     ${dtype} T_y = rcprho*(E_y - (rcprho*rho_y*E + u*u_y + v*v_y + w*w_y));
     ${dtype} T_z = rcprho*(E_z - (rcprho*rho_z*E + u*u_z + v*v_z + w*w_z));
