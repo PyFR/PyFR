@@ -3,6 +3,8 @@
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
 
+import re
+
 from mpi4py import MPI
 
 from pyfr.bases import BasisBase
@@ -93,17 +95,23 @@ class BaseMeshPartition(object):
             self._mpi_inters.append(mpiiface)
 
     def _load_bc_inters(self, rallocs, mesh):
-        bcmap = subclass_map(self.bbcinterscls, 'name')
+        bcmap = subclass_map(self.bbcinterscls, 'type')
 
         self._bc_inters = proxylist([])
-        for bcname, bccls in bcmap.iteritems():
-            mk = 'bcon_%s_p%d' % (bcname, rallocs.prank)
-            if mk in mesh:
-                bciface = bccls(self._backend, mesh[mk], self._elemaps,
-                                self._cfg)
-                self._bc_inters.append(bciface)
+        for f in mesh:
+            m = re.match('bcon_(.+?)_p%d' % rallocs.prank, f)
+            if m:
+                # Get the region name
+                rgn = m.group(1)
 
-        return self._bc_inters
+                # Determine the config file section
+                cfgsect = 'mesh-bcs-%s' % rgn
+
+                # Instantiate
+                bcclass = bcmap[self._cfg.get(cfgsect, 'type')]
+                bciface = bcclass(self._backend, mesh[f], self._elemaps,
+                                  cfgsect, self._cfg)
+                self._bc_inters.append(bciface)
 
     def _gen_queues(self):
         self._queues = [self._backend.queue(), self._backend.queue()]

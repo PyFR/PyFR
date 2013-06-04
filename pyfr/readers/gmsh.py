@@ -59,13 +59,6 @@ class GmshReader(BaseReader):
                        'pri': {'quad': 3, 'tri': 2},
                        'pyr': {'quad': 1, 'tri': 4}}
 
-    # Supported fixed boundary conditions
-    _bctype_map = {'supersonic_inflow': 'sup_inflow',
-                   'supersonic_outflow': 'sup_outflow',
-                   'subsonic_inflow': 'sub_inflow',
-                   'subsonic_outflow': 'sub_outflow',
-                   'isothermal_noslip': 'isotherm_noslip'}
-
     def __init__(self, msh):
         if isinstance(msh, basestring):
             msh = open(msh)
@@ -143,10 +136,6 @@ class GmshReader(BaseReader):
             # Fluid elements
             if name == 'fluid':
                 self._felespent = pent
-            # Boundary condition faces
-            elif name in self._bctype_map:
-                bctype = self._bctype_map[name]
-                self._bfacespents[bctype] = pent
             # Periodic boundary faces
             elif name.startswith('periodic'):
                 p = re.match(r'periodic[ -_]([a-z0-9]+)[ -_](l|r)$', name)
@@ -154,8 +143,9 @@ class GmshReader(BaseReader):
                     raise ValueError('Invalid periodic boundary condition')
 
                 self._pfacespents[p.group(1)].append(pent)
+            # Other boundary faces
             else:
-                raise ValueError('Invalid physical entity name')
+                self._bfacespents[name] = pent
 
         if self._felespent is None:
             raise ValueError('No fluid elements in mesh')
@@ -400,12 +390,12 @@ class GmshReader(BaseReader):
                 con_pxpy[(rpart, lpart)].append(conr)
 
         # Generate boundary conditions
-        for pbctype, pent in self._bfacespents.iteritems():
+        for pbcrgn, pent in self._bfacespents.iteritems():
             for l in bcf[pent]:
                 lpart, leidx = eleglmap[l.petype][l.eidx]
                 conl = (l.petype, leidx, l.fidx, 0)
 
-                bcon_px[(pbctype, lpart)].append(conl)
+                bcon_px[(pbcrgn, lpart)].append(conl)
 
         return con_px, con_pxpy, bcon_px
 

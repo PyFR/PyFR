@@ -20,7 +20,7 @@ _bc_grad_u_copy(const ${dtype} ul[${ndims}],
             grad_ur[i][j] = grad_ul[i][j];
 }
 
-% if bctype == 'isotherm_noslip':
+% if bctype == 'isotherm-noslip':
 inline __device__ void
 bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 {
@@ -33,7 +33,7 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_copy
-% elif bctype == 'sup_inflow':
+% elif bctype == 'sup-inflow':
 <%
   rho, p = c['fs-rho'], c['fs-p']
   vv = [c['fs-%c' % v] for v in 'uvw'[:ndims]]
@@ -50,7 +50,7 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_zero
-% elif bctype == 'sup_outflow':
+% elif bctype == 'sup-outflow':
 inline __device__ void
 bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 {
@@ -60,7 +60,7 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_copy
-% elif bctype == 'sub_inflow':
+% elif bctype == 'sub-inflow':
 <%
   rho, p = c['fs-rho'], c['fs-p']
   vv = [c['fs-%c' % v] for v in 'uvw'[:ndims]]
@@ -79,7 +79,7 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_zero
-% elif bctype == 'sub_outflow':
+% elif bctype == 'sub-outflow':
 inline __device__ void
 bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 {

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
+from ConfigParser import NoOptionError
 
 import numpy as np
 
@@ -192,10 +193,12 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
 
 
 class BaseAdvectionBCInters(BaseInters):
-    name = None
+    type = None
+    args = []
 
-    def __init__(self, be, lhs, elemap, cfg):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super(BaseAdvectionBCInters, self).__init__(be, elemap, cfg)
+        self._cfgsect = cfgsect
 
         view_onto, const_mat = self._view_onto, self._const_mat
 
@@ -212,9 +215,16 @@ class BaseAdvectionBCInters(BaseInters):
         # into scope when evaluating the boundary conditions
         cc = self._cfg.items_as('constants', float)
 
-        # Evaluate the BC expressions to yield the relevant constants
-        for k, v in self._cfg.items('mesh-bcs').iteritems():
-            kc[k] = npeval(v, cc)
+        # Evaluate any BC specific arguments from the config file
+        for k in self.args:
+            try:
+                # Get the constant/expression
+                expr = self._cfg.get(self._cfgsect, k)
+
+                # Evaluate
+                kc[k] = npeval(expr, cc)
+            except NoOptionError:
+                continue
 
         return kc
 
@@ -239,7 +249,7 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
 
     def get_conu_fpts_kern(self):
         kc = self._kernel_constants()
-        return self._be.kernel('conu_bc', self.ndims, self.nvars, self.name,
+        return self._be.kernel('conu_bc', self.ndims, self.nvars, self.type,
                                self._scal0_lhs, self._scal1_lhs, kc)
 
 
@@ -270,12 +280,13 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_inv_bc', self.ndims, self.nvars,
-                               rsinv, self.name, self._scal0_lhs,
+                               rsinv, self.type, self._scal0_lhs,
                                self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
 
 
 class EulerSupInflowBCInters(EulerBaseBCInters):
-    name = 'sup_inflow'
+    type = 'sup-inflow'
+    args = ['fs-rho', 'fs-p', 'fs-u', 'fs-v', 'fs-w']
 
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
@@ -307,26 +318,30 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_ldg_vis_bc', self.ndims, self.nvars,
-                               rsinv, self.name, self._scal0_lhs,
+                               rsinv, self.type, self._scal0_lhs,
                                self._vect0_lhs, self._mag_pnorm_lhs,
                                self._norm_pnorm_lhs, kc)
 
 
 class NavierStokesIsoThermNoslipBCInters(NavierStokesBaseBCInters):
-    name = 'isotherm_noslip'
+    type = 'isotherm-noslip'
+    args = ['cpTw']
 
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
-    name = 'sup_inflow'
+    type = 'sup-inflow'
+    args = ['fs-rho', 'fs-p', 'fs-u', 'fs-v', 'fs-w']
 
 
 class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
-    name = 'sup_outflow'
+    type = 'sup-outflow'
 
 
 class NavierStokesSubInflowBCInters(NavierStokesBaseBCInters):
-    name = 'sub_inflow'
+    type = 'sub-inflow'
+    args = ['fs-rho', 'fs-p', 'fs-u', 'fs-v', 'fs-w']
 
 
 class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
-    name = 'sub_outflow'
+    type = 'sub-outflow'
+    args = ['fs-p']
