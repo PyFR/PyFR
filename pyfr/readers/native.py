@@ -97,13 +97,16 @@ class PyFRBaseReader(Mapping):
         # Assembles possible array file names, then checks if present
         # in .pyfr{m, s} archive.  If so, the element type and array
         # shape are assigned to the array file name in info.
-        for prt in xrange(len(ls_files)):
+        prt = 0
+        while len(info) < len(ls_files):
             for ele_type in basismap.keys():
 
                 name = '%s_%s_p%d' % (prfx, ele_type, prt)
 
                 if name in ls_files:
                     info[name] = (ele_type, self[name].shape)
+            
+            prt += 1
 
         return info
 
