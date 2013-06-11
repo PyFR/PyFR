@@ -28,7 +28,7 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 % for i in range(ndims):
     ur[${i + 1}] = -ul[${i + 1}];
 % endfor
-    ur[${nvars - 1}] = ${c['cpTw']|f}*ul[0]
+    ur[${nvars - 1}] = ${c['cpTw']/c['gamma']|f}*ul[0]
                      + ${0.5|f}/ul[0]*${util.vlen('ul[{0}+1]')};
 }
 
