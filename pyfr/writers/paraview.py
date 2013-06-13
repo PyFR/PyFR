@@ -174,12 +174,6 @@ def _npts_from_order(order, m_inf, total=True):
 def _quadcube_con(ndim, nsubdiv):
     """Generate node connectivity for vtu hex/quad in high-order elements
 
-    PyFR high-order elements are subdivided into low-order vtu
-    cells to permit visualisation in Paraview.  Cells are defined
-    in vtk files by specifying connectivity between nodes.  To
-    reduce memory requirements it is possible to use a single
-    high-order node multiple times in defining low-order cells.
-
     :param ndim: Number of dimensions [2,3]
     :param nsubdiv: Number of subdivisions (equal to element shape order)
     :type ndim: integer
@@ -187,10 +181,6 @@ def _quadcube_con(ndim, nsubdiv):
     :rtype: list
 
     """
-    # Catch all for cases where cell subdivision is not performed
-    if nsubdiv is None:
-        nsubdiv = 1
-
     # Mapping from pyfr to vtk quad nodes
     conbase = np.array([0, 1, nsubdiv + 2, nsubdiv + 1], dtype=int)
 
@@ -208,6 +198,56 @@ def _quadcube_con(ndim, nsubdiv):
     internal_con += nodeoff.T.flatten()[:, None]
 
     return np.hstack(internal_con)
+
+
+def _tri_con(ndim, nsubdiv):
+    """Generate node connectivity for vtu triangles in high-order elements
+
+    :param ndim: Number of dimensions [2,3]
+    :param nsubdiv: Number of subdivisions (equal to element shape order)
+    :type ndim: integer
+    :type nsubdiv: integer
+    :rtype: list
+
+    """
+    if nsubdiv > 1:
+        raise RuntimeError('Subdivision is not implemented for triangles.')
+
+    return ParaviewWriter.vtk_to_pyfr['tri'][1]
+
+
+def _base_con(etype, ndim, nsubdiv):
+    """Switch case to select node connectivity for supported vtu elements
+
+    PyFR high-order elements are subdivided into low-order vtu
+    cells to permit visualisation in Paraview.  Cells are defined
+    in vtk files by specifying connectivity between nodes.  To
+    reduce memory requirements, it is possible to use a single
+    high-order node multiple times in defining low-order cells.
+
+    :param etype: PyFR element type
+    :param ndim: Number of dimensions [2,3]
+    :param nsubdiv: Number of subdivisions (equal to element shape order)
+    :type etype: string
+    :type ndim: integer
+    :type nsubdiv: integer
+    :rtype: list
+
+    """
+    # Catch-all for cases where cell subdivision is not performed
+    if nsubdiv is None:
+        nsubdiv = 1
+
+    # Switch case to generate node connectivity for each element type
+    if etype == 'tri':
+        connec = _tri_con(ndim, nsubdiv)
+    elif etype == 'quad' or etype == 'hex':
+        connec = _quadcube_con(ndim, nsubdiv)
+    else:
+        raise RuntimeError('Node connectivity is not yet implemented for %s '
+                          'elements.' % etype)
+
+    return connec
 
 
 def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
@@ -372,7 +412,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Prepare vtu cell arrays (connectivity, offsets, types):
     # Generate and extend vtu sub-cell node connectivity across all elements
-    vtu_con = np.tile(_quadcube_con(len(dims), args.divisor), (m_inf[1][1], 1))
+    vtu_con = np.tile(_base_con(m_inf[0], len(dims), args.divisor),
+                      (m_inf[1][1], 1))
     vtu_con += (np.arange(m_inf[1][1]) * npts)[:, None]
 
     # Generate offset into the connectivity array for the end of each element
