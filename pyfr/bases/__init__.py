@@ -1,3 +1,3 @@
 
 from pyfr.bases.base import BasisBase
-from pyfr.bases.tensorprod import HexBasis
+from pyfr.bases.tensorprod import HexBasis, QuadBasis
