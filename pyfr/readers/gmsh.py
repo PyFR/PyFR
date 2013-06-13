@@ -240,7 +240,7 @@ class GmshReader(BaseReader):
 
         lf.eidx = np.arange(len(fotris))[...,None]
         lf.fidx = np.arange(3)
-        lf.nodes = fotris[:fnmap]
+        lf.nodes = fotris[:,fnmap]
 
         return [('line', lf)]
 
