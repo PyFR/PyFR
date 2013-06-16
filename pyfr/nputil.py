@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import ctypes as ct
+import itertools as it
+import re
 
 import numpy as np
 
@@ -24,6 +26,15 @@ _npeval_syms = {
 
 
 def npeval(expr, locals):
+    # Ensure the expression does not contain invalid characters
+    if not re.match(r'^[A-Za-z0-9 \t\n\r.,+\-*/^%()]+$', expr):
+        raise ValueError('Invalid characters in expression')
+
+    # Disallow access to object attributes
+    objs = '|'.join(it.chain(_npeval_syms, locals))
+    if re.search(r'(%s|\))\s*\.' % objs, expr):
+        raise ValueError('Invalid expression')
+
     # Allow '^' to be used for exponentiation
     expr = expr.replace('^', '**')
 
