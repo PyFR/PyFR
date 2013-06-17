@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import ast
 import ctypes as ct
 import itertools as it
 import re
@@ -41,13 +42,24 @@ def npeval(expr, locals):
     return eval(expr, _npeval_syms, locals)
 
 
-_range_eval_syms = {
-    '__builtins__': None,
-    'range': lambda s, e, n: list(np.linspace(s, e, n))}
-
-
 def range_eval(expr):
-    return [float(t) for t in eval(expr, _range_eval_syms, None)]
+    r = []
+
+    for prt in map(lambda s: s.strip(), expr.split('+')):
+        try:
+            # Parse parts of the form [x, y, z, ...]
+            if prt.startswith('['):
+                r.extend(float(l) for l in ast.literal_eval(prt))
+            # Parse parts of the form range(start, stop, n)
+            else:
+                m = re.match(r'range\((.*?),(.*?),(.*?)\)$', prt)
+                s, e, n = m.groups()
+
+                r.extend(np.linspace(float(s), float(e), int(n)))
+        except (AttributeError, SyntaxError, ValueError):
+            raise ValueError('Invalid range')
+
+    return r
 
 
 _ctype_map = {
