@@ -10,7 +10,7 @@ from collections import defaultdict, OrderedDict
 
 import numpy as np
 
-from pyfr.bases.tensorprod import gen_std_hex, gen_std_quad
+from pyfr.bases import get_std_ele_by_name
 from pyfr.readers import get_reader_by_name, get_reader_by_extn, BaseReader
 from pyfr.util import all_subclasses
 
@@ -51,10 +51,9 @@ def _gen_part_spts(p_cdef, p_ddef, npart, ndim, sord, ele_type):
     shape point (spt) arrays are of dimension [nspts,nelements,ndim].
     '''
 
-    if ndim == 3: #Standard element from pyfr.bases.tensorprod
-        std_ele = np.array(gen_std_hex(sord), dtype=float).reshape(-1,ndim)
-    else:
-        std_ele = np.array(gen_std_quad(sord), dtype=float).reshape(-1,ndim)
+    # Get standard element
+    std_ele = np.array(get_std_ele_by_name(ele_type, sord),
+                       dtype=float).reshape(-1, ndim)
 
     std_ele += 1
     std_ele *= 0.5  #More convenient form

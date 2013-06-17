@@ -6,7 +6,7 @@ from copy import copy
 import numpy as np
 import sympy as sy
 
-from pyfr.bases import BasisBase
+from pyfr.bases import BasisBase, get_std_ele_by_name
 from pyfr.inifile import Inifile
 from pyfr.readers.nodemaps import GmshNodeMaps
 from pyfr.util import subclass_map
@@ -152,7 +152,7 @@ def _npts_from_order(order, m_inf, total=True):
     :type ms_inf: tuple: (str, list)
     :type total: bool
     :rtype: integer
-    
+
     """
     # Calculate number of nodes in element of type and order
     if m_inf[0] in ['quad', 'hex']:
@@ -445,12 +445,15 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
         # Generate basis objects for mesh, solution and vtu output
         mesh_b = basismap[m_inf[0]](dims, m_inf[1][0], cfg)
-        cfg.set('mesh-elements', 'quad-rule', 'equi-spaced')
-        vtu_b = basismap[m_inf[0]](dims, s_inf[1][0], cfg)
+
+        # Get location of spts in standard element of solution order
+        uord = cfg.getint('mesh-elements', 'order')
+        ele_spts = np.reshape(get_std_ele_by_name(m_inf[0], uord),
+                              (-1, len(dims)))
 
         # Generate operator matrices to move points and solutions to vtu nodes
-        mesh_hpts_op = np.array(mesh_b.sbasis_at(vtu_b.upts), dtype=float)
-        soln_hpts_op = np.array(mesh_b.ubasis_at(vtu_b.upts), dtype=float)
+        mesh_hpts_op = np.array(mesh_b.sbasis_at(ele_spts), dtype=float)
+        soln_hpts_op = np.array(mesh_b.ubasis_at(ele_spts), dtype=float)
 
         # Calculate node locations of vtu elements
         pts = np.dot(mesh_hpts_op, mesh.reshape(m_inf[1][0], -1))
