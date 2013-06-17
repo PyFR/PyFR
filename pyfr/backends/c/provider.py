@@ -19,7 +19,7 @@ class CKernelProvider(object):
 
         # Filter floating point constants
         if tplparams['dtype'] == 'float':
-            fpfilt = lambda v: v + 'f'
+            fpfilt = lambda v: v + ('f' if '.' in v or 'e' in v else '.f')
         else:
             fpfilt = lambda v: v
 
