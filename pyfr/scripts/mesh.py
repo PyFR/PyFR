@@ -52,8 +52,7 @@ def _gen_part_spts(p_cdef, p_ddef, npart, ndim, sord, ele_type):
     '''
 
     # Get standard element
-    std_ele = np.array(get_std_ele_by_name(ele_type, sord),
-                       dtype=float).reshape(-1, ndim)
+    std_ele = np.array(get_std_ele_by_name(ele_type, sord), dtype=float)
 
     std_ele += 1
     std_ele *= 0.5  #More convenient form
