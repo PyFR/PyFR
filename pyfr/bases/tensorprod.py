@@ -12,11 +12,11 @@ from pyfr.util import ndrange, lazyprop
 
 
 def get_std_hex(sptord):
-    return cart_prod_points(equi_spaced(sptord + 1), 3, compact=False)
+    return cart_prod_points(equi_spaced(sptord + 1), 3)
 
 
 def get_std_quad(sptord):
-    return cart_prod_points(equi_spaced(sptord + 1), 2, compact=False)
+    return cart_prod_points(equi_spaced(sptord + 1), 2)
 
 
 def cart_prod_points(points, ndim, compact=True):

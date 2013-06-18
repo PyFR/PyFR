@@ -448,8 +448,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
         # Get location of spts in standard element of solution order
         uord = cfg.getint('mesh-elements', 'order')
-        ele_spts = np.reshape(get_std_ele_by_name(m_inf[0], uord),
-                              (-1, len(dims)))
+        ele_spts = get_std_ele_by_name(m_inf[0], uord)
 
         # Generate operator matrices to move points and solutions to vtu nodes
         mesh_hpts_op = np.array(mesh_b.sbasis_at(ele_spts), dtype=float)
