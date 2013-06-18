@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from abc import ABCMeta, abstractmethod
 import re
 import uuid
-
-from abc import ABCMeta, abstractmethod
 
 import numpy as np
 
