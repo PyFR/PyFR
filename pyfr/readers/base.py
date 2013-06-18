@@ -21,7 +21,7 @@ class BaseReader(object):
 
     def _optimize(self, mesh):
         # Sort interior interfaces
-        for f in filter(lambda f: re.match(r'^con_p\d+$', f), mesh):
+        for f in filter(lambda f: re.match(r'con_p\d+$', f), mesh):
             mesh[f] = mesh[f][:,np.argsort(mesh[f][0])]
 
     def to_pyfrm(self):
