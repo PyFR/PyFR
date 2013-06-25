@@ -27,8 +27,8 @@ class BaseStepper(BaseIntegrator):
     def collect_stats(self, stats):
         super(BaseStepper, self).collect_stats(stats)
 
-        stats.set('time-integration', 'nsteps', self.nsteps)
-        stats.set('time-integration', 'nfevals', self._stepper_nfevals)
+        stats.set('solver-time-integrator', 'nsteps', self.nsteps)
+        stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
 
     def _get_axnpby_kerns(self, n):
         try:

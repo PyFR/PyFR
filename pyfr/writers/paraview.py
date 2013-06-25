@@ -51,7 +51,7 @@ class ParaviewWriter(BaseWriter):
         """
         # Set default divisor to solution order
         if self.args.divisor == 0:
-            self.args.divisor = self.cfg.getint('mesh-elements', 'order')
+            self.args.divisor = self.cfg.getint('solver-elements', 'order')
 
         # Write .vtu file header
         self.outf.write('<?xml version="1.0" ?>\n<VTKFile '
@@ -447,7 +447,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         mesh_b = basismap[m_inf[0]](dims, m_inf[1][0], cfg)
 
         # Get location of spts in standard element of solution order
-        uord = cfg.getint('mesh-elements', 'order')
+        uord = cfg.getint('solver-elements', 'order')
         ele_spts = get_std_ele_by_name(m_inf[0], uord)
 
         # Generate operator matrices to move points and solutions to vtu nodes

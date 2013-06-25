@@ -9,7 +9,7 @@ class BaseController(BaseIntegrator):
         super(BaseController, self).__init__(*args, **kwargs)
 
         # Current and minimum time steps
-        self._dt = self._cfg.getfloat('time-integration', 'dt')
+        self._dt = self._cfg.getfloat('solver-time-integrator', 'dt')
         self._dtmin = 1.0e-14
 
         # Bank index of solution

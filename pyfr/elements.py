@@ -76,7 +76,7 @@ class BaseAdvectionElements(object):
         vars.update(dict(zip('xyz', coords)))
 
         # Evaluate the ICs from the config file
-        ics = [npeval(self._cfg.get('mesh-ics', dv), vars)
+        ics = [npeval(self._cfg.get('soln-ics', dv), vars)
                for dv in self._dynvarmap[ndims]]
 
         # Allow subclasses to process these ICs

@@ -14,8 +14,8 @@ def get_integrator(backend, rallocs, mesh, initsoln, cfg):
     writer_map = subclass_map(BaseWriter, 'writer_name')
 
     # Look-up the controller, stepper and writer classes
-    c = controller_map[cfg.get('time-integration', 'controller')]
-    s = stepper_map[cfg.get('time-integration', 'scheme')]
+    c = controller_map[cfg.get('solver-time-integrator', 'controller')]
+    s = stepper_map[cfg.get('solver-time-integrator', 'scheme')]
     w = writer_map[cfg.get('soln-output', 'format')]
 
     # Determine the integrator name

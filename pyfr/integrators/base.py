@@ -23,7 +23,7 @@ class BaseIntegrator(object):
             raise TypeError('Incompatible stepper/controller combination')
 
         # Start time
-        self.tstart = cfg.getfloat('time-integration', 't0', 0.0)
+        self.tstart = cfg.getfloat('solver-time-integrator', 't0', 0.0)
 
         # Output times
         self.tout = sorted(range_eval(cfg.get('soln-output', 'times')))
@@ -34,7 +34,7 @@ class BaseIntegrator(object):
             self.tcurr = self.tstart
         else:
             stats = Inifile(initsoln['stats'])
-            self.tcurr = stats.getfloat('time-integration', 'tcurr')
+            self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
 
             # Cull already written output times
             self.tout = [t for t in self.tout if t > self.tcurr]
@@ -125,4 +125,4 @@ class BaseIntegrator(object):
             self.output(solnmap, stats)
 
     def collect_stats(self, stats):
-        stats.set('time-integration', 'tcurr', self.tcurr)
+        stats.set('solver-time-integrator', 'tcurr', self.tcurr)

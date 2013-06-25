@@ -18,7 +18,7 @@ from pyfr.util import proxylist, subclass_map
 
 def get_mesh_partition(backend, rallocs, mesh, initsoln, nreg, cfg):
     mpmap = subclass_map(BaseMeshPartition, 'name')
-    mpcls = mpmap[cfg.get('mesh', 'system')]
+    mpcls = mpmap[cfg.get('solver', 'system')]
 
     return mpcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
@@ -105,7 +105,7 @@ class BaseMeshPartition(object):
                 rgn = m.group(1)
 
                 # Determine the config file section
-                cfgsect = 'mesh-bcs-%s' % rgn
+                cfgsect = 'soln-bcs-%s' % rgn
 
                 # Instantiate
                 bcclass = bcmap[self._cfg.get(cfgsect, 'type')]

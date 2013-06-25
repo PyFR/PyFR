@@ -55,7 +55,7 @@ class BasisBase(object):
         self._dims = dims
         self._nspts = nspts
         self._cfg = cfg
-        self._order = cfg.getint('mesh', 'order')
+        self._order = cfg.getint('solver', 'order')
 
         if self.ndims != len(dims):
             raise ValueError('Invalid dimension symbols')

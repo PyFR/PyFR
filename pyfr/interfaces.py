@@ -129,7 +129,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         kc = super(BaseAdvectionDiffusionIntInters, self)._kernel_constants()
 
         # Bring LDG-specific constants into scope
-        kc.update(self._cfg.items_as('mesh', float))
+        kc.update(self._cfg.items_as('solver-interfaces', float))
 
         return kc
 
@@ -166,7 +166,7 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         kc = super(BaseAdvectionDiffusionMPIInters, self)._kernel_constants()
 
         # Bring LDG-specific constants into scope
-        kc.update(self._cfg.items_as('mesh', float))
+        kc.update(self._cfg.items_as('solver-interfaces', float))
         kc['ldg-beta'] *= self._beta_sgn
 
         return kc
@@ -243,7 +243,7 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
         kc = super(BaseAdvectionDiffusionBCInters, self)._kernel_constants()
 
         # Bring LDG-specific constants into scope
-        kc.update(self._cfg.items_as('mesh', float))
+        kc.update(self._cfg.items_as('solver-interfaces', float))
 
         return kc
 
@@ -255,7 +255,7 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
 
 class EulerIntInters(BaseAdvectionIntInters):
     def get_rsolve_kern(self):
-        rsinv = self._cfg.get('mesh', 'riemann-solver')
+        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_inv_int', self.ndims, self.nvars,
@@ -266,7 +266,7 @@ class EulerIntInters(BaseAdvectionIntInters):
 
 class EulerMPIInters(BaseAdvectionMPIInters):
     def get_rsolve_kern(self):
-        rsinv = self._cfg.get('mesh', 'riemann-solver')
+        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_inv_mpi', self.ndims, self.nvars,
@@ -276,7 +276,7 @@ class EulerMPIInters(BaseAdvectionMPIInters):
 
 class EulerBaseBCInters(BaseAdvectionBCInters):
     def get_rsolve_kern(self):
-        rsinv = self._cfg.get('mesh', 'riemann-solver')
+        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_inv_bc', self.ndims, self.nvars,
@@ -291,7 +291,7 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
     def get_rsolve_kern(self):
-        rsinv = self._cfg.get('mesh', 'riemann-solver')
+        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
@@ -303,7 +303,7 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
     def get_rsolve_kern(self):
-        rsinv = self._cfg.get('mesh', 'riemann-solver')
+        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_ldg_vis_mpi', self.ndims, self.nvars,
@@ -314,7 +314,7 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 
 class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
     def get_rsolve_kern(self):
-        rsinv = self._cfg.get('mesh', 'riemann-solver')
+        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
         kc = self._kernel_constants()
 
         return self._be.kernel('rsolve_ldg_vis_bc', self.ndims, self.nvars,
