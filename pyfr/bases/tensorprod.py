@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import abstractproperty
-import itertools
+import itertools as it
 
 import numpy as np
 import sympy as sy
@@ -68,7 +68,7 @@ def nodal_basis(points, dims, compact=True):
     basis = [lagrange_basis(p, d) for d in reversed(dims)]
 
     # Take the cartesian product of these and multiply the resulting tuples
-    cpbasis = np.array([np.prod(b) for b in itertools.product(*basis)])
+    cpbasis = np.array([np.prod(b) for b in it.product(*basis)])
 
     return cpbasis if compact else cpbasis.reshape((len(p),)*len(dims))
 
