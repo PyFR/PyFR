@@ -14,7 +14,7 @@ def test_hex_gleg_ord3_csd():
     # Config for a third order spectral difference scheme
     cfg = Inifile()
     cfg.set('mesh', 'order', '3')
-    cfg.set('mesh-elements-hex', 'quad-rule', 'gauss-legendre')
+    cfg.set('mesh-elements-hex', 'soln-pts', 'gauss-legendre')
     cfg.set('mesh-elements-hex', 'vcjh-eta', 'sd')
 
     # Generate the hexes

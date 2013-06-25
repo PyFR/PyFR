@@ -146,7 +146,7 @@ class TensorProdBasis(object):
 
     @lazyprop
     def _pts1d(self):
-        rule = self._cfg.get('mesh-elements-' + self.name, 'quad-rule')
+        rule = self._cfg.get('mesh-elements-' + self.name, 'soln-pts')
         return get_quadrule(BaseLineQuadRule, rule, self._order + 1).points
 
     @lazyprop
