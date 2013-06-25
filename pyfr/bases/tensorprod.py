@@ -98,7 +98,7 @@ _cube_map_rots = np.array([
     [[ 1,  0,  0], [ 0,  0, -1], [ 0,  1,  0]]])  # 1 -> 5
 
 
-def cube_map_face(fpts):
+def quad_map_face(fpts):
     """Given a matrix of points (p,q,r) corresponding to face one of
     `the cube' this method maps these points onto the remaining faces
 
@@ -275,7 +275,7 @@ class HexBasis(TensorProdBasis, BasisBase):
         fonepts[...,1] = -1
 
         # Cube map face one to get faces zero through five
-        return cube_map_face(fonepts).reshape(-1, 3)
+        return quad_map_face(fonepts).reshape(-1, 3)
 
     @lazyprop
     def fbasis(self):
@@ -310,7 +310,7 @@ class HexBasis(TensorProdBasis, BasisBase):
         fonenorms[...,1] = -1
 
         # Cube map to get the remaining face normals
-        return cube_map_face(fonenorms).reshape(-1, 3)
+        return quad_map_face(fonenorms).reshape(-1, 3)
 
     @lazyprop
     def _rschemes(self):
