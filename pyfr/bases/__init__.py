@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.bases.base import BasisBase
-from pyfr.bases.tensorprod import (get_std_hex, get_std_quad, HexBasis,
-                                   QuadBasis)
+from pyfr.bases.tensorprod import HexBasis, QuadBasis
+from pyfr.util import subclass_map
 
 
 def get_std_ele_by_name(name, order):
@@ -15,6 +15,6 @@ def get_std_ele_by_name(name, order):
     :rtype: np.ndarray
 
     """
-    ele_map = {'quad': get_std_quad, 'hex': get_std_hex}
+    ele_cls = subclass_map(BasisBase, 'name')[name]
 
-    return ele_map[name](order)
+    return ele_cls.std_ele(order)

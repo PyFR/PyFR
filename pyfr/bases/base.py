@@ -64,6 +64,10 @@ class BasisBase(object):
     def dims(self):
         return self._dims
 
+    @abstractmethod
+    def std_ele(sptord):
+        pass
+
     @lazyprop
     def m0(self):
         """Discontinuous soln at upts to discontinuous soln at fpts"""

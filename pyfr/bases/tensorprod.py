@@ -12,16 +12,6 @@ from pyfr.syutil import lagrange_basis
 from pyfr.util import ndrange, lazyprop
 
 
-def get_std_hex(sptord):
-    esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
-    return cart_prod_points(esqr.points, 3)
-
-
-def get_std_quad(sptord):
-    esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
-    return cart_prod_points(esqr.points, 2)
-
-
 def cart_prod_points(points, ndim, compact=True):
     """Performs a cartesian product extension of *points* into *ndim*
 
@@ -148,6 +138,11 @@ class TensorProdBasis(object):
             if not self._nsptsord.is_Number:
                 raise ValueError('Invalid number of shape points for {} dims'
                                  .format(self.ndims))
+
+    @classmethod
+    def std_ele(cls, sptord):
+        esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
+        return cart_prod_points(esqr.points, cls.ndims)
 
     @lazyprop
     def _pts1d(self):
