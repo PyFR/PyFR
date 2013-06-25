@@ -13,9 +13,9 @@ from pyfr.inifile import Inifile
 def test_hex_gleg_ord3_csd():
     # Config for a third order spectral difference scheme
     cfg = Inifile()
-    cfg.set('mesh-elements', 'quad-rule', 'gauss-legendre')
-    cfg.set('mesh-elements', 'order', '3')
-    cfg.set('mesh-elements', 'vcjh-eta', 'sd')
+    cfg.set('mesh', 'order', '3')
+    cfg.set('mesh-elements-hex', 'quad-rule', 'gauss-legendre')
+    cfg.set('mesh-elements-hex', 'vcjh-eta', 'sd')
 
     # Generate the hexes
     hb = HexBasis(sy.symbols('p q r'), None, cfg)
