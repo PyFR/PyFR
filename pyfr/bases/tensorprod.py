@@ -8,6 +8,7 @@ import sympy as sy
 
 from pyfr.bases.base import BasisBase
 from pyfr.quad_points import points_for_rule, equi_spaced
+from pyfr.syutil import lagrange_basis
 from pyfr.util import ndrange, lazyprop
 
 
@@ -52,19 +53,6 @@ def cart_prod_points(points, ndim, compact=True):
         return cprodpts
 
 
-def _nodal_basis1d(points, sym):
-    """Generates a basis of polynomials, :math:`l_i(x)`, such that
-    .. math::
-       l_i(x) = \delta^x_{p_i}
-    where :math:`p_i` is the i'th entry in *points* and :math:`x \in p`.
-    """
-    n = len(points)
-    lagrange_poly = sy.interpolating_poly
-
-    return [lagrange_poly(n, sym, points, [0]*i + [1] + [0]*(n-i-1)).expand()
-            for i in xrange(n)]
-
-
 def nodal_basis(points, dims, compact=True):
     """Generates a nodal basis for *points* over *dims*
 
@@ -85,7 +73,7 @@ def nodal_basis(points, dims, compact=True):
     p = list(points)
 
     # Evaluate the basis function in terms of each dimension
-    basis = [_nodal_basis1d(p, d) for d in reversed(dims)]
+    basis = [lagrange_basis(p, d) for d in reversed(dims)]
 
     # Take the cartesian product of these and multiply the resulting tuples
     cpbasis = np.array([np.prod(b) for b in itertools.product(*basis)])
