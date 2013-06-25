@@ -149,7 +149,7 @@ class TensorProdBasis(object):
 
     @lazyprop
     def _pts1d(self):
-        rule = self._cfg.get('mesh-elements', 'quad-rule')
+        rule = self._cfg.get('mesh-elements-' + self.name, 'quad-rule')
         return points_for_rule(rule, self._order + 1)
 
     @lazyprop
@@ -214,7 +214,7 @@ class QuadBasis(TensorProdBasis, BasisBase):
             nbdim = [d for d in self._dims if d is not sym]
             fbasis[epair,...] = nodal_basis(pts1d, nbdim, compact=False)
 
-            eta = self._cfg.get('mesh-elements', 'vcjh-eta')
+            eta = self._cfg.get('mesh-elements-quad', 'vcjh-eta')
             diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
 
             for p, gfn in zip(epair, diffcorfn):
@@ -288,7 +288,7 @@ class HexBasis(TensorProdBasis, BasisBase):
             nbdims = [d for d in self._dims if d is not sym]
             fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
 
-            eta = self._cfg.get('mesh-elements', 'vcjh-eta')
+            eta = self._cfg.get('mesh-elements-hex', 'vcjh-eta')
             diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
 
             for p, gfn in zip(fpair, diffcorfn):

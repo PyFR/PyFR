@@ -12,8 +12,10 @@ from pyfr.util import subclass_map
 
 
 def get_rank_allocation(mesh, cfg):
-    allocatormap = subclass_map(BaseRankAllocator, 'name')
-    return allocatormap[cfg.get('mesh', 'allocator')](mesh, cfg)
+    allocator_map = subclass_map(BaseRankAllocator, 'name')
+
+    name = cfg.get('backend', 'rank-allocator', 'linear')
+    return allocator_map[name](mesh, cfg)
 
 
 class BaseRankAllocator(object):
