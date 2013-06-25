@@ -7,17 +7,19 @@ import numpy as np
 import sympy as sy
 
 from pyfr.bases.base import BasisBase
-from pyfr.quad_points import points_for_rule, equi_spaced
+from pyfr.quadrules import BaseLineQuadRule, get_quadrule
 from pyfr.syutil import lagrange_basis
 from pyfr.util import ndrange, lazyprop
 
 
 def get_std_hex(sptord):
-    return cart_prod_points(equi_spaced(sptord + 1), 3)
+    esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
+    return cart_prod_points(esqr.points, 3)
 
 
 def get_std_quad(sptord):
-    return cart_prod_points(equi_spaced(sptord + 1), 2)
+    esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
+    return cart_prod_points(esqr.points, 2)
 
 
 def cart_prod_points(points, ndim, compact=True):
@@ -150,7 +152,7 @@ class TensorProdBasis(object):
     @lazyprop
     def _pts1d(self):
         rule = self._cfg.get('mesh-elements-' + self.name, 'quad-rule')
-        return points_for_rule(rule, self._order + 1)
+        return get_quadrule(BaseLineQuadRule, rule, self._order + 1).points
 
     @lazyprop
     def upts(self):
@@ -161,12 +163,17 @@ class TensorProdBasis(object):
         return nodal_basis(self._pts1d, self._dims)
 
     @lazyprop
+    def spts1d(self):
+        esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', self._nsptsord)
+        return esqr.points
+
+    @lazyprop
     def spts(self):
-        return cart_prod_points(equi_spaced(self._nsptsord), self.ndims)
+        return cart_prod_points(self.spts1d, self.ndims)
 
     @lazyprop
     def sbasis(self):
-        return nodal_basis(equi_spaced(self._nsptsord), self._dims)
+        return nodal_basis(self.spts1d, self._dims)
 
     @property
     def nupts(self):
