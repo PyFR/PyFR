@@ -2,7 +2,6 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
-
 import re
 
 from mpi4py import MPI
@@ -24,6 +23,8 @@ def get_mesh_partition(backend, rallocs, mesh, initsoln, nreg, cfg):
 
 
 class BaseMeshPartition(object):
+    __metaclass__ = ABCMeta
+
     elementscls = None
     intinterscls = None
     mpiinterscls = None
@@ -180,17 +181,7 @@ class BaseMeshPartition(object):
         return list(self._eles.get_scal_upts_mat(idx))
 
 
-class EulerMeshPartition(BaseMeshPartition):
-    name = 'euler'
-
-    elementscls = EulerElements
-    intinterscls = EulerIntInters
-    mpiinterscls = EulerMPIInters
-    bbcinterscls = EulerBaseBCInters
-
-    def _gen_kernels(self):
-        super(EulerMeshPartition, self)._gen_kernels()
-
+class BaseAdvectionMeshPartition(BaseMeshPartition):
     def _get_negdivf(self):
         runall = self._backend.runall
         q1, q2 = self._queues
@@ -230,16 +221,19 @@ class EulerMeshPartition(BaseMeshPartition):
         runall([q1])
 
 
-class NavierStokesMeshPartition(BaseMeshPartition):
-    name = 'navier-stokes'
+class EulerMeshPartition(BaseAdvectionMeshPartition):
+    name = 'euler'
 
-    elementscls = NavierStokesElements
-    intinterscls = NavierStokesIntInters
-    mpiinterscls = NavierStokesMPIInters
-    bbcinterscls = NavierStokesBaseBCInters
+    elementscls = EulerElements
+    intinterscls = EulerIntInters
+    mpiinterscls = EulerMPIInters
+    bbcinterscls = EulerBaseBCInters
 
+
+class BaseAdvectionDiffusionMeshPartition(BaseAdvectionMeshPartition):
     def _gen_kernels(self):
-        super(NavierStokesMeshPartition, self)._gen_kernels()
+        super(BaseAdvectionDiffusionMeshPartition, self)._gen_kernels()
+
         eles = self._eles
         int_inters = self._int_inters
         mpi_inters = self._mpi_inters
@@ -304,3 +298,12 @@ class NavierStokesMeshPartition(BaseMeshPartition):
         q1 << self._tdivtconf_upts_kerns()
         q1 << self._negdivconf_upts_kerns()
         runall([q1])
+
+
+class NavierStokesMeshPartition(BaseAdvectionDiffusionMeshPartition):
+    name = 'navier-stokes'
+
+    elementscls = NavierStokesElements
+    intinterscls = NavierStokesIntInters
+    mpiinterscls = NavierStokesMPIInters
+    bbcinterscls = NavierStokesBaseBCInters
