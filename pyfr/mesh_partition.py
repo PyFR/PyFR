@@ -119,32 +119,7 @@ class BaseMeshPartition(object):
 
     @abstractmethod
     def _gen_kernels(self):
-        eles = self._eles
-        int_inters = self._int_inters
-        mpi_inters = self._mpi_inters
-        bc_inters = self._bc_inters
-
-        # Generate the kernels over each element type
-        self._disu_fpts_kerns = eles.get_disu_fpts_kern()
-        self._tdisf_upts_kerns = eles.get_tdisf_upts_kern()
-        self._tdivtpcorf_upts_kerns = eles.get_tdivtpcorf_upts_kern()
-        self._tdivtconf_upts_kerns = eles.get_tdivtconf_upts_kern()
-        self._negdivconf_upts_kerns = eles.get_negdivconf_upts_kern()
-
-        # Generate MPI sending/recving kernels over each MPI interface
-        self._mpi_inters_scal_fpts0_pack_kerns = \
-            mpi_inters.get_scal_fpts0_pack_kern()
-        self._mpi_inters_scal_fpts0_send_kerns = \
-            mpi_inters.get_scal_fpts0_send_pack_kern()
-        self._mpi_inters_scal_fpts0_recv_kerns = \
-            mpi_inters.get_scal_fpts0_recv_pack_kern()
-        self._mpi_inters_scal_fpts0_unpack_kerns = \
-            mpi_inters.get_scal_fpts0_unpack_kern()
-
-        # Generate the Riemann solvers for the various interface types
-        self._int_inters_rsolve_kerns = int_inters.get_rsolve_kern()
-        self._mpi_inters_rsolve_kerns = mpi_inters.get_rsolve_kern()
-        self._bc_inters_rsolve_kerns = bc_inters.get_rsolve_kern()
+        pass
 
     @abstractmethod
     def _get_negdivf(self):
@@ -182,6 +157,34 @@ class BaseMeshPartition(object):
 
 
 class BaseAdvectionMeshPartition(BaseMeshPartition):
+    def _gen_kernels(self):
+        eles = self._eles
+        int_inters = self._int_inters
+        mpi_inters = self._mpi_inters
+        bc_inters = self._bc_inters
+
+        # Generate the kernels over each element type
+        self._disu_fpts_kerns = eles.get_disu_fpts_kern()
+        self._tdisf_upts_kerns = eles.get_tdisf_upts_kern()
+        self._tdivtpcorf_upts_kerns = eles.get_tdivtpcorf_upts_kern()
+        self._tdivtconf_upts_kerns = eles.get_tdivtconf_upts_kern()
+        self._negdivconf_upts_kerns = eles.get_negdivconf_upts_kern()
+
+        # Generate MPI sending/recving kernels over each MPI interface
+        self._mpi_inters_scal_fpts0_pack_kerns = \
+            mpi_inters.get_scal_fpts0_pack_kern()
+        self._mpi_inters_scal_fpts0_send_kerns = \
+            mpi_inters.get_scal_fpts0_send_pack_kern()
+        self._mpi_inters_scal_fpts0_recv_kerns = \
+            mpi_inters.get_scal_fpts0_recv_pack_kern()
+        self._mpi_inters_scal_fpts0_unpack_kerns = \
+            mpi_inters.get_scal_fpts0_unpack_kern()
+
+        # Generate the Riemann solvers for the various interface types
+        self._int_inters_rsolve_kerns = int_inters.get_rsolve_kern()
+        self._mpi_inters_rsolve_kerns = mpi_inters.get_rsolve_kern()
+        self._bc_inters_rsolve_kerns = bc_inters.get_rsolve_kern()
+
     def _get_negdivf(self):
         runall = self._backend.runall
         q1, q2 = self._queues
