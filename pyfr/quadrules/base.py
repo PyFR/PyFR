@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractmethod
+from abc import ABCMeta, abstractmethod
 import itertools as it
 import os
 import pkgutil
@@ -10,6 +10,8 @@ from sympy.mpmath import mp
 
 
 class BaseQuadRule(object):
+    __metaclass__ = ABCMeta
+
     eletype = None
     orbits = None
 

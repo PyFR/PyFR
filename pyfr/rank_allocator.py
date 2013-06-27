@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import re
-
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
+import re
 
 from mpi4py import MPI
 
@@ -71,7 +70,7 @@ class BaseRankAllocator(object):
                     raise ValueError('MPI interface (%d, %d) is not symmetric'
                                      % (lhs, rhs))
 
-        if list(sorted(conn.keys())) != list(range(len(conn))):
+        if sorted(conn) != list(range(len(conn))):
             raise ValueError('Mesh has invalid partition numbers')
 
         return conn
