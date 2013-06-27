@@ -37,7 +37,8 @@ class BaseTabulatedQuadRule(BaseQuadRule):
         
         for s in rule.split('\n'):
             try:
-                typ, orb, args = re.match(r'(PTS|WTS)(\d+)\((.*)\)$', s).groups()
+                m = re.match(r'(PTS|WTS)(\d+)\((.*)\)$', s)
+                typ, orb, args = m.groups()
             except TypeError:
                 raise ValueError('Invalid quadrature rule syntax')
 
