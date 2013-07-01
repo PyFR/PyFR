@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 
+from abc import ABCMeta, abstractmethod, abstractproperty
 import re
 
-from abc import ABCMeta, abstractmethod, abstractproperty
-
 import numpy as np
-
 from sympy.mpmath import mp
 from sympy.utilities.lambdify import lambdastr
 
