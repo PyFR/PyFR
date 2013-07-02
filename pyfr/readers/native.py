@@ -105,7 +105,7 @@ class PyFRBaseReader(Mapping):
 
                 if name in ls_files:
                     info[name] = (ele_type, self[name].shape)
-            
+
             prt += 1
 
         return info
