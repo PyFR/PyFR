@@ -6,7 +6,7 @@ import itertools as it
 import numpy as np
 import sympy as sy
 
-from pyfr.bases.base import BasisBase
+from pyfr.bases.base import BaseBasis
 from pyfr.quadrules import BaseLineQuadRule, get_quadrule
 from pyfr.syutil import lagrange_basis
 from pyfr.util import ndrange, lazyprop
@@ -186,7 +186,7 @@ class TensorProdBasis(object):
         return self._rschemes[face, rtag]
 
 
-class QuadBasis(TensorProdBasis, BasisBase):
+class QuadBasis(TensorProdBasis, BaseBasis):
     name = 'quad'
     ndims = 2
 
@@ -257,7 +257,7 @@ class QuadBasis(TensorProdBasis, BasisBase):
         return rs
 
 
-class HexBasis(TensorProdBasis, BasisBase):
+class HexBasis(TensorProdBasis, BaseBasis):
     name = 'hex'
     ndims = 3
 

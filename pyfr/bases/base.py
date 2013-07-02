@@ -43,7 +43,7 @@ def lambdify_jac_mpf(dims, exprs):
     return lambdify_mpf(dims, jac_exprs)
 
 
-class BasisBase(object):
+class BaseBasis(object):
     __metaclass__ = ABCMeta
 
     name = None

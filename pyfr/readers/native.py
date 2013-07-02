@@ -10,7 +10,7 @@ from collections import Mapping, defaultdict, OrderedDict
 
 import numpy as np
 
-from pyfr.bases import BasisBase, HexBasis
+from pyfr.bases import BaseBasis, HexBasis
 from pyfr.util import lazyprop, subclass_map
 
 
@@ -92,7 +92,7 @@ class PyFRBaseReader(Mapping):
                                'files' % (self.fname))
 
         # Generate mapping of pyfr element types to respective basis classes.
-        basismap = subclass_map(BasisBase, 'name')
+        basismap = subclass_map(BaseBasis, 'name')
 
         # Assembles possible array file names, then checks if present
         # in .pyfr{m, s} archive.  If so, the element type and array

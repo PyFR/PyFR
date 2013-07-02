@@ -6,7 +6,7 @@ from copy import copy
 import numpy as np
 import sympy as sy
 
-from pyfr.bases import BasisBase, get_std_ele_by_name
+from pyfr.bases import BaseBasis, get_std_ele_by_name
 from pyfr.inifile import Inifile
 from pyfr.readers.nodemaps import GmshNodeMaps
 from pyfr.util import subclass_map
@@ -379,7 +379,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         flt = ['float64', 8]
 
     # Construct basismap and dimensions
-    basismap = subclass_map(BasisBase, 'name')
+    basismap = subclass_map(BaseBasis, 'name')
     dims = sy.symbols('p q r')[:m_inf[1][2]]
 
     # Set npts for divide/append cases

@@ -6,7 +6,7 @@ import re
 
 from mpi4py import MPI
 
-from pyfr.bases import BasisBase
+from pyfr.bases import BaseBasis
 from pyfr.elements import EulerElements, NavierStokesElements
 from pyfr.inifile import Inifile
 from pyfr.interfaces import (EulerIntInters, EulerMPIInters, EulerBaseBCInters,
@@ -46,7 +46,7 @@ class BaseMeshPartition(object):
         self._gen_kernels()
 
     def _load_eles(self, rallocs, mesh, initsoln):
-        basismap = subclass_map(BasisBase, 'name')
+        basismap = subclass_map(BaseBasis, 'name')
 
         # Look for and load each element type from the mesh
         self._elemaps = elemaps = OrderedDict()
