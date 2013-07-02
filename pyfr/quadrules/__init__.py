@@ -4,7 +4,6 @@ import re
 
 from pyfr.quadrules.base import BaseQuadRule, BaseTabulatedQuadRule
 from pyfr.quadrules.line import BaseLineQuadRule
-from pyfr.quadrules.tri import BaseTriQuadRule
 from pyfr.util import subclass_map
 
 
