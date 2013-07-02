@@ -3,8 +3,8 @@
 
 import re
 import sys
-
 from setuptools import setup
+
 
 # Python version
 if sys.version_info[:2] < (2, 7):
@@ -28,8 +28,10 @@ modules = [
     'pyfr.backends.cuda',
     'pyfr.bases',
     'pyfr.integrators',
+    'pyfr.quadrules',
     'pyfr.readers',
-    'pyfr.scripts']
+    'pyfr.scripts',
+    'pyfr.writers']
 
 # Tests
 tests = [
