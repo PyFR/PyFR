@@ -14,12 +14,12 @@ if sys.version_info[:2] < (2, 7):
 
 # PyFR version
 vfile = open('pyfr/_version.py').read()
-vsrch = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", vstr, re.M)
+vsrch = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", vfile, re.M)
 
 if vsrch:
     version = vsrch.group(1)
 else:
-    print 'Unable to find a version string in pyfr/_version.py'
+    print('Unable to find a version string in pyfr/_version.py')
 
 # Modules
 modules = [
@@ -43,13 +43,16 @@ package_data = {
     'pyfr.backends.cuda': ['kernels/*'],
     'pyfr.tests': ['*.npz']}
 
-# Dependencies
+# Hard dependencies
 install_requires = [
-    'pycuda >= 2011.2',
-    'mpi4py >= 1.3',
     'mako',
+    'mpi4py >= 1.3',
     'numpy >= 1.6',
     'sympy >= 0.7.2']
+
+# Soft dependencies
+extras_require = {
+    'cuda': ['pycuda >= 2011.2']}
 
 # Scripts
 console_scripts = [
@@ -81,4 +84,5 @@ setup(name='pyfr',
       package_data=package_data,
       entry_points={'console_scripts': console_scripts},
       install_requires=install_requires,
+      extras_require=extras_require,
       classifiers=classifiers)
