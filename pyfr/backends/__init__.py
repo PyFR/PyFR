@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import Backend as BaseBackend
-from pyfr.backends.c import CBackend
 from pyfr.backends.cuda import CUDABackend
+from pyfr.backends.openmp import OpenMPBackend
 from pyfr.util import subclass_map
 
 

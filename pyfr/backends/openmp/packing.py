@@ -3,12 +3,12 @@
 from mpi4py import MPI
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
-from pyfr.backends.c.provider import CKernelProvider
-from pyfr.backends.c.types import CMPIMatrix, CMPIView
+from pyfr.backends.openmp.provider import OpenMPKernelProvider
+from pyfr.backends.openmp.types import OpenMPMPIMatrix, OpenMPMPIView
 from pyfr.nputil import npdtype_to_ctype
 
 
-class CPackingKernels(CKernelProvider):
+class OpenMPPackingKernels(OpenMPKernelProvider):
     def _packmodopts(self, mpiview):
         return dict(dtype=npdtype_to_ctype(mpiview.mpimat.dtype),
                     vlen=mpiview.view.vlen)
@@ -33,16 +33,16 @@ class CPackingKernels(CKernelProvider):
                                   m.leaddim)
 
     def _packunpack(self, op, mv):
-        if isinstance(mv, CMPIMatrix):
+        if isinstance(mv, OpenMPMPIMatrix):
             return self._packunpack_mpimat(op, mv)
-        elif isinstance(mv, CMPIView):
+        elif isinstance(mv, OpenMPMPIView):
             return self._packunpack_mpiview(op, mv)
         else:
             raise TypeError('Can only pack MPI views and MPI matrices')
 
     def _sendrecv(self, mv, mpipreqfn, pid, tag):
         # If we are an MPI view then extract the MPI matrix
-        mpimat = mv.mpimat if isinstance(mv, CMPIView) else mv
+        mpimat = mv.mpimat if isinstance(mv, OpenMPMPIView) else mv
 
         # Create a persistent MPI request to send/recv the pack
         preq = mpipreqfn(mpimat.data, pid, tag)

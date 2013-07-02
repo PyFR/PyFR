@@ -9,7 +9,7 @@ from ctypes.util import find_library
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
-from pyfr.backends.c.provider import CKernelProvider
+from pyfr.backends.openmp.provider import OpenMPKernelProvider
 from pyfr.ctypesutil import platform_libname
 from pyfr.nputil import npdtype_to_ctype
 
@@ -63,13 +63,13 @@ class CBlasWrappers(object):
 
 
 
-class CBlasKernels(CKernelProvider):
+class OpenMPCBLASKernels(OpenMPKernelProvider):
     def __init__(self, backend, cfg):
-        super(CBlasKernels, self).__init__(backend, cfg)
+        super(OpenMPCBLASKernels, self).__init__(backend, cfg)
 
         # Look for single and multi-threaded BLAS libraries
-        hasst = cfg.hasopt('backend-c', 'cblas-st')
-        hasmt = cfg.hasopt('backend-c', 'cblas-mt')
+        hasst = cfg.hasopt('backend-openmp', 'cblas-st')
+        hasmt = cfg.hasopt('backend-openmp', 'cblas-mt')
 
         if hasst and hasmt:
             raise RuntimeError('cblas-st and cblas-mt are mutually exclusive')
@@ -80,7 +80,7 @@ class CBlasKernels(CKernelProvider):
         else:
             raise RuntimeError('No cblas library specified')
 
-        libname = cfg.getpath('backend-c', self._cblas_type, abs=False)
+        libname = cfg.getpath('backend-openmp', self._cblas_type, abs=False)
 
         # Load and wrap cblas
         self._wrappers = CBlasWrappers(libname)

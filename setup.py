@@ -24,8 +24,8 @@ else:
 # Modules
 modules = [
     'pyfr.backends',
-    'pyfr.backends.c',
     'pyfr.backends.cuda',
+    'pyfr.backends.openmp',
     'pyfr.bases',
     'pyfr.integrators',
     'pyfr.quadrules',
@@ -39,8 +39,8 @@ tests = [
 
 # Data
 package_data = {
-    'pyfr.backends.c': ['kernels/*'],
     'pyfr.backends.cuda': ['kernels/*'],
+    'pyfr.backends.openmp': ['kernels/*'],
     'pyfr.tests': ['*.npz']}
 
 # Hard dependencies

@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import traits
-from pyfr.backends.c.provider import CKernelProvider
+from pyfr.backends.openmp.provider import OpenMPKernelProvider
 from pyfr.nputil import npdtype_to_ctype
 
 
-class CPointwiseKernels(CKernelProvider):
+class OpenMPPointwiseKernels(OpenMPKernelProvider):
     def _get_function(self, mod, func, rest, argt, opts):
-        basefn = super(CPointwiseKernels, self)._get_function
+        basefn = super(OpenMPPointwiseKernels, self)._get_function
 
         # Map dtype
         nopts = opts.copy()

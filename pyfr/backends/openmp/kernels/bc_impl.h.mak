@@ -1,4 +1,4 @@
-<%namespace name='util' module='pyfr.backends.c.makoutil' />
+<%namespace name='util' module='pyfr.backends.openmp.makoutil' />
 
 static inline void
 _bc_grad_u_zero(const ${dtype} ul[${ndims}],

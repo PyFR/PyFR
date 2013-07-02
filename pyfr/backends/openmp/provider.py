@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import ComputeKernel
-from pyfr.backends.c.compiler import GccSourceModule
+from pyfr.backends.openmp.compiler import GccSourceModule
 from pyfr.template import PkgTemplateLookup
 from pyfr.util import memoize
 
 
-class CKernelProvider(object):
+class OpenMPKernelProvider(object):
     lookup = PkgTemplateLookup(__name__, 'kernels')
 
     def __init__(self, backend, cfg):

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%namespace name='util' module='pyfr.backends.c.makoutil' />
+<%namespace name='util' module='pyfr.backends.openmp.makoutil' />
 <%include file='flux_inv_impl.h.mak' />
 
 % if rsinv == 'rusanov':

@@ -12,9 +12,10 @@ from pyfr.nputil import npaligned
 from pyfr.util import ndrange
 
 
-class CMatrixBase(base.MatrixBase):
+class OpenMPMatrixBase(base.MatrixBase):
     def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
-        super(CMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
+        super(OpenMPMatrixBase, self).__init__(backend, ioshape, iopacking,
+                                               tags)
 
         # Data type info
         self.dtype = dtype
@@ -97,15 +98,15 @@ class CMatrixBase(base.MatrixBase):
         return self.data.nbytes
 
 
-class CMatrix(CMatrixBase, base.Matrix):
+class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
     def __init__(self, backend, ioshape, initval, iopacking, tags):
-        super(CMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                      initval, iopacking, tags)
+        super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
+                                           initval, iopacking, tags)
 
 
-class CMatrixRSlice(base.MatrixRSlice):
+class OpenMPMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
-        super(CMatrixRSlice, self).__init__(backend, mat, p, q)
+        super(OpenMPMatrixRSlice, self).__init__(backend, mat, p, q)
 
         # Copy over common attributes
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
@@ -125,32 +126,32 @@ class CMatrixRSlice(base.MatrixRSlice):
         return self.data.ctypes.data
 
 
-class CMatrixBank(base.MatrixBank):
+class OpenMPMatrixBank(base.MatrixBank):
     def __init__(self, backend, mats, initbank, tags):
         if any(m.traits != mats[0].traits for m in mats[1:]):
             raise ValueError('Matrices in a bank must be homogeneous')
 
-        super(CMatrixBank, self).__init__(backend, mats, initbank, tags)
+        super(OpenMPMatrixBank, self).__init__(backend, mats, initbank, tags)
 
 
-class CConstMatrix(CMatrixBase, base.ConstMatrix):
+class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
     def __init__(self, backend, initval, iopacking, tags):
-        super(CConstMatrix, self).__init__(backend, backend.fpdtype,
-                                           initval.shape, initval, iopacking,
-                                           tags)
+        super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
+                                                initval.shape, initval,
+                                                iopacking, tags)
 
 
-class CMPIMatrix(CMatrix, base.MPIMatrix):
+class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
     pass
 
 
-class CMPIView(base.MPIView):
+class OpenMPMPIView(base.MPIView):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
         self.nrow = nrow = matmap.shape[0]
         self.ncol = ncol = matmap.shape[1]
         self.vlen = vlen
 
-        # Create a normal C view
+        # Create a normal OpenMP view
         self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
@@ -162,10 +163,10 @@ class CMPIView(base.MPIView):
         return self.view.nbytes + self.mpimat.nbytes
 
 
-class CView(base.View):
+class OpenMPView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        super(CView, self).__init__(backend, matmap, rcmap, stridemap, vlen,
-                                    tags)
+        super(OpenMPView, self).__init__(backend, matmap, rcmap, stridemap,
+                                         vlen, tags)
 
         # Extract the data type and item size from the first matrix
         self.refdtype = self._mats[0].dtype
@@ -173,7 +174,7 @@ class CView(base.View):
 
         # Validate the matrices
         for m in self._mats:
-            if not isinstance(m, (CMatrix, CConstMatrix)):
+            if not isinstance(m, (OpenMPMatrix, OpenMPConstMatrix)):
                 raise TypeError('Incompatible matrix type for view')
 
             if m.dtype != self.refdtype:
@@ -191,17 +192,17 @@ class CView(base.View):
             ptrmap[ix] += m._as_parameter_ + r[ix]*m.pitch
 
         shape = (self.nrow, self.ncol)
-        self.mapping = CMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
-                                   tags)
-        self.strides = CMatrixBase(backend, np.int32, shape, stridemap, 'AoS',
-                                   tags)
+        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
+                                        tags)
+        self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
+                                        'AoS', tags)
 
     @property
     def nbytes(self):
         return self.mapping.nbytes + self.strides.nbytes
 
 
-class CQueue(base.Queue):
+class OpenMPQueue(base.Queue):
     def __init__(self):
         # Last kernel we executed
         self._last = None

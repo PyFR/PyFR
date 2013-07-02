@@ -2,12 +2,12 @@
 
 import numpy as np
 
-from pyfr.backends.c.provider import CKernelProvider
+from pyfr.backends.openmp.provider import OpenMPKernelProvider
 from pyfr.backends.base import ComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 
-class CBlasExtKernels(CKernelProvider):
+class OpenMPBlasExtKernels(OpenMPKernelProvider):
     def axnpby(self, y, *xn):
         if any(y.traits != x.traits for x in xn):
             raise ValueError('Incompatible matrix types')
