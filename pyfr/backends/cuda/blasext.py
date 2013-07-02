@@ -2,12 +2,12 @@
 
 import numpy as np
 
-from pyfr.backends.cuda.provider import CudaKernelProvider
+from pyfr.backends.cuda.provider import CUDAKernelProvider
 from pyfr.backends.base import ComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 
-class CudaBlasExtKernels(CudaKernelProvider):
+class CUDABlasExtKernels(CUDAKernelProvider):
     def axnpby(self, y, *xn):
         if any(y.traits != x.traits for x in xn):
             raise ValueError('Incompatible matrix types')

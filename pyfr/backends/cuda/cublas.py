@@ -127,7 +127,7 @@ class CublasWrappers(object):
                 raise CublasError
 
 
-class CudaCublasKernels(object):
+class CUDACublasKernels(object):
     def __init__(self, backend, cfg):
         # Load and wrap cublas
         self._wrappers = CublasWrappers()

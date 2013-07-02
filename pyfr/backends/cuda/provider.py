@@ -7,7 +7,7 @@ from pyfr.template import PkgTemplateLookup
 from pyfr.util import memoize
 
 
-class CudaKernelProvider(object):
+class CUDAKernelProvider(object):
     KERNEL_EXT = '.cu.mak'
 
     lookup = PkgTemplateLookup(__name__, 'kernels')

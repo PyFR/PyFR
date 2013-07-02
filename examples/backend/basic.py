@@ -5,7 +5,7 @@
 Demonstrates key backend concepts
 """
 
-from pyfr.backends.cuda import CudaBackend
+from pyfr.backends.cuda import CUDABackend
 import numpy as np
 
 # Number of rows and columns in our matrices
@@ -16,7 +16,7 @@ np1 = np.random.randn(NROW, NCOL)
 np2 = np.random.randn(NROW, NCOL)
 
 # Create the backend
-be = CudaBackend()
+be = CUDABackend()
 
 # Allocate matrices on the backend
 m1 = be.matrix((NROW, NCOL), np1)

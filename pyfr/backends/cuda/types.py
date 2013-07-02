@@ -11,9 +11,9 @@ import pyfr.backends.base as base
 from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
-class CudaMatrixBase(base.MatrixBase):
+class CUDAMatrixBase(base.MatrixBase):
     def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
-        super(CudaMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
+        super(CUDAMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
 
         # Data type info
         self.dtype = dtype
@@ -94,15 +94,15 @@ class CudaMatrixBase(base.MatrixBase):
         return self._nbytes
 
 
-class CudaMatrix(CudaMatrixBase, base.Matrix):
+class CUDAMatrix(CUDAMatrixBase, base.Matrix):
     def __init__(self, backend, ioshape, initval, iopacking, tags):
-        super(CudaMatrix, self).__init__(backend, backend.fpdtype, ioshape,
+        super(CUDAMatrix, self).__init__(backend, backend.fpdtype, ioshape,
                                          initval, iopacking, tags)
 
 
-class CudaMatrixRSlice(base.MatrixRSlice):
+class CUDAMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
-        super(CudaMatrixRSlice, self).__init__(backend, mat, p, q)
+        super(CUDAMatrixRSlice, self).__init__(backend, mat, p, q)
 
         # Copy over common attributes
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
@@ -123,28 +123,28 @@ class CudaMatrixRSlice(base.MatrixRSlice):
         return long(self.parent) + self._soffset
 
 
-class CudaMatrixBank(base.MatrixBank):
+class CUDAMatrixBank(base.MatrixBank):
     def __init__(self, backend, mats, initbank, tags):
         if any(m.traits != mats[0].traits for m in mats[1:]):
             raise ValueError('Matrices in a bank must be homogeneous')
 
-        super(CudaMatrixBank, self).__init__(backend, mats, initbank, tags)
+        super(CUDAMatrixBank, self).__init__(backend, mats, initbank, tags)
 
     def __long__(self):
         return long(self._curr_mat)
 
 
-class CudaConstMatrix(CudaMatrixBase, base.ConstMatrix):
+class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
     def __init__(self, backend, initval, iopacking, tags):
         ioshape = initval.shape
-        super(CudaConstMatrix, self).__init__(backend, backend.fpdtype,
+        super(CUDAConstMatrix, self).__init__(backend, backend.fpdtype,
                                               ioshape, initval, iopacking,
                                               tags)
 
 
-class CudaView(base.View):
+class CUDAView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        super(CudaView, self).__init__(backend, matmap, rcmap, stridemap,
+        super(CUDAView, self).__init__(backend, matmap, rcmap, stridemap,
                                        vlen, tags)
 
         # Extract the data type and item size from the first matrix
@@ -153,7 +153,7 @@ class CudaView(base.View):
 
         # Validate the matrices
         for m in self._mats:
-            if not isinstance(m, (CudaMatrix, CudaConstMatrix)):
+            if not isinstance(m, (CUDAMatrix, CUDAConstMatrix)):
                 raise TypeError('Incompatible matrix type for view')
 
             if m.dtype != self.refdtype:
@@ -171,9 +171,9 @@ class CudaView(base.View):
             ptrmap[ix] += long(m) + r[ix]*m.pitch
 
         shape = (self.nrow, self.ncol)
-        self.mapping = CudaMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
+        self.mapping = CUDAMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
                                       tags)
-        self.strides = CudaMatrixBase(backend, np.int32, shape, stridemap,
+        self.strides = CUDAMatrixBase(backend, np.int32, shape, stridemap,
                                       'AoS', tags)
 
     @property
@@ -181,10 +181,10 @@ class CudaView(base.View):
         return self.mapping.nbytes + self.strides.nbytes
 
 
-class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
+class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
     def __init__(self, backend, ioshape, initval, iopacking, tags):
         # Call the standard matrix constructor
-        super(CudaMPIMatrix, self).__init__(backend, ioshape, initval,
+        super(CUDAMPIMatrix, self).__init__(backend, ioshape, initval,
                                             iopacking, tags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
@@ -192,13 +192,13 @@ class CudaMPIMatrix(CudaMatrix, base.MPIMatrix):
                                            self.dtype, 'C')
 
 
-class CudaMPIView(base.MPIView):
+class CUDAMPIView(base.MPIView):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        super(CudaMPIView, self).__init__(backend, matmap, rcmap, stridemap,
+        super(CUDAMPIView, self).__init__(backend, matmap, rcmap, stridemap,
                                           vlen, tags)
 
 
-class CudaQueue(base.Queue):
+class CUDAQueue(base.Queue):
     def __init__(self):
         # Last kernel we executed
         self._last = None

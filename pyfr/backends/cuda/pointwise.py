@@ -4,13 +4,13 @@ import numpy as np
 
 import pycuda.driver as cuda
 
-from pyfr.backends.cuda.provider import CudaKernelProvider
+from pyfr.backends.cuda.provider import CUDAKernelProvider
 from pyfr.nputil import npdtype_to_ctype
 
 
-class CudaPointwiseKernels(CudaKernelProvider):
+class CUDAPointwiseKernels(CUDAKernelProvider):
     def _get_function(self, mod, func, argt, opts, nvccopts=None):
-        basefn = super(CudaPointwiseKernels, self)._get_function
+        basefn = super(CUDAPointwiseKernels, self)._get_function
 
         # Map dtype
         nopts = opts.copy()

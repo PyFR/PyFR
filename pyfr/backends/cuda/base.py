@@ -6,11 +6,11 @@ from pyfr.backends.base import Backend
 from pyfr.backends import blockmats
 
 
-class CudaBackend(Backend):
+class CUDABackend(Backend):
     name = 'cuda'
 
     def __init__(self, cfg):
-        super(CudaBackend, self).__init__(cfg)
+        super(CUDABackend, self).__init__(cfg)
 
         # Create a CUDA context
         from pycuda.autoinit import context as cuda_ctx
@@ -25,7 +25,7 @@ class CudaBackend(Backend):
         cuda_ctx.set_cache_config(func_cache.PREFER_SHARED)
 
         # For introspection to work it must always be possible to
-        # import the CudaBackend (even if CUDA is unavailable on the
+        # import the CUDABackend (even if CUDA is unavailable on the
         # system).  As many of our types/providers depend on the CUDA
         # runtime we import these here, locally, at the time of
         # instantiation.
@@ -33,21 +33,21 @@ class CudaBackend(Backend):
                                         types)
 
         # Register our data types
-        self.const_matrix_cls = types.CudaConstMatrix
-        self.matrix_cls = types.CudaMatrix
-        self.matrix_bank_cls = types.CudaMatrixBank
-        self.matrix_rslice_cls = types.CudaMatrixRSlice
-        self.mpi_matrix_cls = types.CudaMPIMatrix
-        self.mpi_view_cls = types.CudaMPIView
-        self.queue_cls = types.CudaQueue
-        self.view_cls = types.CudaView
+        self.const_matrix_cls = types.CUDAConstMatrix
+        self.matrix_cls = types.CUDAMatrix
+        self.matrix_bank_cls = types.CUDAMatrixBank
+        self.matrix_rslice_cls = types.CUDAMatrixRSlice
+        self.mpi_matrix_cls = types.CUDAMPIMatrix
+        self.mpi_view_cls = types.CUDAMPIView
+        self.queue_cls = types.CUDAQueue
+        self.view_cls = types.CUDAView
 
         # Instantiate the kernel providers
         kprovs = [blockmats.BlockDiagMatrixKernels,
-                  pointwise.CudaPointwiseKernels,
-                  blasext.CudaBlasExtKernels,
-                  packing.CudaPackingKernels,
-                  cublas.CudaCublasKernels]
+                  pointwise.CUDAPointwiseKernels,
+                  blasext.CUDABlasExtKernels,
+                  packing.CUDAPackingKernels,
+                  cublas.CUDACublasKernels]
         self._providers = [k(self, cfg) for k in kprovs]
 
         # Numeric data type

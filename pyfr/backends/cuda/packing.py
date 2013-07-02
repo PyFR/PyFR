@@ -5,13 +5,13 @@ from mpi4py import MPI
 import pycuda.driver as cuda
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
-from pyfr.backends.cuda.provider import CudaKernelProvider
-from pyfr.backends.cuda.types import CudaMPIMatrix, CudaMPIView
+from pyfr.backends.cuda.provider import CUDAKernelProvider
+from pyfr.backends.cuda.types import CUDAMPIMatrix, CUDAMPIView
 
 from pyfr.nputil import npdtype_to_ctype
 
 
-class CudaPackingKernels(CudaKernelProvider):
+class CUDAPackingKernels(CUDAKernelProvider):
     def _packmodopts(self, mpiview):
         return dict(dtype=npdtype_to_ctype(mpiview.mpimat.dtype),
                     vlen=mpiview.view.vlen)
@@ -64,16 +64,16 @@ class CudaPackingKernels(CudaKernelProvider):
         return ViewPackUnpackKernel()
 
     def _packunpack(self, op, mv):
-        if isinstance(mv, CudaMPIMatrix):
+        if isinstance(mv, CUDAMPIMatrix):
             return self._packunpack_mpimat(op, mv)
-        elif isinstance(mv, CudaMPIView):
+        elif isinstance(mv, CUDAMPIView):
             return self._packunpack_mpiview(op, mv)
         else:
             raise TypeError('Can only pack MPI views and MPI matrices')
 
     def _sendrecv(self, mv, mpipreqfn, pid, tag):
         # If we are an MPI view then extract the MPI matrix
-        mpimat = mv.mpimat if isinstance(mv, CudaMPIView) else mv
+        mpimat = mv.mpimat if isinstance(mv, CUDAMPIView) else mv
 
         # Create a persistent MPI request to send/recv the pack
         preq = mpipreqfn(mpimat.hdata, pid, tag)

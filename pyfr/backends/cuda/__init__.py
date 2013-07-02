@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.cuda.base import CudaBackend
+from pyfr.backends.cuda.base import CUDABackend
