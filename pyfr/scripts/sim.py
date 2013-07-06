@@ -39,7 +39,7 @@ def process_restart(args):
     if args.cfg:
         cfg = Inifile.load(args.cfg)
     else:
-        cfg = Inifile(soln['config'].item())
+        cfg = Inifile(soln['config'])
 
     return mesh, soln, cfg
 
