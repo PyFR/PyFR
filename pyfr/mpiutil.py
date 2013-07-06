@@ -4,7 +4,7 @@ import os
 
 from mpi4py import MPI
 
-from excepthook import excepthook
+from pyfr.excepthook import excepthook
 
 
 def init():
