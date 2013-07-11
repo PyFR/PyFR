@@ -54,7 +54,7 @@ class SourceModule(object):
 class GccSourceModule(SourceModule):
     def __init__(self, src, cfg):
         # Find GCC (or a compatible alternative)
-        self._cc = cfg.getpath('backend-c', 'cc', 'cc', abs=False)
+        self._cc = cfg.getpath('backend-openmp', 'cc', 'cc', abs=False)
 
         # Delegate
         super(GccSourceModule, self).__init__(src, cfg)
