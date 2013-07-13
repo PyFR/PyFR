@@ -147,18 +147,6 @@ class CUDAView(base.View):
         super(CUDAView, self).__init__(backend, matmap, rcmap, stridemap,
                                        vlen, tags)
 
-        # Extract the data type and item size from the first matrix
-        self.refdtype = self._mats[0].dtype
-        self.refitemsize = self._mats[0].itemsize
-
-        # Validate the matrices
-        for m in self._mats:
-            if not isinstance(m, (CUDAMatrix, CUDAConstMatrix)):
-                raise TypeError('Incompatible matrix type for view')
-
-            if m.dtype != self.refdtype:
-                raise TypeError('Mixed view matrix types are not supported')
-
         # Row/column indcies of each view element
         r, c = rcmap[...,0], rcmap[...,1]
 

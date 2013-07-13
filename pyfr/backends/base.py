@@ -465,10 +465,17 @@ class View(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def __init__(self, backends, matmap, rcmap, stridemap, vlen, tags):
+    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
         self.nrow = nrow = matmap.shape[0]
         self.ncol = ncol = matmap.shape[1]
         self.vlen = vlen
+
+        # Get the different matrices which we map onto
+        self._mats = list(np.unique(matmap))
+
+        # Extract the data type and item size from the first matrix
+        self.refdtype = self._mats[0].dtype
+        self.refitemsize = self._mats[0].itemsize
 
         # For vector views a stridemap is required
         if vlen != 1 and np.any(stridemap == 0):
@@ -479,8 +486,16 @@ class View(object):
            matmap.shape != stridemap.shape:
             raise TypeError('Invalid matrix shapes')
 
-        # Get the different matrices which we map onto
-        self._mats = list(np.unique(matmap))
+        # Matrix classes that can be 'viewed' upon
+        mat_classes = (backend.const_matrix_cls, backend.matrix_cls)
+
+        # Validate the matrices
+        for m in self._mats:
+            if not isinstance(m, mat_classes):
+                raise TypeError('Incompatible matrix type for view')
+
+            if m.dtype != self.refdtype:
+                raise TypeError('Mixed data types are not supported')
 
     @abstractproperty
     def nbytes(self):
