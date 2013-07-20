@@ -8,7 +8,7 @@ import numpy as np
 from pyfr.nputil import npeval
 
 
-def get_view_mats(interside, mat, elemap):
+def get_view_mats(interside, mat, elemap, perm=Ellipsis):
     # Map from element type to view mat getter
     viewmatmap = {type: getattr(ele, mat) for type, ele in elemap.items()}
 
@@ -21,16 +21,34 @@ def get_view_mats(interside, mat, elemap):
     # required in order to define a view
     scal_v = [np.hstack(scal[i::3]) for i in xrange(3)]
 
+    # Permute
+    scal_v = [sv[:,perm] for sv in scal_v]
+
     return scal_v
 
 
-def get_mat(interside, mat, elemap):
+def get_mat(interside, mat, elemap, perm=Ellipsis):
     # Map from element type to view mat getter
     emap = {type: getattr(ele, mat) for type, ele in elemap.items()}
 
-    # Form the matrix
+    # Form the matrix and permute
     m = [emap[type](eidx, fidx, rtag) for type, eidx, fidx, rtag in interside]
-    return np.concatenate(m)[None,...]
+    m = np.concatenate(m)[None,...]
+    m = m[:,perm,...]
+
+    return m
+
+
+def get_opt_view_perm(interside, mat, elemap):
+    matmap, rcmap, stridemap = get_view_mats(interside, mat, elemap)
+
+    # Since np.lexsort can not currently handle np.object arrays we
+    # work around this by using np.unique to build an array in which
+    # each distinct matrix object is represented by an integer
+    u, uix = np.unique(matmap, return_inverse=True)
+
+    # Sort
+    return np.lexsort((uix, rcmap[0,:,1], rcmap[0,:,0]))
 
 
 class BaseInters(object):
@@ -45,12 +63,15 @@ class BaseInters(object):
         self.ndims = next(iter(elemap.viewvalues())).ndims
         self.nvars = next(iter(elemap.viewvalues())).nvars
 
+        # By default do not permute any of the interface arrays
+        self._perm = Ellipsis
+
     def _const_mat(self, inter, meth):
-        m = get_mat(inter, meth, self._elemap)
+        m = get_mat(inter, meth, self._elemap, self._perm)
         return self._be.const_matrix(m)
 
-    def _view_onto(self, inter, meth):
-        vm = get_view_mats(inter, meth, self._elemap)
+    def _view_onto(self, inter, meth, perm=Ellipsis):
+        vm = get_view_mats(inter, meth, self._elemap, self._perm)
         return self._be.view(*vm, vlen=self.nvars)
 
     def _mpi_view_onto(self, inter, meth):
@@ -71,6 +92,9 @@ class BaseAdvectionIntInters(BaseInters):
 
         view_onto, const_mat = self._view_onto, self._const_mat
 
+        # Compute the `optimal' permutation for our interface
+        self._gen_perm(lhs, rhs)
+
         # Generate the left and right hand side view matrices
         self._scal0_lhs = view_onto(lhs, 'get_scal_fpts0_for_inter')
         self._scal0_rhs = view_onto(rhs, 'get_scal_fpts0_for_inter')
@@ -79,6 +103,12 @@ class BaseAdvectionIntInters(BaseInters):
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._mag_pnorm_rhs = const_mat(rhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
+
+    def _gen_perm(self, lhs, rhs):
+        # Arbitrarily, take the permutation which results it an optimal
+        # memory access pattern for the LHS of the interface
+        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts0_for_inter',
+                                       self._elemap)
 
 
 class BaseAdvectionMPIInters(BaseInters):
@@ -138,6 +168,16 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         return self._be.kernel('conu_int', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
                                self._scal1_lhs, self._scal1_rhs, kc)
+
+    def _gen_perm(self, lhs, rhs):
+        # In the special case of β = -0.5 it is better to sort by the
+        # RHS interface; otherwise we simply opt for the LHS
+        beta = self._cfg.getfloat('solver-interfaces', 'ldg-beta')
+        side = lhs if beta != -0.5 else rhs
+
+        # Compute the relevant permutation
+        self._perm = get_opt_view_perm(side, 'get_scal_fpts0_for_inter',
+                                       self._elemap)
 
 
 class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
