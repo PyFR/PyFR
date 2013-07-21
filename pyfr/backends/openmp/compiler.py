@@ -1,19 +1,15 @@
 # -*- coding: utf-8 -*-
 
-import os
-import shutil
-import subprocess
-import tempfile
-import itertools as it
-
 from abc import ABCMeta, abstractmethod
 from ctypes import CDLL
-
-import numpy as np
+import itertools as it
+import os
+import subprocess
+import tempfile
 
 from pyfr.ctypesutil import platform_libname
 from pyfr.nputil import npdtype_to_ctypestype
-from pyfr.util import memoize, chdir
+from pyfr.util import chdir, memoize, rm
 
 
 class SourceModule(object):
@@ -36,7 +32,9 @@ class SourceModule(object):
                 # Load
                 self._mod = CDLL(os.path.abspath(lname))
         finally:
-            shutil.rmtree(tmpdir)
+            # Unless we're debugging delete the scratch directory
+            if 'PYFR_DEBUG_OMP_KEEP_LIBS' not in os.environ:
+                rm(tmpdir)
 
     def function(self, name, restype, argtypes):
         # Get the function
