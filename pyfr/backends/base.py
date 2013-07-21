@@ -486,12 +486,9 @@ class View(object):
            matmap.shape != stridemap.shape:
             raise TypeError('Invalid matrix shapes')
 
-        # Matrix classes that can be 'viewed' upon
-        mat_classes = (backend.const_matrix_cls, backend.matrix_cls)
-
         # Validate the matrices
         for m in self._mats:
-            if not isinstance(m, mat_classes):
+            if not isinstance(m, backend.matrix_cls):
                 raise TypeError('Incompatible matrix type for view')
 
             if m.dtype != self.refdtype:
