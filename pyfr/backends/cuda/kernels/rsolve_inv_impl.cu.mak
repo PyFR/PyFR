@@ -54,15 +54,14 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
     ${dtype} nvl = ${util.dot('pnorm[{0}]', 'vl[{0}]')};
     ${dtype} nvr = ${util.dot('pnorm[{0}]', 'vr[{0}]')};
 
-    // Compute the enthalpies
-    ${dtype} Hl = (ul[${nvars - 1}] + pl)/ul[0];
-    ${dtype} Hr = (ur[${nvars - 1}] + pr)/ur[0];
-
     // Compute the Roe-averaged enthalpy
-    ${dtype} H = (sqrt(ul[0])*Hl + sqrt(ur[0])*Hr)/(sqrt(ul[0]) + sqrt(ur[0]));
+    ${dtype} H = (sqrt(ul[0])*(pr + ur[${nvars - 1}])
+                + sqrt(ur[0])*(pl + ul[${nvars - 1}]))
+               / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
 
     // Compute the Roe-averaged velocity
-    ${dtype} v = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)/(sqrt(ul[0]) + sqrt(ur[0]));
+    ${dtype} v = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)
+               / (sqrt(ul[0]) + sqrt(ur[0]));
 
     // Use these to compute the Roe-averaged sound speed
     ${dtype} a = sqrt(${c['gamma'] - 1.0|f}*(H - ${0.5|f}*v*v));
