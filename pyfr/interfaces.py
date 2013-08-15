@@ -325,8 +325,8 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
 
 
 class EulerSupInflowBCInters(EulerBaseBCInters):
-    type = 'sup-inflow'
-    args = ['fs-rho', 'fs-p', 'fs-u', 'fs-v', 'fs-w']
+    type = 'sup-in-fa'
+    args = ['rho', 'p', 'u', 'v', 'w']
 
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
@@ -364,24 +364,24 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
 
 
 class NavierStokesIsoThermNoslipBCInters(NavierStokesBaseBCInters):
-    type = 'isotherm-noslip'
+    type = 'no-slp-iso-wall'
     args = ['cpTw']
 
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
-    type = 'sup-inflow'
-    args = ['fs-rho', 'fs-p', 'fs-u', 'fs-v', 'fs-w']
+    type = 'sup-in-fa'
+    args = ['rho', 'p', 'u', 'v', 'w']
 
 
 class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
-    type = 'sup-outflow'
+    type = 'sup-out-fn'
 
 
 class NavierStokesSubInflowBCInters(NavierStokesBaseBCInters):
-    type = 'sub-inflow'
-    args = ['fs-rho', 'fs-p', 'fs-u', 'fs-v', 'fs-w']
+    type = 'sub-in-frv'
+    args = ['rho', 'u', 'v', 'w']
 
 
 class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
-    type = 'sub-outflow'
-    args = ['fs-p']
+    type = 'sub-out-fp'
+    args = ['p']

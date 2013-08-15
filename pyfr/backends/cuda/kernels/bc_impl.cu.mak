@@ -20,7 +20,7 @@ _bc_grad_u_copy(const ${dtype} ul[${ndims}],
             grad_ur[i][j] = grad_ul[i][j];
 }
 
-% if bctype == 'isotherm-noslip':
+% if bctype == 'no-slp-iso-wall':
 inline __device__ void
 bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 {
@@ -33,10 +33,10 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_copy
-% elif bctype == 'sup-inflow':
+% elif bctype == 'sup-in-fa':
 <%
-  rho, p = c['fs-rho'], c['fs-p']
-  vv = [c['fs-%c' % v] for v in 'uvw'[:ndims]]
+  rho, p = c['rho'], c['p']
+  vv = [c['%c' % v] for v in 'uvw'[:ndims]]
 %>
 
 inline __device__ void
@@ -50,7 +50,7 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_zero
-% elif bctype == 'sup-outflow':
+% elif bctype == 'sup-out-fn':
 inline __device__ void
 bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 {
@@ -60,10 +60,10 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_copy
-% elif bctype == 'sub-inflow':
+% elif bctype == 'sub-in-frv':
 <%
-  rho, p = c['fs-rho'], c['fs-p']
-  vv = [c['fs-%c' % v] for v in 'uvw'[:ndims]]
+  rho = c['rho']
+  vv = [c['%c' % v] for v in 'uvw'[:ndims]]
 %>
 
 inline __device__ void
@@ -79,14 +79,14 @@ bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 }
 
 #define bc_grad_u_impl _bc_grad_u_zero
-% elif bctype == 'sub-outflow':
+% elif bctype == 'sub-out-fp':
 inline __device__ void
 bc_u_impl(const ${dtype} ul[${nvars}], ${dtype} ur[${nvars}])
 {
 % for i in range(ndims + 1):
     ur[${i}] = ul[${i}];
 % endfor
-    ur[${nvars - 1}] = ${c['fs-p']/(c['gamma'] - 1)|f}
+    ur[${nvars - 1}] = ${c['p']/(c['gamma'] - 1)|f}
                      + ${0.5|f}/ul[0]*${util.vlen('ul[{0}+1]')};
 }
 
