@@ -270,9 +270,9 @@ class BaseAdvectionBCInters(BaseInters):
 
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
-    def __init__(self, be, lhs, elemap, cfg):
-        super(BaseAdvectionDiffusionBCInters, self).__init__(be, lhs,
-                                                             elemap, cfg)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super(BaseAdvectionDiffusionBCInters, self).__init__(be, lhs, elemap,
+                                                             cfgsect, cfg)
 
         # Additional view matrices
         self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
