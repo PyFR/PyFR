@@ -12,6 +12,10 @@ def dot(context, l, r, len='ndims'):
     return '(' + ' + '.join(lr.format(k) for k in range(nd)) + ')'
 
 
+def vlen(context, v, len='ndims'):
+    return dot(context, v, v, len)
+
+
 def arr_args(context, name, shape, dtype='dtype', const=False):
     if any(s > 10 for s in shape):
         raise ValueError('Unsupported dimensions')

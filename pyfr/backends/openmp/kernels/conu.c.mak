@@ -49,3 +49,32 @@ conu_mpi(size_t ninters,
         }
     }
 }
+
+% if bctype:
+<%include file='views.h.mak' />
+<%include file='bc_impl.h.mak' />
+
+void
+conu_bc(size_t ninters,
+        ${dtype} **restrict ul_vin,
+        const int *restrict ul_vstri,
+        ${dtype} **restrict ul_vout)
+{
+    #pragma omp parallel for
+    for (size_t iidx = 0; iidx < ninters; iidx++)
+    {
+        int lstri = ul_vstri[iidx];
+        ${dtype} ul[${nvars}], ur[${nvars}];
+
+        // Load in the LHS soln from the view
+        READ_VIEW(ul, ul_vin, ul_vstri, iidx, ${nvars});
+
+        // Compute the RHS (boundary) soln from the LHS
+        bc_u_impl(ul, ur);
+
+        for (int i = 0; i < ${nvars}; ++i)
+            ul_vout[iidx][lstri*i] = ur[i]*(${0.5 + c['ldg-beta']|f})
+                                   + ul[i]*(${0.5 - c['ldg-beta']|f});
+    }
+}
+% endif
