@@ -2,7 +2,7 @@
 
 static inline void
 _bc_grad_u_zero(const ${dtype} ul[${ndims}],
-                const ${dtype} grad_ul[${ndims}][${nvars}],
+                ${dtype} grad_ul[${ndims}][${nvars}],
                 ${dtype} grad_ur[${ndims}][${nvars}])
 {
     for (int i = 0; i < ${ndims}; i++)
@@ -12,7 +12,7 @@ _bc_grad_u_zero(const ${dtype} ul[${ndims}],
 
 static inline void
 _bc_grad_u_copy(const ${dtype} ul[${ndims}],
-                const ${dtype} grad_ul[${ndims}][${nvars}],
+                ${dtype} grad_ul[${ndims}][${nvars}],
                 ${dtype} grad_ur[${ndims}][${nvars}])
 {
     for (int i = 0; i < ${ndims}; i++)
