@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import re
-
 from collections import defaultdict, Counter
 from itertools import chain, ifilter, izip
+import re
 
 import numpy as np
 
@@ -156,7 +155,7 @@ class GmshReader(BaseReader):
     def _read_nodes(self, msh):
         self._nodepts = nodepts = {}
 
-        for i, l in enumerate(msh_section(msh, 'Nodes')):
+        for l in msh_section(msh, 'Nodes'):
             nv = l.split()
             nodepts[int(nv[0])] = [float(x) for x in nv[1:]]
 
@@ -166,7 +165,7 @@ class GmshReader(BaseReader):
 
         for l in msh_section(msh, 'Elements'):
             # Extract the raw element data
-            elei = map(int, l.split())
+            elei = [int(i) for i in l.split()]
             enum, etype, entags = elei[:3]
             etags, enodes = elei[3:3 + entags], elei[3 + entags:]
 
@@ -399,7 +398,7 @@ class GmshReader(BaseReader):
 
         return con_px, con_pxpy, bcon_px
 
-    def _gen_connectivity(self):
+    def _get_connectivity(self):
         # For connectivity a first-order representation is sufficient
         eles = self._to_first_order(self._elenodes)
 
@@ -446,7 +445,7 @@ class GmshReader(BaseReader):
 
         return retcon
 
-    def _gen_shape_points(self):
+    def _get_shape_points(self):
         spts = defaultdict(list)
 
         # Global node map (node index to coords)
@@ -476,6 +475,6 @@ class GmshReader(BaseReader):
 
     def _to_raw_pyfrm(self):
         rawm = {}
-        rawm.update(self._gen_connectivity())
-        rawm.update(self._gen_shape_points())
+        rawm.update(self._get_connectivity())
+        rawm.update(self._get_shape_points())
         return rawm
