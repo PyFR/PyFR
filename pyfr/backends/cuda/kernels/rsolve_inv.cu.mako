@@ -83,7 +83,7 @@ rsolve_inv_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='bc_impl.cu.mak' />
+<%include file='bc_impl.cu.mako' />
 
 __global__ void
 rsolve_inv_bc(int ninters,

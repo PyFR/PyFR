@@ -134,7 +134,7 @@ rsolve_ldg_vis_mpi(size_t ninters,
 }
 
 % if bctype:
-<%include file='bc_impl.h.mak' />
+<%include file='bc_impl.h.mako' />
 
 void
 rsolve_ldg_vis_bc(size_t ninters,

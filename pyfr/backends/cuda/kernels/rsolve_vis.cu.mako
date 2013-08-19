@@ -155,7 +155,7 @@ rsolve_ldg_vis_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='bc_impl.cu.mak' />
+<%include file='bc_impl.cu.mako' />
 
 __global__ void
 rsolve_ldg_vis_bc(int ninters,

@@ -51,8 +51,8 @@ conu_mpi(size_t ninters,
 }
 
 % if bctype:
-<%include file='views.h.mak' />
-<%include file='bc_impl.h.mak' />
+<%include file='views.h.mako' />
+<%include file='bc_impl.h.mako' />
 
 void
 conu_bc(size_t ninters,
