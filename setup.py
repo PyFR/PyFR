@@ -41,6 +41,7 @@ tests = [
 package_data = {
     'pyfr.backends.cuda': ['kernels/*'],
     'pyfr.backends.openmp': ['kernels/*'],
+    'pyfr.quadrules': ['tri/*'],
     'pyfr.tests': ['*.npz']}
 
 # Hard dependencies
