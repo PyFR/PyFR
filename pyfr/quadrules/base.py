@@ -43,7 +43,7 @@ class BaseTabulatedQuadRule(BaseQuadRule):
                 raise ValueError('Invalid quadrature rule syntax')
 
             # Convert the arguments to mp.mpf types
-            args = map(mp.mpf, args.split(','))
+            args = [mp.mpf(arg) for arg in args.split(',')]
 
             if typ == 'PTS':
                 pts.append(self.orbits[orb](*args))
@@ -65,4 +65,3 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
         
         rule = pkgutil.get_data(__name__, ptspath)
         super(BaseStoredQuadRule, self).__init__(rule)
-        
