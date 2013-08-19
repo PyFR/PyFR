@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 <%namespace name='util' module='pyfr.backends.cuda.makoutil' />
-<%include file='idx_of.cu.mak' />
-<%include file='flux_inv_impl.cu.mak' />
+<%include file='idx_of.cu.mako' />
+<%include file='flux_inv_impl.cu.mako' />
 
 /**
  * Computes the transformed inviscid flux.

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%include file='idx_of.cu.mak' />
+<%include file='idx_of.cu.mako' />
 
 __global__ void
 pack_view(int nrow, int ncol, ${dtype}** vptr, int* vstri, ${dtype}* pmat,

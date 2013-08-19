@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-<%include file='views.cu.mak' />
-<%include file='rsolve_inv_impl.cu.mak' />
-<%include file='flux_vis_impl.cu.mak' />
+<%include file='views.cu.mako' />
+<%include file='rsolve_inv_impl.cu.mako' />
+<%include file='flux_vis_impl.cu.mako' />
 
 <%
 beta, tau = c['ldg-beta'], c['ldg-tau']

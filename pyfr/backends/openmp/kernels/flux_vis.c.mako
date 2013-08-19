@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 <%namespace name='util' module='pyfr.backends.openmp.makoutil' />
-<%include file='common.h.mak' />
-<%include file='flux_inv_impl.h.mak' />
-<%include file='flux_vis_impl.h.mak' />
+<%include file='common.h.mako' />
+<%include file='flux_inv_impl.h.mako' />
+<%include file='flux_vis_impl.h.mako' />
 
 static NOINLINE void
 tdisf_vis_aux(size_t neles,

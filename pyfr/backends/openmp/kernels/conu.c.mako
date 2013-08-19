@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%include file='common.h.mak' />
+<%include file='common.h.mako' />
 
 void
 conu_int(size_t ninters,

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%include file='idx_of.cu.mak' />
+<%include file='idx_of.cu.mako' />
 
 /**
  * Compute the inviscid flux.

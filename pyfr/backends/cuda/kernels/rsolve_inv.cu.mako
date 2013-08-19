@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-<%include file='rsolve_inv_impl.cu.mak' />
-<%include file='views.cu.mak' />
+<%include file='rsolve_inv_impl.cu.mako' />
+<%include file='views.cu.mako' />
 
 __global__ void
 rsolve_inv_int(int ninters,

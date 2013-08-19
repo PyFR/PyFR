@@ -8,7 +8,7 @@ from pyfr.util import memoize
 
 
 class CUDAKernelProvider(object):
-    KERNEL_EXT = '.cu.mak'
+    KERNEL_EXT = '.cu.mako'
 
     lookup = PkgTemplateLookup(__name__, 'kernels')
 

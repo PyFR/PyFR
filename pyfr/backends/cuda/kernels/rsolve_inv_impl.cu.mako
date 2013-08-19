@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 
-<%namespace name='util' module='pyfr.backends.openmp.makoutil' />
-<%include file='flux_inv_impl.h.mak' />
+<%namespace name='util' module='pyfr.backends.cuda.makoutil' />
+<%include file='flux_inv_impl.cu.mako' />
 
 % if rsinv == 'rusanov':
 /**
  * Rusanov Riemann solver from Z. J. Wang et al.
  */
-static inline void
+inline __device__ void
 rsolve_inv_impl(const ${dtype} ul[${nvars}],
                 const ${dtype} ur[${nvars}],
                 const ${dtype} pnorm[${ndims}],
@@ -27,7 +27,7 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
 
 
     // Output
-    for (int i = 0; i < ${nvars}; i++)
+    for (int i = 0; i < ${nvars}; ++i)
         fcomm[i] = ${0.5|f}*${util.dot('pnorm[{0}]', 'fl[{0}][i] + fr[{0}][i]')}
                  + a*(ul[i] - ur[i]);
 
@@ -36,7 +36,7 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
 /**
  * HLL Riemann solver from Toro.
  */
-static inline void
+inline __device__ void
 rsolve_inv_impl(const ${dtype} ul[${nvars}],
                 const ${dtype} ur[${nvars}],
                 const ${dtype} pnorm[${ndims}],
@@ -70,7 +70,7 @@ rsolve_inv_impl(const ${dtype} ul[${nvars}],
     ${dtype} Sl = v - a;
     ${dtype} Sr = v + a;
 
-    for (int i = 0; i < ${nvars}; i++)
+    for (int i = 0; i < ${nvars}; ++i)
     {
         if (Sl > 0.0)
             fcomm[i] = ${util.dot('pnorm[{0}]', 'fl[{0}][i]')};

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-<%include file='common.h.mak' />
-<%include file='rsolve_inv_impl.h.mak' />
-<%include file='flux_vis_impl.h.mak' />
-<%include file='views.h.mak' />
+<%include file='common.h.mako' />
+<%include file='rsolve_inv_impl.h.mako' />
+<%include file='flux_vis_impl.h.mako' />
+<%include file='views.h.mako' />
 
 <%
 beta, tau = c['ldg-beta'], c['ldg-tau']
