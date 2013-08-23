@@ -30,16 +30,17 @@ gradcoru_aux(size_t neles,
 void
 gradcoru(size_t nfpts, size_t neles,
          const ${dtype} *jmats, ${dtype} *tgrad_u,
-         size_t ldj, size_t ldg, size_t lsdj, size_t lsdg)
+         size_t lsdj, size_t lsdg)
 {
     #pragma omp parallel for
     for (size_t fidx = 0; fidx < nfpts; fidx++)
     {
         gradcoru_aux(neles,
-                     ${', '.join('jmats + fidx*ldj + {}*lsdj'.format(i)
+                     ${', '.join('jmats + (fidx*{} + {})*lsdj'
+                                 .format(ndims**2, i)
                                  for i in range(ndims**2))},
-                     ${', '.join('tgrad_u + ({}*nfpts + fidx)*ldg + {}*lsdg'
-                                 .format(i, j)
+                     ${', '.join('tgrad_u + (({}*nfpts + fidx)*{} + {})*lsdg'
+                                 .format(i, nvars, j)
                                  for i, j in util.ndrange(ndims, nvars))});
     }
 }

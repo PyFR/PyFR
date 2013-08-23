@@ -49,20 +49,20 @@ void
 tdisf_vis(size_t nupts, size_t neles,
           const ${dtype} *u, const ${dtype} *smats,
           const ${dtype} *rcpdjac, ${dtype} *tgrad_u,
-          size_t ldu, size_t lds, size_t ldr, size_t ldg,
-          size_t lsdu, size_t lsds, size_t lsdg)
+          size_t ldr, size_t lsdu, size_t lsds, size_t lsdg)
 {
     #pragma omp parallel for
     for (size_t uidx = 0; uidx < nupts; uidx++)
     {
         tdisf_vis_aux(neles,
-                      ${', '.join('u + uidx*ldu + {}*lsdu'.format(i)
+                      ${', '.join('u + (uidx*{} + {})*lsdu'.format(nvars, i)
                                   for i in range(nvars))},
-                      ${', '.join('smats + uidx*lds + {}*lsds'.format(i)
+                      ${', '.join('smats + (uidx*{} + {})*lsds'
+                                  .format(ndims**2, i)
                                   for i in range(ndims**2))},
                       rcpdjac + uidx*ldr,
-                      ${', '.join('tgrad_u + ({}*nupts + uidx)*ldg + {}*lsdg'
-                                  .format(i, j)
+                      ${', '.join('tgrad_u + (({}*nupts + uidx)*{} + {})*lsdg'
+                                  .format(i, nvars, j)
                                   for i, j in util.ndrange(ndims, nvars))});
     }
 }

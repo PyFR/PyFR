@@ -35,19 +35,19 @@ tdisf_inv_aux(size_t neles,
 void
 tdisf_inv(size_t nupts, size_t neles,
           const ${dtype} *u, const ${dtype} *smats, ${dtype} *f,
-          size_t ldu, size_t lds, size_t ldf,
           size_t lsdu, size_t lsds, size_t lsdf)
 {
     #pragma omp parallel for
     for (size_t uidx = 0; uidx < nupts; uidx++)
     {
         tdisf_inv_aux(neles,
-                      ${', '.join('u + uidx*ldu + {}*lsdu'.format(i)
+                      ${', '.join('u + (uidx*{} + {})*lsdu'.format(nvars, i)
                                   for i in range(nvars))},
-                      ${', '.join('smats + uidx*lds + {}*lsds'.format(i)
+                      ${', '.join('smats + (uidx*{} + {})*lsds'
+                                  .format(ndims**2, i)
                                   for i in range(ndims**2))},
-                      ${', '.join('f + ({}*nupts + uidx)*ldf + {}*lsdf'
-                                  .format(i, j)
+                      ${', '.join('f + (({}*nupts + uidx)*{} + {})*lsdf'
+                                  .format(i, nvars, j)
                                   for i, j in util.ndrange(ndims, nvars))});
     }
 }

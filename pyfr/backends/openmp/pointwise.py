@@ -20,11 +20,10 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         nupts, neles = u.nrow, u.soa_shape[2]
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, c=c)
 
-        fn = self._get_function('flux_inv', 'tdisf_inv', None, 'NNPPPNNNNNN',
+        fn = self._get_function('flux_inv', 'tdisf_inv', None, 'NNPPPNNN',
                                 opts)
 
         return self._basic_kernel(fn, nupts, neles, u, smats, f,
-                                  u.leaddim, smats.leaddim, f.leaddim,
                                   u.leadsubdim, smats.leadsubdim, f.leadsubdim)
 
     @traits(u={'align'}, smats={'align'}, rcpdjac={'align'}, tgradu={'align'})
@@ -33,11 +32,10 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, c=c)
 
         fn = self._get_function('flux_vis', 'tdisf_vis', None,
-                                'NNPPPPNNNNNNN', opts)
+                                'NNPPPPNNNN', opts)
 
         return self._basic_kernel(fn, nupts, neles, u, smats, rcpdjac, tgradu,
-                                  u.leaddim, smats.leaddim, rcpdjac.leaddim,
-                                  tgradu.leaddim, u.leadsubdim,
+                                  rcpdjac.leaddim, u.leadsubdim,
                                   smats.leadsubdim, tgradu.leadsubdim)
 
     def conu_int(self, nvars, ul_vin, ur_vin, ul_vout, ur_vout, c):
@@ -79,10 +77,9 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         nfpts, neles = jmats.nrow, gradu.ncol / nvars
         opts = dict(dtype=gradu.dtype, ndims=ndims, nvars=nvars)
 
-        fn = self._get_function('gradcoru', 'gradcoru', None, 'NNPPNNNN', opts)
+        fn = self._get_function('gradcoru', 'gradcoru', None, 'NNPPNN', opts)
 
         return self._basic_kernel(fn, nfpts, neles, jmats, gradu,
-                                  jmats.leaddim, gradu.leaddim,
                                   jmats.leadsubdim, gradu.leadsubdim)
 
     def rsolve_inv_int(self, ndims, nvars, rsinv, ul_v, ur_v, magl, magr,
@@ -176,9 +173,9 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         nupts, neles = dv.nrow, dv.soa_shape[2]
         opts = dict(dtype=dv.dtype, nvars=nvars)
 
-        fn = self._get_function('negdivconf', 'negdivconf', None, 'NNPPNNN',
+        fn = self._get_function('negdivconf', 'negdivconf', None, 'NNPPNN',
                                 opts)
 
 
         return self._basic_kernel(fn, nupts, neles, dv, rcpdjac,
-                                  dv.leaddim, rcpdjac.leaddim, dv.leadsubdim)
+                                  rcpdjac.leaddim, dv.leadsubdim)
