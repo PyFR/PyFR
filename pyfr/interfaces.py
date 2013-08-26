@@ -70,7 +70,7 @@ class BaseInters(object):
         m = get_mat(inter, meth, self._elemap, self._perm)
         return self._be.const_matrix(m)
 
-    def _view_onto(self, inter, meth, perm=Ellipsis):
+    def _view_onto(self, inter, meth):
         vm = get_view_mats(inter, meth, self._elemap, self._perm)
         return self._be.view(*vm, vlen=self.nvars)
 
