@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict, OrderedDict
+from collections import OrderedDict
 import re
 
 from mpi4py import MPI
