@@ -23,8 +23,8 @@ class CUDAKernelProvider(object):
         return grid, block
 
     def _get_grid_for_block(self, block, nrow, ncol=1):
-        return (nrow + (-nrow % block[0])) // block[0],\
-               (ncol + (-ncol % block[1])) // block[1]
+        return ((nrow + (-nrow % block[0])) // block[0],
+                (ncol + (-ncol % block[1])) // block[1])
 
     @memoize
     def _get_module(self, module, tplparams={}, nvccopts=None):
