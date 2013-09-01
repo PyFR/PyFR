@@ -78,7 +78,7 @@ class FileWriter(BaseWriter):
         comm, rank, root = get_comm_rank_root()
 
         # Get the type and shape of each element in the partition
-        types, shapes = self._meshp.ele_types, self._meshp.ele_shapes
+        types, shapes = self._system.ele_types, self._system.ele_shapes
 
         # Gather this information onto the root rank
         eleinfo = comm.gather(zip(types, shapes), root=root)

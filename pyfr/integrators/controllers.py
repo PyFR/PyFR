@@ -29,7 +29,7 @@ class BaseController(BaseIntegrator):
 
     @property
     def soln(self):
-        return self._meshp.ele_scal_upts(self._idxcurr)
+        return self._system.ele_scal_upts(self._idxcurr)
 
 
 class NoneController(BaseController):

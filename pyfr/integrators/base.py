@@ -5,7 +5,6 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from mpi4py import MPI
 
 from pyfr.inifile import Inifile
-from pyfr.mesh_partition import get_mesh_partition
 from pyfr.nputil import range_eval
 from pyfr.util import proxylist
 
@@ -13,7 +12,7 @@ from pyfr.util import proxylist
 class BaseIntegrator(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, backend, rallocs, mesh, initsoln, cfg):
+    def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         self._backend = backend
         self._rallocs = rallocs
         self._cfg = cfg
@@ -47,8 +46,7 @@ class BaseIntegrator(object):
         nreg = self._stepper_nregs
 
         # Construct the relevant mesh partition
-        self._meshp = get_mesh_partition(backend, rallocs, mesh, initsoln,
-                                         nreg, cfg)
+        self._system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
         self._mesh_uuid = mesh['mesh_uuid'].item()
@@ -57,7 +55,7 @@ class BaseIntegrator(object):
         self._queue = backend.queue()
 
         # Get the number of degrees of freedom in this partition
-        ndofs = sum(self._meshp.ele_ndofs)
+        ndofs = sum(self._system.ele_ndofs)
 
         # Sum to get the global number over all partitions
         self._gndofs = MPI.COMM_WORLD.allreduce(ndofs, op=MPI.SUM)
@@ -115,7 +113,7 @@ class BaseIntegrator(object):
             solns = self.advance_to(t)
 
             # Map solutions to elements types
-            solnmap = dict(zip(self._meshp.ele_types, solns))
+            solnmap = dict(zip(self._system.ele_types, solns))
 
             # Collect statistics
             stats = Inifile()

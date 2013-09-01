@@ -8,7 +8,7 @@ from pyfr.integrators.writers import BaseWriter
 from pyfr.util import subclass_map
 
 
-def get_integrator(backend, rallocs, mesh, initsoln, cfg):
+def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
     controller_map = subclass_map(BaseController, 'controller_name')
     stepper_map = subclass_map(BaseStepper, 'stepper_name')
     writer_map = subclass_map(BaseWriter, 'writer_name')
@@ -26,4 +26,4 @@ def get_integrator(backend, rallocs, mesh, initsoln, cfg):
     integrator = type(name, (c, s, w), dict(name=name))
 
     # Construct and return an instance of this new integrator class
-    return integrator(backend, rallocs, mesh, initsoln, cfg)
+    return integrator(backend, systemcls, rallocs, mesh, initsoln, cfg)

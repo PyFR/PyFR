@@ -18,9 +18,9 @@ atexit.register(mpiutil.atexit)
 from pyfr import __version__ as version
 from pyfr.backends import get_backend
 from pyfr.inifile import Inifile
-from pyfr.integrators import get_integrator
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.progress_bar import ProgressBar
+from pyfr.solvers import get_solver
 
 
 def process_run(args):
@@ -81,16 +81,16 @@ def main():
     # Get the mapping from physical ranks to MPI ranks
     rallocs = get_rank_allocation(mesh, cfg)
 
-    # Construct the time integrator
-    integrator = get_integrator(backend, rallocs, mesh, soln, cfg)
+    # Construct the solver
+    solver = get_solver(backend, rallocs, mesh, soln, cfg)
 
     # If we are running interactively then create a progress bar
     if args.progress and mpiutil.get_comm_rank_root()[1] == 0:
-        pb = ProgressBar(integrator.tstart, integrator.tcurr, integrator.tend)
+        pb = ProgressBar(solver.tstart, solver.tcurr, solver.tend)
 
         # Register a callback to update the bar after each step
         callb = lambda intg: pb.advance_to(intg.tcurr)
-        integrator.completed_step_handlers.append(callb)
+        solver.completed_step_handlers.append(callb)
 
     # NaN sweeping
     if args.nansweep:
@@ -99,10 +99,10 @@ def main():
                 if any(np.isnan(np.sum(s)) for s in intg.soln):
                     raise RuntimeError('NaNs detected at t = {}'
                                        .format(intg.tcurr))
-        integrator.completed_step_handlers.append(nansweep)
+        solver.completed_step_handlers.append(nansweep)
 
     # Execute!
-    integrator.run()
+    solver.run()
 
 
 if __name__ == '__main__':

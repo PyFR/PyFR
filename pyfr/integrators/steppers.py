@@ -11,7 +11,7 @@ class BaseStepper(BaseIntegrator):
         super(BaseStepper, self).__init__(*args, **kwargs)
 
         backend = self._backend
-        elemats = self._meshp.ele_banks
+        elemats = self._system.ele_banks
 
         # Create a proxylist of matrix-banks for each storage register
         self._regs = regs = []
@@ -71,7 +71,7 @@ class EulerStepper(BaseStepper):
         return 1
 
     def step(self, t, dt):
-        add, negdivf = self._add, self._meshp
+        add, negdivf = self._add, self._system
         ut, f = self._regidx
 
         negdivf(ut, f)
@@ -100,7 +100,7 @@ class RK4Stepper(BaseStepper):
         return 4
 
     def step(self, t, dt):
-        add, negdivf = self._add, self._meshp
+        add, negdivf = self._add, self._system
 
         # Get the bank indices for each register
         r0, r1, r2 = self._regidx
@@ -163,7 +163,7 @@ class DOPRI5Stepper(BaseStepper):
         return 5
 
     def step(self, t, dt):
-        add, negdivf = self._add, self._meshp
+        add, negdivf = self._add, self._system
 
         # Register bank indices (r0 = u(t); r1..6 = temp RK 'k' stages)
         r0, r1, r2, r3, r4, r5, r6 = self._regidx

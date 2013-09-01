@@ -9,7 +9,7 @@ from pyfr.nputil import npeval
 from pyfr.util import ndrange
 
 
-class BaseAdvectionElements(object):
+class BaseElements(object):
     __metaclass__ = ABCMeta
 
     # Map from dimension number to list of dynamical variables
@@ -59,8 +59,9 @@ class BaseAdvectionElements(object):
         # Physical locations of the solution points
         self._gen_ploc_upts(eles)
 
+    @abstractmethod
     def _process_ics(self, ics):
-        return ics
+        pass
 
     def set_ics_from_expr(self):
         nupts, neles, ndims = self._ploc_upts.shape
@@ -104,6 +105,7 @@ class BaseAdvectionElements(object):
         self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
         self._scal_upts = self._scal_upts.reshape(nupts, neles, nvars)
 
+    @abstractmethod
     def set_backend(self, be, nscal_upts):
         # Ensure a backend has not already been set
         assert self._be is None
@@ -141,50 +143,8 @@ class BaseAdvectionElements(object):
         self.scal_upts_inb = be.matrix_bank(self._scal_upts)
         self.scal_upts_outb = be.matrix_bank(self._scal_upts)
 
-        # Pre-compute some of the matrices required for constructing views
-        # onto scal_fpts and pnorm_fpts
-        self._gen_inter_view_mats(be, neles, nvars, ndims)
-
-    def _gen_inter_view_mats(self, be, neles, nvars, ndims):
-        # Get the number of flux points for each face of the element
-        self._nfacefpts = nfacefpts = self._basis.nfacefpts
-
-        # Get the relevant strides required for view construction
-        self._scal_fpts_strides = (1, self._scal_fpts[0].leadsubdim)
-
-        # Pre-compute for the max flux point count on a given face
-        nmaxfpts = max(nfacefpts)
-
-        # View stride info (common to all scal_fpts mats)
-        self._scal_fpts_vstri = np.empty((1, nmaxfpts), dtype=np.int32)
-        self._scal_fpts_vstri[:] = self._scal_fpts_strides[1]
-
-        # View matrix info
-        self._scal_fpts_vmats = [np.tile(m, (1, nmaxfpts))
-                                 for m in self._scal_fpts]
-
     def get_scal_upts_mat(self, idx):
         return self._scal_upts[idx].get()
-
-    @abstractmethod
-    def get_tdisf_upts_kern(self):
-        pass
-
-    def get_disu_fpts_kern(self):
-        return self._be.kernel('mul', self._m0b, self.scal_upts_inb,
-                               out=self._scal_fpts[0])
-
-    def get_tdivtpcorf_upts_kern(self):
-        return self._be.kernel('mul', self._m132b, self._vect_upts[0],
-                               out=self.scal_upts_outb)
-
-    def get_tdivtconf_upts_kern(self):
-        return self._be.kernel('mul', self._m3b, self._scal_fpts[0],
-                               out=self.scal_upts_outb, beta=1.0)
-
-    def get_negdivconf_upts_kern(self):
-        return self._be.kernel('negdivconf', self.nvars,
-                               self.scal_upts_outb, self._rcpdjac_upts)
 
     def _gen_rcpdjac_smat_upts(self, eles):
         jacs = self._get_jac_eles_at(eles, self._basis.upts)
@@ -287,138 +247,3 @@ class BaseAdvectionElements(object):
             return smats, djacs
         else:
             return smats
-
-    def get_mag_pnorms_for_inter(self, eidx, fidx, rtag):
-        fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
-        return self._mag_pnorm_fpts[fpts_idx, eidx]
-
-    def get_norm_pnorms_for_inter(self, eidx, fidx, rtag):
-        fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
-        return self._norm_pnorm_fpts[fpts_idx, eidx]
-
-    def _get_scal_fptsn_for_inter(self, n, eidx, fidx, rtag):
-        nfp = self._nfacefpts[fidx]
-
-        vrcidx = np.empty((1, nfp, 2), dtype=np.int32)
-        vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[...,1] = eidx*self._scal_fpts_strides[0]
-
-        return (self._scal_fpts_vmats[n][:nfp], vrcidx,
-                self._scal_fpts_vstri[:nfp])
-
-    def _get_vect_fptsn_for_inter(self, n, eidx, fidx, rtag):
-        nfp = self._nfacefpts[fidx]
-
-        vrcidx = np.empty((self.ndims, nfp, 2), dtype=np.int32)
-        vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[...,1] = eidx*self._scal_fpts_strides[0]
-
-        # Correct the row indicies
-        for i in range(self.ndims):
-            vrcidx[i,:,0] += i*self.nfpts
-
-        return (self._vect_fpts_vmats[n][:nfp], vrcidx,
-                self._vect_fpts_vstri[:nfp])
-
-    def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
-        return self._get_scal_fptsn_for_inter(0, eidx, fidx, rtag)
-
-
-class BaseAdvectionDiffusionElements(BaseAdvectionElements):
-    _nscal_fpts = 2
-    _nvect_upts = 1
-    _nvect_fpts = 1
-
-    def __init__(self, basiscls, eles, cfg):
-        super(BaseAdvectionDiffusionElements, self).__init__(basiscls, eles,
-                                                             cfg)
-
-        self._gen_jmats_fpts(eles)
-
-    def set_backend(self, be, nscal_upts):
-        super(BaseAdvectionDiffusionElements, self).set_backend(be, nscal_upts)
-
-        # Allocate the additional operator matrices
-        self._m5b = be.auto_matrix(self._basis.m5, tags={'M5'})
-        self._m6b = be.auto_matrix(self._basis.m6, tags={'M6'})
-        self._m460b = be.auto_matrix(self._basis.m460, tags={'M460'})
-
-        # Flux point transformation matrices
-        self._jmat_fpts = be.const_matrix(self._jmat_fpts, tags={'align'})
-
-    def _gen_inter_view_mats(self, be, neles, nvars, ndims):
-        base = super(BaseAdvectionDiffusionElements, self)._gen_inter_view_mats
-        base(be, neles, nvars, ndims)
-
-        # Vector-view stride info
-        self._vect_fpts_vstri = np.tile(self._scal_fpts_vstri, (self.ndims, 1))
-
-        # Vector view matrix info
-        self._vect_fpts_vmats = [np.tile(m, self._vect_fpts_vstri.shape)
-                                 for m in self._vect_fpts]
-
-    def _gen_jmats_fpts(self, eles):
-        jac = self._get_jac_eles_at(eles, self._basis.fpts)
-        smats, djacs = self._get_smats(jac, retdets=True)
-
-        # Use J^-1 = S/|J| hence J^-T = S^T/|J|
-        jmat_fpts = smats.swapaxes(1, 2) / djacs[...,None,None]
-
-        self._jmat_fpts = jmat_fpts.reshape(self.nfpts, -1, self.ndims**2)
-
-    def get_tgradpcoru_upts_kern(self):
-        return self._be.kernel('mul', self._m460b, self.scal_upts_inb,
-                               out=self._vect_upts[0])
-
-    def get_tgradcoru_upts_kern(self):
-        return self._be.kernel('mul', self._m6b, self._scal_fpts[1],
-                               out=self._vect_upts[0], beta=1.0)
-
-    def get_tgradcoru_fpts_kern(self):
-        return self._be.kernel('mul', self._m5b, self._vect_upts[0],
-                               out=self._vect_fpts[0])
-
-    def get_gradcoru_fpts_kern(self):
-        return self._be.kernel('gradcoru', self.ndims, self.nvars,
-                               self._jmat_fpts, self._vect_fpts[0])
-
-    def get_scal_fpts1_for_inter(self, eidx, fidx, rtag):
-        return self._get_scal_fptsn_for_inter(1, eidx, fidx, rtag)
-
-    def get_vect_fpts0_for_inter(self, eidx, fidx, rtag):
-        return self._get_vect_fptsn_for_inter(0, eidx, fidx, rtag)
-
-
-class BaseFluidElements(object):
-    _dynvarmap = {2: ['rho', 'u', 'v', 'p'],
-                  3: ['rho', 'u', 'v', 'w', 'p']}
-
-    def _process_ics(self, ics):
-        rho, p = ics[0], ics[-1]
-
-        # Multiply velocity components by rho
-        rhovs = [rho*c for c in ics[1:-1]]
-
-        # Compute the energy
-        gamma = self._cfg.getfloat('constants', 'gamma')
-        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in ics[1:-1])
-
-        return [rho] + rhovs + [E]
-
-
-class EulerElements(BaseFluidElements, BaseAdvectionElements):
-    def get_tdisf_upts_kern(self):
-        kc = self._cfg.items_as('constants', float)
-
-        return self._be.kernel('tdisf_inv', self.ndims, self.nvars,
-                               self.scal_upts_inb, self._smat_upts,
-                               self._vect_upts[0], kc)
-
-
-class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
-    def get_tdisf_upts_kern(self):
-        kc = self._cfg.items_as('constants', float)
-
-        return self._be.kernel('tdisf_vis', self.ndims, self.nvars,
-                               self.scal_upts_inb, self._smat_upts,
-                               self._rcpdjac_upts, self._vect_upts[0], kc)
