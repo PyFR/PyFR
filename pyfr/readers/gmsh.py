@@ -376,11 +376,14 @@ class GmshReader(BaseReader):
 
         # Generate the face connectivity
         for l, r in pairs:
-            lpart, leidx = eleglmap[l.petype][l.eidx]
-            rpart, reidx = eleglmap[r.petype][r.eidx]
+            lpetype, leidxg, lfidx, lrtag, lnodes = l
+            rpetype, reidxg, rfidx, rrtag, rnodes = r
 
-            conl = (l.petype, leidx, l.fidx, l.rtag)
-            conr = (r.petype, reidx, r.fidx, r.rtag)
+            lpart, leidxl = eleglmap[lpetype][leidxg]
+            rpart, reidxl = eleglmap[rpetype][reidxg]
+
+            conl = (lpetype, leidxl, lfidx, lrtag)
+            conr = (rpetype, reidxl, rfidx, rrtag)
 
             if lpart == rpart:
                 con_px[lpart].append([conl, conr])
@@ -390,9 +393,9 @@ class GmshReader(BaseReader):
 
         # Generate boundary conditions
         for pbcrgn, pent in self._bfacespents.iteritems():
-            for l in bcf[pent]:
-                lpart, leidx = eleglmap[l.petype][l.eidx]
-                conl = (l.petype, leidx, l.fidx, 0)
+            for lpetype, leidxg, lfidx, lrtag, lnodes in bcf[pent]:
+                lpart, leidxl = eleglmap[lpetype][leidxg]
+                conl = (lpetype, leidxl, lfidx, 0)
 
                 bcon_px[(pbcrgn, lpart)].append(conl)
 
