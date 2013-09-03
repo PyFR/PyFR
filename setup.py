@@ -31,6 +31,12 @@ modules = [
     'pyfr.quadrules',
     'pyfr.readers',
     'pyfr.scripts',
+    'pyfr.solvers',
+    'pyfr.solvers.base',
+    'pyfr.solvers.baseadvec',
+    'pyfr.solvers.baseadvecdiff',
+    'pyfr.solvers.euler',
+    'pyfr.solvers.navstokes',
     'pyfr.writers']
 
 # Tests
