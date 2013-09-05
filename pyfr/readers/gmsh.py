@@ -11,22 +11,22 @@ from pyfr.readers.nodemaps import GmshNodeMaps
 
 
 def msh_section(mshit, section):
-    endln = '$End%s\n' % section
-    count = int(next(mshit))
+    endln = '$End{}\n'.format(section)
+    endix = int(next(mshit)) - 1
 
     for i, l in enumerate(mshit):
         if l == endln:
-            raise ValueError('Unexpected end of section $%s' % section)
+            raise ValueError('Unexpected end of section $' + section)
 
         yield l
 
-        if i == count - 1:
+        if i == endix:
             break
     else:
         raise ValueError('Unexpected EOF')
 
     if next(mshit) != endln:
-        raise ValueError('Expected $End%s' % section)
+        raise ValueError('Expected $End' + section)
 
 
 class GmshReader(BaseReader):
@@ -89,18 +89,19 @@ class GmshReader(BaseReader):
                 seen_sect.add(sect)
             # Else skip over it
             else:
-                endsect = '$End%s\n' % sect
+                endsect = '$End{}\n'.format(sect)
 
                 for el in mshit:
                     if el == endsect:
                         break
                 else:
-                    raise ValueError('Expected $End%s' % sect)
+                    raise ValueError('Expected $End' + sect)
 
         # Check that all of the required sections are present
         if seen_sect != req_sect:
             missing = req_sect - seen_sect
-            raise ValueError('Required sections: %s not found' % missing)
+            raise ValueError('Required sections: {} not found'
+                             .format(missing))
 
     def _read_mesh_format(self, mshit):
         ver, ftype, dsize = next(mshit).split()
@@ -170,7 +171,7 @@ class GmshReader(BaseReader):
             etags, enodes = elei[3:3 + entags], elei[3 + entags:]
 
             if etype not in self._etype_map:
-                raise ValueError('Unsupported element type %d' % etype)
+                raise ValueError('Unsupported element type {}'.format(etype))
 
             # Physical entity type (used for BCs)
             epent = etags[0]
@@ -473,7 +474,7 @@ class GmshReader(BaseReader):
             for nn, p in izip(peles, prts):
                 spts[(petype, p)].append([nodepts[i][:ndim] for i in nn])
 
-        return {'spt_%s_p%d' % k: np.array(arr).swapaxes(0, 1)
+        return {'spt_{}_p{}'.format(*k): np.array(arr).swapaxes(0, 1)
                 for k, arr in spts.iteritems()}
 
     def _to_raw_pyfrm(self):
