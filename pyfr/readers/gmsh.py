@@ -179,8 +179,8 @@ class GmshReader(BaseReader):
             # Determine the partition number (defaults to 0)
             epart = etags[3] - 1 if entags > 2 else 0
 
-            elenodes[(etype, epent)].append(enodes)
-            eleparts[(etype, epent)].append(epart)
+            elenodes[etype, epent].append(enodes)
+            eleparts[etype, epent].append(epart)
 
         self._elenodes = {k: np.array(v) for k, v in elenodes.iteritems()}
         self._eleparts = {k: np.array(v) for k, v in eleparts.iteritems()}
@@ -194,7 +194,7 @@ class GmshReader(BaseReader):
             # Number of nodes in the first-order representation
             focount = self._petype_focount[petype]
 
-            foelemap[(petype, epent)] = eles[:,:focount]
+            foelemap[petype, epent] = eles[:,:focount]
 
         return foelemap
 
@@ -372,8 +372,8 @@ class GmshReader(BaseReader):
             petype = self._etype_map[etype][0]
 
             for p in eleps:
-                eleglmap[petype].append((p, pcounter[(petype, p)]))
-                pcounter[(petype, p)] += 1
+                eleglmap[petype].append((p, pcounter[petype, p]))
+                pcounter[petype, p] += 1
 
         # Generate the face connectivity
         for l, r in pairs:
@@ -389,8 +389,8 @@ class GmshReader(BaseReader):
             if lpart == rpart:
                 con_px[lpart].append([conl, conr])
             else:
-                con_pxpy[(lpart, rpart)].append(conl)
-                con_pxpy[(rpart, lpart)].append(conr)
+                con_pxpy[lpart, rpart].append(conl)
+                con_pxpy[rpart, lpart].append(conr)
 
         # Generate boundary conditions
         for pbcrgn, pent in self._bfacespents.iteritems():
@@ -398,7 +398,7 @@ class GmshReader(BaseReader):
                 lpart, leidxl = eleglmap[lpetype][leidxg]
                 conl = (lpetype, leidxl, lfidx, 0)
 
-                bcon_px[(pbcrgn, lpart)].append(conl)
+                bcon_px[pbcrgn, lpart].append(conl)
 
         return con_px, con_pxpy, bcon_px
 
@@ -460,19 +460,19 @@ class GmshReader(BaseReader):
                 continue
 
             # Elements and corresponding partition numbers
-            eles = self._elenodes[(etype, pent)]
-            prts = self._eleparts[(etype, pent)]
+            eles = self._elenodes[etype, pent]
+            prts = self._eleparts[etype, pent]
 
             petype, nnodes = self._etype_map[etype]
 
             # Go from Gmsh to PyFR node ordering
-            peles = eles[:,GmshNodeMaps.from_pyfr[(petype, nnodes)]]
+            peles = eles[:,GmshNodeMaps.from_pyfr[petype, nnodes]]
 
             # Obtain the dimensionality of the element type
             ndim = self._petype_ndim[petype]
 
             for nn, p in izip(peles, prts):
-                spts[(petype, p)].append([nodepts[i][:ndim] for i in nn])
+                spts[petype, p].append([nodepts[i][:ndim] for i in nn])
 
         return {'spt_{}_p{}'.format(*k): np.array(arr).swapaxes(0, 1)
                 for k, arr in spts.iteritems()}
