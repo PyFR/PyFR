@@ -21,6 +21,8 @@ class BaseElements(object):
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
+
+        self._eles = eles
         self._cfg = cfg
 
         self.nspts = nspts = eles.shape[0]
@@ -56,36 +58,39 @@ class BaseElements(object):
         # Physical normals at the flux points
         self._gen_pnorm_fpts(eles)
 
-        # Physical locations of the solution points
-        self._gen_ploc_upts(eles)
-
     @abstractmethod
     def _process_ics(self, ics):
         pass
 
     def set_ics_from_expr(self):
-        nupts, neles, ndims = self._ploc_upts.shape
-
         # Bring simulation constants into scope
         vars = self._cfg.items_as('constants', float)
 
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
+        # Construct the physical location operator matrix
+        plocop = np.asanyarray(self._basis.sbasis_at(self._basis.upts),
+                               dtype=np.float)
+
+        # Apply the operator to the mesh elements and reshape
+        plocupts = np.dot(plocop, self._eles.reshape(self.nspts, -1))
+        plocupts = plocupts.reshape(self.nupts, self.neles, self.ndims)
+
         # Extract the components of the mesh coordinates
-        coords = np.rollaxis(self._ploc_upts, 2)
+        coords = np.rollaxis(plocupts, 2)
         vars.update(dict(zip('xyz', coords)))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self._cfg.get('soln-ics', dv), vars)
-               for dv in self._dynvarmap[ndims]]
+               for dv in self._dynvarmap[self.ndims]]
 
         # Allow subclasses to process these ICs
         ics = np.dstack(self._process_ics(ics))
 
         # Handle the case of uniform (scalar) ICs
         if ics.shape[:2] == (1, 1):
-            ics = ics*np.ones((nupts, neles, 1))
+            ics = ics*np.ones((self.nupts, self.neles, 1))
 
         self._scal_upts = ics
 
@@ -158,18 +163,6 @@ class BaseElements(object):
 
         self._rcpdjac_upts = 1.0 / djacs.reshape(-1, neles)
         self._smat_upts = smats.reshape(-1, neles, ndims**2)
-
-    def _gen_ploc_upts(self, eles):
-        nspts, neles, ndims = eles.shape
-        nupts = self.nupts
-
-        # Construct the interpolation matrix
-        op = np.asanyarray(self._basis.sbasis_at(self._basis.upts),
-                           dtype=np.float)
-
-        # Apply the operator and reshape
-        self._ploc_upts = np.dot(op, eles.reshape(nspts, -1))\
-                            .reshape(nupts, neles, ndims)
 
     def _gen_pnorm_fpts(self, eles):
         jac = self._get_jac_eles_at(eles, self._basis.fpts)
