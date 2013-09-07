@@ -138,27 +138,11 @@ class Backend(object):
         """
         return self.const_matrix_cls(self, initval, iopacking, tags)
 
-    def sparse_matrix(self, initval, iopacking='AoS', tags=set()):
-        """Creates a sparse matrix from *initval*
-
-        A *sparse matrix* is a special type of constant matrix
-        that---potentially---uses a different storage pattern that is
-        well-suited to matrices populated with a large number of zeros.
-
-        :param initval: Initial value of the matrix.
-        :param tags: Implementation-specific metadata.
-
-        :type initval: numpy.ndarray
-        :type tags: set of str, optional
-        :rtype: :class:`~pyfr.backends.base.SparseMatrix`
-        """
-        pass
-
     def block_diag_matrix(self, initval, brange, iopacking='AoS', tags=set()):
         return BlockDiagMatrix(self, initval, brange, iopacking, tags)
 
     def auto_matrix(self, initval, iopacking='AoS', tags=set()):
-        """Creates either a constant or sparse matrix from *initval*
+        """Creates either a constant or block diagonal matrix from *initval*
         """
         # HACK: The following code attempts to identify one special-
         # case of block diagonal matrices;  while it is currently
@@ -385,11 +369,6 @@ class MatrixRSlice(object):
 class ConstMatrix(MatrixBase):
     """Constant matrix abstract base class"""
     _base_tags = {'const', 'dense'}
-
-
-class SparseMatrix(MatrixBase):
-    """Sparse matrix abstract base class"""
-    _base_tags = {'const', 'sparse'}
 
 
 class BlockDiagMatrix(MatrixBase):
