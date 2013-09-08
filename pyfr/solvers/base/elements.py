@@ -49,8 +49,8 @@ class BaseElements(object):
         self._basis = basis = basiscls(dims, nspts, cfg)
 
         # Sizes
-        self.nupts = nupts = basis.nupts
-        self.nfpts = nfpts = basis.nfpts
+        self.nupts = basis.nupts
+        self.nfpts = basis.nfpts
 
         # Transform matrices at the soln points
         self._gen_rcpdjac_smat_upts(eles)
