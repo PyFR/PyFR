@@ -24,6 +24,7 @@ else:
 # Modules
 modules = [
     'pyfr.backends',
+    'pyfr.backends.base',
     'pyfr.backends.cuda',
     'pyfr.backends.openmp',
     'pyfr.bases',
