@@ -5,8 +5,7 @@ from abc import ABCMeta, abstractmethod
 from pyfr.util import proxylist
 
 
-class Kernel(object):
-    """Bound kernel abstract base class"""
+class _BaseKernel(object):
     __metaclass__ = ABCMeta
 
     def __call__(self, *args):
@@ -21,11 +20,11 @@ class Kernel(object):
         pass
 
 
-class ComputeKernel(Kernel):
+class ComputeKernel(_BaseKernel):
     pass
 
 
-class MPIKernel(Kernel):
+class MPIKernel(_BaseKernel):
     pass
 
 
