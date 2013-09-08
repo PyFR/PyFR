@@ -3,6 +3,7 @@
 import numpy as np
 
 from pyfr.backends.base import BaseBackend, blockmats
+from pyfr.template import PkgTemplateLookup
 
 
 class CUDABackend(BaseBackend):
@@ -42,10 +43,13 @@ class CUDABackend(BaseBackend):
         self.queue_cls = types.CUDAQueue
         self.view_cls = types.CUDAView
 
+        # Template lookup
+        self.lookup = PkgTemplateLookup(__name__, 'kernels')
+
         # Instantiate the kernel providers
         kprovs = [blockmats.BlockDiagMatrixKernels,
                   pointwise.CUDAPointwiseKernels,
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   cublas.CUDACublasKernels]
-        self._providers = [k(self, cfg) for k in kprovs]
+        self._providers = [k(self) for k in kprovs]

@@ -64,12 +64,14 @@ class CBlasWrappers(object):
 
 
 class OpenMPCBLASKernels(OpenMPKernelProvider):
-    def __init__(self, backend, cfg):
-        super(OpenMPCBLASKernels, self).__init__(backend, cfg)
+    def __init__(self, backend):
+        super(OpenMPCBLASKernels, self).__init__(backend)
+
+
 
         # Look for single and multi-threaded BLAS libraries
-        hasst = cfg.hasopt('backend-openmp', 'cblas-st')
-        hasmt = cfg.hasopt('backend-openmp', 'cblas-mt')
+        hasst = backend.cfg.hasopt('backend-openmp', 'cblas-st')
+        hasmt = backend.cfg.hasopt('backend-openmp', 'cblas-mt')
 
         if hasst and hasmt:
             raise RuntimeError('cblas-st and cblas-mt are mutually exclusive')
@@ -80,7 +82,8 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
         else:
             raise RuntimeError('No cblas library specified')
 
-        libname = cfg.getpath('backend-openmp', self._cblas_type, abs=False)
+        libname = backend.cfg.getpath('backend-openmp', self._cblas_type,
+                                      abs=False)
 
         # Load and wrap cblas
         self._wrappers = CBlasWrappers(libname)

@@ -53,7 +53,7 @@ class BaseBackend(object):
     def __init__(self, cfg):
         assert self.name is not None
 
-        self._cfg = cfg
+        self.cfg = cfg
         self._allocs = defaultdict(WeakSet)
 
         # Numeric data type

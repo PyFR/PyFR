@@ -3,17 +3,12 @@
 import pycuda.compiler as compiler
 
 from pyfr.backends.base import ComputeKernel
-from pyfr.template import PkgTemplateLookup
 from pyfr.util import memoize
 
 
 class CUDAKernelProvider(object):
-    KERNEL_EXT = '.cu.mako'
-
-    lookup = PkgTemplateLookup(__name__, 'kernels')
-
-    def __init__(self, backend, cfg):
-        pass
+    def __init__(self, backend):
+        self.backend = backend
 
     def _get_2d_grid_block(self, function, nrow, ncol):
         # TODO: Write a totally bitchin' method which uses info from the
@@ -29,7 +24,7 @@ class CUDAKernelProvider(object):
     @memoize
     def _get_module(self, module, tplparams={}, nvccopts=None):
         # Get the template file
-        tpl = self.lookup.get_template(module + self.KERNEL_EXT)
+        tpl = self.backend.lookup.get_template(module + '.cu.mako')
 
         # Filter floating point constants
         if tplparams['dtype'] == 'float':

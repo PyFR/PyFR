@@ -2,20 +2,17 @@
 
 from pyfr.backends.base import ComputeKernel
 from pyfr.backends.openmp.compiler import GccSourceModule
-from pyfr.template import PkgTemplateLookup
 from pyfr.util import memoize
 
 
 class OpenMPKernelProvider(object):
-    lookup = PkgTemplateLookup(__name__, 'kernels')
-
-    def __init__(self, backend, cfg):
-        self._cfg = cfg
+    def __init__(self, backend):
+        self.backend = backend
 
     @memoize
     def _get_module(self, module, tplparams={}):
         # Get the template file
-        tpl = self.lookup.get_template(module + '.c.mako')
+        tpl = self.backend.lookup.get_template(module + '.c.mako')
 
         # Filter floating point constants
         if tplparams['dtype'] == 'float':
@@ -27,7 +24,7 @@ class OpenMPKernelProvider(object):
         mod = tpl.render(f=fpfilt, **tplparams)
 
         # Compile
-        return GccSourceModule(mod, self._cfg)
+        return GccSourceModule(mod, self.backend.cfg)
 
     @memoize
     def _get_function(self, module, function, restype, argtypes,

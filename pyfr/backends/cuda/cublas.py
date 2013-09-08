@@ -128,7 +128,7 @@ class CublasWrappers(object):
 
 
 class CUDACublasKernels(object):
-    def __init__(self, backend, cfg):
+    def __init__(self, backend):
         # Load and wrap cublas
         self._wrappers = CublasWrappers()
 

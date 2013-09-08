@@ -3,6 +3,7 @@
 import numpy as np
 
 from pyfr.backends.base import BaseBackend, blockmats
+from pyfr.template import PkgTemplateLookup
 
 
 class OpenMPBackend(BaseBackend):
@@ -25,10 +26,13 @@ class OpenMPBackend(BaseBackend):
         self.queue_cls = types.OpenMPQueue
         self.view_cls = types.OpenMPView
 
+        # Template lookup
+        self.lookup = PkgTemplateLookup(__name__, 'kernels')
+
         # Kernel provider classes
         kprovcls = [blockmats.BlockDiagMatrixKernels,
                     pointwise.OpenMPPointwiseKernels,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
                     cblas.OpenMPCBLASKernels]
-        self._providers = [k(self, cfg) for k in kprovcls]
+        self._providers = [k(self) for k in kprovcls]
