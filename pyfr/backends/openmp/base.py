@@ -32,12 +32,3 @@ class OpenMPBackend(BaseBackend):
                     packing.OpenMPPackingKernels,
                     cblas.OpenMPCBLASKernels]
         self._providers = [k(self, cfg) for k in kprovcls]
-
-        # Numeric data type
-        prec = cfg.get('backend', 'precision', 'double')
-        if prec not in {'single', 'double'}:
-            raise ValueError('OpenMP backend precision must be either single '
-                             ' or double')
-
-        # Convert to a numpy data type
-        self.fpdtype = np.dtype(prec).type

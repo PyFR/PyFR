@@ -56,6 +56,15 @@ class BaseBackend(object):
         self._cfg = cfg
         self._allocs = defaultdict(WeakSet)
 
+        # Numeric data type
+        prec = cfg.get('backend', 'precision', 'double')
+        if prec not in {'single', 'double'}:
+            raise ValueError('Backend precision must be either single or'
+                             'double')
+
+        # Convert to a NumPy data type
+        self.fpdtype = np.dtype(prec).type
+
     @recordalloc('data')
     def matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
         """Creates an *nrow* by *ncol* matrix
