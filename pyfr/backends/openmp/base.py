@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
 from pyfr.backends.base import BaseBackend, blockmats
 from pyfr.template import PkgTemplateLookup
 
