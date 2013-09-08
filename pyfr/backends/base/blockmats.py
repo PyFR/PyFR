@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import traits, ComputeMetaKernel
+from pyfr.backends.base.backend import traits
+from pyfr.backends.base.kernels import ComputeMetaKernel
 
 
 class BlockDiagMatrixKernels(object):

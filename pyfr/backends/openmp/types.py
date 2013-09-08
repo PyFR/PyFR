@@ -141,6 +141,10 @@ class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
                                                 iopacking, tags)
 
 
+class OpenMPBlockDiagMatrix(base.BlockDiagMatrix):
+    pass
+
+
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
     pass
 

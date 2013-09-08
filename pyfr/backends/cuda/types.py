@@ -142,6 +142,10 @@ class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
                                               tags)
 
 
+class CUDABlockDiagMatrix(base.BlockDiagMatrix):
+    pass
+
+
 class CUDAView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
         super(CUDAView, self).__init__(backend, matmap, rcmap, stridemap,

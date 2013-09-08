@@ -2,11 +2,10 @@
 
 import numpy as np
 
-from pyfr.backends.base import Backend
-from pyfr.backends import blockmats
+from pyfr.backends.base import BaseBackend, blockmats
 
 
-class OpenMPBackend(Backend):
+class OpenMPBackend(BaseBackend):
     name = 'openmp'
 
     def __init__(self, cfg):
@@ -16,6 +15,7 @@ class OpenMPBackend(Backend):
                                           types)
 
         # Register our data types
+        self.block_diag_matrix_cls = types.OpenMPBlockDiagMatrix
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_bank_cls = types.OpenMPMatrixBank

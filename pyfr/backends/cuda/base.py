@@ -2,11 +2,10 @@
 
 import numpy as np
 
-from pyfr.backends.base import Backend
-from pyfr.backends import blockmats
+from pyfr.backends.base import BaseBackend, blockmats
 
 
-class CUDABackend(Backend):
+class CUDABackend(BaseBackend):
     name = 'cuda'
 
     def __init__(self, cfg):
@@ -33,6 +32,7 @@ class CUDABackend(Backend):
                                         types)
 
         # Register our data types
+        self.block_diag_matrix_cls = types.CUDABlockDiagMatrix
         self.const_matrix_cls = types.CUDAConstMatrix
         self.matrix_cls = types.CUDAMatrix
         self.matrix_bank_cls = types.CUDAMatrixBank
