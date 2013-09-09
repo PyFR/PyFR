@@ -48,8 +48,6 @@ class BaseAdvectionElements(BaseElements):
         return self._be.kernel('negdivconf', self.nvars,
                                self.scal_upts_outb, self._rcpdjac_upts)
 
-
-
     def get_mag_pnorms_for_inter(self, eidx, fidx, rtag):
         fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
         return self._mag_pnorm_fpts[fpts_idx, eidx]
