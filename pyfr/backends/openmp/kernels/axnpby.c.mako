@@ -4,7 +4,7 @@
 <%include file='common.h.mako' />
 
 void
-axnpby(size_t n, ${dtype} *restrict y, ${dtype} beta,
+axnpby(int n, ${dtype} *restrict y, ${dtype} beta,
        ${', '.join('const {0} *restrict x{1}, {0} a{1}'.format(dtype, i)
                    for i in range(n))})
 {
@@ -13,7 +13,7 @@ axnpby(size_t n, ${dtype} *restrict y, ${dtype} beta,
     ASSUME_ALIGNED(x${i});
 % endfor
 
-    for (size_t i = 0; i < n; i++)
+    for (int i = 0; i < n; i++)
     {
         ${dtype} axn = ${util.dot('a{0}', 'x{0}[i]', len='n')};
 

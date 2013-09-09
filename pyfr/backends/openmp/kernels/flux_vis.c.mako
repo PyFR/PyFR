@@ -6,7 +6,7 @@
 <%include file='flux_vis_impl.h.mako' />
 
 static NOINLINE void
-tdisf_vis_aux(size_t neles,
+tdisf_vis_aux(int neles,
               ${util.arr_args('u', [nvars], const=True)},
               ${util.arr_args('sm', [ndims, ndims], const=True)},
               const ${dtype} *restrict rcpdjac,
@@ -17,7 +17,7 @@ tdisf_vis_aux(size_t neles,
     ASSUME_ALIGNED(rcpdjac);
     ${util.arr_align('tgrad_u', [ndims, nvars])};
 
-    for (size_t eidx = 0; eidx < neles; eidx++)
+    for (int eidx = 0; eidx < neles; eidx++)
     {
         ${dtype} u[${nvars}], grad_u[${ndims}][${nvars}], f[${ndims}][${nvars}];
 
@@ -46,13 +46,13 @@ tdisf_vis_aux(size_t neles,
 }
 
 void
-tdisf_vis(size_t nupts, size_t neles,
+tdisf_vis(int nupts, int neles,
           const ${dtype} *u, const ${dtype} *smats,
           const ${dtype} *rcpdjac, ${dtype} *tgrad_u,
-          size_t ldr, size_t lsdu, size_t lsds, size_t lsdg)
+          int ldr, int lsdu, int lsds, int lsdg)
 {
     #pragma omp parallel for
-    for (size_t uidx = 0; uidx < nupts; uidx++)
+    for (int uidx = 0; uidx < nupts; uidx++)
     {
         tdisf_vis_aux(neles,
                       ${', '.join('u + (uidx*{} + {})*lsdu'.format(nvars, i)

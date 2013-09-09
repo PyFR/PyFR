@@ -3,13 +3,13 @@
 <%include file='common.h.mako' />
 
 void
-pack_view(size_t nrow, size_t ncol,
+pack_view(int nrow, int ncol,
           ${dtype} **vptr, int *vstri, ${dtype} *pmat,
-          size_t ldp, size_t lds, size_t ldm)
+          int ldp, int lds, int ldm)
 {
-    for (size_t i = 0; i < nrow; i++)
+    for (int i = 0; i < nrow; i++)
     {
-        for (size_t j = 0; j < ncol; j++)
+        for (int j = 0; j < ncol; j++)
         {
             ${dtype} *ptr = vptr[i*ldp + j];
             int stride = vstri[i*lds + j];

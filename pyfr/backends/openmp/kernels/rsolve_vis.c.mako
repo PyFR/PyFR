@@ -20,7 +20,7 @@ fvcomm = '(' + fvcomm + ')'
 %>
 
 void
-rsolve_ldg_vis_int(size_t ninters,
+rsolve_ldg_vis_int(int ninters,
                    ${dtype} **restrict ul_v,
                    const int *restrict ul_vstri,
                    ${dtype} **restrict gul_v,
@@ -34,7 +34,7 @@ rsolve_ldg_vis_int(size_t ninters,
                    const ${dtype} *restrict normpnorml)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ul[${nvars}], ur[${nvars}];
 
@@ -79,7 +79,7 @@ rsolve_ldg_vis_int(size_t ninters,
 }
 
 void
-rsolve_ldg_vis_mpi(size_t ninters,
+rsolve_ldg_vis_mpi(int ninters,
                    ${dtype} **restrict ul_v,
                    const int *restrict ul_vstri,
                    ${dtype} **restrict gul_v,
@@ -90,7 +90,7 @@ rsolve_ldg_vis_mpi(size_t ninters,
                    const ${dtype} *restrict normpnorml)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ul[${nvars}], ur[${nvars}];
 
@@ -137,7 +137,7 @@ rsolve_ldg_vis_mpi(size_t ninters,
 <%include file='bc_impl.h.mako' />
 
 void
-rsolve_ldg_vis_bc(size_t ninters,
+rsolve_ldg_vis_bc(int ninters,
                   ${dtype} **restrict ul_v,
                   const int *restrict ul_vstri,
                   ${dtype} **restrict gul_v,
@@ -146,7 +146,7 @@ rsolve_ldg_vis_bc(size_t ninters,
                   const ${dtype} *restrict normpnorml)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ul[${nvars}], ur[${nvars}];
 

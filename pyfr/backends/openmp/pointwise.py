@@ -20,7 +20,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         nupts, neles = u.nrow, u.soa_shape[2]
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, c=c)
 
-        fn = self._get_function('flux_inv', 'tdisf_inv', None, 'NNPPPNNN',
+        fn = self._get_function('flux_inv', 'tdisf_inv', None, 'iiPPPiii',
                                 opts)
 
         return self._basic_kernel(fn, nupts, neles, u, smats, f,
@@ -32,7 +32,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         opts = dict(dtype=u.dtype, ndims=ndims, nvars=nvars, c=c)
 
         fn = self._get_function('flux_vis', 'tdisf_vis', None,
-                                'NNPPPPNNNN', opts)
+                                'iiPPPPiiii', opts)
 
         return self._basic_kernel(fn, nupts, neles, u, smats, rcpdjac, tgradu,
                                   rcpdjac.leaddim, u.leadsubdim,
@@ -43,7 +43,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         dtype = ul_vin.refdtype
         opts = dict(dtype=dtype, nvars=nvars, c=c)
 
-        fn = self._get_function('conu', 'conu_int', None, 'NPPPPPP', opts)
+        fn = self._get_function('conu', 'conu_int', None, 'iPPPPPP', opts)
 
         return self._basic_kernel(fn, ninters,
                                   ul_vin.mapping, ul_vin.strides,
@@ -55,7 +55,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         dtype = ul_vin.view.refdtype
         opts = dict(dtype=dtype, nvars=nvars, c=c)
 
-        fn = self._get_function('conu', 'conu_mpi', None, 'NPPPP', opts)
+        fn = self._get_function('conu', 'conu_mpi', None, 'iPPPP', opts)
 
         return self._basic_kernel(fn, ninters,
                                   ul_vin.view.mapping, ul_vin.view.strides,
@@ -66,7 +66,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         dtype = ul_vin.refdtype
         opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, c=c, bctype=bctype)
 
-        fn = self._get_function('conu', 'conu_bc', None, 'NPPP', opts)
+        fn = self._get_function('conu', 'conu_bc', None, 'iPPP', opts)
 
         return self._basic_kernel(fn, ninters,
                                   ul_vin.mapping, ul_vin.strides,
@@ -77,7 +77,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         nfpts, neles = jmats.nrow, gradu.ncol / nvars
         opts = dict(dtype=gradu.dtype, ndims=ndims, nvars=nvars)
 
-        fn = self._get_function('gradcoru', 'gradcoru', None, 'NNPPNN', opts)
+        fn = self._get_function('gradcoru', 'gradcoru', None, 'iiPPii', opts)
 
         return self._basic_kernel(fn, nfpts, neles, jmats, gradu,
                                   jmats.leadsubdim, gradu.leadsubdim)
@@ -90,7 +90,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
                     rsinv=rsinv)
 
         fn = self._get_function('rsolve_inv', 'rsolve_inv_int', None,
-                                'NPPPPPPP', opts)
+                                'iPPPPPPP', opts)
 
         return self._basic_kernel(fn, ninters, ul_v.mapping, ul_v.strides,
                                   ur_v.mapping, ur_v.strides, magl, magr,
@@ -104,7 +104,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         opts = dict(dtype=dtype, ndims=ndims, nvars=nvars, c=c, rsinv=rsinv)
 
         fn = self._get_function('rsolve_inv', 'rsolve_inv_mpi', None,
-                                'NPPPPP', opts)
+                                'iPPPPP', opts)
 
         return self._basic_kernel(fn, ninters, ul_v.mapping, ul_v.strides,
                                   ur_mpim, magl, normpnorml)
@@ -117,7 +117,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
                     bctype=bctype)
 
         fn = self._get_function('rsolve_inv', 'rsolve_inv_bc', None,
-                                'NPPPP', opts)
+                                'iPPPP', opts)
 
         return self._basic_kernel(fn, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -130,7 +130,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
                     rsinv=rsinv)
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_int', None,
-                                'NPPPPPPPPPPP', opts)
+                                'iPPPPPPPPPPP', opts)
 
         return self._basic_kernel(fn, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -147,7 +147,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
                     rsinv=rsinv)
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_mpi', None,
-                                'NPPPPPPPP', opts)
+                                'iPPPPPPPP', opts)
 
         return self._basic_kernel(fn, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -161,7 +161,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
                     rsinv=rsinv, bctype=bctype)
 
         fn = self._get_function('rsolve_vis', 'rsolve_ldg_vis_bc', None,
-                                'NPPPPPP', opts)
+                                'iPPPPPP', opts)
 
         return self._basic_kernel(fn, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -173,7 +173,7 @@ class OpenMPPointwiseKernels(OpenMPKernelProvider):
         nupts, neles = dv.nrow, dv.soa_shape[2]
         opts = dict(dtype=dv.dtype, nvars=nvars)
 
-        fn = self._get_function('negdivconf', 'negdivconf', None, 'NNPPNN',
+        fn = self._get_function('negdivconf', 'negdivconf', None, 'iiPPii',
                                 opts)
 
 

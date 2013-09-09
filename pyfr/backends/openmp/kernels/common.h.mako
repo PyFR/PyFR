@@ -18,7 +18,7 @@
  * distributed between all of the currently active threads.
  */
 static inline void
-static_omp_sched(size_t N, size_t *tstart, size_t *tn)
+static_omp_sched(int N, int *tstart, int *tn)
 {
     int tid = omp_get_thread_num();
     int cnt = omp_get_num_threads();

@@ -3,7 +3,7 @@
 <%include file='common.h.mako' />
 
 void
-conu_int(size_t ninters,
+conu_int(int ninters,
          ${dtype} **restrict ul_vin,
          const int *restrict ul_vstri,
          ${dtype} **restrict ur_vin,
@@ -12,7 +12,7 @@ conu_int(size_t ninters,
          ${dtype} **restrict ur_vout)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         int lstri = ul_vstri[iidx];
         int rstri = ur_vstri[iidx];
@@ -29,14 +29,14 @@ conu_int(size_t ninters,
 }
 
 void
-conu_mpi(size_t ninters,
+conu_mpi(int ninters,
          ${dtype} **restrict ul_vin,
          const int *restrict ul_vstri,
          ${dtype} **restrict ul_vout,
          const ${dtype} *restrict ur_m)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         int lstri = ul_vstri[iidx];
 
@@ -55,13 +55,13 @@ conu_mpi(size_t ninters,
 <%include file='bc_impl.h.mako' />
 
 void
-conu_bc(size_t ninters,
+conu_bc(int ninters,
         ${dtype} **restrict ul_vin,
         const int *restrict ul_vstri,
         ${dtype} **restrict ul_vout)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         int lstri = ul_vstri[iidx];
         ${dtype} ul[${nvars}], ur[${nvars}];

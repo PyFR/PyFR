@@ -25,7 +25,7 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
         # An MPI view is simply a regular view plus an MPI matrix
         v, m = mpiview.view, mpiview.mpimat
 
-        fn = self._get_function('pack', op + '_view', None, 'NNPPPNNN',
+        fn = self._get_function('pack', op + '_view', None, 'iiPPPiii',
                                 self._packmodopts(mpiview))
 
         return self._basic_kernel(fn, v.nrow, v.ncol, v.mapping, v.strides, m,

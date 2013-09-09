@@ -14,7 +14,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         opts = dict(n=len(xn), dtype=npdtype_to_ctype(y.dtype))
         fn = self._get_function('axnpby', 'axnpby', None,
-                                [np.uintp] + [np.uintp, y.dtype]*(1 + len(xn)),
+                                [np.int32] + [np.intp, y.dtype]*(1 + len(xn)),
                                 opts)
 
         class AxnpbyKernel(ComputeKernel):

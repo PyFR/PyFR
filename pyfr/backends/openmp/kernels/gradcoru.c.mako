@@ -4,14 +4,14 @@
 <%include file='common.h.mako' />
 
 static NOINLINE void
-gradcoru_aux(size_t neles,
+gradcoru_aux(int neles,
              ${util.arr_args('jm', [ndims, ndims], const=True)},
              ${util.arr_args('tgrad_u', [ndims, nvars])})
 {
     ${util.arr_align('jm', [ndims, ndims])};
     ${util.arr_align('tgrad_u', [ndims, nvars])};
 
-    for (size_t eidx = 0; eidx < neles; eidx++)
+    for (int eidx = 0; eidx < neles; eidx++)
     {
         // Dereference the (transformed) gradient
     % for i, j in util.ndrange(ndims, nvars):
@@ -28,12 +28,12 @@ gradcoru_aux(size_t neles,
 }
 
 void
-gradcoru(size_t nfpts, size_t neles,
+gradcoru(int nfpts, int neles,
          const ${dtype} *jmats, ${dtype} *tgrad_u,
-         size_t lsdj, size_t lsdg)
+         int lsdj, int lsdg)
 {
     #pragma omp parallel for
-    for (size_t fidx = 0; fidx < nfpts; fidx++)
+    for (int fidx = 0; fidx < nfpts; fidx++)
     {
         gradcoru_aux(neles,
                      ${', '.join('jmats + (fidx*{} + {})*lsdj'

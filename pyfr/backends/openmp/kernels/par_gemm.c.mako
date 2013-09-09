@@ -21,7 +21,7 @@ par_gemm(cblas_gemm_t gemm, int M, int N, int K,
 {
     #pragma omp parallel
     {
-        size_t offN, tN;
+        int offN, tN;
         static_omp_sched(N, &offN, &tN);
 
         gemm(ROW_MAJOR, NO_TRANS, NO_TRANS, M, tN, K,

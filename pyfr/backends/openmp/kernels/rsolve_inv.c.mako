@@ -5,7 +5,7 @@
 <%include file='views.h.mako' />
 
 void
-rsolve_inv_int(size_t ninters,
+rsolve_inv_int(int ninters,
                ${dtype} **restrict ul_v,
                const int *restrict ul_vstri,
                ${dtype} **restrict ur_v,
@@ -15,7 +15,7 @@ rsolve_inv_int(size_t ninters,
                const ${dtype} *restrict normpnorml)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ul[${nvars}], ur[${nvars}];
 
@@ -46,7 +46,7 @@ rsolve_inv_int(size_t ninters,
 }
 
 void
-rsolve_inv_mpi(size_t ninters,
+rsolve_inv_mpi(int ninters,
                ${dtype} **restrict ul_v,
                const int *restrict ul_vstri,
                const ${dtype} *restrict ur_m,
@@ -54,7 +54,7 @@ rsolve_inv_mpi(size_t ninters,
                const ${dtype} *restrict normpnorml)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ptemp[${ndims}], ul[${nvars}], ur[${nvars}];
 
@@ -85,14 +85,14 @@ rsolve_inv_mpi(size_t ninters,
 <%include file='bc_impl.cu.mako' />
 
 void
-rsolve_inv_bc(size_t ninters,
+rsolve_inv_bc(int ninters,
               ${dtype} **restrict ul_v,
               const int *restrict ul_vstri,
               const ${dtype} *restrict magpnorml,
               const ${dtype} *restrict normpnorml)
 {
     #pragma omp parallel for
-    for (size_t iidx = 0; iidx < ninters; iidx++)
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ul[${nvars}], ur[${nvars}];
 

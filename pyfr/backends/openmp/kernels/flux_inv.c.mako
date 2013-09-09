@@ -5,7 +5,7 @@
 <%include file='flux_inv_impl.h.mako' />
 
 static NOINLINE void
-tdisf_inv_aux(size_t neles,
+tdisf_inv_aux(int neles,
               ${util.arr_args('u', [nvars], const=True)},
               ${util.arr_args('smats', [ndims, ndims], const=True)},
               ${util.arr_args('f', [ndims, nvars])})
@@ -14,7 +14,7 @@ tdisf_inv_aux(size_t neles,
     ${util.arr_align('smats', [ndims, ndims])};
     ${util.arr_align('f', [ndims, nvars])};
 
-    for (size_t eidx = 0; eidx < neles; eidx++)
+    for (int eidx = 0; eidx < neles; eidx++)
     {
         // Load in the components of the soln
         ${dtype} uin[${nvars}] = { ${', '.join('u{}[eidx]'.format(i)
@@ -33,12 +33,12 @@ tdisf_inv_aux(size_t neles,
 }
 
 void
-tdisf_inv(size_t nupts, size_t neles,
+tdisf_inv(int nupts, int neles,
           const ${dtype} *u, const ${dtype} *smats, ${dtype} *f,
-          size_t lsdu, size_t lsds, size_t lsdf)
+          int lsdu, int lsds, int lsdf)
 {
     #pragma omp parallel for
-    for (size_t uidx = 0; uidx < nupts; uidx++)
+    for (int uidx = 0; uidx < nupts; uidx++)
     {
         tdisf_inv_aux(neles,
                       ${', '.join('u + (uidx*{} + {})*lsdu'.format(nvars, i)
