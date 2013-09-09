@@ -6,20 +6,22 @@ from pyfr.backends.base import ComputeKernel
 from pyfr.util import memoize
 
 
+def get_grid_for_block(block, nrow, ncol=1):
+    return ((nrow + (-nrow % block[0])) // block[0],
+            (ncol + (-ncol % block[1])) // block[1])
+
+
+def get_2d_grid_block(function, nrow, ncol):
+    # TODO: Write a totally bitchin' method which uses info from the
+    #       function to help compute an optimal block size
+    block = (min(16, nrow), min(16, ncol), 1)
+    grid = get_grid_for_block(block, nrow, ncol)
+    return grid, block
+
+
 class CUDAKernelProvider(object):
     def __init__(self, backend):
         self.backend = backend
-
-    def _get_2d_grid_block(self, function, nrow, ncol):
-        # TODO: Write a totally bitchin' method which uses info from the
-        #       function to help compute an optimal block size
-        block = (min(16, nrow), min(16, ncol), 1)
-        grid = self._get_grid_for_block(block, nrow, ncol)
-        return grid, block
-
-    def _get_grid_for_block(self, block, nrow, ncol=1):
-        return ((nrow + (-nrow % block[0])) // block[0],
-                (ncol + (-ncol % block[1])) // block[1])
 
     @memoize
     def _get_module(self, module, tplparams={}, nvccopts=None):

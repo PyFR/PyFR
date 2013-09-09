@@ -5,7 +5,7 @@ from mpi4py import MPI
 import pycuda.driver as cuda
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
-from pyfr.backends.cuda.provider import CUDAKernelProvider
+from pyfr.backends.cuda.provider import CUDAKernelProvider, get_2d_grid_block
 from pyfr.backends.cuda.types import CUDAMPIMatrix, CUDAMPIView
 
 from pyfr.nputil import npdtype_to_ctype
@@ -36,7 +36,7 @@ class CUDAPackingKernels(CUDAKernelProvider):
                                 tplparams=self._packmodopts(mpiview))
 
         # Compute the grid and thread-block size
-        grid, block = self._get_2d_grid_block(fn, v.nrow, v.ncol)
+        grid, block = get_2d_grid_block(fn, v.nrow, v.ncol)
 
         # Create a CUDA event
         event = cuda.Event(cuda.event_flags.DISABLE_TIMING)

@@ -4,7 +4,7 @@ import numpy as np
 
 import pycuda.driver as cuda
 
-from pyfr.backends.cuda.provider import CUDAKernelProvider
+from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
 from pyfr.nputil import npdtype_to_ctype
 
 
@@ -26,7 +26,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, neles)
+        grid = get_grid_for_block(block, neles)
 
         return self._basic_kernel(fn, grid, block, nupts, neles,
                                   u, smats, f, u.leaddim,
@@ -40,7 +40,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, neles)
+        grid = get_grid_for_block(block, neles)
 
         return self._basic_kernel(fn, grid, block, nupts, neles,
                                   u, smats, rcpdjac, tgradu,
@@ -56,7 +56,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_vin.mapping, ul_vin.strides,
@@ -72,7 +72,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_vin.view.mapping, ul_vin.view.strides,
@@ -87,7 +87,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_vin.mapping, ul_vin.strides,
@@ -101,7 +101,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, neles)
+        grid = get_grid_for_block(block, neles)
 
         return self._basic_kernel(fn, grid, block, nfpts, neles,
                                   jmats, gradu, jmats.leaddim, gradu.leaddim)
@@ -118,7 +118,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -137,7 +137,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides, ur_mpim,
@@ -154,7 +154,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -171,7 +171,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -192,7 +192,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn.set_cache_config(cuda.func_cache.PREFER_L1)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -209,7 +209,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
                                 opts)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, ninters)
+        grid = get_grid_for_block(block, ninters)
 
         return self._basic_kernel(fn, grid, block, ninters,
                                   ul_v.mapping, ul_v.strides,
@@ -223,7 +223,7 @@ class CUDAPointwiseKernels(CUDAKernelProvider):
         fn = self._get_function('negdivconf', 'negdivconf', 'iiPPii', opts)
 
         block = (256, 1, 1)
-        grid = self._get_grid_for_block(block, neles)
+        grid = get_grid_for_block(block, neles)
 
         return self._basic_kernel(fn, grid, block, nupts, neles, dv, rcpdjac,
                                   dv.leaddim, rcpdjac.leaddim)

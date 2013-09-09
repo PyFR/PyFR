@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from pyfr.backends.cuda.provider import CUDAKernelProvider
+from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
 from pyfr.backends.base import ComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
@@ -21,7 +21,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         # Compute a suitable block and grid
         block = (1024, 1, 1)
-        grid = self._get_grid_for_block(block, cnt)
+        grid = get_grid_for_block(block, cnt)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, scomp, scopy, beta, *alphan):
