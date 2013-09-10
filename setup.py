@@ -26,7 +26,9 @@ modules = [
     'pyfr.backends',
     'pyfr.backends.base',
     'pyfr.backends.cuda',
+    'pyfr.backends.cuda.kernels',
     'pyfr.backends.openmp',
+    'pyfr.backends.openmp.kernels',
     'pyfr.bases',
     'pyfr.integrators',
     'pyfr.quadrules',
@@ -46,8 +48,8 @@ tests = [
 
 # Data
 package_data = {
-    'pyfr.backends.cuda': ['kernels/*'],
-    'pyfr.backends.openmp': ['kernels/*'],
+    'pyfr.backends.cuda.kernels': ['*.mako'],
+    'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.quadrules': ['tri/*'],
     'pyfr.tests': ['*.npz']}
 
