@@ -82,7 +82,7 @@ rsolve_inv_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='bc_impl.cu.mako' />
+<%include file='bc_impl.h.mako' />
 
 void
 rsolve_inv_bc(int ninters,
