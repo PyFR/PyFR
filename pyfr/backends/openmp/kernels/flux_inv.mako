@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 <%namespace name='util' module='pyfr.backends.openmp.makoutil' />
-<%include file='common.h.mako' />
-<%include file='flux_inv_impl.h.mako' />
+<%include file='common' />
+<%include file='flux_inv_impl' />
 
 static NOINLINE void
 tdisf_inv_aux(int neles,

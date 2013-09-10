@@ -12,7 +12,7 @@ class OpenMPKernelProvider(object):
     @memoize
     def _get_module(self, module, tplparams={}):
         # Get the template file
-        tpl = self.backend.lookup.get_template(module + '.c.mako')
+        tpl = self.backend.lookup.get_template(module)
 
         # Filter floating point constants
         if tplparams['dtype'] == 'float':

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
 <%namespace name='util' module='pyfr.backends.cuda.makoutil' />
-<%include file='idx_of.cu.mako' />
-<%include file='flux_inv_impl.cu.mako' />
-<%include file='flux_vis_impl.cu.mako' />
+<%include file='idx_of' />
+<%include file='flux_inv_impl' />
+<%include file='flux_vis_impl' />
 
 /**
  * Computes the transformed viscous flux.

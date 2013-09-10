@@ -63,8 +63,8 @@ conu_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='views.cu.mako' />
-<%include file='bc_impl.cu.mako' />
+<%include file='views' />
+<%include file='bc_impl' />
 
 __global__ void
 conu_bc(int ninters,

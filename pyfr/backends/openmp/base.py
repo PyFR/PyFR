@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import BaseBackend, blockmats
-from pyfr.template import PkgTemplateLookup
+from pyfr.template import DottedTemplateLookup
 
 
 class OpenMPBackend(BaseBackend):
@@ -25,7 +25,7 @@ class OpenMPBackend(BaseBackend):
         self.view_cls = types.OpenMPView
 
         # Template lookup
-        self.lookup = PkgTemplateLookup(__name__, 'kernels')
+        self.lookup = DottedTemplateLookup('pyfr.backends.openmp.kernels')
 
         # Kernel provider classes
         kprovcls = [blockmats.BlockDiagMatrixKernels,

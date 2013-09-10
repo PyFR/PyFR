@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 <%namespace name='util' module='pyfr.backends.openmp.makoutil' />
-<%include file='common.h.mako' />
+<%include file='common' />
 
 void
 axnpby(int n, ${dtype} *restrict y, ${dtype} beta,

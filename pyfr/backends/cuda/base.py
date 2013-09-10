@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import BaseBackend, blockmats
-from pyfr.template import PkgTemplateLookup
+from pyfr.template import DottedTemplateLookup
 
 
 class CUDABackend(BaseBackend):
@@ -42,7 +42,7 @@ class CUDABackend(BaseBackend):
         self.view_cls = types.CUDAView
 
         # Template lookup
-        self.lookup = PkgTemplateLookup(__name__, 'kernels')
+        self.lookup = DottedTemplateLookup('pyfr.backends.cuda.kernels')
 
         # Instantiate the kernel providers
         kprovs = [blockmats.BlockDiagMatrixKernels,

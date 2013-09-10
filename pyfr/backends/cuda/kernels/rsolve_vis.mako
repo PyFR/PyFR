@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-<%include file='views.cu.mako' />
-<%include file='rsolve_inv_impl.cu.mako' />
-<%include file='flux_vis_impl.cu.mako' />
+<%include file='views' />
+<%include file='rsolve_inv_impl' />
+<%include file='flux_vis_impl' />
 
 <%
 beta, tau = c['ldg-beta'], c['ldg-tau']
@@ -155,7 +155,7 @@ rsolve_ldg_vis_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='bc_impl.cu.mako' />
+<%include file='bc_impl' />
 
 __global__ void
 rsolve_ldg_vis_bc(int ninters,

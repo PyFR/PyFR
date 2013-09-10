@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 <%namespace name='util' module='pyfr.backends.openmp.makoutil' />
-<%include file='common.h.mako' />
+<%include file='common' />
 
 static NOINLINE void
 gradcoru_aux(int neles,

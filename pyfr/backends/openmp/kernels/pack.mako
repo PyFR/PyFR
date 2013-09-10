@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%include file='common.h.mako' />
+<%include file='common' />
 
 void
 pack_view(int nrow, int ncol,

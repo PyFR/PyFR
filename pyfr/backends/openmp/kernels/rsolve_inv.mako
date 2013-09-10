@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 
-<%include file='rsolve_inv_impl.cu.mako' />
-<%include file='views.cu.mako' />
+<%include file='common' />
+<%include file='rsolve_inv_impl' />
+<%include file='views' />
 
-__global__ void
+void
 rsolve_inv_int(int ninters,
-               ${dtype}** __restrict__ ul_v,
-               const int* __restrict__ ul_vstri,
-               ${dtype}** __restrict__ ur_v,
-               const int* __restrict__ ur_vstri,
-               const ${dtype}* __restrict__ magpnorml,
-               const ${dtype}* __restrict__ magpnormr,
-               const ${dtype}* __restrict__ normpnorml)
+               ${dtype} **restrict ul_v,
+               const int *restrict ul_vstri,
+               ${dtype} **restrict ur_v,
+               const int *restrict ur_vstri,
+               const ${dtype} *restrict magpnorml,
+               const ${dtype} *restrict magpnormr,
+               const ${dtype} *restrict normpnorml)
 {
-    int iidx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (iidx < ninters)
+    #pragma omp parallel for
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ul[${nvars}], ur[${nvars}];
 
@@ -25,7 +25,7 @@ rsolve_inv_int(int ninters,
 
         // Load the left normalized physical normal
         ${dtype} ptemp[${ndims}];
-        for (int i = 0; i < ${ndims}; ++i)
+        for (int i = 0; i < ${ndims}; i++)
             ptemp[i] = normpnorml[ninters*i + iidx];
 
         // Perform the Riemann solve
@@ -33,7 +33,7 @@ rsolve_inv_int(int ninters,
         rsolve_inv_impl(ul, ur, ptemp, fn);
 
         // Write out the fluxes into ul and ur
-        for (int i = 0; i < ${nvars}; ++i)
+        for (int i = 0; i < ${nvars}; i++)
         {
             ul[i] =  magpnorml[iidx]*fn[i];
             ur[i] = -magpnormr[iidx]*fn[i];
@@ -45,17 +45,16 @@ rsolve_inv_int(int ninters,
     }
 }
 
-__global__ void
+void
 rsolve_inv_mpi(int ninters,
-               ${dtype}** __restrict__ ul_v,
-               const int* __restrict__ ul_vstri,
-               const ${dtype}* __restrict__ ur_m,
-               const ${dtype}* __restrict__ magpnorml,
-               const ${dtype}* __restrict__ normpnorml)
+               ${dtype} **restrict ul_v,
+               const int *restrict ul_vstri,
+               const ${dtype} *restrict ur_m,
+               const ${dtype} *restrict magpnorml,
+               const ${dtype} *restrict normpnorml)
 {
-    int iidx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (iidx < ninters)
+    #pragma omp parallel for
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ptemp[${ndims}], ul[${nvars}], ur[${nvars}];
 
@@ -83,18 +82,17 @@ rsolve_inv_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='bc_impl.cu.mako' />
+<%include file='bc_impl' />
 
-__global__ void
+void
 rsolve_inv_bc(int ninters,
-              ${dtype}** __restrict__ ul_v,
-              const int* __restrict__ ul_vstri,
-              const ${dtype}* __restrict__ magpnorml,
-              const ${dtype}* __restrict__ normpnorml)
+              ${dtype} **restrict ul_v,
+              const int *restrict ul_vstri,
+              const ${dtype} *restrict magpnorml,
+              const ${dtype} *restrict normpnorml)
 {
-    int iidx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (iidx < ninters)
+    #pragma omp parallel for
+    for (int iidx = 0; iidx < ninters; iidx++)
     {
         ${dtype} ul[${nvars}], ur[${nvars}];
 

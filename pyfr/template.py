@@ -7,25 +7,27 @@ from mako.lookup import TemplateLookup
 from mako.template import Template
 
 
-class PkgTemplateLookup(TemplateLookup):
-    def __init__(self, pkg, basedir):
-        self.paths = [(pkg, basedir)]
-
-    def add_search_path(self, pkg, basedir):
-        self.paths.insert(0, (pkg, basedir))
-
-    def del_search_path(self, pkg, basedir):
-        self.paths.remove((pkg, basedir))
+class DottedTemplateLookup(TemplateLookup):
+    def __init__(self, pkg):
+        self.dfltpkg = pkg
 
     def adjust_uri(self, uri, relto):
         return uri
 
     def get_template(self, name):
-        for pkg, basedir in self.paths:
-            try:
-                tpl = pkgutil.get_data(pkg, os.path.join(basedir, name))
-                return Template(tpl, lookup=self)
-            except IOError:
-                pass
+        div = name.rfind('.')
 
-        raise RuntimeError('Template "{}" not found'.format(name))
+        # Break apart name into a package and base file name
+        if div >= 0:
+            pkg = name[:div]
+            basename = name[div + 1:]
+        else:
+            pkg = self.dfltpkg
+            basename = name
+
+        # Attempt to load the template
+        try:
+            tpl = pkgutil.get_data(pkg, basename + '.mako')
+            return Template(tpl, lookup=self)
+        except IOError:
+            raise RuntimeError('Template "{}" not found'.format(name))

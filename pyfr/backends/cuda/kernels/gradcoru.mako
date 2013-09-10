@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%include file='idx_of.cu.mako' />
+<%include file='idx_of' />
 
 __global__ void
 gradcoru(int nfpts, int neles,

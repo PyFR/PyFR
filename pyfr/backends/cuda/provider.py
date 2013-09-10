@@ -26,7 +26,7 @@ class CUDAKernelProvider(object):
     @memoize
     def _get_module(self, module, tplparams={}, nvccopts=None):
         # Get the template file
-        tpl = self.backend.lookup.get_template(module + '.cu.mako')
+        tpl = self.backend.lookup.get_template(module)
 
         # Filter floating point constants
         if tplparams['dtype'] == 'float':

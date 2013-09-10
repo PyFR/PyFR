@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-<%include file='common.h.mako' />
-<%include file='rsolve_inv_impl.h.mako' />
-<%include file='flux_vis_impl.h.mako' />
-<%include file='views.h.mako' />
+<%include file='common' />
+<%include file='rsolve_inv_impl' />
+<%include file='flux_vis_impl' />
+<%include file='views' />
 
 <%
 beta, tau = c['ldg-beta'], c['ldg-tau']
@@ -134,7 +134,7 @@ rsolve_ldg_vis_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='bc_impl.h.mako' />
+<%include file='bc_impl' />
 
 void
 rsolve_ldg_vis_bc(int ninters,

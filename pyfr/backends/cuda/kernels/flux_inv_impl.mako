@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-<%include file='idx_of.cu.mako' />
-
 /**
  * Compute the inviscid flux.
  */

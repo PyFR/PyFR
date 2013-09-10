@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%include file='common.h.mako' />
+<%include file='common' />
 
 void
 conu_int(int ninters,
@@ -51,8 +51,8 @@ conu_mpi(int ninters,
 }
 
 % if bctype:
-<%include file='views.h.mako' />
-<%include file='bc_impl.h.mako' />
+<%include file='views' />
+<%include file='bc_impl' />
 
 void
 conu_bc(int ninters,

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-<%include file='common.h.mako' />
+<%include file='common' />
 
 // CBLAS GEMM constants
 #define ROW_MAJOR 101
