@@ -26,8 +26,8 @@ class DottedTemplateLookup(TemplateLookup):
             basename = name
 
         # Attempt to load the template
-        try:
-            tpl = pkgutil.get_data(pkg, basename + '.mako')
-            return Template(tpl, lookup=self)
-        except IOError:
+        src = pkgutil.get_data(pkg, basename + '.mako')
+        if not src:
             raise RuntimeError('Template "{}" not found'.format(name))
+
+        return Template(src, lookup=self)
