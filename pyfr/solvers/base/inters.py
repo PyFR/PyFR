@@ -51,7 +51,7 @@ def get_opt_view_perm(interside, mat, elemap):
 class BaseInters(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, be, elemap, cfg):
+    def __init__(self, be, lhs, elemap, cfg):
         self._be = be
         self._elemap = elemap
         self._cfg = cfg
@@ -59,6 +59,7 @@ class BaseInters(object):
         # Get the number of dimensions and variables
         self.ndims = next(iter(elemap.viewvalues())).ndims
         self.nvars = next(iter(elemap.viewvalues())).nvars
+        self.ninters = len(lhs)
 
         # By default do not permute any of the interface arrays
         self._perm = Ellipsis

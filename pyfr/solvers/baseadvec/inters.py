@@ -8,7 +8,7 @@ from pyfr.nputil import npeval
 
 class BaseAdvectionIntInters(BaseInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
-        super(BaseAdvectionIntInters, self).__init__(be, elemap, cfg)
+        super(BaseAdvectionIntInters, self).__init__(be, lhs, elemap, cfg)
 
         view_onto, const_mat = self._view_onto, self._const_mat
 
@@ -36,7 +36,7 @@ class BaseAdvectionMPIInters(BaseInters):
     MPI_TAG = 2314
 
     def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
-        super(BaseAdvectionMPIInters, self).__init__(be, elemap, cfg)
+        super(BaseAdvectionMPIInters, self).__init__(be, lhs, elemap, cfg)
         self._rhsrank = rhsrank
         self._rallocs = rallocs
 
@@ -69,7 +69,7 @@ class BaseAdvectionBCInters(BaseInters):
     args = []
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
-        super(BaseAdvectionBCInters, self).__init__(be, elemap, cfg)
+        super(BaseAdvectionBCInters, self).__init__(be, lhs, elemap, cfg)
         self._cfgsect = cfgsect
 
         view_onto, const_mat = self._view_onto, self._const_mat
