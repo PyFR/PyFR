@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import sys
-
-from ctypes import CDLL, POINTER, byref, c_int, c_double, c_float, c_void_p
-from ctypes.util import find_library
+from ctypes import CDLL, POINTER, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 

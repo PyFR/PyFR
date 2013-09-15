@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
 import pycuda.driver as cuda
 
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
