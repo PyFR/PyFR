@@ -79,8 +79,9 @@ class BaseAdvectionBCInters(BaseInters):
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
+    @property
     def _kernel_constants(self):
-        kc = super(BaseAdvectionBCInters, self)._kernel_constants()
+        newkc = dict(super(BaseAdvectionBCInters, self)._kernel_constants)
 
         # Boundary conditions, much like initial conditions, can be
         # parameterized by values in [constants] so we must bring these
@@ -94,8 +95,8 @@ class BaseAdvectionBCInters(BaseInters):
                 expr = self._cfg.get(self._cfgsect, k)
 
                 # Evaluate
-                kc[k] = npeval(expr, cc)
+                newkc[k] = npeval(expr, cc)
             except NoOptionError:
                 continue
 
-        return kc
+        return newkc

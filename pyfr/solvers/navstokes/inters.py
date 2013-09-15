@@ -8,7 +8,7 @@ from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
     def get_comm_flux_kern(self):
         rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
 
         return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._vect0_lhs,
@@ -20,7 +20,7 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
     def get_comm_flux_kern(self):
         rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
 
         return self._be.kernel('rsolve_ldg_vis_mpi', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._vect0_lhs,
@@ -31,7 +31,7 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
     def get_comm_flux_kern(self):
         rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
 
         return self._be.kernel('rsolve_ldg_vis_bc', self.ndims, self.nvars,
                                rsinv, self.type, self._scal0_lhs,

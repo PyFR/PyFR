@@ -76,6 +76,7 @@ class BaseInters(object):
         vm = get_view_mats(inter, meth, self._elemap)
         return self._be.mpi_view(*vm, vlen=self.nvars)
 
+    @property
     def _kernel_constants(self):
         return self._cfg.items_as('constants', float)
 

@@ -17,16 +17,18 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         self._vect0_lhs = self._view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = self._view_onto(rhs, 'get_vect_fpts0_for_inter')
 
+    @property
     def _kernel_constants(self):
-        kc = super(BaseAdvectionDiffusionIntInters, self)._kernel_constants()
+        kc = super(BaseAdvectionDiffusionIntInters, self)._kernel_constants
 
         # Bring LDG-specific constants into scope
-        kc.update(self._cfg.items_as('solver-interfaces', float))
+        newkc = dict(kc)
+        newkc.update(self._cfg.items_as('solver-interfaces', float))
 
-        return kc
+        return newkc
 
     def get_conu_fpts_kern(self):
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
         return self._be.kernel('conu_int', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
                                self._scal1_lhs, self._scal1_rhs, kc)
@@ -64,14 +66,16 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         self._vect0_lhs = self._mpi_view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
 
+    @property
     def _kernel_constants(self):
-        kc = super(BaseAdvectionDiffusionMPIInters, self)._kernel_constants()
+        kc = super(BaseAdvectionDiffusionMPIInters, self)._kernel_constants
 
         # Bring LDG-specific constants into scope
-        kc.update(self._cfg.items_as('solver-interfaces', float))
-        kc['ldg-beta'] *= self._beta_sgn
+        newkc = dict(kc)
+        newkc.update(self._cfg.items_as('solver-interfaces', float))
+        newkc['ldg-beta'] *= self._beta_sgn
 
-        return kc
+        return newkc
 
     def get_vect_fpts0_pack_kern(self):
         return self._be.kernel('pack', self._vect0_lhs)
@@ -88,7 +92,7 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         return self._be.kernel('unpack', self._vect0_rhs)
 
     def get_conu_fpts_kern(self):
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
         return self._be.kernel('conu_mpi', self.nvars,
                                self._scal0_lhs, self._scal0_rhs,
                                self._scal1_lhs, kc)
@@ -103,16 +107,17 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
         self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
         self._vect0_lhs = self._view_onto(lhs, 'get_vect_fpts0_for_inter')
 
-
+    @property
     def _kernel_constants(self):
-        kc = super(BaseAdvectionDiffusionBCInters, self)._kernel_constants()
+        kc = super(BaseAdvectionDiffusionBCInters, self)._kernel_constants
 
         # Bring LDG-specific constants into scope
-        kc.update(self._cfg.items_as('solver-interfaces', float))
+        newkc = dict(kc)
+        newkc.update(self._cfg.items_as('solver-interfaces', float))
 
-        return kc
+        return newkc
 
     def get_conu_fpts_kern(self):
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
         return self._be.kernel('conu_bc', self.ndims, self.nvars, self.type,
                                self._scal0_lhs, self._scal1_lhs, kc)

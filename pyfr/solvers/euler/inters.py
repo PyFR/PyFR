@@ -8,7 +8,7 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
 class EulerIntInters(BaseAdvectionIntInters):
     def get_comm_flux_kern(self):
         rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
 
         return self._be.kernel('rsolve_inv_int', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._scal0_rhs,
@@ -19,7 +19,7 @@ class EulerIntInters(BaseAdvectionIntInters):
 class EulerMPIInters(BaseAdvectionMPIInters):
     def get_comm_flux_kern(self):
         rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
 
         return self._be.kernel('rsolve_inv_mpi', self.ndims, self.nvars,
                                rsinv, self._scal0_lhs, self._scal0_rhs,
@@ -29,7 +29,7 @@ class EulerMPIInters(BaseAdvectionMPIInters):
 class EulerBaseBCInters(BaseAdvectionBCInters):
     def get_comm_flux_kern(self):
         rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants()
+        kc = self._kernel_constants
 
         return self._be.kernel('rsolve_inv_bc', self.ndims, self.nvars,
                                rsinv, self.type, self._scal0_lhs,
