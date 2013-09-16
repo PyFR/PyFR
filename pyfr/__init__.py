@@ -1,3 +1,3 @@
 # -*- coding: utf-8 -*-
 
-from _version import __version__
+from pyfr._version import __version__
