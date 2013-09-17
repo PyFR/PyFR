@@ -60,7 +60,13 @@ class BaseInters(object):
         # Get the number of dimensions and variables
         self.ndims = next(iter(elemap.viewvalues())).ndims
         self.nvars = next(iter(elemap.viewvalues())).nvars
+
+        # Get the number of interfaces
         self.ninters = len(lhs)
+
+        # Compute the total number of interface flux points
+        self.ninterfpts = sum(elemap[etype].nfacefpts[fidx]
+                              for etype, eidx, fidx, rtag in lhs)
 
         # By default do not permute any of the interface arrays
         self._perm = Ellipsis

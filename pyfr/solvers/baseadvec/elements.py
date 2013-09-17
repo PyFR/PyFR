@@ -12,7 +12,7 @@ class BaseAdvectionElements(BaseElements):
         super(BaseAdvectionElements, self).set_backend(be, nscal_upts)
 
         # Get the number of flux points for each face of the element
-        self._nfacefpts = nfacefpts = self._basis.nfacefpts
+        self.nfacefpts = nfacefpts = self._basis.nfacefpts
 
         # Get the relevant strides required for view construction
         self._scal_fpts_strides = (1, self._scal_fpts[0].leadsubdim)
@@ -57,7 +57,7 @@ class BaseAdvectionElements(BaseElements):
         return self._norm_pnorm_fpts[fpts_idx, eidx]
 
     def _get_scal_fptsn_for_inter(self, n, eidx, fidx, rtag):
-        nfp = self._nfacefpts[fidx]
+        nfp = self.nfacefpts[fidx]
 
         vrcidx = np.empty((1, nfp, 2), dtype=np.int32)
         vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
@@ -67,7 +67,7 @@ class BaseAdvectionElements(BaseElements):
                 self._scal_fpts_vstri[:nfp])
 
     def _get_vect_fptsn_for_inter(self, n, eidx, fidx, rtag):
-        nfp = self._nfacefpts[fidx]
+        nfp = self.nfacefpts[fidx]
 
         vrcidx = np.empty((self.ndims, nfp, 2), dtype=np.int32)
         vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
