@@ -28,10 +28,11 @@ def get_mat(interside, mat, elemap, perm=Ellipsis):
     # Map from element type to view mat getter
     emap = {type: getattr(ele, mat) for type, ele in elemap.items()}
 
-    # Form the matrix and permute
+    # Get the matrix, swizzle the dimensions, and permute
     m = [emap[type](eidx, fidx, rtag) for type, eidx, fidx, rtag in interside]
-    m = np.concatenate(m)[None,...]
-    m = m[:,perm,...]
+    m = np.concatenate(m)
+    m = np.atleast_2d(m.T)
+    m = m[:,perm]
 
     return m
 
