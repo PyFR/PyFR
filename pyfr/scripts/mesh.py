@@ -228,7 +228,7 @@ def process_convert(args):
     mesh = reader.to_pyfrm()
 
     # Save to disk
-    np.savez_compressed(args.outmesh, **mesh)
+    np.savez(args.outmesh, **mesh)
 
 def main():
     ap = ArgumentParser(prog='pyfr-mesh', description='Generates and '

@@ -71,9 +71,6 @@ class FileWriter(BaseWriter):
     def __init__(self, *args, **kwargs):
         super(FileWriter, self).__init__(*args, **kwargs)
 
-        # See if we should compress output files or not
-        self._compress = self._cfg.getbool('soln-output', 'compress', False)
-
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
@@ -123,10 +120,7 @@ class FileWriter(BaseWriter):
             outdict = dict(zip(names, solns), **metadata)
 
             with open(path, 'wb') as f:
-                if self._compress:
-                    np.savez_compressed(f, **outdict)
-                else:
-                    np.savez(f, **outdict)
+                np.savez(f, **outdict)
 
 
 class DirWriter(BaseWriter):
