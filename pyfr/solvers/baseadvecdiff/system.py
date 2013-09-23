@@ -27,9 +27,9 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         self._mpi_inters_vect_fpts0_unpack_kerns = \
             mpi_inters.get_vect_fpts0_unpack_kern()
 
-        self._int_inters_conu_fpts_kerns = int_inters.get_conu_fpts_kern()
-        self._mpi_inters_conu_fpts_kerns = mpi_inters.get_conu_fpts_kern()
-        self._bc_inters_conu_fpts_kerns = bc_inters.get_conu_fpts_kern()
+        self._int_inters_con_u_kerns = int_inters.get_con_u_kern()
+        self._mpi_inters_con_u_kerns = mpi_inters.get_con_u_kern()
+        self._bc_inters_con_u_kerns = bc_inters.get_con_u_kern()
 
     def _get_negdivf(self):
         runall = self._backend.runall
@@ -39,8 +39,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1 << self._mpi_inters_scal_fpts0_pack_kerns()
         runall([q1])
 
-        q1 << self._int_inters_conu_fpts_kerns()
-        q1 << self._bc_inters_conu_fpts_kerns()
+        q1 << self._int_inters_con_u_kerns()
+        q1 << self._bc_inters_con_u_kerns()
         q1 << self._tgradpcoru_upts_kerns()
 
         q2 << self._mpi_inters_scal_fpts0_send_kerns()
@@ -49,7 +49,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         runall([q1, q2])
 
-        q1 << self._mpi_inters_conu_fpts_kerns()
+        q1 << self._mpi_inters_con_u_kerns()
         q1 << self._tgradcoru_upts_kerns()
         q1 << self._tgradcoru_fpts_kerns()
         q1 << self._gradcoru_fpts_kerns()

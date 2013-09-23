@@ -34,6 +34,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         self._vect_fpts_vmats = [np.tile(m, self._vect_fpts_vstri.shape)
                                  for m in self._vect_fpts]
 
+        # Register pointwise kernels
+        be.pointwise.register('pyfr.solvers.baseadvecdiff.kernels.gradcoru')
+
     def _gen_jmats_fpts(self, eles):
         jac = self._get_jac_eles_at(eles, self._basis.fpts)
         smats, djacs = self._get_smats(jac, retdets=True)
@@ -56,8 +59,11 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                out=self._vect_fpts[0])
 
     def get_gradcoru_fpts_kern(self):
-        return self._be.kernel('gradcoru', self.ndims, self.nvars,
-                               self._jmat_fpts, self._vect_fpts[0])
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars)
+
+        return self._be.kernel('gradcoru', tplargs,
+                               dims=[self.nfpts, self.neles],
+                               jmats=self._jmat_fpts, gradu=self._vect_fpts[0])
 
     def get_scal_fpts1_for_inter(self, eidx, fidx, rtag):
         return self._get_scal_fptsn_for_inter(1, eidx, fidx, rtag)

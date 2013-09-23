@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-<%include file='common' />
-
 void
 pack_view(int nrow, int ncol,
           ${dtype} **vptr, int *vstri, ${dtype} *pmat,

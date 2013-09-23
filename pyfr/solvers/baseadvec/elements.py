@@ -28,6 +28,9 @@ class BaseAdvectionElements(BaseElements):
         self._scal_fpts_vmats = [np.tile(m, (1, nmaxfpts))
                                  for m in self._scal_fpts]
 
+        # Register pointwise kernels
+        be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
+
     @abstractmethod
     def get_tdisf_upts_kern(self):
         pass
@@ -45,8 +48,10 @@ class BaseAdvectionElements(BaseElements):
                                out=self.scal_upts_outb, beta=1.0)
 
     def get_negdivconf_upts_kern(self):
-        return self._be.kernel('negdivconf', self.nvars,
-                               self.scal_upts_outb, self._rcpdjac_upts)
+        return self._be.kernel('negdivconf', tplargs=dict(nvars=self.nvars),
+                               dims=[self.nupts, self.neles],
+                               tdivtconf=self.scal_upts_outb,
+                               rcpdjac=self._rcpdjac_upts)
 
     def get_mag_pnorms_for_inter(self, eidx, fidx, rtag):
         fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)

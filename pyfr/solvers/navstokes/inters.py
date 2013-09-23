@@ -6,47 +6,110 @@ from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
 
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
-    def get_comm_flux_kern(self):
-        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants
+    def __init__(self, *args, **kwargs):
+        super(NavierStokesIntInters, self).__init__(*args, **kwargs)
 
-        return self._be.kernel('rsolve_ldg_vis_int', self.ndims, self.nvars,
-                               rsinv, self._scal0_lhs, self._vect0_lhs,
-                               self._scal0_rhs, self._vect0_rhs,
-                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
-                               self._norm_pnorm_lhs, kc)
+        # Pointwise template arguments
+        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
+                             rsolver=rsolver, c=self._kernel_constants)
+
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
+
+    def get_con_u_kern(self):
+        return self._be.kernel('intconu', self._tplargs,
+                               dims=[self.ninterfpts],
+                               ulin=self._scal0_lhs, urin=self._scal0_rhs,
+                               ulout=self._scal1_lhs, urout=self._scal1_rhs)
+
+    def get_comm_flux_kern(self):
+        return self._be.kernel('intcflux', self._tplargs,
+                               dims=[self.ninterfpts],
+                               ul=self._scal0_lhs, ur=self._scal0_rhs,
+                               gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+                               magnl=self._mag_pnorm_lhs,
+                               magnr=self._mag_pnorm_rhs,
+                               nl=self._norm_pnorm_lhs)
 
 
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
-    def get_comm_flux_kern(self):
-        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants
+    def __init__(self, *args, **kwargs):
+        super(NavierStokesMPIInters, self).__init__(*args, **kwargs)
 
-        return self._be.kernel('rsolve_ldg_vis_mpi', self.ndims, self.nvars,
-                               rsinv, self._scal0_lhs, self._vect0_lhs,
-                               self._scal0_rhs, self._vect0_rhs,
-                               self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
+        # Pointwise template arguments
+        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
+                             rsolver=rsolver, c=self._kernel_constants)
+
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpiconu')
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpicflux')
+
+    def get_con_u_kern(self):
+        return self._be.kernel('mpiconu', self._tplargs,
+                               dims=[self.ninterfpts],
+                               ulin=self._scal0_lhs, urin=self._scal0_rhs,
+                               ulout=self._scal1_lhs)
+
+    def get_comm_flux_kern(self):
+        return self._be.kernel('mpicflux', self._tplargs,
+                               dims=[self.ninterfpts],
+                               ul=self._scal0_lhs, ur=self._scal0_rhs,
+                               gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+                               magnl=self._mag_pnorm_lhs,
+                               nl=self._norm_pnorm_lhs)
 
 
 class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
+    def __init__(self, *args, **kwargs):
+        super(NavierStokesBaseBCInters, self).__init__(*args, **kwargs)
+
+        # Pointwise template arguments
+        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
+                             rsolver=rsolver, c=self._kernel_constants,
+                             bctype=self.type)
+
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
+
+    def get_con_u_kern(self):
+        return self._be.kernel('bcconu', self._tplargs, dims=[self.ninterfpts],
+                               ulin=self._scal0_lhs, ulout=self._scal1_lhs)
+
     def get_comm_flux_kern(self):
-        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants
-
-        return self._be.kernel('rsolve_ldg_vis_bc', self.ndims, self.nvars,
-                               rsinv, self.type, self._scal0_lhs,
-                               self._vect0_lhs, self._mag_pnorm_lhs,
-                               self._norm_pnorm_lhs, kc)
+        return self._be.kernel('bccflux', self._tplargs,
+                               dims=[self.ninterfpts],
+                               ul=self._scal0_lhs, gradul=self._vect0_lhs,
+                               magnl=self._mag_pnorm_lhs,
+                               nl=self._norm_pnorm_lhs)
 
 
-class NavierStokesIsoThermNoslipBCInters(NavierStokesBaseBCInters):
+class NavierStokesNoSlpIsoWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-iso-wall'
-    args = ['cpTw']
+
+    @property
+    def _kernel_constants(self):
+        kc = super(NavierStokesNoSlpIsoWallBCInters, self)._kernel_constants
+        kc = dict(kc)
+
+        kc['cpTw'], = self._eval_opts('cpTw')
+
+        return kc
 
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     type = 'sup-in-fa'
-    args = ['rho', 'p', 'u', 'v', 'w']
+
+    @property
+    def _kernel_constants(self):
+        kc = super(NavierStokesSupInflowBCInters, self)._kernel_constants
+        kc = dict(kc)
+
+        kc['rho'], kc['p'] = self._eval_opts('rho', 'p')
+        kc['v'] = self._eval_opts(*'uvw'[:self.ndims])
+
+        return kc
 
 
 class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
@@ -55,9 +118,25 @@ class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesSubInflowBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-frv'
-    args = ['rho', 'u', 'v', 'w']
 
+    @property
+    def _kernel_constants(self):
+        kc = super(NavierStokesSubInflowBCInters, self)._kernel_constants
+        kc = dict(kc)
+
+        kc['rho'], = self._eval_opts('rho')
+        kc['v'] = self._eval_opts(*'uvw'[:self.ndims])
+
+        return kc
 
 class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
     type = 'sub-out-fp'
-    args = ['p']
+
+    @property
+    def _kernel_constants(self):
+        kc = super(NavierStokesSubOutflowBCInters, self)._kernel_constants
+        kc = dict(kc)
+
+        kc['p'], = self._eval_opts('p')
+
+        return kc

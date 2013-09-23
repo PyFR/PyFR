@@ -1,21 +1,20 @@
 # -*- coding: utf-8 -*-
-
-<%namespace name='util' module='pyfr.backends.openmp.makoutil' />
-<%include file='common' />
+<%inherit file='base'/>
+<%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 void
-axnpby(int n, ${dtype} *restrict y, ${dtype} beta,
-       ${', '.join('const {0} *restrict x{1}, {0} a{1}'.format(dtype, i)
-                   for i in range(n))})
+axnpby(int n, fpdtype_t *__restrict__ y, fpdtype_t beta,
+       ${', '.join('const fpdtype_t *__restrict__ x{0}, '
+                   'fpdtype_t a{0}'.format(i) for i in range(n))})
 {
-    ASSUME_ALIGNED(y);
+    PYFR_ALIGNED(y);
 % for i in range(n):
-    ASSUME_ALIGNED(x${i});
+    PYFR_ALIGNED(x${i});
 % endfor
 
     for (int i = 0; i < n; i++)
     {
-        ${dtype} axn = ${util.dot('a{0}', 'x{0}[i]', len='n')};
+        fpdtype_t axn = ${pyfr.dot('a{j}', 'x{j}[i]', j=n)};
 
         if (beta == 0.0)
             y[i] = axn;

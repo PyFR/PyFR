@@ -79,24 +79,11 @@ class BaseAdvectionBCInters(BaseInters):
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
-    @property
-    def _kernel_constants(self):
-        newkc = dict(super(BaseAdvectionBCInters, self)._kernel_constants)
-
+    def _eval_opts(self, *opts):
         # Boundary conditions, much like initial conditions, can be
         # parameterized by values in [constants] so we must bring these
         # into scope when evaluating the boundary conditions
         cc = self._cfg.items_as('constants', float)
 
         # Evaluate any BC specific arguments from the config file
-        for k in self.args:
-            try:
-                # Get the constant/expression
-                expr = self._cfg.get(self._cfgsect, k)
-
-                # Evaluate
-                newkc[k] = npeval(expr, cc)
-            except NoOptionError:
-                continue
-
-        return newkc
+        return [npeval(self._cfg.get(self._cfgsect, k), cc) for k in opts]

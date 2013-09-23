@@ -7,26 +7,37 @@ from textwrap import dedent
 import numpy as np
 
 
-def funcsig(mods, rett, name, args):
+def funccall(name, args):
     # Delimit such that we have one (indented) argument per line
-    sep = ',\n{}'.format(' '*(len(name) + 1))
-    sig = sep.join(args).split('\n')
+    sep = ',\n' + ' '*(len(name) + 1)
+    cal = sep.join(args).split('\n')
 
     # Add in the name and parentheses
-    sig[0] = '{}({}'.format(name, sig[0])
-    sig[-1] = '{})'.format(sig[-1])
+    cal[0] = '{}({}'.format(name, cal[0])
+    cal[-1] = '{})'.format(cal[-1])
+
+    return cal
+
+
+def funcsig(mods, rett, name, args):
+    # Exploit the similarity between prototypes and invocations
+    sig = funccall(name, args)
 
     # Include modifiers and return type
-    return ['{} {}'.format(mods, rett)] + sig
+    return ['{} {}'.format(mods, rett).strip()] + sig
 
 
 def procbody(body, fpdtype):
+    # Remove any indentation
+    body = dedent(body)
+
     # At single precision suffix all floating point constants by 'f'
     if fpdtype == np.float32:
-        return re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
+        body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
                       r'\g<0>f', body)
-    else:
-        return body
+
+    # Split into lines
+    return body.split('\n')
 
 
 class Arg(object):
@@ -34,7 +45,7 @@ class Arg(object):
         self.name = name
 
         specptn = (r'(?:(in|inout|out)\s+)?'       # Intent
-                   r'(?:(view|scalar)\s+)?'        # Attrs
+                   r'(?:(mpi|scalar|view)\s+)?'    # Attrs
                    r'([A-Za-z_]\w*)'               # Data type
                    r'((?:\[\d+\]){0,2})$')         # Constant array dimensions
         dimsptn = r'(?<=\[)\d+(?=\])'
@@ -62,6 +73,9 @@ class Arg(object):
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
+    @property
+    def ismpi(self):
+        return 'mpi' in self.attrs
 
     @property
     def isview(self):
@@ -83,11 +97,11 @@ class Arg(object):
 class BaseFunctionGenerator(object):
     __metaclass__ = ABCMeta
 
-    def __init__(self, name, args, rett, body, fpdtype):
+    def __init__(self, name, params, rett, body, fpdtype):
         self.name = name
         self.rett = rett
-        self.args = arg
-        self.body = procbody(body, fpdtype).split('\n')
+        self.args = re.split(r'\s*,\s*', params)
+        self.body = procbody(body, fpdtype)[1:-1]
 
     def render(self):
         head = funcsig(self.mods, self.rett, self.name, self.args)
@@ -107,7 +121,8 @@ class BaseKernelGenerator(object):
     def __init__(self, name, ndim, args, body, fpdtype):
         self.name = name
         self.ndim = ndim
-        self.body = procbody(dedent(body), fpdtype).split('\n')
+        self.body = procbody(body, fpdtype)
+        self.fpdtype = fpdtype
 
         # Parse and sort our argument list
         sargs = sorted((k, Arg(k, v, body)) for k, v in args.iteritems())
@@ -120,6 +135,10 @@ class BaseKernelGenerator(object):
         if ndim == 2 and any(v.isview for v in self.vectargs):
             raise ValueError('View arguments are not supported for 2D kernels')
 
+        # Similarly, check for MPI matrices
+        if ndim == 2 and any(v.ismpi for v in self.vectargs):
+            raise ValueError('MPI matrices are not supported for 2D kernels')
+
     @abstractmethod
     def argspec(self):
         pass
@@ -127,4 +146,3 @@ class BaseKernelGenerator(object):
     @abstractmethod
     def render(self):
         pass
-

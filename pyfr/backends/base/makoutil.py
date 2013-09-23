@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 
+from collections import Iterable
+
 from mako.runtime import supports_caller, capture
 
+import pyfr.nputil as nputil
 import pyfr.util as util
 
 
@@ -11,6 +14,16 @@ def ndrange(context, *args):
 
 def npdtype_to_ctype(context, dtype):
     return nputil.npdtype_to_ctype(dtype)
+
+
+def dot(context, a_, b_=None, **kwargs):
+    ix, nd = next(kwargs.iteritems())
+    ab = '({})*({})'.format(a_, b_ or a_)
+
+    # Allow for flexible range arguments
+    nd = nd if isinstance(nd, Iterable) else [nd]
+
+    return '(' + ' + '.join(ab.format(**{ix: i}) for i in xrange(*nd)) + ')'
 
 
 @supports_caller
@@ -32,7 +45,7 @@ def kernel(context, name, ndim, **kwargs):
 
 
 @supports_caller
-def function(context, name, args, rett='void'):
+def function(context, name, params, rett='void'):
     # Capture the function body
     body = capture(context, context['caller'].body)
 
@@ -40,8 +53,8 @@ def function(context, name, args, rett='void'):
     funcgen, fpdtype = context['_function_generator'], context['fpdtype']
 
     # Render the complete function
-    return funcgen(name, args, rett, body, fpdtype).render()
+    return funcgen(name, params, rett, body, fpdtype).render()
 
 
-def alias(context, name, newname):
-    return '#define {} {}'.format(newname, name)
+def alias(context, name, func):
+    return '#define {} {}'.format(name, func)

@@ -27,7 +27,7 @@ class CUDABackend(BaseBackend):
         # system).  As many of our types/providers depend on the CUDA
         # runtime we import these here, locally, at the time of
         # instantiation.
-        from pyfr.backends.cuda import (blasext, cublas, packing, pointwise,
+        from pyfr.backends.cuda import (blasext, cublas, packing, provider,
                                         types)
 
         # Register our data types
@@ -44,10 +44,13 @@ class CUDABackend(BaseBackend):
         # Template lookup
         self.lookup = DottedTemplateLookup('pyfr.backends.cuda.kernels')
 
-        # Instantiate the kernel providers
-        kprovs = [blockmats.BlockDiagMatrixKernels,
-                  pointwise.CUDAPointwiseKernels,
+        # Instantiate the base kernel providers
+        kprovs = [provider.CUDAPointwiseKernelProvider,
+                  blockmats.BlockDiagMatrixKernels,
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   cublas.CUDACublasKernels]
         self._providers = [k(self) for k in kprovs]
+
+        # Pointwise kernels
+        self.pointwise = self._providers[0]

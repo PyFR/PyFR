@@ -5,9 +5,15 @@ from pyfr.solvers.euler.elements import BaseFluidElements
 
 
 class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
-    def get_tdisf_upts_kern(self):
-        kc = self._cfg.items_as('constants', float)
+    def set_backend(self, backend, nscalupts):
+        super(NavierStokesElements, self).set_backend(backend, nscalupts)
+        backend.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
 
-        return self._be.kernel('tdisf_vis', self.ndims, self.nvars,
-                               self.scal_upts_inb, self._smat_upts,
-                               self._rcpdjac_upts, self._vect_upts[0], kc)
+    def get_tdisf_upts_kern(self):
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars,
+                       c=self._cfg.items_as('constants', float))
+
+        return self._be.kernel('tflux', tplargs, dims=[self.nupts, self.neles],
+                               u=self.scal_upts_inb, smats=self._smat_upts,
+                               rcpdjac=self._rcpdjac_upts,
+                               f=self._vect_upts[0])

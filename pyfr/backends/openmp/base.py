@@ -10,7 +10,7 @@ class OpenMPBackend(BaseBackend):
     def __init__(self, cfg):
         super(OpenMPBackend, self).__init__(cfg)
 
-        from pyfr.backends.openmp import (blasext, cblas, packing, pointwise,
+        from pyfr.backends.openmp import (blasext, cblas, packing, provider,
                                           types)
 
         # Register our data types
@@ -28,9 +28,12 @@ class OpenMPBackend(BaseBackend):
         self.lookup = DottedTemplateLookup('pyfr.backends.openmp.kernels')
 
         # Kernel provider classes
-        kprovcls = [blockmats.BlockDiagMatrixKernels,
-                    pointwise.OpenMPPointwiseKernels,
+        kprovcls = [provider.OpenMPPointwiseKernelProvider,
+                    blockmats.BlockDiagMatrixKernels,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
                     cblas.OpenMPCBLASKernels]
         self._providers = [k(self) for k in kprovcls]
+
+        # Pointwise kernels
+        self.pointwise = self._providers[0]

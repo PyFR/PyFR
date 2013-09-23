@@ -1,21 +1,19 @@
 # -*- coding: utf-8 -*-
 
-<%include file='idx_of' />
-
 __global__ void
 pack_view(int nrow, int ncol, ${dtype}** vptr, int* vstri, ${dtype}* pmat,
           int ldp, int lds, int ldm)
 {
-    uint i = blockIdx.x * blockDim.x + threadIdx.x;
-    uint j = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < nrow && j < ncol)
     {
-        ${dtype}* ptr = vptr[IDX_OF(i, j, ldp)];
-        uint stride = vstri[IDX_OF(i, j, lds)];
+        ${dtype}* ptr = vptr[i*ldp + j];
+        int stride = vstri[i*lds + j];
 
-    % for k in xrange(vlen):
-        pmat[IDX_OF(i, ${k}*ncol + j, ldm)] = ptr[${k}*stride];
+    % for k in range(vlen):
+        pmat[i*ldm + ${k}*ncol + j] = ptr[${k}*stride];
     % endfor
     }
 }
@@ -24,16 +22,16 @@ __global__ void
 unpack_view(int nrow, int ncol, ${dtype}** vptr, int* vstri,
             const ${dtype}* upmat, int ldp, int lds, int ldm)
 {
-    uint i = blockIdx.x * blockDim.x + threadIdx.x;
-    uint j = blockIdx.y * blockDim.y + threadIdx.y;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
 
     if (i < nrow && j < ncol)
     {
-        ${dtype}* ptr = vptr[IDX_OF(i, j, ldp)];
-        uint stride = vstri[IDX_OF(i, j, lds)];
+        ${dtype}* ptr = vptr[i*ldp + j];
+        int stride = vstri[i*lds + j];
 
-    % for k in xrange(vlen):
-        ptr[${k}*stride] = upmat[IDX_OF(i, ${k}*ncol + j, ldm)];
+    % for k in range(vlen):
+        ptr[${k}*stride] = upmat[i*ldm + ${k}*ncol + j];
     % endfor
     }
 }

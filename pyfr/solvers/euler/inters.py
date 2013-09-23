@@ -6,31 +6,61 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
 
 
 class EulerIntInters(BaseAdvectionIntInters):
-    def get_comm_flux_kern(self):
-        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants
+    def __init__(self, *args, **kwargs):
+        super(EulerIntInters, self).__init__(*args, **kwargs)
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
 
-        return self._be.kernel('rsolve_inv_int', self.ndims, self.nvars,
-                               rsinv, self._scal0_lhs, self._scal0_rhs,
-                               self._mag_pnorm_lhs, self._mag_pnorm_rhs,
-                               self._norm_pnorm_lhs, kc)
+    def get_comm_flux_kern(self):
+        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
+                       c=self._kernel_constants)
+
+        return self._be.kernel('intcflux', tplargs, dims=[self.ninterfpts],
+                               ul=self._scal0_lhs, ur=self._scal0_rhs,
+                               magnl=self._mag_pnorm_lhs,
+                               magnr=self._mag_pnorm_rhs,
+                               nl=self._norm_pnorm_lhs)
 
 
 class EulerMPIInters(BaseAdvectionMPIInters):
-    def get_comm_flux_kern(self):
-        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants
+    def __init__(self, *args, **kwargs):
+        super(EulerMPIInters, self).__init__(*args, **kwargs)
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicflux')
 
-        return self._be.kernel('rsolve_inv_mpi', self.ndims, self.nvars,
-                               rsinv, self._scal0_lhs, self._scal0_rhs,
-                               self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
+    def get_comm_flux_kern(self):
+        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars,
+                       rsolver=rsolver, c=self._kernel_constants)
+
+        return self._be.kernel('mpicflux', tplargs, dims=[self.ninterfpts],
+                               ul=self._scal0_lhs, ur=self._scal0_rhs,
+                               magnl=self._mag_pnorm_lhs,
+                               nl=self._norm_pnorm_lhs)
 
 
 class EulerBaseBCInters(BaseAdvectionBCInters):
-    def get_comm_flux_kern(self):
-        rsinv = self._cfg.get('solver-interfaces', 'riemann-solver')
-        kc = self._kernel_constants
+    def __init__(self, *args, **kwargs):
+        super(EulerBaseBCInters, self).__init__(*args, **kwargs)
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.bccflux')
 
-        return self._be.kernel('rsolve_inv_bc', self.ndims, self.nvars,
-                               rsinv, self.type, self._scal0_lhs,
-                               self._mag_pnorm_lhs, self._norm_pnorm_lhs, kc)
+    def get_comm_flux_kern(self):
+        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, bctype=self.type,
+                       rsolver=rsolver, c=self._kernel_constants)
+
+        return self._be.kernel('bccflux', tplargs, dims=[self.ninterfpts],
+                               ul=self._scal0_lhs, magnl=self._mag_pnorm_lhs,
+                               nl=self._norm_pnorm_lhs)
+
+
+class EulerSupInflowBCInters(EulerBaseBCInters):
+    type = 'sup-in-fa'
+
+    @property
+    def _kernel_constants(self):
+        kc = dict(super(EulerSupInflowBCInters, self)._kernel_constants)
+
+        kc['rho'], kc['p'] = self._eval_opts('rho', 'p')
+        kc['v'] = self._eval_opts(*'uvw'[:self.ndims])
+
+        return kc

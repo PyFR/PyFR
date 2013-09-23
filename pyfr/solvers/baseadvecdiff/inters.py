@@ -27,12 +27,6 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
 
         return newkc
 
-    def get_conu_fpts_kern(self):
-        kc = self._kernel_constants
-        return self._be.kernel('conu_int', self.nvars,
-                               self._scal0_lhs, self._scal0_rhs,
-                               self._scal1_lhs, self._scal1_rhs, kc)
-
     def _gen_perm(self, lhs, rhs):
         # In the special case of β = -0.5 it is better to sort by the
         # RHS interface; otherwise we simply opt for the LHS
@@ -91,12 +85,6 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
     def get_vect_fpts0_unpack_kern(self):
         return self._be.kernel('unpack', self._vect0_rhs)
 
-    def get_conu_fpts_kern(self):
-        kc = self._kernel_constants
-        return self._be.kernel('conu_mpi', self.nvars,
-                               self._scal0_lhs, self._scal0_rhs,
-                               self._scal1_lhs, kc)
-
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
@@ -116,8 +104,3 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
         newkc.update(self._cfg.items_as('solver-interfaces', float))
 
         return newkc
-
-    def get_conu_fpts_kern(self):
-        kc = self._kernel_constants
-        return self._be.kernel('conu_bc', self.ndims, self.nvars, self.type,
-                               self._scal0_lhs, self._scal1_lhs, kc)
