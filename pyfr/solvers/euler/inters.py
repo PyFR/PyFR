@@ -13,7 +13,7 @@ class EulerIntInters(BaseAdvectionIntInters):
     def get_comm_flux_kern(self):
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._kernel_constants)
+                       c=self._tpl_c)
 
         return self._be.kernel('intcflux', tplargs, dims=[self.ninterfpts],
                                ul=self._scal0_lhs, ur=self._scal0_rhs,
@@ -30,7 +30,7 @@ class EulerMPIInters(BaseAdvectionMPIInters):
     def get_comm_flux_kern(self):
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                       rsolver=rsolver, c=self._kernel_constants)
+                       rsolver=rsolver, c=self._tpl_c)
 
         return self._be.kernel('mpicflux', tplargs, dims=[self.ninterfpts],
                                ul=self._scal0_lhs, ur=self._scal0_rhs,
@@ -46,7 +46,7 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
     def get_comm_flux_kern(self):
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, bctype=self.type,
-                       rsolver=rsolver, c=self._kernel_constants)
+                       rsolver=rsolver, c=self._tpl_c)
 
         return self._be.kernel('bccflux', tplargs, dims=[self.ninterfpts],
                                ul=self._scal0_lhs, magnl=self._mag_pnorm_lhs,
@@ -56,11 +56,8 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
 class EulerSupInflowBCInters(EulerBaseBCInters):
     type = 'sup-in-fa'
 
-    @property
-    def _kernel_constants(self):
-        kc = dict(super(EulerSupInflowBCInters, self)._kernel_constants)
+    def __init__(self, *args, **kwargs):
+        super(EulerSupInflowBCInters, self).__init__(*args, **kwargs)
 
-        kc['rho'], kc['p'] = self._eval_opts('rho', 'p')
-        kc['v'] = self._eval_opts(*'uvw'[:self.ndims])
-
-        return kc
+        self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts('rho', 'p')
+        self._tpl_c['v'] = self._eval_opts(*'uvw'[:self.ndims])
