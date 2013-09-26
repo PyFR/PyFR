@@ -25,7 +25,7 @@ class BaseAdvectionIntInters(BaseInters):
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
     def _gen_perm(self, lhs, rhs):
-        # Arbitrarily, take the permutation which results it an optimal
+        # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
         self._perm = get_opt_view_perm(lhs, 'get_scal_fpts0_for_inter',
                                        self._elemap)
@@ -73,6 +73,11 @@ class BaseAdvectionBCInters(BaseInters):
         self._cfgsect = cfgsect
 
         view_onto, const_mat = self._view_onto, self._const_mat
+
+        # For BC interfaces, which only have an LHS state, we take the
+        # permutation which results in an optimal memory access pattern
+        # iterating over this state.
+        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts0_for_inter', elemap)
 
         # LHS view and constant matrices
         self._scal0_lhs = view_onto(lhs, 'get_scal_fpts0_for_inter')
