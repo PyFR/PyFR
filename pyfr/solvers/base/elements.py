@@ -161,7 +161,7 @@ class BaseElements(object):
 
         neles, ndims = eles.shape[1:]
 
-        self._rcpdjac_upts = 1.0 / djacs.reshape(-1, neles)
+        self._rcpdjac_upts = 1.0 / djacs
         self._smat_upts = smats.reshape(-1, neles, ndims**2)
 
     def _gen_pnorm_fpts(self, eles):
@@ -169,9 +169,6 @@ class BaseElements(object):
         smats = self._get_smats(jac)
 
         normfpts = np.asanyarray(self._basis.norm_fpts, dtype=np.float)
-
-        # Reshape (nfpts*neles, ndims, dims) => (nfpts, neles, ndims, ndims)
-        smats = smats.reshape(self.nfpts, -1, self.ndims, self.ndims)
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
         # Jacobian and N is the normal for each fpt.  Using
@@ -203,9 +200,7 @@ class BaseElements(object):
         jac = jac.reshape(npts, ndims, neles, ndims)
 
         # Transpose to get (npts, neles, ndims, ndims) ≅ (npts, neles, J)
-        jac = jac.transpose(0, 2, 3, 1)
-
-        return jac.reshape(-1, ndims, ndims)
+        return jac.transpose(0, 2, 3, 1)
 
     def _get_smats(self, jac, retdets=False):
         if self.ndims == 2:
@@ -216,11 +211,11 @@ class BaseElements(object):
             raise ValueError('Invalid basis dimension')
 
     def _get_smats2d(self, jac, retdets):
-        a, b, c, d = [jac[:,i,j] for i, j in ndrange(2, 2)]
+        a, b, c, d = [jac[...,i,j] for i, j in ndrange(2, 2)]
 
         smats = np.empty_like(jac)
-        smats[:,0,0], smats[:,0,1] =  d, -b
-        smats[:,1,0], smats[:,1,1] = -c,  a
+        smats[...,0,0], smats[...,0,1] =  d, -b
+        smats[...,1,0], smats[...,1,1] = -c,  a
 
         if retdets:
             return smats, a*d - b*c
@@ -229,13 +224,13 @@ class BaseElements(object):
 
     def _get_smats3d(self, jac, retdets):
         smats = np.empty_like(jac)
-        smats[:,0,:] = np.cross(jac[:,:,1], jac[:,:,2])
-        smats[:,1,:] = np.cross(jac[:,:,2], jac[:,:,0])
-        smats[:,2,:] = np.cross(jac[:,:,0], jac[:,:,1])
+        smats[...,0,:] = np.cross(jac[...,1], jac[...,2])
+        smats[...,1,:] = np.cross(jac[...,2], jac[...,0])
+        smats[...,2,:] = np.cross(jac[...,0], jac[...,1])
 
         if retdets:
             # Exploit the fact that det(J) = x0 . (x1 ^ x2); J = [x0, x1, x2]
-            djacs = np.einsum('...i,...i', jac[:,:,0], smats[:,0,:])
+            djacs = np.einsum('...i,...i', jac[...,0], smats[...,0,:])
 
             return smats, djacs
         else:

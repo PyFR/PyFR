@@ -42,7 +42,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         smats, djacs = self._get_smats(jac, retdets=True)
 
         # Use J^-1 = S/|J| hence J^-T = S^T/|J|
-        jmat_fpts = smats.swapaxes(1, 2) / djacs[...,None,None]
+        jmat_fpts = smats.swapaxes(2, 3) / djacs[...,None,None]
 
         self._jmat_fpts = jmat_fpts.reshape(self.nfpts, -1, self.ndims**2)
 
