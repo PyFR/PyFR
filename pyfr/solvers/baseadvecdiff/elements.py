@@ -14,7 +14,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         super(BaseAdvectionDiffusionElements, self).__init__(basiscls, eles,
                                                              cfg)
 
-        self._gen_jmats_fpts(eles)
+        self._gen_jmats_fpts()
 
     def set_backend(self, be, nscal_upts):
         super(BaseAdvectionDiffusionElements, self).set_backend(be, nscal_upts)
@@ -37,8 +37,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Register pointwise kernels
         be.pointwise.register('pyfr.solvers.baseadvecdiff.kernels.gradcoru')
 
-    def _gen_jmats_fpts(self, eles):
-        jac = self._get_jac_eles_at(eles, self._basis.fpts)
+    def _gen_jmats_fpts(self):
+        jac = self._get_jac_eles_at(self._basis.fpts)
         smats, djacs = self._get_smats(jac, retdets=True)
 
         # Use J^-1 = S/|J| hence J^-T = S^T/|J|

@@ -53,10 +53,10 @@ class BaseElements(object):
         self.nfpts = basis.nfpts
 
         # Transform matrices at the soln points
-        self._gen_rcpdjac_smat_upts(eles)
+        self._gen_rcpdjac_smat_upts()
 
         # Physical normals at the flux points
-        self._gen_pnorm_fpts(eles)
+        self._gen_pnorm_fpts()
 
     @abstractmethod
     def _process_ics(self, ics):
@@ -151,21 +151,19 @@ class BaseElements(object):
     def get_scal_upts_mat(self, idx):
         return self._scal_upts[idx].get()
 
-    def _gen_rcpdjac_smat_upts(self, eles):
-        jacs = self._get_jac_eles_at(eles, self._basis.upts)
+    def _gen_rcpdjac_smat_upts(self):
+        jacs = self._get_jac_eles_at(self._basis.upts)
         smats, djacs = self._get_smats(jacs, retdets=True)
 
         # Check for negative Jacobians
         if np.any(djacs < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
 
-        neles, ndims = eles.shape[1:]
-
         self._rcpdjac_upts = 1.0 / djacs
-        self._smat_upts = smats.reshape(-1, neles, ndims**2)
+        self._smat_upts = smats.reshape(-1, self.neles, self.ndims**2)
 
-    def _gen_pnorm_fpts(self, eles):
-        jac = self._get_jac_eles_at(eles, self._basis.fpts)
+    def _gen_pnorm_fpts(self):
+        jac = self._get_jac_eles_at(self._basis.fpts)
         smats = self._get_smats(jac)
 
         normfpts = np.asanyarray(self._basis.norm_fpts, dtype=np.float)
@@ -183,8 +181,8 @@ class BaseElements(object):
         self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[...,None]
         self._mag_pnorm_fpts = mag_pnorm_fpts
 
-    def _get_jac_eles_at(self, eles, pts):
-        nspts, neles, ndims = eles.shape
+    def _get_jac_eles_at(self, pts):
+        nspts, neles, ndims = self.nspts, self.neles, self.ndims
         npts = len(pts)
 
         # Form the Jacobian operator (going from AoS to SoA)
@@ -194,7 +192,7 @@ class BaseElements(object):
         jacop = np.asanyarray(jacop, dtype=np.float)
 
         # Cast as a matrix multiply and apply to eles
-        jac = np.dot(jacop.reshape(-1, nspts), eles.reshape(nspts, -1))
+        jac = np.dot(jacop.reshape(-1, nspts), self._eles.reshape(nspts, -1))
 
         # Reshape (npts*ndims, neles*ndims) => (npts, ndims, neles, ndims)
         jac = jac.reshape(npts, ndims, neles, ndims)
