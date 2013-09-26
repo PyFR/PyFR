@@ -56,7 +56,6 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         # of the two partitions.
         self._tpl_c['ldg-beta'] *= 1.0 if lhsprank > rhsprank else -1.0
 
-
     def get_vect_fpts0_pack_kern(self):
         return self._be.kernel('pack', self._vect0_lhs)
 
