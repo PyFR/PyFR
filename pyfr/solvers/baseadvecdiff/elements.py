@@ -38,8 +38,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         be.pointwise.register('pyfr.solvers.baseadvecdiff.kernels.gradcoru')
 
     def _gen_jmats_fpts(self):
-        jac = self._get_jac_eles_at(self._basis.fpts)
-        smats, djacs = self._get_smats(jac, retdets=True)
+        smats, djacs = self._get_smats(self._basis.fpts, retdets=True)
 
         # Use J^-1 = S/|J| hence J^-T = S^T/|J|
         jmat_fpts = smats.swapaxes(2, 3) / djacs[...,None,None]

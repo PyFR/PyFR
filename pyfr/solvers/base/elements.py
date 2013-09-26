@@ -152,8 +152,7 @@ class BaseElements(object):
         return self._scal_upts[idx].get()
 
     def _gen_rcpdjac_smat_upts(self):
-        jacs = self._get_jac_eles_at(self._basis.upts)
-        smats, djacs = self._get_smats(jacs, retdets=True)
+        smats, djacs = self._get_smats(self._basis.upts, retdets=True)
 
         # Check for negative Jacobians
         if np.any(djacs < -1e-5):
@@ -163,8 +162,7 @@ class BaseElements(object):
         self._smat_upts = smats.reshape(-1, self.neles, self.ndims**2)
 
     def _gen_pnorm_fpts(self):
-        jac = self._get_jac_eles_at(self._basis.fpts)
-        smats = self._get_smats(jac)
+        smats = self._get_smats(self._basis.fpts)
 
         normfpts = np.asanyarray(self._basis.norm_fpts, dtype=np.float)
 
@@ -200,15 +198,15 @@ class BaseElements(object):
         # Transpose to get (npts, neles, ndims, ndims) ≅ (npts, neles, J)
         return jac.transpose(0, 2, 3, 1)
 
-    def _get_smats(self, jac, retdets=False):
-        if self.ndims == 2:
-            return self._get_smats2d(jac, retdets)
-        elif self.ndims == 3:
-            return self._get_smats3d(jac, retdets)
-        else:
-            raise ValueError('Invalid basis dimension')
+    def _get_smats(self, pts, retdets=False):
+        jac = self._get_jac_eles_at(pts)
 
-    def _get_smats2d(self, jac, retdets):
+        if self.ndims == 2:
+            return self._get_jac_smats_2d(jac, retdets)
+        else:
+            return self._get_jac_smats_3d(jac, retdets)
+
+    def _get_jac_smats_2d(self, jac, retdets):
         a, b, c, d = [jac[...,i,j] for i, j in ndrange(2, 2)]
 
         smats = np.empty_like(jac)
@@ -220,7 +218,7 @@ class BaseElements(object):
         else:
             return smats
 
-    def _get_smats3d(self, jac, retdets):
+    def _get_jac_smats_3d(self, jac, retdets):
         smats = np.empty_like(jac)
         smats[...,0,:] = np.cross(jac[...,1], jac[...,2])
         smats[...,1,:] = np.cross(jac[...,2], jac[...,0])
