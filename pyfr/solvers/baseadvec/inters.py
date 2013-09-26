@@ -66,7 +66,6 @@ class BaseAdvectionMPIInters(BaseInters):
 
 class BaseAdvectionBCInters(BaseInters):
     type = None
-    args = []
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super(BaseAdvectionBCInters, self).__init__(be, lhs, elemap, cfg)
