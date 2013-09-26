@@ -58,11 +58,11 @@ class BaseSystem(object):
             solncfg = Inifile(initsoln['config'].item())
 
             # Process the solution
-            for k,ele in elemaps.items():
+            for k, ele in elemaps.iteritems():
                 soln = initsoln['soln_%s_p%d' % (k, rallocs.prank)]
                 ele.set_ics_from_soln(soln, solncfg)
         else:
-            eles.set_ics_from_expr()
+            eles.set_ics_from_cfg()
 
         # Allocate these elements on the backend
         eles.set_backend(self._backend, self._nreg)

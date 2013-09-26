@@ -62,7 +62,7 @@ class BaseElements(object):
     def _process_ics(self, ics):
         pass
 
-    def set_ics_from_expr(self):
+    def set_ics_from_cfg(self):
         # Bring simulation constants into scope
         vars = self._cfg.items_as('constants', float)
 
