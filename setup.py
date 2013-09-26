@@ -37,9 +37,16 @@ modules = [
     'pyfr.solvers',
     'pyfr.solvers.base',
     'pyfr.solvers.baseadvec',
+    'pyfr.solvers.baseadvec.kernels',
     'pyfr.solvers.baseadvecdiff',
+    'pyfr.solvers.baseadvecdiff.kernels',
     'pyfr.solvers.euler',
+    'pyfr.solvers.euler.kernels',
+    'pyfr.solvers.euler.kernels.bcs',
+    'pyfr.solvers.euler.kernels.rsolvers',
     'pyfr.solvers.navstokes',
+    'pyfr.solvers.navstokes.kernels',
+    'pyfr.solvers.navstokes.kernels.bcs',
     'pyfr.writers']
 
 # Tests
@@ -50,7 +57,14 @@ tests = [
 package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
-    'pyfr.quadrules': ['tri/*'],
+    'pyfr.quadrules': ['tri/*.txt'],
+    'pyfr.solvers.baseadvec.kernels': ['*.mako'],
+    'pyfr.solvers.baseadvecdiff.kernels': ['*.mako'],
+    'pyfr.solvers.euler.kernels': ['*.mako'],
+    'pyfr.solvers.euler.kernels.bcs': ['*.mako'],
+    'pyfr.solvers.euler.kernels.rsolvers': ['*.mako'],
+    'pyfr.solvers.navstokes.kernels': ['*.mako'],
+    'pyfr.solvers.navstokes.kernels.bcs': ['*.mako'],
     'pyfr.tests': ['*.npz']}
 
 # Hard dependencies
