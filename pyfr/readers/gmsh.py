@@ -36,12 +36,12 @@ class GmshReader(BaseReader):
 
     # Gmsh element types to PyFR type (petype) + sizes
     _etype_map = {1: ('line', 2),  8: ('line', 3), 26: ('line', 4),
-                  2: ('tri', 3),   9: ('tri', 6),
+                  2: ('tri', 3),   9: ('tri', 6),  21: ('tri', 10),
                   3: ('quad', 4), 10: ('quad', 9), 36: ('quad', 16),
-                  4: ('tet', 4),  11: ('tet', 10),
+                  4: ('tet', 4),  11: ('tet', 10), 29: ('tet', 20),
                   5: ('hex', 8),  12: ('hex', 27), 92: ('hex', 64),
                   6: ('pri', 6),  13: ('pri', 18),
-                  7: ('pyr', 5),  14: ('pyr', 15)}
+                  7: ('pyr', 5),  14: ('pyr', 14)}
 
     # Number of nodes in the first-order representation an element
     _petype_focount = {v[0]: v[1] for k, v in _etype_map.items() if k < 8}
