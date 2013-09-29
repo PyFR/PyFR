@@ -27,13 +27,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Flux point transformation matrices
         self._jmat_fpts = be.const_matrix(self._jmat_fpts, tags={'align'})
 
-        # Vector-view stride info
-        self._vect_fpts_vstri = np.tile(self._scal_fpts_vstri, (self.ndims, 1))
-
-        # Vector view matrix info
-        self._vect_fpts_vmats = [np.tile(m, self._vect_fpts_vstri.shape)
-                                 for m in self._vect_fpts]
-
         # Register pointwise kernels
         be.pointwise.register('pyfr.solvers.baseadvecdiff.kernels.gradcoru')
 

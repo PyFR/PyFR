@@ -17,13 +17,16 @@ class BaseAdvectionElements(BaseElements):
         # Pre-compute for the max flux point count on a given face
         nmaxfpts = max(nfacefpts)
 
-        # View stride info (common to all scal_fpts mats)
+        # View and vector-view stride info
         self._scal_fpts_vstri = np.empty((1, nmaxfpts), dtype=np.int32)
         self._scal_fpts_vstri[:] = self._scal_fpts[0].leadsubdim
+        self._vect_fpts_vstri = np.tile(self._scal_fpts_vstri, (self.ndims, 1))
 
         # View matrix info
         self._scal_fpts_vmats = [np.tile(m, (1, nmaxfpts))
                                  for m in self._scal_fpts]
+        self._vect_fpts_vmats = [np.tile(m, self._vect_fpts_vstri.shape)
+                                 for m in self._vect_fpts]
 
         # Register pointwise kernels
         be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
