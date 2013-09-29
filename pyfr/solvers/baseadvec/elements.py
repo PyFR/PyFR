@@ -14,15 +14,12 @@ class BaseAdvectionElements(BaseElements):
         # Get the number of flux points for each face of the element
         self.nfacefpts = nfacefpts = self._basis.nfacefpts
 
-        # Get the relevant strides required for view construction
-        self._scal_fpts_strides = (1, self._scal_fpts[0].leadsubdim)
-
         # Pre-compute for the max flux point count on a given face
         nmaxfpts = max(nfacefpts)
 
         # View stride info (common to all scal_fpts mats)
         self._scal_fpts_vstri = np.empty((1, nmaxfpts), dtype=np.int32)
-        self._scal_fpts_vstri[:] = self._scal_fpts_strides[1]
+        self._scal_fpts_vstri[:] = self._scal_fpts[0].leadsubdim
 
         # View matrix info
         self._scal_fpts_vmats = [np.tile(m, (1, nmaxfpts))
@@ -66,7 +63,7 @@ class BaseAdvectionElements(BaseElements):
 
         vrcidx = np.empty((1, nfp, 2), dtype=np.int32)
         vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[...,1] = eidx*self._scal_fpts_strides[0]
+        vrcidx[...,1] = eidx
 
         return (self._scal_fpts_vmats[n][:nfp], vrcidx,
                 self._scal_fpts_vstri[:nfp])
@@ -76,7 +73,7 @@ class BaseAdvectionElements(BaseElements):
 
         vrcidx = np.empty((self.ndims, nfp, 2), dtype=np.int32)
         vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
-        vrcidx[...,1] = eidx*self._scal_fpts_strides[0]
+        vrcidx[...,1] = eidx
 
         # Correct the row indicies
         for i in range(self.ndims):
