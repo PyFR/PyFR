@@ -82,8 +82,8 @@ class BaseAdvectionElements(BaseElements):
         for i in range(self.ndims):
             vrcidx[i,:,0] += i*self.nfpts
 
-        return (self._vect_fpts_vmats[n][:nfp], vrcidx,
-                self._vect_fpts_vstri[:nfp])
+        return (self._vect_fpts_vmats[n][:,:nfp], vrcidx,
+                self._vect_fpts_vstri[:,:nfp])
 
     def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
         return self._get_scal_fptsn_for_inter(0, eidx, fidx, rtag)
