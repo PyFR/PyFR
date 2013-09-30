@@ -22,7 +22,7 @@ def lambdify_mpf(dims, exprs):
                 csf[m] = mp.mpf(m)
 
     # Sort the keys by their length to prevent erroneous substitutions
-    cs = sorted(csf.iterkeys(), key=len, reverse=True)
+    cs = sorted(csf, key=len, reverse=True)
 
     # Name these constants
     csn = {s: '__c%d' % i for i, s in enumerate(cs)}
