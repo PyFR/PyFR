@@ -57,9 +57,9 @@ class BaseWriter(BaseIntegrator):
 
         return os.path.join(self._basedir, fname)
 
-    def _get_name_for_soln(self, type, prank=None):
+    def _get_name_for_soln(self, etype, prank=None):
         prank = prank or self._rallocs.prank
-        return 'soln_%s_p%d' % (type, prank)
+        return 'soln_{}_p{}'.format(etype, prank)
 
 
 class FileWriter(BaseWriter):
@@ -72,10 +72,10 @@ class FileWriter(BaseWriter):
         comm, rank, root = get_comm_rank_root()
 
         # Get the type and shape of each element in the partition
-        types, shapes = self._system.ele_types, self._system.ele_shapes
+        etypes, shapes = self._system.ele_types, self._system.ele_shapes
 
         # Gather this information onto the root rank
-        eleinfo = comm.gather(zip(types, shapes), root=root)
+        eleinfo = comm.gather(zip(etypes, shapes), root=root)
 
         if rank == root:
             self._mpi_rbufs = mpi_rbufs = []
@@ -85,8 +85,8 @@ class FileWriter(BaseWriter):
 
             for mrank, meleinfo in enumerate(eleinfo):
                 prank = self._rallocs.mprankmap[mrank]
-                for tag, (type, dims) in enumerate(meleinfo):
-                    name = self._get_name_for_soln(type, prank)
+                for tag, (etype, dims) in enumerate(meleinfo):
+                    name = self._get_name_for_soln(etype, prank)
 
                     if mrank == root:
                         loc_names.append(name)
@@ -141,6 +141,6 @@ class DirWriter(BaseWriter):
         comm.barrier()
 
         # Save the solutions
-        for type, buf in solnmap.items():
-            solnpath = os.path.join(path, self._get_name_for_soln(type))
+        for etype, buf in solnmap.items():
+            solnpath = os.path.join(path, self._get_name_for_soln(etype))
             np.save(solnpath, buf)
