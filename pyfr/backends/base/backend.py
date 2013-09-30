@@ -8,7 +8,7 @@ from weakref import WeakSet
 
 import numpy as np
 
-from pyfr.util import ndrange, proxylist
+from pyfr.util import ndrange
 
 
 def recordalloc(type):
