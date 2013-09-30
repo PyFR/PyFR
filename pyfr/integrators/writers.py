@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
 
-import os
-import itertools
-import shutil
-
 from abc import abstractmethod
+import itertools as it
+import os
 
 from mpi4py import MPI
-
 import numpy as np
 
 from pyfr.integrators.base import BaseIntegrator
@@ -113,8 +110,8 @@ class FileWriter(BaseWriter):
             MPI.Prequest.Waitall(self._mpi_rreqs)
 
             # Combine local and MPI data
-            names = itertools.chain(self._loc_names, self._mpi_names)
-            solns = itertools.chain(solnmap.values(), self._mpi_rbufs)
+            names = it.chain(self._loc_names, self._mpi_names)
+            solns = it.chain(solnmap.values(), self._mpi_rbufs)
 
             # Create the output dictionary
             outdict = dict(zip(names, solns), **metadata)
