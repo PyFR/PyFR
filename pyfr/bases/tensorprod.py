@@ -177,17 +177,16 @@ class TensorProdBasis(object):
                           dtype=np.object)
 
         # Pair up opposite faces with their associated (normal) dimension
-        for fpair, sym in zip(self._fpairs, self._dims):
+        for (fl, fr), sym in zip(self._fpairs, self._dims):
             nbdims = [d for d in self._dims if d is not sym]
-            fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
+            fbasis[(fl, fr),...] = nodal_basis(pts1d, nbdims, compact=False)
 
-            for f, n in zip(fpair, [-1, 1]):
-                # Some faces have flux points that count backwards;
-                # this requires us to reverse the nodal basis
-                if f in self._flipb:
-                    fbasis[f] = fbasis[f,...,::-1]
+            fbasis[fl,...] *= diffg.subs(_x, -sym)
+            fbasis[fr,...] *= diffg.subs(_x, sym)
 
-                fbasis[f,...] *= diffg.subs(_x, n*sym)
+        # Some faces have flux points that count backwards; for
+        # these faces we must reverse the basis
+        fbasis[self._flipb] = fbasis[self._flipb,...,::-1]
 
         return fbasis.ravel()
 
