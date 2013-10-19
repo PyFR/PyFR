@@ -112,21 +112,6 @@ def quad_map_face(fpts):
     return mfpts
 
 
-def diff_vcjh_correctionfn(k, eta, sym):
-    # Expand shorthand forms of eta_k for common schemes
-    etacommon = dict(dg='0', sd='k/(k+1)', hu='(k+1)/k')
-
-    eta_k = sy.S(etacommon.get(eta, eta), locals=dict(k=k))
-
-    lkm1, lk, lkp1 = [sy.legendre_poly(m, sym) for m in [k-1, k, k+1]]
-
-    # Correction function derivatives, Eq. 3.46 and 3.47
-    diffgr = (sy.S(1)/2 * (lk + (eta_k*lkm1 + lkp1)/(1 + eta_k))).diff()
-    diffgl = -diffgr.subs(sym, -sym)
-
-    return diffgl, diffgr
-
-
 class TensorProdBasis(object):
     def __init__(self, *args, **kwargs):
         super(TensorProdBasis, self).__init__(*args, **kwargs)
@@ -148,6 +133,17 @@ class TensorProdBasis(object):
     def _pts1d(self):
         rule = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(BaseLineQuadRule, rule, self._order + 1).points
+
+    def _vcjh_fn(self, sym):
+        k = self._order
+        eta = self._cfg.get('solver-elements-' + self.name, 'vcjh-eta')
+
+        # Expand shorthand forms of eta for common schemes
+        etacommon = dict(dg='0', sd='k/(k+1)', hu='(k+1)/k')
+        eta_k = sy.S(etacommon.get(eta, eta), locals=dict(k=k))
+
+        lkm1, lk, lkp1 = [sy.legendre_poly(m, sym) for m in [k - 1, k, k + 1]]
+        return (sy.S(1)/2 * (lk + (eta_k*lkm1 + lkp1)/(1 + eta_k)))
 
     @lazyprop
     def upts(self):
@@ -208,24 +204,24 @@ class QuadBasis(TensorProdBasis, BaseBasis):
         # Get the 1D points
         pts1d = self._pts1d
 
+        # Dummy symbol
+        _x = sy.Symbol('_x')
+
+        # Get the derivative of the 1D correction function
+        diffg = self._vcjh_fn(_x).diff()
+
         # Allocate space for the flux basis
         fbasis = np.empty((4, len(pts1d)), dtype=np.object)
 
         # Pair up opposite edges with their associated (normal) dimension
-        for epair, sym in zip([(3,1), (0,2)], self._dims):
+        for epair, sym in zip([(3, 1), (0, 2)], self._dims):
             nbdim = [d for d in self._dims if d is not sym]
             fbasis[epair,...] = nodal_basis(pts1d, nbdim, compact=False)
 
-            eta = self._cfg.get('solver-elements-quad', 'vcjh-eta')
-            diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
-
-            for p, gfn in zip(epair, diffcorfn):
-                if p in (2,3):
-                    fbasis[p] = fbasis[p,::-1]
-                fbasis[p,:] *= gfn
-
-        # Correct faces with negative normals
-        fbasis[(3,0),:] *= -1
+            for f, n in zip(epair, [-1, 1]):
+                if f in (2, 3):
+                    fbasis[f] = fbasis[f,::-1]
+                fbasis[f,:] *= diffg.subs(_x, n*sym)
 
         return fbasis.ravel()
 
@@ -282,24 +278,24 @@ class HexBasis(TensorProdBasis, BaseBasis):
         # Get the 1D points
         pts1d = self._pts1d
 
+        # Dummy symbol
+        _x = sy.Symbol('_x')
+
+        # Get the derivative of the 1D correction function
+        diffg = self._vcjh_fn(_x).diff()
+
         # Allocate space for the flux points basis
         fbasis = np.empty([6] + [self._order + 1]*2, dtype=np.object)
 
         # Pair up opposite faces with their associated (normal) dimension
-        for fpair, sym in zip([(4,2), (1,3), (0,5)], self._dims):
+        for fpair, sym in zip([(4, 2), (1, 3), (0, 5)], self._dims):
             nbdims = [d for d in self._dims if d is not sym]
             fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
 
-            eta = self._cfg.get('solver-elements-hex', 'vcjh-eta')
-            diffcorfn = diff_vcjh_correctionfn(self._order, eta, sym)
-
-            for p, gfn in zip(fpair, diffcorfn):
-                if p in (0,3,4):
-                    fbasis[p] = np.fliplr(fbasis[p])
-                fbasis[p,...] *= gfn
-
-        # Correct faces with negative normals
-        fbasis[(4,1,0),...] *= -1
+            for f, n in zip(fpair, [-1, 1]):
+                if f in (0, 3, 4):
+                    fbasis[f] = np.fliplr(fbasis[f])
+                fbasis[f,...] *= diffg.subs(_x, n*sym)
 
         return fbasis.ravel()
 
