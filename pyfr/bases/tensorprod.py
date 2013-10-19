@@ -113,6 +113,14 @@ def quad_map_face(fpts):
 
 
 class TensorProdBasis(object):
+    # List of face numbers paired according to their normal dimension
+    # e.g, [(a, b), ...] where a, b are the faces whose normal points
+    # in -p and p, respectively
+    _fpairs = None
+
+    # List of opposite face numbers
+    _flipb = None
+
     def __init__(self, *args, **kwargs):
         super(TensorProdBasis, self).__init__(*args, **kwargs)
 
@@ -154,6 +162,36 @@ class TensorProdBasis(object):
         return nodal_basis(self._pts1d, self._dims)
 
     @lazyprop
+    def fbasis(self):
+        # Get the 1D points
+        pts1d = self._pts1d
+
+        # Dummy symbol
+        _x = sy.Symbol('_x')
+
+        # Get the derivative of the 1D correction function
+        diffg = self._vcjh_fn(_x).diff()
+
+        # Allocate space for the flux points basis
+        fbasis = np.empty([2*self.ndims] + [len(pts1d)]*(self.ndims - 1),
+                          dtype=np.object)
+
+        # Pair up opposite faces with their associated (normal) dimension
+        for fpair, sym in zip(self._fpairs, self._dims):
+            nbdims = [d for d in self._dims if d is not sym]
+            fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
+
+            for f, n in zip(fpair, [-1, 1]):
+                # Some faces have flux points that count backwards;
+                # this requires us to reverse the nodal basis
+                if f in self._flipb:
+                    fbasis[f] = fbasis[f,...,::-1]
+
+                fbasis[f,...] *= diffg.subs(_x, n*sym)
+
+        return fbasis.ravel()
+
+    @lazyprop
     def spts1d(self):
         esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', self._nsptsord)
         return esqr.points
@@ -186,6 +224,9 @@ class QuadBasis(TensorProdBasis, BaseBasis):
     name = 'quad'
     ndims = 2
 
+    _fpairs = [(3, 1), (0, 2)]
+    _flipb = [2, 3]
+
     @lazyprop
     def fpts(self):
         # Get the 1D points
@@ -198,32 +239,6 @@ class QuadBasis(TensorProdBasis, BaseBasis):
 
         # Quad map edge zero to get the full set
         return quad_map_edge(ezeropts).reshape(-1, 2)
-
-    @lazyprop
-    def fbasis(self):
-        # Get the 1D points
-        pts1d = self._pts1d
-
-        # Dummy symbol
-        _x = sy.Symbol('_x')
-
-        # Get the derivative of the 1D correction function
-        diffg = self._vcjh_fn(_x).diff()
-
-        # Allocate space for the flux basis
-        fbasis = np.empty((4, len(pts1d)), dtype=np.object)
-
-        # Pair up opposite edges with their associated (normal) dimension
-        for epair, sym in zip([(3, 1), (0, 2)], self._dims):
-            nbdim = [d for d in self._dims if d is not sym]
-            fbasis[epair,...] = nodal_basis(pts1d, nbdim, compact=False)
-
-            for f, n in zip(epair, [-1, 1]):
-                if f in (2, 3):
-                    fbasis[f] = fbasis[f,::-1]
-                fbasis[f,:] *= diffg.subs(_x, n*sym)
-
-        return fbasis.ravel()
 
     @lazyprop
     def norm_fpts(self):
@@ -257,6 +272,9 @@ class HexBasis(TensorProdBasis, BaseBasis):
     name = 'hex'
     ndims = 3
 
+    _fpairs = [(4, 2), (1, 3), (0, 5)]
+    _flipb = [0, 3, 4]
+
     @lazyprop
     def fpts(self):
         # Get the 1D points
@@ -272,32 +290,6 @@ class HexBasis(TensorProdBasis, BaseBasis):
 
         # Cube map face one to get faces zero through five
         return quad_map_face(fonepts).reshape(-1, 3)
-
-    @lazyprop
-    def fbasis(self):
-        # Get the 1D points
-        pts1d = self._pts1d
-
-        # Dummy symbol
-        _x = sy.Symbol('_x')
-
-        # Get the derivative of the 1D correction function
-        diffg = self._vcjh_fn(_x).diff()
-
-        # Allocate space for the flux points basis
-        fbasis = np.empty([6] + [self._order + 1]*2, dtype=np.object)
-
-        # Pair up opposite faces with their associated (normal) dimension
-        for fpair, sym in zip([(4, 2), (1, 3), (0, 5)], self._dims):
-            nbdims = [d for d in self._dims if d is not sym]
-            fbasis[fpair,...] = nodal_basis(pts1d, nbdims, compact=False)
-
-            for f, n in zip(fpair, [-1, 1]):
-                if f in (0, 3, 4):
-                    fbasis[f] = np.fliplr(fbasis[f])
-                fbasis[f,...] *= diffg.subs(_x, n*sym)
-
-        return fbasis.ravel()
 
     @lazyprop
     def norm_fpts(self):
