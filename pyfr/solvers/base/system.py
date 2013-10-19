@@ -135,7 +135,7 @@ class BaseSystem(object):
 
     @property
     def ele_types(self):
-        return list(self._elemaps.keys())
+        return list(self._elemaps)
 
     @property
     def ele_shapes(self):
