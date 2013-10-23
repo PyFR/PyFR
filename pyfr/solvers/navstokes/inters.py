@@ -92,6 +92,7 @@ class NavierStokesNoSlpIsoWallBCInters(NavierStokesBaseBCInters):
         super(NavierStokesNoSlpIsoWallBCInters, self).__init__(*args, **kwargs)
 
         self._tpl_c['cpTw'], = self._eval_opts(['cpTw'])
+        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')
 
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
