@@ -13,8 +13,8 @@
     fpdtype_t gradu[${ndims}][${nvars}];
 % for i, j in pyfr.ndrange(ndims, nvars):
     gradu[${i}][${j}] = rcpdjac*(${' + '.join('smats[{0}]*f[{1}][{2}]'
-                                             .format(k*ndims + i, k, j)
-                                             for k in range(ndims))});
+                                              .format(k*ndims + i, k, j)
+                                              for k in range(ndims))});
 % endfor
 
     // Compute the flux (F = Fi + Fv)
