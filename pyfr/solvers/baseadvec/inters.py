@@ -83,11 +83,16 @@ class BaseAdvectionBCInters(BaseInters):
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
-    def _eval_opts(self, *opts):
+    def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be
         # parameterized by values in [constants] so we must bring these
         # into scope when evaluating the boundary conditions
         cc = self._cfg.items_as('constants', float)
 
+        cfg, sect = self._cfg, self._cfgsect
+
         # Evaluate any BC specific arguments from the config file
-        return [npeval(self._cfg.get(self._cfgsect, k), cc) for k in opts]
+        if default is not None:
+            return [npeval(cfg.get(sect, k, default), cc) for k in opts]
+        else:
+            return [npeval(cfg.get(sect, k), cc) for k in opts]

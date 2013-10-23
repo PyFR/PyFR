@@ -91,7 +91,7 @@ class NavierStokesNoSlpIsoWallBCInters(NavierStokesBaseBCInters):
     def __init__(self, *args, **kwargs):
         super(NavierStokesNoSlpIsoWallBCInters, self).__init__(*args, **kwargs)
 
-        self._tpl_c['cpTw'], = self._eval_opts('cpTw')
+        self._tpl_c['cpTw'], = self._eval_opts(['cpTw'])
 
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
@@ -100,8 +100,8 @@ class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     def __init__(self, *args, **kwargs):
         super(NavierStokesSupInflowBCInters, self).__init__(*args, **kwargs)
 
-        self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts('rho', 'p')
-        self._tpl_c['v'] = self._eval_opts(*'uvw'[:self.ndims])
+        self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts(['rho', 'p'])
+        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
 
 
 class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
@@ -114,8 +114,8 @@ class NavierStokesSubInflowBCInters(NavierStokesBaseBCInters):
     def __init__(self, *args, **kwargs):
         super(NavierStokesSubInflowBCInters, self).__init__(*args, **kwargs)
 
-        self._tpl_c['rho'], = self._eval_opts('rho')
-        self._tpl_c['v'] = self._eval_opts(*'uvw'[:self.ndims])
+        self._tpl_c['rho'], = self._eval_opts(['rho'])
+        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
 
 
 class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
@@ -124,4 +124,4 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
     def __init__(self, *args, **kwargs):
         super(NavierStokesSubOutflowBCInters, self).__init__(*args, **kwargs)
 
-        self._tpl_c['p'], = self._eval_opts('p')
+        self._tpl_c['p'], = self._eval_opts(['p'])

@@ -59,5 +59,5 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
     def __init__(self, *args, **kwargs):
         super(EulerSupInflowBCInters, self).__init__(*args, **kwargs)
 
-        self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts('rho', 'p')
-        self._tpl_c['v'] = self._eval_opts(*'uvw'[:self.ndims])
+        self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts(['rho', 'p'])
+        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
