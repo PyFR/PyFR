@@ -7,9 +7,9 @@
                         fpdtype_t ur[${str(nvars)}]'>
     ur[0] = ul[0];
 % for i, v in enumerate(c['v']):
-    ur[${i + 1}] = -ul[${i + 1}] + 2*ul[0]*${v};
+    ur[${i + 1}] = -ul[${i + 1}] + ${2*v}*ul[0];
 % endfor
-    ur[${nvars - 1}] = ${c['cpTw']/c['gamma']}*ul[0]
+    ur[${nvars - 1}] = ${c['cpTw']/c['gamma']}*ur[0]
                      + 0.5*(1.0/ur[0])*${pyfr.dot('ur[{i}]', i=(1, ndims + 1))};
 </%pyfr:function>
 
@@ -18,9 +18,9 @@
                         fpdtype_t ur[${str(nvars)}]'>
     ur[0] = ul[0];
 % for i, v in enumerate(c['v']):
-    ur[${i + 1}] = ul[0]*${v};
+    ur[${i + 1}] = ${v}*ul[0];
 % endfor
-    ur[${nvars - 1}] = ${c['cpTw']/c['gamma']}*ul[0]
+    ur[${nvars - 1}] = ${c['cpTw']/c['gamma']}*ur[0]
                      + 0.5*(1.0/ur[0])*${pyfr.dot('ur[{i}]', i=(1, ndims + 1))};
 </%pyfr:function>
 
