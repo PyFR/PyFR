@@ -22,12 +22,6 @@ class BaseAdvectionElements(BaseElements):
         self._scal_fpts_vstri[:] = self._scal_fpts[0].leadsubdim
         self._vect_fpts_vstri = np.tile(self._scal_fpts_vstri, (self.ndims, 1))
 
-        # View matrix info
-        self._scal_fpts_vmats = [np.tile(m, (1, nmaxfpts))
-                                 for m in self._scal_fpts]
-        self._vect_fpts_vmats = [np.tile(m, self._vect_fpts_vstri.shape)
-                                 for m in self._vect_fpts]
-
         # Register pointwise kernels
         be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
 
@@ -61,17 +55,16 @@ class BaseAdvectionElements(BaseElements):
         fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
         return self._norm_pnorm_fpts[fpts_idx, eidx]
 
-    def _get_scal_fptsn_for_inter(self, n, eidx, fidx, rtag):
+    def _get_scal_fptsn_for_inter(self, mat, eidx, fidx, rtag):
         nfp = self.nfacefpts[fidx]
 
         vrcidx = np.empty((1, nfp, 2), dtype=np.int32)
         vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
         vrcidx[...,1] = eidx
 
-        return (self._scal_fpts_vmats[n][:nfp], vrcidx,
-                self._scal_fpts_vstri[:nfp])
+        return (np.tile(mat, (1, nfp)), vrcidx, self._scal_fpts_vstri[:nfp])
 
-    def _get_vect_fptsn_for_inter(self, n, eidx, fidx, rtag):
+    def _get_vect_fptsn_for_inter(self, mat, eidx, fidx, rtag):
         nfp = self.nfacefpts[fidx]
 
         vrcidx = np.empty((self.ndims, nfp, 2), dtype=np.int32)
@@ -82,8 +75,9 @@ class BaseAdvectionElements(BaseElements):
         for i in range(self.ndims):
             vrcidx[i,:,0] += i*self.nfpts
 
-        return (self._vect_fpts_vmats[n][:,:nfp], vrcidx,
+        return (np.tile(mat, (self.ndims, nfp)), vrcidx,
                 self._vect_fpts_vstri[:,:nfp])
 
     def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
-        return self._get_scal_fptsn_for_inter(0, eidx, fidx, rtag)
+        return self._get_scal_fptsn_for_inter(self._scal_fpts[0], eidx, fidx,
+                                              rtag)

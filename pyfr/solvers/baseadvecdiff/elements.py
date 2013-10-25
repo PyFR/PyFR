@@ -4,7 +4,7 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
-    _nscal_fpts = 2
+    _nscal_fpts = 1
     _nvect_upts = 1
     _nvect_fpts = 1
 
@@ -41,7 +41,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                out=self._vect_upts[0])
 
     def get_tgradcoru_upts_kern(self):
-        return self._be.kernel('mul', self._m6b, self._scal_fpts[1],
+        scal_fpts1 = self._vect_fpts[0].rslice(0, self.nfpts)
+        return self._be.kernel('mul', self._m6b, scal_fpts1,
                                out=self._vect_upts[0], beta=1.0)
 
     def get_tgradcoru_fpts_kern(self):
@@ -56,7 +57,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                jmats=self._jmat_fpts, gradu=self._vect_fpts[0])
 
     def get_scal_fpts1_for_inter(self, eidx, fidx, rtag):
-        return self._get_scal_fptsn_for_inter(1, eidx, fidx, rtag)
+        return self._get_scal_fptsn_for_inter(self._vect_fpts[0], eidx, fidx,
+                                              rtag)
 
     def get_vect_fpts0_for_inter(self, eidx, fidx, rtag):
-        return self._get_vect_fptsn_for_inter(0, eidx, fidx, rtag)
+        return self._get_vect_fptsn_for_inter(self._vect_fpts[0], eidx, fidx,
+                                              rtag)
