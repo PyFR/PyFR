@@ -12,7 +12,7 @@ from pyfr.syutil import lagrange_basis
 from pyfr.util import ndrange, lazyprop
 
 
-def cart_prod_points(points, ndim, compact=True):
+def cart_prod_points(points, ndim):
     """Performs a cartesian product extension of *points* into *ndim*
 
     For idiosyncratic reason the counting order of indices is from
@@ -39,10 +39,7 @@ def cart_prod_points(points, ndim, compact=True):
         cprodpts[...,-i-1] = ax
 
     # Compact into an array of ndim component tuples
-    if compact:
-        return cprodpts.reshape(-1, ndim)
-    else:
-        return cprodpts
+    return cprodpts.reshape(-1, ndim)
 
 
 def nodal_basis(points, dims, compact=True):
@@ -280,10 +277,10 @@ class HexBasis(TensorProdBasis, BaseBasis):
         pts1d = self._pts1d
 
         # Perform a 2D extension to get the (p,r) points of face one
-        pts2d = cart_prod_points(pts1d, 2, compact=False)
+        pts2d = cart_prod_points(pts1d, 2)
 
         # 3D points are just (p,-1,r) for face one
-        fonepts = np.empty(pts2d.shape[:-1] + (3,), dtype=np.object)
+        fonepts = np.empty((len(pts2d), 3), dtype=np.object)
         fonepts[...,(0,2)] = pts2d
         fonepts[...,1] = -1
 
