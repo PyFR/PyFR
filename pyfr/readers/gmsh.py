@@ -158,7 +158,7 @@ class GmshReader(BaseReader):
 
         for l in msh_section(msh, 'Nodes'):
             nv = l.split()
-            nodepts[int(nv[0])] = [float(x) for x in nv[1:]]
+            nodepts[int(nv[0])] = np.array([float(x) for x in nv[1:]])
 
     def _read_eles(self, msh):
         elenodes = defaultdict(list)
