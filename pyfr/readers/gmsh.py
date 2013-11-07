@@ -303,13 +303,16 @@ class GmshReader(BaseReader):
         hexlut = np.array([[1, 0, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3],
                            [0, 1, 2, 3], [1, 0, 3, 2], [0, 1, 3, 2]])
 
+        # From offset to rtag
+        offrtag = [3, 1, 2, 4]
+
         for l, r in qpairs:
             ordl = l.nodes[hexlut[l.fidx]]
             ordr = r.nodes[hexlut[r.fidx]]
 
             # RHS rotation tag is index of ordl[0] in ordr mod four
             l.rtag = 0
-            r.rtag = np.where(ordr == ordl[0])[0][0] % 4
+            r.rtag = offrtag[np.where(ordr == ordl[0])[0][0]]
 
     def _pair_periodic_fluid_faces(self, bpart, resid):
         pfaces = defaultdict(list)
