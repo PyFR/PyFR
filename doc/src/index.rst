@@ -10,7 +10,6 @@ Contents:
    overview
    theory
    user_guide
-   tutorials
    developer_guide
 
 Indices and Tables
