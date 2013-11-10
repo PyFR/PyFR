@@ -9,6 +9,19 @@ import re
 from sympy.mpmath import mp
 
 
+def perm_orbit(args, coords):
+    # Argument list for the function
+    args = ', '.join(args)
+
+    # Compute all unique permutations of coords
+    perms = set(it.permutations(coords))
+
+    # Suitably format
+    body = '[' + ', '.join('(' + ', '.join(p) + ')' for p in perms) + ']'
+
+    return eval('lambda {}: {}'.format(args, body))
+
+
 class BaseQuadRule(object):
     __metaclass__ = ABCMeta
 
