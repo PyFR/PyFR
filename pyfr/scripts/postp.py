@@ -143,12 +143,14 @@ def process_tavg(args):
 
     # Initialise the rolling average, load the time of first snapshot
     avg = read_pyfr_data(args.infs[0])
-    tmin = Inifile(avg['stats'].item()).getfloat('time-integration', 'tcurr')
     cavg = {name: avg[name] for name in list(avg)}
+    tmin = Inifile(avg['stats'].item()).getfloat('solver-time-integrator',
+                                                 'tcurr')
 
     # Initialise the next file to be averaged, load the time and delta
     scur = read_pyfr_data(args.infs[1])
-    tcur = Inifile(scur['stats'].item()).getfloat('time-integration', 'tcurr')
+    tcur = Inifile(scur['stats'].item()).getfloat('solver-time-integrator',
+                                                  'tcurr')
     dtcur = tcur - tmin
 
     # Verify that solutions were computed on the same mesh
@@ -167,7 +169,7 @@ def process_tavg(args):
 
         # Read in the next solution, obtain the next time and delta
         snxt = read_pyfr_data(filenm)
-        tnxt = Inifile(snxt['stats'].item()).getfloat('time-integration',
+        tnxt = Inifile(snxt['stats'].item()).getfloat('solver-time-integrator',
                                                       'tcurr')
         dtnxt = tnxt - tcur
 
