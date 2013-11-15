@@ -10,8 +10,6 @@ from pyfr.util import memoize, proxylist
 
 
 class _BaseKernel(object):
-    __metaclass__ = ABCMeta
-
     def __call__(self, *args):
         return self, args
 
@@ -19,7 +17,6 @@ class _BaseKernel(object):
     def retval(self):
         return None
 
-    @abstractmethod
     def run(self, *args, **kwargs):
         pass
 

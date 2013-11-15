@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.quadrules.base import BaseQuadRule, BaseStoredQuadRule
+from pyfr.quadrules.base import BaseQuadRule, BaseStoredQuadRule, perm_orbit
 
 
 class BaseTriQuadRule(BaseQuadRule):
     eletype = 'tri'
     orbits = {
-        '3': lambda a: [(a, a, a)],
-        '21': lambda a: [(a, a, 1-2*a), (a, 1-2*a, a), (1-2*a, a, a)],
-        '111': lambda a, b: [(a, b, 1-a-b), (a, 1-a-b, b), (b, a, 1-a-b),
-                             (b, 1-a-b, a), (1-a-b, a, b), (1-a-b, b, a)]}
+        '3': perm_orbit('a', ['a', 'a', 'a']),
+        '21': perm_orbit('a', ['a', 'a', '1 - 2*a']),
+        '111': perm_orbit('ab', ['a', 'b', '1 - a - b'])}
 
 
 class AlphaOptTriQuadRule(BaseStoredQuadRule, BaseTriQuadRule):

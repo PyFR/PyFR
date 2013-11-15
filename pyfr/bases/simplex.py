@@ -8,7 +8,7 @@ from sympy.mpmath import mp
 
 from pyfr.bases.base import BaseBasis, lambdify_mpf
 from pyfr.quadrules import BaseLineQuadRule, BaseTriQuadRule, get_quadrule
-from pyfr.syutil import lagrange_basis, norm_jacobi
+from pyfr.syutil import lagrange_basis
 from pyfr.util import lazyprop, ndrange
 
 
@@ -60,11 +60,11 @@ class TriBasis(BaseBasis):
         # Construct an orthonormal basis within a standard triangle
         db = []
         for i in xrange(ptsord):
-            tmp = sy.sqrt(2)*norm_jacobi(i, 0, 0, a)*(1 - b)**i
+            tmp = sy.sqrt(2)*sy.jacobi_normalized(i, 0, 0, a)*(1 - b)**i
             tmp = tmp.ratsimp()
 
             for j in xrange(ptsord - i):
-                poly = sy.expand(tmp*norm_jacobi(j, 2*i + 1, 0, b))
+                poly = sy.expand(tmp*sy.jacobi_normalized(j, 2*i + 1, 0, b))
                 db.append(poly.evalf(mp.dps))
 
         return db

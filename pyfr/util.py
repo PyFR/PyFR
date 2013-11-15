@@ -1,36 +1,35 @@
 # -*- coding: utf-8 -*-
 
-import functools
-import itertools
-import contextlib
-import shutil
-
-import os
+from contextlib import contextmanager
+import functools as ft
 import io
+import itertools as it
+import os
 import cPickle as pickle
+import shutil
 
 
 class memoize(object):
     def __init__(self, func):
         self.func = func
 
-    def __get__(self, obj, objtype=None):
-        if obj is None:
-            return self.func
-        return functools.partial(self, obj)
+    def __get__(self, instance, owner):
+        return self.func if instance is None else ft.partial(self, instance)
 
-    def __call__(self, *args, **kw):
-        obj = args[0]
+    def __call__(self, *args, **kwargs):
+        instance = args[0]
+
         try:
-            cache = obj.__cache
+            cache = instance._memoize_cache
         except AttributeError:
-            cache = obj.__cache = {}
+            cache = instance._memoize_cache = {}
 
-        key = (self.func, pickle.dumps(args[1:], 1), pickle.dumps(kw, 1))
+        key = (self.func, pickle.dumps(args[1:], 1), pickle.dumps(kwargs, 1))
+
         try:
             res = cache[key]
         except KeyError:
-            res = cache[key] = self.func(*args, **kw)
+            res = cache[key] = self.func(*args, **kwargs)
 
         return res
 
@@ -50,7 +49,7 @@ class proxylist(list):
         return proxylist([x(*args, **kwargs) for x in self])
 
 
-@contextlib.contextmanager
+@contextmanager
 def setenv(**kwargs):
     _env = os.environ.copy()
     os.environ.update(kwargs)
@@ -62,7 +61,7 @@ def setenv(**kwargs):
         os.environ.update(_env)
 
 
-@contextlib.contextmanager
+@contextmanager
 def chdir(dirname):
     cdir = os.getcwd()
 
@@ -78,7 +77,7 @@ def lazyprop(fn):
     attr = '_lazy_' + fn.__name__
 
     @property
-    @functools.wraps(fn)
+    @ft.wraps(fn)
     def newfn(self):
         try:
             return getattr(self, attr)
@@ -95,8 +94,8 @@ def purge_lazyprops(obj):
 
 
 def all_subclasses(cls):
-    return cls.__subclasses__()\
-         + [g for s in cls.__subclasses__() for g in all_subclasses(s)]
+    return (cls.__subclasses__() +
+            [g for s in cls.__subclasses__() for g in all_subclasses(s)])
 
 
 def subclass_map(cls, attr):
@@ -105,7 +104,7 @@ def subclass_map(cls, attr):
 
 
 def ndrange(*args):
-    return itertools.product(*map(xrange, args))
+    return it.product(*map(xrange, args))
 
 
 def rm(path):

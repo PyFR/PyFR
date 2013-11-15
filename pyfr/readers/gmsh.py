@@ -35,13 +35,14 @@ class GmshReader(BaseReader):
     extn = ['.msh']
 
     # Gmsh element types to PyFR type (petype) + sizes
-    _etype_map = {1: ('line', 2),  8: ('line', 3), 26: ('line', 4),
-                  2: ('tri', 3),   9: ('tri', 6),  21: ('tri', 10),
-                  3: ('quad', 4), 10: ('quad', 9), 36: ('quad', 16),
-                  4: ('tet', 4),  11: ('tet', 10), 29: ('tet', 20),
-                  5: ('hex', 8),  12: ('hex', 27), 92: ('hex', 64),
-                  6: ('pri', 6),  13: ('pri', 18),
-                  7: ('pyr', 5),  14: ('pyr', 14)}
+    _etype_map = {
+        1: ('line', 2),  8: ('line', 3), 26: ('line', 4),  27: ('line', 5),
+        2: ('tri', 3),   9: ('tri', 6),  21: ('tri', 10),  23: ('tri', 15),
+        3: ('quad', 4), 10: ('quad', 9), 36: ('quad', 16), 37: ('quad', 25),
+        4: ('tet', 4),  11: ('tet', 10), 29: ('tet', 20),
+        5: ('hex', 8),  12: ('hex', 27), 92: ('hex', 64),
+        6: ('pri', 6),  13: ('pri', 18),
+        7: ('pyr', 5),  14: ('pyr', 14)}
 
     # Number of nodes in the first-order representation an element
     _petype_focount = {v[0]: v[1] for k, v in _etype_map.items() if k < 8}
@@ -158,7 +159,7 @@ class GmshReader(BaseReader):
 
         for l in msh_section(msh, 'Nodes'):
             nv = l.split()
-            nodepts[int(nv[0])] = [float(x) for x in nv[1:]]
+            nodepts[int(nv[0])] = np.array([float(x) for x in nv[1:]])
 
     def _read_eles(self, msh):
         elenodes = defaultdict(list)
@@ -303,13 +304,16 @@ class GmshReader(BaseReader):
         hexlut = np.array([[1, 0, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3],
                            [0, 1, 2, 3], [1, 0, 3, 2], [0, 1, 3, 2]])
 
+        # From offset to rtag
+        offrtag = [3, 1, 2, 4]
+
         for l, r in qpairs:
             ordl = l.nodes[hexlut[l.fidx]]
             ordr = r.nodes[hexlut[r.fidx]]
 
             # RHS rotation tag is index of ordl[0] in ordr mod four
             l.rtag = 0
-            r.rtag = np.where(ordr == ordl[0])[0][0] % 4
+            r.rtag = offrtag[np.where(ordr == ordl[0])[0][0]]
 
     def _pair_periodic_fluid_faces(self, bpart, resid):
         pfaces = defaultdict(list)
