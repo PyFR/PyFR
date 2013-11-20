@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from ConfigParser import NoOptionError
-
 from pyfr.solvers.base import BaseInters, get_opt_view_perm
 from pyfr.nputil import npeval
 
