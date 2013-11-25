@@ -5,7 +5,7 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 import sympy as sy
 
-from pyfr.nputil import npeval
+from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import ndrange
 
 
@@ -57,6 +57,18 @@ class BaseElements(object):
 
         # Physical normals at the flux points
         self._gen_pnorm_fpts()
+
+        # Construct the physical location operator matrix
+        plocop = np.asanyarray(basis.sbasis_at(basis.fpts), dtype=np.float)
+
+        # Apply the operator to the mesh elements and reshape
+        plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
+        plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
+        plocfpts = plocfpts.transpose(1, 2, 0).tolist()
+
+        srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
+                          for ffpts in basis.facefpts]
+        self._srtd_face_fpts = np.array(srtd_face_fpts).swapaxes(0, 1)
 
     @abstractmethod
     def _process_ics(self, ics):

@@ -187,6 +187,11 @@ class TensorProdBasis(object):
 
         return fbasis.ravel()
 
+    @property
+    def facefpts(self):
+        kn = (self._order + 1)**(self.ndims - 1)
+        return [list(xrange(i*kn, (i + 1)*kn)) for i in xrange(2*self.ndims)]
+
     @lazyprop
     def spts1d(self):
         esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', self._nsptsord)
@@ -203,17 +208,6 @@ class TensorProdBasis(object):
     @property
     def nupts(self):
         return (self._order + 1)**self.ndims
-
-    @property
-    def nfacefpts(self):
-        return [(self._order + 1)**(self.ndims - 1)] * (2*self.ndims)
-
-    @abstractproperty
-    def _rschemes(self):
-        pass
-
-    def fpts_idx_for_face(self, face, rtag):
-        return self._rschemes[face, rtag]
 
 
 class QuadBasis(TensorProdBasis, BaseBasis):
@@ -244,24 +238,6 @@ class QuadBasis(TensorProdBasis, BaseBasis):
 
         # Edge map
         return quad_map_edge(ezeronorms).reshape(-1, 2)
-
-    @lazyprop
-    def _rschemes(self):
-        k = self._order + 1
-
-        # Pre-compute all possible flux point rotation schemes
-        rs = np.empty((4, 2), dtype=np.object)
-        for face, rtag in ndrange(*rs.shape):
-            fpts = np.arange(face*k, (face + 1)*k)
-
-            if rtag == 0:
-                pass
-            elif rtag == 1:
-                fpts = fpts[::-1]
-
-            rs[face,rtag] = fpts
-
-        return rs
 
 
 class HexBasis(TensorProdBasis, BaseBasis):
@@ -295,27 +271,3 @@ class HexBasis(TensorProdBasis, BaseBasis):
 
         # Cube map to get the remaining face normals
         return quad_map_face(fonenorms).reshape(-1, 3)
-
-    @lazyprop
-    def _rschemes(self):
-        k = self._order + 1
-
-        # Compute all possible flux point rotation schemes
-        rs = np.empty((6, 5), dtype=np.object)
-        for face, rtag in ndrange(*rs.shape):
-            fpts = np.arange(face*k*k, (face + 1)*k*k).reshape(k,k)
-
-            if rtag == 0:
-                pass
-            elif rtag == 1:
-                fpts = np.fliplr(fpts)
-            elif rtag == 2:
-                fpts = np.fliplr(fpts)[::-1]
-            elif rtag == 3:
-                fpts = np.transpose(fpts)
-            elif rtag == 4:
-                fpts = np.transpose(fpts)[::-1]
-
-            rs[face,rtag] = fpts.ravel()
-
-        return rs

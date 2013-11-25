@@ -8,6 +8,7 @@ import numpy as np
 
 from pyfr.readers import BaseReader
 from pyfr.readers.nodemaps import GmshNodeMaps
+from pyfr.nputil import fuzzysort
 
 
 def msh_section(mshit, section):
@@ -225,11 +226,11 @@ class GmshReader(BaseReader):
         nfcount = self._petype_ftcount[peletype][pftype]
 
         dtype = [('petype', 'S4'), ('eidx', 'i4'), ('fidx', 'i1'),
-                 ('rtag', 'i1'), ('nodes', 'i4', nfnodes)]
+                 ('flags', 'i1'), ('nodes', 'i4', nfnodes)]
 
         arr = np.recarray((neles, nfcount), dtype=dtype)
         arr.petype = peletype
-        arr.rtag = 0
+        arr.flags = 0
 
         return arr
 
@@ -287,65 +288,28 @@ class GmshReader(BaseReader):
 
         return pairs, resid
 
-    def _calc_fluid_rtags(self, fpairs):
-        rtaggers = {'line': self._calc_fluid_rtags_line,
-                    'quad': self._calc_fluid_rtags_quad}
-
-        for pftype, pairs in fpairs.iteritems():
-            rtaggers[pftype](pairs)
-
-    def _calc_fluid_rtags_line(self, lpairs):
-        # In 2D there is only one possible arrangement
-        for l, r in lpairs:
-            l.rtag, r.rtag = 0, 1
-
-    def _calc_fluid_rtags_quad(self, qpairs):
-        # To standard order
-        hexlut = np.array([[1, 0, 2, 3], [0, 1, 2, 3], [0, 1, 2, 3],
-                           [0, 1, 2, 3], [1, 0, 3, 2], [0, 1, 3, 2]])
-
-        # From offset to rtag
-        offrtag = [3, 1, 2, 4]
-
-        for l, r in qpairs:
-            ordl = l.nodes[hexlut[l.fidx]]
-            ordr = r.nodes[hexlut[r.fidx]]
-
-            # RHS rotation tag is index of ordl[0] in ordr mod four
-            l.rtag = 0
-            r.rtag = offrtag[np.where(ordr == ordl[0])[0][0]]
-
     def _pair_periodic_fluid_faces(self, bpart, resid):
         pfaces = defaultdict(list)
+        nodepts = self._nodepts
 
         for lpent, rpent in self._pfacespents.itervalues():
             for pftype in bpart[lpent]:
                 lfnodes = bpart[lpent][pftype]
                 rfnodes = bpart[rpent][pftype]
 
-                for lfn, rfn in izip(lfnodes, rfnodes):
+                lfpts = np.array([[nodepts[n] for n in fn] for fn in lfnodes])
+                rfpts = np.array([[nodepts[n] for n in fn] for fn in rfnodes])
+
+                lfidx = fuzzysort(lfpts.mean(axis=1).T, xrange(len(lfnodes)))
+                rfidx = fuzzysort(rfpts.mean(axis=1).T, xrange(len(rfnodes)))
+
+                for lfn, rfn in izip(lfnodes[lfidx], rfnodes[rfidx]):
                     lf = resid.pop(tuple(sorted(lfn)))
                     rf = resid.pop(tuple(sorted(rfn)))
 
                     pfaces[pftype].append((lf, rf))
 
         return pfaces
-
-    def _calc_periodic_fluid_rtags(self, pfpairs):
-        rtaggers = {'line': self._calc_periodic_fluid_rtags_line,
-                    'quad': self._calc_periodic_fluid_rtags_quad}
-
-        for pftype, pairs in pfpairs.iteritems():
-            rtaggers[pftype](pairs)
-
-    def _calc_periodic_fluid_rtags_line(self, lpairs):
-        for l, r in lpairs:
-            l.rtag, r.rtag = 0, 1
-
-    def _calc_periodic_fluid_rtags_quad(self, qpairs):
-        # TODO: Compute this properly
-        for l, r in qpairs:
-            r.rtag = 1
 
     def _ident_boundary_faces(self, bpart, resid):
         bfaces = defaultdict(list)
@@ -381,14 +345,14 @@ class GmshReader(BaseReader):
 
         # Generate the face connectivity
         for l, r in pairs:
-            lpetype, leidxg, lfidx, lrtag, lnodes = l
-            rpetype, reidxg, rfidx, rrtag, rnodes = r
+            lpetype, leidxg, lfidx, lflags, lnodes = l
+            rpetype, reidxg, rfidx, rflags, rnodes = r
 
             lpart, leidxl = eleglmap[lpetype][leidxg]
             rpart, reidxl = eleglmap[rpetype][reidxg]
 
-            conl = (lpetype, leidxl, lfidx, lrtag)
-            conr = (rpetype, reidxl, rfidx, rrtag)
+            conl = (lpetype, leidxl, lfidx, lflags)
+            conr = (rpetype, reidxl, rfidx, rflags)
 
             if lpart == rpart:
                 con_px[lpart].append([conl, conr])
@@ -398,7 +362,7 @@ class GmshReader(BaseReader):
 
         # Generate boundary conditions
         for pbcrgn, pent in self._bfacespents.iteritems():
-            for lpetype, leidxg, lfidx, lrtag, lnodes in bcf[pent]:
+            for lpetype, leidxg, lfidx, lflags, lnodes in bcf[pent]:
                 lpart, leidxl = eleglmap[lpetype][leidxg]
                 conl = (lpetype, leidxl, lfidx, 0)
 
@@ -427,10 +391,6 @@ class GmshReader(BaseReader):
 
         if any(resid.itervalues()):
             raise ValueError('Unpaired faces in mesh')
-
-        # Determine the rotation tags of these fluid-fluid faces
-        self._calc_fluid_rtags(fpairs)
-        self._calc_periodic_fluid_rtags(pfpairs)
 
         # Flattern the face-pair dicts
         pairs = chain(chain.from_iterable(fpairs.itervalues()),

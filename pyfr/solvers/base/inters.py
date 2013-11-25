@@ -10,9 +10,9 @@ def get_view_mats(interside, mat, elemap, perm=Ellipsis):
     viewmatmap = {type: getattr(ele, mat) for type, ele in elemap.items()}
 
     scal = []
-    for type, eidx, face, rtag in interside:
+    for type, eidx, face, flags in interside:
         # After the += the length is increased by *three*
-        scal += viewmatmap[type](eidx, face, rtag)
+        scal += viewmatmap[type](eidx, face)
 
     # Concat the various numpy arrays together to yield the three matrices
     # required in order to define a view
@@ -29,7 +29,7 @@ def get_mat(interside, mat, elemap, perm=Ellipsis):
     emap = {type: getattr(ele, mat) for type, ele in elemap.items()}
 
     # Get the matrix, swizzle the dimensions, and permute
-    m = [emap[type](eidx, fidx, rtag) for type, eidx, fidx, rtag in interside]
+    m = [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
     m = np.concatenate(m)
     m = np.atleast_2d(m.T)
     m = m[:,perm]
@@ -66,7 +66,7 @@ class BaseInters(object):
 
         # Compute the total number of interface flux points
         self.ninterfpts = sum(elemap[etype].nfacefpts[fidx]
-                              for etype, eidx, fidx, rtag in lhs)
+                              for etype, eidx, fidx, flags in lhs)
 
         # By default do not permute any of the interface arrays
         self._perm = Ellipsis
