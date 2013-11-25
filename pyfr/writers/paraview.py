@@ -227,9 +227,6 @@ def _tri_con(ndim, nsubdiv):
         
         # Extent list
         conlst.extend([subin, subex])
-
-    if ndim > 2:
-        raise RuntimeError('Subdivision is not implemented for tetrahedra.')
         
     return np.hstack(conlst)
 
