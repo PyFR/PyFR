@@ -15,7 +15,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         # Element-local kernels
         self._tgradpcoru_upts_kerns = eles.get_tgradpcoru_upts_kern()
         self._tgradcoru_upts_kerns = eles.get_tgradcoru_upts_kern()
-        self._tgradcoru_fpts_kerns = eles.get_tgradcoru_fpts_kern()
+        self._gradcoru_upts_kerns = eles.get_gradcoru_upts_kern()
         self._gradcoru_fpts_kerns = eles.get_gradcoru_fpts_kern()
 
         self._mpi_inters_vect_fpts0_pack_kerns = \
@@ -51,7 +51,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         q1 << self._mpi_inters_con_u_kerns()
         q1 << self._tgradcoru_upts_kerns()
-        q1 << self._tgradcoru_fpts_kerns()
+        q1 << self._gradcoru_upts_kerns()
         q1 << self._gradcoru_fpts_kerns()
         q1 << self._mpi_inters_vect_fpts0_pack_kerns()
         runall([q1])

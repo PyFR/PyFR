@@ -15,5 +15,4 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
 
         return self._be.kernel('tflux', tplargs, dims=[self.nupts, self.neles],
                                u=self.scal_upts_inb, smats=self._smat_upts,
-                               rcpdjac=self._rcpdjac_upts,
                                f=self._vect_upts[0])
