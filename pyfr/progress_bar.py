@@ -33,21 +33,23 @@ def format_hms(delta):
 
 
 class ProgressBar(object):
-    _dispfmt = '{:7.1%} [{}{}>{}] {:.2f}/{:.2f} ela: {} rem: {}'
+    _dispfmt = '{:7.1%} [{}{}>{}] {:.{}f}/{:.{}f} ela: {} rem: {}'
 
     # Minimum time in seconds between updates
     _mindelta = 0.1
 
-    def __init__(self, start, curr, end):
+    def __init__(self, start, curr, end, dps=2):
         self.ststrt = start
         self.strtrt = curr
         self.stend = end
+        self.dps = str(dps)
 
         self._wstart = time.time()
         self._last_wallt = 0.0
 
         self._ncol = get_terminal_size()[1]
-        self._nbarcol = self._ncol - 40 - 2*len(format(end, '.2f'))
+        self._nbarcol = self._ncol - 24 - 2*len(format(end, '.' +
+                                                       self.dps + 'f'))
 
         self.advance_to(curr)
 
@@ -79,13 +81,7 @@ class ProgressBar(object):
         rcu, ren = cu - st,  en - st
 
         # Fraction of the simulation we've completed
-        frac = rcu / ren
-
-        # Decide how many '+', '=' and ' ' to output for the progress bar
-        n = self._nbarcol - 1
-        nps = int(n * (rcu - el)/ren)
-        neq = int(n * el/ren)
-        nsp = n - nps - neq
+        frac = float(rcu) / ren
 
         # Elapsed wall time
         wela = format_hms(wallt)
@@ -97,9 +93,15 @@ class ProgressBar(object):
             trem = None
         wrem = format_hms(trem)
 
+        # Decide how many '+', '=' and ' ' to output for the progress bar
+        n = self._nbarcol - len(wela) - len(wrem) - 1
+        nps = int(n * (rcu - el)/ren)
+        neq = int(n * el/ren)
+        nsp = n - nps - neq
+
         # Render the progress bar
-        s = self._dispfmt.format(frac, '+'*nps, '='*neq, ' '*nsp, cu, en,
-                                 wela, wrem)
+        s = self._dispfmt.format(frac, '+'*nps, '='*neq, ' '*nsp, cu, self.dps,
+                                 en, self.dps, wela, wrem)
 
         # Write the progress bar and pad the remaining columns
         sys.stderr.write('\x1b[2K\x1b[G')
