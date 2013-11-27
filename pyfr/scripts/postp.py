@@ -4,12 +4,14 @@
 import os
 import sys
 
-from tempfile import NamedTemporaryFile, mkdtemp
 from argparse import ArgumentParser, FileType
+from collections import OrderedDict
+from tempfile import NamedTemporaryFile, mkdtemp
 
 import numpy as np
 
 from pyfr.inifile import Inifile
+from pyfr.progress_bar import ProgressBar
 from pyfr.readers.native import read_pyfr_data
 from pyfr.util import rm, all_subclasses
 from pyfr.writers import get_writer_by_name, get_writer_by_extn, BaseWriter
@@ -103,113 +105,65 @@ def process_convert(args):
 
 
 def process_tavg(args):
-    # Build list of .pyfrs file names in range
-    if args.rnge:
-        try:
-            # Find common part of .pyfrs file names & min/max of numbering
-            prfx, fmin = args.infs[0].rsplit('.', 1)[0].rsplit('-', 1)
-            prfx2, fmax = args.infs[1].rsplit('.', 1)[0].rsplit('-', 1)
-        except:
-            raise RuntimeError('Range expansion requires file naming of form:'
-                               ' <constant_prefix>-<unique_number>.pyfrs')
+    infs = {}
+    # Interrogate files passed by the shell
+    for fname in args.infs:
+        # Load solution files and obtain solution times
+        inf = read_pyfr_data(fname)
+        tinf = Inifile(inf['stats']).getfloat('solver-time-integrator',
+                                              'tcurr')
 
-        if prfx != prfx2:
-            raise RuntimeError('Range expansion requires a constant prefix '
-                               'in the file name')
+        # Retain if solution time is within limits
+        if args.limits is None or args.limits[0] <= tinf <= args.limits[1]:
+            infs[tinf] = inf
 
-        # Parse paths to external directories
-        direc, prfx = os.path.split(prfx)
-        if direc == '':
-            direc = '.'
+            # Verify that solutions were computed on the same mesh
+            if inf['mesh_uuid'] != infs[infs.keys()[0]]['mesh_uuid']:
+                raise RuntimeError('Solution files in scope were not computed '
+                                   'on the same mesh')
 
-        # Find .pyfrs files within name range
-        infs = []
-        for filenm in os.listdir(direc):
-            tmp = filenm.rsplit('.', 1)
+    # Sort the solution times, check for sufficient files in scope
+    stimes = sorted(infs.keys())
+    if len(infs) <= 1:
+        raise RuntimeError('More than one solution file is required to '
+                           'compute an average')
 
-            # Check for .pyfrs file names with same prefix as in args.infs
-            if tmp[-1] == 'pyfrs' and tmp[0].rsplit('-', 1)[0] == prfx:
-                fprfx, fsufx = tmp[0].rsplit('-', 1)
+    # Initialise progress bar, and the average with first solution
+    pb = ProgressBar(0, 0, len(stimes), 0)
+    avgs = {name: infs[stimes[0]][name].copy() for name in infs[stimes[0]]}
+    solnfs = [name for name in avgs.keys() if name.startswith('soln')]
 
-                # Select files within suffix range defined by args.infs
-                if fsufx >= fmin and fsufx <= fmax:
-                    infs.append(os.path.join(direc, filenm))
+    # Weight the initialised trapezoidal mean
+    dtnext = stimes[1] - stimes[0]
+    for name in solnfs:
+        avgs[name] *= 0.5*dtnext
+    pb.advance_to(1)
 
-        args.infs = sorted(infs)
+    # Compute the trapezoidal mean up to the last solution file
+    for i in xrange(len(stimes[2:])):
+        dtlast = dtnext
+        dtnext = stimes[i+2] - stimes[i+1]
 
-    if len(args.infs) <= 1:
-        raise RuntimeError('More than one solution file is required for an '
-                           'average')
-
-    # Initialise the rolling average, load the time of first snapshot
-    avg = read_pyfr_data(args.infs[0])
-    cavg = {name: avg[name] for name in list(avg)}
-    tmin = Inifile(avg['stats'].item()).getfloat('solver-time-integrator',
-                                                 'tcurr')
-
-    # Initialise the next file to be averaged, load the time and delta
-    scur = read_pyfr_data(args.infs[1])
-    tcur = Inifile(scur['stats'].item()).getfloat('solver-time-integrator',
-                                                  'tcurr')
-    dtcur = tcur - tmin
-
-    # Verify that solutions were computed on the same mesh
-    if scur['mesh_uuid'] != cavg['mesh_uuid']:
-        raise RuntimeError('Solution files in scope were not computed on '
-                           'the same mesh')
-
-    # Weight the initialised trapezoidal rolling mean
-    for name in avg.soln_files:
-        cavg[name] *= 0.5*dtcur
-
-    # Compute the rolling mean up to the last solution file
-    for i, filenm in enumerate(args.infs[2:]):
-        sys.stdout.write('\rProcessing file: %s' % args.infs[i])
-        sys.stdout.flush()
-
-        # Read in the next solution, obtain the next time and delta
-        snxt = read_pyfr_data(filenm)
-        tnxt = Inifile(snxt['stats'].item()).getfloat('solver-time-integrator',
-                                                      'tcurr')
-        dtnxt = tnxt - tcur
-
-        # Verify that solutions were computed on the same mesh
-        if snxt['mesh_uuid'] != cavg['mesh_uuid']:
-            raise RuntimeError('Solution files in scope were not computed on '
-                               'the same mesh')
-
-        # Weight the current solution, then add to the rolling mean
-        weight = 0.5*(dtcur + dtnxt)
-        for name in avg.soln_files:
-            cavg[name] += scur[name]*weight
-
-        # Roll solution pointer, time level and delta
-        scur = snxt
-        tcur = tnxt
-        dtcur = dtnxt
+        # Weight the current solution, then add to the mean
+        for name in solnfs:
+            avgs[name] += 0.5*(dtlast + dtnext)*infs[stimes[i+1]][name]
+        pb.advance_to(i+2)
 
     # Weight final solution, update mean and normalise for elapsed time
-    for name in avg.soln_files:
-        cavg[name] += 0.5*dtcur*scur[name]
-        cavg[name] *= 1.0/(tcur - tmin)
+    for name in solnfs:
+        avgs[name] += 0.5*dtnext*infs[stimes[-1]][name]
+        avgs[name] *= 1.0/(stimes[-1] - stimes[0])
+    pb.advance_to(i+3)
 
     # Compute and assign stats for a time-averaged solution
     stats = Inifile()
-    stats.set('time-average', 'tmin', tmin)
-    stats.set('time-average', 'tmax', tcur)
-    stats.set('time-average', 'ntlevels', len(args.infs))
-    cavg['stats'] = stats.tostr()
+    stats.set('time-average', 'tmin', stimes[0])
+    stats.set('time-average', 'tmax', stimes[-1])
+    stats.set('time-average', 'ntlevels', len(stimes))
+    avgs['stats'] = stats.tostr()
 
-    # Assign output file name
-    if args.outfile is None:
-        if args.rnge:
-            args.outfile = '-'.join([prfx, 'mean', fmin, 'to',
-                                     fmax]) + '.pyfrs'
-        else:
-            args.outfile = 'time-averaged-solution.pyfrs'
-
-    outf = open(args.outfile, 'wb')
-    np.savez_compressed(outf, **cavg)
+    outf = open(args.outf, 'wb')
+    np.savez(outf, **avgs)
 
 
 def main():
@@ -289,20 +243,15 @@ def main():
 
     ap_tavg = sp.add_parser('time-avg', help='time-avg --help',
                             description='Computes the mean solution of a '
-                            'series of PyFR solution (*.pyfrs) files')
-    ap_tavg.add_argument('infs', type=str, nargs='+', help='Names '
-                         'of the (*.pyfrs) solution files to be averaged')
-    ap_tavg.add_argument('-o', '--outfile', type=str, help='Define '
-                         'the name for the (*.pyfrs) output file')
-    ap_tavg.add_argument('-r', '--range', action='store_true', dest='rnge',
-                         help='Usage allows the list of input filenames '
-                         'to be inferred from the contents of a directory.  '
-                         'A "min" then "max" filename is passed for the '
-                         'the [infs ...] arguments. Solution filenames must '
-                         'be consistent and structured of the form:  '
-                         '<constant-prefix>-<unique-numeric>.pyfrs, '
-                         'where the <unique-numeric> is a non-negative '
-                         'integer or real number')
+                            'time-wise series of pyfrs files.')
+    ap_tavg.add_argument('outf', type=str, help='Output PyFR solution file '
+                         'name.')
+    ap_tavg.add_argument('infs', type=str, nargs='+', help='Input '
+                         'PyFR solution files to be time-averaged.')
+    ap_tavg.add_argument('-l', '--limits', nargs=2, type=float,
+                         help='Exclude solution files (passed in the infs '
+                         'argument) that lie outside minimum and maximum '
+                         'solution time limits.')
     ap_tavg.set_defaults(process=process_tavg)
 
     # Parse the arguments
