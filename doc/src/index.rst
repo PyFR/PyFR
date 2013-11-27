@@ -7,7 +7,7 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   overview
+   home
    theory
    user_guide
    developer_guide

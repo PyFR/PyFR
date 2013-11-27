@@ -2,9 +2,6 @@
 User Guide
 **********
 
-Introduction
-============
-
 Getting Started
 ===============
 
