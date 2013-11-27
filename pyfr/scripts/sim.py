@@ -20,16 +20,17 @@ from pyfr.backends import get_backend
 from pyfr.inifile import Inifile
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.progress_bar import ProgressBar
+from pyfr.readers.native import read_pyfr_data
 from pyfr.solvers import get_solver
 
 
 def process_run(args):
-    return np.load(args.mesh), None, Inifile.load(args.cfg)
+    return read_pyfr_data(args.mesh), None, Inifile.load(args.cfg)
 
 
 def process_restart(args):
-    mesh = np.load(args.mesh)
-    soln = np.load(args.soln)
+    mesh = read_pyfr_data(args.mesh)
+    soln = read_pyfr_data(args.soln)
 
     # Ensure the solution is from the mesh we are using
     if soln['mesh_uuid'] != mesh['mesh_uuid']:
@@ -57,13 +58,13 @@ def main():
     sp = ap.add_subparsers(help='sub-command help')
 
     ap_run = sp.add_parser('run', help='run --help')
-    ap_run.add_argument('mesh', type=FileType('rb'), help='mesh file')
+    ap_run.add_argument('mesh', help='mesh file')
     ap_run.add_argument('cfg', type=FileType('r'), help='config file')
     ap_run.set_defaults(process=process_run)
 
     ap_restart = sp.add_parser('restart', help='restart --help')
-    ap_restart.add_argument('mesh', type=FileType('rb'), help='mesh file')
-    ap_restart.add_argument('soln', type=FileType('rb'), help='solution file')
+    ap_restart.add_argument('mesh', help='mesh file')
+    ap_restart.add_argument('soln', help='solution file')
     ap_restart.add_argument('cfg', nargs='?', type=FileType('r'),
                             help='new config file')
     ap_restart.set_defaults(process=process_restart)
