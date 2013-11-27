@@ -30,20 +30,6 @@ class TriBasis(BaseBasis):
             if not self._nsptsord.is_Number:
                 raise ValueError('Invalid number of shape points')
 
-        k = self._order + 1
-
-        # Pre-compute all possible flux point rotation schemes
-        self._rschemes = rs = np.empty((3, 2), dtype=np.object)
-        for face, rtag in ndrange(*rs.shape):
-            fpts = np.arange(face*k, (face + 1)*k)
-
-            if rtag == 0:
-                pass
-            elif rtag == 1:
-                fpts = fpts[::-1]
-
-            rs[face,rtag] = fpts
-
     @classmethod
     def std_ele(cls, sptord):
         esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
@@ -138,8 +124,9 @@ class TriBasis(BaseBasis):
         return nfpts.reshape(-1, 2)
 
     @property
-    def nfacefpts(self):
-        return [self._order + 1]*3
+    def facefpts(self):
+        k = self._order + 1
+        return [list(xrange(i*k, (i + 1)*k)) for i in xrange(3)]
 
     @lazyprop
     def fbasis(self):
@@ -174,6 +161,3 @@ class TriBasis(BaseBasis):
         fbasis[1,:] *= mp.sqrt(2)
 
         return fbasis.ravel()
-
-    def fpts_idx_for_face(self, face, rtag):
-        return self._rschemes[face, rtag]

@@ -47,28 +47,28 @@ class BaseAdvectionElements(BaseElements):
                                tdivtconf=self.scal_upts_outb,
                                rcpdjac=self._rcpdjac_upts)
 
-    def get_mag_pnorms_for_inter(self, eidx, fidx, rtag):
-        fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
-        return self._mag_pnorm_fpts[fpts_idx, eidx]
+    def get_mag_pnorms_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[eidx,fidx]
+        return self._mag_pnorm_fpts[fpts_idx,eidx]
 
-    def get_norm_pnorms_for_inter(self, eidx, fidx, rtag):
-        fpts_idx = self._basis.fpts_idx_for_face(fidx, rtag)
-        return self._norm_pnorm_fpts[fpts_idx, eidx]
+    def get_norm_pnorms_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[eidx,fidx]
+        return self._norm_pnorm_fpts[fpts_idx,eidx]
 
-    def _get_scal_fptsn_for_inter(self, mat, eidx, fidx, rtag):
+    def _get_scal_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
         vrcidx = np.empty((1, nfp, 2), dtype=np.int32)
-        vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
+        vrcidx[...,0] = self._srtd_face_fpts[eidx,fidx]
         vrcidx[...,1] = eidx
 
         return (np.tile(mat, (1, nfp)), vrcidx, self._scal_fpts_vstri[:nfp])
 
-    def _get_vect_fptsn_for_inter(self, mat, eidx, fidx, rtag):
+    def _get_vect_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
         vrcidx = np.empty((self.ndims, nfp, 2), dtype=np.int32)
-        vrcidx[...,0] = self._basis.fpts_idx_for_face(fidx, rtag)
+        vrcidx[...,0] = self._srtd_face_fpts[eidx,fidx]
         vrcidx[...,1] = eidx
 
         # Correct the row indicies
@@ -78,6 +78,5 @@ class BaseAdvectionElements(BaseElements):
         return (np.tile(mat, (self.ndims, nfp)), vrcidx,
                 self._vect_fpts_vstri[:,:nfp])
 
-    def get_scal_fpts0_for_inter(self, eidx, fidx, rtag):
-        return self._get_scal_fptsn_for_inter(self._scal_fpts[0], eidx, fidx,
-                                              rtag)
+    def get_scal_fpts0_for_inter(self, eidx, fidx):
+        return self._get_scal_fptsn_for_inter(self._scal_fpts[0], eidx, fidx)

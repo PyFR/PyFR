@@ -215,13 +215,13 @@ class BaseBasis(object):
         return self._eval_jac_lbasis_at(self._jac_sbasis_lamb, pts)
 
     @abstractproperty
-    def nfacefpts(self):
+    def facefpts(self):
         pass
+
+    @lazyprop
+    def nfacefpts(self):
+        return [len(f) for f in self.facefpts]
 
     @property
     def nfpts(self):
         return sum(self.nfacefpts)
-
-    @abstractmethod
-    def fpts_idx_for_face(self, face, rtag):
-        pass
