@@ -87,8 +87,8 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
                                nl=self._norm_pnorm_lhs)
 
 
-class NavierStokesNoSlpIsoWallBCInters(NavierStokesBaseBCInters):
-    type = 'no-slp-iso-wall'
+class NavierStokesNoSlpIsoTWallBCInters(NavierStokesBaseBCInters):
+    type = 'no-slp-isot-wall'
 
     def __init__(self, *args, **kwargs):
         super(NavierStokesNoSlpIsoWallBCInters, self).__init__(*args, **kwargs)
