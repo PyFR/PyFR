@@ -17,9 +17,9 @@ PyFR currently has a hard depndency on Python 2.7.  PyFR does not currently
 support Microsoft Windows system. To run PyFR it is necessary to install the
 following Python packages:
 
-  - `mako <http://www.makotemplates.org/>`_,
-  - `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3,
-  - `numpy <http://www.numpy.org/>`_ >= 1.6,
+  - `mako <http://www.makotemplates.org/>`_
+  - `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
+  - `numpy <http://www.numpy.org/>`_ >= 1.6
   - `sympy <http://sympy.org/>`_ >= 0.7.3
 
 
