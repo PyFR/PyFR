@@ -68,7 +68,7 @@ matrix multiplication::
   # Populate the queue with `mmul` and run it
   q % [mmul]
 
-.. autoclass:: pyfr.backends.base.Backend
+.. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.Backend
     :members:
 
 .. autoclass:: pyfr.backends.base.Matrix
@@ -79,7 +79,7 @@ matrix multiplication::
     :members:
     :inherited-members:
 
-.. autoclass:: pyfr.backends.base.SparseMatrix
+.. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.SparseMatrix
     :members:
     :inherited-members:
 
@@ -97,7 +97,7 @@ matrix multiplication::
 .. autoclass:: pyfr.backends.base.MPIView
     :members:
 
-.. autoclass:: pyfr.backends.base.Kernel
+.. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.Kernel
     :members:
 
 .. autoclass:: pyfr.backends.base.Queue
