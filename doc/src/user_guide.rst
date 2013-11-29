@@ -8,11 +8,47 @@ Getting Started
 Downloading the Source
 ----------------------
 
+PyFR can be obtained `here <http://www.pyfr.org/download.php>`_
+
 Dependencies
 ------------
 
+PyFR currently has a hard depndency on Python 2.7.  PyFR does not currently
+support Microsoft Windows system. To run PyFR it is necessary to install the
+following Python packages:
+
+  - `mako <http://www.makotemplates.org/>`_,
+  - `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3,
+  - `numpy <http://www.numpy.org/>`_ >= 1.6,
+  - `sympy <http://sympy.org/>`_ >= 0.7.3
+
+
+CUDA Backend
+^^^^^^^^^^^^
+
+The CUDA backend targets NVIDIA GPUs with a compute capability of 2.0 or
+later.  This requires CUDA 4.2 or later to be installed and functioning
+on the system along with the PyCUDA wrapper.
+
+  - `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
+
+OpenMP Backend
+^^^^^^^^^^^^^^
+
+  - GCC >= 4.7
+  - A BLAS library compiled as a shared library,
+    e.g, `OpenBLAS <http://www.openblas.net/>`_.
+
 Installation
 ------------
+
+Before running PyFR it is first necessary to
+either install PyFR using the provided ``setup.py`` installer or add the
+root PyFR directory to
+``PYTHONPATH``::
+
+  user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
+  user@computer ~/PyFR$ python pyfr/scripts/pyfr-sim --help
 
 Running PyFR-Mesh
 =================
