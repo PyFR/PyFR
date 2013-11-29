@@ -8,11 +8,48 @@ Getting Started
 Downloading the Source
 ----------------------
 
+PyFR can be obtained `here <http://www.pyfr.org/download.php>`_
+
 Dependencies
 ------------
 
+PyFR currently has a hard depndency on Python 2.7.  PyFR does not currently
+support Microsoft Windows system. To run PyFR it is necessary to install the
+following Python packages:
+
+  - `mako <http://www.makotemplates.org/>`_
+  - `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
+  - `numpy <http://www.numpy.org/>`_ >= 1.6
+  - `sympy <http://sympy.org/>`_ >= 0.7.3
+
+
+CUDA Backend
+^^^^^^^^^^^^
+
+The CUDA backend targets NVIDIA GPUs with a compute capability of 2.0 or
+later.  This requires CUDA 4.2 or later to be installed and functioning
+on the system along with the PyCUDA wrapper.
+
+  - `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
+
+OpenMP Backend
+^^^^^^^^^^^^^^
+
+  - GCC >= 4.7
+  - A BLAS library compiled as a shared library,
+    e.g, `OpenBLAS <http://www.openblas.net/>`_.
+
 Installation
 ------------
+
+Before running PyFR it is first necessary to
+either install PyFR using the provided ``setup.py`` installer or add the
+root PyFR directory to
+``PYTHONPATH``::
+
+  user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
+  user@computer ~/PyFR$ python pyfr/scripts/pyfr-sim --help
+
 
 Running PyFR
 ============
@@ -125,6 +162,35 @@ the user to:
 3. Convert a PyFR mesh and solution file for visualisation with ParaView: ``pyfr-postp convert ...``
 4. Time-average a series of pyfr solution files (useful for comparing to steady-state data): ``pyfr-postp time-avg ...``
 
+2D Couette Flow
+===============
+
+Proceed with the following steps to run a 2D Couette Flow simulation:
+
+1. Create a working directory called ``couette_flow/``
+2. Copy the file ``PyFR/examples/couette_flow/couette_2d.ini`` into ``couette_flow/``
+3. Copy the file ``PyFR/examples/couette_flow/couette_2d_mixed.msh`` into ``couette_flow/``
+4. Run pyfr-mesh to covert the mixed quadrilateral-triangular mesh into PyFR-format called ``couette_flow_2d_mixed.pyfrm``
+
+    ``pyfr-mesh convert couette_2d_mixed.msh couette_2d_mixed.pyfrm``
+
+5. Run pyfr-sim to solve the Navier-Stokes equations on the mesh, generating a series of solution files called ``couette_2d-*.pyfrs``
+
+    ``pyfr-sim -p run couette_2d_mixed.pyfrm couette_2d.ini``
+
+6. Run pyfr-postp to generate a series of VTU files called ``couette_2d_mixed-*.vtu``
+
+    ``pyfr-postp convert couette_2d_mixed.pyfrm couette_2d-*.pyfrs couette_2d_mixed-*.vtu``
+
+7. Visualise the VTU files in `Paraview <http://www.paraview.org/>`_
+
+.. figure:: ../fig/couette_flow/couette_flow_2d_steady_state.png
+   :width: 450px
+   :figwidth: 450px
+   :alt: cylinder flow
+   :align: center
+
+   Colour map of steady-state density distribution.
 
 3D Euler Vortex
 ===============
