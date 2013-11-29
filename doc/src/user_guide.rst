@@ -162,6 +162,7 @@ the user to:
 3. Convert a PyFR mesh and solution file for visualisation with ParaView: ``pyfr-postp convert ...``
 4. Time-average a series of pyfr solution files (useful for comparing to steady-state data): ``pyfr-postp time-avg ...``
 
+
 2D Couette Flow
 ===============
 
@@ -178,45 +179,54 @@ Proceed with the following steps to run a 2D Couette Flow simulation:
 
     ``pyfr-sim -p run couette_2d_mixed.pyfrm couette_2d.ini``
 
-6. Run pyfr-postp to generate a series of VTU files called ``couette_2d_mixed-*.vtu``
+6. Run pyfr-postp on the solution file ``couette_2d_4.00.pyfrs`` to convert it to the unstructured VTK file ``couette_2d_4.00.vtu``
 
-    ``pyfr-postp convert couette_2d_mixed.pyfrm couette_2d-*.pyfrs couette_2d_mixed-*.vtu``
+    ``pyfr-postp convert couette_2d_mixed.pyfrm couette_2d_4.00.pyfrs couette_2d_4.00.vtu divide -d 4``
 
-7. Visualise the VTU files in `Paraview <http://www.paraview.org/>`_
+    In order to visualise the high-order data, each high-order element is split into 16 linear elements (4 splits in each dimension). This is controlled by the integer at the end of the command.
+
+7. Visualise the .vtu in `Paraview <http://www.paraview.org/>`_
 
 .. figure:: ../fig/couette_flow/couette_flow_2d_steady_state.png
    :width: 450px
    :figwidth: 450px
-   :alt: cylinder flow
+   :alt: couette flow
    :align: center
 
    Colour map of steady-state density distribution.
 
-3D Euler Vortex
-===============
 
-Proceed with the following steps to run a 3D Euler vortex simulation:
+2D Euler Vortex in Parallel
+===========================
+
+Proceed with the following steps to run a 2D Euler vortex simulation on two CPU cores or two NVIDIA GPUs:
 
 1. Create a working directory called ``euler_vortex/``
-2. Copy the file ``PyFR/examples/euler_vortex/euler_vortex.ini`` into ``euler_vortex/``
-3. Run pyfr-mesh to generate a hexahedral mesh with a single partition called ``euler_vortex.pyfrm``
+2. Copy the file ``PyFR/examples/euler_vortex/euler_vortex_2d.ini`` into ``euler_vortex/``
+3. Copy the file ``PyFR/examples/euler_vortex/euler_vortex_2d_2prt.msh`` into ``euler_vortex/``
+4. Run pyfr-mesh to convert the Gmsh-generated quad element mesh into the PyFR mesh format ``euler_vortex_2d_2prt.pyfrm``
 
-    ``pyfr-mesh .... euler_vortex.pyfrm``
+    ``pyfr-mesh convert euler_vortex_2d_2prt.msh euler_vortex_2d_2prt.pyfrm``
 
-4. Run pyfr-sim to solve Euler's equations on the mesh, generating a series of solution files called ``euler_vortex_*.pyfrs``
+5. Run pyfr-sim to solve Euler's equations on the mesh, generating a series of solution files called ``euler_vortex_*.pyfrs``
 
-    ``pyfr-sim -p run euler_vortex.pyfrm euler_vortex.ini``
+    ``mpirun -n 2 pyfr-sim -p run euler_vortex_2d_2prt.pyfrm euler_vortex_2d.ini``
 
-5. Run pyfr-postp to generate a series of VTK files called ``euler_vortex_*.vtu``
+6. Run pyfr-postp on the solution file ``euler_vortex_2d_100.0.pyfrs`` to convert it to the unstructured VTK file ``euler_vortex_2d_100.0.vtu``
 
-    ``pyfr-postp .... euler_vortex.pyfrs``
+    ``pyfr-postp convert euler_vortex_2d_2prt.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu divide -d 4``
 
-6. Visualise the VTK files in `Paraview <http://www.paraview.org/>`_
+    In order to visualise the high-order data, each high-order element is split into 16 linear elements (4 splits in each dimension). This is controlled by the integer at the end of the command.
 
-.. figure:: ../fig/euler_vortex/euler_vortex.jpg
+7. Visualise the .vtu file in `Paraview <http://www.paraview.org/>`_
+
+.. figure:: ../fig/euler_vortex/euler_vortex_2d.png
    :width: 450px
    :figwidth: 450px
-   :alt: cylinder flow
+   :alt: euler vortex
    :align: center
 
-   Colour map of density.
+   Colour map of the vortex after 5 passes of the periodic domain
+
+If two cores or devices are not available, use the single partition mesh file ``euler_vortex_2d_1prt.msh`` instead.
+``mpirun -n 2`` must then be dropped from the command in step 5, but the process is otherwise identical.
