@@ -14,51 +14,118 @@ Dependencies
 Installation
 ------------
 
-Running PyFR-Mesh
-=================
+Running PyFR
+============
 
-Overview
+PyFR consists of three separate programs:
+
+1. PyFR-Mesh --- for pre-processing. This includes converting third party mesh files to the PyFR format.
+2. PyFR-Sim --- for running the PyFR 2/3D compressible Euler or Navier-Stokes flow solver.
+3. PyFR-PostP --- for post-processing mesh and solution files. This includes conversion of PyFR mesh and solution files for visualisation with third party software.
+
+Once PyFR has been installed, the user-interface of each program is accessible from a terminal window. Each of these interfaces follow the same basic structure:
+the program name (in lower-case writing), and one or more levels of sub-command to select the requisite function. Further positional and/or optional arguments then provide
+the inputs required for that subroutine.
+
+Help functionality is provided directly from each program in the terminal window. For example, to find out how to restart a PyFR simulation, one can enter into a terminal:
+
+``pyfr-sim --help``
+
+This will return the following output:
+
+.. code-block:: none
+
+    usage: pyfr-sim [-h] [--verbose] [--backend BACKEND] [--progress]
+                [--nansweep N]
+                {run,restart} ...
+
+    Runs a PyFR simulation
+
+    positional arguments:
+        {run,restart}         sub-command help
+        run                 run --help
+        restart             restart --help
+
+    optional arguments:
+        -h, --help            show this help message and exit
+        --verbose, -v
+        --backend BACKEND, -b BACKEND Backend to use
+        --progress, -p        show a progress bar
+        --nansweep N, -n N    check for NaNs every N steps
+
+Aside from detailing options available to all of PyFR-Sim, it is stated that the two available subcommands are "run" and "restart". Entering ``pyfr-sim restart --help`` details
+the required syntax for restarting a PyFR simulation from an existing solution file:
+
+.. code-block:: none
+
+    usage: pyfr-sim restart [-h] mesh soln [cfg]
+
+    positional arguments:
+        mesh        mesh file
+        soln        solution file
+        cfg         new config file
+
+    optional arguments:
+        -h, --help  show this help message and exit
+
+Note that the square brackets denote the config file as an optional argument. It is only needed if the user wishes to change the configuration from the restart.
+
+
+The functionality of each program and sub-command is summarised in the following sections.
+
+PyFR-Mesh
+---------
+
+PyFR-Mesh contains pre-processing tools for PyFR.
+
+The convert subcommand allows the user to:
+
+1. Convert a `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file to the PyFR native format: ``pyfr-mesh convert ...``
+
+PyFR-Sim
 --------
 
-Command Line Arguments
-----------------------
+PyFR-Sim executes the PyFR compressible Euler or Navier-Stokes flow solver.
 
-    -p        Show a progress bar
-    -n N      Check for NaNs every N steps
-    --progress        Show a progress bar
-    --nansweep N      Check for NaNs every N steps
+There are two subcommands which permit the user to:
 
-Running PyFR-Sim
-================
+1. Start a new PyFR simulation: ``pyfr-sim run ...``
+2. Restart a PyFR simulation from an existing solution file: ``pyfr-sim restart ...``
 
-Overview
---------
+
+Running in Parallel
+^^^^^^^^^^^^^^^^^^^
+The PyFR solver can be run in parallel given a suitable system, and a mesh with the requisite number of partitions.
+
+This is achieved by prefixing the serial ``pyfr-sim ...``
+command with ``mpirun -n <cores/devices>``. For example, to run the solver on four local NVidia GPUs one should enter:
+
+.. code-block:: none
+
+    mpirun -n 4 pyfr-sim run mesh.pyfrm config.ini
+
+Note that the number of cores or devices must be equal to the number of mesh partitions.
 
 Configuration File Format (.ini)
---------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Command Line Arguments
-----------------------
+At present, please use the example conig.ini files as a reference (they are located in the PyFR examples directory).
+Full documentation of the config file format will be posted here directly.
 
-    -p        Show a progress bar
-    -n N      Check for NaNs every N steps
-    --progress        Show a progress bar
-    --nansweep N      Check for NaNs every N steps
+PyFR-PostP
+----------
 
-Running PyFR-Postp
-==================
+PyFR-PostP encompasses a set of tools used for post-processing PyFR simulations.
 
-Overview
---------
+Each tool can be accessed by passing a second argument after ``pyfr-postp``. Broadly, these commands allow
+the user to:
 
-Command Line Arguments
-----------------------
+1. Swap between the pyfr-file and pyfr-dir format: ``pyfr-postp unpack ...``
+2. Swap between the pyfr-dir and pyfr-file format: ``pyfr-postp pack ...``
+3. Convert a PyFR mesh and solution file for visualisation with ParaView: ``pyfr-postp convert ...``
+4. Time-average a series of pyfr solution files (useful for comparing to steady-state data): ``pyfr-postp time-avg ...``
 
-    -p        Show a progress bar
-    -n N      Check for NaNs every N steps
-    --progress        Show a progress bar
-    --nansweep N      Check for NaNs every N steps
-    
+
 3D Euler Vortex
 ===============
 
@@ -116,4 +183,4 @@ Proceed with the following steps to run a 3D cylinder flow simulation:
    :alt: cylinder flow
    :align: center
 
-   Iso-surfaces of Q-criterion coloured by velocity magnitude.    
+   Iso-surfaces of Q-criterion coloured by velocity magnitude.
