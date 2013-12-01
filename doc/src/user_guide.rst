@@ -13,181 +13,142 @@ PyFR can be obtained `here <http://www.pyfr.org/download.php>`_
 Dependencies
 ------------
 
-PyFR currently has a hard depndency on Python 2.7.  PyFR does not currently
-support Microsoft Windows system. To run PyFR it is necessary to install the
-following Python packages:
+Overview
+^^^^^^^^
 
-  - `mako <http://www.makotemplates.org/>`_
-  - `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-  - `numpy <http://www.numpy.org/>`_ >= 1.6
-  - `sympy <http://sympy.org/>`_ >= 0.7.3
+PyFR currently has a hard dependency on Python 2.7.  PyFR does not currently support Microsoft Windows. To run PyFR it is necessary to install the following Python packages:
 
+1. `mako <http://www.makotemplates.org/>`_
+2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
+3. `numpy <http://www.numpy.org/>`_ >= 1.6
+4. `sympy <http://sympy.org/>`_ >= 0.7.3
 
 CUDA Backend
 ^^^^^^^^^^^^
 
 The CUDA backend targets NVIDIA GPUs with a compute capability of 2.0 or
-later.  This requires CUDA 4.2 or later to be installed and functioning
-on the system along with the PyCUDA wrapper.
+greater. The backend requires:
 
-  - `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
+1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
+2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
 
 OpenMP Backend
 ^^^^^^^^^^^^^^
+The OpenMP backend targets multi-core CPUs. The backend requires:
 
-  - GCC >= 4.7
-  - A BLAS library compiled as a shared library,
-    e.g, `OpenBLAS <http://www.openblas.net/>`_.
+1. GCC >= 4.7
+2. A BLAS library compiled as a shared library (e.g. `OpenBLAS <http://www.openblas.net/>`_)
 
 Installation
 ------------
 
-Before running PyFR it is first necessary to
-either install PyFR using the provided ``setup.py`` installer or add the
-root PyFR directory to
+Before running PyFR it is first necessary to either install PyFR using the provided ``setup.py`` installer or add the root PyFR directory to
 ``PYTHONPATH``::
 
   user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
   user@computer ~/PyFR$ python pyfr/scripts/pyfr-sim --help
 
-
 Running PyFR
 ============
 
-PyFR consists of three separate programs:
+Overview
+--------
 
-1. PyFR-Mesh --- for pre-processing. This includes converting third party mesh files to the PyFR format.
-2. PyFR-Sim --- for running the PyFR 2/3D compressible Euler or Navier-Stokes flow solver.
-3. PyFR-PostP --- for post-processing mesh and solution files. This includes conversion of PyFR mesh and solution files for visualisation with third party software.
+PyFR consists of three separate tools:
 
-Once PyFR has been installed, the user-interface of each program is accessible from a terminal window. Each of these interfaces follow the same basic structure:
-the program name (in lower-case writing), and one or more levels of sub-command to select the requisite function. Further positional and/or optional arguments then provide
-the inputs required for that subroutine.
-
-Help functionality is provided directly from each program in the terminal window. For example, to find out how to restart a PyFR simulation, one can enter into a terminal:
-
-``pyfr-sim --help``
-
-This will return the following output:
-
-.. code-block:: none
-
-    usage: pyfr-sim [-h] [--verbose] [--backend BACKEND] [--progress]
-                [--nansweep N]
-                {run,restart} ...
-
-    Runs a PyFR simulation
-
-    positional arguments:
-        {run,restart}         sub-command help
-        run                 run --help
-        restart             restart --help
-
-    optional arguments:
-        -h, --help            show this help message and exit
-        --verbose, -v
-        --backend BACKEND, -b BACKEND Backend to use
-        --progress, -p        show a progress bar
-        --nansweep N, -n N    check for NaNs every N steps
-
-Aside from detailing options available to all of PyFR-Sim, it is stated that the two available subcommands are "run" and "restart". Entering ``pyfr-sim restart --help`` details
-the required syntax for restarting a PyFR simulation from an existing solution file:
-
-.. code-block:: none
-
-    usage: pyfr-sim restart [-h] mesh soln [cfg]
-
-    positional arguments:
-        mesh        mesh file
-        soln        solution file
-        cfg         new config file
-
-    optional arguments:
-        -h, --help  show this help message and exit
-
-Note that the square brackets denote the config file as an optional argument. It is only needed if the user wishes to change the configuration from the restart.
-
-
-The functionality of each program and sub-command is summarised in the following sections.
+1. ``pyfr-mesh`` --- for pre-processing
+2. ``pyfr-sim`` --- the solver
+3. ``pyfr-postp`` --- for post-processing
 
 PyFR-Mesh
 ---------
 
-PyFR-Mesh contains pre-processing tools for PyFR.
+``pyfr-pmesh`` is for pre-processing. The following sub-tools are available:
 
-The convert subcommand allows the user to:
+1. ``pyfr-mesh convert`` --- Convert a `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file into the PyFR format. Example::
 
-1. Convert a `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file to the PyFR native format: ``pyfr-mesh convert ...``
+        pyfr-mesh convert mesh.msh mesh.pyfrm
 
+For full details invoke:: 
+
+    pyfr-mesh [sub-tool] --help
+        
 PyFR-Sim
 --------
 
-PyFR-Sim executes the PyFR compressible Euler or Navier-Stokes flow solver.
+Overview
+^^^^^^^^
 
-There are two subcommands which permit the user to:
+``pyfr-sim`` is the solver. The following sub-tools are available:
 
-1. Start a new PyFR simulation: ``pyfr-sim run ...``
-2. Restart a PyFR simulation from an existing solution file: ``pyfr-sim restart ...``
+1. ``pyfr-sim run`` --- Start a new PyFR simulation. Example::
 
+        pyfr-sim run mesh.pyfrm configuration.ini
+    
+2. ``pyfr-sim restart`` --- Restart a PyFR simulation from an existing solution file. Example::
 
+        pyfr-sim restart mesh.pyfrm solution.pyfrs
+
+For full details invoke:: 
+
+    pyfr-sim [sub-tool] --help        
+        
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
-The PyFR solver can be run in parallel given a suitable system, and a mesh with the requisite number of partitions.
 
-This is achieved by prefixing the serial ``pyfr-sim ...``
-command with ``mpirun -n <cores/devices>``. For example, to run the solver on four local NVidia GPUs one should enter:
-
-.. code-block:: none
-
-    mpirun -n 4 pyfr-sim run mesh.pyfrm config.ini
-
-Note that the number of cores or devices must be equal to the number of mesh partitions.
-
-Configuration File Format (.ini)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-At present, please use the example conig.ini files as a reference (they are located in the PyFR examples directory).
-Full documentation of the config file format will be posted here directly.
+``pyfr-sim`` can be run in parallel. To do so prefix ``pyfr-sim`` with ``mpirun -n <cores/devices>``. Note that the mesh must be pre-partitioned, and the number of cores or devices must be equal to the number of partitions.
 
 PyFR-PostP
 ----------
 
-PyFR-PostP encompasses a set of tools used for post-processing PyFR simulations.
+``pyfr-postp`` is for post-processing. The following sub-tools are available:
 
-Each tool can be accessed by passing a second argument after ``pyfr-postp``. Broadly, these commands allow
-the user to:
+1. ``pyfr-postp convert`` --- Convert a PyFR solution file into an unstructured VTK file. Example::
 
-1. Swap between the pyfr-file and pyfr-dir format: ``pyfr-postp unpack ...``
-2. Swap between the pyfr-dir and pyfr-file format: ``pyfr-postp pack ...``
-3. Convert a PyFR mesh and solution file for visualisation with ParaView: ``pyfr-postp convert ...``
-4. Time-average a series of pyfr solution files (useful for comparing to steady-state data): ``pyfr-postp time-avg ...``
+        pyfr-postp convert mesh.pyfrm solution.pyfrs solution.vtu
+        
+2. ``pyfr-postp pack`` --- Swap between the pyfr-dir and pyfr-file format. Example::
 
+        pyfr-postp pack solution_directory solution_file.pyfrs
+        
+3. ``pyfr-postp time-avg`` --- Time-average a series of PyFR solution files. Example::
 
-2D Couette Flow
-===============
+        pyfr-postp time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
+        
+4. ``pyfr-postp unpack`` --- Swap between the pyfr-file and pyfr-dir format. Example::
 
-Proceed with the following steps to run a 2D Couette Flow simulation:
+        pyfr-postp unpack solution_file.pyfrs solution_directory 
 
-1. Create a working directory called ``couette_flow/``
-2. Copy the file ``PyFR/examples/couette_flow/couette_2d.ini`` into ``couette_flow/``
-3. Copy the file ``PyFR/examples/couette_flow/couette_2d_mixed.msh`` into ``couette_flow/``
-4. Run pyfr-mesh to covert the mixed quadrilateral-triangular mesh into PyFR-format called ``couette_flow_2d_mixed.pyfrm``
+For full details invoke:: 
 
-    ``pyfr-mesh convert couette_2d_mixed.msh couette_2d_mixed.pyfrm``
+    pyfr-postp [sub-tool] --help        
+        
+Example - 2D Couette Flow
+=========================
 
-5. Run pyfr-sim to solve the Navier-Stokes equations on the mesh, generating a series of solution files called ``couette_2d-*.pyfrs``
+Proceed with the following steps to run a serial 2D Couette flow simulation on a mixed unstructured mesh:
 
-    ``pyfr-sim -p run couette_2d_mixed.pyfrm couette_2d.ini``
+1. Create a working directory called ``couette_flow_2d/``
 
-6. Run pyfr-postp on the solution file ``couette_2d_4.00.pyfrs`` to convert it to the unstructured VTK file ``couette_2d_4.00.vtu``
+2. Copy the configuration file ``PyFR/examples/couette_flow_2d/couette_2d.ini`` into ``couette_flow_2d/``
 
-    ``pyfr-postp convert couette_2d_mixed.pyfrm couette_2d_4.00.pyfrs couette_2d_4.00.vtu divide -d 4``
+3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file ``PyFR/examples/couette_flow_2d/couette_2d.msh`` into ``couette_flow_2d/``
 
-    In order to visualise the high-order data, each high-order element is split into 16 linear elements (4 splits in each dimension). This is controlled by the integer at the end of the command.
+4. Run pyfr-mesh to covert the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file into a PyFR mesh file called ``couette_flow_2d.pyfrm``::
 
-7. Visualise the .vtu in `Paraview <http://www.paraview.org/>`_
+    pyfr-mesh convert couette_2d.msh couette_2d.pyfrm
 
-.. figure:: ../fig/couette_flow/couette_flow_2d_steady_state.png
+5. Run pyfr-sim to solve the Navier-Stokes equations on the mesh, generating a series of PyFR solution files called ``couette_2d-*.pyfrs``::
+
+    pyfr-sim -p run couette_2d.pyfrm couette_2d.ini
+
+6. Run pyfr-postp on the solution file ``couette_2d_4.00.pyfrs`` converting it into an unstructured VTK file called ``couette_2d_4.00.vtu``. Note that in order to visualise the high-order data, each high-order element is sub-divided into smaller linear elements. The level of sub-division is controlled by the integer at the end of the command::
+
+    pyfr-postp convert couette_2d.pyfrm couette_2d_4.00.pyfrs couette_2d_4.00.vtu divide -d 4
+
+7. Visualise the unstructured VTK file in `Paraview <http://www.paraview.org/>`_
+
+.. figure:: ../fig/couette_flow_2d/couette_flow_2d.png
    :width: 450px
    :figwidth: 450px
    :alt: couette flow
@@ -195,38 +156,36 @@ Proceed with the following steps to run a 2D Couette Flow simulation:
 
    Colour map of steady-state density distribution.
 
+Example - 2D Euler Vortex
+=========================
 
-2D Euler Vortex in Parallel
-===========================
+Proceed with the following steps to run a parallel 2D Euler vortex simulation on a structured mesh:
 
-Proceed with the following steps to run a 2D Euler vortex simulation on two CPU cores or two NVIDIA GPUs:
+1. Create a working directory called ``euler_vortex_2d/``
 
-1. Create a working directory called ``euler_vortex/``
-2. Copy the file ``PyFR/examples/euler_vortex/euler_vortex_2d.ini`` into ``euler_vortex/``
-3. Copy the file ``PyFR/examples/euler_vortex/euler_vortex_2d_2prt.msh`` into ``euler_vortex/``
-4. Run pyfr-mesh to convert the Gmsh-generated quad element mesh into the PyFR mesh format ``euler_vortex_2d_2prt.pyfrm``
+2. Copy the configuration file ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.ini`` into ``euler_vortex_2d/``
 
-    ``pyfr-mesh convert euler_vortex_2d_2prt.msh euler_vortex_2d_2prt.pyfrm``
+3. Copy the partitioned `Gmsh <http:http://geuz.org/gmsh/>`_ file ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.msh`` into ``euler_vortex_2d/``
 
-5. Run pyfr-sim to solve Euler's equations on the mesh, generating a series of solution files called ``euler_vortex_*.pyfrs``
+4. Run pyfr-mesh to convert the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file into a PyFR mesh file called ``euler_vortex_2d.pyfrm``::
 
-    ``mpirun -n 2 pyfr-sim -p run euler_vortex_2d_2prt.pyfrm euler_vortex_2d.ini``
+    pyfr-mesh convert euler_vortex_2d.msh euler_vortex_2d.pyfrm
 
-6. Run pyfr-postp on the solution file ``euler_vortex_2d_100.0.pyfrs`` to convert it to the unstructured VTK file ``euler_vortex_2d_100.0.vtu``
+5. Run pyfr-sim to solve the Euler equations on the mesh, generating a series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-    ``pyfr-postp convert euler_vortex_2d_2prt.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu divide -d 4``
+    mpirun -n 2 pyfr-sim -p run euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
-    In order to visualise the high-order data, each high-order element is split into 16 linear elements (4 splits in each dimension). This is controlled by the integer at the end of the command.
+6. Run pyfr-postp on the solution file ``euler_vortex_2d_100.0.pyfrs`` converting it into an unstructured VTK file called ``euler_vortex_2d_100.0.vtu``. Note that in order to visualise the high-order data, each high-order element is sub-divided into smaller linear elements. The level of sub-division is controlled by the integer at the end of the command::
 
-7. Visualise the .vtu file in `Paraview <http://www.paraview.org/>`_
+    pyfr-postp convert euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu divide -d 4
 
-.. figure:: ../fig/euler_vortex/euler_vortex_2d.png
+7. Visualise the unstructured VTK file in `Paraview <http://www.paraview.org/>`_
+
+.. figure:: ../fig/euler_vortex_2d/euler_vortex_2d.png
    :width: 450px
    :figwidth: 450px
    :alt: euler vortex
    :align: center
 
-   Colour map of the vortex after 5 passes of the periodic domain
+   Colour map of density distribution at 100 time units.
 
-If two cores or devices are not available, use the single partition mesh file ``euler_vortex_2d_1prt.msh`` instead.
-``mpirun -n 2`` must then be dropped from the command in step 5, but the process is otherwise identical.
