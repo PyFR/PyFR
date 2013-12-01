@@ -105,11 +105,11 @@ PyFR-PostP
 
 1. ``pyfr-postp convert`` --- Convert a PyFR solution file into an unstructured VTK file. Example::
 
-        pyfr-postp convert mesh.pyfrm solution.pyfrs solution.vtu
+        pyfr-postp convert mesh.pyfrm solution.pyfrs solution.vtu divide
         
 2. ``pyfr-postp pack`` --- Swap between the pyfr-dir and pyfr-file format. Example::
 
-        pyfr-postp pack solution_directory solution_file.pyfrs
+        pyfr-postp pack solution_directory.pyfrs solution_file.pyfrs
         
 3. ``pyfr-postp time-avg`` --- Time-average a series of PyFR solution files. Example::
 
@@ -117,7 +117,7 @@ PyFR-PostP
         
 4. ``pyfr-postp unpack`` --- Swap between the pyfr-file and pyfr-dir format. Example::
 
-        pyfr-postp unpack solution_file.pyfrs solution_directory 
+        pyfr-postp unpack solution_file.pyfrs solution_directory.pyfrs
 
 For full details invoke:: 
 
