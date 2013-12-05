@@ -87,11 +87,12 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
                                nl=self._norm_pnorm_lhs)
 
 
-class NavierStokesNoSlpIsoTWallBCInters(NavierStokesBaseBCInters):
+class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-isot-wall'
 
     def __init__(self, *args, **kwargs):
-        super(NavierStokesNoSlpIsoWallBCInters, self).__init__(*args, **kwargs)
+        super(NavierStokesNoSlpIsotWallBCInters, self).__init__(*args,
+                                                                **kwargs)
 
         self._tpl_c['cpTw'], = self._eval_opts(['cpTw'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')

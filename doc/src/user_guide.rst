@@ -130,21 +130,21 @@ Proceed with the following steps to run a serial 2D Couette flow simulation on a
 
 1. Create a working directory called ``couette_flow_2d/``
 
-2. Copy the configuration file ``PyFR/examples/couette_flow_2d/couette_2d.ini`` into ``couette_flow_2d/``
+2. Copy the configuration file ``PyFR/examples/couette_flow_2d/couette_flow_2d.ini`` into ``couette_flow_2d/``
 
-3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file ``PyFR/examples/couette_flow_2d/couette_2d.msh`` into ``couette_flow_2d/``
+3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file ``PyFR/examples/couette_flow_2d/couette_flow_2d.msh`` into ``couette_flow_2d/``
 
 4. Run pyfr-mesh to covert the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file into a PyFR mesh file called ``couette_flow_2d.pyfrm``::
 
-    pyfr-mesh convert couette_2d.msh couette_2d.pyfrm
+    pyfr-mesh convert couette_flow_2d.msh couette_flow_2d.pyfrm
 
-5. Run pyfr-sim to solve the Navier-Stokes equations on the mesh, generating a series of PyFR solution files called ``couette_2d-*.pyfrs``::
+5. Run pyfr-sim to solve the Navier-Stokes equations on the mesh, generating a series of PyFR solution files called ``couette_flow_2d-*.pyfrs``::
 
-    pyfr-sim -p run couette_2d.pyfrm couette_2d.ini
+    pyfr-sim -p run couette_flow_2d.pyfrm couette_flow_2d.ini
 
-6. Run pyfr-postp on the solution file ``couette_2d_4.00.pyfrs`` converting it into an unstructured VTK file called ``couette_2d_4.00.vtu``. Note that in order to visualise the high-order data, each high-order element is sub-divided into smaller linear elements. The level of sub-division is controlled by the integer at the end of the command::
+6. Run pyfr-postp on the solution file ``couette_flow_2d_4.00.pyfrs`` converting it into an unstructured VTK file called ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the high-order data, each high-order element is sub-divided into smaller linear elements. The level of sub-division is controlled by the integer at the end of the command::
 
-    pyfr-postp convert couette_2d.pyfrm couette_2d_4.00.pyfrs couette_2d_4.00.vtu divide -d 4
+    pyfr-postp convert couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu divide -d 4
 
 7. Visualise the unstructured VTK file in `Paraview <http://www.paraview.org/>`_
 
