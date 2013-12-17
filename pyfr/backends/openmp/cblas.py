@@ -1,16 +1,11 @@
  # -*- coding: utf-8 -*-
 
-import os
-
-from ctypes import (CDLL, POINTER, byref, cast, c_int, c_double, c_float,
-                    c_void_p)
-from ctypes.util import find_library
+from ctypes import CDLL, cast, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
-from pyfr.ctypesutil import platform_libname
 from pyfr.nputil import npdtype_to_ctype
 
 

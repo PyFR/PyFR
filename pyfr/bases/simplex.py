@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import itertools as it
-
 import numpy as np
 import sympy as sy
 from sympy.mpmath import mp
@@ -9,7 +7,7 @@ from sympy.mpmath import mp
 from pyfr.bases.base import BaseBasis, lambdify_mpf
 from pyfr.quadrules import BaseLineQuadRule, BaseTriQuadRule, get_quadrule
 from pyfr.syutil import lagrange_basis
-from pyfr.util import lazyprop, ndrange
+from pyfr.util import lazyprop
 
 
 def _bary_to_cart(b, tverts):

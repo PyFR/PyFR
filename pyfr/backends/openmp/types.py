@@ -2,14 +2,12 @@
 
 import collections
 import itertools as it
-from ctypes import c_void_p
 
 from mpi4py import MPI
 import numpy as np
 
 import pyfr.backends.base as base
 from pyfr.nputil import npaligned
-from pyfr.util import ndrange
 
 
 class OpenMPMatrixBase(base.MatrixBase):

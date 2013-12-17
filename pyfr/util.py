@@ -2,7 +2,6 @@
 
 from contextlib import contextmanager
 import functools as ft
-import io
 import itertools as it
 import os
 import cPickle as pickle

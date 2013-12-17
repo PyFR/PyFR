@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, ComputeKernel)
+from pyfr.backends.base import BasePointwiseKernelProvider, ComputeKernel
 from pyfr.backends.openmp.compiler import GccSourceModule
 import pyfr.backends.openmp.generator as generator
 import pyfr.backends.openmp.types as types
