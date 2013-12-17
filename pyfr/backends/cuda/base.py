@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import BaseBackend, blockmats
+from pyfr.backends.base import BaseBackend
 from pyfr.template import DottedTemplateLookup
 
 
@@ -31,7 +31,6 @@ class CUDABackend(BaseBackend):
                                         types)
 
         # Register our data types
-        self.block_diag_matrix_cls = types.CUDABlockDiagMatrix
         self.const_matrix_cls = types.CUDAConstMatrix
         self.matrix_cls = types.CUDAMatrix
         self.matrix_bank_cls = types.CUDAMatrixBank
@@ -46,7 +45,6 @@ class CUDABackend(BaseBackend):
 
         # Instantiate the base kernel providers
         kprovs = [provider.CUDAPointwiseKernelProvider,
-                  blockmats.BlockDiagMatrixKernels,
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   cublas.CUDACublasKernels]

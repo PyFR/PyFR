@@ -129,9 +129,9 @@ class BaseElements(object):
         self._be = be
 
         # Allocate the constant operator matrices
-        self._m0b = be.auto_matrix(self._basis.m0, tags={'M0'})
-        self._m3b = be.auto_matrix(self._basis.m3, tags={'M3'})
-        self._m132b = be.auto_matrix(self._basis.m132, tags={'M132'})
+        self._m0b = be.const_matrix(self._basis.m0, tags={'M0'})
+        self._m3b = be.const_matrix(self._basis.m3, tags={'M3'})
+        self._m132b = be.const_matrix(self._basis.m132, tags={'M132'})
 
         # Tags to ensure alignment of multi-dimensional matrices
         tags = {'align'}

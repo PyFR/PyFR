@@ -147,36 +147,6 @@ class BaseBackend(object):
         """
         return self.const_matrix_cls(self, initval, iopacking, tags)
 
-    def block_diag_matrix(self, initval, brange, iopacking='AoS', tags=set()):
-        return self.block_diag_matrix_cls(self, initval, brange, iopacking,
-                                          tags)
-
-    def auto_matrix(self, initval, iopacking='AoS', tags=set()):
-        """Creates either a constant or block diagonal matrix from *initval*
-        """
-        # HACK: The following code attempts to identify one special-
-        # case of block diagonal matrices;  while it is currently
-        # sufficient a more robust methodology is desirable.
-        shape = initval.shape
-        if iopacking == 'AoS' and len(shape) == 4 and shape[1] == shape[3]:
-            for i, j in ndrange(shape[1], shape[1]):
-                if i == j:
-                    continue
-
-                if np.any(initval[:,i,:,j] != 0):
-                    break
-            else:
-                # Block spans are trivial
-                brange = [(i*shape[0], (i + 1)*shape[0],
-                           i*shape[2], (i + 1)*shape[2])
-                          for i in xrange(shape[1])]
-
-                return self.block_diag_matrix(initval, brange, iopacking,
-                                              tags)
-
-        # Not block-diagonal; return a constant matrix
-        return self.const_matrix(initval, iopacking, tags)
-
     @recordalloc('view')
     def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Uses mapping to create a view of mat

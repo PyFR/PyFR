@@ -105,19 +105,6 @@ class BaseBasis(object):
         return self.m1.swapaxes(2, 1)[...,None]
 
     @lazyprop
-    def m5(self):
-        """Trans grad discontinuous soln at upts to trans gradient of
-        discontinuous solution at fpts
-        """
-        nfpts, ndims, nupts = self.nfpts, self.ndims, self.nupts
-        m = np.zeros((nfpts, ndims, nupts, ndims), dtype=self.m0.dtype)
-
-        for i in xrange(ndims):
-            m[:,i,:,i] = self.m0
-
-        return m
-
-    @lazyprop
     def m6(self):
         """Correction soln at fpts to trans gradient of correction
         solution at upts

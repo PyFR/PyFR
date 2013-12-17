@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.solvers.baseadvec import BaseAdvectionElements
+from pyfr.backends.base.kernels import ComputeMetaKernel
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
@@ -12,9 +13,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         super(BaseAdvectionDiffusionElements, self).set_backend(be, nscal_upts)
 
         # Allocate the additional operator matrices
-        self._m5b = be.auto_matrix(self._basis.m5, tags={'M5'})
-        self._m6b = be.auto_matrix(self._basis.m6, tags={'M6'})
-        self._m460b = be.auto_matrix(self._basis.m460, tags={'M460'})
+        self._m6b = be.const_matrix(self._basis.m6, tags={'M6'})
+        self._m460b = be.const_matrix(self._basis.m460, tags={'M460'})
 
         # Register pointwise kernels
         be.pointwise.register('pyfr.solvers.baseadvecdiff.kernels.gradcoru')
@@ -38,8 +38,18 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                gradu=self._vect_upts[0])
 
     def get_gradcoru_fpts_kern(self):
-        return self._be.kernel('mul', self._m5b, self._vect_upts[0],
-                               out=self._vect_fpts[0])
+        nupts, nfpts = self.nupts, self.nfpts
+        vect_upts, vect_fpts = self._vect_upts[0], self._vect_fpts[0]
+
+        # Here we exploit the fact that the operator to move gradients
+        # at the solution points to the flux points is diag([m0]*ndims)
+        # and so can cast it as ndim applications of m0
+        muls = [self._be.kernel('mul', self._m0b,
+                                vect_upts.rslice(i*nupts, (i + 1)*nupts),
+                                vect_fpts.rslice(i*nfpts, (i + 1)*nfpts))
+                for i in xrange(self.ndims)]
+
+        return ComputeMetaKernel(muls)
 
     def get_scal_fpts1_for_inter(self, eidx, fidx):
         return self._get_scal_fptsn_for_inter(self._vect_fpts[0], eidx, fidx)

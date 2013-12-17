@@ -75,27 +75,6 @@ class ConstMatrix(MatrixBase):
     _base_tags = {'const', 'dense'}
 
 
-class BlockDiagMatrix(MatrixBase):
-    _base_tags = {'const', 'blockdiag'}
-
-    def __init__(self, backend, initval, brange, iopacking, tags):
-        super(BlockDiagMatrix, self).__init__(backend, initval.shape,
-                                              iopacking, tags)
-        self.initval = initval
-
-        # Compact down to a Matrix and extract the blocks
-        mat = backend.compact_arr(initval, iopacking)
-        self.blocks = [mat[ri:rj,ci:cj] for ri, rj, ci, cj in brange]
-        self.ranges = brange
-
-    def get(self):
-        return self.initval
-
-    @property
-    def nbytes(self):
-        return 0
-
-
 class MPIMatrix(Matrix):
     """MPI matrix abstract base class"""
     pass

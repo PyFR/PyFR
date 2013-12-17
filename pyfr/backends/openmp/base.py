@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import BaseBackend, blockmats
+from pyfr.backends.base import BaseBackend
 from pyfr.template import DottedTemplateLookup
 
 
@@ -14,7 +14,6 @@ class OpenMPBackend(BaseBackend):
                                           types)
 
         # Register our data types
-        self.block_diag_matrix_cls = types.OpenMPBlockDiagMatrix
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_bank_cls = types.OpenMPMatrixBank
@@ -29,7 +28,6 @@ class OpenMPBackend(BaseBackend):
 
         # Kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
-                    blockmats.BlockDiagMatrixKernels,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
                     cblas.OpenMPCBLASKernels]

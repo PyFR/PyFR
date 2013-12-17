@@ -6,6 +6,6 @@ from pyfr.backends.base.kernels import (BaseKernelProvider,
                                         ComputeKernel, ComputeMetaKernel,
                                         iscomputekernel, ismpikernel,
                                         MPIKernel, MPIMetaKernel)
-from pyfr.backends.base.types import (BlockDiagMatrix, ConstMatrix, Matrix,
-                                      MatrixBank, MatrixBase, MatrixRSlice,
-                                      MPIMatrix, MPIView, Queue, View)
+from pyfr.backends.base.types import (ConstMatrix, Matrix, MatrixBank,
+                                      MatrixBase, MatrixRSlice, MPIMatrix,
+                                      MPIView, Queue, View)
