@@ -17,7 +17,7 @@ def lambdify_mpf(dims, exprs):
 
     # Locate all numerical constants in these lambdified expressions
     for l in ls:
-        for m in re.findall('([0-9]*\.[0-9]+(?:[eE][-+]?[0-9]+)?)', l):
+        for m in re.findall(r'([0-9]*\.[0-9]+(?:[eE][-+]?[0-9]+)?)', l):
             if m not in csf:
                 csf[m] = mp.mpf(m)
 
