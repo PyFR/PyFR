@@ -42,7 +42,7 @@ class BaseStepper(BaseIntegrator):
 
     def _add(self, *args):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(len(args)/2)
+        axnpby = self._get_axnpby_kerns(len(args) // 2)
 
         # Bank indices are in odd-numbered arguments
         self._prepare_reg_banks(*args[1::2])

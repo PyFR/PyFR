@@ -25,7 +25,7 @@ class OpenMPMatrixBase(base.MatrixBase):
         assert (32 % self.itemsize) == 0
 
         # Alignment requirement for the final dimension
-        ldmod = 32/self.itemsize if 'align' in tags else 1
+        ldmod = 32 // self.itemsize if 'align' in tags else 1
 
         # SoA shape of ourself and our dimensionality
         shape, ndim = self.soa_shape, len(ioshape)

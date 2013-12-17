@@ -41,7 +41,7 @@ class CUDAMatrixBase(base.MatrixBase):
             self.data = cuda.mem_alloc(self._nbytes)
             self.pitch = colsz
 
-        self.leaddim = self.pitch / self.itemsize
+        self.leaddim = self.pitch // self.itemsize
         self.leadsubdim = self.soa_shape[-1]
         self.traits = (nrow, self.leaddim, self.leadsubdim, self.dtype)
 
