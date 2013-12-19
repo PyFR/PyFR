@@ -97,14 +97,12 @@ class BaseElements(object):
         ics = [npeval(self._cfg.get('soln-ics', dv), vars)
                for dv in self._dynvarmap[self.ndims]]
 
-        # Allow subclasses to process these ICs
-        ics = np.dstack(self._process_ics(ics))
+        # Allocate
+        self._scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
-        # Handle the case of uniform (scalar) ICs
-        if ics.shape[:2] == (1, 1):
-            ics = ics*np.ones((self.nupts, self.neles, 1))
-
-        self._scal_upts = ics
+        # Convert from primitive to conservative form
+        for i, v in enumerate(self._process_ics(ics)):
+            self._scal_upts[:,i,:] = v
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -120,7 +118,7 @@ class BaseElements(object):
 
         # Apply and reshape
         self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
-        self._scal_upts = self._scal_upts.reshape(nupts, neles, nvars)
+        self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
 
     @abstractmethod
     def set_backend(self, be, nscal_upts):
@@ -146,14 +144,14 @@ class BaseElements(object):
         neles = self.neles
 
         # Allocate general storage required for flux computation
-        self._scal_upts = [be.matrix((nupts, neles, nvars), self._scal_upts,
+        self._scal_upts = [be.matrix((nupts, nvars, neles), self._scal_upts,
                                      tags=tags)
                            for i in xrange(nscal_upts)]
-        self._vect_upts = [be.matrix((nupts, ndims, neles, nvars), tags=tags)
+        self._vect_upts = [be.matrix((ndims, nupts, nvars, neles), tags=tags)
                            for i in xrange(self._nvect_upts)]
-        self._scal_fpts = [be.matrix((nfpts, neles, nvars), tags=tags)
+        self._scal_fpts = [be.matrix((nfpts, nvars, neles), tags=tags)
                            for i in xrange(self._nscal_fpts)]
-        self._vect_fpts = [be.matrix((nfpts, ndims, neles, nvars), tags=tags)
+        self._vect_fpts = [be.matrix((ndims, nfpts, nvars, neles), tags=tags)
                            for i in xrange(self._nvect_fpts)]
 
         # Bank the scalar soln points (as required by the RK schemes)
@@ -171,10 +169,10 @@ class BaseElements(object):
             raise RuntimeError('Negative mesh Jacobians detected')
 
         self._rcpdjac_upts = 1.0 / djacs
-        self._smat_upts = smats.reshape(-1, self.neles, self.ndims**2)
+        self._smat_upts = smats.reshape(-1, self.ndims**2, self.neles)
 
     def _gen_pnorm_fpts(self):
-        smats = self._get_smats(self._basis.fpts)
+        smats = self._get_smats(self._basis.fpts).transpose(0, 3, 1, 2)
 
         normfpts = np.asanyarray(self._basis.norm_fpts, dtype=np.float)
 
@@ -195,11 +193,8 @@ class BaseElements(object):
         nspts, neles, ndims = self.nspts, self.neles, self.ndims
         npts = len(pts)
 
-        # Form the Jacobian operator (going from AoS to SoA)
-        jacop = self._basis.jac_sbasis_at(pts).swapaxes(1, 2)
-
-        # Convert to double precision
-        jacop = np.asanyarray(jacop, dtype=np.float)
+        # Form the Jacobian operator
+        jacop = np.asanyarray(self._basis.jac_sbasis_at(pts), dtype=np.float)
 
         # Cast as a matrix multiply and apply to eles
         jac = np.dot(jacop.reshape(-1, nspts), self._eles.reshape(nspts, -1))
@@ -207,8 +202,8 @@ class BaseElements(object):
         # Reshape (npts*ndims, neles*ndims) => (npts, ndims, neles, ndims)
         jac = jac.reshape(npts, ndims, neles, ndims)
 
-        # Transpose to get (npts, neles, ndims, ndims) ≅ (npts, neles, J)
-        return jac.transpose(0, 2, 3, 1)
+        # Transpose to get (npts, ndims, ndims, neles) ≅ (npts, J, neles)
+        return jac.transpose(0, 3, 1, 2)
 
     def _get_smats(self, pts, retdets=False):
         jac = self._get_jac_eles_at(pts)
@@ -219,11 +214,11 @@ class BaseElements(object):
             return self._get_jac_smats_3d(jac, retdets)
 
     def _get_jac_smats_2d(self, jac, retdets):
-        a, b, c, d = [jac[...,i,j] for i, j in ndrange(2, 2)]
+        a, b, c, d = [jac[:,i,j] for i, j in ndrange(2, 2)]
 
         smats = np.empty_like(jac)
-        smats[...,0,0], smats[...,0,1] =  d, -b
-        smats[...,1,0], smats[...,1,1] = -c,  a
+        smats[:,0,0], smats[:,0,1] =  d, -b
+        smats[:,1,0], smats[:,1,1] = -c,  a
 
         if retdets:
             return smats, a*d - b*c
@@ -232,13 +227,13 @@ class BaseElements(object):
 
     def _get_jac_smats_3d(self, jac, retdets):
         smats = np.empty_like(jac)
-        smats[...,0,:] = np.cross(jac[...,1], jac[...,2])
-        smats[...,1,:] = np.cross(jac[...,2], jac[...,0])
-        smats[...,2,:] = np.cross(jac[...,0], jac[...,1])
+        smats[:,0,:] = np.cross(jac[:,:,1], jac[:,:,2], axis=1)
+        smats[:,1,:] = np.cross(jac[:,:,2], jac[:,:,0], axis=1)
+        smats[:,2,:] = np.cross(jac[:,:,0], jac[:,:,1], axis=1)
 
         if retdets:
             # Exploit the fact that det(J) = x0 . (x1 ^ x2); J = [x0, x1, x2]
-            djacs = np.einsum('...i,...i', jac[...,0], smats[...,0,:])
+            djacs = np.einsum('...ij,...ij->...j', jac[:,:,0], smats[:,0,:])
 
             return smats, djacs
         else:

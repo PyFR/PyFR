@@ -153,7 +153,7 @@ class OpenMPMPIView(base.MPIView):
         self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, ncol, vlen), None, 'AoS',
+        self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), None, 'SoA',
                                           tags=tags)
 
     @property
@@ -178,10 +178,10 @@ class OpenMPView(base.View):
             ptrmap[ix] += m._as_parameter_ + r[ix]*m.pitch
 
         shape = (self.nrow, self.ncol)
-        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
+        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, 'SoA',
                                         tags)
         self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
-                                        'AoS', tags)
+                                        'SoA', tags)
 
     @property
     def nbytes(self):

@@ -172,7 +172,7 @@ class MPIView(object):
         self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, ncol, vlen), None, 'AoS',
+        self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), None, 'SoA',
                                           tags=tags)
 
     @property

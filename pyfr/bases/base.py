@@ -83,7 +83,7 @@ class BaseBasis(object):
         """Trans discontinuous flux at upts to trans normal
         discontinuous flux at fpts
         """
-        return self.norm_fpts[:,None,:]*self.m0[...,None]
+        return self.norm_fpts[...,None]*self.m0[:,None,:]
 
     @lazyprop
     def m3(self):
@@ -102,7 +102,7 @@ class BaseBasis(object):
         """Discontinuous soln at upts to trans gradient of discontinuous
         solution at upts
         """
-        return self.m1.swapaxes(2, 1)[...,None]
+        return self.m1.swapaxes(0, 1)[...,None,:]
 
     @lazyprop
     def m6(self):
@@ -110,7 +110,7 @@ class BaseBasis(object):
         solution at upts
         """
         m = self.norm_fpts.T[:,None,:]*self.m3
-        return m.swapaxes(0, 1)[...,None]
+        return m[...,None,:]
 
     @property
     def m460(self):
@@ -132,7 +132,7 @@ class BaseBasis(object):
 
     def _eval_jac_lbasis_at(self, jlbasis, pts):
         m = self._eval_lbasis_at(jlbasis, pts)
-        return m.reshape(len(pts), -1, self.ndims)
+        return m.reshape(len(pts), -1, self.ndims).swapaxes(1, 2)
 
     @abstractproperty
     def nupts(self):

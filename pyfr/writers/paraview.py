@@ -112,11 +112,11 @@ def _component_to_physical_soln(soln, gamma):
 
     """
     # Convert rhou, rhov, [rhow] to u, v, [w]
-    soln[...,1:-1] /= soln[...,0,None]
+    soln[:,1:-1] /= soln[:,0,None]
 
     # Convert total energy to pressure
-    soln[...,-1] -= 0.5 * soln[...,0] * np.sum(soln[...,1:-1] ** 2, axis=2)
-    soln[...,-1] *= (gamma - 1)
+    soln[:,-1] -= 0.5*soln[:,0]*np.sum(soln[:,1:-1]**2, axis=1)
+    soln[:,-1] *= gamma - 1
 
 
 def _ncells_after_subdiv(ms_inf, divisor):
@@ -448,9 +448,9 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     _component_to_physical_soln(sol, cfg.getfloat('constants', 'gamma'))
 
     # Write Density, Velocity and Pressure
-    _write_vtk_darray(sol[...,0].T, vtuf, flt[0])
-    _write_vtk_darray(sol[...,1:-1].swapaxes(0,1), vtuf, flt[0])
-    _write_vtk_darray(sol[...,-1].swapaxes(0,1), vtuf, flt[0])
+    _write_vtk_darray(sol[:,0].T, vtuf, flt[0])
+    _write_vtk_darray(sol[:,1:-1].transpose(2, 0, 1), vtuf, flt[0])
+    _write_vtk_darray(sol[:,-1].T, vtuf, flt[0])
 
     # Append high-order data as CellData if not dividing cells
     if args.divisor is None:
@@ -490,7 +490,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
             pt = GmshNodeMaps.to_pyfr[s_inf[0], s_inf[1][0]][gmshpt + nlpts]
 
             # Write node locations, density, velocity and pressure
-            _write_vtk_darray(pts[pt,...], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,...,0], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,...,1:-1], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,...,-1], vtuf, flt[0])
+            _write_vtk_darray(pts[pt], vtuf, flt[0])
+            _write_vtk_darray(sol[pt,0], vtuf, flt[0])
+            _write_vtk_darray(sol[pt,1:-1].T, vtuf, flt[0])
+            _write_vtk_darray(sol[pt,-1], vtuf, flt[0])

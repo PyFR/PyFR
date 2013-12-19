@@ -66,7 +66,7 @@ class BaseBackend(object):
         self.fpdtype = np.dtype(prec).type
 
     @recordalloc('data')
-    def matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
+    def matrix(self, ioshape, initval=None, iopacking='SoA', tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
         If an inital value is specified the shape of the provided
@@ -104,7 +104,7 @@ class BaseBackend(object):
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
     @recordalloc('data')
-    def mpi_matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
+    def mpi_matrix(self, ioshape, initval=None, iopacking='SoA', tags=set()):
         """Creates a matrix which can be exchanged over MPI
 
         Since an MPI Matrix *is a* :class:`~pyfr.backends.base.Matrix`
@@ -127,7 +127,7 @@ class BaseBackend(object):
         return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
 
     @recordalloc('data')
-    def const_matrix(self, initval, iopacking='AoS', tags=set()):
+    def const_matrix(self, initval, iopacking='SoA', tags=set()):
         """Creates a constant matrix from *initval*
 
         This should be preferred over :meth:`matrix` when it is known

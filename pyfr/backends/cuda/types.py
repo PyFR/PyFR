@@ -158,10 +158,10 @@ class CUDAView(base.View):
             ptrmap[ix] += long(m) + r[ix]*m.pitch
 
         shape = (self.nrow, self.ncol)
-        self.mapping = CUDAMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
+        self.mapping = CUDAMatrixBase(backend, np.intp, shape, ptrmap, 'SoA',
                                       tags)
         self.strides = CUDAMatrixBase(backend, np.int32, shape, stridemap,
-                                      'AoS', tags)
+                                      'SoA', tags)
 
     @property
     def nbytes(self):

@@ -139,7 +139,7 @@ class BaseSystem(object):
 
     @property
     def ele_shapes(self):
-        return [(e.nupts, e.neles, e.nvars) for e in self._eles]
+        return [(e.nupts, e.nvars, e.neles) for e in self._eles]
 
     @property
     def ele_ndofs(self):
