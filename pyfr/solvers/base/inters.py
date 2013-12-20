@@ -41,12 +41,12 @@ def get_opt_view_perm(interside, mat, elemap):
     matmap, rcmap, stridemap = get_view_mats(interside, mat, elemap)
 
     # Since np.lexsort can not currently handle np.object arrays we
-    # work around this by using np.unique to build an array in which
-    # each distinct matrix object is represented by an integer
-    u, uix = np.unique(matmap, return_inverse=True)
+    # work around this by using id() to map each distinct matrix
+    # object to an integer
+    uid = np.vectorize(id)(matmap)
 
     # Sort
-    return np.lexsort((uix, rcmap[0,:,1], rcmap[0,:,0]))
+    return np.lexsort((uid[0], rcmap[0,:,1], rcmap[0,:,0]))
 
 
 class BaseInters(object):

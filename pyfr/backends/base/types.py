@@ -133,7 +133,7 @@ class View(object):
         self.vlen = vlen
 
         # Get the different matrices which we map onto
-        self._mats = list(np.unique(matmap))
+        self._mats = list(set(matmap.flat))
 
         # Extract the data type and item size from the first matrix
         self.refdtype = self._mats[0].dtype
