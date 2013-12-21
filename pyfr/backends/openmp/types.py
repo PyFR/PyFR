@@ -11,9 +11,8 @@ from pyfr.nputil import npaligned
 
 
 class OpenMPMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
-        super(OpenMPMatrixBase, self).__init__(backend, ioshape, iopacking,
-                                               tags)
+    def __init__(self, backend, dtype, ioshape, initval, tags):
+        super(OpenMPMatrixBase, self).__init__(backend, ioshape, tags)
 
         # Data type info
         self.dtype = dtype
@@ -26,7 +25,7 @@ class OpenMPMatrixBase(base.MatrixBase):
         ldmod = 32 // self.itemsize if 'align' in tags else 1
 
         # SoA shape of ourself and our dimensionality
-        shape, ndim = self.soa_shape, len(ioshape)
+        shape, ndim = self.ioshape, len(ioshape)
 
         # Shape to allocate
         datashape = []
@@ -68,20 +67,14 @@ class OpenMPMatrixBase(base.MatrixBase):
 
     def get(self):
         # Trim any padding in the final dimension
-        arr = self.data[...,:self.soa_shape[-1]]
-
-        if self.iopacking != 'SoA':
-            arr = self.backend.aos_arr(arr, 'SoA')
-
-        return arr
+        return self.data[...,:self.ioshape[-1]]
 
     def set(self, ary):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
 
-        # Cast and repack into the SoA format
+        # Cast
         nary = np.asanyarray(ary, dtype=self.dtype, order='C')
-        nary = self.backend.soa_arr(nary, self.iopacking)
 
         # Assign
         self.data[...,:nary.shape[-1]] = nary
@@ -97,9 +90,9 @@ class OpenMPMatrixBase(base.MatrixBase):
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, iopacking, tags):
+    def __init__(self, backend, ioshape, initval, tags):
         super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, iopacking, tags)
+                                           initval, tags)
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
@@ -117,7 +110,7 @@ class OpenMPMatrixRSlice(base.MatrixRSlice):
         # Since slices do not retain any information about the
         # high-order structure of an array it is fine to compact mat
         # down to two dimensions and simply slice this
-        self.data = backend.compact_arr(mat.data, 'SoA')[p:q]
+        self.data = backend.compact_arr(mat.data)[p:q]
 
     @property
     def _as_parameter_(self):
@@ -133,10 +126,9 @@ class OpenMPMatrixBank(base.MatrixBank):
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, iopacking, tags):
+    def __init__(self, backend, initval, tags):
         super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval,
-                                                iopacking, tags)
+                                                initval.shape, initval, tags)
 
 
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
@@ -145,20 +137,8 @@ class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
 
 class OpenMPMPIView(base.MPIView):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
-
-        # Create a normal OpenMP view
-        self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
-
-        # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), None, 'SoA',
-                                          tags=tags)
-
-    @property
-    def nbytes(self):
-        return self.view.nbytes + self.mpimat.nbytes
+        super(OpenMPMPIView, self).__init__(backend, matmap, rcmap, stridemap,
+                                            vlen, tags)
 
 
 class OpenMPView(base.View):
@@ -178,10 +158,9 @@ class OpenMPView(base.View):
             ptrmap[ix] += m._as_parameter_ + r[ix]*m.pitch
 
         shape = (self.nrow, self.ncol)
-        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, 'SoA',
-                                        tags)
+        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, tags)
         self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
-                                        'SoA', tags)
+                                        tags)
 
     @property
     def nbytes(self):

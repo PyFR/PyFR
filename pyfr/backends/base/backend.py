@@ -66,7 +66,7 @@ class BaseBackend(object):
         self.fpdtype = np.dtype(prec).type
 
     @recordalloc('data')
-    def matrix(self, ioshape, initval=None, iopacking='SoA', tags=set()):
+    def matrix(self, ioshape, initval=None, tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
         If an inital value is specified the shape of the provided
@@ -83,7 +83,7 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.Matrix`
         """
-        return self.matrix_cls(self, ioshape, initval, iopacking, tags)
+        return self.matrix_cls(self, ioshape, initval, tags)
 
     @recordalloc('rslices')
     def matrix_rslice(self, mat, p, q):
@@ -104,7 +104,7 @@ class BaseBackend(object):
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
     @recordalloc('data')
-    def mpi_matrix(self, ioshape, initval=None, iopacking='SoA', tags=set()):
+    def mpi_matrix(self, ioshape, initval=None, tags=set()):
         """Creates a matrix which can be exchanged over MPI
 
         Since an MPI Matrix *is a* :class:`~pyfr.backends.base.Matrix`
@@ -121,13 +121,13 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.MPIMatrix`
         """
-        return self.mpi_matrix_cls(self, ioshape, initval, iopacking, tags)
+        return self.mpi_matrix_cls(self, ioshape, initval, tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
         return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
 
     @recordalloc('data')
-    def const_matrix(self, initval, iopacking='SoA', tags=set()):
+    def const_matrix(self, initval, tags=set()):
         """Creates a constant matrix from *initval*
 
         This should be preferred over :meth:`matrix` when it is known
@@ -145,7 +145,7 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.ConstMatrix`
         """
-        return self.const_matrix_cls(self, initval, iopacking, tags)
+        return self.const_matrix_cls(self, initval, tags)
 
     @recordalloc('view')
     def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
@@ -219,64 +219,14 @@ class BaseBackend(object):
         return sum(d.nbytes for d in self._allocs['data'])
 
     @staticmethod
-    def _to_arr(mat, currpacking, newpacking):
-        if currpacking not in ('AoS', 'SoA'):
-            raise ValueError('Invalid matrix packing')
-
-        if mat.ndim == 2 or currpacking == newpacking:
-            return mat
-        elif mat.ndim == 3:
-            return mat.swapaxes(1, 2)
-        elif mat.ndim == 4:
-            return mat.swapaxes(0, 1).swapaxes(2, 3)
-        else:
-            raise ValueError('Invalid matrix shape')
+    def compact_arr(mat):
+        return mat.reshape(BaseBackend.compact_shape(mat.shape))
 
     @staticmethod
-    def aos_arr(mat, packing):
-        return BaseBackend._to_arr(mat, packing, 'AoS')
-
-    @staticmethod
-    def soa_arr(mat, packing):
-        return BaseBackend._to_arr(mat, packing, 'SoA')
-
-    @staticmethod
-    def compact_arr(mat, packing):
-        # Convert to SoA and get the compacted shape
-        soamat = BaseBackend.soa_arr(mat, packing)
-        cshape = BaseBackend.compact_shape(mat.shape, packing)
-
-        return soamat.reshape(cshape[0], cshape[1])
-
-    @staticmethod
-    def _to_shape(shape, currpacking, newpacking):
-        if currpacking not in ('AoS', 'SoA'):
-            raise ValueError('Invalid matrix packing')
-
-        if len(shape) == 2 or currpacking == newpacking:
-            return shape
+    def compact_shape(shape):
+        if len(shape) == 2:
+            return shape[0], shape[1]
         elif len(shape) == 3:
-            return shape[0], shape[2], shape[1]
-        elif len(shape) == 4:
-            return shape[1], shape[0], shape[3], shape[2]
+            return shape[0], shape[1]*shape[2]
         else:
-            raise ValueError('Invalid matrix shape')
-
-    @staticmethod
-    def aos_shape(shape, packing):
-        return BaseBackend._to_shape(shape, packing, 'AoS')
-
-    @staticmethod
-    def soa_shape(shape, packing):
-        return BaseBackend._to_shape(shape, packing, 'SoA')
-
-    @staticmethod
-    def compact_shape(shape, packing):
-        sshape = BaseBackend.soa_shape(shape, packing)
-
-        if len(sshape) == 2:
-            return sshape[0], sshape[1]
-        elif len(sshape) == 3:
-            return sshape[0], sshape[1]*sshape[2]
-        else:
-            return sshape[0]*sshape[1], sshape[2]*sshape[3]
+            return shape[0]*shape[1], shape[2]*shape[3]

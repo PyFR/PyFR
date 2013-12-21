@@ -12,10 +12,9 @@ class MatrixBase(object):
     _base_tags = set()
 
     @abstractmethod
-    def __init__(self, backend, ioshape, iopacking, tags):
+    def __init__(self, backend, ioshape, tags):
         self.backend = backend
         self.ioshape = ioshape
-        self.iopacking = iopacking
         self.tags = self._base_tags | tags
 
     @abstractmethod
@@ -26,14 +25,6 @@ class MatrixBase(object):
     def nbytes(self):
         """Size in bytes"""
         pass
-
-    @property
-    def aos_shape(self):
-        return self.backend.aos_shape(self.ioshape, self.iopacking)
-
-    @property
-    def soa_shape(self):
-        return self.backend.soa_shape(self.ioshape, self.iopacking)
 
 
 class Matrix(MatrixBase):
@@ -172,8 +163,7 @@ class MPIView(object):
         self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), None, 'SoA',
-                                          tags=tags)
+        self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), tags=tags)
 
     @property
     def nbytes(self):

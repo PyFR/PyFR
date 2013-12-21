@@ -12,15 +12,15 @@ from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
 class CUDAMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
-        super(CUDAMatrixBase, self).__init__(backend, ioshape, iopacking, tags)
+    def __init__(self, backend, dtype, ioshape, initval, tags):
+        super(CUDAMatrixBase, self).__init__(backend, ioshape, tags)
 
         # Data type info
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
         # Dimensions
-        nrow, ncol = backend.compact_shape(ioshape, iopacking)
+        nrow, ncol = backend.compact_shape(ioshape)
         self.nrow = nrow
         self.ncol = ncol
 
@@ -42,7 +42,7 @@ class CUDAMatrixBase(base.MatrixBase):
             self.pitch = colsz
 
         self.leaddim = self.pitch // self.itemsize
-        self.leadsubdim = self.soa_shape[-1]
+        self.leadsubdim = self.ioshape[-1]
         self.traits = (nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Zero the entire matrix (incl. slack)
@@ -61,22 +61,16 @@ class CUDAMatrixBase(base.MatrixBase):
         memcpy2d_dtoh(buf, self.data, self.pitch, self.ncol*self.itemsize,
                       self.ncol*self.itemsize, self.nrow)
 
-        # Reshape from a matrix to an SoA-packed array
-        buf = buf.reshape(self.soa_shape)
-
-        # Repack if the IO format is AoS
-        if self.iopacking == 'AoS':
-            buf = self.backend.aos_arr(buf, 'SoA')
-
-        return buf
+        # Reshape from a matrix to the expected I/O shape
+        return buf.reshape(self.ioshape)
 
     def set(self, ary):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
 
-        # Cast and repack into the SoA format
+        # Cast and compact from the I/O shape to a matrix
         nary = np.asanyarray(ary, dtype=self.dtype, order='C')
-        nary = self.backend.compact_arr(nary, self.iopacking)
+        nary = self.backend.compact_arr(nary)
 
         # Copy
         memcpy2d_htod(self.data, nary, self.ncol*self.itemsize, self.pitch,
@@ -95,9 +89,9 @@ class CUDAMatrixBase(base.MatrixBase):
 
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, iopacking, tags):
+    def __init__(self, backend, ioshape, initval, tags):
         super(CUDAMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                         initval, iopacking, tags)
+                                         initval, tags)
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
@@ -135,11 +129,10 @@ class CUDAMatrixBank(base.MatrixBank):
 
 
 class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, iopacking, tags):
+    def __init__(self, backend, initval, tags):
         ioshape = initval.shape
         super(CUDAConstMatrix, self).__init__(backend, backend.fpdtype,
-                                              ioshape, initval, iopacking,
-                                              tags)
+                                              ioshape, initval, tags)
 
 class CUDAView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
@@ -158,10 +151,9 @@ class CUDAView(base.View):
             ptrmap[ix] += long(m) + r[ix]*m.pitch
 
         shape = (self.nrow, self.ncol)
-        self.mapping = CUDAMatrixBase(backend, np.intp, shape, ptrmap, 'SoA',
-                                      tags)
+        self.mapping = CUDAMatrixBase(backend, np.intp, shape, ptrmap, tags)
         self.strides = CUDAMatrixBase(backend, np.int32, shape, stridemap,
-                                      'SoA', tags)
+                                      tags)
 
     @property
     def nbytes(self):
@@ -169,10 +161,9 @@ class CUDAView(base.View):
 
 
 class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
-    def __init__(self, backend, ioshape, initval, iopacking, tags):
+    def __init__(self, backend, ioshape, initval, tags):
         # Call the standard matrix constructor
-        super(CUDAMPIMatrix, self).__init__(backend, ioshape, initval,
-                                            iopacking, tags)
+        super(CUDAMPIMatrix, self).__init__(backend, ioshape, initval, tags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
