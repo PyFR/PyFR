@@ -19,7 +19,7 @@ class MatrixBase(object):
 
     @abstractmethod
     def get(self):
-        return self._unpack(self._get())
+        pass
 
     @abstractproperty
     def nbytes(self):
