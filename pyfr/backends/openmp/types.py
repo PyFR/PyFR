@@ -24,42 +24,29 @@ class OpenMPMatrixBase(base.MatrixBase):
         # Alignment requirement for the final dimension
         ldmod = 32 // self.itemsize if 'align' in tags else 1
 
-        # SoA shape of ourself and our dimensionality
-        shape, ndim = self.ioshape, len(ioshape)
+        # Our shape and dimensionality
+        shape, ndim = list(self.ioshape), len(ioshape)
 
-        # Shape to allocate
-        datashape = []
-
-        # Rows
-        if ndim == 2 or ndim == 3:
-            nrow = shape[0]
-            datashape += [nrow]
-        else:
-            nrow = shape[0]*shape[1]
-            datashape += [shape[0], shape[1]]
-
-        # Columns
         if ndim == 2:
-            ncol = shape[1]
-            datashape += [ncol - (ncol % -ldmod)]
-        else:
-            ncols = shape[-2]
-            ncola = shape[-1] - (shape[-1] % -ldmod)
-            ncol = ncols*ncola
-            datashape += [ncols, ncola]
+            nrow, ncol = shape
+        elif ndim == 3 or ndim == 4:
+            nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
+            ncol = shape[-2]*shape[-1] + (1 - shape[-2])*(shape[-1] % -ldmod)
+
+        # Pad the final dimension
+        shape[-1] -= shape[-1] % -ldmod
 
         # Assign
         self.nrow, self.ncol = nrow, ncol
-
         self.leaddim = ncol - (ncol % -ldmod)
-        self.leadsubdim = datashape[-1]
+        self.leadsubdim = shape[-1]
         self.pitch = self.leaddim*self.itemsize
 
         self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Allocate, ensuring data is on a 32-byte boundary (this is
         # separate to the dimension alignment above)
-        self.data = npaligned(datashape, dtype=self.dtype)
+        self.data = npaligned(shape, dtype=self.dtype)
 
         # Process any initial value
         if initval is not None:
