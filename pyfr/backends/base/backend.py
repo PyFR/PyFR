@@ -59,7 +59,7 @@ class BaseBackend(object):
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')
         if prec not in {'single', 'double'}:
-            raise ValueError('Backend precision must be either single or'
+            raise ValueError('Backend precision must be either single or '
                              'double')
 
         # Convert to a NumPy data type
