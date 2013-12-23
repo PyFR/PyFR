@@ -171,9 +171,7 @@ class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
 
 
 class CUDAMPIView(base.MPIView):
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        super(CUDAMPIView, self).__init__(backend, matmap, rcmap, stridemap,
-                                          vlen, tags)
+    pass
 
 
 class CUDAQueue(base.Queue):

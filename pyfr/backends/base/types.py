@@ -153,7 +153,6 @@ class View(object):
 
 
 class MPIView(object):
-    @abstractmethod
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
         self.nrow = nrow = matmap.shape[0]
         self.ncol = ncol = matmap.shape[1]

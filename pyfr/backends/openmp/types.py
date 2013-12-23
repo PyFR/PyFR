@@ -123,9 +123,7 @@ class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
 
 
 class OpenMPMPIView(base.MPIView):
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        super(OpenMPMPIView, self).__init__(backend, matmap, rcmap, stridemap,
-                                            vlen, tags)
+    pass
 
 
 class OpenMPView(base.View):
