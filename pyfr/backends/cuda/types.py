@@ -47,7 +47,7 @@ class CUDAMatrixBase(base.MatrixBase):
 
         # Zero the entire matrix (incl. slack)
         assert (self._nbytes % 4) == 0
-        cuda.memset_d32(self.data, 0, self._nbytes/4)
+        cuda.memset_d32(self.data, 0, self._nbytes // 4)
 
         # Process any initial values
         if initval is not None:
