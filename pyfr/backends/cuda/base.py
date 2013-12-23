@@ -22,11 +22,6 @@ class CUDABackend(BaseBackend):
         from pycuda.driver import func_cache
         cuda_ctx.set_cache_config(func_cache.PREFER_SHARED)
 
-        # For introspection to work it must always be possible to
-        # import the CUDABackend (even if CUDA is unavailable on the
-        # system).  As many of our types/providers depend on the CUDA
-        # runtime we import these here, locally, at the time of
-        # instantiation.
         from pyfr.backends.cuda import (blasext, cublas, packing, provider,
                                         types)
 
