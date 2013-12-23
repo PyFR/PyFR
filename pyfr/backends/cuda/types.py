@@ -100,12 +100,6 @@ class CUDAMatrixRSlice(base.MatrixRSlice):
 
 
 class CUDAMatrixBank(base.MatrixBank):
-    def __init__(self, backend, mats, initbank, tags):
-        if any(m.traits != mats[0].traits for m in mats[1:]):
-            raise ValueError('Matrices in a bank must be homogeneous')
-
-        super(CUDAMatrixBank, self).__init__(backend, mats, initbank, tags)
-
     def __long__(self):
         return long(self._curr_mat)
 

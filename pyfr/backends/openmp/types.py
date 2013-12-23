@@ -94,11 +94,7 @@ class OpenMPMatrixRSlice(base.MatrixRSlice):
 
 
 class OpenMPMatrixBank(base.MatrixBank):
-    def __init__(self, backend, mats, initbank, tags):
-        if any(m.traits != mats[0].traits for m in mats[1:]):
-            raise ValueError('Matrices in a bank must be homogeneous')
-
-        super(OpenMPMatrixBank, self).__init__(backend, mats, initbank, tags)
+    pass
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):

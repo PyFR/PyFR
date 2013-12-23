@@ -92,18 +92,21 @@ class MPIMatrix(Matrix):
 class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
-    @abstractmethod
     def __init__(self, backend, mats, initbank, tags):
+        # Ensure all matrices have the same traits
+        if any(m.traits != mats[0].traits for m in mats[1:]):
+            raise ValueError('Matrices in a bank must be homogeneous')
+
+        # Check that all matrices share tags
+        if any(m.tags != mats[0].tags for m in mats[1:]):
+            raise ValueError('Matrices in a bank must share tags')
+
         self.backend = backend
+        self.tags = tags | mats[0].tags
 
         self._mats = mats
         self._curr_idx = initbank
-        self._curr_mat = self._mats[initbank]
-
-        # Process tags
-        if any(mats[0].tags != m.tags for m in mats[1:]):
-            raise ValueError('Banked matrices must share tags')
-        self.tags = tags | mats[0].tags
+        self._curr_mat = mats[initbank]
 
     def __len__(self):
         return len(self._mats)
