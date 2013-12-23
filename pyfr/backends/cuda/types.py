@@ -29,11 +29,9 @@ class CUDAMatrixBase(base.MatrixBase):
         self.nrow, self.ncol = nrow, ncol
         self.leaddim = ncol - (ncol % -ldmod)
         self.leadsubdim = self.ioshape[-1]
-        self.pitch = self.leaddim*self.itemsize
-        self.traits = (nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Allocate
-        self._nbytes = nrow*self.pitch
+        self._nbytes = nrow*self.leaddim*self.itemsize
         self.data = cuda.mem_alloc(self._nbytes)
 
         # Zero the entire matrix (incl. slack)
@@ -88,13 +86,6 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 class CUDAMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
         super(CUDAMatrixRSlice, self).__init__(backend, mat, p, q)
-
-        # Copy over common attributes
-        self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.pitch, self.leaddim = mat.pitch, mat.leaddim
-
-        # Traits are those of a thinner matrix
-        self.traits = (self.nrow, self.leaddim, self.dtype)
 
         # Starting offset of our row
         self._soffset = p*mat.pitch

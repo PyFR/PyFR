@@ -40,9 +40,6 @@ class OpenMPMatrixBase(base.MatrixBase):
         self.nrow, self.ncol = nrow, ncol
         self.leaddim = ncol - (ncol % -ldmod)
         self.leadsubdim = shape[-1]
-        self.pitch = self.leaddim*self.itemsize
-
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Allocate, ensuring data is on a 32-byte boundary (this is
         # separate to the dimension alignment above)
@@ -85,14 +82,6 @@ class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
 class OpenMPMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
         super(OpenMPMatrixRSlice, self).__init__(backend, mat, p, q)
-
-        # Copy over common attributes
-        self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.pitch, self.leaddim = mat.pitch, mat.leaddim
-        self.leadsubdim = mat.leadsubdim
-
-        # Traits
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Since slices do not retain any information about the
         # high-order structure of an array it is fine to compact mat

@@ -26,6 +26,14 @@ class MatrixBase(object):
         """Size in bytes"""
         pass
 
+    @property
+    def pitch(self):
+        return self.leaddim*self.itemsize
+
+    @property
+    def traits(self):
+        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
+
 
 class Matrix(MatrixBase):
     """Matrix abstract base class
@@ -52,13 +60,23 @@ class MatrixRSlice(object):
         if p < 0 or q > mat.nrow or q < p:
             raise ValueError('Invalid row slice')
 
-        self.nrow = q - p
-        self.ncol = mat.ncol
+        self.nrow, self.ncol = q - p, mat.ncol
+        self.dtype, self.itemsize = mat.dtype, mat.itemsize
+        self.leaddim, self.leadsubdim = mat.leaddim, mat.leadsubdim
+
         self.tags = mat.tags | {'slice'}
 
     @property
     def nbytes(self):
         return 0
+
+    @property
+    def pitch(self):
+        return self.leaddim*self.itemsize
+
+    @property
+    def traits(self):
+        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
 
 class ConstMatrix(MatrixBase):
