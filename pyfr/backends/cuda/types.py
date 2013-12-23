@@ -19,31 +19,22 @@ class CUDAMatrixBase(base.MatrixBase):
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
-        # Dimensions
+        # Alignment requirement for the leading dimension
+        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
+
+        # Matrix dimensions
         nrow, ncol = backend.compact_shape(ioshape)
-        self.nrow = nrow
-        self.ncol = ncol
 
-        # Compute the size, in bytes, of the minor dimension
-        colsz = self.ncol*self.itemsize
-
-        if 'align' in tags:
-            # Allocate a 2D array aligned to the major dimension
-            self.data, self.pitch = cuda.mem_alloc_pitch(colsz, nrow,
-                                                         self.itemsize)
-            self._nbytes = nrow*self.pitch
-
-            # Ensure that the pitch is a multiple of itemsize
-            assert (self.pitch % self.itemsize) == 0
-        else:
-            # Allocate a standard, tighly packed, array
-            self._nbytes = colsz*nrow
-            self.data = cuda.mem_alloc(self._nbytes)
-            self.pitch = colsz
-
-        self.leaddim = self.pitch // self.itemsize
+        # Assign
+        self.nrow, self.ncol = nrow, ncol
+        self.leaddim = ncol - (ncol % -ldmod)
         self.leadsubdim = self.ioshape[-1]
+        self.pitch = self.leaddim*self.itemsize
         self.traits = (nrow, self.leaddim, self.leadsubdim, self.dtype)
+
+        # Allocate
+        self._nbytes = nrow*self.pitch
+        self.data = cuda.mem_alloc(self._nbytes)
 
         # Zero the entire matrix (incl. slack)
         assert (self._nbytes % 4) == 0
