@@ -72,10 +72,6 @@ class CUDAMatrixBase(base.MatrixBase):
     def __long__(self):
         return long(self.data)
 
-    @property
-    def nbytes(self):
-        return self._nbytes
-
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
     def __init__(self, backend, ioshape, initval, tags):
@@ -130,10 +126,6 @@ class CUDAView(base.View):
         self.mapping = CUDAMatrixBase(backend, np.intp, shape, ptrmap, tags)
         self.strides = CUDAMatrixBase(backend, np.int32, shape, stridemap,
                                       tags)
-
-    @property
-    def nbytes(self):
-        return self.mapping.nbytes + self.strides.nbytes
 
 
 class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):

@@ -21,11 +21,6 @@ class MatrixBase(object):
     def get(self):
         pass
 
-    @abstractproperty
-    def nbytes(self):
-        """Size in bytes"""
-        pass
-
     @property
     def pitch(self):
         return self.leaddim*self.itemsize
@@ -65,10 +60,6 @@ class MatrixRSlice(object):
         self.leaddim, self.leadsubdim = mat.leaddim, mat.leadsubdim
 
         self.tags = mat.tags | {'slice'}
-
-    @property
-    def nbytes(self):
-        return 0
 
     @property
     def pitch(self):
@@ -129,10 +120,6 @@ class MatrixBank(Sequence):
         self._curr_idx = idx
         self._curr_mat = self._mats[idx]
 
-    @property
-    def nbytes(self):
-        return sum(m.nbytes for m in self)
-
 
 class View(object):
     """View abstract base class"""
@@ -168,10 +155,6 @@ class View(object):
             if m.dtype != self.refdtype:
                 raise TypeError('Mixed data types are not supported')
 
-    @abstractproperty
-    def nbytes(self):
-        pass
-
 
 class MPIView(object):
     @abstractmethod
@@ -185,10 +168,6 @@ class MPIView(object):
 
         # Now create an MPI matrix so that the view contents may be packed
         self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), tags=tags)
-
-    @property
-    def nbytes(self):
-        return self.view.nbytes + self.mpimat.nbytes
 
 
 class Queue(object):

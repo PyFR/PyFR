@@ -1,25 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
-from collections import defaultdict
-from functools import wraps
 from inspect import getcallargs
-from weakref import WeakSet
 
 import numpy as np
 
 from pyfr.util import ndrange
-
-
-def recordalloc(type):
-    def recordalloc_type(fn):
-        @wraps(fn)
-        def newfn(self, *args, **kwargs):
-            rv = fn(self, *args, **kwargs)
-            self._allocs[type].add(rv)
-            return rv
-        return newfn
-    return recordalloc_type
 
 
 def traits(**tr):
@@ -54,7 +40,6 @@ class BaseBackend(object):
         assert self.name is not None
 
         self.cfg = cfg
-        self._allocs = defaultdict(WeakSet)
 
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')
@@ -65,7 +50,6 @@ class BaseBackend(object):
         # Convert to a NumPy data type
         self.fpdtype = np.dtype(prec).type
 
-    @recordalloc('data')
     def matrix(self, ioshape, initval=None, tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
@@ -85,11 +69,9 @@ class BaseBackend(object):
         """
         return self.matrix_cls(self, ioshape, initval, tags)
 
-    @recordalloc('rslices')
     def matrix_rslice(self, mat, p, q):
         return self.matrix_rslice_cls(self, mat, p, q)
 
-    @recordalloc('banks')
     def matrix_bank(self, mats, initbank=0, tags=set()):
         """Creates a bank of matrices from *mats*
 
@@ -103,7 +85,6 @@ class BaseBackend(object):
         """
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
-    @recordalloc('data')
     def mpi_matrix(self, ioshape, initval=None, tags=set()):
         """Creates a matrix which can be exchanged over MPI
 
@@ -126,7 +107,6 @@ class BaseBackend(object):
     def mpi_matrix_for_view(self, view, tags=set()):
         return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
 
-    @recordalloc('data')
     def const_matrix(self, initval, tags=set()):
         """Creates a constant matrix from *initval*
 
@@ -147,7 +127,6 @@ class BaseBackend(object):
         """
         return self.const_matrix_cls(self, initval, tags)
 
-    @recordalloc('view')
     def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Uses mapping to create a view of mat
 
@@ -164,14 +143,12 @@ class BaseBackend(object):
             stridemap = np.ones(matmap.shape, dtype=np.int32)
         return self.view_cls(self, matmap, rcmap, stridemap, vlen, tags)
 
-    @recordalloc('view')
     def mpi_view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
         if stridemap is None:
             stridemap = np.ones(matmap.shape, dtype=np.int32)
         return self.mpi_view_cls(self, matmap, rcmap, stridemap, vlen, tags)
 
-    @recordalloc('kern')
     def kernel(self, name, *args, **kwargs):
         """Locates and binds a kernel called *name*
 
@@ -192,7 +169,6 @@ class BaseBackend(object):
         else:
             raise KeyError("'{}' has no providers".format(name))
 
-    @recordalloc('queue')
     def queue(self):
         """Creates a queue
 
@@ -212,11 +188,6 @@ class BaseBackend(object):
         queue.
         """
         self.queue_cls.runall(sequence)
-
-    @property
-    def nbytes(self):
-        """Number of data bytes currently allocated on the backend"""
-        return sum(d.nbytes for d in self._allocs['data'])
 
     @staticmethod
     def compact_arr(mat):

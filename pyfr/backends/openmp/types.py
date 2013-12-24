@@ -68,10 +68,6 @@ class OpenMPMatrixBase(base.MatrixBase):
         # Return a pointer to the first element
         return self.data.ctypes.data
 
-    @property
-    def nbytes(self):
-        return self.data.nbytes
-
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
     def __init__(self, backend, ioshape, initval, tags):
@@ -133,10 +129,6 @@ class OpenMPView(base.View):
         self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, tags)
         self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
                                         tags)
-
-    @property
-    def nbytes(self):
-        return self.mapping.nbytes + self.strides.nbytes
 
 
 class OpenMPQueue(base.Queue):
