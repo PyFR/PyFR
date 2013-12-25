@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import numpy as np
+
 from pyfr.backends.base import BaseBackend
 from pyfr.template import DottedTemplateLookup
 
@@ -9,6 +11,9 @@ class OpenMPBackend(BaseBackend):
 
     def __init__(self, cfg):
         super(OpenMPBackend, self).__init__(cfg)
+
+        # Take the alignment requirement to be 32-bytes
+        self.alignb = 32
 
         from pyfr.backends.openmp import (blasext, cblas, packing, provider,
                                           types)
@@ -35,3 +40,9 @@ class OpenMPBackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    def _malloc_impl(self, nbytes):
+            data = np.zeros(nbytes + self.alignb, dtype=np.uint8)
+            offset = -data.ctypes.data % self.alignb
+
+            return data[offset:nbytes + offset]

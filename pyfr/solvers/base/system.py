@@ -28,11 +28,15 @@ class BaseSystem(object):
         self._cfg = cfg
         self._nreg = nreg
 
-        # Load the elements and interfaces from the mesh
+        # Load the elements
         self._load_eles(rallocs, mesh, initsoln)
+        backend.commit()
+
+        # Load the interfaces
         self._load_int_inters(rallocs, mesh)
         self._load_mpi_inters(rallocs, mesh)
         self._load_bc_inters(rallocs, mesh)
+        backend.commit()
 
         # Prepare the queues and kernels
         self._gen_queues()

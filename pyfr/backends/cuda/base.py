@@ -55,3 +55,14 @@ class CUDABackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    def _malloc_impl(self, nbytes):
+        import pycuda.driver as cuda
+
+        # Allocate
+        data = cuda.mem_alloc(nbytes)
+
+        # Zero
+        cuda.memset_d32(data, 0, nbytes // 4)
+
+        return data

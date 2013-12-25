@@ -7,22 +7,18 @@ from mpi4py import MPI
 import numpy as np
 
 import pyfr.backends.base as base
-from pyfr.nputil import npaligned
 
 
 class OpenMPMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         super(OpenMPMatrixBase, self).__init__(backend, ioshape, tags)
 
         # Data type info
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
-        # Types must be multiples of 32
-        assert (32 % self.itemsize) == 0
-
         # Alignment requirement for the final dimension
-        ldmod = 32 // self.itemsize if 'align' in tags else 1
+        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
 
         # Our shape and dimensionality
         shape, ndim = list(self.ioshape), len(ioshape)
@@ -38,16 +34,31 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         # Assign
         self.nrow, self.ncol = nrow, ncol
+        self.datashape = shape
         self.leaddim = ncol - (ncol % -ldmod)
         self.leadsubdim = shape[-1]
 
-        # Allocate, ensuring data is on a 32-byte boundary (this is
-        # separate to the dimension alignment above)
-        self.data = npaligned(shape, dtype=self.dtype)
+        # Allocate
+        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
+
+        # Retain the initial value
+        self._initval = initval
+
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata.ctypes.data
+
+        self.data = basedata[offset:offset + self.nrow*self.pitch]
+        self.data = self.data.view(self.dtype)
+        self.data = self.data.reshape(self.datashape)
+
+        self.offset = offset // self.itemsize
 
         # Process any initial value
-        if initval is not None:
-            self.set(initval)
+        if self._initval is not None:
+            self.set(self._initval)
+
+        # Remove
+        del self._initval
 
     def get(self):
         # Trim any padding in the final dimension
@@ -65,14 +76,14 @@ class OpenMPMatrixBase(base.MatrixBase):
 
     @property
     def _as_parameter_(self):
-        # Return a pointer to the first element
+        # Obtain a pointer to our ndarray
         return self.data.ctypes.data
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, tags):
+    def __init__(self, backend, ioshape, initval, extent, tags):
         super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, tags)
+                                           initval, extent, tags)
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
@@ -94,9 +105,10 @@ class OpenMPMatrixBank(base.MatrixBank):
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, tags):
+    def __init__(self, backend, initval, extent, tags):
         super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval, tags)
+                                                initval.shape, initval,
+                                                extent, tags)
 
 
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
@@ -126,9 +138,10 @@ class OpenMPView(base.View):
             ptrmap[ix] += m._as_parameter_ + r[ix]*m.pitch
 
         shape = (self.nrow, self.ncol)
-        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, tags)
+        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap,
+                                        extent=None, tags=tags)
         self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
-                                        tags)
+                                        extent=None, tags=tags)
 
 
 class OpenMPQueue(base.Queue):
