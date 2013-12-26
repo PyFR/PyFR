@@ -129,16 +129,15 @@ class OpenMPView(base.View):
         # Row/column indcies of each view element
         r, c = rcmap[...,0], rcmap[...,1]
 
-        # We want to go from matrix objects and row/column indicies
-        # to memory addresses.  The algorithm for this is:
-        # ptr = m.base + r*m.pitch + c*itemsize
-        ptrmap = np.array(c*self.refitemsize, dtype=np.intp)
+        # Go from matrices + row/column indcies to offsets relative to
+        # the base allocation address
+        offmap = np.array(c, dtype=np.int32)
         for m in self._mats:
             ix = np.where(matmap == m)
-            ptrmap[ix] += m._as_parameter_ + r[ix]*m.pitch
+            offmap[ix] += m.offset + r[ix]*m.leaddim
 
         shape = (self.nrow, self.ncol)
-        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap,
+        self.mapping = OpenMPMatrixBase(backend, np.int32, shape, offmap,
                                         extent=None, tags=tags)
         self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
                                         extent=None, tags=tags)

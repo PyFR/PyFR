@@ -64,10 +64,10 @@ class OpenMPPointwiseKernelProvider(BasePointwiseKernelProvider):
                 arglst += [ka, ka.leadsubdim] if len(atypes) == 2 else [ka]
             # MPI view
             elif isinstance(ka, types.OpenMPMPIView):
-                arglst += [ka.view.mapping, ka.view.strides]
+                arglst += [ka.view.basedata, ka.view.mapping, ka.view.strides]
             # View
             elif isinstance(ka, types.OpenMPView):
-                arglst += [ka.mapping, ka.strides]
+                arglst += [ka.basedata, ka.mapping, ka.strides]
             # Other; let ctypes handle it
             else:
                 arglst.append(ka)

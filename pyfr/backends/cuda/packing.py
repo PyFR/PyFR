@@ -7,7 +7,6 @@ import pycuda.driver as cuda
 from pyfr.backends.base import ComputeKernel, MPIKernel
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_2d_grid_block
 from pyfr.backends.cuda.types import CUDAMPIMatrix, CUDAMPIView
-
 from pyfr.nputil import npdtype_to_ctype
 
 
@@ -15,61 +14,6 @@ class CUDAPackingKernels(CUDAKernelProvider):
     def _packmodopts(self, mpiview):
         return dict(dtype=npdtype_to_ctype(mpiview.mpimat.dtype),
                     vlen=mpiview.view.vlen)
-
-    def _packunpack_mpimat(self, op, mpimat):
-        class PackUnpackKernel(ComputeKernel):
-            if op == 'pack':
-                def run(self, scomp, scopy):
-                    cuda.memcpy_dtoh_async(mpimat.hdata, mpimat.data, scomp)
-            else:
-                def run(self, scomp, scopy):
-                    cuda.memcpy_htod_async(mpimat.data, mpimat.hdata, scomp)
-
-        return PackUnpackKernel()
-
-    def _packunpack_mpiview(self, op, mpiview):
-        # An MPI view is simply a regular view plus an MPI matrix
-        v, m = mpiview.view, mpiview.mpimat
-
-        # Get the CUDA pack/unpack kernel from the pack module
-        fn = self._get_function('pack', op + '_view', 'iiPPPiii',
-                                tplparams=self._packmodopts(mpiview))
-
-        # Compute the grid and thread-block size
-        grid, block = get_2d_grid_block(fn, v.nrow, v.ncol)
-
-        # Create a CUDA event
-        event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
-
-        class ViewPackUnpackKernel(ComputeKernel):
-            def run(self, scomp, scopy):
-                # If we are unpacking then copy the host buffer to the GPU
-                if op == 'unpack':
-                    cuda.memcpy_htod_async(m.data, m.hdata, scopy)
-                    event.record(scopy)
-                    scomp.wait_for_event(event)
-
-                # Call the CUDA kernel (pack or unpack)
-                fn.prepared_async_call(grid, block, scomp, v.nrow, v.ncol,
-                                       v.mapping, v.strides, m,
-                                       v.mapping.leaddim, v.strides.leaddim,
-                                       m.leaddim)
-
-                # If we have been packing then copy the GPU buffer to the host
-                if op == 'pack':
-                    event.record(scomp)
-                    scopy.wait_for_event(event)
-                    cuda.memcpy_dtoh_async(m.hdata, m.data, scopy)
-
-        return ViewPackUnpackKernel()
-
-    def _packunpack(self, op, mv):
-        if isinstance(mv, CUDAMPIMatrix):
-            return self._packunpack_mpimat(op, mv)
-        elif isinstance(mv, CUDAMPIView):
-            return self._packunpack_mpiview(op, mv)
-        else:
-            raise TypeError('Can only pack MPI views and MPI matrices')
 
     def _sendrecv(self, mv, mpipreqfn, pid, tag):
         # If we are an MPI view then extract the MPI matrix
@@ -87,7 +31,31 @@ class CUDAPackingKernels(CUDAKernelProvider):
         return SendRecvPackKernel()
 
     def pack(self, mv):
-        return self._packunpack('pack', mv)
+        # An MPI view is simply a regular view plus an MPI matrix
+        m, v = mv.mpimat, mv.view
+
+        # Get the CUDA pack/unpack kernel from the pack module
+        fn = self._get_function('pack', 'pack_view', 'iiPPPP',
+                                tplparams=self._packmodopts(mv))
+
+        # Compute the grid and thread-block size
+        grid, block = get_2d_grid_block(fn, v.nrow, v.ncol)
+
+        # Create a CUDA event
+        event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
+
+        class PackMPIViewKernel(ComputeKernel):
+            def run(self, scomp, scopy):
+                # Pack
+                fn.prepared_async_call(grid, block, scomp, v.nrow, v.ncol,
+                                       v.basedata, v.mapping, v.strides, m)
+
+                # Copy the packed buffer to the host
+                event.record(scomp)
+                scopy.wait_for_event(event)
+                cuda.memcpy_dtoh_async(m.hdata, m.data, scopy)
+
+        return PackMPIViewKernel()
 
     def send_pack(self, mv, pid, tag):
         return self._sendrecv(mv, MPI.COMM_WORLD.Send_init, pid, tag)
@@ -96,4 +64,8 @@ class CUDAPackingKernels(CUDAKernelProvider):
         return self._sendrecv(mv, MPI.COMM_WORLD.Recv_init, pid, tag)
 
     def unpack(self, mv):
-        return self._packunpack('unpack', mv)
+        class UnpackMPIMatrixKernel(ComputeKernel):
+            def run(self, scomp, scopy):
+                cuda.memcpy_htod_async(mv.data, mv.hdata, scomp)
+
+        return UnpackMPIMatrixKernel()

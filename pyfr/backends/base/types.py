@@ -134,26 +134,28 @@ class View(object):
         # Get the different matrices which we map onto
         self._mats = list(set(matmap.flat))
 
-        # Extract the data type and item size from the first matrix
+        # Extract the base allocation and data type
+        self.basedata = self._mats[0].basedata
         self.refdtype = self._mats[0].dtype
-        self.refitemsize = self._mats[0].itemsize
 
         # For vector views a stridemap is required
         if vlen != 1 and np.any(stridemap == 0):
             raise ValueError('Vector views require a non-zero stride map')
 
         # Check all of the shapes match up
-        if matmap.shape != rcmap.shape[:2] or\
-           matmap.shape != stridemap.shape:
-            raise TypeError('Invalid matrix shapes')
+        if matmap.shape != rcmap.shape[:2] or matmap.shape != stridemap.shape:
+            raise TypeError('Invalid view matrix shapes')
 
         # Validate the matrices
-        for m in self._mats:
-            if not isinstance(m, backend.matrix_cls):
-                raise TypeError('Incompatible matrix type for view')
+        if any(not isinstance(m, backend.matrix_cls) for m in self._mats):
+            raise TypeError('Incompatible matrix type for view')
 
-            if m.dtype != self.refdtype:
-                raise TypeError('Mixed data types are not supported')
+        if any(m.basedata != self.basedata for m in self._mats):
+            raise TypeError('All viewed matrices must belong to the same '
+                            'allocation extent')
+
+        if any(m.dtype != self.refdtype for m in self._mats):
+            raise TypeError('Mixed data types are not supported')
 
 
 class MPIView(object):
