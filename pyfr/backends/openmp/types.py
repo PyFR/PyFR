@@ -7,22 +7,18 @@ from mpi4py import MPI
 import numpy as np
 
 import pyfr.backends.base as base
-from pyfr.nputil import npaligned
 
 
 class OpenMPMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         super(OpenMPMatrixBase, self).__init__(backend, ioshape, tags)
 
         # Data type info
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
-        # Types must be multiples of 32
-        assert (32 % self.itemsize) == 0
-
         # Alignment requirement for the final dimension
-        ldmod = 32 // self.itemsize if 'align' in tags else 1
+        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
 
         # Our shape and dimensionality
         shape, ndim = list(self.ioshape), len(ioshape)
@@ -38,19 +34,31 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         # Assign
         self.nrow, self.ncol = nrow, ncol
+        self.datashape = shape
         self.leaddim = ncol - (ncol % -ldmod)
         self.leadsubdim = shape[-1]
-        self.pitch = self.leaddim*self.itemsize
 
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
+        # Allocate
+        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
 
-        # Allocate, ensuring data is on a 32-byte boundary (this is
-        # separate to the dimension alignment above)
-        self.data = npaligned(shape, dtype=self.dtype)
+        # Retain the initial value
+        self._initval = initval
+
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata.ctypes.data
+
+        self.data = basedata[offset:offset + self.nrow*self.pitch]
+        self.data = self.data.view(self.dtype)
+        self.data = self.data.reshape(self.datashape)
+
+        self.offset = offset // self.itemsize
 
         # Process any initial value
-        if initval is not None:
-            self.set(initval)
+        if self._initval is not None:
+            self.set(self._initval)
+
+        # Remove
+        del self._initval
 
     def get(self):
         # Trim any padding in the final dimension
@@ -68,31 +76,19 @@ class OpenMPMatrixBase(base.MatrixBase):
 
     @property
     def _as_parameter_(self):
-        # Return a pointer to the first element
+        # Obtain a pointer to our ndarray
         return self.data.ctypes.data
-
-    @property
-    def nbytes(self):
-        return self.data.nbytes
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, tags):
+    def __init__(self, backend, ioshape, initval, extent, tags):
         super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, tags)
+                                           initval, extent, tags)
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
         super(OpenMPMatrixRSlice, self).__init__(backend, mat, p, q)
-
-        # Copy over common attributes
-        self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.pitch, self.leaddim = mat.pitch, mat.leaddim
-        self.leadsubdim = mat.leadsubdim
-
-        # Traits
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Since slices do not retain any information about the
         # high-order structure of an array it is fine to compact mat
@@ -105,17 +101,14 @@ class OpenMPMatrixRSlice(base.MatrixRSlice):
 
 
 class OpenMPMatrixBank(base.MatrixBank):
-    def __init__(self, backend, mats, initbank, tags):
-        if any(m.traits != mats[0].traits for m in mats[1:]):
-            raise ValueError('Matrices in a bank must be homogeneous')
-
-        super(OpenMPMatrixBank, self).__init__(backend, mats, initbank, tags)
+    pass
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, tags):
+    def __init__(self, backend, initval, extent, tags):
         super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval, tags)
+                                                initval.shape, initval,
+                                                extent, tags)
 
 
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
@@ -134,22 +127,18 @@ class OpenMPView(base.View):
         # Row/column indcies of each view element
         r, c = rcmap[...,0], rcmap[...,1]
 
-        # We want to go from matrix objects and row/column indicies
-        # to memory addresses.  The algorithm for this is:
-        # ptr = m.base + r*m.pitch + c*itemsize
-        ptrmap = np.array(c*self.refitemsize, dtype=np.intp)
+        # Go from matrices + row/column indcies to offsets relative to
+        # the base allocation address
+        offmap = np.array(c, dtype=np.int32)
         for m in self._mats:
             ix = np.where(matmap == m)
-            ptrmap[ix] += m._as_parameter_ + r[ix]*m.pitch
+            offmap[ix] += m.offset + r[ix]*m.leaddim
 
         shape = (self.nrow, self.ncol)
-        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, tags)
+        self.mapping = OpenMPMatrixBase(backend, np.int32, shape, offmap,
+                                        extent=None, tags=tags)
         self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
-                                        tags)
-
-    @property
-    def nbytes(self):
-        return self.mapping.nbytes + self.strides.nbytes
+                                        extent=None, tags=tags)
 
 
 class OpenMPQueue(base.Queue):

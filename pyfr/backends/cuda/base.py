@@ -11,7 +11,10 @@ class CUDABackend(BaseBackend):
         super(CUDABackend, self).__init__(cfg)
 
         # Create a CUDA context
-        from pycuda.autoinit import context as cuda_ctx
+        from pycuda.autoinit import context, device
+
+        # Get the alignment requirements for the device
+        self.alignb = device.texture_alignment
 
         # Some CUDA devices share L1 cache and shared memory; on these
         # devices CUDA allows us to specify a preference between L1
@@ -20,7 +23,7 @@ class CUDABackend(BaseBackend):
         # declare its preference) we set the global default to
         # PREFER_SHARED.
         from pycuda.driver import func_cache
-        cuda_ctx.set_cache_config(func_cache.PREFER_SHARED)
+        context.set_cache_config(func_cache.PREFER_SHARED)
 
         from pyfr.backends.cuda import (blasext, cublas, packing, provider,
                                         types)
@@ -47,3 +50,14 @@ class CUDABackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    def _malloc_impl(self, nbytes):
+        import pycuda.driver as cuda
+
+        # Allocate
+        data = cuda.mem_alloc(nbytes)
+
+        # Zero
+        cuda.memset_d32(data, 0, nbytes // 4)
+
+        return data

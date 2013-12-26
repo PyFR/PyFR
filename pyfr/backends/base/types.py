@@ -21,10 +21,13 @@ class MatrixBase(object):
     def get(self):
         pass
 
-    @abstractproperty
-    def nbytes(self):
-        """Size in bytes"""
-        pass
+    @property
+    def pitch(self):
+        return self.leaddim*self.itemsize
+
+    @property
+    def traits(self):
+        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
 
 class Matrix(MatrixBase):
@@ -52,13 +55,19 @@ class MatrixRSlice(object):
         if p < 0 or q > mat.nrow or q < p:
             raise ValueError('Invalid row slice')
 
-        self.nrow = q - p
-        self.ncol = mat.ncol
+        self.nrow, self.ncol = q - p, mat.ncol
+        self.dtype, self.itemsize = mat.dtype, mat.itemsize
+        self.leaddim, self.leadsubdim = mat.leaddim, mat.leadsubdim
+
         self.tags = mat.tags | {'slice'}
 
     @property
-    def nbytes(self):
-        return 0
+    def pitch(self):
+        return self.leaddim*self.itemsize
+
+    @property
+    def traits(self):
+        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
 
 class ConstMatrix(MatrixBase):
@@ -74,18 +83,21 @@ class MPIMatrix(Matrix):
 class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
-    @abstractmethod
     def __init__(self, backend, mats, initbank, tags):
+        # Ensure all matrices have the same traits
+        if any(m.traits != mats[0].traits for m in mats[1:]):
+            raise ValueError('Matrices in a bank must be homogeneous')
+
+        # Check that all matrices share tags
+        if any(m.tags != mats[0].tags for m in mats[1:]):
+            raise ValueError('Matrices in a bank must share tags')
+
         self.backend = backend
+        self.tags = tags | mats[0].tags
 
         self._mats = mats
         self._curr_idx = initbank
-        self._curr_mat = self._mats[initbank]
-
-        # Process tags
-        if any(mats[0].tags != m.tags for m in mats[1:]):
-            raise ValueError('Banked matrices must share tags')
-        self.tags = tags | mats[0].tags
+        self._curr_mat = mats[initbank]
 
     def __len__(self):
         return len(self._mats)
@@ -108,10 +120,6 @@ class MatrixBank(Sequence):
         self._curr_idx = idx
         self._curr_mat = self._mats[idx]
 
-    @property
-    def nbytes(self):
-        return sum(m.nbytes for m in self)
-
 
 class View(object):
     """View abstract base class"""
@@ -126,30 +134,28 @@ class View(object):
         # Get the different matrices which we map onto
         self._mats = list(set(matmap.flat))
 
-        # Extract the data type and item size from the first matrix
+        # Extract the base allocation and data type
+        self.basedata = self._mats[0].basedata
         self.refdtype = self._mats[0].dtype
-        self.refitemsize = self._mats[0].itemsize
 
         # For vector views a stridemap is required
         if vlen != 1 and np.any(stridemap == 0):
             raise ValueError('Vector views require a non-zero stride map')
 
         # Check all of the shapes match up
-        if matmap.shape != rcmap.shape[:2] or\
-           matmap.shape != stridemap.shape:
-            raise TypeError('Invalid matrix shapes')
+        if matmap.shape != rcmap.shape[:2] or matmap.shape != stridemap.shape:
+            raise TypeError('Invalid view matrix shapes')
 
         # Validate the matrices
-        for m in self._mats:
-            if not isinstance(m, backend.matrix_cls):
-                raise TypeError('Incompatible matrix type for view')
+        if any(not isinstance(m, backend.matrix_cls) for m in self._mats):
+            raise TypeError('Incompatible matrix type for view')
 
-            if m.dtype != self.refdtype:
-                raise TypeError('Mixed data types are not supported')
+        if any(m.basedata != self.basedata for m in self._mats):
+            raise TypeError('All viewed matrices must belong to the same '
+                            'allocation extent')
 
-    @abstractproperty
-    def nbytes(self):
-        pass
+        if any(m.dtype != self.refdtype for m in self._mats):
+            raise TypeError('Mixed data types are not supported')
 
 
 class MPIView(object):
@@ -163,10 +169,6 @@ class MPIView(object):
 
         # Now create an MPI matrix so that the view contents may be packed
         self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), tags=tags)
-
-    @property
-    def nbytes(self):
-        return self.view.nbytes + self.mpimat.nbytes
 
 
 class Queue(object):

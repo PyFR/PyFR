@@ -8,14 +8,6 @@ import re
 import numpy as np
 
 
-def npaligned(shape, dtype, alignb=32):
-    nbytes = np.prod(shape)*np.dtype(dtype).itemsize
-    buf = np.zeros(nbytes + alignb, dtype=np.uint8)
-    off = -buf.ctypes.data % alignb
-
-    return buf[off:nbytes + off].view(dtype).reshape(shape)
-
-
 _npeval_syms = {
     '__builtins__': None,
     'exp': np.exp, 'log': np.log,

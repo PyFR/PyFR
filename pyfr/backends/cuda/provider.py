@@ -90,10 +90,10 @@ class CUDAPointwiseKernelProvider(BasePointwiseKernelProvider):
                 arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
             # MPI view
             elif isinstance(ka, types.CUDAMPIView):
-                arglst += [ka.view.mapping, ka.view.strides]
+                arglst += [ka.view.basedata, ka.view.mapping, ka.view.strides]
             # View
             elif isinstance(ka, types.CUDAView):
-                arglst += [ka.mapping, ka.strides]
+                arglst += [ka.basedata, ka.mapping, ka.strides]
             # Other; let PyCUDA handle it
             else:
                 arglst.append(ka)

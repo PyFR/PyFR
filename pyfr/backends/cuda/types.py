@@ -12,46 +12,41 @@ from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
 class CUDAMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         super(CUDAMatrixBase, self).__init__(backend, ioshape, tags)
 
         # Data type info
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
-        # Dimensions
+        # Alignment requirement for the leading dimension
+        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
+
+        # Matrix dimensions
         nrow, ncol = backend.compact_shape(ioshape)
-        self.nrow = nrow
-        self.ncol = ncol
 
-        # Compute the size, in bytes, of the minor dimension
-        colsz = self.ncol*self.itemsize
-
-        if 'align' in tags:
-            # Allocate a 2D array aligned to the major dimension
-            self.data, self.pitch = cuda.mem_alloc_pitch(colsz, nrow,
-                                                         self.itemsize)
-            self._nbytes = nrow*self.pitch
-
-            # Ensure that the pitch is a multiple of itemsize
-            assert (self.pitch % self.itemsize) == 0
-        else:
-            # Allocate a standard, tighly packed, array
-            self._nbytes = colsz*nrow
-            self.data = cuda.mem_alloc(self._nbytes)
-            self.pitch = colsz
-
-        self.leaddim = self.pitch // self.itemsize
+        # Assign
+        self.nrow, self.ncol = nrow, ncol
+        self.leaddim = ncol - (ncol % -ldmod)
         self.leadsubdim = self.ioshape[-1]
-        self.traits = (nrow, self.leaddim, self.leadsubdim, self.dtype)
 
-        # Zero the entire matrix (incl. slack)
-        assert (self._nbytes % 4) == 0
-        cuda.memset_d32(self.data, 0, self._nbytes // 4)
+        # Allocate
+        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
 
-        # Process any initial values
-        if initval is not None:
-            self.set(initval)
+        # Retain the initial value
+        self._initval = initval
+
+    def onalloc(self, basedata, offset):
+        self.basedata = int(basedata)
+        self.data = self.basedata + offset
+        self.offset = offset // self.itemsize
+
+        # Process any initial value
+        if self._initval is not None:
+            self.set(self._initval)
+
+        # Remove
+        del self._initval
 
     def get(self):
         # Allocate an empty buffer
@@ -78,61 +73,44 @@ class CUDAMatrixBase(base.MatrixBase):
 
     @property
     def _as_parameter_(self):
-        return long(self.data)
+        return self.data
 
     def __long__(self):
-        return long(self.data)
-
-    @property
-    def nbytes(self):
-        return self._nbytes
+        return self.data
 
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, tags):
+    def __init__(self, backend, ioshape, initval, extent, tags):
         super(CUDAMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                         initval, tags)
+                                         initval, extent, tags)
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
         super(CUDAMatrixRSlice, self).__init__(backend, mat, p, q)
 
-        # Copy over common attributes
-        self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.pitch, self.leaddim = mat.pitch, mat.leaddim
-
-        # Traits are those of a thinner matrix
-        self.traits = (self.nrow, self.leaddim, self.dtype)
-
         # Starting offset of our row
         self._soffset = p*mat.pitch
 
     @property
     def _as_parameter_(self):
-        return long(self.parent) + self._soffset
+        return self.parent.data + self._soffset
 
     @property
     def __long__(self):
-        return long(self.parent) + self._soffset
+        return self.parent.data + self._soffset
 
 
 class CUDAMatrixBank(base.MatrixBank):
-    def __init__(self, backend, mats, initbank, tags):
-        if any(m.traits != mats[0].traits for m in mats[1:]):
-            raise ValueError('Matrices in a bank must be homogeneous')
-
-        super(CUDAMatrixBank, self).__init__(backend, mats, initbank, tags)
-
     def __long__(self):
-        return long(self._curr_mat)
+        return self._curr_mat.data
 
 
 class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, tags):
+    def __init__(self, backend, initval, extent, tags):
         ioshape = initval.shape
         super(CUDAConstMatrix, self).__init__(backend, backend.fpdtype,
-                                              ioshape, initval, tags)
+                                              ioshape, initval, extent, tags)
 
 class CUDAView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
@@ -142,28 +120,25 @@ class CUDAView(base.View):
         # Row/column indcies of each view element
         r, c = rcmap[...,0], rcmap[...,1]
 
-        # We want to go from matrix objects and row/column indicies
-        # to memory addresses.  The algorithm for this is:
-        # ptr = m.base + r*m.pitch + c*itemsize
-        ptrmap = np.array(c*self.refitemsize, dtype=np.intp)
+        # Go from matrices + row/column indcies to offsets relative to
+        # the base allocation address
+        offmap = np.array(c, dtype=np.int32)
         for m in self._mats:
             ix = np.where(matmap == m)
-            ptrmap[ix] += long(m) + r[ix]*m.pitch
+            offmap[ix] += m.offset + r[ix]*m.leaddim
 
         shape = (self.nrow, self.ncol)
-        self.mapping = CUDAMatrixBase(backend, np.intp, shape, ptrmap, tags)
+        self.mapping = CUDAMatrixBase(backend, np.int32, shape, offmap,
+                                      extent=None, tags=tags)
         self.strides = CUDAMatrixBase(backend, np.int32, shape, stridemap,
-                                      tags)
-
-    @property
-    def nbytes(self):
-        return self.mapping.nbytes + self.strides.nbytes
+                                      extent=None, tags=tags)
 
 
 class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
-    def __init__(self, backend, ioshape, initval, tags):
+    def __init__(self, backend, ioshape, initval, extent, tags):
         # Call the standard matrix constructor
-        super(CUDAMPIMatrix, self).__init__(backend, ioshape, initval, tags)
+        super(CUDAMPIMatrix, self).__init__(backend, ioshape, initval, extent,
+                                            tags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
@@ -171,7 +146,9 @@ class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
 
 
 class CUDAMPIView(base.MPIView):
-    pass
+    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
+        super(CUDAMPIView, self).__init__(backend, matmap, rcmap, stridemap,
+                                          vlen, tags)
 
 
 class CUDAQueue(base.Queue):

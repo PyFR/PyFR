@@ -2,24 +2,12 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from functools import wraps
 from inspect import getcallargs
-from weakref import WeakSet
+from weakref import WeakKeyDictionary
 
 import numpy as np
 
 from pyfr.util import ndrange
-
-
-def recordalloc(type):
-    def recordalloc_type(fn):
-        @wraps(fn)
-        def newfn(self, *args, **kwargs):
-            rv = fn(self, *args, **kwargs)
-            self._allocs[type].add(rv)
-            return rv
-        return newfn
-    return recordalloc_type
 
 
 def traits(**tr):
@@ -54,7 +42,6 @@ class BaseBackend(object):
         assert self.name is not None
 
         self.cfg = cfg
-        self._allocs = defaultdict(WeakSet)
 
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')
@@ -65,8 +52,53 @@ class BaseBackend(object):
         # Convert to a NumPy data type
         self.fpdtype = np.dtype(prec).type
 
-    @recordalloc('data')
-    def matrix(self, ioshape, initval=None, tags=set()):
+        # Pending and committed allocation extents
+        self._pend_extents = defaultdict(list)
+        self._comm_extents = set()
+
+        # Mapping from backend objects to memory extents
+        self._obj_extents = WeakKeyDictionary()
+
+    def malloc(self, obj, nbytes, extent):
+        # If no extent has been specified then use a dummy object
+        extent = extent if extent is not None else object()
+
+        # Check that the extent has not already been committed
+        if extent in self._comm_extents:
+            raise ValueError('Extent "{}" has already been allocated'
+                             .format(extent))
+
+        # Append
+        self._pend_extents[extent].append((obj, nbytes))
+
+    def commit(self):
+        for reqs in self._pend_extents.itervalues():
+            # Determine the required allocation size
+            sz = sum(nbytes - (nbytes % -self.alignb) for _, nbytes in reqs)
+
+            # Perform the allocation
+            data = self._malloc_impl(sz)
+
+            offset = 0
+            for obj, nbytes in reqs:
+                # Fire the objects allocation callback
+                obj.onalloc(data, offset)
+
+                # Increment the offset
+                offset += nbytes - (nbytes % -self.alignb)
+
+                # Retain a (weak) reference to the allocated extent
+                self._obj_extents[obj] = data
+
+        # Mark the extents as committed and clear
+        self._comm_extents.update(self._pend_extents)
+        self._pend_extents.clear()
+
+    @abstractmethod
+    def _malloc_impl(self, nbytes):
+        pass
+
+    def matrix(self, ioshape, initval=None, extent=None, tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
         If an inital value is specified the shape of the provided
@@ -83,13 +115,11 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.Matrix`
         """
-        return self.matrix_cls(self, ioshape, initval, tags)
+        return self.matrix_cls(self, ioshape, initval, extent, tags)
 
-    @recordalloc('rslices')
     def matrix_rslice(self, mat, p, q):
         return self.matrix_rslice_cls(self, mat, p, q)
 
-    @recordalloc('banks')
     def matrix_bank(self, mats, initbank=0, tags=set()):
         """Creates a bank of matrices from *mats*
 
@@ -103,8 +133,7 @@ class BaseBackend(object):
         """
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
-    @recordalloc('data')
-    def mpi_matrix(self, ioshape, initval=None, tags=set()):
+    def mpi_matrix(self, ioshape, initval=None, extent=None, tags=set()):
         """Creates a matrix which can be exchanged over MPI
 
         Since an MPI Matrix *is a* :class:`~pyfr.backends.base.Matrix`
@@ -121,13 +150,12 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.MPIMatrix`
         """
-        return self.mpi_matrix_cls(self, ioshape, initval, tags)
+        return self.mpi_matrix_cls(self, ioshape, initval, extent, tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
         return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
 
-    @recordalloc('data')
-    def const_matrix(self, initval, tags=set()):
+    def const_matrix(self, initval, extent=None, tags=set()):
         """Creates a constant matrix from *initval*
 
         This should be preferred over :meth:`matrix` when it is known
@@ -145,9 +173,8 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.ConstMatrix`
         """
-        return self.const_matrix_cls(self, initval, tags)
+        return self.const_matrix_cls(self, initval, extent, tags)
 
-    @recordalloc('view')
     def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Uses mapping to create a view of mat
 
@@ -164,14 +191,12 @@ class BaseBackend(object):
             stridemap = np.ones(matmap.shape, dtype=np.int32)
         return self.view_cls(self, matmap, rcmap, stridemap, vlen, tags)
 
-    @recordalloc('view')
     def mpi_view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
         if stridemap is None:
             stridemap = np.ones(matmap.shape, dtype=np.int32)
         return self.mpi_view_cls(self, matmap, rcmap, stridemap, vlen, tags)
 
-    @recordalloc('kern')
     def kernel(self, name, *args, **kwargs):
         """Locates and binds a kernel called *name*
 
@@ -192,7 +217,6 @@ class BaseBackend(object):
         else:
             raise KeyError("'{}' has no providers".format(name))
 
-    @recordalloc('queue')
     def queue(self):
         """Creates a queue
 
@@ -212,11 +236,6 @@ class BaseBackend(object):
         queue.
         """
         self.queue_cls.runall(sequence)
-
-    @property
-    def nbytes(self):
-        """Number of data bytes currently allocated on the backend"""
-        return sum(d.nbytes for d in self._allocs['data'])
 
     @staticmethod
     def compact_arr(mat):

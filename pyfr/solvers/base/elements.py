@@ -149,9 +149,11 @@ class BaseElements(object):
                            for i in xrange(nscal_upts)]
         self._vect_upts = [be.matrix((ndims, nupts, nvars, neles), tags=tags)
                            for i in xrange(self._nvect_upts)]
-        self._scal_fpts = [be.matrix((nfpts, nvars, neles), tags=tags)
+        self._scal_fpts = [be.matrix((nfpts, nvars, neles),
+                                     extent='scal_fpts' + str(i), tags=tags)
                            for i in xrange(self._nscal_fpts)]
-        self._vect_fpts = [be.matrix((ndims, nfpts, nvars, neles), tags=tags)
+        self._vect_fpts = [be.matrix((ndims, nfpts, nvars, neles),
+                                     extent='vect_fpts' + str(i), tags=tags)
                            for i in xrange(self._nvect_fpts)]
 
         # Bank the scalar soln points (as required by the RK schemes)

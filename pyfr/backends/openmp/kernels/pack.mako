@@ -1,19 +1,22 @@
 # -*- coding: utf-8 -*-
 
 void
-pack_view(int nrow, int ncol,
-          ${dtype} **vptr, int *vstri, ${dtype} *pmat,
-          int ldp, int lds, int ldm)
+pack_view(int nrow,
+          int ncol,
+          const ${dtype} *__restrict__ v,
+          const int *__restrict__ vix,
+          const int *__restrict__ vstri,
+          ${dtype} *__restrict__ pmat)
 {
     for (int i = 0; i < nrow; i++)
     {
         for (int j = 0; j < ncol; j++)
         {
-            ${dtype} *ptr = vptr[i*ldp + j];
-            int stride = vstri[i*lds + j];
+            const ${dtype} *ptr = v + vix[i*ncol + j];
+            int stride = vstri[i*ncol + j];
 
         % for k in range(vlen):
-            pmat[i*ldm + ${k}*ncol + j] = ptr[${k}*stride];
+            pmat[i*ncol*${vlen} + ${k}*ncol + j] = ptr[${k}*stride];
         % endfor
         }
     }

@@ -153,7 +153,8 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         for va in self.vectargs:
             # Views
             if va.isview:
-                kargs.append('{0.dtype}** __restrict__ {0.name}_v'
+                kargs.append('{0.dtype}* __restrict__ {0.name}_v'.format(va))
+                kargs.append('const int* __restrict__ {0.name}_vix'
                              .format(va))
                 kargs.append('const int* __restrict__ {0.name}_vstri'
                              .format(va))
@@ -281,7 +282,8 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         elif arg.ncdim == 2:
             expr, cidx = '{{0}}*{} + {}'.format(nr, r), '{1}'
 
-        return '{0}_v[{1}][{0}_vstri[{1}]*{2}]'.format(arg.name, expr, cidx)
+        return ('{0}_v[{0}_vix[{1}] + {0}_vstri[{1}]*{2}]'
+                .format(arg.name, expr, cidx))
 
     def _deref_arg_array(self, arg):
         # Index expression fragments
@@ -341,7 +343,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
             # View
             if va.isview:
-                argt.append([np.intp, np.intp])
+                argt.append([np.intp, np.intp, np.intp])
             # Non-stacked vector or MPI type
             elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
                 argt.append([np.intp])
