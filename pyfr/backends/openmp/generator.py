@@ -18,6 +18,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             self._dims = [self._nouter]
 
             self._emit_load_store = self._emit_load_store_1d
+            self._emit_outer_loop = self._emit_outer_loop_1d
             self._emit_outer_loop_body = self._emit_outer_loop_body_1d
         else:
             self._outerit, self._nouter = '_y', '_ny'
@@ -25,6 +26,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             self._dims = [self._nouter, self._ninner]
 
             self._emit_load_store = self._emit_load_store_2d
+            self._emit_outer_loop = self._emit_outer_loop_2d
             self._emit_outer_loop_body = self._emit_outer_loop_body_2d
 
     def render(self):
@@ -34,23 +36,27 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         #   void                        |
         #   Name(Arguments)             | Outer function spec
         #   {                           |
-        #     #pragma omp parallel for  |
-        #     for (...)                 | Outer loop
-        #         ...                   | Outer loop body
+        #     int rb, re, ...;          | Iteration indicies
+        #     loop_sched_xd(...);       |
+        #                               |
+        #     #pragma omp parallel      |
+        #     {                         |
+        #         for (...)             | Outer loop
+        #             ...               | Outer loop body
+        #     }                         |
         #   }                           |
         spec = self._emit_outer_spec()
         head = self._emit_outer_loop()
         body = self._emit_outer_loop_body()
 
         # Fix indentation
-        head = [' '*4 + l for l in head]
-        body = [' '*8 + l for l in body]
+        head = [' '*8 + l for l in head]
+        body = [' '*12 + l for l in body]
 
-        # Add in the missing '{' and '}' to form the kernel
-        body = ['{'] + head + ['    {'] + body + ['    }', '}']
-
-        # Combine to yield the outer kernel
-        kern = spec + body
+        # Combine
+        kern = head + ['        {'] + body + ['        }']
+        kern = ['    #pragma omp parallel', '    {'] + kern + ['    }']
+        kern = spec + ['{'] + kern + ['}']
 
         # In 2D we need to bring in an inner function
         if self.ndim == 2:
@@ -107,7 +113,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
     def _emit_outer_loop_body_2d(self):
         # Arguments for the inner function
-        iargs = [self._ninner]
+        iargs = ['ce - cb']
         iargs.extend(sa.name for sa in self.scalargs)
 
         for va in self.vectargs:
@@ -185,19 +191,27 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         return aligns
 
-    def _emit_for(self, it, n, openmp=True):
-        loop = 'for (int {0} = 0; {0} < {1}; {0}++)'.format(it, n)
-
-        if openmp:
-            return ['#pragma omp parallel for', loop]
-        else:
-            return [loop]
-
     def _emit_inner_loop(self):
-        return self._emit_for(self._innerit, self._ninner, openmp=False)
+        return ['for (int {0} = 0; {0} < {1}; {0}++)'
+                .format(self._innerit, self._ninner)]
 
-    def _emit_outer_loop(self):
-        return self._emit_for(self._outerit, self._nouter, openmp=True)
+    def _emit_outer_loop_1d(self):
+        return ("int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);\n"
+                "int cb, ce;\n"
+                "loop_sched_1d({0}, align, &cb, &ce);\n"
+                "\n"
+                "for (int {1} = cb; {1} < ce; {1}++)"
+                .format(self._nouter, self._outerit)
+               ).splitlines()
+
+    def _emit_outer_loop_2d(self):
+        return ("int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);\n"
+                "int rb, re, cb, ce;\n"
+                "loop_sched_2d({0}, {1}, align, &rb, &re, &cb, &ce);\n"
+                "\n"
+                "for (int {2} = rb; {2} < re; {2}++)"
+                .format(self._nouter, self._ninner, self._outerit)
+               ).splitlines()
 
     def _emit_assigments(self, intent):
         assigns = []
@@ -309,17 +323,17 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         r, nr = self._outerit, self._nouter
         stmts = []
 
-        # Matrix; name + r*lsdim
+        # Matrix; name + r*lsdim + cb
         if arg.ncdim == 0:
-            stmts.append('{0}_v + {1}*lsd{0}'.format(arg.name, r))
-        # Stacked matrix; name + (r*nv + <0>)*lsdim
+            stmts.append('{0}_v + {1}*lsd{0} + cb'.format(arg.name, r))
+        # Stacked matrix; name + (r*nv + <0>)*lsdim + cb
         elif arg.ncdim == 1:
-            stmts.extend('{0}_v + ({1}*{2} + {3})*lsd{0}'
+            stmts.extend('{0}_v + ({1}*{2} + {3})*lsd{0} + cb'
                          .format(arg.name, r, arg.cdims[0], i)
                          for i in range(arg.cdims[0]))
-        # Doubly stacked matrix; name + ((<0>*nr + r)*nv + <1>)*lsdim
+        # Doubly stacked matrix; name + ((<0>*nr + r)*nv + <1>)*lsdim + cb
         else:
-            stmts.extend('{0}_v + (({1}*{2} + {3})*{4} + {5})*lsd{0}'
+            stmts.extend('{0}_v + (({1}*{2} + {3})*{4} + {5})*lsd{0} + cb'
                          .format(arg.name, i, nr, r, arg.cdims[1], j)
                          for i, j in ndrange(*arg.cdims))
 
