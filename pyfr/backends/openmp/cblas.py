@@ -103,7 +103,7 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
             argt = [np.intp, np.int32, np.int32, np.int32,
                     a.dtype, np.intp, np.int32, np.intp, np.int32,
                     a.dtype, np.intp, np.int32]
-            opts = dict(fpdtype=a.dtype)
+            opts = dict(alignb=self.backend.alignb, fpdtype=a.dtype)
 
             par_gemm = self._get_function('par-gemm', 'par_gemm', None, argt,
                                           opts)

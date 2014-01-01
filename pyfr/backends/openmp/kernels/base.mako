@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <tgmath.h>
 
-#define PYFR_ALIGN_BYTES 32
+#define PYFR_ALIGN_BYTES ${alignb}
 #define PYFR_NOINLINE __attribute__ ((noinline))
 
 #ifdef __ICC
