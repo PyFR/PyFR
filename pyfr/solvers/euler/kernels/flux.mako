@@ -4,7 +4,7 @@
 <%pyfr:function name='inviscid_flux'
                 params='const fpdtype_t s[${str(nvars)}],
                         fpdtype_t f[${str(ndims)}][${str(nvars)}],
-                        fpdtype_t* pout, fpdtype_t vout[${str(ndims)}]'>
+                        fpdtype_t pout[1], fpdtype_t vout[${str(ndims)}]'>
     fpdtype_t rho = s[0], invrho = 1.0/s[0], E = s[${nvars - 1}];
 
     // Compute the velocities
@@ -27,7 +27,7 @@
 % endfor
 
     if (pout != NULL)
-        *pout = p;
+        pout[0] = p;
 
     if (vout != NULL)
     {
