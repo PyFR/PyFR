@@ -56,12 +56,9 @@ class CBlasWrappers(object):
         self.cblas_snrm2.argtypes = [c_int, c_void_p, c_int]
 
 
-
 class OpenMPCBLASKernels(OpenMPKernelProvider):
     def __init__(self, backend):
         super(OpenMPCBLASKernels, self).__init__(backend)
-
-
 
         # Look for single and multi-threaded BLAS libraries
         hasst = backend.cfg.hasopt('backend-openmp', 'cblas-st')
