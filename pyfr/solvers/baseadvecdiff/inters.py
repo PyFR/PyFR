@@ -12,8 +12,6 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         base.__init__(be, lhs, rhs, elemap, cfg)
 
         # Generate the additional view matrices
-        self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
-        self._scal1_rhs = self._view_onto(rhs, 'get_scal_fpts1_for_inter')
         self._vect0_lhs = self._view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = self._view_onto(rhs, 'get_vect_fpts0_for_inter')
 
@@ -40,7 +38,6 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         rhsprank = rallocs.mprankmap[rhsrank]
 
         # Generate second set of view matrices
-        self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
         self._vect0_lhs = self._mpi_view_onto(lhs, 'get_vect_fpts0_for_inter')
         self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
 
@@ -77,7 +74,6 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
                                                              cfgsect, cfg)
 
         # Additional view matrices
-        self._scal1_lhs = self._view_onto(lhs, 'get_scal_fpts1_for_inter')
         self._vect0_lhs = self._view_onto(lhs, 'get_vect_fpts0_for_inter')
 
         # Additional kernel constants
