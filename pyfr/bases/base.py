@@ -76,14 +76,15 @@ class BaseBasis(object):
         """Trans discontinuous flux at upts to trans divergence of
         trans discontinuous flux at upts
         """
-        return self.jac_ubasis_at(self.upts)
+        return self.jac_ubasis_at(self.upts).reshape(self.nupts, -1)
 
     @lazyprop
     def m2(self):
         """Trans discontinuous flux at upts to trans normal
         discontinuous flux at fpts
         """
-        return self.norm_fpts[...,None]*self.m0[:,None,:]
+        m = self.norm_fpts[...,None]*self.m0[:,None,:]
+        return m.reshape(self.nfpts, -1)
 
     @lazyprop
     def m3(self):
@@ -94,15 +95,15 @@ class BaseBasis(object):
 
     @property
     def m132(self):
-        m1, m2, m3 = self.m1, self.m2, self.m3
-        return m1 - np.dot(m3, m2.reshape(self.nfpts, -1)).reshape(m1.shape)
+        return self.m1 - np.dot(self.m3, self.m2)
 
     @lazyprop
     def m4(self):
         """Discontinuous soln at upts to trans gradient of discontinuous
         solution at upts
         """
-        return self.m1.swapaxes(0, 1)[...,None,:]
+        m = self.m1.reshape(self.nupts, -1, self.nupts).swapaxes(0, 1)
+        return m.reshape(-1, self.nupts)
 
     @lazyprop
     def m6(self):
@@ -110,12 +111,11 @@ class BaseBasis(object):
         solution at upts
         """
         m = self.norm_fpts.T[:,None,:]*self.m3
-        return m[...,None,:]
+        return m.reshape(-1, self.nfpts)
 
     @property
     def m460(self):
-        m4, m6, m0 = self.m4, self.m6, self.m0
-        return m4 - np.dot(m6.reshape(-1, self.nfpts), m0).reshape(m4.shape)
+        return self.m4 - np.dot(self.m6, self.m0)
 
     @property
     def nspts(self):
