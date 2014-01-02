@@ -6,7 +6,6 @@ import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
-from pyfr.nputil import npdtype_to_ctype
 
 
 # Matrix orderings
@@ -57,12 +56,9 @@ class CBlasWrappers(object):
         self.cblas_snrm2.argtypes = [c_int, c_void_p, c_int]
 
 
-
 class OpenMPCBLASKernels(OpenMPKernelProvider):
     def __init__(self, backend):
         super(OpenMPCBLASKernels, self).__init__(backend)
-
-
 
         # Look for single and multi-threaded BLAS libraries
         hasst = backend.cfg.hasopt('backend-openmp', 'cblas-st')
@@ -107,9 +103,9 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
             argt = [np.intp, np.int32, np.int32, np.int32,
                     a.dtype, np.intp, np.int32, np.intp, np.int32,
                     a.dtype, np.intp, np.int32]
-            opts = dict(dtype=npdtype_to_ctype(a.dtype))
+            opts = dict(alignb=self.backend.alignb, fpdtype=a.dtype)
 
-            par_gemm = self._get_function('par_gemm', 'par_gemm', None, argt,
+            par_gemm = self._get_function('par-gemm', 'par_gemm', None, argt,
                                           opts)
 
             # Pointer to the BLAS library GEMM function

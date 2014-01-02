@@ -51,8 +51,5 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         return ComputeMetaKernel(muls)
 
-    def get_scal_fpts1_for_inter(self, eidx, fidx):
-        return self._get_scal_fptsn_for_inter(self._vect_fpts[0], eidx, fidx)
-
     def get_vect_fpts0_for_inter(self, eidx, fidx):
         return self._get_vect_fptsn_for_inter(self._vect_fpts[0], eidx, fidx)

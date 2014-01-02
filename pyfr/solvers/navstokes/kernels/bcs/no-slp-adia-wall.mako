@@ -47,14 +47,9 @@
     // Copy all fluid-side gradients across to wall-side gradients
     bc_common_grad_copy(ul, nl, grad_ul, grad_ur);
 
-    // Calculate components of symmetric matrix A, where Tr = A*Tl
-    fpdtype_t aa = nl[0]*nl[0];
-    fpdtype_t bb = nl[1]*nl[1];
-    fpdtype_t ab = -nl[0]*nl[1];
-
     // Correct copied across in-fluid temp gradients to in-wall gradients
-    grad_ur[0][3] += (bb - 1.0)*Tl_x + ab*Tl_y;
-    grad_ur[1][3] += ab*Tl_x + (aa - 1.0)*Tl_y;
+    grad_ur[0][3] -= nl[0]*nl[0]*Tl_x + nl[0]*nl[1]*Tl_y;
+    grad_ur[1][3] -= nl[1]*nl[0]*Tl_x + nl[1]*nl[1]*Tl_y;
 
 % elif ndims == 3:
     fpdtype_t u = rcprho*ul[1], v = rcprho*ul[2], w = rcprho*ul[3];
@@ -81,17 +76,9 @@
     // Copy all fluid-side gradients across to wall-side gradients
     bc_common_grad_copy(ul, nl, grad_ul, grad_ur);
 
-    // Calculate components of symmetric matrix A, where Tr = A*Tl
-    fpdtype_t aa = nl[0]*nl[0];
-    fpdtype_t bb = nl[1]*nl[1];
-    fpdtype_t cc = nl[2]*nl[2];
-    fpdtype_t ab = -nl[0]*nl[1];
-    fpdtype_t ac = -nl[0]*nl[2];
-    fpdtype_t bc = -nl[1]*nl[2];
-
     // Correct copied across in-fluid temp gradients to in-wall gradients
-    grad_ur[0][4] += (bb + cc -1.0)*Tl_x + ab*Tl_y + ac*Tl_z;
-    grad_ur[1][4] += ab*Tl_x + (aa + cc -1.0)*Tl_y + bc*Tl_z;
-    grad_ur[2][4] += ac*Tl_x + bc*Tl_y + (aa + bb -1.0)*Tl_z;
+    grad_ur[0][4] -= nl[0]*nl[0]*Tl_x + nl[0]*nl[1]*Tl_y + nl[0]*nl[2]*Tl_z;
+    grad_ur[1][4] -= nl[1]*nl[0]*Tl_x + nl[1]*nl[1]*Tl_y + nl[1]*nl[2]*Tl_z;
+    grad_ur[2][4] -= nl[2]*nl[0]*Tl_x + nl[2]*nl[1]*Tl_y + nl[2]*nl[2]*Tl_z;
 % endif
 </%pyfr:function>

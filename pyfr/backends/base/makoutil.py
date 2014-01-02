@@ -26,6 +26,15 @@ def dot(context, a_, b_=None, **kwargs):
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in xrange(*nd)) + ')'
 
 
+def array(context, ex_, **kwargs):
+    ix, ni = next(kwargs.iteritems())
+
+    # Allow for flexible range arguments
+    ni = ni if isinstance(ni, Iterable) else [ni]
+
+    return '{ ' + ', '.join(ex_.format(**{ix: i}) for i in xrange(*ni)) + ' }'
+
+
 @supports_caller
 def kernel(context, name, ndim, **kwargs):
     # Capture the kernel body
