@@ -17,7 +17,7 @@ class OpenMPMatrixBase(base.MatrixBase):
         ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
 
         # Our shape and dimensionality
-        shape, ndim = list(self.ioshape), len(ioshape)
+        shape, ndim = list(ioshape), len(ioshape)
 
         if ndim == 2:
             nrow, ncol = shape
@@ -44,8 +44,7 @@ class OpenMPMatrixBase(base.MatrixBase):
         self.basedata = basedata.ctypes.data
 
         self.data = basedata[offset:offset + self.nrow*self.pitch]
-        self.data = self.data.view(self.dtype)
-        self.data = self.data.reshape(self.datashape)
+        self.data = self.data.view(self.dtype).reshape(self.datashape)
 
         self.offset = offset // self.itemsize
 
@@ -64,11 +63,8 @@ class OpenMPMatrixBase(base.MatrixBase):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
 
-        # Cast
-        nary = np.asanyarray(ary, dtype=self.dtype, order='C')
-
         # Assign
-        self.data[...,:nary.shape[-1]] = nary
+        self.data[...,:ary.shape[-1]] = ary
 
     @property
     def _as_parameter_(self):
