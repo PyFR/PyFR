@@ -13,11 +13,7 @@ from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 class CUDAMatrixBase(base.MatrixBase):
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):
-        super(CUDAMatrixBase, self).__init__(backend, ioshape, tags)
-
-        # Data type info
-        self.dtype = dtype
-        self.itemsize = np.dtype(dtype).itemsize
+        super(CUDAMatrixBase, self).__init__(backend, dtype, ioshape, tags)
 
         # Alignment requirement for the leading dimension
         ldmod = backend.alignb // self.itemsize if 'align' in tags else 1

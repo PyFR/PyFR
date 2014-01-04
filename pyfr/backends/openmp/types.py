@@ -11,11 +11,7 @@ import pyfr.backends.base as base
 
 class OpenMPMatrixBase(base.MatrixBase):
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):
-        super(OpenMPMatrixBase, self).__init__(backend, ioshape, tags)
-
-        # Data type info
-        self.dtype = dtype
-        self.itemsize = np.dtype(dtype).itemsize
+        super(OpenMPMatrixBase, self).__init__(backend, dtype, ioshape, tags)
 
         # Alignment requirement for the final dimension
         ldmod = backend.alignb // self.itemsize if 'align' in tags else 1

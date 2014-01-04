@@ -12,8 +12,10 @@ class MatrixBase(object):
     _base_tags = set()
 
     @abstractmethod
-    def __init__(self, backend, ioshape, tags):
+    def __init__(self, backend, dtype, ioshape, tags):
         self.backend = backend
+        self.dtype = dtype
+        self.itemsize = np.dtype(dtype).itemsize
         self.ioshape = ioshape
         self.tags = self._base_tags | tags
 
