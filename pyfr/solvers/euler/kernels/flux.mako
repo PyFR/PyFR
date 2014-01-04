@@ -5,7 +5,7 @@
                 params='const fpdtype_t s[${str(nvars)}],
                         fpdtype_t f[${str(ndims)}][${str(nvars)}],
                         fpdtype_t pout[1], fpdtype_t vout[${str(ndims)}]'>
-    fpdtype_t rho = s[0], invrho = 1.0/s[0], E = s[${nvars - 1}];
+    fpdtype_t invrho = 1.0/s[0], E = s[${nvars - 1}];
 
     // Compute the velocities
     fpdtype_t rhov[] = ${pyfr.array('s[{i}]', i=(1, ndims + 1))};
