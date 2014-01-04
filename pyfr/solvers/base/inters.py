@@ -16,7 +16,7 @@ def get_view_mats(interside, mat, elemap, perm=Ellipsis):
 
     # Concat the various numpy arrays together to yield the three matrices
     # required in order to define a view
-    scal_v = [np.hstack(scal[i::3]) for i in xrange(3)]
+    scal_v = [np.concatenate(scal[i::3], axis=1) for i in xrange(3)]
 
     # Permute
     scal_v = [sv[:,perm] for sv in scal_v]
