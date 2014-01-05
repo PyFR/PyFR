@@ -65,33 +65,18 @@ class Arg(object):
 
         # Dimensions
         self.cdims = [int(d) for d in re.findall(dimsptn, g[3])]
+        self.ncdim = len(self.cdims)
 
-        # See if we are used
+        # Attributes
+        self.ismpi = 'mpi' in self.attrs
         self.isused = bool(re.search(usedptn, body))
+        self.isview = 'view' in self.attrs
+        self.isscalar = 'scalar' in self.attrs
+        self.isvector = 'scalar' not in self.attrs
 
         # Currently scalar arguments must be of type fpdtype_t
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
-
-    @property
-    def ismpi(self):
-        return 'mpi' in self.attrs
-
-    @property
-    def isview(self):
-        return 'view' in self.attrs
-
-    @property
-    def isscalar(self):
-        return 'scalar' in self.attrs
-
-    @property
-    def isvector(self):
-        return not self.isscalar
-
-    @property
-    def ncdim(self):
-        return len(self.cdims)
 
 
 class BaseFunctionGenerator(object):
@@ -127,9 +112,12 @@ class BaseKernelGenerator(object):
         # Parse and sort our argument list
         sargs = sorted((k, Arg(k, v, body)) for k, v in args.iteritems())
 
+        # Eliminate unused arguments
+        sargs = [v for k, v in sargs if v.isused]
+
         # Break arguments into point-scalars and point-vectors
-        self.scalargs = [v for k, v in sargs if v.isscalar]
-        self.vectargs = [v for k, v in sargs if v.isvector]
+        self.scalargs = [v for v in sargs if v.isscalar]
+        self.vectargs = [v for v in sargs if v.isvector]
 
         # If we are 2D ensure none of our arguments are views
         if ndim == 2 and any(v.isview for v in self.vectargs):

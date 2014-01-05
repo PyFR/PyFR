@@ -216,7 +216,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def _emit_assigments(self, intent):
         assigns = []
         for va in self.vectargs:
-            if intent in va.intent and va.isused:
+            if intent in va.intent:
                 lg = self._emit_load_store(va)
 
                 if intent == 'in':
@@ -272,12 +272,11 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def _emit_arg_decls(self):
         decls = []
         for va in self.vectargs:
-            if va.isused:
-                if va.ncdim == 0:
-                    decls.append('{0.dtype} {0.name};'.format(va))
-                else:
-                    arr = ']['.join(str(d) for d in va.cdims)
-                    decls.append('{0.dtype} {0.name}[{1}];'.format(va, arr))
+            if va.ncdim == 0:
+                decls.append('{0.dtype} {0.name};'.format(va))
+            else:
+                arr = ']['.join(str(d) for d in va.cdims)
+                decls.append('{0.dtype} {0.name}[{1}];'.format(va, arr))
 
         return decls
 
