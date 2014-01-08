@@ -23,7 +23,9 @@
                 + 0.25*fabs(nv);
 
     // Output
-    for (int i = 0; i < ${nvars}; i++)
-        nf[i] = 0.5*${pyfr.dot('n[{j}]', 'fl[{j}][i] + fr[{j}][i]', j=ndims)}
-              + a*(ul[i] - ur[i]);
+% for i in range(nvars):
+    nf[${i}] = 0.5*(${' + '.join('n[{j}]*(fl[{j}][{i}] + fr[{j}][{i}])'
+                                 .format(i=i, j=j) for j in range(ndims))})
+             + a*(ul[${i}] - ur[${i}]);
+% endfor
 </%pyfr:function>

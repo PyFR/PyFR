@@ -28,13 +28,11 @@
     fpdtype_t ficomm[${nvars}], fvcomm;
     rsolve(ul, ur, nl, ficomm);
 
-    for (int i = 0; i < ${nvars}; i++)
-    {
-        fvcomm = ${pyfr.dot('nl[{j}]', 'fvr[{j}][i]', j=ndims)};
-% if tau != 0.0:
-        fvcomm += ${tau}*(ul[i] - ur[i]);
-% endif
+% for i in range(nvars):
+    fvcomm = ${' + '.join('nl[{j}]*fvr[{j}][{i}]'.format(i=i, j=j)
+                          for j in range(ndims))};
+    fvcomm += ${tau}*(ul[${i}] - ur[${i}]);
 
-        ul[i] = magnl*(ficomm[i] + fvcomm);
-    }
+    ul[${i}] =  magnl*(ficomm[${i}] + fvcomm);
+% endfor
 </%pyfr:kernel>
