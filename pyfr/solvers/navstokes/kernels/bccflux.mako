@@ -31,7 +31,9 @@
 % for i in range(nvars):
     fvcomm = ${' + '.join('nl[{j}]*fvr[{j}][{i}]'.format(i=i, j=j)
                           for j in range(ndims))};
+% if tau != 0.0:
     fvcomm += ${tau}*(ul[${i}] - ur[${i}]);
+% endif
 
     ul[${i}] =  magnl*(ficomm[${i}] + fvcomm);
 % endfor
