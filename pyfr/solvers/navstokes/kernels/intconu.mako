@@ -7,17 +7,14 @@
               urin='in view fpdtype_t[${str(nvars)}]'
               ulout='out view fpdtype_t[${str(nvars)}]'
               urout='out view fpdtype_t[${str(nvars)}]'>
-    for (int i = 0; i < ${nvars}; i++)
-    {
+% for i in range(nvars):
 % if c['ldg-beta'] == -0.5:
-        fpdtype_t con = ulin[i];
+    ulout[${i}] = urout[${i}] = ulin[${i}];
 % elif c['ldg-beta'] == 0.5:
-        fpdtype_t con = urin[i];
+    ulout[${i}] = urout[${i}] = urin[${i}];
 % else:
-        fpdtype_t con = urin[i]*${0.5 + c['ldg-beta']}
-                      + ulin[i]*${0.5 - c['ldg-beta']};
+    ulout[${i}] = urout[${i}] = urin[${i}]*${0.5 + c['ldg-beta']}
+                        + ulin[${i}]*${0.5 - c['ldg-beta']};
 % endif
-
-        ulout[i] = urout[i] = con;
-    }
+% endfor
 </%pyfr:kernel>

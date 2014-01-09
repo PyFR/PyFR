@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
+import re
 
-from pyfr.backends.base.generator import (BaseKernelGenerator,
-                                          BaseFunctionGenerator, funccall,
-                                          funcsig)
+from pyfr.backends.base.generator import BaseKernelGenerator
 from pyfr.util import ndrange
 
 
@@ -13,105 +11,64 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         super(OpenMPKernelGenerator, self).__init__(*args, **kwargs)
 
         # Specialise
-        if self.ndim == 1:
-            self._outerit, self._nouter = '_x', '_nx'
-            self._dims = [self._nouter]
-
-            self._emit_load_store = self._emit_load_store_1d
-            self._emit_outer_loop = self._emit_outer_loop_1d
-            self._emit_outer_loop_body = self._emit_outer_loop_body_1d
-        else:
-            self._outerit, self._nouter = '_y', '_ny'
-            self._innerit, self._ninner = '_x', '_nx'
-            self._dims = [self._nouter, self._ninner]
-
-            self._emit_load_store = self._emit_load_store_2d
-            self._emit_outer_loop = self._emit_outer_loop_2d
-            self._emit_outer_loop_body = self._emit_outer_loop_body_2d
+        self._dims = ['_nx'] if self.ndim == 1 else ['_ny', '_nx']
 
     def render(self):
-        # An OpenMP kernel takes the general form of:
-        #   InnerFunc (2D only)         | Inner-loop function; invoked
-        #                               | by the body of the outer loop
-        #   void                        |
-        #   Name(Arguments)             | Outer function spec
-        #   {                           |
-        #     int rb, re, ...;          | Iteration indicies
-        #     loop_sched_xd(...);       |
-        #                               |
-        #     #pragma omp parallel      |
-        #     {                         |
-        #         for (...)             | Outer loop
-        #             ...               | Outer loop body
-        #     }                         |
-        #   }                           |
-        spec = self._emit_outer_spec()
-        head = self._emit_outer_loop()
-        body = self._emit_outer_loop_body()
+        # Kernel spec
+        spec = self._emit_spec()
 
-        # Fix indentation
-        head = [' '*8 + l for l in head]
-        body = [' '*12 + l for l in body]
-
-        # Combine
-        kern = head + ['        {'] + body + ['        }']
-        kern = ['    #pragma omp parallel', '    {'] + kern + ['    }']
-        kern = spec + ['{'] + kern + ['}']
-
-        # In 2D we need to bring in an inner function
-        if self.ndim == 2:
-            kern = self._emit_inner_func() + [''] + kern
-
-        # Flattern
-        return '\n'.join(kern)
+        if self.ndim == 1:
+            body = self._emit_body_1d()
+            return '''
+                   {spec}
+                   {{
+                       #pragma omp parallel
+                       {{
+                           int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
+                           int cb, ce;
+                           loop_sched_1d(_nx, align, &cb, &ce);
+                           for (int _x = cb; _x < ce; _x++)
+                           {{
+                               {body}
+                           }}
+                       }}
+                   }}'''.format(spec=spec, body=body)
+        else:
+            innerfn = self._emit_inner_func()
+            innercall = self._emit_inner_call()
+            return '''{innerfn}
+                   {spec}
+                   {{
+                       #pragma omp parallel
+                       {{
+                           int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
+                           int rb, re, cb, ce;
+                           loop_sched_2d(_ny, _nx, align, &rb, &re, &cb, &ce);
+                           for (int _y = rb; _y < re; _y++)
+                           {{
+                               {innercall}
+                           }}
+                       }}
+                   }}'''.format(innerfn=innerfn, spec=spec,
+                                innercall=innercall)
 
     def _emit_inner_func(self):
-        # Inner functions, which contain the inner loop in 2D kernels,
-        # take the form of:
-        #   static NOINLINE void        |
-        #   InnerName(InnerArguments)   | Inner function prototype
-        #   {                           |
-        #     Align specs               | Argument aligns
-        #                               |
-        #     for (...)                 | Inner loop
-        #     {                         |
-        #       Arg decl                | Local argument declarations
-        #       In arg loads            | Global-to-local argument loads
-        #                               |
-        #       Main body               | Pointwise op
-        #                               |
-        #       Out arg stores          | Local-to-global argument stores
-        #     }                         |
-        #   }
+        # Get the specification, argument alignment statements and body
         spec = self._emit_inner_spec()
-
-        head = self._emit_inner_aligns() + ['']
-        head += self._emit_inner_loop()
-
-        body = self._emit_arg_decls() + ['']
-        body += self._emit_assigments('in')
-        body += self.body
-        body += self._emit_assigments('out')
-
-        # Fix indentation
-        head = [' '*4 + l for l in head]
-        body = [' '*8 + l for l in body]
-
-        # Add in the missing '{' and '}' to form the inner function
-        body = ['{'] + head + ['    {'] + body + ['    }', '}']
+        aligns = self._emit_inner_aligns()
+        body = self._emit_body_2d()
 
         # Combine
-        return spec + body
+        return '''{spec}
+               {{
+                   {aligns}
+                   for (int _x = 0; _x < _nx; _x++)
+                   {{
+                       {body}
+                   }}
+               }}'''.format(spec=spec, aligns=aligns, body=body)
 
-    def _emit_outer_loop_body_1d(self):
-        body = self._emit_arg_decls() + ['']
-        body += self._emit_assigments('in')
-        body += self.body
-        body += self._emit_assigments('out')
-
-        return body
-
-    def _emit_outer_loop_body_2d(self):
+    def _emit_inner_call(self):
         # Arguments for the inner function
         iargs = ['ce - cb']
         iargs.extend(sa.name for sa in self.scalargs)
@@ -119,16 +76,11 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         for va in self.vectargs:
             iargs.extend(self._offset_arg_array_2d(va))
 
-        fcall = funccall(self.name + '_inner', iargs)
-
-        # Terminate the line
-        fcall[-1] += ';'
-
-        return fcall
+        return '{0}_inner({1});'.format(self.name, ', '.join(iargs))
 
     def _emit_inner_spec(self):
         # Inner dimension
-        ikargs = ['int ' + self._ninner]
+        ikargs = ['int _nx']
 
         # Add any scalar arguments
         ikargs.extend('{0.dtype} {0.name}'.format(sa) for sa in self.scalargs)
@@ -145,10 +97,10 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 for ij in ndrange(*va.cdims):
                     ikargs.append(stmt + 'v'.join(str(n) for n in ij))
 
-        return funcsig('static PYFR_NOINLINE', 'void', self.name + '_inner',
-                       ikargs)
+        return ('static PYFR_NOINLINE void {0}_inner({1})'
+                .format(self.name, ', '.join(ikargs)))
 
-    def _emit_outer_spec(self):
+    def _emit_spec(self):
         # We first need the argument list; starting with the dimensions
         kargs = ['int ' + d for d in self._dims]
 
@@ -177,10 +129,11 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 if self.ndim == 2 or (va.ncdim > 0 and not va.ismpi):
                     kargs.append('int lsd{0.name}'.format(va))
 
-        return funcsig('', 'void', self.name, kargs)
+        return 'void {0}({1})'.format(self.name, ', '.join(kargs))
 
     def _emit_inner_aligns(self):
         aligns = []
+
         for va in self.vectargs:
             if va.ncdim == 0:
                 aligns.append('PYFR_ALIGNED({0.name}_v);'.format(va))
@@ -189,186 +142,69 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                               .format(va, 'v'.join(str(n) for n in ij))
                               for ij in ndrange(*va.cdims))
 
-        return aligns
+        return '\n'.join(aligns)
 
-    def _emit_inner_loop(self):
-        return ['for (int {0} = 0; {0} < {1}; {0}++)'
-                .format(self._innerit, self._ninner)]
+    def _emit_body_1d(self):
+        body = self.body
+        ptns = [r'\b{0}\b', r'\b{0}\[(\d+)\]', r'\b{0}\[(\d+)\]\[(\d+)\]']
 
-    def _emit_outer_loop_1d(self):
-        return ("int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);\n"
-                "int cb, ce;\n"
-                "loop_sched_1d({0}, align, &cb, &ce);\n"
-                "\n"
-                "for (int {1} = cb; {1} < ce; {1}++)"
-                .format(self._nouter, self._outerit)
-               ).splitlines()
-
-    def _emit_outer_loop_2d(self):
-        return ("int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);\n"
-                "int rb, re, cb, ce;\n"
-                "loop_sched_2d({0}, {1}, align, &rb, &re, &cb, &ce);\n"
-                "\n"
-                "for (int {2} = rb; {2} < re; {2}++)"
-                .format(self._nouter, self._ninner, self._outerit)
-               ).splitlines()
-
-    def _emit_assigments(self, intent):
-        assigns = []
         for va in self.vectargs:
-            if intent in va.intent:
-                lg = self._emit_load_store(va)
+            # Dereference the argument
+            darg = self._deref_arg(va)
 
-                if intent == 'in':
-                    assigns.append('// Load ' + va.name)
-                    assigns.extend('{} = {};'.format(l, g) for l, g in lg)
-                else:
-                    assigns.append('// Store ' + va.name)
-                    assigns.extend('{} = {};'.format(g, l) for l, g in lg)
+            # Substitute
+            body = re.sub(ptns[va.ncdim].format(va.name), darg, body)
 
-                assigns.append('')
+        return body
 
-        # Strip the trailing '' and return
-        return assigns[:-1]
+    def _emit_body_2d(self):
+        body = self.body
+        ptns = [r'\b{0}\b', r'\b{0}\[(\d+)\]', r'\b{0}\[(\d+)\]\[(\d+)\]']
+        subs = ['{0}_v[_x]', r'{0}_v\1[_x]', r'{0}_v\1v\2[_x]']
 
-    def _emit_load_store_1d(self, arg):
-        # Dereference the argument
-        darg = self._deref_arg(arg)
-
-        if arg.ncdim == 0:
-            return [(arg.name, darg)]
-        else:
-            exprs = []
-            for ij in ndrange(*arg.cdims):
-                # Local variable; name[<i>] or name[<i>][<j>]
-                lidx = '[{}]'.format(']['.join(str(n) for n in ij))
-                lvar = arg.name + lidx
-
-                # Global variable; varies
-                gvar = darg.format(*ij)
-
-                exprs.append((lvar, gvar))
-
-            return exprs
-
-    def _emit_load_store_2d(self, arg):
-        if arg.ncdim == 0:
-            return [(arg.name, arg.name + '_v[{}]'.format(self._innerit))]
-        else:
-            exprs = []
-            for ij in ndrange(*arg.cdims):
-                # Local variable; name[<i>] or name[<i>][<j>]
-                lidx = '[{}]'.format(']['.join(str(n) for n in ij))
-                lvar = arg.name + lidx
-
-                # Global variable; name_v<i>[ix] or name_v<i>v<j>[ix]
-                gvar = '{0}_v{2}[{1}]'.format(arg.name, self._innerit,
-                                              'v'.join(str(n) for n in ij))
-
-                exprs.append((lvar, gvar))
-
-            return exprs
-
-    def _emit_arg_decls(self):
-        decls = []
         for va in self.vectargs:
-            if va.ncdim == 0:
-                decls.append('{0.dtype} {0.name};'.format(va))
-            else:
-                arr = ']['.join(str(d) for d in va.cdims)
-                decls.append('{0.dtype} {0.name}[{1}];'.format(va, arr))
+            body = re.sub(ptns[va.ncdim].format(va.name),
+                          subs[va.ncdim].format(va.name), body)
 
-        return decls
+        return body
 
     def _deref_arg(self, arg):
         if arg.isview:
-            return self._deref_arg_view(arg)
+            expr = '_x' if arg.ncdim == 1 else r'\1*_nx + _x'
+
+            return (r'{0}_v[{0}_vix[{1}] + {0}_vstri[{1}]*\{2}]'
+                    .format(arg.name, expr, arg.ncdim))
         else:
-            return self._deref_arg_array(arg)
+            # Leading (sub) dimension
+            ldim = 'lsd' + arg.name if not arg.ismpi else '_nx'
 
-    def _deref_arg_view(self, arg):
-        ncdim = len(arg.cdims)
-        r, nr = self._outerit, self._nouter
+            # Vector name_v[_x]
+            if arg.ncdim == 0:
+                ix = '_x'
+            # Stacked vector; name_v[ldim*\1 + _x]
+            elif arg.ncdim == 1:
+                ix = r'{0}*\1 + _x'.format(ldim)
+            # Doubly stacked vector; name_v[ldim*nv*\1 + ldim*\2 + _x]
+            else:
+                ix = r'{0}*{1}*\1 + {0}*\2 + _x'.format(ldim, arg.cdims[1])
 
-        if arg.ncdim == 1:
-            expr, cidx = r, '{0}'
-        elif arg.ncdim == 2:
-            expr, cidx = '{{0}}*{} + {}'.format(nr, r), '{1}'
-
-        return ('{0}_v[{0}_vix[{1}] + {0}_vstri[{1}]*{2}]'
-                .format(arg.name, expr, cidx))
-
-    def _deref_arg_array(self, arg):
-        # Index expression fragments
-        expr = []
-
-        # Leading dimension
-        ldim = 'lsd' + arg.name if not arg.ismpi else self._nouter
-
-        # Vector n_v[x]
-        if arg.ncdim >= 0:
-            expr.append(self._outerit)
-        # Stacked vector; n_v[ldim*<0> + x]
-        if arg.ncdim >= 1:
-            expr.append('{}*{}'.format(ldim,
-                                       '{0}' if arg.ncdim == 1 else '{1}'))
-        # Doubly stacked vector; n_v[ldim*nv*<0> + ldim*<1> + r]
-        if arg.ncdim == 2:
-            expr.append('{}*{}*{{0}}'.format(ldim, arg.cdims[1]))
-
-        return '{}_v[{}]'.format(arg.name, ' + '.join(expr))
+            return '{0}_v[{1}]'.format(arg.name, ix)
 
     def _offset_arg_array_2d(self, arg):
-        r, nr = self._outerit, self._nouter
         stmts = []
 
-        # Matrix; name + r*lsdim + cb
+        # Matrix; name + _y*lsdim + cb
         if arg.ncdim == 0:
-            stmts.append('{0}_v + {1}*lsd{0} + cb'.format(arg.name, r))
-        # Stacked matrix; name + (r*nv + <0>)*lsdim + cb
+            stmts.append('{0}_v + _y*lsd{0} + cb'.format(arg.name))
+        # Stacked matrix; name + (_y*nv + <0>)*lsdim + cb
         elif arg.ncdim == 1:
-            stmts.extend('{0}_v + ({1}*{2} + {3})*lsd{0} + cb'
-                         .format(arg.name, r, arg.cdims[0], i)
-                         for i in range(arg.cdims[0]))
-        # Doubly stacked matrix; name + ((<0>*nr + r)*nv + <1>)*lsdim + cb
+            stmts.extend('{0}_v + (_y*{1} + {2})*lsd{0} + cb'
+                         .format(arg.name, arg.cdims[0], i)
+                         for i in xrange(arg.cdims[0]))
+        # Doubly stacked matrix; name + ((<0>*_ny + _y)*nv + <1>)*lsdim + cb
         else:
-            stmts.extend('{0}_v + (({1}*{2} + {3})*{4} + {5})*lsd{0} + cb'
-                         .format(arg.name, i, nr, r, arg.cdims[1], j)
+            stmts.extend('{0}_v + (({1}*_ny + _y)*{2} + {3})*lsd{0} + cb'
+                         .format(arg.name, i, arg.cdims[1], j)
                          for i, j in ndrange(*arg.cdims))
 
         return stmts
-
-    def argspec(self):
-        # Argument names and types
-        argn, argt = [], []
-
-        # Dimensions
-        argn += self._dims
-        argt += [[np.int32]]*self.ndim
-
-        # Scalar args (always of type fpdtype)
-        argn += [sa.name for sa in self.scalargs]
-        argt += [[self.fpdtype]]*len(self.scalargs)
-
-        # Vector args
-        for va in self.vectargs:
-            argn.append(va.name)
-
-            # View
-            if va.isview:
-                argt.append([np.intp, np.intp, np.intp])
-            # Non-stacked vector or MPI type
-            elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
-                argt.append([np.intp])
-            # Stacked vector/matrix/stacked matrix
-            else:
-                argt.append([np.intp, np.int32])
-
-        # Return
-        return self.ndim, argn, argt
-
-
-class OpenMPFunctionGenerator(BaseFunctionGenerator):
-    @property
-    def mods(self):
-        return 'static inline'

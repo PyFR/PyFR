@@ -16,32 +16,37 @@
               magnl='in fpdtype_t'>
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {};
-    viscous_flux_add(ul, gradul, fvl);
+    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'fvl')};
 % endif
 
 % if beta != 0.5:
     fpdtype_t fvr[${ndims}][${nvars}] = {};
-    viscous_flux_add(ur, gradur, fvr);
+    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
 % endif
 
     // Perform the Riemann solve
     fpdtype_t ficomm[${nvars}], fvcomm;
-    rsolve(ul, ur, nl, ficomm);
+    ${pyfr.expand('rsolve', 'ul', 'ur', 'nl', 'ficomm')};
 
-    for (int i = 0; i < ${nvars}; i++)
-    {
+% for i in range(nvars):
 % if beta == -0.5:
-        fvcomm = ${pyfr.dot('nl[{j}]', 'fvr[{j}][i]', j=ndims)};
+    fvcomm = ${' + '.join('nl[{j}]*fvr[{j}][{i}]'.format(i=i, j=j)
+                          for j in range(ndims))};
 % elif beta == 0.5:
-        fvcomm = ${pyfr.dot('nl[{j}]', 'fvl[{j}][i]', j=ndims)};
+    fvcomm = ${' + '.join('nl[{j}]*fvl[{j}][{i}]'.format(i=i, j=j)
+                          for j in range(ndims))};
 % else:
-        fvcomm = ${0.5 + beta}*${pyfr.dot('nl[{j}]', 'fvl[{j}][i]', j=ndims)}
-               + ${0.5 - beta}*${pyfr.dot('nl[{j}]', 'fvr[{j}][i]', j=ndims)};
+    fvcomm = ${0.5 + beta}*(${' + '.join('nl[{j}]*fvl[{j}][{i}]'
+                                         .format(i=i, j=j)
+                                         for j in range(ndims))})
+           + ${0.5 - beta}*(${' + '.join('nl[{j}]*fvr[{j}][{i}]'
+                                         .format(i=i, j=j)
+                                         for j in range(ndims))});
 % endif
 % if tau != 0.0:
-        fvcomm += ${tau}*(ul[i] - ur[i]);
+    fvcomm += ${tau}*(ul[${i}] - ur[${i}]);
 % endif
 
-        ul[i] = magnl*(ficomm[i] + fvcomm);
-    }
+    ul[${i}] =  magnl*(ficomm[${i}] + fvcomm);
+% endfor
 </%pyfr:kernel>

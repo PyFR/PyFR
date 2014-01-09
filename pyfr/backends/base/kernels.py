@@ -62,7 +62,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
     __metaclass__ = ABCMeta
 
     kernel_generator_cls = None
-    function_generator_cls = None
 
     @memoize
     def _render_kernel(self, name, mod, tplargs):
@@ -75,7 +74,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         # Backend-specfic generator classes
         tplargs['_kernel_generator'] = self.kernel_generator_cls
-        tplargs['_function_generator'] = self.function_generator_cls
+
+        # Macro definitions
+        tplargs['_macros'] = {}
 
         # Backchannel for obtaining kernel argument types
         tplargs['_kernel_argspecs'] = argspecs = {}
