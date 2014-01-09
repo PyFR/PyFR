@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from collections import Iterable
+import itertools as it
+import re
 
 from mako.runtime import supports_caller, capture
 
@@ -35,6 +37,61 @@ def array(context, ex_, **kwargs):
     return '{ ' + ', '.join(ex_.format(**{ix: i}) for i in xrange(*ni)) + ' }'
 
 
+def _locals(body):
+    # First, strip away any comments
+    body = re.sub(r'//.*?\n', '', body)
+
+    # Next, find all variable declaration statements
+    decls = re.findall(r'(?:[A-Za-z_]\w*)\s+([A-Za-z_]\w*[^;]*?);', body)
+
+    # A statement can define multiple variables, so split by ','
+    decls = (re.split(r'\s*,\s*(?![^{}]+\})', d) for d in decls)
+    decls = it.chain.from_iterable(decls)
+
+    return [re.match(r'\w+', v).group(0) for v in decls]
+
+
+@supports_caller
+def macro(context, name, params):
+    # Check we have not already been defined
+    if name in context['_macros']:
+        raise RuntimeError('Attempt to redefine macro "{0}"'
+                           .format(name))
+
+    # Split up the parameter list
+    params = [p.strip() for p in params.split(',')]
+
+    # Capture the function body
+    body = capture(context, context['caller'].body)
+
+    # Identify any local variable declarations
+    lvars = _locals(body)
+
+    # Suffix these variables by a '_'
+    if lvars:
+        body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
+
+    # Save
+    context['_macros'][name] = (params, body)
+
+    return ''
+
+
+def expand(context, name, *params):
+    # Get the macro parameter list and the body
+    mparams, body = context['_macros'][name]
+
+    # Validate
+    if len(mparams) != len(params):
+        raise ValueError('Invalid macro parameter list')
+
+    # Substitute
+    for name, subst in zip(mparams, params):
+        body = re.sub(r'\b{0}\b'.format(name), subst, body)
+
+    return '{\n' + body + '\n}'
+
+
 @supports_caller
 def kernel(context, name, ndim, **kwargs):
     # Capture the kernel body
@@ -53,17 +110,6 @@ def kernel(context, name, ndim, **kwargs):
     return kern.render()
 
 
-@supports_caller
-def function(context, name, params, rett='void'):
-    # Capture the function body
-    body = capture(context, context['caller'].body)
-
-    # Get the generator class and floating point data type
-    funcgen, fpdtype = context['_function_generator'], context['fpdtype']
-
-    # Render the complete function
-    return funcgen(name, params, rett, body, fpdtype).render()
-
-
 def alias(context, name, func):
-    return '#define {} {}'.format(name, func)
+    context['_macros'][name] = context['_macros'][func]
+    return ''

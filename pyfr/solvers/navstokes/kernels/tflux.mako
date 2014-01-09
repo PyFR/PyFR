@@ -10,8 +10,9 @@
               f='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'>
     // Compute the flux (F = Fi + Fv)
     fpdtype_t ftemp[${ndims}][${nvars}];
-    inviscid_flux(u, ftemp, NULL, NULL);
-    viscous_flux_add(u, f, ftemp);
+    fpdtype_t p, v[${ndims}];
+    ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'p', 'v')};
+    ${pyfr.expand('viscous_flux_add', 'u', 'f', 'ftemp')};
 
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):

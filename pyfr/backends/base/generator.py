@@ -7,26 +7,6 @@ from textwrap import dedent
 import numpy as np
 
 
-def funccall(name, args):
-    # Delimit such that we have one (indented) argument per line
-    sep = ',\n' + ' '*(len(name) + 1)
-    cal = sep.join(args).split('\n')
-
-    # Add in the name and parentheses
-    cal[0] = '{}({}'.format(name, cal[0])
-    cal[-1] = '{})'.format(cal[-1])
-
-    return cal
-
-
-def funcsig(mods, rett, name, args):
-    # Exploit the similarity between prototypes and invocations
-    sig = funccall(name, args)
-
-    # Include modifiers and return type
-    return ['{} {}'.format(mods, rett).strip()] + sig
-
-
 def procbody(body, fpdtype):
     # Remove any indentation
     body = dedent(body)
@@ -37,7 +17,7 @@ def procbody(body, fpdtype):
                       r'\g<0>f', body)
 
     # Split into lines
-    return body.split('\n')
+    return body
 
 
 class Arg(object):
@@ -49,7 +29,7 @@ class Arg(object):
                    r'([A-Za-z_]\w*)'               # Data type
                    r'((?:\[\d+\]){0,2})$')         # Constant array dimensions
         dimsptn = r'(?<=\[)\d+(?=\])'
-        usedptn = r'(?:[^A-Za-z]|^){}[^A-Za-z0-9]'.format(name)
+        usedptn = r'(?:[^A-Za-z]|^){0}[^A-Za-z0-9]'.format(name)
 
         # Parse our specification
         m = re.match(specptn, spec)
@@ -79,27 +59,6 @@ class Arg(object):
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
 
-class BaseFunctionGenerator(object):
-    __metaclass__ = ABCMeta
-
-    def __init__(self, name, params, rett, body, fpdtype):
-        self.name = name
-        self.rett = rett
-        self.args = re.split(r'\s*,\s*', params)
-        self.body = procbody(body, fpdtype)[1:-1]
-
-    def render(self):
-        head = funcsig(self.mods, self.rett, self.name, self.args)
-        body = [' '*4 + l for l in self.body]
-
-        # Add in the '{' and '}' and concat
-        return '\n'.join(head + ['{'] + body + ['}'])
-
-    @abstractproperty
-    def mods(self):
-        pass
-
-
 class BaseKernelGenerator(object):
     __metaclass__ = ABCMeta
 
@@ -127,9 +86,34 @@ class BaseKernelGenerator(object):
         if ndim == 2 and any(v.ismpi for v in self.vectargs):
             raise ValueError('MPI matrices are not supported for 2D kernels')
 
-    @abstractmethod
     def argspec(self):
-        pass
+        # Argument names and types
+        argn, argt = [], []
+
+        # Dimensions
+        argn += self._dims
+        argt += [[np.int32]]*self.ndim
+
+        # Scalar args (always of type fpdtype)
+        argn += [sa.name for sa in self.scalargs]
+        argt += [[self.fpdtype]]*len(self.scalargs)
+
+        # Vector args
+        for va in self.vectargs:
+            argn.append(va.name)
+
+            # View
+            if va.isview:
+                argt.append([np.intp, np.intp, np.intp])
+            # Non-stacked vector or MPI type
+            elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
+                argt.append([np.intp])
+            # Stacked vector/matrix/stacked matrix
+            else:
+                argt.append([np.intp, np.int32])
+
+        # Return
+        return self.ndim, argn, argt
 
     @abstractmethod
     def render(self):

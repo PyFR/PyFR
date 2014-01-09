@@ -17,17 +17,17 @@
               magnr='in fpdtype_t'>
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {};
-    viscous_flux_add(ul, gradul, fvl);
+    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'fvl')};
 % endif
 
 % if beta != 0.5:
     fpdtype_t fvr[${ndims}][${nvars}] = {};
-    viscous_flux_add(ur, gradur, fvr);
+    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
 % endif
 
     // Perform the Riemann solve
     fpdtype_t ficomm[${nvars}], fvcomm;
-    rsolve(ul, ur, nl, ficomm);
+    ${pyfr.expand('rsolve', 'ul', 'ur', 'nl', 'ficomm')};
 
 % for i in range(nvars):
 % if beta == -0.5:

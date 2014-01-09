@@ -11,7 +11,7 @@
               magnl='in fpdtype_t'>
     // Perform the Riemann solve
     fpdtype_t fn[${nvars}];
-    rsolve(ul, ur, nl, fn);
+    ${pyfr.expand('rsolve', 'ul', 'ur', 'nl', 'fn')};
 
     // Scale and write out the common normal fluxes
 % for i in range(nvars):

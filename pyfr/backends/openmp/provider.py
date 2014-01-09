@@ -41,7 +41,6 @@ class OpenMPKernelProvider(object):
 
 class OpenMPPointwiseKernelProvider(BasePointwiseKernelProvider):
     kernel_generator_cls = generator.OpenMPKernelGenerator
-    function_generator_cls = generator.OpenMPFunctionGenerator
 
     @memoize
     def _build_kernel(self, name, src, argtypes):

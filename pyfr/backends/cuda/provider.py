@@ -56,7 +56,6 @@ class CUDAKernelProvider(BaseKernelProvider):
 
 class CUDAPointwiseKernelProvider(BasePointwiseKernelProvider):
     kernel_generator_cls = generator.CUDAKernelGenerator
-    function_generator_cls = generator.CUDAFunctionGenerator
 
     @memoize
     def _build_kernel(self, name, src, argtypes):
