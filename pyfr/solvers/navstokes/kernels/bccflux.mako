@@ -18,7 +18,7 @@
     ${pyfr.expand('bc_ldg_state', 'ul', 'ur')};
     ${pyfr.expand('bc_ldg_grad_state', 'ul', 'nl', 'gradul', 'gradur')};
 
-    fpdtype_t fvr[${ndims}][${nvars}] = {};
+    fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
 
     // Inviscid (Riemann solve) state

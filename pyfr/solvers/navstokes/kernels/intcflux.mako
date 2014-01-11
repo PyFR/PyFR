@@ -20,12 +20,12 @@
     ${pyfr.expand('rsolve', 'ul', 'ur', 'nl', 'ficomm')};
 
 % if beta != -0.5:
-    fpdtype_t fvl[${ndims}][${nvars}] = {};
+    fpdtype_t fvl[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'fvl')};
 % endif
 
 % if beta != 0.5:
-    fpdtype_t fvr[${ndims}][${nvars}] = {};
+    fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
 % endif
 
