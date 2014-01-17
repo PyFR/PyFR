@@ -45,7 +45,7 @@ class CUDABackend(BaseBackend):
         kprovs = [provider.CUDAPointwiseKernelProvider,
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
-                  cublas.CUDACublasKernels]
+                  cublas.CUDACUBLASKernels]
         self._providers = [k(self) for k in kprovs]
 
         # Pointwise kernels

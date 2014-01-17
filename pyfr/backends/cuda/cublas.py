@@ -8,59 +8,28 @@ from pyfr.backends.base import ComputeKernel, traits
 from pyfr.ctypesutil import platform_libname
 
 
-class CublasError(Exception):
-    pass
+# Possible CUBLAS exception types
+CUBLASError = type('CUBLASError', (Exception,), {})
+CUBLASNotInitialized = type('CUBLASNotInitialized', (CUBLASError,), {})
+CUBLASAllocFailed = type('CUBLASAllocFailed', (CUBLASError,), {})
+CUBLASInvalidValue = type('CUBLASInvalidValue', (CUBLASError,), {})
+CUBLASArchMismatch = type('CUBLASArchMismatch', (CUBLASError,), {})
+CUBLASMappingError = type('CUBLASMappingError', (CUBLASError,), {})
+CUBLASExecutionFailed = type('CUBLASExecutionFailed', (CUBLASError,), {})
+CUBLASInternalError = type('CUBLASInternalError', (CUBLASError,), {})
 
 
-class CublasNotInitialized(CublasError):
-    pass
-
-
-class CublasAllocFailed(CublasError):
-    pass
-
-
-class CublasInvalidValue(CublasError):
-    pass
-
-
-class CublasArchMismatch(CublasError):
-    pass
-
-
-class CublasMappingError(CublasError):
-    pass
-
-
-class CublasExecutionFailed(CublasError):
-    pass
-
-
-class CublasInternalError(CublasError):
-    pass
-
-
-# Matrix operation types
-class CublasOp(object):
-    NONE = 0
-    TRANS = 1
-    CONJ_TRANS = 2
-
-
-# Opaque CUBLAS handle pointer
-class CublasHandle(c_void_p):
-    pass
-
-
-class CublasWrappers(object):
+class CUBLASWrappers(object):
     # Possible return codes
-    _statuses = {0x1: CublasNotInitialized,
-                 0x3: CublasAllocFailed,
-                 0x7: CublasInvalidValue,
-                 0x8: CublasArchMismatch,
-                 0xb: CublasMappingError,
-                 0xd: CublasExecutionFailed,
-                 0xe: CublasInternalError}
+    _statuses = {
+        0x1: CUBLASNotInitialized,
+        0x3: CUBLASAllocFailed,
+        0x7: CUBLASInvalidValue,
+        0x8: CUBLASArchMismatch,
+        0xb: CUBLASMappingError,
+        0xd: CUBLASExecutionFailed,
+        0xe: CUBLASInternalError
+    }
 
     def __init__(self, libname=None):
         libname = libname or platform_libname('cublas')
@@ -72,47 +41,49 @@ class CublasWrappers(object):
 
         # cublasCreate
         self.cublasCreate = lib.cublasCreate_v2
-        self.cublasCreate.argtypes = [POINTER(CublasHandle)]
+        self.cublasCreate.argtypes = [POINTER(c_void_p)]
         self.cublasCreate.errcheck = self._errcheck
 
         # cublasDestroy
         self.cublasDestroy = lib.cublasDestroy_v2
-        self.cublasDestroy.argtypes = [CublasHandle]
+        self.cublasDestroy.argtypes = [c_void_p]
         self.cublasDestroy.errcheck = self._errcheck
 
         # cublasSetStream
         self.cublasSetStream = lib.cublasSetStream_v2
-        self.cublasSetStream.argtypes = [CublasHandle, c_void_p]
+        self.cublasSetStream.argtypes = [c_void_p, c_void_p]
         self.cublasSetStream.errcheck = self._errcheck
 
         # cublasDgemm
         self.cublasDgemm = lib.cublasDgemm_v2
-        self.cublasDgemm.argtypes = [CublasHandle, c_int, c_int,
-                                     c_int, c_int, c_int,
-                                     POINTER(c_double), c_void_p, c_int,
-                                     c_void_p, c_int,
-                                     POINTER(c_double), c_void_p, c_int]
+        self.cublasDgemm.argtypes = [
+            c_void_p, c_int, c_int, c_int, c_int, c_int,
+            POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
+            POINTER(c_double), c_void_p, c_int
+        ]
         self.cublasDgemm.errcheck = self._errcheck
 
         # cublasSgemm
         self.cublasSgemm = lib.cublasSgemm_v2
-        self.cublasSgemm.argtypes = [CublasHandle, c_int, c_int,
-                                     c_int, c_int, c_int,
-                                     POINTER(c_float), c_void_p, c_int,
-                                     c_void_p, c_int,
-                                     POINTER(c_float), c_void_p, c_int]
+        self.cublasSgemm.argtypes = [
+            c_void_p, c_int, c_int, c_int, c_int, c_int,
+            POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
+            POINTER(c_float), c_void_p, c_int
+        ]
         self.cublasSgemm.errcheck = self._errcheck
 
         # cublasDnrm2
         self.cublasDnrm2 = lib.cublasDnrm2_v2
-        self.cublasDnrm2.argtypes = [CublasHandle,
-                                     c_int, c_void_p, c_int, POINTER(c_double)]
+        self.cublasDnrm2.argtypes = [
+            c_void_p, c_int, c_void_p, c_int, POINTER(c_double)
+        ]
         self.cublasDnrm2.errcheck = self._errcheck
 
         # cublasSnrm2
         self.cublasSnrm2 = lib.cublasSnrm2_v2
-        self.cublasSnrm2.argtypes = [CublasHandle,
-                                     c_int, c_void_p, c_int, POINTER(c_float)]
+        self.cublasSnrm2.argtypes = [
+            c_void_p, c_int, c_void_p, c_int, POINTER(c_float)
+        ]
         self.cublasSnrm2.errcheck = self._errcheck
 
 
@@ -124,13 +95,13 @@ class CublasWrappers(object):
                 raise CublasError
 
 
-class CUDACublasKernels(object):
+class CUDACUBLASKernels(object):
     def __init__(self, backend):
-        # Load and wrap cublas
-        self._wrappers = CublasWrappers()
+        # Load and wrap CUBLAS
+        self._wrappers = CUBLASWrappers()
 
         # Init
-        self._handle = CublasHandle()
+        self._handle = c_void_p()
         self._wrappers.cublasCreate(self._handle)
 
     def __del__(self):
@@ -167,7 +138,7 @@ class CUDACublasKernels(object):
         class MulKernel(ComputeKernel):
             def run(iself, scomp, scopy):
                 self._wrappers.cublasSetStream(self._handle, scomp.handle)
-                cublasgemm(self._handle, CublasOp.NONE, CublasOp.NONE, m, n, k,
+                cublasgemm(self._handle, 0, 0, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 
