@@ -8,14 +8,14 @@ class BaseAdvectionIntInters(BaseInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super(BaseAdvectionIntInters, self).__init__(be, lhs, elemap, cfg)
 
-        view_onto, const_mat = self._view_onto, self._const_mat
+        const_mat = self._const_mat
 
         # Compute the `optimal' permutation for our interface
         self._gen_perm(lhs, rhs)
 
         # Generate the left and right hand side view matrices
-        self._scal0_lhs = view_onto(lhs, 'get_scal_fpts0_for_inter')
-        self._scal0_rhs = view_onto(rhs, 'get_scal_fpts0_for_inter')
+        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts0_for_inter')
+        self._scal0_rhs = self._scal_view(rhs, 'get_scal_fpts0_for_inter')
 
         # Generate the constant matrices
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
@@ -38,10 +38,10 @@ class BaseAdvectionMPIInters(BaseInters):
         self._rhsrank = rhsrank
         self._rallocs = rallocs
 
-        mpi_view_onto, const_mat = self._mpi_view_onto, self._const_mat
+        const_mat = self._const_mat
 
         # Generate the left hand view matrix and its dual
-        self._scal0_lhs = mpi_view_onto(lhs, 'get_scal_fpts0_for_inter')
+        self._scal0_lhs = self._scal_mpi_view(lhs, 'get_scal_fpts0_for_inter')
         self._scal0_rhs = be.mpi_matrix_for_view(self._scal0_lhs)
 
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
@@ -69,7 +69,7 @@ class BaseAdvectionBCInters(BaseInters):
         super(BaseAdvectionBCInters, self).__init__(be, lhs, elemap, cfg)
         self._cfgsect = cfgsect
 
-        view_onto, const_mat = self._view_onto, self._const_mat
+        const_mat = self._const_mat
 
         # For BC interfaces, which only have an LHS state, we take the
         # permutation which results in an optimal memory access pattern
@@ -77,7 +77,7 @@ class BaseAdvectionBCInters(BaseInters):
         self._perm = get_opt_view_perm(lhs, 'get_scal_fpts0_for_inter', elemap)
 
         # LHS view and constant matrices
-        self._scal0_lhs = view_onto(lhs, 'get_scal_fpts0_for_inter')
+        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts0_for_inter')
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 

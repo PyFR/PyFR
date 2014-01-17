@@ -104,7 +104,7 @@ class BaseKernelGenerator(object):
 
             # View
             if va.isview:
-                argt.append([np.intp, np.intp, np.intp])
+                argt.append([np.intp]*(2 + va.ncdim))
             # Non-stacked vector or MPI type
             elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
                 argt.append([np.intp])

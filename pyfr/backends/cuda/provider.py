@@ -14,14 +14,6 @@ def get_grid_for_block(block, nrow, ncol=1):
             (ncol + (-ncol % block[1])) // block[1])
 
 
-def get_2d_grid_block(function, nrow, ncol):
-    # TODO: Write a totally bitchin' method which uses info from the
-    #       function to help compute an optimal block size
-    block = (min(16, nrow), min(16, ncol), 1)
-    grid = get_grid_for_block(block, nrow, ncol)
-    return grid, block
-
-
 class CUDAKernelProvider(BaseKernelProvider):
     @memoize
     def _get_module(self, module, tplparams={}, nvccopts=None):
@@ -87,12 +79,13 @@ class CUDAPointwiseKernelProvider(BasePointwiseKernelProvider):
             # Matrix
             if isinstance(ka, mattypes):
                 arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
-            # MPI view
-            elif isinstance(ka, types.CUDAMPIView):
-                arglst += [ka.view.basedata, ka.view.mapping, ka.view.strides]
             # View
-            elif isinstance(ka, types.CUDAView):
-                arglst += [ka.basedata, ka.mapping, ka.strides]
+            elif isinstance(ka, (types.CUDAView, types.CUDAMPIView)):
+                view = ka if isinstance(ka, types.CUDAView) else ka.view
+
+                arglst += [view.basedata, view.mapping]
+                arglst += [view.cstrides] if len(atypes) >= 3 else []
+                arglst += [view.rstrides] if len(atypes) == 4 else []
             # Other; let PyCUDA handle it
             else:
                 arglst.append(ka)

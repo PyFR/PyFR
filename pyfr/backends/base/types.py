@@ -128,10 +128,10 @@ class View(object):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
+    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
+        self.n = len(matmap)
+        self.nvrow = vshape[-2] if len(vshape) == 2 else 1
+        self.nvcol = vshape[-1] if len(vshape) >= 1 else 1
 
         # Get the different matrices which we map onto
         self._mats = list(set(matmap.flat))
@@ -139,14 +139,6 @@ class View(object):
         # Extract the base allocation and data type
         self.basedata = self._mats[0].basedata
         self.refdtype = self._mats[0].dtype
-
-        # For vector views a stridemap is required
-        if vlen != 1 and np.any(stridemap == 0):
-            raise ValueError('Vector views require a non-zero stride map')
-
-        # Check all of the shapes match up
-        if matmap.shape != rcmap.shape[:2] or matmap.shape != stridemap.shape:
-            raise TypeError('Invalid view matrix shapes')
 
         # Validate the matrices
         if any(not isinstance(m, backend.matrix_cls) for m in self._mats):
@@ -159,18 +151,39 @@ class View(object):
         if any(m.dtype != self.refdtype for m in self._mats):
             raise TypeError('Mixed data types are not supported')
 
+        # Base offsets and leading dimensions for each point
+        offset = np.empty(self.n, dtype=np.int32)
+        leaddim = np.empty(self.n, dtype=np.int32)
+
+        for m in self._mats:
+            ix = np.where(matmap == m)
+            offset[ix], leaddim[ix] = m.offset, m.leaddim
+
+        # Go from matrices + row/column indcies to displacements
+        # relative to the base allocation address
+        self.mapping = (offset + rcmap[:,0]*leaddim + rcmap[:,1])[None,:]
+
+        # Row strides
+        if self.nvrow > 1:
+            self.rstrides = (stridemap[:,0]*leaddim)[None,:]
+
+        # Column strides
+        if self.nvcol > 1:
+            self.cstrides = stridemap[:,-1][None,:]
+
 
 class MPIView(object):
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
-
+    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
         # Create a normal view
-        self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
+        self.view = backend.view(matmap, rcmap, stridemap, vshape, tags)
+
+        # Dimensions
+        self.n = n = self.view.n
+        self.nvrow = nvrow = self.view.nvrow
+        self.nvcol = nvcol = self.view.nvcol
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, vlen, ncol), tags=tags)
+        self.mpimat = backend.mpi_matrix((nvrow, nvcol, n), tags=tags)
 
 
 class Queue(object):

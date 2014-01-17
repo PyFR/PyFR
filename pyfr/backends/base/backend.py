@@ -153,7 +153,7 @@ class BaseBackend(object):
         return self.mpi_matrix_cls(self, ioshape, initval, extent, tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
-        return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
+        return self.mpi_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
 
     def const_matrix(self, initval, extent=None, tags=set()):
         """Creates a constant matrix from *initval*
@@ -175,7 +175,7 @@ class BaseBackend(object):
         """
         return self.const_matrix_cls(self, initval, extent, tags)
 
-    def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
+    def view(self, matmap, rcmap, stridemap=None, vshape=tuple(), tags=set()):
         """Uses mapping to create a view of mat
 
         :param matmap: Matrix of matrix objects.
@@ -187,15 +187,12 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.View`
         """
-        if stridemap is None:
-            stridemap = np.ones(matmap.shape, dtype=np.int32)
-        return self.view_cls(self, matmap, rcmap, stridemap, vlen, tags)
+        return self.view_cls(self, matmap, rcmap, stridemap, vshape, tags)
 
-    def mpi_view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
+    def mpi_view(self, matmap, rcmap, stridemap=None, vshape=tuple(),
+                 tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
-        if stridemap is None:
-            stridemap = np.ones(matmap.shape, dtype=np.int32)
-        return self.mpi_view_cls(self, matmap, rcmap, stridemap, vlen, tags)
+        return self.mpi_view_cls(self, matmap, rcmap, stridemap, vshape, tags)
 
     def kernel(self, name, *args, **kwargs):
         """Locates and binds a kernel called *name*

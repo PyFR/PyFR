@@ -5,16 +5,12 @@ from mpi4py import MPI
 import pycuda.driver as cuda
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
-from pyfr.backends.cuda.provider import CUDAKernelProvider, get_2d_grid_block
+from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
 from pyfr.backends.cuda.types import CUDAMPIMatrix, CUDAMPIView
 from pyfr.nputil import npdtype_to_ctype
 
 
 class CUDAPackingKernels(CUDAKernelProvider):
-    def _packmodopts(self, mpiview):
-        return dict(dtype=npdtype_to_ctype(mpiview.mpimat.dtype),
-                    vlen=mpiview.view.vlen)
-
     def _sendrecv(self, mv, mpipreqfn, pid, tag):
         # If we are an MPI view then extract the MPI matrix
         mpimat = mv.mpimat if isinstance(mv, CUDAMPIView) else mv
@@ -35,20 +31,25 @@ class CUDAPackingKernels(CUDAKernelProvider):
         m, v = mv.mpimat, mv.view
 
         # Get the CUDA pack/unpack kernel from the pack module
-        fn = self._get_function('pack', 'pack_view', 'iiPPPP',
-                                tplparams=self._packmodopts(mv))
+        fn = self._get_function('pack', 'pack_view', 'iiiPPPPP',
+                                dict(dtype=npdtype_to_ctype(m.dtype)))
 
         # Compute the grid and thread-block size
-        grid, block = get_2d_grid_block(fn, v.nrow, v.ncol)
+        block = (128, 1, 1)
+        grid = get_grid_for_block(block, v.n)
 
         # Create a CUDA event
         event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
 
         class PackMPIViewKernel(ComputeKernel):
             def run(self, scomp, scopy):
+                cstrides = getattr(v, 'cstrides', 0)
+                rstrides = getattr(v, 'rstrides', 0)
+
                 # Pack
-                fn.prepared_async_call(grid, block, scomp, v.nrow, v.ncol,
-                                       v.basedata, v.mapping, v.strides, m)
+                fn.prepared_async_call(grid, block, scomp, v.n, v.nvrow,
+                                       v.nvcol, v.basedata, v.mapping,
+                                       cstrides, rstrides, m)
 
                 # Copy the packed buffer to the host
                 event.record(scomp)

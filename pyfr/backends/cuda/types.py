@@ -109,25 +109,20 @@ class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
                                               ioshape, initval, extent, tags)
 
 class CUDAView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
+    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
         super(CUDAView, self).__init__(backend, matmap, rcmap, stridemap,
-                                       vlen, tags)
+                                       vshape, tags)
 
-        # Row/column indcies of each view element
-        r, c = rcmap[...,0], rcmap[...,1]
+        self.mapping = CUDAMatrixBase(backend, np.int32, (1, self.n),
+                                      self.mapping, None, tags)
 
-        # Go from matrices + row/column indcies to offsets relative to
-        # the base allocation address
-        offmap = np.array(c, dtype=np.int32)
-        for m in self._mats:
-            ix = np.where(matmap == m)
-            offmap[ix] += m.offset + r[ix]*m.leaddim
+        if self.nvcol > 1:
+            self.cstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
+                                           self.cstrides, None, tags)
 
-        shape = (self.nrow, self.ncol)
-        self.mapping = CUDAMatrixBase(backend, np.int32, shape, offmap,
-                                      extent=None, tags=tags)
-        self.strides = CUDAMatrixBase(backend, np.int32, shape, stridemap,
-                                      extent=None, tags=tags)
+        if self.nvrow > 1:
+            self.rstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
+                                           self.rstrides, None, tags)
 
 
 class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):

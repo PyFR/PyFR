@@ -61,12 +61,13 @@ class OpenMPPointwiseKernelProvider(BasePointwiseKernelProvider):
             # Matrix
             if isinstance(ka, mattypes):
                 arglst += [ka, ka.leadsubdim] if len(atypes) == 2 else [ka]
-            # MPI view
-            elif isinstance(ka, types.OpenMPMPIView):
-                arglst += [ka.view.basedata, ka.view.mapping, ka.view.strides]
             # View
-            elif isinstance(ka, types.OpenMPView):
-                arglst += [ka.basedata, ka.mapping, ka.strides]
+            elif isinstance(ka, (types.OpenMPView, types.OpenMPMPIView)):
+                view = ka if isinstance(ka, types.OpenMPView) else ka.view
+
+                arglst += [view.basedata, view.mapping]
+                arglst += [view.cstrides] if len(atypes) >= 3 else []
+                arglst += [view.rstrides] if len(atypes) == 4 else []
             # Other; let ctypes handle it
             else:
                 arglst.append(ka)

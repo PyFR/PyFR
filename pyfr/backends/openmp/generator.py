@@ -114,8 +114,13 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 kargs.append('{0.dtype}* __restrict__ {0.name}_v'.format(va))
                 kargs.append('const int* __restrict__ {0.name}_vix'
                              .format(va))
-                kargs.append('const int* __restrict__ {0.name}_vstri'
-                             .format(va))
+
+                if va.ncdim >= 1:
+                    kargs.append('const int* __restrict__ {0.name}_vcstri'
+                                 .format(va))
+                if va.ncdim == 2:
+                    kargs.append('const int* __restrict__ {0.name}_vrstri'
+                                 .format(va))
             # Arrays
             else:
                 # Intent in arguments should be marked constant
@@ -170,10 +175,12 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
     def _deref_arg(self, arg):
         if arg.isview:
-            expr = '_x' if arg.ncdim == 1 else r'\1*_nx + _x'
+            ptns = ['{0}_v[{0}_vix[_x]]',
+                    r'{0}_v[{0}_vix[_x] + {0}_vcstri[_x]*\1]',
+                    r'{0}_v[{0}_vix[_x] + {0}_vrstri[_x]*\1'
+                    r' + {0}_vcstri[_x]*\2]']
 
-            return (r'{0}_v[{0}_vix[{1}] + {0}_vstri[{1}]*\{2}]'
-                    .format(arg.name, expr, arg.ncdim))
+            return ptns[arg.ncdim].format(arg.name)
         else:
             # Leading (sub) dimension
             ldim = 'lsd' + arg.name if not arg.ismpi else '_nx'

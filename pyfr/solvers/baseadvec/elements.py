@@ -58,25 +58,18 @@ class BaseAdvectionElements(BaseElements):
     def _get_scal_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        vrcidx = np.empty((1, nfp, 2), dtype=np.int32)
-        vrcidx[...,0] = self._srtd_face_fpts[eidx,fidx]
-        vrcidx[...,1] = eidx
+        rcmap = [[fpidx, eidx] for fpidx in self._srtd_face_fpts[eidx,fidx]]
+        cstri = [[mat.leadsubdim]]*nfp
 
-        return (np.tile(mat, (1, nfp)), vrcidx, self._scal_fpts_vstri[:nfp])
+        return [mat]*nfp, rcmap, cstri
 
     def _get_vect_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        vrcidx = np.empty((self.ndims, nfp, 2), dtype=np.int32)
-        vrcidx[...,0] = self._srtd_face_fpts[eidx,fidx]
-        vrcidx[...,1] = eidx
+        rcmap = [[fpidx, eidx] for fpidx in self._srtd_face_fpts[eidx,fidx]]
+        rcstri = [[self.nfpts, mat.leadsubdim]]*nfp
 
-        # Correct the row indicies
-        for i in range(self.ndims):
-            vrcidx[i,:,0] += i*self.nfpts
-
-        return (np.tile(mat, (self.ndims, nfp)), vrcidx,
-                self._vect_fpts_vstri[:,:nfp])
+        return [mat]*nfp, rcmap, rcstri
 
     def get_scal_fpts0_for_inter(self, eidx, fidx):
         return self._get_scal_fptsn_for_inter(self._scal_fpts[0], eidx, fidx)
