@@ -53,20 +53,18 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                                 innercall=innercall)
 
     def _emit_inner_func(self):
-        # Get the specification, argument alignment statements and body
+        # Get the specification and body
         spec = self._emit_inner_spec()
-        aligns = self._emit_inner_aligns()
         body = self._emit_body_2d()
 
         # Combine
         return '''{spec}
                {{
-                   {aligns}
                    for (int _x = 0; _x < _nx; _x++)
                    {{
                        {body}
                    }}
-               }}'''.format(spec=spec, aligns=aligns, body=body)
+               }}'''.format(spec=spec, body=body)
 
     def _emit_inner_call(self):
         # Arguments for the inner function
@@ -135,19 +133,6 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     kargs.append('int lsd{0.name}'.format(va))
 
         return 'void {0}({1})'.format(self.name, ', '.join(kargs))
-
-    def _emit_inner_aligns(self):
-        aligns = []
-
-        for va in self.vectargs:
-            if va.ncdim == 0:
-                aligns.append('PYFR_ALIGNED({0.name}_v);'.format(va))
-            else:
-                aligns.extend('PYFR_ALIGNED({0.name}_v{1});'
-                              .format(va, 'v'.join(str(n) for n in ij))
-                              for ij in ndrange(*va.cdims))
-
-        return '\n'.join(aligns)
 
     def _emit_body_1d(self):
         body = self.body

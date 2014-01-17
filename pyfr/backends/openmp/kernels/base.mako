@@ -8,12 +8,6 @@
 #define PYFR_ALIGN_BYTES ${alignb}
 #define PYFR_NOINLINE __attribute__ ((noinline))
 
-#ifdef __ICC
-# define PYFR_ALIGNED(x) __assume_aligned(x, PYFR_ALIGN_BYTES)
-#else
-# define PYFR_ALIGNED(x) x = __builtin_assume_aligned(x, PYFR_ALIGN_BYTES)
-#endif
-
 #define PYFR_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // Typedefs
