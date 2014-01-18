@@ -74,12 +74,6 @@ class CUDAKernelGenerator(BaseKernelGenerator):
 
         return '__global__ void {0}({1})'.format(self.name, ', '.join(kargs))
 
-    def _deref_arg(self, arg):
-        if arg.isview:
-            return self._deref_arg_view(arg)
-        else:
-            return self._deref_arg_array(arg)
-
     def _deref_arg_view(self, arg):
         ptns = ['{0}_v[{0}_vix[_x]]',
                 r'{0}_v[{0}_vix[_x] + {0}_vcstri[_x]*\1]',
@@ -128,7 +122,10 @@ class CUDAKernelGenerator(BaseKernelGenerator):
 
         for va in self.vectargs:
             # Dereference the argument
-            darg = self._deref_arg(va)
+            if va.isview:
+                darg = self._deref_arg_view(va)
+            else:
+                darg = self._deref_arg_array(va)
 
             # Substitute
             body = re.sub(ptns[va.ncdim].format(va.name), darg, body)
