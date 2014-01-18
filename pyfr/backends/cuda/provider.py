@@ -78,7 +78,7 @@ class CUDAPointwiseKernelProvider(BasePointwiseKernelProvider):
 
             # Matrix
             if isinstance(ka, mattypes):
-                arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
+                arglst += [ka, ka.leadsubdim] if len(atypes) == 2 else [ka]
             # View
             elif isinstance(ka, (types.CUDAView, types.CUDAMPIView)):
                 view = ka if isinstance(ka, types.CUDAView) else ka.view
