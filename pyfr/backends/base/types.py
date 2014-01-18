@@ -190,6 +190,9 @@ class Queue(object):
     """Kernel execution queue"""
     __metaclass__ = ABCMeta
 
+    def __init__(self, backend):
+        self.backend = backend
+
     @abstractmethod
     def __lshift__(self, iterable):
         """Appends the kernels in *iterable* to the queue

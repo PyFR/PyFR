@@ -129,7 +129,9 @@ class OpenMPView(base.View):
 
 
 class OpenMPQueue(base.Queue):
-    def __init__(self):
+    def __init__(self, backend):
+        super(OpenMPQueue, self).__init__(backend)
+
         # Last kernel we executed
         self._last = None
 

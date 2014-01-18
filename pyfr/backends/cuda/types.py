@@ -141,7 +141,9 @@ class CUDAMPIView(base.MPIView):
 
 
 class CUDAQueue(base.Queue):
-    def __init__(self):
+    def __init__(self, backend):
+        super(CUDAQueue, self).__init__(backend)
+
         # Last kernel we executed
         self._last = None
 
