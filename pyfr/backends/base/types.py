@@ -11,13 +11,40 @@ class MatrixBase(object):
 
     _base_tags = set()
 
-    @abstractmethod
-    def __init__(self, backend, dtype, ioshape, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         self.backend = backend
+        self.tags = self._base_tags | tags
+
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
-        self.ioshape = ioshape
-        self.tags = self._base_tags | tags
+
+        # Alignment requirement for the leading dimension
+        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
+
+        # Our shape and dimensionality
+        shape, ndim = list(ioshape), len(ioshape)
+
+        if ndim == 2:
+            nrow, ncol = shape
+        elif ndim == 3 or ndim == 4:
+            nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
+            ncol = shape[-2]*shape[-1] + (1 - shape[-2])*(shape[-1] % -ldmod)
+
+        # Pad the final dimension
+        shape[-1] -= shape[-1] % -ldmod
+
+        # Assign
+        self.nrow, self.ncol = nrow, ncol
+        self.ioshape, self.datashape = ioshape, shape
+
+        self.leaddim = ncol - (ncol % -ldmod)
+        self.leadsubdim = shape[-1]
+
+        # Allocate
+        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
+
+        # Retain the initial value
+        self._initval = initval
 
     @abstractmethod
     def get(self):

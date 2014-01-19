@@ -12,36 +12,6 @@ from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
 class CUDAMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
-        super(CUDAMatrixBase, self).__init__(backend, dtype, ioshape, tags)
-
-        # Alignment requirement for the leading dimension
-        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
-
-        # Our shape and dimensionality
-        shape, ndim = list(ioshape), len(ioshape)
-
-        if ndim == 2:
-            nrow, ncol = shape
-        elif ndim == 3 or ndim == 4:
-            nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
-            ncol = shape[-2]*shape[-1] + (1 - shape[-2])*(shape[-1] % -ldmod)
-
-        # Pad the final dimension
-        shape[-1] -= shape[-1] % -ldmod
-
-        # Assign
-        self.nrow, self.ncol = nrow, ncol
-        self.datashape = shape
-        self.leaddim = ncol - (ncol % -ldmod)
-        self.leadsubdim = shape[-1]
-
-        # Allocate
-        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
-
-        # Retain the initial value
-        self._initval = initval
-
     def onalloc(self, basedata, offset):
         self.basedata = int(basedata)
         self.data = self.basedata + offset
