@@ -99,9 +99,42 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
     def _build_kernel(self, name, src, args):
         pass
 
-    @abstractmethod
     def _build_arglst(self, dims, argn, argt, argdict):
-        pass
+        # Possible matrix types
+        mattypes = (
+            self.backend.const_matrix_cls, self.backend.matrix_cls,
+            self.backend.matrix_bank_cls, self.backend.matrix_rslice_cls,
+            self.backend.mpi_matrix_cls
+        )
+
+        # Possible view types
+        viewtypes = (self.backend.mpi_view_cls, self.backend.view_cls)
+
+        # First arguments are the iteration dimensions
+        ndim, arglst = len(dims), list(dims)
+
+        # Followed by the objects themselves
+        for aname, atypes in zip(argn[ndim:], argt[ndim:]):
+            ka = argdict[aname]
+
+            # Matrix
+            if isinstance(ka, mattypes):
+                arglst += [ka, ka.leadsubdim] if len(atypes) == 2 else [ka]
+            # View
+            elif isinstance(ka, viewtypes):
+                if isinstance(ka, self.backend.view_cls):
+                    view = ka
+                else:
+                    view = ka.view
+
+                arglst += [view.basedata, view.mapping]
+                arglst += [view.cstrides] if len(atypes) >= 3 else []
+                arglst += [view.rstrides] if len(atypes) == 4 else []
+            # Other; let the backend handle it
+            else:
+                arglst.append(ka)
+
+        return arglst
 
     @abstractmethod
     def _instantiate_kernel(self, dims, fun, arglst):
