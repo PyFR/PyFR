@@ -51,11 +51,8 @@ class CUDAPointwiseKernelProvider(BasePointwiseKernelProvider):
 
     @memoize
     def _build_kernel(self, name, src, argtypes):
-        # Ignore some spurious compiler warnings
-        opts = ['-Xcudafe', '--diag_suppress=declared_but_not_referenced']
-
         # Compile the source code and retrieve the kernel
-        fun = compiler.SourceModule(src, options=opts).get_function(name)
+        fun = compiler.SourceModule(src).get_function(name)
 
         # Prepare the kernel for execution
         fun.prepare(argtypes)
