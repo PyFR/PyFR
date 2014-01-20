@@ -140,7 +140,7 @@ class GmshReader(BaseReader):
                 self._felespent = pent
             # Periodic boundary faces
             elif name.startswith('periodic'):
-                p = re.match(r'periodic[ -_]([a-z0-9]+)[ -_](l|r)$', name)
+                p = re.match(r'periodic[ _-]([a-z0-9]+)[ _-](l|r)$', name)
                 if not p:
                     raise ValueError('Invalid periodic boundary condition')
 
