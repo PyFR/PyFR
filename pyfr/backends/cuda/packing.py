@@ -6,7 +6,7 @@ import pycuda.driver as cuda
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
-from pyfr.backends.cuda.types import CUDAMPIMatrix, CUDAMPIView
+from pyfr.backends.cuda.types import CUDAMPIView
 from pyfr.nputil import npdtype_to_ctype
 
 
