@@ -159,6 +159,7 @@ class View(object):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
         self.nvcol = vshape[-1] if len(vshape) >= 1 else 1
+        self.rstrides = self.cstrides = None
 
         # Get the different matrices which we map onto
         self._mats = list(set(matmap.flat))

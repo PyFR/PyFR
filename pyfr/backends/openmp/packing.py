@@ -31,8 +31,8 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
         fn = self._get_function('pack', 'pack_view', None, 'iiiPPPPP',
                                 dict(dtype=npdtype_to_ctype(m.dtype)))
 
-        cstrides = getattr(v, 'cstrides', 0)
-        rstrides = getattr(v, 'rstrides', 0)
+        cstrides = v.cstrides or 0
+        rstrides = v.rstrides or 0
 
         return self._basic_kernel(fn, v.n, v.nvrow, v.nvcol, v.basedata,
                                   v.mapping, cstrides, rstrides, m)
