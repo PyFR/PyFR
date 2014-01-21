@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from mpi4py import MPI
-
 import pycuda.driver as cuda
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
