@@ -28,14 +28,19 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
         # An MPI view is simply a regular view plus an MPI matrix
         m, v = mv.mpimat, mv.view
 
-        fn = self._get_function('pack', 'pack_view', None, 'iiiPPPPP',
-                                dict(dtype=npdtype_to_ctype(m.dtype)))
+        # Render the kernel template
+        tpl = self.backend.lookup.get_template('pack')
+        src = tpl.render(dtype=npdtype_to_ctype(m.dtype))
 
-        cstrides = v.cstrides or 0
-        rstrides = v.rstrides or 0
+        # Build
+        kern = self._build_kernel('pack_view', src, 'iiiPPPPP')
 
-        return self._basic_kernel(fn, v.n, v.nvrow, v.nvcol, v.basedata,
-                                  v.mapping, cstrides, rstrides, m)
+        class PackMPIViewKernel(ComputeKernel):
+            def run(self):
+                kern(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
+                     v.cstrides or 0, v.rstrides or 0, m)
+
+        return PackMPIViewKernel()
 
     def send_pack(self, mv, pid, tag):
         return self._sendrecv(mv, MPI.COMM_WORLD.Send_init, pid, tag)

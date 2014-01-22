@@ -11,14 +11,19 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         if any(y.traits != x.traits for x in xn):
             raise ValueError('Incompatible matrix types')
 
-        opts = dict(n=len(xn), alignb=self.backend.alignb, fpdtype=y.dtype)
-        fn = self._get_function('axnpby', 'axnpby', None,
-                                [np.int32] + [np.intp, y.dtype]*(1 + len(xn)),
-                                opts)
+        nv, cnt = len(xn), y.leaddim*y.nrow
+
+        # Render the kernel template
+        tpl = self.backend.lookup.get_template('axnpby')
+        src = tpl.render(n=nv, alignb=self.backend.alignb, fpdtype=y.dtype)
+
+        # Build
+        kern = self._build_kernel('axnpby', src,
+                                  [np.int32] + [np.intp, y.dtype]*(1 + nv))
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, beta, *alphan):
                 args = [i for axn in zip(xn, alphan) for i in axn]
-                fn(y.leaddim*y.nrow, y, beta, *args)
+                kern(cnt, y, beta, *args)
 
         return AxnpbyKernel()

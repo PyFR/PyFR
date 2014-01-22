@@ -99,16 +99,19 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
         # let the BLAS library handle parallelization itself (which
         # may, or may not, use OpenMP).
         if self._cblas_type == 'cblas-st':
-            # Argument types and template params for par_gemm
+            # Render the kernel template
+            tpl = self.backend.lookup.get_template('par-gemm')
+            src = tpl.render(alignb=self.backend.alignb, fpdtype=a.dtype)
+
+            # Argument types for par_gemm
             argt = [
                 np.intp, np.int32, np.int32, np.int32,
                 a.dtype, np.intp, np.int32, np.intp, np.int32,
                 a.dtype, np.intp, np.int32
             ]
-            opts = dict(alignb=self.backend.alignb, fpdtype=a.dtype)
 
-            par_gemm = self._get_function('par-gemm', 'par_gemm', None, argt,
-                                          opts)
+            # Build
+            par_gemm = self._build_kernel('par_gemm', src, argt)
 
             # Pointer to the BLAS library GEMM function
             cblas_gemm_ptr = cast(cblas_gemm, c_void_p).value
