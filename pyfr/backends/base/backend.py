@@ -219,7 +219,7 @@ class BaseBackend(object):
 
         :rtype: :class:`~pyfr.backends.base.Queue`
         """
-        return self.queue_cls()
+        return self.queue_cls(self)
 
     def runall(self, sequence):
         """Executes all of the kernels in the provided sequence of queues

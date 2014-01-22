@@ -168,17 +168,17 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             return ptns[arg.ncdim].format(arg.name)
         else:
             # Leading (sub) dimension
-            ldim = 'lsd' + arg.name if not arg.ismpi else '_nx'
+            lsdim = 'lsd' + arg.name if not arg.ismpi else '_nx'
 
             # Vector name_v[_x]
             if arg.ncdim == 0:
                 ix = '_x'
-            # Stacked vector; name_v[ldim*\1 + _x]
+            # Stacked vector; name_v[lsdim*\1 + _x]
             elif arg.ncdim == 1:
-                ix = r'{0}*\1 + _x'.format(ldim)
-            # Doubly stacked vector; name_v[ldim*nv*\1 + ldim*\2 + _x]
+                ix = r'{0}*\1 + _x'.format(lsdim)
+            # Doubly stacked vector; name_v[lsdim*nv*\1 + lsdim*\2 + _x]
             else:
-                ix = r'{0}*{1}*\1 + {0}*\2 + _x'.format(ldim, arg.cdims[1])
+                ix = r'{0}*{1}*\1 + {0}*\2 + _x'.format(lsdim, arg.cdims[1])
 
             return '{0}_v[{1}]'.format(arg.name, ix)
 

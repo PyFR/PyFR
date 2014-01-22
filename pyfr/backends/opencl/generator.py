@@ -6,9 +6,9 @@ from pyfr.backends.base.generator import BaseKernelGenerator
 from pyfr.util import ndrange
 
 
-class CUDAKernelGenerator(BaseKernelGenerator):
+class OpenCLKernelGenerator(BaseKernelGenerator):
     def __init__(self, *args, **kwargs):
-        super(CUDAKernelGenerator, self).__init__(*args, **kwargs)
+        super(OpenCLKernelGenerator, self).__init__(*args, **kwargs)
 
         # Specialise
         if self.ndim == 1:
@@ -31,7 +31,7 @@ class CUDAKernelGenerator(BaseKernelGenerator):
         # Combine
         return '''{spec}
                {{
-                   int _x = blockIdx.x*blockDim.x + threadIdx.x;
+                   int _x = get_global_id(0);
                    {limits}
                    {{
                        {body}
@@ -47,32 +47,33 @@ class CUDAKernelGenerator(BaseKernelGenerator):
 
         # Finally, add the vector arguments
         for va in self.vectargs:
+            ka = []
+
             # Views
             if va.isview:
-                kargs.append('{0.dtype}* __restrict__ {0.name}_v'.format(va))
-                kargs.append('const int* __restrict__ {0.name}_vix'
-                             .format(va))
+                ka.append('__global {0.dtype}* restrict {0.name}_v')
+                ka.append('__global const int* restrict {0.name}_vix')
 
                 if va.ncdim >= 1:
-                    kargs.append('const int* __restrict__ {0.name}_vcstri'
-                                 .format(va))
+                    ka.append('__global const int* restrict {0.name}_vcstri')
                 if va.ncdim == 2:
-                    kargs.append('const int* __restrict__ {0.name}_vrstri'
-                                 .format(va))
+                    ka.append('__global const int* restrict {0.name}_vrstri')
             # Arrays
             else:
-                # Intent in arguments should be marked constant
-                const = 'const' if va.intent == 'in' else ''
-
-                kargs.append('{0} {1.dtype}* __restrict__ {1.name}_v'
-                             .format(const, va).strip())
+                if va.intent == 'in':
+                    ka.append('__global const {0.dtype}* restrict {0.name}_v')
+                else:
+                    ka.append('__global {0.dtype}* restrict {0.name}_v')
 
                 # If we are a matrix (ndim = 2) or a non-MPI stacked
                 # vector then a leading (sub) dimension is required
                 if self.ndim == 2 or (va.ncdim > 0 and not va.ismpi):
-                    kargs.append('int lsd{0.name}'.format(va))
+                    ka.append('int lsd{0.name}')
 
-        return '__global__ void {0}({1})'.format(self.name, ', '.join(kargs))
+            # Format
+            kargs.extend(k.format(va) for k in ka)
+
+        return '__kernel void {0}({1})'.format(self.name, ', '.join(kargs))
 
     def _deref_arg_view(self, arg):
         ptns = ['{0}_v[{0}_vix[_x]]',

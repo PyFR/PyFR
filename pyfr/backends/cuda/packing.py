@@ -42,13 +42,10 @@ class CUDAPackingKernels(CUDAKernelProvider):
 
         class PackMPIViewKernel(ComputeKernel):
             def run(self, scomp, scopy):
-                cstrides = getattr(v, 'cstrides', 0)
-                rstrides = getattr(v, 'rstrides', 0)
-
                 # Pack
                 fn.prepared_async_call(grid, block, scomp, v.n, v.nvrow,
                                        v.nvcol, v.basedata, v.mapping,
-                                       cstrides, rstrides, m)
+                                       v.cstrides or 0, v.rstrides or 0, m)
 
                 # Copy the packed buffer to the host
                 event.record(scomp)

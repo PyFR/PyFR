@@ -47,33 +47,6 @@ class OpenMPPointwiseKernelProvider(BasePointwiseKernelProvider):
         mod = GccSourceModule(src, self.backend.cfg)
         return mod.function(name, None, argtypes)
 
-    def _build_arglst(self, dims, argn, argt, argdict):
-        # First arguments are the dimensions
-        ndim, arglst = len(dims), list(dims)
-
-        # Matrix types
-        mattypes = (types.OpenMPMatrixBank, types.OpenMPMatrixBase)
-
-        # Process non-dimensional arguments
-        for aname, atypes in zip(argn[ndim:], argt[ndim:]):
-            ka = argdict[aname]
-
-            # Matrix
-            if isinstance(ka, mattypes):
-                arglst += [ka, ka.leadsubdim] if len(atypes) == 2 else [ka]
-            # View
-            elif isinstance(ka, (types.OpenMPView, types.OpenMPMPIView)):
-                view = ka if isinstance(ka, types.OpenMPView) else ka.view
-
-                arglst += [view.basedata, view.mapping]
-                arglst += [view.cstrides] if len(atypes) >= 3 else []
-                arglst += [view.rstrides] if len(atypes) == 4 else []
-            # Other; let ctypes handle it
-            else:
-                arglst.append(ka)
-
-        return arglst
-
     def _instantiate_kernel(self, dims, fun, arglst):
         class PointwiseKernel(ComputeKernel):
             def run(self):

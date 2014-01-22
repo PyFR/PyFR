@@ -12,26 +12,6 @@ from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
 class CUDAMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
-        super(CUDAMatrixBase, self).__init__(backend, dtype, ioshape, tags)
-
-        # Alignment requirement for the leading dimension
-        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
-
-        # Matrix dimensions
-        nrow, ncol = backend.compact_shape(ioshape)
-
-        # Assign
-        self.nrow, self.ncol = nrow, ncol
-        self.leaddim = ncol - (ncol % -ldmod)
-        self.leadsubdim = self.ioshape[-1]
-
-        # Allocate
-        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
-
-        # Retain the initial value
-        self._initval = initval
-
     def onalloc(self, basedata, offset):
         self.basedata = int(basedata)
         self.data = self.basedata + offset
@@ -46,26 +26,24 @@ class CUDAMatrixBase(base.MatrixBase):
 
     def get(self):
         # Allocate an empty buffer
-        buf = np.empty((self.nrow, self.ncol), dtype=self.dtype)
+        buf = np.empty(self.datashape, dtype=self.dtype)
 
         # Copy
-        memcpy2d_dtoh(buf, self.data, self.pitch, self.ncol*self.itemsize,
-                      self.ncol*self.itemsize, self.nrow)
+        cuda.memcpy_dtoh(buf, self.data)
 
-        # Reshape from a matrix to the expected I/O shape
-        return buf.reshape(self.ioshape)
+        # Slice to give the expected I/O shape
+        return buf[...,:self.ioshape[-1]]
 
     def set(self, ary):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
 
-        # Cast and compact from the I/O shape to a matrix
-        nary = np.asanyarray(ary, dtype=self.dtype, order='C')
-        nary = self.backend.compact_arr(nary)
+        # Allocate a new buffer with suitable padding and assign
+        buf = np.zeros(self.datashape, dtype=self.dtype)
+        buf[...,:self.ioshape[-1]] = ary
 
         # Copy
-        memcpy2d_htod(self.data, nary, self.ncol*self.itemsize, self.pitch,
-                      self.ncol*self.itemsize, self.nrow)
+        cuda.memcpy_htod(self.data, buf)
 
     @property
     def _as_parameter_(self):
@@ -141,7 +119,9 @@ class CUDAMPIView(base.MPIView):
 
 
 class CUDAQueue(base.Queue):
-    def __init__(self):
+    def __init__(self, backend):
+        super(CUDAQueue, self).__init__(backend)
+
         # Last kernel we executed
         self._last = None
 

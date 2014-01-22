@@ -5,17 +5,15 @@ import itertools as it
 
 from mpi4py import MPI
 import numpy as np
+import pyopencl as cl
 
 import pyfr.backends.base as base
 
 
-class OpenMPMatrixBase(base.MatrixBase):
+class OpenCLMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
-        self.basedata = basedata.ctypes.data
-
+        self.basedata = basedata
         self.data = basedata[offset:offset + self.nrow*self.pitch]
-        self.data = self.data.view(self.dtype).reshape(self.datashape)
-
         self.offset = offset // self.itemsize
 
         # Process any initial value
@@ -26,86 +24,101 @@ class OpenMPMatrixBase(base.MatrixBase):
         del self._initval
 
     def get(self):
-        # Trim any padding in the final dimension
-        return self.data[...,:self.ioshape[-1]]
+        # Allocate an empty buffer
+        buf = np.empty(self.datashape, dtype=self.dtype)
+
+        # Copy
+        cl.enqueue_copy(self.backend.qdflt, buf, self.data)
+
+        # Slice to give the expected I/O shape
+        return buf[...,:self.ioshape[-1]]
 
     def set(self, ary):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
 
-        # Assign
-        self.data[...,:ary.shape[-1]] = ary
+        # Allocate a new buffer with suitable padding and assign
+        buf = np.zeros(self.datashape, dtype=self.dtype)
+        buf[...,:self.ioshape[-1]] = ary
+
+        # Copy
+        cl.enqueue_copy(self.backend.qdflt, self.data, buf)
 
     @property
     def _as_parameter_(self):
-        # Obtain a pointer to our ndarray
-        return self.data.ctypes.data
+        return self.data.int_ptr
 
 
-class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
+class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
     def __init__(self, backend, ioshape, initval, extent, tags):
-        super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
+        super(OpenCLMatrix, self).__init__(backend, backend.fpdtype, ioshape,
                                            initval, extent, tags)
 
 
-class OpenMPMatrixRSlice(base.MatrixRSlice):
+class OpenCLMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
-        super(OpenMPMatrixRSlice, self).__init__(backend, mat, p, q)
+        super(OpenCLMatrixRSlice, self).__init__(backend, mat, p, q)
 
-        # Since slices do not retain any information about the
-        # high-order structure of an array it is fine to compact mat
-        # down to two dimensions and simply slice this
-        self.data = backend.compact_arr(mat.data)[p:q]
+        # Slice
+        self.data = mat.data[p*mat.pitch:q*mat.pitch]
 
     @property
     def _as_parameter_(self):
-        return self.data.ctypes.data
+        return self.data.int_ptr
 
 
-class OpenMPMatrixBank(base.MatrixBank):
+class OpenCLMatrixBank(base.MatrixBank):
     pass
 
 
-class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
+class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):
     def __init__(self, backend, initval, extent, tags):
-        super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
+        super(OpenCLConstMatrix, self).__init__(backend, backend.fpdtype,
                                                 initval.shape, initval,
                                                 extent, tags)
 
 
-class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
-    pass
-
-
-class OpenMPMPIView(base.MPIView):
-    pass
-
-
-class OpenMPView(base.View):
+class OpenCLView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
-        super(OpenMPView, self).__init__(backend, matmap, rcmap, stridemap,
-                                         vshape, tags)
+        super(OpenCLView, self).__init__(backend, matmap, rcmap, stridemap,
+                                       vshape, tags)
 
-        self.mapping = OpenMPMatrixBase(backend, np.int32, (1, self.n),
+        self.mapping = OpenCLMatrixBase(backend, np.int32, (1, self.n),
                                         self.mapping, None, tags)
 
         if self.nvcol > 1:
-            self.cstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
+            self.cstrides = OpenCLMatrixBase(backend, np.int32, (1, self.n),
                                              self.cstrides, None, tags)
 
         if self.nvrow > 1:
-            self.rstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
+            self.rstrides = OpenCLMatrixBase(backend, np.int32, (1, self.n),
                                              self.rstrides, None, tags)
 
 
-class OpenMPQueue(base.Queue):
+class OpenCLMPIMatrix(OpenCLMatrix, base.MPIMatrix):
+    def __init__(self, backend, ioshape, initval, extent, tags):
+        # Call the standard matrix constructor
+        super(OpenCLMPIMatrix, self).__init__(backend, ioshape, initval,
+                                              extent, tags)
+
+        # Allocate an empty buffer on the host for MPI to send/recv from
+        self.hdata = np.empty((self.nrow, self.ncol), self.dtype)
+
+
+class OpenCLMPIView(base.MPIView):
+    pass
+
+
+class OpenCLQueue(base.Queue):
     def __init__(self, backend):
-        super(OpenMPQueue, self).__init__(backend)
+        super(OpenCLQueue, self).__init__(backend)
 
         # Last kernel we executed
         self._last = None
 
-        # Active MPI requests
+        # OpenCL cmdqueue and MPI request list
+        self._cmdqueue_comp = cl.CommandQueue(backend.ctx)
+        self._cmdqueue_copy = cl.CommandQueue(backend.ctx)
         self._mpireqs = []
 
         # Items waiting to be executed
@@ -124,7 +137,7 @@ class OpenMPQueue(base.Queue):
 
     def _exec_item(self, item, rtargs):
         if base.iscomputekernel(item):
-            item.run(*rtargs)
+            item.run(self._cmdqueue_comp, self._cmdqueue_copy, *rtargs)
         elif base.ismpikernel(item):
             item.run(self._mpireqs, *rtargs)
         else:
@@ -145,24 +158,20 @@ class OpenMPQueue(base.Queue):
         while self._items and not self._at_sequence_point(self._items[0][0]):
             self._exec_item(*self._items.popleft())
 
-    def _exec_nonblock(self):
-        while self._items:
-            kern = self._items[0][0]
-
-            # See if kern will block
-            if self._at_sequence_point(kern) or base.iscomputekernel(kern):
-                break
-
-            self._exec_item(*self._items.popleft())
-
     def _wait(self):
-        if base.ismpikernel(self._last):
+        if base.iscomputekernel(self._last):
+            self._cmdqueue_comp.finish()
+            self._cmdqueue_copy.finish()
+        elif base.ismpikernel(self._last):
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
         self._last = None
 
     def _at_sequence_point(self, item):
-        if base.ismpikernel(self._last) and not base.ismpikernel(item):
+        iscompute, ismpi = base.iscomputekernel, base.ismpikernel
+
+        if (iscompute(self._last) and not iscompute(item)) or\
+           (ismpi(self._last) and not ismpi(item)):
             return True
         else:
             return False
@@ -174,19 +183,16 @@ class OpenMPQueue(base.Queue):
 
     @staticmethod
     def runall(queues):
-        # Fire off any non-blocking kernels
+        # First run any items which will not result in an implicit wait
         for q in queues:
-            q._exec_nonblock()
+            q._exec_nowait()
 
+        # So long as there are items remaining in the queues
         while any(queues):
             # Execute a (potentially) blocking item from each queue
             for q in it.ifilter(None, queues):
-                q._exec_nowait()
-
-            # Now consider kernels which will wait
-            for q in it.ifilter(None, queues):
                 q._exec_next()
-                q._exec_nonblock()
+                q._exec_nowait()
 
         # Wait for all tasks to complete
         for q in queues:

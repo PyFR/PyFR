@@ -11,10 +11,10 @@ class CUDABackend(BaseBackend):
         super(CUDABackend, self).__init__(cfg)
 
         # Create a CUDA context
-        from pycuda.autoinit import context, device
+        from pycuda.autoinit import context
 
-        # Get the alignment requirements for the device
-        self.alignb = device.texture_alignment
+        # Take the required alignment to be 128 bytes
+        self.alignb = 128
 
         # Some CUDA devices share L1 cache and shared memory; on these
         # devices CUDA allows us to specify a preference between L1
