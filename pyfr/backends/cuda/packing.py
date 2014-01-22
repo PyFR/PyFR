@@ -29,9 +29,12 @@ class CUDAPackingKernels(CUDAKernelProvider):
         # An MPI view is simply a regular view plus an MPI matrix
         m, v = mv.mpimat, mv.view
 
-        # Get the CUDA pack/unpack kernel from the pack module
-        fn = self._get_function('pack', 'pack_view', 'iiiPPPPP',
-                                dict(dtype=npdtype_to_ctype(m.dtype)))
+        # Render the kernel template
+        tpl = self.backend.lookup.get_template('pack')
+        src = tpl.render(dtype=npdtype_to_ctype(m.dtype))
+
+        # Build
+        kern = self._build_kernel('pack_view', src, 'iiiPPPPP')
 
         # Compute the grid and thread-block size
         block = (128, 1, 1)
@@ -43,9 +46,9 @@ class CUDAPackingKernels(CUDAKernelProvider):
         class PackMPIViewKernel(ComputeKernel):
             def run(self, scomp, scopy):
                 # Pack
-                fn.prepared_async_call(grid, block, scomp, v.n, v.nvrow,
-                                       v.nvcol, v.basedata, v.mapping,
-                                       v.cstrides or 0, v.rstrides or 0, m)
+                kern.prepared_async_call(grid, block, scomp, v.n, v.nvrow,
+                                         v.nvcol, v.basedata, v.mapping,
+                                         v.cstrides or 0, v.rstrides or 0, m)
 
                 # Copy the packed buffer to the host
                 event.record(scomp)

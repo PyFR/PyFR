@@ -5,7 +5,6 @@ from pycuda import compiler, driver
 from pyfr.backends.base import (BaseKernelProvider,
                                 BasePointwiseKernelProvider, ComputeKernel)
 import pyfr.backends.cuda.generator as generator
-import pyfr.backends.cuda.types as types
 from pyfr.util import memoize
 
 
@@ -15,40 +14,6 @@ def get_grid_for_block(block, nrow, ncol=1):
 
 
 class CUDAKernelProvider(BaseKernelProvider):
-    @memoize
-    def _get_module(self, module, tplparams={}, nvccopts=None):
-        # Get the template file
-        tpl = self.backend.lookup.get_template(module)
-
-        # Render the template
-        mod = tpl.render(**tplparams)
-
-        # Compile
-        return compiler.SourceModule(mod, options=nvccopts)
-
-    @memoize
-    def _get_function(self, module, function, argtypes, tplparams={},
-                      nvccopts=None):
-        # Compile/retrieve the module
-        mod = self._get_module(module, tplparams, nvccopts)
-
-        # Get a reference to the function
-        func = mod.get_function(function)
-
-        # Prepare it for execution
-        return func.prepare(argtypes)
-
-    def _basic_kernel(self, fn, grid, block, *args):
-        class BasicKernel(ComputeKernel):
-            def run(self, scomp, scopy):
-                fn.prepared_async_call(grid, block, scomp, *args)
-
-        return BasicKernel()
-
-
-class CUDAPointwiseKernelProvider(BasePointwiseKernelProvider):
-    kernel_generator_cls = generator.CUDAKernelGenerator
-
     @memoize
     def _build_kernel(self, name, src, argtypes):
         # Compile the source code and retrieve the kernel
@@ -61,6 +26,11 @@ class CUDAPointwiseKernelProvider(BasePointwiseKernelProvider):
         fun.set_cache_config(driver.func_cache.PREFER_L1)
 
         return fun
+
+
+class CUDAPointwiseKernelProvider(CUDAKernelProvider,
+                                  BasePointwiseKernelProvider):
+    kernel_generator_cls = generator.CUDAKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
         # Determine the grid/block
