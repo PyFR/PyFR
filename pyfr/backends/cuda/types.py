@@ -8,7 +8,6 @@ import numpy as np
 import pycuda.driver as cuda
 
 import pyfr.backends.base as base
-from pyfr.backends.cuda.util import memcpy2d_htod, memcpy2d_dtoh
 
 
 class CUDAMatrixBase(base.MatrixBase):
