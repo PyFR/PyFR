@@ -19,8 +19,8 @@ class OpenCLBackend(BaseBackend):
         # Create a queue for initialisation-type operations
         self.qdflt = cl.CommandQueue(self.ctx)
 
-        # Take the alignment requirement to be 128 bytes
-        self.alignb = 128
+        # Compute the alignment requirement for the context
+        self.alignb = self.ctx.devices[0].mem_base_addr_align // 8
 
         from pyfr.backends.opencl import (blasext, clblas, packing, provider,
                                           types)
