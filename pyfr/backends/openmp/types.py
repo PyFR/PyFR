@@ -16,7 +16,7 @@ class OpenMPMatrixBase(base.MatrixBase):
         self.data = basedata[offset:offset + self.nrow*self.pitch]
         self.data = self.data.view(self.dtype).reshape(self.datashape)
 
-        self.offset = offset // self.itemsize
+        self.offset = offset
 
         # Process any initial value
         if self._initval is not None:

@@ -14,7 +14,7 @@ class OpenCLMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
         self.data = basedata[offset:offset + self.nrow*self.pitch]
-        self.offset = offset // self.itemsize
+        self.offset = offset
 
         # Process any initial value
         if self._initval is not None:

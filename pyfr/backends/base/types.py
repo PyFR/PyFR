@@ -185,7 +185,7 @@ class View(object):
 
         for m in self._mats:
             ix = np.where(matmap == m)
-            offset[ix], leaddim[ix] = m.offset, m.leaddim
+            offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
         # Go from matrices + row/column indcies to displacements
         # relative to the base allocation address

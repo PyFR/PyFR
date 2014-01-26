@@ -14,7 +14,7 @@ class CUDAMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = int(basedata)
         self.data = self.basedata + offset
-        self.offset = offset // self.itemsize
+        self.offset = offset
 
         # Process any initial value
         if self._initval is not None:
