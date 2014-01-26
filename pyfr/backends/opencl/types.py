@@ -13,7 +13,7 @@ import pyfr.backends.base as base
 class OpenCLMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
-        self.data = basedata[offset:offset + self.nrow*self.pitch]
+        self.data = basedata.get_sub_region(offset, self.nrow*self.pitch + 1)
         self.offset = offset
 
         # Process any initial value
@@ -60,7 +60,8 @@ class OpenCLMatrixRSlice(base.MatrixRSlice):
         super(OpenCLMatrixRSlice, self).__init__(backend, mat, p, q)
 
         # Slice
-        self.data = mat.data[p*mat.pitch:q*mat.pitch]
+        self.data = mat.basedata.get_sub_region(mat.offset + p*mat.pitch,
+                                                (q - p)*mat.pitch + 1)
 
     @property
     def _as_parameter_(self):
