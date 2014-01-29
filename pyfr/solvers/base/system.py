@@ -97,7 +97,7 @@ class BaseSystem(object):
 
         self._bc_inters = proxylist([])
         for f in mesh:
-            m = re.match('bcon_(.+?)_p%d' % rallocs.prank, f)
+            m = re.match('bcon_(.+?)_p%d$' % rallocs.prank, f)
             if m:
                 # Get the region name
                 rgn = m.group(1)
