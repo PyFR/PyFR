@@ -57,8 +57,6 @@ class TriBasis(BaseBasis):
         # Obtain an orthonormal basis
         ob = self._orthonormal_basis(ptsord)
 
-        p, q = self._dims
-
         # Evaluate each basis function at each point
         V = self._eval_lbasis_at(lambdify_mpf(self._dims, ob), pts)
 
