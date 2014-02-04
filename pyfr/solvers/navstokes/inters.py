@@ -77,7 +77,8 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
 
     def get_con_u_kern(self):
         return self._be.kernel('bcconu', self._tplargs, dims=[self.ninterfpts],
-                               ulin=self._scal0_lhs, ulout=self._vect0_lhs)
+                               ulin=self._scal0_lhs, ulout=self._vect0_lhs,
+                               nlin=self._norm_pnorm_lhs)
 
     def get_comm_flux_kern(self):
         return self._be.kernel('bccflux', self._tplargs,

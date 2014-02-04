@@ -15,14 +15,14 @@
               magnl='in fpdtype_t'>
     // Viscous states
     fpdtype_t ur[${nvars}], gradur[${ndims}][${nvars}];
-    ${pyfr.expand('bc_ldg_state', 'ul', 'ur')};
+    ${pyfr.expand('bc_ldg_state', 'ul', 'nl', 'ur')};
     ${pyfr.expand('bc_ldg_grad_state', 'ul', 'nl', 'gradul', 'gradur')};
 
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
 
     // Inviscid (Riemann solve) state
-    ${pyfr.expand('bc_rsolve_state', 'ul', 'ur')};
+    ${pyfr.expand('bc_rsolve_state', 'ul', 'nl', 'ur')};
 
     // Perform the Riemann solve
     fpdtype_t ficomm[${nvars}], fvcomm;
