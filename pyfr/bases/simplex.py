@@ -14,6 +14,22 @@ def _bary_to_cart(b, tverts):
     return [sum(bj*ej for bj, ej in zip(b, t)) for t in zip(*tverts)]
 
 
+def _orthonormal_basis_tri(order, p, q):
+    a, b = 2*(1 + p)/(1 - q) - 1, q
+
+    # Construct an orthonormal basis within a standard triangle
+    ob = []
+    for i in xrange(order):
+        tmp = sy.sqrt(2)*sy.jacobi_normalized(i, 0, 0, a)*(1 - b)**i
+        tmp = tmp.ratsimp()
+
+        for j in xrange(order - i):
+            poly = sy.expand(tmp*sy.jacobi_normalized(j, 2*i + 1, 0, b))
+            ob.append(poly.evalf(mp.dps))
+
+    return ob
+
+
 class TriBasis(BaseBasis):
     name = 'tri'
     ndims = 2
@@ -39,20 +55,7 @@ class TriBasis(BaseBasis):
 
     @memoize
     def _orthonormal_basis(self, ptsord):
-        p, q = self._dims
-        a, b = 2*(1 + p)/(1 - q) - 1, q
-
-        # Construct an orthonormal basis within a standard triangle
-        db = []
-        for i in xrange(ptsord):
-            tmp = sy.sqrt(2)*sy.jacobi_normalized(i, 0, 0, a)*(1 - b)**i
-            tmp = tmp.ratsimp()
-
-            for j in xrange(ptsord - i):
-                poly = sy.expand(tmp*sy.jacobi_normalized(j, 2*i + 1, 0, b))
-                db.append(poly.evalf(mp.dps))
-
-        return db
+        return _orthonormal_basis_tri(ptsord, *self._dims)
 
     @lazyprop
     def upts(self):
