@@ -4,10 +4,10 @@ import numpy as np
 import sympy as sy
 from sympy.mpmath import mp
 
-from pyfr.bases.base import BaseBasis, lambdify_mpf
+from pyfr.bases.base import BaseBasis
 from pyfr.quadrules import BaseLineQuadRule, BaseTriQuadRule, get_quadrule
-from pyfr.syutil import lagrange_basis
-from pyfr.util import lazyprop
+from pyfr.syutil import lagrange_basis, nodal_basis
+from pyfr.util import lazyprop, memoize
 
 
 def _bary_to_cart(b, tverts):
@@ -37,6 +37,7 @@ class TriBasis(BaseBasis):
 
         return np.array(sele, dtype=np.object)
 
+    @memoize
     def _orthonormal_basis(self, ptsord):
         p, q = self._dims
         a, b = 2*(1 + p)/(1 - q) - 1, q
@@ -52,23 +53,6 @@ class TriBasis(BaseBasis):
                 db.append(poly.evalf(mp.dps))
 
         return db
-
-    def _nodal_basis(self, pts, ptsord):
-        # Obtain an orthonormal basis
-        ob = self._orthonormal_basis(ptsord)
-
-        # Evaluate each basis function at each point
-        V = self._eval_lbasis_at(lambdify_mpf(self._dims, ob), pts)
-
-        # Invert this matrix to obtain the expansion coefficients
-        Vinv = mp.matrix(V.T)**-1
-
-        # Each nodal basis function is a linear combination of
-        # orthonormal basis functions
-        nb = [sum(c*b for c, b in zip(Vinv[i,:], ob))
-              for i in xrange(len(pts))]
-
-        return np.array(nb, dtype=np.object)
 
     @lazyprop
     def upts(self):
@@ -86,7 +70,9 @@ class TriBasis(BaseBasis):
 
     @lazyprop
     def ubasis(self):
-        return self._nodal_basis(self.upts, self._order + 1)
+        return nodal_basis(self.upts,
+                           self._orthonormal_basis(self._order + 1),
+                           dims=self._dims)
 
     @lazyprop
     def spts(self):
@@ -94,7 +80,9 @@ class TriBasis(BaseBasis):
 
     @lazyprop
     def sbasis(self):
-        return self._nodal_basis(self.spts, self._nsptsord)
+        return nodal_basis(self.spts,
+                           self._orthonormal_basis(self._nsptsord),
+                           dims=self._dims)
 
     @lazyprop
     def fpts(self):

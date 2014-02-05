@@ -51,3 +51,19 @@ def lagrange_basis(points, sym):
 
     return [lagrange_poly(n, sym, points, [0]*i + [1] + [0]*(n-i-1)).expand()
             for i in xrange(n)]
+
+
+def nodal_basis(points, basis, dims=None, basisfns=None):
+    # If necessary lambdify the basis
+    basisfns = basisfns or lambdify_mpf(dims, basis)
+
+    # Evaluate the terms of the Vandermonde matrix
+    V = [[fn(*p) for p in points] for fn in basisfns]
+
+    # Invert this matrix to obtain the expansion coefficients
+    Vinv = mp.matrix(V)**-1
+
+    # Each nodal basis function is a linear combination of
+    # orthonormal basis functions
+    return [sum(c*b for c, b in zip(Vinv[i,:], basis))
+            for i in xrange(len(points))]
