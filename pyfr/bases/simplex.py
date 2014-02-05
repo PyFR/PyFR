@@ -115,7 +115,7 @@ class TriBasis(BaseBasis):
     @lazyprop
     def fbasis(self):
         # Dummy parametric symbol
-        t = sy.Symbol('t')
+        t = sy.Symbol('_t')
 
         # Dimension variables
         p, q = self._dims
