@@ -5,8 +5,7 @@ import sympy as sy
 from sympy.mpmath import mp
 
 from pyfr.bases.base import BaseBasis
-from pyfr.quadrules import (BaseLineQuadRule, BaseTetQuadRule,
-                            BaseTriQuadRule, get_quadrule)
+from pyfr.quadrules import get_quadrule
 from pyfr.syutil import lagrange_basis, nodal_basis
 from pyfr.util import lazyprop, memoize
 
@@ -66,10 +65,10 @@ class TriBasis(BaseBasis):
 
     @classmethod
     def std_ele(cls, sptord):
-        esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
+        pts1d = get_quadrule('line', 'equi-spaced', sptord + 1).points
         sele = [(p, q)
-                for i, q in enumerate(esqr.points)
-                for p in esqr.points[:(sptord + 1 - i)]]
+                for i, q in enumerate(pts1d)
+                for p in pts1d[:(sptord + 1 - i)]]
 
         return np.array(sele, dtype=np.object)
 
@@ -80,7 +79,7 @@ class TriBasis(BaseBasis):
     @lazyprop
     def upts(self):
         qrule = self._cfg.get('solver-elements-tri', 'soln-pts')
-        bupts = get_quadrule(BaseTriQuadRule, qrule, self.nupts).points
+        bupts = get_quadrule('tri', qrule, self.nupts).points
 
         # Convert to Cartesian
         stdtri = self.std_ele(1)
@@ -111,7 +110,7 @@ class TriBasis(BaseBasis):
     def fpts(self):
         # 1D points
         qrule = self._cfg.get('solver-interfaces-line', 'flux-pts')
-        pts1d = get_quadrule(BaseLineQuadRule, qrule, self._order + 1).points
+        pts1d = get_quadrule('line', qrule, self._order + 1).points
 
         # Flux points
         fpts = np.empty((3, self._order + 1, 2), dtype=np.object)
@@ -148,7 +147,7 @@ class TriBasis(BaseBasis):
 
         # Nodal basis along an edge
         qrule = self._cfg.get('solver-interfaces-line', 'flux-pts')
-        pts1d = get_quadrule(BaseLineQuadRule, qrule, self._order + 1).points
+        pts1d = get_quadrule('line', qrule, self._order + 1).points
         nb1d = lagrange_basis(pts1d, t)
 
         # Allocate space for the flux point basis
@@ -189,11 +188,11 @@ class TetBasis(BaseBasis):
 
     @classmethod
     def std_ele(cls, sptord):
-        esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
+        pts1d = get_quadrule('line', 'equi-spaced', sptord + 1).points
         sele = [(p, q, r)
-                for i, r in enumerate(esqr.points)
-                for j, q in enumerate(esqr.points[:(sptord + 1 - i)])
-                for p in esqr.points[:(sptord + 1 - i - j)]]
+                for i, r in enumerate(pts1d)
+                for j, q in enumerate(pts1d[:(sptord + 1 - i)])
+                for p in pts1d[:(sptord + 1 - i - j)]]
 
         return np.array(sele, dtype=np.object)
 
@@ -204,7 +203,7 @@ class TetBasis(BaseBasis):
     @lazyprop
     def upts(self):
         qrule = self._cfg.get('solver-elements-tet', 'soln-pts')
-        bupts = get_quadrule(BaseTetQuadRule, qrule, self.nupts).points
+        bupts = get_quadrule('tet', qrule, self.nupts).points
 
         # Convert to Cartesian
         stdtri = self.std_ele(1)
@@ -237,7 +236,7 @@ class TetBasis(BaseBasis):
         qrule = self._cfg.get('solver-interfaces-tri', 'flux-pts')
 
         npts2d = (self._order + 1)*(self._order + 2) // 2
-        pts2d = get_quadrule(BaseTriQuadRule, qrule, npts2d).points
+        pts2d = get_quadrule('tri', qrule, npts2d).points
 
         # Convert to Cartesian
         stdtri = TriBasis.std_ele(1)
@@ -285,7 +284,7 @@ class TetBasis(BaseBasis):
 
         # Barycentric flux points inside of a (triangular) face
         qrule = self._cfg.get('solver-interfaces-tri', 'flux-pts')
-        ptstri = get_quadrule(BaseTriQuadRule, qrule, k*(k + 1) // 2).points
+        ptstri = get_quadrule('tri', qrule, k*(k + 1) // 2).points
 
         # Convert these to Cartesian coordinates
         stdtri = TriBasis.std_ele(1)

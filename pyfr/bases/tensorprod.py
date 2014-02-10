@@ -7,7 +7,7 @@ import numpy as np
 import sympy as sy
 
 from pyfr.bases.base import BaseBasis
-from pyfr.quadrules import BaseLineQuadRule, get_quadrule
+from pyfr.quadrules import get_quadrule
 from pyfr.syutil import lagrange_basis
 from pyfr.util import ndrange, lazyprop
 
@@ -131,13 +131,13 @@ class TensorProdBasis(object):
 
     @classmethod
     def std_ele(cls, sptord):
-        esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', sptord + 1)
+        esqr = get_quadrule('line', 'equi-spaced', sptord + 1)
         return cart_prod_points(esqr.points, cls.ndims)
 
     @lazyprop
     def _pts1d(self):
         rule = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
-        return get_quadrule(BaseLineQuadRule, rule, self._order + 1).points
+        return get_quadrule('line', rule, self._order + 1).points
 
     def _vcjh_fn(self, sym):
         k = self._order
@@ -194,8 +194,7 @@ class TensorProdBasis(object):
 
     @lazyprop
     def spts1d(self):
-        esqr = get_quadrule(BaseLineQuadRule, 'equi-spaced', self._nsptsord)
-        return esqr.points
+        return get_quadrule('line', 'equi-spaced', self._nsptsord).points
 
     @lazyprop
     def spts(self):
