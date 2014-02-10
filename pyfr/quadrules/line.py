@@ -71,5 +71,4 @@ class EquiSpacedQuadRule(BaseLineQuadRule):
     
     def __init__(self, npts):
         # Only points
-        self.points = [mp.mpf(-1) + mp.mpf(2*i)/(npts - 1)
-                       for i in xrange(npts)]
+        self.points = mp.linspace(-1, 1, npts)
