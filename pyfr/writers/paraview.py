@@ -231,6 +231,13 @@ def _tri_con(ndim, nsubdiv):
     return np.hstack(conlst)
 
 
+def _tet_con(nsubdiv):
+    if nsubdiv > 1:
+        raise RuntimeError('Subdivision is not implemented for tetrahedra.')
+
+    return ParaviewWriter.vtk_to_pyfr['tet'][1]
+
+
 def _base_con(etype, ndim, nsubdiv):
     """Switch case to select node connectivity for supported vtu elements
 
@@ -256,6 +263,8 @@ def _base_con(etype, ndim, nsubdiv):
     # Switch case to generate node connectivity for each element type
     if etype == 'tri':
         connec = _tri_con(ndim, nsubdiv)
+    elif etype == 'tet':
+        connec = _tet_con(nsubdiv)
     elif etype == 'quad' or etype == 'hex':
         connec = _quadcube_con(ndim, nsubdiv)
     else:

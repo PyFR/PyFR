@@ -211,6 +211,7 @@ class GmshReader(BaseReader):
     def _extract_faces(self, foeles):
         extractors = {'tri': self._extract_faces_tri,
                       'quad': self._extract_faces_quad,
+                      'tet': self._extract_faces_tet,
                       'hex': self._extract_faces_hex}
 
         fofaces = defaultdict(list)
@@ -257,6 +258,18 @@ class GmshReader(BaseReader):
         lf.nodes = foquads[:,fnmap]
 
         return [('line', lf)]
+
+    def _extract_faces_tet(self, fotets):
+        # Gmsh node numbers for each of the four faces
+        fnmap = np.array([[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]])
+
+        tf = self._foface_array('tet', 'tri', len(fotets))
+
+        tf.eidx = np.arange(len(fotets))[...,None]
+        tf.fidx = np.arange(4)
+        tf.nodes = fotets[:,fnmap]
+
+        return [('tri', tf)]
 
     def _extract_faces_hex(self, fohexes):
         # Gmsh nodes offsets for each of the six faces
