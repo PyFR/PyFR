@@ -2,7 +2,7 @@
 
 from pyfr.bases.base import BaseBasis
 from pyfr.bases.tensorprod import HexBasis, QuadBasis
-from pyfr.bases.simplex import TriBasis
+from pyfr.bases.simplex import TetBasis, TriBasis
 from pyfr.util import subclass_map
 
 
