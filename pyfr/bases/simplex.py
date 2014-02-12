@@ -110,13 +110,13 @@ class TriBasis(BaseBasis):
     def fpts(self):
         # 1D points
         qrule = self._cfg.get('solver-interfaces-line', 'flux-pts')
-        pts1d = get_quadrule('line', qrule, self._order + 1).points
+        pts1d = np.array(get_quadrule('line', qrule, self._order + 1).points)
 
         # Flux points
         fpts = np.empty((3, self._order + 1, 2), dtype=np.object)
         fpts[0,:,0], fpts[0,:,1] = pts1d, -1
-        fpts[1,:,0], fpts[1,:,1] = pts1d[::-1], pts1d
-        fpts[2,:,0], fpts[2,:,1] = -1, pts1d[::-1]
+        fpts[1,:,0], fpts[1,:,1] = -pts1d, pts1d
+        fpts[2,:,0], fpts[2,:,1] = -1, pts1d
 
         return fpts.reshape(-1, 2)
 
@@ -155,7 +155,7 @@ class TriBasis(BaseBasis):
 
         # Parametric mappings (p,q) -> t for the three edges
         # (bottom, hypot, left)
-        substs = [{p: t, q: -1}, {p: -t, q: t}, {p: -1, q: -t}]
+        substs = [{p: t, q: -1}, {p: -t, q: t}, {p: -1, q: t}]
 
         for i, esub in enumerate(substs):
             for j, lj in enumerate(nb1d):
