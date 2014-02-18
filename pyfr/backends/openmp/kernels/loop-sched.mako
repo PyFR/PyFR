@@ -12,11 +12,13 @@ loop_sched_1d(int n, int align, int *b, int *e)
     int tid = omp_get_thread_num();
     int nth = omp_get_num_threads();
 
+    // Round up n to be a multiple of nth
+    int rn = n + nth - 1 - (n - 1) % nth;
+
     // Nominal tile size
-    int sz = n / nth;
+    int sz = rn / nth;
 
     // Handle alignment
-    sz += nth - 1 - (sz - 1) % nth;
     sz += align - 1 - (sz - 1) % align;
 
     // Assign the starting and ending index
@@ -43,12 +45,14 @@ loop_sched_2d(int nrow, int ncol, int colalign,
     int rowix = tid / ncolth;
     int colix = tid % ncolth;
 
+    // Round up ncol to be a multiple of ncolth
+    int rncol = ncol + ncolth - 1 - (ncol - 1) % ncolth;
+
     // Nominal tile size
     int ntilerow = nrow / nrowth;
-    int ntilecol = ncol / ncolth;
+    int ntilecol = rncol / ncolth;
 
-    // Handle alignment
-    ntilecol += ncolth - 1 - (ntilecol - 1) % ncolth;
+    // Handle column alignment
     ntilecol += colalign - 1 - (ntilecol - 1) % colalign;
 
     // Assign the starting and ending row to each thread
