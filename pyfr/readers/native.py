@@ -28,7 +28,7 @@ class PyFRBaseReader(Mapping):
         :rtype: list
 
         """
-        return [name for name in list(self) if name.startswith(prefix)]
+        return [name for name in self if name.startswith(prefix)]
 
     @property
     def spt_files(self):
@@ -128,7 +128,7 @@ class PyFRDirReader(PyFRBaseReader):
                 raise
 
     def __iter__(self):
-        return iter([name.rsplit('.')[0] for name in os.listdir(self.fname)])
+        return (name.rsplit('.')[0] for name in os.listdir(self.fname))
 
     def __len__(self):
         return len(os.listdir(self.fname))
