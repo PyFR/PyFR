@@ -3,6 +3,7 @@
 """Allows for interopability between .pyfr{m, s}-{file, dir} archive formats
 
 """
+import errno
 import os
 
 from abc import abstractmethod
@@ -117,7 +118,14 @@ class PyFRDirReader(PyFRBaseReader):
         self.fname = fname
 
     def __getitem__(self, aname):
-        return np.load(os.path.join(self.fname, aname + '.npy'), mmap_mode='r')
+        try:
+            return np.load(os.path.join(self.fname, aname + '.npy'),
+                           mmap_mode='r')
+        except IOError as e:
+            if e.errno == errno.ENOENT:
+                raise KeyError
+            else:
+                raise
 
     def __iter__(self):
         return iter([name.rsplit('.')[0] for name in os.listdir(self.fname)])
