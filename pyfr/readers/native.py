@@ -3,15 +3,13 @@
 """Allows for interopability between .pyfr{m, s}-{file, dir} archive formats
 
 """
+from collections import Mapping, OrderedDict
 import errno
 import os
 
-from abc import abstractmethod
-from collections import Mapping, defaultdict, OrderedDict
-
 import numpy as np
 
-from pyfr.bases import BaseBasis, HexBasis
+from pyfr.bases import BaseBasis
 from pyfr.util import lazyprop, subclass_map
 
 
