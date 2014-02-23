@@ -12,53 +12,7 @@ from pyfr.syutil import lagrange_basis
 from pyfr.util import ndrange, lazyprop
 
 
-def cart_prod_points(points, ndim):
-    """Performs a cartesian product extension of *points* into *ndim*
-
-    For idiosyncratic reason the counting order of indices is from
-    first to last, i.e, it is the first index that counts quickest,
-    followed by the second index and so on.
-
-    **Example**
-    >>> cart_prod_points([-1, 0, 1], 2)
-    array([[-1., -1.],
-       [ 0., -1.],
-       [ 1., -1.],
-       [-1.,  0.],
-       [ 0.,  0.],
-       [ 1.,  0.],
-       [-1.,  1.],
-       [ 0.,  1.],
-       [ 1.,  1.]])
-    """
-    npoints = len(points)
-
-    cprodpts = np.empty((npoints,)*ndim + (ndim,), dtype=np.object)
-    for i,ax in enumerate(np.ix_(*(points,)*ndim)):
-        # -i-1 ensures we count first-to-last
-        cprodpts[...,-i-1] = ax
-
-    # Compact into an array of ndim component tuples
-    return cprodpts.reshape(-1, ndim)
-
-
 def nodal_basis(points, dims, compact=True):
-    """Generates a nodal basis for *points* over *dims*
-
-    .. note::
-      This function adcfg the same first-to-last counting order as
-      :func:`cart_prod_points` with the first index varying quickest.
-
-    **Example**
-    >>> import sympy as sy
-    >>> nb = nodal_basis([-1, 1], sy.symbols('p q'))
-    >>> nb[0]
-    (-p/2 + 1/2)*(-q/2 + 1/2)
-    >>> nb[0].subs(dict(p=-1, q=-1))
-    1
-    >>> nb[0].subs(dict(p=1, q=-1))
-    0
-    """
     p = list(points)
 
     # Evaluate the basis function in terms of each dimension
@@ -131,8 +85,8 @@ class TensorProdBasis(object):
 
     @classmethod
     def std_ele(cls, sptord):
-        esqr = get_quadrule('line', 'equi-spaced', sptord + 1)
-        return cart_prod_points(esqr.points, cls.ndims)
+        n = (sptord + 1)**cls.ndims
+        return get_quadrule(cls.name, 'equi-spaced', n).points
 
     @lazyprop
     def _pts1d(self):
@@ -152,7 +106,8 @@ class TensorProdBasis(object):
 
     @lazyprop
     def upts(self):
-        return cart_prod_points(self._pts1d, self.ndims)
+        rule = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
+        return get_quadrule(self.name, rule, self.nupts).points
 
     @lazyprop
     def ubasis(self):
@@ -193,16 +148,13 @@ class TensorProdBasis(object):
         return [list(xrange(i*kn, (i + 1)*kn)) for i in xrange(2*self.ndims)]
 
     @lazyprop
-    def spts1d(self):
-        return get_quadrule('line', 'equi-spaced', self._nsptsord).points
-
-    @lazyprop
     def spts(self):
-        return cart_prod_points(self.spts1d, self.ndims)
+        return self.std_ele(self._nsptsord - 1)
 
     @lazyprop
     def sbasis(self):
-        return nodal_basis(self.spts1d, self._dims)
+        pts1d = get_quadrule('line', 'equi-spaced', self._nsptsord).points
+        return nodal_basis(pts1d, self._dims)
 
     @property
     def nupts(self):
@@ -248,11 +200,9 @@ class HexBasis(TensorProdBasis, BaseBasis):
 
     @lazyprop
     def fpts(self):
-        # Get the 1D points
-        pts1d = self._pts1d
-
-        # Perform a 2D extension to get the (p,r) points of face one
-        pts2d = cart_prod_points(pts1d, 2)
+        # Flux points for a single face
+        rule = self._cfg.get('solver-elements-hex', 'soln-pts')
+        pts2d = get_quadrule('quad', rule, self.nfpts // 6).points
 
         # 3D points are just (p,-1,r) for face one
         fonepts = np.empty((len(pts2d), 3), dtype=np.object)

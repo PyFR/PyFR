@@ -4,6 +4,8 @@ import re
 
 from pyfr.quadrules.base import BaseQuadRule, BaseTabulatedQuadRule
 from pyfr.quadrules.line import BaseLineQuadRule
+from pyfr.quadrules.hex import BaseHexQuadRule
+from pyfr.quadrules.quad import BaseQuadQuadRule
 from pyfr.quadrules.tet import BaseTetQuadRule
 from pyfr.quadrules.tri import BaseTriQuadRule
 from pyfr.util import subclass_map
@@ -12,6 +14,8 @@ from pyfr.util import subclass_map
 def get_quadrule(eletype, rule, npts):
     eletype_map = {
         'line': BaseLineQuadRule,
+        'hex': BaseHexQuadRule,
+        'quad': BaseQuadQuadRule,
         'tet': BaseTetQuadRule,
         'tri': BaseTriQuadRule
     }
