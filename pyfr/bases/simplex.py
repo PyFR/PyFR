@@ -177,8 +177,8 @@ class TetBasis(BaseBasis):
         super(TetBasis, self).__init__(*args, **kwargs)
 
         if self.nspts:
-            # Solve nspts = (n+1)*(n+2)*(n+3)/6 for n to get the order
-            roots = mp.polyroots([1, 6, 11, -6*self.nspts + 6])
+            # Solve nspts = n*(n+1)*(n+2)/6 for n to get the order
+            roots = mp.polyroots([1, 3, 2, -6*self.nspts])
             roots = [int(x) for x in roots if mp.isint(x) and x > 0]
 
             if roots:
@@ -222,12 +222,12 @@ class TetBasis(BaseBasis):
 
     @lazyprop
     def spts(self):
-        return self.std_ele(self._nsptsord)
+        return self.std_ele(self._nsptsord - 1)
 
     @lazyprop
     def sbasis(self):
         return nodal_basis(self.spts,
-                           self._orthonormal_basis(self._nsptsord + 1),
+                           self._orthonormal_basis(self._nsptsord),
                            dims=self._dims)
 
     @lazyprop
