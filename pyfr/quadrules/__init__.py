@@ -30,7 +30,7 @@ def get_quadrule(eletype, rule, npts):
     # Otherwise see if it looks like a tabulation
     elif 'PTS' in rule.upper():
         # Create a suitable subclass
-        rulecls = type(eletype, (BaseTabulatedQuadRule, basecls), {})
+        rulecls = type(eletype, (basecls, BaseTabulatedQuadRule), {})
 
         # Instantiate and validate
         r = rulecls(rule)

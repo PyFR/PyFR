@@ -14,5 +14,5 @@ class BaseTetQuadRule(BaseQuadRule):
     }
 
 
-class ShunnHamTetQuadRule(BaseStoredQuadRule, BaseTetQuadRule):
+class ShunnHamTetQuadRule(BaseTetQuadRule, BaseStoredQuadRule):
     name = 'shunn-ham'

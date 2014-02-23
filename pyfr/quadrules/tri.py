@@ -11,9 +11,9 @@ class BaseTriQuadRule(BaseQuadRule):
         '111': perm_orbit('ab', ['a', 'b', '1 - a - b'])}
 
 
-class AlphaOptTriQuadRule(BaseStoredQuadRule, BaseTriQuadRule):
+class AlphaOptTriQuadRule(BaseTriQuadRule, BaseStoredQuadRule):
     name = 'alpha-opt'
 
 
-class WilliamsShunnTriQuadRule(BaseStoredQuadRule, BaseTriQuadRule):
+class WilliamsShunnTriQuadRule(BaseTriQuadRule, BaseStoredQuadRule):
     name = 'williams-shunn'

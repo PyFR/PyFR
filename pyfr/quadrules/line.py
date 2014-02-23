@@ -13,7 +13,7 @@ class BaseLineQuadRule(BaseQuadRule):
     }
 
 
-class GaussLegendreQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
+class GaussLegendreQuadRule(BaseLineQuadRule, BaseAlgebraicQuadRule):
     name = 'gauss-legendre'
 
     def __init__(self, npts):
@@ -24,7 +24,7 @@ class GaussLegendreQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
         self.weights = [2/((1 - p*p)*mp.diff(lp, p)**2) for p in self.points]
 
 
-class GaussLegendreLobattoQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
+class GaussLegendreLobattoQuadRule(BaseLineQuadRule, BaseAlgebraicQuadRule):
     name = 'gauss-legendre-lobatto'
 
     def __init__(self, npts):
@@ -41,7 +41,7 @@ class GaussLegendreLobattoQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
         self.weights = [2/(npts*(npts - 1)*lp(p)**2) for p in self.points]
         
 
-class GaussChebyshevQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
+class GaussChebyshevQuadRule(BaseLineQuadRule, BaseAlgebraicQuadRule):
     name = 'gauss-chebyshev'
     
     def __init__(self, npts):
@@ -50,7 +50,7 @@ class GaussChebyshevQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
                        for i in xrange(npts, 0, -1)]
                        
 
-class GaussChebyshevLobattoQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
+class GaussChebyshevLobattoQuadRule(BaseLineQuadRule, BaseAlgebraicQuadRule):
     name = 'gauss-chebyshev-lobatto'
     
     def __init__(self, npts):
@@ -59,7 +59,7 @@ class GaussChebyshevLobattoQuadRule(BaseAlgebraicQuadRule, BaseLineQuadRule):
                        for i in xrange(npts, 0, -1)]
  
  
-class EquiSpacedQuadRule(BaseLineQuadRule):
+class EquiSpacedQuadRule(BaseLineQuadRule, BaseAlgebraicQuadRule):
     name = 'equi-spaced'
     
     def __init__(self, npts):
