@@ -144,9 +144,9 @@ class BaseBasis(object):
     def norm_fpts(self):
         pass
 
-    @abstractproperty
+    @lazyprop
     def spts(self):
-        pass
+        return self.std_ele(self._nsptsord - 1)
 
     @abstractproperty
     def sbasis(self):

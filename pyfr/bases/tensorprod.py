@@ -148,10 +148,6 @@ class TensorProdBasis(object):
         return [list(xrange(i*kn, (i + 1)*kn)) for i in xrange(2*self.ndims)]
 
     @lazyprop
-    def spts(self):
-        return self.std_ele(self._nsptsord - 1)
-
-    @lazyprop
     def sbasis(self):
         pts1d = get_quadrule('line', 'equi-spaced', self._nsptsord).points
         return nodal_basis(pts1d, self._dims)

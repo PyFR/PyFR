@@ -97,10 +97,6 @@ class TriBasis(BaseBasis):
                            dims=self._dims)
 
     @lazyprop
-    def spts(self):
-        return self.std_ele(self._nsptsord - 1)
-
-    @lazyprop
     def sbasis(self):
         return nodal_basis(self.spts,
                            self._orthonormal_basis(self._nsptsord),
@@ -219,10 +215,6 @@ class TetBasis(BaseBasis):
         return nodal_basis(self.upts,
                            self._orthonormal_basis(self._order + 1),
                            dims=self._dims)
-
-    @lazyprop
-    def spts(self):
-        return self.std_ele(self._nsptsord - 1)
 
     @lazyprop
     def sbasis(self):
