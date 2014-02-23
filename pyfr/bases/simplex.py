@@ -10,10 +10,6 @@ from pyfr.syutil import lagrange_basis, nodal_basis
 from pyfr.util import lazyprop, memoize
 
 
-def _bary_to_cart(b, tverts):
-    return [sum(bj*ej for bj, ej in zip(b, t)) for t in zip(*tverts)]
-
-
 def _orthonormal_basis_tri(order, p, q):
     a, b = 2*(1 + p)/(1 - q) - 1, q
 
@@ -79,12 +75,7 @@ class TriBasis(BaseBasis):
     @lazyprop
     def upts(self):
         qrule = self._cfg.get('solver-elements-tri', 'soln-pts')
-        bupts = get_quadrule('tri', qrule, self.nupts).points
-
-        # Convert to Cartesian
-        stdtri = self.std_ele(1)
-        return np.array([_bary_to_cart(b, stdtri) for b in bupts],
-                         dtype=np.object)
+        return get_quadrule('tri', qrule, self.nupts).points
 
     @property
     def nupts(self):
@@ -199,12 +190,7 @@ class TetBasis(BaseBasis):
     @lazyprop
     def upts(self):
         qrule = self._cfg.get('solver-elements-tet', 'soln-pts')
-        bupts = get_quadrule('tet', qrule, self.nupts).points
-
-        # Convert to Cartesian
-        stdtri = self.std_ele(1)
-        return np.array([_bary_to_cart(b, stdtri) for b in bupts],
-                         dtype=np.object)
+        return get_quadrule('tet', qrule, self.nupts).points
 
     @property
     def nupts(self):
@@ -224,15 +210,11 @@ class TetBasis(BaseBasis):
 
     @lazyprop
     def fpts(self):
-        # 2D (barycentric) points on a triangle
+        # 2D points on a triangle
         qrule = self._cfg.get('solver-interfaces-tri', 'flux-pts')
-
         npts2d = (self._order + 1)*(self._order + 2) // 2
-        pts2d = get_quadrule('tri', qrule, npts2d).points
 
-        # Convert to Cartesian
-        stdtri = TriBasis.std_ele(1)
-        s, t = np.array([_bary_to_cart(p, stdtri) for p in pts2d]).T
+        s, t = np.array(get_quadrule('tri', qrule, npts2d).points).T
 
         # Flux points
         fpts = np.empty((4, npts2d, 3), dtype=np.object)
@@ -274,13 +256,9 @@ class TetBasis(BaseBasis):
         obtet = self._orthonormal_basis(k)
         obtri = _orthonormal_basis_tri(k, s, t)
 
-        # Barycentric flux points inside of a (triangular) face
+        # Flux points inside of a (triangular) face
         qrule = self._cfg.get('solver-interfaces-tri', 'flux-pts')
         ptstri = get_quadrule('tri', qrule, k*(k + 1) // 2).points
-
-        # Convert these to Cartesian coordinates
-        stdtri = TriBasis.std_ele(1)
-        ptstri = [_bary_to_cart(b, stdtri) for b in ptstri]
 
         # Obtain a nodal basis inside of this triangular face
         nbtri = nodal_basis(ptstri, obtri, dims=(s, t))
