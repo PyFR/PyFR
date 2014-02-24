@@ -24,53 +24,11 @@ def nodal_basis(points, dims, compact=True):
     return cpbasis if compact else cpbasis.reshape((len(p),)*len(dims))
 
 
-_quad_map_rots_np = np.array([[[ 1,  0], [ 0,  1]],
-                              [[ 0,  1], [-1,  0]],
-                              [[-1,  0], [ 0, -1]],
-                              [[ 0, -1], [ 1,  0]]])
-
-
-def quad_map_edge(fpts):
-    mfpts = np.empty((4,) + fpts.shape, dtype=fpts.dtype)
-
-    for i, frot in enumerate(_quad_map_rots_np):
-        mfpts[i,...] = np.dot(fpts, frot)
-
-    return mfpts
-
-
-# Cube map face rotation scheme to go from face 1 -> 0..5
-_cube_map_rots = np.array([
-    [[-1,  0,  0], [ 0,  0,  1], [ 0,  1,  0]],   # 1 -> 0
-    [[ 1,  0,  0], [ 0,  1,  0], [ 0,  0,  1]],   # 1 -> 1 (ident)
-    [[ 0,  1,  0], [-1,  0,  0], [ 0,  0,  1]],   # 1 -> 2
-    [[-1,  0,  0], [ 0, -1,  0], [ 0,  0,  1]],   # 1 -> 3
-    [[ 0, -1,  0], [ 1,  0,  0], [ 0,  0,  1]],   # 1 -> 4
-    [[ 1,  0,  0], [ 0,  0, -1], [ 0,  1,  0]]])  # 1 -> 5
-
-
-def quad_map_face(fpts):
-    """Given a matrix of points (p,q,r) corresponding to face one of
-    `the cube' this method maps these points onto the remaining faces
-
-    On a cube parameterized by (p,q,r) -> (-1,-1,-1) × (1,1,1) face one
-    is defined by (-1,-1,-1) × (1,-1,1)."""
-    mfpts = np.empty((6,) + fpts.shape, dtype=fpts.dtype)
-
-    for i, frot in enumerate(_cube_map_rots):
-        mfpts[i,...] = np.dot(fpts, frot)
-
-    return mfpts
-
-
 class TensorProdBasis(object):
     # List of face numbers paired according to their normal dimension
     # e.g, [(a, b), ...] where a, b are the faces whose normal points
     # in -p and p, respectively
     _fpairs = None
-
-    # List of opposite face numbers
-    _flipb = None
 
     def __init__(self, *args, **kwargs):
         super(TensorProdBasis, self).__init__(*args, **kwargs)
@@ -136,10 +94,6 @@ class TensorProdBasis(object):
             fbasis[fl,...] *= diffg.subs(_x, -sym)
             fbasis[fr,...] *= diffg.subs(_x, sym)
 
-        # Some faces have flux points that count backwards; for
-        # these faces we must reverse the basis
-        fbasis[self._flipb] = fbasis[self._flipb,...,::-1]
-
         return fbasis.ravel()
 
     @property
@@ -162,29 +116,30 @@ class QuadBasis(TensorProdBasis, BaseBasis):
     ndims = 2
 
     _fpairs = [(3, 1), (0, 2)]
-    _flipb = [2, 3]
 
     @lazyprop
     def fpts(self):
         # Get the 1D points
         pts1d = self._pts1d
 
-        # Edge zero has points (q,-1)
-        ezeropts = np.empty((len(pts1d), 2), dtype=np.object)
-        ezeropts[:,0] = pts1d
-        ezeropts[:,1] = -1
+        # Project onto the edges
+        fpts = np.empty((4, len(pts1d), 2), dtype=np.object)
+        fpts[0,:,0], fpts[0,:,1] = pts1d, -1
+        fpts[1,:,0], fpts[1,:,1] = 1, pts1d
+        fpts[2,:,0], fpts[2,:,1] = pts1d, 1
+        fpts[3,:,0], fpts[3,:,1] = -1, pts1d
 
-        # Quad map edge zero to get the full set
-        return quad_map_edge(ezeropts).reshape(-1, 2)
+        return fpts.reshape(-1, 2)
 
     @lazyprop
     def norm_fpts(self):
-        # Normals for edge zero are (0,-1)
-        ezeronorms = np.zeros((self._order + 1, 2), dtype=np.int)
-        ezeronorms[:,1] = -1
+        nfpts = np.empty((4, self._order + 1, 2), dtype=np.int)
+        nfpts[0,:,:] = (0, -1)
+        nfpts[1,:,:] = (1, 0)
+        nfpts[2,:,:] = (0, 1)
+        nfpts[3,:,:] = (-1, 0)
 
-        # Edge map
-        return quad_map_edge(ezeronorms).reshape(-1, 2)
+        return nfpts.reshape(-1, 2)
 
 
 class HexBasis(TensorProdBasis, BaseBasis):
@@ -192,27 +147,32 @@ class HexBasis(TensorProdBasis, BaseBasis):
     ndims = 3
 
     _fpairs = [(4, 2), (1, 3), (0, 5)]
-    _flipb = [0, 3, 4]
 
     @lazyprop
     def fpts(self):
         # Flux points for a single face
         rule = self._cfg.get('solver-elements-hex', 'soln-pts')
-        pts2d = get_quadrule('quad', rule, self.nfpts // 6).points
+        s, t = np.array(get_quadrule('quad', rule, self.nfpts // 6).points).T
 
-        # 3D points are just (p,-1,r) for face one
-        fonepts = np.empty((len(pts2d), 3), dtype=np.object)
-        fonepts[...,(0,2)] = pts2d
-        fonepts[...,1] = -1
+        # Flux points
+        fpts = np.empty((6, self.nfpts // 6, 3), dtype=np.object)
+        fpts[0,:,0], fpts[0,:,1], fpts[0,:,2] = s, t, -1
+        fpts[1,:,0], fpts[1,:,1], fpts[1,:,2] = s, -1, t
+        fpts[2,:,0], fpts[2,:,1], fpts[2,:,2] = 1, s, t
+        fpts[3,:,0], fpts[3,:,1], fpts[3,:,2] = s, 1, t
+        fpts[4,:,0], fpts[4,:,1], fpts[4,:,2] = -1, s, t
+        fpts[5,:,0], fpts[5,:,1], fpts[5,:,2] = s, t, 1
 
-        # Cube map face one to get faces zero through five
-        return quad_map_face(fonepts).reshape(-1, 3)
+        return fpts.reshape(-1, 3)
 
     @lazyprop
     def norm_fpts(self):
-        # Normals for face one are (0,-1,0)
-        fonenorms = np.zeros([self._order + 1]*2 + [3], dtype=np.int)
-        fonenorms[...,1] = -1
+        nfpts = np.empty((6, self.nfpts // 6, 3), dtype=np.int)
+        nfpts[0,:,:] = (0, 0, -1)
+        nfpts[1,:,:] = (0, -1, 0)
+        nfpts[2,:,:] = (1, 0, 0)
+        nfpts[3,:,:] = (0, 1, 0)
+        nfpts[4,:,:] = (-1, 0, 0)
+        nfpts[5,:,:] = (0, 0, 1)
 
-        # Cube map to get the remaining face normals
-        return quad_map_face(fonenorms).reshape(-1, 3)
+        return nfpts.reshape(-1, 3)
