@@ -4,6 +4,7 @@ import itertools as it
 
 import numpy as np
 import sympy as sy
+from sympy.mpmath import mp
 
 from pyfr.bases.base import BaseBasis
 from pyfr.quadrules import get_quadrule
@@ -33,12 +34,14 @@ class TensorProdBasis(object):
         super(TensorProdBasis, self).__init__(*args, **kwargs)
 
         if self.nspts:
-            # Root the number of shape points to get the # in each dim
-            self._nsptsord = sy.S(self.nspts)**(sy.S(1)/self.ndims)
+            # Obtain the shape point order
+            nsptsord = mp.nthroot(self.nspts, self.ndims)
 
-            if not self._nsptsord.is_Number:
+            if not mp.isint(nsptsord):
                 raise ValueError('Invalid number of shape points for {} dims'
                                  .format(self.ndims))
+
+            self._nsptsord = int(nsptsord)
 
     @classmethod
     def std_ele(cls, sptord):
