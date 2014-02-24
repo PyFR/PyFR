@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractproperty
 import itertools as it
 
 import numpy as np
@@ -9,7 +8,7 @@ import sympy as sy
 from pyfr.bases.base import BaseBasis
 from pyfr.quadrules import get_quadrule
 from pyfr.syutil import lagrange_basis
-from pyfr.util import ndrange, lazyprop
+from pyfr.util import lazyprop
 
 
 def nodal_basis(points, dims, compact=True):
@@ -60,7 +59,7 @@ class TensorProdBasis(object):
         eta_k = sy.S(etacommon.get(eta, eta), locals=dict(k=k))
 
         lkm1, lk, lkp1 = [sy.legendre_poly(m, sym) for m in [k - 1, k, k + 1]]
-        return (sy.S(1)/2 * (lk + (eta_k*lkm1 + lkp1)/(1 + eta_k)))
+        return sy.S(1)/2 * (lk + (eta_k*lkm1 + lkp1)/(1 + eta_k))
 
     @lazyprop
     def upts(self):
