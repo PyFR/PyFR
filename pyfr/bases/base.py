@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 import numpy as np
 
+from pyfr.quadrules import get_quadrule
 from pyfr.syutil import lambdify_jac_mpf, lambdify_mpf
 from pyfr.util import lazyprop, ndrange
 
@@ -103,9 +104,10 @@ class BaseBasis(object):
     def nupts(self):
         pass
 
-    @abstractproperty
+    @lazyprop
     def upts(self):
-        pass
+        rname = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
+        return get_quadrule(self.name, rname, self.nupts).points
 
     @abstractproperty
     def ubasis(self):

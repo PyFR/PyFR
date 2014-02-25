@@ -72,11 +72,6 @@ class TriBasis(BaseBasis):
     def _orthonormal_basis(self, ptsord):
         return _orthonormal_basis_tri(ptsord, *self._dims)
 
-    @lazyprop
-    def upts(self):
-        qrule = self._cfg.get('solver-elements-tri', 'soln-pts')
-        return get_quadrule('tri', qrule, self.nupts).points
-
     @property
     def nupts(self):
         return (self._order + 1)*(self._order + 2) // 2
@@ -186,11 +181,6 @@ class TetBasis(BaseBasis):
     @memoize
     def _orthonormal_basis(self, ptsord):
         return _orthonormal_basis_tet(ptsord, *self._dims)
-
-    @lazyprop
-    def upts(self):
-        qrule = self._cfg.get('solver-elements-tet', 'soln-pts')
-        return get_quadrule('tet', qrule, self.nupts).points
 
     @property
     def nupts(self):

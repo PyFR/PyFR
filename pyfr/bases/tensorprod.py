@@ -65,11 +65,6 @@ class TensorProdBasis(object):
         return sy.S(1)/2 * (lk + (eta_k*lkm1 + lkp1)/(1 + eta_k))
 
     @lazyprop
-    def upts(self):
-        rule = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
-        return get_quadrule(self.name, rule, self.nupts).points
-
-    @lazyprop
     def ubasis(self):
         return nodal_basis(self._pts1d, self._dims)
 
