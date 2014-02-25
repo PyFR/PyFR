@@ -60,7 +60,7 @@ package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
-    'pyfr.quadrules': ['tri/*.txt'],
+    'pyfr.quadrules': ['tet/*.txt', 'tri/*.txt'],
     'pyfr.solvers.baseadvec.kernels': ['*.mako'],
     'pyfr.solvers.baseadvecdiff.kernels': ['*.mako'],
     'pyfr.solvers.euler.kernels': ['*.mako'],
