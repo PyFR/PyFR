@@ -98,12 +98,10 @@ class TriBasis(BaseBasis):
 
     @lazyprop
     def norm_fpts(self):
-        nfpts = np.empty((3, self._order + 1, 2), dtype=np.object)
-        nfpts[0,:,:] = (0, -1)
-        nfpts[1,:,:] = (1/mp.sqrt(2), 1/mp.sqrt(2))
-        nfpts[2,:,:] = (-1, 0)
+        # Normal vectors for each edge
+        norms = [(0, -1), (1/mp.sqrt(2), 1/mp.sqrt(2)), (-1, 0)]
 
-        return nfpts.reshape(-1, 2)
+        return np.vstack([[en]*(self.nfpts // 3) for en in norms])
 
     @property
     def facefpts(self):
@@ -202,15 +200,11 @@ class TetBasis(BaseBasis):
 
     @lazyprop
     def norm_fpts(self):
-        n = (self._order + 1)*(self._order + 2) // 2
+        # Normal vectors for each face
+        norms = [(0, 0, -1), (0, -1, 0), (-1, 0, 0),
+                 (1/mp.sqrt(3), 1/mp.sqrt(3), 1/mp.sqrt(3))]
 
-        nfpts = np.empty((4, n, 3), dtype=np.object)
-        nfpts[0,:,:] = (0, 0, -1)
-        nfpts[1,:,:] = (0, -1, 0)
-        nfpts[2,:,:] = (-1, 0, 0)
-        nfpts[3,:,:] = (1/mp.sqrt(3), 1/mp.sqrt(3), 1/mp.sqrt(3))
-
-        return nfpts.reshape(-1, 3)
+        return np.vstack([[fn]*(self.nfpts // 4) for fn in norms])
 
     @property
     def facefpts(self):
