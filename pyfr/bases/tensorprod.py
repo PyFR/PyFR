@@ -4,7 +4,6 @@ import itertools as it
 
 import numpy as np
 import sympy as sy
-from sympy.mpmath import mp
 
 from pyfr.bases.base import BaseBasis
 from pyfr.quadrules import get_quadrule
@@ -29,19 +28,6 @@ class TensorProdBasis(object):
     # e.g, [(a, b), ...] where a, b are the faces whose normal points
     # in -p and p, respectively
     _fpairs = None
-
-    def __init__(self, *args, **kwargs):
-        super(TensorProdBasis, self).__init__(*args, **kwargs)
-
-        if self.nspts:
-            # Obtain the shape point order
-            nsptsord = mp.nthroot(self.nspts, self.ndims)
-
-            if not mp.isint(nsptsord):
-                raise ValueError('Invalid number of shape points for {} dims'
-                                 .format(self.ndims))
-
-            self._nsptsord = int(nsptsord)
 
     @classmethod
     def std_ele(cls, sptord):
@@ -112,6 +98,10 @@ class QuadBasis(TensorProdBasis, BaseBasis):
     name = 'quad'
     ndims = 2
 
+    # nspts = n^2
+    nspts_coeffs = [1, 0, 0]
+    nspts_cdenom = 1
+
     _fpairs = [(3, 1), (0, 2)]
 
     @lazyprop
@@ -142,6 +132,10 @@ class QuadBasis(TensorProdBasis, BaseBasis):
 class HexBasis(TensorProdBasis, BaseBasis):
     name = 'hex'
     ndims = 3
+
+    # nspts = n^3
+    nspts_coeffs = [1, 0, 0, 0]
+    nspts_cdenom = 1
 
     _fpairs = [(4, 2), (1, 3), (0, 5)]
 

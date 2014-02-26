@@ -2,6 +2,7 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
+from sympy.mpmath import mp
 import numpy as np
 
 from pyfr.quadrules import get_quadrule
@@ -15,11 +16,17 @@ class BaseBasis(object):
     name = None
     ndims = -1
 
+    nspts_coeffs = None
+    nspts_cdenom = None
+
     def __init__(self, dims, nspts, cfg):
         self._dims = dims
         self._nspts = nspts
         self._cfg = cfg
         self._order = cfg.getint('solver', 'order')
+
+        if nspts:
+            self._nsptsord = self.order_from_nspts(nspts)
 
         if self.ndims != len(dims):
             raise ValueError('Invalid dimension symbols')
@@ -27,6 +34,25 @@ class BaseBasis(object):
     @abstractmethod
     def std_ele(sptord):
         pass
+
+    @classmethod
+    def nspts_from_order(cls, sptord):
+        return int(mp.polyval(cls.nspts_coeffs, sptord)) / cls.nspts_cdenom
+
+    @classmethod
+    def order_from_nspts(cls, nspts):
+        # Obtain the coefficients for the poly: P(n) - nspts = 0
+        coeffs = list(cls.nspts_coeffs)
+        coeffs[-1] -= cls.nspts_cdenom*nspts
+
+        # Solve to obtain the order (a positive integer)
+        roots = mp.polyroots(coeffs)
+        roots = [int(x) for x in roots if mp.isint(x) and x > 0]
+
+        if roots:
+            return roots[0]
+        else:
+            raise ValueError('Invalid number of shape points')
 
     @lazyprop
     def m0(self):

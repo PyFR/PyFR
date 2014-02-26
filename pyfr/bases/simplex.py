@@ -49,15 +49,9 @@ class TriBasis(BaseBasis):
     name = 'tri'
     ndims = 2
 
-    def __init__(self, *args, **kwargs):
-        super(TriBasis, self).__init__(*args, **kwargs)
-
-        if self.nspts:
-            # Solve nspts = n*(n+1)/2 for n to get the shape point order
-            self._nsptsord = (sy.sqrt(8*self.nspts + 1) - 1) / 2
-
-            if not self._nsptsord.is_Number:
-                raise ValueError('Invalid number of shape points')
+    # nspts = n*(n + 1)/2
+    nspts_coeffs = [1, 1, 0]
+    nspts_cdenom = 2
 
     @classmethod
     def std_ele(cls, sptord):
@@ -155,18 +149,9 @@ class TetBasis(BaseBasis):
     name = 'tet'
     ndims = 3
 
-    def __init__(self, *args, **kwargs):
-        super(TetBasis, self).__init__(*args, **kwargs)
-
-        if self.nspts:
-            # Solve nspts = n*(n+1)*(n+2)/6 for n to get the order
-            roots = mp.polyroots([1, 3, 2, -6*self.nspts])
-            roots = [int(x) for x in roots if mp.isint(x) and x > 0]
-
-            if roots:
-                self._nsptsord = roots[0]
-            else:
-                raise ValueError('Invalid number of shape points')
+    # nspts = n*(n + 1)*(n + 2)/6
+    nspts_coeffs = [1, 3, 2, 0]
+    nspts_cdenom = 6
 
     @classmethod
     def std_ele(cls, sptord):
