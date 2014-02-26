@@ -88,13 +88,10 @@ class TriBasis(BaseBasis):
         qrule = self._cfg.get('solver-interfaces-line', 'flux-pts')
         pts1d = np.array(get_quadrule('line', qrule, self._order + 1).points)
 
-        # Flux points
-        fpts = np.empty((3, self._order + 1, 2), dtype=np.object)
-        fpts[0,:,0], fpts[0,:,1] = pts1d, -1
-        fpts[1,:,0], fpts[1,:,1] = -pts1d, pts1d
-        fpts[2,:,0], fpts[2,:,1] = -1, pts1d
+        # Project
+        proj = [(pts1d, -1), (-pts1d, pts1d), (-1, pts1d)]
 
-        return fpts.reshape(-1, 2)
+        return np.vstack([list(np.broadcast(*p)) for p in proj])
 
     @lazyprop
     def norm_fpts(self):
@@ -189,14 +186,10 @@ class TetBasis(BaseBasis):
 
         s, t = np.array(get_quadrule('tri', qrule, npts2d).points).T
 
-        # Flux points
-        fpts = np.empty((4, npts2d, 3), dtype=np.object)
-        fpts[0,:,0], fpts[0,:,1], fpts[0,:,2] = s, t, -1
-        fpts[1,:,0], fpts[1,:,1], fpts[1,:,2] = s, -1, t
-        fpts[2,:,0], fpts[2,:,1], fpts[2,:,2] = -1, t, s
-        fpts[3,:,0], fpts[3,:,1], fpts[3,:,2] = s, t, -s - t - 1
+        # Project
+        proj = [(s, t, -1), (s, -1, t), (-1, t, s), (s, t, -s -t -1)]
 
-        return fpts.reshape(-1, 3)
+        return np.vstack([list(np.broadcast(*p)) for p in proj])
 
     @lazyprop
     def norm_fpts(self):

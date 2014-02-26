@@ -110,13 +110,9 @@ class QuadBasis(TensorProdBasis, BaseBasis):
         pts1d = self._pts1d
 
         # Project onto the edges
-        fpts = np.empty((4, len(pts1d), 2), dtype=np.object)
-        fpts[0,:,0], fpts[0,:,1] = pts1d, -1
-        fpts[1,:,0], fpts[1,:,1] = 1, pts1d
-        fpts[2,:,0], fpts[2,:,1] = pts1d, 1
-        fpts[3,:,0], fpts[3,:,1] = -1, pts1d
+        proj = [(pts1d, -1), (1, pts1d), (pts1d, 1), (-1, pts1d)]
 
-        return fpts.reshape(-1, 2)
+        return np.vstack([list(np.broadcast(*p)) for p in proj])
 
     @lazyprop
     def norm_fpts(self):
@@ -142,16 +138,11 @@ class HexBasis(TensorProdBasis, BaseBasis):
         rule = self._cfg.get('solver-elements-hex', 'soln-pts')
         s, t = np.array(get_quadrule('quad', rule, self.nfpts // 6).points).T
 
-        # Flux points
-        fpts = np.empty((6, self.nfpts // 6, 3), dtype=np.object)
-        fpts[0,:,0], fpts[0,:,1], fpts[0,:,2] = s, t, -1
-        fpts[1,:,0], fpts[1,:,1], fpts[1,:,2] = s, -1, t
-        fpts[2,:,0], fpts[2,:,1], fpts[2,:,2] = 1, s, t
-        fpts[3,:,0], fpts[3,:,1], fpts[3,:,2] = s, 1, t
-        fpts[4,:,0], fpts[4,:,1], fpts[4,:,2] = -1, s, t
-        fpts[5,:,0], fpts[5,:,1], fpts[5,:,2] = s, t, 1
+        # Project
+        proj = [(s, t, -1), (s, -1, t), (1, s, t),
+                (s, 1, t), (-1, s, t), (s, t, 1)]
 
-        return fpts.reshape(-1, 3)
+        return np.vstack([list(np.broadcast(*p)) for p in proj])
 
     @lazyprop
     def norm_fpts(self):
