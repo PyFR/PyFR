@@ -24,10 +24,6 @@ class BaseBasis(object):
         if self.ndims != len(dims):
             raise ValueError('Invalid dimension symbols')
 
-    @property
-    def dims(self):
-        return self._dims
-
     @abstractmethod
     def std_ele(sptord):
         pass
