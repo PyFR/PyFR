@@ -11,17 +11,17 @@ from pyfr.inifile import Inifile
 
 
 def test_hex_gleg_ord3_csd():
-    # Config for a third order spectral difference scheme
+    # Config for a third order DG scheme
     cfg = Inifile()
     cfg.set('solver', 'order', '3')
     cfg.set('solver-elements-hex', 'soln-pts', 'gauss-legendre')
-    cfg.set('solver-elements-hex', 'vcjh-eta', 'sd')
+    cfg.set('solver-elements-hex', 'vcjh-eta', 'dg')
 
     # Generate the hexes
     hb = HexBasis(sy.symbols('p q r'), None, cfg)
 
     # Load and import the reference values
-    fobj = BytesIO(pkgutil.get_data(__name__, 'hex-gleg-ord3-csd.npz'))
+    fobj = BytesIO(pkgutil.get_data(__name__, 'hex-gleg-ord3.npz'))
     refm = np.load(fobj)
 
     assert np.allclose(refm['m0'], np.asanyarray(hb.m0, dtype=np.float))
