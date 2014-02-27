@@ -93,12 +93,9 @@ class TriBasis(BaseBasis):
 
         return np.vstack([list(np.broadcast(*p)) for p in proj])
 
-    @lazyprop
-    def norm_fpts(self):
-        # Normal vectors for each edge
-        norms = [(0, -1), (1/mp.sqrt(2), 1/mp.sqrt(2)), (-1, 0)]
-
-        return np.vstack([[en]*(self.nfpts // 3) for en in norms])
+    @property
+    def facenorms(self):
+        return [(0, -1), (1 / mp.sqrt(2), 1 / mp.sqrt(2)), (-1, 0)]
 
     @property
     def facefpts(self):
@@ -191,13 +188,10 @@ class TetBasis(BaseBasis):
 
         return np.vstack([list(np.broadcast(*p)) for p in proj])
 
-    @lazyprop
-    def norm_fpts(self):
-        # Normal vectors for each face
-        norms = [(0, 0, -1), (0, -1, 0), (-1, 0, 0),
-                 (1/mp.sqrt(3), 1/mp.sqrt(3), 1/mp.sqrt(3))]
-
-        return np.vstack([[fn]*(self.nfpts // 4) for fn in norms])
+    @property
+    def facenorms(self):
+        c = 1 / mp.sqrt(3)
+        return [(0, 0, -1), (0, -1, 0), (-1, 0, 0), (c, c, c)]
 
     @property
     def facefpts(self):

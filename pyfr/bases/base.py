@@ -165,8 +165,13 @@ class BaseBasis(object):
         return self._eval_lbasis_at(self._fbasis_lamb, pts)
 
     @abstractproperty
-    def norm_fpts(self):
+    def facenorms(self):
         pass
+
+    @lazyprop
+    def norm_fpts(self):
+        fnorms = self.facenorms
+        return np.vstack([[fn]*n for fn, n in zip(fnorms, self.nfacefpts)])
 
     @lazyprop
     def spts(self):

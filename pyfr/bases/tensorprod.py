@@ -114,12 +114,9 @@ class QuadBasis(TensorProdBasis, BaseBasis):
 
         return np.vstack([list(np.broadcast(*p)) for p in proj])
 
-    @lazyprop
-    def norm_fpts(self):
-        # Normal vectors for each edge
-        norms = [(0, -1), (1, 0), (0, 1), (-1, 0)]
-
-        return np.vstack([[en]*(self.nfpts // 4) for en in norms])
+    @property
+    def facenorms(self):
+        return [(0, -1), (1, 0), (0, 1), (-1, 0)]
 
 
 class HexBasis(TensorProdBasis, BaseBasis):
@@ -144,10 +141,7 @@ class HexBasis(TensorProdBasis, BaseBasis):
 
         return np.vstack([list(np.broadcast(*p)) for p in proj])
 
-    @lazyprop
-    def norm_fpts(self):
-        # Normal vectors for each face
-        norms = [(0, 0, -1), (0, -1, 0), (1, 0, 0),
-                 (0, 1, 0), (-1, 0, 0), (0, 0, 1)]
-
-        return np.vstack([[fn]*(self.nfpts // 6) for fn in norms])
+    @property
+    def facenorms(self):
+        return [(0, 0, -1), (0, -1, 0), (1, 0, 0),
+                (0, 1, 0), (-1, 0, 0), (0, 0, 1)]
