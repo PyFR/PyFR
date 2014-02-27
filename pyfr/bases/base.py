@@ -171,7 +171,7 @@ class BaseBasis(object):
     @lazyprop
     def norm_fpts(self):
         fnorms = self.facenorms
-        return np.vstack([[fn]*n for fn, n in zip(fnorms, self.nfacefpts)])
+        return np.vstack([fn]*n for fn, n in zip(fnorms, self.nfacefpts))
 
     @lazyprop
     def spts(self):

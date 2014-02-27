@@ -112,7 +112,7 @@ class QuadBasis(TensorProdBasis, BaseBasis):
         # Project onto the edges
         proj = [(pts1d, -1), (1, pts1d), (pts1d, 1), (-1, pts1d)]
 
-        return np.vstack([list(np.broadcast(*p)) for p in proj])
+        return np.vstack(list(np.broadcast(*p)) for p in proj)
 
     @property
     def facenorms(self):
@@ -139,7 +139,7 @@ class HexBasis(TensorProdBasis, BaseBasis):
         proj = [(s, t, -1), (s, -1, t), (1, s, t),
                 (s, 1, t), (-1, s, t), (s, t, 1)]
 
-        return np.vstack([list(np.broadcast(*p)) for p in proj])
+        return np.vstack(list(np.broadcast(*p)) for p in proj)
 
     @property
     def facenorms(self):

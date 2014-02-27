@@ -91,7 +91,7 @@ class TriBasis(BaseBasis):
         # Project
         proj = [(pts1d, -1), (-pts1d, pts1d), (-1, pts1d)]
 
-        return np.vstack([list(np.broadcast(*p)) for p in proj])
+        return np.vstack(list(np.broadcast(*p)) for p in proj)
 
     @property
     def facenorms(self):
@@ -186,7 +186,7 @@ class TetBasis(BaseBasis):
         # Project
         proj = [(s, t, -1), (s, -1, t), (-1, t, s), (s, t, -s -t -1)]
 
-        return np.vstack([list(np.broadcast(*p)) for p in proj])
+        return np.vstack(list(np.broadcast(*p)) for p in proj)
 
     @property
     def facenorms(self):
