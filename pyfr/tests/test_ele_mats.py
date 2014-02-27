@@ -10,10 +10,11 @@ from pyfr.bases.tensorprod import HexBasis
 from pyfr.inifile import Inifile
 
 
-def test_hex_gleg_ord3_csd():
+def test_hex_gleg_ord3():
     # Config for a third order DG scheme
     cfg = Inifile()
     cfg.set('solver', 'order', '3')
+    cfg.set('solver-interfaces-quad', 'flux-pts', 'gauss-legendre')
     cfg.set('solver-elements-hex', 'soln-pts', 'gauss-legendre')
     cfg.set('solver-elements-hex', 'vcjh-eta', 'dg')
 
