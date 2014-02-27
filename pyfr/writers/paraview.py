@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 
 """Converts .pyfr[m, s] files to a Paraview VTK UnstructuredGrid File"""
-from copy import copy
-
 import numpy as np
 import sympy as sy
 
@@ -77,8 +75,8 @@ class ParaviewWriter(BaseWriter):
         for i, mk in enumerate(self.mesh_inf.iterkeys()):
             sk = self.soln_inf.keys()[i]
 
-            _write_vtu_data(self.args, self.outf, copy(self.cfg),
-                            self.mesh[mk], self.mesh_inf[mk], self.soln[sk],
+            _write_vtu_data(self.args, self.outf, self.cfg, self.mesh[mk],
+                            self.mesh_inf[mk], self.soln[sk],
                             self.soln_inf[sk])
 
         # Write .vtu file footer
