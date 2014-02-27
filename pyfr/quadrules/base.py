@@ -7,6 +7,9 @@ import pkgutil
 import re
 
 from sympy.mpmath import mp
+import numpy as np
+
+from pyfr.util import lazyprop
 
 
 def perm_orbit(args, coords):
@@ -31,6 +34,14 @@ class BaseQuadRule(object):
     @abstractmethod
     def __init__(self):
         pass
+
+    @lazyprop
+    def np_points(self):
+        return np.asanyarray(self.points, dtype=np.float)
+
+    @lazyprop
+    def np_weights(self):
+        return np.asanyarray(self.weights, dtype=np.float)
 
 
 class BaseAlgebraicQuadRule(BaseQuadRule):

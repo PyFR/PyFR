@@ -86,7 +86,7 @@ class TriBasis(BaseBasis):
     def fpts(self):
         # 1D points
         qrule = self._cfg.get('solver-interfaces-line', 'flux-pts')
-        pts1d = np.array(get_quadrule('line', qrule, self._order + 1).points)
+        pts1d = get_quadrule('line', qrule, self._order + 1).np_points
 
         # Project
         proj = [(pts1d, -1), (-pts1d, pts1d), (-1, pts1d)]
@@ -181,7 +181,7 @@ class TetBasis(BaseBasis):
         qrule = self._cfg.get('solver-interfaces-tri', 'flux-pts')
         npts2d = (self._order + 1)*(self._order + 2) // 2
 
-        s, t = np.array(get_quadrule('tri', qrule, npts2d).points).T
+        s, t = get_quadrule('tri', qrule, npts2d).np_points.T
 
         # Project
         proj = [(s, t, -1), (s, -1, t), (-1, t, s), (s, t, -s -t -1)]

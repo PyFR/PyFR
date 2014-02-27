@@ -133,7 +133,7 @@ class HexBasis(TensorProdBasis, BaseBasis):
     def fpts(self):
         # Flux points for a single face
         rule = self._cfg.get('solver-elements-hex', 'soln-pts')
-        s, t = np.array(get_quadrule('quad', rule, self.nfpts // 6).points).T
+        s, t = get_quadrule('quad', rule, self.nfpts // 6).np_points.T
 
         # Project
         proj = [(s, t, -1), (s, -1, t), (1, s, t),
