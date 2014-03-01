@@ -58,16 +58,16 @@ class BaseAdvectionElements(BaseElements):
     def _get_scal_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [[fpidx, eidx] for fpidx in self._srtd_face_fpts[eidx,fidx]]
-        cstri = [[mat.leadsubdim]]*nfp
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[eidx,fidx]]
+        cstri = [(mat.leadsubdim,)]*nfp
 
         return [mat]*nfp, rcmap, cstri
 
     def _get_vect_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [[fpidx, eidx] for fpidx in self._srtd_face_fpts[eidx,fidx]]
-        rcstri = [[self.nfpts, mat.leadsubdim]]*nfp
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[eidx,fidx]]
+        rcstri = [(self.nfpts, mat.leadsubdim)]*nfp
 
         return [mat]*nfp, rcmap, rcstri
 
