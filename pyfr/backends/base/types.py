@@ -113,6 +113,8 @@ class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
     def __init__(self, backend, mats, initbank, tags):
+        mats = list(mats)
+
         # Ensure all matrices have the same traits
         if any(m.traits != mats[0].traits for m in mats[1:]):
             raise ValueError('Matrices in a bank must be homogeneous')
