@@ -4,13 +4,9 @@ from pyfr.solvers.baseadvec import BaseAdvectionSystem
 
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
-    def _gen_kernels(self):
-        super(BaseAdvectionDiffusionSystem, self)._gen_kernels()
-
-        eles = self._eles
-        int_inters = self._int_inters
-        mpi_inters = self._mpi_inters
-        bc_inters = self._bc_inters
+    def _gen_kernels(self, eles, int_inters, mpi_inters, bc_inters):
+        base = super(BaseAdvectionDiffusionSystem, self)
+        base._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
 
         # Element-local kernels
         self._tgradpcoru_upts_kerns = eles.get_tgradpcoru_upts_kern()

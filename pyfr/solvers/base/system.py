@@ -29,31 +29,41 @@ class BaseSystem(object):
         self._nreg = nreg
 
         # Load the elements
-        self._load_eles(rallocs, mesh, initsoln)
+        eles, elemap = self._load_eles(rallocs, mesh, initsoln)
         backend.commit()
 
+        # Get the banks, types, num DOFs and shapes of the elements
+        self.ele_banks = list(eles.scal_upts_inb)
+        self.ele_types = list(elemap)
+        self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
+        self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
+
+        # I/O banks for the elements
+        self._eles_scal_upts_inb = eles.scal_upts_inb
+        self._eles_scal_upts_outb = eles.scal_upts_outb
+
         # Load the interfaces
-        self._load_int_inters(rallocs, mesh)
-        self._load_mpi_inters(rallocs, mesh)
-        self._load_bc_inters(rallocs, mesh)
+        int_inters = self._load_int_inters(rallocs, mesh, elemap)
+        mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
+        bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
 
         # Prepare the queues and kernels
         self._gen_queues()
-        self._gen_kernels()
+        self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
 
     def _load_eles(self, rallocs, mesh, initsoln):
         basismap = subclass_map(BaseBasis, 'name')
 
         # Look for and load each element type from the mesh
-        self._elemaps = elemaps = OrderedDict()
+        elemap = OrderedDict()
         for bname, bcls in basismap.iteritems():
             mk = 'spt_%s_p%d' % (bname, rallocs.prank)
             if mk in mesh:
-                elemaps[bname] = self.elementscls(bcls, mesh[mk], self._cfg)
+                elemap[bname] = self.elementscls(bcls, mesh[mk], self._cfg)
 
         # Construct a proxylist to simplify collective operations
-        self._eles = eles = proxylist(elemaps.values())
+        eles = proxylist(elemap.values())
 
         # Set the initial conditions either from a pyfrs file or from
         # explicit expressions in the config file
@@ -62,7 +72,7 @@ class BaseSystem(object):
             solncfg = Inifile(initsoln['config'].item())
 
             # Process the solution
-            for k, ele in elemaps.iteritems():
+            for k, ele in elemap.iteritems():
                 soln = initsoln['soln_%s_p%d' % (k, rallocs.prank)]
                 ele.set_ics_from_soln(soln, solncfg)
         else:
@@ -71,31 +81,35 @@ class BaseSystem(object):
         # Allocate these elements on the backend
         eles.set_backend(self._backend, self._nreg)
 
-    def _load_int_inters(self, rallocs, mesh):
+        return eles, elemap
+
+    def _load_int_inters(self, rallocs, mesh, elemap):
         lhs, rhs = mesh['con_p%d' % rallocs.prank]
-        int_inters = self.intinterscls(self._backend, lhs, rhs, self._elemaps,
+        int_inters = self.intinterscls(self._backend, lhs, rhs, elemap,
                                        self._cfg)
 
         # Although we only have a single internal interfaces instance
         # we wrap it in a proxylist for consistency
-        self._int_inters = proxylist([int_inters])
+        return proxylist([int_inters])
 
-    def _load_mpi_inters(self, rallocs, mesh):
+    def _load_mpi_inters(self, rallocs, mesh, elemap):
         lhsprank = rallocs.prank
 
-        self._mpi_inters = proxylist([])
+        mpi_inters = proxylist([])
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)]
 
             mpiiface = self.mpiinterscls(self._backend, interarr, rhsmrank,
-                                         rallocs, self._elemaps, self._cfg)
-            self._mpi_inters.append(mpiiface)
+                                         rallocs, elemap, self._cfg)
+            mpi_inters.append(mpiiface)
 
-    def _load_bc_inters(self, rallocs, mesh):
+        return mpi_inters
+
+    def _load_bc_inters(self, rallocs, mesh, elemap):
         bcmap = subclass_map(self.bbcinterscls, 'type')
 
-        self._bc_inters = proxylist([])
+        bc_inters = proxylist([])
         for f in mesh:
             m = re.match('bcon_(.+?)_p%d$' % rallocs.prank, f)
             if m:
@@ -107,9 +121,11 @@ class BaseSystem(object):
 
                 # Instantiate
                 bcclass = bcmap[self._cfg.get(cfgsect, 'type')]
-                bciface = bcclass(self._backend, mesh[f], self._elemaps,
-                                  cfgsect, self._cfg)
-                self._bc_inters.append(bciface)
+                bciface = bcclass(self._backend, mesh[f], elemap, cfgsect,
+                                  self._cfg)
+                bc_inters.append(bciface)
+
+        return bc_inters
 
     def _gen_queues(self):
         self._queues = [self._backend.queue() for i in xrange(self._nqueues)]
@@ -124,8 +140,8 @@ class BaseSystem(object):
 
     def __call__(self, uinbank, foutbank):
         # Set the banks to use for each element type
-        self._eles.scal_upts_inb.active = uinbank
-        self._eles.scal_upts_outb.active = foutbank
+        self._eles_scal_upts_inb.active = uinbank
+        self._eles_scal_upts_outb.active = foutbank
 
         # Delegate to our subclass
         self._get_negdivf()
@@ -133,21 +149,5 @@ class BaseSystem(object):
         # Wait for all ranks to finish
         MPI.COMM_WORLD.barrier()
 
-    @property
-    def ele_banks(self):
-        return [list(b) for b in self._eles.scal_upts_inb]
-
-    @property
-    def ele_types(self):
-        return list(self._elemaps)
-
-    @property
-    def ele_shapes(self):
-        return [(e.nupts, e.nvars, e.neles) for e in self._eles]
-
-    @property
-    def ele_ndofs(self):
-        return [e.neles*e.nupts*e.nvars for e in self._eles]
-
     def ele_scal_upts(self, idx):
-        return list(self._eles.get_scal_upts_mat(idx))
+        return [eb[idx].get() for eb in self.ele_banks]

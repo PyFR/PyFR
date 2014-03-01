@@ -6,12 +6,7 @@ from pyfr.solvers.base import BaseSystem
 class BaseAdvectionSystem(BaseSystem):
     _nqueues = 2
 
-    def _gen_kernels(self):
-        eles = self._eles
-        int_inters = self._int_inters
-        mpi_inters = self._mpi_inters
-        bc_inters = self._bc_inters
-
+    def _gen_kernels(self, eles, int_inters, mpi_inters, bc_inters):
         # Generate the kernels over each element type
         self._disu_fpts_kerns = eles.get_disu_fpts_kern()
         self._tdisf_upts_kerns = eles.get_tdisf_upts_kern()
