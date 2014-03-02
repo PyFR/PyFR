@@ -3,7 +3,6 @@
 from abc import ABCMeta, abstractmethod
 
 import numpy as np
-import sympy as sy
 
 from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import ndrange
@@ -42,11 +41,8 @@ class BaseElements(object):
         # Determine the number of dynamical variables
         self.nvars = len(self._dynvarmap[ndims])
 
-        # Generate a symbol for each dimension (p,q or p,q,r)
-        dims = sy.symbols('p q r')[:ndims]
-
         # Instantiate the basis class
-        self._basis = basis = basiscls(dims, nspts, cfg)
+        self._basis = basis = basiscls(nspts, cfg)
 
         # Sizes
         self.nupts = basis.nupts

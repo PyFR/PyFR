@@ -2,10 +2,13 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
+from mpmath import mp
 import numpy as np
 
-from pyfr.syutil import lambdify_jac_mpf, lambdify_mpf
-from pyfr.util import lazyprop, ndrange
+from pyfr.nputil import chop
+from pyfr.polys import get_polybasis
+from pyfr.quadrules import get_quadrule
+from pyfr.util import lazyprop
 
 
 class BaseBasis(object):
@@ -14,22 +17,42 @@ class BaseBasis(object):
     name = None
     ndims = -1
 
-    def __init__(self, dims, nspts, cfg):
-        self._dims = dims
+    nspts_coeffs = None
+    nspts_cdenom = None
+
+    def __init__(self, nspts, cfg):
         self._nspts = nspts
         self._cfg = cfg
         self._order = cfg.getint('solver', 'order')
 
-        if self.ndims != len(dims):
-            raise ValueError('Invalid dimension symbols')
+        self.ubasis = get_polybasis(self.name, self._order + 1, self.upts)
 
-    @property
-    def dims(self):
-        return self._dims
+        if nspts:
+            self._nsptsord = nsptord = self.order_from_nspts(nspts)
+            self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
     @abstractmethod
     def std_ele(sptord):
         pass
+
+    @classmethod
+    def nspts_from_order(cls, sptord):
+        return int(mp.polyval(cls.nspts_coeffs, sptord)) / cls.nspts_cdenom
+
+    @classmethod
+    def order_from_nspts(cls, nspts):
+        # Obtain the coefficients for the poly: P(n) - nspts = 0
+        coeffs = list(cls.nspts_coeffs)
+        coeffs[-1] -= cls.nspts_cdenom*nspts
+
+        # Solve to obtain the order (a positive integer)
+        roots = mp.polyroots(coeffs)
+        roots = [int(x) for x in roots if mp.isint(x) and x > 0]
+
+        if roots:
+            return roots[0]
+        else:
+            raise ValueError('Invalid number of shape points')
 
     @lazyprop
     def m0(self):
@@ -86,85 +109,51 @@ class BaseBasis(object):
     def nspts(self):
         return self._nspts
 
-    def _eval_lbasis_at(self, lbasis, pts):
-        m = np.empty((len(pts), len(lbasis)), dtype=np.object)
-
-        for i, j in ndrange(*m.shape):
-            m[i,j] = lbasis[j](*pts[i])
-
-        m[abs(m) < 1e-14] = 0
-        return m
-
-    def _eval_jac_lbasis_at(self, jlbasis, pts):
-        m = self._eval_lbasis_at(jlbasis, pts)
-        return m.reshape(len(pts), -1, self.ndims).swapaxes(1, 2)
-
     @abstractproperty
     def nupts(self):
         pass
 
-    @abstractproperty
+    @lazyprop
     def upts(self):
-        pass
-
-    @abstractproperty
-    def ubasis(self):
-        pass
-
-    @lazyprop
-    def _ubasis_lamb(self):
-        return lambdify_mpf(self._dims, self.ubasis)
-
-    @lazyprop
-    def _jac_ubasis_lamb(self):
-        return lambdify_jac_mpf(self._dims, self.ubasis)
+        rname = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
+        return get_quadrule(self.name, rname, self.nupts).points
 
     def ubasis_at(self, pts):
-        return self._eval_lbasis_at(self._ubasis_lamb, pts)
+        return self.ubasis.nodal_basis_at(pts)
 
     def jac_ubasis_at(self, pts):
-        return self._eval_jac_lbasis_at(self._jac_ubasis_lamb, pts)
+        return np.rollaxis(self.ubasis.jac_nodal_basis_at(pts), 2)
 
     @abstractproperty
     def fpts(self):
         pass
 
     @abstractproperty
-    def fbasis(self):
+    def fbasis_coeffs(self):
+        pass
+
+    @chop
+    def fbasis_at(self, pts):
+        return np.dot(self.fbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T
+
+    @abstractproperty
+    def facenorms(self):
         pass
 
     @lazyprop
-    def _fbasis_lamb(self):
-        return lambdify_mpf(self._dims, self.fbasis)
-
-    def fbasis_at(self, pts):
-        return self._eval_lbasis_at(self._fbasis_lamb, pts)
-
-    @abstractproperty
     def norm_fpts(self):
-        pass
+        fnorms = self.facenorms
+        return np.vstack([fn]*n for fn, n in zip(fnorms, self.nfacefpts))
 
     @lazyprop
     def spts(self):
         return self.std_ele(self._nsptsord - 1)
 
-    @abstractproperty
-    def sbasis(self):
-        pass
-
-    @lazyprop
-    def _sbasis_lamb(self):
-        return lambdify_mpf(self._dims, self.sbasis)
-
-    @lazyprop
-    def _jac_sbasis_lamb(self):
-        return lambdify_jac_mpf(self._dims, self.sbasis)
-
     def sbasis_at(self, pts):
-        return self._eval_lbasis_at(self._sbasis_lamb, pts)
+        return self.sbasis.nodal_basis_at(pts)
 
     def jac_sbasis_at(self, pts):
-        return self._eval_jac_lbasis_at(self._jac_sbasis_lamb, pts)
+        return np.rollaxis(self.sbasis.jac_nodal_basis_at(pts), 2)
 
     @abstractproperty
     def facefpts(self):

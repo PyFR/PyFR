@@ -2,10 +2,23 @@
 
 import ast
 import ctypes as ct
+import functools as ft
 import itertools as it
 import re
 
 import numpy as np
+
+
+def chop(fn):
+    @ft.wraps(fn)
+    def newfn(*args, **kwargs):
+        arr = fn(*args, **kwargs)
+
+        # Determine a tolerance and flush
+        arr[abs(arr) < np.finfo(arr.dtype).resolution] = 0
+
+        return arr
+    return newfn
 
 
 _npeval_syms = {

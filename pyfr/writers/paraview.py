@@ -2,7 +2,6 @@
 
 """Converts .pyfr[m, s] files to a Paraview VTK UnstructuredGrid File"""
 import numpy as np
-import sympy as sy
 
 from pyfr.bases import BaseBasis, get_std_ele_by_name
 from pyfr.inifile import Inifile
@@ -402,7 +401,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Construct basismap and dimensions
     basismap = subclass_map(BaseBasis, 'name')
-    dims = sy.symbols('p q r')[:m_inf[1][2]]
+    ndims = m_inf[1][2]
 
     # Set npts for divide/append cases
     if args.divisor is not None:
@@ -411,8 +410,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         npts = ParaviewWriter.vtk_to_pyfr[m_inf[0]][2]
 
     # Generate basis objects for solution and vtu output
-    soln_b = basismap[m_inf[0]](dims, m_inf[1][0], cfg)
-    vtu_b = basismap[m_inf[0]](dims, npts, cfg)
+    soln_b = basismap[m_inf[0]](m_inf[1][0], cfg)
+    vtu_b = basismap[m_inf[0]](npts, cfg)
 
     # Generate operator matrices to move points and solutions to vtu nodes
     mesh_vtu_op = np.array(soln_b.sbasis_at(vtu_b.spts), dtype=float)
@@ -420,13 +419,13 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Calculate node locations of vtu elements
     pts = np.dot(mesh_vtu_op, mesh.reshape(m_inf[1][0],
-                                           -1)).reshape(npts, -1, len(dims))
+                                           -1)).reshape(npts, -1, ndims)
     # Calculate solution at node locations of vtu elements
     sol = np.dot(soln_vtu_op, soln.reshape(s_inf[1][0],
                                            -1)).reshape(npts, s_inf[1][1], -1)
 
     # Append dummy z dimension for points in 2-d (required by Paraview)
-    if len(dims) == 2:
+    if ndims == 2:
         pts = np.append(pts, np.zeros(pts.shape[:-1])[...,None], axis=2)
 
     # Write element node locations to file
@@ -434,7 +433,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Prepare vtu cell arrays (connectivity, offsets, types):
     # Generate and extend vtu sub-cell node connectivity across all elements
-    vtu_con = np.tile(_base_con(m_inf[0], len(dims), args.divisor),
+    vtu_con = np.tile(_base_con(m_inf[0], ndims, args.divisor),
                       (m_inf[1][1], 1))
     vtu_con += (np.arange(m_inf[1][1]) * npts)[:, None]
 
@@ -466,7 +465,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         nhpts = s_inf[1][0] - nlpts
 
         # Generate basis objects for mesh, solution and vtu output
-        mesh_b = basismap[m_inf[0]](dims, m_inf[1][0], cfg)
+        mesh_b = basismap[m_inf[0]](m_inf[1][0], cfg)
 
         # Get location of spts in standard element of solution order
         uord = cfg.getint('solver', 'order')
@@ -481,7 +480,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         pts = pts.reshape((-1,) + m_inf[1][1:])
 
         # Append dummy z dimension to 2-d points (required by Paraview)
-        if len(dims) == 2:
+        if ndims == 2:
             pts = np.append(pts, np.zeros(pts.shape[:-1])[...,None], axis=2)
 
         # Calculate solution at node locations

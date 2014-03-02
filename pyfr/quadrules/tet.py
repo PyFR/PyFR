@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from sympy.mpmath import mp
+from mpmath import mp
 
 from pyfr.quadrules.base import BaseQuadRule, BaseStoredQuadRule, perm_orbit
 
