@@ -51,6 +51,31 @@ class BaseStepper(BaseIntegrator):
         self._queue % axnpby(*args[::2])
 
 
+class WilliamsonRKStepper(BaseStepper):
+    @property
+    def _stepper_has_errest(self):
+        return False
+
+    @property
+    def _stepper_nfevals(self):
+        return self.nsteps
+
+    @property
+    def _stepper_nregs(self):
+        return 3
+
+    def step(self, t, dt):
+        add, negdivf = self._add, self._system
+        r1, r2, r3 = self._regidx
+
+        for a, b in zip(self.A, self.B):
+            negdivf(r1, r3)
+            add(a, r2, dt, r3)
+            add(1.0, r1, b, r2)
+
+        return r1
+
+
 class EulerStepper(BaseStepper):
     stepper_name = 'euler'
 
@@ -141,6 +166,30 @@ class RK4Stepper(BaseStepper):
 
         # Return the index of the bank containing u(t + dt)
         return r1
+
+
+class RK45Stepper(WilliamsonRKStepper):
+    stepper_name = 'rk45'
+
+    A = [
+        0,
+        -567301805773.0 / 1357537059087.0,
+        -2404267990393.0 / 2016746695238.0,
+        -3550918686646.0 / 2091501179385.0,
+        -1275806237668.0 / 842570457699.0,
+    ]
+
+    B = [
+        1432997174477.0 / 9575080441755.0,
+        5161836677717.0 / 13612068292357.0,
+        1720146321549.0 / 2090206949498.0,
+        3134564353537.0 / 4481467310338.0,
+        2277821191437.0 / 14882151754819
+    ]
+
+    @property
+    def _stepper_order(self):
+        return 4
 
 
 class DOPRI5Stepper(BaseStepper):
