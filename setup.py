@@ -74,8 +74,9 @@ package_data = {
 install_requires = [
     'mako',
     'mpi4py >= 1.3',
-    'numpy >= 1.6',
-    'sympy >= 0.7.3']
+    'mpmath >= 0.17',
+    'numpy >= 1.6'
+]
 
 # Soft dependencies
 extras_require = {

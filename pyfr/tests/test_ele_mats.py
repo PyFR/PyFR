@@ -4,7 +4,6 @@ from io import BytesIO
 import pkgutil
 
 import numpy as np
-import sympy as sy
 
 from pyfr.bases.tensorprod import HexBasis
 from pyfr.inifile import Inifile
@@ -16,10 +15,9 @@ def test_hex_gleg_ord3():
     cfg.set('solver', 'order', '3')
     cfg.set('solver-interfaces-quad', 'flux-pts', 'gauss-legendre')
     cfg.set('solver-elements-hex', 'soln-pts', 'gauss-legendre')
-    cfg.set('solver-elements-hex', 'vcjh-eta', 'dg')
 
     # Generate the hexes
-    hb = HexBasis(sy.symbols('p q r'), None, cfg)
+    hb = HexBasis(None, cfg)
 
     # Load and import the reference values
     fobj = BytesIO(pkgutil.get_data(__name__, 'hex-gleg-ord3.npz'))

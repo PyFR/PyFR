@@ -6,7 +6,7 @@ import os
 import pkgutil
 import re
 
-from sympy.mpmath import mp
+from mpmath import mp
 import numpy as np
 
 from pyfr.util import lazyprop

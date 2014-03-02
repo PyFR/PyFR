@@ -2,12 +2,13 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 
-from sympy.mpmath import mp
+from mpmath import mp
 import numpy as np
 
+from pyfr.nputil import chop
+from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
-from pyfr.syutil import lambdify_jac_mpf, lambdify_mpf
-from pyfr.util import lazyprop, ndrange
+from pyfr.util import lazyprop
 
 
 class BaseBasis(object):
@@ -19,17 +20,16 @@ class BaseBasis(object):
     nspts_coeffs = None
     nspts_cdenom = None
 
-    def __init__(self, dims, nspts, cfg):
-        self._dims = dims
+    def __init__(self, nspts, cfg):
         self._nspts = nspts
         self._cfg = cfg
         self._order = cfg.getint('solver', 'order')
 
-        if nspts:
-            self._nsptsord = self.order_from_nspts(nspts)
+        self.ubasis = get_polybasis(self.name, self._order + 1, self.upts)
 
-        if self.ndims != len(dims):
-            raise ValueError('Invalid dimension symbols')
+        if nspts:
+            self._nsptsord = nsptord = self.order_from_nspts(nspts)
+            self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
     @abstractmethod
     def std_ele(sptord):
@@ -109,19 +109,6 @@ class BaseBasis(object):
     def nspts(self):
         return self._nspts
 
-    def _eval_lbasis_at(self, lbasis, pts):
-        m = np.empty((len(pts), len(lbasis)), dtype=np.object)
-
-        for i, j in ndrange(*m.shape):
-            m[i,j] = lbasis[j](*pts[i])
-
-        m[abs(m) < 1e-14] = 0
-        return m
-
-    def _eval_jac_lbasis_at(self, jlbasis, pts):
-        m = self._eval_lbasis_at(jlbasis, pts)
-        return m.reshape(len(pts), -1, self.ndims).swapaxes(1, 2)
-
     @abstractproperty
     def nupts(self):
         pass
@@ -131,38 +118,23 @@ class BaseBasis(object):
         rname = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).points
 
-    @abstractproperty
-    def ubasis(self):
-        pass
-
-    @lazyprop
-    def _ubasis_lamb(self):
-        return lambdify_mpf(self._dims, self.ubasis)
-
-    @lazyprop
-    def _jac_ubasis_lamb(self):
-        return lambdify_jac_mpf(self._dims, self.ubasis)
-
     def ubasis_at(self, pts):
-        return self._eval_lbasis_at(self._ubasis_lamb, pts)
+        return self.ubasis.nodal_basis_at(pts)
 
     def jac_ubasis_at(self, pts):
-        return self._eval_jac_lbasis_at(self._jac_ubasis_lamb, pts)
+        return np.rollaxis(self.ubasis.jac_nodal_basis_at(pts), 2)
 
     @abstractproperty
     def fpts(self):
         pass
 
     @abstractproperty
-    def fbasis(self):
+    def fbasis_coeffs(self):
         pass
 
-    @lazyprop
-    def _fbasis_lamb(self):
-        return lambdify_mpf(self._dims, self.fbasis)
-
+    @chop
     def fbasis_at(self, pts):
-        return self._eval_lbasis_at(self._fbasis_lamb, pts)
+        return np.dot(self.fbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T
 
     @abstractproperty
     def facenorms(self):
@@ -177,23 +149,11 @@ class BaseBasis(object):
     def spts(self):
         return self.std_ele(self._nsptsord - 1)
 
-    @abstractproperty
-    def sbasis(self):
-        pass
-
-    @lazyprop
-    def _sbasis_lamb(self):
-        return lambdify_mpf(self._dims, self.sbasis)
-
-    @lazyprop
-    def _jac_sbasis_lamb(self):
-        return lambdify_jac_mpf(self._dims, self.sbasis)
-
     def sbasis_at(self, pts):
-        return self._eval_lbasis_at(self._sbasis_lamb, pts)
+        return self.sbasis.nodal_basis_at(pts)
 
     def jac_sbasis_at(self, pts):
-        return self._eval_jac_lbasis_at(self._jac_sbasis_lamb, pts)
+        return np.rollaxis(self.sbasis.jac_nodal_basis_at(pts), 2)
 
     @abstractproperty
     def facefpts(self):
