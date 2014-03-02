@@ -40,17 +40,17 @@ class BaseAdvectionElements(BaseElements):
                                rcpdjac=self._rcpdjac_upts)
 
     def get_mag_pnorms_for_inter(self, eidx, fidx):
-        fpts_idx = self._srtd_face_fpts[eidx,fidx]
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
         return self._mag_pnorm_fpts[fpts_idx,eidx]
 
     def get_norm_pnorms_for_inter(self, eidx, fidx):
-        fpts_idx = self._srtd_face_fpts[eidx,fidx]
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
         return self._norm_pnorm_fpts[fpts_idx,eidx]
 
     def _get_scal_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[eidx,fidx]]
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
         cstri = [(mat.leadsubdim,)]*nfp
 
         return [mat]*nfp, rcmap, cstri
@@ -58,7 +58,7 @@ class BaseAdvectionElements(BaseElements):
     def _get_vect_fptsn_for_inter(self, mat, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[eidx,fidx]]
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
         rcstri = [(self.nfpts, mat.leadsubdim)]*nfp
 
         return [mat]*nfp, rcmap, rcstri

@@ -64,7 +64,7 @@ class BaseElements(object):
 
         srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
                           for ffpts in basis.facefpts]
-        self._srtd_face_fpts = np.array(srtd_face_fpts).swapaxes(0, 1)
+        self._srtd_face_fpts = srtd_face_fpts
 
     @abstractmethod
     def _process_ics(self, ics):
