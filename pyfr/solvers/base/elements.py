@@ -103,11 +103,10 @@ class BaseElements(object):
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
         currb = self._basis
-        solnb = currb.__class__(currb._dims, None, solncfg)
+        solnb = currb.__class__(None, solncfg)
 
         # Form the interpolation operator
         interp = solnb.ubasis_at(currb.upts)
-        interp = np.asanyarray(interp, dtype=np.float)
 
         # Sizes
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
