@@ -23,7 +23,7 @@ def test_hex_gleg_ord3():
     fobj = BytesIO(pkgutil.get_data(__name__, 'hex-gleg-ord3.npz'))
     refm = np.load(fobj)
 
-    assert np.allclose(refm['m0'], np.asanyarray(hb.m0, dtype=np.float))
-    assert np.allclose(refm['m1'], np.asanyarray(hb.m1, dtype=np.float))
-    assert np.allclose(refm['m2'], np.asanyarray(hb.m2, dtype=np.float))
-    assert np.allclose(refm['m3'], np.asanyarray(hb.m3, dtype=np.float))
+    assert np.allclose(refm['m0'], hb.m0)
+    assert np.allclose(refm['m1'], hb.m1)
+    assert np.allclose(refm['m2'], hb.m2)
+    assert np.allclose(refm['m3'], hb.m3)

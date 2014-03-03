@@ -55,7 +55,7 @@ class BaseElements(object):
         self._gen_pnorm_fpts()
 
         # Construct the physical location operator matrix
-        plocop = np.asanyarray(basis.sbasis_at(basis.fpts), dtype=np.float)
+        plocop = basis.sbasis_at(basis.fpts)
 
         # Apply the operator to the mesh elements and reshape
         plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
@@ -78,8 +78,7 @@ class BaseElements(object):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
         # Construct the physical location operator matrix
-        plocop = np.asanyarray(self._basis.sbasis_at(self._basis.upts),
-                               dtype=np.float)
+        plocop = self._basis.sbasis_at(self._basis.upts)
 
         # Apply the operator to the mesh elements and reshape
         plocupts = np.dot(plocop, self._eles.reshape(self.nspts, -1))
@@ -171,12 +170,10 @@ class BaseElements(object):
     def _gen_pnorm_fpts(self):
         smats = self._get_smats(self._basis.fpts).transpose(1, 3, 0, 2)
 
-        normfpts = np.asanyarray(self._basis.norm_fpts, dtype=np.float)
-
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
         # Jacobian and N is the normal for each fpt.  Using
         # J^{-1} = S/|J| where S are the smats, we have S^{T}.N.
-        pnorm_fpts = np.einsum('ijlk,il->ijk', smats, normfpts)
+        pnorm_fpts = np.einsum('ijlk,il->ijk', smats, self._basis.norm_fpts)
 
         # Compute the magnitudes of these flux point normals
         mag_pnorm_fpts = np.einsum('...i,...i', pnorm_fpts, pnorm_fpts)
@@ -191,7 +188,7 @@ class BaseElements(object):
         npts = len(pts)
 
         # Form the Jacobian operator
-        jacop = np.asanyarray(self._basis.jac_sbasis_at(pts), dtype=np.float)
+        jacop = self._basis.jac_sbasis_at(pts)
 
         # Cast as a matrix multiply and apply to eles
         jac = np.dot(jacop.reshape(-1, nspts), self._eles.reshape(nspts, -1))
