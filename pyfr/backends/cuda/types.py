@@ -144,9 +144,9 @@ class CUDAQueue(base.Queue):
         return bool(self._items)
 
     def _exec_item(self, item, rtargs):
-        if base.iscomputekernel(item):
+        if item.ktype == 'compute':
             item.run(self._stream_comp, self._stream_copy, *rtargs)
-        elif base.ismpikernel(item):
+        elif item.ktype == 'mpi':
             item.run(self._mpireqs, *rtargs)
         else:
             raise ValueError('Non compute/MPI kernel in queue')
@@ -167,22 +167,19 @@ class CUDAQueue(base.Queue):
             self._exec_item(*self._items.popleft())
 
     def _wait(self):
-        if base.iscomputekernel(self._last):
+        last = self._last
+
+        if last and last.ktype == 'compute':
             self._stream_comp.synchronize()
             self._stream_copy.synchronize()
-        elif base.ismpikernel(self._last):
+        elif last and last.ktype == 'mpi':
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
+
         self._last = None
 
     def _at_sequence_point(self, item):
-        iscompute, ismpi = base.iscomputekernel, base.ismpikernel
-
-        if (iscompute(self._last) and not iscompute(item)) or\
-           (ismpi(self._last) and not ismpi(item)):
-            return True
-        else:
-            return False
+        return self._last and self._last.ktype != item.ktype
 
     def run(self):
         while self._items:

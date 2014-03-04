@@ -120,9 +120,9 @@ class OpenMPQueue(base.Queue):
         return bool(self._items)
 
     def _exec_item(self, item, rtargs):
-        if base.iscomputekernel(item):
+        if item.ktype == 'compute':
             item.run(*rtargs)
-        elif base.ismpikernel(item):
+        elif item.ktype == 'mpi':
             item.run(self._mpireqs, *rtargs)
         else:
             raise ValueError('Non compute/MPI kernel in queue')
@@ -147,22 +147,22 @@ class OpenMPQueue(base.Queue):
             kern = self._items[0][0]
 
             # See if kern will block
-            if self._at_sequence_point(kern) or base.iscomputekernel(kern):
+            if self._at_sequence_point(kern) or kern.ktype == 'compute':
                 break
 
             self._exec_item(*self._items.popleft())
 
     def _wait(self):
-        if base.ismpikernel(self._last):
+        if self._last and self._last.ktype == 'mpi':
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
+
         self._last = None
 
     def _at_sequence_point(self, item):
-        if base.ismpikernel(self._last) and not base.ismpikernel(item):
-            return True
-        else:
-            return False
+        last = self._last
+
+        return last and last.ktype == 'mpi' and item.ktype != 'mpi'
 
     def run(self):
         while self._items:

@@ -22,19 +22,11 @@ class _BaseKernel(object):
 
 
 class ComputeKernel(_BaseKernel):
-    pass
+    ktype = 'compute'
 
 
 class MPIKernel(_BaseKernel):
-    pass
-
-
-def iscomputekernel(kernel):
-    return isinstance(kernel, ComputeKernel)
-
-
-def ismpikernel(kernel):
-    return isinstance(kernel, MPIKernel)
+    ktype = 'mpi'
 
 
 class _MetaKernel(object):
