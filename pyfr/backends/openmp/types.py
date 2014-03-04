@@ -18,6 +18,9 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         self.offset = offset
 
+        # Pointer to our ndarray (used by ctypes)
+        self._as_parameter_ = self.data.ctypes.data
+
         # Process any initial value
         if self._initval is not None:
             self.set(self._initval)
@@ -36,11 +39,6 @@ class OpenMPMatrixBase(base.MatrixBase):
         # Assign
         self.data[...,:ary.shape[-1]] = ary
 
-    @property
-    def _as_parameter_(self):
-        # Obtain a pointer to our ndarray
-        return self.data.ctypes.data
-
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
     def __init__(self, backend, ioshape, initval, extent, tags):
@@ -57,9 +55,8 @@ class OpenMPMatrixRSlice(base.MatrixRSlice):
         # down to two dimensions and simply slice this
         self.data = backend.compact_arr(mat.data)[p:q]
 
-    @property
-    def _as_parameter_(self):
-        return self.data.ctypes.data
+        # Pointer to our ndarray (used by ctypes)
+        self._as_parameter_ = self.data.ctypes.data
 
 
 class OpenMPMatrixBank(base.MatrixBank):
