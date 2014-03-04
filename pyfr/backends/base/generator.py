@@ -2,21 +2,16 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 import re
-from textwrap import dedent
 
 import numpy as np
 
 
 def procbody(body, fpdtype):
-    # Remove any indentation
-    body = dedent(body)
-
     # At single precision suffix all floating point constants by 'f'
     if fpdtype == np.float32:
         body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
                       r'\g<0>f', body)
 
-    # Split into lines
     return body
 
 
