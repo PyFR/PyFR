@@ -4,7 +4,8 @@ from pyfr.backends.base.backend import BaseBackend, traits
 from pyfr.backends.base.kernels import (BaseKernelProvider,
                                         BasePointwiseKernelProvider,
                                         ComputeKernel, ComputeMetaKernel,
-                                        MPIKernel, MPIMetaKernel)
+                                        MPIKernel, MPIMetaKernel,
+                                        NullComputeKernel, NullMPIKernel)
 from pyfr.backends.base.types import (ConstMatrix, Matrix, MatrixBank,
                                       MatrixBase, MatrixRSlice, MPIMatrix,
                                       MPIView, Queue, View)

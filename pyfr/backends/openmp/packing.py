@@ -2,7 +2,7 @@
 
 from mpi4py import MPI
 
-from pyfr.backends.base import ComputeKernel, MPIKernel
+from pyfr.backends.base import ComputeKernel, MPIKernel, NullComputeKernel
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
 from pyfr.backends.openmp.types import OpenMPMPIMatrix, OpenMPMPIView
 from pyfr.nputil import npdtype_to_ctype
@@ -50,8 +50,4 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
 
     def unpack(self, mv):
         # No-op
-        class UnpackMPIMatrixKernel(ComputeKernel):
-            def run(self):
-                pass
-
-        return UnpackMPIMatrixKernel()
+        return NullComputeKernel()

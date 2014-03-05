@@ -29,6 +29,14 @@ class MPIKernel(_BaseKernel):
     ktype = 'mpi'
 
 
+class NullComputeKernel(ComputeKernel):
+    pass
+
+
+class NullMPIKernel(MPIKernel):
+    pass
+
+
 class _MetaKernel(object):
     def __init__(self, kernels):
         self._kernels = proxylist(kernels)
