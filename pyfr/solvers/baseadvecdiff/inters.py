@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from pyfr.backends.base import NullComputeKernel, NullMPIKernel
 from pyfr.solvers.base import get_opt_view_perm
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
@@ -53,19 +54,35 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         # of the two partitions.
         self._tpl_c['ldg-beta'] *= 1.0 if lhsprank > rhsprank else -1.0
 
+        # Decide what gradients we need to send/recv
+        self._send_vect0_lhs = self._tpl_c['ldg-beta'] != -0.5
+        self._recv_vect0_rhs = self._tpl_c['ldg-beta'] != 0.5
+
     def get_vect_fpts0_pack_kern(self):
-        return self._be.kernel('pack', self._vect0_lhs)
+        if self._send_vect0_lhs:
+            return self._be.kernel('pack', self._vect0_lhs)
+        else:
+            return NullComputeKernel()
 
     def get_vect_fpts0_send_pack_kern(self):
-        return self._be.kernel('send_pack', self._vect0_lhs,
-                               self._rhsrank, self.MPI_TAG)
+        if self._send_vect0_lhs:
+            return self._be.kernel('send_pack', self._vect0_lhs,
+                                   self._rhsrank, self.MPI_TAG)
+        else:
+            return NullMPIKernel()
 
     def get_vect_fpts0_recv_pack_kern(self):
-        return self._be.kernel('recv_pack', self._vect0_rhs,
-                               self._rhsrank, self.MPI_TAG)
+        if self._recv_vect0_rhs:
+            return self._be.kernel('recv_pack', self._vect0_rhs,
+                                   self._rhsrank, self.MPI_TAG)
+        else:
+            return NullMPIKernel()
 
     def get_vect_fpts0_unpack_kern(self):
-        return self._be.kernel('unpack', self._vect0_rhs)
+        if self._recv_vect0_rhs:
+            return self._be.kernel('unpack', self._vect0_rhs)
+        else:
+            return NullComputeKernel()
 
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
