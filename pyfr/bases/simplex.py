@@ -5,7 +5,6 @@ from math import sqrt
 import numpy as np
 
 from pyfr.bases.base import BaseBasis
-from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
 from pyfr.util import lazyprop
 
@@ -53,26 +52,10 @@ class TriBasis(BaseBasis):
 
     @lazyprop
     def fbasis_coeffs(self):
-        qrule = get_quadrule('line', 'gauss-legendre', self._order + 1)
-        qpts = qrule.np_points
+        fproj = lambda pts: [(pts, -1), (-pts, pts), (-1, pts)]
 
-        proj = [(qpts, -1), (-qpts, qpts), (-1, qpts)]
-        qedgepts = np.vstack(list(np.broadcast(*p)) for p in proj)
-
-        rulename = self._cfg.get('solver-interfaces-line', 'flux-pts')
-        pts = get_quadrule('line', rulename, self.nfpts // 3).np_points
-        nbedge = get_polybasis('line', self._order + 1, pts)
-
-        L = nbedge.nodal_basis_at(qpts)
-        M = self.ubasis.ortho_basis_at(qedgepts).reshape(-1, 3, len(qpts))
-
-        # Do the quadrature
-        S = np.einsum('i...,ik,jli->lkj', qrule.np_weights, L, M)
-
-        # Account for the longer length of the hypotenuse
-        S[1] *= sqrt(2)
-
-        return S.reshape(-1, self.nupts)
+        return self._fbasis_coeffs_for('line', fproj, [1, sqrt(2), 1],
+                                       self.nfpts // 3)
 
 
 class TetBasis(BaseBasis):
@@ -122,25 +105,8 @@ class TetBasis(BaseBasis):
 
     @lazyprop
     def fbasis_coeffs(self):
-        # Obtain a high-power quadrature rule on the reference
-        # triangle; this is sufficient up to order 6
-        qrule = get_quadrule('tri', 'williams-shunn', 36)
-        s, t = qrule.np_points.T
+        fproj = lambda s, t: [(s, t, -1), (s, -1, t), (-1, t, s),
+                              (s, t, -s -t -1)]
 
-        proj = [(s, t, -1), (s, -1, t), (-1, t, s), (s, t, -s -t -1)]
-        qedgepts = np.vstack(list(np.broadcast(*p)) for p in proj)
-
-        rulename = self._cfg.get('solver-interfaces-tri', 'flux-pts')
-        pts = get_quadrule('tri', rulename, self.nfpts // 4).np_points
-        nbedge = get_polybasis('tri', self._order + 1, pts)
-
-        L = nbedge.nodal_basis_at(qrule.np_points)
-        M = self.ubasis.ortho_basis_at(qedgepts).reshape(-1, 4, len(s))
-
-        # Do the quadrature
-        S = np.einsum('i...,ik,jli->lkj', qrule.np_weights, L, M)
-
-        # Account for the greater area of the centre face
-        S[3] *= sqrt(3)
-
-        return S.reshape(-1, self.nupts)
+        return self._fbasis_coeffs_for('tri', fproj, [1, 1, 1, sqrt(3)],
+                                       self.nfpts // 4)

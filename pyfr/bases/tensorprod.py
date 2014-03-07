@@ -3,7 +3,6 @@
 import numpy as np
 
 from pyfr.bases.base import BaseBasis
-from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
 from pyfr.util import lazyprop
 
@@ -49,23 +48,9 @@ class QuadBasis(TensorProdBasis, BaseBasis):
 
     @lazyprop
     def fbasis_coeffs(self):
-        qrule = get_quadrule('line', 'gauss-legendre', self._order + 1)
-        qpts = qrule.np_points
+        fproj = lambda pts: [(pts, -1), (1, pts), (pts, 1), (-1, pts)]
 
-        proj = [(qpts, -1), (1, qpts), (qpts, 1), (-1, qpts)]
-        qedgepts = np.vstack(list(np.broadcast(*p)) for p in proj)
-
-        rulename = self._cfg.get('solver-interfaces-line', 'flux-pts')
-        pts = get_quadrule('line', rulename, self.nfpts // 4).np_points
-        nbedge = get_polybasis('line', self._order + 1, pts)
-
-        L = nbedge.nodal_basis_at(qpts)
-        M = self.ubasis.ortho_basis_at(qedgepts).reshape(-1, 4, len(qpts))
-
-        # Do the quadrature
-        S = np.einsum('i...,ik,jli->lkj', qrule.np_weights, L, M)
-
-        return S.reshape(-1, self.nupts)
+        return self._fbasis_coeffs_for('line', fproj, [1]*4, self.nfpts // 4)
 
 
 class HexBasis(TensorProdBasis, BaseBasis):
@@ -95,21 +80,7 @@ class HexBasis(TensorProdBasis, BaseBasis):
 
     @lazyprop
     def fbasis_coeffs(self):
-        qrule = get_quadrule('quad', 'gauss-legendre', (self._order + 1)**2)
-        s, t = qrule.np_points.T
+        fproj = lambda s, t: [(s, t, -1), (s, -1, t), (1, s, t),
+                              (s, 1, t), (-1, s, t), (s, t, 1)]
 
-        proj = [(s, t, -1), (s, -1, t), (1, s, t),
-                (s, 1, t), (-1, s, t), (s, t, 1)]
-        qfacepts = np.vstack(list(np.broadcast(*p)) for p in proj)
-
-        rulename = self._cfg.get('solver-interfaces-quad', 'flux-pts')
-        fptsrule = get_quadrule('quad', rulename, self.nfpts // 6)
-        nbface = get_polybasis('quad', self._order + 1, fptsrule.points)
-
-        L = nbface.nodal_basis_at(qrule.np_points)
-        M = self.ubasis.ortho_basis_at(qfacepts).reshape(-1, 6, len(s))
-
-        # Do the quadrature
-        S = np.einsum('i...,ik,jli->lkj', qrule.np_weights, L, M)
-
-        return S.reshape(-1, self.nupts)
+        return self._fbasis_coeffs_for('quad', fproj, [1]*6, self.nfpts // 6)
