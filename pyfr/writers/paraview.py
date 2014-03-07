@@ -21,7 +21,7 @@ class ParaviewWriter(BaseWriter):
                    'quad': (9, [0, 1, 3, 2], 4),
                    'tet': (10, [0, 1, 2, 3], 4),
                    'pyr': (14, [0, 1, 3, 2, 4], 5),
-                   'pri': (13, [0, 1, 4, 2, 3, 5], 6),
+                   'pri': (13, [0, 1, 2, 3, 4, 5], 6),
                    'hex': (12, [0, 1, 3, 2, 4, 5, 7, 6], 8)}
 
     def write_out(self):
@@ -235,6 +235,13 @@ def _tet_con(nsubdiv):
     return ParaviewWriter.vtk_to_pyfr['tet'][1]
 
 
+def _pri_con(nsubdiv):
+    if nsubdiv > 1:
+        raise RuntimeError('Subdivision is not implemented for prisms.')
+
+    return ParaviewWriter.vtk_to_pyfr['pri'][1]
+
+
 def _base_con(etype, ndim, nsubdiv):
     """Switch case to select node connectivity for supported vtu elements
 
@@ -262,6 +269,8 @@ def _base_con(etype, ndim, nsubdiv):
         connec = _tri_con(ndim, nsubdiv)
     elif etype == 'tet':
         connec = _tet_con(nsubdiv)
+    elif etype == 'pri':
+        connec = _pri_con(nsubdiv)
     elif etype == 'quad' or etype == 'hex':
         connec = _quadcube_con(ndim, nsubdiv)
     else:

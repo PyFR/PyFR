@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.bases.base import BaseBasis
+from pyfr.bases.mixed import PriBasis
 from pyfr.bases.tensorprod import HexBasis, QuadBasis
 from pyfr.bases.simplex import TetBasis, TriBasis
 from pyfr.util import subclass_map

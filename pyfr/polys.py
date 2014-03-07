@@ -17,6 +17,7 @@ def get_polybasis(eletype, order, pts=[]):
         'quad': _quad_orthob_at,
         'tri': _tri_orthob_at,
         'tet': _tet_orthob_at,
+        'pri': _pri_orthob_at,
         'hex': _hex_orthob_at
     }
 
@@ -117,6 +118,26 @@ def _tet_orthob_at(order, p, q, r):
                 ob.append(cij*ck*pij*pk)
 
     return ob
+
+
+def _pri_orthob_at(order, p, q, r):
+    a = 2*(1 + p)/(1 - q) - 1 if q != 1 else 0
+    b = q
+    c = r
+
+    pab = []
+    for i, pi in enumerate(jacobi(order - 1, 0, 0, a)):
+        ci = (1 - b)**i / 2**(i + 1)
+
+        for j, pj in enumerate(jacobi(order - i - 1, 2*i + 1, 0, b)):
+            cij = mp.sqrt((2*i + 1)*(2*i + 2*j + 2))*ci
+
+            pab.append(cij*pi*pj)
+
+    sk = [mp.sqrt(k + 0.5) for k in xrange(order)]
+    pc = [c*jp for c, jp in zip(sk, jacobi(order - 1, 0, 0, c))]
+
+    return [pij*pk for pij in pab for pk in pc]
 
 
 def _hex_orthob_at(order, p, q, r):
