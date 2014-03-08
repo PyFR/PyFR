@@ -197,10 +197,9 @@ def _quadcube_con(ndim, nsubdiv):
     return np.hstack(internal_con)
 
 
-def _tri_con(ndim, nsubdiv):
+def _tri_con(nsubdiv):
     """Generate node connectivity for vtu triangles in high-order elements
 
-    :param ndim: Number of dimensions [2,3]
     :param nsubdiv: Number of subdivisions (equal to element shape order)
     :type ndim: integer
     :type nsubdiv: integer
@@ -237,7 +236,7 @@ def _tet_con(nsubdiv):
 
 def _pri_con(nsubdiv):
     # Triangle connectivity
-    tcon = _tri_con(2, nsubdiv).reshape(-1, 3)
+    tcon = _tri_con(nsubdiv).reshape(-1, 3)
 
     # Layer these rows of triangles to define prisms
     loff = (nsubdiv + 1)*(nsubdiv + 2) // 2
@@ -246,7 +245,7 @@ def _pri_con(nsubdiv):
     return np.hstack(np.hstack(l).flat for l in lcon)
 
 
-def _base_con(etype, ndim, nsubdiv):
+def _base_con(etype, nsubdiv):
     """Switch case to select node connectivity for supported vtu elements
 
     PyFR high-order elements are subdivided into low-order vtu
@@ -256,7 +255,6 @@ def _base_con(etype, ndim, nsubdiv):
     high-order node multiple times in defining low-order cells.
 
     :param etype: PyFR element type
-    :param ndim: Number of dimensions [2,3]
     :param nsubdiv: Number of subdivisions (equal to element shape order)
     :type etype: string
     :type ndim: integer
@@ -264,24 +262,18 @@ def _base_con(etype, ndim, nsubdiv):
     :rtype: list
 
     """
-    # Catch-all for cases where cell subdivision is not performed
-    if nsubdiv is None:
-        nsubdiv = 1
+    connec_map = {
+        'tri': _tri_con,
+        'tet': _tet_con,
+        'pri': _pri_con,
+        'quad': lambda n: _quadcube_con(2, n),
+        'hex': lambda n: _quadcube_con(3, n)
+    }
 
-    # Switch case to generate node connectivity for each element type
-    if etype == 'tri':
-        connec = _tri_con(ndim, nsubdiv)
-    elif etype == 'tet':
-        connec = _tet_con(nsubdiv)
-    elif etype == 'pri':
-        connec = _pri_con(nsubdiv)
-    elif etype == 'quad' or etype == 'hex':
-        connec = _quadcube_con(ndim, nsubdiv)
-    else:
-        raise RuntimeError('Node connectivity is not yet implemented for %s '
-                          'elements.' % etype)
-
-    return connec
+    try:
+        return connec_map[etype](nsubdiv or 1)
+    except KeyError:
+        raise RuntimeError('Connectivity not implemented for ' + etype)
 
 
 def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
@@ -446,7 +438,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Prepare vtu cell arrays (connectivity, offsets, types):
     # Generate and extend vtu sub-cell node connectivity across all elements
-    vtu_con = np.tile(_base_con(m_inf[0], ndims, args.divisor),
+    vtu_con = np.tile(_base_con(m_inf[0], args.divisor),
                       (m_inf[1][1], 1))
     vtu_con += (np.arange(m_inf[1][1]) * npts)[:, None]
 
