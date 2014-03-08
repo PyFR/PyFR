@@ -135,7 +135,7 @@ def _pri_orthob_at(order, p, q, r):
             pab.append(cij*pi*pj)
 
     sk = [mp.sqrt(k + 0.5) for k in xrange(order)]
-    pc = [c*jp for c, jp in zip(sk, jacobi(order - 1, 0, 0, c))]
+    pc = [s*jp for s, jp in zip(sk, jacobi(order - 1, 0, 0, c))]
 
     return [pij*pk for pij in pab for pk in pc]
 
