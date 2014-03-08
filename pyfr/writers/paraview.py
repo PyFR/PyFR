@@ -236,10 +236,14 @@ def _tet_con(nsubdiv):
 
 
 def _pri_con(nsubdiv):
-    if nsubdiv > 1:
-        raise RuntimeError('Subdivision is not implemented for prisms.')
+    # Triangle connectivity
+    tcon = _tri_con(2, nsubdiv).reshape(-1, 3)
 
-    return ParaviewWriter.vtk_to_pyfr['pri'][1]
+    # Layer these rows of triangles to define prisms
+    loff = (nsubdiv + 1)*(nsubdiv + 2) // 2
+    lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in xrange(nsubdiv)]
+
+    return np.hstack(np.hstack(l).flat for l in lcon)
 
 
 def _base_con(etype, ndim, nsubdiv):
