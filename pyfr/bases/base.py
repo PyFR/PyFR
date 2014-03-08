@@ -132,6 +132,39 @@ class BaseBasis(object):
     def fbasis_coeffs(self):
         pass
 
+    def _fbasis_coeffs_for(self, ftype, fproj, fdjacs, nffpts):
+        # Suitable quadrature rules for various face types
+        qrule_map = {
+            'line': ('gauss-legendre', self._order + 1),
+            'quad': ('gauss-legendre', (self._order + 1)**2),
+            'tri': ('williams-shunn', 36)
+        }
+
+        # Obtain a quadrature rule for integrating on the face
+        qrule = get_quadrule(ftype, *qrule_map[ftype])
+
+        # Project the rule points onto the various faces
+        proj = fproj(*np.atleast_2d(qrule.np_points.T))
+        qfacepts = np.vstack(list(np.broadcast(*p)) for p in proj)
+
+        # Obtain a nodal basis on the reference face
+        fname = self._cfg.get('solver-interfaces-' + ftype, 'flux-pts')
+        ffpts = get_quadrule(ftype, fname, nffpts)
+        nodeb = get_polybasis(ftype, self._order + 1, ffpts.np_points)
+
+        L = nodeb.nodal_basis_at(qrule.np_points)
+
+        M = self.ubasis.ortho_basis_at(qfacepts)
+        M = M.reshape(-1, len(proj), len(qrule.np_points))
+
+        # Do the quadrature
+        S = np.einsum('i...,ik,jli->lkj', qrule.np_weights, L, M)
+
+        # Account for differing face areas
+        S *= np.asanyarray(fdjacs)[:,None,None]
+
+        return S.reshape(-1, self.nupts)
+
     @chop
     def fbasis_at(self, pts):
         return np.dot(self.fbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T

@@ -21,7 +21,7 @@ class ParaviewWriter(BaseWriter):
                    'quad': (9, [0, 1, 3, 2], 4),
                    'tet': (10, [0, 1, 2, 3], 4),
                    'pyr': (14, [0, 1, 3, 2, 4], 5),
-                   'pri': (13, [0, 1, 4, 2, 3, 5], 6),
+                   'pri': (13, [0, 1, 2, 3, 4, 5], 6),
                    'hex': (12, [0, 1, 3, 2, 4, 5, 7, 6], 8)}
 
     def write_out(self):
@@ -235,6 +235,17 @@ def _tet_con(nsubdiv):
     return ParaviewWriter.vtk_to_pyfr['tet'][1]
 
 
+def _pri_con(nsubdiv):
+    # Triangle connectivity
+    tcon = _tri_con(2, nsubdiv).reshape(-1, 3)
+
+    # Layer these rows of triangles to define prisms
+    loff = (nsubdiv + 1)*(nsubdiv + 2) // 2
+    lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in xrange(nsubdiv)]
+
+    return np.hstack(np.hstack(l).flat for l in lcon)
+
+
 def _base_con(etype, ndim, nsubdiv):
     """Switch case to select node connectivity for supported vtu elements
 
@@ -262,6 +273,8 @@ def _base_con(etype, ndim, nsubdiv):
         connec = _tri_con(ndim, nsubdiv)
     elif etype == 'tet':
         connec = _tet_con(nsubdiv)
+    elif etype == 'pri':
+        connec = _pri_con(nsubdiv)
     elif etype == 'quad' or etype == 'hex':
         connec = _quadcube_con(ndim, nsubdiv)
     else:
