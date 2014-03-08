@@ -37,7 +37,7 @@ class BaseBasis(object):
 
     @classmethod
     def nspts_from_order(cls, sptord):
-        return int(mp.polyval(cls.nspts_coeffs, sptord)) / cls.nspts_cdenom
+        return int(mp.polyval(cls.nspts_coeffs, sptord)) // cls.nspts_cdenom
 
     @classmethod
     def order_from_nspts(cls, nspts):
