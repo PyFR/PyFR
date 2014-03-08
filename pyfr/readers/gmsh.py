@@ -259,7 +259,7 @@ class GmshReader(BaseReader):
 
         for pftype, faces in ffofaces.iteritems():
             for f in chain(*faces):
-                sn = tuple(sorted(f.nodes))
+                sn = tuple(sorted(f['nodes']))
 
                 # See if the nodes are in resid
                 if sn in resid:
