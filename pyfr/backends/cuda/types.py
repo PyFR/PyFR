@@ -69,7 +69,6 @@ class CUDAMatrixRSlice(base.MatrixRSlice):
     def _as_parameter_(self):
         return self.parent.data + self._soffset
 
-    @property
     def __long__(self):
         return self.parent.data + self._soffset
 
