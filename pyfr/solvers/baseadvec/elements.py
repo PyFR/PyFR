@@ -2,8 +2,6 @@
 
 from abc import abstractmethod
 
-import numpy as np
-
 from pyfr.solvers.base import BaseElements
 
 
