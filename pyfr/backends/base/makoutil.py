@@ -37,6 +37,18 @@ def array(context, ex_, **kwargs):
     return '{ ' + ', '.join(ex_.format(**{ix: i}) for i in xrange(*ni)) + ' }'
 
 
+def _strip_parens(s):
+    out, depth = [], 0
+
+    for c in s:
+        depth += (c in '{(') - (c in ')}')
+
+        if depth == 0 and c not in ')}':
+            out.append(c)
+
+    return ''.join(out)
+
+
 def _locals(body):
     # First, strip away any comments
     body = re.sub(r'//.*?\n', '', body)
@@ -44,11 +56,13 @@ def _locals(body):
     # Next, find all variable declaration statements
     decls = re.findall(r'(?:[A-Za-z_]\w*)\s+([A-Za-z_]\w*[^;]*?);', body)
 
-    # A statement can define multiple variables, so split by ','
-    decls = (re.split(r'\s*,\s*(?![^{}]+\})', d) for d in decls)
-    decls = it.chain.from_iterable(decls)
+    # Strip anything inside () or {}
+    decls = [_strip_parens(d) for d in decls]
 
-    return [re.match(r'\w+', v).group(0) for v in decls]
+    # A statement can define multiple variables, so split by ','
+    decls = it.chain.from_iterable(d.split(',') for d in decls)
+
+    return [re.match(r'\s*(\w+)', v).group(1) for v in decls]
 
 
 @supports_caller
