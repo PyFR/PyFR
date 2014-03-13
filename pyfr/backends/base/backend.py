@@ -210,7 +210,10 @@ class BaseBackend(object):
         for prov in self._providers:
             kern = getattr(prov, name, None)
             if kern and issuitable(kern, *args, **kwargs):
-                return kern(*args, **kwargs)
+                try:
+                    return kern(*args, **kwargs)
+                except NotImplementedError:
+                    pass
         else:
             raise KeyError("'{}' has no providers".format(name))
 
