@@ -34,8 +34,8 @@ class memoize(object):
 
 
 class proxylist(list):
-    def __init__(self, iterable):
-        super(proxylist, self).__init__(iterable)
+    def __init__(self, *args):
+        super(proxylist, self).__init__(*args)
 
     def __getattr__(self, attr):
         return proxylist([getattr(x, attr) for x in self])

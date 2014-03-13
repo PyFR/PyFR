@@ -4,66 +4,44 @@ from pyfr.solvers.baseadvec import BaseAdvectionSystem
 
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
-    def _gen_kernels(self, eles, int_inters, mpi_inters, bc_inters):
-        base = super(BaseAdvectionDiffusionSystem, self)
-        base._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
-
-        # Element-local kernels
-        self._tgradpcoru_upts_kerns = eles.get_tgradpcoru_upts_kern()
-        self._tgradcoru_upts_kerns = eles.get_tgradcoru_upts_kern()
-        self._gradcoru_upts_kerns = eles.get_gradcoru_upts_kern()
-        self._gradcoru_fpts_kerns = eles.get_gradcoru_fpts_kern()
-
-        self._mpi_inters_vect_fpts0_pack_kerns = \
-            mpi_inters.get_vect_fpts0_pack_kern()
-        self._mpi_inters_vect_fpts0_send_kerns = \
-            mpi_inters.get_vect_fpts0_send_pack_kern()
-        self._mpi_inters_vect_fpts0_recv_kerns = \
-            mpi_inters.get_vect_fpts0_recv_pack_kern()
-        self._mpi_inters_vect_fpts0_unpack_kerns = \
-            mpi_inters.get_vect_fpts0_unpack_kern()
-
-        self._int_inters_con_u_kerns = int_inters.get_con_u_kern()
-        self._mpi_inters_con_u_kerns = mpi_inters.get_con_u_kern()
-        self._bc_inters_con_u_kerns = bc_inters.get_con_u_kern()
-
     def _get_negdivf(self):
         runall = self._backend.runall
         q1, q2 = self._queues
+        kernels = self._kernels
 
-        q1 << self._disu_fpts_kerns()
-        q1 << self._mpi_inters_scal_fpts0_pack_kerns()
+        q1 << kernels['eles', 'disu_fpts']()
+        q1 << kernels['mpiint', 'scal_fpts0_pack']()
         runall([q1])
 
-        q1 << self._int_inters_con_u_kerns()
-        q1 << self._bc_inters_con_u_kerns()
-        q1 << self._tgradpcoru_upts_kerns()
+        q1 << kernels['iint', 'con_u']()
+        q1 << kernels['bcint', 'con_u']()
+        q1 << kernels['eles', 'tgradpcoru_upts']()
 
-        q2 << self._mpi_inters_scal_fpts0_send_kerns()
-        q2 << self._mpi_inters_scal_fpts0_recv_kerns()
-        q2 << self._mpi_inters_scal_fpts0_unpack_kerns()
+        q2 << kernels['mpiint', 'scal_fpts0_send']()
+        q2 << kernels['mpiint', 'scal_fpts0_recv']()
+        q2 << kernels['mpiint', 'scal_fpts0_unpack']()
 
         runall([q1, q2])
 
-        q1 << self._mpi_inters_con_u_kerns()
-        q1 << self._tgradcoru_upts_kerns()
-        q1 << self._gradcoru_upts_kerns()
-        q1 << self._gradcoru_fpts_kerns()
-        q1 << self._mpi_inters_vect_fpts0_pack_kerns()
+        q1 << kernels['mpiint', 'con_u']()
+        q1 << kernels['eles', 'tgradcoru_upts']()
+        q1 << kernels['eles', 'gradcoru_upts']()
+        q1 << kernels['eles', 'gradcoru_fpts']()
+        q1 << kernels['mpiint', 'vect_fpts0_pack']()
         runall([q1])
 
-        q1 << self._tdisf_upts_kerns()
-        q1 << self._tdivtpcorf_upts_kerns()
-        q1 << self._int_inters_comm_flux_kerns()
-        q1 << self._bc_inters_comm_flux_kerns()
+        q1 << kernels['eles', 'tdisf_upts']()
+        q1 << kernels['eles', 'tdivtpcorf_upts']()
+        q1 << kernels['iint', 'comm_flux']()
+        q1 << kernels['bcint', 'comm_flux']()
 
-        q2 << self._mpi_inters_vect_fpts0_send_kerns()
-        q2 << self._mpi_inters_vect_fpts0_recv_kerns()
-        q2 << self._mpi_inters_vect_fpts0_unpack_kerns()
+        q2 << kernels['mpiint', 'vect_fpts0_send']()
+        q2 << kernels['mpiint', 'vect_fpts0_recv']()
+        q2 << kernels['mpiint', 'vect_fpts0_unpack']()
 
         runall([q1, q2])
 
-        q1 << self._mpi_inters_comm_flux_kerns()
-        q1 << self._tdivtconf_upts_kerns()
-        q1 << self._negdivconf_upts_kerns()
+        q1 << kernels['mpiint', 'comm_flux']()
+        q1 << kernels['eles', 'tdivtconf_upts']()
+        q1 << kernels['eles', 'negdivconf_upts']()
         runall([q1])

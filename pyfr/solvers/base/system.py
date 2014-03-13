@@ -1,7 +1,8 @@
  # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
+import itertools as it
 import re
 
 from mpi4py import MPI
@@ -130,9 +131,15 @@ class BaseSystem(object):
     def _gen_queues(self):
         self._queues = [self._backend.queue() for i in xrange(self._nqueues)]
 
-    @abstractmethod
-    def _gen_kernels(self):
-        pass
+    def _gen_kernels(self, eles, iint, mpiint, bcint):
+        self._kernels = kernels = defaultdict(proxylist)
+
+        provnames = ['eles', 'iint', 'mpiint', 'bcint']
+        provobjs = [eles, iint, mpiint, bcint]
+
+        for pn, pobj in zip(provnames, provobjs):
+            for kn, kgetter in it.chain(*pobj.kernels.iteritems()):
+                kernels[pn, kn].append(kgetter())
 
     @abstractmethod
     def _get_negdivf(self):

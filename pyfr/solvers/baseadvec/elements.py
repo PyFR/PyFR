@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractmethod
-
 from pyfr.solvers.base import BaseElements
 
 
@@ -12,30 +10,26 @@ class BaseAdvectionElements(BaseElements):
         # Get the number of flux points for each face of the element
         self.nfacefpts = nfacefpts = self._basis.nfacefpts
 
-        # Register pointwise kernels
+        # Register pointwise kernels with the backend
         be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
 
-    @abstractmethod
-    def get_tdisf_upts_kern(self):
-        pass
+        m0b, m132b, m3b = self._m0b, self._m132b, self._m3b
 
-    def get_disu_fpts_kern(self):
-        return self._be.kernel('mul', self._m0b, self.scal_upts_inb,
-                               out=self._scal_fpts[0])
-
-    def get_tdivtpcorf_upts_kern(self):
-        return self._be.kernel('mul', self._m132b, self._vect_upts[0],
-                               out=self.scal_upts_outb)
-
-    def get_tdivtconf_upts_kern(self):
-        return self._be.kernel('mul', self._m3b, self._scal_fpts[0],
-                               out=self.scal_upts_outb, beta=1.0)
-
-    def get_negdivconf_upts_kern(self):
-        return self._be.kernel('negdivconf', tplargs=dict(nvars=self.nvars),
-                               dims=[self.nupts, self.neles],
-                               tdivtconf=self.scal_upts_outb,
-                               rcpdjac=self._rcpdjac_upts)
+        # Specify the kernels we provide
+        self.kernels['disu_fpts'] = lambda: be.kernel(
+            'mul', m0b, self.scal_upts_inb, out=self._scal_fpts[0]
+        )
+        self.kernels['tdivtpcorf_upts'] = lambda: be.kernel(
+            'mul', m132b, self._vect_upts[0], out=self.scal_upts_outb
+        )
+        self.kernels['tdivtconf_upts'] = lambda: be.kernel(
+            'mul', m3b, self._scal_fpts[0], out=self.scal_upts_outb, beta=1.0
+        )
+        self.kernels['negdivconf_upts'] = lambda: be.kernel(
+            'negdivconf', tplargs=dict(nvars=self.nvars),
+            dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
+            rcpdjac=self._rcpdjac_upts
+        )
 
     def get_mag_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]

@@ -28,6 +28,9 @@ class BaseElements(object):
         self.neles = neles = eles.shape[1]
         self.ndims = ndims = eles.shape[2]
 
+        # Kernels we provide
+        self.kernels = {}
+
         # Subclass checks
         assert self._dynvarmap
         assert self._nscal_fpts >= 1

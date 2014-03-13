@@ -13,26 +13,24 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 
         # Pointwise template arguments
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
-        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                             rsolver=rsolver, c=self._tpl_c)
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
+                       c=self._tpl_c)
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
 
-    def get_con_u_kern(self):
-        return self._be.kernel('intconu', self._tplargs,
-                               dims=[self.ninterfpts],
-                               ulin=self._scal0_lhs, urin=self._scal0_rhs,
-                               ulout=self._vect0_lhs, urout=self._vect0_rhs)
-
-    def get_comm_flux_kern(self):
-        return self._be.kernel('intcflux', self._tplargs,
-                               dims=[self.ninterfpts],
-                               ul=self._scal0_lhs, ur=self._scal0_rhs,
-                               gradul=self._vect0_lhs, gradur=self._vect0_rhs,
-                               magnl=self._mag_pnorm_lhs,
-                               magnr=self._mag_pnorm_rhs,
-                               nl=self._norm_pnorm_lhs)
+        self.kernels['con_u'] = lambda: self._be.kernel(
+            'intconu', tplargs=tplargs, dims=[self.ninterfpts],
+            ulin=self._scal0_lhs, urin=self._scal0_rhs,
+            ulout=self._vect0_lhs, urout=self._vect0_rhs
+        )
+        self.kernels['comm_flux'] = lambda: self._be.kernel(
+            'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
+             ul=self._scal0_lhs, ur=self._scal0_rhs,
+             gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+             magnl=self._mag_pnorm_lhs, magnr=self._mag_pnorm_rhs,
+             nl=self._norm_pnorm_lhs
+        )
 
 
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
@@ -41,25 +39,22 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 
         # Pointwise template arguments
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
-        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                             rsolver=rsolver, c=self._tpl_c)
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
+                       c=self._tpl_c)
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpiconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpicflux')
 
-    def get_con_u_kern(self):
-        return self._be.kernel('mpiconu', self._tplargs,
-                               dims=[self.ninterfpts],
-                               ulin=self._scal0_lhs, urin=self._scal0_rhs,
-                               ulout=self._vect0_lhs)
-
-    def get_comm_flux_kern(self):
-        return self._be.kernel('mpicflux', self._tplargs,
-                               dims=[self.ninterfpts],
-                               ul=self._scal0_lhs, ur=self._scal0_rhs,
-                               gradul=self._vect0_lhs, gradur=self._vect0_rhs,
-                               magnl=self._mag_pnorm_lhs,
-                               nl=self._norm_pnorm_lhs)
+        self.kernels['con_u'] = lambda: self._be.kernel(
+            'mpiconu', tplargs=tplargs, dims=[self.ninterfpts],
+             ulin=self._scal0_lhs, urin=self._scal0_rhs, ulout=self._vect0_lhs
+        )
+        self.kernels['comm_flux'] = lambda: self._be.kernel(
+            'mpicflux', tplargs=tplargs, dims=[self.ninterfpts],
+             ul=self._scal0_lhs, ur=self._scal0_rhs,
+             gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+        )
 
 
 class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
@@ -68,24 +63,22 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
 
         # Pointwise template arguments
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
-        self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                             rsolver=rsolver, c=self._tpl_c,
-                             bctype=self.type)
+        tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
+                       c=self._tpl_c, bctype=self.type)
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
 
-    def get_con_u_kern(self):
-        return self._be.kernel('bcconu', self._tplargs, dims=[self.ninterfpts],
-                               ulin=self._scal0_lhs, ulout=self._vect0_lhs,
-                               nlin=self._norm_pnorm_lhs)
-
-    def get_comm_flux_kern(self):
-        return self._be.kernel('bccflux', self._tplargs,
-                               dims=[self.ninterfpts],
-                               ul=self._scal0_lhs, gradul=self._vect0_lhs,
-                               magnl=self._mag_pnorm_lhs,
-                               nl=self._norm_pnorm_lhs)
+        self.kernels['con_u'] = lambda: self._be.kernel(
+            'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
+             ulin=self._scal0_lhs, ulout=self._vect0_lhs,
+             nlin=self._norm_pnorm_lhs
+        )
+        self.kernels['comm_flux'] = lambda: self._be.kernel(
+            'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
+            ul=self._scal0_lhs, gradul=self._vect0_lhs,
+            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+        )
 
 
 class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):

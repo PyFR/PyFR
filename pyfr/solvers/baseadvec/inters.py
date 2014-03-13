@@ -47,19 +47,19 @@ class BaseAdvectionMPIInters(BaseInters):
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
-    def get_scal_fpts0_pack_kern(self):
-        return self._be.kernel('pack', self._scal0_lhs)
-
-    def get_scal_fpts0_send_pack_kern(self):
-        return self._be.kernel('send_pack', self._scal0_lhs,
-                               self._rhsrank, self.MPI_TAG)
-
-    def get_scal_fpts0_recv_pack_kern(self):
-        return self._be.kernel('recv_pack', self._scal0_rhs,
-                               self._rhsrank, self.MPI_TAG)
-
-    def get_scal_fpts0_unpack_kern(self):
-        return self._be.kernel('unpack', self._scal0_rhs)
+        # Kernels
+        self.kernels['scal_fpts0_pack'] = lambda: be.kernel(
+            'pack', self._scal0_lhs
+        )
+        self.kernels['scal_fpts0_send'] = lambda: be.kernel(
+            'send_pack', self._scal0_lhs, self._rhsrank, self.MPI_TAG
+        )
+        self.kernels['scal_fpts0_recv'] = lambda: be.kernel(
+            'recv_pack', self._scal0_rhs, self._rhsrank, self.MPI_TAG
+        )
+        self.kernels['scal_fpts0_unpack'] = lambda: be.kernel(
+            'unpack', self._scal0_rhs
+        )
 
 
 class BaseAdvectionBCInters(BaseInters):

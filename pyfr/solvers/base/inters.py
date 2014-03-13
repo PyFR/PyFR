@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
-
 import numpy as np
 
 
@@ -27,8 +25,6 @@ def get_opt_view_perm(interside, mat, elemap):
 
 
 class BaseInters(object):
-    __metaclass__ = ABCMeta
-
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
         self._elemap = elemap
@@ -50,6 +46,9 @@ class BaseInters(object):
 
         # Kernel constants
         self._tpl_c = cfg.items_as('constants', float)
+
+        # Kernels we provide
+        self.kernels = {}
 
     def _const_mat(self, inter, meth):
         m = _get_inter_objs(inter, meth, self._elemap)
@@ -82,7 +81,3 @@ class BaseInters(object):
 
     def _vect_mpi_view(self, inter, meth):
         return self._mpi_view(inter, meth, (self.ndims, self.nvars))
-
-    @abstractmethod
-    def get_comm_flux_kern(self):
-        pass
