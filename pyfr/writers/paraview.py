@@ -228,10 +228,42 @@ def _tri_con(nsubdiv):
 
 
 def _tet_con(nsubdiv):
-    if nsubdiv > 1:
-        raise RuntimeError('Subdivision is not implemented for tetrahedra.')
+    """Generate node connectivity for vtu tet in high-order elements
 
-    return ParaviewWriter.vtk_to_pyfr['tet'][1]
+    :param ndim: Number of dimensions [3]
+    :param nsubdiv: Number of subdivisions (equal to element shape order)
+    :type nsubdiv: integer
+    :rtype: list
+
+    Produce six different mappings for six different cell orientations
+    """
+    conlst = []
+    jump = 0
+    for n in xrange(nsubdiv, 0, -1):
+        for row in xrange(n, 0, -1):
+            # Lower and upper indices
+            l = (n - row)*(n + row + 3) // 2 + jump
+            u = l + row + 1
+
+            # Lower and upper for one row up
+            ln = (n + 1)*(n + 2) // 2 + l - n + row
+            un = ln + row
+
+            rowm1 = np.arange(row - 1)[...,None]
+
+            # Base offsets
+            offs = [(l, l + 1, u, ln), (l + 1, u, ln, ln + 1),
+                    (u, u + 1, ln + 1, un), (u, ln, ln + 1, un),
+                    (l + 1, u, u+1, ln + 1), (u + 1, ln + 1, un, un + 1)]
+
+            # Current row
+            conlst.extend(rowm1 + off for off in offs[:-1])
+            conlst.append(rowm1[:-1] + offs[-1])
+            conlst.append([ix + row - 1 for ix in offs[0]])
+
+        jump += (n + 1)*(n + 2) // 2
+
+    return np.hstack(np.ravel(c) for c in conlst)
 
 
 def _pri_con(nsubdiv):
