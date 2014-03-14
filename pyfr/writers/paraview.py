@@ -264,6 +264,7 @@ def _tet_con(nsubdiv):
         jump += (n + 1)*(n + 2) // 2
 
     return np.hstack(np.ravel(c) for c in con_map)
+  
 def _base_con(etype, ndim, nsubdiv):
     """Switch case to select node connectivity for supported vtu elements
 
