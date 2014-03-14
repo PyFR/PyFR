@@ -157,9 +157,6 @@ class BaseElements(object):
         self.scal_upts_inb = be.matrix_bank(self._scal_upts)
         self.scal_upts_outb = be.matrix_bank(self._scal_upts)
 
-    def get_scal_upts_mat(self, idx):
-        return self._scal_upts[idx].get()
-
     def _gen_rcpdjac_smat_upts(self):
         smats, djacs = self._get_smats(self._basis.upts, retdets=True)
 
