@@ -236,16 +236,3 @@ class BaseBackend(object):
         queue.
         """
         self.queue_cls.runall(sequence)
-
-    @staticmethod
-    def compact_arr(mat):
-        return mat.reshape(BaseBackend.compact_shape(mat.shape))
-
-    @staticmethod
-    def compact_shape(shape):
-        if len(shape) == 2:
-            return shape[0], shape[1]
-        elif len(shape) == 3:
-            return shape[0], shape[1]*shape[2]
-        else:
-            return shape[0]*shape[1], shape[2]*shape[3]

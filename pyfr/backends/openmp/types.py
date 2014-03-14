@@ -53,7 +53,7 @@ class OpenMPMatrixRSlice(base.MatrixRSlice):
         # Since slices do not retain any information about the
         # high-order structure of an array it is fine to compact mat
         # down to two dimensions and simply slice this
-        self.data = backend.compact_arr(mat.data)[p:q]
+        self.data = mat.data.reshape(mat.nrow, mat.leaddim)[p:q]
 
         # Pointer to our ndarray (used by ctypes)
         self._as_parameter_ = self.data.ctypes.data
