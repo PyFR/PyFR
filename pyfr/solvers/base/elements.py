@@ -5,7 +5,6 @@ from abc import ABCMeta, abstractmethod
 import numpy as np
 
 from pyfr.nputil import npeval, fuzzysort
-from pyfr.util import ndrange
 
 
 class BaseElements(object):
@@ -201,37 +200,26 @@ class BaseElements(object):
 
     def _get_smats(self, pts, retdets=False):
         jac = self._get_jac_eles_at(pts)
+        smats = np.empty_like(jac)
 
         if self.ndims == 2:
-            return self._get_jac_smats_2d(jac, retdets)
+            a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
+
+            smats[0,:,0], smats[0,:,1] =  d, -b
+            smats[1,:,0], smats[1,:,1] = -c,  a
+
+            if retdets:
+                djacs = a*d - b*c
         else:
-            return self._get_jac_smats_3d(jac, retdets)
+            # We note that J = [x0, x1, x2]
+            x0, x1, x2 = jac[:,:,0], jac[:,:,1], jac[:,:,2]
 
-    def _get_jac_smats_2d(self, jac, retdets):
-        a, b, c, d = [jac[i,:,j] for i, j in ndrange(2, 2)]
+            smats[0] = np.cross(x1, x2, axisa=0, axisb=0, axisc=1)
+            smats[1] = np.cross(x2, x0, axisa=0, axisb=0, axisc=1)
+            smats[2] = np.cross(x0, x1, axisa=0, axisb=0, axisc=1)
 
-        smats = np.empty_like(jac)
-        smats[0,:,0], smats[0,:,1] =  d, -b
-        smats[1,:,0], smats[1,:,1] = -c,  a
+            if retdets:
+                # Exploit the fact that det(J) = x0 . (x1 ^ x2)
+                djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
 
-        if retdets:
-            return smats, a*d - b*c
-        else:
-            return smats
-
-    def _get_jac_smats_3d(self, jac, retdets):
-        # We note that J = [x0, x1, x2]
-        x0, x1, x2 = jac[:,:,0], jac[:,:,1], jac[:,:,2]
-
-        smats = np.empty_like(jac)
-        smats[0] = np.cross(x1, x2, axisa=0, axisb=0, axisc=1)
-        smats[1] = np.cross(x2, x0, axisa=0, axisb=0, axisc=1)
-        smats[2] = np.cross(x0, x1, axisa=0, axisb=0, axisc=1)
-
-        if retdets:
-            # Exploit the fact that det(J) = x0 . (x1 ^ x2)
-            djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
-
-            return smats, djacs
-        else:
-            return smats
+        return (smats, djacs) if retdets else smats
