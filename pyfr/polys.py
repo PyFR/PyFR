@@ -51,21 +51,15 @@ class PolyBasis(object):
 
     @chop
     def nodal_basis_at(self, epts):
-        return np.dot(self.vdm_inv, self.ortho_basis_at(epts)).T
+        return np.linalg.solve(self.vdm, self.ortho_basis_at(epts)).T
 
     @chop
     def jac_nodal_basis_at(self, epts):
-        J = self.jac_ortho_basis_at(epts)
-
-        return np.array([np.dot(self.vdm_inv, d) for d in J])
+        return np.linalg.solve(self.vdm, self.jac_ortho_basis_at(epts))
 
     @lazyprop
     def vdm(self):
         return self.ortho_basis_at(self._pts)
-
-    @lazyprop
-    def vdm_inv(self):
-        return np.linalg.inv(self.vdm)
 
 
 def _line_orthob_at(order, p):
