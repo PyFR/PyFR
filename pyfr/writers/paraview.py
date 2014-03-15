@@ -6,7 +6,7 @@ import numpy as np
 from pyfr.bases import BaseBasis, get_std_ele_by_name
 from pyfr.inifile import Inifile
 from pyfr.readers.nodemaps import GmshNodeMaps
-from pyfr.util import subclass_map
+from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
@@ -436,8 +436,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     else:
         flt = ['float64', 8]
 
-    # Construct basismap and dimensions
-    basismap = subclass_map(BaseBasis, 'name')
+    # Get the basis class
+    basiscls = subclass_where(BaseBasis, name=m_inf[0])
     ndims = m_inf[1][2]
 
     # Set npts for divide/append cases
@@ -447,8 +447,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         npts = ParaviewWriter.vtk_to_pyfr[m_inf[0]][2]
 
     # Generate basis objects for solution and vtu output
-    soln_b = basismap[m_inf[0]](m_inf[1][0], cfg)
-    vtu_b = basismap[m_inf[0]](npts, cfg)
+    soln_b = basiscls(m_inf[1][0], cfg)
+    vtu_b = basiscls(npts, cfg)
 
     # Generate operator matrices to move points and solutions to vtu nodes
     mesh_vtu_op = np.array(soln_b.sbasis_at(vtu_b.spts), dtype=float)
@@ -502,7 +502,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         nhpts = s_inf[1][0] - nlpts
 
         # Generate basis objects for mesh, solution and vtu output
-        mesh_b = basismap[m_inf[0]](m_inf[1][0], cfg)
+        mesh_b = basiscls(m_inf[1][0], cfg)
 
         # Get location of spts in standard element of solution order
         uord = cfg.getint('solver', 'order')

@@ -4,7 +4,7 @@ from mpmath import mp
 
 from pyfr.quadrules.base import BaseQuadRule
 from pyfr.quadrules.line import BaseLineQuadRule
-from pyfr.util import subclass_map
+from pyfr.util import subclass_where
 
 
 class BaseHexQuadRule(BaseQuadRule):
@@ -16,8 +16,8 @@ class TensorProdHexQuadRule(BaseHexQuadRule):
         if not mp.isint(mp.cbrt(npts)):
             raise ValueError('Invalid number of points for quad rule')
 
-        rule_map = subclass_map(BaseLineQuadRule, 'name')
-        rule = rule_map[self.name](int(mp.cbrt(npts)))
+        rulecls = subclass_where(BaseLineQuadRule, name=self.name)
+        rule = rulecls(int(mp.cbrt(npts)))
 
         pts = rule.points
         self.points = [(i, j, k) for k in pts for j in pts for i in pts]

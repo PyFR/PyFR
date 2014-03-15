@@ -5,7 +5,7 @@ from mpmath import mp
 from pyfr.quadrules.base import BaseQuadRule
 from pyfr.quadrules.line import BaseLineQuadRule
 from pyfr.quadrules.tri import BaseTriQuadRule
-from pyfr.util import subclass_map
+from pyfr.util import subclass_where
 
 
 class BasePriQuadRule(BaseQuadRule):
@@ -22,11 +22,11 @@ class TensorProdPriQuadRule(BasePriQuadRule):
 
         tname, lname = self.name.split('*')
 
-        trule_map = subclass_map(BaseTriQuadRule, 'name')
-        trule = trule_map[tname](roots[0]*(roots[0] + 1) // 2)
+        trulecls = subclass_where(BaseTriQuadRule, name=tname)
+        trule = trulecls(roots[0]*(roots[0] + 1) // 2)
 
-        lrule_map = subclass_map(BaseLineQuadRule, 'name')
-        lrule = lrule_map[lname](roots[0])
+        lrulecls = subclass_where(BaseLineQuadRule, name=lname)
+        lrule = lrulecls[lname](roots[0])
 
         self.points = [(t[0], t[1], l)
                        for l in lrule.points for t in trule.points]

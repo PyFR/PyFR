@@ -9,7 +9,7 @@ from pyfr.quadrules.pri import BasePriQuadRule
 from pyfr.quadrules.quad import BaseQuadQuadRule
 from pyfr.quadrules.tet import BaseTetQuadRule
 from pyfr.quadrules.tri import BaseTriQuadRule
-from pyfr.util import subclass_map
+from pyfr.util import subclass_where
 
 
 def get_quadrule(eletype, rule, npts):
@@ -27,8 +27,7 @@ def get_quadrule(eletype, rule, npts):
 
     # See if rule looks like the name of a scheme
     if re.match(r'[a-zA-Z0-9\-+*_]+$', rule):
-        rule_map = subclass_map(basecls, 'name')
-        return rule_map[rule](npts)
+        return subclass_where(basecls, name=rule)(npts)
     # Otherwise see if it looks like a tabulation
     elif 'PTS' in rule.upper():
         # Create a suitable subclass

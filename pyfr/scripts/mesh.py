@@ -8,7 +8,7 @@ from argparse import ArgumentParser, FileType
 import numpy as np
 
 from pyfr.readers import get_reader_by_name, get_reader_by_extn, BaseReader
-from pyfr.util import all_subclasses
+from pyfr.util import subclasses
 
 
 def process_convert(args):
@@ -38,7 +38,7 @@ def main():
                             help='Input mesh file')
     ap_convert.add_argument('outmesh', type=FileType('wb'),
                             help='Output PyFR mesh file')
-    types = [cls.name for cls in all_subclasses(BaseReader)]
+    types = [cls.name for cls in subclasses(BaseReader)]
     ap_convert.add_argument('-t', dest='type', choices=types, required=False,
                             help='Input file type; this is usually inferred '
                             'from the extension of inmesh')

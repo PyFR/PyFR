@@ -10,7 +10,7 @@ import os
 import numpy as np
 
 from pyfr.bases import BaseBasis
-from pyfr.util import lazyprop, subclass_map
+from pyfr.util import subclasses, lazyprop
 
 
 class PyFRBaseReader(Mapping):
@@ -90,20 +90,20 @@ class PyFRBaseReader(Mapping):
             raise RuntimeError('"%s" does not contain solution or shape point '
                                'files' % (self.fname))
 
-        # Generate mapping of pyfr element types to respective basis classes.
-        basismap = subclass_map(BaseBasis, 'name')
+        # Element types known to PyFR
+        eletypes = [b.name for b in subclasses(BaseBasis)
+                    if hasattr(b, 'name')]
 
         # Assembles possible array file names, then checks if present
         # in .pyfr{m, s} archive.  If so, the element type and array
         # shape are assigned to the array file name in info.
         prt = 0
         while len(info) < len(ls_files):
-            for ele_type in basismap.keys():
-
-                name = '%s_%s_p%d' % (prfx, ele_type, prt)
+            for et in eletypes:
+                name = '%s_%s_p%d' % (prfx, et, prt)
 
                 if name in ls_files:
-                    info[name] = (ele_type, self[name].shape)
+                    info[name] = (et, self[name].shape)
 
             prt += 1
 

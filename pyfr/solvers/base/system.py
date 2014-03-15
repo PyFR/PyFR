@@ -9,7 +9,7 @@ from mpi4py import MPI
 
 from pyfr.bases import BaseBasis
 from pyfr.inifile import Inifile
-from pyfr.util import proxylist, subclass_map
+from pyfr.util import proxylist, subclasses
 
 
 class BaseSystem(object):
@@ -54,14 +54,17 @@ class BaseSystem(object):
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
 
     def _load_eles(self, rallocs, mesh, initsoln):
-        basismap = subclass_map(BaseBasis, 'name')
+        basismap = {b.name: b for b in subclasses(BaseBasis, just_leaf=True)}
 
         # Look for and load each element type from the mesh
         elemap = OrderedDict()
-        for bname, bcls in basismap.iteritems():
-            mk = 'spt_%s_p%d' % (bname, rallocs.prank)
-            if mk in mesh:
-                elemap[bname] = self.elementscls(bcls, mesh[mk], self._cfg)
+        for f in mesh:
+            m = re.match('spt_(.+?)_p%d$' % rallocs.prank, f)
+            if m:
+                # Element type
+                t = m.group(1)
+
+                elemap[t] = self.elementscls(basismap[t], mesh[f], self._cfg)
 
         # Construct a proxylist to simplify collective operations
         eles = proxylist(elemap.values())
@@ -108,7 +111,8 @@ class BaseSystem(object):
         return mpi_inters
 
     def _load_bc_inters(self, rallocs, mesh, elemap):
-        bcmap = subclass_map(self.bbcinterscls, 'type')
+        bccls = self.bbcinterscls
+        bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
 
         bc_inters = proxylist([])
         for f in mesh:
