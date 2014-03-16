@@ -20,7 +20,7 @@ PyFR currently has a hard dependency on Python 2.7.  PyFR does not currently sup
 
 1. `mako <http://www.makotemplates.org/>`_
 2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-3. `numpy <http://www.numpy.org/>`_ >= 1.6
+3. `numpy <http://www.numpy.org/>`_ >= 1.8
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 
 CUDA Backend

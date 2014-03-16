@@ -74,8 +74,8 @@ package_data = {
 install_requires = [
     'mako',
     'mpi4py >= 1.3',
-    'mpmath >= 0.17',
-    'numpy >= 1.6'
+    'mpmath >= 0.18',
+    'numpy >= 1.8'
 ]
 
 # Soft dependencies
