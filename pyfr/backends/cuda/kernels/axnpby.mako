@@ -6,9 +6,10 @@ axnpby(int n, ${dtype}* y, ${dtype} beta,
        ${', '.join('const {0}* x{1}, {0} a{1}'.format(dtype, i)
          for i in range(n))})
 {
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    int strt = blockIdx.x*blockDim.x + threadIdx.x;
+    int incr = gridDim.x*blockDim.x;
 
-    if (i < n)
+    for (int i = strt; i < n; i += incr)
     {
         ${dtype} axn = ${pyfr.dot('a{j}', 'x{j}[i]', j=n)};
 

@@ -2,18 +2,23 @@
 
 import ast
 import ctypes as ct
+import functools as ft
 import itertools as it
 import re
 
 import numpy as np
 
 
-def npaligned(shape, dtype, alignb=32):
-    nbytes = np.prod(shape)*np.dtype(dtype).itemsize
-    buf = np.zeros(nbytes + alignb, dtype=np.uint8)
-    off = -buf.ctypes.data % alignb
+def chop(fn):
+    @ft.wraps(fn)
+    def newfn(*args, **kwargs):
+        arr = fn(*args, **kwargs)
 
-    return buf[off:nbytes + off].view(dtype).reshape(shape)
+        # Determine a tolerance and flush
+        arr[abs(arr) < np.finfo(arr.dtype).resolution] = 0
+
+        return arr
+    return newfn
 
 
 _npeval_syms = {

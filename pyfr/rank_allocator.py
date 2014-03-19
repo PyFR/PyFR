@@ -5,14 +5,13 @@ from collections import defaultdict
 import re
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.util import subclass_map
+from pyfr.util import subclass_where
 
 
 def get_rank_allocation(mesh, cfg):
-    allocator_map = subclass_map(BaseRankAllocator, 'name')
-
     name = cfg.get('backend', 'rank-allocator', 'linear')
-    return allocator_map[name](mesh, cfg)
+
+    return subclass_where(BaseRankAllocator, name=name)(mesh, cfg)
 
 
 class BaseRankAllocator(object):

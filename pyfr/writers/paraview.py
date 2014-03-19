@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
 
 """Converts .pyfr[m, s] files to a Paraview VTK UnstructuredGrid File"""
-from copy import copy
-
 import numpy as np
-import sympy as sy
 
 from pyfr.bases import BaseBasis, get_std_ele_by_name
 from pyfr.inifile import Inifile
 from pyfr.readers.nodemaps import GmshNodeMaps
-from pyfr.util import subclass_map
+from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
@@ -24,7 +21,7 @@ class ParaviewWriter(BaseWriter):
                    'quad': (9, [0, 1, 3, 2], 4),
                    'tet': (10, [0, 1, 2, 3], 4),
                    'pyr': (14, [0, 1, 3, 2, 4], 5),
-                   'pri': (13, [0, 1, 4, 2, 3, 5], 6),
+                   'pri': (13, [0, 1, 2, 3, 4, 5], 6),
                    'hex': (12, [0, 1, 3, 2, 4, 5, 7, 6], 8)}
 
     def write_out(self):
@@ -77,8 +74,8 @@ class ParaviewWriter(BaseWriter):
         for i, mk in enumerate(self.mesh_inf.iterkeys()):
             sk = self.soln_inf.keys()[i]
 
-            _write_vtu_data(self.args, self.outf, copy(self.cfg),
-                            self.mesh[mk], self.mesh_inf[mk], self.soln[sk],
+            _write_vtu_data(self.args, self.outf, self.cfg, self.mesh[mk],
+                            self.mesh_inf[mk], self.soln[sk],
                             self.soln_inf[sk])
 
         # Write .vtu file footer
@@ -112,11 +109,11 @@ def _component_to_physical_soln(soln, gamma):
 
     """
     # Convert rhou, rhov, [rhow] to u, v, [w]
-    soln[...,1:-1] /= soln[...,0,None]
+    soln[:,1:-1] /= soln[:,0,None]
 
     # Convert total energy to pressure
-    soln[...,-1] -= 0.5 * soln[...,0] * np.sum(soln[...,1:-1] ** 2, axis=2)
-    soln[...,-1] *= (gamma - 1)
+    soln[:,-1] -= 0.5*soln[:,0]*np.sum(soln[:,1:-1]**2, axis=1)
+    soln[:,-1] *= gamma - 1
 
 
 def _ncells_after_subdiv(ms_inf, divisor):
@@ -200,10 +197,9 @@ def _quadcube_con(ndim, nsubdiv):
     return np.hstack(internal_con)
 
 
-def _tri_con(ndim, nsubdiv):
+def _tri_con(nsubdiv):
     """Generate node connectivity for vtu triangles in high-order elements
 
-    :param ndim: Number of dimensions [2,3]
     :param nsubdiv: Number of subdivisions (equal to element shape order)
     :type ndim: integer
     :type nsubdiv: integer
@@ -231,7 +227,57 @@ def _tri_con(ndim, nsubdiv):
     return np.hstack(conlst)
 
 
-def _base_con(etype, ndim, nsubdiv):
+def _tet_con(nsubdiv):
+    """Generate node connectivity for vtu tet in high-order elements
+
+    :param ndim: Number of dimensions [3]
+    :param nsubdiv: Number of subdivisions (equal to element shape order)
+    :type nsubdiv: integer
+    :rtype: list
+
+    Produce six different mappings for six different cell orientations
+    """
+    conlst = []
+    jump = 0
+    for n in xrange(nsubdiv, 0, -1):
+        for row in xrange(n, 0, -1):
+            # Lower and upper indices
+            l = (n - row)*(n + row + 3) // 2 + jump
+            u = l + row + 1
+
+            # Lower and upper for one row up
+            ln = (n + 1)*(n + 2) // 2 + l - n + row
+            un = ln + row
+
+            rowm1 = np.arange(row - 1)[...,None]
+
+            # Base offsets
+            offs = [(l, l + 1, u, ln), (l + 1, u, ln, ln + 1),
+                    (u, u + 1, ln + 1, un), (u, ln, ln + 1, un),
+                    (l + 1, u, u+1, ln + 1), (u + 1, ln + 1, un, un + 1)]
+
+            # Current row
+            conlst.extend(rowm1 + off for off in offs[:-1])
+            conlst.append(rowm1[:-1] + offs[-1])
+            conlst.append([ix + row - 1 for ix in offs[0]])
+
+        jump += (n + 1)*(n + 2) // 2
+
+    return np.hstack(np.ravel(c) for c in conlst)
+
+
+def _pri_con(nsubdiv):
+    # Triangle connectivity
+    tcon = _tri_con(nsubdiv).reshape(-1, 3)
+
+    # Layer these rows of triangles to define prisms
+    loff = (nsubdiv + 1)*(nsubdiv + 2) // 2
+    lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in xrange(nsubdiv)]
+
+    return np.hstack(np.hstack(l).flat for l in lcon)
+
+
+def _base_con(etype, nsubdiv):
     """Switch case to select node connectivity for supported vtu elements
 
     PyFR high-order elements are subdivided into low-order vtu
@@ -241,7 +287,6 @@ def _base_con(etype, ndim, nsubdiv):
     high-order node multiple times in defining low-order cells.
 
     :param etype: PyFR element type
-    :param ndim: Number of dimensions [2,3]
     :param nsubdiv: Number of subdivisions (equal to element shape order)
     :type etype: string
     :type ndim: integer
@@ -249,20 +294,18 @@ def _base_con(etype, ndim, nsubdiv):
     :rtype: list
 
     """
-    # Catch-all for cases where cell subdivision is not performed
-    if nsubdiv is None:
-        nsubdiv = 1
+    connec_map = {
+        'tri': _tri_con,
+        'tet': _tet_con,
+        'pri': _pri_con,
+        'quad': lambda n: _quadcube_con(2, n),
+        'hex': lambda n: _quadcube_con(3, n)
+    }
 
-    # Switch case to generate node connectivity for each element type
-    if etype == 'tri':
-        connec = _tri_con(ndim, nsubdiv)
-    elif etype == 'quad' or etype == 'hex':
-        connec = _quadcube_con(ndim, nsubdiv)
-    else:
-        raise RuntimeError('Node connectivity is not yet implemented for %s '
-                          'elements.' % etype)
-
-    return connec
+    try:
+        return connec_map[etype](nsubdiv or 1)
+    except KeyError:
+        raise RuntimeError('Connectivity not implemented for ' + etype)
 
 
 def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
@@ -393,9 +436,9 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     else:
         flt = ['float64', 8]
 
-    # Construct basismap and dimensions
-    basismap = subclass_map(BaseBasis, 'name')
-    dims = sy.symbols('p q r')[:m_inf[1][2]]
+    # Get the basis class
+    basiscls = subclass_where(BaseBasis, name=m_inf[0])
+    ndims = m_inf[1][2]
 
     # Set npts for divide/append cases
     if args.divisor is not None:
@@ -404,8 +447,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         npts = ParaviewWriter.vtk_to_pyfr[m_inf[0]][2]
 
     # Generate basis objects for solution and vtu output
-    soln_b = basismap[m_inf[0]](dims, m_inf[1][0], cfg)
-    vtu_b = basismap[m_inf[0]](dims, npts, cfg)
+    soln_b = basiscls(m_inf[1][0], cfg)
+    vtu_b = basiscls(npts, cfg)
 
     # Generate operator matrices to move points and solutions to vtu nodes
     mesh_vtu_op = np.array(soln_b.sbasis_at(vtu_b.spts), dtype=float)
@@ -413,13 +456,13 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Calculate node locations of vtu elements
     pts = np.dot(mesh_vtu_op, mesh.reshape(m_inf[1][0],
-                                           -1)).reshape(npts, -1, len(dims))
+                                           -1)).reshape(npts, -1, ndims)
     # Calculate solution at node locations of vtu elements
     sol = np.dot(soln_vtu_op, soln.reshape(s_inf[1][0],
                                            -1)).reshape(npts, s_inf[1][1], -1)
 
     # Append dummy z dimension for points in 2-d (required by Paraview)
-    if len(dims) == 2:
+    if ndims == 2:
         pts = np.append(pts, np.zeros(pts.shape[:-1])[...,None], axis=2)
 
     # Write element node locations to file
@@ -427,7 +470,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Prepare vtu cell arrays (connectivity, offsets, types):
     # Generate and extend vtu sub-cell node connectivity across all elements
-    vtu_con = np.tile(_base_con(m_inf[0], len(dims), args.divisor),
+    vtu_con = np.tile(_base_con(m_inf[0], args.divisor),
                       (m_inf[1][1], 1))
     vtu_con += (np.arange(m_inf[1][1]) * npts)[:, None]
 
@@ -448,9 +491,9 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     _component_to_physical_soln(sol, cfg.getfloat('constants', 'gamma'))
 
     # Write Density, Velocity and Pressure
-    _write_vtk_darray(sol[...,0].T, vtuf, flt[0])
-    _write_vtk_darray(sol[...,1:-1].swapaxes(0,1), vtuf, flt[0])
-    _write_vtk_darray(sol[...,-1].swapaxes(0,1), vtuf, flt[0])
+    _write_vtk_darray(sol[:,0].T, vtuf, flt[0])
+    _write_vtk_darray(sol[:,1:-1].transpose(2, 0, 1), vtuf, flt[0])
+    _write_vtk_darray(sol[:,-1].T, vtuf, flt[0])
 
     # Append high-order data as CellData if not dividing cells
     if args.divisor is None:
@@ -459,7 +502,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         nhpts = s_inf[1][0] - nlpts
 
         # Generate basis objects for mesh, solution and vtu output
-        mesh_b = basismap[m_inf[0]](dims, m_inf[1][0], cfg)
+        mesh_b = basiscls(m_inf[1][0], cfg)
 
         # Get location of spts in standard element of solution order
         uord = cfg.getint('solver', 'order')
@@ -474,7 +517,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         pts = pts.reshape((-1,) + m_inf[1][1:])
 
         # Append dummy z dimension to 2-d points (required by Paraview)
-        if len(dims) == 2:
+        if ndims == 2:
             pts = np.append(pts, np.zeros(pts.shape[:-1])[...,None], axis=2)
 
         # Calculate solution at node locations
@@ -490,7 +533,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
             pt = GmshNodeMaps.to_pyfr[s_inf[0], s_inf[1][0]][gmshpt + nlpts]
 
             # Write node locations, density, velocity and pressure
-            _write_vtk_darray(pts[pt,...], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,...,0], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,...,1:-1], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,...,-1], vtuf, flt[0])
+            _write_vtk_darray(pts[pt], vtuf, flt[0])
+            _write_vtk_darray(sol[pt,0], vtuf, flt[0])
+            _write_vtk_darray(sol[pt,1:-1].T, vtuf, flt[0])
+            _write_vtk_darray(sol[pt,-1], vtuf, flt[0])

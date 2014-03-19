@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import BaseBackend, blockmats
+import numpy as np
+
+from pyfr.backends.base import BaseBackend
 from pyfr.template import DottedTemplateLookup
 
 
@@ -10,11 +12,13 @@ class OpenMPBackend(BaseBackend):
     def __init__(self, cfg):
         super(OpenMPBackend, self).__init__(cfg)
 
+        # Take the alignment requirement to be 32-bytes
+        self.alignb = 32
+
         from pyfr.backends.openmp import (blasext, cblas, packing, provider,
                                           types)
 
         # Register our data types
-        self.block_diag_matrix_cls = types.OpenMPBlockDiagMatrix
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_bank_cls = types.OpenMPMatrixBank
@@ -29,7 +33,6 @@ class OpenMPBackend(BaseBackend):
 
         # Kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
-                    blockmats.BlockDiagMatrixKernels,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
                     cblas.OpenMPCBLASKernels]
@@ -37,3 +40,9 @@ class OpenMPBackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    def _malloc_impl(self, nbytes):
+            data = np.zeros(nbytes + self.alignb, dtype=np.uint8)
+            offset = -data.ctypes.data % self.alignb
+
+            return data[offset:nbytes + offset]

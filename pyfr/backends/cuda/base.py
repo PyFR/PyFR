@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import BaseBackend, blockmats
+from pyfr.backends.base import BaseBackend
 from pyfr.template import DottedTemplateLookup
 
 
@@ -11,7 +11,10 @@ class CUDABackend(BaseBackend):
         super(CUDABackend, self).__init__(cfg)
 
         # Create a CUDA context
-        from pycuda.autoinit import context as cuda_ctx
+        from pycuda.autoinit import context
+
+        # Take the required alignment to be 128 bytes
+        self.alignb = 128
 
         # Some CUDA devices share L1 cache and shared memory; on these
         # devices CUDA allows us to specify a preference between L1
@@ -20,18 +23,12 @@ class CUDABackend(BaseBackend):
         # declare its preference) we set the global default to
         # PREFER_SHARED.
         from pycuda.driver import func_cache
-        cuda_ctx.set_cache_config(func_cache.PREFER_SHARED)
+        context.set_cache_config(func_cache.PREFER_SHARED)
 
-        # For introspection to work it must always be possible to
-        # import the CUDABackend (even if CUDA is unavailable on the
-        # system).  As many of our types/providers depend on the CUDA
-        # runtime we import these here, locally, at the time of
-        # instantiation.
         from pyfr.backends.cuda import (blasext, cublas, packing, provider,
                                         types)
 
         # Register our data types
-        self.block_diag_matrix_cls = types.CUDABlockDiagMatrix
         self.const_matrix_cls = types.CUDAConstMatrix
         self.matrix_cls = types.CUDAMatrix
         self.matrix_bank_cls = types.CUDAMatrixBank
@@ -46,11 +43,21 @@ class CUDABackend(BaseBackend):
 
         # Instantiate the base kernel providers
         kprovs = [provider.CUDAPointwiseKernelProvider,
-                  blockmats.BlockDiagMatrixKernels,
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
-                  cublas.CUDACublasKernels]
+                  cublas.CUDACUBLASKernels]
         self._providers = [k(self) for k in kprovs]
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    def _malloc_impl(self, nbytes):
+        import pycuda.driver as cuda
+
+        # Allocate
+        data = cuda.mem_alloc(nbytes)
+
+        # Zero
+        cuda.memset_d32(data, 0, nbytes // 4)
+
+        return data

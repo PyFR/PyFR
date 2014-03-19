@@ -20,8 +20,8 @@ PyFR currently has a hard dependency on Python 2.7.  PyFR does not currently sup
 
 1. `mako <http://www.makotemplates.org/>`_
 2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-3. `numpy <http://www.numpy.org/>`_ >= 1.6
-4. `sympy <http://sympy.org/>`_ >= 0.7.3
+3. `numpy <http://www.numpy.org/>`_ >= 1.8
+4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -34,10 +34,21 @@ greater. The backend requires:
 
 OpenMP Backend
 ^^^^^^^^^^^^^^
+
 The OpenMP backend targets multi-core CPUs. The backend requires:
 
 1. GCC >= 4.7
 2. A BLAS library compiled as a shared library (e.g. `OpenBLAS <http://www.openblas.net/>`_)
+
+OpenCL Backend
+^^^^^^^^^^^^^^
+
+The OpenCL backend targets a range of accelerators including GPUs from
+AMD and NVIDIA.  The backend requires:
+
+1. A working OpenCL installation.
+2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_ >= 2013.2
+3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
 Installation
 ------------

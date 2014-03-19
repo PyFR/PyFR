@@ -2,9 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 % if ndims == 2:
-<%pyfr:function name='viscous_flux_add'
-                params='const fpdtype_t uin[4], fpdtype_t grad_uin[2][4],
-                        fpdtype_t fout[2][4]'>
+<%pyfr:macro name='viscous_flux_add' params='uin, grad_uin, fout'>
     fpdtype_t rho = uin[0], rhou = uin[1], rhov = uin[2], E = uin[3];
 
     fpdtype_t rcprho = 1.0/rho;
@@ -36,11 +34,9 @@
 
     fout[0][3] += u*t_xx + v*t_xy + ${-c['mu']*c['gamma']/c['Pr']}*T_x;
     fout[1][3] += u*t_xy + v*t_yy + ${-c['mu']*c['gamma']/c['Pr']}*T_y;
-</%pyfr:function>
+</%pyfr:macro>
 % elif ndims == 3:
-<%pyfr:function name='viscous_flux_add'
-                params='const fpdtype_t uin[5], fpdtype_t grad_uin[3][5],
-                        fpdtype_t fout[3][5]'>
+<%pyfr:macro name='viscous_flux_add' params='uin, grad_uin, fout'>
     fpdtype_t rho  = uin[0];
     fpdtype_t rhou = uin[1], rhov = uin[2], rhow = uin[3];
     fpdtype_t E    = uin[4];
@@ -87,5 +83,5 @@
     fout[0][4] += u*t_xx + v*t_xy + w*t_xz + ${-c['mu']*c['gamma']/c['Pr']}*T_x;
     fout[1][4] += u*t_xy + v*t_yy + w*t_yz + ${-c['mu']*c['gamma']/c['Pr']}*T_y;
     fout[2][4] += u*t_xz + v*t_yz + w*t_zz + ${-c['mu']*c['gamma']/c['Pr']}*T_z;
-</%pyfr:function>
+</%pyfr:macro>
 % endif

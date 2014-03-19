@@ -2,147 +2,72 @@
 
 import collections
 import itertools as it
-from ctypes import c_void_p
 
 from mpi4py import MPI
 import numpy as np
 
 import pyfr.backends.base as base
-from pyfr.nputil import npaligned
-from pyfr.util import ndrange
 
 
 class OpenMPMatrixBase(base.MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, iopacking, tags):
-        super(OpenMPMatrixBase, self).__init__(backend, ioshape, iopacking,
-                                               tags)
+    def onalloc(self, basedata, offset):
+        self.basedata = basedata.ctypes.data
 
-        # Data type info
-        self.dtype = dtype
-        self.itemsize = np.dtype(dtype).itemsize
+        self.data = basedata[offset:offset + self.nrow*self.pitch]
+        self.data = self.data.view(self.dtype).reshape(self.datashape)
 
-        # Types must be multiples of 32
-        assert (32 % self.itemsize) == 0
+        self.offset = offset
 
-        # Alignment requirement for the final dimension
-        ldmod = 32/self.itemsize if 'align' in tags else 1
-
-        # SoA shape of ourself and our dimensionality
-        shape, ndim = self.soa_shape, len(ioshape)
-
-        # Shape to allocate
-        datashape = []
-
-        # Rows
-        if ndim == 2 or ndim == 3:
-            nrow = shape[0]
-            datashape += [nrow]
-        else:
-            nrow = shape[0]*shape[1]
-            datashape += [shape[0], shape[1]]
-
-        # Columns
-        if ndim == 2:
-            ncol = shape[1]
-            datashape += [ncol - (ncol % -ldmod)]
-        else:
-            ncols = shape[-2]
-            ncola = shape[-1] - (shape[-1] % -ldmod)
-            ncol = ncols*ncola
-            datashape += [ncols, ncola]
-
-        # Assign
-        self.nrow, self.ncol = nrow, ncol
-
-        self.leaddim = ncol - (ncol % -ldmod)
-        self.leadsubdim = datashape[-1]
-        self.pitch = self.leaddim*self.itemsize
-
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
-
-        # Allocate, ensuring data is on a 32-byte boundary (this is
-        # separate to the dimension alignment above)
-        self.data = npaligned(datashape, dtype=self.dtype)
+        # Pointer to our ndarray (used by ctypes)
+        self._as_parameter_ = self.data.ctypes.data
 
         # Process any initial value
-        if initval is not None:
-            self.set(initval)
+        if self._initval is not None:
+            self.set(self._initval)
+
+        # Remove
+        del self._initval
 
     def get(self):
         # Trim any padding in the final dimension
-        arr = self.data[...,:self.soa_shape[-1]]
-
-        if self.iopacking != 'SoA':
-            arr = self.backend.aos_arr(arr, 'SoA')
-
-        return arr
+        return self.data[...,:self.ioshape[-1]]
 
     def set(self, ary):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
 
-        # Cast and repack into the SoA format
-        nary = np.asanyarray(ary, dtype=self.dtype, order='C')
-        nary = self.backend.soa_arr(nary, self.iopacking)
-
         # Assign
-        self.data[...,:nary.shape[-1]] = nary
-
-    @property
-    def _as_parameter_(self):
-        # Return a pointer to the first element
-        return self.data.ctypes.data
-
-    @property
-    def nbytes(self):
-        return self.data.nbytes
+        self.data[...,:ary.shape[-1]] = ary
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, iopacking, tags):
+    def __init__(self, backend, ioshape, initval, extent, tags):
         super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, iopacking, tags)
+                                           initval, extent, tags)
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
     def __init__(self, backend, mat, p, q):
         super(OpenMPMatrixRSlice, self).__init__(backend, mat, p, q)
 
-        # Copy over common attributes
-        self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.pitch, self.leaddim = mat.pitch, mat.leaddim
-        self.leadsubdim = mat.leadsubdim
-
-        # Traits
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
-
         # Since slices do not retain any information about the
         # high-order structure of an array it is fine to compact mat
         # down to two dimensions and simply slice this
-        self.data = backend.compact_arr(mat.data, 'SoA')[p:q]
+        self.data = mat.data.reshape(mat.nrow, mat.leaddim)[p:q]
 
-    @property
-    def _as_parameter_(self):
-        return self.data.ctypes.data
+        # Pointer to our ndarray (used by ctypes)
+        self._as_parameter_ = self.data.ctypes.data
 
 
 class OpenMPMatrixBank(base.MatrixBank):
-    def __init__(self, backend, mats, initbank, tags):
-        if any(m.traits != mats[0].traits for m in mats[1:]):
-            raise ValueError('Matrices in a bank must be homogeneous')
-
-        super(OpenMPMatrixBank, self).__init__(backend, mats, initbank, tags)
+    pass
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, iopacking, tags):
+    def __init__(self, backend, initval, extent, tags):
         super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
                                                 initval.shape, initval,
-                                                iopacking, tags)
-
-
-class OpenMPBlockDiagMatrix(base.BlockDiagMatrix):
-    pass
+                                                extent, tags)
 
 
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
@@ -150,52 +75,30 @@ class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
 
 
 class OpenMPMPIView(base.MPIView):
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
-
-        # Create a normal OpenMP view
-        self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
-
-        # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, ncol, vlen), None, 'AoS',
-                                          tags=tags)
-
-    @property
-    def nbytes(self):
-        return self.view.nbytes + self.mpimat.nbytes
+    pass
 
 
 class OpenMPView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
+    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
         super(OpenMPView, self).__init__(backend, matmap, rcmap, stridemap,
-                                         vlen, tags)
+                                         vshape, tags)
 
-        # Row/column indcies of each view element
-        r, c = rcmap[...,0], rcmap[...,1]
+        self.mapping = OpenMPMatrixBase(backend, np.int32, (1, self.n),
+                                        self.mapping, None, tags)
 
-        # We want to go from matrix objects and row/column indicies
-        # to memory addresses.  The algorithm for this is:
-        # ptr = m.base + r*m.pitch + c*itemsize
-        ptrmap = np.array(c*self.refitemsize, dtype=np.intp)
-        for m in self._mats:
-            ix = np.where(matmap == m)
-            ptrmap[ix] += m._as_parameter_ + r[ix]*m.pitch
+        if self.nvcol > 1:
+            self.cstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
+                                             self.cstrides, None, tags)
 
-        shape = (self.nrow, self.ncol)
-        self.mapping = OpenMPMatrixBase(backend, np.intp, shape, ptrmap, 'AoS',
-                                        tags)
-        self.strides = OpenMPMatrixBase(backend, np.int32, shape, stridemap,
-                                        'AoS', tags)
-
-    @property
-    def nbytes(self):
-        return self.mapping.nbytes + self.strides.nbytes
+        if self.nvrow > 1:
+            self.rstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
+                                             self.rstrides, None, tags)
 
 
 class OpenMPQueue(base.Queue):
-    def __init__(self):
+    def __init__(self, backend):
+        super(OpenMPQueue, self).__init__(backend)
+
         # Last kernel we executed
         self._last = None
 
@@ -217,9 +120,9 @@ class OpenMPQueue(base.Queue):
         return bool(self._items)
 
     def _exec_item(self, item, rtargs):
-        if base.iscomputekernel(item):
+        if item.ktype == 'compute':
             item.run(*rtargs)
-        elif base.ismpikernel(item):
+        elif item.ktype == 'mpi':
             item.run(self._mpireqs, *rtargs)
         else:
             raise ValueError('Non compute/MPI kernel in queue')
@@ -244,22 +147,22 @@ class OpenMPQueue(base.Queue):
             kern = self._items[0][0]
 
             # See if kern will block
-            if self._at_sequence_point(kern) or base.iscomputekernel(kern):
+            if self._at_sequence_point(kern) or kern.ktype == 'compute':
                 break
 
             self._exec_item(*self._items.popleft())
 
     def _wait(self):
-        if base.ismpikernel(self._last):
+        if self._last and self._last.ktype == 'mpi':
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
+
         self._last = None
 
     def _at_sequence_point(self, item):
-        if base.ismpikernel(self._last) and not base.ismpikernel(item):
-            return True
-        else:
-            return False
+        last = self._last
+
+        return last and last.ktype == 'mpi' and item.ktype != 'mpi'
 
     def run(self):
         while self._items:

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+from abc import ABCMeta, abstractmethod
 from collections import Sequence
  
 import numpy as np
@@ -11,29 +11,52 @@ class MatrixBase(object):
 
     _base_tags = set()
 
-    @abstractmethod
-    def __init__(self, backend, ioshape, iopacking, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         self.backend = backend
-        self.ioshape = ioshape
-        self.iopacking = iopacking
         self.tags = self._base_tags | tags
+
+        self.dtype = dtype
+        self.itemsize = np.dtype(dtype).itemsize
+
+        # Alignment requirement for the leading dimension
+        ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
+
+        # Our shape and dimensionality
+        shape, ndim = list(ioshape), len(ioshape)
+
+        if ndim == 2:
+            nrow, ncol = shape
+        elif ndim == 3 or ndim == 4:
+            nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
+            ncol = shape[-2]*shape[-1] + (1 - shape[-2])*(shape[-1] % -ldmod)
+
+        # Pad the final dimension
+        shape[-1] -= shape[-1] % -ldmod
+
+        # Assign
+        self.nrow, self.ncol = nrow, ncol
+        self.ioshape, self.datashape = ioshape, shape
+
+        self.leaddim = ncol - (ncol % -ldmod)
+        self.leadsubdim = shape[-1]
+
+        # Allocate
+        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
+
+        # Retain the initial value
+        self._initval = initval
 
     @abstractmethod
     def get(self):
-        return self._unpack(self._get())
-
-    @abstractproperty
-    def nbytes(self):
-        """Size in bytes"""
         pass
 
     @property
-    def aos_shape(self):
-        return self.backend.aos_shape(self.ioshape, self.iopacking)
+    def pitch(self):
+        return self.leaddim*self.itemsize
 
     @property
-    def soa_shape(self):
-        return self.backend.soa_shape(self.ioshape, self.iopacking)
+    def traits(self):
+        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
 
 class Matrix(MatrixBase):
@@ -61,39 +84,24 @@ class MatrixRSlice(object):
         if p < 0 or q > mat.nrow or q < p:
             raise ValueError('Invalid row slice')
 
-        self.nrow = q - p
-        self.ncol = mat.ncol
+        self.nrow, self.ncol = q - p, mat.ncol
+        self.dtype, self.itemsize = mat.dtype, mat.itemsize
+        self.leaddim, self.leadsubdim = mat.leaddim, mat.leadsubdim
+
         self.tags = mat.tags | {'slice'}
 
     @property
-    def nbytes(self):
-        return 0
+    def pitch(self):
+        return self.leaddim*self.itemsize
+
+    @property
+    def traits(self):
+        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
 
 class ConstMatrix(MatrixBase):
     """Constant matrix abstract base class"""
     _base_tags = {'const', 'dense'}
-
-
-class BlockDiagMatrix(MatrixBase):
-    _base_tags = {'const', 'blockdiag'}
-
-    def __init__(self, backend, initval, brange, iopacking, tags):
-        super(BlockDiagMatrix, self).__init__(backend, initval.shape,
-                                              iopacking, tags)
-        self.initval = initval
-
-        # Compact down to a Matrix and extract the blocks
-        mat = backend.compact_arr(initval, iopacking)
-        self.blocks = [mat[ri:rj,ci:cj] for ri, rj, ci, cj in brange]
-        self.ranges = brange
-
-    def get(self):
-        return self.initval
-
-    @property
-    def nbytes(self):
-        return 0
 
 
 class MPIMatrix(Matrix):
@@ -104,18 +112,23 @@ class MPIMatrix(Matrix):
 class MatrixBank(Sequence):
     """Matrix bank abstract base class"""
 
-    @abstractmethod
     def __init__(self, backend, mats, initbank, tags):
+        mats = list(mats)
+
+        # Ensure all matrices have the same traits
+        if any(m.traits != mats[0].traits for m in mats[1:]):
+            raise ValueError('Matrices in a bank must be homogeneous')
+
+        # Check that all matrices share tags
+        if any(m.tags != mats[0].tags for m in mats[1:]):
+            raise ValueError('Matrices in a bank must share tags')
+
         self.backend = backend
+        self.tags = tags | mats[0].tags
 
         self._mats = mats
         self._curr_idx = initbank
-        self._curr_mat = self._mats[initbank]
-
-        # Process tags
-        if any(mats[0].tags != m.tags for m in mats[1:]):
-            raise ValueError('Banked matrices must share tags')
-        self.tags = tags | mats[0].tags
+        self._curr_mat = mats[initbank]
 
     def __len__(self):
         return len(self._mats)
@@ -138,72 +151,77 @@ class MatrixBank(Sequence):
         self._curr_idx = idx
         self._curr_mat = self._mats[idx]
 
-    @property
-    def nbytes(self):
-        return sum(m.nbytes for m in self)
-
 
 class View(object):
     """View abstract base class"""
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
+    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
+        self.n = len(matmap)
+        self.nvrow = vshape[-2] if len(vshape) == 2 else 1
+        self.nvcol = vshape[-1] if len(vshape) >= 1 else 1
+        self.rstrides = self.cstrides = None
 
         # Get the different matrices which we map onto
-        self._mats = list(np.unique(matmap))
+        self._mats = list(set(matmap.flat))
 
-        # Extract the data type and item size from the first matrix
+        # Extract the base allocation and data type
+        self.basedata = self._mats[0].basedata
         self.refdtype = self._mats[0].dtype
-        self.refitemsize = self._mats[0].itemsize
-
-        # For vector views a stridemap is required
-        if vlen != 1 and np.any(stridemap == 0):
-            raise ValueError('Vector views require a non-zero stride map')
-
-        # Check all of the shapes match up
-        if matmap.shape != rcmap.shape[:2] or\
-           matmap.shape != stridemap.shape:
-            raise TypeError('Invalid matrix shapes')
 
         # Validate the matrices
+        if any(not isinstance(m, backend.matrix_cls) for m in self._mats):
+            raise TypeError('Incompatible matrix type for view')
+
+        if any(m.basedata != self.basedata for m in self._mats):
+            raise TypeError('All viewed matrices must belong to the same '
+                            'allocation extent')
+
+        if any(m.dtype != self.refdtype for m in self._mats):
+            raise TypeError('Mixed data types are not supported')
+
+        # Base offsets and leading dimensions for each point
+        offset = np.empty(self.n, dtype=np.int32)
+        leaddim = np.empty(self.n, dtype=np.int32)
+
         for m in self._mats:
-            if not isinstance(m, backend.matrix_cls):
-                raise TypeError('Incompatible matrix type for view')
+            ix = np.where(matmap == m)
+            offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
-            if m.dtype != self.refdtype:
-                raise TypeError('Mixed data types are not supported')
+        # Go from matrices + row/column indcies to displacements
+        # relative to the base allocation address
+        self.mapping = (offset + rcmap[:,0]*leaddim + rcmap[:,1])[None,:]
 
-    @abstractproperty
-    def nbytes(self):
-        pass
+        # Row strides
+        if self.nvrow > 1:
+            self.rstrides = (stridemap[:,0]*leaddim)[None,:]
+
+        # Column strides
+        if self.nvcol > 1:
+            self.cstrides = stridemap[:,-1][None,:]
 
 
 class MPIView(object):
-    @abstractmethod
-    def __init__(self, backend, matmap, rcmap, stridemap, vlen, tags):
-        self.nrow = nrow = matmap.shape[0]
-        self.ncol = ncol = matmap.shape[1]
-        self.vlen = vlen
-
+    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
         # Create a normal view
-        self.view = backend.view(matmap, rcmap, stridemap, vlen, tags)
+        self.view = backend.view(matmap, rcmap, stridemap, vshape, tags)
+
+        # Dimensions
+        self.n = n = self.view.n
+        self.nvrow = nvrow = self.view.nvrow
+        self.nvcol = nvcol = self.view.nvcol
 
         # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nrow, ncol, vlen), None, 'AoS',
-                                          tags=tags)
-
-    @property
-    def nbytes(self):
-        return self.view.nbytes + self.mpimat.nbytes
+        self.mpimat = backend.mpi_matrix((nvrow, nvcol, n), tags=tags)
 
 
 class Queue(object):
     """Kernel execution queue"""
     __metaclass__ = ABCMeta
+
+    def __init__(self, backend):
+        self.backend = backend
 
     @abstractmethod
     def __lshift__(self, iterable):
