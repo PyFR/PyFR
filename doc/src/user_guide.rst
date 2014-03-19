@@ -34,10 +34,21 @@ greater. The backend requires:
 
 OpenMP Backend
 ^^^^^^^^^^^^^^
+
 The OpenMP backend targets multi-core CPUs. The backend requires:
 
 1. GCC >= 4.7
 2. A BLAS library compiled as a shared library (e.g. `OpenBLAS <http://www.openblas.net/>`_)
+
+OpenCL Backend
+^^^^^^^^^^^^^^
+
+The OpenCL backend targets a range of accelerators including GPUs from
+AMD and NVIDIA.  The backend requires:
+
+1. A working OpenCL installation.
+2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_ >= 2013.2
+3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
 Installation
 ------------
