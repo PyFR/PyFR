@@ -20,13 +20,12 @@ class PriBasis(BaseBasis):
 
     @classmethod
     def std_ele(cls, sptord):
-        pts1d = get_quadrule('line', 'equi-spaced', sptord + 1).points
-        sele = [(p, q, r)
+        pts1d = np.linspace(-1, 1, sptord + 1)
+
+        return [(p, q, r)
                 for r in pts1d
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
-
-        return np.array(sele)
 
     @property
     def nupts(self):

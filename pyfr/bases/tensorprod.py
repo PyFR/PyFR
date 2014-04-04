@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import itertools as it
+
 import numpy as np
 
 from pyfr.bases.base import BaseBasis
@@ -10,8 +12,8 @@ from pyfr.util import lazyprop
 class TensorProdBasis(object):
     @classmethod
     def std_ele(cls, sptord):
-        n = (sptord + 1)**cls.ndims
-        return get_quadrule(cls.name, 'equi-spaced', n).points
+        pts1d = np.linspace(-1, 1, sptord + 1)
+        return list(p[::-1] for p in it.product(pts1d, repeat=cls.ndims))
 
     @property
     def facefpts(self):
