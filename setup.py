@@ -27,6 +27,8 @@ modules = [
     'pyfr.backends.base',
     'pyfr.backends.cuda',
     'pyfr.backends.cuda.kernels',
+    'pyfr.backends.opencl',
+    'pyfr.backends.opencl.kernels',
     'pyfr.backends.openmp',
     'pyfr.backends.openmp.kernels',
     'pyfr.bases',
@@ -56,8 +58,9 @@ tests = [
 # Data
 package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
+    'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
-    'pyfr.quadrules': ['tri/*.txt'],
+    'pyfr.quadrules': ['tet/*.txt', 'tri/*.txt'],
     'pyfr.solvers.baseadvec.kernels': ['*.mako'],
     'pyfr.solvers.baseadvecdiff.kernels': ['*.mako'],
     'pyfr.solvers.euler.kernels': ['*.mako'],
@@ -71,12 +74,14 @@ package_data = {
 install_requires = [
     'mako',
     'mpi4py >= 1.3',
-    'numpy >= 1.6',
-    'sympy >= 0.7.3']
+    'mpmath >= 0.18',
+    'numpy >= 1.8'
+]
 
 # Soft dependencies
 extras_require = {
-    'cuda': ['pycuda >= 2011.2']}
+    'cuda': ['pycuda >= 2011.2'],
+    'opencl': ['pyopencl >= 2013.2']}
 
 # Scripts
 console_scripts = [

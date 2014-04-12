@@ -22,19 +22,19 @@ class _BaseKernel(object):
 
 
 class ComputeKernel(_BaseKernel):
-    pass
+    ktype = 'compute'
 
 
 class MPIKernel(_BaseKernel):
+    ktype = 'mpi'
+
+
+class NullComputeKernel(ComputeKernel):
     pass
 
 
-def iscomputekernel(kernel):
-    return isinstance(kernel, ComputeKernel)
-
-
-def ismpikernel(kernel):
-    return isinstance(kernel, MPIKernel)
+class NullMPIKernel(MPIKernel):
+    pass
 
 
 class _MetaKernel(object):
@@ -62,19 +62,21 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
     __metaclass__ = ABCMeta
 
     kernel_generator_cls = None
-    function_generator_cls = None
 
     @memoize
     def _render_kernel(self, name, mod, tplargs):
         # Copy the provided argument list
         tplargs = dict(tplargs)
 
-        # Floating point data type used by the backend
+        # Floating point data type and aligment requirement for the backend
         tplargs['fpdtype'] = self.backend.fpdtype
+        tplargs['alignb'] = self.backend.alignb
 
         # Backend-specfic generator classes
         tplargs['_kernel_generator'] = self.kernel_generator_cls
-        tplargs['_function_generator'] = self.function_generator_cls
+
+        # Macro definitions
+        tplargs['_macros'] = {}
 
         # Backchannel for obtaining kernel argument types
         tplargs['_kernel_argspecs'] = argspecs = {}
@@ -97,9 +99,42 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
     def _build_kernel(self, name, src, args):
         pass
 
-    @abstractmethod
     def _build_arglst(self, dims, argn, argt, argdict):
-        pass
+        # Possible matrix types
+        mattypes = (
+            self.backend.const_matrix_cls, self.backend.matrix_cls,
+            self.backend.matrix_bank_cls, self.backend.matrix_rslice_cls,
+            self.backend.mpi_matrix_cls
+        )
+
+        # Possible view types
+        viewtypes = (self.backend.mpi_view_cls, self.backend.view_cls)
+
+        # First arguments are the iteration dimensions
+        ndim, arglst = len(dims), list(dims)
+
+        # Followed by the objects themselves
+        for aname, atypes in zip(argn[ndim:], argt[ndim:]):
+            ka = argdict[aname]
+
+            # Matrix
+            if isinstance(ka, mattypes):
+                arglst += [ka, ka.leadsubdim] if len(atypes) == 2 else [ka]
+            # View
+            elif isinstance(ka, viewtypes):
+                if isinstance(ka, self.backend.view_cls):
+                    view = ka
+                else:
+                    view = ka.view
+
+                arglst += [view.basedata, view.mapping]
+                arglst += [view.cstrides] if len(atypes) >= 3 else []
+                arglst += [view.rstrides] if len(atypes) == 4 else []
+            # Other; let the backend handle it
+            else:
+                arglst.append(ka)
+
+        return arglst
 
     @abstractmethod
     def _instantiate_kernel(self, dims, fun, arglst):

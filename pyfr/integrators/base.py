@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+from collections import OrderedDict
 
 from mpi4py import MPI
 
@@ -113,7 +114,7 @@ class BaseIntegrator(object):
             solns = self.advance_to(t)
 
             # Map solutions to elements types
-            solnmap = dict(zip(self._system.ele_types, solns))
+            solnmap = OrderedDict(zip(self._system.ele_types, solns))
 
             # Collect statistics
             stats = Inifile()

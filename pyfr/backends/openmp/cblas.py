@@ -1,17 +1,11 @@
  # -*- coding: utf-8 -*-
 
-import os
-
-from ctypes import (CDLL, POINTER, byref, cast, c_int, c_double, c_float,
-                    c_void_p)
-from ctypes.util import find_library
+from ctypes import CDLL, cast, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
-from pyfr.ctypesutil import platform_libname
-from pyfr.nputil import npdtype_to_ctype
 
 
 # Matrix orderings
@@ -36,20 +30,20 @@ class CBlasWrappers(object):
         # cblas_dgemm
         self.cblas_dgemm = lib.cblas_dgemm
         self.cblas_dgemm.restype = None
-        self.cblas_dgemm.argtypes = [c_int, c_int, c_int,
-                                     c_int, c_int, c_int,
-                                     c_double, c_void_p, c_int,
-                                     c_void_p, c_int,
-                                     c_double, c_void_p, c_int]
+        self.cblas_dgemm.argtypes = [
+            c_int, c_int, c_int, c_int, c_int, c_int,
+            c_double, c_void_p, c_int, c_void_p, c_int,
+            c_double, c_void_p, c_int
+        ]
 
         # cblas_sgemm
         self.cblas_sgemm = lib.cblas_sgemm
         self.cblas_sgemm.restype = None
-        self.cblas_sgemm.argtypes = [c_int, c_int, c_int,
-                                     c_int, c_int, c_int,
-                                     c_float, c_void_p, c_int,
-                                     c_void_p, c_int,
-                                     c_float, c_void_p, c_int]
+        self.cblas_sgemm.argtypes = [
+            c_int, c_int, c_int, c_int, c_int, c_int,
+            c_float, c_void_p, c_int, c_void_p, c_int,
+            c_float, c_void_p, c_int
+        ]
 
         # cblas_dnrm2
         self.cblas_dnrm2 = lib.cblas_dnrm2
@@ -62,12 +56,9 @@ class CBlasWrappers(object):
         self.cblas_snrm2.argtypes = [c_int, c_void_p, c_int]
 
 
-
 class OpenMPCBLASKernels(OpenMPKernelProvider):
     def __init__(self, backend):
         super(OpenMPCBLASKernels, self).__init__(backend)
-
-
 
         # Look for single and multi-threaded BLAS libraries
         hasst = backend.cfg.hasopt('backend-openmp', 'cblas-st')
@@ -108,14 +99,19 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
         # let the BLAS library handle parallelization itself (which
         # may, or may not, use OpenMP).
         if self._cblas_type == 'cblas-st':
-            # Argument types and template params for par_gemm
-            argt = [np.intp, np.int32, np.int32, np.int32,
-                    a.dtype, np.intp, np.int32, np.intp, np.int32,
-                    a.dtype, np.intp, np.int32]
-            opts = dict(dtype=npdtype_to_ctype(a.dtype))
+            # Render the kernel template
+            tpl = self.backend.lookup.get_template('par-gemm')
+            src = tpl.render(alignb=self.backend.alignb, fpdtype=a.dtype)
 
-            par_gemm = self._get_function('par_gemm', 'par_gemm', None, argt,
-                                          opts)
+            # Argument types for par_gemm
+            argt = [
+                np.intp, np.int32, np.int32, np.int32,
+                a.dtype, np.intp, np.int32, np.intp, np.int32,
+                a.dtype, np.intp, np.int32
+            ]
+
+            # Build
+            par_gemm = self._build_kernel('par_gemm', src, argt)
 
             # Pointer to the BLAS library GEMM function
             cblas_gemm_ptr = cast(cblas_gemm, c_void_p).value

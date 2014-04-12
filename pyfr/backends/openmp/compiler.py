@@ -9,7 +9,7 @@ import tempfile
 
 from pyfr.ctypesutil import platform_libname
 from pyfr.nputil import npdtype_to_ctypestype
-from pyfr.util import chdir, memoize, rm
+from pyfr.util import chdir, rm
 
 
 class SourceModule(object):

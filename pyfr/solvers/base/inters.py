@@ -1,57 +1,30 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
-
 import numpy as np
 
 
-def get_view_mats(interside, mat, elemap, perm=Ellipsis):
+def _get_inter_objs(interside, getter, elemap):
     # Map from element type to view mat getter
-    viewmatmap = {type: getattr(ele, mat) for type, ele in elemap.items()}
+    emap = {type: getattr(ele, getter) for type, ele in elemap.items()}
 
-    scal = []
-    for type, eidx, face, flags in interside:
-        # After the += the length is increased by *three*
-        scal += viewmatmap[type](eidx, face)
-
-    # Concat the various numpy arrays together to yield the three matrices
-    # required in order to define a view
-    scal_v = [np.hstack(scal[i::3]) for i in xrange(3)]
-
-    # Permute
-    scal_v = [sv[:,perm] for sv in scal_v]
-
-    return scal_v
-
-
-def get_mat(interside, mat, elemap, perm=Ellipsis):
-    # Map from element type to view mat getter
-    emap = {type: getattr(ele, mat) for type, ele in elemap.items()}
-
-    # Get the matrix, swizzle the dimensions, and permute
-    m = [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
-    m = np.concatenate(m)
-    m = np.atleast_2d(m.T)
-    m = m[:,perm]
-
-    return m
+    # Get the data from the interface
+    return [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
 
 
 def get_opt_view_perm(interside, mat, elemap):
-    matmap, rcmap, stridemap = get_view_mats(interside, mat, elemap)
+    vm = _get_inter_objs(interside, mat, elemap)
+    matmap, rcmap = [np.concatenate([m[i] for m in vm]) for i in xrange(2)]
 
     # Since np.lexsort can not currently handle np.object arrays we
-    # work around this by using np.unique to build an array in which
-    # each distinct matrix object is represented by an integer
-    u, uix = np.unique(matmap, return_inverse=True)
+    # work around this by using id() to map each distinct matrix
+    # object to an integer
+    uid = np.vectorize(id)(matmap)
 
     # Sort
-    return np.lexsort((uix, rcmap[0,:,1], rcmap[0,:,0]))
+    return np.lexsort((uid, rcmap[:,1], rcmap[:,0]))
 
 
 class BaseInters(object):
-    __metaclass__ = ABCMeta
-
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
         self._elemap = elemap
@@ -74,18 +47,37 @@ class BaseInters(object):
         # Kernel constants
         self._tpl_c = cfg.items_as('constants', float)
 
+        # Kernels we provide
+        self.kernels = {}
+
     def _const_mat(self, inter, meth):
-        m = get_mat(inter, meth, self._elemap, self._perm)
+        m = _get_inter_objs(inter, meth, self._elemap)
+
+        # Swizzle the dimensions and permute
+        m = np.concatenate(m)
+        m = np.atleast_2d(m.T)
+        m = m[:,self._perm]
+
         return self._be.const_matrix(m)
 
-    def _view_onto(self, inter, meth):
-        vm = get_view_mats(inter, meth, self._elemap, self._perm)
-        return self._be.view(*vm, vlen=self.nvars)
+    def _view(self, inter, meth, vshape):
+        vm = _get_inter_objs(inter, meth, self._elemap)
+        vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
+        return self._be.view(*vm, vshape=vshape)
 
-    def _mpi_view_onto(self, inter, meth):
-        vm = get_view_mats(inter, meth, self._elemap)
-        return self._be.mpi_view(*vm, vlen=self.nvars)
+    def _scal_view(self, inter, meth):
+        return self._view(inter, meth, (self.nvars,))
 
-    @abstractmethod
-    def get_comm_flux_kern(self):
-        pass
+    def _vect_view(self, inter, meth):
+        return self._view(inter, meth, (self.ndims, self.nvars))
+
+    def _mpi_view(self, inter, meth, vshape):
+        vm = _get_inter_objs(inter, meth, self._elemap)
+        vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
+        return self._be.mpi_view(*vm, vshape=vshape)
+
+    def _scal_mpi_view(self, inter, meth):
+        return self._mpi_view(inter, meth, (self.nvars,))
+
+    def _vect_mpi_view(self, inter, meth):
+        return self._mpi_view(inter, meth, (self.ndims, self.nvars))

@@ -42,7 +42,7 @@ class BaseStepper(BaseIntegrator):
 
     def _add(self, *args):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(len(args)/2)
+        axnpby = self._get_axnpby_kerns(len(args) // 2)
 
         # Bank indices are in odd-numbered arguments
         self._prepare_reg_banks(*args[1::2])
@@ -140,6 +140,62 @@ class RK4Stepper(BaseStepper):
         add(1.0, r1, dt/6.0, r2)
 
         # Return the index of the bank containing u(t + dt)
+        return r1
+
+
+class RK45Stepper(BaseStepper):
+    stepper_name = 'rk45'
+
+    @property
+    def _stepper_has_errest(self):
+        return False
+
+    @property
+    def _stepper_nfevals(self):
+        return self.nsteps
+
+    @property
+    def _stepper_nregs(self):
+        return 2
+
+    @property
+    def _stepper_order(self):
+        return 4
+
+    def step(self, t, dt):
+        a21 = 970286171893 / 4311952581923.0
+        a32 = 6584761158862 / 12103376702013.0
+        a43 = 2251764453980 / 15575788980749.0
+        a54 = 26877169314380 / 34165994151039.0
+
+        b1 = 1153189308089 / 22510343858157.0
+        b2 = 1772645290293 / 4653164025191.0
+        b3 = -1672844663538 / 4480602732383.0
+        b4 = 2114624349019 / 3568978502595.0
+        b5 = 5198255086312 / 14908931495163.0
+
+        add, negdivf = self._add, self._system
+        r1, r2 = self._regidx
+
+        negdivf(r1, r2)
+        add(1.0, r1, a21*dt, r2)
+        add((b1 - a21)*dt, r2, 1.0, r1)
+
+        negdivf(r1, r1)
+        add(1.0, r2, a32*dt, r1)
+        add((b2 - a32)*dt, r1, 1.0, r2)
+
+        negdivf(r2, r2)
+        add(1.0, r1, a43*dt, r2)
+        add((b3 - a43)*dt, r2, 1.0, r1)
+
+        negdivf(r1, r1)
+        add(1.0, r2, a54*dt, r1)
+        add((b4 - a54)*dt, r1, 1.0, r2)
+
+        negdivf(r2, r2)
+        add(1.0, r1, b5*dt, r2)
+
         return r1
 
 

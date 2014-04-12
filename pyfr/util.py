@@ -2,7 +2,6 @@
 
 from contextlib import contextmanager
 import functools as ft
-import io
 import itertools as it
 import os
 import cPickle as pickle
@@ -35,8 +34,8 @@ class memoize(object):
 
 
 class proxylist(list):
-    def __init__(self, iterable):
-        super(proxylist, self).__init__(iterable)
+    def __init__(self, *args):
+        super(proxylist, self).__init__(*args)
 
     def __getattr__(self, attr):
         return proxylist([getattr(x, attr) for x in self])
@@ -93,14 +92,19 @@ def purge_lazyprops(obj):
             del obj.__dict__[attr]
 
 
-def all_subclasses(cls):
-    return (cls.__subclasses__() +
-            [g for s in cls.__subclasses__() for g in all_subclasses(s)])
+def subclasses(cls, just_leaf=False):
+    sc = cls.__subclasses__()
+    ssc = [g for s in sc for g in subclasses(s, just_leaf)]
+
+    return [s for s in sc if not just_leaf or not s.__subclasses__()] + ssc
 
 
-def subclass_map(cls, attr):
-    subcls = all_subclasses(cls)
-    return {getattr(s, attr): s for s in subcls if hasattr(s, attr)}
+def subclass_where(cls, **kwargs):
+    k, v = next(kwargs.iteritems())
+
+    for s in subclasses(cls):
+        if hasattr(s, k) and getattr(s, k) == v:
+            return s
 
 
 def ndrange(*args):

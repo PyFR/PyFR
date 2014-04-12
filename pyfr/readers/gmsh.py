@@ -35,15 +35,16 @@ class GmshReader(BaseReader):
     name = 'gmsh'
     extn = ['.msh']
 
-    # Gmsh element types to PyFR type (petype) + sizes
+    # Gmsh element types to PyFR type (petype) and node counts
     _etype_map = {
-        1: ('line', 2),  8: ('line', 3), 26: ('line', 4),  27: ('line', 5),
-        2: ('tri', 3),   9: ('tri', 6),  21: ('tri', 10),  23: ('tri', 15),
+        1: ('line', 2), 8: ('line', 3), 26: ('line', 4), 27: ('line', 5),
+        2: ('tri', 3), 9: ('tri', 6), 21: ('tri', 10), 23: ('tri', 15),
         3: ('quad', 4), 10: ('quad', 9), 36: ('quad', 16), 37: ('quad', 25),
-        4: ('tet', 4),  11: ('tet', 10), 29: ('tet', 20),
-        5: ('hex', 8),  12: ('hex', 27), 92: ('hex', 64),
-        6: ('pri', 6),  13: ('pri', 18),
-        7: ('pyr', 5),  14: ('pyr', 14)}
+        4: ('tet', 4), 11: ('tet', 10), 29: ('tet', 20), 30: ('tet', 35),
+        5: ('hex', 8), 12: ('hex', 27), 92: ('hex', 64), 93: ('hex', 125),
+        6: ('pri', 6), 13: ('pri', 18), 90: ('pri', 40), 91: ('pri', 75),
+        7: ('pyr', 5), 14: ('pyr', 14), 118: ('pyr', 30), 119: ('pyr', 55)
+    }
 
     # Number of nodes in the first-order representation an element
     _petype_focount = {v[0]: v[1] for k, v in _etype_map.items() if k < 8}
@@ -52,13 +53,26 @@ class GmshReader(BaseReader):
     _petype_ndim = {'tri': 2, 'quad': 2,
                     'tet': 3, 'hex': 3, 'pri': 3, 'pyr': 3}
 
-    # Number of faces of each type per element
-    _petype_ftcount = {'tri': {'line': 3},
-                       'quad': {'line': 4},
-                       'tet': {'tri': 4},
-                       'hex': {'quad': 6},
-                       'pri': {'quad': 3, 'tri': 2},
-                       'pyr': {'quad': 1, 'tri': 4}}
+    # Face numberings for each element type
+    _petype_fnums = {
+        'tri': {'line': [0, 1, 2]},
+        'quad': {'line': [0, 1, 2, 3]},
+        'tet': {'tri': [0, 1, 2, 3]},
+        'hex': {'quad': [0, 1, 2, 3, 4, 5]},
+        'pri': {'quad': [2, 3, 4], 'tri': [0, 1]},
+        'pyr': {'quad': [0], 'tri': [1, 2, 3, 4]}
+    }
+
+    # First-order node numbers associated with each element face
+    _petype_fnmap = {
+        'tri': {'line': [[0, 1], [1, 2], [2, 0]]},
+        'quad': {'line': [[0, 1], [1, 2], [2, 3], [3, 0]]},
+        'tet': {'tri': [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]]},
+        'hex': {'quad': [[0, 1, 2, 3], [0, 1, 4, 5], [1, 2, 5, 6],
+                         [2, 3, 6, 7], [0, 3, 4, 7], [4, 5, 6, 7]]},
+        'pri': {'quad': [[0, 1, 3, 4], [1, 2, 4, 5], [0, 2, 3, 5]],
+                'tri': [[0, 1, 2], [3, 4, 5]]}
+    }
 
     def __init__(self, msh):
         if isinstance(msh, basestring):
@@ -140,7 +154,7 @@ class GmshReader(BaseReader):
                 self._felespent = pent
             # Periodic boundary faces
             elif name.startswith('periodic'):
-                p = re.match(r'periodic[ -_]([a-z0-9]+)[ -_](l|r)$', name)
+                p = re.match(r'periodic[ _-]([a-z0-9]+)[ _-](l|r)$', name)
                 if not p:
                     raise ValueError('Invalid periodic boundary condition')
 
@@ -208,68 +222,36 @@ class GmshReader(BaseReader):
 
         return selemap.pop(self._felespent), selemap
 
-    def _extract_faces(self, foeles):
-        extractors = {'tri': self._extract_faces_tri,
-                      'quad': self._extract_faces_quad,
-                      'hex': self._extract_faces_hex}
+    def _foface_array(self, petype, pftype, foeles):
+        # Face numbers of faces of this type on this element
+        fnums = self._petype_fnums[petype][pftype]
 
-        fofaces = defaultdict(list)
-        for petype, eles in foeles.iteritems():
-            for pftype, faces in extractors[petype](eles):
-                fofaces[pftype].append(faces.ravel())
+        # First-order nodes associated with this face
+        fnmap = self._petype_fnmap[petype][pftype]
 
-        return fofaces
-
-    def _foface_array(self, peletype, pftype, neles):
-        # Number of nodes per face and number of faces of this type per ele
+        # Number of first order nodes needed to define a face of this type
         nfnodes = self._petype_focount[pftype]
-        nfcount = self._petype_ftcount[peletype][pftype]
 
         dtype = [('petype', 'S4'), ('eidx', 'i4'), ('fidx', 'i1'),
-                 ('flags', 'i1'), ('nodes', 'i4', nfnodes)]
+                 ('flags', 'i1'), ('nodes', 'i8', nfnodes)]
 
-        arr = np.recarray((neles, nfcount), dtype=dtype)
-        arr.petype = peletype
+        arr = np.recarray((len(foeles), len(fnums)), dtype=dtype)
+        arr.petype = petype
+        arr.eidx = np.arange(len(foeles))[...,None]
+        arr.fidx = fnums
+        arr.nodes = foeles[:,fnmap]
         arr.flags = 0
 
-        return arr
+        return arr.ravel()
 
-    def _extract_faces_tri(self, fotris):
-        # Gmsh node offsets for the three edges
-        fnmap = np.array([[0, 1], [1, 2], [2, 0]])
+    def _extract_faces(self, foeles):
+        fofaces = defaultdict(list)
+        for petype, eles in foeles.iteritems():
+            for pftype in self._petype_fnums[petype]:
+                fofarr = self._foface_array(petype, pftype, eles)
+                fofaces[pftype].append(fofarr)
 
-        lf = self._foface_array('tri', 'line', len(fotris))
-
-        lf.eidx = np.arange(len(fotris))[...,None]
-        lf.fidx = np.arange(3)
-        lf.nodes = fotris[:,fnmap]
-
-        return [('line', lf)]
-
-    def _extract_faces_quad(self, foquads):
-        # Gmsh node offsets for the four edges
-        fnmap = np.array([[0, 1], [1, 2], [2, 3], [3, 0]])
-
-        lf = self._foface_array('quad', 'line', len(foquads))
-
-        lf.eidx = np.arange(len(foquads))[...,None]
-        lf.fidx = np.arange(4)
-        lf.nodes = foquads[:,fnmap]
-
-        return [('line', lf)]
-
-    def _extract_faces_hex(self, fohexes):
-        # Gmsh nodes offsets for each of the six faces
-        fnmap = np.array([[0, 1, 2, 3], [0, 1, 4, 5], [1, 2, 5, 6],
-                          [2, 3, 6, 7], [0, 3, 4, 7], [4, 5, 6, 7]])
-
-        qf = self._foface_array('hex', 'quad', len(fohexes))
-
-        qf.eidx = np.arange(len(fohexes))[...,None]
-        qf.fidx = np.arange(6)
-        qf.nodes = fohexes[:,fnmap]
-
-        return [('quad', qf)]
+        return fofaces
 
     def _pair_fluid_faces(self, ffofaces):
         pairs = defaultdict(list)
@@ -277,7 +259,7 @@ class GmshReader(BaseReader):
 
         for pftype, faces in ffofaces.iteritems():
             for f in chain(*faces):
-                sn = tuple(sorted(f.nodes))
+                sn = tuple(sorted(f['nodes']))
 
                 # See if the nodes are in resid
                 if sn in resid:

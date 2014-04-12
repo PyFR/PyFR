@@ -3,15 +3,14 @@
 """Allows for interopability between .pyfr{m, s}-{file, dir} archive formats
 
 """
+from collections import Mapping, OrderedDict
+import errno
 import os
-
-from abc import abstractmethod
-from collections import Mapping, defaultdict, OrderedDict
 
 import numpy as np
 
-from pyfr.bases import BaseBasis, HexBasis
-from pyfr.util import lazyprop, subclass_map
+from pyfr.bases import BaseBasis
+from pyfr.util import subclasses, lazyprop
 
 
 class PyFRBaseReader(Mapping):
@@ -27,7 +26,7 @@ class PyFRBaseReader(Mapping):
         :rtype: list
 
         """
-        return [name for name in list(self) if name.startswith(prefix)]
+        return [name for name in self if name.startswith(prefix)]
 
     @property
     def spt_files(self):
@@ -91,20 +90,20 @@ class PyFRBaseReader(Mapping):
             raise RuntimeError('"%s" does not contain solution or shape point '
                                'files' % (self.fname))
 
-        # Generate mapping of pyfr element types to respective basis classes.
-        basismap = subclass_map(BaseBasis, 'name')
+        # Element types known to PyFR
+        eletypes = [b.name for b in subclasses(BaseBasis)
+                    if hasattr(b, 'name')]
 
         # Assembles possible array file names, then checks if present
         # in .pyfr{m, s} archive.  If so, the element type and array
         # shape are assigned to the array file name in info.
         prt = 0
         while len(info) < len(ls_files):
-            for ele_type in basismap.keys():
-
-                name = '%s_%s_p%d' % (prfx, ele_type, prt)
+            for et in eletypes:
+                name = '%s_%s_p%d' % (prfx, et, prt)
 
                 if name in ls_files:
-                    info[name] = (ele_type, self[name].shape)
+                    info[name] = (et, self[name].shape)
 
             prt += 1
 
@@ -117,10 +116,17 @@ class PyFRDirReader(PyFRBaseReader):
         self.fname = fname
 
     def __getitem__(self, aname):
-        return np.load(os.path.join(self.fname, aname + '.npy'), mmap_mode='r')
+        try:
+            return np.load(os.path.join(self.fname, aname + '.npy'),
+                           mmap_mode='r')
+        except IOError as e:
+            if e.errno == errno.ENOENT:
+                raise KeyError
+            else:
+                raise
 
     def __iter__(self):
-        return iter([name.rsplit('.')[0] for name in os.listdir(self.fname)])
+        return (name.rsplit('.')[0] for name in os.listdir(self.fname))
 
     def __len__(self):
         return len(os.listdir(self.fname))

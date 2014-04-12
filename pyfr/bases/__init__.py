@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.bases.base import BaseBasis
+from pyfr.bases.mixed import PriBasis
 from pyfr.bases.tensorprod import HexBasis, QuadBasis
-from pyfr.bases.simplex import TriBasis
-from pyfr.util import subclass_map
+from pyfr.bases.simplex import TetBasis, TriBasis
+from pyfr.util import subclass_where
 
 
 def get_std_ele_by_name(name, order):
@@ -16,6 +17,4 @@ def get_std_ele_by_name(name, order):
     :rtype: np.ndarray
 
     """
-    ele_cls = subclass_map(BaseBasis, 'name')[name]
-
-    return ele_cls.std_ele(order)
+    return subclass_where(BaseBasis, name=name).std_ele(order)

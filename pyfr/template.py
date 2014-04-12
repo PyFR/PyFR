@@ -1,6 +1,5 @@
  # -*- coding: utf-8 -*-
 
-import os
 import pkgutil
 
 from mako.lookup import TemplateLookup

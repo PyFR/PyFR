@@ -2,24 +2,12 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
-from functools import wraps
 from inspect import getcallargs
-from weakref import WeakSet
+from weakref import WeakKeyDictionary
 
 import numpy as np
 
 from pyfr.util import ndrange
-
-
-def recordalloc(type):
-    def recordalloc_type(fn):
-        @wraps(fn)
-        def newfn(self, *args, **kwargs):
-            rv = fn(self, *args, **kwargs)
-            self._allocs[type].add(rv)
-            return rv
-        return newfn
-    return recordalloc_type
 
 
 def traits(**tr):
@@ -54,19 +42,63 @@ class BaseBackend(object):
         assert self.name is not None
 
         self.cfg = cfg
-        self._allocs = defaultdict(WeakSet)
 
         # Numeric data type
         prec = cfg.get('backend', 'precision', 'double')
         if prec not in {'single', 'double'}:
-            raise ValueError('Backend precision must be either single or'
+            raise ValueError('Backend precision must be either single or '
                              'double')
 
         # Convert to a NumPy data type
         self.fpdtype = np.dtype(prec).type
 
-    @recordalloc('data')
-    def matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
+        # Pending and committed allocation extents
+        self._pend_extents = defaultdict(list)
+        self._comm_extents = set()
+
+        # Mapping from backend objects to memory extents
+        self._obj_extents = WeakKeyDictionary()
+
+    def malloc(self, obj, nbytes, extent):
+        # If no extent has been specified then use a dummy object
+        extent = extent if extent is not None else object()
+
+        # Check that the extent has not already been committed
+        if extent in self._comm_extents:
+            raise ValueError('Extent "{}" has already been allocated'
+                             .format(extent))
+
+        # Append
+        self._pend_extents[extent].append((obj, nbytes))
+
+    def commit(self):
+        for reqs in self._pend_extents.itervalues():
+            # Determine the required allocation size
+            sz = sum(nbytes - (nbytes % -self.alignb) for _, nbytes in reqs)
+
+            # Perform the allocation
+            data = self._malloc_impl(sz)
+
+            offset = 0
+            for obj, nbytes in reqs:
+                # Fire the objects allocation callback
+                obj.onalloc(data, offset)
+
+                # Increment the offset
+                offset += nbytes - (nbytes % -self.alignb)
+
+                # Retain a (weak) reference to the allocated extent
+                self._obj_extents[obj] = data
+
+        # Mark the extents as committed and clear
+        self._comm_extents.update(self._pend_extents)
+        self._pend_extents.clear()
+
+    @abstractmethod
+    def _malloc_impl(self, nbytes):
+        pass
+
+    def matrix(self, ioshape, initval=None, extent=None, tags=set()):
         """Creates an *nrow* by *ncol* matrix
 
         If an inital value is specified the shape of the provided
@@ -83,13 +115,11 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.Matrix`
         """
-        return self.matrix_cls(self, ioshape, initval, iopacking, tags)
+        return self.matrix_cls(self, ioshape, initval, extent, tags)
 
-    @recordalloc('rslices')
     def matrix_rslice(self, mat, p, q):
         return self.matrix_rslice_cls(self, mat, p, q)
 
-    @recordalloc('banks')
     def matrix_bank(self, mats, initbank=0, tags=set()):
         """Creates a bank of matrices from *mats*
 
@@ -103,8 +133,7 @@ class BaseBackend(object):
         """
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
-    @recordalloc('data')
-    def mpi_matrix(self, ioshape, initval=None, iopacking='AoS', tags=set()):
+    def mpi_matrix(self, ioshape, initval=None, extent=None, tags=set()):
         """Creates a matrix which can be exchanged over MPI
 
         Since an MPI Matrix *is a* :class:`~pyfr.backends.base.Matrix`
@@ -121,13 +150,12 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.MPIMatrix`
         """
-        return self.mpi_matrix_cls(self, ioshape, initval, iopacking, tags)
+        return self.mpi_matrix_cls(self, ioshape, initval, extent, tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
-        return self.mpi_matrix((view.nrow, view.ncol, view.vlen), tags=tags)
+        return self.mpi_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
 
-    @recordalloc('data')
-    def const_matrix(self, initval, iopacking='AoS', tags=set()):
+    def const_matrix(self, initval, extent=None, tags=set()):
         """Creates a constant matrix from *initval*
 
         This should be preferred over :meth:`matrix` when it is known
@@ -145,40 +173,9 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.ConstMatrix`
         """
-        return self.const_matrix_cls(self, initval, iopacking, tags)
+        return self.const_matrix_cls(self, initval, extent, tags)
 
-    def block_diag_matrix(self, initval, brange, iopacking='AoS', tags=set()):
-        return self.block_diag_matrix_cls(self, initval, brange, iopacking,
-                                          tags)
-
-    def auto_matrix(self, initval, iopacking='AoS', tags=set()):
-        """Creates either a constant or block diagonal matrix from *initval*
-        """
-        # HACK: The following code attempts to identify one special-
-        # case of block diagonal matrices;  while it is currently
-        # sufficient a more robust methodology is desirable.
-        shape = initval.shape
-        if iopacking == 'AoS' and len(shape) == 4 and shape[1] == shape[3]:
-            for i, j in ndrange(shape[1], shape[1]):
-                if i == j:
-                    continue
-
-                if np.any(initval[:,i,:,j] != 0):
-                    break
-            else:
-                # Block spans are trivial
-                brange = [(i*shape[0], (i + 1)*shape[0],
-                           i*shape[2], (i + 1)*shape[2])
-                          for i in xrange(shape[1])]
-
-                return self.block_diag_matrix(initval, brange, iopacking,
-                                              tags)
-
-        # Not block-diagonal; return a constant matrix
-        return self.const_matrix(initval, iopacking, tags)
-
-    @recordalloc('view')
-    def view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
+    def view(self, matmap, rcmap, stridemap=None, vshape=tuple(), tags=set()):
         """Uses mapping to create a view of mat
 
         :param matmap: Matrix of matrix objects.
@@ -190,18 +187,13 @@ class BaseBackend(object):
         :type tags: set of str, optional
         :rtype: :class:`~pyfr.backends.base.View`
         """
-        if stridemap is None:
-            stridemap = np.ones(matmap.shape, dtype=np.int32)
-        return self.view_cls(self, matmap, rcmap, stridemap, vlen, tags)
+        return self.view_cls(self, matmap, rcmap, stridemap, vshape, tags)
 
-    @recordalloc('view')
-    def mpi_view(self, matmap, rcmap, stridemap=None, vlen=1, tags=set()):
+    def mpi_view(self, matmap, rcmap, stridemap=None, vshape=tuple(),
+                 tags=set()):
         """Creates a view whose contents can be exchanged using MPI"""
-        if stridemap is None:
-            stridemap = np.ones(matmap.shape, dtype=np.int32)
-        return self.mpi_view_cls(self, matmap, rcmap, stridemap, vlen, tags)
+        return self.mpi_view_cls(self, matmap, rcmap, stridemap, vshape, tags)
 
-    @recordalloc('kern')
     def kernel(self, name, *args, **kwargs):
         """Locates and binds a kernel called *name*
 
@@ -218,17 +210,19 @@ class BaseBackend(object):
         for prov in self._providers:
             kern = getattr(prov, name, None)
             if kern and issuitable(kern, *args, **kwargs):
-                return kern(*args, **kwargs)
+                try:
+                    return kern(*args, **kwargs)
+                except NotImplementedError:
+                    pass
         else:
             raise KeyError("'{}' has no providers".format(name))
 
-    @recordalloc('queue')
     def queue(self):
         """Creates a queue
 
         :rtype: :class:`~pyfr.backends.base.Queue`
         """
-        return self.queue_cls()
+        return self.queue_cls(self)
 
     def runall(self, sequence):
         """Executes all of the kernels in the provided sequence of queues
@@ -242,71 +236,3 @@ class BaseBackend(object):
         queue.
         """
         self.queue_cls.runall(sequence)
-
-    @property
-    def nbytes(self):
-        """Number of data bytes currently allocated on the backend"""
-        return sum(d.nbytes for d in self._allocs['data'])
-
-    @staticmethod
-    def _to_arr(mat, currpacking, newpacking):
-        if currpacking not in ('AoS', 'SoA'):
-            raise ValueError('Invalid matrix packing')
-
-        if mat.ndim == 2 or currpacking == newpacking:
-            return mat
-        elif mat.ndim == 3:
-            return mat.swapaxes(1, 2)
-        elif mat.ndim == 4:
-            return mat.swapaxes(0, 1).swapaxes(2, 3)
-        else:
-            raise ValueError('Invalid matrix shape')
-
-    @staticmethod
-    def aos_arr(mat, packing):
-        return BaseBackend._to_arr(mat, packing, 'AoS')
-
-    @staticmethod
-    def soa_arr(mat, packing):
-        return BaseBackend._to_arr(mat, packing, 'SoA')
-
-    @staticmethod
-    def compact_arr(mat, packing):
-        # Convert to SoA and get the compacted shape
-        soamat = BaseBackend.soa_arr(mat, packing)
-        cshape = BaseBackend.compact_shape(mat.shape, packing)
-
-        return soamat.reshape(cshape[0], cshape[1])
-
-    @staticmethod
-    def _to_shape(shape, currpacking, newpacking):
-        if currpacking not in ('AoS', 'SoA'):
-            raise ValueError('Invalid matrix packing')
-
-        if len(shape) == 2 or currpacking == newpacking:
-            return shape
-        elif len(shape) == 3:
-            return shape[0], shape[2], shape[1]
-        elif len(shape) == 4:
-            return shape[1], shape[0], shape[3], shape[2]
-        else:
-            raise ValueError('Invalid matrix shape')
-
-    @staticmethod
-    def aos_shape(shape, packing):
-        return BaseBackend._to_shape(shape, packing, 'AoS')
-
-    @staticmethod
-    def soa_shape(shape, packing):
-        return BaseBackend._to_shape(shape, packing, 'SoA')
-
-    @staticmethod
-    def compact_shape(shape, packing):
-        sshape = BaseBackend.soa_shape(shape, packing)
-
-        if len(sshape) == 2:
-            return sshape[0], sshape[1]
-        elif len(sshape) == 3:
-            return sshape[0], sshape[1]*sshape[2]
-        else:
-            return sshape[0]*sshape[1], sshape[2]*sshape[3]
