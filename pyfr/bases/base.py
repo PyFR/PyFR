@@ -56,11 +56,12 @@ class BaseBasis(object):
 
     @lazyprop
     def m0(self):
-        return self.ubasis_at(self.fpts)
+        return self.ubasis.nodal_basis_at(self.fpts)
 
     @lazyprop
     def m1(self):
-        return self.jac_ubasis_at(self.upts).reshape(self.nupts, -1)
+        m = np.rollaxis(self.ubasis.jac_nodal_basis_at(self.upts), 2)
+        return m.reshape(self.nupts, -1)
 
     @lazyprop
     def m2(self):
@@ -102,11 +103,7 @@ class BaseBasis(object):
         rname = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).points
 
-    def ubasis_at(self, pts):
-        return self.ubasis.nodal_basis_at(pts)
 
-    def jac_ubasis_at(self, pts):
-        return np.rollaxis(self.ubasis.jac_nodal_basis_at(pts), 2)
 
     @abstractproperty
     def fpts(self):
@@ -165,12 +162,6 @@ class BaseBasis(object):
     @lazyprop
     def spts(self):
         return self.std_ele(self._nsptsord - 1)
-
-    def sbasis_at(self, pts):
-        return self.sbasis.nodal_basis_at(pts)
-
-    def jac_sbasis_at(self, pts):
-        return np.rollaxis(self.sbasis.jac_nodal_basis_at(pts), 2)
 
     @abstractproperty
     def facefpts(self):

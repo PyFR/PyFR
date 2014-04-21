@@ -52,7 +52,7 @@ class BaseElements(object):
         self._gen_pnorm_fpts()
 
         # Construct the physical location operator matrix
-        plocop = basis.sbasis_at(basis.fpts)
+        plocop = basis.sbasis.nodal_basis_at(basis.fpts)
 
         # Apply the operator to the mesh elements and reshape
         plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
@@ -75,7 +75,7 @@ class BaseElements(object):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
         # Construct the physical location operator matrix
-        plocop = self._basis.sbasis_at(self._basis.upts)
+        plocop = self._basis.sbasis.nodal_basis_at(self._basis.upts)
 
         # Apply the operator to the mesh elements and reshape
         plocupts = np.dot(plocop, self._eles.reshape(self.nspts, -1))
@@ -102,7 +102,7 @@ class BaseElements(object):
         solnb = currb.__class__(None, solncfg)
 
         # Form the interpolation operator
-        interp = solnb.ubasis_at(currb.upts)
+        interp = solnb.ubasis.nodal_basis_at(currb.upts)
 
         # Sizes
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
@@ -175,7 +175,7 @@ class BaseElements(object):
         npts = len(pts)
 
         # Form the Jacobian operator
-        jacop = self._basis.jac_sbasis_at(pts)
+        jacop = np.rollaxis(self._basis.sbasis.jac_nodal_basis_at(pts), 2)
 
         # Cast as a matrix multiply and apply to eles
         jac = np.dot(jacop.reshape(-1, nspts), self._eles.reshape(nspts, -1))
