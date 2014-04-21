@@ -59,9 +59,8 @@ class BaseElements(object):
         plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
         plocfpts = plocfpts.transpose(1, 2, 0).tolist()
 
-        srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
-                          for ffpts in basis.facefpts]
-        self._srtd_face_fpts = srtd_face_fpts
+        self._srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
+                                for ffpts in basis.facefpts]
 
     @abstractmethod
     def _process_ics(self, ics):
