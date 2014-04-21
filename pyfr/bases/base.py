@@ -73,6 +73,7 @@ class BaseBasis(object):
         return self.fbasis_at(self.upts)
 
     @property
+    @chop
     def m132(self):
         return self.m1 - np.dot(self.m3, self.m2)
 
@@ -87,6 +88,7 @@ class BaseBasis(object):
         return m.reshape(-1, self.nfpts)
 
     @property
+    @chop
     def m460(self):
         return self.m4 - np.dot(self.m6, self.m0)
 
