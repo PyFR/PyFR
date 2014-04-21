@@ -5,46 +5,44 @@ from pyfr.backends.base.kernels import ComputeMetaKernel
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
-    _nscal_fpts = 1
-    _nvect_upts = 1
-    _nvect_fpts = 1
+    _need_vect_fpts = True
 
-    def set_backend(self, be, nscal_upts):
-        super(BaseAdvectionDiffusionElements, self).set_backend(be, nscal_upts)
-
-        # Allocate the additional operator matrices
-        m6b = be.const_matrix(self._basis.m6, tags={'M6'})
-        m460b = be.const_matrix(self._basis.m460, tags={'M460'})
+    def set_backend(self, backend, nscal_upts):
+        super(BaseAdvectionDiffusionElements, self).set_backend(backend,
+                                                                nscal_upts)
 
         # Register pointwise kernels
-        be.pointwise.register('pyfr.solvers.baseadvecdiff.kernels.gradcoru')
+        backend.pointwise.register(
+            'pyfr.solvers.baseadvecdiff.kernels.gradcoru'
+        )
 
-        self.kernels['tgradpcoru_upts'] = lambda: be.kernel(
-            'mul', m460b, self.scal_upts_inb, out=self._vect_upts[0]
+        self._m460b = backend.const_matrix(self._basis.m460, tags={'M460'})
+        self.kernels['tgradpcoru_upts'] = lambda: backend.kernel(
+            'mul', self._m460b, self.scal_upts_inb, out=self._vect_upts
         )
-        self.kernels['tgradcoru_upts'] = lambda: be.kernel(
-            'mul', m6b, self._vect_fpts[0].rslice(0, self.nfpts),
-             out=self._vect_upts[0], beta=1.0
+
+        self._m6b = backend.const_matrix(self._basis.m6, tags={'M6'})
+        self.kernels['tgradcoru_upts'] = lambda: backend.kernel(
+            'mul', self._m6b, self._vect_fpts.rslice(0, self.nfpts),
+             out=self._vect_upts, beta=1.0
         )
-        self.kernels['gradcoru_upts'] = lambda: be.kernel(
+
+        self.kernels['gradcoru_upts'] = lambda: backend.kernel(
             'gradcoru', tplargs=dict(ndims=self.ndims, nvars=self.nvars),
              dims=[self.nupts, self.neles], smats=self._smat_upts,
-             rcpdjac=self._rcpdjac_upts, gradu=self._vect_upts[0]
+             rcpdjac=self._rcpdjac_upts, gradu=self._vect_upts
         )
 
         def gradcoru_fpts():
             nupts, nfpts = self.nupts, self.nfpts
-            vect_upts, vect_fpts = self._vect_upts[0], self._vect_fpts[0]
+            vect_upts, vect_fpts = self._vect_upts, self._vect_fpts
 
             # Exploit the block-diagonal form of the operator
-            muls = [be.kernel('mul', self._m0b,
-                              vect_upts.rslice(i*nupts, (i + 1)*nupts),
-                              vect_fpts.rslice(i*nfpts, (i + 1)*nfpts))
+            muls = [backend.kernel('mul', self._m0b,
+                                   vect_upts.rslice(i*nupts, (i + 1)*nupts),
+                                   vect_fpts.rslice(i*nfpts, (i + 1)*nfpts))
                     for i in xrange(self.ndims)]
 
             return ComputeMetaKernel(muls)
 
         self.kernels['gradcoru_fpts'] = gradcoru_fpts
-
-    def get_vect_fpts0_for_inter(self, eidx, fidx):
-        return self._get_vect_fptsn_for_inter(self._vect_fpts[0], eidx, fidx)

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
+import functools as ft
 
 import numpy as np
 
@@ -13,9 +14,8 @@ class BaseElements(object):
     # Map from dimension number to list of dynamical variables
     _dynvarmap = None
 
-    _nscal_fpts = 1
-    _nvect_upts = 1
-    _nvect_fpts = 0
+    # Additional storage requirements
+    _need_vect_fpts = False
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
@@ -30,12 +30,6 @@ class BaseElements(object):
         # Kernels we provide
         self.kernels = {}
 
-        # Subclass checks
-        assert self._dynvarmap
-        assert self._nscal_fpts >= 1
-        assert self._nvect_upts >= 1
-        assert self._nvect_fpts >= 0
-
         # Check the dimensionality of the problem
         if ndims != basiscls.ndims or ndims not in self._dynvarmap:
             raise ValueError('Invalid element matrix dimensions')
@@ -49,6 +43,7 @@ class BaseElements(object):
         # Sizes
         self.nupts = basis.nupts
         self.nfpts = basis.nfpts
+        self.nfacefpts = basis.nfacefpts
 
         # Transform matrices at the soln points
         self._gen_rcpdjac_smat_upts()
@@ -117,44 +112,37 @@ class BaseElements(object):
         self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
 
     @abstractmethod
-    def set_backend(self, be, nscal_upts):
+    def set_backend(self, backend, nscal_upts):
         # Ensure a backend has not already been set
         assert self._be is None
-        self._be = be
-
-        # Allocate the constant operator matrices
-        self._m0b = be.const_matrix(self._basis.m0, tags={'M0'})
-        self._m3b = be.const_matrix(self._basis.m3, tags={'M3'})
-        self._m132b = be.const_matrix(self._basis.m132, tags={'M132'})
-
-        # Tags to ensure alignment of multi-dimensional matrices
-        tags = {'align'}
-
-        # Allocate soln point transformation matrices
-        self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts, tags=tags)
-        self._smat_upts = be.const_matrix(self._smat_upts, tags=tags)
+        self._be = backend
 
         # Sizes
         nupts, nfpts = self.nupts, self.nfpts
         nvars, ndims = self.nvars, self.ndims
         neles = self.neles
 
-        # Allocate general storage required for flux computation
-        self._scal_upts = [be.matrix((nupts, nvars, neles), self._scal_upts,
-                                     tags=tags)
-                           for i in xrange(nscal_upts)]
-        self._vect_upts = [be.matrix((ndims, nupts, nvars, neles), tags=tags)
-                           for i in xrange(self._nvect_upts)]
-        self._scal_fpts = [be.matrix((nfpts, nvars, neles),
-                                     extent='scal_fpts' + str(i), tags=tags)
-                           for i in xrange(self._nscal_fpts)]
-        self._vect_fpts = [be.matrix((ndims, nfpts, nvars, neles),
-                                     extent='vect_fpts' + str(i), tags=tags)
-                           for i in xrange(self._nvect_fpts)]
+        # Convenience wrappers for aligned allocations
+        matrix = ft.partial(backend.matrix, tags={'align'})
+        const_matrix = ft.partial(backend.const_matrix, tags={'align'})
 
-        # Bank the scalar soln points (as required by the RK schemes)
-        self.scal_upts_inb = be.matrix_bank(self._scal_upts)
-        self.scal_upts_outb = be.matrix_bank(self._scal_upts)
+        # Allocate soln point transformation matrices
+        self._rcpdjac_upts = const_matrix(self._rcpdjac_upts)
+        self._smat_upts = const_matrix(self._smat_upts)
+
+        # Allocate and bank the storage required by the time integrator
+        self._scal_upts = [matrix((nupts, nvars, neles), self._scal_upts)
+                           for i in xrange(nscal_upts)]
+        self.scal_upts_inb = backend.matrix_bank(self._scal_upts)
+        self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
+
+        # Allocate scratch space required for evaluating -∇·f
+        self._vect_upts = matrix((ndims, nupts, nvars, neles))
+        self._scal_fpts = matrix((nfpts, nvars, neles), extent='scal_fpts')
+
+        if self._need_vect_fpts:
+            self._vect_fpts = matrix((ndims, nfpts, nvars, neles),
+                                     extent='vect_fpts')
 
     def _gen_rcpdjac_smat_upts(self):
         smats, djacs = self._get_smats(self._basis.upts, retdets=True)
@@ -223,3 +211,27 @@ class BaseElements(object):
                 djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
 
         return (smats, djacs) if retdets else smats
+
+    def get_mag_pnorms_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self._mag_pnorm_fpts[fpts_idx,eidx]
+
+    def get_norm_pnorms_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self._norm_pnorm_fpts[fpts_idx,eidx]
+
+    def get_scal_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        cstri = [(self._scal_fpts.leadsubdim,)]*nfp
+
+        return [self._scal_fpts]*nfp, rcmap, cstri
+
+    def get_vect_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        rcstri = [(self.nfpts, self._vect_fpts.leadsubdim)]*nfp
+
+        return [self._vect_fpts]*nfp, rcmap, rcstri

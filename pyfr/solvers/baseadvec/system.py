@@ -15,7 +15,7 @@ class BaseAdvectionSystem(BaseSystem):
         # flux point solutions which are on our side of an MPI
         # interface
         q1 << kernels['eles', 'disu_fpts']()
-        q1 << kernels['mpiint', 'scal_fpts0_pack']()
+        q1 << kernels['mpiint', 'scal_fpts_pack']()
         runall([q1])
 
         # Evaluate the flux at each of the solution points and take the
@@ -30,9 +30,9 @@ class BaseAdvectionSystem(BaseSystem):
         # Send the MPI interface buffers we have just packed and
         # receive the corresponding buffers from our peers.  Then
         # proceed to unpack these received buffers
-        q2 << kernels['mpiint', 'scal_fpts0_send']()
-        q2 << kernels['mpiint', 'scal_fpts0_recv']()
-        q2 << kernels['mpiint', 'scal_fpts0_unpack']()
+        q2 << kernels['mpiint', 'scal_fpts_send']()
+        q2 << kernels['mpiint', 'scal_fpts_recv']()
+        q2 << kernels['mpiint', 'scal_fpts_unpack']()
 
         runall([q1, q2])
 
