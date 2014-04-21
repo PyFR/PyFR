@@ -56,29 +56,19 @@ class BaseBasis(object):
 
     @lazyprop
     def m0(self):
-        """Discontinuous soln at upts to discontinuous soln at fpts"""
         return self.ubasis_at(self.fpts)
 
     @lazyprop
     def m1(self):
-        """Trans discontinuous flux at upts to trans divergence of
-        trans discontinuous flux at upts
-        """
         return self.jac_ubasis_at(self.upts).reshape(self.nupts, -1)
 
     @lazyprop
     def m2(self):
-        """Trans discontinuous flux at upts to trans normal
-        discontinuous flux at fpts
-        """
         m = self.norm_fpts[...,None]*self.m0[:,None,:]
         return m.reshape(self.nfpts, -1)
 
     @lazyprop
     def m3(self):
-        """Trans normal correction flux at upts to trans divergence of
-        trans correction flux at upts
-        """
         return self.fbasis_at(self.upts)
 
     @property
@@ -87,17 +77,11 @@ class BaseBasis(object):
 
     @lazyprop
     def m4(self):
-        """Discontinuous soln at upts to trans gradient of discontinuous
-        solution at upts
-        """
         m = self.m1.reshape(self.nupts, -1, self.nupts).swapaxes(0, 1)
         return m.reshape(-1, self.nupts)
 
     @lazyprop
     def m6(self):
-        """Correction soln at fpts to trans gradient of correction
-        solution at upts
-        """
         m = self.norm_fpts.T[:,None,:]*self.m3
         return m.reshape(-1, self.nfpts)
 
