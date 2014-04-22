@@ -17,12 +17,12 @@ class TensorProdBasis(object):
 
     @property
     def facefpts(self):
-        kn = (self._order + 1)**(self.ndims - 1)
+        kn = (self.order + 1)**(self.ndims - 1)
         return [list(xrange(i*kn, (i + 1)*kn)) for i in xrange(2*self.ndims)]
 
     @property
     def nupts(self):
-        return (self._order + 1)**self.ndims
+        return (self.order + 1)**self.ndims
 
 
 class QuadBasis(TensorProdBasis, BaseBasis):
@@ -36,7 +36,7 @@ class QuadBasis(TensorProdBasis, BaseBasis):
     @lazyprop
     def fpts(self):
         # Flux points along an edge
-        rulename = self._cfg.get('solver-interfaces-line', 'flux-pts')
+        rulename = self.cfg.get('solver-interfaces-line', 'flux-pts')
         pts = np.array(get_quadrule('line', rulename, self.nfpts // 4).points)
 
         # Project onto the edges
@@ -66,7 +66,7 @@ class HexBasis(TensorProdBasis, BaseBasis):
     @lazyprop
     def fpts(self):
         # Flux points for a single face
-        rule = self._cfg.get('solver-elements-hex', 'soln-pts')
+        rule = self.cfg.get('solver-elements-hex', 'soln-pts')
         s, t = get_quadrule('quad', rule, self.nfpts // 6).np_points.T
 
         # Project

@@ -21,14 +21,14 @@ class BaseBasis(object):
     nspts_cdenom = None
 
     def __init__(self, nspts, cfg):
-        self._nspts = nspts
-        self._cfg = cfg
-        self._order = cfg.getint('solver', 'order')
+        self.nspts = nspts
+        self.cfg = cfg
+        self.order = cfg.getint('solver', 'order')
 
-        self.ubasis = get_polybasis(self.name, self._order + 1, self.upts)
+        self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
 
         if nspts:
-            self._nsptsord = nsptord = self.order_from_nspts(nspts)
+            self.nsptsord = nsptord = self.order_from_nspts(nspts)
             self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
     @abstractmethod
@@ -92,9 +92,6 @@ class BaseBasis(object):
     def m460(self):
         return self.m4 - np.dot(self.m6, self.m0)
 
-    @property
-    def nspts(self):
-        return self._nspts
 
     @abstractproperty
     def nupts(self):
@@ -102,7 +99,7 @@ class BaseBasis(object):
 
     @lazyprop
     def upts(self):
-        rname = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
+        rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).points
 
 
@@ -118,8 +115,8 @@ class BaseBasis(object):
     def _fbasis_coeffs_for(self, ftype, fproj, fdjacs, nffpts):
         # Suitable quadrature rules for various face types
         qrule_map = {
-            'line': ('gauss-legendre', self._order + 1),
-            'quad': ('gauss-legendre', (self._order + 1)**2),
+            'line': ('gauss-legendre', self.order + 1),
+            'quad': ('gauss-legendre', (self.order + 1)**2),
             'tri': ('williams-shunn', 36)
         }
 
@@ -131,9 +128,9 @@ class BaseBasis(object):
         qfacepts = np.vstack(list(np.broadcast(*p)) for p in proj)
 
         # Obtain a nodal basis on the reference face
-        fname = self._cfg.get('solver-interfaces-' + ftype, 'flux-pts')
+        fname = self.cfg.get('solver-interfaces-' + ftype, 'flux-pts')
         ffpts = get_quadrule(ftype, fname, nffpts)
-        nodeb = get_polybasis(ftype, self._order + 1, ffpts.np_points)
+        nodeb = get_polybasis(ftype, self.order + 1, ffpts.np_points)
 
         L = nodeb.nodal_basis_at(qrule.np_points)
 
@@ -163,7 +160,7 @@ class BaseBasis(object):
 
     @lazyprop
     def spts(self):
-        return self.std_ele(self._nsptsord - 1)
+        return self.std_ele(self.nsptsord - 1)
 
     @abstractproperty
     def facefpts(self):
