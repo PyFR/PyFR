@@ -33,5 +33,6 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
 
         self.kernels['tdisf_upts'] = lambda: backend.kernel(
             'tflux', tplargs=tplargs, dims=[self.nupts, self.neles],
-            u=self.scal_upts_inb, smats=self._smat_upts, f=self._vect_upts
+            u=self.scal_upts_inb, smats=self.smat_at('upts'),
+            f=self._vect_upts
         )

@@ -6,6 +6,7 @@ import functools as ft
 import numpy as np
 
 from pyfr.nputil import npeval, fuzzysort
+from pyfr.util import memoize
 
 
 class BaseElements(object):
@@ -44,9 +45,6 @@ class BaseElements(object):
         self.nupts = basis.nupts
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
-
-        # Transform matrices at the soln points
-        self._gen_rcpdjac_smat_upts()
 
         # Physical normals at the flux points
         self._gen_pnorm_fpts()
@@ -121,13 +119,8 @@ class BaseElements(object):
         nvars, ndims = self.nvars, self.ndims
         neles = self.neles
 
-        # Convenience wrappers for aligned allocations
+        # Convenience wrapper for aligned allocations
         matrix = ft.partial(backend.matrix, tags={'align'})
-        const_matrix = ft.partial(backend.const_matrix, tags={'align'})
-
-        # Allocate soln point transformation matrices
-        self._rcpdjac_upts = const_matrix(self._rcpdjac_upts)
-        self._smat_upts = const_matrix(self._smat_upts)
 
         # Allocate and bank the storage required by the time integrator
         self._scal_upts = [matrix((nupts, nvars, neles), self._scal_upts)
@@ -143,15 +136,24 @@ class BaseElements(object):
             self._vect_fpts = matrix((ndims, nfpts, nvars, neles),
                                      extent='vect_fpts')
 
-    def _gen_rcpdjac_smat_upts(self):
-        smats, djacs = self._get_smats(self._basis.upts, retdets=True)
+    @memoize
+    def opmat(self, name):
+        return self._be.const_matrix(getattr(self._basis, name.lower()),
+                                     tags={name})
 
-        # Check for negative Jacobians
-        if np.any(djacs < -1e-5):
+    @memoize
+    def smat_at(self, name):
+        smat = self._get_smats(getattr(self._basis, name))
+        return self._be.const_matrix(smat, tags={'align'})
+
+    @memoize
+    def rcpdjac_at(self, name):
+        _, djac = self._get_smats(getattr(self._basis, name), retdets=True)
+
+        if np.any(djac < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
 
-        self._rcpdjac_upts = 1.0 / djacs
-        self._smat_upts = smats
+        return self._be.const_matrix(1.0 / djac, tags={'align'})
 
     def _gen_pnorm_fpts(self):
         smats = self._get_smats(self._basis.fpts).transpose(1, 3, 0, 2)
