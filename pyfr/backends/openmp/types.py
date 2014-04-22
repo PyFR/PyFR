@@ -23,19 +23,16 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         # Process any initial value
         if self._initval is not None:
-            self.set(self._initval)
+            self._set(self._initval)
 
         # Remove
         del self._initval
 
-    def get(self):
+    def _get(self):
         # Trim any padding in the final dimension
         return self.data[...,:self.ioshape[-1]]
 
-    def set(self, ary):
-        if ary.shape != self.ioshape:
-            raise ValueError('Invalid matrix shape')
-
+    def _set(self, ary):
         # Assign
         self.data[...,:ary.shape[-1]] = ary
 

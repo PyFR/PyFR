@@ -18,12 +18,12 @@ class OpenCLMatrixBase(base.MatrixBase):
 
         # Process any initial value
         if self._initval is not None:
-            self.set(self._initval)
+            self._set(self._initval)
 
         # Remove
         del self._initval
 
-    def get(self):
+    def _get(self):
         # Allocate an empty buffer
         buf = np.empty(self.datashape, dtype=self.dtype)
 
@@ -33,10 +33,7 @@ class OpenCLMatrixBase(base.MatrixBase):
         # Slice to give the expected I/O shape
         return buf[...,:self.ioshape[-1]]
 
-    def set(self, ary):
-        if ary.shape != self.ioshape:
-            raise ValueError('Invalid matrix shape')
-
+    def _set(self, ary):
         # Allocate a new buffer with suitable padding and assign
         buf = np.zeros(self.datashape, dtype=self.dtype)
         buf[...,:self.ioshape[-1]] = ary

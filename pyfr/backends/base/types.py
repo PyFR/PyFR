@@ -43,11 +43,28 @@ class MatrixBase(object):
         # Allocate
         backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
 
-        # Retain the initial value
-        self._initval = initval
+        # Process the initial value
+        if initval is not None:
+            if initval.shape != self.ioshape:
+                raise ValueError('Invalid initial value')
+
+            self._initval = np.asanyarray(initval, dtype=self.dtype)
+        else:
+            self._initval = None
+
+    def get(self):
+        # If we are yet to be allocated use our initial value
+        if hasattr(self, '_initval'):
+            if self._initval is not None:
+                return self._initval
+            else:
+                return np.zeros(self.ioshape, dtype=self.dtype)
+        # Otherwise defer to the backend
+        else:
+            return self._get()
 
     @abstractmethod
-    def get(self):
+    def _get(self):
         pass
 
     @property
@@ -64,8 +81,19 @@ class Matrix(MatrixBase):
     """
     _base_tags = {'dense'}
 
+    def set(self, ary):
+        if ary.shape != self.ioshape:
+            raise ValueError('Invalid matrix shape')
+
+        # If we are yet to be allocated then update our initial value
+        if hasattr(self, '_initval'):
+            self._initval = np.asanyarray(ary, dtype=self.dtype)
+        # Otherwise defer to the backend
+        else:
+            self._set(ary)
+
     @abstractmethod
-    def set(self, buf):
+    def _set(self, ary):
         pass
 
     def rslice(self, p, q):
