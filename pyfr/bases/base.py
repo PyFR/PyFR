@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+import re
 
 from mpmath import mp
 import numpy as np
@@ -54,6 +55,16 @@ class BaseBasis(object):
         else:
             raise ValueError('Invalid number of shape points')
 
+    @chop
+    def opmat(self, expr):
+        if not re.match(r'[M0-9\-+*() ]+$', expr):
+            raise ValueError('Invalid operator matrix expression')
+
+        mats = {m: np.asmatrix(getattr(self, m.lower()))
+                for m in re.findall(r'M\d+', expr)}
+
+        return np.asarray(eval(expr, {'__builtins__': None}, mats))
+
     @lazyprop
     def m0(self):
         return self.ubasis.nodal_basis_at(self.fpts)
@@ -72,11 +83,6 @@ class BaseBasis(object):
     def m3(self):
         return self.fbasis_at(self.upts)
 
-    @property
-    @chop
-    def m132(self):
-        return self.m1 - np.dot(self.m3, self.m2)
-
     @lazyprop
     def m4(self):
         m = self.m1.reshape(self.nupts, -1, self.nupts).swapaxes(0, 1)
@@ -87,12 +93,6 @@ class BaseBasis(object):
         m = self.norm_fpts.T[:,None,:]*self.m3
         return m.reshape(-1, self.nfpts)
 
-    @property
-    @chop
-    def m460(self):
-        return self.m4 - np.dot(self.m6, self.m0)
-
-
     @abstractproperty
     def nupts(self):
         pass
@@ -101,8 +101,6 @@ class BaseBasis(object):
     def upts(self):
         rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).points
-
-
 
     @abstractproperty
     def fpts(self):

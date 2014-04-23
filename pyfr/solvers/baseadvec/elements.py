@@ -17,7 +17,7 @@ class BaseAdvectionElements(BaseElements):
             'mul', self.opmat('M0'), self.scal_upts_inb, out=self._scal_fpts
         )
         self.kernels['tdivtpcorf_upts'] = lambda: backend.kernel(
-            'mul', self.opmat('M132'), self._vect_upts,
+            'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
             out=self.scal_upts_outb
         )
         self.kernels['tdivtconf_upts'] = lambda: backend.kernel(

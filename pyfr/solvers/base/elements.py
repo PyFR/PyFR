@@ -137,9 +137,8 @@ class BaseElements(object):
                                      extent='vect_fpts')
 
     @memoize
-    def opmat(self, name):
-        return self._be.const_matrix(getattr(self._basis, name.lower()),
-                                     tags={name})
+    def opmat(self, expr):
+        return self._be.const_matrix(self._basis.opmat(expr), tags={expr})
 
     @memoize
     def smat_at(self, name):

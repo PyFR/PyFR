@@ -17,7 +17,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         )
 
         self.kernels['tgradpcoru_upts'] = lambda: backend.kernel(
-            'mul', self.opmat('M460'), self.scal_upts_inb, out=self._vect_upts
+            'mul', self.opmat('M4 - M6*M0'), self.scal_upts_inb,
+            out=self._vect_upts
         )
         self.kernels['tgradcoru_upts'] = lambda: backend.kernel(
             'mul', self.opmat('M6'), self._vect_fpts.rslice(0, self.nfpts),
