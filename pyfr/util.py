@@ -72,24 +72,18 @@ def chdir(dirname):
         os.chdir(cdir)
 
 
-def lazyprop(fn):
-    attr = '_lazy_' + fn.__name__
+class lazyprop(object):
+    def __init__(self, fn):
+        self.fn = fn
 
-    @property
-    @ft.wraps(fn)
-    def newfn(self):
-        try:
-            return getattr(self, attr)
-        except AttributeError:
-            setattr(self, attr, fn(self))
-            return getattr(self, attr)
-    return newfn
+    def __get__(self, instance, owner):
+        if instance is None:
+            return None
 
+        value = self.fn(instance)
+        setattr(instance, self.fn.__name__, value)
 
-def purge_lazyprops(obj):
-    for attr in obj.__dict__:
-        if attr.startswith('_lazy_'):
-            del obj.__dict__[attr]
+        return value
 
 
 def subclasses(cls, just_leaf=False):
