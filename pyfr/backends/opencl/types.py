@@ -8,6 +8,7 @@ import numpy as np
 import pyopencl as cl
 
 import pyfr.backends.base as base
+from pyfr.util import lazyprop
 
 
 class OpenCLMatrixBase(base.MatrixBase):
@@ -53,12 +54,10 @@ class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
 
 
 class OpenCLMatrixRSlice(base.MatrixRSlice):
-    def __init__(self, backend, mat, p, q):
-        super(OpenCLMatrixRSlice, self).__init__(backend, mat, p, q)
-
-        # Slice
-        self.data = mat.basedata.get_sub_region(mat.offset + p*mat.pitch,
-                                                (q - p)*mat.pitch + 1)
+    @lazyprop
+    def data(self):
+        return self.parent.basedata.get_sub_region(self.offset,
+                                                   self.nrow*self.pitch + 1)
 
     @property
     def _as_parameter_(self):

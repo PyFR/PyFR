@@ -56,18 +56,12 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
-    def __init__(self, backend, mat, p, q):
-        super(CUDAMatrixRSlice, self).__init__(backend, mat, p, q)
-
-        # Starting offset of our row
-        self._soffset = p*mat.pitch
-
     @property
     def _as_parameter_(self):
-        return self.parent.data + self._soffset
+        return self.parent.basedata + self.offset
 
     def __long__(self):
-        return self.parent.data + self._soffset
+        return self.parent.basedata + self.offset
 
 
 class CUDAMatrixBank(base.MatrixBank):

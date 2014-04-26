@@ -7,6 +7,7 @@ from mpi4py import MPI
 import numpy as np
 
 import pyfr.backends.base as base
+from pyfr.util import lazyprop
 
 
 class OpenMPMatrixBase(base.MatrixBase):
@@ -44,16 +45,17 @@ class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
-    def __init__(self, backend, mat, p, q):
-        super(OpenMPMatrixRSlice, self).__init__(backend, mat, p, q)
-
+    @lazyprop
+    def data(self):
         # Since slices do not retain any information about the
         # high-order structure of an array it is fine to compact mat
         # down to two dimensions and simply slice this
-        self.data = mat.data.reshape(mat.nrow, mat.leaddim)[p:q]
+        mat = self.parent
+        return mat.data.reshape(mat.nrow, mat.leaddim)[self.p:self.q]
 
-        # Pointer to our ndarray (used by ctypes)
-        self._as_parameter_ = self.data.ctypes.data
+    @lazyprop
+    def _as_parameter_(self):
+        return self.data.ctypes.data
 
 
 class OpenMPMatrixBank(base.MatrixBank):
