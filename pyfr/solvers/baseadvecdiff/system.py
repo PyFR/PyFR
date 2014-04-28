@@ -9,7 +9,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1, q2 = self._queues
         kernels = self._kernels
 
-        q1 << kernels['eles', 'disu_fpts']()
+        q1 << kernels['eles', 'disu']()
         q1 << kernels['mpiint', 'scal_fpts_pack']()
         runall([q1])
 
@@ -30,8 +30,10 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1 << kernels['mpiint', 'vect_fpts_pack']()
         runall([q1])
 
-        q1 << kernels['eles', 'tdisf_upts']()
-        q1 << kernels['eles', 'tdivtpcorf_upts']()
+        if ('eles', 'gradcoru_qpts') in kernels:
+            q1 << kernels['eles', 'gradcoru_qpts']()
+        q1 << kernels['eles', 'tdisf']()
+        q1 << kernels['eles', 'tdivtpcorf']()
         q1 << kernels['iint', 'comm_flux']()
         q1 << kernels['bcint', 'comm_flux']()
 
@@ -42,6 +44,11 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         runall([q1, q2])
 
         q1 << kernels['mpiint', 'comm_flux']()
-        q1 << kernels['eles', 'tdivtconf_upts']()
-        q1 << kernels['eles', 'negdivconf_upts']()
+        q1 << kernels['eles', 'tdivtconf']()
+        if ('eles', 'tdivf_qpts') in kernels:
+            q1 << kernels['eles', 'tdivf_qpts']()
+            q1 << kernels['eles', 'negdivconf']()
+            q1 << kernels['eles', 'divf_upts']()
+        else:
+            q1 << kernels['eles', 'negdivconf']()
         runall([q1])

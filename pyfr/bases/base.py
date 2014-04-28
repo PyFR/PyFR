@@ -9,6 +9,7 @@ import numpy as np
 from pyfr.nputil import chop
 from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
+from pyfr.nputil import block_diag
 from pyfr.util import lazyprop
 
 
@@ -25,6 +26,12 @@ class BaseBasis(object):
         self.nspts = nspts
         self.cfg = cfg
         self.order = cfg.getint('solver', 'order')
+
+        self.antialias = cfg.get('solver', 'anti-alias', 'none')
+        self.antialias = set(s.strip() for s in self.antialias.split(','))
+        self.antialias.discard('none')
+        if self.antialias - {'flux', 'div-flux'}:
+            raise ValueError('Invalid anti-alias options')
 
         self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
 
@@ -93,6 +100,24 @@ class BaseBasis(object):
         m = self.norm_fpts.T[:,None,:]*self.m3
         return m.reshape(-1, self.nfpts)
 
+    @lazyprop
+    def m7(self):
+        return self.ubasis.nodal_basis_at(self.qpts)
+
+    @lazyprop
+    def m8(self):
+        return np.vstack([self.m0, self.m7])
+
+    @lazyprop
+    @chop
+    def m9(self):
+        ub = self.ubasis
+        return np.dot(ub.vdm.T, self.qwts*ub.ortho_basis_at(self.qpts))
+
+    @property
+    def m10(self):
+        return block_diag([self.m9]*self.ndims)
+
     @abstractproperty
     def nupts(self):
         pass
@@ -101,6 +126,31 @@ class BaseBasis(object):
     def upts(self):
         rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).points
+
+    @lazyprop
+    def _qrule(self):
+        sect = 'solver-elements-' + self.name
+        kwargs = {'flags': 'sp'}
+
+        if self.cfg.hasopt(sect, 'quad-pts'):
+            kwargs['rule'] = self.cfg.get(sect, 'quad-pts')
+
+        if self.cfg.hasopt(sect, 'quad-deg'):
+            kwargs['qdeg'] = self.cfg.getint(sect, 'quad-deg')
+
+        return get_quadrule(self.name, **kwargs)
+
+    @property
+    def qpts(self):
+        return self._qrule.np_points
+
+    @property
+    def nqpts(self):
+        return len(self.qpts)
+
+    @property
+    def qwts(self):
+        return self._qrule.np_weights
 
     @abstractproperty
     def fpts(self):

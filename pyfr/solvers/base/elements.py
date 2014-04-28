@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
-import functools as ft
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 import numpy as np
 
@@ -14,9 +13,6 @@ class BaseElements(object):
 
     # Map from dimension number to list of dynamical variables
     _dynvarmap = None
-
-    # Additional storage requirements
-    _need_vect_fpts = False
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
@@ -41,8 +37,15 @@ class BaseElements(object):
         # Instantiate the basis class
         self._basis = basis = basiscls(nspts, cfg)
 
+        # See what kind of projection the basis is using
+        self.antialias = basis.antialias
+
+        # If we need quadrature points or not
+        haveqpts = 'flux' in self.antialias or 'div-flux' in self.antialias
+
         # Sizes
         self.nupts = basis.nupts
+        self.nqpts = basis.nqpts if haveqpts else None
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
 
@@ -108,6 +111,10 @@ class BaseElements(object):
         self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
         self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
 
+    @abstractproperty
+    def _scratch_bufs(self):
+        pass
+
     @abstractmethod
     def set_backend(self, backend, nscal_upts):
         # Ensure a backend has not already been set
@@ -115,26 +122,39 @@ class BaseElements(object):
         self._be = backend
 
         # Sizes
-        nupts, nfpts = self.nupts, self.nfpts
-        nvars, ndims = self.nvars, self.ndims
-        neles = self.neles
-
-        # Convenience wrapper for aligned allocations
-        matrix = ft.partial(backend.matrix, tags={'align'})
+        ndims, nvars, neles = self.ndims, self.nvars, self.neles
+        nfpts, nupts, nqpts = self.nfpts, self.nupts, self.nqpts
+        sbufs = self._scratch_bufs
 
         # Allocate and bank the storage required by the time integrator
-        self._scal_upts = [matrix((nupts, nvars, neles), self._scal_upts)
+        self._scal_upts = [backend.matrix(self._scal_upts.shape,
+                                          self._scal_upts, tags={'align'})
                            for i in xrange(nscal_upts)]
         self.scal_upts_inb = backend.matrix_bank(self._scal_upts)
         self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
 
-        # Allocate scratch space required for evaluating -∇·f
-        self._vect_upts = matrix((ndims, nupts, nvars, neles))
-        self._scal_fpts = matrix((nfpts, nvars, neles), extent='scal_fpts')
+        # Convenience functions for scalar/vector allocation
+        alloc = lambda ex, n: backend.matrix(n, extent=ex, tags={'align'})
+        salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
+        valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
 
-        if self._need_vect_fpts:
-            self._vect_fpts = matrix((ndims, nfpts, nvars, neles),
-                                     extent='vect_fpts')
+        # Allocate required scalar scratch space
+        if 'scal_fpts' in sbufs and 'scal_qpts' in sbufs:
+            self._scal_fqpts = salloc('_scal_fqpts', nfpts + nqpts)
+            self._scal_fpts = self._scal_fqpts.rslice(0, nfpts)
+            self._scal_qpts = self._scal_fqpts.rslice(nfpts, nfpts + nqpts)
+        elif 'scal_fpts' in sbufs:
+            self._scal_fpts = salloc('scal_fpts', nfpts)
+        elif 'scal_qpts' in sbufs:
+            self._scal_qpts = salloc('scal_qpts', nqpts)
+
+        # Allocate required vector scratch space
+        if 'vect_upts' in sbufs:
+            self._vect_upts = valloc('vect_upts', nupts)
+        if 'vect_qpts' in sbufs:
+            self._vect_qpts = valloc('vect_qpts', nqpts)
+        if 'vect_fpts' in sbufs:
+            self._vect_fpts = valloc('vect_fpts', nfpts)
 
     @memoize
     def opmat(self, expr):

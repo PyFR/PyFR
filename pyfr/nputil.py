@@ -9,6 +9,19 @@ import re
 import numpy as np
 
 
+def block_diag(arrs):
+    shapes = [a.shape for a in arrs]
+    out = np.zeros(np.sum(shapes, axis=0), dtype=arrs[0].dtype)
+
+    r, c = 0, 0
+    for i, (rr, cc) in enumerate(shapes):
+        out[r:r + rr, c:c + cc] = arrs[i]
+        r += rr
+        c += cc
+
+    return out
+
+
 def chop(fn):
     @ft.wraps(fn)
     def newfn(*args, **kwargs):
