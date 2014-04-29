@@ -451,8 +451,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     vtu_b = basiscls(npts, cfg)
 
     # Generate operator matrices to move points and solutions to vtu nodes
-    mesh_vtu_op = np.array(soln_b.sbasis_at(vtu_b.spts), dtype=float)
-    soln_vtu_op = np.array(soln_b.ubasis_at(vtu_b.spts), dtype=float)
+    mesh_vtu_op = soln_b.sbasis.nodal_basis_at(vtu_b.spts)
+    soln_vtu_op = soln_b.ubasis.nodal_basis_at(vtu_b.spts)
 
     # Calculate node locations of vtu elements
     pts = np.dot(mesh_vtu_op, mesh.reshape(m_inf[1][0],
@@ -509,8 +509,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         ele_spts = get_std_ele_by_name(m_inf[0], uord)
 
         # Generate operator matrices to move points and solutions to vtu nodes
-        mesh_hpts_op = np.array(mesh_b.sbasis_at(ele_spts), dtype=float)
-        soln_hpts_op = np.array(mesh_b.ubasis_at(ele_spts), dtype=float)
+        mesh_hpts_op = mesh_b.sbasis.nodal_basis_at(ele_spts)
+        soln_hpts_op = mesh_b.ubasis.nodal_basis_at(ele_spts)
 
         # Calculate node locations of vtu elements
         pts = np.dot(mesh_hpts_op, mesh.reshape(m_inf[1][0], -1))

@@ -19,22 +19,21 @@ class TriBasis(BaseBasis):
 
     @classmethod
     def std_ele(cls, sptord):
-        pts1d = get_quadrule('line', 'equi-spaced', sptord + 1).points
-        sele = [(p, q)
+        pts1d = np.linspace(-1, 1, sptord + 1)
+
+        return [(p, q)
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
 
-        return np.array(sele, dtype=np.object)
-
     @property
     def nupts(self):
-        return (self._order + 1)*(self._order + 2) // 2
+        return (self.order + 1)*(self.order + 2) // 2
 
     @lazyprop
     def fpts(self):
         # 1D points
-        qrule = self._cfg.get('solver-interfaces-line', 'flux-pts')
-        pts1d = get_quadrule('line', qrule, self._order + 1).np_points
+        qrule = self.cfg.get('solver-interfaces-line', 'flux-pts')
+        pts1d = get_quadrule('line', qrule, self.order + 1).np_points
 
         # Project
         proj = [(pts1d, -1), (-pts1d, pts1d), (-1, pts1d)]
@@ -47,7 +46,7 @@ class TriBasis(BaseBasis):
 
     @property
     def facefpts(self):
-        k = self._order + 1
+        k = self.order + 1
         return [list(xrange(i*k, (i + 1)*k)) for i in xrange(3)]
 
     @lazyprop
@@ -68,23 +67,22 @@ class TetBasis(BaseBasis):
 
     @classmethod
     def std_ele(cls, sptord):
-        pts1d = get_quadrule('line', 'equi-spaced', sptord + 1).points
-        sele = [(p, q, r)
+        pts1d = np.linspace(-1, 1, sptord + 1)
+
+        return [(p, q, r)
                 for i, r in enumerate(pts1d)
                 for j, q in enumerate(pts1d[:(sptord + 1 - i)])
                 for p in pts1d[:(sptord + 1 - i - j)]]
 
-        return np.array(sele, dtype=np.object)
-
     @property
     def nupts(self):
-        return (self._order + 1)*(self._order + 2)*(self._order + 3) // 6
+        return (self.order + 1)*(self.order + 2)*(self.order + 3) // 6
 
     @lazyprop
     def fpts(self):
         # 2D points on a triangle
-        qrule = self._cfg.get('solver-interfaces-tri', 'flux-pts')
-        npts2d = (self._order + 1)*(self._order + 2) // 2
+        qrule = self.cfg.get('solver-interfaces-tri', 'flux-pts')
+        npts2d = (self.order + 1)*(self.order + 2) // 2
 
         s, t = get_quadrule('tri', qrule, npts2d).np_points.T
 
@@ -100,7 +98,7 @@ class TetBasis(BaseBasis):
 
     @property
     def facefpts(self):
-        n = (self._order + 1)*(self._order + 2) // 2
+        n = (self.order + 1)*(self.order + 2) // 2
         return [list(xrange(i*n, (i + 1)*n)) for i in xrange(4)]
 
     @lazyprop

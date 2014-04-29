@@ -20,28 +20,27 @@ class PriBasis(BaseBasis):
 
     @classmethod
     def std_ele(cls, sptord):
-        pts1d = get_quadrule('line', 'equi-spaced', sptord + 1).points
-        sele = [(p, q, r)
+        pts1d = np.linspace(-1, 1, sptord + 1)
+
+        return [(p, q, r)
                 for r in pts1d
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
 
-        return np.array(sele)
-
     @property
     def nupts(self):
-        return (self._order + 1)**2*(self._order + 2) // 2
+        return (self.order + 1)**2*(self.order + 2) // 2
 
     @lazyprop
     def fpts(self):
-        n = self._order + 1
+        n = self.order + 1
 
         # Tri face points
-        tname = self._cfg.get('solver-interfaces-tri', 'flux-pts')
+        tname = self.cfg.get('solver-interfaces-tri', 'flux-pts')
         ts, tt = get_quadrule('tri', tname, n*(n + 1) // 2).np_points.T
 
         # Quad face points
-        qname = self._cfg.get('solver-interfaces-quad', 'flux-pts')
+        qname = self.cfg.get('solver-interfaces-quad', 'flux-pts')
         qs, qt = get_quadrule('quad', qname, n**2).np_points.T
 
         # Project
@@ -57,7 +56,7 @@ class PriBasis(BaseBasis):
 
     @property
     def facefpts(self):
-        n = self._order + 1
+        n = self.order + 1
 
         tpts = np.arange(n*(n + 1)).reshape(2, -1)
         qpts = np.arange(3*n**2).reshape(3, -1) + n*(n + 1)
@@ -66,7 +65,7 @@ class PriBasis(BaseBasis):
 
     @lazyprop
     def fbasis_coeffs(self):
-        n = self._order + 1
+        n = self.order + 1
 
         tfproj = lambda s, t: [(s, t, -1), (s, t, 1)]
         qfproj = lambda s, t: [(s, -1, t), (-s, s, t), (-1, s, t)]

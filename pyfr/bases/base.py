@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+import re
 
 from mpmath import mp
 import numpy as np
@@ -8,6 +9,7 @@ import numpy as np
 from pyfr.nputil import chop
 from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
+from pyfr.nputil import block_diag
 from pyfr.util import lazyprop
 
 
@@ -21,14 +23,20 @@ class BaseBasis(object):
     nspts_cdenom = None
 
     def __init__(self, nspts, cfg):
-        self._nspts = nspts
-        self._cfg = cfg
-        self._order = cfg.getint('solver', 'order')
+        self.nspts = nspts
+        self.cfg = cfg
+        self.order = cfg.getint('solver', 'order')
 
-        self.ubasis = get_polybasis(self.name, self._order + 1, self.upts)
+        self.antialias = cfg.get('solver', 'anti-alias', 'none')
+        self.antialias = set(s.strip() for s in self.antialias.split(','))
+        self.antialias.discard('none')
+        if self.antialias - {'flux', 'div-flux'}:
+            raise ValueError('Invalid anti-alias options')
+
+        self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
 
         if nspts:
-            self._nsptsord = nsptord = self.order_from_nspts(nspts)
+            self.nsptsord = nsptord = self.order_from_nspts(nspts)
             self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
     @abstractmethod
@@ -54,60 +62,61 @@ class BaseBasis(object):
         else:
             raise ValueError('Invalid number of shape points')
 
+    @chop
+    def opmat(self, expr):
+        if not re.match(r'[M0-9\-+*() ]+$', expr):
+            raise ValueError('Invalid operator matrix expression')
+
+        mats = {m: np.asmatrix(getattr(self, m.lower()))
+                for m in re.findall(r'M\d+', expr)}
+
+        return np.asarray(eval(expr, {'__builtins__': None}, mats))
+
     @lazyprop
     def m0(self):
-        """Discontinuous soln at upts to discontinuous soln at fpts"""
-        return self.ubasis_at(self.fpts)
+        return self.ubasis.nodal_basis_at(self.fpts)
 
     @lazyprop
     def m1(self):
-        """Trans discontinuous flux at upts to trans divergence of
-        trans discontinuous flux at upts
-        """
-        return self.jac_ubasis_at(self.upts).reshape(self.nupts, -1)
+        m = np.rollaxis(self.ubasis.jac_nodal_basis_at(self.upts), 2)
+        return m.reshape(self.nupts, -1)
 
     @lazyprop
     def m2(self):
-        """Trans discontinuous flux at upts to trans normal
-        discontinuous flux at fpts
-        """
         m = self.norm_fpts[...,None]*self.m0[:,None,:]
         return m.reshape(self.nfpts, -1)
 
     @lazyprop
     def m3(self):
-        """Trans normal correction flux at upts to trans divergence of
-        trans correction flux at upts
-        """
         return self.fbasis_at(self.upts)
-
-    @property
-    def m132(self):
-        return self.m1 - np.dot(self.m3, self.m2)
 
     @lazyprop
     def m4(self):
-        """Discontinuous soln at upts to trans gradient of discontinuous
-        solution at upts
-        """
         m = self.m1.reshape(self.nupts, -1, self.nupts).swapaxes(0, 1)
         return m.reshape(-1, self.nupts)
 
     @lazyprop
     def m6(self):
-        """Correction soln at fpts to trans gradient of correction
-        solution at upts
-        """
         m = self.norm_fpts.T[:,None,:]*self.m3
         return m.reshape(-1, self.nfpts)
 
-    @property
-    def m460(self):
-        return self.m4 - np.dot(self.m6, self.m0)
+    @lazyprop
+    def m7(self):
+        return self.ubasis.nodal_basis_at(self.qpts)
+
+    @lazyprop
+    def m8(self):
+        return np.vstack([self.m0, self.m7])
+
+    @lazyprop
+    @chop
+    def m9(self):
+        ub = self.ubasis
+        return np.dot(ub.vdm.T, self.qwts*ub.ortho_basis_at(self.qpts))
 
     @property
-    def nspts(self):
-        return self._nspts
+    def m10(self):
+        return block_diag([self.m9]*self.ndims)
 
     @abstractproperty
     def nupts(self):
@@ -115,14 +124,33 @@ class BaseBasis(object):
 
     @lazyprop
     def upts(self):
-        rname = self._cfg.get('solver-elements-' + self.name, 'soln-pts')
+        rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).points
 
-    def ubasis_at(self, pts):
-        return self.ubasis.nodal_basis_at(pts)
+    @lazyprop
+    def _qrule(self):
+        sect = 'solver-elements-' + self.name
+        kwargs = {'flags': 'sp'}
 
-    def jac_ubasis_at(self, pts):
-        return np.rollaxis(self.ubasis.jac_nodal_basis_at(pts), 2)
+        if self.cfg.hasopt(sect, 'quad-pts'):
+            kwargs['rule'] = self.cfg.get(sect, 'quad-pts')
+
+        if self.cfg.hasopt(sect, 'quad-deg'):
+            kwargs['qdeg'] = self.cfg.getint(sect, 'quad-deg')
+
+        return get_quadrule(self.name, **kwargs)
+
+    @property
+    def qpts(self):
+        return self._qrule.np_points
+
+    @property
+    def nqpts(self):
+        return len(self.qpts)
+
+    @property
+    def qwts(self):
+        return self._qrule.np_weights
 
     @abstractproperty
     def fpts(self):
@@ -135,8 +163,8 @@ class BaseBasis(object):
     def _fbasis_coeffs_for(self, ftype, fproj, fdjacs, nffpts):
         # Suitable quadrature rules for various face types
         qrule_map = {
-            'line': ('gauss-legendre', self._order + 1),
-            'quad': ('gauss-legendre', (self._order + 1)**2),
+            'line': ('gauss-legendre', self.order + 1),
+            'quad': ('gauss-legendre', (self.order + 1)**2),
             'tri': ('williams-shunn', 36)
         }
 
@@ -148,9 +176,9 @@ class BaseBasis(object):
         qfacepts = np.vstack(list(np.broadcast(*p)) for p in proj)
 
         # Obtain a nodal basis on the reference face
-        fname = self._cfg.get('solver-interfaces-' + ftype, 'flux-pts')
+        fname = self.cfg.get('solver-interfaces-' + ftype, 'flux-pts')
         ffpts = get_quadrule(ftype, fname, nffpts)
-        nodeb = get_polybasis(ftype, self._order + 1, ffpts.np_points)
+        nodeb = get_polybasis(ftype, self.order + 1, ffpts.np_points)
 
         L = nodeb.nodal_basis_at(qrule.np_points)
 
@@ -180,13 +208,7 @@ class BaseBasis(object):
 
     @lazyprop
     def spts(self):
-        return self.std_ele(self._nsptsord - 1)
-
-    def sbasis_at(self, pts):
-        return self.sbasis.nodal_basis_at(pts)
-
-    def jac_sbasis_at(self, pts):
-        return np.rollaxis(self.sbasis.jac_nodal_basis_at(pts), 2)
+        return self.std_ele(self.nsptsord - 1)
 
     @abstractproperty
     def facefpts(self):

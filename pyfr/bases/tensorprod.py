@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import itertools as it
+
 import numpy as np
 
 from pyfr.bases.base import BaseBasis
@@ -10,17 +12,17 @@ from pyfr.util import lazyprop
 class TensorProdBasis(object):
     @classmethod
     def std_ele(cls, sptord):
-        n = (sptord + 1)**cls.ndims
-        return get_quadrule(cls.name, 'equi-spaced', n).points
+        pts1d = np.linspace(-1, 1, sptord + 1)
+        return list(p[::-1] for p in it.product(pts1d, repeat=cls.ndims))
 
     @property
     def facefpts(self):
-        kn = (self._order + 1)**(self.ndims - 1)
+        kn = (self.order + 1)**(self.ndims - 1)
         return [list(xrange(i*kn, (i + 1)*kn)) for i in xrange(2*self.ndims)]
 
     @property
     def nupts(self):
-        return (self._order + 1)**self.ndims
+        return (self.order + 1)**self.ndims
 
 
 class QuadBasis(TensorProdBasis, BaseBasis):
@@ -34,7 +36,7 @@ class QuadBasis(TensorProdBasis, BaseBasis):
     @lazyprop
     def fpts(self):
         # Flux points along an edge
-        rulename = self._cfg.get('solver-interfaces-line', 'flux-pts')
+        rulename = self.cfg.get('solver-interfaces-line', 'flux-pts')
         pts = np.array(get_quadrule('line', rulename, self.nfpts // 4).points)
 
         # Project onto the edges
@@ -64,7 +66,7 @@ class HexBasis(TensorProdBasis, BaseBasis):
     @lazyprop
     def fpts(self):
         # Flux points for a single face
-        rule = self._cfg.get('solver-elements-hex', 'soln-pts')
+        rule = self.cfg.get('solver-elements-hex', 'soln-pts')
         s, t = get_quadrule('quad', rule, self.nfpts // 6).np_points.T
 
         # Project

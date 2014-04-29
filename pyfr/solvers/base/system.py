@@ -52,6 +52,7 @@ class BaseSystem(object):
         # Prepare the queues and kernels
         self._gen_queues()
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
+        backend.commit()
 
     def _load_eles(self, rallocs, mesh, initsoln):
         basismap = {b.name: b for b in subclasses(BaseBasis, just_leaf=True)}
