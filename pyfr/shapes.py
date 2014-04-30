@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod, abstractproperty
+import itertools as it
+from math import sqrt
 import re
 
 from mpmath import mp
@@ -18,9 +19,7 @@ def _proj_rule_pts(projector, qrule):
     return np.vstack(np.broadcast_arrays(*projector(*pts))).T
 
 
-class BaseBasis(object):
-    __metaclass__ = ABCMeta
-
+class BaseShape(object):
     name = None
     ndims = -1
 
@@ -49,10 +48,6 @@ class BaseBasis(object):
         if nspts:
             self.nsptsord = nsptord = self.order_from_nspts(nspts)
             self.sbasis = get_polybasis(self.name, nsptord, self.spts)
-
-    @abstractmethod
-    def std_ele(sptord):
-        pass
 
     @classmethod
     def nspts_from_order(cls, sptord):
@@ -128,10 +123,6 @@ class BaseBasis(object):
     @property
     def m10(self):
         return block_diag([self.m9]*self.ndims)
-
-    @abstractproperty
-    def nupts(self):
-        pass
 
     @lazyprop
     def upts(self):
@@ -251,3 +242,140 @@ class BaseBasis(object):
     @property
     def nfpts(self):
         return sum(self.nfacefpts)
+
+
+class TensorProdShape(object):
+    @classmethod
+    def std_ele(cls, sptord):
+        pts1d = np.linspace(-1, 1, sptord + 1)
+        return list(p[::-1] for p in it.product(pts1d, repeat=cls.ndims))
+
+    @property
+    def nupts(self):
+        return (self.order + 1)**self.ndims
+
+
+class QuadShape(TensorProdShape, BaseShape):
+    name = 'quad'
+    ndims = 2
+
+    # nspts = n^2
+    nspts_coeffs = [1, 0, 0]
+    nspts_cdenom = 1
+
+    # Faces: type, reference-to-face projection, normal, relative area
+    faces = [
+        ('line', lambda s: (s, -1), (0, -1), 1),
+        ('line', lambda s: (1, s), (1, 0), 1),
+        ('line', lambda s: (s, 1), (0, 1), 1),
+        ('line', lambda s: (-1, s), (-1, 0), 1),
+    ]
+
+
+class HexShape(TensorProdShape, BaseShape):
+    name = 'hex'
+    ndims = 3
+
+    # nspts = n^3
+    nspts_coeffs = [1, 0, 0, 0]
+    nspts_cdenom = 1
+
+    # Faces: type, reference-to-face projection, normal, relative area
+    faces = [
+        ('quad', lambda s, t: (s, t, -1), (0, 0, -1), 1),
+        ('quad', lambda s, t: (s, -1, t), (0, -1, 0), 1),
+        ('quad', lambda s, t: (1, s, t), (1, 0, 0), 1),
+        ('quad', lambda s, t: (s, 1, t), (0, 1, 0), 1),
+        ('quad', lambda s, t: (-1, s, t), (-1, 0, 0), 1),
+        ('quad', lambda s, t: (s, t, 1), (0, 0, 1), 1),
+    ]
+
+
+class TriShape(BaseShape):
+    name = 'tri'
+    ndims = 2
+
+    # nspts = n*(n + 1)/2
+    nspts_coeffs = [1, 1, 0]
+    nspts_cdenom = 2
+
+    # Faces: type, reference-to-face projection, normal, relative area
+    faces = [
+        ('line', lambda s: (s, -1), (0, -1), 1),
+        ('line', lambda s: (-s, s), (1/sqrt(2), 1/sqrt(2)), sqrt(2)),
+        ('line', lambda s: (-1, s), (-1, 0), 1),
+    ]
+
+    @classmethod
+    def std_ele(cls, sptord):
+        pts1d = np.linspace(-1, 1, sptord + 1)
+
+        return [(p, q)
+                for i, q in enumerate(pts1d)
+                for p in pts1d[:(sptord + 1 - i)]]
+
+    @property
+    def nupts(self):
+        return (self.order + 1)*(self.order + 2) // 2
+
+
+class TetShape(BaseShape):
+    name = 'tet'
+    ndims = 3
+
+    # nspts = n*(n + 1)*(n + 2)/6
+    nspts_coeffs = [1, 3, 2, 0]
+    nspts_cdenom = 6
+
+    # Faces: type, reference-to-face projection, normal, relative area
+    faces = [
+        ('tri', lambda s, t: (s, t, -1), (0, 0, -1), 1),
+        ('tri', lambda s, t: (s, -1, t), (0, -1, 0), 1),
+        ('tri', lambda s, t: (-1, t, s), (-1, 0, 0), 1),
+        ('tri', lambda s, t: (s, t, -s - t - 1),
+         (1/sqrt(3), 1/sqrt(3), 1/sqrt(3)), sqrt(3)),
+    ]
+
+    @classmethod
+    def std_ele(cls, sptord):
+        pts1d = np.linspace(-1, 1, sptord + 1)
+
+        return [(p, q, r)
+                for i, r in enumerate(pts1d)
+                for j, q in enumerate(pts1d[:(sptord + 1 - i)])
+                for p in pts1d[:(sptord + 1 - i - j)]]
+
+    @property
+    def nupts(self):
+        return (self.order + 1)*(self.order + 2)*(self.order + 3) // 6
+
+
+class PriShape(BaseShape):
+    name = 'pri'
+    ndims = 3
+
+    # nspts = n^2*(n + 1)/2
+    nspts_coeffs = [1, 1, 0, 0]
+    nspts_cdenom = 2
+
+    # Faces: type, reference-to-face projection, normal, relative area
+    faces = [
+        ('tri', lambda s, t: (s, t, -1), (0, 0, -1), 1),
+        ('tri', lambda s, t: (s, t, 1), (0, 0, 1), 1),
+        ('quad', lambda s, t: (s, -1, t), (0, -1, 0), 1),
+        ('quad', lambda s, t: (-s, s, t), (1/sqrt(2), 1/sqrt(2), 0), sqrt(2)),
+        ('quad', lambda s, t: (-1, s, t), (-1, 0, 0), 1),
+    ]
+
+    @classmethod
+    def std_ele(cls, sptord):
+        pts1d = np.linspace(-1, 1, sptord + 1)
+
+        return [(p, q, r)
+                for r in pts1d
+                for i, q in enumerate(pts1d)
+                for p in pts1d[:(sptord + 1 - i)]]
+
+    @property
+    def nupts(self):
+        return (self.order + 1)**2*(self.order + 2) // 2

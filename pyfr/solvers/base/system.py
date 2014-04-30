@@ -7,8 +7,8 @@ import re
 
 from mpi4py import MPI
 
-from pyfr.bases import BaseBasis
 from pyfr.inifile import Inifile
+from pyfr.shapes import BaseShape
 from pyfr.util import proxylist, subclasses
 
 
@@ -55,7 +55,7 @@ class BaseSystem(object):
         backend.commit()
 
     def _load_eles(self, rallocs, mesh, initsoln):
-        basismap = {b.name: b for b in subclasses(BaseBasis, just_leaf=True)}
+        basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Look for and load each element type from the mesh
         elemap = OrderedDict()
