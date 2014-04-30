@@ -13,6 +13,11 @@ from pyfr.nputil import block_diag
 from pyfr.util import lazyprop
 
 
+def _proj_rule_pts(projector, qrule):
+    pts = np.atleast_2d(qrule.np_points.T)
+    return np.vstack(np.broadcast_arrays(*projector(*pts))).T
+
+
 class BaseBasis(object):
     __metaclass__ = ABCMeta
 
@@ -21,6 +26,12 @@ class BaseBasis(object):
 
     nspts_coeffs = None
     nspts_cdenom = None
+
+    npts_for_face = {
+        'line': lambda order: order + 1,
+        'tri': lambda order: (order + 1)*(order + 2) // 2,
+        'quad': lambda order: (order + 1)**2
+    }
 
     def __init__(self, nspts, cfg):
         self.nspts = nspts
@@ -152,15 +163,30 @@ class BaseBasis(object):
     def qwts(self):
         return self._qrule.np_weights
 
-    @abstractproperty
+    @lazyprop
     def fpts(self):
-        pass
+        rrule, ppts = {}, []
 
-    @abstractproperty
+        for kind, proj, norm, area in self.faces:
+            # Obtain the flux points in reference space for the face type
+            try:
+                r = rrule[kind]
+            except KeyError:
+                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                npts = self.npts_for_face[kind](self.order)
+
+                rrule[kind] = r = get_quadrule(kind, rule, npts)
+
+            # Project
+            ppts.append(_proj_rule_pts(proj, r))
+
+        return np.vstack(ppts)
+
+    @lazyprop
     def fbasis_coeffs(self):
-        pass
+        coeffs = []
+        rcache = {}
 
-    def _fbasis_coeffs_for(self, ftype, fproj, fdjacs, nffpts):
         # Suitable quadrature rules for various face types
         qrule_map = {
             'line': ('gauss-legendre', self.order + 1),
@@ -168,38 +194,40 @@ class BaseBasis(object):
             'tri': ('williams-shunn', 36)
         }
 
-        # Obtain a quadrature rule for integrating on the face
-        qrule = get_quadrule(ftype, *qrule_map[ftype])
+        for kind, proj, norm, area in self.faces:
+            # Obtain a quadrature rule for integrating on the reference face
+            # and evaluate this rule at the nodal basis defined by the flux
+            # points
+            try:
+                qr, L = rcache[kind]
+            except KeyError:
+                qr = get_quadrule(kind, *qrule_map[kind])
 
-        # Project the rule points onto the various faces
-        proj = fproj(*np.atleast_2d(qrule.np_points.T))
-        qfacepts = np.vstack(list(np.broadcast(*p)) for p in proj)
+                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                npts = self.npts_for_face[kind](self.order)
 
-        # Obtain a nodal basis on the reference face
-        fname = self.cfg.get('solver-interfaces-' + ftype, 'flux-pts')
-        ffpts = get_quadrule(ftype, fname, nffpts)
-        nodeb = get_polybasis(ftype, self.order + 1, ffpts.np_points)
+                pts = get_quadrule(kind, rule, npts).np_points
+                ppb = get_polybasis(kind, self.order + 1, pts)
 
-        L = nodeb.nodal_basis_at(qrule.np_points)
+                L = ppb.nodal_basis_at(qr.np_points)
 
-        M = self.ubasis.ortho_basis_at(qfacepts)
-        M = M.reshape(-1, len(proj), len(qrule.np_points))
+                rcache[kind] = (qr, L)
 
-        # Do the quadrature
-        S = np.einsum('i...,ik,jli->lkj', qrule.np_weights, L, M)
+            # Do the quadrature
+            M = self.ubasis.ortho_basis_at(_proj_rule_pts(proj, qr))
+            S = np.einsum('i...,ik,ji->kj', area*qr.np_weights, L, M)
 
-        # Account for differing face areas
-        S *= np.asanyarray(fdjacs)[:,None,None]
+            coeffs.append(S)
 
-        return S.reshape(-1, self.nupts)
+        return np.vstack(coeffs)
 
     @chop
     def fbasis_at(self, pts):
         return np.dot(self.fbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T
 
-    @abstractproperty
+    @property
     def facenorms(self):
-        pass
+        return [norm for kind, proj, norm, area in self.faces]
 
     @lazyprop
     def norm_fpts(self):
@@ -210,13 +238,15 @@ class BaseBasis(object):
     def spts(self):
         return self.std_ele(self.nsptsord - 1)
 
-    @abstractproperty
+    @lazyprop
     def facefpts(self):
-        pass
+        nf = np.cumsum([0] + self.nfacefpts)
+        return [list(xrange(nf[i], nf[i + 1])) for i in xrange(len(nf) - 1)]
 
     @lazyprop
     def nfacefpts(self):
-        return [len(f) for f in self.facefpts]
+        return [self.npts_for_face[kind](self.order)
+                for kind, proj, norm, area in self.faces]
 
     @property
     def nfpts(self):
