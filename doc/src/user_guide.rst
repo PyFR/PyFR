@@ -394,13 +394,13 @@ Parameterizes the prismatic elements. Options:
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
-    ``williams-shunn*gauss-legendre | 
-    williams-shunn*gauss-legendre-lobatto``
+    ``williams-shunn~gauss-legendre | 
+    williams-shunn~gauss-legendre-lobatto``
 
 Example::
 
     [solver-elements-pri]
-    soln-pts = williams-shunn*gauss-legendre
+    soln-pts = williams-shunn~gauss-legendre
 
 [solver-output]
 ^^^^^^^^^^^^^^^
