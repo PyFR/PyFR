@@ -244,7 +244,7 @@ Parameterizes the time-integration scheme used by the solver. Options:
 
 1. ``scheme`` --- time-integration scheme:
 
-    ``euler | rk4 | rk45``
+    ``euler | rk4 | rk45 | dopri5``
 
 2. ``controller`` --- time-step size controller:
 
@@ -379,12 +379,12 @@ Parameterizes the tetrahedral elements. Options:
 1. ``soln-pts`` --- location of the solution points in a tetrahedral
    element:
 
-    ``williams-shunn``
+    ``shunn-ham``
 
 Example::
 
     [solver-elements-tet]
-    soln-pts = williams-shunn
+    soln-pts = shunn-ham
 
 [solver-elements-pri]
 ^^^^^^^^^^^^^^^^^^^^^
