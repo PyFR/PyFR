@@ -4,56 +4,78 @@ from pyfr.solvers.base import BaseElements
 
 
 class BaseAdvectionElements(BaseElements):
-    def set_backend(self, be, nscal_upts):
-        super(BaseAdvectionElements, self).set_backend(be, nscal_upts)
+    @property
+    def _scratch_bufs(self):
+        if 'flux' in self.antialias:
+            return {'scal_fpts', 'scal_qpts', 'vect_qpts'}
+        elif 'div-flux' in self.antialias:
+            return {'scal_fpts', 'vect_upts', 'scal_qpts'}
+        else:
+            return {'scal_fpts', 'vect_upts'}
 
-        # Get the number of flux points for each face of the element
-        self.nfacefpts = nfacefpts = self._basis.nfacefpts
+    def set_backend(self, backend, nscal_upts):
+        super(BaseAdvectionElements, self).set_backend(backend, nscal_upts)
 
         # Register pointwise kernels with the backend
-        be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
-
-        m0b, m132b, m3b = self._m0b, self._m132b, self._m3b
-
-        # Specify the kernels we provide
-        self.kernels['disu_fpts'] = lambda: be.kernel(
-            'mul', m0b, self.scal_upts_inb, out=self._scal_fpts[0]
-        )
-        self.kernels['tdivtpcorf_upts'] = lambda: be.kernel(
-            'mul', m132b, self._vect_upts[0], out=self.scal_upts_outb
-        )
-        self.kernels['tdivtconf_upts'] = lambda: be.kernel(
-            'mul', m3b, self._scal_fpts[0], out=self.scal_upts_outb, beta=1.0
-        )
-        self.kernels['negdivconf_upts'] = lambda: be.kernel(
-            'negdivconf', tplargs=dict(nvars=self.nvars),
-            dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
-            rcpdjac=self._rcpdjac_upts
+        backend.pointwise.register(
+            'pyfr.solvers.baseadvec.kernels.negdivconf'
         )
 
-    def get_mag_pnorms_for_inter(self, eidx, fidx):
-        fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._mag_pnorm_fpts[fpts_idx,eidx]
+        # What anti-aliasing options we're running with
+        fluxaa = 'flux' in self.antialias
+        divfluxaa = 'div-flux' in self.antialias
 
-    def get_norm_pnorms_for_inter(self, eidx, fidx):
-        fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._norm_pnorm_fpts[fpts_idx,eidx]
+        # Interpolation from elemental points
+        if fluxaa:
+            self.kernels['disu'] = lambda: backend.kernel(
+                'mul', self.opmat('M8'), self.scal_upts_inb,
+                out=self._scal_fqpts
+            )
+        else:
+            self.kernels['disu'] = lambda: backend.kernel(
+                'mul', self.opmat('M0'), self.scal_upts_inb,
+                out=self._scal_fpts
+            )
 
-    def _get_scal_fptsn_for_inter(self, mat, eidx, fidx):
-        nfp = self.nfacefpts[fidx]
+        # Interpolations and projections to/from quadrature points
+        if divfluxaa:
+            self.kernels['tdivf_qpts'] = lambda: backend.kernel(
+                'mul', self.opmat('M7'), self.scal_upts_outb,
+                out=self._scal_qpts
+            )
+            self.kernels['divf_upts'] = lambda: backend.kernel(
+                'mul', self.opmat('M9'), self._scal_qpts,
+                out=self.scal_upts_outb
+            )
 
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        cstri = [(mat.leadsubdim,)]*nfp
+        # First flux correction kernel
+        if fluxaa:
+            self.kernels['tdivtpcorf'] = lambda: backend.kernel(
+                'mul', self.opmat('(M1 - M3*M2)*M10'), self._vect_qpts,
+                out=self.scal_upts_outb
+            )
+        else:
+            self.kernels['tdivtpcorf'] = lambda: backend.kernel(
+                'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
+                out=self.scal_upts_outb
+            )
 
-        return [mat]*nfp, rcmap, cstri
+        # Second flux correction kernel
+        self.kernels['tdivtconf'] = lambda: backend.kernel(
+            'mul', self.opmat('M3'), self._scal_fpts, out=self.scal_upts_outb,
+            beta=1.0
+        )
 
-    def _get_vect_fptsn_for_inter(self, mat, eidx, fidx):
-        nfp = self.nfacefpts[fidx]
-
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        rcstri = [(self.nfpts, mat.leadsubdim)]*nfp
-
-        return [mat]*nfp, rcmap, rcstri
-
-    def get_scal_fpts0_for_inter(self, eidx, fidx):
-        return self._get_scal_fptsn_for_inter(self._scal_fpts[0], eidx, fidx)
+        # Transformed to physical divergence kernel
+        if divfluxaa:
+            self.kernels['negdivconf'] = lambda: backend.kernel(
+                'negdivconf', tplargs=dict(nvars=self.nvars),
+                dims=[self.nqpts, self.neles], tdivtconf=self._scal_qpts,
+                rcpdjac=self.rcpdjac_at('qpts')
+            )
+        else:
+            self.kernels['negdivconf'] = lambda: backend.kernel(
+                'negdivconf', tplargs=dict(nvars=self.nvars),
+                dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
+                rcpdjac=self.rcpdjac_at('upts')
+            )

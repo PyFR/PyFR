@@ -31,7 +31,6 @@ modules = [
     'pyfr.backends.opencl.kernels',
     'pyfr.backends.openmp',
     'pyfr.backends.openmp.kernels',
-    'pyfr.bases',
     'pyfr.integrators',
     'pyfr.quadrules',
     'pyfr.readers',
@@ -60,7 +59,14 @@ package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
-    'pyfr.quadrules': ['tet/*.txt', 'tri/*.txt'],
+    'pyfr.quadrules': [
+        'hex/*.txt',
+        'line/*.txt',
+        'pri/*.txt',
+        'quad/*.txt',
+        'tet/*.txt',
+        'tri/*.txt'
+    ],
     'pyfr.solvers.baseadvec.kernels': ['*.mako'],
     'pyfr.solvers.baseadvecdiff.kernels': ['*.mako'],
     'pyfr.solvers.euler.kernels': ['*.mako'],

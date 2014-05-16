@@ -18,12 +18,12 @@ class CUDAMatrixBase(base.MatrixBase):
 
         # Process any initial value
         if self._initval is not None:
-            self.set(self._initval)
+            self._set(self._initval)
 
         # Remove
         del self._initval
 
-    def get(self):
+    def _get(self):
         # Allocate an empty buffer
         buf = np.empty(self.datashape, dtype=self.dtype)
 
@@ -33,10 +33,7 @@ class CUDAMatrixBase(base.MatrixBase):
         # Slice to give the expected I/O shape
         return buf[...,:self.ioshape[-1]]
 
-    def set(self, ary):
-        if ary.shape != self.ioshape:
-            raise ValueError('Invalid matrix shape')
-
+    def _set(self, ary):
         # Allocate a new buffer with suitable padding and assign
         buf = np.zeros(self.datashape, dtype=self.dtype)
         buf[...,:self.ioshape[-1]] = ary
@@ -59,18 +56,12 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
-    def __init__(self, backend, mat, p, q):
-        super(CUDAMatrixRSlice, self).__init__(backend, mat, p, q)
-
-        # Starting offset of our row
-        self._soffset = p*mat.pitch
-
     @property
     def _as_parameter_(self):
-        return self.parent.data + self._soffset
+        return self.parent.basedata + self.offset
 
     def __long__(self):
-        return self.parent.data + self._soffset
+        return self.parent.basedata + self.offset
 
 
 class CUDAMatrixBank(base.MatrixBank):

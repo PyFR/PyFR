@@ -3,9 +3,9 @@
 """Converts .pyfr[m, s] files to a Paraview VTK UnstructuredGrid File"""
 import numpy as np
 
-from pyfr.bases import BaseBasis, get_std_ele_by_name
 from pyfr.inifile import Inifile
 from pyfr.readers.nodemaps import GmshNodeMaps
+from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
@@ -437,7 +437,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         flt = ['float64', 8]
 
     # Get the basis class
-    basiscls = subclass_where(BaseBasis, name=m_inf[0])
+    basiscls = subclass_where(BaseShape, name=m_inf[0])
     ndims = m_inf[1][2]
 
     # Set npts for divide/append cases
@@ -451,8 +451,8 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     vtu_b = basiscls(npts, cfg)
 
     # Generate operator matrices to move points and solutions to vtu nodes
-    mesh_vtu_op = np.array(soln_b.sbasis_at(vtu_b.spts), dtype=float)
-    soln_vtu_op = np.array(soln_b.ubasis_at(vtu_b.spts), dtype=float)
+    mesh_vtu_op = soln_b.sbasis.nodal_basis_at(vtu_b.spts)
+    soln_vtu_op = soln_b.ubasis.nodal_basis_at(vtu_b.spts)
 
     # Calculate node locations of vtu elements
     pts = np.dot(mesh_vtu_op, mesh.reshape(m_inf[1][0],
@@ -506,11 +506,11 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
         # Get location of spts in standard element of solution order
         uord = cfg.getint('solver', 'order')
-        ele_spts = get_std_ele_by_name(m_inf[0], uord)
+        ele_spts = subclass_where(BaseShape, name=m_inf[0]).std_ele(uord)
 
         # Generate operator matrices to move points and solutions to vtu nodes
-        mesh_hpts_op = np.array(mesh_b.sbasis_at(ele_spts), dtype=float)
-        soln_hpts_op = np.array(mesh_b.ubasis_at(ele_spts), dtype=float)
+        mesh_hpts_op = mesh_b.sbasis.nodal_basis_at(ele_spts)
+        soln_hpts_op = mesh_b.ubasis.nodal_basis_at(ele_spts)
 
         # Calculate node locations of vtu elements
         pts = np.dot(mesh_hpts_op, mesh.reshape(m_inf[1][0], -1))
