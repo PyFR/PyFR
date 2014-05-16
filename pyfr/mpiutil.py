@@ -2,17 +2,19 @@
 
 import os
 
-from mpi4py import MPI
-
 from pyfr.excepthook import excepthook
 
 
 def init():
+    from mpi4py import MPI
+
     MPI.Init_thread()
     MPI.COMM_WORLD.barrier()
 
 
 def atexit():
+    from mpi4py import MPI
+
     if not MPI.Is_initialized() or MPI.Is_finalized():
         return
 
@@ -26,6 +28,8 @@ def atexit():
 
 
 def get_comm_rank_root():
+    from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
     return comm, comm.rank, 0
 

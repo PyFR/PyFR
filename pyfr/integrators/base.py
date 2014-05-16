@@ -3,8 +3,6 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict
 
-from mpi4py import MPI
-
 from pyfr.inifile import Inifile
 from pyfr.nputil import range_eval
 from pyfr.util import proxylist
@@ -14,6 +12,8 @@ class BaseIntegrator(object):
     __metaclass__ = ABCMeta
 
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
+        from mpi4py import MPI
+
         self._backend = backend
         self._rallocs = rallocs
         self._cfg = cfg
