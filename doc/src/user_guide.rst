@@ -199,6 +199,7 @@ Parameterizes the OpenMP backend. Options:
 
 Example::
 
+    [backend-openmp]
     cc = gcc
     cblas-mt = example/path/libBLAS.dylib
 
@@ -520,8 +521,8 @@ Example::
     w = 1.0
     p = 1.0/(1.0+x)
 
-Example - 2D Couette Flow
-==========================
+Example --- 2D Couette Flow
+===========================
 
 Proceed with the following steps to run a serial 2D Couette flow
 simulation on a mixed unstructured mesh:
@@ -567,8 +568,8 @@ simulation on a mixed unstructured mesh:
 
    Colour map of steady-state density distribution.
 
-Example - 2D Euler Vortex
-==========================
+Example --- 2D Euler Vortex
+===========================
 
 Proceed with the following steps to run a parallel 2D Euler vortex
 simulation on a structured mesh:
