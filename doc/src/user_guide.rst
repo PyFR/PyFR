@@ -402,7 +402,7 @@ Example::
     [solver-elements-pri]
     soln-pts = williams-shunn~gauss-legendre
 
-[solver-output]
+[soln-output]
 ^^^^^^^^^^^^^^^
 
 Parameterizes the solver output. Options:
