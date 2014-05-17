@@ -31,7 +31,15 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                        c=self._cfg.items_as('constants', float))
 
-        self.kernels['tdisf_upts'] = lambda: backend.kernel(
-            'tflux', tplargs=tplargs, dims=[self.nupts, self.neles],
-            u=self.scal_upts_inb, smats=self._smat_upts, f=self._vect_upts[0]
-        )
+        if 'flux' in self.antialias:
+            self.kernels['tdisf'] = lambda: backend.kernel(
+                'tflux', tplargs=tplargs, dims=[self.nqpts, self.neles],
+                u=self._scal_qpts, smats=self.smat_at('qpts'),
+                f=self._vect_qpts
+            )
+        else:
+            self.kernels['tdisf'] = lambda: backend.kernel(
+                'tflux', tplargs=tplargs, dims=[self.nupts, self.neles],
+                u=self.scal_upts_inb, smats=self.smat_at('upts'),
+                f=self._vect_upts
+            )

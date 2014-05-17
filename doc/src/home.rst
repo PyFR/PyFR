@@ -39,16 +39,16 @@ Who is Developing PyFR?
 PyFR is being developed in the `Vincent Lab
 <https://www.imperial.ac.uk/aeronautics/research/vincentlab/>`_, Department of
 Aeronautics, Imperial College London, UK. More details about the development
-team are available `here <http://www.pyfr.org/team.php>`_.
+team are available `here <http://www.pyfr.org/team.php>`__.
 
 How do I get PyFR?
 ------------------
 
 PyFR is available for free under an open-source license. You can download it
-`here <http://www.pyfr.org/download.php>`_.
+`here <http://www.pyfr.org/download.php>`__.
 
 How do I Cite PyFR?
-------------------
+-------------------
 
 If you would like to cite PyFR, please reference the following paper:
 

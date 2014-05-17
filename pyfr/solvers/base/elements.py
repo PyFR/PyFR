@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 import numpy as np
 
 from pyfr.nputil import npeval, fuzzysort
+from pyfr.util import memoize
 
 
 class BaseElements(object):
@@ -12,10 +13,6 @@ class BaseElements(object):
 
     # Map from dimension number to list of dynamical variables
     _dynvarmap = None
-
-    _nscal_fpts = 1
-    _nvect_upts = 1
-    _nvect_fpts = 0
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
@@ -30,12 +27,6 @@ class BaseElements(object):
         # Kernels we provide
         self.kernels = {}
 
-        # Subclass checks
-        assert self._dynvarmap
-        assert self._nscal_fpts >= 1
-        assert self._nvect_upts >= 1
-        assert self._nvect_fpts >= 0
-
         # Check the dimensionality of the problem
         if ndims != basiscls.ndims or ndims not in self._dynvarmap:
             raise ValueError('Invalid element matrix dimensions')
@@ -46,27 +37,31 @@ class BaseElements(object):
         # Instantiate the basis class
         self._basis = basis = basiscls(nspts, cfg)
 
+        # See what kind of projection the basis is using
+        self.antialias = basis.antialias
+
+        # If we need quadrature points or not
+        haveqpts = 'flux' in self.antialias or 'div-flux' in self.antialias
+
         # Sizes
         self.nupts = basis.nupts
+        self.nqpts = basis.nqpts if haveqpts else None
         self.nfpts = basis.nfpts
-
-        # Transform matrices at the soln points
-        self._gen_rcpdjac_smat_upts()
+        self.nfacefpts = basis.nfacefpts
 
         # Physical normals at the flux points
         self._gen_pnorm_fpts()
 
         # Construct the physical location operator matrix
-        plocop = basis.sbasis_at(basis.fpts)
+        plocop = basis.sbasis.nodal_basis_at(basis.fpts)
 
         # Apply the operator to the mesh elements and reshape
         plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
         plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
         plocfpts = plocfpts.transpose(1, 2, 0).tolist()
 
-        srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
-                          for ffpts in basis.facefpts]
-        self._srtd_face_fpts = srtd_face_fpts
+        self._srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
+                                for ffpts in basis.facefpts]
 
     @abstractmethod
     def _process_ics(self, ics):
@@ -80,7 +75,7 @@ class BaseElements(object):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
         # Construct the physical location operator matrix
-        plocop = self._basis.sbasis_at(self._basis.upts)
+        plocop = self._basis.sbasis.nodal_basis_at(self._basis.upts)
 
         # Apply the operator to the mesh elements and reshape
         plocupts = np.dot(plocop, self._eles.reshape(self.nspts, -1))
@@ -107,7 +102,7 @@ class BaseElements(object):
         solnb = currb.__class__(None, solncfg)
 
         # Form the interpolation operator
-        interp = solnb.ubasis_at(currb.upts)
+        interp = solnb.ubasis.nodal_basis_at(currb.upts)
 
         # Sizes
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
@@ -116,55 +111,68 @@ class BaseElements(object):
         self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
         self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
 
+    @abstractproperty
+    def _scratch_bufs(self):
+        pass
+
     @abstractmethod
-    def set_backend(self, be, nscal_upts):
+    def set_backend(self, backend, nscal_upts):
         # Ensure a backend has not already been set
         assert self._be is None
-        self._be = be
-
-        # Allocate the constant operator matrices
-        self._m0b = be.const_matrix(self._basis.m0, tags={'M0'})
-        self._m3b = be.const_matrix(self._basis.m3, tags={'M3'})
-        self._m132b = be.const_matrix(self._basis.m132, tags={'M132'})
-
-        # Tags to ensure alignment of multi-dimensional matrices
-        tags = {'align'}
-
-        # Allocate soln point transformation matrices
-        self._rcpdjac_upts = be.const_matrix(self._rcpdjac_upts, tags=tags)
-        self._smat_upts = be.const_matrix(self._smat_upts, tags=tags)
+        self._be = backend
 
         # Sizes
-        nupts, nfpts = self.nupts, self.nfpts
-        nvars, ndims = self.nvars, self.ndims
-        neles = self.neles
+        ndims, nvars, neles = self.ndims, self.nvars, self.neles
+        nfpts, nupts, nqpts = self.nfpts, self.nupts, self.nqpts
+        sbufs = self._scratch_bufs
 
-        # Allocate general storage required for flux computation
-        self._scal_upts = [be.matrix((nupts, nvars, neles), self._scal_upts,
-                                     tags=tags)
+        # Allocate and bank the storage required by the time integrator
+        self._scal_upts = [backend.matrix(self._scal_upts.shape,
+                                          self._scal_upts, tags={'align'})
                            for i in xrange(nscal_upts)]
-        self._vect_upts = [be.matrix((ndims, nupts, nvars, neles), tags=tags)
-                           for i in xrange(self._nvect_upts)]
-        self._scal_fpts = [be.matrix((nfpts, nvars, neles),
-                                     extent='scal_fpts' + str(i), tags=tags)
-                           for i in xrange(self._nscal_fpts)]
-        self._vect_fpts = [be.matrix((ndims, nfpts, nvars, neles),
-                                     extent='vect_fpts' + str(i), tags=tags)
-                           for i in xrange(self._nvect_fpts)]
+        self.scal_upts_inb = backend.matrix_bank(self._scal_upts)
+        self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
 
-        # Bank the scalar soln points (as required by the RK schemes)
-        self.scal_upts_inb = be.matrix_bank(self._scal_upts)
-        self.scal_upts_outb = be.matrix_bank(self._scal_upts)
+        # Convenience functions for scalar/vector allocation
+        alloc = lambda ex, n: backend.matrix(n, extent=ex, tags={'align'})
+        salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
+        valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
 
-    def _gen_rcpdjac_smat_upts(self):
-        smats, djacs = self._get_smats(self._basis.upts, retdets=True)
+        # Allocate required scalar scratch space
+        if 'scal_fpts' in sbufs and 'scal_qpts' in sbufs:
+            self._scal_fqpts = salloc('_scal_fqpts', nfpts + nqpts)
+            self._scal_fpts = self._scal_fqpts.rslice(0, nfpts)
+            self._scal_qpts = self._scal_fqpts.rslice(nfpts, nfpts + nqpts)
+        elif 'scal_fpts' in sbufs:
+            self._scal_fpts = salloc('scal_fpts', nfpts)
+        elif 'scal_qpts' in sbufs:
+            self._scal_qpts = salloc('scal_qpts', nqpts)
 
-        # Check for negative Jacobians
-        if np.any(djacs < -1e-5):
+        # Allocate required vector scratch space
+        if 'vect_upts' in sbufs:
+            self._vect_upts = valloc('vect_upts', nupts)
+        if 'vect_qpts' in sbufs:
+            self._vect_qpts = valloc('vect_qpts', nqpts)
+        if 'vect_fpts' in sbufs:
+            self._vect_fpts = valloc('vect_fpts', nfpts)
+
+    @memoize
+    def opmat(self, expr):
+        return self._be.const_matrix(self._basis.opmat(expr), tags={expr})
+
+    @memoize
+    def smat_at(self, name):
+        smat = self._get_smats(getattr(self._basis, name))
+        return self._be.const_matrix(smat, tags={'align'})
+
+    @memoize
+    def rcpdjac_at(self, name):
+        _, djac = self._get_smats(getattr(self._basis, name), retdets=True)
+
+        if np.any(djac < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
 
-        self._rcpdjac_upts = 1.0 / djacs
-        self._smat_upts = smats
+        return self._be.const_matrix(1.0 / djac, tags={'align'})
 
     def _gen_pnorm_fpts(self):
         smats = self._get_smats(self._basis.fpts).transpose(1, 3, 0, 2)
@@ -187,7 +195,7 @@ class BaseElements(object):
         npts = len(pts)
 
         # Form the Jacobian operator
-        jacop = self._basis.jac_sbasis_at(pts)
+        jacop = np.rollaxis(self._basis.sbasis.jac_nodal_basis_at(pts), 2)
 
         # Cast as a matrix multiply and apply to eles
         jac = np.dot(jacop.reshape(-1, nspts), self._eles.reshape(nspts, -1))
@@ -223,3 +231,27 @@ class BaseElements(object):
                 djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
 
         return (smats, djacs) if retdets else smats
+
+    def get_mag_pnorms_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self._mag_pnorm_fpts[fpts_idx,eidx]
+
+    def get_norm_pnorms_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self._norm_pnorm_fpts[fpts_idx,eidx]
+
+    def get_scal_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        cstri = [(self._scal_fpts.leadsubdim,)]*nfp
+
+        return [self._scal_fpts]*nfp, rcmap, cstri
+
+    def get_vect_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        rcstri = [(self.nfpts, self._vect_fpts.leadsubdim)]*nfp
+
+        return [self._vect_fpts]*nfp, rcmap, rcstri
