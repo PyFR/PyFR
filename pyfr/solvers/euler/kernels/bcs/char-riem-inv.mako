@@ -11,13 +11,13 @@
                         
     fpdtype_t V_i = 0.0;
 % for i in range(ndims):
-    V_i = V_i + ul[${i + 1}]*nl[${i}];
+    V_i += ul[${i + 1}]*nl[${i}];
 % endfor
     V_i = inv*V_i;
 
     fpdtype_t V_e = 0.0;
 % for i in range(ndims):
-    V_e = V_e + ${v[i]}*nl[${i}];
+    V_e += ${v[i]}*nl[${i}];
 % endfor
     
     fpdtype_t p_i = (ul[${nvars - 1}]
@@ -28,8 +28,7 @@
     fpdtype_t V_b = 0.5*(R_e + R_i);
     fpdtype_t c_b = ${0.25*gmo}*(R_i - R_e);
     fpdtype_t s_i = pow(ul[0], ${-gmo})*c_i*c_i*${1.0/gamma};
-    fpdtype_t rho_b = (V_i < 0) ? pow(c_b*c_b*${1.0/(gamma*s)}, ${1.0/gmo}) :
-                    pow(c_b*c_b*${1.0/gamma}/s_i, ${1.0/gmo});
+    fpdtype_t rho_b = pow((V_i < 0) ? c_b*c_b*${1.0/(gamma*s)} : c_b*c_b*${1.0/gamma}/s_i, ${1.0/gmo});
     fpdtype_t p_b = rho_b*c_b*c_b*${1.0/gamma};
 
     ur[0] = rho_b;
@@ -40,3 +39,4 @@
     ur[${nvars - 1}] = p_b*${1.0/gmo} + 0.5*(1.0/ur[0])*${pyfr.dot('ur[{i}]', i=(1, ndims + 1))};
                      
 </%pyfr:macro>
+

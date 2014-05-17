@@ -164,3 +164,4 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
         super(NavierStokesSubOutflowBCInters, self).__init__(*args, **kwargs)
 
         self._tpl_c['p'], = self._eval_opts(['p'])
+
