@@ -75,4 +75,3 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
         
 class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
     type = 'slp-adia-wall'
-
