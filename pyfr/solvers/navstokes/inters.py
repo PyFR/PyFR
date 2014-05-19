@@ -13,8 +13,9 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 
         # Pointwise template arguments
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        visc_corr = self._cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._tpl_c)
+                       visc_corr=visc_corr, c=self._tpl_c)
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
@@ -39,8 +40,9 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 
         # Pointwise template arguments
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        visc_corr = self._cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._tpl_c)
+                       visc_corr=visc_corr, c=self._tpl_c)
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpiconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpicflux')
@@ -63,8 +65,9 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
 
         # Pointwise template arguments
         rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        visc_corr = self._cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._tpl_c, bctype=self.type)
+                       visc_corr=visc_corr, c=self._tpl_c, bctype=self.type)
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
