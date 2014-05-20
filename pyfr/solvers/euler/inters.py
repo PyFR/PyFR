@@ -61,8 +61,8 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
 
         self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts(['rho', 'p'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
-        
-        
+
+
 class EulerCharRiemInvBCInters(EulerBaseBCInters):
     type = 'char-riem-inv'
 
@@ -72,6 +72,6 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
         self._tpl_c['p'], self._tpl_c['rho'] = self._eval_opts(['p', 'rho'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
 
-        
+
 class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
     type = 'slp-adia-wall'
