@@ -12,7 +12,7 @@
                                  for i in range(ndims))};
     fpdtype_t V_i = inv*(${' + '.join('ul[{1}]*nl[{0}]'.format(i, i + 1)
                                       for i in range(ndims))});
-    fpdtype_t p_i = ul[${nvars - 1}]
+    fpdtype_t p_i = ${gmo}*ul[${nvars - 1}]
                   - ${0.5*gmo}*inv*${pyfr.dot('ul[{i}]', i=(1, ndims + 1))};
     fpdtype_t c_i = sqrt(${gamma}*p_i*inv);
     fpdtype_t R_e = (fabs(V_e) >= ${cs} && V_i >= 0)
