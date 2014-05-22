@@ -13,8 +13,8 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         base.__init__(be, lhs, rhs, elemap, cfg)
 
         # Generate the additional view matrices
-        self._vect0_lhs = self._vect_view(lhs, 'get_vect_fpts0_for_inter')
-        self._vect0_rhs = self._vect_view(rhs, 'get_vect_fpts0_for_inter')
+        self._vect0_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
+        self._vect0_rhs = self._vect_view(rhs, 'get_vect_fpts_for_inter')
 
         # Additional kernel constants
         self._tpl_c.update(cfg.items_as('solver-interfaces', float))
@@ -26,7 +26,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         side = lhs if beta != -0.5 else rhs
 
         # Compute the relevant permutation
-        self._perm = get_opt_view_perm(side, 'get_scal_fpts0_for_inter',
+        self._perm = get_opt_view_perm(side, 'get_scal_fpts_for_inter',
                                        self._elemap)
 
 
@@ -39,7 +39,7 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         rhsprank = rallocs.mprankmap[rhsrank]
 
         # Generate second set of view matrices
-        self._vect0_lhs = self._vect_mpi_view(lhs, 'get_vect_fpts0_for_inter')
+        self._vect0_lhs = self._vect_mpi_view(lhs, 'get_vect_fpts_for_inter')
         self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
 
         # Additional kernel constants
@@ -56,27 +56,27 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
 
         # If we need to send our gradients to the RHS
         if self._tpl_c['ldg-beta'] != -0.5:
-            self.kernels['vect_fpts0_pack'] = lambda: be.kernel(
+            self.kernels['vect_fpts_pack'] = lambda: be.kernel(
                 'pack', self._vect0_lhs
             )
-            self.kernels['vect_fpts0_send'] = lambda: be.kernel(
+            self.kernels['vect_fpts_send'] = lambda: be.kernel(
                 'send_pack', self._vect0_lhs, self._rhsrank, self.MPI_TAG
             )
         else:
-            self.kernels['vect_fpts0_pack'] = lambda: NullComputeKernel()
-            self.kernels['vect_fpts0_send'] = lambda: NullMPIKernel()
+            self.kernels['vect_fpts_pack'] = lambda: NullComputeKernel()
+            self.kernels['vect_fpts_send'] = lambda: NullMPIKernel()
 
         # If we need to recv gradients from the RHS
         if self._tpl_c['ldg-beta'] != 0.5:
-            self.kernels['vect_fpts0_recv'] = lambda: be.kernel(
+            self.kernels['vect_fpts_recv'] = lambda: be.kernel(
                 'recv_pack', self._vect0_rhs, self._rhsrank, self.MPI_TAG
             )
-            self.kernels['vect_fpts0_unpack'] = lambda: be.kernel(
+            self.kernels['vect_fpts_unpack'] = lambda: be.kernel(
                 'unpack', self._vect0_rhs
             )
         else:
-            self.kernels['vect_fpts0_recv'] = lambda: NullMPIKernel()
-            self.kernels['vect_fpts0_unpack'] = lambda: NullComputeKernel()
+            self.kernels['vect_fpts_recv'] = lambda: NullMPIKernel()
+            self.kernels['vect_fpts_unpack'] = lambda: NullComputeKernel()
 
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
@@ -85,7 +85,7 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
                                                              cfgsect, cfg)
 
         # Additional view matrices
-        self._vect0_lhs = self._vect_view(lhs, 'get_vect_fpts0_for_inter')
+        self._vect0_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
 
         # Additional kernel constants
         self._tpl_c.update(cfg.items_as('solver-interfaces', float))
