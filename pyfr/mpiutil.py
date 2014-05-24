@@ -40,4 +40,17 @@ def get_local_rank():
         if ev in os.environ:
             return int(os.environ[ev])
     else:
-        raise RuntimeError('Unknown/unsupported MPI implementation')
+        from mpi4py import MPI
+
+        hostn = MPI.Get_processor_name()
+        grank = MPI.COMM_WORLD.rank
+        lrank = 0
+
+        for i, n in enumerate(MPI.COMM_WORLD.allgather(hostn)):
+            if i >= grank:
+                break
+
+            if hostn == n:
+                lrank += 1
+
+        return lrank
