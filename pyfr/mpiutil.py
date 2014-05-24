@@ -1,30 +1,29 @@
 # -*- coding: utf-8 -*-
 
 import os
-
-from pyfr.excepthook import excepthook
-
-
-def init():
-    from mpi4py import MPI
-
-    MPI.Init_thread()
-    MPI.COMM_WORLD.barrier()
+import sys
 
 
-def atexit():
-    from mpi4py import MPI
+def register_excepthook():
+    currhook = sys.excepthook
 
-    if not MPI.Is_initialized() or MPI.Is_finalized():
-        return
+    def newhook(exctype, exc, *args):
+        # See if mpi4py has been imported or not
+        if 'mpi4py' in sys.modules:
+            from mpi4py import MPI
 
-    exc = excepthook.exception
-    if MPI.COMM_WORLD.size > 1 and exc is not None and\
-       not isinstance(exc, KeyboardInterrupt) and\
-       (not isinstance(exc, SystemExit) or exc.code != 0):
-        MPI.COMM_WORLD.Abort(1)
-    else:
-        MPI.Finalize()
+            # If we are running with multiple ranks and are exiting
+            # abnormally then abort
+            if (MPI.COMM_WORLD.size > 1 and
+                not isinstance(exc, KeyboardInterrupt) and
+                (not isinstance(exc, SystemExit) or exc.code != 0)):
+                MPI.COMM_WORLD.Abort(1)
+
+        # Delegate to the previous handler
+        currhook(exctype, exc, *args)
+
+    # Install the new handler
+    sys.excepthook = newhook
 
 
 def get_comm_rank_root():
