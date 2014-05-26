@@ -1,13 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-
 from argparse import ArgumentParser, FileType
+import itertools as it
+import os
 
 import numpy as np
 
-from pyfr.readers import get_reader_by_name, get_reader_by_extn, BaseReader
+from pyfr.partitioners import BasePartitioner, get_partitioner_by_name
+from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
+from pyfr.readers.native import read_pyfr_data
 from pyfr.util import subclasses
 
 
@@ -26,6 +28,44 @@ def process_convert(args):
     np.savez(args.outmesh, **mesh)
 
 
+def process_partition(args):
+    # Ensure outd is a directory
+    if not os.path.isdir(args.outd):
+        raise ValueError('Invalid output directory')
+
+    # Create the partitioner
+    if args.partitioner:
+        part = get_partitioner_by_name(args.partitioner, args.np)
+    else:
+        for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
+            try:
+                part = get_partitioner_by_name(name, args.np)
+                break
+            except RuntimeError:
+                pass
+        else:
+            raise RuntimeError('No partitioners available')
+
+    # Partition the mesh
+    mesh, part_soln_fn = part.partition(read_pyfr_data(args.mesh))
+
+    # Prepare the solutions
+    solnit = (part_soln_fn(read_pyfr_data(s)) for s in args.solns)
+
+    # Output paths/files
+    paths = it.chain([args.mesh], args.solns)
+    files = it.chain([mesh], solnit)
+
+    # Iterate over the output mesh/solutions
+    for path, data in it.izip(paths, files):
+        # Compute the output path
+        path = os.path.join(args.outd, os.path.basename(path.rstrip('/')))
+
+        # Open and save
+        with open(path, 'wb') as f:
+            np.savez(f, **data)
+
+
 def main():
     ap = ArgumentParser(prog='pyfr-mesh', description='Generates and '
                         'manipulates PyFR mesh files')
@@ -38,14 +78,27 @@ def main():
                             help='Input mesh file')
     ap_convert.add_argument('outmesh', type=FileType('wb'),
                             help='Output PyFR mesh file')
-    types = [cls.name for cls in subclasses(BaseReader)]
+    types = sorted(cls.name for cls in subclasses(BaseReader))
     ap_convert.add_argument('-t', dest='type', choices=types, required=False,
                             help='Input file type; this is usually inferred '
                             'from the extension of inmesh')
     ap_convert.set_defaults(process=process_convert)
 
+    # Mesh and solution partitioning
+    ap_partition = sp.add_parser('partition', help='partition --help')
+    ap_partition.add_argument('np', type=int, help='number of partitions')
+    ap_partition.add_argument('mesh', help='input mesh file')
+    ap_partition.add_argument('solns', nargs='*',
+                                help='input solution files')
+    ap_partition.add_argument(dest='outd', help='output directory')
+    partitioners = sorted(cls.name for cls in subclasses(BasePartitioner))
+    ap_partition.add_argument('-p', dest='partitioner', choices=partitioners,
+                              help='partitioner to use')
+    ap_partition.set_defaults(process=process_partition)
+
     args = ap.parse_args()
     args.process(args)
+
 
 if __name__ == '__main__':
     main()
