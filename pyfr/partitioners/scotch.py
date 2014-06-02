@@ -15,12 +15,6 @@ class SCOTCHWrappers(object):
         except OSError:
             raise RuntimeError('Unable to load scotch')
 
-        # Constants
-        self.SCOTCH_STRATDEFAULT = 0x0
-        self.SCOTCH_STRATQUALITY =  0x1
-        self.SCOTCH_STRATSPEED =  0x2
-        self.SCOTCH_STRATBALANCE = 0x4
-
         # Types
         self.SCOTCH_Arch = SCOTCH_Arch = c_double*128
         self.SCOTCH_Graph = SCOTCH_Graph = c_double*128
@@ -95,18 +89,31 @@ class SCOTCHWrappers(object):
 class SCOTCHPartitioner(BasePartitioner):
     name = 'scotch'
 
+    # Interger options
+    int_opts = {'ufactor'}
+
+    # Enumeration options
+    enum_opts = {
+        'strat': {'default': 0, 'quality': 1, 'speed': 2, 'balance': 4}
+    }
+
+    # Default options
+    dflt_opts = {'ufactor': 10, 'strat': 'default'}
+
     def __init__(self, *args, **kwargs):
         super(SCOTCHPartitioner, self).__init__(*args, **kwargs)
 
         # Load SCOTCH
         self._wrappers = SCOTCHWrappers()
 
-    def _partition_graph(self, vtab, etab, partwts):
+    def _partition_graph(self, graph, partwts):
         w = self._wrappers
 
         # Type conversion
-        vtab = np.asanyarray(vtab, dtype=np.int32)
-        etab = np.asanyarray(etab, dtype=np.int32)
+        vtab = np.asanyarray(graph.vtab, dtype=np.int32)
+        etab = np.asanyarray(graph.etab, dtype=np.int32)
+        vwts = np.asanyarray(graph.vwts, dtype=np.int32)
+        ewts = np.asanyarray(graph.ewts, dtype=np.int32)
         partwts = np.asanyarray(partwts, dtype=np.int32)
 
         # Output partition array
@@ -128,13 +135,16 @@ class SCOTCHPartitioner(BasePartitioner):
 
             # Construct the graph
             w.SCOTCH_graphBuild(
-                graph, 0, len(vtab) - 1, vtab.ctypes, None, None, None,
-                len(etab), etab.ctypes, None
+                graph, 0, len(vtab) - 1, vtab.ctypes, None, vwts.ctypes, None,
+                len(etab), etab.ctypes, ewts.ctypes
             )
+
+            # Permitted load imbalance ratio
+            balrat = self.opts['ufactor'] / 1000.0
 
             # Partitioning stratergy
             w.SCOTCH_stratGraphMapBuild(
-                strat, w.SCOTCH_STRATDEFAULT, len(partwts), 0.001
+                strat, self.opts['strat'], len(partwts), balrat
             )
 
             # Perform the partitioning

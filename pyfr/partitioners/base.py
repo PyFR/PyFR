@@ -1,18 +1,32 @@
 # -*- coding: utf-8 -*-
 
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, namedtuple
 import itertools as it
 import re
 import uuid
 
 import numpy as np
 
-from pyfr.shapes import BaseShape
+
+Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
 class BasePartitioner(object):
-    def __init__(self, nparts):
-        self.partwts = [1]*nparts
+    # Approximate element weighting table
+    _ele_wts = {'quad': 3, 'tri': 2, 'tet': 2, 'hex': 6, 'pri': 4, 'pyr': 3}
+
+    def __init__(self, partwts, opts={}):
+        self.partwts = partwts
+
+        # Parse the options list
+        self.opts = {}
+        for k, v in dict(self.dflt_opts, **opts).iteritems():
+            if k in self.int_opts:
+                self.opts[k] = int(v)
+            elif k in self.enum_opts:
+                self.opts[k] = self.enum_opts[k][v]
+            else:
+                raise ValueError('Invalid partitioner option')
 
     def _combine_mesh_parts(self, mesh):
         # Get the per-partition element counts
@@ -107,9 +121,13 @@ class BasePartitioner(object):
         # Prepare the list of edges for each vertex
         etab = np.array([etivmap[tuple(r)] for r in rhs])
 
-        return vtab, etab, vetimap
+        # Prepare the list of vertex and edge weights
+        vwts = np.array([self._ele_wts[t] for t, i in vetimap])
+        ewts = np.ones_like(etab)
 
-    def _partition_graph(self, vtab, edgetab, partwts):
+        return Graph(vtab, etab, vwts, ewts), vetimap
+
+    def _partition_graph(self, graph, partwts):
         pass
 
     def _partition_spts(self, mesh, vparts, vetimap):
@@ -208,10 +226,10 @@ class BasePartitioner(object):
         # Perform the partitioning
         if len(self.partwts) > 1:
             # Obtain the dual graph for this mesh
-            vtab, etab, vetimap = self._construct_graph(mesh)
+            graph, vetimap = self._construct_graph(mesh)
 
             # Partition the graph
-            vparts = self._partition_graph(vtab, etab, self.partwts)
+            vparts = self._partition_graph(graph, self.partwts)
 
             # Partition the connectivity portion of the mesh
             newmesh = self._partition_con(mesh, vparts, vetimap)
