@@ -178,7 +178,6 @@ class GmshReader(BaseReader):
 
     def _read_eles(self, msh):
         elenodes = defaultdict(list)
-        eleparts = defaultdict(list)
 
         for l in msh_section(msh, 'Elements'):
             # Extract the raw element data
@@ -192,14 +191,9 @@ class GmshReader(BaseReader):
             # Physical entity type (used for BCs)
             epent = etags[0]
 
-            # Determine the partition number (defaults to 0)
-            epart = etags[3] - 1 if entags > 2 else 0
-
             elenodes[etype, epent].append(enodes)
-            eleparts[etype, epent].append(epart)
 
         self._elenodes = {k: np.array(v) for k, v in elenodes.iteritems()}
-        self._eleparts = {k: np.array(v) for k, v in eleparts.iteritems()}
 
     def _to_first_order(self, elemap):
         foelemap = {}
@@ -222,7 +216,7 @@ class GmshReader(BaseReader):
 
         return selemap.pop(self._felespent), selemap
 
-    def _foface_array(self, petype, pftype, foeles):
+    def _foface_info(self, petype, pftype, foeles):
         # Face numbers of faces of this type on this element
         fnums = self._petype_fnums[petype][pftype]
 
@@ -232,24 +226,27 @@ class GmshReader(BaseReader):
         # Number of first order nodes needed to define a face of this type
         nfnodes = self._petype_focount[pftype]
 
+        # Connectivity
         dtype = [('petype', 'S4'), ('eidx', 'i4'), ('fidx', 'i1'),
-                 ('flags', 'i1'), ('nodes', 'i8', nfnodes)]
+                 ('flags', 'i1')]
 
-        arr = np.recarray((len(foeles), len(fnums)), dtype=dtype)
-        arr.petype = petype
-        arr.eidx = np.arange(len(foeles))[...,None]
-        arr.fidx = fnums
-        arr.nodes = foeles[:,fnmap]
-        arr.flags = 0
+        con = np.recarray((len(foeles), len(fnums)), dtype=dtype)
+        con.petype = petype
+        con.eidx = np.arange(len(foeles))[...,None]
+        con.fidx = fnums
+        con.flags = 0
 
-        return arr.ravel()
+        # Nodes
+        nodes = np.sort(foeles[:, fnmap]).reshape(-1, nfnodes)
+
+        return con.ravel(), nodes
 
     def _extract_faces(self, foeles):
         fofaces = defaultdict(list)
         for petype, eles in foeles.iteritems():
             for pftype in self._petype_fnums[petype]:
-                fofarr = self._foface_array(petype, pftype, eles)
-                fofaces[pftype].append(fofarr)
+                fofinf = self._foface_info(petype, pftype, eles)
+                fofaces[pftype].append(fofinf)
 
         return fofaces
 
@@ -258,12 +255,12 @@ class GmshReader(BaseReader):
         resid = {}
 
         for pftype, faces in ffofaces.iteritems():
-            for f in chain(*faces):
-                sn = tuple(sorted(f['nodes']))
+            for f, n in chain.from_iterable(izip(f, n) for f, n in faces):
+                sn = tuple(n)
 
                 # See if the nodes are in resid
                 if sn in resid:
-                    pairs[pftype].append((resid.pop(sn), f))
+                    pairs[pftype].append([resid.pop(sn), f])
                 # Otherwise add them to the unpaired dict
                 else:
                     resid[sn] = f
@@ -289,7 +286,7 @@ class GmshReader(BaseReader):
                     lf = resid.pop(tuple(sorted(lfn)))
                     rf = resid.pop(tuple(sorted(rfn)))
 
-                    pfaces[pftype].append((lf, rf))
+                    pfaces[pftype].append([lf, rf])
 
         return pfaces
 
@@ -304,53 +301,6 @@ class GmshReader(BaseReader):
                     bfaces[epent].append(resid.pop(tuple(sorted(fn))))
 
         return bfaces
-
-    def _partition_pairs(self, pairs, bcf):
-        con_px = defaultdict(list)
-        con_pxpy = defaultdict(list)
-        bcon_px = defaultdict(list)
-
-        # Connectivity in PyFR is specified in terms of partition-local
-        # element numbers.  As the element indices in pairs are
-        # global it is first necessary to produce a global-to-local
-        # mapping for each element type.
-        eleglmap = defaultdict(list)
-        pcounter = Counter()
-
-        feleparts = self._split_fluid(self._eleparts)[0]
-        for etype, eleps in feleparts.iteritems():
-            petype = self._etype_map[etype][0]
-
-            for p in eleps:
-                eleglmap[petype].append((p, pcounter[petype, p]))
-                pcounter[petype, p] += 1
-
-        # Generate the face connectivity
-        for l, r in pairs:
-            lpetype, leidxg, lfidx, lflags, lnodes = l
-            rpetype, reidxg, rfidx, rflags, rnodes = r
-
-            lpart, leidxl = eleglmap[lpetype][leidxg]
-            rpart, reidxl = eleglmap[rpetype][reidxg]
-
-            conl = (lpetype, leidxl, lfidx, lflags)
-            conr = (rpetype, reidxl, rfidx, rflags)
-
-            if lpart == rpart:
-                con_px[lpart].append([conl, conr])
-            else:
-                con_pxpy[lpart, rpart].append(conl)
-                con_pxpy[rpart, lpart].append(conr)
-
-        # Generate boundary conditions
-        for pbcrgn, pent in self._bfacespents.iteritems():
-            for lpetype, leidxg, lfidx, lflags, lnodes in bcf[pent]:
-                lpart, leidxl = eleglmap[lpetype][leidxg]
-                conl = (lpetype, leidxl, lfidx, 0)
-
-                bcon_px[pbcrgn, lpart].append(conl)
-
-        return con_px, con_pxpy, bcon_px
 
     def _get_connectivity(self):
         # For connectivity a first-order representation is sufficient
@@ -378,25 +328,24 @@ class GmshReader(BaseReader):
         pairs = chain(chain.from_iterable(fpairs.itervalues()),
                       chain.from_iterable(pfpairs.itervalues()))
 
-        # Process these face pairs into the connectivity arrays
-        con_px, con_pxpy, bcon_px = self._partition_pairs(pairs, bf)
+        # Generate the internal connectivity array
+        con = list(pairs)
+
+        # Generate boundary condition connectivity arrays
+        bcon = {}
+        for pbcrgn, pent in self._bfacespents.iteritems():
+            bcon[pbcrgn] = bf[pent]
 
         # Output
-        retcon = {}
+        ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i1').T}
 
-        for k, v in con_px.iteritems():
-            retcon['con_p%d' % k] = np.array(v, dtype='S5,i4,i1,i1').T
+        for k, v in bcon.iteritems():
+            ret['bcon_{0}_p0'.format(k)] = np.array(v, dtype='S4,i4,i1,i1')
 
-        for k, v in con_pxpy.iteritems():
-            retcon['con_p%dp%d' % k] = np.array(v, dtype='S5,i4,i1,i1')
-
-        for k, v in bcon_px.iteritems():
-            retcon['bcon_%s_p%d' % k] = np.array(v, dtype='S5,i4,i1,i1')
-
-        return retcon
+        return ret
 
     def _get_shape_points(self):
-        spts = defaultdict(list)
+        spts = {}
 
         # Global node map (node index to coords)
         nodepts = self._nodepts
@@ -405,10 +354,8 @@ class GmshReader(BaseReader):
             if pent != self._felespent:
                 continue
 
-            # Elements and corresponding partition numbers
+            # Elements and type information
             eles = self._elenodes[etype, pent]
-            prts = self._eleparts[etype, pent]
-
             petype, nnodes = self._etype_map[etype]
 
             # Go from Gmsh to PyFR node ordering
@@ -417,11 +364,15 @@ class GmshReader(BaseReader):
             # Obtain the dimensionality of the element type
             ndim = self._petype_ndim[petype]
 
-            for nn, p in izip(peles, prts):
-                spts[petype, p].append([nodepts[i][:ndim] for i in nn])
+            # Build the array
+            arr = np.concatenate([[nodepts[i] for i in nn] for nn in peles])
+            arr = arr.reshape(-1, nnodes, ndim)
+            arr = arr.swapaxes(0, 1)
+            arr = arr[...,:ndim]
 
-        return {'spt_{}_p{}'.format(*k): np.array(arr).swapaxes(0, 1)
-                for k, arr in spts.iteritems()}
+            spts['spt_{0}_p0'.format(petype)] = arr
+
+        return spts
 
     def _to_raw_pyfrm(self):
         rawm = {}
