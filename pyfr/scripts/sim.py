@@ -9,7 +9,7 @@ import numpy as np
 from pyfr import __version__ as version
 from pyfr.backends import get_backend
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import register_excepthook
+from pyfr.mpiutil import register_finalize_handler
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.progress_bar import ProgressBar
 from pyfr.readers.native import read_pyfr_data
@@ -67,8 +67,8 @@ def main():
     args = ap.parse_args()
     mesh, soln, cfg = args.process(args)
 
-    # Register our uncaught exception handler
-    register_excepthook()
+    # Ensure MPI is suitably cleaned up
+    register_finalize_handler()
 
     # Create a backend
     backend = get_backend(args.backend, cfg)
