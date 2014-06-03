@@ -206,13 +206,13 @@ class BasePartitioner(object):
         ret = {}
 
         for k, v in con_px.iteritems():
-            ret['con_p{0}'.format(k)] = np.array(v, dtype='S5,i4,i1,i1').T
+            ret['con_p{0}'.format(k)] = np.array(v, dtype='S4,i4,i1,i1').T
 
         for k, v in con_pxpy.iteritems():
-            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype='S5,i4,i1,i1')
+            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
 
         for k, v in bcon_px.iteritems():
-            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype='S5,i4,i1,i1')
+            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
 
         return ret
 
