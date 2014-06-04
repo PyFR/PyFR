@@ -41,23 +41,24 @@ class Inifile(object):
 
     def get(self, section, option, default=_sentinel, raw=False, vars=None):
         try:
-            return self._cp.get(section, option, raw=raw, vars=vars)
+            val = self._cp.get(section, option, raw=raw, vars=vars)
         except NoSectionError:
             if default is _sentinel:
                 raise
 
             self._cp.add_section(section)
-            return self.get(section, option, default, raw, vars)
+            val = self.get(section, option, default, raw, vars)
         except NoOptionError:
             if default is _sentinel:
                 raise
 
             self._cp.set(section, option, str(default))
-            return self._cp.get(section, option, raw=raw, vars=vars)
+            val = self._cp.get(section, option, raw=raw, vars=vars)
+
+        return os.path.expandvars(val)
 
     def getpath(self, section, option, default=_sentinel, vars=None, abs=True):
         path = self.get(section, option, default, vars)
-        path = os.path.expandvars(path)
         path = os.path.expanduser(path)
 
         if abs:
