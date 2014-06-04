@@ -406,7 +406,7 @@ Parameterizes the prismatic elements. Options:
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
-    ``williams-shunn~gauss-legendre | 
+    ``williams-shunn~gauss-legendre |
     williams-shunn~gauss-legendre-lobatto``
 
 Example::
@@ -446,7 +446,7 @@ Options:
 
 1. ``type`` --- type of boundary condition:
 
-    ``no-slp-adia-wall | no-slp-aisot-wall | sub-in-frv | 
+    ``no-slp-adia-wall | no-slp-aisot-wall | sub-in-frv |
     sub-in-ftpttang | sub-out-fp | sup-in-fa | sup-out-fn``
 
     where
@@ -563,7 +563,7 @@ simulation on a mixed unstructured mesh:
    converting it into an unstructured VTK file called
    ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the 
+   linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
         pyfr-postp convert couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu divide -d 4
