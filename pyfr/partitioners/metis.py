@@ -4,7 +4,7 @@ from ctypes import CDLL, POINTER, c_int64, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.ctypesutil import platform_libname
+from pyfr.ctypesutil import load_library
 from pyfr.partitioners.base import BasePartitioner
 
 
@@ -23,10 +23,7 @@ class METISWrappers(object):
     }
 
     def __init__(self):
-        try:
-            lib = CDLL(platform_libname('metis'))
-        except OSError:
-            raise RuntimeError('Unable to load metis')
+        lib = load_library('metis')
 
         # Relevant constants
         self.METIS_NOPTIONS = 40

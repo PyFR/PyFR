@@ -4,16 +4,13 @@ from ctypes import CDLL, POINTER, c_int, c_double, c_void_p
 
 import numpy as np
 
-from pyfr.ctypesutil import platform_libname
+from pyfr.ctypesutil import load_library
 from pyfr.partitioners.base import BasePartitioner
 
 
 class SCOTCHWrappers(object):
     def __init__(self):
-        try:
-            lib = CDLL(platform_libname('scotch'))
-        except OSError:
-            raise RuntimeError('Unable to load scotch')
+        lib = load_library('scotch')
 
         # Types
         self.SCOTCH_Arch = SCOTCH_Arch = c_double*128
