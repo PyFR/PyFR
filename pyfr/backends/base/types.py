@@ -2,7 +2,7 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import Sequence
- 
+
 import numpy as np
 
 
