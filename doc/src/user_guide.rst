@@ -96,7 +96,7 @@ available:
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
    Example::
 
-        pyfr-mesh convert mesh.msh mesh.pyfrm'
+        pyfr-mesh convert mesh.msh mesh.pyfrm
 
 2. ``pyfr-mesh partition`` --- Partition an existing mesh and
    associated solution files.
