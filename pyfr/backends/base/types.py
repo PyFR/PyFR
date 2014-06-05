@@ -72,8 +72,6 @@ class MatrixBase(object):
 
 
 class Matrix(MatrixBase):
-    """Matrix abstract base class
-    """
     _base_tags = {'dense'}
 
     def set(self, ary):
@@ -123,18 +121,14 @@ class MatrixRSlice(object):
 
 
 class ConstMatrix(MatrixBase):
-    """Constant matrix abstract base class"""
     _base_tags = {'const', 'dense'}
 
 
 class MPIMatrix(Matrix):
-    """MPI matrix abstract base class"""
     pass
 
 
 class MatrixBank(Sequence):
-    """Matrix bank abstract base class"""
-
     def __init__(self, backend, mats, initbank, tags):
         mats = list(mats)
 
@@ -176,7 +170,6 @@ class MatrixBank(Sequence):
 
 
 class View(object):
-    """View abstract base class"""
     __metaclass__ = ABCMeta
 
     @abstractmethod
@@ -243,7 +236,6 @@ class MPIView(object):
 
 
 class Queue(object):
-    """Kernel execution queue"""
     __metaclass__ = ABCMeta
 
     def __init__(self, backend):
@@ -251,21 +243,8 @@ class Queue(object):
 
     @abstractmethod
     def __lshift__(self, iterable):
-        """Appends the kernels in *iterable* to the queue
-
-        .. note::
-          This method does **not** execute the kernels, but rather just
-          schedules them.  Queued kernels should be executed by
-          calling :meth:`pyfr.backends.base.Backend.runall`
-        """
         pass
 
     @abstractmethod
     def __mod__(self, iterable):
-        """Synchronously executes the kernels in *iterable*
-
-        .. note::
-          In the (unusual) instance that the queue already has one or
-          more kernels queued these will run first.
-        """
         pass
