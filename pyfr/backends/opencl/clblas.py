@@ -18,6 +18,13 @@ class ClBLASWrappers(object):
         except OSError:
             raise RuntimeError('Unable to load clBLAS')
 
+        # Constants
+        self.clblasRowMajor = 0
+        self.clblasColumnMajor = 1
+        self.clblasNoTrans = 0
+        self.clblasTrans = 1
+        self.clblasConjTrans = 2
+
         # clblasSetup
         self.clblasSetup = lib.clblasSetup
         self.clblasSetup.argtypes = []
@@ -70,20 +77,31 @@ class OpenCLClBLASKernels(object):
 
     @traits(a={'dense'})
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
+        w = self._wrappers
+
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
 
         m, n, k = a.nrow, b.ncol, a.ncol
 
-        if a.dtype == np.float64:
-            clblasgemm = self._wrappers.clblasDgemm
+        # In the case of a being constant we can improve the memory
+        # access pattern of GEMM by tranposing it
+        if 'const' in a.tags:
+            a = a.backend.const_matrix(a.get().T)
+            opA = w.clblasTrans
         else:
-            clblasgemm = self._wrappers.clblasSgemm
+            opA = w.clblasNoTrans
+
+        if a.dtype == np.float64:
+            clblasgemm = w.clblasDgemm
+        else:
+            clblasgemm = w.clblasSgemm
 
         class MulKernel(ComputeKernel):
             def run(self, qcomp, qcopy):
-                clblasgemm(0, 0, 0, m, n, k, alpha,
+                clblasgemm(w.clblasRowMajor, opA, w.clblasNoTrans,
+                           m, n, k, alpha,
                            a, 0, a.leaddim,
                            b, 0, b.leaddim, beta,
                            out, 0, out.leaddim,

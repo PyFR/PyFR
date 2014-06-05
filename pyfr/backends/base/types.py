@@ -2,7 +2,7 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import Sequence
- 
+
 import numpy as np
 
 
@@ -43,9 +43,6 @@ class MatrixBase(object):
         self.pitch = self.leaddim*self.itemsize
         self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
-        # Allocate
-        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
-
         # Process the initial value
         if initval is not None:
             if initval.shape != self.ioshape:
@@ -54,6 +51,9 @@ class MatrixBase(object):
             self._initval = np.asanyarray(initval, dtype=self.dtype)
         else:
             self._initval = None
+
+        # Allocate
+        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value

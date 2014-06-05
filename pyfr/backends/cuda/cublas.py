@@ -39,6 +39,11 @@ class CUBLASWrappers(object):
         except OSError:
             raise RuntimeError('Unable to load CUBLAS')
 
+        # Constants
+        self.CUBLAS_OP_N = 0
+        self.CUBLAS_OP_T = 1
+        self.CUBLAS_OP_C = 2
+
         # cublasCreate
         self.cublasCreate = lib.cublasCreate_v2
         self.cublasCreate.argtypes = [POINTER(c_void_p)]
@@ -127,7 +132,15 @@ class CUDACUBLASKernels(object):
         m, n, k = b.ncol, a.nrow, a.ncol
         A, B, C = b, a, out
 
-        # α and β factors for C = α*(A*B) + β*C
+        # When B is constant it is possible to improve performance by
+        # passing its transpose to GEMM
+        if 'const' in B.tags:
+            B = B.backend.const_matrix(B.get().T)
+            opB = self._wrappers.CUBLAS_OP_T
+        else:
+            opB = self._wrappers.CUBLAS_OP_N
+
+        # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:
             cublasgemm = self._wrappers.cublasDgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
@@ -138,8 +151,8 @@ class CUDACUBLASKernels(object):
         class MulKernel(ComputeKernel):
             def run(iself, scomp, scopy):
                 self._wrappers.cublasSetStream(self._handle, scomp.handle)
-                cublasgemm(self._handle, 0, 0, m, n, k,
-                           alpha_ct, A, A.leaddim, B, B.leaddim,
+                cublasgemm(self._handle, self._wrappers.CUBLAS_OP_N, opB,
+                           m, n, k, alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 
         return MulKernel()
