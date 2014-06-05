@@ -60,16 +60,25 @@ class BaseBackend(object):
         self._obj_extents = WeakKeyDictionary()
 
     def malloc(self, obj, nbytes, extent):
-        # If no extent has been specified then use a dummy object
-        extent = extent if extent is not None else object()
+        # If no extent has been specified then autocommit
+        if extent is None:
+            # Perform the allocation
+            data = self._malloc_impl(nbytes)
 
-        # Check that the extent has not already been committed
-        if extent in self._comm_extents:
-            raise ValueError('Extent "{}" has already been allocated'
-                             .format(extent))
+            # Fire the callback
+            obj.onalloc(data, 0)
 
-        # Append
-        self._pend_extents[extent].append((obj, nbytes))
+            # Retain a (weak) reference to the allocated extent
+            self._obj_extents[obj] = data
+        # Otherwise defer the allocation
+        else:
+            # Check that the extent has not already been committed
+            if extent in self._comm_extents:
+                raise ValueError('Extent "{}" has already been allocated'
+                                 .format(extent))
+
+            # Append
+            self._pend_extents[extent].append((obj, nbytes))
 
     def commit(self):
         for reqs in self._pend_extents.itervalues():
