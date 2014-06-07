@@ -2,8 +2,10 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
+from functools import wraps
 from inspect import getcallargs
-from weakref import WeakKeyDictionary
+from itertools import count
+from weakref import WeakValueDictionary, WeakKeyDictionary
 
 import numpy as np
 
@@ -31,6 +33,16 @@ def issuitable(kern, *args, **kwargs):
     return True
 
 
+def recordmat(fn):
+    @wraps(fn)
+    def newfn(self, *args, **kwargs):
+        m = fn(self, *args, **kwargs)
+        m.mid = next(self._mat_counter)
+        self.mats[m.mid] = m
+
+        return m
+    return newfn
+
 class BaseBackend(object):
     __metaclass__ = ABCMeta
 
@@ -51,6 +63,10 @@ class BaseBackend(object):
 
         # Convert to a NumPy data type
         self.fpdtype = np.dtype(prec).type
+
+        # Allocated matrices
+        self.mats = WeakValueDictionary()
+        self._mat_counter = count()
 
         # Pending and committed allocation extents
         self._pend_extents = defaultdict(list)
@@ -107,23 +123,27 @@ class BaseBackend(object):
     def _malloc_impl(self, nbytes):
         pass
 
+    @recordmat
+    def const_matrix(self, initval, extent=None, tags=set()):
+        return self.const_matrix_cls(self, initval, extent, tags)
+
+    @recordmat
     def matrix(self, ioshape, initval=None, extent=None, tags=set()):
         return self.matrix_cls(self, ioshape, initval, extent, tags)
 
+    @recordmat
     def matrix_rslice(self, mat, p, q):
         return self.matrix_rslice_cls(self, mat, p, q)
 
     def matrix_bank(self, mats, initbank=0, tags=set()):
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
+    @recordmat
     def mpi_matrix(self, ioshape, initval=None, extent=None, tags=set()):
         return self.mpi_matrix_cls(self, ioshape, initval, extent, tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
         return self.mpi_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
-
-    def const_matrix(self, initval, extent=None, tags=set()):
-        return self.const_matrix_cls(self, initval, extent, tags)
 
     def view(self, matmap, rcmap, stridemap=None, vshape=tuple(), tags=set()):
         return self.view_cls(self, matmap, rcmap, stridemap, vshape, tags)
