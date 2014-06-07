@@ -15,13 +15,8 @@ def get_opt_view_perm(interside, mat, elemap):
     vm = _get_inter_objs(interside, mat, elemap)
     matmap, rcmap = [np.concatenate([m[i] for m in vm]) for i in xrange(2)]
 
-    # Since np.lexsort can not currently handle np.object arrays we
-    # work around this by using id() to map each distinct matrix
-    # object to an integer
-    uid = np.vectorize(id)(matmap)
-
     # Sort
-    return np.lexsort((uid, rcmap[:,1], rcmap[:,0]))
+    return np.lexsort((matmap, rcmap[:,1], rcmap[:,0]))
 
 
 class BaseInters(object):

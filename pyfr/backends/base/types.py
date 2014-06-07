@@ -180,7 +180,7 @@ class View(object):
         self.rstrides = self.cstrides = None
 
         # Get the different matrices which we map onto
-        self._mats = list(set(matmap.flat))
+        self._mats = [backend.mats[i] for i in np.unique(matmap)]
 
         # Extract the base allocation and data type
         self.basedata = self._mats[0].basedata
@@ -205,7 +205,7 @@ class View(object):
         leaddim = np.empty(self.n, dtype=np.int32)
 
         for m in self._mats:
-            ix = np.where(matmap == m)
+            ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
         # Go from matrices + row/column indcies to displacements
