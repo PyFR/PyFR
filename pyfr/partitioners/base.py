@@ -32,8 +32,13 @@ class BasePartitioner(object):
         # Get the per-partition element counts
         pinf = mesh.partition_info
 
-        # Use this to compute the offsetting factors for each partition
-        offs = {en: np.cumsum(cn) - cn[0] for en, cn in pinf.iteritems()}
+        # Use these to compute the offsetting factors for each partition
+        offs = {}
+        for en, pn in pinf.iteritems():
+            arrn = np.array(pn)
+            arrn[np.nonzero(arrn)[0][0]] = 0
+
+            offs[en] = np.cumsum(arrn)
 
         def offset_con(con, pr):
             con = con.copy()
