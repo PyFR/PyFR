@@ -9,6 +9,7 @@ import numpy as np
 from pyfr.readers import BaseReader
 from pyfr.readers.nodemaps import GmshNodeMaps
 from pyfr.nputil import fuzzysort
+from pyfr.util import ndrange
 
 
 def msh_section(mshit, section):
@@ -226,20 +227,13 @@ class GmshReader(BaseReader):
         # Number of first order nodes needed to define a face of this type
         nfnodes = self._petype_focount[pftype]
 
-        # Connectivity
-        dtype = [('petype', 'S4'), ('eidx', 'i4'), ('fidx', 'i1'),
-                 ('flags', 'i1')]
-
-        con = np.recarray((len(foeles), len(fnums)), dtype=dtype)
-        con.petype = petype
-        con.eidx = np.arange(len(foeles))[...,None]
-        con.fidx = fnums
-        con.flags = 0
+        # Connectivity; (petype, eidx, fidx, flags)
+        con = [(petype, i, j, 0) for i, j in ndrange(len(foeles), len(fnums))]
 
         # Nodes
-        nodes = np.sort(foeles[:, fnmap]).reshape(-1, nfnodes)
+        nodes = np.sort(foeles[:, fnmap]).reshape(len(con), -1)
 
-        return con.ravel(), nodes
+        return con, nodes
 
     def _extract_faces(self, foeles):
         fofaces = defaultdict(list)
