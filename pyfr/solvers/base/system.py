@@ -72,7 +72,7 @@ class BaseSystem(object):
         # explicit expressions in the config file
         if initsoln:
             # Load the config used to produce the solution
-            solncfg = Inifile(initsoln['config'].item())
+            solncfg = Inifile(initsoln['config'])
 
             # Process the solution
             for k, ele in elemap.iteritems():

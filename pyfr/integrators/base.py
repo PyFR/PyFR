@@ -50,7 +50,7 @@ class BaseIntegrator(object):
         self._system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
-        self._mesh_uuid = mesh['mesh_uuid'].item()
+        self._mesh_uuid = mesh['mesh_uuid']
 
         # Get a queue for subclasses to use
         self._queue = backend.queue()
