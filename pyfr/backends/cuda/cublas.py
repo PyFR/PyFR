@@ -5,7 +5,7 @@ from ctypes import CDLL, POINTER, c_int, c_double, c_float, c_void_p
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
-from pyfr.ctypesutil import platform_libname
+from pyfr.ctypesutil import load_library
 
 
 # Possible CUBLAS exception types
@@ -31,13 +31,8 @@ class CUBLASWrappers(object):
         0xe: CUBLASInternalError
     }
 
-    def __init__(self, libname=None):
-        libname = libname or platform_libname('cublas')
-
-        try:
-            lib = CDLL(libname)
-        except OSError:
-            raise RuntimeError('Unable to load CUBLAS')
+    def __init__(self):
+        lib = load_library('cublas')
 
         # Constants
         self.CUBLAS_OP_N = 0

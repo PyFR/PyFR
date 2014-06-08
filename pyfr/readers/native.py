@@ -6,6 +6,7 @@
 from collections import Mapping, OrderedDict
 import errno
 import os
+import re
 
 import numpy as np
 
@@ -108,6 +109,24 @@ class PyFRBaseReader(Mapping):
             prt += 1
 
         return info
+
+    @lazyprop
+    def partition_info(self):
+        ai = self.array_info
+
+        # Number of partitions in the mesh
+        npr = max(int(re.search(r'\d+$', k).group(0)) for k in ai) + 1
+
+        # Element types in the mesh
+        etypes = set(v[0] for v in ai.itervalues())
+
+        # Compute the number of elements of each type in each partition
+        nep = {et: [0]*npr for et in etypes}
+
+        for k, v in ai.iteritems():
+            nep[v[0]][int(re.search(r'\d+$', k).group(0))] = v[1][1]
+
+        return nep
 
 
 class PyFRDirReader(PyFRBaseReader):

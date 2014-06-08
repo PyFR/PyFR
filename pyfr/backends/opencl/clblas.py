@@ -6,17 +6,12 @@ from ctypes import (CDLL, POINTER, c_int, c_double, c_float, c_size_t,
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
-from pyfr.ctypesutil import platform_libname
+from pyfr.ctypesutil import load_library
 
 
 class ClBLASWrappers(object):
-    def __init__(self, libname=None):
-        libname = libname or platform_libname('clBLAS')
-
-        try:
-            lib = CDLL(libname)
-        except OSError:
-            raise RuntimeError('Unable to load clBLAS')
+    def __init__(self):
+        lib = load_library('clBLAS')
 
         # Constants
         self.clblasRowMajor = 0
