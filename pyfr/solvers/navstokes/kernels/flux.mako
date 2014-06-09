@@ -20,18 +20,15 @@
     fpdtype_t E_x = grad_uin[0][3];
     fpdtype_t E_y = grad_uin[1][3];
 
-    // Compute Sutherland viscosity correction
-    // Input mu taken to be mu_ref, S is Sutherland temperature
-    % if visc_corr == 'sutherland':
-        // Compute temperature
-        fpdtype_t T = ${(c['gamma'])/c['cp']}*(rcprho*E -
-                      0.5*(u*u + v*v));
-        fpdtype_t mu_c = ${c['mu']*(c['Tref'] + c['Ts'])}*
-                         ((T/${c['Tref']})*
-                         sqrt(T/${c['Tref']}))/(T + ${c['Ts']});
-    % else:
-        fpdtype_t mu_c = ${c['mu']};
-    % endif
+% if visc_corr == 'sutherland':
+    // Compute the temperature and viscosity
+    fpdtype_t T = ${c['gamma']/c['cp']}*(rcprho*E - 0.5*(u*u + v*v));
+    fpdtype_t Trat = ${1/c['Tref']}*T;
+    fpdtype_t mu_c = ${c['mu']*(c['Tref'] + c['Ts'])}*Trat*sqrt(Trat)
+                   / (T + ${c['Ts']});
+% else:
+    fpdtype_t mu_c = ${c['mu']};
+% endif
 
     // Compute temperature derivatives (c_v*dT/d[x,y])
     fpdtype_t T_x = rcprho*(E_x - (rcprho*rho_x*E + u*u_x + v*v_x));
@@ -76,18 +73,15 @@
     fpdtype_t E_y = grad_uin[1][4];
     fpdtype_t E_z = grad_uin[2][4];
 
-    // Compute Sutherland viscosity correction
-    // Input mu taken to be mu_ref, S = Sutherland temperature
-    % if visc_corr == 'sutherland':
-        // Compute temperature
-        fpdtype_t T = ${(c['gamma'])/c['cp']}*(rcprho*E -
-                       0.5*(u*u + v*v + w*w));
-        fpdtype_t mu_c = ${c['mu']*(c['Tref'] + c['Ts'])}*
-                         ((T/${c['Tref']})*
-                         sqrt(T/${c['Tref']}))/(T + ${c['Ts']});
-    % else:
-        fpdtype_t mu_c = ${c['mu']};
-    % endif
+% if visc_corr == 'sutherland':
+    // Compute the temperature and viscosity
+    fpdtype_t T = ${c['gamma']/c['cp']}*(rcprho*E - 0.5*(u*u + v*v + w*w));
+    fpdtype_t Trat = ${1/c['Tref']}*T;
+    fpdtype_t mu_c = ${c['mu']*(c['Tref'] + c['Ts'])}*Trat*sqrt(Trat)
+                   / (T + ${c['Ts']});
+% else:
+    fpdtype_t mu_c = ${c['mu']};
+% endif
 
     // Compute temperature derivatives (c_v*dT/d[x,y,z])
     fpdtype_t T_x = rcprho*(E_x - (rcprho*rho_x*E + u*u_x + v*v_x + w*w_x));
