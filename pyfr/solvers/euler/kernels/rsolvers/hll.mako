@@ -12,18 +12,21 @@
     ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
     ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'pr', 'vr')};
 
-    // Roe average velocity and take normal
-    fpdtype_t nv = ${pyfr.dot('n[{i}]',
-                     'sqrt(ul[0])*vl[{i}] + sqrt(ur[0])*vr[{i}]', i=ndims)}
-                     / (sqrt(ul[0]) + sqrt(ur[0]));
+    // Get the normal left and right velocities
+    fpdtype_t nvl = ${pyfr.dot('n[{i}]', 'vl[{i}]', i=ndims)};
+    fpdtype_t nvr = ${pyfr.dot('n[{i}]', 'vr[{i}]', i=ndims)};
 
-    // Roe average enthalpy
-    fpdtype_t H = (ur[0]*sqrt(ul[0])*(ul[${ndims + 1}] + pl)
-                   + (ul[0]*sqrt(ur[0])*ur[${ndims + 1}] + pr))
-                   / (ul[0]*ur[0]*(sqrt(ul[0]) + sqrt(ur[0])));
+    // Compute the Roe-averaged velocity
+    fpdtype_t nv = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)
+                 / (sqrt(ul[0]) + sqrt(ur[0]));
+
+    // Compute the Roe-averaged enthalpy
+    fpdtype_t H = (sqrt(ul[0])*(pr + ur[${ndims + 1}])
+                 + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
+                / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
 
     // Roe average sound speed
-    fpdtype_t a = sqrt(${c['gamma']-1}*(H - 0.5*nv*nv));
+    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*nv*nv));
 
     // Estimate the left and right wave speed, sl and sr
     fpdtype_t sl = nv - a;
@@ -31,12 +34,11 @@
     fpdtype_t rcpsrsl = 1/(sr - sl);
 
     // Output
-    // Possible solutions for flux
 % for i in range(nvars):
-    nf_fl = (${' + '.join('n[{j}]*fl[{j}][{i}]'
-                                 .format(i=i, j=j) for j in range(ndims))});
-    nf_fr = (${' + '.join('n[{j}]*fr[{j}][{i}]'
-                                 .format(i=i, j=j) for j in range(ndims))});
+    nf_fl = ${' + '.join('n[{j}]*fl[{j}][{i}]'.format(i=i, j=j)
+                         for j in range(ndims))};
+    nf_fr = ${' + '.join('n[{j}]*fr[{j}][{i}]'.format(i=i, j=j)
+                         for j in range(ndims))};
     nf_sub = (sr*nf_fl - sl*nf_fr + sl*sr*(ur[${i}] - ul[${i}]))*rcpsrsl;
     nf[${i}] = (0 <= sl) ? nf_fl : (0 >= sr) ? nf_fr : nf_sub;
 % endfor
