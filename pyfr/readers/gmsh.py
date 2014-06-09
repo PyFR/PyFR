@@ -359,10 +359,9 @@ class GmshReader(BaseReader):
             ndim = self._petype_ndim[petype]
 
             # Build the array
-            arr = np.concatenate([[nodepts[i] for i in nn] for nn in peles])
-            arr = arr.reshape(-1, nnodes, ndim)
+            arr = np.array([[nodepts[i] for i in nn] for nn in peles])
             arr = arr.swapaxes(0, 1)
-            arr = arr[...,:ndim]
+            arr = arr[..., :ndim]
 
             spts['spt_{0}_p0'.format(petype)] = arr
 
