@@ -5,10 +5,8 @@ from collections import defaultdict, OrderedDict
 import itertools as it
 import re
 
-from mpi4py import MPI
-
-from pyfr.bases import BaseBasis
 from pyfr.inifile import Inifile
+from pyfr.shapes import BaseShape
 from pyfr.util import proxylist, subclasses
 
 
@@ -52,9 +50,10 @@ class BaseSystem(object):
         # Prepare the queues and kernels
         self._gen_queues()
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
+        backend.commit()
 
     def _load_eles(self, rallocs, mesh, initsoln):
-        basismap = {b.name: b for b in subclasses(BaseBasis, just_leaf=True)}
+        basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Look for and load each element type from the mesh
         elemap = OrderedDict()
@@ -156,9 +155,6 @@ class BaseSystem(object):
 
         # Delegate to our subclass
         self._get_negdivf()
-
-        # Wait for all ranks to finish
-        MPI.COMM_WORLD.barrier()
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

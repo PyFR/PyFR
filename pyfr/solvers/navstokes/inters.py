@@ -99,6 +99,16 @@ class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-adia-wall'
 
 
+class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
+    type = 'char-riem-inv'
+
+    def __init__(self, *args, **kwargs):
+        super(NavierStokesCharRiemInvBCInters, self).__init__(*args, **kwargs)
+
+        self._tpl_c['p'], self._tpl_c['rho'] = self._eval_opts(['p', 'rho'])
+        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
+
+
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     type = 'sup-in-fa'
 

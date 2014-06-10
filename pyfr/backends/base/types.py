@@ -40,23 +40,35 @@ class MatrixBase(object):
         self.leaddim = ncol - (ncol % -ldmod)
         self.leadsubdim = shape[-1]
 
+        self.pitch = self.leaddim*self.itemsize
+        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
+
         # Allocate
         backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
 
-        # Retain the initial value
-        self._initval = initval
+        # Process the initial value
+        if initval is not None:
+            if initval.shape != self.ioshape:
+                raise ValueError('Invalid initial value')
+
+            self._initval = np.asanyarray(initval, dtype=self.dtype)
+        else:
+            self._initval = None
+
+    def get(self):
+        # If we are yet to be allocated use our initial value
+        if hasattr(self, '_initval'):
+            if self._initval is not None:
+                return self._initval
+            else:
+                return np.zeros(self.ioshape, dtype=self.dtype)
+        # Otherwise defer to the backend
+        else:
+            return self._get()
 
     @abstractmethod
-    def get(self):
+    def _get(self):
         pass
-
-    @property
-    def pitch(self):
-        return self.leaddim*self.itemsize
-
-    @property
-    def traits(self):
-        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
 
 class Matrix(MatrixBase):
@@ -64,8 +76,19 @@ class Matrix(MatrixBase):
     """
     _base_tags = {'dense'}
 
+    def set(self, ary):
+        if ary.shape != self.ioshape:
+            raise ValueError('Invalid matrix shape')
+
+        # If we are yet to be allocated then update our initial value
+        if hasattr(self, '_initval'):
+            self._initval = np.asanyarray(ary, dtype=self.dtype)
+        # Otherwise defer to the backend
+        else:
+            self._set(ary)
+
     @abstractmethod
-    def set(self, buf):
+    def _set(self, ary):
         pass
 
     def rslice(self, p, q):
@@ -73,10 +96,6 @@ class Matrix(MatrixBase):
 
 
 class MatrixRSlice(object):
-    """Slice of a matrix abstract base class"""
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
     def __init__(self, backend, mat, p, q):
         self.backend = backend
         self.parent = mat
@@ -84,19 +103,23 @@ class MatrixRSlice(object):
         if p < 0 or q > mat.nrow or q < p:
             raise ValueError('Invalid row slice')
 
+        self.p, self.q = p, q
         self.nrow, self.ncol = q - p, mat.ncol
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
         self.leaddim, self.leadsubdim = mat.leaddim, mat.leadsubdim
 
+        self.pitch = self.leaddim*self.itemsize
+        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
+
         self.tags = mat.tags | {'slice'}
 
     @property
-    def pitch(self):
-        return self.leaddim*self.itemsize
+    def basedata(self):
+        return self.parent.basedata
 
     @property
-    def traits(self):
-        return (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
+    def offset(self):
+        return self.parent.offset + self.p*self.pitch
 
 
 class ConstMatrix(MatrixBase):
@@ -170,8 +193,11 @@ class View(object):
         self.basedata = self._mats[0].basedata
         self.refdtype = self._mats[0].dtype
 
+        # Valid matrix types
+        mattypes = (backend.matrix_cls, backend.matrix_rslice_cls)
+
         # Validate the matrices
-        if any(not isinstance(m, backend.matrix_cls) for m in self._mats):
+        if any(not isinstance(m, mattypes) for m in self._mats):
             raise TypeError('Incompatible matrix type for view')
 
         if any(m.basedata != self.basedata for m in self._mats):

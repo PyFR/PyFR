@@ -14,8 +14,8 @@ class BaseAdvectionIntInters(BaseInters):
         self._gen_perm(lhs, rhs)
 
         # Generate the left and right hand side view matrices
-        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts0_for_inter')
-        self._scal0_rhs = self._scal_view(rhs, 'get_scal_fpts0_for_inter')
+        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
+        self._scal0_rhs = self._scal_view(rhs, 'get_scal_fpts_for_inter')
 
         # Generate the constant matrices
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
@@ -25,7 +25,7 @@ class BaseAdvectionIntInters(BaseInters):
     def _gen_perm(self, lhs, rhs):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
-        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts0_for_inter',
+        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter',
                                        self._elemap)
 
 
@@ -41,23 +41,23 @@ class BaseAdvectionMPIInters(BaseInters):
         const_mat = self._const_mat
 
         # Generate the left hand view matrix and its dual
-        self._scal0_lhs = self._scal_mpi_view(lhs, 'get_scal_fpts0_for_inter')
+        self._scal0_lhs = self._scal_mpi_view(lhs, 'get_scal_fpts_for_inter')
         self._scal0_rhs = be.mpi_matrix_for_view(self._scal0_lhs)
 
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
         # Kernels
-        self.kernels['scal_fpts0_pack'] = lambda: be.kernel(
+        self.kernels['scal_fpts_pack'] = lambda: be.kernel(
             'pack', self._scal0_lhs
         )
-        self.kernels['scal_fpts0_send'] = lambda: be.kernel(
+        self.kernels['scal_fpts_send'] = lambda: be.kernel(
             'send_pack', self._scal0_lhs, self._rhsrank, self.MPI_TAG
         )
-        self.kernels['scal_fpts0_recv'] = lambda: be.kernel(
+        self.kernels['scal_fpts_recv'] = lambda: be.kernel(
             'recv_pack', self._scal0_rhs, self._rhsrank, self.MPI_TAG
         )
-        self.kernels['scal_fpts0_unpack'] = lambda: be.kernel(
+        self.kernels['scal_fpts_unpack'] = lambda: be.kernel(
             'unpack', self._scal0_rhs
         )
 
@@ -74,10 +74,10 @@ class BaseAdvectionBCInters(BaseInters):
         # For BC interfaces, which only have an LHS state, we take the
         # permutation which results in an optimal memory access pattern
         # iterating over this state.
-        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts0_for_inter', elemap)
+        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter', elemap)
 
         # LHS view and constant matrices
-        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts0_for_inter')
+        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 

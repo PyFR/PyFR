@@ -9,7 +9,7 @@ import os
 
 import numpy as np
 
-from pyfr.bases import BaseBasis
+from pyfr.shapes import BaseShape
 from pyfr.util import subclasses, lazyprop
 
 
@@ -91,7 +91,7 @@ class PyFRBaseReader(Mapping):
                                'files' % (self.fname))
 
         # Element types known to PyFR
-        eletypes = [b.name for b in subclasses(BaseBasis)
+        eletypes = [b.name for b in subclasses(BaseShape)
                     if hasattr(b, 'name')]
 
         # Assembles possible array file names, then checks if present
