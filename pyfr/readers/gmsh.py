@@ -9,7 +9,6 @@ import numpy as np
 from pyfr.readers import BaseReader
 from pyfr.readers.nodemaps import GmshNodeMaps
 from pyfr.nputil import fuzzysort
-from pyfr.util import ndrange
 
 
 def msh_section(mshit, section):
@@ -228,7 +227,7 @@ class GmshReader(BaseReader):
         nfnodes = self._petype_focount[pftype]
 
         # Connectivity; (petype, eidx, fidx, flags)
-        con = [(petype, i, j, 0) for i, j in ndrange(len(foeles), len(fnums))]
+        con = [(petype, i, j, 0) for i in xrange(len(foeles)) for j in fnums]
 
         # Nodes
         nodes = np.sort(foeles[:, fnmap]).reshape(len(con), -1)
