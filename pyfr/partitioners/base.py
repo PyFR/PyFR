@@ -32,13 +32,15 @@ class BasePartitioner(object):
         # Get the per-partition element counts
         pinf = mesh.partition_info
 
-        # Use these to compute the offsetting factors for each partition
-        offs = {}
-        for en, pn in pinf.iteritems():
-            arrn = np.array(pn)
-            arrn[np.nonzero(arrn)[0][0]] = 0
+        # Shape points and element number offsets
+        spts = defaultdict(list)
+        offs = defaultdict(dict)
 
-            offs[en] = np.cumsum(arrn)
+        for en, pn in pinf.iteritems():
+            for i, n in enumerate(pn):
+                if n > 0:
+                    offs[en][i] = sum(s.shape[1] for s in spts[en])
+                    spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
 
         def offset_con(con, pr):
             con = con.copy()
@@ -71,14 +73,6 @@ class BasePartitioner(object):
             elif bc:
                 name, l = bc.group(1), int(bc.group(2))
                 bccon[name].append(offset_con(mesh[f], l))
-
-        # Shape points
-        spts = defaultdict(list)
-
-        for en, pn in pinf.iteritems():
-            for i, n in enumerate(pn):
-                if n > 0:
-                    spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
 
         # Concatenate these arrays to from the new mesh
         newmesh = {'con_p0': np.hstack(intcon)}
