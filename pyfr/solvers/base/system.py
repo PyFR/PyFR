@@ -145,16 +145,8 @@ class BaseSystem(object):
                 kernels[pn, kn].append(kgetter())
 
     @abstractmethod
-    def _get_negdivf(self):
+    def rhs(self, uinbank, foutbank):
         pass
-
-    def __call__(self, uinbank, foutbank):
-        # Set the banks to use for each element type
-        self._eles_scal_upts_inb.active = uinbank
-        self._eles_scal_upts_outb.active = foutbank
-
-        # Delegate to our subclass
-        self._get_negdivf()
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

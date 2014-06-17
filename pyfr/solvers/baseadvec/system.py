@@ -6,10 +6,13 @@ from pyfr.solvers.base import BaseSystem
 class BaseAdvectionSystem(BaseSystem):
     _nqueues = 2
 
-    def _get_negdivf(self):
+    def rhs(self, uinbank, foutbank):
         runall = self._backend.runall
         q1, q2 = self._queues
         kernels = self._kernels
+
+        self._eles_scal_upts_inb.active = uinbank
+        self._eles_scal_upts_outb.active = foutbank
 
         q1 << kernels['eles', 'disu']()
         q1 << kernels['mpiint', 'scal_fpts_pack']()

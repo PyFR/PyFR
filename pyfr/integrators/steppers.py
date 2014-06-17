@@ -71,10 +71,10 @@ class EulerStepper(BaseStepper):
         return 1
 
     def step(self, t, dt):
-        add, negdivf = self._add, self._system
+        add, rhs = self._add, self._system.rhs
         ut, f = self._regidx
 
-        negdivf(ut, f)
+        rhs(ut, f)
         add(1.0, ut, dt, f)
 
         return ut
@@ -100,7 +100,7 @@ class RK4Stepper(BaseStepper):
         return 4
 
     def step(self, t, dt):
-        add, negdivf = self._add, self._system
+        add, rhs = self._add, self._system.rhs
 
         # Get the bank indices for each register
         r0, r1, r2 = self._regidx
@@ -110,11 +110,11 @@ class RK4Stepper(BaseStepper):
             r0, r1 = r1, r0
 
         # First stage; r1 = -∇·f(r0)
-        negdivf(r0, r1)
+        rhs(r0, r1)
 
         # Second stage; r2 = r0 + dt/2*r1; r2 = -∇·f(r2)
         add(0.0, r2, 1.0, r0, dt/2.0, r1)
-        negdivf(r2, r2)
+        rhs(r2, r2)
 
         # As no subsequent stages depend on the first stage we can
         # reuse its register to start accumulating the solution with
@@ -125,7 +125,7 @@ class RK4Stepper(BaseStepper):
         # r2 = r0 + dt/2*r2
         # r2 = -∇·f(r2)
         add(dt/2.0, r2, 1.0, r0)
-        negdivf(r2, r2)
+        rhs(r2, r2)
 
         # Accumulate; r1 = r1 + dt/3*r2
         add(1.0, r1, dt/3.0, r2)
@@ -134,7 +134,7 @@ class RK4Stepper(BaseStepper):
         # r2 = r0 + dt*r2
         # r2 = -∇·f(r2)
         add(dt, r2, 1.0, r0)
-        negdivf(r2, r2)
+        rhs(r2, r2)
 
         # Final accumulation r1 = r1 + dt/6*r2 = u(t + dt)
         add(1.0, r1, dt/6.0, r2)
@@ -174,26 +174,26 @@ class RK45Stepper(BaseStepper):
         b4 = 2114624349019 / 3568978502595.0
         b5 = 5198255086312 / 14908931495163.0
 
-        add, negdivf = self._add, self._system
+        add, rhs = self._add, self._system.rhs
         r1, r2 = self._regidx
 
-        negdivf(r1, r2)
+        rhs(r1, r2)
         add(1.0, r1, a21*dt, r2)
         add((b1 - a21)*dt, r2, 1.0, r1)
 
-        negdivf(r1, r1)
+        rhs(r1, r1)
         add(1.0, r2, a32*dt, r1)
         add((b2 - a32)*dt, r1, 1.0, r2)
 
-        negdivf(r2, r2)
+        rhs(r2, r2)
         add(1.0, r1, a43*dt, r2)
         add((b3 - a43)*dt, r2, 1.0, r1)
 
-        negdivf(r1, r1)
+        rhs(r1, r1)
         add(1.0, r2, a54*dt, r1)
         add((b4 - a54)*dt, r1, 1.0, r2)
 
-        negdivf(r2, r2)
+        rhs(r2, r2)
         add(1.0, r1, b5*dt, r2)
 
         return r1
