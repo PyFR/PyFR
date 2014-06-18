@@ -48,9 +48,9 @@ class CUDAMatrixBase(base.MatrixBase):
 
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         super(CUDAMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                         initval, extent, tags)
+                                         initval, extent, aliases, tags)
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
@@ -71,7 +71,8 @@ class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
     def __init__(self, backend, initval, extent, tags):
         ioshape = initval.shape
         super(CUDAConstMatrix, self).__init__(backend, backend.fpdtype,
-                                              ioshape, initval, extent, tags)
+                                              ioshape, initval, extent, None,
+                                              tags)
 
 class CUDAView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
@@ -79,15 +80,15 @@ class CUDAView(base.View):
                                        vshape, tags)
 
         self.mapping = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                      self.mapping, None, tags)
+                                      self.mapping, None, None, tags)
 
         if self.nvcol > 1:
             self.cstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                           self.cstrides, None, tags)
+                                           self.cstrides, None, None, tags)
 
         if self.nvrow > 1:
             self.rstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                           self.rstrides, None, tags)
+                                           self.rstrides, None, None, tags)
 
 
 class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
