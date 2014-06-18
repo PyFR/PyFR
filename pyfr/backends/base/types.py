@@ -11,7 +11,8 @@ class MatrixBase(object):
 
     _base_tags = set()
 
-    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
+                 tags):
         self.backend = backend
         self.tags = self._base_tags | tags
 
@@ -53,8 +54,14 @@ class MatrixBase(object):
         else:
             self._initval = None
 
-        # Allocate
-        backend.malloc(self, extent)
+        # Alias or allocate ourself
+        if aliases:
+            if extent is not None:
+                raise ValueError('Aliased matrices can not have an extent')
+
+            backend.alias(self, aliases)
+        else:
+            backend.malloc(self, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value

@@ -46,9 +46,9 @@ class OpenCLMatrixBase(base.MatrixBase):
 
 
 class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         super(OpenCLMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, extent, tags)
+                                           initval, extent, aliases, tags)
 
 
 class OpenCLMatrixRSlice(base.MatrixRSlice):
@@ -70,7 +70,7 @@ class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):
     def __init__(self, backend, initval, extent, tags):
         super(OpenCLConstMatrix, self).__init__(backend, backend.fpdtype,
                                                 initval.shape, initval,
-                                                extent, tags)
+                                                extent, None, tags)
 
 
 class OpenCLView(base.View):
@@ -79,15 +79,15 @@ class OpenCLView(base.View):
                                        vshape, tags)
 
         self.mapping = OpenCLMatrixBase(backend, np.int32, (1, self.n),
-                                        self.mapping, None, tags)
+                                        self.mapping, None, None, tags)
 
         if self.nvcol > 1:
             self.cstrides = OpenCLMatrixBase(backend, np.int32, (1, self.n),
-                                             self.cstrides, None, tags)
+                                             self.cstrides, None, None, tags)
 
         if self.nvrow > 1:
             self.rstrides = OpenCLMatrixBase(backend, np.int32, (1, self.n),
-                                             self.rstrides, None, tags)
+                                             self.rstrides, None, None, tags)
 
 
 class OpenCLMPIMatrix(OpenCLMatrix, base.MPIMatrix):
