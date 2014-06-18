@@ -41,6 +41,7 @@ class MatrixBase(object):
         self.leadsubdim = shape[-1]
 
         self.pitch = self.leaddim*self.itemsize
+        self.nbytes = nrow*self.pitch
         self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Process the initial value
@@ -53,7 +54,7 @@ class MatrixBase(object):
             self._initval = None
 
         # Allocate
-        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
+        backend.malloc(self, self.nbytes, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value
