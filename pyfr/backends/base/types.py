@@ -54,7 +54,7 @@ class MatrixBase(object):
             self._initval = None
 
         # Allocate
-        backend.malloc(self, self.nbytes, extent)
+        backend.malloc(self, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value

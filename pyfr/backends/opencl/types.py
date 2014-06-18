@@ -12,7 +12,7 @@ from pyfr.util import lazyprop
 class OpenCLMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
-        self.data = basedata.get_sub_region(offset, self.nrow*self.pitch + 1)
+        self.data = basedata.get_sub_region(offset, self.nbytes + 1)
         self.offset = offset
 
         # Process any initial value
