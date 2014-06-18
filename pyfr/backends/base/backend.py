@@ -76,11 +76,11 @@ class BaseBackend(object):
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
 
-    def malloc(self, obj, nbytes, extent):
+    def malloc(self, obj, extent):
         # If no extent has been specified then autocommit
         if extent is None:
             # Perform the allocation
-            data = self._malloc_impl(nbytes)
+            data = self._malloc_impl(obj.nbytes)
 
             # Fire the callback
             obj.onalloc(data, 0)
