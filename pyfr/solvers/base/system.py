@@ -148,5 +148,10 @@ class BaseSystem(object):
     def rhs(self, uinbank, foutbank):
         pass
 
+    def filt(self, uinoutbank):
+        self._eles_scal_upts_inb.active = uinoutbank
+
+        self._queues[0] % self._kernels['eles', 'filter_soln']()
+
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

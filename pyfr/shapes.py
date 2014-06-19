@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import itertools as it
-from math import sqrt
+from math import exp, sqrt
 import re
 
 from mpmath import mp
@@ -123,6 +123,23 @@ class BaseShape(object):
     @property
     def m10(self):
         return block_diag([self.m9]*self.ndims)
+
+    @lazyprop
+    @chop
+    def m11(self):
+        ub = self.ubasis
+
+        n = ub.order
+        ncut = self.cfg.get('soln-filter', 'cutoff')
+        order = self.cfg.getint('soln-filter', 'order')
+        alpha = self.cfg.getfloat('soln-filter', 'alpha')
+
+        A = np.ones(self.nupts)
+        for i, d in enumerate(ub.degrees):
+            if d >= ncut < n:
+                A[i] = exp(-alpha*(float(d - ncut)/(n - ncut))**order)
+
+        return np.linalg.solve(ub.vdm, A[:,None]*ub.vdm).T
 
     @lazyprop
     def upts(self):

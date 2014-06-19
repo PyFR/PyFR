@@ -12,6 +12,9 @@ class BaseController(BaseIntegrator):
         self._dt = self._cfg.getfloat('solver-time-integrator', 'dt')
         self._dtmin = 1.0e-14
 
+        # Solution filtering frequency
+        self._ffreq = self._cfg.getint('soln-filter', 'freq', '0')
+
         # Bank index of solution
         self._idxcurr = 0
 
@@ -59,6 +62,10 @@ class NoneController(BaseController):
             # Update status
             self.nacptsteps += 1
             self.nacptchain += 1
+
+            # Filter
+            if self._ffreq and self.nacptsteps % self._ffreq == 0:
+                self._system.filt(self._idxcurr)
 
             # Fire off any event handlers
             self.completed_step_handlers(self)
