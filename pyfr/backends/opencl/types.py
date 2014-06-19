@@ -46,9 +46,7 @@ class OpenCLMatrixBase(base.MatrixBase):
 
 
 class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        super(OpenCLMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, extent, aliases, tags)
+    pass
 
 
 class OpenCLMatrixRSlice(base.MatrixRSlice):
@@ -67,10 +65,7 @@ class OpenCLMatrixBank(base.MatrixBank):
 
 
 class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, extent, tags):
-        super(OpenCLConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval,
-                                                extent, None, tags)
+    pass
 
 
 class OpenCLView(base.View):

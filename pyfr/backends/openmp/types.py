@@ -37,9 +37,7 @@ class OpenMPMatrixBase(base.MatrixBase):
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, extent, aliases, tags)
+    pass
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
@@ -61,10 +59,7 @@ class OpenMPMatrixBank(base.MatrixBank):
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, extent, tags):
-        super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval,
-                                                extent, None, tags)
+    pass
 
 
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
