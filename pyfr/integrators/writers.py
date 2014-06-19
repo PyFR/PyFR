@@ -4,7 +4,6 @@ from abc import abstractmethod
 import itertools as it
 import os
 
-from mpi4py import MPI
 import numpy as np
 
 from pyfr.integrators.base import BaseIntegrator
@@ -99,6 +98,8 @@ class FileWriter(BaseWriter):
                         mpi_names.append(name)
 
     def _write(self, path, solnmap, metadata):
+        from mpi4py import MPI
+
         comm, rank, root = get_comm_rank_root()
 
         if rank != root:

@@ -23,11 +23,10 @@
                   : V_i + c_i*${2.0/gmo};
     fpdtype_t V_b = 0.5*(R_e + R_i);
     fpdtype_t c_b = ${0.25*gmo}*(R_i - R_e);
-    fpdtype_t s_i = pow(ul[0], ${-gmo})*p_i*inv;
-    fpdtype_t rho_b = pow((V_i < 0) ?
-                          c_b*c_b*${1.0/(gamma*s)} : c_b*c_b*${1.0/gamma}/s_i,
-                          ${1.0/gmo});
-    fpdtype_t p_b = rho_b*c_b*c_b*${1.0/gamma};
+    fpdtype_t rho_b = (V_i < 0)
+                    ? pow(${1.0/(gamma*s)}*c_b*c_b, ${1.0/gmo})
+                    : ul[0]*pow(ul[0]*c_b*c_b/(${gamma}*p_i), ${1.0/gmo});
+    fpdtype_t p_b = ${1.0/gamma}*rho_b*c_b*c_b;
 
     ur[0] = rho_b;
 % for i in range(ndims):

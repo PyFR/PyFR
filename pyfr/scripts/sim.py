@@ -1,23 +1,15 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import atexit
-
 from argparse import ArgumentParser, FileType
 
 from mpmath import mp
 import numpy as np
 
-import mpi4py.rc
-mpi4py.rc.initialize = False
-mpi4py.rc.finalize = False
-
-from pyfr import mpiutil
-atexit.register(mpiutil.atexit)
-
 from pyfr import __version__ as version
 from pyfr.backends import get_backend
 from pyfr.inifile import Inifile
+from pyfr.mpiutil import register_finalize_handler
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.progress_bar import ProgressBar
 from pyfr.readers.native import read_pyfr_data
@@ -47,6 +39,8 @@ def process_restart(args):
 
 @mp.workdps(60)
 def main():
+    from mpi4py import MPI
+
     ap = ArgumentParser(prog='pyfr-sim', description='Runs a PyFR simulation')
     ap.add_argument('--verbose', '-v', action='count')
     ap.add_argument('--backend', '-b', default='cuda', help='Backend to use')
@@ -73,11 +67,11 @@ def main():
     args = ap.parse_args()
     mesh, soln, cfg = args.process(args)
 
+    # Ensure MPI is suitably cleaned up
+    register_finalize_handler()
+
     # Create a backend
     backend = get_backend(args.backend, cfg)
-
-    # Bring up MPI (this must be done after we have created a backend)
-    mpiutil.init()
 
     # Get the mapping from physical ranks to MPI ranks
     rallocs = get_rank_allocation(mesh, cfg)
@@ -86,7 +80,7 @@ def main():
     solver = get_solver(backend, rallocs, mesh, soln, cfg)
 
     # If we are running interactively then create a progress bar
-    if args.progress and mpiutil.get_comm_rank_root()[1] == 0:
+    if args.progress and MPI.COMM_WORLD.rank == 0:
         pb = ProgressBar(solver.tstart, solver.tcurr, solver.tend)
 
         # Register a callback to update the bar after each step

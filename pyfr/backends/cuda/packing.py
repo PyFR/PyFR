@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from mpi4py import MPI
 import pycuda.driver as cuda
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
@@ -58,9 +57,13 @@ class CUDAPackingKernels(CUDAKernelProvider):
         return PackMPIViewKernel()
 
     def send_pack(self, mv, pid, tag):
+        from mpi4py import MPI
+
         return self._sendrecv(mv, MPI.COMM_WORLD.Send_init, pid, tag)
 
     def recv_pack(self, mv, pid, tag):
+        from mpi4py import MPI
+
         return self._sendrecv(mv, MPI.COMM_WORLD.Recv_init, pid, tag)
 
     def unpack(self, mv):
