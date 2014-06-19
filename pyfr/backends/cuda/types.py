@@ -48,9 +48,7 @@ class CUDAMatrixBase(base.MatrixBase):
 
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        super(CUDAMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                         initval, extent, aliases, tags)
+    pass
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
@@ -68,11 +66,8 @@ class CUDAMatrixBank(base.MatrixBank):
 
 
 class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, extent, tags):
-        ioshape = initval.shape
-        super(CUDAConstMatrix, self).__init__(backend, backend.fpdtype,
-                                              ioshape, initval, extent, None,
-                                              tags)
+    pass
+
 
 class CUDAView(base.View):
     def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):

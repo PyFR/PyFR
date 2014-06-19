@@ -82,6 +82,10 @@ class MatrixBase(object):
 class Matrix(MatrixBase):
     _base_tags = {'dense'}
 
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
+        super(Matrix, self).__init__(backend, backend.fpdtype, ioshape,
+                                     initval, extent, aliases, tags)
+
     def set(self, ary):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
@@ -130,6 +134,11 @@ class MatrixRSlice(object):
 
 class ConstMatrix(MatrixBase):
     _base_tags = {'const', 'dense'}
+
+    def __init__(self, backend, initval, extent, tags):
+        super(ConstMatrix, self).__init__(backend, backend.fpdtype,
+                                          initval.shape, initval, extent,
+                                          None, tags)
 
 
 class MPIMatrix(Matrix):
