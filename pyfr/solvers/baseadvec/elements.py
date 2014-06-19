@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from pyfr.backends.base.kernels import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
 
 
@@ -79,3 +80,18 @@ class BaseAdvectionElements(BaseElements):
                 dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
                 rcpdjac=self.rcpdjac_at('upts')
             )
+
+        # In-place solution filter
+        if self._cfg.getint('soln-filter', 'freq', '0'):
+            def filter_soln():
+                mul = backend.kernel(
+                    'mul', self.opmat('M11'), self.scal_upts_inb,
+                    out=self._scal_upts_temp
+                )
+                copy = backend.kernel(
+                    'copy', self.scal_upts_inb, self._scal_upts_temp
+                )
+
+                return ComputeMetaKernel([mul, copy])
+
+            self.kernels['filter_soln'] = filter_soln

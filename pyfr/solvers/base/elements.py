@@ -124,17 +124,12 @@ class BaseElements(object):
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
         nfpts, nupts, nqpts = self.nfpts, self.nupts, self.nqpts
-        sbufs = self._scratch_bufs
-
-        # Allocate and bank the storage required by the time integrator
-        self._scal_upts = [backend.matrix(self._scal_upts.shape,
-                                          self._scal_upts, tags={'align'})
-                           for i in xrange(nscal_upts)]
-        self.scal_upts_inb = backend.matrix_bank(self._scal_upts)
-        self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
+        sbufs, abufs = self._scratch_bufs, []
 
         # Convenience functions for scalar/vector allocation
-        alloc = lambda ex, n: backend.matrix(n, extent=ex, tags={'align'})
+        alloc = lambda ex, n: abufs.append(
+            backend.matrix(n, extent=ex, tags={'align'})
+        ) or abufs[-1]
         salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
         valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
 
@@ -155,6 +150,19 @@ class BaseElements(object):
             self._vect_qpts = valloc('vect_qpts', nqpts)
         if 'vect_fpts' in sbufs:
             self._vect_fpts = valloc('vect_fpts', nfpts)
+
+        # Allocate and bank the storage required by the time integrator
+        self._scal_upts = [backend.matrix(self._scal_upts.shape,
+                                          self._scal_upts, tags={'align'})
+                           for i in xrange(nscal_upts)]
+        self.scal_upts_inb = inb = backend.matrix_bank(self._scal_upts)
+        self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
+
+        # Find/allocate space for a solution-sized scalar that is
+        # allowed to alias other scratch space in the simulation
+        aliases = next((m for m in abufs if m.nbytes >= inb.nbytes), None)
+        self._scal_upts_temp = backend.matrix(inb.ioshape, aliases=aliases,
+                                              tags=inb.tags)
 
     @memoize
     def opmat(self, expr):
