@@ -109,31 +109,21 @@ class CUDAQueue(base.Queue):
     def __init__(self, backend):
         super(CUDAQueue, self).__init__(backend)
 
-        # CUDA stream and MPI request list
-        self._stream_comp = cuda.Stream()
-        self._stream_copy = cuda.Stream()
-        self._mpireqs = []
-
-    def _exec_item(self, item, rtargs):
-        if item.ktype == 'compute':
-            item.run(self._stream_comp, self._stream_copy, *rtargs)
-        elif item.ktype == 'mpi':
-            item.run(self._mpireqs, *rtargs)
-        else:
-            raise ValueError('Non compute/MPI kernel in queue')
-        self._last = item
+        # CUDA streams
+        self.cuda_stream_comp = cuda.Stream()
+        self.cuda_stream_copy = cuda.Stream()
 
     def _wait(self):
         last = self._last
 
         if last and last.ktype == 'compute':
-            self._stream_comp.synchronize()
-            self._stream_copy.synchronize()
+            self.cuda_stream_comp.synchronize()
+            self.cuda_stream_copy.synchronize()
         elif last and last.ktype == 'mpi':
             from mpi4py import MPI
 
-            MPI.Prequest.Waitall(self._mpireqs)
-            self._mpireqs = []
+            MPI.Prequest.Waitall(self.mpi_reqs)
+            self.mpi_reqs = []
 
         self._last = None
 

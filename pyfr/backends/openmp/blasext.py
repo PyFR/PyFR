@@ -22,7 +22,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
                                   [np.int32] + [np.intp, y.dtype]*(1 + nv))
 
         class AxnpbyKernel(ComputeKernel):
-            def run(self, beta, *alphan):
+            def run(self, queue, beta, *alphan):
                 args = [i for axn in zip(xn, alphan) for i in axn]
                 kern(cnt, y, beta, *args)
 

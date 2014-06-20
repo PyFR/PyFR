@@ -93,21 +93,6 @@ class OpenMPView(base.View):
 
 
 class OpenMPQueue(base.Queue):
-    def __init__(self, backend):
-        super(OpenMPQueue, self).__init__(backend)
-
-        # Active MPI requests
-        self._mpireqs = []
-
-    def _exec_item(self, item, rtargs):
-        if item.ktype == 'compute':
-            item.run(*rtargs)
-        elif item.ktype == 'mpi':
-            item.run(self._mpireqs, *rtargs)
-        else:
-            raise ValueError('Non compute/MPI kernel in queue')
-        self._last = item
-
     def _exec_nonblock(self):
         while self._items:
             kern = self._items[0][0]
@@ -122,8 +107,8 @@ class OpenMPQueue(base.Queue):
         if self._last and self._last.ktype == 'mpi':
             from mpi4py import MPI
 
-            MPI.Prequest.Waitall(self._mpireqs)
-            self._mpireqs = []
+            MPI.Prequest.Waitall(self.mpi_reqs)
+            self.mpi_reqs = []
 
         self._last = None
 

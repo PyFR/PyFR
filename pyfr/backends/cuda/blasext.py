@@ -27,9 +27,9 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         grid, block = splay(cnt)
 
         class AxnpbyKernel(ComputeKernel):
-            def run(self, scomp, scopy, beta, *alphan):
+            def run(self, queue, beta, *alphan):
                 args = [i for axn in zip(xn, alphan) for i in axn]
-                kern.prepared_async_call(grid, block, scomp, cnt, y, beta,
-                                         *args)
+                kern.prepared_async_call(grid, block, queue.cuda_stream_comp,
+                                         cnt, y, beta, *args)
 
         return AxnpbyKernel()

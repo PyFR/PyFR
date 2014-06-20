@@ -38,7 +38,8 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
         grid = get_grid_for_block(block, dims[-1])
 
         class PointwiseKernel(ComputeKernel):
-            def run(self, scomp, scopy):
-                fun.prepared_async_call(grid, block, scomp, *arglst)
+            def run(self, queue):
+                fun.prepared_async_call(grid, block, queue.cuda_stream_comp,
+                                        *arglst)
 
         return PointwiseKernel()

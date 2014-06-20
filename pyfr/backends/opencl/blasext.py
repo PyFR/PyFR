@@ -30,8 +30,8 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         gs, ls = splay(self.backend.qdflt, cnt)
 
         class AxnpbyKernel(ComputeKernel):
-            def run(self, qcomp, qcopy, *consts):
+            def run(self, queue, *consts):
                 args = [x.data for x in arr] + list(consts)
-                kern(qcomp, gs, ls, cnt, *args)
+                kern(queue.cl_queue_comp, gs, ls, cnt, *args)
 
         return AxnpbyKernel()

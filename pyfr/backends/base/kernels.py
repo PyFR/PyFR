@@ -17,7 +17,7 @@ class _BaseKernel(object):
     def retval(self):
         return None
 
-    def run(self, *args, **kwargs):
+    def run(self, queue, *args, **kwargs):
         pass
 
 
@@ -41,8 +41,8 @@ class _MetaKernel(object):
     def __init__(self, kernels):
         self._kernels = proxylist(kernels)
 
-    def run(self, *args, **kwargs):
-        self._kernels.run(*args, **kwargs)
+    def run(self, queue, *args, **kwargs):
+        self._kernels.run(queue, *args, **kwargs)
 
 
 class ComputeMetaKernel(_MetaKernel, ComputeKernel):
