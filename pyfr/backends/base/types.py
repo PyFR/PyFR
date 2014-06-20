@@ -247,6 +247,9 @@ class Queue(object):
         # Items waiting to be executed
         self._items = deque()
 
+        # Active MPI requests
+        self.mpi_reqs = []
+
     def __lshift__(self, items):
         self._items.extend(items)
 
@@ -262,6 +265,10 @@ class Queue(object):
         while self._items:
             self._exec_next()
         self._wait()
+
+    def _exec_item(self, item, rtargs):
+        item.run(self, *rtargs)
+        self._last = item
 
     def _exec_next(self):
         item, rtargs = self._items.popleft()
@@ -279,10 +286,6 @@ class Queue(object):
 
     @abstractmethod
     def _at_sequence_point(self, item):
-        pass
-
-    @abstractmethod
-    def _exec_item(self, item, rtargs):
         pass
 
     @abstractmethod

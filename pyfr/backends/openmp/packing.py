@@ -15,10 +15,10 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
         preq = mpipreqfn(mpimat.data, pid, tag)
 
         class SendRecvPackKernel(MPIKernel):
-            def run(self, reqlist):
+            def run(self, queue):
                 # Start the request and append us to the list of requests
                 preq.Start()
-                reqlist.append(preq)
+                queue.mpi_reqs.append(preq)
 
         return SendRecvPackKernel()
 
@@ -34,7 +34,7 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
         kern = self._build_kernel('pack_view', src, 'iiiPPPPP')
 
         class PackMPIViewKernel(ComputeKernel):
-            def run(self):
+            def run(self, queue):
                 kern(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
                      v.cstrides or 0, v.rstrides or 0, m)
 

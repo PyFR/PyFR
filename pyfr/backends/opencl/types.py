@@ -108,31 +108,21 @@ class OpenCLQueue(base.Queue):
     def __init__(self, backend):
         super(OpenCLQueue, self).__init__(backend)
 
-        # OpenCL cmdqueue and MPI request list
-        self._cmdqueue_comp = cl.CommandQueue(backend.ctx)
-        self._cmdqueue_copy = cl.CommandQueue(backend.ctx)
-        self._mpireqs = []
-
-    def _exec_item(self, item, rtargs):
-        if item.ktype == 'compute':
-            item.run(self._cmdqueue_comp, self._cmdqueue_copy, *rtargs)
-        elif item.ktype == 'mpi':
-            item.run(self._mpireqs, *rtargs)
-        else:
-            raise ValueError('Non compute/MPI kernel in queue')
-        self._last = item
+        # OpenCL command queues
+        self.cl_queue_comp = cl.CommandQueue(backend.ctx)
+        self.cl_queue_copy = cl.CommandQueue(backend.ctx)
 
     def _wait(self):
         last = self._last
 
         if last and last.ktype == 'compute':
-            self._cmdqueue_comp.finish()
-            self._cmdqueue_copy.finish()
+            self.cl_queue_comp.finish()
+            self.cl_queue_copy.finish()
         elif last and last.ktype == 'mpi':
             from mpi4py import MPI
 
-            MPI.Prequest.Waitall(self._mpireqs)
-            self._mpireqs = []
+            MPI.Prequest.Waitall(self.mpi_reqs)
+            self.mpi_reqs = []
 
         self._last = None
 

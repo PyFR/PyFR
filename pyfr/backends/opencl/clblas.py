@@ -86,12 +86,13 @@ class OpenCLClBLASKernels(object):
             clblasgemm = w.clblasSgemm
 
         class MulKernel(ComputeKernel):
-            def run(self, qcomp, qcopy):
+            def run(self, queue):
+                qptr = c_void_p(queue.cl_queue_comp.int_ptr)
                 clblasgemm(w.clblasRowMajor, w.clblasNoTrans, w.clblasNoTrans,
                            m, n, k, alpha,
                            a, 0, a.leaddim,
                            b, 0, b.leaddim, beta,
                            out, 0, out.leaddim,
-                           1, c_void_p(qcomp.int_ptr), 0, None, None)
+                           1, qptr, 0, None, None)
 
         return MulKernel()
