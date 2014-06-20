@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import collections
 import itertools as it
 
 import numpy as np
@@ -109,27 +108,10 @@ class OpenCLQueue(base.Queue):
     def __init__(self, backend):
         super(OpenCLQueue, self).__init__(backend)
 
-        # Last kernel we executed
-        self._last = None
-
         # OpenCL cmdqueue and MPI request list
         self._cmdqueue_comp = cl.CommandQueue(backend.ctx)
         self._cmdqueue_copy = cl.CommandQueue(backend.ctx)
         self._mpireqs = []
-
-        # Items waiting to be executed
-        self._items = collections.deque()
-
-    def __lshift__(self, items):
-        self._items.extend(items)
-
-    def __mod__(self, items):
-        self.run()
-        self << items
-        self.run()
-
-    def __nonzero__(self):
-        return bool(self._items)
 
     def _exec_item(self, item, rtargs):
         if item.ktype == 'compute':
@@ -139,20 +121,6 @@ class OpenCLQueue(base.Queue):
         else:
             raise ValueError('Non compute/MPI kernel in queue')
         self._last = item
-
-    def _exec_next(self):
-        item, rtargs = self._items.popleft()
-
-        # If we are at a sequence point then wait for current items
-        if self._at_sequence_point(item):
-            self._wait()
-
-        # Execute the item
-        self._exec_item(item, rtargs)
-
-    def _exec_nowait(self):
-        while self._items and not self._at_sequence_point(self._items[0][0]):
-            self._exec_item(*self._items.popleft())
 
     def _wait(self):
         last = self._last
@@ -170,11 +138,6 @@ class OpenCLQueue(base.Queue):
 
     def _at_sequence_point(self, item):
         return self._last and self._last.ktype != item.ktype
-
-    def run(self):
-        while self._items:
-            self._exec_next()
-        self._wait()
 
     @staticmethod
     def runall(queues):

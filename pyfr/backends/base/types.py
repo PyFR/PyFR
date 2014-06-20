@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
-from collections import Sequence
+from collections import Sequence, deque
 
 import numpy as np
 
@@ -241,10 +241,50 @@ class Queue(object):
     def __init__(self, backend):
         self.backend = backend
 
+        # Last kernel we executed
+        self._last = None
+
+        # Items waiting to be executed
+        self._items = deque()
+
+    def __lshift__(self, items):
+        self._items.extend(items)
+
+    def __mod__(self, items):
+        self.run()
+        self << items
+        self.run()
+
+    def __nonzero__(self):
+        return bool(self._items)
+
+    def run(self):
+        while self._items:
+            self._exec_next()
+        self._wait()
+
+    def _exec_next(self):
+        item, rtargs = self._items.popleft()
+
+        # If we are at a sequence point then wait for current items
+        if self._at_sequence_point(item):
+            self._wait()
+
+        # Execute the item
+        self._exec_item(item, rtargs)
+
+    def _exec_nowait(self):
+        while self._items and not self._at_sequence_point(self._items[0][0]):
+            self._exec_item(*self._items.popleft())
+
     @abstractmethod
-    def __lshift__(self, iterable):
+    def _at_sequence_point(self, item):
         pass
 
     @abstractmethod
-    def __mod__(self, iterable):
+    def _exec_item(self, item, rtargs):
+        pass
+
+    @abstractmethod
+    def _wait(self):
         pass

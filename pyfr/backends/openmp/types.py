@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import collections
 import itertools as it
 
 import numpy as np
@@ -97,25 +96,8 @@ class OpenMPQueue(base.Queue):
     def __init__(self, backend):
         super(OpenMPQueue, self).__init__(backend)
 
-        # Last kernel we executed
-        self._last = None
-
         # Active MPI requests
         self._mpireqs = []
-
-        # Items waiting to be executed
-        self._items = collections.deque()
-
-    def __lshift__(self, items):
-        self._items.extend(items)
-
-    def __mod__(self, items):
-        self.run()
-        self << items
-        self.run()
-
-    def __nonzero__(self):
-        return bool(self._items)
 
     def _exec_item(self, item, rtargs):
         if item.ktype == 'compute':
@@ -125,20 +107,6 @@ class OpenMPQueue(base.Queue):
         else:
             raise ValueError('Non compute/MPI kernel in queue')
         self._last = item
-
-    def _exec_next(self):
-        item, rtargs = self._items.popleft()
-
-        # If we are at a sequence point then wait for current items
-        if self._at_sequence_point(item):
-            self._wait()
-
-        # Execute the item
-        self._exec_item(item, rtargs)
-
-    def _exec_nowait(self):
-        while self._items and not self._at_sequence_point(self._items[0][0]):
-            self._exec_item(*self._items.popleft())
 
     def _exec_nonblock(self):
         while self._items:
@@ -163,11 +131,6 @@ class OpenMPQueue(base.Queue):
         last = self._last
 
         return last and last.ktype == 'mpi' and item.ktype != 'mpi'
-
-    def run(self):
-        while self._items:
-            self._exec_next()
-        self._wait()
 
     @staticmethod
     def runall(queues):
