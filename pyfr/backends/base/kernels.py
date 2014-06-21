@@ -115,7 +115,14 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         # Followed by the objects themselves
         for aname, atypes in zip(argn[ndim:], argt[ndim:]):
-            ka = argdict[aname]
+            try:
+                ka = argdict[aname]
+            except KeyError:
+                # Allow scalar arguments to be resolved at runtime
+                if len(atypes) == 1 and atypes[0] == self.backend.fpdtype:
+                    ka = aname
+                else:
+                    raise
 
             # Matrix
             if isinstance(ka, mattypes):
