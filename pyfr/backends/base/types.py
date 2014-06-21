@@ -266,19 +266,19 @@ class Queue(object):
             self._exec_next()
         self._wait()
 
-    def _exec_item(self, item, rtargs):
-        item.run(self, *rtargs)
+    def _exec_item(self, item, args, kwargs):
+        item.run(self, *args, **kwargs)
         self._last = item
 
     def _exec_next(self):
-        item, rtargs = self._items.popleft()
+        item, args, kwargs = self._items.popleft()
 
         # If we are at a sequence point then wait for current items
         if self._at_sequence_point(item):
             self._wait()
 
         # Execute the item
-        self._exec_item(item, rtargs)
+        self._exec_item(item, args, kwargs)
 
     def _exec_nowait(self):
         while self._items and not self._at_sequence_point(self._items[0][0]):
