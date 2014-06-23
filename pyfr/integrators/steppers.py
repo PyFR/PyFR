@@ -152,7 +152,7 @@ class RK45Stepper(BaseStepper):
 
     @property
     def _stepper_nfevals(self):
-        return self.nsteps
+        return 5*self.nsteps
 
     @property
     def _stepper_nregs(self):
