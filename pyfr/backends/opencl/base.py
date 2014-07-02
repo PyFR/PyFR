@@ -3,6 +3,7 @@
 import numpy as np
 
 from pyfr.backends.base import BaseBackend
+from pyfr.mpiutil import get_local_rank
 from pyfr.template import DottedTemplateLookup
 
 
@@ -12,15 +13,42 @@ class OpenCLBackend(BaseBackend):
     def __init__(self, cfg):
         super(OpenCLBackend, self).__init__(cfg)
 
-        # Create a OpenCL context
         import pyopencl as cl
-        self.ctx = cl.create_some_context()
+
+        # Get the platform/device info from the config file
+        platid = cfg.get('backend-opencl', 'platform-id', '0').lower()
+        devid = cfg.get('backend-opencl', 'device-id', 'local-rank').lower()
+        devtype = cfg.get('backend-opencl', 'device-type', 'all').upper()
+
+        # Handle the local-rank case
+        if devid == 'local-rank':
+            devid = str(get_local_rank())
+
+        # Map the device type to the corresponding PyOpenCL constant
+        devtype = getattr(cl.device_type, devtype)
+
+        # Determine the OpenCL platform to use
+        for i, platform in enumerate(cl.get_platforms()):
+            if platid == str(i) or platid == platform.name.lower():
+                break
+        else:
+            raise ValueError('No suitable OpenCL platform found')
+
+        # Determine the OpenCL device to use
+        for i, device in enumerate(platform.get_devices(devtype)):
+            if devid == str(i) or devid == device.name.lower():
+                break
+        else:
+            raise ValueError('No suitable OpenCL device found')
+
+        # Create a OpenCL context on this device
+        self.ctx = cl.Context([device])
 
         # Create a queue for initialisation-type operations
         self.qdflt = cl.CommandQueue(self.ctx)
 
         # Compute the alignment requirement for the context
-        self.alignb = self.ctx.devices[0].mem_base_addr_align // 8
+        self.alignb = device.mem_base_addr_align // 8
 
         from pyfr.backends.opencl import (blasext, clblas, packing, provider,
                                           types)

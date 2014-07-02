@@ -5,7 +5,7 @@ from ctypes import CDLL, POINTER, c_int, c_double, c_float, c_void_p
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, traits
-from pyfr.ctypesutil import platform_libname
+from pyfr.ctypesutil import load_library
 
 
 # Possible CUBLAS exception types
@@ -31,13 +31,13 @@ class CUBLASWrappers(object):
         0xe: CUBLASInternalError
     }
 
-    def __init__(self, libname=None):
-        libname = libname or platform_libname('cublas')
+    def __init__(self):
+        lib = load_library('cublas')
 
-        try:
-            lib = CDLL(libname)
-        except OSError:
-            raise RuntimeError('Unable to load CUBLAS')
+        # Constants
+        self.CUBLAS_OP_N = 0
+        self.CUBLAS_OP_T = 1
+        self.CUBLAS_OP_C = 2
 
         # cublasCreate
         self.cublasCreate = lib.cublasCreate_v2
@@ -127,7 +127,10 @@ class CUDACUBLASKernels(object):
         m, n, k = b.ncol, a.nrow, a.ncol
         A, B, C = b, a, out
 
-        # α and β factors for C = α*(A*B) + β*C
+        # Do not transpose either A or B
+        opA = opB = self._wrappers.CUBLAS_OP_N
+
+        # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:
             cublasgemm = self._wrappers.cublasDgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
@@ -138,7 +141,7 @@ class CUDACUBLASKernels(object):
         class MulKernel(ComputeKernel):
             def run(iself, scomp, scopy):
                 self._wrappers.cublasSetStream(self._handle, scomp.handle)
-                cublasgemm(self._handle, 0, 0, m, n, k,
+                cublasgemm(self._handle, opA, opB, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 

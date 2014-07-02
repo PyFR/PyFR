@@ -3,7 +3,6 @@
 import collections
 import itertools as it
 
-from mpi4py import MPI
 import numpy as np
 
 import pyfr.backends.base as base
@@ -153,6 +152,8 @@ class OpenMPQueue(base.Queue):
 
     def _wait(self):
         if self._last and self._last.ktype == 'mpi':
+            from mpi4py import MPI
+
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
 

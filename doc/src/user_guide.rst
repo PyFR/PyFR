@@ -25,6 +25,11 @@ necessary to install the following Python packages:
 3. `numpy <http://www.numpy.org/>`_ >= 1.8
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 
+To run PyFR in parallel it is also necessary to have either
+`metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0 or
+`scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+installed.
+
 OpenMP Backend
 ^^^^^^^^^^^^^^
 
@@ -93,6 +98,12 @@ available:
 
         pyfr-mesh convert mesh.msh mesh.pyfrm
 
+2. ``pyfr-mesh partition`` --- Partition an existing mesh and
+   associated solution files.
+   Example::
+
+       pyfr-mesh partition 2 mesh.pyfrm solution.pyfrs .
+
 For full details invoke::
 
     pyfr-mesh [sub-tool] --help
@@ -108,8 +119,8 @@ Overview
 1. ``pyfr-sim run`` --- Start a new PyFR simulation. Example::
 
         pyfr-sim run mesh.pyfrm configuration.ini
-        
-2. ``pyfr-sim restart`` --- Restart a PyFR simulation from an existing 
+
+2. ``pyfr-sim restart`` --- Restart a PyFR simulation from an existing
    solution file. Example::
 
         pyfr-sim restart mesh.pyfrm solution.pyfrs
@@ -395,7 +406,7 @@ Parameterizes the prismatic elements. Options:
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
-    ``williams-shunn~gauss-legendre | 
+    ``williams-shunn~gauss-legendre |
     williams-shunn~gauss-legendre-lobatto``
 
 Example::
@@ -435,7 +446,7 @@ Options:
 
 1. ``type`` --- type of boundary condition:
 
-    ``no-slp-adia-wall | no-slp-aisot-wall | sub-in-frv | 
+    ``no-slp-adia-wall | no-slp-aisot-wall | sub-in-frv |
     sub-in-ftpttang | sub-out-fp | sup-in-fa | sup-out-fn``
 
     where
@@ -552,7 +563,7 @@ simulation on a mixed unstructured mesh:
    converting it into an unstructured VTK file called
    ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the 
+   linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
         pyfr-postp convert couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu divide -d 4
@@ -580,7 +591,7 @@ simulation on a structured mesh:
    ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.ini`` into
    ``euler_vortex_2d/``
 
-3. Copy the partitioned `Gmsh <http:http://geuz.org/gmsh/>`_ file
+3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ file
    ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.msh`` into
    ``euler_vortex_2d/``
 
@@ -589,21 +600,25 @@ simulation on a structured mesh:
 
         pyfr-mesh convert euler_vortex_2d.msh euler_vortex_2d.pyfrm
 
-5. Run pyfr-sim to solve the Euler equations on the mesh, generating a
+5. Run pyfr-mesh to partition the PyFR mesh file into two pieces::
+
+        pyfr-mesh partition 2 euler_vortex_2d.pyfrm .
+
+6. Run pyfr-sim to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
         mpirun -n 2 pyfr-sim -p run euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
-6. Run pyfr-postp on the solution file ``euler_vortex_2d_100.0.pyfrs``
+7. Run pyfr-postp on the solution file ``euler_vortex_2d_100.0.pyfrs``
    converting it into an unstructured VTK file called
    ``euler_vortex_2d_100.0.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the 
+   linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
         pyfr-postp convert euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu divide -d 4
 
-7. Visualise the unstructured VTK file in `Paraview
+8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
 
 .. figure:: ../fig/euler_vortex_2d/euler_vortex_2d.png

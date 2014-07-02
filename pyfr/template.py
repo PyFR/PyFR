@@ -6,6 +6,10 @@ from mako.lookup import TemplateLookup
 from mako.template import Template
 
 
+def float_repr(obj):
+    return repr(obj) if isinstance(obj, float) else obj
+
+
 class DottedTemplateLookup(TemplateLookup):
     def __init__(self, pkg):
         self.dfltpkg = pkg
@@ -29,4 +33,6 @@ class DottedTemplateLookup(TemplateLookup):
         if not src:
             raise RuntimeError('Template "{}" not found'.format(name))
 
-        return Template(src, lookup=self)
+        return Template(src, lookup=self,
+                        default_filters=['float_repr', 'str'],
+                        imports=['from pyfr.template import float_repr'])

@@ -3,7 +3,6 @@
 import collections
 import itertools as it
 
-from mpi4py import MPI
 import numpy as np
 import pycuda.driver as cuda
 
@@ -163,6 +162,8 @@ class CUDAQueue(base.Queue):
             self._stream_comp.synchronize()
             self._stream_copy.synchronize()
         elif last and last.ktype == 'mpi':
+            from mpi4py import MPI
+
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
 
