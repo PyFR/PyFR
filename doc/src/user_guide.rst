@@ -10,7 +10,7 @@ Getting Started
 Downloading the Source
 ----------------------
 
-PyFR can be obtained `here <http://www.pyfr.org/download.php>`_
+PyFR can be obtained `here <http://www.pyfr.org/download.php>`_.
 
 Dependencies
 ------------
@@ -18,22 +18,20 @@ Dependencies
 Overview
 ^^^^^^^^
 
-PyFR |release| has a hard dependency on Python 2.7. PyFR |release| does
-not currently support Microsoft Windows. To run PyFR |release| it is
-necessary to install the following Python packages:
+PyFR |release| has a hard dependency on Python 2.7 and the following
+Python packages:
 
 1. `mako <http://www.makotemplates.org/>`_
 2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
 3. `numpy <http://www.numpy.org/>`_ >= 1.8
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 
-To run PyFR in parallel it is also necessary to have either
-`metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0 or
-`scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
-installed.
+To run PyFR |release| in parallel it is also necessary to have one of the following installed:
 
-OpenMP Backend
-^^^^^^^^^^^^^^
+1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
+2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+
+PyFR |release| does not currently support Microsoft Windows. 
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -98,12 +96,14 @@ available:
 
 1. ``pyfr-mesh convert`` --- convert a `Gmsh
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
+   
    Example::
 
         pyfr-mesh convert mesh.msh mesh.pyfrm
 
-2. ``pyfr-mesh partition`` --- Partition an existing mesh and
+2. ``pyfr-mesh partition`` --- partition an existing mesh and
    associated solution files.
+   
    Example::
 
        pyfr-mesh partition 2 mesh.pyfrm solution.pyfrs .
