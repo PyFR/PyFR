@@ -22,10 +22,10 @@
 
 % if visc_corr == 'sutherland':
     // Compute the temperature and viscosity
-    fpdtype_t T = ${c['gamma']/c['cp']}*(rcprho*E - 0.5*(u*u + v*v));
-    fpdtype_t Trat = ${1/c['Tref']}*T;
-    fpdtype_t mu_c = ${c['mu']*(c['Tref'] + c['Ts'])}*Trat*sqrt(Trat)
-                   / (T + ${c['Ts']});
+    fpdtype_t cpT = ${c['gamma']}*(rcprho*E - 0.5*(u*u + v*v));
+    fpdtype_t Trat = ${1/c['cpTref']}*cpT;
+    fpdtype_t mu_c = ${c['mu']*(c['cpTref'] + c['cpTs'])}*Trat*sqrt(Trat)
+                   / (cpT + ${c['cpTs']});
 % else:
     fpdtype_t mu_c = ${c['mu']};
 % endif
@@ -75,10 +75,10 @@
 
 % if visc_corr == 'sutherland':
     // Compute the temperature and viscosity
-    fpdtype_t T = ${c['gamma']/c['cp']}*(rcprho*E - 0.5*(u*u + v*v + w*w));
-    fpdtype_t Trat = ${1/c['Tref']}*T;
-    fpdtype_t mu_c = ${c['mu']*(c['Tref'] + c['Ts'])}*Trat*sqrt(Trat)
-                   / (T + ${c['Ts']});
+    fpdtype_t cpT = ${c['gamma']}*(rcprho*E - 0.5*(u*u + v*v + w*w));
+    fpdtype_t Trat = ${1/c['cpTref']}*cpT;
+    fpdtype_t mu_c = ${c['mu']*(c['cpTref'] + c['cpTs'])}*Trat*sqrt(Trat)
+                   / (cpT + ${c['cpTs']});
 % else:
     fpdtype_t mu_c = ${c['mu']};
 % endif

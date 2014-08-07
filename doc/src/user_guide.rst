@@ -221,9 +221,16 @@ Sets constants used in the simulation. Options:
 
 1. ``gamma`` --- ratio of specific heats
 
-2. ``mu`` --- dynamic viscosity
+2. ``mu`` --- dynamic viscosity (used as reference viscosity
+   when using Sutherland's Law viscosity-correction option)
 
 3. ``Pr`` --- Prandlt number
+
+4. ``cpTref`` --- specific heat at constant pressure*reference
+   temperature (only required for Sutherland's Law)
+
+5. ``cpTs`` --- specific heat at constant pressure*Sutherland
+   temperature (only required for Sutherland's Law)
 
 Example::
 
@@ -242,6 +249,11 @@ Parameterizes the solver. Options:
     ``euler | navier-stokes``
 
 2. ``order`` --- order of polynomial solution basis
+
+3. ``viscosity-correction`` --- viscosity-correction option used
+   (default: none):
+
+    ``none | sutherland``
 
 Example::
 
