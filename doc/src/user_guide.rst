@@ -1,3 +1,5 @@
+.. highlightlang:: none
+
 **********
 User Guide
 **********
@@ -8,7 +10,7 @@ Getting Started
 Downloading the Source
 ----------------------
 
-PyFR can be obtained `here <http://www.pyfr.org/download.php>`_
+PyFR can be obtained `here <http://www.pyfr.org/download.php>`_.
 
 Dependencies
 ------------
@@ -16,28 +18,20 @@ Dependencies
 Overview
 ^^^^^^^^
 
-PyFR |release| has a hard dependency on Python 2.7. PyFR |release| does
-not currently support Microsoft Windows. To run PyFR |release| it is
-necessary to install the following Python packages:
+PyFR |release| has a hard dependency on Python 2.7 and the following
+Python packages:
 
 1. `mako <http://www.makotemplates.org/>`_
 2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
 3. `numpy <http://www.numpy.org/>`_ >= 1.8
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 
-To run PyFR in parallel it is also necessary to have either
-`metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0 or
-`scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
-installed.
+To run PyFR |release| in parallel it is also necessary to have one of the following installed:
 
-OpenMP Backend
-^^^^^^^^^^^^^^
+1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
+2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
 
-The OpenMP backend targets multi-core CPUs. The backend requires:
-
-1. GCC >= 4.7
-2. A BLAS library compiled as a shared library
-   (e.g. `OpenBLAS <http://www.openblas.net/>`_)
+PyFR |release| does not currently support Microsoft Windows. 
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -58,15 +52,23 @@ AMD and NVIDIA. The backend requires:
 2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_ >= 2013.2
 3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
+OpenMP Backend
+^^^^^^^^^^^^^^
+
+The OpenMP backend targets multi-core CPUs. The backend requires:
+
+1. GCC >= 4.7
+2. A BLAS library compiled as a shared library
+   (e.g. `OpenBLAS <http://www.openblas.net/>`_)
+
 Installation
 ------------
 
 Before running PyFR |release| it is first necessary to either install
 the software using the provided ``setup.py`` installer or add the root
-PyFR directory to ``PYTHONPATH``::
+PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
-    user@computer ~/PyFR$ python pyfr/scripts/pyfr-sim --help
 
 Running PyFR
 ============
@@ -92,14 +94,16 @@ PyFR-Mesh
 ``pyfr-pmesh`` is for pre-processing. The following sub-tools are
 available:
 
-1. ``pyfr-mesh convert`` --- Convert a `Gmsh
+1. ``pyfr-mesh convert`` --- convert a `Gmsh
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
+   
    Example::
 
         pyfr-mesh convert mesh.msh mesh.pyfrm
 
-2. ``pyfr-mesh partition`` --- Partition an existing mesh and
+2. ``pyfr-mesh partition`` --- partition an existing mesh and
    associated solution files.
+   
    Example::
 
        pyfr-mesh partition 2 mesh.pyfrm solution.pyfrs .
@@ -116,11 +120,11 @@ Overview
 
 ``pyfr-sim`` is the solver. The following sub-tools are available:
 
-1. ``pyfr-sim run`` --- Start a new PyFR simulation. Example::
+1. ``pyfr-sim run`` --- start a new PyFR simulation. Example::
 
         pyfr-sim run mesh.pyfrm configuration.ini
-
-2. ``pyfr-sim restart`` --- Restart a PyFR simulation from an existing
+        
+2. ``pyfr-sim restart`` --- restart a PyFR simulation from an existing 
    solution file. Example::
 
         pyfr-sim restart mesh.pyfrm solution.pyfrs
@@ -143,22 +147,22 @@ PyFR-PostP
 ``pyfr-postp`` is for post-processing. The following sub-tools are
 available:
 
-1. ``pyfr-postp convert`` --- Convert a PyFR .pyfrs file into an
+1. ``pyfr-postp convert`` --- convert a PyFR .pyfrs file into an
    unstructured VTK .vtu file. Example::
 
         pyfr-postp convert mesh.pyfrm solution.pyfrs solution.vtu divide
 
-2. ``pyfr-postp pack`` --- Swap between the pyfr-dir and pyfr-file
+2. ``pyfr-postp pack`` --- swap between the pyfr-dir and pyfr-file
    format. Example::
 
         pyfr-postp pack solution_directory.pyfrs solution_file.pyfrs
 
-3. ``pyfr-postp time-avg`` --- Time-average a series of PyFR solution
+3. ``pyfr-postp time-avg`` --- time-average a series of PyFR solution
    files. Example::
 
         pyfr-postp time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
 
-4. ``pyfr-postp unpack`` --- Swap between the pyfr-file and pyfr-dir
+4. ``pyfr-postp unpack`` --- swap between the pyfr-file and pyfr-dir
    format. Example::
 
         pyfr-postp unpack solution_file.pyfrs solution_directory.pyfrs
@@ -181,11 +185,11 @@ their associated parameters are described below.
 [backend]
 ^^^^^^^^^
 
-Parameterizes the backend. Options:
+Parameterises the backend with
 
 1. ``precision`` --- number precision:
 
-    ``single | double``
+    ``single`` | ``double``
 
 2. ``rank-allocator`` --- MPI rank allocator:
 
@@ -197,16 +201,60 @@ Example::
     precision = double
     rank-allocator = linear
 
+[backend-cuda]
+^^^^^^^^^^^^^^
+
+Parameterises the CUDA backend with
+
+1. ``device-id`` --- method for selecting which device(s) to run on:
+
+     *int* | ``round-robin`` | ``local-rank``
+    
+Example::
+
+    [backend-cuda]
+    device-id = round-robin
+
+[backend-opencl]
+^^^^^^^^^^^^^^^^
+
+Parameterises the OpenCL backend with
+
+1. ``platform-id`` --- for selecting platform id:
+
+    *int* | *string*
+    
+2. ``device-type`` --- for selecting what type of device(s) to run on:
+
+    ``all`` | ``cpu`` | ``gpu`` | ``accelerator``
+    
+3. ``device-id`` --- for selecting which device(s) to run on:
+
+    *int* | *string* | ``local-rank``
+    
+Example::
+
+    [backend-opencl]
+    platform-id = 0
+    device-type = gpu
+    device-id = local-rank
+
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
 
-Parameterizes the OpenMP backend. Options:
+Parameterises the OpenMP backend with
 
 1. ``cc`` --- C compiler
 
+    *string*
+
 2. ``cblas-st`` --- path to shared single-threaded C BLAS library
 
+    *string*
+
 3. ``cblas-mt`` --- path to shared multi-threaded C BLAS library
+
+    *string*
 
 Example::
 
@@ -217,13 +265,19 @@ Example::
 [constants]
 ^^^^^^^^^^^
 
-Sets constants used in the simulation. Options:
+Sets constants used in the simulation with
 
 1. ``gamma`` --- ratio of specific heats
 
+    *float*
+
 2. ``mu`` --- dynamic viscosity
 
-3. ``Pr`` --- Prandlt number
+    *float*
+
+3. ``Pr`` --- Prandtl number
+
+    *float*
 
 Example::
 
@@ -235,28 +289,40 @@ Example::
 [solver]
 ^^^^^^^^
 
-Parameterizes the solver. Options:
+Parameterises the solver with
 
 1. ``system`` --- governing system:
 
-    ``euler | navier-stokes``
+    ``euler`` | ``navier-stokes``
 
 2. ``order`` --- order of polynomial solution basis
+
+    *int*
+
+3. ``anti-alias`` --- type of anti-aliasing:
+
+    ``flux`` | ``div-flux`` | ``flux, div-flux``
+
+4. ``viscosity-correction`` --- viscosity correction
+
+    ``none`` | ``sutherland``
 
 Example::
 
     [solver]
     system = navier-stokes
     order = 3
+    anti-alias = flux
+    viscosity-correction = none
 
 [solver-time-integrator]
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the time-integration scheme used by the solver. Options:
+Parameterises the time-integration scheme used by the solver with
 
 1. ``scheme`` --- time-integration scheme:
 
-    ``euler | rk4 | rk45 | dopri5``
+    ``euler`` | ``rk4`` | ``rk45`` | ``dopri5``
 
 2. ``controller`` --- time-step size controller:
 
@@ -264,7 +330,11 @@ Parameterizes the time-integration scheme used by the solver. Options:
 
 3. ``t0`` --- initial time
 
+    *float*
+
 4. ``dt`` --- time-step
+
+    *float*
 
 Example::
 
@@ -277,15 +347,19 @@ Example::
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the interfaces. Options:
+Parameterises the interfaces with
 
-1. ``riemann-solver`` --- Riemann solver:
+1. ``riemann-solver`` --- type of Riemann solver:
 
-    ``rusanov``
+    ``rusanov`` | ``hll``
 
 2. ``ldg-beta`` --- beta parameter used for LDG
 
+    *float*
+
 3. ``ldg-tau`` --- tau parameter used for LDG
+
+    *float*
 
 Example::
 
@@ -297,11 +371,11 @@ Example::
 [solver-interfaces-line]
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the line interfaces. Options:
+Parameterises the line interfaces with
 
 1. ``flux-pts`` --- location of the flux points on a line interface:
 
-    ``gauss-legendre | gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
 Example::
 
@@ -311,7 +385,7 @@ Example::
 [solver-interfaces-tri]
 ^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the triangular interfaces. Options:
+Parameterises the triangular interfaces with
 
 1. ``flux-pts`` --- location of the flux points on a triangular
    interface:
@@ -326,12 +400,12 @@ Example::
 [solver-interfaces-quad]
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the quadrilateral interfaces. Options:
+Parameterises the quadrilateral interfaces with
 
 1. ``flux-pts`` --- location of the flux points on a quadrilateral
    interface:
 
-    ``gauss-legendre | gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``   
 
 Example::
 
@@ -341,10 +415,20 @@ Example::
 [solver-elements-tri]
 ^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the triangular elements. Options:
+Parameterises the triangular elements with
 
-1. ``soln-pts`` --- location of the solution points in a triangular
+1. ``soln-pts`` --- location of the solution points in a triangular 
    element:
+
+    ``williams-shunn``
+    
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a 
+   triangular element:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a 
+   triangular element:
 
     ``williams-shunn``
 
@@ -352,44 +436,80 @@ Example::
 
     [solver-elements-tri]
     soln-pts = williams-shunn
+    quad-deg = 10
+    quad-pts = williams-shunn
 
 [solver-elements-quad]
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the quadrilateral elements. Options:
+Parameterises the quadrilateral elements with
 
-1. ``soln-pts`` --- location of the solution points in a quadrilateral
+1. ``soln-pts`` --- location of the solution points in a quadrilateral 
    element:
 
-    ``gauss-legendre | gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a 
+   quadrilateral element:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a 
+   quadrilateral element:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
 Example::
 
     [solver-elements-quad]
     soln-pts = gauss-legendre
-
+    quad-deg = 10
+    quad-pts = gauss-legendre
+    
 [solver-elements-hex]
 ^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the hexahedral elements. Options:
+Parameterises the hexahedral elements with
 
 1. ``soln-pts`` --- location of the solution points in a hexahedral
    element:
 
-    ``gauss-legendre | gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+  
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
+   hexahedral element:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
+   hexahedral element:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
 Example::
 
     [solver-elements-hex]
     soln-pts = gauss-legendre
+    quad-deg = 10
+    quad-pts = gauss-legendre
 
 [solver-elements-tet]
 ^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the tetrahedral elements. Options:
+Parameterises the tetrahedral elements with
 
 1. ``soln-pts`` --- location of the solution points in a tetrahedral
    element:
+
+    ``shunn-ham``
+
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
+   tetrahedral element:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
+   tetrahedral element:
 
     ``shunn-ham``
 
@@ -397,38 +517,59 @@ Example::
 
     [solver-elements-tet]
     soln-pts = shunn-ham
+    quad-deg = 10
+    quad-pts = shunn-ham
 
 [solver-elements-pri]
 ^^^^^^^^^^^^^^^^^^^^^
 
-Parameterizes the prismatic elements. Options:
+Parameterises the prismatic elements with
 
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
-    ``williams-shunn~gauss-legendre |
-    williams-shunn~gauss-legendre-lobatto``
+    ``williams-shunn~gauss-legendre`` | 
+    ``williams-shunn~gauss-legendre-lobatto``
+  
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
+   prismatic element:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
+   prismatic element:
+
+    ``williams-shunn~gauss-legendre`` | 
+    ``williams-shunn~gauss-legendre-lobatto``
 
 Example::
 
     [solver-elements-pri]
     soln-pts = williams-shunn~gauss-legendre
+    quad-deg = 10
+    quad-pts = williams-shunn~gauss-legendre
 
 [soln-output]
 ^^^^^^^^^^^^^^^
 
-Parameterizes the solver output. Options:
+Parameterises the solver output with
 
 1. ``format`` --- format of the outputs:
 
-    ``pyfrs-file | pyfrs-dir``
+    ``pyfrs-file`` | ``pyfrs-dir``
 
 2. ``basedir`` --- relative path to directory where outputs will be
    written
+   
+    *string*
 
 3. ``basename`` --- pattern of output names
 
+    *string*
+
 4. ``times`` --- times at which outputs will be dumped
+
+    ``range(`` *float* ``,`` *float* ``,`` *int* ``)``
 
 Example::
 
@@ -438,68 +579,127 @@ Example::
     basename = files_%(t).2f
     times = range(0, 1, 11)
 
-[soln-bcs-{$NAME}]
+[soln-bcs-name]
 ^^^^^^^^^^^^^^^^^^
 
-Parameterizes boundary condition labelled {$NAME} in the .pyfrm file.
-Options:
+Parameterises boundary condition labelled :code:`name` in the .pyfrm
+file with
 
 1. ``type`` --- type of boundary condition:
 
-    ``no-slp-adia-wall | no-slp-aisot-wall | sub-in-frv |
-    sub-in-ftpttang | sub-out-fp | sup-in-fa | sup-out-fn``
+    ``char-riem-inv`` | ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | 
+    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` | 
+    ``sup-in-fa`` | ``sup-out-fn``
 
     where
+    
+    ``char-riem-inv`` requires
+
+        - ``rho`` --- density
+        
+           *float*
+
+        - ``u`` --- x-velocity
+        
+           *float*        
+
+        - ``v`` --- y-velocity
+
+           *float*
+           
+        - ``w`` --- z-velocity
+           
+           *float*
+           
+        - ``p`` --- static pressure
+
+           *float*        
 
     ``no-slp-isot-wall`` requires
 
-        - ``cpTw`` --- product of specific heat capacity at constant
-          pressure and temperature of wall
-
         - ``u`` --- x-velocity of wall
+
+           *float*
 
         - ``v`` --- y-velocity of wall
 
+           *float*
+
         - ``w`` --- z-velocity of wall
+
+           *float*
+           
+        - ``cpTw`` --- product of specific heat capacity at constant
+          pressure and temperature of wall
+
+           *float*           
 
     ``sub-in-frv`` requires
 
         - ``rho`` --- density
 
+           *float*          
+
         - ``u`` --- x-velocity
+
+           *float*          
 
         - ``v`` --- y-velocity
 
+           *float*          
+
         - ``w`` --- z-velocity
+
+           *float*          
 
     ``sub-in-ftpttang`` requires
 
         - ``pt`` --- total pressure
 
+           *float*          
+
         - ``cpTt`` --- product of specific heat capacity at constant
           pressure and total temperature
 
-        - ``theta`` --- azimuth angle of inflow (in degrees) measured in
+           *float*          
+
+        - ``theta`` --- azimuth angle of inflow measured in
           the x-y plane relative to the global positive x-axis
 
-        - ``phi`` --- inclination angle of inflow (in degrees) measured
+           *float*          
+
+        - ``phi`` --- inclination angle of inflow measured
           relative to the global positive z-axis
+
+           *float*
 
     ``sub-out-fp`` requires
 
         - ``p`` --- static pressure
 
+           *float*  
+
     ``sup-in-fa`` requires
 
         - ``rho`` --- density
 
+           *float*  
+
         - ``u`` --- x-velocity
+
+           *float*  
 
         - ``v`` --- y-velocity
 
+           *float*  
+
         - ``w`` --- z-velocity
 
+           *float*  
+
         - ``p`` --- static pressure
+
+           *float*  
 
 Example::
 
@@ -511,17 +711,27 @@ Example::
 [soln-ics]
 ^^^^^^^^^^
 
-Parameterizes the initial conditions. Options:
+Parameterises the initial conditions with
 
 1. ``rho`` --- initial density distribution
 
+    *string*
+
 2. ``u`` --- initial x-velocity distribution
+
+    *string*
 
 3. ``v`` --- initial y-velocity distribution
 
+    *string*
+
 4. ``w`` --- initial z-velocity distribution
 
+    *string*
+
 5. ``p`` --- initial static pressure distribution
+
+    *string*
 
 Example::
 

@@ -1,136 +1,167 @@
-###############
+.. highlightlang:: python
+
+***************
 Developer Guide
-###############
+***************
 
-************
-Introduction
-************
+=========
+PyFR-Mako
+=========
 
-A detailed developer guide is provided below
+Overview
+--------
 
+Platform portability of PyFR is achieved, in part, via use of an
+inbuilt templating language derived from `Mako
+<http://www.makotemplates.org/>`_, henceforth referred to as PyFR-Mako.
+Non-linear point-wise functionality is specified using PyFR-Mako.
+PyFR-Mako specifications are then converted into platform specific
+low-level code at runtime, which is compiled/linked/loaded.
 
-.. _devg-internal-file-formats:
+PyFR-Mako Kernels
+-----------------
 
-*********************
-Internal File Formats
-*********************
+PyFR-Mako kernels are specifications of point-wise functionality that
+can be invoked directly from within PyFR. They are opened with a header
+of the form::
 
-Mesh Format (.pyfrm)
-====================
+    <%pyfr:kernel name='kernel-name' ndim='data-dimensionality' [argument-name='argument-intent argument-attribute argument-data-type' ...]>
+                      
+where 
 
-Solution Format (.pyfrs)
-========================
+1. ``kernel-name`` --- name of kernel
 
-**********
-Unit Tests
-**********
+    *string*
+    
+2. ``data-dimensionality`` --- dimensionality of data
 
-****
-Code
-****
+    *int*
+    
+3. ``argument-name`` --- name of argument
 
-Backend Interface
-=================
+    *string*
+    
+4. ``argument-intent`` --- intent of argument
 
-All of the backends in PyFR implement a common interface.  This
-interface is based around the `factory method pattern
-<http://en.wikipedia.org/wiki/Factory_method_pattern>`_ and consists
-of a ``Backend`` class (the factory) and a series of types (products
-of the factory).  Broadly speaking these types can be placed into one
-of three categories: matrices, kernels and queues.
+    ``in`` | ``out`` | ``inout``
+    
+5. ``argument-attribute`` --- attribute of argument
 
-All algorithms in PyFR are implemented according to the following
-procedure.  Firstly a series of matrices are allocated and populated
-with suitable initial values. Next a set of kernels are defined to
-operate these matrices.  Then one or more queues are allocated to
-execute these kernels.  Finally, these queues are populated with the
-relevant kernels and run.  As an example of this process consider
-matrix multiplication::
+    ``mpi`` | ``scalar`` | ``view``
+        
+6. ``argument-data-type`` --- data type of argument
 
-  import numpy as np
+    *string*
+    
+and are closed with a footer of the form::
 
-  # Take be to be a concrete Backend instance
-  be = get_a_backend()
+     </%pyfr:kernel>
 
-  # Allocate two 1024 by 1024 matrices filled with random numbers
-  m1 = be.const_matrix(np.random.rand(1024, 1024))
-  m2 = be.const_matrix(np.random.rand(1024, 1024))
+PyFR-Mako Macros
+----------------
 
-  # Allocate a third empty matrix
-  m3 = be.matrix(1024, 1024)
+PyFR-Mako macros are specifications of point-wise functionality that
+cannot be invoked directly from within PyFR, but can be embedded into
+PyFR-Mako kernels. PyFR-Mako macros can be viewed as building blocks
+for PyFR-mako kernels. They are opened with a header of the form::
 
-  # Prepare a kernel to multiply m1 by m2 putting the result in m3
-  mmul = be.kernel('mul', m1, m2, out=m3)
+    <%pyfr:macro name='macro-name' params='[parameter-name, ...]'>
+                      
+where
 
-  # Allocate a queue
-  q = be.queue()
+1. ``macro-name`` --- name of macro
 
-  # Populate the queue with `mmul` and run it
-  q % [mmul]
+    *string*
+    
+2. ``parameter-name`` --- name of parameter
 
-.. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.Backend
-    :members:
+    *string*
+    
+and are closed with a footer of the form::
 
-.. autoclass:: pyfr.backends.base.Matrix
-    :members:
-    :inherited-members:
+    </%pyfr:macro>
+    
+PyFR-Mako macros are embedded within a kernel using an expression of
+the following form::
 
-.. autoclass:: pyfr.backends.base.ConstMatrix
-    :members:
-    :inherited-members:
+    ${pyfr.expand('macro-name', ['parameter-name', ...])};
+    
+where
 
-.. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.SparseMatrix
-    :members:
-    :inherited-members:
+1. ``macro-name`` --- name of the macro
 
-.. autoclass:: pyfr.backends.base.MPIMatrix
-    :members:
-    :inherited-members:
+    *string*
+    
+2. ``parameter-name`` --- name of parameter
 
-.. autoclass:: pyfr.backends.base.MatrixBank()
-    :members:
-    :inherited-members:
-
-.. autoclass:: pyfr.backends.base.View
-    :members:
-
-.. autoclass:: pyfr.backends.base.MPIView
-    :members:
-
-.. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.Kernel
-    :members:
-
-.. autoclass:: pyfr.backends.base.Queue
-    :members: __lshift__, __mod__
-
-Readers
-=======
-
-Functionality for PyFR to read internal and external file formats is provided
-here.
-
-:ref:`devg-internal-file-formats` have two base structures; file and directory.
-These structures allow for convenience and performance respectively, but
-require different treatments. It is the purpose of the
-:py:mod:`pyfr.readers.native` module to present a common and convenient
-interface for general use in PyFR.
-
-Native
+    *string*    
+      
+Syntax
 ------
 
-.. automodule:: pyfr.readers.native
-    :members:
+Basic Functionality
+^^^^^^^^^^^^^^^^^^^
 
-Gmsh
-----
+Basic functionality can be expressed using a restricted subset of the C
+programming language. Specifically, use of the following is allowed:
 
-Utilities
----------
+1. ``+,-,*,/`` --- basic arithmetic
 
-Documentation for the utility modules contained in the readers folder.
+2. ``sin, cos, tan`` --- basic trigonometric functions
 
-Node Maps
-^^^^^^^^^
+3. ``exp`` --- exponential
 
-.. automodule:: pyfr.readers.nodemaps
-    :members:
+4. ``pow`` --- power
+
+5. ``fabs`` --- absolute value
+
+6. ``output = ( condition ? satisfied : unsatisfied )`` --- ternary if
+
+However, conditional if statements, as well as for/while loops, are
+not allowed.
+
+Expression Substitution
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Mako expression substitution can be used to facilitate PyFR-Mako kernel
+specification. A Python expression :code:`expression` prescribed thus
+:code:`${expression}` is substituted for the result when the PyFR-Mako
+kernel specification is interpreted at runtime.
+
+Example::
+
+        E = s[${ndims - 1}]
+
+Conditionals
+^^^^^^^^^^^^
+
+Mako conditionals can be used to facilitate PyFR-Mako kernel
+specification. Conditionals are opened with :code:`% if condition:` and
+closed with :code:`% endif`. Note that such conditionals are evaluated
+when the PyFR-Mako kernel specification is interpreted at runtime, they
+are not embedded into the low-level kernel.
+
+Example::
+
+        % if ndims == 2:
+            fout[0][1] += t_xx;     fout[1][1] += t_xy;
+            fout[0][2] += t_xy;     fout[1][2] += t_yy;
+            fout[0][3] += u*t_xx + v*t_xy + ${-c['mu']*c['gamma']/c['Pr']}*T_x;
+            fout[1][3] += u*t_xy + v*t_yy + ${-c['mu']*c['gamma']/c['Pr']}*T_y;
+        % endif
+     
+Loops
+^^^^^
+
+Mako loops can be used to facilitate PyFR-Mako kernel specification.
+Loops are opened with :code:`% for condition:` and closed with :code:`%
+endfor`. Note that such loops are unrolled when the PyFR-Mako kernel
+specification is interpreted at runtime, they are not embedded into the
+low-level kernel.
+
+Example::
+
+        % for i in range(ndims):
+            rhov[${i}] = s[${i + 1}];
+            v[${i}] = invrho*rhov[${i}];
+        % endfor
