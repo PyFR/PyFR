@@ -130,7 +130,7 @@ kernel specification is interpreted at runtime.
 
 Example::
 
-        E = s[${nvars - 1}]
+        E = s[${ndims - 1}]
 
 Conditionals
 ^^^^^^^^^^^^

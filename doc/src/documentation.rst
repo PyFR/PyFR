@@ -66,7 +66,7 @@ matrix multiplication::
   q = be.queue()
 
   # Populate the queue with `mmul` and run it
-  q % [mmul]
+  q % [mmul()]
 
 .. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.Backend
     :members:
