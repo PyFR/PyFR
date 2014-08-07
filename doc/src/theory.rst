@@ -8,28 +8,30 @@ Flux Reconstruction
 Overview
 --------
 
-High-order numerical methods for unstructured grids combine the superior
-accuracy of high-order spectral or finite difference methods with the
-geometrical flexibility of low-order finite volume or finite element schemes.
-The Flux Reconstruction (FR) approach unifies various high-order schemes for
-unstructured grids within a single framework. Additionally, the FR approach
-exhibits a significant degree of element locality, and is thus able to run
-efficiently on modern streaming architectures, such as Graphical Processing
-Units (GPUs). The aforementioned properties of FR mean it offers a promising
-route to performing affordable, and hence industrially relevant,
-scale-resolving simulations of hitherto intractable unsteady flows (involving
-separation, acoustics etc.) within the vicinity of real-world engineering
-geometries. An detailed overview of the FR approach is given in:
+High-order numerical methods for unstructured grids combine the
+superior accuracy of high-order spectral or finite difference methods
+with the geometrical flexibility of low-order finite volume or finite
+element schemes. The Flux Reconstruction (FR) approach unifies various
+high-order schemes for unstructured grids within a single framework.
+Additionally, the FR approach exhibits a significant degree of element
+locality, and is thus able to run efficiently on modern streaming
+architectures, such as Graphical Processing Units (GPUs). The
+aforementioned properties of FR mean it offers a promising route to
+performing affordable, and hence industrially relevant, scale-resolving
+simulations of hitherto intractable unsteady flows (involving
+separation, acoustics etc.) within the vicinity of real-world
+engineering geometries. An detailed overview of the FR approach is
+given in:
 
-- `A Flux Reconstruction Approach to High-Order Schemes Including Discontinuous
-  Galerkin Methods. H. T. Huynh. AIAA Paper 2007-4079
+- `A Flux Reconstruction Approach to High-Order Schemes Including 
+  Discontinuous Galerkin Methods. H. T. Huynh. AIAA Paper 2007-4079
   <http://arc.aiaa.org/doi/abs/10.2514/6.2007-4079>`_
 
 Linear Stability
 ----------------
 
-The linear stability of an FR schemes depends on the form of the correction
-function. Linear stability issues are discussed in:
+The linear stability of an FR schemes depends on the form of the
+correction function. Linear stability issues are discussed in:
 
 - `A New Class of High-Order Energy Stable Flux Reconstruction Schemes.
   P. E. Vincent, P. Castonguay, A. Jameson. Journal of Scientific Computing,
