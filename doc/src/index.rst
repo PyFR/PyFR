@@ -1,3 +1,5 @@
+.. highlightlang:: none
+
 ####
 PyFR
 ####
