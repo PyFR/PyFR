@@ -158,7 +158,8 @@ class BaseElements(object):
 
     @memoize
     def opmat(self, expr):
-        return self._be.const_matrix(self._basis.opmat(expr), tags={expr})
+        return self._be.const_matrix(self._basis.opmat(expr),
+                                     tags={expr, 'align'})
 
     @memoize
     def smat_at(self, name):
