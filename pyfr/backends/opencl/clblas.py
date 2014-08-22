@@ -80,14 +80,6 @@ class OpenCLClBLASKernels(object):
 
         m, n, k = a.nrow, b.ncol, a.ncol
 
-        # In the case of a being constant we can improve the memory
-        # access pattern of GEMM by tranposing it
-        if 'const' in a.tags:
-            a = a.backend.const_matrix(a.get().T)
-            opA = w.clblasTrans
-        else:
-            opA = w.clblasNoTrans
-
         if a.dtype == np.float64:
             clblasgemm = w.clblasDgemm
         else:
@@ -95,7 +87,7 @@ class OpenCLClBLASKernels(object):
 
         class MulKernel(ComputeKernel):
             def run(self, qcomp, qcopy):
-                clblasgemm(w.clblasRowMajor, opA, w.clblasNoTrans,
+                clblasgemm(w.clblasRowMajor, w.clblasNoTrans, w.clblasNoTrans,
                            m, n, k, alpha,
                            a, 0, a.leaddim,
                            b, 0, b.leaddim, beta,
