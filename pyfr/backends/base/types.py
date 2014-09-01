@@ -2,7 +2,7 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import Sequence
- 
+
 import numpy as np
 
 
@@ -43,9 +43,6 @@ class MatrixBase(object):
         self.pitch = self.leaddim*self.itemsize
         self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
-        # Allocate
-        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
-
         # Process the initial value
         if initval is not None:
             if initval.shape != self.ioshape:
@@ -54,6 +51,9 @@ class MatrixBase(object):
             self._initval = np.asanyarray(initval, dtype=self.dtype)
         else:
             self._initval = None
+
+        # Allocate
+        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value
@@ -72,8 +72,6 @@ class MatrixBase(object):
 
 
 class Matrix(MatrixBase):
-    """Matrix abstract base class
-    """
     _base_tags = {'dense'}
 
     def set(self, ary):
@@ -123,18 +121,14 @@ class MatrixRSlice(object):
 
 
 class ConstMatrix(MatrixBase):
-    """Constant matrix abstract base class"""
     _base_tags = {'const', 'dense'}
 
 
 class MPIMatrix(Matrix):
-    """MPI matrix abstract base class"""
     pass
 
 
 class MatrixBank(Sequence):
-    """Matrix bank abstract base class"""
-
     def __init__(self, backend, mats, initbank, tags):
         mats = list(mats)
 
@@ -176,7 +170,6 @@ class MatrixBank(Sequence):
 
 
 class View(object):
-    """View abstract base class"""
     __metaclass__ = ABCMeta
 
     @abstractmethod
@@ -187,7 +180,7 @@ class View(object):
         self.rstrides = self.cstrides = None
 
         # Get the different matrices which we map onto
-        self._mats = list(set(matmap.flat))
+        self._mats = [backend.mats[i] for i in np.unique(matmap)]
 
         # Extract the base allocation and data type
         self.basedata = self._mats[0].basedata
@@ -212,7 +205,7 @@ class View(object):
         leaddim = np.empty(self.n, dtype=np.int32)
 
         for m in self._mats:
-            ix = np.where(matmap == m)
+            ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
         # Go from matrices + row/column indcies to displacements
@@ -243,7 +236,6 @@ class MPIView(object):
 
 
 class Queue(object):
-    """Kernel execution queue"""
     __metaclass__ = ABCMeta
 
     def __init__(self, backend):
@@ -251,21 +243,8 @@ class Queue(object):
 
     @abstractmethod
     def __lshift__(self, iterable):
-        """Appends the kernels in *iterable* to the queue
-
-        .. note::
-          This method does **not** execute the kernels, but rather just
-          schedules them.  Queued kernels should be executed by
-          calling :meth:`pyfr.backends.base.Backend.runall`
-        """
         pass
 
     @abstractmethod
     def __mod__(self, iterable):
-        """Synchronously executes the kernels in *iterable*
-
-        .. note::
-          In the (unusual) instance that the queue already has one or
-          more kernels queued these will run first.
-        """
         pass

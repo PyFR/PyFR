@@ -34,6 +34,7 @@ modules = [
     'pyfr.integrators',
     'pyfr.quadrules',
     'pyfr.readers',
+    'pyfr.partitioners',
     'pyfr.scripts',
     'pyfr.solvers',
     'pyfr.solvers.base',

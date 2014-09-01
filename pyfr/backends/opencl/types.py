@@ -3,7 +3,6 @@
 import collections
 import itertools as it
 
-from mpi4py import MPI
 import numpy as np
 import pyopencl as cl
 
@@ -162,6 +161,8 @@ class OpenCLQueue(base.Queue):
             self._cmdqueue_comp.finish()
             self._cmdqueue_copy.finish()
         elif last and last.ktype == 'mpi':
+            from mpi4py import MPI
+
             MPI.Prequest.Waitall(self._mpireqs)
             self._mpireqs = []
 

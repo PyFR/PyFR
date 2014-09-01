@@ -158,7 +158,8 @@ class BaseElements(object):
 
     @memoize
     def opmat(self, expr):
-        return self._be.const_matrix(self._basis.opmat(expr), tags={expr})
+        return self._be.const_matrix(self._basis.opmat(expr),
+                                     tags={expr, 'align'})
 
     @memoize
     def smat_at(self, name):
@@ -244,14 +245,14 @@ class BaseElements(object):
         nfp = self.nfacefpts[fidx]
 
         rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        cstri = [(self._scal_fpts.leadsubdim,)]*nfp
+        cstri = ((self._scal_fpts.leadsubdim,),)*nfp
 
-        return [self._scal_fpts]*nfp, rcmap, cstri
+        return (self._scal_fpts.mid,)*nfp, rcmap, cstri
 
     def get_vect_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
         rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        rcstri = [(self.nfpts, self._vect_fpts.leadsubdim)]*nfp
+        rcstri = ((self.nfpts, self._vect_fpts.leadsubdim),)*nfp
 
-        return [self._vect_fpts]*nfp, rcmap, rcstri
+        return (self._vect_fpts.mid,)*nfp, rcmap, rcstri

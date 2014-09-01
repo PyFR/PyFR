@@ -72,7 +72,7 @@ class BaseSystem(object):
         # explicit expressions in the config file
         if initsoln:
             # Load the config used to produce the solution
-            solncfg = Inifile(initsoln['config'].item())
+            solncfg = Inifile(initsoln['config'])
 
             # Process the solution
             for k, ele in elemap.iteritems():
@@ -87,7 +87,7 @@ class BaseSystem(object):
         return eles, elemap
 
     def _load_int_inters(self, rallocs, mesh, elemap):
-        lhs, rhs = mesh['con_p%d' % rallocs.prank]
+        lhs, rhs = mesh['con_p%d' % rallocs.prank].tolist()
         int_inters = self.intinterscls(self._backend, lhs, rhs, elemap,
                                        self._cfg)
 
@@ -101,7 +101,7 @@ class BaseSystem(object):
         mpi_inters = proxylist([])
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
-            interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)]
+            interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)].tolist()
 
             mpiiface = self.mpiinterscls(self._backend, interarr, rhsmrank,
                                          rallocs, elemap, self._cfg)
@@ -125,8 +125,8 @@ class BaseSystem(object):
 
                 # Instantiate
                 bcclass = bcmap[self._cfg.get(cfgsect, 'type')]
-                bciface = bcclass(self._backend, mesh[f], elemap, cfgsect,
-                                  self._cfg)
+                bciface = bcclass(self._backend, mesh[f].tolist(), elemap,
+                                  cfgsect, self._cfg)
                 bc_inters.append(bciface)
 
         return bc_inters

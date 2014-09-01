@@ -48,6 +48,57 @@ class proxylist(list):
         return proxylist([x(*args, **kwargs) for x in self])
 
 
+class silence(object):
+    def __init__(self, stdout=os.devnull, stderr=os.devnull):
+        self.outfiles = stdout, stderr
+        self.combine = (stdout == stderr)
+
+    def __enter__(self):
+        import sys
+        self.sys = sys
+
+        # Flush
+        sys.__stdout__.flush()
+        sys.__stderr__.flush()
+
+        # Save
+        self.saved_streams = [sys.__stdout__, sys.__stderr__]
+        self.fds = [s.fileno() for s in self.saved_streams]
+        self.saved_fds = [os.dup(f) for f in self.fds]
+
+        # Open the redirects
+        if self.combine:
+            self.new_streams = [open(self.outfiles[0], 'w', 0)]*2
+        else:
+            self.new_streams = [open(f, 'w', 0) for f in self.outfiles]
+
+        self.new_fds = [s.fileno() for s in self.new_streams]
+
+        # Replace
+        os.dup2(self.new_fds[0], self.fds[0])
+        os.dup2(self.new_fds[1], self.fds[1])
+
+    def __exit__(self, *args):
+        sys = self.sys
+
+        # Flush
+        for s in self.saved_streams:
+            s.flush()
+
+        # Restore
+        os.dup2(self.saved_fds[0], self.fds[0])
+        os.dup2(self.saved_fds[1], self.fds[1])
+
+        sys.stdout, sys.stderr = self.saved_streams
+
+        # Clean up
+        self.new_streams[0].close()
+        self.new_streams[1].close()
+
+        os.close(self.saved_fds[0])
+        os.close(self.saved_fds[1])
+
+
 @contextmanager
 def setenv(**kwargs):
     _env = os.environ.copy()
