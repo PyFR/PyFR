@@ -26,12 +26,13 @@ Python packages:
 3. `numpy <http://www.numpy.org/>`_ >= 1.8
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 
-To run PyFR |release| in parallel it is also necessary to have one of the following installed:
+To run PyFR |release| in parallel it is also necessary to have one of
+the following installed:
 
 1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
 2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
 
-PyFR |release| does not currently support Microsoft Windows. 
+PyFR |release| does not currently support Microsoft Windows.
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -96,14 +97,14 @@ available:
 
 1. ``pyfr-mesh convert`` --- convert a `Gmsh
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
-   
+
    Example::
 
         pyfr-mesh convert mesh.msh mesh.pyfrm
 
 2. ``pyfr-mesh partition`` --- partition an existing mesh and
    associated solution files.
-   
+
    Example::
 
        pyfr-mesh partition 2 mesh.pyfrm solution.pyfrs .
@@ -123,8 +124,8 @@ Overview
 1. ``pyfr-sim run`` --- start a new PyFR simulation. Example::
 
         pyfr-sim run mesh.pyfrm configuration.ini
-        
-2. ``pyfr-sim restart`` --- restart a PyFR simulation from an existing 
+
+2. ``pyfr-sim restart`` --- restart a PyFR simulation from an existing
    solution file. Example::
 
         pyfr-sim restart mesh.pyfrm solution.pyfrs
@@ -209,7 +210,7 @@ Parameterises the CUDA backend with
 1. ``device-id`` --- method for selecting which device(s) to run on:
 
      *int* | ``round-robin`` | ``local-rank``
-    
+
 Example::
 
     [backend-cuda]
@@ -223,15 +224,15 @@ Parameterises the OpenCL backend with
 1. ``platform-id`` --- for selecting platform id:
 
     *int* | *string*
-    
+
 2. ``device-type`` --- for selecting what type of device(s) to run on:
 
     ``all`` | ``cpu`` | ``gpu`` | ``accelerator``
-    
+
 3. ``device-id`` --- for selecting which device(s) to run on:
 
     *int* | *string* | ``local-rank``
-    
+
 Example::
 
     [backend-opencl]
@@ -283,12 +284,12 @@ Sets constants used in the simulation with
    reference temperature for Sutherland's Law
 
    *float*
-   
+
 5. ``cpTs`` --- product of specific heat at constant pressure and
    Sutherland temperature for Sutherland's Law
 
    *float*
-  
+
 Example::
 
     [constants]
@@ -415,7 +416,7 @@ Parameterises the quadrilateral interfaces with
 1. ``flux-pts`` --- location of the flux points on a quadrilateral
    interface:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``   
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
 Example::
 
@@ -427,17 +428,17 @@ Example::
 
 Parameterises the triangular elements with
 
-1. ``soln-pts`` --- location of the solution points in a triangular 
+1. ``soln-pts`` --- location of the solution points in a triangular
    element:
 
     ``williams-shunn``
-    
-2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a 
+
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    triangular element:
 
     *int*
 
-3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a 
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    triangular element:
 
     ``williams-shunn``
@@ -454,17 +455,17 @@ Example::
 
 Parameterises the quadrilateral elements with
 
-1. ``soln-pts`` --- location of the solution points in a quadrilateral 
+1. ``soln-pts`` --- location of the solution points in a quadrilateral
    element:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
-    
-2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a 
+
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    quadrilateral element:
 
     *int*
 
-3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a 
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    quadrilateral element:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
@@ -475,7 +476,7 @@ Example::
     soln-pts = gauss-legendre
     quad-deg = 10
     quad-pts = gauss-legendre
-    
+
 [solver-elements-hex]
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -485,7 +486,7 @@ Parameterises the hexahedral elements with
    element:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
-  
+
 2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    hexahedral element:
 
@@ -538,9 +539,9 @@ Parameterises the prismatic elements with
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
-    ``williams-shunn~gauss-legendre`` | 
+    ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto``
-  
+
 2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    prismatic element:
 
@@ -549,7 +550,7 @@ Parameterises the prismatic elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    prismatic element:
 
-    ``williams-shunn~gauss-legendre`` | 
+    ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto``
 
 Example::
@@ -570,7 +571,7 @@ Parameterises the solver output with
 
 2. ``basedir`` --- relative path to directory where outputs will be
    written
-   
+
     *string*
 
 3. ``basename`` --- pattern of output names
@@ -597,33 +598,33 @@ file with
 
 1. ``type`` --- type of boundary condition:
 
-    ``char-riem-inv`` | ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | 
-    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` | 
+    ``char-riem-inv`` | ``no-slp-adia-wall`` | ``no-slp-isot-wall`` |
+    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` |
     ``sup-in-fa`` | ``sup-out-fn``
 
     where
-    
+
     ``char-riem-inv`` requires
 
         - ``rho`` --- density
-        
+
            *float*
 
         - ``u`` --- x-velocity
-        
-           *float*        
+
+           *float*
 
         - ``v`` --- y-velocity
 
            *float*
-           
+
         - ``w`` --- z-velocity
-           
+
            *float*
-           
+
         - ``p`` --- static pressure
 
-           *float*        
+           *float*
 
     ``no-slp-isot-wall`` requires
 
@@ -638,45 +639,45 @@ file with
         - ``w`` --- z-velocity of wall
 
            *float*
-           
+
         - ``cpTw`` --- product of specific heat capacity at constant
           pressure and temperature of wall
 
-           *float*           
+           *float*
 
     ``sub-in-frv`` requires
 
         - ``rho`` --- density
 
-           *float*          
+           *float*
 
         - ``u`` --- x-velocity
 
-           *float*          
+           *float*
 
         - ``v`` --- y-velocity
 
-           *float*          
+           *float*
 
         - ``w`` --- z-velocity
 
-           *float*          
+           *float*
 
     ``sub-in-ftpttang`` requires
 
         - ``pt`` --- total pressure
 
-           *float*          
+           *float*
 
         - ``cpTt`` --- product of specific heat capacity at constant
           pressure and total temperature
 
-           *float*          
+           *float*
 
         - ``theta`` --- azimuth angle of inflow measured in
           the x-y plane relative to the global positive x-axis
 
-           *float*          
+           *float*
 
         - ``phi`` --- inclination angle of inflow measured
           relative to the global positive z-axis
@@ -687,29 +688,29 @@ file with
 
         - ``p`` --- static pressure
 
-           *float*  
+           *float*
 
     ``sup-in-fa`` requires
 
         - ``rho`` --- density
 
-           *float*  
+           *float*
 
         - ``u`` --- x-velocity
 
-           *float*  
+           *float*
 
         - ``v`` --- y-velocity
 
-           *float*  
+           *float*
 
         - ``w`` --- z-velocity
 
-           *float*  
+           *float*
 
         - ``p`` --- static pressure
 
-           *float*  
+           *float*
 
 Example::
 
