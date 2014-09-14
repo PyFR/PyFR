@@ -82,13 +82,15 @@ install_requires = [
     'mako',
     'mpi4py >= 1.3',
     'mpmath >= 0.18',
-    'numpy >= 1.8'
+    'numpy >= 1.8',
+    'pytools >= 2014.3'
 ]
 
 # Soft dependencies
 extras_require = {
     'cuda': ['pycuda >= 2011.2'],
-    'opencl': ['pyopencl >= 2013.2']}
+    'opencl': ['pyopencl >= 2013.2']
+}
 
 # Scripts
 console_scripts = [

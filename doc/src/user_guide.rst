@@ -23,8 +23,9 @@ Python packages:
 
 1. `mako <http://www.makotemplates.org/>`_
 2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-3. `numpy <http://www.numpy.org/>`_ >= 1.8
-4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
+3. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
+4. `numpy <http://www.numpy.org/>`_ >= 1.8
+5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
 
 To run PyFR |release| in parallel it is also necessary to have one of
 the following installed:
