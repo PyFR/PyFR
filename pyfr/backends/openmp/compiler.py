@@ -4,12 +4,13 @@ from abc import ABCMeta, abstractmethod
 from ctypes import CDLL
 import itertools as it
 import os
-import subprocess
 import tempfile
+
+from pytools.prefork import call_capture_output
 
 from pyfr.ctypesutil import platform_libname
 from pyfr.nputil import npdtype_to_ctypestype
-from pyfr.util import chdir, rm
+from pyfr.util import rm
 
 
 class SourceModule(object):
@@ -25,12 +26,11 @@ class SourceModule(object):
         tmpdir = tempfile.mkdtemp(prefix='pyfr-%d-' % next(self._dir_seq))
 
         try:
-            with chdir(tmpdir):
-                # Compile and link the source
-                lname = self._build()
+            # Compile and link the source
+            lname = self._build(tmpdir)
 
-                # Load
-                self._mod = CDLL(os.path.abspath(lname))
+            # Load
+            self._mod = CDLL(os.path.join(tmpdir, lname))
         finally:
             # Unless we're debugging delete the scratch directory
             if 'PYFR_DEBUG_OMP_KEEP_LIBS' not in os.environ:
@@ -45,7 +45,7 @@ class SourceModule(object):
         return fn
 
     @abstractmethod
-    def _build(self):
+    def _build(self, tmpdir):
         pass
 
 
@@ -57,12 +57,12 @@ class GccSourceModule(SourceModule):
         # Delegate
         super(GccSourceModule, self).__init__(src, cfg)
 
-    def _build(self):
+    def _build(self, tmpdir):
         # File names
         cn, on, ln = 'tmp.c', 'tmp.o', platform_libname('tmp')
 
         # Write the source code out
-        with open(cn, 'w') as f:
+        with open(os.path.join(tmpdir, cn), 'w') as f:
             f.write(self._src)
 
         # Compile
@@ -73,13 +73,13 @@ class GccSourceModule(SourceModule):
                '-fopenmp',       # Enable OpenMP support
                '-fPIC',          # Position-independent code for shared lib
                '-c', '-o', on, cn]
-        out = subprocess.check_call(cmd, stderr=subprocess.STDOUT)
+        call_capture_output(cmd, cwd=tmpdir)
 
         # Link
         cmd = [self._cc,
                '-shared',   # Create a shared library
                '-fopenmp',  # Required for OpenMP
                '-o', ln, on,]
-        out = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        call_capture_output(cmd, cwd=tmpdir)
 
         return ln
