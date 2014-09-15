@@ -71,20 +71,7 @@ class OpenMPMPIView(base.MPIView):
 
 
 class OpenMPView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
-        super(OpenMPView, self).__init__(backend, matmap, rcmap, stridemap,
-                                         vshape, tags)
-
-        self.mapping = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                        self.mapping, None, None, tags)
-
-        if self.nvcol > 1:
-            self.cstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                             self.cstrides, None, None, tags)
-
-        if self.nvrow > 1:
-            self.rstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                             self.rstrides, None, None, tags)
+    pass
 
 
 class OpenMPQueue(base.Queue):

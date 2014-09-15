@@ -70,20 +70,7 @@ class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
 
 
 class CUDAView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
-        super(CUDAView, self).__init__(backend, matmap, rcmap, stridemap,
-                                       vshape, tags)
-
-        self.mapping = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                      self.mapping, None, None, tags)
-
-        if self.nvcol > 1:
-            self.cstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                           self.cstrides, None, None, tags)
-
-        if self.nvrow > 1:
-            self.rstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                           self.rstrides, None, None, tags)
+    pass
 
 
 class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):

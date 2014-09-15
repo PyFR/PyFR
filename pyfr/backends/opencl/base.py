@@ -54,6 +54,7 @@ class OpenCLBackend(BaseBackend):
                                           types)
 
         # Register our data types
+        self.base_matrix_cls = types.OpenCLMatrixBase
         self.const_matrix_cls = types.OpenCLConstMatrix
         self.matrix_cls = types.OpenCLMatrix
         self.matrix_bank_cls = types.OpenCLMatrixBank
