@@ -187,9 +187,6 @@ class MatrixBank(Sequence):
 
 
 class View(object):
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
     def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
@@ -225,17 +222,26 @@ class View(object):
             ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
-        # Go from matrices + row/column indcies to displacements
+        # Go from matrices + (row, column) indcies to displacements
         # relative to the base allocation address
-        self.mapping = (offset + rcmap[:,0]*leaddim + rcmap[:,1])[None,:]
+        mapping = (offset + rcmap[:,0]*leaddim + rcmap[:,1])[None,:]
+        self.mapping = backend.base_matrix_cls(
+            backend, np.int32, (1, self.n), mapping, None, None, tags
+        )
 
         # Row strides
         if self.nvrow > 1:
-            self.rstrides = (stridemap[:,0]*leaddim)[None,:]
+            rstrides = (stridemap[:,0]*leaddim)[None,:]
+            self.rstrides = backend.base_matrix_cls(
+                backend, np.int32, (1, self.n), rstrides, None, None, tags
+            )
 
         # Column strides
         if self.nvcol > 1:
-            self.cstrides = stridemap[:,-1][None,:]
+            cstrides = stridemap[:,-1][None,:]
+            self.cstrides = backend.base_matrix_cls(
+                backend, np.int32, (1, self.n), cstrides, None, None, tags
+            )
 
 
 class MPIView(object):
