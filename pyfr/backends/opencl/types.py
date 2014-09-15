@@ -86,10 +86,10 @@ class OpenCLView(base.View):
 
 
 class OpenCLMPIMatrix(OpenCLMatrix, base.MPIMatrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         # Call the standard matrix constructor
         super(OpenCLMPIMatrix, self).__init__(backend, ioshape, initval,
-                                              extent, tags)
+                                              extent, aliases, tags)
 
         # Allocate an empty buffer on the host for MPI to send/recv from
         self.hdata = np.empty((self.nrow, self.ncol), self.dtype)

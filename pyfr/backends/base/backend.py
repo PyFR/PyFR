@@ -154,8 +154,10 @@ class BaseBackend(object):
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
     @recordmat
-    def mpi_matrix(self, ioshape, initval=None, extent=None, tags=set()):
-        return self.mpi_matrix_cls(self, ioshape, initval, extent, tags)
+    def mpi_matrix(self, ioshape, initval=None, extent=None, aliases=None,
+                   tags=set()):
+        return self.mpi_matrix_cls(self, ioshape, initval, extent, aliases,
+                                   tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
         return self.mpi_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
