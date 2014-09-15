@@ -9,8 +9,6 @@ from weakref import WeakValueDictionary, WeakKeyDictionary
 
 import numpy as np
 
-from pyfr.util import ndrange
-
 
 def traits(**tr):
     def traits_tr(fn):
@@ -69,18 +67,19 @@ class BaseBackend(object):
         self.mats = WeakValueDictionary()
         self._mat_counter = count()
 
-        # Pending and committed allocation extents
+        # Aliases and extents
+        self._pend_aliases = {}
         self._pend_extents = defaultdict(list)
         self._comm_extents = set()
 
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
 
-    def malloc(self, obj, nbytes, extent):
+    def malloc(self, obj, extent):
         # If no extent has been specified then autocommit
         if extent is None:
             # Perform the allocation
-            data = self._malloc_impl(nbytes)
+            data = self._malloc_impl(obj.nbytes)
 
             # Fire the callback
             obj.onalloc(data, 0)
@@ -95,29 +94,43 @@ class BaseBackend(object):
                                  .format(extent))
 
             # Append
-            self._pend_extents[extent].append((obj, nbytes))
+            self._pend_extents[extent].append(obj)
+
+            # Permit obj to be aliased
+            self._pend_aliases[obj] = []
+
+    def alias(self, obj, aobj):
+        if obj.nbytes > aobj.nbytes:
+            raise ValueError('Object too large to alias')
+
+        try:
+            obj.onalloc(self._obj_extents[aobj], aobj.offset)
+        except KeyError:
+            self._pend_aliases[aobj].append(obj)
 
     def commit(self):
         for reqs in self._pend_extents.itervalues():
             # Determine the required allocation size
-            sz = sum(nbytes - (nbytes % -self.alignb) for _, nbytes in reqs)
+            sz = sum(obj.nbytes - (obj.nbytes % -self.alignb) for obj in reqs)
 
             # Perform the allocation
             data = self._malloc_impl(sz)
 
             offset = 0
-            for obj, nbytes in reqs:
-                # Fire the objects allocation callback
-                obj.onalloc(data, offset)
+            for obj in reqs:
+                for aobj in [obj] + self._pend_aliases[obj]:
+                    # Fire the objects allocation callback
+                    aobj.onalloc(data, offset)
+
+                    # Retain a (weak) reference to the allocated extent
+                    self._obj_extents[aobj] = data
 
                 # Increment the offset
-                offset += nbytes - (nbytes % -self.alignb)
-
-                # Retain a (weak) reference to the allocated extent
-                self._obj_extents[obj] = data
+                offset += obj.nbytes - (obj.nbytes % -self.alignb)
 
         # Mark the extents as committed and clear
         self._comm_extents.update(self._pend_extents)
+        self._pend_aliases.clear()
         self._pend_extents.clear()
 
     @abstractmethod
@@ -129,8 +142,9 @@ class BaseBackend(object):
         return self.const_matrix_cls(self, initval, extent, tags)
 
     @recordmat
-    def matrix(self, ioshape, initval=None, extent=None, tags=set()):
-        return self.matrix_cls(self, ioshape, initval, extent, tags)
+    def matrix(self, ioshape, initval=None, extent=None, aliases=None,
+               tags=set()):
+        return self.matrix_cls(self, ioshape, initval, extent, aliases, tags)
 
     @recordmat
     def matrix_rslice(self, mat, p, q):
@@ -140,8 +154,10 @@ class BaseBackend(object):
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
     @recordmat
-    def mpi_matrix(self, ioshape, initval=None, extent=None, tags=set()):
-        return self.mpi_matrix_cls(self, ioshape, initval, extent, tags)
+    def mpi_matrix(self, ioshape, initval=None, extent=None, aliases=None,
+                   tags=set()):
+        return self.mpi_matrix_cls(self, ioshape, initval, extent, aliases,
+                                   tags)
 
     def mpi_matrix_for_view(self, view, tags=set()):
         return self.mpi_matrix((view.nvrow, view.nvcol, view.n), tags=tags)

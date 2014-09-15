@@ -37,9 +37,7 @@ class OpenMPMatrixBase(base.MatrixBase):
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
-        super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, extent, tags)
+    pass
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
@@ -61,10 +59,7 @@ class OpenMPMatrixBank(base.MatrixBank):
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, extent, tags):
-        super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval,
-                                                extent, tags)
+    pass
 
 
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
@@ -76,20 +71,7 @@ class OpenMPMPIView(base.MPIView):
 
 
 class OpenMPView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
-        super(OpenMPView, self).__init__(backend, matmap, rcmap, stridemap,
-                                         vshape, tags)
-
-        self.mapping = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                        self.mapping, None, tags)
-
-        if self.nvcol > 1:
-            self.cstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                             self.cstrides, None, tags)
-
-        if self.nvrow > 1:
-            self.rstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                             self.rstrides, None, tags)
+    pass
 
 
 class OpenMPQueue(base.Queue):

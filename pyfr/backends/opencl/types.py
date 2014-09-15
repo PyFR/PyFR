@@ -12,7 +12,7 @@ from pyfr.util import lazyprop
 class OpenCLMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
-        self.data = basedata.get_sub_region(offset, self.nrow*self.pitch + 1)
+        self.data = basedata.get_sub_region(offset, self.nbytes + 1)
         self.offset = offset
 
         # Process any initial value
@@ -46,9 +46,7 @@ class OpenCLMatrixBase(base.MatrixBase):
 
 
 class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
-        super(OpenCLMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, extent, tags)
+    pass
 
 
 class OpenCLMatrixRSlice(base.MatrixRSlice):
@@ -67,34 +65,18 @@ class OpenCLMatrixBank(base.MatrixBank):
 
 
 class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, extent, tags):
-        super(OpenCLConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval,
-                                                extent, tags)
+    pass
 
 
 class OpenCLView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
-        super(OpenCLView, self).__init__(backend, matmap, rcmap, stridemap,
-                                       vshape, tags)
-
-        self.mapping = OpenCLMatrixBase(backend, np.int32, (1, self.n),
-                                        self.mapping, None, tags)
-
-        if self.nvcol > 1:
-            self.cstrides = OpenCLMatrixBase(backend, np.int32, (1, self.n),
-                                             self.cstrides, None, tags)
-
-        if self.nvrow > 1:
-            self.rstrides = OpenCLMatrixBase(backend, np.int32, (1, self.n),
-                                             self.rstrides, None, tags)
+    pass
 
 
 class OpenCLMPIMatrix(OpenCLMatrix, base.MPIMatrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         # Call the standard matrix constructor
         super(OpenCLMPIMatrix, self).__init__(backend, ioshape, initval,
-                                              extent, tags)
+                                              extent, aliases, tags)
 
         # Allocate an empty buffer on the host for MPI to send/recv from
         self.hdata = np.empty((self.nrow, self.ncol), self.dtype)

@@ -48,9 +48,7 @@ class CUDAMatrixBase(base.MatrixBase):
 
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
-        super(CUDAMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                         initval, extent, tags)
+    pass
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
@@ -68,33 +66,18 @@ class CUDAMatrixBank(base.MatrixBank):
 
 
 class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, extent, tags):
-        ioshape = initval.shape
-        super(CUDAConstMatrix, self).__init__(backend, backend.fpdtype,
-                                              ioshape, initval, extent, tags)
+    pass
+
 
 class CUDAView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
-        super(CUDAView, self).__init__(backend, matmap, rcmap, stridemap,
-                                       vshape, tags)
-
-        self.mapping = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                      self.mapping, None, tags)
-
-        if self.nvcol > 1:
-            self.cstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                           self.cstrides, None, tags)
-
-        if self.nvrow > 1:
-            self.rstrides = CUDAMatrixBase(backend, np.int32, (1, self.n),
-                                           self.rstrides, None, tags)
+    pass
 
 
 class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         # Call the standard matrix constructor
         super(CUDAMPIMatrix, self).__init__(backend, ioshape, initval, extent,
-                                            tags)
+                                            aliases, tags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
