@@ -9,8 +9,6 @@ from weakref import WeakValueDictionary, WeakKeyDictionary
 
 import numpy as np
 
-from pyfr.util import ndrange
-
 
 def traits(**tr):
     def traits_tr(fn):
