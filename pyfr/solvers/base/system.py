@@ -145,7 +145,7 @@ class BaseSystem(object):
                 kernels[pn, kn].append(kgetter())
 
     @abstractmethod
-    def rhs(self, uinbank, foutbank):
+    def rhs(self, t, uinbank, foutbank):
         pass
 
     def filt(self, uinoutbank):
