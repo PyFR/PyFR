@@ -33,7 +33,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         class CopyKernel(ComputeKernel):
-            def run(self):
+            def run(self, queue):
                 dst.data[:] = src.data[:]
 
         return CopyKernel()
