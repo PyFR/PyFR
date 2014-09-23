@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import math
 import re
 
 from pyfr.backends.base.kernels import ComputeMetaKernel
@@ -106,7 +107,7 @@ class BaseAdvectionElements(BaseElements):
         # Variable and function substitutions
         subs = self._cfg.items('constants')
         subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
-        subs.update(abs='fabs')
+        subs.update(abs='fabs', pi=repr(math.pi))
 
         srcex = []
         for v in self._convarmap[self.ndims]:
