@@ -42,7 +42,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         class CopyKernel(ComputeKernel):
-            def run(self, qcomp, qcopy):
-                cl.enqueue_copy(qcomp, dst.data, src.data)
+            def run(self, queue):
+                cl.enqueue_copy(queue.cl_queue_comp, dst.data, src.data)
 
         return CopyKernel()

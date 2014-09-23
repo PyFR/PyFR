@@ -40,8 +40,8 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         class CopyKernel(ComputeKernel):
-            def run(self, scomp, scopy):
+            def run(self, queue):
                 cuda.memcpy_dtod_async(dst.data, src.data, dst.nbytes,
-                                       stream=scomp)
+                                       stream=queue.cuda_stream_comp)
 
         return CopyKernel()
