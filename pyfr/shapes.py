@@ -130,7 +130,7 @@ class BaseShape(object):
         ub = self.ubasis
 
         n = ub.order
-        ncut = self.cfg.get('soln-filter', 'cutoff')
+        ncut = self.cfg.getint('soln-filter', 'cutoff')
         order = self.cfg.getint('soln-filter', 'order')
         alpha = self.cfg.getfloat('soln-filter', 'alpha')
 
