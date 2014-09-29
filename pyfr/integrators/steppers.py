@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractmethod
-
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.util import proxylist
 
