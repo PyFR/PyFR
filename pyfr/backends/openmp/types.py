@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import collections
 import itertools as it
 
 import numpy as np
@@ -38,9 +37,7 @@ class OpenMPMatrixBase(base.MatrixBase):
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    def __init__(self, backend, ioshape, initval, extent, tags):
-        super(OpenMPMatrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                           initval, extent, tags)
+    pass
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
@@ -62,10 +59,7 @@ class OpenMPMatrixBank(base.MatrixBank):
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    def __init__(self, backend, initval, extent, tags):
-        super(OpenMPConstMatrix, self).__init__(backend, backend.fpdtype,
-                                                initval.shape, initval,
-                                                extent, tags)
+    pass
 
 
 class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
@@ -77,69 +71,10 @@ class OpenMPMPIView(base.MPIView):
 
 
 class OpenMPView(base.View):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
-        super(OpenMPView, self).__init__(backend, matmap, rcmap, stridemap,
-                                         vshape, tags)
-
-        self.mapping = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                        self.mapping, None, tags)
-
-        if self.nvcol > 1:
-            self.cstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                             self.cstrides, None, tags)
-
-        if self.nvrow > 1:
-            self.rstrides = OpenMPMatrixBase(backend, np.int32, (1, self.n),
-                                             self.rstrides, None, tags)
+    pass
 
 
 class OpenMPQueue(base.Queue):
-    def __init__(self, backend):
-        super(OpenMPQueue, self).__init__(backend)
-
-        # Last kernel we executed
-        self._last = None
-
-        # Active MPI requests
-        self._mpireqs = []
-
-        # Items waiting to be executed
-        self._items = collections.deque()
-
-    def __lshift__(self, items):
-        self._items.extend(items)
-
-    def __mod__(self, items):
-        self.run()
-        self << items
-        self.run()
-
-    def __nonzero__(self):
-        return bool(self._items)
-
-    def _exec_item(self, item, rtargs):
-        if item.ktype == 'compute':
-            item.run(*rtargs)
-        elif item.ktype == 'mpi':
-            item.run(self._mpireqs, *rtargs)
-        else:
-            raise ValueError('Non compute/MPI kernel in queue')
-        self._last = item
-
-    def _exec_next(self):
-        item, rtargs = self._items.popleft()
-
-        # If we are at a sequence point then wait for current items
-        if self._at_sequence_point(item):
-            self._wait()
-
-        # Execute the item
-        self._exec_item(item, rtargs)
-
-    def _exec_nowait(self):
-        while self._items and not self._at_sequence_point(self._items[0][0]):
-            self._exec_item(*self._items.popleft())
-
     def _exec_nonblock(self):
         while self._items:
             kern = self._items[0][0]
@@ -154,8 +89,8 @@ class OpenMPQueue(base.Queue):
         if self._last and self._last.ktype == 'mpi':
             from mpi4py import MPI
 
-            MPI.Prequest.Waitall(self._mpireqs)
-            self._mpireqs = []
+            MPI.Prequest.Waitall(self.mpi_reqs)
+            self.mpi_reqs = []
 
         self._last = None
 
@@ -163,11 +98,6 @@ class OpenMPQueue(base.Queue):
         last = self._last
 
         return last and last.ktype == 'mpi' and item.ktype != 'mpi'
-
-    def run(self):
-        while self._items:
-            self._exec_next()
-        self._wait()
 
     @staticmethod
     def runall(queues):

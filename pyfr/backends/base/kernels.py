@@ -10,14 +10,14 @@ from pyfr.util import memoize, proxylist
 
 
 class _BaseKernel(object):
-    def __call__(self, *args):
-        return self, args
+    def __call__(self, *args, **kwargs):
+        return self, args, kwargs
 
     @property
     def retval(self):
         return None
 
-    def run(self, *args, **kwargs):
+    def run(self, queue, *args, **kwargs):
         pass
 
 
@@ -41,8 +41,8 @@ class _MetaKernel(object):
     def __init__(self, kernels):
         self._kernels = proxylist(kernels)
 
-    def run(self, *args, **kwargs):
-        self._kernels.run(*args, **kwargs)
+    def run(self, queue, *args, **kwargs):
+        self._kernels.run(queue, *args, **kwargs)
 
 
 class ComputeMetaKernel(_MetaKernel, ComputeKernel):
@@ -115,7 +115,14 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         # Followed by the objects themselves
         for aname, atypes in zip(argn[ndim:], argt[ndim:]):
-            ka = argdict[aname]
+            try:
+                ka = argdict[aname]
+            except KeyError:
+                # Allow scalar arguments to be resolved at runtime
+                if len(atypes) == 1 and atypes[0] == self.backend.fpdtype:
+                    ka = aname
+                else:
+                    raise
 
             # Matrix
             if isinstance(ka, mattypes):

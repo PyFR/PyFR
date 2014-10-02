@@ -22,8 +22,18 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
                                   [np.int32] + [np.intp, y.dtype]*(1 + nv))
 
         class AxnpbyKernel(ComputeKernel):
-            def run(self, beta, *alphan):
+            def run(self, queue, beta, *alphan):
                 args = [i for axn in zip(xn, alphan) for i in axn]
                 kern(cnt, y, beta, *args)
 
         return AxnpbyKernel()
+
+    def copy(self, dst, src):
+        if dst.traits != src.traits:
+            raise ValueError('Incompatible matrix types')
+
+        class CopyKernel(ComputeKernel):
+            def run(self, queue):
+                dst.data[:] = src.data[:]
+
+        return CopyKernel()

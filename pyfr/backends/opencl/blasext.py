@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import pyopencl as cl
 from pyopencl.array import splay
 
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
@@ -30,8 +31,18 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         gs, ls = splay(self.backend.qdflt, cnt)
 
         class AxnpbyKernel(ComputeKernel):
-            def run(self, qcomp, qcopy, *consts):
+            def run(self, queue, *consts):
                 args = [x.data for x in arr] + list(consts)
-                kern(qcomp, gs, ls, cnt, *args)
+                kern(queue.cl_queue_comp, gs, ls, cnt, *args)
 
         return AxnpbyKernel()
+
+    def copy(self, dst, src):
+        if dst.traits != src.traits:
+            raise ValueError('Incompatible matrix types')
+
+        class CopyKernel(ComputeKernel):
+            def run(self, queue):
+                cl.enqueue_copy(queue.cl_queue_comp, dst.data, src.data)
+
+        return CopyKernel()

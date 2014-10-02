@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
 
+import math
+import re
+
+from pyfr.backends.base.kernels import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
 
 
@@ -68,14 +72,57 @@ class BaseAdvectionElements(BaseElements):
 
         # Transformed to physical divergence kernel
         if divfluxaa:
+            tplargs, plocqpts = self._process_src_terms('qpts')
+
             self.kernels['negdivconf'] = lambda: backend.kernel(
-                'negdivconf', tplargs=dict(nvars=self.nvars),
-                dims=[self.nqpts, self.neles], tdivtconf=self._scal_qpts,
-                rcpdjac=self.rcpdjac_at('qpts')
+                'negdivconf', tplargs=tplargs, dims=[self.nqpts, self.neles],
+                tdivtconf=self._scal_qpts, rcpdjac=self.rcpdjac_at('qpts'),
+                ploc=plocqpts
             )
         else:
+            tplargs, plocupts = self._process_src_terms('upts')
+
             self.kernels['negdivconf'] = lambda: backend.kernel(
-                'negdivconf', tplargs=dict(nvars=self.nvars),
-                dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
-                rcpdjac=self.rcpdjac_at('upts')
+                'negdivconf', tplargs=tplargs, dims=[self.nupts, self.neles],
+                tdivtconf=self.scal_upts_outb,
+                rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts
             )
+
+        # In-place solution filter
+        if self._cfg.getint('soln-filter', 'freq', '0'):
+            def filter_soln():
+                mul = backend.kernel(
+                    'mul', self.opmat('M11'), self.scal_upts_inb,
+                    out=self._scal_upts_temp
+                )
+                copy = backend.kernel(
+                    'copy', self.scal_upts_inb, self._scal_upts_temp
+                )
+
+                return ComputeMetaKernel([mul, copy])
+
+            self.kernels['filter_soln'] = filter_soln
+
+    def _process_src_terms(self, where):
+        # Variable and function substitutions
+        subs = self._cfg.items('constants')
+        subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs.update(abs='fabs', pi=repr(math.pi))
+
+        srcex = []
+        for v in self._convarmap[self.ndims]:
+            ex = self._cfg.get('solver-source-terms', v, '0')
+
+            # Substitute variables
+            ex = re.sub(r'\b({0})\b'.format('|'.join(subs)),
+                        lambda m: subs[m.group(1)], ex)
+
+            # Append
+            srcex.append(ex)
+
+        if any('ploc' in ex for ex in srcex):
+            plocpts = self.ploc_at(where)
+        else:
+            plocpts = None
+
+        return dict(ndims=self.ndims, nvars=self.nvars, srcex=srcex), plocpts

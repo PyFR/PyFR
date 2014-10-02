@@ -4,8 +4,11 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements(object):
-    _dynvarmap = {2: ['rho', 'u', 'v', 'p'],
+    _privarmap = {2: ['rho', 'u', 'v', 'p'],
                   3: ['rho', 'u', 'v', 'w', 'p']}
+
+    _convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
+                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
 
     def _process_ics(self, ics):
         rho, p = ics[0], ics[-1]

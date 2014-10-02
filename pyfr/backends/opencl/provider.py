@@ -32,8 +32,9 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
 
     def _instantiate_kernel(self, dims, fun, arglst):
         class PointwiseKernel(ComputeKernel):
-            def run(self, qcomp, qcopy):
-                narglst = [getattr(arg, 'data', arg) for arg in arglst]
-                fun(qcomp, (dims[-1],), None, *narglst)
+            def run(self, queue, **kwargs):
+                narglst = [kwargs.get(ka, ka) for ka in arglst]
+                narglst = [getattr(arg, 'data', arg) for arg in narglst]
+                fun(queue.cl_queue_comp, (dims[-1],), None, *narglst)
 
         return PointwiseKernel()

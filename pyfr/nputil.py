@@ -45,17 +45,18 @@ _npeval_syms = {
 
 
 def npeval(expr, locals):
+    # Disallow direct exponentiation
+    if '^' in expr or '**' in expr:
+        raise ValueError('Direct exponentiation is not supported; use pow')
+
     # Ensure the expression does not contain invalid characters
-    if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/^%()]+$', expr):
+    if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', expr):
         raise ValueError('Invalid characters in expression')
 
     # Disallow access to object attributes
     objs = '|'.join(it.chain(_npeval_syms, locals))
     if re.search(r'(%s|\))\s*\.' % objs, expr):
         raise ValueError('Invalid expression')
-
-    # Allow '^' to be used for exponentiation
-    expr = expr.replace('^', '**')
 
     return eval(expr, _npeval_syms, locals)
 

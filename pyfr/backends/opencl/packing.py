@@ -17,10 +17,10 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         preq = mpipreqfn(mpimat.hdata, pid, tag)
 
         class SendRecvPackKernel(MPIKernel):
-            def run(self, reqlist):
+            def run(self, queue):
                 # Start the request and append us to the list of requests
                 preq.Start()
-                reqlist.append(preq)
+                queue.mpi_reqs.append(preq)
 
         return SendRecvPackKernel()
 
@@ -36,18 +36,18 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*5)
 
         class PackMPIViewKernel(ComputeKernel):
-            def run(self, qcomp, qcopy):
+            def run(self, queue):
                 # Kernel arguments
                 args = [v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
                         v.cstrides, v.rstrides, m]
                 args = [getattr(arg, 'data', arg) for arg in args]
 
                 # Pack
-                event = kern(qcomp, (v.n,), None, *args)
+                event = kern(queue.cl_queue_comp, (v.n,), None, *args)
 
                 # Copy the packed buffer to the host
-                cl.enqueue_copy(qcopy, m.hdata, m.data, is_blocking=False,
-                                wait_for=[event])
+                cl.enqueue_copy(queue.cl_queue_copy, m.hdata, m.data,
+                                is_blocking=False, wait_for=[event])
 
         return PackMPIViewKernel()
 
@@ -63,7 +63,8 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
 
     def unpack(self, mv):
         class UnpackMPIMatrixKernel(ComputeKernel):
-            def run(self, qcomp, qcopy):
-                cl.enqueue_copy(qcomp, mv.data, mv.hdata, is_blocking=False)
+            def run(self, queue):
+                cl.enqueue_copy(queue.cl_queue_comp, mv.data, mv.hdata,
+                                is_blocking=False)
 
         return UnpackMPIMatrixKernel()

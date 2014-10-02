@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import pycuda.driver as cuda
 from pycuda.gpuarray import splay
 
 from pyfr.backends.cuda.provider import CUDAKernelProvider
@@ -27,9 +28,20 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         grid, block = splay(cnt)
 
         class AxnpbyKernel(ComputeKernel):
-            def run(self, scomp, scopy, beta, *alphan):
+            def run(self, queue, beta, *alphan):
                 args = [i for axn in zip(xn, alphan) for i in axn]
-                kern.prepared_async_call(grid, block, scomp, cnt, y, beta,
-                                         *args)
+                kern.prepared_async_call(grid, block, queue.cuda_stream_comp,
+                                         cnt, y, beta, *args)
 
         return AxnpbyKernel()
+
+    def copy(self, dst, src):
+        if dst.traits != src.traits:
+            raise ValueError('Incompatible matrix types')
+
+        class CopyKernel(ComputeKernel):
+            def run(self, queue):
+                cuda.memcpy_dtod_async(dst.data, src.data, dst.nbytes,
+                                       stream=queue.cuda_stream_comp)
+
+        return CopyKernel()

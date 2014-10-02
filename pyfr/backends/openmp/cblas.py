@@ -117,12 +117,12 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
             cblas_gemm_ptr = cast(cblas_gemm, c_void_p).value
 
             class MulKernel(ComputeKernel):
-                def run(self):
+                def run(self, queue):
                     par_gemm(cblas_gemm_ptr, m, n, k, alpha, a, a.leaddim,
                              b, b.leaddim, beta, out, out.leaddim)
         else:
             class MulKernel(ComputeKernel):
-                def run(self):
+                def run(self, queue):
                     cblas_gemm(CBlasOrder.ROW_MAJOR, CBlasTranspose.NO_TRANS,
                                CBlasTranspose.NO_TRANS, m, n, k,
                                alpha, a, a.leaddim, b, b.leaddim,
@@ -141,7 +141,7 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
             def retval(self):
                 return self._rv
 
-            def run(self):
+            def run(self, queue):
                 self._rv = cblas_nrm2(x.leaddim*x.nrow, x, 1)
 
         return Nrm2Kernel()
