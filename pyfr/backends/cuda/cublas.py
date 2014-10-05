@@ -72,21 +72,6 @@ class CUBLASWrappers(object):
         ]
         self.cublasSgemm.errcheck = self._errcheck
 
-        # cublasDnrm2
-        self.cublasDnrm2 = lib.cublasDnrm2_v2
-        self.cublasDnrm2.argtypes = [
-            c_void_p, c_int, c_void_p, c_int, POINTER(c_double)
-        ]
-        self.cublasDnrm2.errcheck = self._errcheck
-
-        # cublasSnrm2
-        self.cublasSnrm2 = lib.cublasSnrm2_v2
-        self.cublasSnrm2.argtypes = [
-            c_void_p, c_int, c_void_p, c_int, POINTER(c_float)
-        ]
-        self.cublasSnrm2.errcheck = self._errcheck
-
-
     def _errcheck(self, status, fn, args):
         if status != 0:
             try:
@@ -148,27 +133,3 @@ class CUDACUBLASKernels(object):
                            beta_ct, C, C.leaddim)
 
         return MulKernel()
-
-    def nrm2(self, x):
-        w = self._wrappers
-
-        if x.dtype == np.float64:
-            cublasnrm2 = w.cublasDnrm2
-            result = c_double()
-        else:
-            cublasnrm2 = w.cublasSnrm2
-            result = c_float()
-
-        # Total number of elements (incl. slack)
-        n = x.leaddim*x.nrow
-
-        class Nrm2Kernel(ComputeKernel):
-            @property
-            def retval(iself):
-                return result.value
-
-            def run(iself, queue):
-                w.cublasSetStream(self._handle, queue.cuda_stream_comp.handle)
-                cublasnrm2(self._handle, n, x, 1, result)
-
-        return Nrm2Kernel()

@@ -9,9 +9,9 @@ from pyfr.util import memoize
 
 class OpenMPKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, restype=None):
         mod = GccSourceModule(src, self.backend.cfg)
-        return mod.function(name, None, argtypes)
+        return mod.function(name, restype, argtypes)
 
 
 class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,

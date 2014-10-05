@@ -2,10 +2,12 @@
 
 import numpy as np
 import pyopencl as cl
-from pyopencl.array import splay
+from pyopencl.array import Array, splay
+from pyopencl.reduction import ReductionKernel
 
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
 from pyfr.backends.base import ComputeKernel
+from pyfr.nputil import npdtype_to_ctype
 
 
 class OpenCLBlasExtKernels(OpenCLKernelProvider):
@@ -46,3 +48,36 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
                 cl.enqueue_copy(queue.cl_queue_comp, dst.data, src.data)
 
         return CopyKernel()
+
+    def errest(self, x, y, z):
+        if x.traits != y.traits != z.traits:
+            raise ValueError('Incompatible matrix types')
+
+        cnt = x.leaddim*x.nrow
+        dtype = x.dtype
+
+        # Build the reduction kernel
+        rkern = ReductionKernel(
+            self.backend.ctx, dtype, neutral='0', reduce_expr='a + b',
+            map_expr='pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2)',
+            arguments='__global {0}* x, __global {0}* y, __global {0}* z, '
+                      '{0} atol, {0} rtol'.format(npdtype_to_ctype(dtype))
+        )
+
+        class ErrestKernel(ComputeKernel):
+            @property
+            def retval(self):
+                return self._retarr.get()
+
+            def run(self, queue, atol, rtol):
+                qcomp = queue.cl_queue_comp
+
+                xarr = Array(qcomp, cnt, dtype, data=x.data)
+                yarr = Array(qcomp, cnt, dtype, data=y.data)
+                zarr = Array(qcomp, cnt, dtype, data=z.data)
+
+                self._retarr = rkern(xarr, yarr, zarr, atol, rtol,
+                                     queue=qcomp)
+
+
+        return ErrestKernel()
