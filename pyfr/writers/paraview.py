@@ -206,24 +206,24 @@ def _tri_con(nsubdiv):
     :rtype: list
 
     """
-  
+
     conlst = []
-    
+
     for row in xrange(nsubdiv, 0, -1):
         # Lower and upper indices
         l = (nsubdiv - row)*(nsubdiv + row + 3) // 2
         u = l + row + 1
-        
+
         # Base offsets
         off = [l, l + 1, u, u + 1, l + 1, u]
-        
+
         # Generate current row
         subin = np.ravel(np.arange(row - 1)[...,None] + off)
         subex = [ix + row - 1 for ix in off[:3]]
-        
+
         # Extent list
         conlst.extend([subin, subex])
-        
+
     return np.hstack(conlst)
 
 
