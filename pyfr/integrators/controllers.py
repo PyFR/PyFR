@@ -42,7 +42,10 @@ class BaseController(BaseIntegrator):
         # Fire off any event handlers
         self.completed_step_handlers(self)
 
-    def _reject_step(self, idxold):
+    def _reject_step(self, dt, idxold):
+        if dt <= self._dtmin:
+            raise RuntimeError('Minimum sized time step rejected')
+
         self.nacptchain = 0
         self.nrjctsteps += 1
 
@@ -82,17 +85,24 @@ class NoneController(BaseController):
         return self.soln
 
 
-class PController(BaseController):
-    controller_name = 'p'
+class PIController(BaseController):
+    controller_name = 'pi'
 
     def __init__(self, *args, **kwargs):
-        super(PController, self).__init__(*args, **kwargs)
+        super(PIController, self).__init__(*args, **kwargs)
 
         sect = 'solver-time-integrator'
 
         # Error tolerances
         self._atol = self._cfg.getfloat(sect, 'atol')
         self._rtol = self._cfg.getfloat(sect, 'rtol')
+
+        # PI control values
+        self._alpha = self._cfg.getfloat(sect, 'pi-alpha', 0.7)
+        self._beta = self._cfg.getfloat(sect, 'pi-beta', 0.4)
+
+        # Estimate of previous error
+        self._errprev = 0.0
 
         # Step size adjustment factors
         self._saffac = self._cfg.getfloat(sect, 'safety-fact', 0.9)
@@ -148,13 +158,21 @@ class PController(BaseController):
             saff = self._saffac
             sord = self._stepper_order
 
-            # Compute the next time step
-            self._dt = dt*min(maxf, max(minf, saff*err**(-1.0 / sord)))
+            expa = self._alpha / self._stepper_order
+            expb = self._beta / self._stepper_order
+
+            # Determine time step adjustment factor
+            fac = err**-expa*self._errprev**expb
+            fac = min(maxf, max(minf, saff*fac))
+
+            # Compute the size of the next step
+            self._dt = fac*dt
 
             # Decide if to accept or reject the step
             if err < 1.0:
+                self._errprev = err
                 self._accept_step(dt, idxcurr)
             else:
-                self._reject_step(idxprev)
+                self._reject_step(dt, idxprev)
 
         return self.soln
