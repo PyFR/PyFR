@@ -111,7 +111,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         viewtypes = (self.backend.mpi_view_cls, self.backend.view_cls)
 
         # First arguments are the iteration dimensions
-        ndim, arglst = len(dims), list(dims)
+        ndim, arglst = len(dims), [int(d) for d in dims]
 
         # Followed by the objects themselves
         for aname, atypes in zip(argn[ndim:], argt[ndim:]):
