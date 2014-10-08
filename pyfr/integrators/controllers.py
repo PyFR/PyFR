@@ -3,7 +3,7 @@
 import math
 
 from pyfr.integrators.base import BaseIntegrator
-from pyfr.util import proxylist
+from pyfr.util import memoize, proxylist
 
 
 class BaseController(BaseIntegrator):
@@ -113,13 +113,9 @@ class PIController(BaseController):
     def _controller_needs_errest(self):
         return True
 
+    @memoize
     def _get_errest_kerns(self):
-        try:
-            return self._errest_kerns
-        except AttributeError:
-            self._errest_kerns = self._kernel('errest', nargs=3)
-
-            return self._errest_kerns
+        return self._kernel('errest', nargs=3)
 
     def _errest(self, x, y, z):
         from mpi4py import MPI

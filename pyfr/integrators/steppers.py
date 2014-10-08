@@ -3,7 +3,7 @@
 from __future__ import division
 
 from pyfr.integrators.base import BaseIntegrator
-from pyfr.util import proxylist
+from pyfr.util import memoize, proxylist
 
 
 class BaseStepper(BaseIntegrator):
@@ -30,15 +30,9 @@ class BaseStepper(BaseIntegrator):
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)
         stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
 
+    @memoize
     def _get_axnpby_kerns(self, n):
-        try:
-            return self._axnpby_kerns[n]
-        except KeyError:
-            k = self._kernel('axnpby', nargs=n)
-
-            # Cache and return
-            self._axnpby_kerns[n] = k
-            return k
+        return self._kernel('axnpby', nargs=n)
 
     def _add(self, *args):
         # Get a suitable set of axnpby kernels
