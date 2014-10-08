@@ -11,11 +11,11 @@ class BaseController(BaseIntegrator):
         super(BaseController, self).__init__(*args, **kwargs)
 
         # Current and minimum time steps
-        self._dt = self._cfg.getfloat('solver-time-integrator', 'dt')
+        self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
         self._dtmin = 1.0e-14
 
         # Solution filtering frequency
-        self._ffreq = self._cfg.getint('soln-filter', 'freq', '0')
+        self._ffreq = self.cfg.getint('soln-filter', 'freq', '0')
 
         # Bank index of solution
         self._idxcurr = 0
@@ -94,20 +94,20 @@ class PIController(BaseController):
         sect = 'solver-time-integrator'
 
         # Error tolerances
-        self._atol = self._cfg.getfloat(sect, 'atol')
-        self._rtol = self._cfg.getfloat(sect, 'rtol')
+        self._atol = self.cfg.getfloat(sect, 'atol')
+        self._rtol = self.cfg.getfloat(sect, 'rtol')
 
         # PI control values
-        self._alpha = self._cfg.getfloat(sect, 'pi-alpha', 0.7)
-        self._beta = self._cfg.getfloat(sect, 'pi-beta', 0.4)
+        self._alpha = self.cfg.getfloat(sect, 'pi-alpha', 0.7)
+        self._beta = self.cfg.getfloat(sect, 'pi-beta', 0.4)
 
         # Estimate of previous error
         self._errprev = 0.0
 
         # Step size adjustment factors
-        self._saffac = self._cfg.getfloat(sect, 'safety-fact', 0.9)
-        self._maxfac = self._cfg.getfloat(sect, 'max-fact', 2.5)
-        self._minfac = self._cfg.getfloat(sect, 'min-fact', 0.3)
+        self._saffac = self.cfg.getfloat(sect, 'safety-fact', 0.8)
+        self._maxfac = self.cfg.getfloat(sect, 'max-fact', 2.5)
+        self._minfac = self.cfg.getfloat(sect, 'min-fact', 0.3)
 
     @property
     def _controller_needs_errest(self):

@@ -16,8 +16,8 @@ class BaseWriter(BaseIntegrator):
         super(BaseWriter, self).__init__(*args, **kwargs)
 
         # Base output directory and file name
-        self._basedir = self._cfg.getpath('soln-output', 'basedir', '.')
-        self._basename = self._cfg.get('soln-output', 'basename', raw=True)
+        self._basedir = self.cfg.getpath('soln-output', 'basedir', '.')
+        self._basename = self.cfg.get('soln-output', 'basename', raw=True)
 
         # Output counter (incremented each time output() is called)
         self.nout = 0
@@ -27,7 +27,7 @@ class BaseWriter(BaseIntegrator):
 
         # Convert the config and stats objects to strings
         if rank == root:
-            metadata = dict(config=self._cfg.tostr(),
+            metadata = dict(config=self.cfg.tostr(),
                             stats=stats.tostr(),
                             mesh_uuid=self._mesh_uuid)
         else:
@@ -57,7 +57,7 @@ class BaseWriter(BaseIntegrator):
         return os.path.join(self._basedir, fname)
 
     def _get_name_for_soln(self, etype, prank=None):
-        prank = prank or self._rallocs.prank
+        prank = prank or self.rallocs.prank
         return 'soln_{}_p{}'.format(etype, prank)
 
 
@@ -83,14 +83,14 @@ class FileWriter(BaseWriter):
             self._loc_names = loc_names = []
 
             for mrank, meleinfo in enumerate(eleinfo):
-                prank = self._rallocs.mprankmap[mrank]
+                prank = self.rallocs.mprankmap[mrank]
                 for tag, (etype, dims) in enumerate(meleinfo):
                     name = self._get_name_for_soln(etype, prank)
 
                     if mrank == root:
                         loc_names.append(name)
                     else:
-                        rbuf = np.empty(dims, dtype=self._backend.fpdtype)
+                        rbuf = np.empty(dims, dtype=self.backend.fpdtype)
                         rreq = comm.Recv_init(rbuf, mrank, tag)
 
                         mpi_rbufs.append(rbuf)

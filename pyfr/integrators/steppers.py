@@ -10,7 +10,7 @@ class BaseStepper(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseStepper, self).__init__(*args, **kwargs)
 
-        backend = self._backend
+        backend = self.backend
         elemats = self._system.ele_banks
 
         # Create a proxylist of matrix-banks for each storage register

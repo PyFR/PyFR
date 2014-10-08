@@ -14,9 +14,9 @@ class BaseIntegrator(object):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         from mpi4py import MPI
 
-        self._backend = backend
-        self._rallocs = rallocs
-        self._cfg = cfg
+        self.backend = backend
+        self.rallocs = rallocs
+        self.cfg = cfg
 
         # Sanity checks
         if self._controller_needs_errest and not self._stepper_has_errest:
@@ -68,7 +68,7 @@ class BaseIntegrator(object):
         # Generate an kernel for each element type
         kerns = proxylist([])
         for tr in transregs:
-            kerns.append(self._backend.kernel(name, *tr[:nargs]))
+            kerns.append(self.backend.kernel(name, *tr[:nargs]))
 
         return kerns
 
