@@ -206,40 +206,18 @@ def main():
     ap_conv.add_argument('-t', dest='type', choices=types, required=False,
                          help='Output file type; this is usually inferred '
                          'from the extension of outf')
-
-    ap_pop = ap_conv.add_subparsers(help='Choose output mode for high-order '
-                                    'data.')
-
-    ap_pdiv = ap_pop.add_parser('divide', help='paraview *args divide --help',
-                                description='Divides high-order elements '
-                                'into multiple low-order elements.  All '
-                                'elements are split to the same level.')
-
-    ap_pdiv.add_argument('-d', '--divisor', type=int, choices=range(1, 17),
+    ap_conv.add_argument('-d', '--divisor', type=int, choices=range(1, 17),
                          default=0, help='Sets the level to which high '
                          'order elements are divided along each edge. The '
                          'total node count produced by divisor is equivalent '
                          'to that of solution order, which is used as the '
                          'default. Note: the output is linear between '
                          'nodes, so increased resolution may be required.')
-    ap_pdiv.add_argument('-p', '--precision', choices=['single', 'double'],
+    ap_conv.add_argument('-p', '--precision', choices=['single', 'double'],
                          default='single', help='Selects the precision of '
                          'floating point numbers written to the output file; '
                          'single is the default.')
-    ap_pdiv.set_defaults(process=process_convert)
-
-    ap_pap = ap_pop.add_parser('append', help='paraview *args append --help',
-                               description='High-order solutions are written '
-                               'as high-order data appended to low-order '
-                               'elements.  A Paraview plugin recursively '
-                               'bisects each element to achieve a requirement '
-                               'on the relative error of a solution variable. '
-                               'Paraview requires the high-order plugin '
-                               'written by Sébastien Blaise, available from: '
-                               'http://perso.uclouvain.be/sebastien.blaise/'
-                               'tools.html')
-    ap_pap.set_defaults(divisor=None, precision='double',
-                        process=process_convert)
+    ap_conv.set_defaults(process=process_convert)
 
     ap_tavg = sp.add_parser('time-avg', help='time-avg --help',
                             description='Computes the mean solution of a '

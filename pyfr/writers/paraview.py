@@ -32,19 +32,6 @@ class ParaviewWriter(BaseWriter):
         which concatenates all data into a single block of binary data
         at the end of the file.  ASCII headers written at the top of
         the file describe the structure of this data.
-
-        Two different methods for outputting the data are used; one
-        that involves subdividing a high order element into low
-        order elements (at the shape points), and another that appends
-        high-order data to be read by an external plugin detailed here:
-        http://perso.uclouvain.be/sebastien.blaise/tools.html
-
-        The methods are switched such that the latter is used when
-        self.args.divisor is None. When it is not none, the former
-        method is used on a high order element of shape order =
-        self.args.divsior. An initial 0 value sets itself to the
-        solution order.
-
         """
         # Set default divisor to solution order
         if self.args.divisor == 0:
@@ -60,9 +47,7 @@ class ParaviewWriter(BaseWriter):
 
         # Write data description header.  A vtk "piece" is used for each
         # element in a partition.
-        for i, mk in enumerate(self.mesh_inf.iterkeys()):
-            sk = self.soln_inf.keys()[i]
-
+        for mk, sk in zip(self.mesh_inf, self.soln_inf):
             _write_vtu_header(self.args, self.outf, self.mesh_inf[mk],
                               self.soln_inf[sk], off)
 
@@ -71,9 +56,7 @@ class ParaviewWriter(BaseWriter):
                         'encoding="raw">\n_')
 
         # Write data "piece"wise
-        for i, mk in enumerate(self.mesh_inf.iterkeys()):
-            sk = self.soln_inf.keys()[i]
-
+        for mk, sk in zip(self.mesh_inf, self.soln_inf):
             _write_vtu_data(self.args, self.outf, self.cfg, self.mesh[mk],
                             self.mesh_inf[mk], self.soln[sk],
                             self.soln_inf[sk])
@@ -315,11 +298,6 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     which requires ASCII headers to be written to define the contents
     of the appended data arrays.
 
-    The function handles both "append" and "divide" high-order data
-    output options.  The "append" option requires analogous data
-    to the "divide" option to define the low-order cells.  The
-    high-order data is appended to the end of the piece as "CellData".
-
     :param args: pyfr-postp command line arguments from argparse
     :param vtuf: .vtu output file
     :param m_inf: Tuple of element type and array shape of mesh
@@ -338,13 +316,8 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     else:
         flt = ['Float64', 8]
 
-    # Assign variables dependent on output mode
-    if args.divisor is not None:
-        nele = _ncells_after_subdiv(m_inf, args.divisor)
-        npts = _npts_from_order(args.divisor, m_inf)
-    else:
-        nele = m_inf[1][1]
-        npts = m_inf[1][1] * ParaviewWriter.vtk_to_pyfr[m_inf[0]][2]
+    nele = _ncells_after_subdiv(m_inf, args.divisor)
+    npts = _npts_from_order(args.divisor, m_inf)
 
     # Standard template for vtk DataArray string
     darray = '<DataArray Name="%s" type="%s" NumberOfComponents="%s" '\
@@ -382,32 +355,6 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     # Store total offset (bytes) to end of appended data
     off += sum(offs) + 4*len(nams)
 
-    # Write headers for appended high-order data, if required
-    if args.divisor is None:
-        vtuf.write('<CellData>\n')
-
-        # Size of described high order data (in bytes)
-        hooffs = np.array([3, 1, m_inf[1][2], 1]) * nele * flt[1]
-
-        # Number of high-order nodes per ele (less those written as low-order)
-        nhpts = s_inf[1][0] - ParaviewWriter.vtk_to_pyfr[m_inf[0]][2]
-
-        # Lists of requisite DataArray "names" and "NumberOfComponents"
-        nams = ['HOcoord', 'Density_HOsol', 'Velocity_HOsol', 'Pressure_HOsol']
-        ncom = ['3', 1, str(m_inf[1][2]), 1]
-
-        # Equivalent high-order nodes are written to the same array
-        for spt in xrange(nhpts):
-            # Write DataArrays as named in nams for each node
-            for i in xrange(len(nams)):
-                vtuf.write(darray % ('_'.join((nams[i], str(spt))), flt[0],
-                                     ncom[i], sum(hooffs[:i]) + off + 4*i))
-
-            # Update total byte offset to current end of appended data
-            off += sum(hooffs) + 4*len(nams)
-
-        # Write ends of vtk objects
-        vtuf.write('</CellData>\n')
     vtuf.write('</Piece>\n')
 
 
@@ -494,46 +441,3 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     _write_vtk_darray(sol[:,0].T, vtuf, flt[0])
     _write_vtk_darray(sol[:,1:-1].transpose(2, 0, 1), vtuf, flt[0])
     _write_vtk_darray(sol[:,-1].T, vtuf, flt[0])
-
-    # Append high-order data as CellData if not dividing cells
-    if args.divisor is None:
-        # Calculate number of points written as low-order, and left to append
-        nlpts = ParaviewWriter.vtk_to_pyfr[s_inf[0]][2]
-        nhpts = s_inf[1][0] - nlpts
-
-        # Generate basis objects for mesh, solution and vtu output
-        mesh_b = basiscls(m_inf[1][0], cfg)
-
-        # Get location of spts in standard element of solution order
-        uord = cfg.getint('solver', 'order')
-        ele_spts = subclass_where(BaseShape, name=m_inf[0]).std_ele(uord)
-
-        # Generate operator matrices to move points and solutions to vtu nodes
-        mesh_hpts_op = mesh_b.sbasis.nodal_basis_at(ele_spts)
-        soln_hpts_op = mesh_b.ubasis.nodal_basis_at(ele_spts)
-
-        # Calculate node locations of vtu elements
-        pts = np.dot(mesh_hpts_op, mesh.reshape(m_inf[1][0], -1))
-        pts = pts.reshape((-1,) + m_inf[1][1:])
-
-        # Append dummy z dimension to 2-d points (required by Paraview)
-        if ndims == 2:
-            pts = np.append(pts, np.zeros(pts.shape[:-1])[...,None], axis=2)
-
-        # Calculate solution at node locations
-        sol = np.dot(soln_hpts_op, soln.reshape(s_inf[1][0], -1))
-        sol = sol.reshape((-1,) + s_inf[1][1:])
-
-        # Convert rhou, rhov, [rhow] to u, v, [w] and energy to pressure
-        _component_to_physical_soln(sol, cfg.getfloat('constants', 'gamma'))
-
-        # Write data arrays, one set of high order points at a time
-        for gmshpt in xrange(nhpts):
-            # Convert Gmsh node number to equivalent in PyFR
-            pt = GmshNodeMaps.to_pyfr[s_inf[0], s_inf[1][0]][gmshpt + nlpts]
-
-            # Write node locations, density, velocity and pressure
-            _write_vtk_darray(pts[pt], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,0], vtuf, flt[0])
-            _write_vtk_darray(sol[pt,1:-1].T, vtuf, flt[0])
-            _write_vtk_darray(sol[pt,-1], vtuf, flt[0])
