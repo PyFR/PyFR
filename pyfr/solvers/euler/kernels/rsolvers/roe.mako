@@ -22,9 +22,10 @@
     fpdtype_t ha = (sqrt(ul[0])*(pr + ur[${ndims + 1}])
                  + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
                 / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
+    fpdtype_t invsqrulpur = 1/(sqrt(ul[0]) + sqrt(ur[0]));
 
 % for i in range(ndims):
-    va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0]))/(sqrt(ul[0]) + sqrt(ur[0]));
+    va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0]))*invsqrulpur;
 % endfor
 
     fpdtype_t qq = ${pyfr.dot('va[{i}]', 'va[{i}]', i=ndims)};
@@ -53,13 +54,13 @@
     v1[0] = (dp - roa*a*dvs)*r2a2;
     v1[${nvars - 1}] = (dp - roa*a*dvs)*r2a2*(ha - a*vs);
     v2[0] = dro - dp*2*r2a2;
-    v2[${nvars - 1}] = (dro - dp*2*r2a2)*(qq*0.5) + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - vs*dvs);
+    v2[${nvars - 1}] = (dro - dp*2*r2a2)*qq*0.5 + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - vs*dvs);
     v3[0] = (dp + roa*a*dvs)*r2a2;
     v3[${nvars - 1}] = (dp + roa*a*dvs)*r2a2*(ha + a*vs);
 
 % for i in range(ndims):
     v1[${i + 1}] = (dp - roa*a*dvs)*r2a2*(va[${i}] - a*n[${i}]);
-    v2[${i + 1}] = (dro - dp*2*r2a2)*(va[${i}]) + roa*(dv[${i}] - dvs*n[${i}]);
+    v2[${i + 1}] = (dro - dp*2*r2a2)*va[${i}] + roa*(dv[${i}] - dvs*n[${i}]);
     v3[${i + 1}] = (dp + roa*a*dvs)*r2a2*(va[${i}] + a*n[${i}]);
 % endfor
 
