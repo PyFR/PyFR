@@ -2,28 +2,13 @@
 
 import pycuda.driver as cuda
 
-from pyfr.backends.base import ComputeKernel, MPIKernel
+from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
-from pyfr.backends.cuda.types import CUDAXchgView
 from pyfr.nputil import npdtype_to_ctype
 
 
-class CUDAPackingKernels(CUDAKernelProvider):
-    def _sendrecv(self, mv, mpipreqfn, pid, tag):
-        # If we are an exchange view then extract the exchange matrix
-        xchgmat = mv.xchgmat if isinstance(mv, CUDAXchgView) else mv
-
-        # Create a persistent MPI request to send/recv the pack
-        preq = mpipreqfn(xchgmat.hdata, pid, tag)
-
-        class SendRecvPackKernel(MPIKernel):
-            def run(self, queue):
-                # Start the request and append us to the list of requests
-                preq.Start()
-                queue.mpi_reqs.append(preq)
-
-        return SendRecvPackKernel()
-
+class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
     def pack(self, mv):
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -58,16 +43,6 @@ class CUDAPackingKernels(CUDAKernelProvider):
                 cuda.memcpy_dtoh_async(m.hdata, m.data, scopy)
 
         return PackXchgViewKernel()
-
-    def send_pack(self, mv, pid, tag):
-        from mpi4py import MPI
-
-        return self._sendrecv(mv, MPI.COMM_WORLD.Send_init, pid, tag)
-
-    def recv_pack(self, mv, pid, tag):
-        from mpi4py import MPI
-
-        return self._sendrecv(mv, MPI.COMM_WORLD.Recv_init, pid, tag)
 
     def unpack(self, mv):
         class UnpackXchgMatrixKernel(ComputeKernel):

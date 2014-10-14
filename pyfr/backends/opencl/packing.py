@@ -3,27 +3,12 @@
 import numpy as np
 import pyopencl as cl
 
-from pyfr.backends.base import ComputeKernel, MPIKernel
+from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
-from pyfr.backends.opencl.types import OpenCLXchgView
 
 
-class OpenCLPackingKernels(OpenCLKernelProvider):
-    def _sendrecv(self, mv, mpipreqfn, pid, tag):
-        # If we are an exchange view then extract the exchange matrix
-        xchgmat = mv.xchgmat if isinstance(mv, OpenCLXchgView) else mv
-
-        # Create a persistent MPI request to send/recv the pack
-        preq = mpipreqfn(xchgmat.hdata, pid, tag)
-
-        class SendRecvPackKernel(MPIKernel):
-            def run(self, queue):
-                # Start the request and append us to the list of requests
-                preq.Start()
-                queue.mpi_reqs.append(preq)
-
-        return SendRecvPackKernel()
-
+class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
     def pack(self, mv):
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -50,16 +35,6 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
                                 is_blocking=False, wait_for=[event])
 
         return PackXchgViewKernel()
-
-    def send_pack(self, mv, pid, tag):
-        from mpi4py import MPI
-
-        return self._sendrecv(mv, MPI.COMM_WORLD.Send_init, pid, tag)
-
-    def recv_pack(self, mv, pid, tag):
-        from mpi4py import MPI
-
-        return self._sendrecv(mv, MPI.COMM_WORLD.Recv_init, pid, tag)
 
     def unpack(self, mv):
         class UnpackXchgMatrixKernel(ComputeKernel):
