@@ -62,11 +62,11 @@ class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
     pass
 
 
-class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
+class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix):
     pass
 
 
-class OpenMPMPIView(base.MPIView):
+class OpenMPXchgView(base.XchgView):
     pass
 
 

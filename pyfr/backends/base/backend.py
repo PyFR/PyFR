@@ -154,20 +154,21 @@ class BaseBackend(object):
         return self.matrix_bank_cls(self, mats, initbank, tags)
 
     @recordmat
-    def mpi_matrix(self, ioshape, initval=None, extent=None, aliases=None,
-                   tags=set()):
-        return self.mpi_matrix_cls(self, ioshape, initval, extent, aliases,
-                                   tags)
+    def xchg_matrix(self, ioshape, initval=None, extent=None, aliases=None,
+                    tags=set()):
+        return self.xchg_matrix_cls(self, ioshape, initval, extent, aliases,
+                                    tags)
 
-    def mpi_matrix_for_view(self, view, tags=set()):
-        return self.mpi_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
+    def xchg_matrix_for_view(self, view, tags=set()):
+        return self.xchg_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
 
     def view(self, matmap, rcmap, stridemap=None, vshape=tuple(), tags=set()):
         return self.view_cls(self, matmap, rcmap, stridemap, vshape, tags)
 
-    def mpi_view(self, matmap, rcmap, stridemap=None, vshape=tuple(),
-                 tags=set()):
-        return self.mpi_view_cls(self, matmap, rcmap, stridemap, vshape, tags)
+    def xchg_view(self, matmap, rcmap, stridemap=None, vshape=tuple(),
+                  tags=set()):
+        return self.xchg_view_cls(self, matmap, rcmap, stridemap, vshape,
+                                  tags)
 
     def kernel(self, name, *args, **kwargs):
         for prov in self._providers:

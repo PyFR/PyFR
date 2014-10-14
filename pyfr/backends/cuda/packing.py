@@ -4,17 +4,17 @@ import pycuda.driver as cuda
 
 from pyfr.backends.base import ComputeKernel, MPIKernel
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
-from pyfr.backends.cuda.types import CUDAMPIView
+from pyfr.backends.cuda.types import CUDAXchgView
 from pyfr.nputil import npdtype_to_ctype
 
 
 class CUDAPackingKernels(CUDAKernelProvider):
     def _sendrecv(self, mv, mpipreqfn, pid, tag):
-        # If we are an MPI view then extract the MPI matrix
-        mpimat = mv.mpimat if isinstance(mv, CUDAMPIView) else mv
+        # If we are an exchange view then extract the exchange matrix
+        xchgmat = mv.xchgmat if isinstance(mv, CUDAXchgView) else mv
 
         # Create a persistent MPI request to send/recv the pack
-        preq = mpipreqfn(mpimat.hdata, pid, tag)
+        preq = mpipreqfn(xchgmat.hdata, pid, tag)
 
         class SendRecvPackKernel(MPIKernel):
             def run(self, queue):
@@ -25,8 +25,8 @@ class CUDAPackingKernels(CUDAKernelProvider):
         return SendRecvPackKernel()
 
     def pack(self, mv):
-        # An MPI view is simply a regular view plus an MPI matrix
-        m, v = mv.mpimat, mv.view
+        # An exchange view is simply a regular view plus an exchange matrix
+        m, v = mv.xchgmat, mv.view
 
         # Render the kernel template
         tpl = self.backend.lookup.get_template('pack')
@@ -42,7 +42,7 @@ class CUDAPackingKernels(CUDAKernelProvider):
         # Create a CUDA event
         event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
 
-        class PackMPIViewKernel(ComputeKernel):
+        class PackXchgViewKernel(ComputeKernel):
             def run(self, queue):
                 scomp = queue.cuda_stream_comp
                 scopy = queue.cuda_stream_copy
@@ -57,7 +57,7 @@ class CUDAPackingKernels(CUDAKernelProvider):
                 scopy.wait_for_event(event)
                 cuda.memcpy_dtoh_async(m.hdata, m.data, scopy)
 
-        return PackMPIViewKernel()
+        return PackXchgViewKernel()
 
     def send_pack(self, mv, pid, tag):
         from mpi4py import MPI
@@ -70,9 +70,9 @@ class CUDAPackingKernels(CUDAKernelProvider):
         return self._sendrecv(mv, MPI.COMM_WORLD.Recv_init, pid, tag)
 
     def unpack(self, mv):
-        class UnpackMPIMatrixKernel(ComputeKernel):
+        class UnpackXchgMatrixKernel(ComputeKernel):
             def run(self, queue):
                 cuda.memcpy_htod_async(mv.data, mv.hdata,
                                        queue.cuda_stream_comp)
 
-        return UnpackMPIMatrixKernel()
+        return UnpackXchgMatrixKernel()

@@ -73,18 +73,18 @@ class CUDAView(base.View):
     pass
 
 
-class CUDAMPIMatrix(CUDAMatrix, base.MPIMatrix):
+class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
     def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         # Call the standard matrix constructor
-        super(CUDAMPIMatrix, self).__init__(backend, ioshape, initval, extent,
-                                            aliases, tags)
+        super(CUDAXchgMatrix, self).__init__(backend, ioshape, initval,
+                                             extent, aliases, tags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
                                            self.dtype, 'C')
 
 
-class CUDAMPIView(base.MPIView):
+class CUDAXchgView(base.XchgView):
     pass
 
 

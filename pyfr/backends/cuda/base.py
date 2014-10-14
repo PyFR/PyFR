@@ -53,10 +53,10 @@ class CUDABackend(BaseBackend):
         self.matrix_cls = types.CUDAMatrix
         self.matrix_bank_cls = types.CUDAMatrixBank
         self.matrix_rslice_cls = types.CUDAMatrixRSlice
-        self.mpi_matrix_cls = types.CUDAMPIMatrix
-        self.mpi_view_cls = types.CUDAMPIView
         self.queue_cls = types.CUDAQueue
         self.view_cls = types.CUDAView
+        self.xchg_matrix_cls = types.CUDAXchgMatrix
+        self.xchg_view_cls = types.CUDAXchgView
 
         # Template lookup
         self.lookup = DottedTemplateLookup('pyfr.backends.cuda.kernels')

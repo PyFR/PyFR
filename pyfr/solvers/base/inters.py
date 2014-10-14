@@ -66,13 +66,13 @@ class BaseInters(object):
     def _vect_view(self, inter, meth):
         return self._view(inter, meth, (self.ndims, self.nvars))
 
-    def _mpi_view(self, inter, meth, vshape):
+    def _xchg_view(self, inter, meth, vshape):
         vm = _get_inter_objs(inter, meth, self._elemap)
         vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
-        return self._be.mpi_view(*vm, vshape=vshape)
+        return self._be.xchg_view(*vm, vshape=vshape)
 
-    def _scal_mpi_view(self, inter, meth):
-        return self._mpi_view(inter, meth, (self.nvars,))
+    def _scal_xchg_view(self, inter, meth):
+        return self._xchg_view(inter, meth, (self.nvars,))
 
-    def _vect_mpi_view(self, inter, meth):
-        return self._mpi_view(inter, meth, (self.ndims, self.nvars))
+    def _vect_xchg_view(self, inter, meth):
+        return self._xchg_view(inter, meth, (self.ndims, self.nvars))
