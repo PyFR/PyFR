@@ -14,23 +14,24 @@
     ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
     ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'pr', 'vr')};
 
-    // Get the normal velocities from both sides
-    fpdtype_t nvl = ${pyfr.dot('n[{i}]', 'vl[{i}]', i=ndims)};
-    fpdtype_t nvr = ${pyfr.dot('n[{i}]', 'vr[{i}]', i=ndims)};
-
+    // Get the normal velocity jump
+    fpdtype_t dvs = ${pyfr.dot('n[{i}]', 'vr[{i}] - vl[{i}]', i=ndims)};
 
     // Compute Roe averaged density and enthalpy
-    fpdtype_t roa = sqrt(ul[0]*ur[0]);
-    fpdtype_t ha = (sqrt(ul[0])*(pr + ur[${ndims + 1}])
-                 + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
-                / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
+    fpdtype_t squl = sqrt(ul[0]);
+    fpdtype_t squr = sqrt(ur[0]);
+    fpdtype_t roa = squl*squr;
+    fpdtype_t ha = (squl*(pr + ur[${ndims + 1}])
+                 + squr*(pl + ul[${ndims + 1}]))
+                / (squl*ur[0] + squr*ul[0]);
 
 % for i in range(ndims):
-    va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0]))/(sqrt(ul[0]) + sqrt(ur[0]));
+    va[${i}] = (vl[${i}]*squl + vr[${i}]*squr)/(squl + squr);
 % endfor
-    fpdtype_t q = sqrt(${pyfr.dot('va[{i}]', 'va[{i}]', i=ndims)});
+
+    fpdtype_t qq = ${pyfr.dot('va[{i}]', 'va[{i}]', i=ndims)};
     fpdtype_t vs = ${pyfr.dot('n[{i}]', 'va[{i}]', i=ndims)};
-    fpdtype_t a = sqrt((${c['gamma'] - 1})*(ha - 0.5*q*q));
+    fpdtype_t a = sqrt((${c['gamma'] - 1})*(ha - 0.5*qq));
 
     // Compute the Eigenvalues
     fpdtype_t l1 = fabs(vs - a);
@@ -41,25 +42,26 @@
     l1 = (l1 < ${eps}) ? ${1/(2*eps)}*(l1*l1 + ${eps**2}) : l1;
     l3 = (l3 < ${eps}) ? ${1/(2*eps)}*(l3*l3 + ${eps**2}) : l3;
 
-    //Get the jumps 
+    // Get the jumps 
 % for i in range(ndims):
     dv[${i}] = vr[${i}] - vl[${i}];
 % endfor
+
     fpdtype_t dro = ur[0] - ul[0];
     fpdtype_t dp = pr - pl;
-    fpdtype_t dvs = nvr - nvl;
 
     // Compute the Eigenvectors
     r2a2 = 1/(2*a*a);
-    v1[0] = ((dp - roa*a*dvs)*r2a2);
-    v1[${nvars - 1}] = ((dp - roa*a*dvs)*r2a2)*(ha - a*vs);
-    v2[0] = (dro-dp*2*r2a2);
-    v2[${nvars - 1}] = (dro - dp*2*r2a2)*((q*q)/2) + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - vs*dvs);
+    v1[0] = (dp - roa*a*dvs)*r2a2;
+    v1[${nvars - 1}] = (dp - roa*a*dvs)*r2a2*(ha - a*vs);
+    v2[0] = (dro - dp*2*r2a2);
+    v2[${nvars - 1}] = (dro - dp*2*r2a2)*((qq)*0.5) + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - vs*dvs);
     v3[0] = ((dp + roa*a*dvs)*r2a2);
-    v3[${nvars - 1}] = ((dp+roa*a*dvs)*r2a2)*(ha+a*vs);
+    v3[${nvars - 1}] = ((dp + roa*a*dvs)*r2a2)*(ha + a*vs);
+
 % for i in range(ndims):
-    v1[${i + 1}] = ((dp - roa*a*dvs)*r2a2)*(va[${i}] - a*n[${i}]);
-    v2[${i + 1}] = (dro - dp/(a*a))*(va[${i}]) + roa*(dv[${i}] - dvs*n[${i}]);
+    v1[${i + 1}] = (dp - roa*a*dvs)*r2a2*(va[${i}] - a*n[${i}]);
+    v2[${i + 1}] = (dro - dp*2*r2a2)*(va[${i}]) + roa*(dv[${i}] - dvs*n[${i}]);
     v3[${i + 1}] = ((dp + roa*a*dvs)*r2a2)*(va[${i}] + a*n[${i}]);
 % endfor
 
