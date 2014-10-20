@@ -334,27 +334,59 @@ Parameterises the time-integration scheme used by the solver with
 
 1. ``scheme`` --- time-integration scheme:
 
-    ``euler`` | ``rk4`` | ``rk45`` | ``dopri5``
+    ``euler`` | ``rk34`` | ``rk4`` | ``rk45``
 
-2. ``controller`` --- time-step size controller:
-
-    ``none``
-
-3. ``t0`` --- initial time
+2. ``t0`` --- initial time
 
     *float*
 
-4. ``dt`` --- time-step
+3. ``dt`` --- time-step
 
     *float*
+
+4. ``controller`` --- time-step size controller:
+
+    ``none`` | ``pi``
+
+    where
+
+    ``pi`` only works with ``rk34`` and ``rk45`` and requires
+
+        - ``atol`` --- absolute error tolerance
+
+           *float*
+
+        - ``rtol`` --- relative error tolerance
+
+           *float*
+
+        - ``safety-fact`` --- safety factor for step size adjustment 
+          (suitable range 0.80-0.95)
+
+           *float*
+
+        - ``min-fact`` --- minimum factor that the time-step can change
+          between iterations (suitable range 0.1-0.5)
+
+           *float*
+
+        - ``max-fact`` --- maximum factor that the time-step can change
+          between iterations (suitable range 2.0-6.0)
+
+           *float*
 
 Example::
 
     [solver-time-integrator]
-    scheme = rk4
-    controller = none
+    scheme = rk45
+    controller = pi
     t0 = 0.0
     dt = 0.001
+    atol = 0.00001
+    rtol = 0.00001
+    safety-fact = 0.9
+    min-fact = 0.3
+    max-fact = 2.5
 
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
@@ -363,7 +395,7 @@ Parameterises the interfaces with
 
 1. ``riemann-solver`` --- type of Riemann solver:
 
-    ``rusanov`` | ``hll``
+    ``rusanov`` | ``hll`` | ``hllc`` | ``roe``
 
 2. ``ldg-beta`` --- beta parameter used for LDG
 
@@ -561,10 +593,44 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn~gauss-legendre
 
-[soln-output]
-^^^^^^^^^^^^^^^
+[solver-source-terms]
+^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the solver output with
+Parameterises space (x, y, [z]) and time (t) dependent source terms with
+
+1. ``rho`` --- density source term
+
+    *string*
+
+2. ``rhou`` --- x-momentum source term
+
+    *string*
+
+3. ``rhov`` --- y-momentum source term 
+
+    *string*
+
+4. ``rhow`` --- z-momentum source term 
+
+    *string*
+
+5. ``E`` --- energy source term
+
+    *string*
+
+Example::
+
+    [solver-source-terms]
+    rho = t
+    rhou = x*y*sin(y)
+    rhov = z
+    rhow = 1.0
+    E = 1.0/(1.0+x)
+
+[soln-output]
+^^^^^^^^^^^^^
+
+Parameterises the output with
 
 1. ``format`` --- format of the outputs:
 
@@ -591,8 +657,29 @@ Example::
     basename = files_%(t).2f
     times = range(0, 1, 11)
 
+[soln-filter]
+^^^^^^^^^^^^^
+
+Parameterises an exponential solution filter with
+
+1. ``freq`` --- frequency at which filter is applied:
+
+    *int*
+
+2. ``alpha`` --- strength of filter:
+
+    *float*
+
+3. ``order`` --- order of filter:
+
+    *int*
+
+4. ``cutoff`` --- cutoff frequency below which no filtering is applied:
+
+    *int*
+
 [soln-bcs-name]
-^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^
 
 Parameterises boundary condition labelled :code:`name` in the .pyfrm
 file with
@@ -723,7 +810,7 @@ Example::
 [soln-ics]
 ^^^^^^^^^^
 
-Parameterises the initial conditions with
+Parameterises space (x, y, [z]) dependent initial conditions with
 
 1. ``rho`` --- initial density distribution
 
