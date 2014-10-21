@@ -45,16 +45,6 @@ class CBlasWrappers(object):
             c_float, c_void_p, c_int
         ]
 
-        # cblas_dnrm2
-        self.cblas_dnrm2 = lib.cblas_dnrm2
-        self.cblas_dnrm2.restype = c_double
-        self.cblas_dnrm2.argtypes = [c_int, c_void_p, c_int]
-
-        # cblas_snrm2
-        self.cblas_snrm2 = lib.cblas_snrm2
-        self.cblas_snrm2.restype = c_float
-        self.cblas_snrm2.argtypes = [c_int, c_void_p, c_int]
-
 
 class OpenMPCBLASKernels(OpenMPKernelProvider):
     def __init__(self, backend):
@@ -129,19 +119,3 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
                                beta, out, out.leaddim)
 
         return MulKernel()
-
-    def nrm2(self, x):
-        if x.dtype == np.float64:
-            cblas_nrm2 = self._wrappers.cblas_dnrm2
-        else:
-            cblas_nrm2 = self._wrappers.cblas_snrm2
-
-        class Nrm2Kernel(ComputeKernel):
-            @property
-            def retval(self):
-                return self._rv
-
-            def run(self, queue):
-                self._rv = cblas_nrm2(x.leaddim*x.nrow, x, 1)
-
-        return Nrm2Kernel()

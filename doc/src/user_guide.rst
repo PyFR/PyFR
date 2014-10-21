@@ -152,7 +152,7 @@ available:
 1. ``pyfr-postp convert`` --- convert a PyFR .pyfrs file into an
    unstructured VTK .vtu file. Example::
 
-        pyfr-postp convert mesh.pyfrm solution.pyfrs solution.vtu divide
+        pyfr-postp convert mesh.pyfrm solution.pyfrs solution.vtu
 
 2. ``pyfr-postp pack`` --- swap between the pyfr-dir and pyfr-file
    format. Example::
@@ -875,7 +875,7 @@ simulation on a mixed unstructured mesh:
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr-postp convert couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu divide -d 4
+        pyfr-postp convert couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -925,7 +925,7 @@ simulation on a structured mesh:
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr-postp convert euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu divide -d 4
+        pyfr-postp convert euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
 
 8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_

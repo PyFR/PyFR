@@ -23,7 +23,7 @@ loop_sched_1d(int n, int align, int *b, int *e)
 
     // Assign the starting and ending index
     *b = sz * tid;
-    *e = PYFR_MIN(*b + sz, n);
+    *e = min(*b + sz, n);
 
     // Clamp
     if (*b >= n)
@@ -61,7 +61,7 @@ loop_sched_2d(int nrow, int ncol, int colalign,
 
     // Assign the starting and ending column to each thread
     *colb = ntilecol * colix;
-    *cole = PYFR_MIN(*colb + ntilecol, ncol);
+    *cole = min(*colb + ntilecol, ncol);
 
     // Clamp
     if (*colb >= ncol)

@@ -8,7 +8,8 @@
 #define PYFR_ALIGN_BYTES ${alignb}
 #define PYFR_NOINLINE __attribute__ ((noinline))
 
-#define PYFR_MIN(a, b) ((a) < (b) ? (a) : (b))
+#define min(a, b) ((a) < (b) ? (a) : (b))
+#define max(a, b) ((a) > (b) ? (a) : (b))
 
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;

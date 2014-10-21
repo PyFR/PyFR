@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractmethod
+from __future__ import division
 
 from pyfr.integrators.base import BaseIntegrator
-from pyfr.util import proxylist
+from pyfr.util import memoize, proxylist
 
 
 class BaseStepper(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super(BaseStepper, self).__init__(*args, **kwargs)
 
-        backend = self._backend
+        backend = self.backend
         elemats = self._system.ele_banks
 
         # Create a proxylist of matrix-banks for each storage register
@@ -30,15 +30,9 @@ class BaseStepper(BaseIntegrator):
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)
         stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
 
+    @memoize
     def _get_axnpby_kerns(self, n):
-        try:
-            return self._axnpby_kerns[n]
-        except KeyError:
-            k = self._kernel('axnpby', nargs=n)
-
-            # Cache and return
-            self._axnpby_kerns[n] = k
-            return k
+        return self._kernel('axnpby', nargs=n)
 
     def _add(self, *args):
         # Get a suitable set of axnpby kernels
@@ -143,57 +137,124 @@ class RK4Stepper(BaseStepper):
         return r1
 
 
-class RK45Stepper(BaseStepper):
-    stepper_name = 'rk45'
+class RKVdH2RStepper(BaseStepper):
+    # Coefficients
+    a = []
+    b = []
+    bhat = []
+
+    def __init__(self, *args, **kwargs):
+        super(RKVdH2RStepper, self).__init__(*args, **kwargs)
+
+        # Compute the c and error coeffs
+        self.c = [0.0] + [sum(self.b[:i]) + ai for i, ai in enumerate(self.a)]
+        self.e = [b - bh for b, bh in zip(self.b, self.bhat)]
+
+        self._nstages = len(self.c)
 
     @property
     def _stepper_has_errest(self):
-        return False
+        return self._controller_needs_errest and len(self.bhat)
 
     @property
     def _stepper_nfevals(self):
-        return 5*self.nsteps
+        return len(self.b)*self.nsteps
 
     @property
     def _stepper_nregs(self):
-        return 2
+        return 4 if self._stepper_has_errest else 2
+
+    def step(self, t, dt):
+        add, rhs = self._add, self._system.rhs
+        errest = self._stepper_has_errest
+
+        r1 = self._idxcurr
+
+        if errest:
+            r2, rold, rerr = set(self._regidx) - {r1}
+
+            # Save the current solution
+            add(0.0, rold, 1.0, r1)
+        else:
+            r2, = set(self._regidx) - {r1}
+
+        # Evaluate the stages in the scheme
+        for i in xrange(self._nstages):
+            # Compute -∇·f
+            rhs(t + self.c[i]*dt, r2 if i > 0 else r1, r2)
+
+            # Accumulate the error term in rerr
+            if errest:
+                add(1.0 if i > 0 else 0.0, rerr, self.e[i]*dt, r2)
+
+            # Sum (special-casing the final stage)
+            if i < self._nstages - 1:
+                add(1.0, r1, self.a[i]*dt, r2)
+                add((self.b[i] - self.a[i])*dt, r2, 1.0, r1)
+            else:
+                add(1.0, r1, self.b[i]*dt, r2)
+
+            # Swap
+            r1, r2 = r2, r1
+
+        # Return
+        return (r2, rold, rerr) if errest else r2
+
+
+class RK34Stepper(RKVdH2RStepper):
+    stepper_name = 'rk34'
+
+    a = [
+        11847461282814 / 36547543011857,
+        3943225443063 / 7078155732230,
+        -346793006927 / 4029903576067
+    ]
+
+    b = [
+        1017324711453 / 9774461848756,
+        8237718856693 / 13685301971492,
+        57731312506979 / 19404895981398,
+        -101169746363290 / 37734290219643
+    ]
+
+    bhat = [
+        15763415370699 / 46270243929542,
+        514528521746 / 5659431552419,
+        27030193851939 / 9429696342944,
+        -69544964788955 / 30262026368149
+    ]
+
+    @property
+    def _stepper_order(self):
+        return 3
+
+
+class RK45Stepper(RKVdH2RStepper):
+    stepper_name = 'rk45'
+
+    a = [
+        970286171893 / 4311952581923,
+        6584761158862 / 12103376702013,
+        2251764453980 / 15575788980749,
+        26877169314380 / 34165994151039
+    ]
+
+    b = [
+        1153189308089 / 22510343858157,
+        1772645290293 / 4653164025191,
+        -1672844663538 / 4480602732383,
+        2114624349019 / 3568978502595,
+        5198255086312 / 14908931495163
+    ]
+
+    bhat = [
+        1016888040809 / 7410784769900,
+        11231460423587 / 58533540763752,
+        -1563879915014 / 6823010717585,
+        606302364029 / 971179775848,
+        1097981568119 / 3980877426909
+    ]
 
     @property
     def _stepper_order(self):
         return 4
-
-    def step(self, t, dt):
-        a21 = 970286171893 / 4311952581923.0
-        a32 = 6584761158862 / 12103376702013.0
-        a43 = 2251764453980 / 15575788980749.0
-        a54 = 26877169314380 / 34165994151039.0
-
-        b1 = 1153189308089 / 22510343858157.0
-        b2 = 1772645290293 / 4653164025191.0
-        b3 = -1672844663538 / 4480602732383.0
-        b4 = 2114624349019 / 3568978502595.0
-        b5 = 5198255086312 / 14908931495163.0
-
-        add, rhs = self._add, self._system.rhs
-        r1, r2 = self._regidx
-
-        rhs(t, r1, r2)
-        add(1.0, r1, a21*dt, r2)
-        add((b1 - a21)*dt, r2, 1.0, r1)
-
-        rhs(t + a21*dt, r1, r1)
-        add(1.0, r2, a32*dt, r1)
-        add((b2 - a32)*dt, r1, 1.0, r2)
-
-        rhs(t + (b1 + a32)*dt, r2, r2)
-        add(1.0, r1, a43*dt, r2)
-        add((b3 - a43)*dt, r2, 1.0, r1)
-
-        rhs(t + (b1 + b2 + a43)*dt, r1, r1)
-        add(1.0, r2, a54*dt, r1)
-        add((b4 - a54)*dt, r1, 1.0, r2)
-
-        rhs(t + (b1 + b2 + b3 + a54)*dt, r2, r2)
-        add(1.0, r1, b5*dt, r2)
-
-        return r1

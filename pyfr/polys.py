@@ -70,7 +70,9 @@ class TriPolyBasis(BasePolyBasis):
     name = 'tri'
 
     def ortho_basis_at_mp(self, p, q):
-        a = 2*(1 + p)/(1 - q) - 1 if q != 1 else 0
+        q = q if q != 1 else q + mp.eps
+
+        a = 2*(1 + p)/(1 - q) - 1
         b = q
 
         ob = []
@@ -110,8 +112,10 @@ class TetPolyBasis(BasePolyBasis):
     name = 'tet'
 
     def ortho_basis_at_mp(self, p, q, r):
-        a = -2*(1 + p)/(q + r) - 1 if q + r != 0 else 0
-        b = 2*(1 + q)/(1 - r) - 1 if r != 1 else 0
+        r = r if r != -q and r != 1 else r + mp.eps
+
+        a = -2*(1 + p)/(q + r) - 1
+        b = 2*(1 + q)/(1 - r) - 1
         c = r
 
         ob = []
@@ -143,7 +147,9 @@ class PriPolyBasis(BasePolyBasis):
     name = 'pri'
 
     def ortho_basis_at_mp(self, p, q, r):
-        a = 2*(1 + p)/(1 - q) - 1 if q != 1 else 0
+        q = q if q != 1 else q + mp.eps
+
+        a = 2*(1 + p)/(1 - q) - 1
         b = q
         c = r
 

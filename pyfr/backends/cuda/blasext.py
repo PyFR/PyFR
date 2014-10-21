@@ -2,7 +2,8 @@
 
 import numpy as np
 import pycuda.driver as cuda
-from pycuda.gpuarray import splay
+from pycuda.gpuarray import GPUArray, splay
+from pycuda.reduction import ReductionKernel
 
 from pyfr.backends.cuda.provider import CUDAKernelProvider
 from pyfr.backends.base import ComputeKernel
@@ -45,3 +46,32 @@ class CUDABlasExtKernels(CUDAKernelProvider):
                                        stream=queue.cuda_stream_comp)
 
         return CopyKernel()
+
+    def errest(self, x, y, z):
+        if x.traits != y.traits != z.traits:
+            raise ValueError('Incompatible matrix types')
+
+        # Wrap
+        xarr = GPUArray(x.leaddim*x.nrow, x.dtype, gpudata=x)
+        yarr = GPUArray(y.leaddim*y.nrow, y.dtype, gpudata=y)
+        zarr = GPUArray(z.leaddim*z.nrow, z.dtype, gpudata=z)
+
+        # Build the reduction kernel
+        rkern = ReductionKernel(
+            x.dtype, neutral='0', reduce_expr='a + b',
+            map_expr='pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2)',
+            arguments='{0}* x, {0}* y, {0}* z, {0} atol, {0} rtol'
+                      .format(npdtype_to_ctype(x.dtype))
+        )
+
+        class ErrestKernel(ComputeKernel):
+            @property
+            def retval(self):
+                return self._retarr.get()
+
+            def run(self, queue, atol, rtol):
+                self._retarr = rkern(xarr, yarr, zarr, atol, rtol,
+                                     stream=queue.cuda_stream_comp)
+
+
+        return ErrestKernel()
