@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
-from collections import Sequence
+from collections import Sequence, deque
 
 import numpy as np
 
@@ -11,7 +11,8 @@ class MatrixBase(object):
 
     _base_tags = set()
 
-    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
+                 tags):
         self.backend = backend
         self.tags = self._base_tags | tags
 
@@ -41,6 +42,7 @@ class MatrixBase(object):
         self.leadsubdim = shape[-1]
 
         self.pitch = self.leaddim*self.itemsize
+        self.nbytes = nrow*self.pitch
         self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Process the initial value
@@ -52,8 +54,14 @@ class MatrixBase(object):
         else:
             self._initval = None
 
-        # Allocate
-        backend.malloc(self, nrow*self.leaddim*self.itemsize, extent)
+        # Alias or allocate ourself
+        if aliases:
+            if extent is not None:
+                raise ValueError('Aliased matrices can not have an extent')
+
+            backend.alias(self, aliases)
+        else:
+            backend.malloc(self, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value
@@ -73,6 +81,10 @@ class MatrixBase(object):
 
 class Matrix(MatrixBase):
     _base_tags = {'dense'}
+
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
+        super(Matrix, self).__init__(backend, backend.fpdtype, ioshape,
+                                     initval, extent, aliases, tags)
 
     def set(self, ary):
         if ary.shape != self.ioshape:
@@ -123,6 +135,11 @@ class MatrixRSlice(object):
 class ConstMatrix(MatrixBase):
     _base_tags = {'const', 'dense'}
 
+    def __init__(self, backend, initval, extent, tags):
+        super(ConstMatrix, self).__init__(backend, backend.fpdtype,
+                                          initval.shape, initval, extent,
+                                          None, tags)
+
 
 class MPIMatrix(Matrix):
     pass
@@ -170,9 +187,6 @@ class MatrixBank(Sequence):
 
 
 class View(object):
-    __metaclass__ = ABCMeta
-
-    @abstractmethod
     def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
@@ -208,17 +222,26 @@ class View(object):
             ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
-        # Go from matrices + row/column indcies to displacements
+        # Go from matrices + (row, column) indcies to displacements
         # relative to the base allocation address
-        self.mapping = (offset + rcmap[:,0]*leaddim + rcmap[:,1])[None,:]
+        mapping = (offset + rcmap[:,0]*leaddim + rcmap[:,1])[None,:]
+        self.mapping = backend.base_matrix_cls(
+            backend, np.int32, (1, self.n), mapping, None, None, tags
+        )
 
         # Row strides
         if self.nvrow > 1:
-            self.rstrides = (stridemap[:,0]*leaddim)[None,:]
+            rstrides = (stridemap[:,0]*leaddim)[None,:]
+            self.rstrides = backend.base_matrix_cls(
+                backend, np.int32, (1, self.n), rstrides, None, None, tags
+            )
 
         # Column strides
         if self.nvcol > 1:
-            self.cstrides = stridemap[:,-1][None,:]
+            cstrides = stridemap[:,-1][None,:]
+            self.cstrides = backend.base_matrix_cls(
+                backend, np.int32, (1, self.n), cstrides, None, None, tags
+            )
 
 
 class MPIView(object):
@@ -241,10 +264,53 @@ class Queue(object):
     def __init__(self, backend):
         self.backend = backend
 
+        # Last kernel we executed
+        self._last = None
+
+        # Items waiting to be executed
+        self._items = deque()
+
+        # Active MPI requests
+        self.mpi_reqs = []
+
+    def __lshift__(self, items):
+        self._items.extend(items)
+
+    def __mod__(self, items):
+        self.run()
+        self << items
+        self.run()
+
+    def __nonzero__(self):
+        return bool(self._items)
+
+    def run(self):
+        while self._items:
+            self._exec_next()
+        self._wait()
+
+    def _exec_item(self, item, args, kwargs):
+        item.run(self, *args, **kwargs)
+        self._last = item
+
+    def _exec_next(self):
+        item, args, kwargs = self._items.popleft()
+
+        # If we are at a sequence point then wait for current items
+        if self._at_sequence_point(item):
+            self._wait()
+
+        # Execute the item
+        self._exec_item(item, args, kwargs)
+
+    def _exec_nowait(self):
+        while self._items and not self._at_sequence_point(self._items[0][0]):
+            self._exec_item(*self._items.popleft())
+
     @abstractmethod
-    def __lshift__(self, iterable):
+    def _at_sequence_point(self, item):
         pass
 
     @abstractmethod
-    def __mod__(self, iterable):
+    def _wait(self):
         pass

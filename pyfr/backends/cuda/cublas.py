@@ -72,21 +72,6 @@ class CUBLASWrappers(object):
         ]
         self.cublasSgemm.errcheck = self._errcheck
 
-        # cublasDnrm2
-        self.cublasDnrm2 = lib.cublasDnrm2_v2
-        self.cublasDnrm2.argtypes = [
-            c_void_p, c_int, c_void_p, c_int, POINTER(c_double)
-        ]
-        self.cublasDnrm2.errcheck = self._errcheck
-
-        # cublasSnrm2
-        self.cublasSnrm2 = lib.cublasSnrm2_v2
-        self.cublasSnrm2.argtypes = [
-            c_void_p, c_int, c_void_p, c_int, POINTER(c_float)
-        ]
-        self.cublasSnrm2.errcheck = self._errcheck
-
-
     def _errcheck(self, status, fn, args):
         if status != 0:
             try:
@@ -116,6 +101,8 @@ class CUDACUBLASKernels(object):
 
     @traits(a={'dense'})
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
+        w = self._wrappers
+
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
@@ -128,43 +115,21 @@ class CUDACUBLASKernels(object):
         A, B, C = b, a, out
 
         # Do not transpose either A or B
-        opA = opB = self._wrappers.CUBLAS_OP_N
+        opA = opB = w.CUBLAS_OP_N
 
         # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:
-            cublasgemm = self._wrappers.cublasDgemm
+            cublasgemm = w.cublasDgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
         else:
-            cublasgemm = self._wrappers.cublasSgemm
+            cublasgemm = w.cublasSgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(ComputeKernel):
-            def run(iself, scomp, scopy):
-                self._wrappers.cublasSetStream(self._handle, scomp.handle)
+            def run(iself, queue):
+                w.cublasSetStream(self._handle, queue.cuda_stream_comp.handle)
                 cublasgemm(self._handle, opA, opB, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 
         return MulKernel()
-
-    def nrm2(self, x):
-        if x.dtype == np.float64:
-            cublasnrm2 = self._wrappers.cublasDnrm2
-            result = c_double()
-        else:
-            cublasnrm2 = self._wrappers.cublasSnrm2
-            result = c_float()
-
-        # Total number of elements (incl. slack)
-        n = x.leaddim*x.nrow
-
-        class Nrm2Kernel(ComputeKernel):
-            @property
-            def retval(iself):
-                return result.value
-
-            def run(iself, scomp, scopy):
-                self._wrappers.cublasSetStream(self._handle, scomp.handle)
-                cublasnrm2(self._handle, n, x, 1, result)
-
-        return Nrm2Kernel()

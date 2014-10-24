@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import itertools as it
-from math import sqrt
+from math import exp, sqrt
 import re
 
 from mpmath import mp
@@ -23,8 +23,8 @@ class BaseShape(object):
     name = None
     ndims = -1
 
-    nspts_coeffs = None
-    nspts_cdenom = None
+    npts_coeffs = None
+    npts_cdenom = None
 
     npts_for_face = {
         'line': lambda order: order + 1,
@@ -51,13 +51,13 @@ class BaseShape(object):
 
     @classmethod
     def nspts_from_order(cls, sptord):
-        return int(mp.polyval(cls.nspts_coeffs, sptord)) // cls.nspts_cdenom
+        return np.polyval(cls.npts_coeffs, sptord) // cls.npts_cdenom
 
     @classmethod
     def order_from_nspts(cls, nspts):
         # Obtain the coefficients for the poly: P(n) - nspts = 0
-        coeffs = list(cls.nspts_coeffs)
-        coeffs[-1] -= cls.nspts_cdenom*nspts
+        coeffs = list(cls.npts_coeffs)
+        coeffs[-1] -= cls.npts_cdenom*nspts
 
         # Solve to obtain the order (a positive integer)
         roots = mp.polyroots(coeffs)
@@ -123,6 +123,28 @@ class BaseShape(object):
     @property
     def m10(self):
         return block_diag([self.m9]*self.ndims)
+
+    @lazyprop
+    @chop
+    def m11(self):
+        ub = self.ubasis
+
+        n = ub.order
+        ncut = self.cfg.getint('soln-filter', 'cutoff')
+        order = self.cfg.getint('soln-filter', 'order')
+        alpha = self.cfg.getfloat('soln-filter', 'alpha')
+
+        A = np.ones(self.nupts)
+        for i, d in enumerate(ub.degrees):
+            if d >= ncut < n:
+                A[i] = exp(-alpha*(float(d - ncut)/(n - ncut))**order)
+
+        return np.linalg.solve(ub.vdm, A[:,None]*ub.vdm).T
+
+    @lazyprop
+    def nupts(self):
+        n = self.order + 1
+        return np.polyval(self.npts_coeffs, n) // self.npts_cdenom
 
     @lazyprop
     def upts(self):
@@ -250,18 +272,14 @@ class TensorProdShape(object):
         pts1d = np.linspace(-1, 1, sptord + 1)
         return list(p[::-1] for p in it.product(pts1d, repeat=cls.ndims))
 
-    @property
-    def nupts(self):
-        return (self.order + 1)**self.ndims
-
 
 class QuadShape(TensorProdShape, BaseShape):
     name = 'quad'
     ndims = 2
 
     # nspts = n^2
-    nspts_coeffs = [1, 0, 0]
-    nspts_cdenom = 1
+    npts_coeffs = [1, 0, 0]
+    npts_cdenom = 1
 
     # Faces: type, reference-to-face projection, normal, relative area
     faces = [
@@ -277,8 +295,8 @@ class HexShape(TensorProdShape, BaseShape):
     ndims = 3
 
     # nspts = n^3
-    nspts_coeffs = [1, 0, 0, 0]
-    nspts_cdenom = 1
+    npts_coeffs = [1, 0, 0, 0]
+    npts_cdenom = 1
 
     # Faces: type, reference-to-face projection, normal, relative area
     faces = [
@@ -296,8 +314,8 @@ class TriShape(BaseShape):
     ndims = 2
 
     # nspts = n*(n + 1)/2
-    nspts_coeffs = [1, 1, 0]
-    nspts_cdenom = 2
+    npts_coeffs = [1, 1, 0]
+    npts_cdenom = 2
 
     # Faces: type, reference-to-face projection, normal, relative area
     faces = [
@@ -314,18 +332,14 @@ class TriShape(BaseShape):
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
 
-    @property
-    def nupts(self):
-        return (self.order + 1)*(self.order + 2) // 2
-
 
 class TetShape(BaseShape):
     name = 'tet'
     ndims = 3
 
     # nspts = n*(n + 1)*(n + 2)/6
-    nspts_coeffs = [1, 3, 2, 0]
-    nspts_cdenom = 6
+    npts_coeffs = [1, 3, 2, 0]
+    npts_cdenom = 6
 
     # Faces: type, reference-to-face projection, normal, relative area
     faces = [
@@ -345,18 +359,14 @@ class TetShape(BaseShape):
                 for j, q in enumerate(pts1d[:(sptord + 1 - i)])
                 for p in pts1d[:(sptord + 1 - i - j)]]
 
-    @property
-    def nupts(self):
-        return (self.order + 1)*(self.order + 2)*(self.order + 3) // 6
-
 
 class PriShape(BaseShape):
     name = 'pri'
     ndims = 3
 
     # nspts = n^2*(n + 1)/2
-    nspts_coeffs = [1, 1, 0, 0]
-    nspts_cdenom = 2
+    npts_coeffs = [1, 1, 0, 0]
+    npts_cdenom = 2
 
     # Faces: type, reference-to-face projection, normal, relative area
     faces = [
@@ -376,6 +386,3 @@ class PriShape(BaseShape):
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
 
-    @property
-    def nupts(self):
-        return (self.order + 1)**2*(self.order + 2) // 2

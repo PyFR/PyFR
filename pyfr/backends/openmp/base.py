@@ -19,6 +19,7 @@ class OpenMPBackend(BaseBackend):
                                           types)
 
         # Register our data types
+        self.base_matrix_cls = types.OpenMPMatrixBase
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_bank_cls = types.OpenMPMatrixBank

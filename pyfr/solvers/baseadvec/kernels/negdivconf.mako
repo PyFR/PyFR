@@ -3,9 +3,11 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%pyfr:kernel name='negdivconf' ndim='2'
+              t='scalar fpdtype_t'
               tdivtconf='inout fpdtype_t[${str(nvars)}]'
+              ploc='in fpdtype_t[${str(ndims)}]'
               rcpdjac='in fpdtype_t'>
-% for i in range(nvars):
-    tdivtconf[${i}] *= -rcpdjac;
+% for i, ex in enumerate(srcex):
+    tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + ${ex};
 % endfor
 </%pyfr:kernel>

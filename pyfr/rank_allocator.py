@@ -20,7 +20,7 @@ class BaseRankAllocator(object):
     name = None
 
     def __init__(self, mesh, cfg):
-        self._cfg = cfg
+        self.cfg = cfg
 
         comm, rank, root = get_comm_rank_root()
 

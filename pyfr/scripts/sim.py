@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 from argparse import ArgumentParser, FileType
+import os
 
 from mpmath import mp
 import numpy as np
@@ -39,8 +40,6 @@ def process_restart(args):
 
 @mp.workdps(60)
 def main():
-    from mpi4py import MPI
-
     ap = ArgumentParser(prog='pyfr-sim', description='Runs a PyFR simulation')
     ap.add_argument('--verbose', '-v', action='count')
     ap.add_argument('--backend', '-b', default='cuda', help='Backend to use')
@@ -66,6 +65,15 @@ def main():
     # Parse the arguments
     args = ap.parse_args()
     mesh, soln, cfg = args.process(args)
+
+    # Prefork to allow us to exec processes after MPI is initialised
+    if hasattr(os, 'fork'):
+        from pytools.prefork import enable_prefork
+
+        enable_prefork()
+
+    # Import and hence initialise MPI
+    from mpi4py import MPI
 
     # Ensure MPI is suitably cleaned up
     register_finalize_handler()

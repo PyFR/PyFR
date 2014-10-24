@@ -17,10 +17,10 @@ class CUDAPackingKernels(CUDAKernelProvider):
         preq = mpipreqfn(mpimat.hdata, pid, tag)
 
         class SendRecvPackKernel(MPIKernel):
-            def run(self, reqlist):
+            def run(self, queue):
                 # Start the request and append us to the list of requests
                 preq.Start()
-                reqlist.append(preq)
+                queue.mpi_reqs.append(preq)
 
         return SendRecvPackKernel()
 
@@ -43,7 +43,10 @@ class CUDAPackingKernels(CUDAKernelProvider):
         event = cuda.Event(cuda.event_flags.DISABLE_TIMING)
 
         class PackMPIViewKernel(ComputeKernel):
-            def run(self, scomp, scopy):
+            def run(self, queue):
+                scomp = queue.cuda_stream_comp
+                scopy = queue.cuda_stream_copy
+
                 # Pack
                 kern.prepared_async_call(grid, block, scomp, v.n, v.nvrow,
                                          v.nvcol, v.basedata, v.mapping,
@@ -68,7 +71,8 @@ class CUDAPackingKernels(CUDAKernelProvider):
 
     def unpack(self, mv):
         class UnpackMPIMatrixKernel(ComputeKernel):
-            def run(self, scomp, scopy):
-                cuda.memcpy_htod_async(mv.data, mv.hdata, scomp)
+            def run(self, queue):
+                cuda.memcpy_htod_async(mv.data, mv.hdata,
+                                       queue.cuda_stream_comp)
 
         return UnpackMPIMatrixKernel()

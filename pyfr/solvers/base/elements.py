@@ -12,7 +12,7 @@ class BaseElements(object):
     __metaclass__ = ABCMeta
 
     # Map from dimension number to list of dynamical variables
-    _dynvarmap = None
+    _privarmap = None
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
@@ -28,11 +28,11 @@ class BaseElements(object):
         self.kernels = {}
 
         # Check the dimensionality of the problem
-        if ndims != basiscls.ndims or ndims not in self._dynvarmap:
+        if ndims != basiscls.ndims or ndims not in self._privarmap:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables
-        self.nvars = len(self._dynvarmap[ndims])
+        self.nvars = len(self._privarmap[ndims])
 
         # Instantiate the basis class
         self._basis = basis = basiscls(nspts, cfg)
@@ -87,7 +87,7 @@ class BaseElements(object):
 
         # Evaluate the ICs from the config file
         ics = [npeval(self._cfg.get('soln-ics', dv), vars)
-               for dv in self._dynvarmap[self.ndims]]
+               for dv in self._privarmap[self.ndims]]
 
         # Allocate
         self._scal_upts = np.empty((self.nupts, self.nvars, self.neles))
@@ -124,17 +124,12 @@ class BaseElements(object):
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
         nfpts, nupts, nqpts = self.nfpts, self.nupts, self.nqpts
-        sbufs = self._scratch_bufs
-
-        # Allocate and bank the storage required by the time integrator
-        self._scal_upts = [backend.matrix(self._scal_upts.shape,
-                                          self._scal_upts, tags={'align'})
-                           for i in xrange(nscal_upts)]
-        self.scal_upts_inb = backend.matrix_bank(self._scal_upts)
-        self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
+        sbufs, abufs = self._scratch_bufs, []
 
         # Convenience functions for scalar/vector allocation
-        alloc = lambda ex, n: backend.matrix(n, extent=ex, tags={'align'})
+        alloc = lambda ex, n: abufs.append(
+            backend.matrix(n, extent=ex, tags={'align'})
+        ) or abufs[-1]
         salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
         valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
 
@@ -156,6 +151,19 @@ class BaseElements(object):
         if 'vect_fpts' in sbufs:
             self._vect_fpts = valloc('vect_fpts', nfpts)
 
+        # Allocate and bank the storage required by the time integrator
+        self._scal_upts = [backend.matrix(self._scal_upts.shape,
+                                          self._scal_upts, tags={'align'})
+                           for i in xrange(nscal_upts)]
+        self.scal_upts_inb = inb = backend.matrix_bank(self._scal_upts)
+        self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
+
+        # Find/allocate space for a solution-sized scalar that is
+        # allowed to alias other scratch space in the simulation
+        aliases = next((m for m in abufs if m.nbytes >= inb.nbytes), None)
+        self._scal_upts_temp = backend.matrix(inb.ioshape, aliases=aliases,
+                                              tags=inb.tags)
+
     @memoize
     def opmat(self, expr):
         return self._be.const_matrix(self._basis.opmat(expr),
@@ -174,6 +182,15 @@ class BaseElements(object):
             raise RuntimeError('Negative mesh Jacobians detected')
 
         return self._be.const_matrix(1.0 / djac, tags={'align'})
+
+    @memoize
+    def ploc_at(self, name):
+        op = self._basis.sbasis.nodal_basis_at(getattr(self._basis, name))
+
+        ploc = np.dot(op, self._eles.reshape(self.nspts, -1))
+        ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
+
+        return self._be.const_matrix(ploc, tags={'align'})
 
     def _gen_pnorm_fpts(self):
         smats = self._get_smats(self._basis.fpts).transpose(1, 3, 0, 2)

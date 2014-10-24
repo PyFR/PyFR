@@ -4,10 +4,13 @@ from pyfr.solvers.baseadvec import BaseAdvectionSystem
 
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
-    def _get_negdivf(self):
+    def rhs(self, t, uinbank, foutbank):
         runall = self._backend.runall
         q1, q2 = self._queues
         kernels = self._kernels
+
+        self._eles_scal_upts_inb.active = uinbank
+        self._eles_scal_upts_outb.active = foutbank
 
         q1 << kernels['eles', 'disu']()
         q1 << kernels['mpiint', 'scal_fpts_pack']()
@@ -47,8 +50,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1 << kernels['eles', 'tdivtconf']()
         if ('eles', 'tdivf_qpts') in kernels:
             q1 << kernels['eles', 'tdivf_qpts']()
-            q1 << kernels['eles', 'negdivconf']()
+            q1 << kernels['eles', 'negdivconf'](t=t)
             q1 << kernels['eles', 'divf_upts']()
         else:
-            q1 << kernels['eles', 'negdivconf']()
+            q1 << kernels['eles', 'negdivconf'](t=t)
         runall([q1])
