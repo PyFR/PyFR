@@ -41,8 +41,8 @@ class BaseAdvectionMPIInters(BaseInters):
         const_mat = self._const_mat
 
         # Generate the left hand view matrix and its dual
-        self._scal0_lhs = self._scal_mpi_view(lhs, 'get_scal_fpts_for_inter')
-        self._scal0_rhs = be.mpi_matrix_for_view(self._scal0_lhs)
+        self._scal0_lhs = self._scal_xchg_view(lhs, 'get_scal_fpts_for_inter')
+        self._scal0_rhs = be.xchg_matrix_for_view(self._scal0_lhs)
 
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')

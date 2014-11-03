@@ -104,11 +104,11 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         mattypes = (
             self.backend.const_matrix_cls, self.backend.matrix_cls,
             self.backend.matrix_bank_cls, self.backend.matrix_rslice_cls,
-            self.backend.mpi_matrix_cls
+            self.backend.xchg_matrix_cls
         )
 
         # Possible view types
-        viewtypes = (self.backend.mpi_view_cls, self.backend.view_cls)
+        viewtypes = (self.backend.view_cls, self.backend.xchg_view_cls)
 
         # First arguments are the iteration dimensions
         ndim, arglst = len(dims), [int(d) for d in dims]

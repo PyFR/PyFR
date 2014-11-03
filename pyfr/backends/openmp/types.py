@@ -37,7 +37,9 @@ class OpenMPMatrixBase(base.MatrixBase):
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    pass
+    @lazyprop
+    def hdata(self):
+        return self.data
 
 
 class OpenMPMatrixRSlice(base.MatrixRSlice):
@@ -62,11 +64,11 @@ class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
     pass
 
 
-class OpenMPMPIMatrix(OpenMPMatrix, base.MPIMatrix):
+class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix):
     pass
 
 
-class OpenMPMPIView(base.MPIView):
+class OpenMPXchgView(base.XchgView):
     pass
 
 

@@ -24,10 +24,10 @@ class OpenMPBackend(BaseBackend):
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_bank_cls = types.OpenMPMatrixBank
         self.matrix_rslice_cls = types.OpenMPMatrixRSlice
-        self.mpi_matrix_cls = types.OpenMPMPIMatrix
-        self.mpi_view_cls = types.OpenMPMPIView
         self.queue_cls = types.OpenMPQueue
         self.view_cls = types.OpenMPView
+        self.xchg_matrix_cls = types.OpenMPXchgMatrix
+        self.xchg_view_cls = types.OpenMPXchgView
 
         # Template lookup
         self.lookup = DottedTemplateLookup('pyfr.backends.openmp.kernels')

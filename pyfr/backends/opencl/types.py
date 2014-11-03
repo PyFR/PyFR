@@ -72,17 +72,17 @@ class OpenCLView(base.View):
     pass
 
 
-class OpenCLMPIMatrix(OpenCLMatrix, base.MPIMatrix):
+class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
     def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         # Call the standard matrix constructor
-        super(OpenCLMPIMatrix, self).__init__(backend, ioshape, initval,
-                                              extent, aliases, tags)
+        super(OpenCLXchgMatrix, self).__init__(backend, ioshape, initval,
+                                               extent, aliases, tags)
 
         # Allocate an empty buffer on the host for MPI to send/recv from
         self.hdata = np.empty((self.nrow, self.ncol), self.dtype)
 
 
-class OpenCLMPIView(base.MPIView):
+class OpenCLXchgView(base.XchgView):
     pass
 
 

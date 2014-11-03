@@ -59,10 +59,10 @@ class OpenCLBackend(BaseBackend):
         self.matrix_cls = types.OpenCLMatrix
         self.matrix_bank_cls = types.OpenCLMatrixBank
         self.matrix_rslice_cls = types.OpenCLMatrixRSlice
-        self.mpi_matrix_cls = types.OpenCLMPIMatrix
-        self.mpi_view_cls = types.OpenCLMPIView
         self.queue_cls = types.OpenCLQueue
         self.view_cls = types.OpenCLView
+        self.xchg_matrix_cls = types.OpenCLXchgMatrix
+        self.xchg_view_cls = types.OpenCLXchgView
 
         # Template lookup
         self.lookup = DottedTemplateLookup('pyfr.backends.opencl.kernels')

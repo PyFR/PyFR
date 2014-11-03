@@ -39,8 +39,8 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         rhsprank = rallocs.mprankmap[rhsrank]
 
         # Generate second set of view matrices
-        self._vect0_lhs = self._vect_mpi_view(lhs, 'get_vect_fpts_for_inter')
-        self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
+        self._vect0_lhs = self._vect_xchg_view(lhs, 'get_vect_fpts_for_inter')
+        self._vect0_rhs = be.xchg_matrix_for_view(self._vect0_lhs)
 
         # Additional kernel constants
         self._tpl_c.update(cfg.items_as('solver-interfaces', float))

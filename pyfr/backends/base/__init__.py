@@ -7,5 +7,5 @@ from pyfr.backends.base.kernels import (BaseKernelProvider,
                                         MPIKernel, MPIMetaKernel,
                                         NullComputeKernel, NullMPIKernel)
 from pyfr.backends.base.types import (ConstMatrix, Matrix, MatrixBank,
-                                      MatrixBase, MatrixRSlice, MPIMatrix,
-                                      MPIView, Queue, View)
+                                      MatrixBase, MatrixRSlice, Queue, View,
+                                      XchgMatrix, XchgView)
