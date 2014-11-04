@@ -32,7 +32,7 @@ def format_hms(delta):
 
 
 class ProgressBar(object):
-    _dispfmt = '{:7.1%} [{}{}>{}] {:.{}f}/{:.{}f} ela: {} rem: {}'
+    _dispfmt = '{:7.1%} [{}{}>{}] {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
 
     # Minimum time in seconds between updates
     _mindelta = 0.1
@@ -41,14 +41,13 @@ class ProgressBar(object):
         self.ststrt = start
         self.strtrt = curr
         self.stend = end
-        self.dps = str(dps)
+        self.dps = dps
 
         self._wstart = time.time()
         self._last_wallt = 0.0
 
         self._ncol = get_terminal_size()[1]
-        self._nbarcol = self._ncol - 24 - 2*len(format(end, '.' +
-                                                       self.dps + 'f'))
+        self._nbarcol = self._ncol - 24 - 2*len('{:.{}f}'.format(end, dps))
 
         self.advance_to(curr)
 
@@ -82,15 +81,9 @@ class ProgressBar(object):
         # Fraction of the simulation we've completed
         frac = float(rcu) / ren
 
-        # Elapsed wall time
+        # Elapsed and estimated remaining wall time
         wela = format_hms(wallt)
-
-        # Remaining wall time
-        if self.stelap > 0:
-            trem = wallt*(en - cu)/el
-        else:
-            trem = None
-        wrem = format_hms(trem)
+        wrem = format_hms(wallt*(en - cu)/el if self.stelap > 0 else None)
 
         # Decide how many '+', '=' and ' ' to output for the progress bar
         n = self._nbarcol - len(wela) - len(wrem) - 1
@@ -99,8 +92,8 @@ class ProgressBar(object):
         nsp = n - nps - neq
 
         # Render the progress bar
-        s = self._dispfmt.format(frac, '+'*nps, '='*neq, ' '*nsp, cu, self.dps,
-                                 en, self.dps, wela, wrem)
+        s = self._dispfmt.format(frac, '+'*nps, '='*neq, ' '*nsp, cu, en,
+                                 wela, wrem, dps=self.dps)
 
         # Write the progress bar and pad the remaining columns
         sys.stderr.write('\x1b[2K\x1b[G')
