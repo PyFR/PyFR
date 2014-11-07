@@ -6,13 +6,11 @@ import re
 from mpmath import mp
 import numpy as np
 
-from pyfr.util import lazyprop
-
 
 class BaseTabulatedQuadRule(object):
     def __init__(self, rule):
-        self.points = []
-        self.weights = []
+        pts = []
+        wts = []
 
         rule = re.sub(r'(?<=\))\s*,?\s*(?!$)', r'\n', rule)
         rule = re.sub(r'\(|\)|,', '', rule).strip()
@@ -26,27 +24,23 @@ class BaseTabulatedQuadRule(object):
             args = [mp.mpf(f) for f in l.split()]
 
             if len(args) == self.ndim:
-                self.points.append(args)
+                pts.append(args)
             elif len(args) == self.ndim + 1:
-                self.points.append(args[:-1])
-                self.weights.append(args[-1])
+                pts.append(args[:-1])
+                wts.append(args[-1])
             else:
                 raise ValueError('Invalid points in quadrature rule')
 
-        if len(self.weights) and len(self.weights) != len(self.points):
+        if len(wts) and len(wts) != len(pts):
             raise ValueError('Invalid number of weights')
 
         # Flatten 1D rules
         if self.ndim == 1:
-            self.points = [p[0] for p in self.points]
+            pts = [p[0] for p in pts]
 
-    @lazyprop
-    def np_points(self):
-        return np.asanyarray(self.points, dtype=np.float)
-
-    @lazyprop
-    def np_weights(self):
-        return np.asanyarray(self.weights, dtype=np.float)
+        # Cast
+        self.pts = np.array(pts, dtype=np.float)
+        self.wts = np.array(wts, dtype=np.float)
 
 
 class BaseStoredQuadRule(BaseTabulatedQuadRule):
@@ -96,10 +90,10 @@ def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):
         r = TabulatedQuadRule(rule)
 
         # Validate the provided point set
-        if npts and npts != len(r.points):
+        if npts and npts != len(r.pts):
             raise ValueError('Invalid number of points in provided rule')
 
-        if qdeg and not r.weights:
+        if qdeg and not len(r.wts):
             raise ValueError('Provided rule has no quadrature weights')
 
         return r

@@ -15,8 +15,13 @@ from pyfr.util import lazyprop
 
 
 def _proj_rule_pts(projector, qrule):
-    pts = np.atleast_2d(qrule.np_points.T)
+    pts = np.atleast_2d(qrule.pts.T)
     return np.vstack(np.broadcast_arrays(*projector(*pts))).T
+
+
+@chop
+def _proj_l2(qpts, qwts, basis):
+    return np.dot(basis.vdm.T, qwts*basis.ortho_basis_at(qpts))
 
 
 class BaseShape(object):
@@ -38,7 +43,7 @@ class BaseShape(object):
         self.order = cfg.getint('solver', 'order')
 
         self.antialias = cfg.get('solver', 'anti-alias', 'none')
-        self.antialias = set(s.strip() for s in self.antialias.split(','))
+        self.antialias = {s.strip() for s in self.antialias.split(',')}
         self.antialias.discard('none')
         if self.antialias - {'flux', 'div-flux'}:
             raise ValueError('Invalid anti-alias options')
@@ -94,7 +99,7 @@ class BaseShape(object):
 
     @lazyprop
     def m3(self):
-        return self.fbasis_at(self.upts)
+        return self.gbasis_at(self.upts)
 
     @lazyprop
     def m4(self):
@@ -115,10 +120,8 @@ class BaseShape(object):
         return np.vstack([self.m0, self.m7])
 
     @lazyprop
-    @chop
     def m9(self):
-        ub = self.ubasis
-        return np.dot(ub.vdm.T, self.qwts*ub.ortho_basis_at(self.qpts))
+        return _proj_l2(self.qpts, self.qwts, self.ubasis)
 
     @property
     def m10(self):
@@ -149,7 +152,7 @@ class BaseShape(object):
     @lazyprop
     def upts(self):
         rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
-        return get_quadrule(self.name, rname, self.nupts).points
+        return get_quadrule(self.name, rname, self.nupts).pts
 
     @lazyprop
     def _qrule(self):
@@ -166,7 +169,7 @@ class BaseShape(object):
 
     @property
     def qpts(self):
-        return self._qrule.np_points
+        return self._qrule.pts
 
     @property
     def nqpts(self):
@@ -174,7 +177,7 @@ class BaseShape(object):
 
     @property
     def qwts(self):
-        return self._qrule.np_weights
+        return self._qrule.wts
 
     @lazyprop
     def fpts(self):
@@ -196,7 +199,7 @@ class BaseShape(object):
         return np.vstack(ppts)
 
     @lazyprop
-    def fbasis_coeffs(self):
+    def gbasis_coeffs(self):
         coeffs = []
         rcache = {}
 
@@ -219,24 +222,24 @@ class BaseShape(object):
                 rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
                 npts = self.npts_for_face[kind](self.order)
 
-                pts = get_quadrule(kind, rule, npts).np_points
+                pts = get_quadrule(kind, rule, npts).pts
                 ppb = get_polybasis(kind, self.order + 1, pts)
 
-                L = ppb.nodal_basis_at(qr.np_points)
+                L = ppb.nodal_basis_at(qr.pts)
 
                 rcache[kind] = (qr, L)
 
             # Do the quadrature
             M = self.ubasis.ortho_basis_at(_proj_rule_pts(proj, qr))
-            S = np.einsum('i...,ik,ji->kj', area*qr.np_weights, L, M)
+            S = np.einsum('i...,ik,ji->kj', area*qr.wts, L, M)
 
             coeffs.append(S)
 
         return np.vstack(coeffs)
 
     @chop
-    def fbasis_at(self, pts):
-        return np.dot(self.fbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T
+    def gbasis_at(self, pts):
+        return np.dot(self.gbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T
 
     @property
     def facenorms(self):
