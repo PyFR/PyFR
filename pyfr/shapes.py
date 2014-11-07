@@ -7,21 +7,20 @@ import re
 from mpmath import mp
 import numpy as np
 
-from pyfr.nputil import chop
+from pyfr.nputil import block_diag, chop
 from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
-from pyfr.nputil import block_diag
 from pyfr.util import lazyprop
 
 
-def _proj_rule_pts(projector, qrule):
-    pts = np.atleast_2d(qrule.pts.T)
+def _proj_pts(projector, pts):
+    pts = np.atleast_2d(pts.T)
     return np.vstack(np.broadcast_arrays(*projector(*pts))).T
 
 
 @chop
-def _proj_l2(qpts, qwts, basis):
-    return np.dot(basis.vdm.T, qwts*basis.ortho_basis_at(qpts))
+def _proj_l2(qrule, basis):
+    return np.dot(basis.vdm.T, qrule.wts*basis.ortho_basis_at(qrule.pts))
 
 
 class BaseShape(object):
@@ -45,7 +44,7 @@ class BaseShape(object):
         self.antialias = cfg.get('solver', 'anti-alias', 'none')
         self.antialias = {s.strip() for s in self.antialias.split(',')}
         self.antialias.discard('none')
-        if self.antialias - {'flux', 'div-flux'}:
+        if self.antialias - {'flux', 'div-flux', 'surf-flux'}:
             raise ValueError('Invalid anti-alias options')
 
         self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
@@ -99,7 +98,16 @@ class BaseShape(object):
 
     @lazyprop
     def m3(self):
-        return self.gbasis_at(self.upts)
+        m = self.gbasis_at(self.upts)
+
+        if 'surf-flux' in self.antialias:
+            fp = [_proj_l2(self._iqrules[kind],
+                           self.facebases[kind])
+                  for kind, proj, norm, area in self.faces]
+
+            m = np.dot(m, block_diag(fp))
+
+        return m
 
     @lazyprop
     def m4(self):
@@ -121,7 +129,7 @@ class BaseShape(object):
 
     @lazyprop
     def m9(self):
-        return _proj_l2(self.qpts, self.qwts, self.ubasis)
+        return _proj_l2(self._eqrule, self.ubasis)
 
     @property
     def m10(self):
@@ -154,10 +162,8 @@ class BaseShape(object):
         rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).pts
 
-    @lazyprop
-    def _qrule(self):
-        sect = 'solver-elements-' + self.name
-        kwargs = {'flags': 'sp'}
+    def _get_qrule(self, eleint, kind, **kwargs):
+        sect = 'solver-{0}-{1}'.format(eleint, kind)
 
         if self.cfg.hasopt(sect, 'quad-pts'):
             kwargs['rule'] = self.cfg.get(sect, 'quad-pts')
@@ -165,43 +171,47 @@ class BaseShape(object):
         if self.cfg.hasopt(sect, 'quad-deg'):
             kwargs['qdeg'] = self.cfg.getint(sect, 'quad-deg')
 
-        return get_quadrule(self.name, **kwargs)
+        return get_quadrule(kind, **kwargs)
+
+    @lazyprop
+    def _eqrule(self):
+        return self._get_qrule('elements', self.name)
+
+    @lazyprop
+    def _iqrules(self):
+        return {kind: self._get_qrule('interfaces', kind, flags='s')
+                for kind in {k for k, p, n, a in self.faces}}
 
     @property
     def qpts(self):
-        return self._qrule.pts
+        return self._eqrule.pts
 
     @property
     def nqpts(self):
         return len(self.qpts)
 
-    @property
-    def qwts(self):
-        return self._qrule.wts
-
     @lazyprop
     def fpts(self):
-        rrule, ppts = {}, []
+        ppts = []
 
         for kind, proj, norm, area in self.faces:
             # Obtain the flux points in reference space for the face type
-            try:
-                r = rrule[kind]
-            except KeyError:
+            if 'surf-flux' in self.antialias:
+                r = self._iqrules[kind]
+            else:
                 rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
                 npts = self.npts_for_face[kind](self.order)
 
-                rrule[kind] = r = get_quadrule(kind, rule, npts)
+                r = get_quadrule(kind, rule, npts)
 
             # Project
-            ppts.append(_proj_rule_pts(proj, r))
+            ppts.append(_proj_pts(proj, r.pts))
 
         return np.vstack(ppts)
 
     @lazyprop
     def gbasis_coeffs(self):
         coeffs = []
-        rcache = {}
 
         # Suitable quadrature rules for various face types
         qrule_map = {
@@ -214,23 +224,11 @@ class BaseShape(object):
             # Obtain a quadrature rule for integrating on the reference face
             # and evaluate this rule at the nodal basis defined by the flux
             # points
-            try:
-                qr, L = rcache[kind]
-            except KeyError:
-                qr = get_quadrule(kind, *qrule_map[kind])
-
-                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
-                npts = self.npts_for_face[kind](self.order)
-
-                pts = get_quadrule(kind, rule, npts).pts
-                ppb = get_polybasis(kind, self.order + 1, pts)
-
-                L = ppb.nodal_basis_at(qr.pts)
-
-                rcache[kind] = (qr, L)
+            qr = get_quadrule(kind, *qrule_map[kind])
+            L = self.facebases[kind].nodal_basis_at(qr.pts)
 
             # Do the quadrature
-            M = self.ubasis.ortho_basis_at(_proj_rule_pts(proj, qr))
+            M = self.ubasis.ortho_basis_at(_proj_pts(proj, qr.pts))
             S = np.einsum('i...,ik,ji->kj', area*qr.wts, L, M)
 
             coeffs.append(S)
@@ -255,14 +253,32 @@ class BaseShape(object):
         return self.std_ele(self.nsptsord - 1)
 
     @lazyprop
+    def facebases(self):
+        fb = {}
+
+        for kind in {k for k, p, n, a in self.faces}:
+            rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+            npts = self.npts_for_face[kind](self.order)
+
+            pts = get_quadrule(kind, rule, npts).pts
+
+            fb[kind] = get_polybasis(kind, self.order + 1, pts)
+
+        return fb
+
+    @lazyprop
     def facefpts(self):
         nf = np.cumsum([0] + self.nfacefpts)
         return [list(xrange(nf[i], nf[i + 1])) for i in xrange(len(nf) - 1)]
 
     @lazyprop
     def nfacefpts(self):
-        return [self.npts_for_face[kind](self.order)
-                for kind, proj, norm, area in self.faces]
+        if 'surf-flux' in self.antialias:
+            cnt = lambda k: len(self._iqrules[k].pts)
+        else:
+            cnt = lambda k: self.npts_for_face[k](self.order)
+
+        return [cnt(kind) for kind, proj, norm, area in self.faces]
 
     @property
     def nfpts(self):
@@ -388,4 +404,3 @@ class PriShape(BaseShape):
                 for r in pts1d
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
-
