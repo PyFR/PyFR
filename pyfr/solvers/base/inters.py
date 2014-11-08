@@ -23,7 +23,7 @@ class BaseInters(object):
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
         self._elemap = elemap
-        self._cfg = cfg
+        self.cfg = cfg
 
         # Get the number of dimensions and variables
         self.ndims = next(iter(elemap.viewvalues())).ndims

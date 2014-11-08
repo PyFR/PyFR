@@ -7,12 +7,12 @@ class BaseAdvectionSystem(BaseSystem):
     _nqueues = 2
 
     def rhs(self, t, uinbank, foutbank):
-        runall = self._backend.runall
+        runall = self.backend.runall
         q1, q2 = self._queues
         kernels = self._kernels
 
-        self._eles_scal_upts_inb.active = uinbank
-        self._eles_scal_upts_outb.active = foutbank
+        self.eles_scal_upts_inb.active = uinbank
+        self.eles_scal_upts_outb.active = foutbank
 
         q1 << kernels['eles', 'disu']()
         q1 << kernels['mpiint', 'scal_fpts_pack']()

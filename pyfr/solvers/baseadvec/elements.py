@@ -89,7 +89,7 @@ class BaseAdvectionElements(BaseElements):
             )
 
         # In-place solution filter
-        if self._cfg.getint('soln-filter', 'freq', '0'):
+        if self.cfg.getint('soln-filter', 'freq', '0'):
             def filter_soln():
                 mul = backend.kernel(
                     'mul', self.opmat('M11'), self.scal_upts_inb,
@@ -105,13 +105,13 @@ class BaseAdvectionElements(BaseElements):
 
     def _process_src_terms(self, where):
         # Variable and function substitutions
-        subs = self._cfg.items('constants')
+        subs = self.cfg.items('constants')
         subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
         subs.update(abs='fabs', pi=repr(math.pi))
 
         srcex = []
         for v in self._convarmap[self.ndims]:
-            ex = self._cfg.get('solver-source-terms', v, '0')
+            ex = self.cfg.get('solver-source-terms', v, '0')
 
             # Substitute variables
             ex = re.sub(r'\b({0})\b'.format('|'.join(subs)),

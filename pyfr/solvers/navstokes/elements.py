@@ -9,12 +9,12 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         super(NavierStokesElements, self).set_backend(backend, nscalupts)
         backend.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
 
-        visc_corr = self._cfg.get('solver', 'viscosity-correction', 'none')
+        visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         if visc_corr not in {'sutherland', 'none'}:
             raise ValueError('Invalid viscosity-correction option')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                        visc_corr=visc_corr,
-                       c=self._cfg.items_as('constants', float))
+                       c=self.cfg.items_as('constants', float))
 
         if 'flux' in self.antialias:
             self.kernels['tdisf'] = lambda: backend.kernel(

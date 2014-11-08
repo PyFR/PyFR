@@ -22,7 +22,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
     def _gen_perm(self, lhs, rhs):
         # In the special case of β = -0.5 it is better to sort by the
         # RHS interface; otherwise we simply opt for the LHS
-        beta = self._cfg.getfloat('solver-interfaces', 'ldg-beta')
+        beta = self.cfg.getfloat('solver-interfaces', 'ldg-beta')
         side = lhs if beta != -0.5 else rhs
 
         # Compute the relevant permutation

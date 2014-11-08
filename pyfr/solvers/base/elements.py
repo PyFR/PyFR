@@ -17,8 +17,8 @@ class BaseElements(object):
     def __init__(self, basiscls, eles, cfg):
         self._be = None
 
-        self._eles = eles
-        self._cfg = cfg
+        self.eles = eles
+        self.cfg = cfg
 
         self.nspts = nspts = eles.shape[0]
         self.neles = neles = eles.shape[1]
@@ -69,7 +69,7 @@ class BaseElements(object):
 
     def set_ics_from_cfg(self):
         # Bring simulation constants into scope
-        vars = self._cfg.items_as('constants', float)
+        vars = self.cfg.items_as('constants', float)
 
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
@@ -78,7 +78,7 @@ class BaseElements(object):
         plocop = self._basis.sbasis.nodal_basis_at(self._basis.upts)
 
         # Apply the operator to the mesh elements and reshape
-        plocupts = np.dot(plocop, self._eles.reshape(self.nspts, -1))
+        plocupts = np.dot(plocop, self.eles.reshape(self.nspts, -1))
         plocupts = plocupts.reshape(self.nupts, self.neles, self.ndims)
 
         # Extract the components of the mesh coordinates
@@ -86,7 +86,7 @@ class BaseElements(object):
         vars.update(dict(zip('xyz', coords)))
 
         # Evaluate the ICs from the config file
-        ics = [npeval(self._cfg.get('soln-ics', dv), vars)
+        ics = [npeval(self.cfg.get('soln-ics', dv), vars)
                for dv in self._privarmap[self.ndims]]
 
         # Allocate
@@ -187,7 +187,7 @@ class BaseElements(object):
     def ploc_at(self, name):
         op = self._basis.sbasis.nodal_basis_at(getattr(self._basis, name))
 
-        ploc = np.dot(op, self._eles.reshape(self.nspts, -1))
+        ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
         ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
 
         return self._be.const_matrix(ploc, tags={'align'})
@@ -216,7 +216,7 @@ class BaseElements(object):
         jacop = np.rollaxis(self._basis.sbasis.jac_nodal_basis_at(pts), 2)
 
         # Cast as a matrix multiply and apply to eles
-        jac = np.dot(jacop.reshape(-1, nspts), self._eles.reshape(nspts, -1))
+        jac = np.dot(jacop.reshape(-1, nspts), self.eles.reshape(nspts, -1))
 
         # Reshape (npts*ndims, neles*ndims) => (npts, ndims, neles, ndims)
         jac = jac.reshape(npts, ndims, neles, ndims)

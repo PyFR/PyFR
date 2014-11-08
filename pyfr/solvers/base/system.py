@@ -23,12 +23,11 @@ class BaseSystem(object):
     _nqueues = None
 
     def __init__(self, backend, rallocs, mesh, initsoln, nreg, cfg):
-        self._backend = backend
-        self._cfg = cfg
-        self._nreg = nreg
+        self.backend = backend
+        self.cfg = cfg
 
         # Load the elements
-        eles, elemap = self._load_eles(rallocs, mesh, initsoln)
+        eles, elemap = self._load_eles(rallocs, mesh, initsoln, nreg)
         backend.commit()
 
         # Get the banks, types, num DOFs and shapes of the elements
@@ -38,8 +37,8 @@ class BaseSystem(object):
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
 
         # I/O banks for the elements
-        self._eles_scal_upts_inb = eles.scal_upts_inb
-        self._eles_scal_upts_outb = eles.scal_upts_outb
+        self.eles_scal_upts_inb = eles.scal_upts_inb
+        self.eles_scal_upts_outb = eles.scal_upts_outb
 
         # Load the interfaces
         int_inters = self._load_int_inters(rallocs, mesh, elemap)
@@ -52,7 +51,7 @@ class BaseSystem(object):
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
         backend.commit()
 
-    def _load_eles(self, rallocs, mesh, initsoln):
+    def _load_eles(self, rallocs, mesh, initsoln, nreg):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Look for and load each element type from the mesh
@@ -63,7 +62,7 @@ class BaseSystem(object):
                 # Element type
                 t = m.group(1)
 
-                elemap[t] = self.elementscls(basismap[t], mesh[f], self._cfg)
+                elemap[t] = self.elementscls(basismap[t], mesh[f], self.cfg)
 
         # Construct a proxylist to simplify collective operations
         eles = proxylist(elemap.values())
@@ -82,14 +81,14 @@ class BaseSystem(object):
             eles.set_ics_from_cfg()
 
         # Allocate these elements on the backend
-        eles.set_backend(self._backend, self._nreg)
+        eles.set_backend(self.backend, nreg)
 
         return eles, elemap
 
     def _load_int_inters(self, rallocs, mesh, elemap):
         lhs, rhs = mesh['con_p%d' % rallocs.prank].tolist()
-        int_inters = self.intinterscls(self._backend, lhs, rhs, elemap,
-                                       self._cfg)
+        int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
+                                       self.cfg)
 
         # Although we only have a single internal interfaces instance
         # we wrap it in a proxylist for consistency
@@ -103,8 +102,8 @@ class BaseSystem(object):
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)].tolist()
 
-            mpiiface = self.mpiinterscls(self._backend, interarr, rhsmrank,
-                                         rallocs, elemap, self._cfg)
+            mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
+                                         rallocs, elemap, self.cfg)
             mpi_inters.append(mpiiface)
 
         return mpi_inters
@@ -124,15 +123,15 @@ class BaseSystem(object):
                 cfgsect = 'soln-bcs-%s' % rgn
 
                 # Instantiate
-                bcclass = bcmap[self._cfg.get(cfgsect, 'type')]
-                bciface = bcclass(self._backend, mesh[f].tolist(), elemap,
-                                  cfgsect, self._cfg)
+                bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
+                bciface = bcclass(self.backend, mesh[f].tolist(), elemap,
+                                  cfgsect, self.cfg)
                 bc_inters.append(bciface)
 
         return bc_inters
 
     def _gen_queues(self):
-        self._queues = [self._backend.queue() for i in xrange(self._nqueues)]
+        self._queues = [self.backend.queue() for i in xrange(self._nqueues)]
 
     def _gen_kernels(self, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(proxylist)
@@ -149,7 +148,7 @@ class BaseSystem(object):
         pass
 
     def filt(self, uinoutbank):
-        self._eles_scal_upts_inb.active = uinoutbank
+        self.eles_scal_upts_inb.active = uinoutbank
 
         self._queues[0] % self._kernels['eles', 'filter_soln']()
 
