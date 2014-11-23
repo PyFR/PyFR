@@ -46,7 +46,7 @@ class OpenMPBackend(BaseBackend):
         self.pointwise = self._providers[0]
 
     def _malloc_impl(self, nbytes):
-            data = np.zeros(nbytes + self.alignb, dtype=np.uint8)
-            offset = -data.ctypes.data % self.alignb
+        data = np.zeros(nbytes + self.alignb, dtype=np.uint8)
+        offset = -data.ctypes.data % self.alignb
 
-            return data[offset:nbytes + offset]
+        return data[offset:nbytes + offset]
