@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
+<%inherit file='base'/>
 
 __global__ void
 pack_view(int n, int nrv, int ncv,
-          const ${dtype}* __restrict__ v,
+          const fpdtype_t* __restrict__ v,
           const int* __restrict__ vix,
           const int* __restrict__ vcstri,
           const int* __restrict__ vrstri,
-          ${dtype}* __restrict__  pmat)
+          fpdtype_t* __restrict__  pmat)
 {
     int i = blockIdx.x*blockDim.x + threadIdx.x;
 

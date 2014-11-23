@@ -90,8 +90,7 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
         # may, or may not, use OpenMP).
         if self._cblas_type == 'cblas-st':
             # Render the kernel template
-            tpl = self.backend.lookup.get_template('par-gemm')
-            src = tpl.render(alignb=self.backend.alignb, fpdtype=a.dtype)
+            src = self.backend.lookup.get_template('par-gemm').render()
 
             # Argument types for par_gemm
             argt = [

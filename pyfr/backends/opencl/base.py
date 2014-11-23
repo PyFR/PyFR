@@ -65,7 +65,10 @@ class OpenCLBackend(BaseBackend):
         self.xchg_view_cls = types.OpenCLXchgView
 
         # Template lookup
-        self.lookup = DottedTemplateLookup('pyfr.backends.opencl.kernels')
+        self.lookup = DottedTemplateLookup(
+            'pyfr.backends.opencl.kernels',
+            fpdtype=self.fpdtype, alignb=self.alignb
+        )
 
         # Instantiate the base kernel providers
         kprovs = [provider.OpenCLPointwiseKernelProvider,

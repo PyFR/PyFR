@@ -3,7 +3,6 @@
 from pyfr.backends.base import ComputeKernel, NullComputeKernel
 from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
-from pyfr.nputil import npdtype_to_ctype
 
 
 class OpenMPPackingKernels(OpenMPKernelProvider, BasePackingKernels):
@@ -12,8 +11,7 @@ class OpenMPPackingKernels(OpenMPKernelProvider, BasePackingKernels):
         m, v = mv.xchgmat, mv.view
 
         # Render the kernel template
-        tpl = self.backend.lookup.get_template('pack')
-        src = tpl.render(dtype=npdtype_to_ctype(m.dtype))
+        src = self.backend.lookup.get_template('pack').render()
 
         # Build
         kern = self._build_kernel('pack_view', src, 'iiiPPPPP')

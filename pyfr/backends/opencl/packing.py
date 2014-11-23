@@ -14,8 +14,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
         m, v = mv.xchgmat, mv.view
 
         # Render the kernel template
-        tpl = self.backend.lookup.get_template('pack')
-        src = tpl.render(alignb=self.backend.alignb, fpdtype=m.dtype)
+        src = self.backend.lookup.get_template('pack').render()
 
         # Build
         kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*5)

@@ -30,7 +30,10 @@ class OpenMPBackend(BaseBackend):
         self.xchg_view_cls = types.OpenMPXchgView
 
         # Template lookup
-        self.lookup = DottedTemplateLookup('pyfr.backends.openmp.kernels')
+        self.lookup = DottedTemplateLookup(
+            'pyfr.backends.openmp.kernels',
+            fpdtype=self.fpdtype, alignb=self.alignb
+        )
 
         # Kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,

@@ -5,7 +5,6 @@ import pycuda.driver as cuda
 from pyfr.backends.base import ComputeKernel
 from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
-from pyfr.nputil import npdtype_to_ctype
 
 
 class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
@@ -14,8 +13,7 @@ class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
         m, v = mv.xchgmat, mv.view
 
         # Render the kernel template
-        tpl = self.backend.lookup.get_template('pack')
-        src = tpl.render(dtype=npdtype_to_ctype(m.dtype))
+        src = self.backend.lookup.get_template('pack').render()
 
         # Build
         kern = self._build_kernel('pack_view', src, 'iiiPPPPP')

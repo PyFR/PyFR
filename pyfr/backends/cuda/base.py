@@ -59,7 +59,10 @@ class CUDABackend(BaseBackend):
         self.xchg_view_cls = types.CUDAXchgView
 
         # Template lookup
-        self.lookup = DottedTemplateLookup('pyfr.backends.cuda.kernels')
+        self.lookup = DottedTemplateLookup(
+            'pyfr.backends.cuda.kernels',
+            fpdtype=self.fpdtype, alignb=self.alignb
+        )
 
         # Instantiate the base kernel providers
         kprovs = [provider.CUDAPointwiseKernelProvider,

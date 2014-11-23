@@ -68,10 +68,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Copy the provided argument list
         tplargs = dict(tplargs)
 
-        # Floating point data type and aligment requirement for the backend
-        tplargs['fpdtype'] = self.backend.fpdtype
-        tplargs['alignb'] = self.backend.alignb
-
         # Backend-specfic generator classes
         tplargs['_kernel_generator'] = self.kernel_generator_cls
 
