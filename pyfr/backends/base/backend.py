@@ -50,8 +50,6 @@ class BaseBackend(object):
 
     @abstractmethod
     def __init__(self, cfg):
-        assert self.name is not None
-
         self.cfg = cfg
 
         # Numeric data type
