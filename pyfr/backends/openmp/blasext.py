@@ -14,8 +14,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         nv, cnt = len(xn), y.leaddim*y.nrow
 
         # Render the kernel template
-        tpl = self.backend.lookup.get_template('axnpby')
-        src = tpl.render(n=nv, alignb=self.backend.alignb, fpdtype=y.dtype)
+        src = self.backend.lookup.get_template('axnpby').render(n=nv)
 
         # Build
         kern = self._build_kernel('axnpby', src,
@@ -46,8 +45,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         dtype = x.dtype
 
         # Render the reduction kernel template
-        tpl = self.backend.lookup.get_template('errest')
-        src = tpl.render(alignb=self.backend.alignb, fpdtype=dtype)
+        src = self.backend.lookup.get_template('errest').render()
 
         # Build
         rkern = self._build_kernel(

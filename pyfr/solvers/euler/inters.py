@@ -10,7 +10,7 @@ class EulerIntInters(BaseAdvectionIntInters):
         super(EulerIntInters, self).__init__(*args, **kwargs)
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
 
-        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        c=self._tpl_c)
 
@@ -27,7 +27,7 @@ class EulerMPIInters(BaseAdvectionMPIInters):
         super(EulerMPIInters, self).__init__(*args, **kwargs)
         self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicflux')
 
-        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        c=self._tpl_c)
 
@@ -43,7 +43,7 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
         super(EulerBaseBCInters, self).__init__(*args, **kwargs)
         self._be.pointwise.register('pyfr.solvers.euler.kernels.bccflux')
 
-        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
+        rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        c=self._tpl_c, bctype=self.type)
 

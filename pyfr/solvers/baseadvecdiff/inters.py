@@ -22,7 +22,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
     def _gen_perm(self, lhs, rhs):
         # In the special case of β = -0.5 it is better to sort by the
         # RHS interface; otherwise we simply opt for the LHS
-        beta = self._cfg.getfloat('solver-interfaces', 'ldg-beta')
+        beta = self.cfg.getfloat('solver-interfaces', 'ldg-beta')
         side = lhs if beta != -0.5 else rhs
 
         # Compute the relevant permutation
@@ -39,8 +39,8 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         rhsprank = rallocs.mprankmap[rhsrank]
 
         # Generate second set of view matrices
-        self._vect0_lhs = self._vect_mpi_view(lhs, 'get_vect_fpts_for_inter')
-        self._vect0_rhs = be.mpi_matrix_for_view(self._vect0_lhs)
+        self._vect0_lhs = self._vect_xchg_view(lhs, 'get_vect_fpts_for_inter')
+        self._vect0_rhs = be.xchg_matrix_for_view(self._vect0_lhs)
 
         # Additional kernel constants
         self._tpl_c.update(cfg.items_as('solver-interfaces', float))

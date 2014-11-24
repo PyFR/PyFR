@@ -141,7 +141,7 @@ class ConstMatrix(MatrixBase):
                                           None, tags)
 
 
-class MPIMatrix(Matrix):
+class XchgMatrix(Matrix):
     pass
 
 
@@ -244,7 +244,7 @@ class View(object):
             )
 
 
-class MPIView(object):
+class XchgView(object):
     def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
         # Create a normal view
         self.view = backend.view(matmap, rcmap, stridemap, vshape, tags)
@@ -254,8 +254,8 @@ class MPIView(object):
         self.nvrow = nvrow = self.view.nvrow
         self.nvcol = nvcol = self.view.nvcol
 
-        # Now create an MPI matrix so that the view contents may be packed
-        self.mpimat = backend.mpi_matrix((nvrow, nvcol, n), tags=tags)
+        # Now create an exchange matrix to pack the view into
+        self.xchgmat = backend.xchg_matrix((nvrow, nvcol, n), tags=tags)
 
 
 class Queue(object):

@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
+<%inherit file='base'/>
 
 void
 pack_view(int n, int nrv, int ncv,
-          const ${dtype} *__restrict__ v,
+          const fpdtype_t *__restrict__ v,
           const int *__restrict__ vix,
           const int *__restrict__ vcstri,
           const int *__restrict__ vrstri,
-          ${dtype} *__restrict__  pmat)
+          fpdtype_t *__restrict__  pmat)
 {
     if (ncv == 1)
         for (int i = 0; i < n; i++)

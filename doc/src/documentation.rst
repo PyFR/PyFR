@@ -83,7 +83,7 @@ matrix multiplication::
     :members:
     :inherited-members:
 
-.. autoclass:: pyfr.backends.base.MPIMatrix
+.. autoclass:: pyfr.backends.base.XchgMatrix
     :members:
     :inherited-members:
 
@@ -94,7 +94,7 @@ matrix multiplication::
 .. autoclass:: pyfr.backends.base.View
     :members:
 
-.. autoclass:: pyfr.backends.base.MPIView
+.. autoclass:: pyfr.backends.base.XchgView
     :members:
 
 .. COMMENTOUT-ALTEREDPATH autoclass:: pyfr.backends.base.Kernel
@@ -134,4 +134,3 @@ Node Maps
 
 .. automodule:: pyfr.readers.nodemaps
     :members:
-    
