@@ -98,7 +98,7 @@ class SCOTCHPartitioner(BasePartitioner):
     dflt_opts = {'ufactor': 10, 'strat': 'default'}
 
     def __init__(self, *args, **kwargs):
-        super(SCOTCHPartitioner, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Load SCOTCH
         self._wrappers = SCOTCHWrappers()

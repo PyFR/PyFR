@@ -76,7 +76,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
 
         # Load the rule
         rule = resource_string(__name__, '{}/{}'.format(self.shape, best[0]))
-        super(BaseStoredQuadRule, self).__init__(rule)
+        super().__init__(rule.decode('utf-8'))
 
 
 def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):

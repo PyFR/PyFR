@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import itertools as it
-
 import numpy as np
 
 import pyfr.backends.base as base
@@ -109,11 +107,11 @@ class OpenMPQueue(base.Queue):
 
         while any(queues):
             # Execute a (potentially) blocking item from each queue
-            for q in it.ifilter(None, queues):
+            for q in filter(None, queues):
                 q._exec_nowait()
 
             # Now consider kernels which will wait
-            for q in it.ifilter(None, queues):
+            for q in filter(None, queues):
                 q._exec_next()
                 q._exec_nonblock()
 

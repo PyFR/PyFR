@@ -13,7 +13,7 @@ from pyfr.util import rm
 
 class BaseWriter(BaseIntegrator):
     def __init__(self, *args, **kwargs):
-        super(BaseWriter, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Base output directory and file name
         self._basedir = self.cfg.getpath('soln-output', 'basedir', '.')
@@ -27,8 +27,8 @@ class BaseWriter(BaseIntegrator):
 
         # Convert the config and stats objects to strings
         if rank == root:
-            metadata = dict(config=self.cfg.tostr(),
-                            stats=stats.tostr(),
+            metadata = dict(config=self.cfg.tostr().encode(),
+                            stats=stats.tostr().encode(),
                             mesh_uuid=self._mesh_uuid)
         else:
             metadata = None
@@ -65,7 +65,7 @@ class FileWriter(BaseWriter):
     writer_name = 'pyfrs-file'
 
     def __init__(self, *args, **kwargs):
-        super(FileWriter, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # MPI info
         comm, rank, root = get_comm_rank_root()

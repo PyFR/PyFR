@@ -16,8 +16,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             return comm
 
     def set_backend(self, backend, nscal_upts):
-        super(BaseAdvectionDiffusionElements, self).set_backend(backend,
-                                                                nscal_upts)
+        super().set_backend(backend, nscal_upts)
 
         # Register pointwise kernels
         backend.pointwise.register(
@@ -46,7 +45,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             muls = [backend.kernel('mul', self.opmat('M0'),
                                    vupts.rslice(i*nupts, (i + 1)*nupts),
                                    vfpts.rslice(i*nfpts, (i + 1)*nfpts))
-                    for i in xrange(self.ndims)]
+                    for i in range(self.ndims)]
 
             return ComputeMetaKernel(muls)
 
@@ -61,7 +60,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 muls = [backend.kernel('mul', self.opmat('M7'),
                                        vupts.rslice(i*nupts, (i + 1)*nupts),
                                        vqpts.rslice(i*nqpts, (i + 1)*nqpts))
-                        for i in xrange(self.ndims)]
+                        for i in range(self.ndims)]
 
                 return ComputeMetaKernel(muls)
 

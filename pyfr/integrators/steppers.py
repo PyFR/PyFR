@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import division
-
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.util import memoize, proxylist
 
 
 class BaseStepper(BaseIntegrator):
     def __init__(self, *args, **kwargs):
-        super(BaseStepper, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         backend = self.backend
         elemats = self._system.ele_banks
@@ -16,7 +14,7 @@ class BaseStepper(BaseIntegrator):
         # Create a proxylist of matrix-banks for each storage register
         self._regs = regs = []
         self._regidx = regidx = []
-        for i in xrange(self._stepper_nregs):
+        for i in range(self._stepper_nregs):
             b = proxylist([backend.matrix_bank(em, i) for em in elemats])
             regs.append(b)
             regidx.append(i)
@@ -25,7 +23,7 @@ class BaseStepper(BaseIntegrator):
         self._axnpby_kerns = {}
 
     def collect_stats(self, stats):
-        super(BaseStepper, self).collect_stats(stats)
+        super().collect_stats(stats)
 
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)
         stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
@@ -144,7 +142,7 @@ class RKVdH2RStepper(BaseStepper):
     bhat = []
 
     def __init__(self, *args, **kwargs):
-        super(RKVdH2RStepper, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Compute the c and error coeffs
         self.c = [0.0] + [sum(self.b[:i]) + ai for i, ai in enumerate(self.a)]
@@ -179,7 +177,7 @@ class RKVdH2RStepper(BaseStepper):
             r2, = set(self._regidx) - {r1}
 
         # Evaluate the stages in the scheme
-        for i in xrange(self._nstages):
+        for i in range(self._nstages):
             # Compute -∇·f
             rhs(t + self.c[i]*dt, r2 if i > 0 else r1, r2)
 

@@ -11,7 +11,7 @@ def jacobi(n, a, b, z):
     if n >= 2:
         apb, bbmaa = a + b, b*b - a*a
 
-        for q in xrange(2, n + 1):
+        for q in range(2, n + 1):
             qapbpq, apbp2q = q*(apb + q), apb + 2*q
             apbp2qm1, apbp2qm2  = apbp2q - 1, apbp2q - 2
 
@@ -30,7 +30,7 @@ def jacobian(f, x):
     h2 = h / 2
 
     J = []
-    for j in xrange(len(x)):
+    for j in range(len(x)):
         xph2 = [xk if k != j else xk + h2 for k, xk in enumerate(x)]
         xmh2 = [xk if k != j else xk - h2 for k, xk in enumerate(x)]
 

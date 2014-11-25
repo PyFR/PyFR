@@ -9,7 +9,7 @@ from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
     def __init__(self, *args, **kwargs):
-        super(NavierStokesIntInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -36,7 +36,7 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
     def __init__(self, *args, **kwargs):
-        super(NavierStokesMPIInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -61,7 +61,7 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 
 class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
     def __init__(self, *args, **kwargs):
-        super(NavierStokesBaseBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -88,8 +88,7 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-isot-wall'
 
     def __init__(self, *args, **kwargs):
-        super(NavierStokesNoSlpIsotWallBCInters, self).__init__(*args,
-                                                                **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._tpl_c['cpTw'], = self._eval_opts(['cpTw'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')
@@ -103,7 +102,7 @@ class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
     type = 'char-riem-inv'
 
     def __init__(self, *args, **kwargs):
-        super(NavierStokesCharRiemInvBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._tpl_c['p'], self._tpl_c['rho'] = self._eval_opts(['p', 'rho'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
@@ -113,7 +112,7 @@ class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     type = 'sup-in-fa'
 
     def __init__(self, *args, **kwargs):
-        super(NavierStokesSupInflowBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts(['rho', 'p'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
@@ -127,7 +126,7 @@ class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-frv'
 
     def __init__(self, *args, **kwargs):
-        super(NavierStokesSubInflowFrvBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._tpl_c['rho'], = self._eval_opts(['rho'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
@@ -137,8 +136,7 @@ class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-ftpttang'
 
     def __init__(self, *args, **kwargs):
-        super(NavierStokesSubInflowFtpttangBCInters, self).__init__(*args,
-                                                                    **kwargs)
+        super().__init__(*args, **kwargs)
 
         gamma = self.cfg.getfloat('constants', 'gamma')
 
@@ -164,6 +162,6 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
     type = 'sub-out-fp'
 
     def __init__(self, *args, **kwargs):
-        super(NavierStokesSubOutflowBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._tpl_c['p'], = self._eval_opts(['p'])

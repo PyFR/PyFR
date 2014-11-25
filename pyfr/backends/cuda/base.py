@@ -12,7 +12,7 @@ class CUDABackend(BaseBackend):
     name = 'cuda'
 
     def __init__(self, cfg):
-        super(CUDABackend, self).__init__(cfg)
+        super().__init__(cfg)
 
         # Get the desired CUDA device
         devid = cfg.get('backend-cuda', 'device-id', 'round-robin')

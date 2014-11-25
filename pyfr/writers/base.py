@@ -33,4 +33,4 @@ class BaseWriter(object):
                                (args.solnf, args.meshf))
 
         # Load config file
-        self.cfg = Inifile(self.soln['config'])
+        self.cfg = Inifile(self.soln['config'].item().decode())

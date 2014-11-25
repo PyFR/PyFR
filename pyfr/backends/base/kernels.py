@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import absolute_import
-
 from abc import ABCMeta, abstractmethod
 import itertools as it
 import types
@@ -58,9 +56,7 @@ class BaseKernelProvider(object):
         self.backend = backend
 
 
-class BasePointwiseKernelProvider(BaseKernelProvider):
-    __metaclass__ = ABCMeta
-
+class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
     kernel_generator_cls = None
 
     @memoize

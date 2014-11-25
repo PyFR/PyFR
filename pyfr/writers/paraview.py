@@ -36,10 +36,12 @@ class ParaviewWriter(BaseWriter):
         if self.args.divisor == 0:
             self.args.divisor = self.cfg.getint('solver', 'order')
 
+        write_s = lambda s: self.outf.write(s.encode('utf-8'))
+
         # Write .vtu file header
-        self.outf.write('<?xml version="1.0" ?>\n<VTKFile '
-                        'byte_order="LittleEndian" type="UnstructuredGrid" '
-                        'version="0.1">\n<UnstructuredGrid>\n')
+        write_s('<?xml version="1.0" ?>\n<VTKFile '
+                'byte_order="LittleEndian" type="UnstructuredGrid" '
+                'version="0.1">\n<UnstructuredGrid>\n')
 
         # Initialise offset (in bytes) to end of appended data
         off = 0
@@ -51,8 +53,7 @@ class ParaviewWriter(BaseWriter):
                                      self.soln_inf[sk], off)
 
         # Write end/start of header/data sections
-        self.outf.write('</UnstructuredGrid>\n<AppendedData '
-                        'encoding="raw">\n_')
+        write_s('</UnstructuredGrid>\n<AppendedData encoding="raw">\n_')
 
         # Write data "piece"wise
         for mk, sk in zip(self.mesh_inf, self.soln_inf):
@@ -61,7 +62,7 @@ class ParaviewWriter(BaseWriter):
                             self.soln_inf[sk])
 
         # Write .vtu file footer
-        self.outf.write('\n</AppendedData>\n</VTKFile>')
+        write_s('\n</AppendedData>\n</VTKFile>')
 
 
 def _write_vtk_darray(array, vtuf, numtyp):
@@ -103,7 +104,7 @@ class TensorProdShapeSubDiv(BaseShapeSubDiv):
 
         # Calculate offset of each subdivided element's nodes
         nodeoff = np.zeros((n,)*cls.ndim)
-        for dim, off in enumerate(np.ix_(*(xrange(n),)*cls.ndim)):
+        for dim, off in enumerate(np.ix_(*(range(n),)*cls.ndim)):
             nodeoff += off*(n + 1)**dim
 
         # Tile standard element node ordering mapping, then apply offsets
@@ -142,7 +143,7 @@ class TriShapeSubDiv(BaseShapeSubDiv):
     def subnodes(cls, n):
         conlst = []
 
-        for row in xrange(n, 0, -1):
+        for row in range(n, 0, -1):
             # Lower and upper indices
             l = (n - row)*(n + row + 3) // 2
             u = l + row + 1
@@ -172,8 +173,8 @@ class TetShapeSubDiv(BaseShapeSubDiv):
         conlst = []
         jump = 0
 
-        for n in xrange(nsubdiv, 0, -1):
-            for row in xrange(n, 0, -1):
+        for n in range(nsubdiv, 0, -1):
+            for row in range(n, 0, -1):
                 # Lower and upper indices
                 l = (n - row)*(n + row + 3) // 2 + jump
                 u = l + row + 1
@@ -213,7 +214,7 @@ class PriShapeSubDiv(BaseShapeSubDiv):
 
         # Layer these rows of triangles to define prisms
         loff = (n + 1)*(n + 2) // 2
-        lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in xrange(n)]
+        lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in range(n)]
 
         return np.hstack(np.hstack(l).flat for l in lcon)
 
@@ -225,7 +226,7 @@ class PyrShapeSubDiv(BaseShapeSubDiv):
     def subcells(cls, n):
         cells = []
 
-        for i in xrange(n, 0, -1):
+        for i in range(n, 0, -1):
             cells += ['pyr']*(i**2 + (i - 1)**2)
             cells += ['tet']*(2*i*(i - 1))
 
@@ -237,21 +238,21 @@ class PyrShapeSubDiv(BaseShapeSubDiv):
 
         # Quad connectivity
         qcon = [QuadShapeSubDiv.subnodes(n + 1).reshape(-1, 4)
-                for n in xrange(nsubdiv)]
+                for n in range(nsubdiv)]
 
         # Simple functions
         def _row_in_quad(n, a=0, b=0):
             return np.array([(n*i + j, n*i + j + 1)
-                             for i in xrange(a, n + b)
-                             for j in xrange(n - 1)])
+                             for i in range(a, n + b)
+                             for j in range(n - 1)])
 
         def _col_in_quad(n, a=0, b=0):
             return np.array([(n*i + j, n*(i + 1) + j)
-                             for i in xrange(n - 1)
-                             for j in xrange(a, n + b)])
+                             for i in range(n - 1)
+                             for j in range(a, n + b)])
 
         u = 0
-        for n in xrange(nsubdiv, 0, -1):
+        for n in range(nsubdiv, 0, -1):
             l = u
             u += (n + 1)**2
 
@@ -263,8 +264,8 @@ class PyrShapeSubDiv(BaseShapeSubDiv):
 
             if n > 1:
                 upper_quad = qcon[n - 2] + u
-                lower_pts = np.hstack(xrange(k*(n + 1)+1, (k + 1)*n + k)
-                                      for k in xrange(1, n)) + l
+                lower_pts = np.hstack(range(k*(n + 1)+1, (k + 1)*n + k)
+                                      for k in range(1, n)) + l
 
                 # Second set of pyramids
                 lcon.append([upper_quad[:, ::-1], lower_pts])
@@ -289,6 +290,8 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     else:
         flt = ['Float64', 8]
 
+    write_s = lambda s: vtuf.write(s.encode('utf-8'))
+
     # Get the shape and sub division classes
     shapecls = subclass_where(BaseShape, name=m_inf[0])
     subdvcls = subclass_where(BaseShapeSubDiv, name=m_inf[0])
@@ -306,8 +309,8 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
              'format="appended" offset="%d"/>\n'
 
     # Write headers for vtu elements
-    vtuf.write('<Piece NumberOfPoints="%s" NumberOfCells="%s">\n<Points>\n'
-               % (npts, ncells))
+    write_s('<Piece NumberOfPoints="%s" NumberOfCells="%s">\n<Points>\n'
+            % (npts, ncells))
 
     # Lists of DataArray "names", "types" and "NumberOfComponents"
     nams = ['', 'connectivity', 'offsets', 'types', 'Density', 'Velocity',
@@ -320,18 +323,18 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     offs[[1,5,6,7]] *= flt[1]*npts
 
     # Write vtk DaraArray headers
-    for i in xrange(len(nams)):
-        vtuf.write(darray % (nams[i], typs[i], ncom[i],
-                             sum(offs[:i+1]) + i*4 + off))
+    for i in range(len(nams)):
+        write_s(darray % (nams[i], typs[i], ncom[i],
+                          sum(offs[:i+1]) + i*4 + off))
 
         # Write ends/starts of vtk file objects
         if i == 0:
-            vtuf.write('</Points>\n<Cells>\n')
+            write_s('</Points>\n<Cells>\n')
         elif i == 3:
-            vtuf.write('</Cells>\n<PointData>\n')
+            write_s('</Cells>\n<PointData>\n')
 
     # Write end of vtk element data
-    vtuf.write('</PointData>\n</Piece>\n')
+    write_s('</PointData>\n</Piece>\n')
 
     # Return the number of bytes appended
     return sum(offs) + 4*len(nams)

@@ -13,9 +13,7 @@ from pyfr.nputil import npdtype_to_ctypestype
 from pyfr.util import rm
 
 
-class SourceModule(object):
-    __metaclass__ = ABCMeta
-
+class SourceModule(object, metaclass=ABCMeta):
     _dir_seq = it.count()
 
     def __init__(self, src, cfg):
@@ -56,7 +54,7 @@ class GccSourceModule(SourceModule):
         self._cc = cfg.getpath('backend-openmp', 'cc', 'cc', abs=False)
 
         # Delegate
-        super(GccSourceModule, self).__init__(src, cfg)
+        super().__init__(src, cfg)
 
     def _build(self, tmpdir):
         # File names

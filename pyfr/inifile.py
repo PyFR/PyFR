@@ -4,7 +4,7 @@ import os
 import io
 
 from collections import OrderedDict
-from ConfigParser import SafeConfigParser, NoSectionError, NoOptionError
+from configparser import SafeConfigParser, NoSectionError, NoOptionError
 
 
 _sentinel = object()
@@ -18,11 +18,11 @@ class Inifile(object):
         cp.optionxform = str
 
         if inistr:
-            cp.readfp(io.BytesIO(inistr))
+            cp.readfp(io.StringIO(inistr))
 
     @staticmethod
     def load(file):
-        if isinstance(file, basestring):
+        if isinstance(file, str):
             file = open(file)
 
         return Inifile(file.read())
@@ -94,6 +94,6 @@ class Inifile(object):
         return self._bool_states[v.lower()]
 
     def tostr(self):
-        buf = io.BytesIO()
+        buf = io.StringIO()
         self._cp.write(buf)
         return buf.getvalue()

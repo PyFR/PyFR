@@ -13,7 +13,7 @@ class OpenCLKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes):
         # Compile the source code
-        prg = cl.Program(self.backend.ctx, bytes(src))
+        prg = cl.Program(self.backend.ctx, src)
         prg.build(['-cl-fast-relaxed-math'])
 
         # Retrieve the kernel

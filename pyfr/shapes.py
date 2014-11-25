@@ -61,7 +61,7 @@ class BaseShape(object):
     def order_from_nspts(cls, nspts):
         # Obtain the coefficients for the poly: P(n) - nspts = 0
         coeffs = list(cls.npts_coeffs)
-        coeffs[-1] -= cls.npts_cdenom*nspts
+        coeffs[-1] -= cls.npts_cdenom*int(nspts)
 
         # Solve to obtain the order (a positive integer)
         roots = mp.polyroots(coeffs)
@@ -269,7 +269,7 @@ class BaseShape(object):
     @lazyprop
     def facefpts(self):
         nf = np.cumsum([0] + self.nfacefpts)
-        return [list(xrange(nf[i], nf[i + 1])) for i in xrange(len(nf) - 1)]
+        return [list(range(nf[i], nf[i + 1])) for i in range(len(nf) - 1)]
 
     @lazyprop
     def nfacefpts(self):

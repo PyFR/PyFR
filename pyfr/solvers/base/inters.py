@@ -13,7 +13,7 @@ def _get_inter_objs(interside, getter, elemap):
 
 def get_opt_view_perm(interside, mat, elemap):
     vm = _get_inter_objs(interside, mat, elemap)
-    matmap, rcmap = [np.concatenate([m[i] for m in vm]) for i in xrange(2)]
+    matmap, rcmap = [np.concatenate([m[i] for m in vm]) for i in range(2)]
 
     # Sort
     return np.lexsort((matmap, rcmap[:,1], rcmap[:,0]))
@@ -26,8 +26,8 @@ class BaseInters(object):
         self.cfg = cfg
 
         # Get the number of dimensions and variables
-        self.ndims = next(iter(elemap.viewvalues())).ndims
-        self.nvars = next(iter(elemap.viewvalues())).nvars
+        self.ndims = next(iter(elemap.values())).ndims
+        self.nvars = next(iter(elemap.values())).nvars
 
         # Get the number of interfaces
         self.ninters = len(lhs)

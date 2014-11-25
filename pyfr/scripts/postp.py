@@ -72,7 +72,7 @@ def process_unpack(args):
 
     # Write out the files to this temporary directory
     try:
-        for n, d in inf.iteritems():
+        for n, d in inf.items():
             np.save(os.path.join(tmpdir, n), d)
 
         # Remove the output path if it should exist
@@ -110,15 +110,15 @@ def process_tavg(args):
     for fname in args.infs:
         # Load solution files and obtain solution times
         inf = read_pyfr_data(fname)
-        tinf = Inifile(inf['stats']).getfloat('solver-time-integrator',
-                                              'tcurr')
+        cfg = Inifile(inf['stats'].item().decode())
+        tinf = cfg.getfloat('solver-time-integrator', 'tcurr')
 
         # Retain if solution time is within limits
         if args.limits is None or args.limits[0] <= tinf <= args.limits[1]:
             infs[tinf] = inf
 
             # Verify that solutions were computed on the same mesh
-            if inf['mesh_uuid'] != infs[infs.keys()[0]]['mesh_uuid']:
+            if inf['mesh_uuid'] != infs[list(infs.keys())[0]]['mesh_uuid']:
                 raise RuntimeError('Solution files in scope were not computed '
                                    'on the same mesh')
 
@@ -140,7 +140,7 @@ def process_tavg(args):
     pb.advance_to(1)
 
     # Compute the trapezoidal mean up to the last solution file
-    for i in xrange(len(stimes[2:])):
+    for i in range(len(stimes[2:])):
         dtlast = dtnext
         dtnext = stimes[i+2] - stimes[i+1]
 
@@ -206,13 +206,13 @@ def main():
     ap_conv.add_argument('-t', dest='type', choices=types, required=False,
                          help='Output file type; this is usually inferred '
                          'from the extension of outf')
-    ap_conv.add_argument('-d', '--divisor', type=int, choices=range(1, 17),
-                         default=0, help='Sets the level to which high '
-                         'order elements are divided along each edge. The '
-                         'total node count produced by divisor is equivalent '
-                         'to that of solution order, which is used as the '
-                         'default. Note: the output is linear between '
-                         'nodes, so increased resolution may be required.')
+    ap_conv.add_argument('-d', '--divisor', type=int, default=0,
+                         help='Sets the level to which high order elements '
+                         'are divided along each edge. The total node count '
+                         'produced by divisor is equivalent to that of '
+                         'solution order, which is used as the default. '
+                         'Note: the output is linear between nodes, so '
+                         'increased resolution may be required.')
     ap_conv.add_argument('-p', '--precision', choices=['single', 'double'],
                          default='single', help='Selects the precision of '
                          'floating point numbers written to the output file; '

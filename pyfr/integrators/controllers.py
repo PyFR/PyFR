@@ -8,7 +8,7 @@ from pyfr.util import memoize, proxylist
 
 class BaseController(BaseIntegrator):
     def __init__(self, *args, **kwargs):
-        super(BaseController, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Current and minimum time steps
         self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
@@ -89,7 +89,7 @@ class PIController(BaseController):
     controller_name = 'pi'
 
     def __init__(self, *args, **kwargs):
-        super(PIController, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         sect = 'solver-time-integrator'
 
