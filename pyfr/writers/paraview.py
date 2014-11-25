@@ -107,10 +107,6 @@ def _ncells_after_subdiv(ms_inf, divisor):
     :rtype: integer
 
     """
-    # Catch all for cases where cell subdivision is not performed
-    if divisor is None:
-        divisor = 1
-
     # Calculate the number of low-order cells in each high order element
     n_sub_ele = divisor ** ms_inf[1][2]
 
@@ -120,35 +116,6 @@ def _ncells_after_subdiv(ms_inf, divisor):
 
     # Multiply by number of elements
     return n_sub_ele * ms_inf[1][1]
-
-
-def _npts_from_order(order, m_inf, total=True):
-    """Calculates the number of nodes in an element of order n
-
-    :param order: Shape order of element
-    :param ms_inf: Mesh/soln information. ('ele_type', [npts, nele, ndims])
-    :param total: True/False return nodes in element/nodes in partition
-    :type order: integer
-    :type ms_inf: tuple: (str, list)
-    :type total: bool
-    :rtype: integer
-
-    """
-    # Calculate number of nodes in element of type and order
-    if m_inf[0] in ['quad', 'hex']:
-        gen_npts = (order + 1)**m_inf[1][2]
-    elif m_inf[0] in ['tri', 'pri']:
-        gen_npts = (order + 2) * (order + 1)**(m_inf[1][2] - 1) / 2
-    elif m_inf[0] == 'tet':
-        gen_npts = (order + 1) * (order + 2) * (order + 3) / 6
-    elif m_inf == 'pyr':
-        gen_npts = (order + 1) * (order + 2) * (2 * order + 3) / 6
-
-    # Multiply by number of elements
-    if total:
-        return gen_npts * m_inf[1][1]
-    else:
-        return gen_npts
 
 
 def _quadcube_con(ndim, nsubdiv):
@@ -272,7 +239,6 @@ def _base_con(etype, nsubdiv):
     :param etype: PyFR element type
     :param nsubdiv: Number of subdivisions (equal to element shape order)
     :type etype: string
-    :type ndim: integer
     :type nsubdiv: integer
     :rtype: list
 
@@ -286,7 +252,7 @@ def _base_con(etype, nsubdiv):
     }
 
     try:
-        return connec_map[etype](nsubdiv or 1)
+        return connec_map[etype](nsubdiv)
     except KeyError:
         raise RuntimeError('Connectivity not implemented for ' + etype)
 
@@ -316,8 +282,11 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     else:
         flt = ['Float64', 8]
 
+    # Get the basis class
+    basiscls = subclass_where(BaseShape, name=m_inf[0])
+
     nele = _ncells_after_subdiv(m_inf, args.divisor)
-    npts = _npts_from_order(args.divisor, m_inf)
+    npts = basiscls.nspts_from_order(args.divisor + 1)*m_inf[1][1]
 
     # Standard template for vtk DataArray string
     darray = '<DataArray Name="%s" type="%s" NumberOfComponents="%s" '\
@@ -385,13 +354,9 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Get the basis class
     basiscls = subclass_where(BaseShape, name=m_inf[0])
-    ndims = m_inf[1][2]
 
-    # Set npts for divide/append cases
-    if args.divisor is not None:
-        npts = _npts_from_order(args.divisor, m_inf, total=False)
-    else:
-        npts = ParaviewWriter.vtk_to_pyfr[m_inf[0]][2]
+    ndims = m_inf[1][2]
+    npts = basiscls.nspts_from_order(args.divisor + 1)
 
     # Generate basis objects for solution and vtu output
     soln_b = basiscls(m_inf[1][0], cfg)
