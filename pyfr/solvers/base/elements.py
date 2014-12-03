@@ -98,11 +98,10 @@ class BaseElements(object):
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
-        currb = self._basis
-        solnb = currb.__class__(None, solncfg)
+        solnb = self._basis.__class__(None, solncfg)
 
         # Form the interpolation operator
-        interp = solnb.ubasis.nodal_basis_at(currb.upts)
+        interp = solnb.ubasis.nodal_basis_at(self._basis.upts)
 
         # Sizes
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
@@ -117,8 +116,6 @@ class BaseElements(object):
 
     @abstractmethod
     def set_backend(self, backend, nscal_upts):
-        # Ensure a backend has not already been set
-        assert self._be is None
         self._be = backend
 
         # Sizes
