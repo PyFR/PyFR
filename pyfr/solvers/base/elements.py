@@ -201,6 +201,10 @@ class BaseElements(object):
         mag_pnorm_fpts = np.einsum('...i,...i', pnorm_fpts, pnorm_fpts)
         mag_pnorm_fpts = np.sqrt(mag_pnorm_fpts)
 
+        # Check that none of these magnitudes are zero
+        if np.any(mag_pnorm_fpts < 1e-6):
+            raise RuntimeError('Zero face normals detected')
+
         # Normalize the physical normals at the flux points
         self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[...,None]
         self._mag_pnorm_fpts = mag_pnorm_fpts
