@@ -120,7 +120,7 @@ class TetPolyBasis(BasePolyBasis):
 
         ob = []
         for i, pi in enumerate(jacobi(self.order - 1, 0, 0, a)):
-            ci = mp.mpf(2)**(-2*i - 1.5)*mp.sqrt(4*i + 2)*(1 - b)**i
+            ci = mp.mpf(2)**(-2*i - 1)*mp.sqrt(2*i + 1)*(1 - b)**i
 
             for j, pj in enumerate(jacobi(self.order - i - 1, 2*i + 1, 0, b)):
                 cj = mp.sqrt(i + j + 1)*2**-j*(1 - c)**(i + j)

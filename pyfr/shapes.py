@@ -424,7 +424,7 @@ class PyrShape(BaseShape):
         ('tri', lambda s, t: (s + (t + 1)/2, (t - 1)/2, t), (0, -2*n, n), j),
         ('tri', lambda s, t: ((1 - t)/2, -s - (t + 1)/2, t), (2*n, 0, n), j),
         ('tri', lambda s, t: (-s - (t + 1)/2, (1 - t)/2, t), (0, 2*n, n), j),
-        ('tri', lambda s, t: ((t - 1)/2, s + (t + 1)/2, t), (-2*n, 0, n), j)
+        ('tri', lambda s, t: ((t - 1)/2, s + (t + 1)/2, t), (-2*n, 0, n), j),
     ]
 
     @classmethod
