@@ -227,6 +227,13 @@ def _pri_con(nsubdiv):
     return np.hstack(np.hstack(l).flat for l in lcon)
 
 
+def _pyr_con(nsubdiv):
+    if nsubdiv > 1:
+        raise RuntimeError('Subdivision is not implemented for pyramids.')
+
+    return ParaviewWriter.vtk_to_pyfr['pyr'][1]
+
+
 def _base_con(etype, nsubdiv):
     """Switch case to select node connectivity for supported vtu elements
 
@@ -247,6 +254,7 @@ def _base_con(etype, nsubdiv):
         'tri': _tri_con,
         'tet': _tet_con,
         'pri': _pri_con,
+        'pyr': _pyr_con,
         'quad': lambda n: _quadcube_con(2, n),
         'hex': lambda n: _quadcube_con(3, n)
     }

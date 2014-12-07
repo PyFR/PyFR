@@ -80,7 +80,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
 
 
 def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):
-    ndims = dict(line=1, quad=2, tri=2, hex=3, pri=3, tet=3)
+    ndims = dict(line=1, quad=2, tri=2, hex=3, pri=3, pyr=3, tet=3)
 
     if rule and not re.match(r'[a-zA-z0-9\-~+]+$', rule):
         class TabulatedQuadRule(BaseTabulatedQuadRule):

@@ -175,6 +175,43 @@ class PriPolyBasis(BasePolyBasis):
                 for k in xrange(self.order)]
 
 
+class PyrPolyBasis(BasePolyBasis):
+    name = 'pyr'
+
+    def ortho_basis_at_mp(self, p, q, r):
+        r = r if r != 1 else r + mp.eps
+
+        a = 2*p/(1 - r)
+        b = 2*q/(1 - r)
+        c = r
+
+        sk = [mp.mpf(2)**(-k - 0.25)*mp.sqrt(k + 0.5)
+              for k in xrange(self.order)]
+        pa = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, a))]
+        pb = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, b))]
+
+        ob = []
+        for i, pi in enumerate(pa):
+            for j, pj in enumerate(pb):
+                cij = (1 - c)**(i + j)
+                pij = pi*pj
+
+                pc = jacobi(self.order - max(i, j) - 1, 2*(i + j + 1), 0, c)
+                for k, pk in enumerate(pc):
+                    ck = mp.sqrt(2*(k + j + i) + 3)
+
+                    ob.append(cij*ck*pij*pk)
+
+        return ob
+
+    @lazyprop
+    def degrees(self):
+        return [i + j + k
+                for i in xrange(self.order)
+                for j in xrange(self.order)
+                for k in xrange(self.order - max(i, j))]
+
+
 class HexPolyBasis(BasePolyBasis):
     name = 'hex'
 
