@@ -87,170 +87,215 @@ def _component_to_physical_soln(soln, gamma):
     soln[:,-1] *= gamma - 1
 
 
-def _ncells_after_subdiv(ms_inf, divisor):
-    """Calculates total number of vtu cells in partition after subdivision
+class BaseShapeSubDiv(object):
+    vtk_types = dict(tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
+    vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
 
-    :param ms_inf: Mesh/solninformation. ('ele_type', [npts, nele, ndims])
-    :type ms_inf: tuple: (str, list)
-    :rtype: integer
+    @classmethod
+    def subcells(cls, n):
+        pass
 
-    """
-    # Calculate the number of low-order cells in each high order element
-    n_sub_ele = divisor ** ms_inf[1][2]
+    @classmethod
+    def subcelloffs(cls, n):
+        return np.cumsum([cls.vtk_nodes[t] for t in cls.subcells(n)])
 
-    # Pyramids require the further addition of an arithmetic series
-    if ms_inf[0] == 'pyr':
-        n_sub_ele += (divisor - 1) * divisor / 2
+    @classmethod
+    def subcelltypes(cls, n):
+        return np.array([cls.vtk_types[t] for t in cls.subcells(n)])
 
-    # Multiply by number of elements
-    return n_sub_ele * ms_inf[1][1]
-
-
-def _quadcube_con(ndim, nsubdiv):
-    """Generate node connectivity for vtu hex/quad in high-order elements
-
-    :param ndim: Number of dimensions [2,3]
-    :param nsubdiv: Number of subdivisions (equal to element shape order)
-    :type ndim: integer
-    :type nsubdiv: integer
-    :rtype: list
-
-    """
-    # Mapping from pyfr to vtk quad nodes
-    conbase = np.array([0, 1, nsubdiv + 2, nsubdiv + 1], dtype=int)
-
-    # Extend quad mapping to hex mapping if 3-d
-    if ndim == 3:
-        conbase = np.hstack((conbase, conbase + (1 + nsubdiv) ** 2))
-
-    # Calculate offset of each subdivided element's nodes from std. mapping
-    nodeoff = np.zeros((nsubdiv,)*ndim)
-    for dim, off in enumerate(np.ix_(*(xrange(nsubdiv),)*ndim)):
-        nodeoff += off * (nsubdiv + 1) ** dim
-
-    # Tile standard element node ordering mapping, then apply offsets
-    internal_con = np.tile(conbase, (nsubdiv ** ndim, 1))
-    internal_con += nodeoff.T.flatten()[:, None]
-
-    return np.hstack(internal_con)
+    @classmethod
+    def subnodes(cls, n):
+        pass
 
 
-def _tri_con(nsubdiv):
-    """Generate node connectivity for vtu triangles in high-order elements
+class TensorProdShapeSubDiv(BaseShapeSubDiv):
+    @classmethod
+    def subnodes(cls, n):
+        conbase = np.array([0, 1, n + 2, n + 1])
 
-    :param nsubdiv: Number of subdivisions (equal to element shape order)
-    :type ndim: integer
-    :type nsubdiv: integer
-    :rtype: list
+        # Extend quad mapping to hex mapping
+        if cls.ndim == 3:
+            conbase = np.hstack((conbase, conbase + (1 + n)**2))
 
-    """
+        # Calculate offset of each subdivided element's nodes
+        nodeoff = np.zeros((n,)*cls.ndim)
+        for dim, off in enumerate(np.ix_(*(xrange(n),)*cls.ndim)):
+            nodeoff += off*(n + 1)**dim
 
-    conlst = []
+        # Tile standard element node ordering mapping, then apply offsets
+        internal_con = np.tile(conbase, (n**cls.ndim, 1))
+        internal_con += nodeoff.T.flatten()[:, None]
 
-    for row in xrange(nsubdiv, 0, -1):
-        # Lower and upper indices
-        l = (nsubdiv - row)*(nsubdiv + row + 3) // 2
-        u = l + row + 1
-
-        # Base offsets
-        off = [l, l + 1, u, u + 1, l + 1, u]
-
-        # Generate current row
-        subin = np.ravel(np.arange(row - 1)[...,None] + off)
-        subex = [ix + row - 1 for ix in off[:3]]
-
-        # Extent list
-        conlst.extend([subin, subex])
-
-    return np.hstack(conlst)
+        return np.hstack(internal_con)
 
 
-def _tet_con(nsubdiv):
-    """Generate node connectivity for vtu tet in high-order elements
+class QuadShapeSubDiv(TensorProdShapeSubDiv):
+    name = 'quad'
+    ndim = 2
 
-    :param ndim: Number of dimensions [3]
-    :param nsubdiv: Number of subdivisions (equal to element shape order)
-    :type nsubdiv: integer
-    :rtype: list
+    @classmethod
+    def subcells(cls, n):
+        return ['quad']*(n**2)
 
-    Produce six different mappings for six different cell orientations
-    """
-    conlst = []
-    jump = 0
-    for n in xrange(nsubdiv, 0, -1):
+
+class HexShapeSubDiv(TensorProdShapeSubDiv):
+    name = 'hex'
+    ndim = 3
+
+    @classmethod
+    def subcells(cls, n):
+        return ['hex']*(n**3)
+
+
+class TriShapeSubDiv(BaseShapeSubDiv):
+    name = 'tri'
+
+    @classmethod
+    def subcells(cls, n):
+        return ['tri']*(n**2)
+
+    @classmethod
+    def subnodes(cls, n):
+        conlst = []
+
         for row in xrange(n, 0, -1):
             # Lower and upper indices
-            l = (n - row)*(n + row + 3) // 2 + jump
+            l = (n - row)*(n + row + 3) // 2
             u = l + row + 1
 
-            # Lower and upper for one row up
-            ln = (n + 1)*(n + 2) // 2 + l - n + row
-            un = ln + row
-
-            rowm1 = np.arange(row - 1)[...,None]
-
             # Base offsets
-            offs = [(l, l + 1, u, ln), (l + 1, u, ln, ln + 1),
-                    (u, u + 1, ln + 1, un), (u, ln, ln + 1, un),
-                    (l + 1, u, u+1, ln + 1), (u + 1, ln + 1, un, un + 1)]
+            off = [l, l + 1, u, u + 1, l + 1, u]
 
-            # Current row
-            conlst.extend(rowm1 + off for off in offs[:-1])
-            conlst.append(rowm1[:-1] + offs[-1])
-            conlst.append([ix + row - 1 for ix in offs[0]])
+            # Generate current row
+            subin = np.ravel(np.arange(row - 1)[...,None] + off)
+            subex = [ix + row - 1 for ix in off[:3]]
 
-        jump += (n + 1)*(n + 2) // 2
+            # Extent list
+            conlst.extend([subin, subex])
 
-    return np.hstack(np.ravel(c) for c in conlst)
+        return np.hstack(conlst)
 
 
-def _pri_con(nsubdiv):
-    # Triangle connectivity
-    tcon = _tri_con(nsubdiv).reshape(-1, 3)
+class TetShapeSubDiv(BaseShapeSubDiv):
+    name = 'tet'
 
-    # Layer these rows of triangles to define prisms
-    loff = (nsubdiv + 1)*(nsubdiv + 2) // 2
-    lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in xrange(nsubdiv)]
+    @classmethod
+    def subcells(cls, nsubdiv):
+        return ['tet']*(nsubdiv**3)
 
-    return np.hstack(np.hstack(l).flat for l in lcon)
+    @classmethod
+    def subnodes(cls, nsubdiv):
+        conlst = []
+        jump = 0
+
+        for n in xrange(nsubdiv, 0, -1):
+            for row in xrange(n, 0, -1):
+                # Lower and upper indices
+                l = (n - row)*(n + row + 3) // 2 + jump
+                u = l + row + 1
+
+                # Lower and upper for one row up
+                ln = (n + 1)*(n + 2) // 2 + l - n + row
+                un = ln + row
+
+                rowm1 = np.arange(row - 1)[..., None]
+
+                # Base offsets
+                offs = [(l, l + 1, u, ln), (l + 1, u, ln, ln + 1),
+                        (u, u + 1, ln + 1, un), (u, ln, ln + 1, un),
+                        (l + 1, u, u+1, ln + 1), (u + 1, ln + 1, un, un + 1)]
+
+                # Current row
+                conlst.extend(rowm1 + off for off in offs[:-1])
+                conlst.append(rowm1[:-1] + offs[-1])
+                conlst.append([ix + row - 1 for ix in offs[0]])
+
+            jump += (n + 1)*(n + 2) // 2
+
+        return np.hstack(np.ravel(c) for c in conlst)
 
 
-def _pyr_con(nsubdiv):
-    if nsubdiv > 1:
-        raise RuntimeError('Subdivision is not implemented for pyramids.')
+class PriShapeSubDiv(BaseShapeSubDiv):
+    name = 'pri'
 
-    return [0, 1, 3, 2, 4]
+    @classmethod
+    def subcells(cls, n):
+        return ['pri']*(n**3)
+
+    @classmethod
+    def subnodes(cls, n):
+        # Triangle connectivity
+        tcon = TriShapeSubDiv.subnodes(n).reshape(-1, 3)
+
+        # Layer these rows of triangles to define prisms
+        loff = (n + 1)*(n + 2) // 2
+        lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in xrange(n)]
+
+        return np.hstack(np.hstack(l).flat for l in lcon)
 
 
-def _base_con(etype, nsubdiv):
-    """Switch case to select node connectivity for supported vtu elements
+class PyrShapeSubDiv(BaseShapeSubDiv):
+    name = 'pyr'
 
-    PyFR high-order elements are subdivided into low-order vtu
-    cells to permit visualisation in Paraview.  Cells are defined
-    in vtk files by specifying connectivity between nodes.  To
-    reduce memory requirements, it is possible to use a single
-    high-order node multiple times in defining low-order cells.
+    @classmethod
+    def subcells(cls, n):
+        cells = []
 
-    :param etype: PyFR element type
-    :param nsubdiv: Number of subdivisions (equal to element shape order)
-    :type etype: string
-    :type nsubdiv: integer
-    :rtype: list
+        for i in xrange(n, 0, -1):
+            cells += ['pyr']*(i**2 + (i - 1)**2)
+            cells += ['tet']*(2*i*(i - 1))
 
-    """
-    connec_map = {
-        'tri': _tri_con,
-        'tet': _tet_con,
-        'pri': _pri_con,
-        'pyr': _pyr_con,
-        'quad': lambda n: _quadcube_con(2, n),
-        'hex': lambda n: _quadcube_con(3, n)
-    }
+        return cells
 
-    try:
-        return connec_map[etype](nsubdiv)
-    except KeyError:
-        raise RuntimeError('Connectivity not implemented for ' + etype)
+    @classmethod
+    def subnodes(cls, nsubdiv):
+        lcon = []
+
+        # Quad connectivity
+        qcon = [QuadShapeSubDiv.subnodes(n + 1).reshape(-1, 4)
+                for n in xrange(nsubdiv)]
+
+        # Simple functions
+        def _row_in_quad(n, a=0, b=0):
+            return np.array([(n*i + j, n*i + j + 1)
+                             for i in xrange(a, n + b)
+                             for j in xrange(n - 1)])
+
+        def _col_in_quad(n, a=0, b=0):
+            return np.array([(n*i + j, n*(i + 1) + j)
+                             for i in xrange(n - 1)
+                             for j in xrange(a, n + b)])
+
+        u = 0
+        for n in xrange(nsubdiv, 0, -1):
+            l = u
+            u += (n + 1)**2
+
+            lower_quad = qcon[n - 1] + l
+            upper_pts = np.arange(n**2) + u
+
+            # First set of pyramids
+            lcon.append([lower_quad, upper_pts])
+
+            if n > 1:
+                upper_quad = qcon[n - 2] + u
+                lower_pts = np.hstack(xrange(k*(n + 1)+1, (k + 1)*n + k)
+                                      for k in xrange(1, n)) + l
+
+                # Second set of pyramids
+                lcon.append([upper_quad[:, ::-1], lower_pts])
+
+                lower_row = _row_in_quad(n + 1, 1, -1) + l
+                lower_col = _col_in_quad(n + 1, 1, -1) + l
+
+                upper_row = _row_in_quad(n) + u
+                upper_col = _col_in_quad(n) + u
+
+                # Tetrahedra
+                lcon.append([lower_col, upper_row])
+                lcon.append([lower_row[:, ::-1], upper_col])
+
+        return np.hstack(np.column_stack(l).flat for l in lcon)
 
 
 def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
@@ -260,11 +305,17 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     else:
         flt = ['Float64', 8]
 
-    # Get the basis class
-    basiscls = subclass_where(BaseShape, name=m_inf[0])
+    # Get the shape and sub division classes
+    shapecls = subclass_where(BaseShape, name=m_inf[0])
+    subdvcls = subclass_where(BaseShapeSubDiv, name=m_inf[0])
 
-    nele = _ncells_after_subdiv(m_inf, args.divisor)
-    npts = basiscls.nspts_from_order(args.divisor + 1)*m_inf[1][1]
+    npts = shapecls.nspts_from_order(args.divisor + 1)*m_inf[1][1]
+
+    cells = subdvcls.subcells(args.divisor)
+    nodes = subdvcls.subnodes(args.divisor)
+
+    ncells = len(cells)*m_inf[1][1]
+    nnodes = len(nodes)*m_inf[1][1]
 
     # Standard template for vtk DataArray string
     darray = '<DataArray Name="%s" type="%s" NumberOfComponents="%s" '\
@@ -272,7 +323,7 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
 
     # Write headers for vtu elements
     vtuf.write('<Piece NumberOfPoints="%s" NumberOfCells="%s">\n<Points>\n'
-               % (npts, nele))
+               % (npts, ncells))
 
     # Lists of DataArray "names", "types" and "NumberOfComponents"
     nams = ['', 'connectivity', 'offsets', 'types', 'Density', 'Velocity',
@@ -281,9 +332,8 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     ncom = ['3', '', '', '', '1', str(m_inf[1][2]), '1']
 
     # Calculate size of described DataArrays (in bytes)
-    offs = np.array([0, 3, 4 * nele * ParaviewWriter.vtk_types[m_inf[0]][1],
-                     4 * nele, nele, 1, m_inf[1][2], 1])
-    offs[[1,5,6,7]] *= flt[1] * npts
+    offs = np.array([0, 3, 4*nnodes, 4*ncells, ncells, 1, m_inf[1][2], 1])
+    offs[[1,5,6,7]] *= flt[1]*npts
 
     # Write vtk DaraArray headers
     for i in xrange(len(nams)):
@@ -306,47 +356,51 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
 def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     dtype = 'float32' if args.precision == 'single' else 'float64'
 
-    # Get the basis class
-    basiscls = subclass_where(BaseShape, name=m_inf[0])
+    # Get the shape and sub division classes
+    shapecls = subclass_where(BaseShape, name=m_inf[0])
+    subdvcls = subclass_where(BaseShapeSubDiv, name=m_inf[0])
 
-    ndims = m_inf[1][2]
-    npts = basiscls.nspts_from_order(args.divisor + 1)
+    nspts, neles, ndims = m_inf[1]
+    nvpts = shapecls.nspts_from_order(args.divisor + 1)
 
     # Generate basis objects for solution and vtu output
-    soln_b = basiscls(m_inf[1][0], cfg)
-    vtu_b = basiscls(npts, cfg)
+    soln_b = shapecls(nspts, cfg)
+    vtu_b = shapecls(nvpts, cfg)
 
     # Generate operator matrices to move points and solutions to vtu nodes
     mesh_vtu_op = soln_b.sbasis.nodal_basis_at(vtu_b.spts)
     soln_vtu_op = soln_b.ubasis.nodal_basis_at(vtu_b.spts)
 
     # Calculate node locations of vtu elements
-    pts = np.dot(mesh_vtu_op, mesh.reshape(m_inf[1][0],
-                                           -1)).reshape(npts, -1, ndims)
+    pts = np.dot(mesh_vtu_op, mesh.reshape(nspts, -1))
+    pts = pts.reshape(nvpts, -1, ndims)
+
     # Calculate solution at node locations of vtu elements
-    sol = np.dot(soln_vtu_op, soln.reshape(s_inf[1][0],
-                                           -1)).reshape(npts, s_inf[1][1], -1)
+    sol = np.dot(soln_vtu_op, soln.reshape(s_inf[1][0], -1))
+    sol = sol.reshape(nvpts, s_inf[1][1], -1)
 
     # Append dummy z dimension for points in 2-d (required by Paraview)
     if ndims == 2:
-        pts = np.append(pts, np.zeros(pts.shape[:-1])[...,None], axis=2)
+        pts = np.append(pts, np.zeros(pts.shape[:-1])[..., None], axis=2)
 
     # Write element node locations to file
     _write_vtk_darray(pts.swapaxes(0, 1), vtuf, dtype)
 
+    # Perform the sub division
+    cells = subdvcls.subcells(args.divisor)
+    nodes = subdvcls.subnodes(args.divisor)
+
     # Prepare vtu cell arrays (connectivity, offsets, types):
     # Generate and extend vtu sub-cell node connectivity across all elements
-    vtu_con = np.tile(_base_con(m_inf[0], args.divisor),
-                      (m_inf[1][1], 1))
-    vtu_con += (np.arange(m_inf[1][1]) * npts)[:, None]
+    vtu_con = np.tile(nodes, (neles, 1))
+    vtu_con += (np.arange(neles)*nvpts)[:, None]
 
     # Generate offset into the connectivity array for the end of each element
-    vtu_off = np.arange(_ncells_after_subdiv(m_inf, args.divisor)) + 1
-    vtu_off *= ParaviewWriter.vtk_types[m_inf[0]][1]
+    vtu_off = np.tile(subdvcls.subcelloffs(args.divisor), (neles, 1))
+    vtu_off += (np.arange(neles)*len(nodes))[:, None]
 
     # Tile vtu cell type numbers
-    vtu_typ = np.tile(ParaviewWriter.vtk_types[m_inf[0]][0],
-                      _ncells_after_subdiv(m_inf, args.divisor))
+    vtu_typ = np.tile(subdvcls.subcelltypes(args.divisor), neles)
 
     # Write vtu node connectivity, connectivity offsets and cell types
     _write_vtk_darray(vtu_con, vtuf, 'int32')
