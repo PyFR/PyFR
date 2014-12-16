@@ -16,13 +16,11 @@ class ParaviewWriter(BaseWriter):
     name = 'paraview'
     extn = ['.vtu']
 
-    # PyFR to VTK element types, node mapping, (number of nodes)
-    vtk_to_pyfr = {'tri': (5, [0, 1, 2], 3),
-                   'quad': (9, [0, 1, 3, 2], 4),
-                   'tet': (10, [0, 1, 2, 3], 4),
-                   'pyr': (14, [0, 1, 3, 2, 4], 5),
-                   'pri': (13, [0, 1, 2, 3, 4, 5], 6),
-                   'hex': (12, [0, 1, 3, 2, 4, 5, 7, 6], 8)}
+    # PyFR to VTK element types and number of nodes
+    vtk_types = {
+        'tri': (5, 3), 'quad': (9, 4),
+        'tet': (10, 4), 'pyr': (14, 5), 'pri': (13, 6), 'hex': (12, 8)
+    }
 
     def write_out(self):
         """Controls the writing of serial .vtu Paraview files
@@ -43,13 +41,13 @@ class ParaviewWriter(BaseWriter):
                         'version="0.1">\n<UnstructuredGrid>\n')
 
         # Initialise offset (in bytes) to end of appended data
-        off = np.array([0])
+        off = 0
 
         # Write data description header.  A vtk "piece" is used for each
         # element in a partition.
         for mk, sk in zip(self.mesh_inf, self.soln_inf):
-            _write_vtu_header(self.args, self.outf, self.mesh_inf[mk],
-                              self.soln_inf[sk], off)
+            off += _write_vtu_header(self.args, self.outf, self.mesh_inf[mk],
+                                     self.soln_inf[sk], off)
 
         # Write end/start of header/data sections
         self.outf.write('</UnstructuredGrid>\n<AppendedData '
@@ -66,20 +64,10 @@ class ParaviewWriter(BaseWriter):
 
 
 def _write_vtk_darray(array, vtuf, numtyp):
-    """Writes a numpy array to a vtu file (in binary as type numtyp)
+    array = array.astype(numtyp)
 
-    .vtu files require the size of the data (in bytes) to be prepended.
-
-    :param array: Array to be written to file.
-    :param vtuf: File to write array to.
-    :param numtyp: Type of number representation to use. e.g. 'float32'
-    :type array: numpy.ndrarray
-    :type vtuf: file
-    :type numtyp: string
-
-    """
-    np.array(array.astype(numtyp).nbytes).astype('uint32').tofile(vtuf)
-    array.astype(numtyp).tofile(vtuf)
+    np.uint32(array.nbytes).tofile(vtuf)
+    array.tofile(vtuf)
 
 
 def _component_to_physical_soln(soln, gamma):
@@ -231,7 +219,7 @@ def _pyr_con(nsubdiv):
     if nsubdiv > 1:
         raise RuntimeError('Subdivision is not implemented for pyramids.')
 
-    return ParaviewWriter.vtk_to_pyfr['pyr'][1]
+    return [0, 1, 3, 2, 4]
 
 
 def _base_con(etype, nsubdiv):
@@ -266,24 +254,6 @@ def _base_con(etype, nsubdiv):
 
 
 def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
-    """Write headers for .vtu piece objects and subsequent appended DataArrays
-
-    The .vtk data format used by the Paraview converter is "appended",
-    which requires ASCII headers to be written to define the contents
-    of the appended data arrays.
-
-    :param args: pyfr-postp command line arguments from argparse
-    :param vtuf: .vtu output file
-    :param m_inf: Tuple of element type and array shape of mesh
-    :param s_inf: Tuple of element type and array shape of soln
-    :param off: Offset (in bytes) to end of appended data
-    :type args: class 'argparse.Namespace'
-    :type vtuf: file
-    :type m_inf: tuple
-    :type s_inf: tuple
-    :type off: type 'numpy.ndarray'
-
-    """
     # Set vtk name for float, set size in bytes
     if args.precision == 'single':
         flt = ['Float32', 4]
@@ -311,7 +281,7 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     ncom = ['3', '', '', '', '1', str(m_inf[1][2]), '1']
 
     # Calculate size of described DataArrays (in bytes)
-    offs = np.array([0, 3, 4 * nele * ParaviewWriter.vtk_to_pyfr[m_inf[0]][2],
+    offs = np.array([0, 3, 4 * nele * ParaviewWriter.vtk_types[m_inf[0]][1],
                      4 * nele, nele, 1, m_inf[1][2], 1])
     offs[[1,5,6,7]] *= flt[1] * npts
 
@@ -327,38 +297,14 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
             vtuf.write('</Cells>\n<PointData>\n')
 
     # Write end of vtk element data
-    vtuf.write('</PointData>\n')
+    vtuf.write('</PointData>\n</Piece>\n')
 
-    # Store total offset (bytes) to end of appended data
-    off += sum(offs) + 4*len(nams)
-
-    vtuf.write('</Piece>\n')
+    # Return the number of bytes appended
+    return sum(offs) + 4*len(nams)
 
 
 def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
-    """ Writes mesh and solution data for appended (binary) data .vtu files
-
-    :param args: pyfr-postp command line arguments from argparse
-    :param vtuf: .vtu output file
-    :param cfg: PyFR config file used in the respective simulation
-    :param mesh: Single PyFR mesh array (corresponding to soln)
-    :param m_inf: Tuple of element type and array shape of mesh
-    :param soln: Single PyFR solution array (corresponding to mesh)
-    :param s_inf: Tuple of element type and array shape of soln
-    :type args: class 'argparse.Namespace'
-    :type vtuf: file
-    :type cfg: class 'pyfr.inifile.Inifile'
-    :type mesh: numpy.ndarray
-    :type m_inf: tuple
-    :type soln: numpy.ndrayy
-    :type s_inf: tuple
-
-    """
-    # Set numpy name for float; set size in bytes
-    if args.precision == 'single':
-        flt = ['float32', 4]
-    else:
-        flt = ['float64', 8]
+    dtype = 'float32' if args.precision == 'single' else 'float64'
 
     # Get the basis class
     basiscls = subclass_where(BaseShape, name=m_inf[0])
@@ -386,7 +332,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
         pts = np.append(pts, np.zeros(pts.shape[:-1])[...,None], axis=2)
 
     # Write element node locations to file
-    _write_vtk_darray(pts.swapaxes(0,1), vtuf, flt[0])
+    _write_vtk_darray(pts.swapaxes(0, 1), vtuf, dtype)
 
     # Prepare vtu cell arrays (connectivity, offsets, types):
     # Generate and extend vtu sub-cell node connectivity across all elements
@@ -396,10 +342,10 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Generate offset into the connectivity array for the end of each element
     vtu_off = np.arange(_ncells_after_subdiv(m_inf, args.divisor)) + 1
-    vtu_off *= ParaviewWriter.vtk_to_pyfr[m_inf[0]][2]
+    vtu_off *= ParaviewWriter.vtk_types[m_inf[0]][1]
 
     # Tile vtu cell type numbers
-    vtu_typ = np.tile(ParaviewWriter.vtk_to_pyfr[m_inf[0]][0],
+    vtu_typ = np.tile(ParaviewWriter.vtk_types[m_inf[0]][0],
                       _ncells_after_subdiv(m_inf, args.divisor))
 
     # Write vtu node connectivity, connectivity offsets and cell types
@@ -411,6 +357,6 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     _component_to_physical_soln(sol, cfg.getfloat('constants', 'gamma'))
 
     # Write Density, Velocity and Pressure
-    _write_vtk_darray(sol[:,0].T, vtuf, flt[0])
-    _write_vtk_darray(sol[:,1:-1].transpose(2, 0, 1), vtuf, flt[0])
-    _write_vtk_darray(sol[:,-1].T, vtuf, flt[0])
+    _write_vtk_darray(sol[:,0].T, vtuf, dtype)
+    _write_vtk_darray(sol[:,1:-1].transpose(2, 0, 1), vtuf, dtype)
+    _write_vtk_darray(sol[:,-1].T, vtuf, dtype)
