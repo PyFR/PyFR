@@ -64,6 +64,7 @@ package_data = {
         'hex/*.txt',
         'line/*.txt',
         'pri/*.txt',
+        'pyr/*.txt',
         'quad/*.txt',
         'tet/*.txt',
         'tri/*.txt'

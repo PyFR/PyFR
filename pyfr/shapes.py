@@ -404,3 +404,35 @@ class PriShape(BaseShape):
                 for r in pts1d
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
+
+
+class PyrShape(BaseShape):
+    name = 'pyr'
+    ndims = 3
+
+    # nspts = n*(n + 1)*(2*n + 1)/6
+    npts_coeffs = [2, 3, 1, 0]
+    npts_cdenom = 6
+
+    # Normalisation and relative area constants
+    n = 1 / sqrt(5)
+    j = sqrt(5) / 2
+
+    # Faces: type, reference-to-face projection, normal, relative area
+    faces = [
+        ('quad', lambda s, t: (s, t, -1), (0, 0, -1), 1),
+        ('tri', lambda s, t: (s + (t + 1)/2, (t - 1)/2, t), (0, -2*n, n), j),
+        ('tri', lambda s, t: ((1 - t)/2, -s - (t + 1)/2, t), (2*n, 0, n), j),
+        ('tri', lambda s, t: (-s - (t + 1)/2, (1 - t)/2, t), (0, 2*n, n), j),
+        ('tri', lambda s, t: ((t - 1)/2, s + (t + 1)/2, t), (-2*n, 0, n), j),
+    ]
+
+    @classmethod
+    def std_ele(cls, sptord):
+        npts1d = 2*sptord + 1
+        pts1d = np.linspace(-1, 1, npts1d)
+
+        return [(p, q, r)
+                for i, r in enumerate(pts1d[::2])
+                for q in pts1d[i:npts1d - i:2]
+                for p in pts1d[i:npts1d - i:2]]
