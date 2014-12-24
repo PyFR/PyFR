@@ -60,27 +60,21 @@ class GccSourceModule(SourceModule):
 
     def _build(self, tmpdir):
         # File names
-        cn, on, ln = 'tmp.c', 'tmp.o', platform_libname('tmp')
+        cn, ln = 'tmp.c', platform_libname('tmp')
 
         # Write the source code out
         with open(os.path.join(tmpdir, cn), 'w') as f:
             f.write(self.src)
 
-        # Compile
+        # Compile and link
         cmd = [self._cc,
+               '-shared',        # Create a shared library
                '-std=c99',       # Enable C99 support
                '-Ofast',         # Optimise, incl. -ffast-math
                '-march=native',  # Use CPU-specific instructions
                '-fopenmp',       # Enable OpenMP support
                '-fPIC',          # Position-independent code for shared lib
-               '-c', '-o', on, cn]
-        call_capture_output(cmd, cwd=tmpdir)
-
-        # Link
-        cmd = [self._cc,
-               '-shared',   # Create a shared library
-               '-fopenmp',  # Required for OpenMP
-               '-o', ln, on,]
+               '-o', ln, cn]
         call_capture_output(cmd, cwd=tmpdir)
 
         return ln
