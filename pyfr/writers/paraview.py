@@ -6,6 +6,7 @@ import numpy as np
 from pyfr.inifile import Inifile
 from pyfr.readers.nodemaps import GmshNodeMaps
 from pyfr.shapes import BaseShape
+from pyfr.solvers import BaseSystem
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
@@ -68,23 +69,6 @@ def _write_vtk_darray(array, vtuf, numtyp):
 
     np.uint32(array.nbytes).tofile(vtuf)
     array.tofile(vtuf)
-
-
-def _component_to_physical_soln(soln, gamma):
-    """Convert PyFR solution of rho, rho(u, v, [w]), E to rho, u, v, [w], p
-
-    :param soln: PyFR solution array to be converted.
-    :param gamma: Ratio of specific heats.
-    :type soln: numpy.ndarray of shape [nupts, neles, ndims + 2]
-    :type gamma: integer
-
-    """
-    # Convert rhou, rhov, [rhow] to u, v, [w]
-    soln[:,1:-1] /= soln[:,0,None]
-
-    # Convert total energy to pressure
-    soln[:,-1] -= 0.5*soln[:,0]*np.sum(soln[:,1:-1]**2, axis=1)
-    soln[:,-1] *= gamma - 1
 
 
 class BaseShapeSubDiv(object):
@@ -360,6 +344,9 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     shapecls = subclass_where(BaseShape, name=m_inf[0])
     subdvcls = subclass_where(BaseShapeSubDiv, name=m_inf[0])
 
+    # Get the system class
+    syscls = subclass_where(BaseSystem, name=cfg.get('solver', 'system'))
+
     nspts, neles, ndims = m_inf[1]
     nvpts = shapecls.nspts_from_order(args.divisor + 1)
 
@@ -377,7 +364,7 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
 
     # Calculate solution at node locations of vtu elements
     sol = np.dot(soln_vtu_op, soln.reshape(s_inf[1][0], -1))
-    sol = sol.reshape(nvpts, s_inf[1][1], -1)
+    sol = sol.reshape(nvpts, s_inf[1][1], -1).swapaxes(0, 1)
 
     # Append dummy z dimension for points in 2-d (required by Paraview)
     if ndims == 2:
@@ -407,10 +394,10 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     _write_vtk_darray(vtu_off, vtuf, 'int32')
     _write_vtk_darray(vtu_typ, vtuf, 'uint8')
 
-    # Convert rhou, rhov, [rhow] to u, v, [w] and energy to pressure
-    _component_to_physical_soln(sol, cfg.getfloat('constants', 'gamma'))
+    # Convert from conservative to primitive variables
+    sol = np.array(syscls.elementscls.conv_to_pri(sol, cfg))
 
     # Write Density, Velocity and Pressure
-    _write_vtk_darray(sol[:,0].T, vtuf, dtype)
-    _write_vtk_darray(sol[:,1:-1].transpose(2, 0, 1), vtuf, dtype)
-    _write_vtk_darray(sol[:,-1].T, vtuf, dtype)
+    _write_vtk_darray(sol[0].T, vtuf, dtype)
+    _write_vtk_darray(sol[1:-1].T, vtuf, dtype)
+    _write_vtk_darray(sol[-1].T, vtuf, dtype)

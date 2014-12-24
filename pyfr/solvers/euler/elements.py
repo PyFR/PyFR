@@ -10,17 +10,31 @@ class BaseFluidElements(object):
     _convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
                   3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
 
-    def _process_ics(self, ics):
-        rho, p = ics[0], ics[-1]
+    @staticmethod
+    def pri_to_conv(pris, cfg):
+        rho, p = pris[0], pris[-1]
 
         # Multiply velocity components by rho
-        rhovs = [rho*c for c in ics[1:-1]]
+        rhovs = [rho*c for c in pris[1:-1]]
 
         # Compute the energy
-        gamma = self.cfg.getfloat('constants', 'gamma')
-        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in ics[1:-1])
+        gamma = cfg.getfloat('constants', 'gamma')
+        E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
 
         return [rho] + rhovs + [E]
+
+    @staticmethod
+    def conv_to_pri(convs, cfg):
+        rho, E = convs[0], convs[-1]
+
+        # Divide momentum components by rho
+        vs = [rhov/rho for rhov in convs[1:-1]]
+
+        # Compute the pressure
+        gamma = cfg.getfloat('constants', 'gamma')
+        p = (gamma - 1)*(E - 0.5*rho*sum(v*v for v in vs))
+
+        return [rho] + vs + [p]
 
 
 class EulerElements(BaseFluidElements, BaseAdvectionElements):

@@ -64,7 +64,7 @@ class BaseElements(object):
                                 for ffpts in basis.facefpts]
 
     @abstractmethod
-    def _process_ics(self, ics):
+    def pri_to_conv(ics, cfg):
         pass
 
     def set_ics_from_cfg(self):
@@ -93,7 +93,7 @@ class BaseElements(object):
         self._scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
         # Convert from primitive to conservative form
-        for i, v in enumerate(self._process_ics(ics)):
+        for i, v in enumerate(self.pri_to_conv(ics, self.cfg)):
             self._scal_upts[:,i,:] = v
 
     def set_ics_from_soln(self, solnmat, solncfg):
