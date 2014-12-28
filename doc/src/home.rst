@@ -19,7 +19,7 @@ derived from the Mako templating engine. The current release (PyFR
 - Governing equations - Euler, Navier Stokes
 - Dimensionality - 2D, 3D
 - Element types - Triangles, Quadrilaterals, Hexahedra, Prisms, 
-  Tetrahedra
+  Tetrahedra, Pyramids
 - Platforms - CPU clusters, Nvidia GPU clusters, AMD GPU clusters
 - Spatial discretisation - High-order flux reconstruction
 - Temporal discretisation - Explicit Runge-Kutta
@@ -46,8 +46,9 @@ about the development team are available
 How do I get PyFR?
 ------------------
 
-PyFR is available for free under an open-source license. You can 
-download it `here <http://www.pyfr.org/download.php>`__.
+PyFR is available for free under an industry friendly open-source
+license. You can download it
+`here <http://www.pyfr.org/download.php>`__.
 
 How do I Cite PyFR?
 -------------------

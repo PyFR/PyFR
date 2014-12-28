@@ -4,19 +4,376 @@
 Developer Guide
 ***************
 
+=============================================================
+PyFR-Sim to PyFR-Mako: A Brief Overview of the PyFR Framework
+=============================================================
+
+PyFR-Sim
+--------
+
+The symbolic link :code:`pyfr.scripts.pyfr-sim` points to the script
+:code:`pyfr.scripts.sim`, which is where it all starts! Specifically,
+the function :code:`main` calls the function :code:`get_solver`, which
+returns an Integrator -- a composite of a `Controller`_ a `Stepper`_
+and a `Writer`_. The Integrator has a method named :code:`run`, which
+is then called to run the simulation.
+
+Controller
+----------
+
+A `Controller`_ acts to advance the simulation in time. Specifically, a
+`Controller`_ has a method named :code:`advance_to` which advances a
+`System`_ to a specified time. There are two types of `Controller`_
+available in PyFR |release|:
+
+.. autoclass:: pyfr.integrators.controllers.NoneController
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.controllers.PIController
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `Controller`_ are related via the following inheritance
+diagram:
+
+.. inheritance-diagram:: pyfr.integrators.controllers
+    :parts: 1
+
+Stepper
+-------
+
+A `Stepper`_ acts to advance the simulation by a single time-step.
+Specifically, a `Stepper`_ has a method named :code:`step` which
+advances a `System`_ by a single time-step. There are four types of
+`Stepper`_ available in PyFR |release|:
+
+.. autoclass:: pyfr.integrators.steppers.EulerStepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.steppers.RK4Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.steppers.RK34Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.steppers.RK45Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `Stepper`_ are related via the following inheritance diagram:
+
+.. inheritance-diagram:: pyfr.integrators.steppers
+    :parts: 1
+
+Writer
+------
+
+A `Writer`_ acts to write out simulation data. There are two types of
+`Writer`_ available in PyFR |release|:
+
+.. autoclass:: pyfr.integrators.writers.FileWriter
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.writers.DirWriter
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `Writer`_ are related via the following inheritance diagram:
+
+.. inheritance-diagram:: pyfr.integrators.writers
+    :parts: 1
+
+System
+------
+
+A `System`_ holds information/data for the system, including
+`Elements`_, `Interfaces`_, and the `Backend`_ with which the
+simulation is to run. A `System`_ has a method named :code:`rhs`, which
+obtains the divergence of the flux (the 'right-hand-side') at each
+solution point. The method :code:`rhs` invokes various kernels which
+have been pre-generated and loaded into queues. A `System`_ also has a
+method named :code:`_gen_kernels` which acts to generate all the
+kernels required by a particular `System`_. A kernel is an instance of
+a 'one-off' class with a method named :code:`run` that implements the
+required kernel functionality. Individual kernels are produced by a
+kernel provider. PyFR |release| has various types of kernel provider. A
+`Pointwise Kernel Provider`_ produces point-wise kernels such as
+Riemann solvers and flux functions etc. These point-wise kernels are
+specified using an in-built platform-independent templating language
+derived from `Mako <http://www.makotemplates.org/>`_, henceforth
+referred to as `PyFR-Mako`_. There are two types of `System`_ available
+in PyFR |release|:
+
+.. autoclass:: pyfr.solvers.euler.system.EulerSystem
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.navstokes.system.NavierStokesSystem
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `System`_ are related via the following inheritance diagram:
+
+.. inheritance-diagram:: pyfr.solvers.navstokes.system
+                         pyfr.solvers.euler.system
+    :parts: 1
+
+Elements
+--------
+
+An `Elements`_ holds information/data for a group of elements. There are
+two types of `Elements`_ available in PyFR |release|:
+
+.. autoclass:: pyfr.solvers.euler.elements.EulerElements
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.navstokes.elements.NavierStokesElements
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `Elements`_ are related via the following inheritance diagram:
+
+.. inheritance-diagram:: pyfr.solvers.navstokes.elements
+                         pyfr.solvers.euler.elements
+    :parts: 1
+
+Interfaces
+----------
+
+An `Interfaces`_ holds information/data for a group of interfaces. There
+are four types of (non-boundary) `Interfaces`_ available in PyFR
+|release|:
+
+.. autoclass:: pyfr.solvers.euler.inters.EulerIntInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.euler.inters.EulerMPIInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesIntInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesMPIInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of (non-boundary) `Interfaces`_ are related via the following
+inheritance diagram:
+
+.. inheritance-diagram:: pyfr.solvers.navstokes.inters.NavierStokesMPIInters
+                         pyfr.solvers.navstokes.inters.NavierStokesIntInters
+                         pyfr.solvers.euler.inters.EulerMPIInters
+                         pyfr.solvers.euler.inters.EulerIntInters
+    :parts: 1
+
+Backend
+-------
+
+A `Backend`_ holds information/data for a backend. There are three types
+of `Backend`_ available in PyFR |release|:
+
+.. autoclass:: pyfr.backends.cuda.base.CUDABackend
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.opencl.base.OpenCLBackend
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.openmp.base.OpenMPBackend
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `Backend`_ are related via the following inheritance diagram:
+
+.. inheritance-diagram:: pyfr.backends.cuda.base
+                         pyfr.backends.opencl.base
+                         pyfr.backends.openmp.base
+    :parts: 1
+
+Pointwise Kernel Provider
+-------------------------
+
+A `Pointwise Kernel Provider`_ produces point-wise kernels.
+Specifically, a `Pointwise Kernel Provider`_ has a method named
+:code:`register`, which adds a new method to an instance of a
+`Pointwise Kernel Provider`_. This new method, when called, returns a
+kernel. A kernel is an instance of a 'one-off' class with a method
+named :code:`run` that implements the required kernel functionality.
+The kernel functionality itself is specified using `PyFR-Mako`_. Hence,
+a `Pointwise Kernel Provider`_ also has a method named
+:code:`_render_kernel`, which renders `PyFR-Mako`_ into low-level
+platform-specific code. The :code:`_render_kernel` method first sets
+the context for Mako (i.e. details about the `Backend`_ etc.) and then
+uses Mako to begin rendering the `PyFR-Mako`_ specification. When Mako
+encounters a :code:`pyfr:kernel` an instance of a `Kernel Generator`_
+is created, which is used to render the body of the
+:code:`pyfr:kernel`. There are three types of `Pointwise Kernel
+Provider`_ available in PyFR |release|:
+
+.. autoclass:: pyfr.backends.cuda.provider.CUDAPointwiseKernelProvider
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.opencl.provider.OpenCLPointwiseKernelProvider
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.openmp.provider.OpenMPPointwiseKernelProvider
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `Pointwise Kernel Provider`_ are related via the following
+inheritance diagram:
+
+.. inheritance-diagram:: pyfr.backends.openmp.provider
+                         pyfr.backends.cuda.provider
+                         pyfr.backends.opencl.provider
+                         pyfr.backends.base.kernels.BasePointwiseKernelProvider
+    :parts: 1
+
+Kernel Generator
+----------------
+
+A `Kernel Generator`_ renders the `PyFR-Mako`_ in a :code:`pyfr:kernel`
+into low-level platform-specific code. Specifically, a `Kernel
+Generator`_ has a method named :code:`render`, which applies `Backend`_
+specific regex and adds `Backend`_ specific 'boiler plate' code to
+produce the low-level platform-specific source -- which is compiled,
+linked, and loaded. There are three types of `Kernel Generator`_
+available in PyFR |release|:
+
+.. autoclass:: pyfr.backends.cuda.generator.CUDAKernelGenerator
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.opencl.generator.OpenCLKernelGenerator
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.openmp.generator.OpenMPKernelGenerator
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of `Kernel Generator`_ are related via the following inheritance diagram:
+
+.. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
+                         pyfr.backends.opencl.generator.OpenCLKernelGenerator
+                         pyfr.backends.openmp.generator.OpenMPKernelGenerator
+    :parts: 1
+
 =========
 PyFR-Mako
 =========
-
-Overview
---------
-
-Platform portability of PyFR is achieved, in part, via use of an
-inbuilt templating language derived from `Mako
-<http://www.makotemplates.org/>`_, henceforth referred to as PyFR-Mako.
-Non-linear point-wise functionality is specified using PyFR-Mako.
-PyFR-Mako specifications are then converted into platform-specific
-low-level code at runtime, which is compiled/linked/loaded.
 
 PyFR-Mako Kernels
 -----------------
