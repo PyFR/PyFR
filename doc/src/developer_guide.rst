@@ -383,33 +383,33 @@ can be invoked directly from within PyFR. They are opened with a header
 of the form::
 
     <%pyfr:kernel name='kernel-name' ndim='data-dimensionality' [argument-name='argument-intent argument-attribute argument-data-type' ...]>
-                      
-where 
+
+where
 
 1. ``kernel-name`` --- name of kernel
 
     *string*
-    
+
 2. ``data-dimensionality`` --- dimensionality of data
 
     *int*
-    
+
 3. ``argument-name`` --- name of argument
 
     *string*
-    
+
 4. ``argument-intent`` --- intent of argument
 
     ``in`` | ``out`` | ``inout``
-    
+
 5. ``argument-attribute`` --- attribute of argument
 
     ``mpi`` | ``scalar`` | ``view``
-        
+
 6. ``argument-data-type`` --- data type of argument
 
     *string*
-    
+
 and are closed with a footer of the form::
 
      </%pyfr:kernel>
@@ -423,36 +423,36 @@ PyFR-Mako kernels. PyFR-Mako macros can be viewed as building blocks
 for PyFR-mako kernels. They are opened with a header of the form::
 
     <%pyfr:macro name='macro-name' params='[parameter-name, ...]'>
-                      
+
 where
 
 1. ``macro-name`` --- name of macro
 
     *string*
-    
+
 2. ``parameter-name`` --- name of parameter
 
     *string*
-    
+
 and are closed with a footer of the form::
 
     </%pyfr:macro>
-    
+
 PyFR-Mako macros are embedded within a kernel using an expression of
 the following form::
 
     ${pyfr.expand('macro-name', ['parameter-name', ...])};
-    
+
 where
 
 1. ``macro-name`` --- name of the macro
 
     *string*
-    
+
 2. ``parameter-name`` --- name of parameter
 
-    *string*    
-      
+    *string*
+
 Syntax
 ------
 
@@ -506,7 +506,7 @@ Example::
             fout[0][3] += u*t_xx + v*t_xy + ${-c['mu']*c['gamma']/c['Pr']}*T_x;
             fout[1][3] += u*t_xy + v*t_yy + ${-c['mu']*c['gamma']/c['Pr']}*T_y;
         % endif
-     
+
 Loops
 ^^^^^
 

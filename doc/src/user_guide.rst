@@ -362,7 +362,7 @@ Parameterises the time-integration scheme used by the solver with
 
            *float*
 
-        - ``safety-fact`` --- safety factor for step size adjustment 
+        - ``safety-fact`` --- safety factor for step size adjustment
           (suitable range 0.80-0.95)
 
            *float*
@@ -613,14 +613,14 @@ Parameterises the pyramidal elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    pyramidal element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``witherden-vincent``
 
 Example::
 
     [solver-elements-pyr]
     soln-pts = gauss-legendre
     quad-deg = 10
-    quad-pts = gauss-legendre
+    quad-pts = witherden-vincent
 
 [solver-source-terms]
 ^^^^^^^^^^^^^^^^^^^^^
@@ -635,11 +635,11 @@ Parameterises space (x, y, [z]) and time (t) dependent source terms with
 
     *string*
 
-3. ``rhov`` --- y-momentum source term 
+3. ``rhov`` --- y-momentum source term
 
     *string*
 
-4. ``rhow`` --- z-momentum source term 
+4. ``rhow`` --- z-momentum source term
 
     *string*
 
