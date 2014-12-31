@@ -17,7 +17,7 @@ class BaseFluidElements(object):
         rhovs = [rho*c for c in ics[1:-1]]
 
         # Compute the energy
-        gamma = self._cfg.getfloat('constants', 'gamma')
+        gamma = self.cfg.getfloat('constants', 'gamma')
         E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in ics[1:-1])
 
         return [rho] + rhovs + [E]
@@ -32,7 +32,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
 
         # Template parameters for the flux kernel
         tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                       c=self._cfg.items_as('constants', float))
+                       c=self.cfg.items_as('constants', float))
 
         if 'flux' in self.antialias:
             self.kernels['tdisf'] = lambda: backend.kernel(

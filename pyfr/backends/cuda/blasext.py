@@ -18,8 +18,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         nv, cnt = len(xn), y.leaddim*y.nrow
 
         # Render the kernel template
-        tpl = self.backend.lookup.get_template('axnpby')
-        src = tpl.render(n=nv, dtype=npdtype_to_ctype(y.dtype))
+        src = self.backend.lookup.get_template('axnpby').render(n=nv)
 
         # Build
         kern = self._build_kernel('axnpby', src,

@@ -56,7 +56,7 @@ class ClBLASWrappers(object):
 
     def _errcheck(self, status, fn, args):
         if status != 0:
-            raise RuntimeError('clBLAS')
+            raise RuntimeError('clBLAS: {0}'.format(status))
 
 
 class OpenCLClBLASKernels(object):

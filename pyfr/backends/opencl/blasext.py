@@ -19,8 +19,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         nrow, leaddim, leadsubdim, dtype = arr[0].traits
 
         # Render the kernel template
-        tpl = self.backend.lookup.get_template('axnpby')
-        src = tpl.render(nv=nv, alignb=self.backend.alignb, fpdtype=dtype)
+        src = self.backend.lookup.get_template('axnpby').render(nv=nv)
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,

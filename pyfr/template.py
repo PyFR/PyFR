@@ -11,8 +11,9 @@ def float_repr(obj):
 
 
 class DottedTemplateLookup(TemplateLookup):
-    def __init__(self, pkg):
+    def __init__(self, pkg, **kwargs):
         self.dfltpkg = pkg
+        self.dfltargs = kwargs
 
     def adjust_uri(self, uri, relto):
         return uri
@@ -33,6 +34,14 @@ class DottedTemplateLookup(TemplateLookup):
         if not src:
             raise RuntimeError('Template "{}" not found'.format(name))
 
-        return Template(src, lookup=self,
-                        default_filters=['float_repr', 'str'],
-                        imports=['from pyfr.template import float_repr'])
+        # Subclass Template to support implicit arguments
+        class DefaultTemplate(Template):
+            def render(iself, *args, **kwargs):
+                return super(DefaultTemplate, iself).render(
+                    *args, **dict(self.dfltargs, **kwargs)
+                )
+
+        return DefaultTemplate(
+            src, lookup=self, default_filters=['float_repr', 'str'],
+            imports=['from pyfr.template import float_repr']
+        )

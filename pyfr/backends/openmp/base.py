@@ -24,13 +24,16 @@ class OpenMPBackend(BaseBackend):
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_bank_cls = types.OpenMPMatrixBank
         self.matrix_rslice_cls = types.OpenMPMatrixRSlice
-        self.mpi_matrix_cls = types.OpenMPMPIMatrix
-        self.mpi_view_cls = types.OpenMPMPIView
         self.queue_cls = types.OpenMPQueue
         self.view_cls = types.OpenMPView
+        self.xchg_matrix_cls = types.OpenMPXchgMatrix
+        self.xchg_view_cls = types.OpenMPXchgView
 
         # Template lookup
-        self.lookup = DottedTemplateLookup('pyfr.backends.openmp.kernels')
+        self.lookup = DottedTemplateLookup(
+            'pyfr.backends.openmp.kernels',
+            fpdtype=self.fpdtype, alignb=self.alignb
+        )
 
         # Kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
@@ -43,7 +46,7 @@ class OpenMPBackend(BaseBackend):
         self.pointwise = self._providers[0]
 
     def _malloc_impl(self, nbytes):
-            data = np.zeros(nbytes + self.alignb, dtype=np.uint8)
-            offset = -data.ctypes.data % self.alignb
+        data = np.zeros(nbytes + self.alignb, dtype=np.uint8)
+        offset = -data.ctypes.data % self.alignb
 
-            return data[offset:nbytes + offset]
+        return data[offset:nbytes + offset]

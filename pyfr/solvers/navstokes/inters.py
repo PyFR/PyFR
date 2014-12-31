@@ -12,8 +12,8 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
         super(NavierStokesIntInters, self).__init__(*args, **kwargs)
 
         # Pointwise template arguments
-        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
-        visc_corr = self._cfg.get('solver', 'viscosity-correction', 'none')
+        rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
+        visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c)
 
@@ -39,8 +39,8 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
         super(NavierStokesMPIInters, self).__init__(*args, **kwargs)
 
         # Pointwise template arguments
-        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
-        visc_corr = self._cfg.get('solver', 'viscosity-correction', 'none')
+        rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
+        visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c)
 
@@ -64,8 +64,8 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         super(NavierStokesBaseBCInters, self).__init__(*args, **kwargs)
 
         # Pointwise template arguments
-        rsolver = self._cfg.get('solver-interfaces', 'riemann-solver')
-        visc_corr = self._cfg.get('solver', 'viscosity-correction', 'none')
+        rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
+        visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c, bctype=self.type)
 
@@ -140,7 +140,7 @@ class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):
         super(NavierStokesSubInflowFtpttangBCInters, self).__init__(*args,
                                                                     **kwargs)
 
-        gamma = self._cfg.getfloat('constants', 'gamma')
+        gamma = self.cfg.getfloat('constants', 'gamma')
 
         # Pass boundary constants to the backend
         self._tpl_c['cpTt'], = self._eval_opts(['cpTt'])

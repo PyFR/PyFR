@@ -41,8 +41,8 @@ class BaseAdvectionMPIInters(BaseInters):
         const_mat = self._const_mat
 
         # Generate the left hand view matrix and its dual
-        self._scal0_lhs = self._scal_mpi_view(lhs, 'get_scal_fpts_for_inter')
-        self._scal0_rhs = be.mpi_matrix_for_view(self._scal0_lhs)
+        self._scal0_lhs = self._scal_xchg_view(lhs, 'get_scal_fpts_for_inter')
+        self._scal0_rhs = be.xchg_matrix_for_view(self._scal0_lhs)
 
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
@@ -67,7 +67,7 @@ class BaseAdvectionBCInters(BaseInters):
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super(BaseAdvectionBCInters, self).__init__(be, lhs, elemap, cfg)
-        self._cfgsect = cfgsect
+        self.cfgsect = cfgsect
 
         const_mat = self._const_mat
 
@@ -85,9 +85,9 @@ class BaseAdvectionBCInters(BaseInters):
         # Boundary conditions, much like initial conditions, can be
         # parameterized by values in [constants] so we must bring these
         # into scope when evaluating the boundary conditions
-        cc = self._cfg.items_as('constants', float)
+        cc = self.cfg.items_as('constants', float)
 
-        cfg, sect = self._cfg, self._cfgsect
+        cfg, sect = self.cfg, self.cfgsect
 
         # Evaluate any BC specific arguments from the config file
         if default is not None:

@@ -19,11 +19,12 @@ class SourceModule(object):
     _dir_seq = it.count()
 
     def __init__(self, src, cfg):
-        self._src = src
-        self._cfg = cfg
+        self.src = src
+        self.cfg = cfg
 
         # Create a scratch directory
-        tmpdir = tempfile.mkdtemp(prefix='pyfr-%d-' % next(self._dir_seq))
+        tmpidx = next(self._dir_seq)
+        tmpdir = tempfile.mkdtemp(prefix='pyfr-{0}-'.format(tmpidx))
 
         try:
             # Compile and link the source
@@ -63,7 +64,7 @@ class GccSourceModule(SourceModule):
 
         # Write the source code out
         with open(os.path.join(tmpdir, cn), 'w') as f:
-            f.write(self._src)
+            f.write(self.src)
 
         # Compile
         cmd = [self._cc,
