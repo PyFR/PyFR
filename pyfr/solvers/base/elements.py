@@ -202,7 +202,7 @@ class BaseElements(object):
         mag_pnorm_fpts = np.sqrt(mag_pnorm_fpts)
 
         # Check that none of these magnitudes are zero
-        if np.any(mag_pnorm_fpts < 1e-6):
+        if np.any(mag_pnorm_fpts < 1e-10):
             raise RuntimeError('Zero face normals detected')
 
         # Normalize the physical normals at the flux points
