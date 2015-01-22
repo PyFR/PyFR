@@ -12,13 +12,13 @@ _sentinel = object()
 
 class Inifile(object):
     def __init__(self, inistr=None):
-        self._cp = cp = SafeConfigParser()
+        self._cp = cp = SafeConfigParser(inline_comment_prefixes=[';'])
 
         # Preserve case
         cp.optionxform = str
 
         if inistr:
-            cp.readfp(io.StringIO(inistr))
+            cp.read_string(inistr)
 
     @staticmethod
     def load(file):
