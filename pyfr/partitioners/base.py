@@ -194,7 +194,9 @@ class BasePartitioner(object):
         for f in mesh:
             m = re.match('bcon_(.+?)_p0$', f)
             if m:
-                for lpetype, leidxg, lfidx, lflags in mesh[f]:
+                lhs = mesh[f].astype('U4,i4,i1,i1')
+
+                for lpetype, leidxg, lfidx, lflags in lhs:
                     lpart, leidxl = eleglmap[lpetype][leidxg]
                     conl = (lpetype, leidxl, lfidx, lflags)
 
