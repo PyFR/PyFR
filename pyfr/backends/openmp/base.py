@@ -10,7 +10,7 @@ class OpenMPBackend(BaseBackend):
     name = 'openmp'
 
     def __init__(self, cfg):
-        super(OpenMPBackend, self).__init__(cfg)
+        super().__init__(cfg)
 
         # Take the alignment requirement to be 32-bytes
         self.alignb = 32

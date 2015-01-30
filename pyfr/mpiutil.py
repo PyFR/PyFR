@@ -41,6 +41,7 @@ def register_finalize_handler():
             MPI.Finalize()
         # Otherwise forcefully abort
         else:
+            sys.stderr.flush()
             MPI.COMM_WORLD.Abort(1)
 
     # Register our exit handler

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 import functools as ft
 import itertools as it
 import os
-import cPickle as pickle
+import pickle as pickle
 import shutil
 
 
@@ -35,7 +35,7 @@ class memoize(object):
 
 class proxylist(list):
     def __init__(self, *args):
-        super(proxylist, self).__init__(*args)
+        super().__init__(*args)
 
     def __getattr__(self, attr):
         return proxylist([getattr(x, attr) for x in self])
@@ -68,9 +68,9 @@ class silence(object):
 
         # Open the redirects
         if self.combine:
-            self.new_streams = [open(self.outfiles[0], 'w', 0)]*2
+            self.new_streams = [open(self.outfiles[0], 'wb', 0)]*2
         else:
-            self.new_streams = [open(f, 'w', 0) for f in self.outfiles]
+            self.new_streams = [open(f, 'wb', 0) for f in self.outfiles]
 
         self.new_fds = [s.fileno() for s in self.new_streams]
 
@@ -145,7 +145,7 @@ def subclasses(cls, just_leaf=False):
 
 
 def subclass_where(cls, **kwargs):
-    k, v = next(kwargs.iteritems())
+    k, v = next(iter(kwargs.items()))
 
     for s in subclasses(cls):
         if hasattr(s, k) and getattr(s, k) == v:
@@ -153,7 +153,7 @@ def subclass_where(cls, **kwargs):
 
 
 def ndrange(*args):
-    return it.product(*map(xrange, args))
+    return it.product(*map(range, args))
 
 
 def rm(path):

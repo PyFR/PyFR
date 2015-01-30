@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import itertools as it
-
 import numpy as np
 import pycuda.driver as cuda
 
@@ -43,7 +41,7 @@ class CUDAMatrixBase(base.MatrixBase):
     def _as_parameter_(self):
         return self.data
 
-    def __long__(self):
+    def __index__(self):
         return self.data
 
 
@@ -54,14 +52,14 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 class CUDAMatrixRSlice(base.MatrixRSlice):
     @property
     def _as_parameter_(self):
-        return self.parent.basedata + self.offset
+        return int(self.parent.basedata + self.offset)
 
-    def __long__(self):
-        return self.parent.basedata + self.offset
+    def __index__(self):
+        return int(self.parent.basedata + self.offset)
 
 
 class CUDAMatrixBank(base.MatrixBank):
-    def __long__(self):
+    def __index__(self):
         return self._curr_mat.data
 
 
@@ -76,8 +74,7 @@ class CUDAView(base.View):
 class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
     def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         # Call the standard matrix constructor
-        super(CUDAXchgMatrix, self).__init__(backend, ioshape, initval,
-                                             extent, aliases, tags)
+        super().__init__(backend, ioshape, initval, extent, aliases, tags)
 
         # Allocate a page-locked buffer on the host for MPI to send/recv from
         self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
@@ -90,7 +87,7 @@ class CUDAXchgView(base.XchgView):
 
 class CUDAQueue(base.Queue):
     def __init__(self, backend):
-        super(CUDAQueue, self).__init__(backend)
+        super().__init__(backend)
 
         # CUDA streams
         self.cuda_stream_comp = cuda.Stream()
@@ -122,7 +119,7 @@ class CUDAQueue(base.Queue):
         # So long as there are items remaining in the queues
         while any(queues):
             # Execute a (potentially) blocking item from each queue
-            for q in it.ifilter(None, queues):
+            for q in filter(None, queues):
                 q._exec_next()
                 q._exec_nowait()
 

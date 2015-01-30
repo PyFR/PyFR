@@ -63,7 +63,7 @@ class LinePolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return list(xrange(self.order))
+        return list(range(self.order))
 
 
 class TriPolyBasis(BasePolyBasis):
@@ -89,15 +89,15 @@ class TriPolyBasis(BasePolyBasis):
     @lazyprop
     def degrees(self):
         return [i + j
-                for i in xrange(self.order)
-                for j in xrange(self.order - i)]
+                for i in range(self.order)
+                for j in range(self.order - i)]
 
 
 class QuadPolyBasis(BasePolyBasis):
     name = 'quad'
 
     def ortho_basis_at_mp(self, p, q):
-        sk = [mp.sqrt(k + 0.5) for k in xrange(self.order)]
+        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
 
@@ -105,7 +105,7 @@ class QuadPolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return [i + j for i in xrange(self.order) for j in xrange(self.order)]
+        return [i + j for i in range(self.order) for j in range(self.order)]
 
 
 class TetPolyBasis(BasePolyBasis):
@@ -138,9 +138,9 @@ class TetPolyBasis(BasePolyBasis):
     @lazyprop
     def degrees(self):
         return [i + j + k
-                for i in xrange(self.order)
-                for j in xrange(self.order - i)
-                for k in xrange(self.order - i - j)]
+                for i in range(self.order)
+                for j in range(self.order - i)
+                for k in range(self.order - i - j)]
 
 
 class PriPolyBasis(BasePolyBasis):
@@ -162,7 +162,7 @@ class PriPolyBasis(BasePolyBasis):
 
                 pab.append(cij*pi*pj)
 
-        sk = [mp.sqrt(k + 0.5) for k in xrange(self.order)]
+        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
         pc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, c))]
 
         return [pij*pk for pij in pab for pk in pc]
@@ -170,9 +170,9 @@ class PriPolyBasis(BasePolyBasis):
     @lazyprop
     def degrees(self):
         return [i + j + k
-                for i in xrange(self.order)
-                for j in xrange(self.order - i)
-                for k in xrange(self.order)]
+                for i in range(self.order)
+                for j in range(self.order - i)
+                for k in range(self.order)]
 
 
 class PyrPolyBasis(BasePolyBasis):
@@ -216,7 +216,7 @@ class HexPolyBasis(BasePolyBasis):
     name = 'hex'
 
     def ortho_basis_at_mp(self, p, q, r):
-        sk = [mp.sqrt(k + 0.5) for k in xrange(self.order)]
+        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
         pc = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, r))]
@@ -226,6 +226,6 @@ class HexPolyBasis(BasePolyBasis):
     @lazyprop
     def degrees(self):
         return [i + j + k
-                for i in xrange(self.order)
-                for j in xrange(self.order)
-                for k in xrange(self.order)]
+                for i in range(self.order)
+                for j in range(self.order)
+                for k in range(self.order)]

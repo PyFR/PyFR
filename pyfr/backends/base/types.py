@@ -6,9 +6,7 @@ from collections import Sequence, deque
 import numpy as np
 
 
-class MatrixBase(object):
-    __metaclass__ = ABCMeta
-
+class MatrixBase(object, metaclass=ABCMeta):
     _base_tags = set()
 
     def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
@@ -35,14 +33,14 @@ class MatrixBase(object):
         shape[-1] -= shape[-1] % -ldmod
 
         # Assign
-        self.nrow, self.ncol = nrow, ncol
+        self.nrow, self.ncol = int(nrow), int(ncol)
         self.ioshape, self.datashape = ioshape, shape
 
-        self.leaddim = ncol - (ncol % -ldmod)
+        self.leaddim = self.ncol - (self.ncol % -ldmod)
         self.leadsubdim = shape[-1]
 
         self.pitch = self.leaddim*self.itemsize
-        self.nbytes = nrow*self.pitch
+        self.nbytes = self.nrow*self.pitch
         self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
 
         # Process the initial value
@@ -83,8 +81,8 @@ class Matrix(MatrixBase):
     _base_tags = {'dense'}
 
     def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        super(Matrix, self).__init__(backend, backend.fpdtype, ioshape,
-                                     initval, extent, aliases, tags)
+        super().__init__(backend, backend.fpdtype, ioshape, initval, extent,
+                         aliases, tags)
 
     def set(self, ary):
         if ary.shape != self.ioshape:
@@ -113,8 +111,8 @@ class MatrixRSlice(object):
         if p < 0 or q > mat.nrow or q < p:
             raise ValueError('Invalid row slice')
 
-        self.p, self.q = p, q
-        self.nrow, self.ncol = q - p, mat.ncol
+        self.p, self.q = int(p), int(q)
+        self.nrow, self.ncol = self.q - self.p, mat.ncol
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
         self.leaddim, self.leadsubdim = mat.leaddim, mat.leadsubdim
 
@@ -136,9 +134,8 @@ class ConstMatrix(MatrixBase):
     _base_tags = {'const', 'dense'}
 
     def __init__(self, backend, initval, extent, tags):
-        super(ConstMatrix, self).__init__(backend, backend.fpdtype,
-                                          initval.shape, initval, extent,
-                                          None, tags)
+        super().__init__(backend, backend.fpdtype, initval.shape, initval,
+                         extent, None, tags)
 
 
 class XchgMatrix(Matrix):
@@ -258,9 +255,7 @@ class XchgView(object):
         self.xchgmat = backend.xchg_matrix((nvrow, nvcol, n), tags=tags)
 
 
-class Queue(object):
-    __metaclass__ = ABCMeta
-
+class Queue(object, metaclass=ABCMeta):
     def __init__(self, backend):
         self.backend = backend
 
@@ -281,7 +276,7 @@ class Queue(object):
         self << items
         self.run()
 
-    def __nonzero__(self):
+    def __bool__(self):
         return bool(self._items)
 
     def run(self):

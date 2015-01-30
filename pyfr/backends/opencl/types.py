@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import itertools as it
-
 import numpy as np
 import pyopencl as cl
 
@@ -74,9 +72,7 @@ class OpenCLView(base.View):
 
 class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
     def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        # Call the standard matrix constructor
-        super(OpenCLXchgMatrix, self).__init__(backend, ioshape, initval,
-                                               extent, aliases, tags)
+        super().__init__(backend, ioshape, initval, extent, aliases, tags)
 
         # Allocate an empty buffer on the host for MPI to send/recv from
         self.hdata = np.empty((self.nrow, self.ncol), self.dtype)
@@ -88,7 +84,7 @@ class OpenCLXchgView(base.XchgView):
 
 class OpenCLQueue(base.Queue):
     def __init__(self, backend):
-        super(OpenCLQueue, self).__init__(backend)
+        super().__init__(backend)
 
         # OpenCL command queues
         self.cl_queue_comp = cl.CommandQueue(backend.ctx)
@@ -120,7 +116,7 @@ class OpenCLQueue(base.Queue):
         # So long as there are items remaining in the queues
         while any(queues):
             # Execute a (potentially) blocking item from each queue
-            for q in it.ifilter(None, queues):
+            for q in filter(None, queues):
                 q._exec_next()
                 q._exec_nowait()
 

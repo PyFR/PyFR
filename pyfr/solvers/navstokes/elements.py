@@ -6,7 +6,7 @@ from pyfr.solvers.euler.elements import BaseFluidElements
 
 class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     def set_backend(self, backend, nscalupts):
-        super(NavierStokesElements, self).set_backend(backend, nscalupts)
+        super().set_backend(backend, nscalupts)
         backend.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
 
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')

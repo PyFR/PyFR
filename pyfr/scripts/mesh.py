@@ -66,7 +66,7 @@ def process_partition(args):
     files = it.chain([mesh], solnit)
 
     # Iterate over the output mesh/solutions
-    for path, data in it.izip(paths, files):
+    for path, data in zip(paths, files):
         # Compute the output path
         path = os.path.join(args.outd, os.path.basename(path.rstrip('/')))
 

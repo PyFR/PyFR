@@ -1,20 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import shutil
 import sys
 import time
-
-
-def get_terminal_size():
-    if sys.platform in ('linux2', 'darwin'):
-        import fcntl, termios, struct
-        try:
-            s = struct.unpack('hh', fcntl.ioctl(0, termios.TIOCGWINSZ, '1234'))
-            return s
-        except IOError:
-            pass
-
-    # Default to 24 by 80
-    return 24, 80
 
 
 def to_hms(delta):
@@ -46,7 +34,7 @@ class ProgressBar(object):
         self._wstart = time.time()
         self._last_wallt = 0.0
 
-        self._ncol = get_terminal_size()[1]
+        self._ncol = shutil.get_terminal_size()[0] or 80
         self._nbarcol = self._ncol - 24 - 2*len('{:.{}f}'.format(end, dps))
 
         self.advance_to(curr)

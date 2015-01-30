@@ -8,10 +8,7 @@ from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import memoize
 
 
-class BaseElements(object):
-    __metaclass__ = ABCMeta
-
-    # Map from dimension number to list of dynamical variables
+class BaseElements(object, metaclass=ABCMeta):
     _privarmap = None
 
     def __init__(self, basiscls, eles, cfg):
@@ -64,7 +61,7 @@ class BaseElements(object):
                                 for ffpts in basis.facefpts]
 
     @abstractmethod
-    def _process_ics(self, ics):
+    def pri_to_conv(ics, cfg):
         pass
 
     def set_ics_from_cfg(self):
@@ -93,7 +90,7 @@ class BaseElements(object):
         self._scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
         # Convert from primitive to conservative form
-        for i, v in enumerate(self._process_ics(ics)):
+        for i, v in enumerate(self.pri_to_conv(ics, self.cfg)):
             self._scal_upts[:,i,:] = v
 
     def set_ics_from_soln(self, solnmat, solncfg):
@@ -151,7 +148,7 @@ class BaseElements(object):
         # Allocate and bank the storage required by the time integrator
         self._scal_upts = [backend.matrix(self._scal_upts.shape,
                                           self._scal_upts, tags={'align'})
-                           for i in xrange(nscal_upts)]
+                           for i in range(nscal_upts)]
         self.scal_upts_inb = inb = backend.matrix_bank(self._scal_upts)
         self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
 

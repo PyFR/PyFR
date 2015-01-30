@@ -8,7 +8,7 @@ from pyfr.util import ndrange
 
 class CUDAKernelGenerator(BaseKernelGenerator):
     def __init__(self, *args, **kwargs):
-        super(CUDAKernelGenerator, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Specialise
         if self.ndim == 1:

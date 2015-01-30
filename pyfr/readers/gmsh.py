@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import defaultdict, Counter
-from itertools import chain, ifilter, izip
+from itertools import chain
 import re
 
 import numpy as np
@@ -77,7 +77,7 @@ class GmshReader(BaseReader):
     }
 
     def __init__(self, msh):
-        if isinstance(msh, basestring):
+        if isinstance(msh, str):
             msh = open(msh)
 
         # Get an iterator over the lines of the mesh
@@ -93,7 +93,7 @@ class GmshReader(BaseReader):
         # Seen sections
         seen_sect = set()
 
-        for l in ifilter(lambda l: l != '\n', mshit):
+        for l in filter(lambda l: l != '\n', mshit):
             # Ensure we have encountered a section
             if not l.startswith('$'):
                 raise ValueError('Expected a mesh section')
@@ -168,7 +168,7 @@ class GmshReader(BaseReader):
         if self._felespent is None:
             raise ValueError('No fluid elements in mesh')
 
-        if any(len(pf) != 2 for pf in self._pfacespents.itervalues()):
+        if any(len(pf) != 2 for pf in self._pfacespents.values()):
             raise ValueError('Unpaired periodic boundary in mesh')
 
     def _read_nodes(self, msh):
@@ -195,11 +195,11 @@ class GmshReader(BaseReader):
 
             elenodes[etype, epent].append(enodes)
 
-        self._elenodes = {k: np.array(v) for k, v in elenodes.iteritems()}
+        self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
 
     def _to_first_order(self, elemap):
         foelemap = {}
-        for (etype, epent), eles in elemap.iteritems():
+        for (etype, epent), eles in elemap.items():
             # PyFR element type ('hex', 'tri', &c)
             petype = self._etype_map[etype][0]
 
@@ -213,7 +213,7 @@ class GmshReader(BaseReader):
     def _split_fluid(self, elemap):
         selemap = defaultdict(dict)
 
-        for (petype, epent), eles in elemap.iteritems():
+        for (petype, epent), eles in elemap.items():
             selemap[epent][petype] = eles
 
         return selemap.pop(self._felespent), selemap
@@ -229,7 +229,7 @@ class GmshReader(BaseReader):
         nfnodes = self._petype_focount[pftype]
 
         # Connectivity; (petype, eidx, fidx, flags)
-        con = [(petype, i, j, 0) for i in xrange(len(foeles)) for j in fnums]
+        con = [(petype, i, j, 0) for i in range(len(foeles)) for j in fnums]
 
         # Nodes
         nodes = np.sort(foeles[:, fnmap]).reshape(len(con), -1)
@@ -238,7 +238,7 @@ class GmshReader(BaseReader):
 
     def _extract_faces(self, foeles):
         fofaces = defaultdict(list)
-        for petype, eles in foeles.iteritems():
+        for petype, eles in foeles.items():
             for pftype in self._petype_fnums[petype]:
                 fofinf = self._foface_info(petype, pftype, eles)
                 fofaces[pftype].append(fofinf)
@@ -249,8 +249,8 @@ class GmshReader(BaseReader):
         pairs = defaultdict(list)
         resid = {}
 
-        for pftype, faces in ffofaces.iteritems():
-            for f, n in chain.from_iterable(izip(f, n) for f, n in faces):
+        for pftype, faces in ffofaces.items():
+            for f, n in chain.from_iterable(zip(f, n) for f, n in faces):
                 sn = tuple(n)
 
                 # See if the nodes are in resid
@@ -266,7 +266,7 @@ class GmshReader(BaseReader):
         pfaces = defaultdict(list)
         nodepts = self._nodepts
 
-        for lpent, rpent in self._pfacespents.itervalues():
+        for lpent, rpent in self._pfacespents.values():
             for pftype in bpart[lpent]:
                 lfnodes = bpart[lpent][pftype]
                 rfnodes = bpart[rpent][pftype]
@@ -274,10 +274,10 @@ class GmshReader(BaseReader):
                 lfpts = np.array([[nodepts[n] for n in fn] for fn in lfnodes])
                 rfpts = np.array([[nodepts[n] for n in fn] for fn in rfnodes])
 
-                lfidx = fuzzysort(lfpts.mean(axis=1).T, xrange(len(lfnodes)))
-                rfidx = fuzzysort(rfpts.mean(axis=1).T, xrange(len(rfnodes)))
+                lfidx = fuzzysort(lfpts.mean(axis=1).T, range(len(lfnodes)))
+                rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
 
-                for lfn, rfn in izip(lfnodes[lfidx], rfnodes[rfidx]):
+                for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
                     lf = resid.pop(tuple(sorted(lfn)))
                     rf = resid.pop(tuple(sorted(rfn)))
 
@@ -288,11 +288,11 @@ class GmshReader(BaseReader):
     def _ident_boundary_faces(self, bpart, resid):
         bfaces = defaultdict(list)
 
-        bpents = set(self._bfacespents.itervalues())
+        bpents = set(self._bfacespents.values())
 
-        for epent, fnodes in bpart.iteritems():
+        for epent, fnodes in bpart.items():
             if epent in bpents:
-                for fn in chain.from_iterable(fnodes.itervalues()):
+                for fn in chain.from_iterable(fnodes.values()):
                     bfaces[epent].append(resid.pop(tuple(sorted(fn))))
 
         return bfaces
@@ -316,25 +316,25 @@ class GmshReader(BaseReader):
         # Identify the fixed boundary faces
         bf = self._ident_boundary_faces(bpart, resid)
 
-        if any(resid.itervalues()):
+        if any(resid.values()):
             raise ValueError('Unpaired faces in mesh')
 
         # Flattern the face-pair dicts
-        pairs = chain(chain.from_iterable(fpairs.itervalues()),
-                      chain.from_iterable(pfpairs.itervalues()))
+        pairs = chain(chain.from_iterable(fpairs.values()),
+                      chain.from_iterable(pfpairs.values()))
 
         # Generate the internal connectivity array
         con = list(pairs)
 
         # Generate boundary condition connectivity arrays
         bcon = {}
-        for pbcrgn, pent in self._bfacespents.iteritems():
+        for pbcrgn, pent in self._bfacespents.items():
             bcon[pbcrgn] = bf[pent]
 
         # Output
         ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i1').T}
 
-        for k, v in bcon.iteritems():
+        for k, v in bcon.items():
             ret['bcon_{0}_p0'.format(k)] = np.array(v, dtype='S4,i4,i1,i1')
 
         return ret
