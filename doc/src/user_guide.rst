@@ -18,7 +18,7 @@ Dependencies
 Overview
 ^^^^^^^^
 
-PyFR |release| has a hard dependency on Python 2.7 and the following
+PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
 1. `mako <http://www.makotemplates.org/>`_
