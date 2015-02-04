@@ -4,7 +4,7 @@ from contextlib import contextmanager
 import functools as ft
 import itertools as it
 import os
-import pickle as pickle
+import pickle
 import shutil
 
 
