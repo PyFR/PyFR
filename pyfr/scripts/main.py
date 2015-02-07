@@ -27,10 +27,10 @@ def main():
     # Parse the arguments
     args = ap.parse_args()
 
-    try:
-        # Invoke the process method
+    # Invoke the process method
+    if hasattr(args, 'process'):
         args.process(args)
-    except AttributeError:
+    else:
         sap.get(args.cmd, ap).print_help()
 
 
