@@ -1,8 +1,16 @@
  # -*- coding: utf-8 -*-
 
-from ctypes import CDLL
+import ctypes
+import ctypes.util
 import os
 import sys
+
+
+def find_libc():
+    if sys.platform == 'win32':
+        return ctypes.util.find_msvcrt()
+    else:
+        return ctypes.util.find_library('c')
 
 
 def load_library(name):
@@ -11,12 +19,12 @@ def load_library(name):
 
     # First attempt to utilise the system search path
     try:
-        return CDLL(lname)
+        return ctypes.CDLL(lname)
     # Otherwise, if this fails then run our own search
     except OSError:
         for sd in sdirs:
             try:
-                return CDLL(os.path.abspath(os.path.join(sd, lname)))
+                return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)))
             except OSError:
                 pass
         else:

@@ -1,13 +1,11 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from argparse import ArgumentParser, FileType
+from argparse import FileType
 import os
 
 from mpmath import mp
 import numpy as np
 
-from pyfr import __version__ as version
 from pyfr.backends import get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler
@@ -17,55 +15,8 @@ from pyfr.readers.native import read_pyfr_data
 from pyfr.solvers import get_solver
 
 
-def process_run(args):
-    return read_pyfr_data(args.mesh), None, Inifile.load(args.cfg)
-
-
-def process_restart(args):
-    mesh = read_pyfr_data(args.mesh)
-    soln = read_pyfr_data(args.soln)
-
-    # Ensure the solution is from the mesh we are using
-    if soln['mesh_uuid'] != mesh['mesh_uuid']:
-        raise RuntimeError('Invalid solution for mesh.')
-
-    # Process the config file
-    if args.cfg:
-        cfg = Inifile.load(args.cfg)
-    else:
-        cfg = Inifile(soln['config'].item().decode())
-
-    return mesh, soln, cfg
-
-
 @mp.workdps(60)
-def main():
-    ap = ArgumentParser(prog='pyfr-sim', description='Runs a PyFR simulation')
-    ap.add_argument('--verbose', '-v', action='count')
-    ap.add_argument('--backend', '-b', default='cuda', help='Backend to use')
-    ap.add_argument('--progress', '-p', action='store_true',
-                    help='show a progress bar')
-    ap.add_argument('--nansweep', '-n', metavar='N', type=int,
-                    help='check for NaNs every N steps')
-
-    sp = ap.add_subparsers(help='sub-command help')
-
-    ap_run = sp.add_parser('run', help='run --help')
-    ap_run.add_argument('mesh', help='mesh file')
-    ap_run.add_argument('cfg', type=FileType('r'), help='config file')
-    ap_run.set_defaults(process=process_run)
-
-    ap_restart = sp.add_parser('restart', help='restart --help')
-    ap_restart.add_argument('mesh', help='mesh file')
-    ap_restart.add_argument('soln', help='solution file')
-    ap_restart.add_argument('cfg', nargs='?', type=FileType('r'),
-                            help='new config file')
-    ap_restart.set_defaults(process=process_restart)
-
-    # Parse the arguments
-    args = ap.parse_args()
-    mesh, soln, cfg = args.process(args)
-
+def _process_common(args, mesh, soln, cfg):
     # Prefork to allow us to exec processes after MPI is initialised
     if hasattr(os, 'fork'):
         from pytools.prefork import enable_prefork
@@ -108,5 +59,47 @@ def main():
     solver.run()
 
 
-if __name__ == '__main__':
-    main()
+def add_args(ap):
+    ap.add_argument('--verbose', '-v', action='count')
+    ap.add_argument('--backend', '-b', default='cuda', help='Backend to use')
+    ap.add_argument('--progress', '-p', action='store_true',
+                    help='show a progress bar')
+    ap.add_argument('--nansweep', '-n', metavar='N', type=int,
+                    help='check for NaNs every N steps')
+
+    sp = ap.add_subparsers(help='sub-command help')
+
+    ap_run = sp.add_parser('run', help='run --help')
+    ap_run.add_argument('mesh', help='mesh file')
+    ap_run.add_argument('cfg', type=FileType('r'), help='config file')
+    ap_run.set_defaults(process=process_run)
+
+    ap_restart = sp.add_parser('restart', help='restart --help')
+    ap_restart.add_argument('mesh', help='mesh file')
+    ap_restart.add_argument('soln', help='solution file')
+    ap_restart.add_argument('cfg', nargs='?', type=FileType('r'),
+                            help='new config file')
+    ap_restart.set_defaults(process=process_restart)
+
+
+def process_run(args):
+    _process_common(
+        args, read_pyfr_data(args.mesh), None, Inifile.load(args.cfg)
+    )
+
+
+def process_restart(args):
+    mesh = read_pyfr_data(args.mesh)
+    soln = read_pyfr_data(args.soln)
+
+    # Ensure the solution is from the mesh we are using
+    if soln['mesh_uuid'] != mesh['mesh_uuid']:
+        raise RuntimeError('Invalid solution for mesh.')
+
+    # Process the config file
+    if args.cfg:
+        cfg = Inifile.load(args.cfg)
+    else:
+        cfg = Inifile(soln['config'].item().decode())
+
+    _process_common(args, mesh, soln, cfg)

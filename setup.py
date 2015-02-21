@@ -80,6 +80,11 @@ package_data = {
     'pyfr.tests': ['*.npz']
 }
 
+# Additional data
+data_files = [
+    ('', ['pyfr/__main__.py'])
+]
+
 # Hard dependencies
 install_requires = [
     'mako',
@@ -97,9 +102,7 @@ extras_require = {
 
 # Scripts
 console_scripts = [
-    'pyfr-mesh = pyfr.scripts.mesh:main',
-    'pyfr-sim = pyfr.scripts.sim:main',
-    'pyfr-postp = pyfr.scripts.postp:main'
+    'pyfr = pyfr.scripts.main:main'
 ]
 
 # Info
@@ -125,6 +128,7 @@ setup(name='pyfr',
       keywords='Math',
       packages=['pyfr'] + modules + tests,
       package_data=package_data,
+      data_files=data_files,
       entry_points={'console_scripts': console_scripts},
       install_requires=install_requires,
       extras_require=extras_require,

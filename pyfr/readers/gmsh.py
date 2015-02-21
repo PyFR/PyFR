@@ -19,7 +19,7 @@ def msh_section(mshit, section):
         if l == endln:
             raise ValueError('Unexpected end of section $' + section)
 
-        yield l
+        yield l.strip()
 
         if i == endix:
             break
@@ -143,6 +143,9 @@ class GmshReader(BaseReader):
         self._bfacespents = {}
         self._pfacespents = defaultdict(list)
 
+        # Seen physical names
+        seen = set()
+
         # Extract the physical names
         for l in msh_section(msh, 'PhysicalNames'):
             m = re.match(r'(\d+) (\d+) "((?:[^"\\]|\\.)*)"$', l)
@@ -150,6 +153,10 @@ class GmshReader(BaseReader):
                 raise ValueError('Malformed physical entity')
 
             pent, name = int(m.group(2)), m.group(3).lower()
+
+            # Ensure we have not seen this name before
+            if name in seen:
+                raise ValueError('Duplicate physical name: {}'.format(name))
 
             # Fluid elements
             if name == 'fluid':
@@ -164,6 +171,8 @@ class GmshReader(BaseReader):
             # Other boundary faces
             else:
                 self._bfacespents[name] = pent
+
+            seen.add(name)
 
         if self._felespent is None:
             raise ValueError('No fluid elements in mesh')
