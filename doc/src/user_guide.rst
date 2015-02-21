@@ -244,19 +244,20 @@ Parameterises the OpenMP backend with
 
     *string*
 
-2. ``cblas-st`` --- path to shared single-threaded C BLAS library
+2. ``cblas`` --- path to shared C BLAS library
 
     *string*
 
-3. ``cblas-mt`` --- path to shared multi-threaded C BLAS library
+3. ``cblas-type`` --- type of BLAS library
 
-    *string*
+    ``serial`` | ``parallel``
 
 Example::
 
     [backend-openmp]
     cc = gcc
-    cblas-mt = example/path/libBLAS.dylib
+    cblas= example/path/libBLAS.dylib
+    cblas-type = parallel
 
 [constants]
 ^^^^^^^^^^^
