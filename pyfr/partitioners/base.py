@@ -42,7 +42,7 @@ class BasePartitioner(object):
                     spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
 
         def offset_con(con, pr):
-            con = con.copy()
+            con = con.copy().astype('U4,i4,i1,i1')
 
             for en, pn in pinf.items():
                 if pn[pr] > 0:
