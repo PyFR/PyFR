@@ -33,6 +33,9 @@ class BaseSystem(object, metaclass=ABCMeta):
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
 
+        # Get all the solution point locations for the elements
+        self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
+
         # I/O banks for the elements
         self.eles_scal_upts_inb = eles.scal_upts_inb
         self.eles_scal_upts_outb = eles.scal_upts_outb
