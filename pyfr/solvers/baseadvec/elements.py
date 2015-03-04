@@ -110,7 +110,7 @@ class BaseAdvectionElements(BaseElements):
         subs.update(abs='fabs', pi=repr(math.pi))
 
         srcex = []
-        for v in self._convarmap[self.ndims]:
+        for v in self.convarmap[self.ndims]:
             ex = self.cfg.get('solver-source-terms', v, '0')
 
             # Substitute variables

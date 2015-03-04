@@ -37,7 +37,7 @@ class BaseController(BaseIntegrator):
 
         # Filter
         if self._ffreq and self.nacptsteps % self._ffreq == 0:
-            self._system.filt(idxcurr)
+            self.system.filt(idxcurr)
 
         # Fire off any event handlers
         self.completed_step_handlers(self)
@@ -57,7 +57,7 @@ class BaseController(BaseIntegrator):
 
     @property
     def soln(self):
-        return self._system.ele_scal_upts(self._idxcurr)
+        return self.system.ele_scal_upts(self._idxcurr)
 
 
 class NoneController(BaseController):
