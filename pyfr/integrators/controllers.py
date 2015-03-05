@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import math
+import re
 
 from pyfr.integrators.base import BaseIntegrator
+from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
 
@@ -27,6 +29,18 @@ class BaseController(BaseIntegrator):
 
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
+
+        # Load any plugins specified in the config file
+        for s in self.cfg.sections():
+            m = re.match('solver-plugin-(.+?)(?:-.+)?$', s)
+            if m:
+                cfgsect, name = m.group(0), m.group(1)
+
+                # Instantiate
+                plugin = get_plugin(name, self, cfgsect)
+
+                # Register as an event handler
+                self.completed_step_handlers.append(plugin)
 
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt

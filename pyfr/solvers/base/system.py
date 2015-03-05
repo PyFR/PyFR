@@ -40,6 +40,10 @@ class BaseSystem(object, metaclass=ABCMeta):
         self.eles_scal_upts_inb = eles.scal_upts_inb
         self.eles_scal_upts_outb = eles.scal_upts_outb
 
+        # Save the number of dimensions and field variables
+        self.ndims = eles[0].ndims
+        self.nvars = eles[0].nvars
+
         # Load the interfaces
         int_inters = self._load_int_inters(rallocs, mesh, elemap)
         mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
