@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
 import pyfr.backends.base as base
 from pyfr.util import lazyprop
 

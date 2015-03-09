@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 
 from argparse import FileType
 from tempfile import NamedTemporaryFile, mkdtemp

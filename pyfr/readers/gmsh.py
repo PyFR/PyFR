@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from collections import defaultdict, Counter
+from collections import defaultdict
 from itertools import chain
 import re
 

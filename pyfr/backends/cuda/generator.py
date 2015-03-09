@@ -3,7 +3,6 @@
 import re
 
 from pyfr.backends.base.generator import BaseKernelGenerator
-from pyfr.util import ndrange
 
 
 class CUDAKernelGenerator(BaseKernelGenerator):
