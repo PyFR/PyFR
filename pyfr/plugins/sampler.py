@@ -111,7 +111,7 @@ class SamplerPlugin(BasePlugin):
         comm, rank, root = get_comm_rank_root()
 
         # Solution matrices indexed by element type
-        solns = {k: v for k, v in zip(intg.system.ele_types, intg.soln)}
+        solns = dict(zip(intg.system.ele_types, intg.soln))
 
         # Points we're responsible for sampling
         ourpts = self._ptsinfo[comm.rank]

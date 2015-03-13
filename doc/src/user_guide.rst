@@ -702,6 +702,42 @@ Parameterises an exponential solution filter with
 
     *int*
 
+[soln-plugin-nancheck]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically checks the solution for NaN values
+
+1. ``freq`` --- frequency at which the check is performed:
+
+    *int*
+
+[soln-plugin-sampler]
+^^^^^^^^^^^^^^^^^^^^^
+
+Periodically samples specific points in the volume and writes them out
+to a CSV file.
+
+1. ``freq`` --- frequency at which to sample:
+
+    *int*
+
+2. ``samp-pts`` --- list of points to sample:
+
+    ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]``
+
+3. ``format`` --- output variable format:
+
+    ``primitive`` | ``conservative``
+
+4. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+5. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
 
