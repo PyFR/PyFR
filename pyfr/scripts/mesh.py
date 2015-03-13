@@ -6,7 +6,7 @@ import os
 
 import numpy as np
 
-from pyfr.partitioners import BasePartitioner, get_partitioner_by_name
+from pyfr.partitioners import BasePartitioner, get_partitioner
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import read_pyfr_data
 from pyfr.util import subclasses
@@ -75,11 +75,11 @@ def process_partition(args):
 
     # Create the partitioner
     if args.partitioner:
-        part = get_partitioner_by_name(args.partitioner, pwts, opts)
+        part = get_partitioner(args.partitioner, pwts, opts)
     else:
         for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
             try:
-                part = get_partitioner_by_name(name, pwts)
+                part = get_partitioner(name, pwts)
                 break
             except RuntimeError:
                 pass

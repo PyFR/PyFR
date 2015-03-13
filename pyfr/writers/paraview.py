@@ -3,8 +3,6 @@
 """Converts .pyfr[m, s] files to a Paraview VTK UnstructuredGrid File"""
 import numpy as np
 
-from pyfr.inifile import Inifile
-from pyfr.readers.nodemaps import GmshNodeMaps
 from pyfr.shapes import BaseShape
 from pyfr.solvers import BaseSystem
 from pyfr.util import subclass_where

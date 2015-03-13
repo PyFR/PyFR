@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import CDLL, POINTER, c_int, c_double, c_void_p
+from ctypes import POINTER, c_int, c_double, c_void_p
 
 import numpy as np
 
