@@ -4,7 +4,6 @@ from argparse import FileType
 import os
 
 from mpmath import mp
-import numpy as np
 
 from pyfr.backends import get_backend
 from pyfr.inifile import Inifile
@@ -46,15 +45,6 @@ def _process_common(args, mesh, soln, cfg):
         callb = lambda intg: pb.advance_to(intg.tcurr)
         solver.completed_step_handlers.append(callb)
 
-    # NaN sweeping
-    if args.nansweep:
-        def nansweep(intg):
-            if intg.nsteps % args.nansweep == 0:
-                if any(np.isnan(np.sum(s)) for s in intg.soln):
-                    raise RuntimeError('NaNs detected at t = {}'
-                                       .format(intg.tcurr))
-        solver.completed_step_handlers.append(nansweep)
-
     # Execute!
     solver.run()
 
@@ -64,8 +54,6 @@ def add_args(ap):
     ap.add_argument('--backend', '-b', default='cuda', help='Backend to use')
     ap.add_argument('--progress', '-p', action='store_true',
                     help='show a progress bar')
-    ap.add_argument('--nansweep', '-n', metavar='N', type=int,
-                    help='check for NaNs every N steps')
 
     sp = ap.add_subparsers(help='sub-command help')
 

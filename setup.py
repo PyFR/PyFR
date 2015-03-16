@@ -31,6 +31,7 @@ modules = [
     'pyfr.backends.openmp',
     'pyfr.backends.openmp.kernels',
     'pyfr.integrators',
+    'pyfr.plugins',
     'pyfr.quadrules',
     'pyfr.readers',
     'pyfr.partitioners',

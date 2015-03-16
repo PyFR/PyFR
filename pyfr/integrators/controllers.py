@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import math
+import re
 
 from pyfr.integrators.base import BaseIntegrator
+from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
 
@@ -20,6 +22,9 @@ class BaseController(BaseIntegrator):
         # Bank index of solution
         self._idxcurr = 0
 
+        # Solution cache
+        self._curr_soln = None
+
         # Accepted and rejected step counters
         self.nacptsteps = 0
         self.nrjctsteps = 0
@@ -27,6 +32,18 @@ class BaseController(BaseIntegrator):
 
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
+
+        # Load any plugins specified in the config file
+        for s in self.cfg.sections():
+            m = re.match('solver-plugin-(.+?)(?:-.+)?$', s)
+            if m:
+                cfgsect, name = m.group(0), m.group(1)
+
+                # Instantiate
+                plugin = get_plugin(name, self, cfgsect)
+
+                # Register as an event handler
+                self.completed_step_handlers.append(plugin)
 
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt
@@ -37,7 +54,10 @@ class BaseController(BaseIntegrator):
 
         # Filter
         if self._ffreq and self.nacptsteps % self._ffreq == 0:
-            self._system.filt(idxcurr)
+            self.system.filt(idxcurr)
+
+        # Invalidate the solution cache
+        self._curr_soln = None
 
         # Fire off any event handlers
         self.completed_step_handlers(self)
@@ -57,7 +77,11 @@ class BaseController(BaseIntegrator):
 
     @property
     def soln(self):
-        return self._system.ele_scal_upts(self._idxcurr)
+        # If we do not have the solution cached then fetch it
+        if not self._curr_soln:
+            self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
+
+        return self._curr_soln
 
 
 class NoneController(BaseController):

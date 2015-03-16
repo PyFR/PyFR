@@ -93,6 +93,9 @@ class Inifile(object):
         v = self.get(section, option, default)
         return self._bool_states[v.lower()]
 
+    def sections(self):
+        return self._cp.sections()
+
     def tostr(self):
         buf = io.StringIO()
         self._cp.write(buf)

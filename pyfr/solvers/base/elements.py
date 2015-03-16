@@ -9,7 +9,8 @@ from pyfr.util import memoize
 
 
 class BaseElements(object, metaclass=ABCMeta):
-    _privarmap = None
+    privarmap = None
+    convarmap = None
 
     def __init__(self, basiscls, eles, cfg):
         self._be = None
@@ -25,11 +26,11 @@ class BaseElements(object, metaclass=ABCMeta):
         self.kernels = {}
 
         # Check the dimensionality of the problem
-        if ndims != basiscls.ndims or ndims not in self._privarmap:
+        if ndims != basiscls.ndims or ndims not in self.privarmap:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables
-        self.nvars = len(self._privarmap[ndims])
+        self.nvars = len(self.privarmap[ndims])
 
         # Instantiate the basis class
         self._basis = basis = basiscls(nspts, cfg)
@@ -71,20 +72,13 @@ class BaseElements(object, metaclass=ABCMeta):
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
-        # Construct the physical location operator matrix
-        plocop = self._basis.sbasis.nodal_basis_at(self._basis.upts)
-
-        # Apply the operator to the mesh elements and reshape
-        plocupts = np.dot(plocop, self.eles.reshape(self.nspts, -1))
-        plocupts = plocupts.reshape(self.nupts, self.neles, self.ndims)
-
-        # Extract the components of the mesh coordinates
-        coords = np.rollaxis(plocupts, 2)
+        # Get the physical location of each solution point
+        coords = self.ploc_at_np('upts').swapaxes(0, 1)
         vars.update(dict(zip('xyz', coords)))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.get('soln-ics', dv), vars)
-               for dv in self._privarmap[self.ndims]]
+               for dv in self.privarmap[self.ndims]]
 
         # Allocate
         self._scal_upts = np.empty((self.nupts, self.nvars, self.neles))
@@ -178,13 +172,17 @@ class BaseElements(object, metaclass=ABCMeta):
         return self._be.const_matrix(1.0 / djac, tags={'align'})
 
     @memoize
-    def ploc_at(self, name):
+    def ploc_at_np(self, name):
         op = self._basis.sbasis.nodal_basis_at(getattr(self._basis, name))
 
         ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
         ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
 
-        return self._be.const_matrix(ploc, tags={'align'})
+        return ploc
+
+    @memoize
+    def ploc_at(self, name):
+        return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
 
     def _gen_pnorm_fpts(self):
         smats = self._get_smats(self._basis.fpts).transpose(1, 3, 0, 2)
