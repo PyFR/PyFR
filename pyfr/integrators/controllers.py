@@ -22,6 +22,9 @@ class BaseController(BaseIntegrator):
         # Bank index of solution
         self._idxcurr = 0
 
+        # Solution cache
+        self._curr_soln = None
+
         # Accepted and rejected step counters
         self.nacptsteps = 0
         self.nrjctsteps = 0
@@ -53,6 +56,9 @@ class BaseController(BaseIntegrator):
         if self._ffreq and self.nacptsteps % self._ffreq == 0:
             self.system.filt(idxcurr)
 
+        # Invalidate the solution cache
+        self._curr_soln = None
+
         # Fire off any event handlers
         self.completed_step_handlers(self)
 
@@ -71,7 +77,11 @@ class BaseController(BaseIntegrator):
 
     @property
     def soln(self):
-        return self.system.ele_scal_upts(self._idxcurr)
+        # If we do not have the solution cached then fetch it
+        if not self._curr_soln:
+            self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
+
+        return self._curr_soln
 
 
 class NoneController(BaseController):
