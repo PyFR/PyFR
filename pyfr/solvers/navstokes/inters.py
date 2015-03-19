@@ -60,6 +60,8 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 
 
 class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
+    cflux_state = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -67,7 +69,8 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       visc_corr=visc_corr, c=self._tpl_c, bctype=self.type)
+                       visc_corr=visc_corr, c=self._tpl_c, bctype=self.type,
+                       bccfluxstate=self.cflux_state)
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
@@ -86,6 +89,7 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
 
 class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-isot-wall'
+    cflux_state = 'ghost'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -96,10 +100,12 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-adia-wall'
+    cflux_state = 'ghost'
 
 
 class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
     type = 'char-riem-inv'
+    cflux_state = 'ghost'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -110,6 +116,7 @@ class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     type = 'sup-in-fa'
+    cflux_state = 'ghost'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -120,10 +127,12 @@ class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
     type = 'sup-out-fn'
+    cflux_state = 'ghost'
 
 
 class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-frv'
+    cflux_state = 'ghost'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -134,6 +143,7 @@ class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-ftpttang'
+    cflux_state = 'ghost'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -160,6 +170,7 @@ class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
     type = 'sub-out-fp'
+    cflux_state = 'ghost'
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
