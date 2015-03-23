@@ -13,7 +13,7 @@ class OpenCLKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes):
         # Compile the source code
-        prg = cl.Program(self.backend.ctx, bytes(src))
+        prg = cl.Program(self.backend.ctx, src)
         prg.build(['-cl-fast-relaxed-math'])
 
         # Retrieve the kernel
@@ -33,6 +33,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
     def _instantiate_kernel(self, dims, fun, arglst):
         class PointwiseKernel(ComputeKernel):
             def run(self, queue, **kwargs):
+                kwargs = {k: float(v) for k, v in kwargs.items()}
                 narglst = [kwargs.get(ka, ka) for ka in arglst]
                 narglst = [getattr(arg, 'data', arg) for arg in narglst]
                 fun(queue.cl_queue_comp, (dims[-1],), None, *narglst)

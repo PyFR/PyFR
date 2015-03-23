@@ -18,7 +18,7 @@ class BaseAdvectionElements(BaseElements):
             return {'scal_fpts', 'vect_upts'}
 
     def set_backend(self, backend, nscal_upts):
-        super(BaseAdvectionElements, self).set_backend(backend, nscal_upts)
+        super().set_backend(backend, nscal_upts)
 
         # Register pointwise kernels with the backend
         backend.pointwise.register(

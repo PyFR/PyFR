@@ -1,16 +1,47 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from argparse import ArgumentParser, FileType
+from argparse import FileType
 import itertools as it
 import os
 
 import numpy as np
 
-from pyfr.partitioners import BasePartitioner, get_partitioner_by_name
+from pyfr.partitioners import BasePartitioner, get_partitioner
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import read_pyfr_data
 from pyfr.util import subclasses
+
+
+def add_args(ap):
+    sp = ap.add_subparsers(help='sub-command help')
+
+    # Mesh format conversion
+    ap_convert = sp.add_parser('convert', help='convert --help')
+    ap_convert.add_argument('inmesh', type=FileType('r'),
+                            help='input mesh file')
+    ap_convert.add_argument('outmesh', type=FileType('wb'),
+                            help='output PyFR mesh file')
+    types = sorted(cls.name for cls in subclasses(BaseReader))
+    ap_convert.add_argument('-t', dest='type', choices=types,
+                            help='input file type; this is usually inferred '
+                            'from the extension of inmesh')
+    ap_convert.set_defaults(process=process_convert)
+
+    # Mesh and solution partitioning
+    ap_partition = sp.add_parser('partition', help='partition --help')
+    ap_partition.add_argument('np', help='number of partitions or a colon '
+                              'delimited list of weighs')
+    ap_partition.add_argument('mesh', help='input mesh file')
+    ap_partition.add_argument('solns', nargs='*',
+                              help='input solution files')
+    ap_partition.add_argument(dest='outd', help='output directory')
+    partitioners = sorted(cls.name for cls in subclasses(BasePartitioner))
+    ap_partition.add_argument('-p', dest='partitioner', choices=partitioners,
+                              help='partitioner to use')
+    ap_partition.add_argument('--popt', dest='popts', action='append',
+                              default=[], metavar='key:value',
+                              help='partitioner-specific option')
+    ap_partition.set_defaults(process=process_partition)
 
 
 def process_convert(args):
@@ -44,11 +75,11 @@ def process_partition(args):
 
     # Create the partitioner
     if args.partitioner:
-        part = get_partitioner_by_name(args.partitioner, pwts, opts)
+        part = get_partitioner(args.partitioner, pwts, opts)
     else:
         for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
             try:
-                part = get_partitioner_by_name(name, pwts)
+                part = get_partitioner(name, pwts)
                 break
             except RuntimeError:
                 pass
@@ -66,52 +97,10 @@ def process_partition(args):
     files = it.chain([mesh], solnit)
 
     # Iterate over the output mesh/solutions
-    for path, data in it.izip(paths, files):
+    for path, data in zip(paths, files):
         # Compute the output path
         path = os.path.join(args.outd, os.path.basename(path.rstrip('/')))
 
         # Open and save
         with open(path, 'wb') as f:
             np.savez(f, **data)
-
-
-def main():
-    ap = ArgumentParser(prog='pyfr-mesh', description='Generates and '
-                        'manipulates PyFR mesh files')
-
-    sp = ap.add_subparsers(help='sub-command help')
-
-    # Mesh format conversion
-    ap_convert = sp.add_parser('convert', help='convert --help')
-    ap_convert.add_argument('inmesh', type=FileType('r'),
-                            help='input mesh file')
-    ap_convert.add_argument('outmesh', type=FileType('wb'),
-                            help='output PyFR mesh file')
-    types = sorted(cls.name for cls in subclasses(BaseReader))
-    ap_convert.add_argument('-t', dest='type', choices=types,
-                            help='input file type; this is usually inferred '
-                            'from the extension of inmesh')
-    ap_convert.set_defaults(process=process_convert)
-
-    # Mesh and solution partitioning
-    ap_partition = sp.add_parser('partition', help='partition --help')
-    ap_partition.add_argument('np', help='number of partitions or a colon '
-                              'delimited list of weighs')
-    ap_partition.add_argument('mesh', help='input mesh file')
-    ap_partition.add_argument('solns', nargs='*',
-                              help='input solution files')
-    ap_partition.add_argument(dest='outd', help='output directory')
-    partitioners = sorted(cls.name for cls in subclasses(BasePartitioner))
-    ap_partition.add_argument('-p', dest='partitioner', choices=partitioners,
-                              help='partitioner to use')
-    ap_partition.add_argument('--popt', dest='popts', action='append',
-                              default=[], metavar='key:value',
-                              help='partitioner-specific option ')
-    ap_partition.set_defaults(process=process_partition)
-
-    args = ap.parse_args()
-    args.process(args)
-
-
-if __name__ == '__main__':
-    main()

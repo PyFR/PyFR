@@ -8,7 +8,7 @@ from pyfr.util import memoize, proxylist
 
 class BaseController(BaseIntegrator):
     def __init__(self, *args, **kwargs):
-        super(BaseController, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Current and minimum time steps
         self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
@@ -89,7 +89,7 @@ class PIController(BaseController):
     controller_name = 'pi'
 
     def __init__(self, *args, **kwargs):
-        super(PIController, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         sect = 'solver-time-integrator'
 
@@ -139,6 +139,15 @@ class PIController(BaseController):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
+        # Constants
+        maxf = self._maxfac
+        minf = self._minfac
+        saff = self._saffac
+        sord = self._stepper_order
+
+        expa = self._alpha / self._stepper_order
+        expb = self._beta / self._stepper_order
+
         while self.tcurr < t:
             # Decide on the time step
             dt = max(min(t - self.tcurr, self._dt), self._dtmin)
@@ -149,16 +158,8 @@ class PIController(BaseController):
             # Estimate the error
             err = self._errest(idxerr, idxcurr, idxprev)
 
-            maxf = self._maxfac
-            minf = self._minfac
-            saff = self._saffac
-            sord = self._stepper_order
-
-            expa = self._alpha / self._stepper_order
-            expb = self._beta / self._stepper_order
-
             # Determine time step adjustment factor
-            fac = err**-expa*self._errprev**expb
+            fac = err**-expa * self._errprev**expb
             fac = min(maxf, max(minf, saff*fac))
 
             # Compute the size of the next step

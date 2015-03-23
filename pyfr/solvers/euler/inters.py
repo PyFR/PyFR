@@ -7,7 +7,7 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
 
 class EulerIntInters(BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
-        super(EulerIntInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -24,7 +24,7 @@ class EulerIntInters(BaseAdvectionIntInters):
 
 class EulerMPIInters(BaseAdvectionMPIInters):
     def __init__(self, *args, **kwargs):
-        super(EulerMPIInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -40,7 +40,7 @@ class EulerMPIInters(BaseAdvectionMPIInters):
 
 class EulerBaseBCInters(BaseAdvectionBCInters):
     def __init__(self, *args, **kwargs):
-        super(EulerBaseBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._be.pointwise.register('pyfr.solvers.euler.kernels.bccflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -57,7 +57,7 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
     type = 'sup-in-fa'
 
     def __init__(self, *args, **kwargs):
-        super(EulerSupInflowBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts(['rho', 'p'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
@@ -67,7 +67,7 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
     type = 'char-riem-inv'
 
     def __init__(self, *args, **kwargs):
-        super(EulerCharRiemInvBCInters, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         self._tpl_c['p'], self._tpl_c['rho'] = self._eval_opts(['p', 'rho'])
         self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])

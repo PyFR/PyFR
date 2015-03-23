@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from __future__ import division
-
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.util import memoize, proxylist
 
 
 class BaseStepper(BaseIntegrator):
     def __init__(self, *args, **kwargs):
-        super(BaseStepper, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         backend = self.backend
         elemats = self._system.ele_banks
@@ -16,7 +14,7 @@ class BaseStepper(BaseIntegrator):
         # Create a proxylist of matrix-banks for each storage register
         self._regs = regs = []
         self._regidx = regidx = []
-        for i in xrange(self._stepper_nregs):
+        for i in range(self._stepper_nregs):
             b = proxylist([backend.matrix_bank(em, i) for em in elemats])
             regs.append(b)
             regidx.append(i)
@@ -25,7 +23,7 @@ class BaseStepper(BaseIntegrator):
         self._axnpby_kerns = {}
 
     def collect_stats(self, stats):
-        super(BaseStepper, self).collect_stats(stats)
+        super().collect_stats(stats)
 
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)
         stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
@@ -72,6 +70,51 @@ class EulerStepper(BaseStepper):
         add(1.0, ut, dt, f)
 
         return ut
+
+
+class TVDRK3Stepper(BaseStepper):
+    stepper_name = 'tvd-rk3'
+
+    @property
+    def _stepper_has_errest(self):
+        return False
+
+    @property
+    def _stepper_nfevals(self):
+        return 3*self.nsteps
+
+    @property
+    def _stepper_nregs(self):
+        return 3
+
+    @property
+    def _stepper_order(self):
+        return 3
+
+    def step(self, t, dt):
+        add, rhs = self._add, self._system.rhs
+
+        # Get the bank indices for each register (n, n+1, rhs)
+        r0, r1, r2 = self._regidx
+
+        # Ensure r0 references the bank containing u(t)
+        if r0 != self._idxcurr:
+            r0, r1 = r1, r0
+
+        # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
+        rhs(t, r0, r2)
+        add(0.0, r1, 1.0, r0, dt, r2)
+
+        # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
+        rhs(t + dt, r1, r2)
+        add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+
+        # Third stage; r2 = -∇·f(r1); r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
+        rhs(t + 0.5*dt, r1, r2)
+        add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+
+        # Return the index of the bank containing u(t + dt)
+        return r1
 
 
 class RK4Stepper(BaseStepper):
@@ -144,7 +187,7 @@ class RKVdH2RStepper(BaseStepper):
     bhat = []
 
     def __init__(self, *args, **kwargs):
-        super(RKVdH2RStepper, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Compute the c and error coeffs
         self.c = [0.0] + [sum(self.b[:i]) + ai for i, ai in enumerate(self.a)]
@@ -179,7 +222,7 @@ class RKVdH2RStepper(BaseStepper):
             r2, = set(self._regidx) - {r1}
 
         # Evaluate the stages in the scheme
-        for i in xrange(self._nstages):
+        for i in range(self._nstages):
             # Compute -∇·f
             rhs(t + self.c[i]*dt, r2 if i > 0 else r1, r2)
 

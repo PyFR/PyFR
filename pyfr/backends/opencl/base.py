@@ -11,7 +11,7 @@ class OpenCLBackend(BaseBackend):
     name = 'opencl'
 
     def __init__(self, cfg):
-        super(OpenCLBackend, self).__init__(cfg)
+        super().__init__(cfg)
 
         import pyopencl as cl
 

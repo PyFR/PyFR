@@ -9,8 +9,7 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
 
 class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
-        base = super(BaseAdvectionDiffusionIntInters, self)
-        base.__init__(be, lhs, rhs, elemap, cfg)
+        super().__init__(be, lhs, rhs, elemap, cfg)
 
         # Generate the additional view matrices
         self._vect0_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
@@ -32,8 +31,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
 
 class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
     def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
-        base = super(BaseAdvectionDiffusionMPIInters, self)
-        base.__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
+        super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
 
         lhsprank = rallocs.prank
         rhsprank = rallocs.mprankmap[rhsrank]
@@ -81,8 +79,7 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
-        super(BaseAdvectionDiffusionBCInters, self).__init__(be, lhs, elemap,
-                                                             cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         # Additional view matrices
         self._vect0_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')

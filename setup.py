@@ -2,14 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import re
-import sys
 from setuptools import setup
+import sys
 
 
 # Python version
-if sys.version_info[:2] < (2, 7):
-    print('PyFR requires Python 2.7 or newer.  Python {}.{} detected'
-          .format(*sys.version_info[:2]))
+if sys.version_info[:2] < (3, 3):
+    print('PyFR requires Python 3.3 or newer')
     sys.exit(-1)
 
 # PyFR version
@@ -49,11 +48,13 @@ modules = [
     'pyfr.solvers.navstokes',
     'pyfr.solvers.navstokes.kernels',
     'pyfr.solvers.navstokes.kernels.bcs',
-    'pyfr.writers']
+    'pyfr.writers'
+]
 
 # Tests
 tests = [
-    'pyfr.tests']
+    'pyfr.tests'
+]
 
 # Data
 package_data = {
@@ -76,7 +77,13 @@ package_data = {
     'pyfr.solvers.euler.kernels.rsolvers': ['*.mako'],
     'pyfr.solvers.navstokes.kernels': ['*.mako'],
     'pyfr.solvers.navstokes.kernels.bcs': ['*.mako'],
-    'pyfr.tests': ['*.npz']}
+    'pyfr.tests': ['*.npz']
+}
+
+# Additional data
+data_files = [
+    ('', ['pyfr/__main__.py'])
+]
 
 # Hard dependencies
 install_requires = [
@@ -95,16 +102,16 @@ extras_require = {
 
 # Scripts
 console_scripts = [
-    'pyfr-mesh = pyfr.scripts.mesh:main',
-    'pyfr-sim = pyfr.scripts.sim:main',
-    'pyfr-postp = pyfr.scripts.postp:main']
+    'pyfr = pyfr.scripts.main:main'
+]
 
 # Info
 classifiers = [
     'License :: OSI Approved :: New BSD License',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 2.7',
-    'Topic :: Scientific/Engineering']
+    'Programming Language :: Python :: 3.3',
+    'Topic :: Scientific/Engineering'
+]
 
 long_description = '''PyFR is a Python based high-order compressible
 fluid flow solver based on energy stable
@@ -121,7 +128,9 @@ setup(name='pyfr',
       keywords='Math',
       packages=['pyfr'] + modules + tests,
       package_data=package_data,
+      data_files=data_files,
       entry_points={'console_scripts': console_scripts},
       install_requires=install_requires,
       extras_require=extras_require,
-      classifiers=classifiers)
+      classifiers=classifiers
+)

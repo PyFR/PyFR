@@ -8,9 +8,7 @@ from pyfr.nputil import range_eval
 from pyfr.util import proxylist
 
 
-class BaseIntegrator(object):
-    __metaclass__ = ABCMeta
-
+class BaseIntegrator(object, metaclass=ABCMeta):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         from mpi4py import MPI
 
@@ -33,7 +31,7 @@ class BaseIntegrator(object):
         if initsoln is None or 'stats' not in initsoln:
             self.tcurr = self.tstart
         else:
-            stats = Inifile(initsoln['stats'])
+            stats = Inifile(initsoln['stats'].item().decode())
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
 
             # Cull already written output times

@@ -43,7 +43,7 @@ _npeval_syms = {
     'abs': np.abs, 'pow': np.power, 'sqrt': np.sqrt,
     'pi': np.pi,
     'tanh': np.tanh,
-    'sign': np.sign
+    'sign': np.sign,
     'trunc': np.trunc}
 
 

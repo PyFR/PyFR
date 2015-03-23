@@ -8,7 +8,7 @@ from pyfr.util import ndrange
 
 class OpenMPKernelGenerator(BaseKernelGenerator):
     def __init__(self, *args, **kwargs):
-        super(OpenMPKernelGenerator, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Specialise
         self._dims = ['_nx'] if self.ndim == 1 else ['_ny', '_nx']
@@ -192,7 +192,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         elif arg.ncdim == 1:
             stmts.extend('{0}_v + (_y*{1} + {2})*lsd{0} + cb'
                          .format(arg.name, arg.cdims[0], i)
-                         for i in xrange(arg.cdims[0]))
+                         for i in range(arg.cdims[0]))
         # Doubly stacked matrix; name + ((<0>*_ny + _y)*nv + <1>)*lsdim + cb
         else:
             stmts.extend('{0}_v + (({1}*_ny + _y)*{2} + {3})*lsd{0} + cb'

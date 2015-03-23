@@ -118,12 +118,12 @@ class PyFRBaseReader(Mapping):
         npr = max(int(re.search(r'\d+$', k).group(0)) for k in ai) + 1
 
         # Element types in the mesh
-        etypes = set(v[0] for v in ai.itervalues())
+        etypes = set(v[0] for v in ai.values())
 
         # Compute the number of elements of each type in each partition
         nep = {et: [0]*npr for et in etypes}
 
-        for k, v in ai.iteritems():
+        for k, v in ai.items():
             nep[v[0]][int(re.search(r'\d+$', k).group(0))] = v[1][1]
 
         return nep
