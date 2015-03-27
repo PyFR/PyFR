@@ -42,7 +42,7 @@ class BasePartitioner(object):
                     spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
 
         def offset_con(con, pr):
-            con = con.copy()
+            con = con.copy().astype('U4,i4,i1,i1')
 
             for en, pn in pinf.items():
                 if pn[pr] > 0:
@@ -103,7 +103,7 @@ class BasePartitioner(object):
 
         # Sort by the left hand side
         idx = np.lexsort([con['f0'][0], con['f1'][0]])
-        con = con[:,idx]
+        con = con[:, idx]
 
         # Left and right hand side element types/indicies
         lhs, rhs = con[['f0', 'f1']]
@@ -138,7 +138,7 @@ class BasePartitioner(object):
         # Partition the shape points
         spt_px = defaultdict(list)
         for (etype, eidxg), part in zip(vetimap, vparts):
-            spt_px[etype, part].append(spt_p0[etype][:,eidxg,:])
+            spt_px[etype, part].append(spt_p0[etype][:, eidxg, :])
 
         # Stack
         return {'spt_{0}_p{1}'.format(*k): np.array(v).swapaxes(0, 1)
@@ -154,7 +154,7 @@ class BasePartitioner(object):
         # Partition the solutions
         soln_px = defaultdict(list)
         for (etype, eidxg), part in zip(vetimap, vparts):
-            soln_px[etype, part].append(soln_p0[etype][...,eidxg])
+            soln_px[etype, part].append(soln_p0[etype][..., eidxg])
 
         # Stack
         return {'soln_{0}_p{1}'.format(*k): np.dstack(v)

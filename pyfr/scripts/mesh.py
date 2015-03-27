@@ -4,10 +4,10 @@ from argparse import FileType
 import itertools as it
 import os
 
-import numpy as np
+import h5py
 
-from pyfr.partitioners import BasePartitioner, get_partitioner_by_name
-from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
+from pyfr.partitioners import BasePartitioner, get_partitioner
+from pyfr.readers import BaseReader, get_reader_by_extn, get_reader_by_name
 from pyfr.readers.native import read_pyfr_data
 from pyfr.util import subclasses
 
@@ -19,7 +19,7 @@ def add_args(ap):
     ap_convert = sp.add_parser('convert', help='convert --help')
     ap_convert.add_argument('inmesh', type=FileType('r'),
                             help='input mesh file')
-    ap_convert.add_argument('outmesh', type=FileType('wb'),
+    ap_convert.add_argument('outmesh', type=str,
                             help='output PyFR mesh file')
     types = sorted(cls.name for cls in subclasses(BaseReader))
     ap_convert.add_argument('-t', dest='type', choices=types,
@@ -56,7 +56,9 @@ def process_convert(args):
     mesh = reader.to_pyfrm()
 
     # Save to disk
-    np.savez(args.outmesh, **mesh)
+    with h5py.File(args.outmesh, 'w') as msh5:
+        for k, v in mesh.items():
+            msh5.create_dataset(k, data=v)
 
 
 def process_partition(args):
@@ -75,11 +77,11 @@ def process_partition(args):
 
     # Create the partitioner
     if args.partitioner:
-        part = get_partitioner_by_name(args.partitioner, pwts, opts)
+        part = get_partitioner(args.partitioner, pwts, opts)
     else:
         for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
             try:
-                part = get_partitioner_by_name(name, pwts)
+                part = get_partitioner(name, pwts)
                 break
             except RuntimeError:
                 pass
@@ -102,5 +104,7 @@ def process_partition(args):
         path = os.path.join(args.outd, os.path.basename(path.rstrip('/')))
 
         # Open and save
-        with open(path, 'wb') as f:
-            np.savez(f, **data)
+        # Save to disk
+        with h5py.File(path, 'w') as msh5:
+            for k, v in data.items():
+                msh5.create_dataset(k, data=v)

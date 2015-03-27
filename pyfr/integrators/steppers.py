@@ -9,7 +9,7 @@ class BaseStepper(BaseIntegrator):
         super().__init__(*args, **kwargs)
 
         backend = self.backend
-        elemats = self._system.ele_banks
+        elemats = self.system.ele_banks
 
         # Create a proxylist of matrix-banks for each storage register
         self._regs = regs = []
@@ -63,13 +63,58 @@ class EulerStepper(BaseStepper):
         return 1
 
     def step(self, t, dt):
-        add, rhs = self._add, self._system.rhs
+        add, rhs = self._add, self.system.rhs
         ut, f = self._regidx
 
         rhs(t, ut, f)
         add(1.0, ut, dt, f)
 
         return ut
+
+
+class TVDRK3Stepper(BaseStepper):
+    stepper_name = 'tvd-rk3'
+
+    @property
+    def _stepper_has_errest(self):
+        return False
+
+    @property
+    def _stepper_nfevals(self):
+        return 3*self.nsteps
+
+    @property
+    def _stepper_nregs(self):
+        return 3
+
+    @property
+    def _stepper_order(self):
+        return 3
+
+    def step(self, t, dt):
+        add, rhs = self._add, self.system.rhs
+
+        # Get the bank indices for each register (n, n+1, rhs)
+        r0, r1, r2 = self._regidx
+
+        # Ensure r0 references the bank containing u(t)
+        if r0 != self._idxcurr:
+            r0, r1 = r1, r0
+
+        # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
+        rhs(t, r0, r2)
+        add(0.0, r1, 1.0, r0, dt, r2)
+
+        # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
+        rhs(t + dt, r1, r2)
+        add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+
+        # Third stage; r2 = -∇·f(r1); r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
+        rhs(t + 0.5*dt, r1, r2)
+        add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+
+        # Return the index of the bank containing u(t + dt)
+        return r1
 
 
 class RK4Stepper(BaseStepper):
@@ -92,7 +137,7 @@ class RK4Stepper(BaseStepper):
         return 4
 
     def step(self, t, dt):
-        add, rhs = self._add, self._system.rhs
+        add, rhs = self._add, self.system.rhs
 
         # Get the bank indices for each register
         r0, r1, r2 = self._regidx
@@ -163,7 +208,7 @@ class RKVdH2RStepper(BaseStepper):
         return 4 if self._stepper_has_errest else 2
 
     def step(self, t, dt):
-        add, rhs = self._add, self._system.rhs
+        add, rhs = self._add, self.system.rhs
         errest = self._stepper_has_errest
 
         r1 = self._idxcurr

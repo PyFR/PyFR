@@ -4,11 +4,11 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements(object):
-    _privarmap = {2: ['rho', 'u', 'v', 'p'],
-                  3: ['rho', 'u', 'v', 'w', 'p']}
+    privarmap = {2: ['rho', 'u', 'v', 'p'],
+                 3: ['rho', 'u', 'v', 'w', 'p']}
 
-    _convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
-                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+    convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
+                 3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
 
     @staticmethod
     def pri_to_conv(pris, cfg):

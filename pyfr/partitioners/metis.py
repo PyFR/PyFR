@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (CDLL, POINTER, byref, c_double, c_int32, c_int64,
-                    c_float, c_void_p)
+from ctypes import (POINTER, byref, c_double, c_int32, c_int64, c_float,
+                    c_void_p)
 
 import numpy as np
 

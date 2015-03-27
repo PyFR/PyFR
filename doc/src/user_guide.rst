@@ -244,19 +244,20 @@ Parameterises the OpenMP backend with
 
     *string*
 
-2. ``cblas-st`` --- path to shared single-threaded C BLAS library
+2. ``cblas`` --- path to shared C BLAS library
 
     *string*
 
-3. ``cblas-mt`` --- path to shared multi-threaded C BLAS library
+3. ``cblas-type`` --- type of BLAS library
 
-    *string*
+    ``serial`` | ``parallel``
 
 Example::
 
     [backend-openmp]
     cc = gcc
-    cblas-mt = example/path/libBLAS.dylib
+    cblas= example/path/libBLAS.dylib
+    cblas-type = parallel
 
 [constants]
 ^^^^^^^^^^^
@@ -655,20 +656,17 @@ Example::
 
 Parameterises the output with
 
-1. ``format`` --- format of the outputs:
 
-    ``pyfrs-file`` | ``pyfrs-dir``
-
-2. ``basedir`` --- relative path to directory where outputs will be
+1. ``basedir`` --- relative path to directory where outputs will be
    written
 
     *string*
 
-3. ``basename`` --- pattern of output names
+2. ``basename`` --- pattern of output names
 
     *string*
 
-4. ``times`` --- times at which outputs will be dumped
+3. ``times`` --- times at which outputs will be dumped
 
     ``range(`` *float* ``,`` *float* ``,`` *int* ``)``
 
@@ -700,6 +698,42 @@ Parameterises an exponential solution filter with
 4. ``cutoff`` --- cutoff frequency below which no filtering is applied:
 
     *int*
+
+[soln-plugin-nancheck]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically checks the solution for NaN values
+
+1. ``freq`` --- frequency at which the check is performed:
+
+    *int*
+
+[soln-plugin-sampler]
+^^^^^^^^^^^^^^^^^^^^^
+
+Periodically samples specific points in the volume and writes them out
+to a CSV file.
+
+1. ``freq`` --- frequency at which to sample:
+
+    *int*
+
+2. ``samp-pts`` --- list of points to sample:
+
+    ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]``
+
+3. ``format`` --- output variable format:
+
+    ``primitive`` | ``conservative``
+
+4. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+5. ``header`` --- if to output a header row or not:
+
+    *boolean*
 
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
