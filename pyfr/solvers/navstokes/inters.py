@@ -103,6 +103,11 @@ class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     cflux_state = 'ghost'
 
 
+class NavierStokesSlpAdiaWallBCInters(NavierStokesBaseBCInters):
+    type = 'slp-adia-wall'
+    cflux_state = None
+
+
 class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
     type = 'char-riem-inv'
     cflux_state = 'ghost'
