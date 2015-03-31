@@ -21,11 +21,12 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `mako <http://www.makotemplates.org/>`_
-2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-3. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
-4. `numpy <http://www.numpy.org/>`_ >= 1.8
-5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
+1. `h5py <http://www.h5py.org/>`_
+2. `mako <http://www.makotemplates.org/>`_
+3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
+4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
+5. `numpy <http://www.numpy.org/>`_ >= 1.8
+6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
 
 To run PyFR |release| in parallel it is also necessary to have one of
 the following installed:
@@ -331,7 +332,7 @@ Parameterises the time-integration scheme used by the solver with
 
 1. ``scheme`` --- time-integration scheme:
 
-    ``euler`` | ``rk34`` | ``rk4`` | ``rk45``
+    ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
 2. ``t0`` --- initial time
 
@@ -673,7 +674,6 @@ Parameterises the output with
 Example::
 
     [soln-output]
-    format = pyfrs-file
     basedir = .
     basename = files_%(t).2f
     times = range(0, 1, 11)
@@ -744,8 +744,8 @@ file with
 1. ``type`` --- type of boundary condition:
 
     ``char-riem-inv`` | ``no-slp-adia-wall`` | ``no-slp-isot-wall`` |
-    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` |
-    ``sup-in-fa`` | ``sup-out-fn``
+    ``slp-adia-wall`` | ``sub-in-frv`` | ``sub-in-ftpttang`` |
+    ``sub-out-fp`` | ``sup-in-fa`` | ``sup-out-fn``
 
     where
 
