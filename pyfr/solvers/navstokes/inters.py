@@ -27,10 +27,10 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
-             ul=self._scal0_lhs, ur=self._scal0_rhs,
-             gradul=self._vect0_lhs, gradur=self._vect0_rhs,
-             magnl=self._mag_pnorm_lhs, magnr=self._mag_pnorm_rhs,
-             nl=self._norm_pnorm_lhs
+            ul=self._scal0_lhs, ur=self._scal0_rhs,
+            gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+            magnl=self._mag_pnorm_lhs, magnr=self._mag_pnorm_rhs,
+            nl=self._norm_pnorm_lhs
         )
 
 
@@ -49,13 +49,13 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'mpiconu', tplargs=tplargs, dims=[self.ninterfpts],
-             ulin=self._scal0_lhs, urin=self._scal0_rhs, ulout=self._vect0_lhs
+            ulin=self._scal0_lhs, urin=self._scal0_rhs, ulout=self._vect0_lhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs=tplargs, dims=[self.ninterfpts],
-             ul=self._scal0_lhs, ur=self._scal0_rhs,
-             gradul=self._vect0_lhs, gradur=self._vect0_rhs,
-             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+            ul=self._scal0_lhs, ur=self._scal0_rhs,
+            gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
         )
 
 
@@ -77,8 +77,8 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
-             ulin=self._scal0_lhs, ulout=self._vect0_lhs,
-             nlin=self._norm_pnorm_lhs
+            ulin=self._scal0_lhs, ulout=self._vect0_lhs,
+            nlin=self._norm_pnorm_lhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
