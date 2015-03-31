@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractmethod
 import itertools as it
 import os
 
+import h5py
 import numpy as np
 
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.util import rm
 
 
-class BaseWriter(BaseIntegrator):
+class H5Writer(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -22,13 +21,67 @@ class BaseWriter(BaseIntegrator):
         # Output counter (incremented each time output() is called)
         self.nout = 0
 
+        # MPI info
+        comm, rank, root = get_comm_rank_root()
+
+        # Get the type and shape of each element in the partition
+        etypes, shapes = self.system.ele_types, self.system.ele_shapes
+
+        # Gather this information onto the root rank
+        eleinfo = comm.gather(zip(etypes, shapes), root=root)
+
+        # Deciding if parallel
+        parallel = h5py.get_config().mpi
+        parallel &= h5py.version.version_tuple[:2] >= (2, 5)
+        parallel &= not self.cfg.getbool('soln-output', 'serial-h5', False)
+
+        if parallel:
+            self._write = self._write_parallel
+
+            if rank == root:
+                sollist = []
+                for mrank, meleinfo in enumerate(eleinfo):
+                    prank = self.rallocs.mprankmap[mrank]
+                    sollist.extend(
+                        (self._get_name_for_soln(etype, prank), dims)
+                        for etype, dims in meleinfo
+                    )
+
+            else:
+                sollist = None
+
+            self.sollist = comm.bcast(sollist, root=root)
+        else:
+            self._write = self._write_serial
+
+            if rank == root:
+                self._mpi_rbufs = mpi_rbufs = []
+                self._mpi_rreqs = mpi_rreqs = []
+                self._mpi_names = mpi_names = []
+                self._loc_names = loc_names = []
+
+                for mrank, meleinfo in enumerate(eleinfo):
+                    prank = self.rallocs.mprankmap[mrank]
+                    for tag, (etype, dims) in enumerate(meleinfo):
+                        name = self._get_name_for_soln(etype, prank)
+
+                        if mrank == root:
+                            loc_names.append(name)
+                        else:
+                            rbuf = np.empty(dims, dtype=self.backend.fpdtype)
+                            rreq = comm.Recv_init(rbuf, mrank, tag)
+
+                            mpi_rbufs.append(rbuf)
+                            mpi_rreqs.append(rreq)
+                            mpi_names.append(name)
+
     def output(self, solnmap, stats):
         comm, rank, root = get_comm_rank_root()
 
         # Convert the config and stats objects to strings
         if rank == root:
-            metadata = dict(config=self.cfg.tostr().encode(),
-                            stats=stats.tostr().encode(),
+            metadata = dict(config=self.cfg.tostr(),
+                            stats=stats.tostr(),
                             mesh_uuid=self._mesh_uuid)
         else:
             metadata = None
@@ -41,10 +94,6 @@ class BaseWriter(BaseIntegrator):
 
         # Increment the output number
         self.nout += 1
-
-    @abstractmethod
-    def _write(self, path, solnmap, metadata):
-        pass
 
     def _get_output_path(self):
         # Substitute %(t) and %(n) for the current time and output number
@@ -60,44 +109,34 @@ class BaseWriter(BaseIntegrator):
         prank = prank or self.rallocs.prank
         return 'soln_{}_p{}'.format(etype, prank)
 
-
-class FileWriter(BaseWriter):
-    writer_name = 'pyfrs-file'
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # MPI info
+    def _write_parallel(self, path, solnmap, metadata):
         comm, rank, root = get_comm_rank_root()
 
-        # Get the type and shape of each element in the partition
-        etypes, shapes = self.system.ele_types, self.system.ele_shapes
+        with h5py.File(path, 'w', driver='mpio', comm=comm) as h5file:
+            smap = {}
+            for s, shape in self.sollist:
+                smap[s] = h5file.create_dataset(
+                    s, shape, dtype=self.backend.fpdtype
+                )
 
-        # Gather this information onto the root rank
-        eleinfo = comm.gather(zip(etypes, shapes), root=root)
+            for e, sol in solnmap.items():
+                s = self._get_name_for_soln(e, self.rallocs.prank)
+                smap[s][:] = sol
 
-        if rank == root:
-            self._mpi_rbufs = mpi_rbufs = []
-            self._mpi_rreqs = mpi_rreqs = []
-            self._mpi_names = mpi_names = []
-            self._loc_names = loc_names = []
+            # Metadata information has to be transferred to all the ranks
+            if rank == root:
+                mmap = [(k, len(v.encode()))
+                        for k, v in metadata.items()]
+            else:
+                mmap = None
 
-            for mrank, meleinfo in enumerate(eleinfo):
-                prank = self.rallocs.mprankmap[mrank]
-                for tag, (etype, dims) in enumerate(meleinfo):
-                    name = self._get_name_for_soln(etype, prank)
+            mmap = comm.bcast(mmap, root=root)
+            for name, size in mmap:
+                d = h5file.create_dataset(name, (), dtype='S{}'.format(size))
+                if rank == root:
+                    d.write_direct(np.array(metadata[name]).astype('S'))
 
-                    if mrank == root:
-                        loc_names.append(name)
-                    else:
-                        rbuf = np.empty(dims, dtype=self.backend.fpdtype)
-                        rreq = comm.Recv_init(rbuf, mrank, tag)
-
-                        mpi_rbufs.append(rbuf)
-                        mpi_rreqs.append(rreq)
-                        mpi_names.append(name)
-
-    def _write(self, path, solnmap, metadata):
+    def _write_serial(self, path, solnmap, metadata):
         from mpi4py import MPI
 
         comm, rank, root = get_comm_rank_root()
@@ -117,31 +156,6 @@ class FileWriter(BaseWriter):
             # Create the output dictionary
             outdict = dict(zip(names, solns), **metadata)
 
-            with open(path, 'wb') as f:
-                np.savez(f, **outdict)
-
-
-class DirWriter(BaseWriter):
-    writer_name = 'pyfrs-dir'
-
-    def _write(self, path, solnmap, metadata):
-        comm, rank, root = get_comm_rank_root()
-
-        # Create the output directory and save the config/status files
-        if rank == root:
-            if os.path.exists(path):
-                rm(path)
-
-            os.mkdir(path)
-
-            # Write out our metadata
-            for name, data in metadata.items():
-                np.save(os.path.join(path, name), data)
-
-        # Wait for this to complete
-        comm.barrier()
-
-        # Save the solutions
-        for etype, buf in solnmap.items():
-            solnpath = os.path.join(path, self._get_name_for_soln(etype))
-            np.save(solnpath, buf)
+            with h5py.File(path, 'w') as h5file:
+                for k, v in outdict.items():
+                    h5file.create_dataset(k, data=v)

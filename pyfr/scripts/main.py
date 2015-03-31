@@ -3,6 +3,9 @@
 
 from argparse import ArgumentParser
 
+import mpi4py.rc
+mpi4py.rc.initialize = False
+
 import pyfr.scripts.mesh
 import pyfr.scripts.sim
 import pyfr.scripts.postp

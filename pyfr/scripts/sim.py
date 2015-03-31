@@ -22,8 +22,11 @@ def _process_common(args, mesh, soln, cfg):
 
         enable_prefork()
 
-    # Import and hence initialise MPI
+    # Import MPI
     from mpi4py import MPI
+
+    # Manually initialise MPI
+    MPI.Init()
 
     # Ensure MPI is suitably cleaned up
     register_finalize_handler()

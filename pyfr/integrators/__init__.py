@@ -4,7 +4,7 @@ import re
 
 from pyfr.integrators.controllers import BaseController
 from pyfr.integrators.steppers import BaseStepper
-from pyfr.integrators.writers import BaseWriter
+from pyfr.integrators.writers import H5Writer
 from pyfr.util import subclass_where
 
 
@@ -12,11 +12,11 @@ def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
     # Look-up the controller, stepper and writer names
     c = cfg.get('solver-time-integrator', 'controller')
     s = cfg.get('solver-time-integrator', 'scheme')
-    w = cfg.get('soln-output', 'format')
+    w = 'HDF5'
 
     controller = subclass_where(BaseController, controller_name=c)
     stepper = subclass_where(BaseStepper, stepper_name=s)
-    writer = subclass_where(BaseWriter, writer_name=w)
+    writer = H5Writer
 
     # Determine the integrator name
     name = '_'.join([c, s, w])

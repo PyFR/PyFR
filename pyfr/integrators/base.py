@@ -31,7 +31,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         if initsoln is None or 'stats' not in initsoln:
             self.tcurr = self.tstart
         else:
-            stats = Inifile(initsoln['stats'].item().decode())
+            stats = Inifile(initsoln['stats'])
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
 
             # Cull already written output times

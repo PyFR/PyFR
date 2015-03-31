@@ -1,4 +1,4 @@
- # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
@@ -75,7 +75,7 @@ class BaseSystem(object, metaclass=ABCMeta):
         # explicit expressions in the config file
         if initsoln:
             # Load the config used to produce the solution
-            solncfg = Inifile(initsoln['config'].item().decode())
+            solncfg = Inifile(initsoln['config'])
 
             # Process the solution
             for k, ele in elemap.items():

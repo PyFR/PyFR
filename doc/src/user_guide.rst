@@ -656,20 +656,17 @@ Example::
 
 Parameterises the output with
 
-1. ``format`` --- format of the outputs:
 
-    ``pyfrs-file`` | ``pyfrs-dir``
-
-2. ``basedir`` --- relative path to directory where outputs will be
+1. ``basedir`` --- relative path to directory where outputs will be
    written
 
     *string*
 
-3. ``basename`` --- pattern of output names
+2. ``basename`` --- pattern of output names
 
     *string*
 
-4. ``times`` --- times at which outputs will be dumped
+3. ``times`` --- times at which outputs will be dumped
 
     ``range(`` *float* ``,`` *float* ``,`` *int* ``)``
 

@@ -88,6 +88,7 @@ data_files = [
 
 # Hard dependencies
 install_requires = [
+    'h5py >= 2.4',
     'mako',
     'mpi4py >= 1.3',
     'mpmath >= 0.18',
