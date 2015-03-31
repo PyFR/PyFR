@@ -148,20 +148,10 @@ available:
 
         pyfr postp convert mesh.pyfrm solution.pyfrs solution.vtu
 
-2. ``pyfr postp pack`` --- swap between the pyfr-dir and pyfr-file
-   format. Example::
-
-        pyfr postp pack solution_directory.pyfrs solution_file.pyfrs
-
-3. ``pyfr postp time-avg`` --- time-average a series of PyFR solution
+2. ``pyfr postp time-avg`` --- time-average a series of PyFR solution
    files. Example::
 
         pyfr postp time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
-
-4. ``pyfr postp unpack`` --- swap between the pyfr-file and pyfr-dir
-   format. Example::
-
-        pyfr postp unpack solution_file.pyfrs solution_directory.pyfrs
 
 For full details invoke::
 
