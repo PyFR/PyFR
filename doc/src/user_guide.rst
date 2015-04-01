@@ -875,25 +875,25 @@ simulation on a mixed unstructured mesh:
    ``PyFR/examples/couette_flow_2d/couette_flow_2d.msh`` into
    ``couette_flow_2d/``
 
-4. Run pyfr mesh to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+4. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``couette_flow_2d.pyfrm``::
 
-        pyfr mesh convert couette_flow_2d.msh couette_flow_2d.pyfrm
+        pyfr import couette_flow_2d.msh couette_flow_2d.pyfrm
 
-5. Run pyfr sim to solve the Navier-Stokes equations on the mesh,
+5. Run pyfr to solve the Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
    ``couette_flow_2d-*.pyfrs``::
 
-        pyfr sim -p run couette_flow_2d.pyfrm couette_flow_2d.ini
+        pyfr run -p couette_flow_2d.pyfrm couette_flow_2d.ini
 
-6. Run pyfr postp on the solution file ``couette_flow_2d_4.00.pyfrs``
+6. Run pyfr on the solution file ``couette_flow_2d_4.00.pyfrs``
    converting it into an unstructured VTK file called
    ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr postp convert couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
+        pyfr export couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -922,28 +922,28 @@ simulation on a structured mesh:
    ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.msh`` into
    ``euler_vortex_2d/``
 
-4. Run pyfr mesh to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
+4. Run pyfr to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``euler_vortex_2d.pyfrm``::
 
-        pyfr mesh convert euler_vortex_2d.msh euler_vortex_2d.pyfrm
+        pyfr import euler_vortex_2d.msh euler_vortex_2d.pyfrm
 
-5. Run pyfrmesh to partition the PyFR mesh file into two pieces::
+5. Run pyfr to partition the PyFR mesh file into two pieces::
 
-        pyfr mesh partition 2 euler_vortex_2d.pyfrm .
+        pyfr partition 2 euler_vortex_2d.pyfrm .
 
-6. Run pyfr sim to solve the Euler equations on the mesh, generating a
+6. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-        mpirun -n 2 pyfr sim -p run euler_vortex_2d.pyfrm euler_vortex_2d.ini
+        mpirun -n 2 pyfr run -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
-7. Run pyfr postp on the solution file ``euler_vortex_2d_100.0.pyfrs``
+7. Run pyfr on the solution file ``euler_vortex_2d_100.0.pyfrs``
    converting it into an unstructured VTK file called
    ``euler_vortex_2d_100.0.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr postp convert euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
+        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
 
 8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
