@@ -24,6 +24,7 @@ from pyfr.util import subclasses
 from pyfr.writers import BaseWriter, get_writer_by_name, get_writer_by_extn
 
 
+@mp.workdps(60)
 def main():
     ap = ArgumentParser(prog='pyfr')
     sp = ap.add_subparsers(dest='cmd', help='sub-command help')
@@ -204,7 +205,6 @@ def process_export(args):
     writer.write_out()
 
 
-@mp.workdps(60)
 def _process_common(args, mesh, soln, cfg):
     # Prefork to allow us to exec processes after MPI is initialised
     if hasattr(os, 'fork'):
