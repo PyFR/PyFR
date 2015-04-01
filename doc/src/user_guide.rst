@@ -85,78 +85,49 @@ PyFR |release| uses three distinct file formats:
 2. ``.pyfrm`` --- mesh file
 3. ``.pyfrs`` --- solution file
 
-Mesh
-----
 
-``pyfr mesh`` is for pre-processing. The following sub-tools are
-available:
+The following commands are available from the ``pyfr`` program:
 
-1. ``pyfr mesh convert`` --- convert a `Gmsh
+1. ``pyfr import`` --- convert a `Gmsh
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
 
    Example::
 
-        pyfr mesh convert mesh.msh mesh.pyfrm
+        pyfr import mesh.msh mesh.pyfrm
 
-2. ``pyfr mesh partition`` --- partition an existing mesh and
+2. ``pyfr partition`` --- partition an existing mesh and
    associated solution files.
 
    Example::
 
-       pyfr mesh partition 2 mesh.pyfrm solution.pyfrs .
+       pyfr partition 2 mesh.pyfrm solution.pyfrs .
 
-For full details invoke::
+3. ``pyfr run`` --- start a new PyFR simulation. Example::
 
-    pyfr mesh [sub-tool] --help
+        pyfr run mesh.pyfrm configuration.ini
 
-Sim
----
-
-Overview
-^^^^^^^^
-
-``pyfr sim`` is the solver. The following sub-tools are available:
-
-1. ``pyfr sim run`` --- start a new PyFR simulation. Example::
-
-        pyfr sim run mesh.pyfrm configuration.ini
-
-2. ``pyfr sim restart`` --- restart a PyFR simulation from an existing
+4. ``pyfr restart`` --- restart a PyFR simulation from an existing
    solution file. Example::
 
-        pyfr sim restart mesh.pyfrm solution.pyfrs
+        pyfr restart mesh.pyfrm solution.pyfrs
 
-For full details invoke::
+5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
+   unstructured VTK .vtu file. Example::
 
-    pyfr sim [sub-tool] --help
+        pyfr export mesh.pyfrm solution.pyfrs solution.vtu
+
+6. ``pyfr time-avg`` --- time-average a series of PyFR solution
+   files. Example::
+
+        pyfr time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
 
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
 
-``pyfr sim`` can be run in parallel. To do so prefix ``pyfr sim`` with
+``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
 ``mpirun -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
-
-Postp
-----------
-
-``pyfr postp`` is for post-processing. The following sub-tools are
-available:
-
-1. ``pyfr postp convert`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu file. Example::
-
-        pyfr postp convert mesh.pyfrm solution.pyfrs solution.vtu
-
-2. ``pyfr postp time-avg`` --- time-average a series of PyFR solution
-   files. Example::
-
-        pyfr postp time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
-
-For full details invoke::
-
-    pyfr postp [sub-tool] --help
 
 Configuration File (.ini)
 -------------------------
