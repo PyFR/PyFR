@@ -4,19 +4,20 @@
 Developer Guide
 ***************
 
-=============================================================
-PyFR-Sim to PyFR-Mako: A Brief Overview of the PyFR Framework
-=============================================================
+======================================
+A Brief Overview of the PyFR Framework
+======================================
 
-PyFR-Sim
---------
+Where to Start
+--------------
 
-The symbolic link :code:`pyfr.scripts.pyfr-sim` points to the script
-:code:`pyfr.scripts.sim`, which is where it all starts! Specifically,
-the function :code:`main` calls the function :code:`get_solver`, which
-returns an Integrator -- a composite of a `Controller`_ a `Stepper`_
-and a `Writer`_. The Integrator has a method named :code:`run`, which
-is then called to run the simulation.
+The symbolic link :code:`pyfr.scripts.pyfr` points to the script
+:code:`pyfr.scripts.main`, which is where it all starts! Specifically,
+the function :code:`process_run` calls the function
+:code:`_process_common`, which in turn calls the function
+:code:`get_solver`, returning an Integrator -- a composite of a
+`Controller`_ a `Stepper`_ and a `Writer`_. The Integrator has a method
+named :code:`run`, which is then called to run the simulation.
 
 Controller
 ----------
@@ -53,7 +54,7 @@ Stepper
 
 A `Stepper`_ acts to advance the simulation by a single time-step.
 Specifically, a `Stepper`_ has a method named :code:`step` which
-advances a `System`_ by a single time-step. There are four types of
+advances a `System`_ by a single time-step. There are five types of
 `Stepper`_ available in PyFR |release|:
 
 .. autoclass:: pyfr.integrators.steppers.EulerStepper
@@ -88,6 +89,14 @@ advances a `System`_ by a single time-step. There are four types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
+.. autoclass:: pyfr.integrators.steppers.TVDRK3Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
 Types of `Stepper`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.steppers
@@ -96,18 +105,10 @@ Types of `Stepper`_ are related via the following inheritance diagram:
 Writer
 ------
 
-A `Writer`_ acts to write out simulation data. There are two types of
+A `Writer`_ acts to write out simulation data. There is one type of
 `Writer`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.integrators.writers.FileWriter
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
-.. autoclass:: pyfr.integrators.writers.DirWriter
+.. autoclass:: pyfr.integrators.writers.H5Writer
     :members:
     :undoc-members:
     :inherited-members:
