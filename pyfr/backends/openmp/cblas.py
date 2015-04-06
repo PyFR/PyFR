@@ -48,26 +48,17 @@ class CBlasWrappers(object):
 
 class OpenMPCBLASKernels(OpenMPKernelProvider):
     def __init__(self, backend):
-        super(OpenMPCBLASKernels, self).__init__(backend)
+        super().__init__(backend)
 
-        # Look for single and multi-threaded BLAS libraries
-        hasst = backend.cfg.hasopt('backend-openmp', 'cblas-st')
-        hasmt = backend.cfg.hasopt('backend-openmp', 'cblas-mt')
+        libname = backend.cfg.getpath('backend-openmp', 'cblas', abs=False)
+        libtype = backend.cfg.get('backend-openmp', 'cblas-type', 'parallel')
 
-        if hasst and hasmt:
-            raise RuntimeError('cblas-st and cblas-mt are mutually exclusive')
-        elif hasst:
-            self._cblas_type = 'cblas-st'
-        elif hasmt:
-            self._cblas_type = 'cblas-mt'
-        else:
-            raise RuntimeError('No cblas library specified')
-
-        libname = backend.cfg.getpath('backend-openmp', self._cblas_type,
-                                      abs=False)
+        if libtype not in {'serial', 'parallel'}:
+            raise ValueError('cblas type must be serial or parallel')
 
         # Load and wrap cblas
         self._wrappers = CBlasWrappers(libname)
+        self._cblas_type = libtype
 
     @traits(a={'dense'})
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
@@ -88,7 +79,7 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
         # extremely long matrices encountered by PyFR).  Otherwise, we
         # let the BLAS library handle parallelization itself (which
         # may, or may not, use OpenMP).
-        if self._cblas_type == 'cblas-st':
+        if self._cblas_type == 'serial':
             # Render the kernel template
             src = self.backend.lookup.get_template('par-gemm').render()
 

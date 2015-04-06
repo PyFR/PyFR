@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 
 from contextlib import contextmanager
+from ctypes import CDLL, c_void_p
 import functools as ft
 import itertools as it
 import os
-import cPickle as pickle
+import pickle
 import shutil
+
+from pyfr.ctypesutil import find_libc
 
 
 class memoize(object):
@@ -35,7 +38,7 @@ class memoize(object):
 
 class proxylist(list):
     def __init__(self, *args):
-        super(proxylist, self).__init__(*args)
+        super().__init__(*args)
 
     def __getattr__(self, attr):
         return proxylist([getattr(x, attr) for x in self])
@@ -53,6 +56,10 @@ class silence(object):
         self.outfiles = stdout, stderr
         self.combine = (stdout == stderr)
 
+        # Acquire a handle to fflush from libc
+        self.libc_fflush = CDLL(find_libc()).fflush
+        self.libc_fflush.argtypes = [c_void_p]
+
     def __enter__(self):
         import sys
         self.sys = sys
@@ -68,9 +75,9 @@ class silence(object):
 
         # Open the redirects
         if self.combine:
-            self.new_streams = [open(self.outfiles[0], 'w', 0)]*2
+            self.new_streams = [open(self.outfiles[0], 'wb', 0)]*2
         else:
-            self.new_streams = [open(f, 'w', 0) for f in self.outfiles]
+            self.new_streams = [open(f, 'wb', 0) for f in self.outfiles]
 
         self.new_fds = [s.fileno() for s in self.new_streams]
 
@@ -82,8 +89,7 @@ class silence(object):
         sys = self.sys
 
         # Flush
-        for s in self.saved_streams:
-            s.flush()
+        self.libc_fflush(None)
 
         # Restore
         os.dup2(self.saved_fds[0], self.fds[0])
@@ -145,7 +151,7 @@ def subclasses(cls, just_leaf=False):
 
 
 def subclass_where(cls, **kwargs):
-    k, v = next(kwargs.iteritems())
+    k, v = next(iter(kwargs.items()))
 
     for s in subclasses(cls):
         if hasattr(s, k) and getattr(s, k) == v:
@@ -153,7 +159,7 @@ def subclass_where(cls, **kwargs):
 
 
 def ndrange(*args):
-    return it.product(*map(xrange, args))
+    return it.product(*map(range, args))
 
 
 def rm(path):

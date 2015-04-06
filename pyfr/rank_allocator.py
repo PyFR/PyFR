@@ -14,9 +14,7 @@ def get_rank_allocation(mesh, cfg):
     return subclass_where(BaseRankAllocator, name=name)(mesh, cfg)
 
 
-class BaseRankAllocator(object):
-    __metaclass__ = ABCMeta
-
+class BaseRankAllocator(object, metaclass=ABCMeta):
     name = None
 
     def __init__(self, mesh, cfg):
@@ -88,4 +86,4 @@ class LinearRankAllocator(BaseRankAllocator):
         return None
 
     def _get_mprankmap(self, prankconn, rinfo):
-        return {i: i for i in xrange(len(rinfo))}
+        return {i: i for i in range(len(rinfo))}

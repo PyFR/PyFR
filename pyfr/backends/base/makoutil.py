@@ -19,22 +19,22 @@ def npdtype_to_ctype(context, dtype):
 
 
 def dot(context, a_, b_=None, **kwargs):
-    ix, nd = next(kwargs.iteritems())
+    ix, nd = next(iter(kwargs.items()))
     ab = '({})*({})'.format(a_, b_ or a_)
 
     # Allow for flexible range arguments
     nd = nd if isinstance(nd, Iterable) else [nd]
 
-    return '(' + ' + '.join(ab.format(**{ix: i}) for i in xrange(*nd)) + ')'
+    return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
 
 
 def array(context, ex_, **kwargs):
-    ix, ni = next(kwargs.iteritems())
+    ix, ni = next(iter(kwargs.items()))
 
     # Allow for flexible range arguments
     ni = ni if isinstance(ni, Iterable) else [ni]
 
-    return '{ ' + ', '.join(ex_.format(**{ix: i}) for i in xrange(*ni)) + ' }'
+    return '{ ' + ', '.join(ex_.format(**{ix: i}) for i in range(*ni)) + ' }'
 
 
 def _strip_parens(s):

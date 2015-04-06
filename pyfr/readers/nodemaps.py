@@ -186,4 +186,4 @@ class GmshNodeMaps(object):
                                 16, 22, 27, 26, 19, 13, 14, 15, 21, 20])
     }
 
-    from_pyfr = {k: np.argsort(v) for k, v in to_pyfr.iteritems()}
+    from_pyfr = {k: np.argsort(v) for k, v in to_pyfr.items()}

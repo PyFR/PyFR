@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from collections import Counter, defaultdict, namedtuple
-import itertools as it
 import re
 import uuid
 
@@ -20,7 +19,7 @@ class BasePartitioner(object):
 
         # Parse the options list
         self.opts = {}
-        for k, v in dict(self.dflt_opts, **opts).iteritems():
+        for k, v in dict(self.dflt_opts, **opts).items():
             if k in self.int_opts:
                 self.opts[k] = int(v)
             elif k in self.enum_opts:
@@ -36,16 +35,16 @@ class BasePartitioner(object):
         spts = defaultdict(list)
         offs = defaultdict(dict)
 
-        for en, pn in pinf.iteritems():
+        for en, pn in pinf.items():
             for i, n in enumerate(pn):
                 if n > 0:
                     offs[en][i] = sum(s.shape[1] for s in spts[en])
                     spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
 
         def offset_con(con, pr):
-            con = con.copy()
+            con = con.copy().astype('U4,i4,i1,i1')
 
-            for en, pn in pinf.iteritems():
+            for en, pn in pinf.items():
                 if pn[pr] > 0:
                     con['f1'][np.where(con['f0'] == en)] += offs[en][pr]
 
@@ -74,24 +73,27 @@ class BasePartitioner(object):
                 name, l = bc.group(1), int(bc.group(2))
                 bccon[name].append(offset_con(mesh[f], l))
 
-        # Concatenate these arrays to from the new mesh
-        newmesh = {'con_p0': np.hstack(intcon)}
+        # Output data type
+        dtype = 'S4,i4,i1,i1'
 
-        for k, v in spts.iteritems():
+        # Concatenate these arrays to from the new mesh
+        newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
+
+        for k, v in spts.items():
             newmesh['spt_{0}_p0'.format(k)] = np.hstack(v)
 
-        for k, v in bccon.iteritems():
-            newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v)
+        for k, v in bccon.items():
+            newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v).astype(dtype)
 
         return newmesh
 
     def _combine_soln_parts(self, soln):
         newsoln = defaultdict(list)
 
-        for f, (en, shape) in soln.array_info.iteritems():
+        for f, (en, shape) in soln.array_info.items():
             newsoln['soln_{0}_p0'.format(en)].append(soln[f])
 
-        newsoln = {k: np.dstack(v) for k, v in newsoln.iteritems()}
+        newsoln = {k: np.dstack(v) for k, v in newsoln.items()}
         newsoln['config'] = soln['config']
         newsoln['stats'] = soln['stats']
 
@@ -99,12 +101,12 @@ class BasePartitioner(object):
 
     def _construct_graph(self, mesh):
         # Edges of the dual graph
-        con = mesh['con_p0']
+        con = mesh['con_p0'].astype('U4,i4,i1,i1')
         con = np.hstack([con, con[::-1]])
 
         # Sort by the left hand side
         idx = np.lexsort([con['f0'][0], con['f1'][0]])
-        con = con[:,idx]
+        con = con[:, idx]
 
         # Left and right hand side element types/indicies
         lhs, rhs = con[['f0', 'f1']]
@@ -138,12 +140,12 @@ class BasePartitioner(object):
 
         # Partition the shape points
         spt_px = defaultdict(list)
-        for (etype, eidxg), part in it.izip(vetimap, vparts):
-            spt_px[etype, part].append(spt_p0[etype][:,eidxg,:])
+        for (etype, eidxg), part in zip(vetimap, vparts):
+            spt_px[etype, part].append(spt_p0[etype][:, eidxg, :])
 
         # Stack
         return {'spt_{0}_p{1}'.format(*k): np.array(v).swapaxes(0, 1)
-                for k, v in spt_px.iteritems()}
+                for k, v in spt_px.items()}
 
     def _partition_soln(self, soln, vparts, vetimap):
         # Get the solution arrays from the file
@@ -154,12 +156,12 @@ class BasePartitioner(object):
 
         # Partition the solutions
         soln_px = defaultdict(list)
-        for (etype, eidxg), part in it.izip(vetimap, vparts):
-            soln_px[etype, part].append(soln_p0[etype][...,eidxg])
+        for (etype, eidxg), part in zip(vetimap, vparts):
+            soln_px[etype, part].append(soln_p0[etype][..., eidxg])
 
         # Stack
         return {'soln_{0}_p{1}'.format(*k): np.dstack(v)
-                for k, v in soln_px.iteritems()}
+                for k, v in soln_px.items()}
 
     def _partition_con(self, mesh, vparts, vetimap):
         con_px = defaultdict(list)
@@ -170,12 +172,12 @@ class BasePartitioner(object):
         eleglmap = defaultdict(list)
         pcounter = Counter()
 
-        for (etype, eidxg), part in it.izip(vetimap, vparts):
+        for (etype, eidxg), part in zip(vetimap, vparts):
             eleglmap[etype].append((part, pcounter[etype, part]))
             pcounter[etype, part] += 1
 
         # Generate the face connectivity
-        for l, r in zip(*mesh['con_p0']):
+        for l, r in zip(*mesh['con_p0'].astype('U4,i4,i1,i1')):
             letype, leidxg, lfidx, lflags = l
             retype, reidxg, rfidx, rflags = r
 
@@ -195,23 +197,28 @@ class BasePartitioner(object):
         for f in mesh:
             m = re.match('bcon_(.+?)_p0$', f)
             if m:
-                for lpetype, leidxg, lfidx, lflags in mesh[f]:
+                lhs = mesh[f].astype('U4,i4,i1,i1')
+
+                for lpetype, leidxg, lfidx, lflags in lhs:
                     lpart, leidxl = eleglmap[lpetype][leidxg]
                     conl = (lpetype, leidxl, lfidx, lflags)
 
                     bcon_px[m.group(1), lpart].append(conl)
 
+        # Output data type
+        dtype = 'S4,i4,i1,i1'
+
         # Output
         ret = {}
 
-        for k, v in con_px.iteritems():
-            ret['con_p{0}'.format(k)] = np.array(v, dtype='S4,i4,i1,i1').T
+        for k, v in con_px.items():
+            ret['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
 
-        for k, v in con_pxpy.iteritems():
-            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
+        for k, v in con_pxpy.items():
+            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
-        for k, v in bcon_px.iteritems():
-            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
+        for k, v in bcon_px.items():
+            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
         return ret
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (CDLL, POINTER, byref, c_double, c_int32, c_int64,
-                    c_float, c_void_p)
+from ctypes import (POINTER, byref, c_double, c_int32, c_int64, c_float,
+                    c_void_p)
 
 import numpy as np
 
@@ -133,7 +133,7 @@ class METISPartitioner(BasePartitioner):
     dflt_opts = {'ufactor': 10, 'ptype': 'rb', 'minconn': 'true'}
 
     def __init__(self, *args, **kwargs):
-        super(METISPartitioner, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Load METIS
         self._wrappers = METISWrappers()
@@ -159,7 +159,7 @@ class METISPartitioner(BasePartitioner):
         w.METIS_SetDefaultOptions(opts.ctypes)
 
         # Process our options
-        for k, v in self.opts.iteritems():
+        for k, v in self.opts.items():
             oidx = getattr(w, 'METIS_OPTION_' + k.upper())
             opts[oidx] = v
 

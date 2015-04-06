@@ -18,7 +18,7 @@ class BaseAdvectionElements(BaseElements):
             return {'scal_fpts', 'vect_upts'}
 
     def set_backend(self, backend, nscal_upts):
-        super(BaseAdvectionElements, self).set_backend(backend, nscal_upts)
+        super().set_backend(backend, nscal_upts)
 
         # Register pointwise kernels with the backend
         backend.pointwise.register(
@@ -110,7 +110,7 @@ class BaseAdvectionElements(BaseElements):
         subs.update(abs='fabs', pi=repr(math.pi))
 
         srcex = []
-        for v in self._convarmap[self.ndims]:
+        for v in self.convarmap[self.ndims]:
             ex = self.cfg.get('solver-source-terms', v, '0')
 
             # Substitute variables

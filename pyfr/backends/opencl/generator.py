@@ -3,12 +3,11 @@
 import re
 
 from pyfr.backends.base.generator import BaseKernelGenerator
-from pyfr.util import ndrange
 
 
 class OpenCLKernelGenerator(BaseKernelGenerator):
     def __init__(self, *args, **kwargs):
-        super(OpenCLKernelGenerator, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Specialise
         if self.ndim == 1:

@@ -5,9 +5,7 @@ from abc import ABCMeta, abstractmethod
 from pyfr.backends.base.kernels import BaseKernelProvider, MPIKernel
 
 
-class BasePackingKernels(BaseKernelProvider):
-    __metaclass__ = ABCMeta
-
+class BasePackingKernels(BaseKernelProvider, metaclass=ABCMeta):
     def _sendrecv(self, mv, mpipreqfn, pid, tag):
         # If we are an exchange view then extract the exchange matrix
         if isinstance(mv, self.backend.xchg_view_cls):

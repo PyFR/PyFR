@@ -3,15 +3,16 @@
 """Allows for interopability between .pyfr{m, s}-{file, dir} archive formats
 
 """
-from collections import Mapping, OrderedDict
 import errno
 import os
 import re
 
+from collections import Mapping, OrderedDict
+import h5py
 import numpy as np
 
 from pyfr.shapes import BaseShape
-from pyfr.util import subclasses, lazyprop
+from pyfr.util import lazyprop, subclasses
 
 
 class PyFRBaseReader(Mapping):
@@ -118,12 +119,12 @@ class PyFRBaseReader(Mapping):
         npr = max(int(re.search(r'\d+$', k).group(0)) for k in ai) + 1
 
         # Element types in the mesh
-        etypes = set(v[0] for v in ai.itervalues())
+        etypes = set(v[0] for v in ai.values())
 
         # Compute the number of elements of each type in each partition
         nep = {et: [0]*npr for et in etypes}
 
-        for k, v in ai.iteritems():
+        for k, v in ai.items():
             nep[v[0]][int(re.search(r'\d+$', k).group(0))] = v[1][1]
 
         return nep
@@ -136,8 +137,13 @@ class PyFRDirReader(PyFRBaseReader):
 
     def __getitem__(self, aname):
         try:
-            return np.load(os.path.join(self.fname, aname + '.npy'),
-                           mmap_mode='r')
+            ret = np.load(os.path.join(self.fname, aname + '.npy'),
+                          mmap_mode='r')
+
+            ret = ret.item() if ret.dtype.kind in 'SU' else ret
+
+            return ret.decode() if isinstance(ret, bytes) else ret
+
         except IOError as e:
             if e.errno == errno.ENOENT:
                 raise KeyError
@@ -157,13 +163,39 @@ class PyFRFileReader(PyFRBaseReader):
         self._npf = np.load(fname)
 
     def __getitem__(self, aname):
-        return self._npf[aname]
+        ret = self._npf[aname]
+
+        ret = ret.item() if ret.dtype.kind in 'SU' else ret
+
+        return ret.decode() if isinstance(ret, bytes) else ret
 
     def __iter__(self):
         return iter(self._npf.files)
 
     def __len__(self):
         return len(self._npf.files)
+
+
+class PyFRH5Reader(PyFRBaseReader):
+    """Does everything that file reader does but with a h5py file"""
+    def __init__(self, fname):
+        self._file = h5py.File(fname, 'r')
+
+    def __getitem__(self, aname):
+        ret = self._file[aname]
+
+        if ret.shape == ():
+            ret = ret.value
+        else:
+            ret = np.array(ret)
+
+        return ret.decode() if isinstance(ret, bytes) else ret
+
+    def __iter__(self):
+        return iter(self._file)
+
+    def __len__(self):
+        return len(self._file)
 
 
 def read_pyfr_data(fname):
@@ -207,4 +239,7 @@ def read_pyfr_data(fname):
     if os.path.isdir(fname):
         return PyFRDirReader(fname)
     else:
-        return PyFRFileReader(fname)
+        try:
+            return PyFRFileReader(fname)
+        except OSError:
+            return PyFRH5Reader(fname)

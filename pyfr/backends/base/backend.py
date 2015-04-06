@@ -21,7 +21,7 @@ def issuitable(kern, *args, **kwargs):
     kernt = getattr(kern, '_traits', {})
     kargs = getcallargs(kern, *args, **kwargs)
 
-    for k, tags in kernt.iteritems():
+    for k, tags in kernt.items():
         argtags = kargs[k].tags
         for t in tags:
             if (t[0] == '!' and t[1:] in argtags) or\
@@ -42,10 +42,7 @@ def recordmat(fn):
     return newfn
 
 
-class BaseBackend(object):
-    __metaclass__ = ABCMeta
-
-    # Backend name
+class BaseBackend(object, metaclass=ABCMeta):
     name = None
 
     @abstractmethod
@@ -107,7 +104,7 @@ class BaseBackend(object):
             self._pend_aliases[aobj].append(obj)
 
     def commit(self):
-        for reqs in self._pend_extents.itervalues():
+        for reqs in self._pend_extents.values():
             # Determine the required allocation size
             sz = sum(obj.nbytes - (obj.nbytes % -self.alignb) for obj in reqs)
 

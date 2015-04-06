@@ -1,4 +1,4 @@
- # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
@@ -10,10 +10,7 @@ from pyfr.shapes import BaseShape
 from pyfr.util import proxylist, subclasses
 
 
-class BaseSystem(object):
-    __metaclass__ = ABCMeta
-
-    # Relevant derived classes
+class BaseSystem(object, metaclass=ABCMeta):
     elementscls = None
     intinterscls = None
     mpiinterscls = None
@@ -36,9 +33,16 @@ class BaseSystem(object):
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
 
+        # Get all the solution point locations for the elements
+        self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
+
         # I/O banks for the elements
         self.eles_scal_upts_inb = eles.scal_upts_inb
         self.eles_scal_upts_outb = eles.scal_upts_outb
+
+        # Save the number of dimensions and field variables
+        self.ndims = eles[0].ndims
+        self.nvars = eles[0].nvars
 
         # Load the interfaces
         int_inters = self._load_int_inters(rallocs, mesh, elemap)
@@ -74,7 +78,7 @@ class BaseSystem(object):
             solncfg = Inifile(initsoln['config'])
 
             # Process the solution
-            for k, ele in elemap.iteritems():
+            for k, ele in elemap.items():
                 soln = initsoln['soln_%s_p%d' % (k, rallocs.prank)]
                 ele.set_ics_from_soln(soln, solncfg)
         else:
@@ -86,7 +90,9 @@ class BaseSystem(object):
         return eles, elemap
 
     def _load_int_inters(self, rallocs, mesh, elemap):
-        lhs, rhs = mesh['con_p%d' % rallocs.prank].tolist()
+        key = 'con_p{0}'.format(rallocs.prank)
+
+        lhs, rhs = mesh[key].astype('U4,i4,i1,i1').tolist()
         int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
                                        self.cfg)
 
@@ -100,7 +106,8 @@ class BaseSystem(object):
         mpi_inters = proxylist([])
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
-            interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)].tolist()
+            interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)]
+            interarr = interarr.astype('U4,i4,i1,i1').tolist()
 
             mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
                                          rallocs, elemap, self.cfg)
@@ -122,16 +129,19 @@ class BaseSystem(object):
                 # Determine the config file section
                 cfgsect = 'soln-bcs-%s' % rgn
 
+                # Get the interface
+                interarr = mesh[f].astype('U4,i4,i1,i1').tolist()
+
                 # Instantiate
                 bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
-                bciface = bcclass(self.backend, mesh[f].tolist(), elemap,
-                                  cfgsect, self.cfg)
+                bciface = bcclass(self.backend, interarr, elemap, cfgsect,
+                                  self.cfg)
                 bc_inters.append(bciface)
 
         return bc_inters
 
     def _gen_queues(self):
-        self._queues = [self.backend.queue() for i in xrange(self._nqueues)]
+        self._queues = [self.backend.queue() for i in range(self._nqueues)]
 
     def _gen_kernels(self, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(proxylist)
@@ -140,7 +150,7 @@ class BaseSystem(object):
         provobjs = [eles, iint, mpiint, bcint]
 
         for pn, pobj in zip(provnames, provobjs):
-            for kn, kgetter in it.chain(*pobj.kernels.iteritems()):
+            for kn, kgetter in it.chain(*pobj.kernels.items()):
                 kernels[pn, kn].append(kgetter())
 
     @abstractmethod

@@ -8,9 +8,7 @@ from pyfr.nputil import range_eval
 from pyfr.util import proxylist
 
 
-class BaseIntegrator(object):
-    __metaclass__ = ABCMeta
-
+class BaseIntegrator(object, metaclass=ABCMeta):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         from mpi4py import MPI
 
@@ -47,7 +45,7 @@ class BaseIntegrator(object):
         nreg = self._stepper_nregs
 
         # Construct the relevant mesh partition
-        self._system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
+        self.system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
         self._mesh_uuid = mesh['mesh_uuid']
@@ -56,7 +54,7 @@ class BaseIntegrator(object):
         self._queue = backend.queue()
 
         # Get the number of degrees of freedom in this partition
-        ndofs = sum(self._system.ele_ndofs)
+        ndofs = sum(self.system.ele_ndofs)
 
         # Sum to get the global number over all partitions
         self._gndofs = MPI.COMM_WORLD.allreduce(ndofs, op=MPI.SUM)
@@ -114,7 +112,7 @@ class BaseIntegrator(object):
             solns = self.advance_to(t)
 
             # Map solutions to elements types
-            solnmap = OrderedDict(zip(self._system.ele_types, solns))
+            solnmap = OrderedDict(zip(self.system.ele_types, solns))
 
             # Collect statistics
             stats = Inifile()
