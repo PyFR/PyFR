@@ -73,14 +73,17 @@ class BasePartitioner(object):
                 name, l = bc.group(1), int(bc.group(2))
                 bccon[name].append(offset_con(mesh[f], l))
 
+        # Output data type
+        dtype = 'S4,i4,i1,i1'
+
         # Concatenate these arrays to from the new mesh
-        newmesh = {'con_p0': np.hstack(intcon)}
+        newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
 
         for k, v in spts.items():
             newmesh['spt_{0}_p0'.format(k)] = np.hstack(v)
 
         for k, v in bccon.items():
-            newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v)
+            newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v).astype(dtype)
 
         return newmesh
 
@@ -202,17 +205,20 @@ class BasePartitioner(object):
 
                     bcon_px[m.group(1), lpart].append(conl)
 
+        # Output data type
+        dtype = 'S4,i4,i1,i1'
+
         # Output
         ret = {}
 
         for k, v in con_px.items():
-            ret['con_p{0}'.format(k)] = np.array(v, dtype='S4,i4,i1,i1').T
+            ret['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
 
         for k, v in con_pxpy.items():
-            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
+            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
         for k, v in bcon_px.items():
-            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
+            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
         return ret
 
