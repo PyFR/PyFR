@@ -31,7 +31,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         if initsoln is None or 'stats' not in initsoln:
             self.tcurr = self.tstart
         else:
-            stats = Inifile(initsoln['stats'].item().decode())
+            stats = Inifile(initsoln['stats'])
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
 
             # Cull already written output times
@@ -45,7 +45,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         nreg = self._stepper_nregs
 
         # Construct the relevant mesh partition
-        self._system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
+        self.system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
         self._mesh_uuid = mesh['mesh_uuid']
@@ -54,7 +54,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self._queue = backend.queue()
 
         # Get the number of degrees of freedom in this partition
-        ndofs = sum(self._system.ele_ndofs)
+        ndofs = sum(self.system.ele_ndofs)
 
         # Sum to get the global number over all partitions
         self._gndofs = MPI.COMM_WORLD.allreduce(ndofs, op=MPI.SUM)
@@ -112,7 +112,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
             solns = self.advance_to(t)
 
             # Map solutions to elements types
-            solnmap = OrderedDict(zip(self._system.ele_types, solns))
+            solnmap = OrderedDict(zip(self.system.ele_types, solns))
 
             # Collect statistics
             stats = Inifile()

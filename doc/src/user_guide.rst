@@ -21,11 +21,12 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `mako <http://www.makotemplates.org/>`_
-2. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-3. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
-4. `numpy <http://www.numpy.org/>`_ >= 1.8
-5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
+1. `h5py <http://www.h5py.org/>`_
+2. `mako <http://www.makotemplates.org/>`_
+3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
+4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
+5. `numpy <http://www.numpy.org/>`_ >= 1.8
+6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
 
 To run PyFR |release| in parallel it is also necessary to have one of
 the following installed:
@@ -84,88 +85,49 @@ PyFR |release| uses three distinct file formats:
 2. ``.pyfrm`` --- mesh file
 3. ``.pyfrs`` --- solution file
 
-Mesh
-----
 
-``pyfr mesh`` is for pre-processing. The following sub-tools are
-available:
+The following commands are available from the ``pyfr`` program:
 
-1. ``pyfr mesh convert`` --- convert a `Gmsh
+1. ``pyfr import`` --- convert a `Gmsh
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
 
    Example::
 
-        pyfr mesh convert mesh.msh mesh.pyfrm
+        pyfr import mesh.msh mesh.pyfrm
 
-2. ``pyfr mesh partition`` --- partition an existing mesh and
+2. ``pyfr partition`` --- partition an existing mesh and
    associated solution files.
 
    Example::
 
-       pyfr mesh partition 2 mesh.pyfrm solution.pyfrs .
+       pyfr partition 2 mesh.pyfrm solution.pyfrs .
 
-For full details invoke::
+3. ``pyfr run`` --- start a new PyFR simulation. Example::
 
-    pyfr mesh [sub-tool] --help
+        pyfr run mesh.pyfrm configuration.ini
 
-Sim
----
-
-Overview
-^^^^^^^^
-
-``pyfr sim`` is the solver. The following sub-tools are available:
-
-1. ``pyfr sim run`` --- start a new PyFR simulation. Example::
-
-        pyfr sim run mesh.pyfrm configuration.ini
-
-2. ``pyfr sim restart`` --- restart a PyFR simulation from an existing
+4. ``pyfr restart`` --- restart a PyFR simulation from an existing
    solution file. Example::
 
-        pyfr sim restart mesh.pyfrm solution.pyfrs
+        pyfr restart mesh.pyfrm solution.pyfrs
 
-For full details invoke::
+5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
+   unstructured VTK .vtu file. Example::
 
-    pyfr sim [sub-tool] --help
+        pyfr export mesh.pyfrm solution.pyfrs solution.vtu
+
+6. ``pyfr time-avg`` --- time-average a series of PyFR solution
+   files. Example::
+
+        pyfr time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
 
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
 
-``pyfr sim`` can be run in parallel. To do so prefix ``pyfr sim`` with
+``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
 ``mpirun -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
-
-Postp
-----------
-
-``pyfr postp`` is for post-processing. The following sub-tools are
-available:
-
-1. ``pyfr postp convert`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu file. Example::
-
-        pyfr postp convert mesh.pyfrm solution.pyfrs solution.vtu
-
-2. ``pyfr postp pack`` --- swap between the pyfr-dir and pyfr-file
-   format. Example::
-
-        pyfr postp pack solution_directory.pyfrs solution_file.pyfrs
-
-3. ``pyfr postp time-avg`` --- time-average a series of PyFR solution
-   files. Example::
-
-        pyfr postp time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
-
-4. ``pyfr postp unpack`` --- swap between the pyfr-file and pyfr-dir
-   format. Example::
-
-        pyfr postp unpack solution_file.pyfrs solution_directory.pyfrs
-
-For full details invoke::
-
-    pyfr postp [sub-tool] --help
 
 Configuration File (.ini)
 -------------------------
@@ -331,7 +293,7 @@ Parameterises the time-integration scheme used by the solver with
 
 1. ``scheme`` --- time-integration scheme:
 
-    ``euler`` | ``rk34`` | ``rk4`` | ``rk45``
+    ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
 2. ``t0`` --- initial time
 
@@ -656,27 +618,23 @@ Example::
 
 Parameterises the output with
 
-1. ``format`` --- format of the outputs:
 
-    ``pyfrs-file`` | ``pyfrs-dir``
-
-2. ``basedir`` --- relative path to directory where outputs will be
+1. ``basedir`` --- relative path to directory where outputs will be
    written
 
     *string*
 
-3. ``basename`` --- pattern of output names
+2. ``basename`` --- pattern of output names
 
     *string*
 
-4. ``times`` --- times at which outputs will be dumped
+3. ``times`` --- times at which outputs will be dumped
 
     ``range(`` *float* ``,`` *float* ``,`` *int* ``)``
 
 Example::
 
     [soln-output]
-    format = pyfrs-file
     basedir = .
     basename = files_%(t).2f
     times = range(0, 1, 11)
@@ -702,6 +660,42 @@ Parameterises an exponential solution filter with
 
     *int*
 
+[soln-plugin-nancheck]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically checks the solution for NaN values
+
+1. ``freq`` --- frequency at which the check is performed:
+
+    *int*
+
+[soln-plugin-sampler]
+^^^^^^^^^^^^^^^^^^^^^
+
+Periodically samples specific points in the volume and writes them out
+to a CSV file.
+
+1. ``freq`` --- frequency at which to sample:
+
+    *int*
+
+2. ``samp-pts`` --- list of points to sample:
+
+    ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]``
+
+3. ``format`` --- output variable format:
+
+    ``primitive`` | ``conservative``
+
+4. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+5. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
 
@@ -711,8 +705,8 @@ file with
 1. ``type`` --- type of boundary condition:
 
     ``char-riem-inv`` | ``no-slp-adia-wall`` | ``no-slp-isot-wall`` |
-    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` |
-    ``sup-in-fa`` | ``sup-out-fn``
+    ``slp-adia-wall`` | ``sub-in-frv`` | ``sub-in-ftpttang`` |
+    ``sub-out-fp`` | ``sup-in-fa`` | ``sup-out-fn``
 
     where
 
@@ -881,25 +875,25 @@ simulation on a mixed unstructured mesh:
    ``PyFR/examples/couette_flow_2d/couette_flow_2d.msh`` into
    ``couette_flow_2d/``
 
-4. Run pyfr mesh to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+4. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``couette_flow_2d.pyfrm``::
 
-        pyfr mesh convert couette_flow_2d.msh couette_flow_2d.pyfrm
+        pyfr import couette_flow_2d.msh couette_flow_2d.pyfrm
 
-5. Run pyfr sim to solve the Navier-Stokes equations on the mesh,
+5. Run pyfr to solve the Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
    ``couette_flow_2d-*.pyfrs``::
 
-        pyfr sim -p run couette_flow_2d.pyfrm couette_flow_2d.ini
+        pyfr run -p couette_flow_2d.pyfrm couette_flow_2d.ini
 
-6. Run pyfr postp on the solution file ``couette_flow_2d_4.00.pyfrs``
+6. Run pyfr on the solution file ``couette_flow_2d_4.00.pyfrs``
    converting it into an unstructured VTK file called
    ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr postp convert couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
+        pyfr export couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -928,28 +922,28 @@ simulation on a structured mesh:
    ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.msh`` into
    ``euler_vortex_2d/``
 
-4. Run pyfr mesh to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
+4. Run pyfr to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``euler_vortex_2d.pyfrm``::
 
-        pyfr mesh convert euler_vortex_2d.msh euler_vortex_2d.pyfrm
+        pyfr import euler_vortex_2d.msh euler_vortex_2d.pyfrm
 
-5. Run pyfrmesh to partition the PyFR mesh file into two pieces::
+5. Run pyfr to partition the PyFR mesh file into two pieces::
 
-        pyfr mesh partition 2 euler_vortex_2d.pyfrm .
+        pyfr partition 2 euler_vortex_2d.pyfrm .
 
-6. Run pyfr sim to solve the Euler equations on the mesh, generating a
+6. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-        mpirun -n 2 pyfr sim -p run euler_vortex_2d.pyfrm euler_vortex_2d.ini
+        mpirun -n 2 pyfr run -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
-7. Run pyfr postp on the solution file ``euler_vortex_2d_100.0.pyfrs``
+7. Run pyfr on the solution file ``euler_vortex_2d_100.0.pyfrs``
    converting it into an unstructured VTK file called
    ``euler_vortex_2d_100.0.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr postp convert euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
+        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
 
 8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_

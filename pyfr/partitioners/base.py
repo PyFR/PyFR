@@ -73,14 +73,17 @@ class BasePartitioner(object):
                 name, l = bc.group(1), int(bc.group(2))
                 bccon[name].append(offset_con(mesh[f], l))
 
+        # Output data type
+        dtype = 'S4,i4,i1,i1'
+
         # Concatenate these arrays to from the new mesh
-        newmesh = {'con_p0': np.hstack(intcon)}
+        newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
 
         for k, v in spts.items():
             newmesh['spt_{0}_p0'.format(k)] = np.hstack(v)
 
         for k, v in bccon.items():
-            newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v)
+            newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v).astype(dtype)
 
         return newmesh
 
@@ -103,7 +106,7 @@ class BasePartitioner(object):
 
         # Sort by the left hand side
         idx = np.lexsort([con['f0'][0], con['f1'][0]])
-        con = con[:,idx]
+        con = con[:, idx]
 
         # Left and right hand side element types/indicies
         lhs, rhs = con[['f0', 'f1']]
@@ -138,7 +141,7 @@ class BasePartitioner(object):
         # Partition the shape points
         spt_px = defaultdict(list)
         for (etype, eidxg), part in zip(vetimap, vparts):
-            spt_px[etype, part].append(spt_p0[etype][:,eidxg,:])
+            spt_px[etype, part].append(spt_p0[etype][:, eidxg, :])
 
         # Stack
         return {'spt_{0}_p{1}'.format(*k): np.array(v).swapaxes(0, 1)
@@ -154,7 +157,7 @@ class BasePartitioner(object):
         # Partition the solutions
         soln_px = defaultdict(list)
         for (etype, eidxg), part in zip(vetimap, vparts):
-            soln_px[etype, part].append(soln_p0[etype][...,eidxg])
+            soln_px[etype, part].append(soln_p0[etype][..., eidxg])
 
         # Stack
         return {'soln_{0}_p{1}'.format(*k): np.dstack(v)
@@ -202,17 +205,20 @@ class BasePartitioner(object):
 
                     bcon_px[m.group(1), lpart].append(conl)
 
+        # Output data type
+        dtype = 'S4,i4,i1,i1'
+
         # Output
         ret = {}
 
         for k, v in con_px.items():
-            ret['con_p{0}'.format(k)] = np.array(v, dtype='S4,i4,i1,i1').T
+            ret['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
 
         for k, v in con_pxpy.items():
-            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
+            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
         for k, v in bcon_px.items():
-            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype='S4,i4,i1,i1')
+            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
         return ret
 
