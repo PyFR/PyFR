@@ -35,7 +35,7 @@ class BaseController(BaseIntegrator):
 
         # Load any plugins specified in the config file
         for s in self.cfg.sections():
-            m = re.match('solver-plugin-(.+?)(?:-.+)?$', s)
+            m = re.match('soln-plugin-(.+?)(?:-.+)?$', s)
             if m:
                 cfgsect, name = m.group(0), m.group(1)
 
