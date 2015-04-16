@@ -2,20 +2,31 @@
 
 import numpy as np
 
+from pyfr.backends.base import NullComputeKernel, NullMPIKernel
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
 
 
 class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, rhs, elemap, cfg):
+        super().__init__(be, lhs, rhs, elemap, cfg)
 
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c)
+
+        # Generate the additional view matrices for artificial viscosity
+        self.shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if self.shock_capturing == 'artificial-viscosity':
+            avis0_lhs = self._avis_view(lhs, 'get_avis_fpts_for_inter')
+            avis0_rhs = self._avis_view(rhs, 'get_avis_fpts_for_inter')
+            tplargs['art_vis'] = 'mu'
+        else:
+            avis0_lhs = avis0_rhs = None
+            tplargs['art_vis'] = 'none'
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
@@ -29,20 +40,56 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
             ul=self._scal0_lhs, ur=self._scal0_rhs,
             gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+            amul=avis0_lhs, amur=avis0_rhs,
             magnl=self._mag_pnorm_lhs, magnr=self._mag_pnorm_rhs,
             nl=self._norm_pnorm_lhs
         )
 
 
 class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
+        super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
 
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c)
+
+        # Generate the additional kernels, view matrices for artificial viscosity
+        self.shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if self.shock_capturing == 'artificial-viscosity':
+            avis0_lhs = self._avis_xchg_view(lhs, 'get_avis_fpts_for_inter')
+            avis0_rhs = be.xchg_matrix_for_view(avis0_lhs)
+
+            # If we need to send our artificial viscosity to the RHS
+            if self._tpl_c['ldg-beta'] != -0.5:
+                self.kernels['avis_fpts_pack'] = lambda: be.kernel(
+                    'pack', avis0_lhs
+                )
+                self.kernels['avis_fpts_send'] = lambda: be.kernel(
+                    'send_pack', avis0_lhs, self._rhsrank, self.MPI_TAG
+                )
+            else:
+                self.kernels['avis_fpts_pack'] = lambda: NullComputeKernel()
+                self.kernels['avis_fpts_send'] = lambda: NullMPIKernel()
+
+            # If we need to recv artificial viscosity from the RHS
+            if self._tpl_c['ldg-beta'] != 0.5:
+                self.kernels['avis_fpts_recv'] = lambda: be.kernel(
+                    'recv_pack', avis0_rhs, self._rhsrank, self.MPI_TAG
+                )
+                self.kernels['avis_fpts_unpack'] = lambda: be.kernel(
+                    'unpack', avis0_rhs
+                )
+            else:
+                self.kernels['avis_fpts_recv'] = lambda: NullMPIKernel()
+                self.kernels['avis_fpts_unpack'] = lambda: NullComputeKernel()
+
+            tplargs['art_vis'] = 'mu'
+        else:
+            avis0_lhs = avis0_rhs = None
+            tplargs['art_vis'] = 'none'
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpiconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.mpicflux')
@@ -55,6 +102,7 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
             'mpicflux', tplargs=tplargs, dims=[self.ninterfpts],
             ul=self._scal0_lhs, ur=self._scal0_rhs,
             gradul=self._vect0_lhs, gradur=self._vect0_rhs,
+            amul=avis0_lhs, amur=avis0_rhs,
             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
         )
 
@@ -62,8 +110,8 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
     cflux_state = None
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -71,6 +119,15 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c, bctype=self.type,
                        bccfluxstate=self.cflux_state)
+
+        # Generate the additional view matrices for artificial viscosity
+        self.shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if self.shock_capturing == 'artificial-viscosity':
+            avis0_lhs = self._avis_view(lhs, 'get_avis_fpts_for_inter')
+            tplargs['art_vis'] = 'mu'
+        else:
+            avis0_lhs = None
+            tplargs['art_vis'] = 'none'
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
@@ -82,7 +139,7 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
-            ul=self._scal0_lhs, gradul=self._vect0_lhs,
+            ul=self._scal0_lhs, gradul=self._vect0_lhs, amul=avis0_lhs,
             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
         )
 

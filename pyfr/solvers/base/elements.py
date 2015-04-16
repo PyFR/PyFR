@@ -269,3 +269,11 @@ class BaseElements(object, metaclass=ABCMeta):
         rcstri = ((self.nfpts, self._vect_fpts.leadsubdim),)*nfp
 
         return (self._vect_fpts.mid,)*nfp, rcmap, rcstri
+
+    def get_avis_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        cstri = ((self._avis_fpts.leadsubdim,),)*nfp
+
+        return (self._avis_fpts.mid,)*nfp, rcmap, cstri
