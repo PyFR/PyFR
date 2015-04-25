@@ -46,6 +46,9 @@ class BaseController(BaseIntegrator):
                 # Register as an event handler
                 self.completed_step_handlers.append(plugin)
 
+        # Delete the memory-intensive elements map from the system
+        del self.system.ele_map
+
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt
         self.nacptsteps += 1
