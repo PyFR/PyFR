@@ -5,7 +5,7 @@ import os
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root, get_mpiop
+from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin
 
 
@@ -56,7 +56,7 @@ class SamplerPlugin(BasePlugin):
             cp = _closest_upt(intg.system.ele_types, plocs, p)
 
             # Reduce over all partitions
-            mcp, mrank = comm.allreduce(cp, op=get_mpiop('minloc'))
+            mcp, mrank = comm.allreduce(cp, op=get_mpi('minloc'))
 
             # Store the rank responsible along with the info
             ptsrank.append(mrank)

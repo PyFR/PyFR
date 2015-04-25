@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import OrderedDict
 
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import get_comm_rank_root, get_mpiop
+from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.nputil import range_eval
 from pyfr.util import proxylist
 
@@ -58,7 +58,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         comm, rank, root = get_comm_rank_root()
 
         # Sum to get the global number over all partitions
-        self._gndofs = comm.allreduce(ndofs, op=get_mpiop('sum'))
+        self._gndofs = comm.allreduce(ndofs, op=get_mpi('sum'))
 
     def _kernel(self, name, nargs):
         # Transpose from [nregs][neletypes] to [neletypes][nregs]

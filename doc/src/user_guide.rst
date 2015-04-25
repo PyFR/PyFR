@@ -660,6 +660,25 @@ Parameterises an exponential solution filter with
 
     *int*
 
+[soln-plugin-fluidforce-name]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically integrates the pressure on the boundary labelled ``name``
+and writes out the resulting force vectors to a CSV file.
+
+1. ``nsteps`` --- integrate every ``nsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
 
