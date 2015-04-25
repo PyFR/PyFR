@@ -18,7 +18,7 @@ class BaseController(BaseIntegrator):
         self._dtmin = 1.0e-14
 
         # Solution filtering frequency
-        self._ffreq = self.cfg.getint('soln-filter', 'freq', '0')
+        self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
         # Bank index of solution
         self._idxcurr = 0
@@ -57,7 +57,7 @@ class BaseController(BaseIntegrator):
         self._idxcurr = idxcurr
 
         # Filter
-        if self._ffreq and self.nacptsteps % self._ffreq == 0:
+        if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
             self.system.filt(idxcurr)
 
         # Invalidate the solution cache

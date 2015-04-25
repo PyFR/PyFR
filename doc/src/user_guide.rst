@@ -644,7 +644,7 @@ Example::
 
 Parameterises an exponential solution filter with
 
-1. ``freq`` --- frequency at which filter is applied:
+1. ``nsteps`` --- apply filter every ``nsteps``:
 
     *int*
 
@@ -665,7 +665,7 @@ Parameterises an exponential solution filter with
 
 Periodically checks the solution for NaN values
 
-1. ``freq`` --- frequency at which the check is performed:
+1. ``nsteps`` --- check every ``nsteps``:
 
     *int*
 
@@ -675,7 +675,7 @@ Periodically checks the solution for NaN values
 Periodically samples specific points in the volume and writes them out
 to a CSV file.
 
-1. ``freq`` --- frequency at which to sample:
+1. ``nsteps`` --- sample every ``nsteps``:
 
     *int*
 

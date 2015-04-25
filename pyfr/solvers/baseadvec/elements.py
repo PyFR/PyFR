@@ -89,7 +89,7 @@ class BaseAdvectionElements(BaseElements):
             )
 
         # In-place solution filter
-        if self.cfg.getint('soln-filter', 'freq', '0'):
+        if self.cfg.getint('soln-filter', 'nsteps', '0'):
             def filter_soln():
                 mul = backend.kernel(
                     'mul', self.opmat('M11'), self.scal_upts_inb,

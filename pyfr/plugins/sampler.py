@@ -35,7 +35,7 @@ class SamplerPlugin(BasePlugin):
         self.elementscls = intg.system.elementscls
 
         # Output frequency
-        self.freq = self.cfg.getint(cfgsect, 'freq')
+        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # List of points to be sampled and format
         self.pts = ast.literal_eval(self.cfg.get(cfgsect, 'samp-pts'))
@@ -103,7 +103,7 @@ class SamplerPlugin(BasePlugin):
 
     def __call__(self, intg):
         # Return if no output is due
-        if intg.nsteps % self.freq:
+        if intg.nsteps % self.nsteps:
             return
 
         # MPI info
