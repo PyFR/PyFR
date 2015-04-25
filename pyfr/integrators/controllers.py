@@ -36,12 +36,12 @@ class BaseController(BaseIntegrator):
 
         # Load any plugins specified in the config file
         for s in self.cfg.sections():
-            m = re.match('soln-plugin-(.+?)(?:-.+)?$', s)
+            m = re.match('soln-plugin-(.+?)(?:-(.+))?$', s)
             if m:
-                cfgsect, name = m.group(0), m.group(1)
+                cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
 
                 # Instantiate
-                plugin = get_plugin(name, self, cfgsect)
+                plugin = get_plugin(name, self, cfgsect, suffix)
 
                 # Register as an event handler
                 self.completed_step_handlers.append(plugin)

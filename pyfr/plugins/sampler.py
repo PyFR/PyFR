@@ -26,11 +26,10 @@ def _closest_upt(etypes, eupts, p):
 
 class SamplerPlugin(BasePlugin):
     name = 'sampler'
+    systems = ['*']
 
-    def __init__(self, intg, cfgsect):
-        from mpi4py import MPI
-
-        super().__init__(intg, cfgsect)
+    def __init__(self, intg, cfgsect, suffix):
+        super().__init__(intg, cfgsect, suffix)
 
         # Underlying elements class
         self.elementscls = intg.system.elementscls
