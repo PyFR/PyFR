@@ -4,6 +4,7 @@ import math
 import re
 
 from pyfr.integrators.base import BaseIntegrator
+from pyfr.mpiutil import get_comm_rank_root, get_mpiop
 from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
@@ -142,7 +143,7 @@ class PIController(BaseController):
         return self._kernel('errest', nargs=3)
 
     def _errest(self, x, y, z):
-        from mpi4py import MPI
+        comm, rank, root = get_comm_rank_root()
 
         errest = self._get_errest_kerns()
 
@@ -152,7 +153,7 @@ class PIController(BaseController):
 
         # Reduce locally (element types) and globally (MPI ranks)
         rl = sum(errest.retval)
-        rg = MPI.COMM_WORLD.allreduce(rl, op=MPI.SUM)
+        rg = comm.allreduce(rl, op=get_mpiop('sum'))
 
         # Normalise
         err = math.sqrt(rg / self._gndofs)
