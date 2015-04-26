@@ -4,6 +4,7 @@ import math
 import re
 
 from pyfr.integrators.base import BaseIntegrator
+from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
@@ -17,7 +18,7 @@ class BaseController(BaseIntegrator):
         self._dtmin = 1.0e-14
 
         # Solution filtering frequency
-        self._ffreq = self.cfg.getint('soln-filter', 'freq', '0')
+        self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
         # Bank index of solution
         self._idxcurr = 0
@@ -35,15 +36,18 @@ class BaseController(BaseIntegrator):
 
         # Load any plugins specified in the config file
         for s in self.cfg.sections():
-            m = re.match('solver-plugin-(.+?)(?:-.+)?$', s)
+            m = re.match('soln-plugin-(.+?)(?:-(.+))?$', s)
             if m:
-                cfgsect, name = m.group(0), m.group(1)
+                cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
 
                 # Instantiate
-                plugin = get_plugin(name, self, cfgsect)
+                plugin = get_plugin(name, self, cfgsect, suffix)
 
                 # Register as an event handler
                 self.completed_step_handlers.append(plugin)
+
+        # Delete the memory-intensive elements map from the system
+        del self.system.ele_map
 
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt
@@ -53,7 +57,7 @@ class BaseController(BaseIntegrator):
         self._idxcurr = idxcurr
 
         # Filter
-        if self._ffreq and self.nacptsteps % self._ffreq == 0:
+        if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
             self.system.filt(idxcurr)
 
         # Invalidate the solution cache
@@ -142,7 +146,7 @@ class PIController(BaseController):
         return self._kernel('errest', nargs=3)
 
     def _errest(self, x, y, z):
-        from mpi4py import MPI
+        comm, rank, root = get_comm_rank_root()
 
         errest = self._get_errest_kerns()
 
@@ -152,7 +156,7 @@ class PIController(BaseController):
 
         # Reduce locally (element types) and globally (MPI ranks)
         rl = sum(errest.retval)
-        rg = MPI.COMM_WORLD.allreduce(rl, op=MPI.SUM)
+        rg = comm.allreduce(rl, op=get_mpi('sum'))
 
         # Normalise
         err = math.sqrt(rg / self._gndofs)

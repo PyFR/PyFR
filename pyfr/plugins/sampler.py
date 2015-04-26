@@ -5,7 +5,7 @@ import os
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root
+from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin
 
 
@@ -26,17 +26,16 @@ def _closest_upt(etypes, eupts, p):
 
 class SamplerPlugin(BasePlugin):
     name = 'sampler'
+    systems = ['*']
 
-    def __init__(self, intg, cfgsect):
-        from mpi4py import MPI
-
-        super().__init__(intg, cfgsect)
+    def __init__(self, intg, cfgsect, suffix):
+        super().__init__(intg, cfgsect, suffix)
 
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
         # Output frequency
-        self.freq = self.cfg.getint(cfgsect, 'freq')
+        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # List of points to be sampled and format
         self.pts = ast.literal_eval(self.cfg.get(cfgsect, 'samp-pts'))
@@ -57,7 +56,7 @@ class SamplerPlugin(BasePlugin):
             cp = _closest_upt(intg.system.ele_types, plocs, p)
 
             # Reduce over all partitions
-            mcp, mrank = comm.allreduce(cp, op=MPI.MINLOC)
+            mcp, mrank = comm.allreduce(cp, op=get_mpi('minloc'))
 
             # Store the rank responsible along with the info
             ptsrank.append(mrank)
@@ -104,7 +103,7 @@ class SamplerPlugin(BasePlugin):
 
     def __call__(self, intg):
         # Return if no output is due
-        if intg.nsteps % self.freq:
+        if intg.nsteps % self.nsteps:
             return
 
         # MPI info
