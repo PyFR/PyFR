@@ -105,11 +105,14 @@ class PyFRBaseReader(Mapping):
                 name = '%s_%s_p%d' % (prfx, et, prt)
 
                 if name in ls_files:
-                    info[name] = (et, self[name].shape)
+                    info[name] = (et, self.get_shape(name))
 
             prt += 1
 
         return info
+
+    def get_shape(self, name):
+        return self[name].shape
 
     @lazyprop
     def partition_info(self):
@@ -190,6 +193,9 @@ class PyFRH5Reader(PyFRBaseReader):
             ret = np.array(ret)
 
         return ret.decode() if isinstance(ret, bytes) else ret
+
+    def get_shape(self, name):
+        return self._file.get(name).shape
 
     def __iter__(self):
         return iter(self._file)

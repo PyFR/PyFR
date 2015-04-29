@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 
 """Converts .pyfr[m, s] files to a Paraview VTK UnstructuredGrid File"""
+
+from collections import defaultdict
+import os
+
 import numpy as np
 
 from pyfr.shapes import BaseShape
@@ -10,10 +14,10 @@ from pyfr.writers import BaseWriter
 
 
 class ParaviewWriter(BaseWriter):
-    """Wrapper for writing serial .vtu Paraview files"""
+    """Wrapper for writing serial .vtu  and parallel .pvtu Paraview files"""
     # Supported file types and extensions
     name = 'paraview'
-    extn = ['.vtu']
+    extn = ['.vtu', '.pvtu']
 
     # PyFR to VTK element types and number of nodes
     vtk_types = {
@@ -22,45 +26,68 @@ class ParaviewWriter(BaseWriter):
     }
 
     def write_out(self):
-        """Controls the writing of serial .vtu Paraview files
+        extn = os.path.splitext(self.outf)[1]
+        parallel = extn == '.pvtu'
 
-        Writes .vtu pieces for each element type, in each partition of
-        the PyFR files.  The Paraview data type used is "appended",
-        which concatenates all data into a single block of binary data
-        at the end of the file.  ASCII headers written at the top of
-        the file describe the structure of this data.
-        """
         # Set default divisor to solution order
         if self.args.divisor == 0:
             self.args.divisor = self.cfg.getint('solver', 'order')
 
-        write_s = lambda s: self.outf.write(s.encode('utf-8'))
+        filerootname = os.path.splitext(self.outf)[0]
 
-        # Write .vtu file header
-        write_s('<?xml version="1.0" ?>\n<VTKFile '
-                'byte_order="LittleEndian" type="UnstructuredGrid" '
-                'version="0.1">\n<UnstructuredGrid>\n')
-
-        # Initialise offset (in bytes) to end of appended data
-        off = 0
-
-        # Write data description header.  A vtk "piece" is used for each
-        # element in a partition.
+        parts = defaultdict(list)
         for mk, sk in zip(self.mesh_inf, self.soln_inf):
-            off += _write_vtu_header(self.args, self.outf, self.mesh_inf[mk],
-                                     self.soln_inf[sk], off)
+            part = mk.split('_')[-1]
 
-        # Write end/start of header/data sections
-        write_s('</UnstructuredGrid>\n<AppendedData encoding="raw">\n_')
+            if parallel:
+                pfn = '{}_{}.vtu'.format(filerootname, part)
+            else:
+                pfn = self.outf
 
-        # Write data "piece"wise
-        for mk, sk in zip(self.mesh_inf, self.soln_inf):
-            _write_vtu_data(self.args, self.outf, self.cfg, self.mesh[mk],
-                            self.mesh_inf[mk], self.soln[sk],
-                            self.soln_inf[sk])
+            parts[pfn].append((mk, sk))
 
-        # Write .vtu file footer
-        write_s('\n</AppendedData>\n</VTKFile>')
+        write_s_to_fh = lambda s: fh.write(s.encode('utf-8'))
+
+        for pfn, misil in parts.items():
+            with open(pfn, 'wb') as fh:
+                # Write .vtu file header
+                write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
+                              'byte_order="LittleEndian" '
+                              'type="UnstructuredGrid" '
+                              'version="0.1">\n<UnstructuredGrid>\n')
+
+                off = 0
+                for mk, sk in misil:
+                    # Write data description header.
+                    # element in a partition.
+                    off += _write_vtu_header(self.args, fh, self.mesh_inf[mk],
+                                             self.soln_inf[sk], off)
+
+                # Write end/start of header/data sections
+                write_s_to_fh('</UnstructuredGrid>\n'
+                              '<AppendedData encoding="raw">\n_')
+                for mk, sk in misil:
+                    # Write data "piece"wise
+                    _write_vtu_data(self.args, fh, self.cfg, self.mesh[mk],
+                                    self.mesh_inf[mk], self.soln[sk],
+                                    self.soln_inf[sk])
+
+                # Write .vtu file footer
+                write_s_to_fh('\n</AppendedData>\n</VTKFile>')
+
+        if parallel:
+            with open(self.outf, 'wb') as fh:
+                write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
+                              'byte_order="LittleEndian" '
+                              'type="PUnstructuredGrid" '
+                              'version="0.1">\n<PUnstructuredGrid>\n')
+                mk, sk = next(iter(parts.values()))[0]
+                _write_vtu_header(self.args, fh, self.mesh_inf[mk],
+                                  self.soln_inf[sk], 0, True)
+                for pfn in parts:
+                    write_s_to_fh('<Piece Source="{}"/>\n'
+                                  .format(os.path.basename(pfn)))
+                write_s_to_fh('</PUnstructuredGrid>\n</VTKFile>\n')
 
 
 def _write_vtk_darray(array, vtuf, numtyp):
@@ -150,7 +177,7 @@ class TriShapeSubDiv(BaseShapeSubDiv):
             off = [l, l + 1, u, u + 1, l + 1, u]
 
             # Generate current row
-            subin = np.ravel(np.arange(row - 1)[...,None] + off)
+            subin = np.ravel(np.arange(row - 1)[..., None] + off)
             subex = [ix + row - 1 for ix in off[:3]]
 
             # Extent list
@@ -281,7 +308,7 @@ class PyrShapeSubDiv(BaseShapeSubDiv):
         return np.hstack(np.column_stack(l).flat for l in lcon)
 
 
-def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
+def _write_vtu_header(args, vtuf, m_inf, s_inf, off, parallel=False):
     # Set vtk name for float, set size in bytes
     if args.precision == 'single':
         flt = ['Float32', 4]
@@ -289,6 +316,8 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
         flt = ['Float64', 8]
 
     write_s = lambda s: vtuf.write(s.encode('utf-8'))
+
+    prefix = 'P' if parallel else ''
 
     # Get the shape and sub division classes
     shapecls = subclass_where(BaseShape, name=m_inf[0])
@@ -303,12 +332,19 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
     nnodes = len(nodes)*m_inf[1][1]
 
     # Standard template for vtk DataArray string
-    darray = '<DataArray Name="%s" type="%s" NumberOfComponents="%s" '\
-             'format="appended" offset="%d"/>\n'
+    if parallel:
+        darray = '<PDataArray Name="%s" type="%s" '\
+            'NumberOfComponents="%s"/>\n'
+    else:
+        darray = '<DataArray Name="%s" type="%s" '\
+            'NumberOfComponents="%s" format="appended" offset="%d"/>\n'
 
-    # Write headers for vtu elements
-    write_s('<Piece NumberOfPoints="%s" NumberOfCells="%s">\n<Points>\n'
-            % (npts, ncells))
+    if not parallel:
+        # Write headers for vtu elements
+        write_s('<Piece NumberOfPoints="%s" NumberOfCells="%s">\n'
+                % (npts, ncells))
+
+    write_s('<{prefix}Points>\n'.format(prefix=prefix))
 
     # Lists of DataArray "names", "types" and "NumberOfComponents"
     nams = ['', 'connectivity', 'offsets', 'types', 'Density', 'Velocity',
@@ -318,21 +354,29 @@ def _write_vtu_header(args, vtuf, m_inf, s_inf, off):
 
     # Calculate size of described DataArrays (in bytes)
     offs = np.array([0, 3, 4*nnodes, 4*ncells, ncells, 1, m_inf[1][2], 1])
-    offs[[1,5,6,7]] *= flt[1]*npts
+    offs[[1, 5, 6, 7]] *= flt[1]*npts
 
     # Write vtk DaraArray headers
     for i in range(len(nams)):
-        write_s(darray % (nams[i], typs[i], ncom[i],
-                          sum(offs[:i+1]) + i*4 + off))
+        if parallel:
+            write_s(darray % (nams[i], typs[i], ncom[i]))
+        else:
+            write_s(darray % (nams[i], typs[i], ncom[i],
+                              sum(offs[:i+1]) + i*4 + off))
 
         # Write ends/starts of vtk file objects
         if i == 0:
-            write_s('</Points>\n<Cells>\n')
+            write_s('</{prefix}Points>\n<{prefix}Cells>\n'
+                    .format(prefix=prefix))
         elif i == 3:
-            write_s('</Cells>\n<PointData>\n')
+            write_s('</{prefix}Cells>\n<{prefix}PointData>\n'
+                    .format(prefix=prefix))
 
     # Write end of vtk element data
-    write_s('</PointData>\n</Piece>\n')
+    write_s('</{prefix}PointData>\n'.format(prefix=prefix))
+
+    if not parallel:
+        write_s('</Piece>\n')
 
     # Return the number of bytes appended
     return sum(offs) + 4*len(nams)
@@ -375,7 +419,6 @@ def _write_vtu_data(args, vtuf, cfg, mesh, m_inf, soln, s_inf):
     _write_vtk_darray(pts.swapaxes(0, 1), vtuf, dtype)
 
     # Perform the sub division
-    cells = subdvcls.subcells(args.divisor)
     nodes = subdvcls.subnodes(args.divisor)
 
     # Prepare vtu cell arrays (connectivity, offsets, types):
