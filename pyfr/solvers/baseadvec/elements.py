@@ -89,7 +89,7 @@ class BaseAdvectionElements(BaseElements):
             )
 
         # In-place solution filter
-        if self.cfg.getint('soln-filter', 'freq', '0'):
+        if self.cfg.getint('soln-filter', 'nsteps', '0'):
             def filter_soln():
                 mul = backend.kernel(
                     'mul', self.opmat('M11'), self.scal_upts_inb,
@@ -112,6 +112,10 @@ class BaseAdvectionElements(BaseElements):
         srcex = []
         for v in self.convarmap[self.ndims]:
             ex = self.cfg.get('solver-source-terms', v, '0')
+
+            # Ensure the expression does not contain invalid characters
+            if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', ex):
+                raise ValueError('Invalid characters in expression')
 
             # Substitute variables
             ex = re.sub(r'\b({0})\b'.format('|'.join(subs)),

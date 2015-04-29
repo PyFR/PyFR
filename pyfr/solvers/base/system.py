@@ -21,11 +21,15 @@ class BaseSystem(object, metaclass=ABCMeta):
 
     def __init__(self, backend, rallocs, mesh, initsoln, nreg, cfg):
         self.backend = backend
+        self.mesh = mesh
         self.cfg = cfg
 
         # Load the elements
         eles, elemap = self._load_eles(rallocs, mesh, initsoln, nreg)
         backend.commit()
+
+        # Retain the element map; this may be deleted by clients
+        self.ele_map = elemap
 
         # Get the banks, types, num DOFs and shapes of the elements
         self.ele_banks = list(eles.scal_upts_inb)

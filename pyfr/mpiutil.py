@@ -76,3 +76,9 @@ def get_local_rank():
                 lrank += 1
 
         return lrank
+
+
+def get_mpi(attr):
+    from mpi4py import MPI
+
+    return getattr(MPI, attr.upper())

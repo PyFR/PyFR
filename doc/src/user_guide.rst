@@ -644,7 +644,7 @@ Example::
 
 Parameterises an exponential solution filter with
 
-1. ``freq`` --- frequency at which filter is applied:
+1. ``nsteps`` --- apply filter every ``nsteps``:
 
     *int*
 
@@ -660,12 +660,31 @@ Parameterises an exponential solution filter with
 
     *int*
 
+[soln-plugin-fluidforce-name]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically integrates the pressure on the boundary labelled ``name``
+and writes out the resulting force vectors to a CSV file.
+
+1. ``nsteps`` --- integrate every ``nsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically checks the solution for NaN values
 
-1. ``freq`` --- frequency at which the check is performed:
+1. ``nsteps`` --- check every ``nsteps``:
 
     *int*
 
@@ -675,7 +694,7 @@ Periodically checks the solution for NaN values
 Periodically samples specific points in the volume and writes them out
 to a CSV file.
 
-1. ``freq`` --- frequency at which to sample:
+1. ``nsteps`` --- sample every ``nsteps``:
 
     *int*
 
