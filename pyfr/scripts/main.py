@@ -61,11 +61,11 @@ def main():
 
     # Export command
     ap_export = sp.add_parser('export', help='export --help',
-                              description= 'Converts .pyfr[ms] files for '
+                              description='Converts .pyfr[ms] files for '
                               'visualisation in external software.')
     ap_export.add_argument('meshf', help='PyFR mesh file to be converted')
     ap_export.add_argument('solnf', help='PyFR solution file to be converted')
-    ap_export.add_argument('outf', type=FileType('wb'), help='Output filename')
+    ap_export.add_argument('outf', type=str, help='Output filename')
     types = [cls.name for cls in subclasses(BaseWriter)]
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
                            help='Output file type; this is usually inferred '
@@ -198,7 +198,7 @@ def process_export(args):
     if args.type:
         writer = get_writer_by_name(args.type, args)
     else:
-        extn = os.path.splitext(args.outf.name)[1]
+        extn = os.path.splitext(args.outf)[1]
         writer = get_writer_by_extn(extn, args)
 
     # Write the output file
