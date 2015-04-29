@@ -27,6 +27,10 @@ class BaseWriter(object):
         self.mesh_inf = self.mesh.array_info
         self.soln_inf = self.soln.array_info
 
+        # Dimensions
+        self.ndims = next(iter(self.mesh_inf.values()))[1][2]
+        self.nvars = next(iter(self.soln_inf.values()))[1][1]
+
         # Check solution and mesh are compatible
         if self.mesh['mesh_uuid'] != self.soln['mesh_uuid']:
             raise RuntimeError('Solution "%s" was not computed on mesh "%s"' %
