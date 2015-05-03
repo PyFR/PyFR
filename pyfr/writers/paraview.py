@@ -8,22 +8,14 @@ import os
 import numpy as np
 
 from pyfr.shapes import BaseShape
-from pyfr.solvers import BaseSystem
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
 class ParaviewWriter(BaseWriter):
-    """Wrapper for writing serial .vtu  and parallel .pvtu Paraview files"""
     # Supported file types and extensions
     name = 'paraview'
     extn = ['.vtu', '.pvtu']
-
-    # PyFR to VTK element types and number of nodes
-    vtk_types = {
-        'tri': (5, 3), 'quad': (9, 4),
-        'tet': (10, 4), 'pyr': (14, 5), 'pri': (13, 6), 'hex': (12, 8)
-    }
 
     def __init__(self, args):
         super().__init__(args)
@@ -47,22 +39,29 @@ class ParaviewWriter(BaseWriter):
 
         return npts, ncells, nnodes
 
-    def _get_vtu_array_attrs(self, mk=None):
+    def _get_array_attrs(self, mk=None):
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
         dsize = np.dtype(self.dtype).itemsize
-        ndims = self.ndims
 
-        names = ['', 'connectivity', 'offsets', 'types', 'Density',
-                'Velocity', 'Pressure']
-        types = [dtype, 'Int32', 'Int32', 'UInt8'] + [dtype]*3
-        comps = ['3', '', '', '', '1', str(ndims), '1']
+        ndims = self.ndims
+        vvars = self.elementscls.visvarmap[ndims]
+
+        names = ['', 'connectivity', 'offsets', 'types']
+        types = [dtype, 'Int32', 'Int32', 'UInt8']
+        comps = ['3', '', '', '']
+
+        for fname, varnames in vvars.items():
+            names.append(fname.capitalize())
+            types.append(dtype)
+            comps.append(str(len(varnames)))
 
         # If a mesh has been given the compute the sizes
         if mk:
             npts, ncells, nnodes = self._get_npts_ncells_nnodes(mk)
+            nb = npts*dsize
 
-            sizes = np.array([3, 4*nnodes, 4*ncells, ncells, 1, ndims, 1])
-            sizes[[0, 4, 5, 6]] *= dsize*npts
+            sizes = [3*nb, 4*nnodes, 4*ncells, ncells]
+            sizes.extend(len(varnames)*nb for varnames in vvars.values())
 
             return names, types, comps, sizes
         else:
@@ -93,14 +92,14 @@ class ParaviewWriter(BaseWriter):
 
                 # Header
                 for mk, sk in misil:
-                    off = self._write_serial_vtu_header(fh, mk, off)
+                    off = self._write_serial_header(fh, mk, off)
 
                 write_s_to_fh('</UnstructuredGrid>\n'
                               '<AppendedData encoding="raw">\n_')
 
                 # Data
                 for mk, sk in misil:
-                    self._write_vtu_data(fh, mk, sk)
+                    self._write_data(fh, mk, sk)
 
                 write_s_to_fh('\n</AppendedData>\n</VTKFile>')
 
@@ -112,7 +111,7 @@ class ParaviewWriter(BaseWriter):
                               'version="0.1">\n<PUnstructuredGrid>\n')
 
                 # Header
-                self._write_parallel_vtu_header(fh)
+                self._write_parallel_header(fh)
 
                 # Constitutent pieces
                 for pfn in parts:
@@ -122,14 +121,14 @@ class ParaviewWriter(BaseWriter):
                 write_s_to_fh('</PUnstructuredGrid>\n</VTKFile>\n')
 
 
-    def _write_vtk_darray(self, array, vtuf, dtype):
+    def _write_darray(self, array, vtuf, dtype):
         array = array.astype(dtype)
 
         np.uint32(array.nbytes).tofile(vtuf)
         array.tofile(vtuf)
 
-    def _write_serial_vtu_header(self, vtuf, mk, off):
-        names, types, comps, sizes = self._get_vtu_array_attrs(mk)
+    def _write_serial_header(self, vtuf, mk, off):
+        names, types, comps, sizes = self._get_array_attrs(mk)
         npts, ncells = self._get_npts_ncells_nnodes(mk)[:2]
 
         write_s = lambda s: vtuf.write(s.encode('utf-8'))
@@ -158,8 +157,8 @@ class ParaviewWriter(BaseWriter):
         # Return the current offset
         return off
 
-    def _write_parallel_vtu_header(self, vtuf):
-        names, types, comps = self._get_vtu_array_attrs()
+    def _write_parallel_header(self, vtuf):
+        names, types, comps = self._get_array_attrs()
 
         write_s = lambda s: vtuf.write(s.encode('utf-8'))
         write_s('<PPoints>\n')
@@ -176,7 +175,7 @@ class ParaviewWriter(BaseWriter):
 
         write_s('</PPointData>\n')
 
-    def _write_vtu_data(self, vtuf, mk, sk):
+    def _write_data(self, vtuf, mk, sk):
         name = self.mesh_inf[mk][0]
         mesh = self.mesh[mk]
         soln = self.soln[sk]
@@ -184,10 +183,6 @@ class ParaviewWriter(BaseWriter):
         # Get the shape and sub division classes
         shapecls = subclass_where(BaseShape, name=name)
         subdvcls = subclass_where(BaseShapeSubDiv, name=name)
-
-        # Get the system class
-        syscls = subclass_where(BaseSystem,
-                                name=self.cfg.get('solver', 'system'))
 
         # Dimensions
         nspts, neles = mesh.shape[:2]
@@ -213,11 +208,10 @@ class ParaviewWriter(BaseWriter):
 
         # Append dummy z dimension for points in 2D
         if self.ndims == 2:
-            vpts = np.append(vpts, np.zeros(pts.shape[:-1])[..., None],
-                             axis=2)
+            vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
 
         # Write element node locations to file
-        self._write_vtk_darray(vpts.swapaxes(0, 1), vtuf, self.dtype)
+        self._write_darray(vpts.swapaxes(0, 1), vtuf, self.dtype)
 
         # Perform the sub division
         nodes = subdvcls.subnodes(self.divisor)
@@ -234,17 +228,22 @@ class ParaviewWriter(BaseWriter):
         vtu_typ = np.tile(subdvcls.subcelltypes(self.divisor), neles)
 
         # Write vtu node connectivity, connectivity offsets and cell types
-        self._write_vtk_darray(vtu_con, vtuf, np.int32)
-        self._write_vtk_darray(vtu_off, vtuf, np.int32)
-        self._write_vtk_darray(vtu_typ, vtuf, np.uint8)
+        self._write_darray(vtu_con, vtuf, np.int32)
+        self._write_darray(vtu_off, vtuf, np.int32)
+        self._write_darray(vtu_typ, vtuf, np.uint8)
+
+        # Primitive and visualisation variable maps
+        privarmap = self.elementscls.privarmap[self.ndims]
+        visvarmap = self.elementscls.visvarmap[self.ndims]
 
         # Convert from conservative to primitive variables
-        vsol = np.array(syscls.elementscls.conv_to_pri(vsol, self.cfg))
+        vsol = np.array(self.elementscls.conv_to_pri(vsol, self.cfg))
 
-        # Write Density, Velocity and Pressure
-        self._write_vtk_darray(vsol[0].T, vtuf, self.dtype)
-        self._write_vtk_darray(vsol[1:-1].T, vtuf, self.dtype)
-        self._write_vtk_darray(vsol[-1].T, vtuf, self.dtype)
+        # Write out the various fields
+        for vnames in visvarmap.values():
+            ix = [privarmap.index(vn) for vn in vnames]
+
+            self._write_darray(vsol[ix].T, vtuf, self.dtype)
 
 
 class BaseShapeSubDiv(object):

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.readers.native import read_pyfr_data
 from pyfr.inifile import Inifile
+from pyfr.readers.native import read_pyfr_data
+from pyfr.solvers import BaseSystem
+from pyfr.util import subclass_where
 
 
 class BaseWriter(object):
@@ -16,7 +18,6 @@ class BaseWriter(object):
         :type args: class 'argparse.Namespace'
 
         """
-        self.args = args
         self.outf = args.outf
 
         # Load mesh and solution files
@@ -36,5 +37,11 @@ class BaseWriter(object):
             raise RuntimeError('Solution "%s" was not computed on mesh "%s"' %
                                (args.solnf, args.meshf))
 
-        # Load config file
+        # Load the config file
         self.cfg = Inifile(self.soln['config'])
+
+        # System and elements classs
+        self.systemscls = subclass_where(
+            BaseSystem, name=self.cfg.get('solver', 'system')
+        )
+        self.elementscls = self.systemscls.elementscls
