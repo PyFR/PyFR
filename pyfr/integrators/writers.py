@@ -133,7 +133,7 @@ class H5Writer(BaseIntegrator):
                 d = h5file.create_dataset(name, (), dtype='S{}'.format(size))
 
                 if rank == root:
-                    d.write_direct(np.array(metadata[name]).astype('S'))
+                    d.write_direct(np.array(metadata[name], dtype='S'))
 
     def _write_serial(self, path, solnmap, metadata):
         from mpi4py import MPI
@@ -151,6 +151,10 @@ class H5Writer(BaseIntegrator):
             # Combine local and MPI data
             names = it.chain(self._loc_names, self._mpi_names)
             solns = it.chain(solnmap.values(), self._mpi_rbufs)
+
+            # Convert any metadata to ASCII
+            metadata = {k: np.array(v, dtype='S')
+                        for k, v in metadata.items()}
 
             # Create the output dictionary
             outdict = dict(zip(names, solns), **metadata)
