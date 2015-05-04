@@ -21,7 +21,7 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `h5py <http://www.h5py.org/>`_
+1. `h5py <http://www.h5py.org/>`_ >= 2.5
 2. `mako <http://www.makotemplates.org/>`_
 3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
@@ -73,6 +73,10 @@ PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
+To manage installation of Python packages we recommend using
+`pip <https://pypi.python.org/pypi/pip>`_ and
+`virtualenv <https://pypi.python.org/pypi/virtualenv>`_.
+
 Running PyFR
 ============
 
@@ -112,7 +116,7 @@ The following commands are available from the ``pyfr`` program:
         pyfr restart mesh.pyfrm solution.pyfrs
 
 5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu file. Example::
+   unstructured VTK .vtu or .pvtu file. Example::
 
         pyfr export mesh.pyfrm solution.pyfrs solution.vtu
 
@@ -660,6 +664,14 @@ Parameterises an exponential solution filter with
 
     *int*
 
+Example::
+
+    [soln-filter]
+    nsteps = 10
+    alpha = 36.0
+    order = 16
+    cutoff = 1
+
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -679,6 +691,13 @@ and writes out the resulting force vectors to a CSV file.
 
     *boolean*
 
+Example::
+
+    [soln-plugin-fluidforce-wing]
+    nsteps = 10
+    file = wing-forces.csv
+    header = true
+
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
 
@@ -687,6 +706,11 @@ Periodically checks the solution for NaN values
 1. ``nsteps`` --- check every ``nsteps``:
 
     *int*
+
+Example::
+
+    [soln-plugin-nancheck]
+    nsteps = 10
 
 [soln-plugin-sampler]
 ^^^^^^^^^^^^^^^^^^^^^
@@ -714,6 +738,15 @@ to a CSV file.
 5. ``header`` --- if to output a header row or not:
 
     *boolean*
+
+Example::
+
+    [soln-plugin-sampler]
+    nsteps = 10
+    samp-pts = [(1.0, 0.7, 0.0), (1.0, 0.8, 0.0)]
+    format = primative
+    file = point-data.csv
+    header = true
 
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
