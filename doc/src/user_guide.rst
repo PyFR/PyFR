@@ -282,6 +282,10 @@ Parameterises the solver with
 
     ``none`` | ``sutherland``
 
+5. ``shock-capturing`` --- shock capturing scheme
+
+    ``none`` | ``artificial-viscosity``
+
 Example::
 
     [solver]
@@ -289,6 +293,7 @@ Example::
     order = 3
     anti-alias = flux
     viscosity-correction = none
+    shock-capturing = artificial-viscosity
 
 [solver-time-integrator]
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -616,6 +621,30 @@ Example::
     rhov = z
     rhow = 1.0
     E = 1.0/(1.0+x)
+
+[solver-artificial-viscosity]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises artificial viscosity for shock capturing with
+
+1. ``max-amu`` --- maximum artificial viscosity
+
+    *float*
+
+2. ``s0`` --- sensor cut-off
+
+    *float*
+
+3. ``kappa`` --- sensor range
+
+    *float*
+
+Example::
+
+    [solver-artificial-viscosity]
+    max-amu = 0.01
+    s0 = 0.01
+    kappa = 5.0
 
 [soln-output]
 ^^^^^^^^^^^^^
