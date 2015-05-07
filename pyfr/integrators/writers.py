@@ -31,9 +31,9 @@ class H5Writer(BaseIntegrator):
         eleinfo = comm.gather(zip(etypes, shapes), root=root)
 
         # Deciding if parallel
-        parallel = h5py.get_config().mpi
-        parallel &= h5py.version.version_tuple[:2] >= (2, 5)
-        parallel &= not self.cfg.getbool('soln-output', 'serial-h5', False)
+        parallel = (h5py.get_config().mpi and
+                    h5py.version.version_tuple >= (2, 5) and
+                    not self.cfg.getbool('soln-output', 'serial-h5', False))
 
         if parallel:
             self._write = self._write_parallel
@@ -46,7 +46,6 @@ class H5Writer(BaseIntegrator):
                         (self._get_name_for_soln(etype, prank), dims)
                         for etype, dims in meleinfo
                     )
-
             else:
                 sollist = None
 
@@ -114,9 +113,9 @@ class H5Writer(BaseIntegrator):
 
         with h5py.File(path, 'w', driver='mpio', comm=comm) as h5file:
             smap = {}
-            for s, shape in self.sollist:
-                smap[s] = h5file.create_dataset(
-                    s, shape, dtype=self.backend.fpdtype
+            for name, shape in self.sollist:
+                smap[name] = h5file.create_dataset(
+                    name, shape, dtype=self.backend.fpdtype
                 )
 
             for e, sol in solnmap.items():
@@ -130,11 +129,11 @@ class H5Writer(BaseIntegrator):
             else:
                 mmap = None
 
-            mmap = comm.bcast(mmap, root=root)
-            for name, size in mmap:
+            for name, size in comm.bcast(mmap, root=root):
                 d = h5file.create_dataset(name, (), dtype='S{}'.format(size))
+
                 if rank == root:
-                    d.write_direct(np.array(metadata[name]).astype('S'))
+                    d.write_direct(np.array(metadata[name], dtype='S'))
 
     def _write_serial(self, path, solnmap, metadata):
         from mpi4py import MPI
@@ -153,9 +152,13 @@ class H5Writer(BaseIntegrator):
             names = it.chain(self._loc_names, self._mpi_names)
             solns = it.chain(solnmap.values(), self._mpi_rbufs)
 
+            # Convert any metadata to ASCII
+            metadata = {k: np.array(v, dtype='S')
+                        for k, v in metadata.items()}
+
             # Create the output dictionary
             outdict = dict(zip(names, solns), **metadata)
 
             with h5py.File(path, 'w') as h5file:
                 for k, v in outdict.items():
-                    h5file.create_dataset(k, data=v)
+                    h5file[k] = v

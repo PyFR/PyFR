@@ -21,7 +21,7 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `h5py <http://www.h5py.org/>`_
+1. `h5py <http://www.h5py.org/>`_ >= 2.5
 2. `mako <http://www.makotemplates.org/>`_
 3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
@@ -73,6 +73,10 @@ PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
+To manage installation of Python packages we recommend using
+`pip <https://pypi.python.org/pypi/pip>`_ and
+`virtualenv <https://pypi.python.org/pypi/virtualenv>`_.
+
 Running PyFR
 ============
 
@@ -112,7 +116,7 @@ The following commands are available from the ``pyfr`` program:
         pyfr restart mesh.pyfrm solution.pyfrs
 
 5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu file. Example::
+   unstructured VTK .vtu or .pvtu file. Example::
 
         pyfr export mesh.pyfrm solution.pyfrs solution.vtu
 
@@ -278,6 +282,10 @@ Parameterises the solver with
 
     ``none`` | ``sutherland``
 
+5. ``shock-capturing`` --- shock capturing scheme
+
+    ``none`` | ``artificial-viscosity``
+
 Example::
 
     [solver]
@@ -285,6 +293,7 @@ Example::
     order = 3
     anti-alias = flux
     viscosity-correction = none
+    shock-capturing = artificial-viscosity
 
 [solver-time-integrator]
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -380,10 +389,22 @@ Parameterises the line interfaces with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   line interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   line interface:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+
 Example::
 
     [solver-interfaces-line]
     flux-pts = gauss-legendre
+    quad-deg = 10
+    quad-pts = gauss-legendre
 
 [solver-interfaces-tri]
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -395,10 +416,22 @@ Parameterises the triangular interfaces with
 
     ``williams-shunn``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   triangular interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   triangular interface:
+
+    ``williams-shunn`` | ``witherden-vincent``
+
 Example::
 
     [solver-interfaces-tri]
     flux-pts = williams-shunn
+    quad-deg = 10
+    quad-pts = williams-shunn
 
 [solver-interfaces-quad]
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -410,10 +443,23 @@ Parameterises the quadrilateral interfaces with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   quadrilateral interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   quadrilateral interface:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` | 
+    ``witherden-vincent``
+
 Example::
 
     [solver-interfaces-quad]
     flux-pts = gauss-legendre
+    quad-deg = 10
+    quad-pts = gauss-legendre
 
 [solver-elements-tri]
 ^^^^^^^^^^^^^^^^^^^^^
@@ -433,7 +479,7 @@ Parameterises the triangular elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    triangular element:
 
-    ``williams-shunn``
+    ``williams-shunn`` | ``witherden-vincent``
 
 Example::
 
@@ -460,7 +506,8 @@ Parameterises the quadrilateral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    quadrilateral element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
+    ``witherden-vincent``
 
 Example::
 
@@ -487,7 +534,8 @@ Parameterises the hexahedral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    hexahedral element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
+    ``witherden-vincent``
 
 Example::
 
@@ -514,7 +562,7 @@ Parameterises the tetrahedral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    tetrahedral element:
 
-    ``shunn-ham``
+    ``shunn-ham`` | ``witherden-vincent``
 
 Example::
 
@@ -543,7 +591,7 @@ Parameterises the prismatic elements with
    prismatic element:
 
     ``williams-shunn~gauss-legendre`` |
-    ``williams-shunn~gauss-legendre-lobatto``
+    ``williams-shunn~gauss-legendre-lobatto`` | ``witherden-vincent``
 
 Example::
 
@@ -613,6 +661,30 @@ Example::
     rhow = 1.0
     E = 1.0/(1.0+x)
 
+[solver-artificial-viscosity]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises artificial viscosity for shock capturing with
+
+1. ``max-amu`` --- maximum artificial viscosity
+
+    *float*
+
+2. ``s0`` --- sensor cut-off
+
+    *float*
+
+3. ``kappa`` --- sensor range
+
+    *float*
+
+Example::
+
+    [solver-artificial-viscosity]
+    max-amu = 0.01
+    s0 = 0.01
+    kappa = 5.0
+
 [soln-output]
 ^^^^^^^^^^^^^
 
@@ -644,7 +716,7 @@ Example::
 
 Parameterises an exponential solution filter with
 
-1. ``freq`` --- frequency at which filter is applied:
+1. ``nsteps`` --- apply filter every ``nsteps``:
 
     *int*
 
@@ -660,14 +732,53 @@ Parameterises an exponential solution filter with
 
     *int*
 
+Example::
+
+    [soln-filter]
+    nsteps = 10
+    alpha = 36.0
+    order = 16
+    cutoff = 1
+
+[soln-plugin-fluidforce-name]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically integrates the pressure on the boundary labelled ``name``
+and writes out the resulting force vectors to a CSV file.
+
+1. ``nsteps`` --- integrate every ``nsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-fluidforce-wing]
+    nsteps = 10
+    file = wing-forces.csv
+    header = true
+
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically checks the solution for NaN values
 
-1. ``freq`` --- frequency at which the check is performed:
+1. ``nsteps`` --- check every ``nsteps``:
 
     *int*
+
+Example::
+
+    [soln-plugin-nancheck]
+    nsteps = 10
 
 [soln-plugin-sampler]
 ^^^^^^^^^^^^^^^^^^^^^
@@ -675,7 +786,7 @@ Periodically checks the solution for NaN values
 Periodically samples specific points in the volume and writes them out
 to a CSV file.
 
-1. ``freq`` --- frequency at which to sample:
+1. ``nsteps`` --- sample every ``nsteps``:
 
     *int*
 
@@ -695,6 +806,15 @@ to a CSV file.
 5. ``header`` --- if to output a header row or not:
 
     *boolean*
+
+Example::
+
+    [soln-plugin-sampler]
+    nsteps = 10
+    samp-pts = [(1.0, 0.7, 0.0), (1.0, 0.8, 0.0)]
+    format = primative
+    file = point-data.csv
+    header = true
 
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^

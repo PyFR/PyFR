@@ -10,6 +10,15 @@ class BaseFluidElements(object):
     convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
 
+    visvarmap = {
+        2: {'density': ['rho'],
+            'velocity': ['u', 'v'],
+            'pressure': ['p']},
+        3: {'density': ['rho'],
+            'velocity': ['u', 'v', 'w'],
+            'pressure': ['p']}
+    }
+
     @staticmethod
     def pri_to_conv(pris, cfg):
         rho, p = pris[0], pris[-1]

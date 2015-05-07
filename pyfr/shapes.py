@@ -210,6 +210,24 @@ class BaseShape(object):
         return np.vstack(ppts)
 
     @lazyprop
+    def fpts_wts(self):
+        pwts = []
+
+        for kind, proj, norm, area in self.faces:
+            # Obtain the weights in reference space for the face type
+            if 'surf-flux' in self.antialias:
+                r = self._iqrules[kind]
+            else:
+                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                npts = self.npts_for_face[kind](self.order)
+
+                r = get_quadrule(kind, rule, npts)
+
+            pwts.append(r.wts)
+
+        return np.hstack(pwts)
+
+    @lazyprop
     def gbasis_coeffs(self):
         coeffs = []
 
