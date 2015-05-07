@@ -389,10 +389,22 @@ Parameterises the line interfaces with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   line interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   line interface:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+
 Example::
 
     [solver-interfaces-line]
     flux-pts = gauss-legendre
+    quad-deg = 10
+    quad-pts = gauss-legendre
 
 [solver-interfaces-tri]
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -404,10 +416,22 @@ Parameterises the triangular interfaces with
 
     ``williams-shunn``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   triangular interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   triangular interface:
+
+    ``williams-shunn`` | ``witherden-vincent``
+
 Example::
 
     [solver-interfaces-tri]
     flux-pts = williams-shunn
+    quad-deg = 10
+    quad-pts = williams-shunn
 
 [solver-interfaces-quad]
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -419,10 +443,23 @@ Parameterises the quadrilateral interfaces with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   quadrilateral interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   quadrilateral interface:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` | 
+    ``witherden-vincent``
+
 Example::
 
     [solver-interfaces-quad]
     flux-pts = gauss-legendre
+    quad-deg = 10
+    quad-pts = gauss-legendre
 
 [solver-elements-tri]
 ^^^^^^^^^^^^^^^^^^^^^
@@ -442,7 +479,7 @@ Parameterises the triangular elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    triangular element:
 
-    ``williams-shunn``
+    ``williams-shunn`` | ``witherden-vincent``
 
 Example::
 
@@ -469,7 +506,8 @@ Parameterises the quadrilateral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    quadrilateral element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
+    ``witherden-vincent``
 
 Example::
 
@@ -496,7 +534,8 @@ Parameterises the hexahedral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    hexahedral element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
+    ``witherden-vincent``
 
 Example::
 
@@ -523,7 +562,7 @@ Parameterises the tetrahedral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    tetrahedral element:
 
-    ``shunn-ham``
+    ``shunn-ham`` | ``witherden-vincent``
 
 Example::
 
@@ -552,7 +591,7 @@ Parameterises the prismatic elements with
    prismatic element:
 
     ``williams-shunn~gauss-legendre`` |
-    ``williams-shunn~gauss-legendre-lobatto``
+    ``williams-shunn~gauss-legendre-lobatto`` | ``witherden-vincent``
 
 Example::
 
