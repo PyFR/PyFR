@@ -118,7 +118,7 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c, bctype=self.type,
-                       bccfluxstate=self.cflux_state)
+                       bccfluxstate=self.cflux_state, stv=self.stv)
 
         # Generate the additional view matrices for artificial viscosity
         self.shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
@@ -132,16 +132,38 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
 
-        self.kernels['con_u'] = lambda: self._be.kernel(
-            'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
-            ulin=self._scal0_lhs, ulout=self._vect0_lhs,
-            nlin=self._norm_pnorm_lhs
-        )
-        self.kernels['comm_flux'] = lambda: self._be.kernel(
-            'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
-            ul=self._scal0_lhs, gradul=self._vect0_lhs, amul=avis0_lhs,
-            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
-        )
+        if(self.stv):
+            consts = self.cfg.items_as('constants', float)
+
+            if any(d in consts for d in 'xyzt'):
+                raise ValueError(
+                    'Invalid constants (x, y, z or t) in config file')
+
+            tplargs['constants'] = consts
+
+            self.kernels['con_u'] = lambda: self._be.kernel(
+                'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
+                ulin=self._scal0_lhs, ulout=self._vect0_lhs,
+                nlin=self._norm_pnorm_lhs, ploc=self._ploc_lhs
+            )
+            self.kernels['comm_flux'] = lambda: self._be.kernel(
+                'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
+                ul=self._scal0_lhs, gradul=self._vect0_lhs, amul=avis0_lhs,
+                magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs,
+                ploc=self._ploc_lhs
+            )
+
+        else:
+            self.kernels['con_u'] = lambda: self._be.kernel(
+                'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
+                ulin=self._scal0_lhs, ulout=self._vect0_lhs,
+                nlin=self._norm_pnorm_lhs
+            )
+            self.kernels['comm_flux'] = lambda: self._be.kernel(
+                'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
+                ul=self._scal0_lhs, gradul=self._vect0_lhs, amul=avis0_lhs,
+                magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+            )
 
 
 class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
@@ -179,12 +201,15 @@ class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     type = 'sup-in-fa'
     cflux_state = 'ghost'
+    stv = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts(['rho', 'p'])
-        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
+        self._tpl_c['rho'] = self.cfg.get(self.cfgsect, 'rho')
+        self._tpl_c['p'] = self.cfg.get(self.cfgsect, 'p')
+        for d in 'uvw'[:self.ndims]:
+            self._tpl_c[d] = self.cfg.get(self.cfgsect, d)
 
 
 class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
@@ -195,12 +220,14 @@ class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
 class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-frv'
     cflux_state = 'ghost'
+    stv = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._tpl_c['rho'], = self._eval_opts(['rho'])
-        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
+        self._tpl_c['rho'] = self.cfg.get(self.cfgsect, 'rho')
+        for d in 'uvw'[:self.ndims]:
+            self._tpl_c[d] = self.cfg.get(self.cfgsect, d)
 
 
 class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):

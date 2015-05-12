@@ -28,7 +28,7 @@ class NavierStokesSystem(BaseAdvectionDiffusionSystem):
         runall([q1])
 
         q1 << kernels['iint', 'con_u']()
-        q1 << kernels['bcint', 'con_u']()
+        q1 << kernels['bcint', 'con_u'](t=t)
         q1 << kernels['eles', 'tgradpcoru_upts']()
         if ('eles', 'avis') in kernels:
             q1 << kernels['eles', 'avis']()
@@ -57,7 +57,7 @@ class NavierStokesSystem(BaseAdvectionDiffusionSystem):
         q1 << kernels['eles', 'tdisf']()
         q1 << kernels['eles', 'tdivtpcorf']()
         q1 << kernels['iint', 'comm_flux']()
-        q1 << kernels['bcint', 'comm_flux']()
+        q1 << kernels['bcint', 'comm_flux'](t=t)
 
         q2 << kernels['mpiint', 'vect_fpts_send']()
         q2 << kernels['mpiint', 'vect_fpts_recv']()

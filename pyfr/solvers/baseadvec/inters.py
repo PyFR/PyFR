@@ -64,6 +64,7 @@ class BaseAdvectionMPIInters(BaseInters):
 
 class BaseAdvectionBCInters(BaseInters):
     type = None
+    stv = False
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfg)
@@ -80,6 +81,8 @@ class BaseAdvectionBCInters(BaseInters):
         self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
+        if(self.stv):
+            self._ploc_lhs = const_mat(lhs, 'get_ploc_for_inter')
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be
