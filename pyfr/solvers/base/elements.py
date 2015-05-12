@@ -55,8 +55,8 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Apply the operator to the mesh elements and reshape
         plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
-        plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
-        plocfpts = plocfpts.transpose(1, 2, 0).tolist()
+        self.plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
+        plocfpts = self.plocfpts.transpose(1, 2, 0).tolist()
 
         self._srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
                                 for ffpts in basis.facefpts]
@@ -261,6 +261,11 @@ class BaseElements(object, metaclass=ABCMeta):
     def get_norm_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
         return self._norm_pnorm_fpts[fpts_idx,eidx]
+
+    def get_ploc_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self.plocfpts[fpts_idx,eidx]
+
 
     def get_scal_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
