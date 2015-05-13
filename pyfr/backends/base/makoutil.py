@@ -97,7 +97,8 @@ def expand(context, name, *params):
 
     # Validate
     if len(mparams) != len(params):
-        raise ValueError('Invalid macro parameter list')
+        raise ValueError('Inconsistent macro parameter list in {} [{}], [{}]'
+                         .format(name, mparams, params))
 
     # Substitute
     for name, subst in zip(mparams, params):

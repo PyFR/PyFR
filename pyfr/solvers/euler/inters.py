@@ -8,6 +8,7 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
 class EulerIntInters(BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -16,15 +17,16 @@ class EulerIntInters(BaseAdvectionIntInters):
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
-             ul=self._scal0_lhs, ur=self._scal0_rhs,
-             magnl=self._mag_pnorm_lhs, magnr=self._mag_pnorm_rhs,
-             nl=self._norm_pnorm_lhs
+            ul=self._scal0_lhs, ur=self._scal0_rhs,
+            magnl=self._mag_pnorm_lhs, magnr=self._mag_pnorm_rhs,
+            nl=self._norm_pnorm_lhs
         )
 
 
 class EulerMPIInters(BaseAdvectionMPIInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -33,14 +35,15 @@ class EulerMPIInters(BaseAdvectionMPIInters):
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs, dims=[self.ninterfpts],
-             ul=self._scal0_lhs, ur=self._scal0_rhs,
-             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+            ul=self._scal0_lhs, ur=self._scal0_rhs,
+            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
         )
 
 
 class EulerBaseBCInters(BaseAdvectionBCInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         self._be.pointwise.register('pyfr.solvers.euler.kernels.bccflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
@@ -56,11 +59,14 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
 class EulerSupInflowBCInters(EulerBaseBCInters):
     type = 'sup-in-fa'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self._tpl_c['rho'], self._tpl_c['p'] = self._eval_opts(['rho', 'p'])
-        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
+        tplc, self._ploc = self._exp_opts(
+            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
+        )
+
+        self._tpl_c.update(tplc)
 
 
 class EulerCharRiemInvBCInters(EulerBaseBCInters):
