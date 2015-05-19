@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+import math
+import re
+
 from pyfr.solvers.base import BaseInters, get_opt_view_perm
 from pyfr.nputil import npeval
 
@@ -80,6 +83,7 @@ class BaseAdvectionBCInters(BaseInters):
         self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
+        self._ploc = None
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be
@@ -94,3 +98,37 @@ class BaseAdvectionBCInters(BaseInters):
             return [npeval(cfg.get(sect, k, default), cc) for k in opts]
         else:
             return [npeval(cfg.get(sect, k), cc) for k in opts]
+
+    def _exp_opts(self, opts, lhs, default=None):
+        cfg, sect = self.cfg, self.cfgsect
+
+        subs = cfg.items('constants')
+        subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs.update(abs='fabs', pi=repr(math.pi))
+
+        exprs = {}
+        for k in opts:
+            if default is None:
+                ex = cfg.get(sect, k)
+            else:
+                if isinstance(default, dict):
+                    ex = cfg.get(sect, k, default.get(k, None))
+                else:
+                    ex = cfg.get(sect, k, default)
+
+
+            # Ensure the expression does not contain invalid characters
+            if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', ex):
+                raise ValueError('Invalid characters in expression')
+
+            # Substitute variables
+            ex = re.sub(r'\b({0})\b'.format('|'.join(subs)),
+                        lambda m: subs[m.group(1)], ex)
+            exprs[k] = ex
+
+        if any('ploc' in ex for ex in exprs.values()):
+            plocpts = self._const_mat(lhs, 'get_ploc_for_inter')
+        else:
+            plocpts = None
+
+        return exprs, plocpts

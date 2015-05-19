@@ -6,7 +6,7 @@
 <% cs, s = (c['gamma']*c['p']/c['rho'])**0.5, c['p']/(c['rho']**c['gamma']) %>
 <% ratio = 2.0*(c['gamma']*c['p']/c['rho'])**0.5/(c['gamma'] - 1.0) %>
 
-<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur'>
+<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur, ploc, t'>
     fpdtype_t inv = 1.0/ul[0];
     fpdtype_t V_e = ${' + '.join('{0}*nl[{1}]'.format(v[i], i)
                                  for i in range(ndims))};

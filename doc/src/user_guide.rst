@@ -875,19 +875,19 @@ file with
 
         - ``rho`` --- density
 
-           *float*
+           *float* | *string*
 
         - ``u`` --- x-velocity
 
-           *float*
+           *float* | *string*
 
         - ``v`` --- y-velocity
 
-           *float*
+           *float* | *string*
 
         - ``w`` --- z-velocity
 
-           *float*
+           *float* | *string*
 
     ``sub-in-ftpttang`` requires
 
@@ -920,23 +920,23 @@ file with
 
         - ``rho`` --- density
 
-           *float*
+           *float* | *string*
 
         - ``u`` --- x-velocity
 
-           *float*
+           *float* | *string*
 
         - ``v`` --- y-velocity
 
-           *float*
+           *float* | *string*
 
         - ``w`` --- z-velocity
 
-           *float*
+           *float* | *string*
 
         - ``p`` --- static pressure
 
-           *float*
+           *float* | *string*
 
 Example::
 
@@ -944,6 +944,8 @@ Example::
     type = no-slp-isot-wall
     cpTw = 10.0
     u = 1.0
+
+The *string*s above can be expressions of the space (x, y, [z]) and time (t).
 
 [soln-ics]
 ^^^^^^^^^^
