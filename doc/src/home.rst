@@ -55,12 +55,17 @@ How do I Cite PyFR?
 
 If you would like to cite PyFR, please reference the following paper:
 
-- `PyFR: An Open Source Framework for Solving Advection-Diffusion Type Problems on Streaming Architectures using the Flux Reconstruction Approach. F. D. Witherden, A. M. Farrington, P. E. Vincent. Computer Physics Communications. 2014. <http://www.sciencedirect.com/science/article/pii/S0010465514002549>`__
+- `PyFR: An Open Source Framework for Solving Advection-Diffusion Type 
+  Problems on Streaming Architectures using the Flux Reconstruction 
+  Approach. F. D. Witherden, A. M. Farrington, P. E. Vincent. Computer 
+  Physics Communications, Volume 185, Pages 3028-3040, 2014. 
+  <http://www.sciencedirect.com/science/article/pii/S0010465514002549>`__
 
 Who is Funding PyFR?
 --------------------
 
-Development of PyFR is supported by the `Engineering and Physical Sciences
-Research Council <http://www.epsrc.ac.uk/>`_ and `Airbus
-<http://www.airbus.com/>`_. We are also grateful for hardware donations 
-from Nvidia, Intel, and AMD.
+Development of PyFR is supported by the `Engineering and Physical 
+Sciences Research Council <http://www.epsrc.ac.uk/>`_, `Innovate UK 
+<https://www.gov.uk/government/organisations/innovate-uk>`_, `BAE Systems 
+<http://www.baesystems.com/>`_, and `Airbus <http://www.airbus.com/>`_. 
+We are also grateful for hardware donations from Nvidia, Intel, and AMD.

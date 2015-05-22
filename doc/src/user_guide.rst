@@ -363,7 +363,7 @@ Parameterises the interfaces with
 
 1. ``riemann-solver`` --- type of Riemann solver:
 
-    ``rusanov`` | ``hll`` | ``hllc`` | ``roe``
+    ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem``
 
 2. ``ldg-beta`` --- beta parameter used for LDG
 
@@ -819,8 +819,8 @@ Example::
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
 
-Parameterises boundary condition labelled :code:`name` in the .pyfrm
-file with
+Parameterises constant, or if available space (x, y, [z]) and time (t) 
+dependent, boundary condition labelled :code:`name` in the .pyfrm file with
 
 1. ``type`` --- type of boundary condition:
 
@@ -944,8 +944,6 @@ Example::
     type = no-slp-isot-wall
     cpTw = 10.0
     u = 1.0
-
-The *string*s above can be expressions of the space (x, y, [z]) and time (t).
 
 [soln-ics]
 ^^^^^^^^^^
