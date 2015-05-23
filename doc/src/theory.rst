@@ -53,6 +53,10 @@ correction function. Linear stability issues are discussed in:
   on Triangles. D. M. Williams, P. Castonguay, P. E. Vincent, A. Jameson.
   Journal of Computational Physics, Volume 250, Pages 53-76, 2013
   <http://www.sciencedirect.com/science/article/pii/S0021999113003318>`_
+- `Energy Stable Flux Reconstruction Schemes for Advection-Diffusion 
+  Problems on Tetrahedra. D. M. Williams, A. Jameson. Journal of 
+  Scientific Computing, Volume 59, Pages 721-759, 2014
+  <http://link.springer.com/article/10.1007%2Fs10915-013-9780-2>`_
 
 Non-Linear Stability
 --------------------
@@ -64,7 +68,7 @@ solution points. Non-linear stability issues are discussed in:
   P. E. Vincent, P. Castonguay. Journal of Scientific Computing, Volume 50,
   Number 2, Pages 434-445, 2012
   <http://www.springerlink.com/content/n835050u01257r36>`_ 
-- `An Analysis of Solution Point Coordinates for Flux Reconstruction Schemes
-  on Triangular Elements. F. D. Witherden, P. E. Vincent. Journal of
-  Scientific Computing, Online First
+- `An Analysis of Solution Point Coordinates for Flux Reconstruction Schemes on
+  Triangular Elements. F. D. Witherden, P. E. Vincent. Journal of Scientific 
+  Computing, Volume 61, Pages 398-423, 2014
   <http://link.springer.com/article/10.1007/s10915-014-9832-2>`_ 
