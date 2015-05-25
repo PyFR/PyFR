@@ -19,9 +19,8 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
                        visc_corr=visc_corr, c=self._tpl_c)
 
         # Generate the additional view matrices for artificial viscosity
-        self.shock_capturing = self.cfg.get('solver', 'shock-capturing',
-                                            'none')
-        if self.shock_capturing == 'artificial-viscosity':
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if shock_capturing == 'artificial-viscosity':
             avis0_lhs = self._avis_view(lhs, 'get_avis_fpts_for_inter')
             avis0_rhs = self._avis_view(rhs, 'get_avis_fpts_for_inter')
             tplargs['art_vis'] = 'mu'
@@ -57,10 +56,9 @@ class NavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        visc_corr=visc_corr, c=self._tpl_c)
 
-        # Generate the additional kernels, view matrices for artificial visc
-        self.shock_capturing = self.cfg.get('solver', 'shock-capturing',
-                                            'none')
-        if self.shock_capturing == 'artificial-viscosity':
+        # Generate the additional kernels/views for artificial viscosity
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if shock_capturing == 'artificial-viscosity':
             avis0_lhs = self._avis_xchg_view(lhs, 'get_avis_fpts_for_inter')
             avis0_rhs = be.xchg_matrix_for_view(avis0_lhs)
 
@@ -123,9 +121,8 @@ class NavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
                        bccfluxstate=self.cflux_state)
 
         # Generate the additional view matrices for artificial viscosity
-        self.shock_capturing = self.cfg.get('solver', 'shock-capturing',
-                                            'none')
-        if self.shock_capturing == 'artificial-viscosity':
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if shock_capturing == 'artificial-viscosity':
             avis0_lhs = self._avis_view(lhs, 'get_avis_fpts_for_inter')
             tplargs['art_vis'] = 'mu'
         else:
