@@ -25,70 +25,85 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             # Allocate required scratch space for artificial viscosity
             nupts, nfpts, neles = self.nupts, self.nfpts, self.neles
             tags = {'align'}
-            avis_upts = backend.matrix((nupts, 1, neles), extent='avis_upts',
-                                       tags=tags)
+
+            if 'flux' in self.antialias:
+                avis_qpts = backend.matrix((self.nqpts, 1, neles),
+                                           extent='avis_qpts', tags=tags)
+                avis_upts = backend.matrix((nupts, 1, neles),
+                                           aliases=avis_qpts, tags=tags)
+            else:
+                avis_upts = backend.matrix((nupts, 1, neles),
+                                           extent='avis_upts', tags=tags)
 
             if nfpts >= nupts:
                 self._avis_fpts = backend.matrix((nfpts, 1, neles),
                                                  extent='avis_fpts', tags=tags)
-                avis_upts_temp = backend.matrix((nupts, 1, neles),
-                                                aliases=self._avis_fpts,
-                                                tags=tags)
+                avis_upts_temp = backend.matrix(
+                    (nupts, 1, neles), aliases=self._avis_fpts, tags=tags
+                )
             else:
                 avis_upts_temp = backend.matrix((nupts, 1, neles),
                                                 extent='avis_fpts', tags=tags)
-                self._avis_fpts = backend.matrix((nfpts, 1, neles),
-                                                 aliases=avis_upts_temp,
-                                                 tags=tags)
+                self._avis_fpts = backend.matrix(
+                    (nfpts, 1, neles), aliases=avis_upts_temp, tags=tags
+                )
 
             backend.pointwise.register('pyfr.solvers.navstokes.kernels.entropy')
             backend.pointwise.register('pyfr.solvers.navstokes.kernels.avis')
 
             def artf_vis():
                 # Compute entropy and save to avis_upts
-                ent = backend.kernel('entropy', tplargs=tplargs,
-                                     dims=[self.nupts, self.neles],
-                                     u=self.scal_upts_inb, s=avis_upts)
+                ent = backend.kernel(
+                    'entropy', tplargs=tplargs, dims=[nupts, neles],
+                    u=self.scal_upts_inb, s=avis_upts
+                )
 
                 # Compute modal coefficients of entropy
                 rcpvdm = np.linalg.inv(self.basis.ubasis.vdm.T)
                 rcpvdm = self._be.const_matrix(rcpvdm, tags={'align'})
-                mul = backend.kernel('mul', rcpvdm, avis_upts,
-                                     out=avis_upts_temp)
+                mul = backend.kernel(
+                    'mul', rcpvdm, avis_upts, out=avis_upts_temp
+                )
 
                 # Additional constants for element-wise artificial viscosity
-                ubdegs = self.basis.ubasis.degrees
                 tplargs['c'].update(
                     self.cfg.items_as('solver-artificial-viscosity', float)
                 )
-                tplargs.update(dict(nupts=self.nupts, nfpts=self.nfpts,
-                                    order=self.basis.order, ubdegs=ubdegs))
+                tplargs.update(dict(
+                    nupts=nupts, nfpts=nfpts, order=self.basis.order,
+                    ubdegs=self.basis.ubasis.degrees,
+                ))
 
                 # Column view for avis_upts/fpts matrices
-                def col_view(mat):
-                    vshape = (mat.nrow,)
-                    rcmap = np.array(list(ndrange(1, mat.ncol)))
-                    matmap = np.array([mat.mid]*mat.ncol)
-                    stridemap = np.array([[mat.leaddim]]*mat.ncol)
+                col_view = lambda mat: backend.view(
+                    matmap=np.array([mat.mid]*mat.ncol),
+                    rcmap=np.array(list(ndrange(1, mat.ncol))),
+                    stridemap=np.array([[mat.leaddim]]*mat.ncol),
+                    vshape=(mat.nrow,)
+                )
 
-                    return backend.view(matmap, rcmap, stridemap, vshape)
-
-                avis_upts_cv = col_view(avis_upts)
                 avis_fpts_cv = col_view(self._avis_fpts)
                 avis_upts_temp_cv = col_view(avis_upts_temp)
 
+                if 'flux' in self.antialias:
+                    ame_e = col_view(avis_qpts)
+                    tplargs['nrow_amu'] = self.nqpts
+                else:
+                    ame_e = col_view(avis_upts)
+                    tplargs['nrow_amu'] = nupts
+
                 # Element-wise artificial viscosity kernel
-                avis = backend.kernel('avis', tplargs, dims=[self.neles],
-                                      ubdegs=ubdegs,
-                                      s=avis_upts_temp_cv,
-                                      amu_e=avis_upts_cv, amu_f=avis_fpts_cv)
+                avis = backend.kernel(
+                    'avis', tplargs, dims=[neles], s=avis_upts_temp_cv,
+                    amu_e=ame_e, amu_f=avis_fpts_cv
+                )
 
                 return ComputeMetaKernel([ent, mul, avis])
 
             self.kernels['avis'] = artf_vis
             tplargs['art_vis'] = 'mu'
         elif shock_capturing == 'none':
-            avis_upts = None
+            avis_upts = avis_qpts = None
             tplargs['art_vis'] = 'none'
         else:
             raise ValueError('Invalid shock-capturing option')
@@ -97,7 +112,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             self.kernels['tdisf'] = lambda: backend.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nqpts, self.neles],
                 u=self._scal_qpts, smats=self.smat_at('qpts'),
-                f=self._vect_qpts, amu=avis_upts
+                f=self._vect_qpts, amu=avis_qpts
             )
         else:
             self.kernels['tdisf'] = lambda: backend.kernel(
