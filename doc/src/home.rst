@@ -16,23 +16,16 @@ of hardware platforms via use of an in-built domain specific language
 derived from the Mako templating engine. The current release (PyFR
 |release|) has the following capabilities:
 
-- Governing equations - Euler, Navier Stokes
+- Governing Equations - Euler, Navier Stokes
 - Dimensionality - 2D, 3D
-- Element types - Triangles, Quadrilaterals, Hexahedra, Prisms, 
+- Element Types - Triangles, Quadrilaterals, Hexahedra, Prisms,
   Tetrahedra, Pyramids
-- Platforms - CPU clusters, Nvidia GPU clusters, AMD GPU clusters
-- Spatial discretisation - High-order flux reconstruction
-- Temporal discretisation - Explicit Runge-Kutta
+- Platforms - CPU Clusters, Nvidia GPU Clusters, AMD GPU Clusters
+- Spatial Discretisation - High-Order Flux Reconstruction
+- Temporal Discretisation - Explicit Runge-Kutta
 - Precision - Single, Double
-- Mesh files read - Gmsh (.msh)
-- Solution files produced - Unstructured VTK (.vtu)
-
-What is PyFR Not?
------------------
-
-PyFR is not a fully fledged 'production' flow solver with all the
-associated bells and whistles. Additionally, while we will do our best
-to help new users, no level of support is guaranteed!
+- Mesh Files Imported - Gmsh (.msh)
+- Solution Files Exported - Unstructured VTK (.vtu)
 
 Who is Developing PyFR?
 -----------------------
@@ -41,25 +34,18 @@ PyFR is being developed in the `Vincent Lab
 <https://www.imperial.ac.uk/aeronautics/research/vincentlab/>`_, 
 Department of Aeronautics, Imperial College London, UK. More details 
 about the development team are available 
-`here <http://www.pyfr.org/team.php>`__.
-
-How do I get PyFR?
-------------------
-
-PyFR is available for free under an industry friendly open-source
-license. You can download it
-`here <http://www.pyfr.org/download.php>`__.
+`here <http://www.pyfr.org/team.php>`_.
 
 How do I Cite PyFR?
 -------------------
 
-If you would like to cite PyFR, please reference the following paper:
+To cite PyFR, please reference the following paper:
 
 - `PyFR: An Open Source Framework for Solving Advection-Diffusion Type 
   Problems on Streaming Architectures using the Flux Reconstruction 
   Approach. F. D. Witherden, A. M. Farrington, P. E. Vincent. Computer 
   Physics Communications, Volume 185, Pages 3028-3040, 2014. 
-  <http://www.sciencedirect.com/science/article/pii/S0010465514002549>`__
+  <http://www.sciencedirect.com/science/article/pii/S0010465514002549>`_
 
 Who is Funding PyFR?
 --------------------

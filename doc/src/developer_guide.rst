@@ -475,6 +475,10 @@ programming language. Specifically, use of the following is allowed:
 
 6. ``output = ( condition ? satisfied : unsatisfied )`` --- ternary if
 
+7. ``min`` --- minimum
+
+8. ``max`` --- maximum
+
 However, conditional if statements, as well as for/while loops, are
 not allowed.
 
