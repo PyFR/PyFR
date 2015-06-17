@@ -7,11 +7,6 @@ User Guide
 Getting Started
 ===============
 
-Downloading the Source
-----------------------
-
-PyFR can be obtained `here <http://www.pyfr.org/download.php>`_.
-
 Dependencies
 ------------
 
@@ -27,14 +22,6 @@ Python packages:
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 5. `numpy <http://www.numpy.org/>`_ >= 1.8
 6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
-
-To run PyFR |release| in parallel it is also necessary to have one of
-the following installed:
-
-1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
-2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
-
-PyFR |release| does not currently support Microsoft Windows.
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -64,18 +51,67 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
 2. A BLAS library compiled as a shared library
    (e.g. `OpenBLAS <http://www.openblas.net/>`_)
 
-Installation
-------------
+Running in Parallel
+^^^^^^^^^^^^^^^^^^^
 
-Before running PyFR |release| it is first necessary to either install
-the software using the provided ``setup.py`` installer or add the root
-PyFR directory to ``PYTHONPATH`` using::
+To partition meshes for running in parallel it is also necessary to
+have one of the following partitioners installed:
 
-    user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
+1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
+2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
 
-To manage installation of Python packages we recommend using
-`pip <https://pypi.python.org/pypi/pip>`_ and
-`virtualenv <https://pypi.python.org/pypi/virtualenv>`_.
+Download and Installation
+-------------------------
+
+Overview
+^^^^^^^^
+
+PyFR can be downloaded and installed in various ways.
+In all cases we strongly recommend using a
+`virtualenv <https://pypi.python.org/pypi/virtualenv>`_ to manage Python
+packages.
+
+Pip (Recommended)
+^^^^^^^^^^^^^^^^^
+
+PyFR version |release| can be downloaded and installed using `pip
+<https://pypi.python.org/pypi/pip>`_ with::
+
+    user@computer ~/$ pip install pyfr
+
+which will also download and install the hard Python dependencies. If
+you wish to use the CUDA Backend you should also download and
+install `pycuda <http://mathema.tician.de/software/pycuda/>`_ with::
+
+    user@computer ~/$ pip install pycuda
+
+Similarly, if you wish to use the OpenCL Backend you should also
+download and install
+`pyopencl <http://mathema.tician.de/software/pyopencl/>`_ with::
+
+    user@computer ~/$ pip install pyopencl
+
+Note that required non-Python dependencies (GCC, CUDA, OpenCL etc.) must
+be downloaded and installed separately.
+
+Manually
+^^^^^^^^
+
+If you have an aversion to `pip <https://pypi.python.org/pypi/pip>`_
+then you can download the source from
+`here <http://www.pyfr.org/download.php>`_ and install manually using
+the ``setup.py`` file with::
+
+    user@computer ~/PyFR/$ python setup.py install
+    
+which will also download and install the hard Python dependencies. If
+you wish to use the CUDA Backend you should also manually
+download and install
+`pycuda <http://mathema.tician.de/software/pycuda/>`_. Similarly, if you
+wish to use the OpenCL Backend you should also manually download
+and install `pyopencl <http://mathema.tician.de/software/pyopencl/>`_.
+Note that required non-Python dependencies (GCC, CUDA, OpenCL etc.) must
+be downloaded and installed separately.
 
 Running PyFR
 ============
