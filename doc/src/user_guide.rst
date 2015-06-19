@@ -22,19 +22,14 @@ PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
 1. `h5py <http://www.h5py.org/>`_ >= 2.5
-2. `mako <http://www.makotemplates.org/>`_
+2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
 3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 5. `numpy <http://www.numpy.org/>`_ >= 1.8
 6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
 
-To run PyFR |release| in parallel it is also necessary to have one of
-the following installed:
-
-1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
-2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
-
-PyFR |release| does not currently support Microsoft Windows.
+Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
+compatible with 32-bit Python distributions.
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -64,6 +59,15 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
 2. A BLAS library compiled as a shared library
    (e.g. `OpenBLAS <http://www.openblas.net/>`_)
 
+Running in Parallel
+^^^^^^^^^^^^^^^^^^^
+
+To partition meshes for running in parallel it is also necessary to
+have one of the following partitioners installed:
+
+1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
+2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+
 Installation
 ------------
 
@@ -73,8 +77,8 @@ PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
-To manage installation of Python packages we recommend using
-`pip <https://pypi.python.org/pypi/pip>`_ and
+To manage installation of Python dependencies we strongly recommend
+using `pip <https://pypi.python.org/pypi/pip>`_ and
 `virtualenv <https://pypi.python.org/pypi/virtualenv>`_.
 
 Running PyFR
@@ -88,7 +92,6 @@ PyFR |release| uses three distinct file formats:
 1. ``.ini`` --- configuration file
 2. ``.pyfrm`` --- mesh file
 3. ``.pyfrs`` --- solution file
-
 
 The following commands are available from the ``pyfr`` program:
 
