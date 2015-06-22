@@ -51,7 +51,10 @@ Who is Funding PyFR?
 --------------------
 
 Development of PyFR is supported by the `Engineering and Physical 
-Sciences Research Council <http://www.epsrc.ac.uk/>`_, `Innovate UK 
-<https://www.gov.uk/government/organisations/innovate-uk>`_, `BAE Systems 
-<http://www.baesystems.com/>`_, and `Airbus <http://www.airbus.com/>`_. 
-We are also grateful for hardware donations from Nvidia, Intel, and AMD.
+Sciences Research Council <http://www.epsrc.ac.uk/>`_, `Innovate UK
+<https://www.gov.uk/government/organisations/innovate-uk>`_, the
+`European Commission
+<http://ec.europa.eu/programmes/horizon2020/>`_,
+`BAE Systems <http://www.baesystems.com/>`_, and
+`Airbus <http://www.airbus.com/>`_. We are also grateful for hardware
+donations from Nvidia, Intel, and AMD.
