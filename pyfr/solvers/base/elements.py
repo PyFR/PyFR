@@ -55,8 +55,8 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Apply the operator to the mesh elements and reshape
         plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
-        plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
-        plocfpts = plocfpts.transpose(1, 2, 0).tolist()
+        self.plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
+        plocfpts = self.plocfpts.transpose(1, 2, 0).tolist()
 
         self._srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
                                 for ffpts in basis.facefpts]
@@ -85,7 +85,7 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_conv(ics, self.cfg)):
-            self._scal_upts[:,i,:] = v
+            self._scal_upts[:, i, :] = v
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -201,7 +201,7 @@ class BaseElements(object, metaclass=ABCMeta):
             raise RuntimeError('Zero face normals detected')
 
         # Normalize the physical normals at the flux points
-        self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[...,None]
+        self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[..., None]
         self._mag_pnorm_fpts = mag_pnorm_fpts
 
     def _get_jac_eles_at(self, pts):
@@ -227,8 +227,8 @@ class BaseElements(object, metaclass=ABCMeta):
         if self.ndims == 2:
             a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
 
-            smats[0,:,0], smats[0,:,1] =  d, -b
-            smats[1,:,0], smats[1,:,1] = -c,  a
+            smats[0,:,0], smats[0,:,1] = d, -b
+            smats[1,:,0], smats[1,:,1] = -c, a
 
             if retdets:
                 djacs = a*d - b*c
@@ -285,3 +285,7 @@ class BaseElements(object, metaclass=ABCMeta):
         cstri = ((self._avis_fpts.leadsubdim,),)*nfp
 
         return (self._avis_fpts.mid,)*nfp, rcmap, cstri
+
+    def get_ploc_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self.plocfpts[fpts_idx,eidx]

@@ -186,7 +186,7 @@ class PyrPolyBasis(BasePolyBasis):
         c = r
 
         sk = [mp.mpf(2)**(-k - 0.25)*mp.sqrt(k + 0.5)
-              for k in xrange(self.order)]
+              for k in range(self.order)]
         pa = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, a))]
         pb = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, b))]
 
@@ -207,9 +207,9 @@ class PyrPolyBasis(BasePolyBasis):
     @lazyprop
     def degrees(self):
         return [i + j + k
-                for i in xrange(self.order)
-                for j in xrange(self.order)
-                for k in xrange(self.order - max(i, j))]
+                for i in range(self.order)
+                for j in range(self.order)
+                for k in range(self.order - max(i, j))]
 
 
 class HexPolyBasis(BasePolyBasis):

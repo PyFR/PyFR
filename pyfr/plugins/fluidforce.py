@@ -73,12 +73,14 @@ class FluidForcePlugin(BasePlugin):
                     m0[etype, fidx] = eles.basis.m0[facefpts]
                     qwts[etype, fidx] = eles.basis.fpts_wts[facefpts]
 
+                area = eles.basis.faces[fidx][3]
+
                 # Unit physical normals and their magnitudes (including |J|)
                 npn = eles.get_norm_pnorms(eidx, fidx)
                 mpn = eles.get_mag_pnorms(eidx, fidx)
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn)
+                norms[etype, fidx].append(mpn[:, None]*npn*area)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
