@@ -72,7 +72,7 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
 class EulerCharRiemInvBCInters(EulerBaseBCInters):
     type = 'char-riem-inv'
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         tplc, self._ploc = self._exp_opts(
