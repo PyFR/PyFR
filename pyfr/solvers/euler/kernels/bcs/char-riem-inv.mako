@@ -7,8 +7,8 @@
 <%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur, ploc, t'>
     <% v = [c[i] for i in 'uvw'[:ndims]] %>
     fpdtype_t cs = sqrt(${gamma}*${c['p']}/${c['rho']});
-    fpdtype_t s =  ${c['p']}/pow(${c['rho']}, ${gamma});
-    fpdtype_t ratio = 2.0*cs/${gmo};
+    fpdtype_t s = ${c['p']}/pow(${c['rho']}, ${gamma});
+    fpdtype_t ratio = cs*${2/gmo};
 
     fpdtype_t inv = 1.0/ul[0];
     fpdtype_t V_e = ${' + '.join('{0}*nl[{1}]'.format(v[i], i)
