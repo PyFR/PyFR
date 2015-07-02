@@ -38,7 +38,7 @@ class ResidualPlugin(BasePlugin):
                 # Conservative variable list
                 convars = intg.system.elementscls.convarmap[self.ndims]
 
-                print(','.join(['t1', 't2'] + convars), file=self.outf)
+                print(','.join(['t'] + convars), file=self.outf)
 
     def __call__(self, intg):
         # If an output is due next step
@@ -65,8 +65,11 @@ class ResidualPlugin(BasePlugin):
                 comm.Reduce(get_mpi('in_place'), resid, op=get_mpi('sum'),
                             root=root)
 
+                # Normalise
+                resid = np.sqrt(resid) / (intg.tcurr - self._tprev)
+
                 # Build the row
-                row = [self._tprev, intg.tcurr] + np.sqrt(resid).tolist()
+                row = [intg.tcurr] + resid.tolist()
 
                 # Write
                 print(','.join(str(r) for r in row), file=self.outf)
