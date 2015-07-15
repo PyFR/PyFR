@@ -3,7 +3,6 @@
 
 <% gmo = c['gamma'] - 1.0 %>
 <% gamma = c['gamma'] %>
-<% v = [c[i] for i in 'uvw'[:ndims]] %>
 
 <%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur, ploc, t'>
     fpdtype_t cs = sqrt(${gamma}*${c['p']}/${c['rho']});
@@ -11,7 +10,7 @@
     fpdtype_t ratio = cs*${2.0/gmo};
 
     fpdtype_t inv = 1.0/ul[0];
-    fpdtype_t V_e = ${' + '.join('{0}*nl[{1}]'.format(v[i], i)
+    fpdtype_t V_e = ${' + '.join('({0})*nl[{1}]'.format(c['uvw'[i]], i)
                                  for i in range(ndims))};
     fpdtype_t V_i = inv*(${' + '.join('ul[{1}]*nl[{0}]'.format(i, i + 1)
                                       for i in range(ndims))});
