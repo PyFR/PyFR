@@ -242,7 +242,9 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
     type = 'sub-out-fp'
     cflux_state = 'ghost'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self._tpl_c['p'], = self._eval_opts(['p'])
+        tplc, self._ploc = self._exp_opts(['p'], lhs)
+        self._tpl_c.update(tplc)
+
