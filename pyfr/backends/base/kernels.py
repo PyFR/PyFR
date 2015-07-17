@@ -4,6 +4,8 @@ from abc import ABCMeta, abstractmethod
 import itertools as it
 import types
 
+from mako import exceptions
+
 from pyfr.util import memoize, proxylist
 
 
@@ -75,7 +77,13 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         # Render the template to yield the source code
         tpl = self.backend.lookup.get_template(mod)
-        src = tpl.render(**tplargs)
+
+        try:
+            src = tpl.render(**tplargs)
+        except Exception as e:
+            with open('mako_error.html', 'w') as fh:
+                fh.write(exceptions.html_error_template().render().decode())
+            raise e
 
         # Check the kernel exists in the template
         if name not in argspecs:
