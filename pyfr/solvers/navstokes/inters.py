@@ -170,11 +170,14 @@ class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
     type = 'char-riem-inv'
     cflux_state = 'ghost'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self._tpl_c['p'], self._tpl_c['rho'] = self._eval_opts(['p', 'rho'])
-        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims])
+        tplc, self._ploc = self._exp_opts(
+            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
+        )
+
+        self._tpl_c.update(tplc)
 
 
 class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
