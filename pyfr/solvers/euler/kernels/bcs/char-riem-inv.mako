@@ -34,7 +34,7 @@
 % for i in range(ndims):
     ur[${i + 1}] = (V_i >= 0)
                  ? rho_b*(ul[${i + 1}]*inv + (V_b - V_i)*nl[${i}])
-                 : rho_b*(${v[i]} + (V_b - V_e)*nl[${i}]);
+                 : rho_b*(${c['uvw'[i]]} + (V_b - V_e)*nl[${i}]);
 % endfor
     ur[${nvars - 1}] = p_b*${1.0/gmo}
                      + 0.5*(1.0/ur[0])*${pyfr.dot('ur[{i}]', i=(1, ndims + 1))};
