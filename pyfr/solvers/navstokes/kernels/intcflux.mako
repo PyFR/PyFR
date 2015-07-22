@@ -14,6 +14,7 @@
               gradur='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               amul='in view fpdtype_t'
               amur='in view fpdtype_t'
+              spngmu='in fpdtype_t'
               nl='in fpdtype_t[${str(ndims)}]'
               magnl='in fpdtype_t'
               magnr='in fpdtype_t'>
@@ -23,12 +24,12 @@
 
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {{0}};
-    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'amul', 'fvl')};
+    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'amul', 'spngmu', 'fvl')};
 % endif
 
 % if beta != 0.5:
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
-    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'amur', 'fvr')};
+    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'amur', 'spngmu', 'fvr')};
 % endif
 
 % for i in range(nvars):

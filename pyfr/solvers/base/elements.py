@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod, abstractproperty
 
 import numpy as np
 
-from pyfr.nputil import npeval, fuzzysort
+from pyfr.nputil import fuzzysort, npeval
 from pyfr.util import memoize
 
 
@@ -285,6 +285,13 @@ class BaseElements(object, metaclass=ABCMeta):
         cstri = ((self._avis_fpts.leadsubdim,),)*nfp
 
         return (self._avis_fpts.mid,)*nfp, rcmap, cstri
+
+    def get_sponge_mu_for_inter(self, eidx, fidx):
+        ploc = self.get_ploc_for_inter(eidx, fidx).transpose()
+        spngmu_expr = self.cfg.get('sponge', 'sponge-mu')
+
+        return npeval(spngmu_expr,
+            {d: ploc[i] for i, d in enumerate('xyz'[:self.ndims])})
 
     def get_ploc_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
