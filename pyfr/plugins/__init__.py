@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from pyfr.plugins.average import AveragePlugin
 from pyfr.plugins.base import BasePlugin
 from pyfr.plugins.fluidforce import FluidForcePlugin
 from pyfr.plugins.nancheck import NaNCheckPlugin
