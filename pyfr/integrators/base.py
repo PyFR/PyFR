@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from collections import OrderedDict
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.nputil import range_eval
 from pyfr.util import proxylist
 
 
@@ -20,11 +18,8 @@ class BaseIntegrator(object, metaclass=ABCMeta):
             raise TypeError('Incompatible stepper/controller combination')
 
         # Start time
-        self.tstart = cfg.getfloat('solver-time-integrator', 't0', 0.0)
-
-        # Output times
-        self.tout = sorted(range_eval(cfg.get('soln-output', 'times')))
-        self.tend = self.tout[-1]
+        self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
+        self.tend = cfg.getfloat('solver-time-integrator', 'tend')
 
         # Current time; defaults to tstart unless resuming a simulation
         if initsoln is None or 'stats' not in initsoln:
@@ -33,12 +28,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
             stats = Inifile(initsoln['stats'])
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
 
-            # Cull already written output times
-            self.tout = [t for t in self.tout if t > self.tcurr]
-
-        # Ensure no time steps are in the past
-        if self.tout[0] < self.tcurr:
-            raise ValueError('Output times must be in the future')
+        self.tlist = [self.tend]
 
         # Determine the amount of temp storage required by thus method
         nreg = self._stepper_nregs
@@ -47,7 +37,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
-        self._mesh_uuid = mesh['mesh_uuid']
+        self.mesh_uuid = mesh['mesh_uuid']
 
         # Get a queue for subclasses to use
         self._queue = backend.queue()
@@ -83,10 +73,6 @@ class BaseIntegrator(object, metaclass=ABCMeta):
     def advance_to(self, t):
         pass
 
-    @abstractmethod
-    def output(self, solns, stats):
-        pass
-
     @abstractproperty
     def _controller_needs_errest(self):
         pass
@@ -108,19 +94,9 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         pass
 
     def run(self):
-        for t in self.tout:
+        for t in self.tlist:
             # Advance to time t
-            solns = self.advance_to(t)
-
-            # Map solutions to elements types
-            solnmap = OrderedDict(zip(self.system.ele_types, solns))
-
-            # Collect statistics
-            stats = Inifile()
-            self.collect_stats(stats)
-
-            # Output
-            self.output(solnmap, stats)
+            self.advance_to(t)
 
     def collect_stats(self, stats):
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
