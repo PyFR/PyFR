@@ -140,7 +140,7 @@ class BaseShape(object):
     def m11(self):
         ub = self.ubasis
 
-        n = ub.order
+        n = max(ub.degrees)
         ncut = self.cfg.getint('soln-filter', 'cutoff')
         order = self.cfg.getint('soln-filter', 'order')
         alpha = self.cfg.getfloat('soln-filter', 'alpha')
@@ -148,7 +148,7 @@ class BaseShape(object):
         A = np.ones(self.nupts)
         for i, d in enumerate(ub.degrees):
             if d >= ncut < n:
-                A[i] = exp(-alpha*(float(d - ncut)/(n - ncut))**order)
+                A[i] = exp(-alpha*((d - ncut)/(n - ncut))**order)
 
         return np.linalg.solve(ub.vdm, A[:,None]*ub.vdm).T
 
