@@ -27,6 +27,8 @@ class NavierStokesSystem(BaseAdvectionDiffusionSystem):
         q1 << kernels['mpiint', 'scal_fpts_pack']()
         runall([q1])
 
+        if ('eles', 'copy_soln') in kernels:
+            q1 << kernels['eles', 'copy_soln']()
         q1 << kernels['iint', 'con_u']()
         q1 << kernels['bcint', 'con_u'](t=t)
         q1 << kernels['eles', 'tgradpcoru_upts']()

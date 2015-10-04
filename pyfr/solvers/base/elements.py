@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+import math
+import re
 
 import numpy as np
 
 from pyfr.nputil import npeval, fuzzysort
-from pyfr.util import memoize
+from pyfr.util import lazyprop, memoize
 
 
 class BaseElements(object, metaclass=ABCMeta):
@@ -105,6 +107,45 @@ class BaseElements(object, metaclass=ABCMeta):
     def _scratch_bufs(self):
         pass
 
+    @lazyprop
+    def _src_exprs(self):
+        convars = self.convarmap[self.ndims]
+
+        # Variable and function substitutions
+        subs = self.cfg.items('constants')
+        subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs.update({v: 'u[{0}]'.format(i) for i, v in enumerate(convars)})
+        subs.update(abs='fabs', pi=str(math.pi))
+
+        srcex = []
+        for v in convars:
+            ex = self.cfg.get('solver-source-terms', v, '0')
+
+            # Ensure the expression does not contain invalid characters
+            if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', ex):
+                raise ValueError('Invalid characters in expression')
+
+            # Convert integers to floats
+            ex = re.sub(r'(?<![a-zA-Z_.])(?<![eE][-+])(\d+)(?![eE.])',
+                        r'\g<1>.0', ex)
+
+            # Substitute variables
+            ex = re.sub(r'\b({0})\b'.format('|'.join(subs)),
+                        lambda m: subs[m.group(1)], ex)
+
+            # Append
+            srcex.append(ex)
+
+        return srcex
+
+    @lazyprop
+    def _ploc_in_src_exprs(self):
+        return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)
+
+    @lazyprop
+    def _soln_in_src_exprs(self):
+        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
+
     @abstractmethod
     def set_backend(self, backend, nscal_upts):
         self._be = backend
@@ -130,6 +171,12 @@ class BaseElements(object, metaclass=ABCMeta):
             self._scal_fpts = salloc('scal_fpts', nfpts)
         elif 'scal_qpts' in sbufs:
             self._scal_qpts = salloc('scal_qpts', nqpts)
+
+        # Allocate additional scalar scratch space
+        if 'scal_upts_cpy' in sbufs:
+            self._scal_upts_cpy = salloc('scal_upts_cpy', nupts)
+        elif 'scal_qpts_cpy' in sbufs:
+            self._scal_qpts_cpy = salloc('scal_qpts_cpy', nqpts)
 
         # Allocate required vector scratch space
         if 'vect_upts' in sbufs:
