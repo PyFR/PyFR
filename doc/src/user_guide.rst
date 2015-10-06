@@ -746,8 +746,8 @@ Example::
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Periodically integrates the pressure on the boundary labelled ``name``
-and writes out the resulting force vectors to a CSV file.
+Periodically integrates the pressure and viscous stress on the boundary
+labelled ``name`` and writes out the resulting force vectors to a CSV file.
 
 1. ``nsteps`` --- integrate every ``nsteps``:
 
