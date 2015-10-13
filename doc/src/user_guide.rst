@@ -307,15 +307,19 @@ Parameterises the time-integration scheme used by the solver with
 
     ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
-2. ``t0`` --- initial time
+2. ``tstart`` --- initial time
 
     *float*
 
-3. ``dt`` --- time-step
+3. ``tend`` --- final time
 
     *float*
 
-4. ``controller`` --- time-step size controller:
+4. ``dt`` --- time-step
+
+    *float*
+
+5. ``controller`` --- time-step size controller:
 
     ``none`` | ``pi``
 
@@ -351,7 +355,8 @@ Example::
     [solver-time-integrator]
     scheme = rk45
     controller = pi
-    t0 = 0.0
+    tstart = 0.0
+    tend = 10.0
     dt = 0.001
     atol = 0.00001
     rtol = 0.00001
@@ -688,32 +693,6 @@ Example::
     s0 = 0.01
     kappa = 5.0
 
-[soln-output]
-^^^^^^^^^^^^^
-
-Parameterises the output with
-
-
-1. ``basedir`` --- relative path to directory where outputs will be
-   written
-
-    *string*
-
-2. ``basename`` --- pattern of output names
-
-    *string*
-
-3. ``times`` --- times at which outputs will be dumped
-
-    ``range(`` *float* ``,`` *float* ``,`` *int* ``)``
-
-Example::
-
-    [soln-output]
-    basedir = .
-    basename = files_%(t).2f
-    times = range(0, 1, 11)
-
 [soln-filter]
 ^^^^^^^^^^^^^
 
@@ -742,6 +721,30 @@ Example::
     alpha = 36.0
     order = 16
     cutoff = 1
+
+[soln-plugin-solnwriter]
+^^^^^^^^^^^^^^^^^^^^^^^^
+Periodically write the solution to disk in the pyfrs format.
+
+1. ``dt-out`` --- write to disk every ``dt-out`` time units:
+
+    *float*
+
+2. ``basedir`` --- relative path to directory where outputs will be
+   written
+
+    *string*
+
+3. ``basename`` --- pattern of output names
+
+    *string*
+
+Example::
+
+    [soln-plugin-solnwriter]
+    dt-out = 0.01
+    basedir = .
+    basename = files_%(t).2f
 
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
