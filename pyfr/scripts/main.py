@@ -167,7 +167,7 @@ def process_partition(args):
             try:
                 part = get_partitioner(name, pwts)
                 break
-            except RuntimeError:
+            except OSError:
                 pass
         else:
             raise RuntimeError('No partitioners available')
