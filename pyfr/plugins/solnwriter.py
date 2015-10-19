@@ -21,8 +21,11 @@ class SolnWriterPlugin(BasePlugin):
 
         intg.call_plugin_dt(self.dt_out)
 
-        # Call for writing the initial solution
-        self(intg)
+        # Call for writing the initial solution if not restart
+        if intg.isrestart:
+            self.tout_next += self.dt_out
+        else:
+            self(intg)
 
     def __call__(self, intg):
         if abs(self.tout_next - intg.tcurr) > intg.dtmin:

@@ -15,6 +15,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.backend = backend
         self.rallocs = rallocs
         self.cfg = cfg
+        self.isrestart = initsoln is not None
 
         # Sanity checks
         if self._controller_needs_errest and not self._stepper_has_errest:
@@ -24,12 +25,12 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
         self.tend = cfg.getfloat('solver-time-integrator', 'tend')
 
-        # Current time; defaults to tstart unless resuming a simulation
-        if initsoln is None or 'stats' not in initsoln:
-            self.tcurr = self.tstart
-        else:
+        # Current time; defaults to tstart unless restarting
+        if self.isrestart:
             stats = Inifile(initsoln['stats'])
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
+        else:
+            self.tcurr = self.tstart
 
         self.tlist = deque([self.tend])
 
