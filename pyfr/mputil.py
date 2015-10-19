@@ -25,18 +25,11 @@ def jacobi(n, a, b, z):
     return j
 
 
-def jacobian(f, x):
-    h = mp.sqrt(mp.eps)
-    h2 = h / 2
+def jacobi_diff(n, a, b, z):
+    dj = [0]
 
-    J = []
-    for j in range(len(x)):
-        xph2 = [xk if k != j else xk + h2 for k, xk in enumerate(x)]
-        xmh2 = [xk if k != j else xk - h2 for k, xk in enumerate(x)]
+    if n >= 1:
+        dj.extend(jp*mp.mpf((i + a + b + 2)/2)
+                  for i, jp in enumerate(jacobi(n - 1, a + 1, b + 1, z)))
 
-        fxph2 = f(*xph2)
-        fxmh2 = f(*xmh2)
-
-        J.append([(fp - fm) / h for fp, fm in zip(fxph2, fxmh2)])
-
-    return list(zip(*J))
+    return dj
