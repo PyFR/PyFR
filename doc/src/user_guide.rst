@@ -750,7 +750,8 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
-labelled ``name`` and writes out the resulting force vectors to a CSV file.
+labelled ``name`` and writes out the resulting force vectors to a CSV
+file.
 
 1. ``nsteps`` --- integrate every ``nsteps``:
 
@@ -785,6 +786,31 @@ Example::
 
     [soln-plugin-nancheck]
     nsteps = 10
+
+[soln-plugin-residual]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically calculates the residual and writes it out to a CSV file.
+
+1. ``nsteps`` --- calculate every ``nsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-residual]
+    nsteps = 10
+    file = residual.csv
+    header = true
 
 [soln-plugin-sampler]
 ^^^^^^^^^^^^^^^^^^^^^
@@ -840,23 +866,23 @@ dependent, boundary condition labelled :code:`name` in the .pyfrm file with
 
         - ``rho`` --- density
 
-           *float*
+           *float* | *string*
 
         - ``u`` --- x-velocity
 
-           *float*
+           *float* | *string*
 
         - ``v`` --- y-velocity
 
-           *float*
+           *float* | *string*
 
         - ``w`` --- z-velocity
 
-           *float*
+           *float* | *string*
 
         - ``p`` --- static pressure
 
-           *float*
+           *float* | *string*
 
     ``no-slp-isot-wall`` requires
 
@@ -920,7 +946,7 @@ dependent, boundary condition labelled :code:`name` in the .pyfrm file with
 
         - ``p`` --- static pressure
 
-           *float*
+           *float* | *string*
 
     ``sup-in-fa`` requires
 

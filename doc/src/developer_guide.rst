@@ -16,8 +16,8 @@ The symbolic link :code:`pyfr.scripts.pyfr` points to the script
 the function :code:`process_run` calls the function
 :code:`_process_common`, which in turn calls the function
 :code:`get_solver`, returning an Integrator -- a composite of a
-`Controller`_ a `Stepper`_ and a `Writer`_. The Integrator has a method
-named :code:`run`, which is then called to run the simulation.
+`Controller`_ and a `Stepper`_. The Integrator has a method named
+:code:`run`, which is then called to run the simulation.
 
 Controller
 ----------
@@ -100,25 +100,6 @@ advances a `System`_ by a single time-step. There are five types of
 Types of `Stepper`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.steppers
-    :parts: 1
-
-Writer
-------
-
-A `Writer`_ acts to write out simulation data. There is one type of
-`Writer`_ available in PyFR |release|:
-
-.. autoclass:: pyfr.integrators.writers.H5Writer
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
-Types of `Writer`_ are related via the following inheritance diagram:
-
-.. inheritance-diagram:: pyfr.integrators.writers
     :parts: 1
 
 System
