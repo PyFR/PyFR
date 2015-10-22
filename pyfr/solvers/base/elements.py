@@ -47,6 +47,11 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
 
+        # Construct smat_base for free-stream metric
+        self.metric = self.basis.metric
+        if self.metric == 'free-stream':
+            self._smat_base()
+
         # Physical normals at the flux points
         self._gen_pnorm_fpts()
 
@@ -228,30 +233,115 @@ class BaseElements(object, metaclass=ABCMeta):
         return jac.transpose(3, 0, 1, 2)
 
     def _get_smats(self, pts, retdets=False):
-        jac = self._get_jac_eles_at(pts)
+        if self.metric == 'free-stream':
+            npts = len(pts)
+            smats = np.empty((self.ndims, npts, self.ndims*self.neles))
+
+            M0 = self.basis.mbasis.nodal_basis_at(pts)
+
+            for i in range(self.ndims):
+                smats[i] = np.dot(M0, self._smats[i])
+
+            smats = smats.reshape(self.ndims, npts, self.ndims, -1)
+
+            if retdets:
+                djacs = np.dot(M0, self._djacs)
+        else:
+            jac = self._get_jac_eles_at(pts)
+            smats = np.empty_like(jac)
+
+            if self.ndims == 2:
+                a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
+
+                smats[0,:,0], smats[0,:,1] = d, -b
+                smats[1,:,0], smats[1,:,1] = -c, a
+
+                if retdets:
+                    djacs = a*d - b*c
+            else:
+                # We note that J = [x0, x1, x2]
+                x0, x1, x2 = jac[:,:,0], jac[:,:,1], jac[:,:,2]
+
+                smats[0] = np.cross(x1, x2, axisa=0, axisb=0, axisc=1)
+                smats[1] = np.cross(x2, x0, axisa=0, axisb=0, axisc=1)
+                smats[2] = np.cross(x0, x1, axisa=0, axisb=0, axisc=1)
+
+                if retdets:
+                    # Exploit the fact that det(J) = x0 . (x1 ^ x2)
+                    djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
+
+        return (smats, djacs) if retdets else smats
+
+    def _plot_at_pts_np(self, pts):
+        op = self.basis.sbasis.nodal_basis_at(pts)
+
+        ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
+        ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
+
+        return ploc
+
+    def _smat_base(self):
+        # Metric basis
+        mpts = self.basis.mpts
+        mbasis = self.basis.mbasis
+        self.nmpts = nmpts = len(mpts)
+
+        # Dimensions and number of elements
+        ndims = self.ndims
+        neles = self.neles
+
+        # Coordinate at pts
+        x = self._plot_at_pts_np(mpts)
+
+        # Jacobian at pts
+        jacop = np.rollaxis(mbasis.jac_nodal_basis_at(mpts), 2)
+        jacop = jacop.reshape(-1, nmpts)
+
+        # Cast as a matrix multiply and apply to eles
+        jac = np.dot(jacop, x.reshape(nmpts, -1))
+
+        # Reshape (npts*ndims, neles*ndims) => (npts, ndims, neles, ndims)
+        jac = jac.reshape(nmpts, ndims, ndims, neles)
+
+        # Transpose to get (ndims, npts, ndims, neles)
+        jac = jac.transpose(2, 0, 1, 3)
+
         smats = np.empty_like(jac)
 
-        if self.ndims == 2:
+        if ndims == 2:
             a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
 
             smats[0,:,0], smats[0,:,1] = d, -b
             smats[1,:,0], smats[1,:,1] = -c, a
 
-            if retdets:
-                djacs = a*d - b*c
+            self._djacs = a*d - b*c
         else:
             # We note that J = [x0, x1, x2]
             x0, x1, x2 = jac[:,:,0], jac[:,:,1], jac[:,:,2]
 
-            smats[0] = np.cross(x1, x2, axisa=0, axisb=0, axisc=1)
-            smats[1] = np.cross(x2, x0, axisa=0, axisb=0, axisc=1)
-            smats[2] = np.cross(x0, x1, axisa=0, axisb=0, axisc=1)
+            # Cpmpute x cross x_(chi)
+            tt = np.zeros((ndims,) + x.shape)
+            tt[0] = np.cross(x0, x, axisa=0, axisb=1, axisc=1)
+            tt[1] = np.cross(x1, x, axisa=0, axisb=1, axisc=1)
+            tt[2] = np.cross(x2, x, axisa=0, axisb=1, axisc=1)
+            tt = tt.reshape(ndims, nmpts, -1)
 
-            if retdets:
-                # Exploit the fact that det(J) = x0 . (x1 ^ x2)
-                djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
+            # Derivative
+            dtt = np.zeros((ndims, nmpts*ndims, ndims*neles))
+            dtt[0] = np.dot(jacop, tt[0])
+            dtt[1] = np.dot(jacop, tt[1])
+            dtt[2] = np.dot(jacop, tt[2])
+            dtt = dtt.reshape(ndims, nmpts, ndims, ndims, -1).swapaxes(1, 2)
 
-        return (smats, djacs) if retdets else smats
+            smats[0] = 0.5*(dtt[1][2] - dtt[2][1])
+            smats[1] = 0.5*(dtt[2][0] - dtt[0][2])
+            smats[2] = 0.5*(dtt[0][1] - dtt[1][0])
+
+            # Exploit the fact that det(J) = x0 . (x1 ^ x2)
+            self._djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
+
+        # Reshape
+        self._smats = smats.reshape(ndims, self.nmpts, -1)
 
     def get_mag_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]

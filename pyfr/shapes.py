@@ -53,6 +53,22 @@ class BaseShape(object):
             self.nsptsord = nsptord = self.order_from_nspts(nspts)
             self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
+            # Basis for free-stream metric
+            self.metric = cfg.get('solver', 'metric', 'none')
+            if self.metric == 'free-stream':
+                if nsptord >= self.order + 1:
+                    # Construct metric basis
+                    self.mpts = self.std_ele(self.order)
+                    self.mbasis = get_polybasis(
+                        self.name, self.order + 1, self.mpts
+                    )
+                else:
+                    # Use sbasis, spts
+                    self.mpts = self.spts
+                    self.mbasis = self.sbasis
+            elif self.metric != 'none':
+                raise ValueError('Invalid metric')
+
     @classmethod
     def nspts_from_order(cls, sptord):
         return np.polyval(cls.npts_coeffs, sptord) // cls.npts_cdenom
