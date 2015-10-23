@@ -18,7 +18,7 @@ from pyfr.partitioners import BasePartitioner, get_partitioner
 from pyfr.progress_bar import ProgressBar
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
-from pyfr.readers.native import read_pyfr_data
+from pyfr.readers.native import NativeReader
 from pyfr.solvers import get_solver
 from pyfr.util import subclasses
 from pyfr.writers import BaseWriter, get_writer_by_name, get_writer_by_extn
@@ -167,16 +167,16 @@ def process_partition(args):
             try:
                 part = get_partitioner(name, pwts)
                 break
-            except RuntimeError:
+            except OSError:
                 pass
         else:
             raise RuntimeError('No partitioners available')
 
     # Partition the mesh
-    mesh, part_soln_fn = part.partition(read_pyfr_data(args.mesh))
+    mesh, part_soln_fn = part.partition(NativeReader(args.mesh))
 
     # Prepare the solutions
-    solnit = (part_soln_fn(read_pyfr_data(s)) for s in args.solns)
+    solnit = (part_soln_fn(NativeReader(s)) for s in args.solns)
 
     # Output paths/files
     paths = it.chain([args.mesh], args.solns)
@@ -244,13 +244,13 @@ def _process_common(args, mesh, soln, cfg):
 
 def process_run(args):
     _process_common(
-        args, read_pyfr_data(args.mesh), None, Inifile.load(args.cfg)
+        args, NativeReader(args.mesh), None, Inifile.load(args.cfg)
     )
 
 
 def process_restart(args):
-    mesh = read_pyfr_data(args.mesh)
-    soln = read_pyfr_data(args.soln)
+    mesh = NativeReader(args.mesh)
+    soln = NativeReader(args.soln)
 
     # Ensure the solution is from the mesh we are using
     if soln['mesh_uuid'] != mesh['mesh_uuid']:
@@ -271,7 +271,7 @@ def process_tavg(args):
     # Interrogate files passed by the shell
     for fname in args.infs:
         # Load solution files and obtain solution times
-        inf = read_pyfr_data(fname)
+        inf = NativeReader(fname)
         cfg = Inifile(inf['stats'])
         tinf = cfg.getfloat('solver-time-integrator', 'tcurr')
 

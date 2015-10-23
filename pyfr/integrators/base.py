@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+from collections import deque
+
+import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
@@ -12,6 +15,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.backend = backend
         self.rallocs = rallocs
         self.cfg = cfg
+        self.isrestart = initsoln is not None
 
         # Sanity checks
         if self._controller_needs_errest and not self._stepper_has_errest:
@@ -21,14 +25,14 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
         self.tend = cfg.getfloat('solver-time-integrator', 'tend')
 
-        # Current time; defaults to tstart unless resuming a simulation
-        if initsoln is None or 'stats' not in initsoln:
-            self.tcurr = self.tstart
-        else:
+        # Current time; defaults to tstart unless restarting
+        if self.isrestart:
             stats = Inifile(initsoln['stats'])
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
+        else:
+            self.tcurr = self.tstart
 
-        self.tlist = [self.tend]
+        self.tlist = deque([self.tend])
 
         # Determine the amount of temp storage required by thus method
         nreg = self._stepper_nregs
@@ -65,6 +69,21 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         for reg, ix in zip(self._regs, bidxes):
             reg.active = ix
 
+    def call_plugin_dt(self, dt):
+        ta = self.tlist
+        tb = deque(np.arange(self.tcurr, self.tend, dt).tolist())
+
+        self.tlist = tlist = deque()
+
+        # Merge the current and new time lists
+        while ta and tb:
+            t = ta.popleft() if ta[0] < tb[0] else tb.popleft()
+            if not tlist or t - tlist[-1] > self.dtmin:
+                tlist.append(t)
+
+        tlist.extend(ta)
+        tlist.extend(tb)
+
     @abstractmethod
     def step(self, t, dt):
         pass
@@ -95,7 +114,6 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
     def run(self):
         for t in self.tlist:
-            # Advance to time t
             self.advance_to(t)
 
     def collect_stats(self, stats):

@@ -3,8 +3,6 @@
 import math
 import re
 
-import numpy as np
-
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins import get_plugin
@@ -50,13 +48,6 @@ class BaseController(BaseIntegrator):
 
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
-
-    def call_plugin_dt(self, dt):
-        for t in np.arange(self.tcurr, self.tend, dt):
-            if all(abs(s - t) > self.dtmin for s in self.tlist):
-                self.tlist.append(t)
-
-        self.tlist.sort()
 
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt
