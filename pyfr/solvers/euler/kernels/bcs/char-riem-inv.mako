@@ -6,7 +6,7 @@
 
 <%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur, ploc, t'>
     fpdtype_t cs = sqrt(${gamma}*${c['p']}/${c['rho']});
-    fpdtype_t s = ${c['p']}*pow(${c['rho']}, -${gamma});
+    fpdtype_t s = ${c['p']}*pow((fpdtype_t)${c['rho']}, -${gamma});
     fpdtype_t ratio = cs*${2.0/gmo};
 
     fpdtype_t inv = 1.0/ul[0];
