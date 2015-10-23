@@ -124,7 +124,7 @@ class BaseAdvectionBCInters(BaseInters):
             # Substitute variables
             ex = re.sub(r'\b({0})\b'.format('|'.join(subs)),
                         lambda m: subs[m.group(1)], ex)
-            exprs[k] = ex
+            exprs[k] = '({0})'.format(ex)
 
         if any('ploc' in ex for ex in exprs.values()):
             plocpts = self._const_mat(lhs, 'get_ploc_for_inter')

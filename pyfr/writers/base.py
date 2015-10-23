@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.inifile import Inifile
-from pyfr.readers.native import read_pyfr_data
+from pyfr.readers.native import NativeReader
 from pyfr.solvers import BaseSystem
 from pyfr.util import subclass_where
 
@@ -21,8 +21,8 @@ class BaseWriter(object):
         self.outf = args.outf
 
         # Load mesh and solution files
-        self.soln = read_pyfr_data(args.solnf)
-        self.mesh = read_pyfr_data(args.meshf)
+        self.soln = NativeReader(args.solnf)
+        self.mesh = NativeReader(args.meshf)
 
         # Get element types and array shapes
         self.mesh_inf = self.mesh.array_info

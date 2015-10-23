@@ -21,6 +21,15 @@ class FluidForcePlugin(BasePlugin):
         # Output frequency
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
+        # Check if we need to compute viscous force
+        self._viscous = intg.system.name == 'navier-stokes'
+
+        # Viscous correction
+        self._viscorr = self.cfg.get('solver', 'viscosity-correction', 'none')
+
+        # Constant variables
+        self._constants = self.cfg.items_as('constants', float)
+
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
@@ -52,11 +61,20 @@ class FluidForcePlugin(BasePlugin):
             # Output a header if required
             if (os.path.getsize(fname) == 0 and
                 self.cfg.getbool(cfgsect, 'header', True)):
-                print(','.join('txyz'[:self.ndims + 1]), file=self.outf)
+                header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
+
+                if self._viscous:
+                    header += ['vx', 'vy', 'vz'][:self.ndims]
+
+                print(','.join(header), file=self.outf)
 
         # Interpolation matrices and quadrature weights
         self._m0 = m0 = {}
         self._qwts = qwts = defaultdict(list)
+
+        if self._viscous:
+            self._m4 = m4 = {}
+            rcpjact = {}
 
         # If we have the boundary then process the interface
         if bc in mesh:
@@ -73,6 +91,21 @@ class FluidForcePlugin(BasePlugin):
                     m0[etype, fidx] = eles.basis.m0[facefpts]
                     qwts[etype, fidx] = eles.basis.fpts_wts[facefpts]
 
+                if self._viscous and etype not in m4:
+                    m4[etype] = eles.basis.m4
+
+                    # Obtain SMat at the face
+                    smat = eles.smat_at_np('upts')
+
+                    # Transpose SMat (= Smat^T)
+                    smat = smat.transpose(2, 0, 1, 3)
+
+                    # Obtain |J|^-1
+                    rcpdjac = eles.rcpdjac_at_np('upts')
+
+                    # Compute |J|^-1 SMat^T
+                    rcpjact[etype] = smat*rcpdjac
+
                 area = eles.basis.faces[fidx][3]
 
                 # Unit physical normals and their magnitudes (including |J|)
@@ -85,9 +118,13 @@ class FluidForcePlugin(BasePlugin):
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
 
+            if self._viscous:
+                self._rcpjact = {k: rcpjact[k[0]][..., v]
+                                 for k, v in self._eidxs.items()}
+
     def __call__(self, intg):
         # Return if no output is due
-        if intg.nsteps % self.nsteps:
+        if intg.nacptsteps % self.nsteps:
             return
 
         # MPI info
@@ -95,9 +132,10 @@ class FluidForcePlugin(BasePlugin):
 
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
+        ndims, nvars = self.ndims, self.nvars
 
         # Force vector
-        f = np.zeros(self.ndims)
+        f = np.zeros(2*ndims if self._viscous else ndims)
 
         for etype, fidx in self._m0:
             # Get the interpolation operator
@@ -109,7 +147,7 @@ class FluidForcePlugin(BasePlugin):
 
             # Interpolate to the face
             ufpts = np.dot(m0, uupts.reshape(nupts, -1))
-            ufpts = ufpts.reshape(nfpts, self.nvars, -1)
+            ufpts = ufpts.reshape(nfpts, nvars, -1)
             ufpts = ufpts.swapaxes(0, 1)
 
             # Compute the pressure
@@ -120,7 +158,30 @@ class FluidForcePlugin(BasePlugin):
             norms = self._norms[etype, fidx]
 
             # Do the quadrature
-            f += np.einsum('i...,ij,jik', qwts, p, norms)
+            f[:ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
+
+            if self._viscous:
+                # Get operator and J^-T matrix
+                m4 = self._m4[etype]
+                rcpjact = self._rcpjact[etype, fidx]
+
+                # Transformed gradient at solution points
+                tduupts = np.dot(m4, uupts.reshape(nupts, -1))
+                tduupts = tduupts.reshape(ndims, nupts, nvars, -1)
+
+                # Physical gradient at solution points
+                duupts = np.einsum('ijkl,jkml->ikml', rcpjact, tduupts)
+                duupts = duupts.reshape(ndims, nupts, -1)
+
+                # Interpolate gradient to flux points
+                dufpts = np.array([np.dot(m0, duupts[i]) for i in range(ndims)])
+                dufpts = dufpts.reshape(ndims, nfpts, nvars, -1).swapaxes(1, 2)
+
+                # Viscous stress
+                vis = self.stress_tensor(ufpts, dufpts)
+
+                # Do the quadrature
+                f[ndims:] += np.einsum('i...,klij,jil', qwts, vis, norms)
 
         # Reduce and output if we're the root rank
         if rank != root:
@@ -136,3 +197,27 @@ class FluidForcePlugin(BasePlugin):
 
             # Flush to disk
             self.outf.flush()
+
+    def stress_tensor(self, u, du):
+        c = self._constants
+
+        # Density, Energy
+        rho, E = u[0], u[-1]
+
+        # Gradient of density and momentum
+        gradrho, gradrhou = du[:, 0], du[:, 1:-1]
+
+        # Gradient of velocity
+        gradu = (gradrhou - gradrho[:, None]*u[None, 1:-1]/rho) / rho
+
+        # Bulk tensor
+        bulk = np.eye(self.ndims)[:, :, None, None]*np.trace(gradu)
+
+        mu = c['mu']
+
+        if self._viscorr == 'sutherland':
+            cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0))
+            Trat = cpT/c['cpTref']
+            mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
+
+        return -mu*(gradu + gradu.swapaxes(0, 1) - 2 / 3*bulk)
