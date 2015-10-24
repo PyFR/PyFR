@@ -205,18 +205,25 @@ class BaseElements(object, metaclass=ABCMeta):
                                      tags={expr, 'align'})
 
     @memoize
-    def smat_at(self, name):
-        smat = self._get_smats(getattr(self.basis, name))
-        return self._be.const_matrix(smat, tags={'align'})
+    def smat_at_np(self, name):
+        return self._get_smats(getattr(self.basis, name))
 
     @memoize
-    def rcpdjac_at(self, name):
+    def smat_at(self, name):
+        return self._be.const_matrix(self.smat_at_np(name), tags={'align'})
+
+    @memoize
+    def rcpdjac_at_np(self, name):
         _, djac = self._get_smats(getattr(self.basis, name), retdets=True)
 
         if np.any(djac < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
 
-        return self._be.const_matrix(1.0 / djac, tags={'align'})
+        return 1.0 / djac
+
+    @memoize
+    def rcpdjac_at(self, name):
+        return self._be.const_matrix(self.rcpdjac_at_np(name), tags={'align'})
 
     @memoize
     def ploc_at_np(self, name):

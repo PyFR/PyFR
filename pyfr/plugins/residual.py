@@ -43,7 +43,7 @@ class ResidualPlugin(BasePlugin):
     def __call__(self, intg):
         # If an output is due next step
         if (intg.nacptsteps + 1) % self.nsteps == 0:
-            self._prev = intg.soln
+            self._prev = [s.copy() for s in intg.soln]
             self._tprev = intg.tcurr
         # If an output is due this step
         elif intg.nacptsteps % self.nsteps == 0:

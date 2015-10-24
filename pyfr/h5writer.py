@@ -6,50 +6,51 @@ import os
 import h5py
 import numpy as np
 
-from pyfr.integrators.base import BaseIntegrator
 from pyfr.mpiutil import get_comm_rank_root
 
 
-class H5Writer(BaseIntegrator):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+class H5Writer(object):
+    def __init__(self, intg, basedir, basename, prefix):
+        # Base output directory and file name and prefix for the data-set.
+        self._basedir = basedir
+        self._basename = basename
+        self._prefix = prefix
 
-        # Base output directory and file name
-        self._basedir = self.cfg.getpath('soln-output', 'basedir', '.')
-        self._basename = self.cfg.get('soln-output', 'basename', raw=True)
-
-        # Output counter (incremented each time output() is called)
+        # Output counter (incremented each time write() is called)
         self.nout = 0
+
+        # Copy the float type
+        self.fpdtype = intg.backend.fpdtype
 
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
         # Get the type and shape of each element in the partition
-        etypes, shapes = self.system.ele_types, self.system.ele_shapes
+        etypes, shapes = intg.system.ele_types, intg.system.ele_shapes
 
-        # Gather this information onto the root rank
-        eleinfo = comm.gather(zip(etypes, shapes), root=root)
+        # Gather this information and distribute
+        eleinfo = comm.allgather(zip(etypes, shapes))
 
         # Deciding if parallel
         parallel = (h5py.get_config().mpi and
                     h5py.version.version_tuple >= (2, 5) and
-                    not self.cfg.getbool('soln-output', 'serial-h5', False))
+                    'PYFR_FORCE_SERIAL_HDF5' not in os.environ)
 
         if parallel:
             self._write = self._write_parallel
+            self._loc_names = loc_names = []
+            self._global_shape_list = []
 
-            if rank == root:
-                sollist = []
-                for mrank, meleinfo in enumerate(eleinfo):
-                    prank = self.rallocs.mprankmap[mrank]
-                    sollist.extend(
-                        (self._get_name_for_soln(etype, prank), dims)
-                        for etype, dims in meleinfo
-                    )
-            else:
-                sollist = None
+            for mrank, meleinfo in enumerate(eleinfo):
+                prank = intg.rallocs.mprankmap[mrank]
 
-            self.sollist = comm.bcast(sollist, root=root)
+                # Loop over all element types across all ranks
+                for etype, shape in meleinfo:
+                    name = self._get_name_for_data(etype, prank)
+                    self._global_shape_list.append((name, shape))
+
+                    if rank == mrank:
+                        loc_names.append(name)
         else:
             self._write = self._write_serial
 
@@ -60,43 +61,33 @@ class H5Writer(BaseIntegrator):
                 self._loc_names = loc_names = []
 
                 for mrank, meleinfo in enumerate(eleinfo):
-                    prank = self.rallocs.mprankmap[mrank]
-                    for tag, (etype, dims) in enumerate(meleinfo):
-                        name = self._get_name_for_soln(etype, prank)
+                    prank = intg.rallocs.mprankmap[mrank]
+                    for tag, (etype, shape) in enumerate(meleinfo):
+                        name = self._get_name_for_data(etype, prank)
 
                         if mrank == root:
                             loc_names.append(name)
                         else:
-                            rbuf = np.empty(dims, dtype=self.backend.fpdtype)
+                            rbuf = np.empty(shape, dtype=self.fpdtype)
                             rreq = comm.Recv_init(rbuf, mrank, tag)
 
                             mpi_rbufs.append(rbuf)
                             mpi_rreqs.append(rreq)
                             mpi_names.append(name)
 
-    def output(self, solnmap, stats):
-        comm, rank, root = get_comm_rank_root()
-
-        # Convert the config and stats objects to strings
-        if rank == root:
-            metadata = dict(config=self.cfg.tostr(),
-                            stats=stats.tostr(),
-                            mesh_uuid=self._mesh_uuid)
-        else:
-            metadata = None
-
+    def write(self, data, metadata, tcurr):
         # Determine the output path
-        path = self._get_output_path()
+        path = self._get_output_path(tcurr)
 
         # Delegate to _write to do the actual outputting
-        self._write(path, solnmap, metadata)
+        self._write(path, data, metadata)
 
         # Increment the output number
         self.nout += 1
 
-    def _get_output_path(self):
+    def _get_output_path(self, tcurr):
         # Substitute %(t) and %(n) for the current time and output number
-        fname = self._basename % dict(t=self.tcurr, n=self.nout)
+        fname = self._basename % dict(t=tcurr, n=self.nout)
 
         # Append the '.pyfrs' extension
         if not fname.endswith('.pyfrs'):
@@ -104,23 +95,21 @@ class H5Writer(BaseIntegrator):
 
         return os.path.join(self._basedir, fname)
 
-    def _get_name_for_soln(self, etype, prank=None):
-        prank = prank or self.rallocs.prank
-        return 'soln_{}_p{}'.format(etype, prank)
+    def _get_name_for_data(self, etype, prank):
+        return '{}_{}_p{}'.format(self._prefix, etype, prank)
 
-    def _write_parallel(self, path, solnmap, metadata):
+    def _write_parallel(self, path, data, metadata):
         comm, rank, root = get_comm_rank_root()
 
         with h5py.File(path, 'w', driver='mpio', comm=comm) as h5file:
-            smap = {}
-            for name, shape in self.sollist:
-                smap[name] = h5file.create_dataset(
-                    name, shape, dtype=self.backend.fpdtype
+            dmap = {}
+            for name, shape in self._global_shape_list:
+                dmap[name] = h5file.create_dataset(
+                    name, shape, dtype=self.fpdtype
                 )
 
-            for e, sol in solnmap.items():
-                s = self._get_name_for_soln(e, self.rallocs.prank)
-                smap[s][:] = sol
+            for s, dat in zip(self._loc_names, data):
+                dmap[s][:] = dat
 
             # Metadata information has to be transferred to all the ranks
             if rank == root:
@@ -135,29 +124,29 @@ class H5Writer(BaseIntegrator):
                 if rank == root:
                     d.write_direct(np.array(metadata[name], dtype='S'))
 
-    def _write_serial(self, path, solnmap, metadata):
+    def _write_serial(self, path, data, metadata):
         from mpi4py import MPI
 
         comm, rank, root = get_comm_rank_root()
 
         if rank != root:
-            for tag, buf in enumerate(solnmap.values()):
+            for tag, buf in enumerate(data):
                 comm.Send(buf.copy(), root, tag)
         else:
-            # Recv all of the non-local solution mats
+            # Recv all of the non-local data
             MPI.Prequest.Startall(self._mpi_rreqs)
             MPI.Prequest.Waitall(self._mpi_rreqs)
 
             # Combine local and MPI data
             names = it.chain(self._loc_names, self._mpi_names)
-            solns = it.chain(solnmap.values(), self._mpi_rbufs)
+            dats = it.chain(data, self._mpi_rbufs)
 
             # Convert any metadata to ASCII
             metadata = {k: np.array(v, dtype='S')
                         for k, v in metadata.items()}
 
             # Create the output dictionary
-            outdict = dict(zip(names, solns), **metadata)
+            outdict = dict(zip(names, dats), **metadata)
 
             with h5py.File(path, 'w') as h5file:
                 for k, v in outdict.items():

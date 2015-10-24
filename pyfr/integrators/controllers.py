@@ -15,7 +15,7 @@ class BaseController(BaseIntegrator):
 
         # Current and minimum time steps
         self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
-        self._dtmin = 1.0e-14
+        self.dtmin = 1.0e-14
 
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
@@ -67,7 +67,7 @@ class BaseController(BaseIntegrator):
         self.completed_step_handlers(self)
 
     def _reject_step(self, dt, idxold):
-        if dt <= self._dtmin:
+        if dt <= self.dtmin:
             raise RuntimeError('Minimum sized time step rejected')
 
         self.nacptchain = 0
@@ -101,16 +101,13 @@ class NoneController(BaseController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt), self._dtmin)
+            dt = max(min(t - self.tcurr, self._dt), self.dtmin)
 
             # Take the step
             idxcurr = self.step(self.tcurr, dt)
 
             # We are not adaptive, so accept every step
             self._accept_step(dt, idxcurr)
-
-        # Return the solution matrices
-        return self.soln
 
 
 class PIController(BaseController):
@@ -178,7 +175,7 @@ class PIController(BaseController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt), self._dtmin)
+            dt = max(min(t - self.tcurr, self._dt), self.dtmin)
 
             # Take the step
             idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
@@ -199,5 +196,3 @@ class PIController(BaseController):
                 self._accept_step(dt, idxcurr)
             else:
                 self._reject_step(dt, idxprev)
-
-        return self.soln

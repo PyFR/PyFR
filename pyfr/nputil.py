@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import ast
 import ctypes as ct
 import functools as ft
 import itertools as it
@@ -77,26 +76,6 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
         srtdidx[i:] = fuzzysort(arr, srtdidx[i:], dim + 1, tol)
 
     return srtdidx
-
-
-def range_eval(expr):
-    r = []
-
-    for prt in map(lambda s: s.strip(), expr.split('+')):
-        try:
-            # Parse parts of the form [x, y, z, ...]
-            if prt.startswith('['):
-                r.extend(float(l) for l in ast.literal_eval(prt))
-            # Parse parts of the form range(start, stop, n)
-            else:
-                m = re.match(r'range\((.*?),(.*?),(.*?)\)$', prt)
-                s, e, n = m.groups()
-
-                r.extend(np.linspace(float(s), float(e), int(n)))
-        except (AttributeError, SyntaxError, ValueError):
-            raise ValueError('Invalid range')
-
-    return r
 
 
 _ctype_map = {
