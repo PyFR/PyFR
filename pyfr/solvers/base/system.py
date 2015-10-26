@@ -78,8 +78,17 @@ class BaseSystem(object, metaclass=ABCMeta):
         # Set the initial conditions either from a pyfrs file or from
         # explicit expressions in the config file
         if initsoln:
-            # Load the config used to produce the solution
+            # Load the config and stats files from the solution
             solncfg = Inifile(initsoln['config'])
+            solnsts = Inifile(initsoln['stats'])
+
+            # Get the names of the conserved variables (fields)
+            solnfields = solnsts.get('data', 'fields', '')
+            currfields = ','.join(eles[0].convarmap[eles[0].ndims])
+
+            # Ensure they match up
+            if solnfields and solnfields != currfields:
+                raise RuntimeError('Invalid solution for system')
 
             # Process the solution
             for k, ele in elemap.items():
