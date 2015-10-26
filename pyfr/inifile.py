@@ -1,10 +1,16 @@
 # -*- coding: utf-8 -*-
 
-import os
 import io
+import os
+import re
 
 from collections import OrderedDict
 from configparser import SafeConfigParser, NoSectionError, NoOptionError
+
+
+def _ensure_float(m):
+    m = m.group(0)
+    return m if any(c in m for c in '.eE') else m + '.'
 
 
 _sentinel = object()
@@ -65,6 +71,25 @@ class Inifile(object):
             path = os.path.abspath(path)
 
         return path
+
+    def getexpr(self, section, option, default=_sentinel, subs={}):
+        expr = self.get(section, option, default)
+
+        # Ensure the expression does not contain invalid characters
+        if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', expr):
+            raise ValueError('Invalid characters in expression')
+
+        # Substitute variables
+        if subs:
+            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
+                          lambda m: subs[m.group(1)], expr)
+
+        # Convert integers to floats
+        expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?',
+                      _ensure_float, expr)
+
+        # Encase in parenthesis
+        return '({0})'.format(expr)
 
     def getfloat(self, section, option, default=_sentinel):
         return float(self.get(section, option, default))

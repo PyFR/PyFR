@@ -79,7 +79,7 @@ class BaseElements(object, metaclass=ABCMeta):
         vars.update(dict(zip('xyz', coords)))
 
         # Evaluate the ICs from the config file
-        ics = [npeval(self.cfg.get('soln-ics', dv), vars)
+        ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
                for dv in self.privarmap[self.ndims]]
 
         # Allocate
@@ -117,26 +117,8 @@ class BaseElements(object, metaclass=ABCMeta):
         subs.update({v: 'u[{0}]'.format(i) for i, v in enumerate(convars)})
         subs.update(abs='fabs', pi=str(math.pi))
 
-        srcex = []
-        for v in convars:
-            ex = self.cfg.get('solver-source-terms', v, '0')
-
-            # Ensure the expression does not contain invalid characters
-            if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', ex):
-                raise ValueError('Invalid characters in expression')
-
-            # Convert integers to floats
-            ex = re.sub(r'(?<![a-zA-Z_.])(?<![eE][-+])(\d+)(?![eE.])',
-                        r'\g<1>.0', ex)
-
-            # Substitute variables
-            ex = re.sub(r'\b({0})\b'.format('|'.join(subs)),
-                        lambda m: subs[m.group(1)], ex)
-
-            # Append
-            srcex.append(ex)
-
-        return srcex
+        return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)
+                for v in convars]
 
     @lazyprop
     def _ploc_in_src_exprs(self):
