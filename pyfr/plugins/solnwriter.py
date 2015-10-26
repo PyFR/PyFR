@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.h5writer import H5Writer
 from pyfr.inifile import Inifile
 from pyfr.plugins.base import BasePlugin
+from pyfr.writers.native import NativeWriter
 
 
 class SolnWriterPlugin(BasePlugin):
@@ -15,7 +15,8 @@ class SolnWriterPlugin(BasePlugin):
         # Construct the solution writer
         basedir = self.cfg.getpath(cfgsect, 'basedir', '.')
         basename = self.cfg.get(cfgsect, 'basename', raw=True)
-        self._writer = H5Writer(intg, basedir, basename, 'soln')
+        self._writer = NativeWriter(intg, self.nvars, basedir, basename,
+                                    '.pyfrs', 'soln')
 
         # Output time step and next output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')

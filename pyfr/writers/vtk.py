@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-"""Converts .pyfr[m, s] files to a Paraview VTK UnstructuredGrid File"""
-
 from collections import defaultdict
 import os
 
@@ -12,9 +10,9 @@ from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
-class ParaviewWriter(BaseWriter):
+class VTKWriter(BaseWriter):
     # Supported file types and extensions
-    name = 'paraview'
+    name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
     def __init__(self, args):

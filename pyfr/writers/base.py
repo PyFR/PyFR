@@ -2,7 +2,7 @@
 
 from pyfr.inifile import Inifile
 from pyfr.readers.native import NativeReader
-from pyfr.solvers import BaseSystem
+from pyfr.solvers.base import BaseSystem
 from pyfr.util import subclass_where
 
 

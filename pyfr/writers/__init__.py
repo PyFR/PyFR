@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.writers.base import BaseWriter
-from pyfr.writers.paraview import ParaviewWriter
+from pyfr.writers.vtk import VTKWriter
 
 from pyfr.util import subclasses, subclass_where
 
