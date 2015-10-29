@@ -41,8 +41,7 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
             ul=self._scal0_lhs, ur=self._scal0_rhs,
             gradul=self._vect0_lhs, gradur=self._vect0_rhs,
             amul=avis0_lhs, amur=avis0_rhs,
-            magnl=self._mag_pnorm_lhs, magnr=self._mag_pnorm_rhs,
-            nl=self._norm_pnorm_lhs
+            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
         )
 
 

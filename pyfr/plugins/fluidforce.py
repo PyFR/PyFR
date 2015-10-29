@@ -106,14 +106,12 @@ class FluidForcePlugin(BasePlugin):
                     # Compute |J|^-1 SMat^T
                     rcpjact[etype] = smat*rcpdjac
 
-                area = eles.basis.faces[fidx][3]
-
                 # Unit physical normals and their magnitudes (including |J|)
                 npn = eles.get_norm_pnorms(eidx, fidx)
                 mpn = eles.get_mag_pnorms(eidx, fidx)
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn*area)
+                norms[etype, fidx].append(mpn[:, None]*npn)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
