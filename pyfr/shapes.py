@@ -57,13 +57,19 @@ class BaseShape(object):
             self.metric = cfg.get('solver', 'metric', 'none')
             if self.metric == 'free-stream':
                 if nsptord >= self.order + 1:
-                    # Construct metric basis
+                    # Construct metric basis when q > p
+                    # We need p-th order pseudo grid points, which includes
+                    # p-th order points on faces. It guarantees th q-th order
+                    # collocation projection on the face on the both adjacent
+                    # cells.
+                    # Ref. 1 JCP 281, 28-54, Sec 4.2
+                    # Ref. 2 JSC 26(3), 301-327, Definition 1
                     self.mpts = self.std_ele(self.order)
                     self.mbasis = get_polybasis(
                         self.name, self.order + 1, self.mpts
                     )
                 else:
-                    # Use sbasis, spts
+                    # Use sbasis, spts when q <= p
                     self.mpts = self.spts
                     self.mbasis = self.sbasis
             elif self.metric != 'none':

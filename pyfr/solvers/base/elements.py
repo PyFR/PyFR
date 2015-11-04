@@ -50,6 +50,7 @@ class BaseElements(object, metaclass=ABCMeta):
         # Construct smat_base for free-stream metric
         self.metric = self.basis.metric
         if self.metric == 'free-stream':
+            # Compute metric (Smat, djac on (pseudo grid points)
             self._smat_base()
 
         # Physical normals at the flux points
@@ -237,13 +238,16 @@ class BaseElements(object, metaclass=ABCMeta):
             npts = len(pts)
             smats = np.empty((self.ndims, npts, self.ndims*self.neles))
 
+            # Interpolation matrix to pts
             M0 = self.basis.mbasis.nodal_basis_at(pts)
 
+            # Interpolate smats
             for i in range(self.ndims):
                 smats[i] = np.dot(M0, self._smats[i])
 
             smats = smats.reshape(self.ndims, npts, self.ndims, -1)
 
+            # Interpolate djacs
             if retdets:
                 djacs = np.dot(M0, self._djacs)
         else:
@@ -281,7 +285,7 @@ class BaseElements(object, metaclass=ABCMeta):
         return ploc
 
     def _smat_base(self):
-        # Metric basis
+        # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
         mpts = self.basis.mpts
         mbasis = self.basis.mbasis
         self.nmpts = nmpts = len(mpts)
@@ -309,6 +313,7 @@ class BaseElements(object, metaclass=ABCMeta):
         smats = np.empty_like(jac)
 
         if ndims == 2:
+            # Just compute smats whose order is q-1
             a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
 
             smats[0,:,0], smats[0,:,1] = d, -b
@@ -321,21 +326,23 @@ class BaseElements(object, metaclass=ABCMeta):
 
             # Cpmpute x cross x_(chi)
             tt = np.zeros((ndims,) + x.shape)
-            tt[0] = np.cross(x0, x, axisa=0, axisb=1, axisc=1)
-            tt[1] = np.cross(x1, x, axisa=0, axisb=1, axisc=1)
-            tt[2] = np.cross(x2, x, axisa=0, axisb=1, axisc=1)
+            tt[0] = np.cross(x, x0, axisa=1, axisb=0, axisc=1)
+            tt[1] = np.cross(x, x1, axisa=1, axisb=0, axisc=1)
+            tt[2] = np.cross(x, x2, axisa=1, axisb=0, axisc=1)
             tt = tt.reshape(ndims, nmpts, -1)
 
-            # Derivative
+            # Derivative of x cross x_(chi) at (pseudo) grid points
             dtt = np.zeros((ndims, nmpts*ndims, ndims*neles))
             dtt[0] = np.dot(jacop, tt[0])
             dtt[1] = np.dot(jacop, tt[1])
             dtt[2] = np.dot(jacop, tt[2])
             dtt = dtt.reshape(ndims, nmpts, ndims, ndims, -1).swapaxes(1, 2)
 
-            smats[0] = 0.5*(dtt[1][2] - dtt[2][1])
-            smats[1] = 0.5*(dtt[2][0] - dtt[0][2])
-            smats[2] = 0.5*(dtt[0][1] - dtt[1][0])
+            # Kopriva's invariant form of smats
+            # Ref. JSC 26(3), 301-327, Eq. (37)
+            smats[0] = -0.5*(dtt[1][2] - dtt[2][1])
+            smats[1] = -0.5*(dtt[2][0] - dtt[0][2])
+            smats[2] = -0.5*(dtt[0][1] - dtt[1][0])
 
             # Exploit the fact that det(J) = x0 . (x1 ^ x2)
             self._djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
