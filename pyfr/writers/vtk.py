@@ -21,6 +21,36 @@ class VTKWriter(BaseWriter):
         self.dtype = np.dtype(args.precision).type
         self.divisor = args.divisor or self.cfg.getint('solver', 'order')
 
+        # PyFR solution file (conservative variables)
+        if self.solnextn == '.pyfrs':
+            self._proc_fields = self._proc_fields_pyfrs
+            self._vtk_vars = self.elementscls.visvarmap[self.ndims]
+        # PyFR data file (arbitrary variables)
+        else:
+            self._proc_fields = self._proc_fields_pyfrd
+            self._soln_fields = self.stats.get('data', 'fields').split(',')
+            self._vtk_vars = {k: [k] for k in self._soln_fields}
+
+    def _proc_fields_pyfrs(self, vsol):
+        # Primitive and visualisation variable maps
+        privarmap = self.elementscls.privarmap[self.ndims]
+        visvarmap = self.elementscls.visvarmap[self.ndims]
+
+        # Convert from conservative to primitive variables
+        vsol = np.array(self.elementscls.conv_to_pri(vsol, self.cfg))
+
+        # Prepare the fields
+        fields = []
+        for vnames in visvarmap.values():
+            ix = [privarmap.index(vn) for vn in vnames]
+
+            fields.append(vsol[ix])
+
+        return fields
+
+    def _proc_fields_pyfrd(self, vsol):
+        return [vsol[self._soln_fields.index(vn)] for vn in self._vtk_vars]
+
     def _get_npts_ncells_nnodes(self, mk):
         m_inf = self.mesh_inf[mk]
 
@@ -41,8 +71,7 @@ class VTKWriter(BaseWriter):
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
         dsize = np.dtype(self.dtype).itemsize
 
-        ndims = self.ndims
-        vvars = self.elementscls.visvarmap[ndims]
+        vvars = self._vtk_vars
 
         names = ['', 'connectivity', 'offsets', 'types']
         types = [dtype, 'Int32', 'Int32', 'UInt8']
@@ -229,18 +258,9 @@ class VTKWriter(BaseWriter):
         self._write_darray(vtu_off, vtuf, np.int32)
         self._write_darray(vtu_typ, vtuf, np.uint8)
 
-        # Primitive and visualisation variable maps
-        privarmap = self.elementscls.privarmap[self.ndims]
-        visvarmap = self.elementscls.visvarmap[self.ndims]
-
-        # Convert from conservative to primitive variables
-        vsol = np.array(self.elementscls.conv_to_pri(vsol, self.cfg))
-
-        # Write out the various fields
-        for vnames in visvarmap.values():
-            ix = [privarmap.index(vn) for vn in vnames]
-
-            self._write_darray(vsol[ix].T, vtuf, self.dtype)
+        # Process and write out the various fields
+        for arr in self._proc_fields(vsol):
+            self._write_darray(arr.T, vtuf, self.dtype)
 
 
 class BaseShapeSubDiv(object):

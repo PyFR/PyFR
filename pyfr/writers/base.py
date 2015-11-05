@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import os
+
 from pyfr.inifile import Inifile
 from pyfr.readers.native import NativeReader
 from pyfr.solvers.base import BaseSystem
@@ -7,20 +9,13 @@ from pyfr.util import subclass_where
 
 
 class BaseWriter(object):
-    """Functionality for post-processing PyFR data to visualisation formats"""
-
     def __init__(self, args):
-        """Loads PyFR mesh and solution files
-
-        A check is made to ensure the solution was computed on the mesh.
-
-        :param args: Command line arguments passed from scripts/postp.py
-        :type args: class 'argparse.Namespace'
-
-        """
         self.outf = args.outf
 
-        # Load mesh and solution files
+        # Solution file type; usually .pyfrs or .pyfrd
+        self.solnextn = os.path.splitext(args.solnf)[1]
+
+        # Load the mesh and solution files
         self.soln = NativeReader(args.solnf)
         self.mesh = NativeReader(args.meshf)
 
@@ -37,8 +32,9 @@ class BaseWriter(object):
             raise RuntimeError('Solution "%s" was not computed on mesh "%s"' %
                                (args.solnf, args.meshf))
 
-        # Load the config file
+        # Load the configuration and stats files
         self.cfg = Inifile(self.soln['config'])
+        self.stats = Inifile(self.soln['stats'])
 
         # System and elements classs
         self.systemscls = subclass_where(
