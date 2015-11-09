@@ -90,8 +90,8 @@ class NativeWriter(object):
         self.nout += 1
 
     def _get_output_path(self, tcurr):
-        # Substitute %(t) and %(n) for the current time and output number
-        fname = self.basename % dict(t=tcurr, n=self.nout)
+        # Substitute {t} and {n} for the current time and output number
+        fname = self.basename.format(t=tcurr, n=self.nout)
 
         # Append the relevant extension
         if not fname.endswith(self.extn):

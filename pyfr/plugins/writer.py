@@ -5,8 +5,8 @@ from pyfr.plugins.base import BasePlugin
 from pyfr.writers.native import NativeWriter
 
 
-class SolnWriterPlugin(BasePlugin):
-    name = 'solnwriter'
+class WriterPlugin(BasePlugin):
+    name = 'writer'
     systems = ['*']
 
     def __init__(self, intg, cfgsect, suffix=None):
@@ -14,7 +14,7 @@ class SolnWriterPlugin(BasePlugin):
 
         # Construct the solution writer
         basedir = self.cfg.getpath(cfgsect, 'basedir', '.')
-        basename = self.cfg.get(cfgsect, 'basename', raw=True)
+        basename = self.cfg.get(cfgsect, 'basename')
         self._writer = NativeWriter(intg, self.nvars, basedir, basename,
                                     prefix='soln')
 
