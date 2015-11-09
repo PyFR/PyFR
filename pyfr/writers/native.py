@@ -10,7 +10,8 @@ from pyfr.mpiutil import get_comm_rank_root
 
 
 class NativeWriter(object):
-    def __init__(self, intg, nvars, basedir, basename, extn, prefix):
+    def __init__(self, intg, nvars, basedir, basename, *, prefix,
+                 extn='.pyfrs'):
         # Base output directory, file name, and extension
         self.basedir = basedir
         self.basename = basename

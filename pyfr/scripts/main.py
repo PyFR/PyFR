@@ -294,7 +294,7 @@ def process_tavg(args):
     pb = ProgressBar(0, 0, len(stimes), 0)
 
     # Copy over the solutions from the first time dump
-    solnfs = infs[stimes[0]].soln_files
+    solnfs = [f for f in infs[stimes[0]] if f.startswith('soln')]
     avgs = {s: infs[stimes[0]][s].copy() for s in solnfs}
 
     # Weight the initialised trapezoidal mean

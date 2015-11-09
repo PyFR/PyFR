@@ -21,17 +21,17 @@ class VTKWriter(BaseWriter):
         self.dtype = np.dtype(args.precision).type
         self.divisor = args.divisor or self.cfg.getint('solver', 'order')
 
-        # PyFR solution file (conservative variables)
-        if self.solnextn == '.pyfrs':
-            self._proc_fields = self._proc_fields_pyfrs
+        # Solutions need a separate processing pipeline to other data
+        if self.dataprefix == 'soln':
+            self._proc_fields = self._proc_fields_soln
             self._vtk_vars = self.elementscls.visvarmap[self.ndims]
-        # PyFR data file (arbitrary variables)
+        # Otherwise we're dealing with simple scalar data
         else:
-            self._proc_fields = self._proc_fields_pyfrd
+            self._proc_fields = self._proc_fields_scal
             self._soln_fields = self.stats.get('data', 'fields').split(',')
             self._vtk_vars = {k: [k] for k in self._soln_fields}
 
-    def _proc_fields_pyfrs(self, vsol):
+    def _proc_fields_soln(self, vsol):
         # Primitive and visualisation variable maps
         privarmap = self.elementscls.privarmap[self.ndims]
         visvarmap = self.elementscls.visvarmap[self.ndims]
@@ -48,7 +48,7 @@ class VTKWriter(BaseWriter):
 
         return fields
 
-    def _proc_fields_pyfrd(self, vsol):
+    def _proc_fields_scal(self, vsol):
         return [vsol[self._soln_fields.index(vn)] for vn in self._vtk_vars]
 
     def _get_npts_ncells_nnodes(self, mk):
