@@ -1,44 +1,40 @@
 # -*- coding: utf-8 -*-
 
+import os
+
 from pyfr.inifile import Inifile
 from pyfr.readers.native import NativeReader
-from pyfr.solvers import BaseSystem
+from pyfr.solvers.base import BaseSystem
 from pyfr.util import subclass_where
 
 
 class BaseWriter(object):
-    """Functionality for post-processing PyFR data to visualisation formats"""
-
     def __init__(self, args):
-        """Loads PyFR mesh and solution files
-
-        A check is made to ensure the solution was computed on the mesh.
-
-        :param args: Command line arguments passed from scripts/postp.py
-        :type args: class 'argparse.Namespace'
-
-        """
         self.outf = args.outf
 
-        # Load mesh and solution files
+        # Load the mesh and solution files
         self.soln = NativeReader(args.solnf)
         self.mesh = NativeReader(args.meshf)
-
-        # Get element types and array shapes
-        self.mesh_inf = self.mesh.array_info
-        self.soln_inf = self.soln.array_info
-
-        # Dimensions
-        self.ndims = next(iter(self.mesh_inf.values()))[1][2]
-        self.nvars = next(iter(self.soln_inf.values()))[1][1]
 
         # Check solution and mesh are compatible
         if self.mesh['mesh_uuid'] != self.soln['mesh_uuid']:
             raise RuntimeError('Solution "%s" was not computed on mesh "%s"' %
                                (args.solnf, args.meshf))
 
-        # Load the config file
+        # Load the configuration and stats files
         self.cfg = Inifile(self.soln['config'])
+        self.stats = Inifile(self.soln['stats'])
+
+        # Data file prefix (defaults to soln for backwards compatibility)
+        self.dataprefix = self.stats.get('data', 'prefix', 'soln')
+
+        # Get element types and array shapes
+        self.mesh_inf = self.mesh.array_info('spt')
+        self.soln_inf = self.soln.array_info(self.dataprefix)
+
+        # Dimensions
+        self.ndims = next(iter(self.mesh_inf.values()))[1][2]
+        self.nvars = next(iter(self.soln_inf.values()))[1][1]
 
         # System and elements classs
         self.systemscls = subclass_where(

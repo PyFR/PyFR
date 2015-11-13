@@ -29,7 +29,7 @@ class BasePartitioner(object):
 
     def _combine_mesh_parts(self, mesh):
         # Get the per-partition element counts
-        pinf = mesh.partition_info
+        pinf = mesh.partition_info('soln')
 
         # Shape points and element number offsets
         spts = defaultdict(list)
@@ -90,7 +90,7 @@ class BasePartitioner(object):
     def _combine_soln_parts(self, soln):
         newsoln = defaultdict(list)
 
-        for f, (en, shape) in soln.array_info.items():
+        for f, (en, shape) in soln.array_info('soln').items():
             newsoln['soln_{0}_p0'.format(en)].append(soln[f])
 
         newsoln = {k: np.dstack(v) for k, v in newsoln.items()}

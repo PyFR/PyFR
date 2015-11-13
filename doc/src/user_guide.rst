@@ -722,8 +722,8 @@ Example::
     order = 16
     cutoff = 1
 
-[soln-plugin-solnwriter]
-^^^^^^^^^^^^^^^^^^^^^^^^
+[soln-plugin-writer]
+^^^^^^^^^^^^^^^^^^^^
 Periodically write the solution to disk in the pyfrs format.
 
 1. ``dt-out`` --- write to disk every ``dt-out`` time units:
@@ -741,10 +741,10 @@ Periodically write the solution to disk in the pyfrs format.
 
 Example::
 
-    [soln-plugin-solnwriter]
+    [soln-plugin-writer]
     dt-out = 0.01
     basedir = .
-    basename = files_%(t).2f
+    basename = files-{t:.2f}
 
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

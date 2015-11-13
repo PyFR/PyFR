@@ -9,12 +9,16 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root
 
 
-class H5Writer(object):
-    def __init__(self, intg, basedir, basename, prefix):
-        # Base output directory and file name and prefix for the data-set.
-        self._basedir = basedir
-        self._basename = basename
-        self._prefix = prefix
+class NativeWriter(object):
+    def __init__(self, intg, nvars, basedir, basename, *, prefix,
+                 extn='.pyfrs'):
+        # Base output directory, file name, and extension
+        self.basedir = basedir
+        self.basename = basename
+        self.extn = extn
+
+        # Prefix given to each data array in the output file
+        self.prefix = prefix
 
         # Output counter (incremented each time write() is called)
         self.nout = 0
@@ -26,17 +30,16 @@ class H5Writer(object):
         comm, rank, root = get_comm_rank_root()
 
         # Get the type and shape of each element in the partition
-        etypes, shapes = intg.system.ele_types, intg.system.ele_shapes
+        etypes = intg.system.ele_types
+        shapes = [(nupts, nvars, neles)
+                  for nupts, _, neles in intg.system.ele_shapes]
 
-        # Gather this information and distribute
+        # Gather
         eleinfo = comm.allgather(zip(etypes, shapes))
 
-        # Deciding if parallel
-        parallel = (h5py.get_config().mpi and
-                    h5py.version.version_tuple >= (2, 5) and
-                    'PYFR_FORCE_SERIAL_HDF5' not in os.environ)
-
-        if parallel:
+        # Parallel I/O
+        if (h5py.get_config().mpi and
+            'PYFR_FORCE_SERIAL_HDF5' not in os.environ):
             self._write = self._write_parallel
             self._loc_names = loc_names = []
             self._global_shape_list = []
@@ -51,6 +54,7 @@ class H5Writer(object):
 
                     if rank == mrank:
                         loc_names.append(name)
+        # Serial I/O
         else:
             self._write = self._write_serial
 
@@ -86,17 +90,17 @@ class H5Writer(object):
         self.nout += 1
 
     def _get_output_path(self, tcurr):
-        # Substitute %(t) and %(n) for the current time and output number
-        fname = self._basename % dict(t=tcurr, n=self.nout)
+        # Substitute {t} and {n} for the current time and output number
+        fname = self.basename.format(t=tcurr, n=self.nout)
 
-        # Append the '.pyfrs' extension
-        if not fname.endswith('.pyfrs'):
-            fname += '.pyfrs'
+        # Append the relevant extension
+        if not fname.endswith(self.extn):
+            fname += self.extn
 
-        return os.path.join(self._basedir, fname)
+        return os.path.join(self.basedir, fname)
 
     def _get_name_for_data(self, etype, prank):
-        return '{}_{}_p{}'.format(self._prefix, etype, prank)
+        return '{}_{}_p{}'.format(self.prefix, etype, prank)
 
     def _write_parallel(self, path, data, metadata):
         comm, rank, root = get_comm_rank_root()
