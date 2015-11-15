@@ -633,7 +633,8 @@ Example::
 [solver-source-terms]
 ^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises space (x, y, [z]) and time (t) dependent source terms with
+Parameterises solution, space (x, y, [z]), and time (t) dependent
+source terms with
 
 1. ``rho`` --- density source term
 
@@ -660,7 +661,7 @@ Example::
     [solver-source-terms]
     rho = t
     rhou = x*y*sin(y)
-    rhov = z
+    rhov = z*rho
     rhow = 1.0
     E = 1.0/(1.0+x)
 
