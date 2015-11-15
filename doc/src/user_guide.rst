@@ -123,11 +123,6 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr export mesh.pyfrm solution.pyfrs solution.vtu
 
-6. ``pyfr time-avg`` --- time-average a series of PyFR solution
-   files. Example::
-
-        pyfr time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
-
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
 
@@ -142,7 +137,7 @@ Configuration File (.ini)
 Overview
 ^^^^^^^^
 
-The .ini configuration file parameterizes the simulation. It is written
+The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
 their associated parameters are described below.
@@ -209,15 +204,15 @@ Example::
 
 Parameterises the OpenMP backend with
 
-1. ``cc`` --- C compiler
+1. ``cc`` --- C compiler:
 
     *string*
 
-2. ``cblas`` --- path to shared C BLAS library
+2. ``cblas`` --- path to shared C BLAS library:
 
     *string*
 
-3. ``cblas-type`` --- type of BLAS library
+3. ``cblas-type`` --- type of BLAS library:
 
     ``serial`` | ``parallel``
 
@@ -233,25 +228,25 @@ Example::
 
 Sets constants used in the simulation with
 
-1. ``gamma`` --- ratio of specific heats
+1. ``gamma`` --- ratio of specific heats:
 
     *float*
 
-2. ``mu`` --- dynamic viscosity
+2. ``mu`` --- dynamic viscosity:
 
     *float*
 
-3. ``Pr`` --- Prandtl number
+3. ``Pr`` --- Prandtl number:
 
     *float*
 
 4. ``cpTref`` --- product of specific heat at constant pressure and
-   reference temperature for Sutherland's Law
+   reference temperature for Sutherland's Law:
 
    *float*
 
 5. ``cpTs`` --- product of specific heat at constant pressure and
-   Sutherland temperature for Sutherland's Law
+   Sutherland temperature for Sutherland's Law:
 
    *float*
 
@@ -271,7 +266,7 @@ Parameterises the solver with
 
     ``euler`` | ``navier-stokes``
 
-2. ``order`` --- order of polynomial solution basis
+2. ``order`` --- order of polynomial solution basis:
 
     *int*
 
@@ -281,11 +276,11 @@ Parameterises the solver with
     ``flux, div-flux`` | ``surf-flux, div-flux`` |
     ``flux, surf-flux, div-flux``
 
-4. ``viscosity-correction`` --- viscosity correction
+4. ``viscosity-correction`` --- viscosity correction:
 
     ``none`` | ``sutherland``
 
-5. ``shock-capturing`` --- shock capturing scheme
+5. ``shock-capturing`` --- shock capturing scheme:
 
     ``none`` | ``artificial-viscosity``
 
@@ -307,15 +302,15 @@ Parameterises the time-integration scheme used by the solver with
 
     ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
-2. ``tstart`` --- initial time
+2. ``tstart`` --- initial time:
 
     *float*
 
-3. ``tend`` --- final time
+3. ``tend`` --- final time:
 
     *float*
 
-4. ``dt`` --- time-step
+4. ``dt`` --- time-step:
 
     *float*
 
@@ -373,11 +368,11 @@ Parameterises the interfaces with
 
     ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem``
 
-2. ``ldg-beta`` --- beta parameter used for LDG
+2. ``ldg-beta`` --- beta parameter used for LDG:
 
     *float*
 
-3. ``ldg-tau`` --- tau parameter used for LDG
+3. ``ldg-tau`` --- tau parameter used for LDG:
 
     *float*
 
@@ -459,7 +454,7 @@ Parameterises the quadrilateral interfaces with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
    quadrilateral interface:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto`` | 
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
     ``witherden-vincent``
 
 Example::
@@ -638,25 +633,26 @@ Example::
 [solver-source-terms]
 ^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises space (x, y, [z]) and time (t) dependent source terms with
+Parameterises solution, space (x, y, [z]), and time (t) dependent
+source terms with
 
-1. ``rho`` --- density source term
-
-    *string*
-
-2. ``rhou`` --- x-momentum source term
+1. ``rho`` --- density source term:
 
     *string*
 
-3. ``rhov`` --- y-momentum source term
+2. ``rhou`` --- x-momentum source term:
 
     *string*
 
-4. ``rhow`` --- z-momentum source term
+3. ``rhov`` --- y-momentum source term:
 
     *string*
 
-5. ``E`` --- energy source term
+4. ``rhow`` --- z-momentum source term:
+
+    *string*
+
+5. ``E`` --- energy source term:
 
     *string*
 
@@ -665,7 +661,7 @@ Example::
     [solver-source-terms]
     rho = t
     rhou = x*y*sin(y)
-    rhov = z
+    rhov = z*rho
     rhow = 1.0
     E = 1.0/(1.0+x)
 
@@ -674,15 +670,15 @@ Example::
 
 Parameterises artificial viscosity for shock capturing with
 
-1. ``max-amu`` --- maximum artificial viscosity
+1. ``max-amu`` --- maximum artificial viscosity:
 
     *float*
 
-2. ``s0`` --- sensor cut-off
+2. ``s0`` --- sensor cut-off:
 
     *float*
 
-3. ``kappa`` --- sensor range
+3. ``kappa`` --- sensor range:
 
     *float*
 
@@ -722,36 +718,37 @@ Example::
     order = 16
     cutoff = 1
 
-[soln-plugin-solnwriter]
-^^^^^^^^^^^^^^^^^^^^^^^^
+[soln-plugin-writer]
+^^^^^^^^^^^^^^^^^^^^
 Periodically write the solution to disk in the pyfrs format.
+Parameterised with
 
 1. ``dt-out`` --- write to disk every ``dt-out`` time units:
 
     *float*
 
 2. ``basedir`` --- relative path to directory where outputs will be
-   written
+   written:
 
     *string*
 
-3. ``basename`` --- pattern of output names
+3. ``basename`` --- pattern of output names:
 
     *string*
 
 Example::
 
-    [soln-plugin-solnwriter]
+    [soln-plugin-writer]
     dt-out = 0.01
     basedir = .
-    basename = files_%(t).2f
+    basename = files-{t:.2f}
 
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
 labelled ``name`` and writes out the resulting force vectors to a CSV
-file.
+file. Parameterised with
 
 1. ``nsteps`` --- integrate every ``nsteps``:
 
@@ -776,7 +773,7 @@ Example::
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Periodically checks the solution for NaN values
+Periodically checks the solution for NaN values. Parameterised with
 
 1. ``nsteps`` --- check every ``nsteps``:
 
@@ -791,6 +788,7 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically calculates the residual and writes it out to a CSV file.
+Parameterised with
 
 1. ``nsteps`` --- calculate every ``nsteps``:
 
@@ -816,7 +814,7 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^
 
 Periodically samples specific points in the volume and writes them out
-to a CSV file.
+to a CSV file. Parameterised with
 
 1. ``nsteps`` --- sample every ``nsteps``:
 
@@ -848,11 +846,52 @@ Example::
     file = point-data.csv
     header = true
 
+[soln-plugin-tavg]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Time average quantities. Parameterised with
+
+1. ``nsteps`` --- accumulate the average every ``nsteps`` time steps:
+
+    *int*
+
+2. ``dt-out`` --- write to disk every ``dt-out`` time units:
+
+    *float*
+
+3. ``basedir`` --- relative path to directory where outputs will be
+   written:
+
+    *string*
+
+4. ``basename`` --- pattern of output names:
+
+    *string*
+
+5. ``avg-name`` --- expression as a function of the primitive variables,
+   time (t), and space (x, y, [z]) to time average; multiple
+   expressions, each with their own *name*, may be specified:
+
+    *string*
+
+Example::
+
+    [soln-plugin-tavg]
+    nsteps = 10
+    dt-out = 2.0
+    basedir = .
+    basename = files-{t:06.2f}
+
+    avg-p = p
+    avg-p2 = p*p
+    avg-vel = sqrt(u*u + v*v)
+
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
 
-Parameterises constant, or if available space (x, y, [z]) and time (t) 
-dependent, boundary condition labelled :code:`name` in the .pyfrm file with
+Parameterises constant, or if available space (x, y, [z]) and time (t)
+dependent, boundary condition labelled :code:`name` in the .pyfrm file
+with
 
 1. ``type`` --- type of boundary condition:
 
@@ -982,23 +1021,23 @@ Example::
 
 Parameterises space (x, y, [z]) dependent initial conditions with
 
-1. ``rho`` --- initial density distribution
+1. ``rho`` --- initial density distribution:
 
     *string*
 
-2. ``u`` --- initial x-velocity distribution
+2. ``u`` --- initial x-velocity distribution:
 
     *string*
 
-3. ``v`` --- initial y-velocity distribution
+3. ``v`` --- initial y-velocity distribution:
 
     *string*
 
-4. ``w`` --- initial z-velocity distribution
+4. ``w`` --- initial z-velocity distribution:
 
     *string*
 
-5. ``p`` --- initial static pressure distribution
+5. ``p`` --- initial static pressure distribution:
 
     *string*
 
@@ -1038,14 +1077,14 @@ simulation on a mixed unstructured mesh:
 
         pyfr run -p couette_flow_2d.pyfrm couette_flow_2d.ini
 
-6. Run pyfr on the solution file ``couette_flow_2d_4.00.pyfrs``
+6. Run pyfr on the solution file ``couette_flow_2d-040.pyfrs``
    converting it into an unstructured VTK file called
-   ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the
+   ``couette_flow_2d-040.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr export couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
+        pyfr export couette_flow_2d.pyfrm couette_flow_2d-040.pyfrs couette_flow_2d-040.vtu -d 4
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -1088,14 +1127,14 @@ simulation on a structured mesh:
 
         mpirun -n 2 pyfr run -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
-7. Run pyfr on the solution file ``euler_vortex_2d_100.0.pyfrs``
+7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called
-   ``euler_vortex_2d_100.0.vtu``. Note that in order to visualise the
+   ``euler_vortex_2d-100.0.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
+        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d-100.0.vtu -d 4
 
 8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_

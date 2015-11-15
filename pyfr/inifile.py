@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
+from collections import OrderedDict
+from configparser import SafeConfigParser, NoSectionError, NoOptionError
 import io
 import os
 import re
-
-from collections import OrderedDict
-from configparser import SafeConfigParser, NoSectionError, NoOptionError
 
 
 def _ensure_float(m):
@@ -45,21 +44,21 @@ class Inifile(object):
     def hasopt(self, section, option):
         return self._cp.has_option(section, option)
 
-    def get(self, section, option, default=_sentinel, raw=False, vars=None):
+    def get(self, section, option, default=_sentinel, vars=None):
         try:
-            val = self._cp.get(section, option, raw=raw, vars=vars)
+            val = self._cp.get(section, option, vars=vars)
         except NoSectionError:
             if default is _sentinel:
                 raise
 
             self._cp.add_section(section)
-            val = self.get(section, option, default, raw, vars)
+            val = self.get(section, option, default, vars)
         except NoOptionError:
             if default is _sentinel:
                 raise
 
             self._cp.set(section, option, str(default))
-            val = self._cp.get(section, option, raw=raw, vars=vars)
+            val = self._cp.get(section, option, vars=vars)
 
         return os.path.expandvars(val)
 

@@ -104,20 +104,6 @@ def main():
         p.add_argument('--progress', '-p', action='store_true',
                        help='show a progress bar')
 
-    # Time average command
-    ap_tavg = sp.add_parser('time-avg', help='time-avg --help',
-                            description='Computes the mean solution of a '
-                            'time-wise series of pyfrs files.')
-    ap_tavg.add_argument('outf', type=str, help='Output PyFR solution file '
-                         'name.')
-    ap_tavg.add_argument('infs', type=str, nargs='+', help='Input '
-                         'PyFR solution files to be time-averaged.')
-    ap_tavg.add_argument('-l', '--limits', nargs=2, type=float,
-                         help='Exclude solution files (passed in the infs '
-                         'argument) that lie outside minimum and maximum '
-                         'solution time limits.')
-    ap_tavg.set_defaults(process=process_tavg)
-
     # Parse the arguments
     args = ap.parse_args()
 
@@ -263,77 +249,6 @@ def process_restart(args):
         cfg = Inifile(soln['config'])
 
     _process_common(args, mesh, soln, cfg)
-
-
-def process_tavg(args):
-    infs = {}
-
-    # Interrogate files passed by the shell
-    for fname in args.infs:
-        # Load solution files and obtain solution times
-        inf = NativeReader(fname)
-        cfg = Inifile(inf['stats'])
-        tinf = cfg.getfloat('solver-time-integrator', 'tcurr')
-
-        # Retain if solution time is within limits
-        if args.limits is None or args.limits[0] <= tinf <= args.limits[1]:
-            infs[tinf] = inf
-
-            # Verify that solutions were computed on the same mesh3
-            if inf['mesh_uuid'] != next(iter(infs.values()))['mesh_uuid']:
-                raise RuntimeError('Solution files in scope were not'
-                                   ' computed on the same mesh')
-
-    # Sort the solution times, check for sufficient files in scope
-    stimes = sorted(infs)
-    if len(infs) <= 1:
-        raise RuntimeError('More than one solution file is required to '
-                           'compute an average')
-
-    # Initialise progress bar
-    pb = ProgressBar(0, 0, len(stimes), 0)
-
-    # Copy over the solutions from the first time dump
-    solnfs = infs[stimes[0]].soln_files
-    avgs = {s: infs[stimes[0]][s].copy() for s in solnfs}
-
-    # Weight the initialised trapezoidal mean
-    dtnext = stimes[1] - stimes[0]
-    for name in solnfs:
-        avgs[name] *= 0.5*dtnext
-    pb.advance_to(1)
-
-    # Compute the trapezoidal mean up to the last solution file
-    for i in range(len(stimes[2:])):
-        dtlast = dtnext
-        dtnext = stimes[i + 2] - stimes[i + 1]
-
-        # Weight the current solution, then add to the mean
-        for name in solnfs:
-            avgs[name] += 0.5*(dtlast + dtnext)*infs[stimes[i + 1]][name]
-        pb.advance_to(i + 2)
-
-    # Weight final solution, update mean and normalise for elapsed time
-    for name in solnfs:
-        avgs[name] += 0.5*dtnext*infs[stimes[-1]][name]
-        avgs[name] *= 1.0/(stimes[-1] - stimes[0])
-    pb.advance_to(i + 3)
-
-    # Compute and assign stats for a time-averaged solution
-    stats = Inifile()
-    stats.set('time-average', 'tmin', stimes[0])
-    stats.set('time-average', 'tmax', stimes[-1])
-    stats.set('time-average', 'ntlevels', len(stimes))
-    avgs['stats'] = stats.tostr()
-
-    # Copy over the ini file and mesh uuid
-    avgs['config'] = infs[stimes[0]]['config']
-    avgs['mesh_uuid'] = infs[stimes[0]]['mesh_uuid']
-
-    # Save to disk
-    with h5py.File(args.outf, 'w') as f:
-        for k, v in avgs.items():
-            f[k] = v
 
 
 if __name__ == '__main__':
