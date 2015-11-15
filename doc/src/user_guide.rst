@@ -459,7 +459,7 @@ Parameterises the quadrilateral interfaces with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
    quadrilateral interface:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto`` | 
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
     ``witherden-vincent``
 
 Example::
@@ -731,11 +731,11 @@ Periodically write the solution to disk in the pyfrs format.
     *float*
 
 2. ``basedir`` --- relative path to directory where outputs will be
-   written
+   written:
 
     *string*
 
-3. ``basename`` --- pattern of output names
+3. ``basename`` --- pattern of output names:
 
     *string*
 
@@ -848,10 +848,50 @@ Example::
     file = point-data.csv
     header = true
 
+[soln-plugin-tavg]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Time average quantities.
+
+1. ``nsteps`` --- accumulate the average every ``nsteps`` time steps:
+
+    *int*
+
+2. ``dt-out`` --- write to disk every ``dt-out`` time units:
+
+    *float*
+
+3. ``basedir`` --- relative path to directory where outputs will be
+   written:
+
+    *string*
+
+4. ``basename`` --- pattern of output names:
+
+    *string*
+
+5. ``avg-name`` --- expression as a function of the primitive variables,
+   time (t), and space (x, y, [z]) to time average; multiple
+   expressions, each with their own *name*, may be specified:
+
+    *string*
+
+Example::
+
+    [soln-plugin-tavg]
+    nsteps = 10
+    dt-out = 2.0
+    basedir = .
+    basename = files-{t:06.2f}
+
+    avg-p = p
+    avg-p2 = p*p
+    avg-vel = sqrt(u*u + v*v)
+
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
 
-Parameterises constant, or if available space (x, y, [z]) and time (t) 
+Parameterises constant, or if available space (x, y, [z]) and time (t)
 dependent, boundary condition labelled :code:`name` in the .pyfrm file with
 
 1. ``type`` --- type of boundary condition:
