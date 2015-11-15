@@ -137,7 +137,7 @@ Configuration File (.ini)
 Overview
 ^^^^^^^^
 
-The .ini configuration file parameterizes the simulation. It is written
+The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
 their associated parameters are described below.
@@ -1074,14 +1074,14 @@ simulation on a mixed unstructured mesh:
 
         pyfr run -p couette_flow_2d.pyfrm couette_flow_2d.ini
 
-6. Run pyfr on the solution file ``couette_flow_2d_4.00.pyfrs``
+6. Run pyfr on the solution file ``couette_flow_2d-040.pyfrs``
    converting it into an unstructured VTK file called
-   ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the
+   ``couette_flow_2d-040.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr export couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
+        pyfr export couette_flow_2d.pyfrm couette_flow_2d-040.pyfrs couette_flow_2d-040.vtu -d 4
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -1124,14 +1124,14 @@ simulation on a structured mesh:
 
         mpirun -n 2 pyfr run -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
-7. Run pyfr on the solution file ``euler_vortex_2d_100.0.pyfrs``
+7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called
-   ``euler_vortex_2d_100.0.vtu``. Note that in order to visualise the
+   ``euler_vortex_2d-100.0.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
+        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d-100.0.vtu -d 4
 
 8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
