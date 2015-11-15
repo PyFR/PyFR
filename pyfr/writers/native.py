@@ -2,6 +2,7 @@
 
 import itertools as it
 import os
+import re
 
 import h5py
 import numpy as np
@@ -12,16 +13,19 @@ from pyfr.mpiutil import get_comm_rank_root
 class NativeWriter(object):
     def __init__(self, intg, nvars, basedir, basename, *, prefix,
                  extn='.pyfrs'):
-        # Base output directory, file name, and extension
+        # Base output directory and file name
         self.basedir = basedir
         self.basename = basename
-        self.extn = extn
+
+        # Append the relevant extension
+        if not self.basename.endswith(extn):
+            self.basename += extn
 
         # Prefix given to each data array in the output file
         self.prefix = prefix
 
         # Output counter (incremented each time write() is called)
-        self.nout = 0
+        self.nout = self._restore_nout() if intg.isrestart else 0
 
         # Copy the float type
         self.fpdtype = intg.backend.fpdtype
@@ -89,13 +93,28 @@ class NativeWriter(object):
         # Increment the output number
         self.nout += 1
 
+    def _restore_nout(self):
+        nout = 0
+
+        # See if the basename appears to depend on {n}
+        if re.search('{n[^}]*}', self.basename):
+            # Quote and substitute
+            bn = re.escape(self.basename)
+            bn = re.sub(r'\\{n[^}]*\\}', r'(\s*\d+\s*)', bn)
+            bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
+
+            print(bn)
+
+            for f in os.listdir(self.basedir):
+                m = re.match(bn, f)
+                if m:
+                    nout = max(nout, int(m.group(1)) + 1)
+
+        return nout
+
     def _get_output_path(self, tcurr):
         # Substitute {t} and {n} for the current time and output number
         fname = self.basename.format(t=tcurr, n=self.nout)
-
-        # Append the relevant extension
-        if not fname.endswith(self.extn):
-            fname += self.extn
 
         return os.path.join(self.basedir, fname)
 
