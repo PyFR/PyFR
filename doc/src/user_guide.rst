@@ -123,11 +123,6 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr export mesh.pyfrm solution.pyfrs solution.vtu
 
-6. ``pyfr time-avg`` --- time-average a series of PyFR solution
-   files. Example::
-
-        pyfr time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
-
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
 
