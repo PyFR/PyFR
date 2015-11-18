@@ -29,7 +29,7 @@ class BasePartitioner(object):
 
     def _combine_mesh_parts(self, mesh):
         # Get the per-partition element counts
-        pinf = mesh.partition_info('soln')
+        pinf = mesh.partition_info('spt')
 
         # Shape points and element number offsets
         spts = defaultdict(list)
