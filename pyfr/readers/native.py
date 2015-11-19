@@ -45,9 +45,12 @@ class NativeReader(Mapping):
         info = OrderedDict()
         for i in range(fmaxpn + 1):
             for et in ftypes:
-                n = '{0}_{1}_p{2}'.format(prefix, et, i)
+                try:
+                    n = '{0}_{1}_p{2}'.format(prefix, et, i)
 
-                info[n] = (et, self._file.get(n).shape)
+                    info[n] = (et, self._file.get(n).shape)
+                except AttributeError:
+                    pass
 
         return info
 
