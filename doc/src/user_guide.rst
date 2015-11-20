@@ -208,11 +208,15 @@ Parameterises the OpenMP backend with
 
     *string*
 
-2. ``cblas`` --- path to shared C BLAS library:
+2. ``cflags`` --- Additional C compiler flags:
 
     *string*
 
-3. ``cblas-type`` --- type of BLAS library:
+3. ``cblas`` --- path to shared C BLAS library:
+
+    *string*
+
+4. ``cblas-type`` --- type of BLAS library:
 
     ``serial`` | ``parallel``
 

@@ -4,6 +4,7 @@ from abc import ABCMeta, abstractmethod
 from ctypes import CDLL
 import itertools as it
 import os
+import shlex
 import tempfile
 
 from pytools.prefork import call_capture_output
@@ -53,6 +54,9 @@ class GccSourceModule(SourceModule):
         # Find GCC (or a compatible alternative)
         self._cc = cfg.getpath('backend-openmp', 'cc', 'cc', abs=False)
 
+        # User specified compiler flags
+        self._cflags = shlex.split(cfg.get('backend-openmp', 'cflags', ''))
+
         # Delegate
         super().__init__(src, cfg)
 
@@ -73,6 +77,6 @@ class GccSourceModule(SourceModule):
                '-fopenmp',       # Enable OpenMP support
                '-fPIC',          # Position-independent code for shared lib
                '-o', ln, cn]
-        call_capture_output(cmd, cwd=tmpdir)
+        call_capture_output(cmd + self._cflags, cwd=tmpdir)
 
         return ln
