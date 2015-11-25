@@ -47,7 +47,8 @@ The OpenCL backend targets a range of accelerators including GPUs from
 AMD and NVIDIA. The backend requires:
 
 1. OpenCL
-2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_ >= 2013.2
+2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
+   >= 2013.2, != 2015.2, != 2015.2.1
 3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
 OpenMP Backend
