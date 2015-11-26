@@ -4,6 +4,7 @@ import numpy as np
 import pycuda.driver as cuda
 
 import pyfr.backends.base as base
+from pyfr.util import lazyprop
 
 
 class CUDAMatrixBase(base.MatrixBase):
@@ -50,12 +51,16 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 
 
 class CUDAMatrixRSlice(base.MatrixRSlice):
-    @property
-    def _as_parameter_(self):
+    @lazyprop
+    def data(self):
         return int(self.parent.basedata + self.offset)
 
+    @property
+    def _as_parameter_(self):
+        return self.data
+
     def __index__(self):
-        return int(self.parent.basedata + self.offset)
+        return self.data
 
 
 class CUDAMatrixBank(base.MatrixBank):

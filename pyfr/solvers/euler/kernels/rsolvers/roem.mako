@@ -43,7 +43,9 @@
     fpdtype_t contraa = ${pyfr.dot('n[{i}]', 'va[{i}]', i=ndims)};
     fpdtype_t aa      = sqrt(${c['gamma'] - 1}*(ha - 0.5*qq));
     fpdtype_t rcp_aa  = 1.0/aa;
-    fpdtype_t abs_ma  = fabs(contraa*rcp_aa);
+
+    // Compute |M|, add a small number to avoid a possible singularity of f
+    fpdtype_t abs_ma  = fabs(contraa*rcp_aa) + 1e-15;
 
     // Eigen structure
     fpdtype_t b1 = max(0.0, max(contraa + aa, contrar + aa));

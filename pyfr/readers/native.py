@@ -7,7 +7,7 @@ import h5py
 import numpy as np
 
 from pyfr.shapes import BaseShape
-from pyfr.util import lazyprop, subclasses
+from pyfr.util import memoize
 
 
 class NativeReader(Mapping):
@@ -30,58 +30,39 @@ class NativeReader(Mapping):
     def __len__(self):
         return len(self._file)
 
-    def list_archives_startswith(self, prefix):
-        return [name for name in self if name.startswith(prefix)]
+    @memoize
+    def array_info(self, prefix):
+        # Entries in the file which start with the prefix
+        names = [n for n in self if n.startswith(prefix)]
 
-    @property
-    def spt_files(self):
-        return self.list_archives_startswith('spt')
+        # Distinct element types in the file
+        ftypes = sorted({n.split('_')[1] for n in names})
 
-    @property
-    def soln_files(self):
-        return self.list_archives_startswith('soln')
+        # Highest partition number in the file
+        fmaxpn = max(int(re.search(r'\d+$', n).group(0)) for n in names)
 
-    @lazyprop
-    def array_info(self):
-        # Retrieve list of {mesh, solution} array names, and set name prefix.
-        if self.spt_files:
-            ls_files = self.spt_files
-            prfx = 'spt'
-        elif self.soln_files:
-            ls_files = self.soln_files
-            prfx = 'soln'
-        else:
-            raise RuntimeError('"%s" does not contain solution or shape point '
-                               'files' % (self.fname))
-
-        # Element types known to PyFR
-        eletypes = [b.name for b in subclasses(BaseShape)
-                    if hasattr(b, 'name')]
-
-        # Extract array information; FIXME
+        # Extract array information
         info = OrderedDict()
-        prt = 0
+        for i in range(fmaxpn + 1):
+            for et in ftypes:
+                try:
+                    n = '{0}_{1}_p{2}'.format(prefix, et, i)
 
-        while len(info) < len(ls_files):
-            for et in eletypes:
-                name = '%s_%s_p%d' % (prfx, et, prt)
-
-                if name in ls_files:
-                    info[name] = (et, self._file.get(name).shape)
-
-            prt += 1
+                    info[n] = (et, self._file.get(n).shape)
+                except AttributeError:
+                    pass
 
         return info
 
-    @lazyprop
-    def partition_info(self):
-        ai = self.array_info
+    @memoize
+    def partition_info(self, prefix):
+        ai = self.array_info(prefix)
 
         # Number of partitions in the mesh
         npr = max(int(re.search(r'\d+$', k).group(0)) for k in ai) + 1
 
         # Element types in the mesh
-        etypes = set(v[0] for v in ai.values())
+        etypes = {v[0] for v in ai.values()}
 
         # Compute the number of elements of each type in each partition
         nep = {et: [0]*npr for et in etypes}

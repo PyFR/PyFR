@@ -5,7 +5,8 @@ from pyfr.plugins.fluidforce import FluidForcePlugin
 from pyfr.plugins.nancheck import NaNCheckPlugin
 from pyfr.plugins.residual import ResidualPlugin
 from pyfr.plugins.sampler import SamplerPlugin
-from pyfr.plugins.solnwriter import SolnWriterPlugin
+from pyfr.plugins.tavg import TavgPlugin
+from pyfr.plugins.writer import WriterPlugin
 from pyfr.util import subclass_where
 
 
