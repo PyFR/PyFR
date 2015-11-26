@@ -35,7 +35,7 @@ class TavgPlugin(BasePlugin):
 
         # Time averaging parameters
         self.dtout = self.cfg.getfloat(cfgsect, 'dt-out')
-        self.nsteps = self.cfg.getfloat(cfgsect, 'nsteps')
+        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
         self.tout = intg.tcurr + self.dtout
 
         # Register our output times with the integrator

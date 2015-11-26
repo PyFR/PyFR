@@ -47,7 +47,8 @@ The OpenCL backend targets a range of accelerators including GPUs from
 AMD and NVIDIA. The backend requires:
 
 1. OpenCL
-2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_ >= 2013.2
+2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
+   >= 2013.2, != 2015.2, != 2015.2.1
 3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
 OpenMP Backend
@@ -208,11 +209,15 @@ Parameterises the OpenMP backend with
 
     *string*
 
-2. ``cblas`` --- path to shared C BLAS library:
+2. ``cflags`` --- Additional C compiler flags:
 
     *string*
 
-3. ``cblas-type`` --- type of BLAS library:
+3. ``cblas`` --- path to shared C BLAS library:
+
+    *string*
+
+4. ``cblas-type`` --- type of BLAS library:
 
     ``serial`` | ``parallel``
 

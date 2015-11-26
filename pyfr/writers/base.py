@@ -4,12 +4,13 @@ import os
 
 from pyfr.inifile import Inifile
 from pyfr.readers.native import NativeReader
-from pyfr.solvers.base import BaseSystem
 from pyfr.util import subclass_where
 
 
 class BaseWriter(object):
     def __init__(self, args):
+        from pyfr.solvers.base import BaseSystem
+
         self.outf = args.outf
 
         # Load the mesh and solution files
@@ -36,7 +37,7 @@ class BaseWriter(object):
         self.ndims = next(iter(self.mesh_inf.values()))[1][2]
         self.nvars = next(iter(self.soln_inf.values()))[1][1]
 
-        # System and elements classs
+        # System and elements classes
         self.systemscls = subclass_where(
             BaseSystem, name=self.cfg.get('solver', 'system')
         )
