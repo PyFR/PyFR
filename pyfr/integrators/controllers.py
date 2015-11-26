@@ -31,6 +31,9 @@ class BaseController(BaseIntegrator):
         self.nrjctsteps = 0
         self.nacptchain = 0
 
+        # Stats on the most recent step
+        self.stepinfo = []
+
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
 
@@ -49,10 +52,11 @@ class BaseController(BaseIntegrator):
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
 
-    def _accept_step(self, dt, idxcurr):
+    def _accept_step(self, dt, idxcurr, err=None):
         self.tcurr += dt
         self.nacptsteps += 1
         self.nacptchain += 1
+        self.stepinfo.append((dt, 'accept', err))
 
         self._idxcurr = idxcurr
 
@@ -66,12 +70,16 @@ class BaseController(BaseIntegrator):
         # Fire off any event handlers
         self.completed_step_handlers(self)
 
-    def _reject_step(self, dt, idxold):
+        # Clear the step info
+        self.stepinfo = []
+
+    def _reject_step(self, dt, idxold, err=None):
         if dt <= self.dtmin:
             raise RuntimeError('Minimum sized time step rejected')
 
         self.nacptchain = 0
         self.nrjctsteps += 1
+        self.stepinfo.append((dt, 'reject', err))
 
         self._idxcurr = idxold
 
@@ -193,6 +201,6 @@ class PIController(BaseController):
             # Decide if to accept or reject the step
             if err < 1.0:
                 self._errprev = err
-                self._accept_step(dt, idxcurr)
+                self._accept_step(dt, idxcurr, err=err)
             else:
-                self._reject_step(dt, idxprev)
+                self._reject_step(dt, idxprev, err=err)
