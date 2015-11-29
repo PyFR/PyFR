@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 
-import os
-
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BasePlugin, init_csv
 
 
 class DtStatsPlugin(BasePlugin):
@@ -22,21 +20,9 @@ class DtStatsPlugin(BasePlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
+        # The root rank needs to open the output file
         if rank == root:
-            # Determine the file path
-            fname = self.cfg.get(cfgsect, 'file')
-
-            # Append the '.csv' extension
-            if not fname.endswith('.csv'):
-                fname += '.csv'
-
-            # Open for appending
-            self.outf = open(fname, 'a')
-
-            # Output a header if required
-            if (os.path.getsize(fname) == 0 and
-                self.cfg.getbool(cfgsect, 'header', True)):
-                print('n,t,dt,action,error', file=self.outf)
+            self.outf = init_csv(self.cfg, cfgsect, 'n,t,dt,action,error')
 
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps

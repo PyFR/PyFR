@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from collections import defaultdict
-import os
 
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BasePlugin, init_csv
 
 
 class FluidForcePlugin(BasePlugin):
@@ -48,25 +47,13 @@ class FluidForcePlugin(BasePlugin):
                 raise RuntimeError('Boundary {0} does not exist'
                                    .format(suffix))
 
-            # Determine the file path
-            fname = self.cfg.get(cfgsect, 'file')
+            # CSV header
+            header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
+            if self._viscous:
+                header += ['vx', 'vy', 'vz'][:self.ndims]
 
-            # Append the '.csv' extension
-            if not fname.endswith('.csv'):
-                fname += '.csv'
-
-            # Open for appending
-            self.outf = open(fname, 'a')
-
-            # Output a header if required
-            if (os.path.getsize(fname) == 0 and
-                self.cfg.getbool(cfgsect, 'header', True)):
-                header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
-
-                if self._viscous:
-                    header += ['vx', 'vy', 'vz'][:self.ndims]
-
-                print(','.join(header), file=self.outf)
+            # Open
+            self.outf = init_csv(self.cfg, cfgsect, header)
 
         # Interpolation matrices and quadrature weights
         self._m0 = m0 = {}
