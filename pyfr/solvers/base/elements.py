@@ -47,11 +47,8 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
 
-        # Construct smat_base for free-stream metric
-        self.metric = self.basis.metric
-        if self.metric == 'free-stream':
-            # Compute metric (Smat, djac on (pseudo grid points)
-            self._smat_base()
+        # Compute metric (Smat, djac on pseudo grid points)
+        self._smat_base()
 
         # Physical normals at the flux points
         self._gen_pnorm_fpts()
@@ -217,62 +214,22 @@ class BaseElements(object, metaclass=ABCMeta):
         self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[..., None]
         self._mag_pnorm_fpts = mag_pnorm_fpts
 
-    def _get_jac_eles_at(self, pts):
-        nspts, neles, ndims = self.nspts, self.neles, self.ndims
-        npts = len(pts)
-
-        # Form the Jacobian operator
-        jacop = np.rollaxis(self.basis.sbasis.jac_nodal_basis_at(pts), 2)
-
-        # Cast as a matrix multiply and apply to eles
-        jac = np.dot(jacop.reshape(-1, nspts), self.eles.reshape(nspts, -1))
-
-        # Reshape (npts*ndims, neles*ndims) => (npts, ndims, neles, ndims)
-        jac = jac.reshape(npts, ndims, neles, ndims)
-
-        # Transpose to get (ndims, npts, ndims, neles)
-        return jac.transpose(3, 0, 1, 2)
-
     def _get_smats(self, pts, retdets=False):
-        if self.metric == 'free-stream':
-            npts = len(pts)
-            smats = np.empty((self.ndims, npts, self.ndims*self.neles))
+        npts = len(pts)
+        smats = np.empty((self.ndims, npts, self.ndims*self.neles))
 
-            # Interpolation matrix to pts
-            M0 = self.basis.mbasis.nodal_basis_at(pts)
+        # Interpolation matrix to pts
+        M0 = self.basis.mbasis.nodal_basis_at(pts)
 
-            # Interpolate smats
-            for i in range(self.ndims):
-                smats[i] = np.dot(M0, self._smats[i])
+        # Interpolate smats
+        for i in range(self.ndims):
+            smats[i] = np.dot(M0, self._smats[i])
 
-            smats = smats.reshape(self.ndims, npts, self.ndims, -1)
+        smats = smats.reshape(self.ndims, npts, self.ndims, -1)
 
-            # Interpolate djacs
-            if retdets:
-                djacs = np.dot(M0, self._djacs)
-        else:
-            jac = self._get_jac_eles_at(pts)
-            smats = np.empty_like(jac)
-
-            if self.ndims == 2:
-                a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
-
-                smats[0,:,0], smats[0,:,1] = d, -b
-                smats[1,:,0], smats[1,:,1] = -c, a
-
-                if retdets:
-                    djacs = a*d - b*c
-            else:
-                # We note that J = [x0, x1, x2]
-                x0, x1, x2 = jac[:,:,0], jac[:,:,1], jac[:,:,2]
-
-                smats[0] = np.cross(x1, x2, axisa=0, axisb=0, axisc=1)
-                smats[1] = np.cross(x2, x0, axisa=0, axisb=0, axisc=1)
-                smats[2] = np.cross(x0, x1, axisa=0, axisb=0, axisc=1)
-
-                if retdets:
-                    # Exploit the fact that det(J) = x0 . (x1 ^ x2)
-                    djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
+        # Interpolate djacs
+        if retdets:
+            djacs = np.dot(M0, self._djacs)
 
         return (smats, djacs) if retdets else smats
 
