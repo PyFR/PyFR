@@ -216,15 +216,12 @@ class BaseElements(object, metaclass=ABCMeta):
 
     def _get_smats(self, pts, retdets=False):
         npts = len(pts)
-        smats = np.empty((self.ndims, npts, self.ndims*self.neles))
 
         # Interpolation matrix to pts
         M0 = self.basis.mbasis.nodal_basis_at(pts)
 
         # Interpolate smats
-        for i in range(self.ndims):
-            smats[i] = np.dot(M0, self._smats[i])
-
+        smats = np.array([np.dot(M0, smat) for smat in self._smats])
         smats = smats.reshape(self.ndims, npts, self.ndims, -1)
 
         # Interpolate djacs
@@ -278,12 +275,10 @@ class BaseElements(object, metaclass=ABCMeta):
 
             self._djacs = a*d - b*c
         else:
-            # We note that J = [x0, x1, x2]
-            x0, x1, x2 = jac[:,:,0], jac[:,:,1], jac[:,:,2]
-
             # Cpmpute x cross x_(chi)
-            tt = np.array([np.cross(x, xn,  axisa=1, axisb=0, axisc=1)
-                           for xn in [x0, x1, x2]])
+            jac = np.rollaxis(jac, 2)
+            tt = np.array([np.cross(x, dx, axisa=1, axisb=0, axisc=1)
+                           for dx in jac])
             tt = tt.reshape(ndims, nmpts, -1)
 
             # Derivative of x cross x_(chi) at (pseudo) grid points
@@ -297,7 +292,7 @@ class BaseElements(object, metaclass=ABCMeta):
             smats[2] = 0.5*(dtt[1][0] - dtt[0][1])
 
             # Exploit the fact that det(J) = x0 . (x1 ^ x2)
-            self._djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
+            self._djacs = np.einsum('ij...,ji...->j...', jac[0], smats[0])
 
         # Reshape
         self._smats = smats.reshape(ndims, self.nmpts, -1)
