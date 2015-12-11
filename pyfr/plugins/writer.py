@@ -32,7 +32,7 @@ class WriterPlugin(BasePlugin):
         if not intg.isrestart:
             self(intg)
         else:
-            self.tout_next += self.dt_out
+            self.tout_next = intg.tcurr + self.dt_out
 
     def __call__(self, intg):
         if abs(self.tout_next - intg.tcurr) > intg.dtmin:
@@ -49,4 +49,4 @@ class WriterPlugin(BasePlugin):
 
         self._writer.write(intg.soln, metadata, intg.tcurr)
 
-        self.tout_next += self.dt_out
+        self.tout_next = intg.tcurr + self.dt_out
