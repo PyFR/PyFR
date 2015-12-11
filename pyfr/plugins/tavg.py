@@ -100,5 +100,5 @@ class TavgPlugin(BasePlugin):
 
                 self._writer.write(accmex, metadata, intg.tcurr)
 
-                self.tout += self.dtout
+                self.tout = intg.tcurr + self.dtout
                 self.accmex = [np.zeros_like(a) for a in accmex]
