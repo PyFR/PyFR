@@ -33,7 +33,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                dst.data[:] = src.data[:]
+                dst.data[:] = src.data.reshape(dst.data.shape)
 
         return CopyKernel()
 

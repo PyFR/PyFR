@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
 
-import os
-import io
-
 from collections import OrderedDict
 from configparser import SafeConfigParser, NoSectionError, NoOptionError
+import io
+import os
+import re
+
+
+def _ensure_float(m):
+    m = m.group(0)
+    return m if any(c in m for c in '.eE') else m + '.'
 
 
 _sentinel = object()
@@ -39,21 +44,21 @@ class Inifile(object):
     def hasopt(self, section, option):
         return self._cp.has_option(section, option)
 
-    def get(self, section, option, default=_sentinel, raw=False, vars=None):
+    def get(self, section, option, default=_sentinel, vars=None):
         try:
-            val = self._cp.get(section, option, raw=raw, vars=vars)
+            val = self._cp.get(section, option, vars=vars)
         except NoSectionError:
             if default is _sentinel:
                 raise
 
             self._cp.add_section(section)
-            val = self.get(section, option, default, raw, vars)
+            val = self.get(section, option, default, vars)
         except NoOptionError:
             if default is _sentinel:
                 raise
 
             self._cp.set(section, option, str(default))
-            val = self._cp.get(section, option, raw=raw, vars=vars)
+            val = self._cp.get(section, option, vars=vars)
 
         return os.path.expandvars(val)
 
@@ -65,6 +70,25 @@ class Inifile(object):
             path = os.path.abspath(path)
 
         return path
+
+    def getexpr(self, section, option, default=_sentinel, subs={}):
+        expr = self.get(section, option, default)
+
+        # Ensure the expression does not contain invalid characters
+        if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', expr):
+            raise ValueError('Invalid characters in expression')
+
+        # Substitute variables
+        if subs:
+            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
+                          lambda m: subs[m.group(1)], expr)
+
+        # Convert integers to floats
+        expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?!\s*])',
+                      _ensure_float, expr)
+
+        # Encase in parenthesis
+        return '({0})'.format(expr)
 
     def getfloat(self, section, option, default=_sentinel):
         return float(self.get(section, option, default))
