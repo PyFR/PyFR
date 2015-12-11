@@ -233,7 +233,7 @@ class BaseElements(object, metaclass=ABCMeta):
 
         return (smats, djacs) if retdets else smats
 
-    def _plot_at_pts_np(self, pts):
+    def _ploc_at_pts_np(self, pts):
         op = self.basis.sbasis.nodal_basis_at(pts)
 
         ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
@@ -252,7 +252,7 @@ class BaseElements(object, metaclass=ABCMeta):
         neles = self.neles
 
         # Coordinate at pts
-        x = self._plot_at_pts_np(mpts)
+        x = self._ploc_at_pts_np(mpts)
 
         # Jacobian at pts
         jacop = np.rollaxis(mbasis.jac_nodal_basis_at(mpts), 2)
@@ -282,24 +282,19 @@ class BaseElements(object, metaclass=ABCMeta):
             x0, x1, x2 = jac[:,:,0], jac[:,:,1], jac[:,:,2]
 
             # Cpmpute x cross x_(chi)
-            tt = np.zeros((ndims,) + x.shape)
-            tt[0] = np.cross(x, x0, axisa=1, axisb=0, axisc=1)
-            tt[1] = np.cross(x, x1, axisa=1, axisb=0, axisc=1)
-            tt[2] = np.cross(x, x2, axisa=1, axisb=0, axisc=1)
+            tt = np.array([np.cross(x, xn,  axisa=1, axisb=0, axisc=1)
+                           for xn in [x0, x1, x2]])
             tt = tt.reshape(ndims, nmpts, -1)
 
             # Derivative of x cross x_(chi) at (pseudo) grid points
-            dtt = np.zeros((ndims, nmpts*ndims, ndims*neles))
-            dtt[0] = np.dot(jacop, tt[0])
-            dtt[1] = np.dot(jacop, tt[1])
-            dtt[2] = np.dot(jacop, tt[2])
+            dtt = np.array([np.dot(jacop, tn) for tn in tt])
             dtt = dtt.reshape(ndims, nmpts, ndims, ndims, -1).swapaxes(1, 2)
 
             # Kopriva's invariant form of smats
             # Ref. JSC 26(3), 301-327, Eq. (37)
-            smats[0] = -0.5*(dtt[1][2] - dtt[2][1])
-            smats[1] = -0.5*(dtt[2][0] - dtt[0][2])
-            smats[2] = -0.5*(dtt[0][1] - dtt[1][0])
+            smats[0] = 0.5*(dtt[2][1] - dtt[1][2])
+            smats[1] = 0.5*(dtt[0][2] - dtt[2][0])
+            smats[2] = 0.5*(dtt[1][0] - dtt[0][1])
 
             # Exploit the fact that det(J) = x0 . (x1 ^ x2)
             self._djacs = np.einsum('ij...,ji...->j...', x0, smats[0])
