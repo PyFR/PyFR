@@ -1,45 +1,38 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
-from collections import OrderedDict
+from collections import deque
+
+import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.nputil import range_eval
+from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.util import proxylist
 
 
 class BaseIntegrator(object, metaclass=ABCMeta):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
-        from mpi4py import MPI
-
         self.backend = backend
         self.rallocs = rallocs
         self.cfg = cfg
+        self.isrestart = initsoln is not None
 
         # Sanity checks
         if self._controller_needs_errest and not self._stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
         # Start time
-        self.tstart = cfg.getfloat('solver-time-integrator', 't0', 0.0)
+        self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
+        self.tend = cfg.getfloat('solver-time-integrator', 'tend')
 
-        # Output times
-        self.tout = sorted(range_eval(cfg.get('soln-output', 'times')))
-        self.tend = self.tout[-1]
-
-        # Current time; defaults to tstart unless resuming a simulation
-        if initsoln is None or 'stats' not in initsoln:
-            self.tcurr = self.tstart
-        else:
+        # Current time; defaults to tstart unless restarting
+        if self.isrestart:
             stats = Inifile(initsoln['stats'])
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
+        else:
+            self.tcurr = self.tstart
 
-            # Cull already written output times
-            self.tout = [t for t in self.tout if t > self.tcurr]
-
-        # Ensure no time steps are in the past
-        if self.tout[0] < self.tcurr:
-            raise ValueError('Output times must be in the future')
+        self.tlist = deque([self.tend])
 
         # Determine the amount of temp storage required by thus method
         nreg = self._stepper_nregs
@@ -48,7 +41,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
-        self._mesh_uuid = mesh['mesh_uuid']
+        self.mesh_uuid = mesh['mesh_uuid']
 
         # Get a queue for subclasses to use
         self._queue = backend.queue()
@@ -56,8 +49,10 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         # Get the number of degrees of freedom in this partition
         ndofs = sum(self.system.ele_ndofs)
 
+        comm, rank, root = get_comm_rank_root()
+
         # Sum to get the global number over all partitions
-        self._gndofs = MPI.COMM_WORLD.allreduce(ndofs, op=MPI.SUM)
+        self._gndofs = comm.allreduce(ndofs, op=get_mpi('sum'))
 
     def _kernel(self, name, nargs):
         # Transpose from [nregs][neletypes] to [neletypes][nregs]
@@ -74,16 +69,27 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         for reg, ix in zip(self._regs, bidxes):
             reg.active = ix
 
+    def call_plugin_dt(self, dt):
+        ta = self.tlist
+        tb = deque(np.arange(self.tcurr, self.tend, dt).tolist())
+
+        self.tlist = tlist = deque()
+
+        # Merge the current and new time lists
+        while ta and tb:
+            t = ta.popleft() if ta[0] < tb[0] else tb.popleft()
+            if not tlist or t - tlist[-1] > self.dtmin:
+                tlist.append(t)
+
+        tlist.extend(ta)
+        tlist.extend(tb)
+
     @abstractmethod
     def step(self, t, dt):
         pass
 
     @abstractmethod
     def advance_to(self, t):
-        pass
-
-    @abstractmethod
-    def output(self, solns, stats):
         pass
 
     @abstractproperty
@@ -107,19 +113,8 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         pass
 
     def run(self):
-        for t in self.tout:
-            # Advance to time t
-            solns = self.advance_to(t)
-
-            # Map solutions to elements types
-            solnmap = OrderedDict(zip(self.system.ele_types, solns))
-
-            # Collect statistics
-            stats = Inifile()
-            self.collect_stats(stats)
-
-            # Output
-            self.output(solnmap, stats)
+        for t in self.tlist:
+            self.advance_to(t)
 
     def collect_stats(self, stats):
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)

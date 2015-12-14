@@ -18,10 +18,12 @@ class BaseAdvectionSystem(BaseSystem):
         q1 << kernels['mpiint', 'scal_fpts_pack']()
         runall([q1])
 
+        if ('eles', 'copy_soln') in kernels:
+            q1 << kernels['eles', 'copy_soln']()
         q1 << kernels['eles', 'tdisf']()
         q1 << kernels['eles', 'tdivtpcorf']()
         q1 << kernels['iint', 'comm_flux']()
-        q1 << kernels['bcint', 'comm_flux']()
+        q1 << kernels['bcint', 'comm_flux'](t=t)
 
         q2 << kernels['mpiint', 'scal_fpts_send']()
         q2 << kernels['mpiint', 'scal_fpts_recv']()

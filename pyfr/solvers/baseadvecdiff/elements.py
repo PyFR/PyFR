@@ -7,13 +7,20 @@ from pyfr.backends.base.kernels import ComputeMetaKernel
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
     @property
     def _scratch_bufs(self):
-        comm = {'scal_fpts', 'vect_fpts', 'vect_upts'}
+        bufs = {'scal_fpts', 'vect_fpts', 'vect_upts'}
+
         if 'flux' in self.antialias:
-            return comm | {'scal_qpts', 'vect_qpts'}
+            bufs |= {'scal_qpts', 'vect_qpts'}
         elif 'div-flux' in self.antialias:
-            return comm | {'scal_qpts'}
-        else:
-            return comm
+            bufs |= {'scal_qpts'}
+
+        if self._soln_in_src_exprs:
+            if 'div-flux' in self.antialias:
+                bufs |= {'scal_qpts_cpy'}
+            else:
+                bufs |= {'scal_upts_cpy'}
+
+        return bufs
 
     def set_backend(self, backend, nscal_upts):
         super().set_backend(backend, nscal_upts)

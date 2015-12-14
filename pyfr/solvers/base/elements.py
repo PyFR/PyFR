@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from abc import ABCMeta, abstractmethod, abstractproperty
+import math
+import re
 
 import numpy as np
 
 from pyfr.nputil import npeval, fuzzysort
-from pyfr.util import memoize
+from pyfr.util import lazyprop, memoize
 
 
 class BaseElements(object, metaclass=ABCMeta):
@@ -33,7 +35,7 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nvars = len(self.privarmap[ndims])
 
         # Instantiate the basis class
-        self._basis = basis = basiscls(nspts, cfg)
+        self.basis = basis = basiscls(nspts, cfg)
 
         # See what kind of projection the basis is using
         self.antialias = basis.antialias
@@ -55,8 +57,8 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Apply the operator to the mesh elements and reshape
         plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
-        plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
-        plocfpts = plocfpts.transpose(1, 2, 0).tolist()
+        self.plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
+        plocfpts = self.plocfpts.transpose(1, 2, 0).tolist()
 
         self._srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
                                 for ffpts in basis.facefpts]
@@ -77,7 +79,7 @@ class BaseElements(object, metaclass=ABCMeta):
         vars.update(dict(zip('xyz', coords)))
 
         # Evaluate the ICs from the config file
-        ics = [npeval(self.cfg.get('soln-ics', dv), vars)
+        ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
                for dv in self.privarmap[self.ndims]]
 
         # Allocate
@@ -85,14 +87,14 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_conv(ics, self.cfg)):
-            self._scal_upts[:,i,:] = v
+            self._scal_upts[:, i, :] = v
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
-        solnb = self._basis.__class__(None, solncfg)
+        solnb = self.basis.__class__(None, solncfg)
 
         # Form the interpolation operator
-        interp = solnb.ubasis.nodal_basis_at(self._basis.upts)
+        interp = solnb.ubasis.nodal_basis_at(self.basis.upts)
 
         # Sizes
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
@@ -104,6 +106,27 @@ class BaseElements(object, metaclass=ABCMeta):
     @abstractproperty
     def _scratch_bufs(self):
         pass
+
+    @lazyprop
+    def _src_exprs(self):
+        convars = self.convarmap[self.ndims]
+
+        # Variable and function substitutions
+        subs = self.cfg.items('constants')
+        subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs.update({v: 'u[{0}]'.format(i) for i, v in enumerate(convars)})
+        subs.update(abs='fabs', pi=str(math.pi))
+
+        return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)
+                for v in convars]
+
+    @lazyprop
+    def _ploc_in_src_exprs(self):
+        return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)
+
+    @lazyprop
+    def _soln_in_src_exprs(self):
+        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
     @abstractmethod
     def set_backend(self, backend, nscal_upts):
@@ -131,6 +154,12 @@ class BaseElements(object, metaclass=ABCMeta):
         elif 'scal_qpts' in sbufs:
             self._scal_qpts = salloc('scal_qpts', nqpts)
 
+        # Allocate additional scalar scratch space
+        if 'scal_upts_cpy' in sbufs:
+            self._scal_upts_cpy = salloc('scal_upts_cpy', nupts)
+        elif 'scal_qpts_cpy' in sbufs:
+            self._scal_qpts_cpy = salloc('scal_qpts_cpy', nqpts)
+
         # Allocate required vector scratch space
         if 'vect_upts' in sbufs:
             self._vect_upts = valloc('vect_upts', nupts)
@@ -154,26 +183,33 @@ class BaseElements(object, metaclass=ABCMeta):
 
     @memoize
     def opmat(self, expr):
-        return self._be.const_matrix(self._basis.opmat(expr),
+        return self._be.const_matrix(self.basis.opmat(expr),
                                      tags={expr, 'align'})
 
     @memoize
-    def smat_at(self, name):
-        smat = self._get_smats(getattr(self._basis, name))
-        return self._be.const_matrix(smat, tags={'align'})
+    def smat_at_np(self, name):
+        return self._get_smats(getattr(self.basis, name))
 
     @memoize
-    def rcpdjac_at(self, name):
-        _, djac = self._get_smats(getattr(self._basis, name), retdets=True)
+    def smat_at(self, name):
+        return self._be.const_matrix(self.smat_at_np(name), tags={'align'})
+
+    @memoize
+    def rcpdjac_at_np(self, name):
+        _, djac = self._get_smats(getattr(self.basis, name), retdets=True)
 
         if np.any(djac < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
 
-        return self._be.const_matrix(1.0 / djac, tags={'align'})
+        return 1.0 / djac
+
+    @memoize
+    def rcpdjac_at(self, name):
+        return self._be.const_matrix(self.rcpdjac_at_np(name), tags={'align'})
 
     @memoize
     def ploc_at_np(self, name):
-        op = self._basis.sbasis.nodal_basis_at(getattr(self._basis, name))
+        op = self.basis.sbasis.nodal_basis_at(getattr(self.basis, name))
 
         ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
         ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
@@ -185,12 +221,12 @@ class BaseElements(object, metaclass=ABCMeta):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
 
     def _gen_pnorm_fpts(self):
-        smats = self._get_smats(self._basis.fpts).transpose(1, 3, 0, 2)
+        smats = self._get_smats(self.basis.fpts).transpose(1, 3, 0, 2)
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
         # Jacobian and N is the normal for each fpt.  Using
         # J^{-1} = S/|J| where S are the smats, we have S^{T}.N.
-        pnorm_fpts = np.einsum('ijlk,il->ijk', smats, self._basis.norm_fpts)
+        pnorm_fpts = np.einsum('ijlk,il->ijk', smats, self.basis.norm_fpts)
 
         # Compute the magnitudes of these flux point normals
         mag_pnorm_fpts = np.einsum('...i,...i', pnorm_fpts, pnorm_fpts)
@@ -201,7 +237,7 @@ class BaseElements(object, metaclass=ABCMeta):
             raise RuntimeError('Zero face normals detected')
 
         # Normalize the physical normals at the flux points
-        self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[...,None]
+        self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[..., None]
         self._mag_pnorm_fpts = mag_pnorm_fpts
 
     def _get_jac_eles_at(self, pts):
@@ -209,7 +245,7 @@ class BaseElements(object, metaclass=ABCMeta):
         npts = len(pts)
 
         # Form the Jacobian operator
-        jacop = np.rollaxis(self._basis.sbasis.jac_nodal_basis_at(pts), 2)
+        jacop = np.rollaxis(self.basis.sbasis.jac_nodal_basis_at(pts), 2)
 
         # Cast as a matrix multiply and apply to eles
         jac = np.dot(jacop.reshape(-1, nspts), self.eles.reshape(nspts, -1))
@@ -227,8 +263,8 @@ class BaseElements(object, metaclass=ABCMeta):
         if self.ndims == 2:
             a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
 
-            smats[0,:,0], smats[0,:,1] =  d, -b
-            smats[1,:,0], smats[1,:,1] = -c,  a
+            smats[0,:,0], smats[0,:,1] = d, -b
+            smats[1,:,0], smats[1,:,1] = -c, a
 
             if retdets:
                 djacs = a*d - b*c
@@ -246,12 +282,20 @@ class BaseElements(object, metaclass=ABCMeta):
 
         return (smats, djacs) if retdets else smats
 
+    def get_mag_pnorms(self, eidx, fidx):
+        fpts_idx = self.basis.facefpts[fidx]
+        return self._mag_pnorm_fpts[fpts_idx,eidx]
+
     def get_mag_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
         return self._mag_pnorm_fpts[fpts_idx,eidx]
 
     def get_norm_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self._norm_pnorm_fpts[fpts_idx,eidx]
+
+    def get_norm_pnorms(self, eidx, fidx):
+        fpts_idx = self.basis.facefpts[fidx]
         return self._norm_pnorm_fpts[fpts_idx,eidx]
 
     def get_scal_fpts_for_inter(self, eidx, fidx):
@@ -269,3 +313,15 @@ class BaseElements(object, metaclass=ABCMeta):
         rcstri = ((self.nfpts, self._vect_fpts.leadsubdim),)*nfp
 
         return (self._vect_fpts.mid,)*nfp, rcmap, rcstri
+
+    def get_avis_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        cstri = ((self._avis_fpts.leadsubdim,),)*nfp
+
+        return (self._avis_fpts.mid,)*nfp, rcmap, cstri
+
+    def get_ploc_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self.plocfpts[fpts_idx,eidx]

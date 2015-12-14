@@ -18,7 +18,7 @@ from pyfr.partitioners import BasePartitioner, get_partitioner
 from pyfr.progress_bar import ProgressBar
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
-from pyfr.readers.native import read_pyfr_data
+from pyfr.readers.native import NativeReader
 from pyfr.solvers import get_solver
 from pyfr.util import subclasses
 from pyfr.writers import BaseWriter, get_writer_by_name, get_writer_by_extn
@@ -61,11 +61,11 @@ def main():
 
     # Export command
     ap_export = sp.add_parser('export', help='export --help',
-                              description= 'Converts .pyfr[ms] files for '
+                              description='Converts .pyfr[ms] files for '
                               'visualisation in external software.')
     ap_export.add_argument('meshf', help='PyFR mesh file to be converted')
     ap_export.add_argument('solnf', help='PyFR solution file to be converted')
-    ap_export.add_argument('outf', type=FileType('wb'), help='Output filename')
+    ap_export.add_argument('outf', type=str, help='Output filename')
     types = [cls.name for cls in subclasses(BaseWriter)]
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
                            help='Output file type; this is usually inferred '
@@ -103,20 +103,6 @@ def main():
                        help='Backend to use')
         p.add_argument('--progress', '-p', action='store_true',
                        help='show a progress bar')
-
-    # Time average command
-    ap_tavg = sp.add_parser('time-avg', help='time-avg --help',
-                            description='Computes the mean solution of a '
-                            'time-wise series of pyfrs files.')
-    ap_tavg.add_argument('outf', type=str, help='Output PyFR solution file '
-                         'name.')
-    ap_tavg.add_argument('infs', type=str, nargs='+', help='Input '
-                         'PyFR solution files to be time-averaged.')
-    ap_tavg.add_argument('-l', '--limits', nargs=2, type=float,
-                         help='Exclude solution files (passed in the infs '
-                         'argument) that lie outside minimum and maximum '
-                         'solution time limits.')
-    ap_tavg.set_defaults(process=process_tavg)
 
     # Parse the arguments
     args = ap.parse_args()
@@ -167,16 +153,16 @@ def process_partition(args):
             try:
                 part = get_partitioner(name, pwts)
                 break
-            except RuntimeError:
+            except OSError:
                 pass
         else:
             raise RuntimeError('No partitioners available')
 
     # Partition the mesh
-    mesh, part_soln_fn = part.partition(read_pyfr_data(args.mesh))
+    mesh, part_soln_fn = part.partition(NativeReader(args.mesh))
 
     # Prepare the solutions
-    solnit = (part_soln_fn(read_pyfr_data(s)) for s in args.solns)
+    solnit = (part_soln_fn(NativeReader(s)) for s in args.solns)
 
     # Output paths/files
     paths = it.chain([args.mesh], args.solns)
@@ -198,7 +184,7 @@ def process_export(args):
     if args.type:
         writer = get_writer_by_name(args.type, args)
     else:
-        extn = os.path.splitext(args.outf.name)[1]
+        extn = os.path.splitext(args.outf)[1]
         writer = get_writer_by_extn(extn, args)
 
     # Write the output file
@@ -244,13 +230,13 @@ def _process_common(args, mesh, soln, cfg):
 
 def process_run(args):
     _process_common(
-        args, read_pyfr_data(args.mesh), None, Inifile.load(args.cfg)
+        args, NativeReader(args.mesh), None, Inifile.load(args.cfg)
     )
 
 
 def process_restart(args):
-    mesh = read_pyfr_data(args.mesh)
-    soln = read_pyfr_data(args.soln)
+    mesh = NativeReader(args.mesh)
+    soln = NativeReader(args.soln)
 
     # Ensure the solution is from the mesh we are using
     if soln['mesh_uuid'] != mesh['mesh_uuid']:
@@ -263,77 +249,6 @@ def process_restart(args):
         cfg = Inifile(soln['config'])
 
     _process_common(args, mesh, soln, cfg)
-
-
-def process_tavg(args):
-    infs = {}
-
-    # Interrogate files passed by the shell
-    for fname in args.infs:
-        # Load solution files and obtain solution times
-        inf = read_pyfr_data(fname)
-        cfg = Inifile(inf['stats'])
-        tinf = cfg.getfloat('solver-time-integrator', 'tcurr')
-
-        # Retain if solution time is within limits
-        if args.limits is None or args.limits[0] <= tinf <= args.limits[1]:
-            infs[tinf] = inf
-
-            # Verify that solutions were computed on the same mesh3
-            if inf['mesh_uuid'] != next(iter(infs.values()))['mesh_uuid']:
-                raise RuntimeError('Solution files in scope were not'
-                                   ' computed on the same mesh')
-
-    # Sort the solution times, check for sufficient files in scope
-    stimes = sorted(infs)
-    if len(infs) <= 1:
-        raise RuntimeError('More than one solution file is required to '
-                           'compute an average')
-
-    # Initialise progress bar
-    pb = ProgressBar(0, 0, len(stimes), 0)
-
-    # Copy over the solutions from the first time dump
-    solnfs = infs[stimes[0]].soln_files
-    avgs = {s: infs[stimes[0]][s].copy() for s in solnfs}
-
-    # Weight the initialised trapezoidal mean
-    dtnext = stimes[1] - stimes[0]
-    for name in solnfs:
-        avgs[name] *= 0.5*dtnext
-    pb.advance_to(1)
-
-    # Compute the trapezoidal mean up to the last solution file
-    for i in range(len(stimes[2:])):
-        dtlast = dtnext
-        dtnext = stimes[i + 2] - stimes[i + 1]
-
-        # Weight the current solution, then add to the mean
-        for name in solnfs:
-            avgs[name] += 0.5*(dtlast + dtnext)*infs[stimes[i + 1]][name]
-        pb.advance_to(i + 2)
-
-    # Weight final solution, update mean and normalise for elapsed time
-    for name in solnfs:
-        avgs[name] += 0.5*dtnext*infs[stimes[-1]][name]
-        avgs[name] *= 1.0/(stimes[-1] - stimes[0])
-    pb.advance_to(i + 3)
-
-    # Compute and assign stats for a time-averaged solution
-    stats = Inifile()
-    stats.set('time-average', 'tmin', stimes[0])
-    stats.set('time-average', 'tmax', stimes[-1])
-    stats.set('time-average', 'ntlevels', len(stimes))
-    avgs['stats'] = stats.tostr()
-
-    # Copy over the ini file and mesh uuid
-    avgs['config'] = infs[stimes[0]]['config']
-    avgs['mesh_uuid'] = infs[stimes[0]]['mesh_uuid']
-
-    # Save to disk
-    with h5py.File(args.outf, 'w') as f:
-        for k, v in avgs.items():
-            f[k] = v
 
 
 if __name__ == '__main__':

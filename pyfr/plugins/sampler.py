@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import ast
-import os
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BasePlugin
+from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.plugins.base import BasePlugin, init_csv
 
 
 def _closest_upt(etypes, eupts, p):
@@ -26,17 +25,16 @@ def _closest_upt(etypes, eupts, p):
 
 class SamplerPlugin(BasePlugin):
     name = 'sampler'
+    systems = ['*']
 
-    def __init__(self, intg, cfgsect):
-        from mpi4py import MPI
-
-        super().__init__(intg, cfgsect)
+    def __init__(self, intg, cfgsect, suffix):
+        super().__init__(intg, cfgsect, suffix)
 
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
         # Output frequency
-        self.freq = self.cfg.getint(cfgsect, 'freq')
+        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # List of points to be sampled and format
         self.pts = ast.literal_eval(self.cfg.get(cfgsect, 'samp-pts'))
@@ -57,7 +55,7 @@ class SamplerPlugin(BasePlugin):
             cp = _closest_upt(intg.system.ele_types, plocs, p)
 
             # Reduce over all partitions
-            mcp, mrank = comm.allreduce(cp, op=MPI.MINLOC)
+            mcp, mrank = comm.allreduce(cp, op=get_mpi('minloc'))
 
             # Store the rank responsible along with the info
             ptsrank.append(mrank)
@@ -65,20 +63,7 @@ class SamplerPlugin(BasePlugin):
 
         # If we're the root rank then open the output file
         if rank == root:
-            # Determine the file path
-            fname = self.cfg.get(cfgsect, 'file')
-
-            # Append the '.csv' extension
-            if not fname.endswith('.csv'):
-                fname += '.csv'
-
-            # Open for appending
-            self.outf = open(fname, 'a')
-
-            # Output a header if required
-            if (os.path.getsize(fname) == 0 and
-                self.cfg.getbool(cfgsect, 'header', True)):
-                print(self._header, file=self.outf)
+            self.outf = init_csv(self.cfg, cfgsect, self._header)
 
     @property
     def _header(self):
@@ -96,7 +81,7 @@ class SamplerPlugin(BasePlugin):
         samps = np.array(samps)
 
         # If necessary then convert to primitive form
-        if self.fmt == 'primitive':
+        if self.fmt == 'primitive' and samps.size:
             samps = self.elementscls.conv_to_pri(samps.T, self.cfg)
             samps = np.array(samps).T
 
@@ -104,7 +89,7 @@ class SamplerPlugin(BasePlugin):
 
     def __call__(self, intg):
         # Return if no output is due
-        if intg.nsteps % self.freq:
+        if intg.nacptsteps % self.nsteps:
             return
 
         # MPI info

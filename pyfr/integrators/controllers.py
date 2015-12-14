@@ -4,6 +4,7 @@ import math
 import re
 
 from pyfr.integrators.base import BaseIntegrator
+from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
@@ -14,10 +15,10 @@ class BaseController(BaseIntegrator):
 
         # Current and minimum time steps
         self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
-        self._dtmin = 1.0e-14
+        self.dtmin = 1.0e-14
 
         # Solution filtering frequency
-        self._ffreq = self.cfg.getint('soln-filter', 'freq', '0')
+        self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
         # Bank index of solution
         self._idxcurr = 0
@@ -30,30 +31,37 @@ class BaseController(BaseIntegrator):
         self.nrjctsteps = 0
         self.nacptchain = 0
 
+        # Stats on the most recent step
+        self.stepinfo = []
+
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
 
         # Load any plugins specified in the config file
         for s in self.cfg.sections():
-            m = re.match('solver-plugin-(.+?)(?:-.+)?$', s)
+            m = re.match('soln-plugin-(.+?)(?:-(.+))?$', s)
             if m:
-                cfgsect, name = m.group(0), m.group(1)
+                cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
 
                 # Instantiate
-                plugin = get_plugin(name, self, cfgsect)
+                plugin = get_plugin(name, self, cfgsect, suffix)
 
                 # Register as an event handler
                 self.completed_step_handlers.append(plugin)
 
-    def _accept_step(self, dt, idxcurr):
+        # Delete the memory-intensive elements map from the system
+        del self.system.ele_map
+
+    def _accept_step(self, dt, idxcurr, err=None):
         self.tcurr += dt
         self.nacptsteps += 1
         self.nacptchain += 1
+        self.stepinfo.append((dt, 'accept', err))
 
         self._idxcurr = idxcurr
 
         # Filter
-        if self._ffreq and self.nacptsteps % self._ffreq == 0:
+        if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
             self.system.filt(idxcurr)
 
         # Invalidate the solution cache
@@ -62,12 +70,16 @@ class BaseController(BaseIntegrator):
         # Fire off any event handlers
         self.completed_step_handlers(self)
 
-    def _reject_step(self, dt, idxold):
-        if dt <= self._dtmin:
+        # Clear the step info
+        self.stepinfo = []
+
+    def _reject_step(self, dt, idxold, err=None):
+        if dt <= self.dtmin:
             raise RuntimeError('Minimum sized time step rejected')
 
         self.nacptchain = 0
         self.nrjctsteps += 1
+        self.stepinfo.append((dt, 'reject', err))
 
         self._idxcurr = idxold
 
@@ -97,16 +109,13 @@ class NoneController(BaseController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt), self._dtmin)
+            dt = max(min(t - self.tcurr, self._dt), self.dtmin)
 
             # Take the step
             idxcurr = self.step(self.tcurr, dt)
 
             # We are not adaptive, so accept every step
             self._accept_step(dt, idxcurr)
-
-        # Return the solution matrices
-        return self.soln
 
 
 class PIController(BaseController):
@@ -142,7 +151,7 @@ class PIController(BaseController):
         return self._kernel('errest', nargs=3)
 
     def _errest(self, x, y, z):
-        from mpi4py import MPI
+        comm, rank, root = get_comm_rank_root()
 
         errest = self._get_errest_kerns()
 
@@ -152,7 +161,7 @@ class PIController(BaseController):
 
         # Reduce locally (element types) and globally (MPI ranks)
         rl = sum(errest.retval)
-        rg = MPI.COMM_WORLD.allreduce(rl, op=MPI.SUM)
+        rg = comm.allreduce(rl, op=get_mpi('sum'))
 
         # Normalise
         err = math.sqrt(rg / self._gndofs)
@@ -174,7 +183,7 @@ class PIController(BaseController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt), self._dtmin)
+            dt = max(min(t - self.tcurr, self._dt), self.dtmin)
 
             # Take the step
             idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
@@ -192,8 +201,6 @@ class PIController(BaseController):
             # Decide if to accept or reject the step
             if err < 1.0:
                 self._errprev = err
-                self._accept_step(dt, idxcurr)
+                self._accept_step(dt, idxcurr, err=err)
             else:
-                self._reject_step(dt, idxprev)
-
-        return self.soln
+                self._reject_step(dt, idxprev, err=err)

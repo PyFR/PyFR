@@ -37,18 +37,15 @@ class memoize(object):
 
 
 class proxylist(list):
-    def __init__(self, *args):
-        super().__init__(*args)
-
     def __getattr__(self, attr):
-        return proxylist([getattr(x, attr) for x in self])
+        return proxylist(getattr(x, attr) for x in self)
 
     def __setattr__(self, attr, val):
         for x in self:
             setattr(x, attr, val)
 
     def __call__(self, *args, **kwargs):
-        return proxylist([x(*args, **kwargs) for x in self])
+        return proxylist(x(*args, **kwargs) for x in self)
 
 
 class silence(object):

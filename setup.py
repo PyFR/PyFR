@@ -89,7 +89,7 @@ data_files = [
 # Hard dependencies
 install_requires = [
     'h5py >= 2.4',
-    'mako',
+    'mako >= 1.0.0',
     'mpi4py >= 1.3',
     'mpmath >= 0.18',
     'numpy >= 1.8',
@@ -99,7 +99,7 @@ install_requires = [
 # Soft dependencies
 extras_require = {
     'cuda': ['pycuda >= 2011.2'],
-    'opencl': ['pyopencl >= 2013.2']
+    'opencl': ['pyopencl >= 2013.2, != 2015.2, != 2015.2.1']
 }
 
 # Scripts
@@ -109,23 +109,29 @@ console_scripts = [
 
 # Info
 classifiers = [
-    'License :: OSI Approved :: New BSD License',
+    'License :: OSI Approved :: BSD License',
     'Programming Language :: Python',
     'Programming Language :: Python :: 3.3',
     'Topic :: Scientific/Engineering'
 ]
 
-long_description = '''PyFR is a Python based high-order compressible
-fluid flow solver based on energy stable
-Vincent-Castonguay-Jameson-Huynh schemes. It is currently being
-developed in the department of Aeronautics at Imperial College London
-under the direction of Dr. Peter Vincent.'''
+long_description = '''PyFR is an open-source Python based framework for
+solving advection-diffusion type problems on streaming architectures
+using the Flux Reconstruction approach of Huynh. The framework is
+designed to solve a range of governing systems on mixed unstructured
+grids containing various element types. It is also designed to target a
+range of hardware platforms via use of an in-built domain specific
+language derived from the Mako templating engine. PyFR is being
+developed in the Vincent Lab, Department of Aeronautics, Imperial
+College London, UK.'''
 
 setup(name='pyfr',
       version=version,
       description='Flux Reconstruction in Python',
       long_description=long_description,
       author='Imperial College London',
+      author_email='info@pyfr.org',
+      url='http://www.pyfr.org/',
       license='BSD',
       keywords='Math',
       packages=['pyfr'] + modules + tests,

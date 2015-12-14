@@ -11,7 +11,10 @@
 <%pyfr:kernel name='bccflux' ndim='1'
               ul='inout view fpdtype_t[${str(nvars)}]'
               gradul='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
+              amul='in view fpdtype_t'
               nl='in fpdtype_t[${str(ndims)}]'
-              magnl='in fpdtype_t'>
-    ${pyfr.expand('bc_common_flux_state', 'ul', 'gradul', 'nl', 'magnl')};
+              magnl='in fpdtype_t'
+              ploc='in fpdtype_t[${str(ndims)}]'
+              t='scalar fpdtype_t'>
+    ${pyfr.expand('bc_common_flux_state', 'ul', 'gradul', 'amul', 'nl', 'magnl', 'ploc', 't')};
 </%pyfr:kernel>

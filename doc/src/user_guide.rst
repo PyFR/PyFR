@@ -21,20 +21,15 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `h5py <http://www.h5py.org/>`_
-2. `mako <http://www.makotemplates.org/>`_
+1. `h5py <http://www.h5py.org/>`_ >= 2.5
+2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
 3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
 4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
 5. `numpy <http://www.numpy.org/>`_ >= 1.8
 6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
 
-To run PyFR |release| in parallel it is also necessary to have one of
-the following installed:
-
-1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
-2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
-
-PyFR |release| does not currently support Microsoft Windows.
+Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
+compatible with 32-bit Python distributions.
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -52,7 +47,8 @@ The OpenCL backend targets a range of accelerators including GPUs from
 AMD and NVIDIA. The backend requires:
 
 1. OpenCL
-2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_ >= 2013.2
+2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
+   >= 2013.2, != 2015.2, != 2015.2.1
 3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
 OpenMP Backend
@@ -64,6 +60,15 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
 2. A BLAS library compiled as a shared library
    (e.g. `OpenBLAS <http://www.openblas.net/>`_)
 
+Running in Parallel
+^^^^^^^^^^^^^^^^^^^
+
+To partition meshes for running in parallel it is also necessary to
+have one of the following partitioners installed:
+
+1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
+2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+
 Installation
 ------------
 
@@ -72,6 +77,10 @@ the software using the provided ``setup.py`` installer or add the root
 PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
+
+To manage installation of Python dependencies we strongly recommend
+using `pip <https://pypi.python.org/pypi/pip>`_ and
+`virtualenv <https://pypi.python.org/pypi/virtualenv>`_.
 
 Running PyFR
 ============
@@ -84,7 +93,6 @@ PyFR |release| uses three distinct file formats:
 1. ``.ini`` --- configuration file
 2. ``.pyfrm`` --- mesh file
 3. ``.pyfrs`` --- solution file
-
 
 The following commands are available from the ``pyfr`` program:
 
@@ -112,14 +120,9 @@ The following commands are available from the ``pyfr`` program:
         pyfr restart mesh.pyfrm solution.pyfrs
 
 5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu file. Example::
+   unstructured VTK .vtu or .pvtu file. Example::
 
         pyfr export mesh.pyfrm solution.pyfrs solution.vtu
-
-6. ``pyfr time-avg`` --- time-average a series of PyFR solution
-   files. Example::
-
-        pyfr time-avg average.pyfrs t1.pyfrs t2.pyfrs t3.pyfrs
 
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
@@ -135,7 +138,7 @@ Configuration File (.ini)
 Overview
 ^^^^^^^^
 
-The .ini configuration file parameterizes the simulation. It is written
+The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
 their associated parameters are described below.
@@ -202,15 +205,19 @@ Example::
 
 Parameterises the OpenMP backend with
 
-1. ``cc`` --- C compiler
+1. ``cc`` --- C compiler:
 
     *string*
 
-2. ``cblas`` --- path to shared C BLAS library
+2. ``cflags`` --- Additional C compiler flags:
 
     *string*
 
-3. ``cblas-type`` --- type of BLAS library
+3. ``cblas`` --- path to shared C BLAS library:
+
+    *string*
+
+4. ``cblas-type`` --- type of BLAS library:
 
     ``serial`` | ``parallel``
 
@@ -226,25 +233,25 @@ Example::
 
 Sets constants used in the simulation with
 
-1. ``gamma`` --- ratio of specific heats
+1. ``gamma`` --- ratio of specific heats:
 
     *float*
 
-2. ``mu`` --- dynamic viscosity
+2. ``mu`` --- dynamic viscosity:
 
     *float*
 
-3. ``Pr`` --- Prandtl number
+3. ``Pr`` --- Prandtl number:
 
     *float*
 
 4. ``cpTref`` --- product of specific heat at constant pressure and
-   reference temperature for Sutherland's Law
+   reference temperature for Sutherland's Law:
 
    *float*
 
 5. ``cpTs`` --- product of specific heat at constant pressure and
-   Sutherland temperature for Sutherland's Law
+   Sutherland temperature for Sutherland's Law:
 
    *float*
 
@@ -264,7 +271,7 @@ Parameterises the solver with
 
     ``euler`` | ``navier-stokes``
 
-2. ``order`` --- order of polynomial solution basis
+2. ``order`` --- order of polynomial solution basis:
 
     *int*
 
@@ -274,9 +281,13 @@ Parameterises the solver with
     ``flux, div-flux`` | ``surf-flux, div-flux`` |
     ``flux, surf-flux, div-flux``
 
-4. ``viscosity-correction`` --- viscosity correction
+4. ``viscosity-correction`` --- viscosity correction:
 
     ``none`` | ``sutherland``
+
+5. ``shock-capturing`` --- shock capturing scheme:
+
+    ``none`` | ``artificial-viscosity``
 
 Example::
 
@@ -285,6 +296,7 @@ Example::
     order = 3
     anti-alias = flux
     viscosity-correction = none
+    shock-capturing = artificial-viscosity
 
 [solver-time-integrator]
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -295,15 +307,19 @@ Parameterises the time-integration scheme used by the solver with
 
     ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
-2. ``t0`` --- initial time
+2. ``tstart`` --- initial time:
 
     *float*
 
-3. ``dt`` --- time-step
+3. ``tend`` --- final time:
 
     *float*
 
-4. ``controller`` --- time-step size controller:
+4. ``dt`` --- time-step:
+
+    *float*
+
+5. ``controller`` --- time-step size controller:
 
     ``none`` | ``pi``
 
@@ -339,7 +355,8 @@ Example::
     [solver-time-integrator]
     scheme = rk45
     controller = pi
-    t0 = 0.0
+    tstart = 0.0
+    tend = 10.0
     dt = 0.001
     atol = 0.00001
     rtol = 0.00001
@@ -354,13 +371,13 @@ Parameterises the interfaces with
 
 1. ``riemann-solver`` --- type of Riemann solver:
 
-    ``rusanov`` | ``hll`` | ``hllc`` | ``roe``
+    ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem``
 
-2. ``ldg-beta`` --- beta parameter used for LDG
+2. ``ldg-beta`` --- beta parameter used for LDG:
 
     *float*
 
-3. ``ldg-tau`` --- tau parameter used for LDG
+3. ``ldg-tau`` --- tau parameter used for LDG:
 
     *float*
 
@@ -380,10 +397,22 @@ Parameterises the line interfaces with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   line interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   line interface:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+
 Example::
 
     [solver-interfaces-line]
     flux-pts = gauss-legendre
+    quad-deg = 10
+    quad-pts = gauss-legendre
 
 [solver-interfaces-tri]
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -395,10 +424,22 @@ Parameterises the triangular interfaces with
 
     ``williams-shunn``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   triangular interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   triangular interface:
+
+    ``williams-shunn`` | ``witherden-vincent``
+
 Example::
 
     [solver-interfaces-tri]
     flux-pts = williams-shunn
+    quad-deg = 10
+    quad-pts = williams-shunn
 
 [solver-interfaces-quad]
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -410,10 +451,23 @@ Parameterises the quadrilateral interfaces with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
+2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+   quadrilateral interface:
+
+    *int*
+
+3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+   quadrilateral interface:
+
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
+    ``witherden-vincent``
+
 Example::
 
     [solver-interfaces-quad]
     flux-pts = gauss-legendre
+    quad-deg = 10
+    quad-pts = gauss-legendre
 
 [solver-elements-tri]
 ^^^^^^^^^^^^^^^^^^^^^
@@ -433,7 +487,7 @@ Parameterises the triangular elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    triangular element:
 
-    ``williams-shunn``
+    ``williams-shunn`` | ``witherden-vincent``
 
 Example::
 
@@ -460,7 +514,8 @@ Parameterises the quadrilateral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    quadrilateral element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
+    ``witherden-vincent``
 
 Example::
 
@@ -487,7 +542,8 @@ Parameterises the hexahedral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    hexahedral element:
 
-    ``gauss-legendre`` | ``gauss-legendre-lobatto``
+    ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
+    ``witherden-vincent``
 
 Example::
 
@@ -514,7 +570,7 @@ Parameterises the tetrahedral elements with
 3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    tetrahedral element:
 
-    ``shunn-ham``
+    ``shunn-ham`` | ``witherden-vincent``
 
 Example::
 
@@ -543,7 +599,7 @@ Parameterises the prismatic elements with
    prismatic element:
 
     ``williams-shunn~gauss-legendre`` |
-    ``williams-shunn~gauss-legendre-lobatto``
+    ``williams-shunn~gauss-legendre-lobatto`` | ``witherden-vincent``
 
 Example::
 
@@ -582,25 +638,26 @@ Example::
 [solver-source-terms]
 ^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises space (x, y, [z]) and time (t) dependent source terms with
+Parameterises solution, space (x, y, [z]), and time (t) dependent
+source terms with
 
-1. ``rho`` --- density source term
-
-    *string*
-
-2. ``rhou`` --- x-momentum source term
+1. ``rho`` --- density source term:
 
     *string*
 
-3. ``rhov`` --- y-momentum source term
+2. ``rhou`` --- x-momentum source term:
 
     *string*
 
-4. ``rhow`` --- z-momentum source term
+3. ``rhov`` --- y-momentum source term:
 
     *string*
 
-5. ``E`` --- energy source term
+4. ``rhow`` --- z-momentum source term:
+
+    *string*
+
+5. ``E`` --- energy source term:
 
     *string*
 
@@ -609,42 +666,40 @@ Example::
     [solver-source-terms]
     rho = t
     rhou = x*y*sin(y)
-    rhov = z
+    rhov = z*rho
     rhow = 1.0
     E = 1.0/(1.0+x)
 
-[soln-output]
-^^^^^^^^^^^^^
+[solver-artificial-viscosity]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the output with
+Parameterises artificial viscosity for shock capturing with
 
+1. ``max-amu`` --- maximum artificial viscosity:
 
-1. ``basedir`` --- relative path to directory where outputs will be
-   written
+    *float*
 
-    *string*
+2. ``s0`` --- sensor cut-off:
 
-2. ``basename`` --- pattern of output names
+    *float*
 
-    *string*
+3. ``kappa`` --- sensor range:
 
-3. ``times`` --- times at which outputs will be dumped
-
-    ``range(`` *float* ``,`` *float* ``,`` *int* ``)``
+    *float*
 
 Example::
 
-    [soln-output]
-    basedir = .
-    basename = files_%(t).2f
-    times = range(0, 1, 11)
+    [solver-artificial-viscosity]
+    max-amu = 0.01
+    s0 = 0.01
+    kappa = 5.0
 
 [soln-filter]
 ^^^^^^^^^^^^^
 
 Parameterises an exponential solution filter with
 
-1. ``freq`` --- frequency at which filter is applied:
+1. ``nsteps`` --- apply filter every ``nsteps``:
 
     *int*
 
@@ -660,22 +715,113 @@ Parameterises an exponential solution filter with
 
     *int*
 
+Example::
+
+    [soln-filter]
+    nsteps = 10
+    alpha = 36.0
+    order = 16
+    cutoff = 1
+
+[soln-plugin-writer]
+^^^^^^^^^^^^^^^^^^^^
+Periodically write the solution to disk in the pyfrs format.
+Parameterised with
+
+1. ``dt-out`` --- write to disk every ``dt-out`` time units:
+
+    *float*
+
+2. ``basedir`` --- relative path to directory where outputs will be
+   written:
+
+    *string*
+
+3. ``basename`` --- pattern of output names:
+
+    *string*
+
+Example::
+
+    [soln-plugin-writer]
+    dt-out = 0.01
+    basedir = .
+    basename = files-{t:.2f}
+
+[soln-plugin-fluidforce-name]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically integrates the pressure and viscous stress on the boundary
+labelled ``name`` and writes out the resulting force vectors to a CSV
+file. Parameterised with
+
+1. ``nsteps`` --- integrate every ``nsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-fluidforce-wing]
+    nsteps = 10
+    file = wing-forces.csv
+    header = true
+
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
 
-Periodically checks the solution for NaN values
+Periodically checks the solution for NaN values. Parameterised with
 
-1. ``freq`` --- frequency at which the check is performed:
+1. ``nsteps`` --- check every ``nsteps``:
 
     *int*
+
+Example::
+
+    [soln-plugin-nancheck]
+    nsteps = 10
+
+[soln-plugin-residual]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Periodically calculates the residual and writes it out to a CSV file.
+Parameterised with
+
+1. ``nsteps`` --- calculate every ``nsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-residual]
+    nsteps = 10
+    file = residual.csv
+    header = true
 
 [soln-plugin-sampler]
 ^^^^^^^^^^^^^^^^^^^^^
 
 Periodically samples specific points in the volume and writes them out
-to a CSV file.
+to a CSV file. Parameterised with
 
-1. ``freq`` --- frequency at which to sample:
+1. ``nsteps`` --- sample every ``nsteps``:
 
     *int*
 
@@ -696,11 +842,61 @@ to a CSV file.
 
     *boolean*
 
+Example::
+
+    [soln-plugin-sampler]
+    nsteps = 10
+    samp-pts = [(1.0, 0.7, 0.0), (1.0, 0.8, 0.0)]
+    format = primative
+    file = point-data.csv
+    header = true
+
+[soln-plugin-tavg]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Time average quantities. Parameterised with
+
+1. ``nsteps`` --- accumulate the average every ``nsteps`` time steps:
+
+    *int*
+
+2. ``dt-out`` --- write to disk every ``dt-out`` time units:
+
+    *float*
+
+3. ``basedir`` --- relative path to directory where outputs will be
+   written:
+
+    *string*
+
+4. ``basename`` --- pattern of output names:
+
+    *string*
+
+5. ``avg-name`` --- expression as a function of the primitive variables,
+   time (t), and space (x, y, [z]) to time average; multiple
+   expressions, each with their own *name*, may be specified:
+
+    *string*
+
+Example::
+
+    [soln-plugin-tavg]
+    nsteps = 10
+    dt-out = 2.0
+    basedir = .
+    basename = files-{t:06.2f}
+
+    avg-p = p
+    avg-p2 = p*p
+    avg-vel = sqrt(u*u + v*v)
+
 [soln-bcs-name]
 ^^^^^^^^^^^^^^^
 
-Parameterises boundary condition labelled :code:`name` in the .pyfrm
-file with
+Parameterises constant, or if available space (x, y, [z]) and time (t)
+dependent, boundary condition labelled :code:`name` in the .pyfrm file
+with
 
 1. ``type`` --- type of boundary condition:
 
@@ -714,23 +910,23 @@ file with
 
         - ``rho`` --- density
 
-           *float*
+           *float* | *string*
 
         - ``u`` --- x-velocity
 
-           *float*
+           *float* | *string*
 
         - ``v`` --- y-velocity
 
-           *float*
+           *float* | *string*
 
         - ``w`` --- z-velocity
 
-           *float*
+           *float* | *string*
 
         - ``p`` --- static pressure
 
-           *float*
+           *float* | *string*
 
     ``no-slp-isot-wall`` requires
 
@@ -755,19 +951,19 @@ file with
 
         - ``rho`` --- density
 
-           *float*
+           *float* | *string*
 
         - ``u`` --- x-velocity
 
-           *float*
+           *float* | *string*
 
         - ``v`` --- y-velocity
 
-           *float*
+           *float* | *string*
 
         - ``w`` --- z-velocity
 
-           *float*
+           *float* | *string*
 
     ``sub-in-ftpttang`` requires
 
@@ -794,29 +990,29 @@ file with
 
         - ``p`` --- static pressure
 
-           *float*
+           *float* | *string*
 
     ``sup-in-fa`` requires
 
         - ``rho`` --- density
 
-           *float*
+           *float* | *string*
 
         - ``u`` --- x-velocity
 
-           *float*
+           *float* | *string*
 
         - ``v`` --- y-velocity
 
-           *float*
+           *float* | *string*
 
         - ``w`` --- z-velocity
 
-           *float*
+           *float* | *string*
 
         - ``p`` --- static pressure
 
-           *float*
+           *float* | *string*
 
 Example::
 
@@ -830,23 +1026,23 @@ Example::
 
 Parameterises space (x, y, [z]) dependent initial conditions with
 
-1. ``rho`` --- initial density distribution
+1. ``rho`` --- initial density distribution:
 
     *string*
 
-2. ``u`` --- initial x-velocity distribution
+2. ``u`` --- initial x-velocity distribution:
 
     *string*
 
-3. ``v`` --- initial y-velocity distribution
+3. ``v`` --- initial y-velocity distribution:
 
     *string*
 
-4. ``w`` --- initial z-velocity distribution
+4. ``w`` --- initial z-velocity distribution:
 
     *string*
 
-5. ``p`` --- initial static pressure distribution
+5. ``p`` --- initial static pressure distribution:
 
     *string*
 
@@ -886,14 +1082,14 @@ simulation on a mixed unstructured mesh:
 
         pyfr run -p couette_flow_2d.pyfrm couette_flow_2d.ini
 
-6. Run pyfr on the solution file ``couette_flow_2d_4.00.pyfrs``
+6. Run pyfr on the solution file ``couette_flow_2d-040.pyfrs``
    converting it into an unstructured VTK file called
-   ``couette_flow_2d_4.00.vtu``. Note that in order to visualise the
+   ``couette_flow_2d-040.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr export couette_flow_2d.pyfrm couette_flow_2d_4.00.pyfrs couette_flow_2d_4.00.vtu -d 4
+        pyfr export couette_flow_2d.pyfrm couette_flow_2d-040.pyfrs couette_flow_2d-040.vtu -d 4
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -936,14 +1132,14 @@ simulation on a structured mesh:
 
         mpirun -n 2 pyfr run -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
-7. Run pyfr on the solution file ``euler_vortex_2d_100.0.pyfrs``
+7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called
-   ``euler_vortex_2d_100.0.vtu``. Note that in order to visualise the
+   ``euler_vortex_2d-100.0.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d_100.0.vtu -d 4
+        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d-100.0.vtu -d 4
 
 8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_

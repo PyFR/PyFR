@@ -140,7 +140,7 @@ class BaseShape(object):
     def m11(self):
         ub = self.ubasis
 
-        n = ub.order
+        n = max(ub.degrees)
         ncut = self.cfg.getint('soln-filter', 'cutoff')
         order = self.cfg.getint('soln-filter', 'order')
         alpha = self.cfg.getfloat('soln-filter', 'alpha')
@@ -148,7 +148,7 @@ class BaseShape(object):
         A = np.ones(self.nupts)
         for i, d in enumerate(ub.degrees):
             if d >= ncut < n:
-                A[i] = exp(-alpha*(float(d - ncut)/(n - ncut))**order)
+                A[i] = exp(-alpha*((d - ncut)/(n - ncut))**order)
 
         return np.linalg.solve(ub.vdm, A[:,None]*ub.vdm).T
 
@@ -208,6 +208,24 @@ class BaseShape(object):
             ppts.append(_proj_pts(proj, r.pts))
 
         return np.vstack(ppts)
+
+    @lazyprop
+    def fpts_wts(self):
+        pwts = []
+
+        for kind, proj, norm, area in self.faces:
+            # Obtain the weights in reference space for the face type
+            if 'surf-flux' in self.antialias:
+                r = self._iqrules[kind]
+            else:
+                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                npts = self.npts_for_face[kind](self.order)
+
+                r = get_quadrule(kind, rule, npts)
+
+            pwts.append(r.wts)
+
+        return np.hstack(pwts)
 
     @lazyprop
     def gbasis_coeffs(self):

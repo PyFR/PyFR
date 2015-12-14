@@ -16,8 +16,10 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1 << kernels['mpiint', 'scal_fpts_pack']()
         runall([q1])
 
+        if ('eles', 'copy_soln') in kernels:
+            q1 << kernels['eles', 'copy_soln']()
         q1 << kernels['iint', 'con_u']()
-        q1 << kernels['bcint', 'con_u']()
+        q1 << kernels['bcint', 'con_u'](t=t)
         q1 << kernels['eles', 'tgradpcoru_upts']()
 
         q2 << kernels['mpiint', 'scal_fpts_send']()
@@ -38,7 +40,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1 << kernels['eles', 'tdisf']()
         q1 << kernels['eles', 'tdivtpcorf']()
         q1 << kernels['iint', 'comm_flux']()
-        q1 << kernels['bcint', 'comm_flux']()
+        q1 << kernels['bcint', 'comm_flux'](t=t)
 
         q2 << kernels['mpiint', 'vect_fpts_send']()
         q2 << kernels['mpiint', 'vect_fpts_recv']()

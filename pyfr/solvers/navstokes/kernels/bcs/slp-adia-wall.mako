@@ -5,7 +5,7 @@
 <%include file='pyfr.solvers.navstokes.kernels.bcs.common'/>
 <%include file='pyfr.solvers.navstokes.kernels.flux'/>
 
-<%pyfr:macro name='bc_ldg_state' params='ul, nl, ur'>
+<%pyfr:macro name='bc_ldg_state' params='ul, nl, ur, ploc, t'>
     fpdtype_t nor = ${' + '.join('ul[{1}]*nl[{0}]'.format(i, i + 1)
                                  for i in range(ndims))};
     ur[0] = ul[0];
@@ -15,10 +15,10 @@
     ur[${nvars - 1}] = ul[${nvars - 1}];
 </%pyfr:macro>
 
-<%pyfr:macro name='bc_common_flux_state' params='ul, gradul, nl, magnl'>
+<%pyfr:macro name='bc_common_flux_state' params='ul, gradul, amul, nl, magnl, ploc, t'>
     // Ghost state r
     fpdtype_t ur[${nvars}];
-    ${pyfr.expand('bc_ldg_state', 'ul', 'nl', 'ur')};
+    ${pyfr.expand('bc_ldg_state', 'ul', 'nl', 'ur', 'ploc', 't')};
 
     // Perform the Riemann solve
     fpdtype_t ficomm[${nvars}];
