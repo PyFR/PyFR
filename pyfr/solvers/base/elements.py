@@ -277,9 +277,8 @@ class BaseElements(object, metaclass=ABCMeta):
         else:
             # Cpmpute x cross x_(chi)
             jac = np.rollaxis(jac, 2)
-            tt = np.array([np.cross(x, dx, axisa=1, axisb=0, axisc=1)
-                           for dx in jac])
-            tt = tt.reshape(ndims, nmpts, -1)
+            tt = [np.cross(x, dx, axisa=1, axisb=0, axisc=1) for dx in jac]
+            tt = np.array(tt).reshape(ndims, nmpts, -1)
 
             # Derivative of x cross x_(chi) at (pseudo) grid points
             dtt = np.array([np.dot(jacop, tn) for tn in tt])
