@@ -6,7 +6,7 @@ import os
 import numpy as np
 
 from pyfr.shapes import BaseShape
-from pyfr.util import subclass_where
+from pyfr.util import memoize, subclass_where
 from pyfr.writers import BaseWriter
 
 
@@ -93,6 +93,25 @@ class VTKWriter(BaseWriter):
             return names, types, comps, sizes
         else:
             return names, types, comps
+
+    @memoize
+    def _get_shape(self, name, nspts):
+        shapecls = subclass_where(BaseShape, name=name)
+        return shapecls(nspts, self.cfg)
+
+    @memoize
+    def _get_std_ele(self, name, nspts):
+        return self._get_shape(name, nspts).std_ele(self.divisor)
+
+    @memoize
+    def _get_mesh_op(self, name, nspts, svpts):
+        shape = self._get_shape(name, nspts)
+        return shape.sbasis.nodal_basis_at(svpts)
+
+    @memoize
+    def _get_soln_op(self, name, nspts, svpts):
+        shape = self._get_shape(name, nspts)
+        return shape.ubasis.nodal_basis_at(svpts)
 
     def write_out(self):
         name, extn = os.path.splitext(self.outf)
@@ -206,23 +225,16 @@ class VTKWriter(BaseWriter):
         mesh = self.mesh[mk]
         soln = self.soln[sk]
 
-        # Get the shape and sub division classes
-        shapecls = subclass_where(BaseShape, name=name)
-        subdvcls = subclass_where(BaseShapeSubDiv, name=name)
-
         # Dimensions
         nspts, neles = mesh.shape[:2]
 
         # Sub divison points inside of a standard element
-        svpts = shapecls.std_ele(self.divisor)
+        svpts = self._get_std_ele(name, nspts)
         nsvpts = len(svpts)
 
-        # Shape
-        soln_b = shapecls(nspts, self.cfg)
-
         # Generate the operator matrices
-        mesh_vtu_op = soln_b.sbasis.nodal_basis_at(svpts)
-        soln_vtu_op = soln_b.ubasis.nodal_basis_at(svpts)
+        mesh_vtu_op = self._get_mesh_op(name, nspts, svpts)
+        soln_vtu_op = self._get_soln_op(name, nspts, svpts)
 
         # Calculate node locations of vtu elements
         vpts = np.dot(mesh_vtu_op, mesh.reshape(nspts, -1))
@@ -240,6 +252,7 @@ class VTKWriter(BaseWriter):
         self._write_darray(vpts.swapaxes(0, 1), vtuf, self.dtype)
 
         # Perform the sub division
+        subdvcls = subclass_where(BaseShapeSubDiv, name=name)
         nodes = subdvcls.subnodes(self.divisor)
 
         # Prepare vtu cell arrays
