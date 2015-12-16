@@ -74,6 +74,8 @@ def main():
                            help='Sets the level to which high order elements '
                            'are divided; output is linear between nodes, so '
                            'increased resolution may be required')
+    ap_export.add_argument('-g', '--gradients', action='store_true',
+                           help='Compute gradients')
     ap_export.add_argument('-p', '--precision', choices=['single', 'double'],
                            default='single', help='Output number precision, '
                            'defaults to single')
