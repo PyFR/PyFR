@@ -81,16 +81,13 @@ class FluidForcePlugin(BasePlugin):
                 if self._viscous and etype not in m4:
                     m4[etype] = eles.basis.m4
 
-                    # Obtain SMat at the face
-                    smat = eles.smat_at_np('upts')
+                    # Get the smats at the solution points
+                    smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
 
-                    # Transpose SMat (= Smat^T)
-                    smat = smat.transpose(2, 0, 1, 3)
-
-                    # Obtain |J|^-1
+                    # Get |J|^-1 at the solution points
                     rcpdjac = eles.rcpdjac_at_np('upts')
 
-                    # Compute |J|^-1 SMat^T
+                    # Product to give J^-T at the solution points
                     rcpjact[etype] = smat*rcpdjac
 
                 area = eles.basis.faces[fidx][3]
