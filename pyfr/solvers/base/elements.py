@@ -47,9 +47,6 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
 
-        # Compute metric (Smat, djac on pseudo grid points)
-        self._smat_base()
-
         # Physical normals at the flux points
         self._gen_pnorm_fpts()
 
@@ -238,7 +235,8 @@ class BaseElements(object, metaclass=ABCMeta):
 
         return ploc
 
-    def _smat_base(self):
+    @lazyprop
+    def _smats(self):
         # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
         mpts = self.basis.mpts
         mbasis = self.basis.mbasis
@@ -293,8 +291,7 @@ class BaseElements(object, metaclass=ABCMeta):
             # Exploit the fact that det(J) = x0 . (x1 ^ x2)
             self._djacs = np.einsum('ij...,ji...->j...', jac[0], smats[0])
 
-        # Reshape
-        self._smats = smats.reshape(ndims, self.nmpts, -1)
+        return smats.reshape(ndims, self.nmpts, -1)
 
     def get_mag_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
