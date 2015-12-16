@@ -218,12 +218,12 @@ class BaseElements(object, metaclass=ABCMeta):
         M0 = self.basis.mbasis.nodal_basis_at(pts)
 
         # Interpolate smats
-        smats = np.array([np.dot(M0, smat) for smat in self._smats])
+        smats = np.array([np.dot(M0, smat) for smat in self._smats_mpts])
         smats = smats.reshape(self.ndims, npts, self.ndims, -1)
 
         # Interpolate djacs
         if retdets:
-            djacs = np.dot(M0, self._djacs)
+            djacs = np.dot(M0, self._djacs_mpts)
 
         return (smats, djacs) if retdets else smats
 
@@ -236,7 +236,7 @@ class BaseElements(object, metaclass=ABCMeta):
         return ploc
 
     @lazyprop
-    def _smats(self):
+    def _smats_mpts(self):
         # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
         mpts = self.basis.mpts
         mbasis = self.basis.mbasis
@@ -271,7 +271,7 @@ class BaseElements(object, metaclass=ABCMeta):
             smats[0,:,0], smats[0,:,1] = d, -b
             smats[1,:,0], smats[1,:,1] = -c, a
 
-            self._djacs = a*d - b*c
+            self._djacs_mpts = a*d - b*c
         else:
             # Cpmpute x cross x_(chi)
             jac = np.rollaxis(jac, 2)
@@ -289,7 +289,7 @@ class BaseElements(object, metaclass=ABCMeta):
             smats[2] = 0.5*(dtt[1][0] - dtt[0][1])
 
             # Exploit the fact that det(J) = x0 . (x1 ^ x2)
-            self._djacs = np.einsum('ij...,ji...->j...', jac[0], smats[0])
+            self._djacs_mpts = np.einsum('ij...,ji...->j...', jac[0], smats[0])
 
         return smats.reshape(ndims, self.nmpts, -1)
 
