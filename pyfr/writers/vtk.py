@@ -40,9 +40,20 @@ class VTKWriter(BaseWriter):
             self._pre_proc_fields = self._pre_proc_fields_grad
             self._post_proc_fields = self._post_proc_fields_grad
 
-            # Update the VTK variable list
-            self._vtk_vars = {f: 'xyz'[:self.ndims]
-                              for f in self._soln_fields}
+            # Update list of solution fields
+            self._soln_fields.extend(
+                '{0}-{1}'.format(f, d)
+                for f in list(self._soln_fields) for d in range(self.ndims)
+            )
+
+            # Update the list of VTK variables
+            nf = lambda f: ['{0}-{1}'.format(f, d) for d in range(self.ndims)]
+            for var, fields in list(self._vtk_vars.items()):
+                if len(fields) == 1:
+                    self._vtk_vars['grad ' + var] = nf(fields[0])
+                else:
+                    for f in fields:
+                        self._vtk_vars['grad {0} {1}'.format(var, f)] = nf(f)
 
     def _pre_proc_fields_soln(self, name, mesh, soln):
         # Convert from conservative to primitive variables
@@ -70,10 +81,10 @@ class VTKWriter(BaseWriter):
 
     def _pre_proc_fields_grad(self, name, mesh, soln):
         # Call the reference pre-processor
-        soln = self._pre_proc_fields_ref(name, mesh, soln).swapaxes(0, 1)
+        soln = self._pre_proc_fields_ref(name, mesh, soln)
 
         # Dimensions
-        nupts, nvars = soln.shape[:2]
+        nvars, nupts = soln.shape[:2]
 
         # Get the shape class
         basiscls = subclass_where(BaseShape, name=name)
@@ -85,23 +96,27 @@ class VTKWriter(BaseWriter):
         smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
         rcpdjac = eles.rcpdjac_at_np('upts')
 
+        # Gradient operator
+        gradop = eles.basis.m4.astype(self.dtype)
+
         # Evaluate the transformed gradient of the solution
-        gradsoln = np.dot(eles.basis.m4, soln.reshape(nupts, -1))
+        gradsoln = np.dot(gradop, soln.swapaxes(0, 1).reshape(nupts, -1))
         gradsoln = gradsoln.reshape(self.ndims, nupts, nvars, -1)
 
-        # Untransform the gradients
-        gradsoln = np.einsum('ijkl,jkml->mikl', smat*rcpdjac, gradsoln)
+        # Untransform
+        gradsoln = np.einsum('ijkl,jkml->mikl', smat*rcpdjac, gradsoln,
+                             dtype=self.dtype, casting='same_kind')
         gradsoln = gradsoln.reshape(nvars*self.ndims, nupts, -1)
 
-        return gradsoln
+        return np.vstack([soln, gradsoln])
 
     def _post_proc_fields_grad(self, vsoln):
         # Prepare the fields
         fields = []
-        for vname in self._vtk_vars:
-            i = self._soln_fields.index(vname)*self.ndims
+        for vname, vfields in self._vtk_vars.items():
+            ix = [self._soln_fields.index(vf) for vf in vfields]
 
-            fields.append(vsoln[range(i, i + self.ndims)])
+            fields.append(vsoln[ix])
 
         return fields
 
@@ -132,7 +147,7 @@ class VTKWriter(BaseWriter):
         comps = ['3', '', '', '']
 
         for fname, varnames in vvars.items():
-            names.append(fname.capitalize())
+            names.append(fname.title())
             types.append(dtype)
             comps.append(str(len(varnames)))
 
@@ -160,12 +175,12 @@ class VTKWriter(BaseWriter):
     @memoize
     def _get_mesh_op(self, name, nspts, svpts):
         shape = self._get_shape(name, nspts)
-        return shape.sbasis.nodal_basis_at(svpts)
+        return shape.sbasis.nodal_basis_at(svpts).astype(self.dtype)
 
     @memoize
     def _get_soln_op(self, name, nspts, svpts):
         shape = self._get_shape(name, nspts)
-        return shape.ubasis.nodal_basis_at(svpts)
+        return shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
 
     def write_out(self):
         name, extn = os.path.splitext(self.outf)
@@ -276,8 +291,8 @@ class VTKWriter(BaseWriter):
 
     def _write_data(self, vtuf, mk, sk):
         name = self.mesh_inf[mk][0]
-        mesh = self.mesh[mk]
-        soln = self.soln[sk].swapaxes(0, 1)
+        mesh = self.mesh[mk].astype(self.dtype)
+        soln = self.soln[sk].swapaxes(0, 1).astype(self.dtype)
 
         # Dimensions
         nspts, neles = mesh.shape[:2]
