@@ -3,15 +3,14 @@
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, NotSuitableError
-from pyfr.backends.cuda.provider import (CUDAKernelProvider,
-                                         get_grid_for_block)
+from pyfr.backends.opencl.provider import OpenCLKernelProvider
 
 
-class CUDAGiMMiKKernels(CUDAKernelProvider):
+class OpenCLGiMMiKKernels(OpenCLKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
 
-        self.max_nnz = backend.cfg.getint('backend-cuda', 'gimmik-max-nnz',
+        self.max_nnz = backend.cfg.getint('backend-opencl', 'gimmik-max-nnz',
                                           512)
 
         try:
@@ -37,21 +36,16 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # Generate
         src = self._gen_gimmik(
-            a.get(), 'cuda', alpha=alpha, beta=beta,
+            a.get(), 'opencl', alpha=alpha, beta=beta,
             double=a.dtype == np.float64, reduced=True,
         )
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src, 'PPiii')
-
-        # Determine the grid/block
-        block = (128, 1, 1)
-        grid = get_grid_for_block(block, b.ncol)
+        fun = self._build_kernel('gimmik_mm', src, [np.intp]*2 + [np.int32]*3)
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun.prepared_async_call(grid, block, queue.cuda_stream_comp,
-                                        b, out, b.ncol, b.leaddim,
-                                        out.leaddim)
+                fun(queue.cl_queue_comp, (b.ncol,), None, b.data, out.data,
+                    b.ncol, b.leaddim, out.leaddim)
 
         return MulKernel()

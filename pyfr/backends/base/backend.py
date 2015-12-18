@@ -9,26 +9,7 @@ from weakref import WeakValueDictionary, WeakKeyDictionary
 
 import numpy as np
 
-
-def traits(**tr):
-    def traits_tr(fn):
-        fn._traits = tr
-        return fn
-    return traits_tr
-
-
-def issuitable(kern, *args, **kwargs):
-    kernt = getattr(kern, '_traits', {})
-    kargs = getcallargs(kern, *args, **kwargs)
-
-    for k, tags in kernt.items():
-        argtags = kargs[k].tags
-        for t in tags:
-            if (t[0] == '!' and t[1:] in argtags) or\
-               (t[0] != '!' and t not in argtags):
-                return False
-
-    return True
+from pyfr.backends.base.kernels import NotSuitableError
 
 
 def recordmat(fn):
@@ -168,10 +149,10 @@ class BaseBackend(object, metaclass=ABCMeta):
     def kernel(self, name, *args, **kwargs):
         for prov in self._providers:
             kern = getattr(prov, name, None)
-            if kern and issuitable(kern, *args, **kwargs):
+            if kern:
                 try:
                     return kern(*args, **kwargs)
-                except NotImplementedError:
+                except NotSuitableError:
                     pass
         else:
             raise KeyError("'{}' has no providers".format(name))
