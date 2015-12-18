@@ -50,7 +50,7 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nfacefpts = basis.nfacefpts
 
     @abstractmethod
-    def pri_to_conv(ics, cfg):
+    def pri_to_con(ics, cfg):
         pass
 
     def set_ics_from_cfg(self):
@@ -72,7 +72,7 @@ class BaseElements(object, metaclass=ABCMeta):
         self._scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
         # Convert from primitive to conservative form
-        for i, v in enumerate(self.pri_to_conv(ics, self.cfg)):
+        for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
             self._scal_upts[:, i, :] = v
 
     def set_ics_from_soln(self, solnmat, solncfg):
