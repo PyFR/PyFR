@@ -11,7 +11,7 @@ mpi4py.rc.initialize = False
 import h5py
 from mpmath import mp
 
-from pyfr.backends import get_backend
+from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler
 from pyfr.partitioners import BasePartitioner, get_partitioner
@@ -98,8 +98,9 @@ def main():
     ap_restart.set_defaults(process=process_restart)
 
     # Options common to run and restart
+    backends = sorted(cls.name for cls in subclasses(BaseBackend))
     for p in [ap_run, ap_restart]:
-        p.add_argument('--backend', '-b', default='cuda',
+        p.add_argument('--backend', '-b', choices=backends, required=True,
                        help='Backend to use')
         p.add_argument('--progress', '-p', action='store_true',
                        help='show a progress bar')

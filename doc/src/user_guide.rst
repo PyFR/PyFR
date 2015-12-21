@@ -1080,7 +1080,7 @@ simulation on a mixed unstructured mesh:
    generating a series of PyFR solution files called
    ``couette_flow_2d-*.pyfrs``::
 
-        pyfr run -p couette_flow_2d.pyfrm couette_flow_2d.ini
+        pyfr run -b cuda -p couette_flow_2d.pyfrm couette_flow_2d.ini
 
 6. Run pyfr on the solution file ``couette_flow_2d-040.pyfrs``
    converting it into an unstructured VTK file called
@@ -1130,7 +1130,7 @@ simulation on a structured mesh:
 6. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-        mpirun -n 2 pyfr run -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
+        mpirun -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
 7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called

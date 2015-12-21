@@ -49,20 +49,6 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
 
-        # Physical normals at the flux points
-        self._gen_pnorm_fpts()
-
-        # Construct the physical location operator matrix
-        plocop = basis.sbasis.nodal_basis_at(basis.fpts)
-
-        # Apply the operator to the mesh elements and reshape
-        plocfpts = np.dot(plocop, eles.reshape(nspts, -1))
-        self.plocfpts = plocfpts.reshape(self.nfpts, neles, ndims)
-        plocfpts = self.plocfpts.transpose(1, 2, 0).tolist()
-
-        self._srtd_face_fpts = [[fuzzysort(pts, ffpts) for pts in plocfpts]
-                                for ffpts in basis.facefpts]
-
     @abstractmethod
     def pri_to_conv(ics, cfg):
         pass
@@ -102,6 +88,24 @@ class BaseElements(object, metaclass=ABCMeta):
         # Apply and reshape
         self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
         self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
+
+    @lazyprop
+    def plocfpts(self):
+        # Construct the physical location operator matrix
+        plocop = self.basis.sbasis.nodal_basis_at(self.basis.fpts)
+
+        # Apply the operator to the mesh elements and reshape
+        plocfpts = np.dot(plocop, self.eles.reshape(self.nspts, -1))
+        plocfpts = plocfpts.reshape(self.nfpts, self.neles, self.ndims)
+
+        return plocfpts
+
+    @lazyprop
+    def _srtd_face_fpts(self):
+        plocfpts = self.plocfpts.transpose(1, 2, 0).tolist()
+
+        return [[fuzzysort(pts, ffpts) for pts in plocfpts]
+                for ffpts in self.basis.facefpts]
 
     @abstractproperty
     def _scratch_bufs(self):
@@ -239,6 +243,16 @@ class BaseElements(object, metaclass=ABCMeta):
         # Normalize the physical normals at the flux points
         self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[..., None]
         self._mag_pnorm_fpts = mag_pnorm_fpts
+
+    @lazyprop
+    def _norm_pnorm_fpts(self):
+        self._gen_pnorm_fpts()
+        return self._norm_pnorm_fpts
+
+    @lazyprop
+    def _mag_pnorm_fpts(self):
+        self._gen_pnorm_fpts()
+        return self._mag_pnorm_fpts
 
     def _get_jac_eles_at(self, pts):
         nspts, neles, ndims = self.nspts, self.neles, self.ndims
