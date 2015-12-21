@@ -53,6 +53,24 @@ class BaseShape(object):
             self.nsptsord = nsptord = self.order_from_nspts(nspts)
             self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
+            # Basis for free-stream metric
+            # We need p-th order pseudo grid points, which includes
+            # p-th order points on faces.
+            # It guarantees th q-th order collocation projection on the face
+            # on the both adjacent cells.
+            # Ref. 1 JCP 281, 28-54, Sec 4.2
+            # Ref. 2 JSC 26(3), 301-327, Definition 1
+            if nsptord >= self.order + 1:
+                # Construct metric basis when q > p
+                self.mpts = self.std_ele(self.order)
+                self.mbasis = get_polybasis(
+                    self.name, self.order + 1, self.mpts
+                )
+            else:
+                # Use sbasis, spts when q <= p
+                self.mpts = self.spts
+                self.mbasis = self.sbasis
+
     @classmethod
     def nspts_from_order(cls, sptord):
         return np.polyval(cls.npts_coeffs, sptord) // cls.npts_cdenom
