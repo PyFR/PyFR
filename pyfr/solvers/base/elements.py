@@ -213,7 +213,7 @@ class BaseElements(object, metaclass=ABCMeta):
 
     def _get_smats(self, pts, retdets=False):
         npts = len(pts)
-        smats_mpts, djacs_mpts = self._smats_mpts
+        smats_mpts, djacs_mpts = self._smats_djacs_mpts
 
         # Interpolation matrix to pts
         M0 = self.basis.mbasis.nodal_basis_at(pts)
@@ -230,7 +230,7 @@ class BaseElements(object, metaclass=ABCMeta):
             return smats
 
     @lazyprop
-    def _smats_mpts(self):
+    def _smats_djacs_mpts(self):
         # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
         mpts = self.basis.mpts
         mbasis = self.basis.mbasis
