@@ -4,7 +4,6 @@ import itertools as it
 from math import exp, sqrt
 import re
 
-from mpmath import mp
 import numpy as np
 
 from pyfr.nputil import block_diag, chop
@@ -63,12 +62,10 @@ class BaseShape(object):
         coeffs = list(cls.npts_coeffs)
         coeffs[-1] -= cls.npts_cdenom*int(nspts)
 
-        # Solve to obtain the order (a positive integer)
-        roots = mp.polyroots(coeffs)
-        roots = [int(x) for x in roots if mp.isint(x) and x > 0]
-
-        if roots:
-            return roots[0]
+        # Iterate
+        for n in range(1, 15):
+            if np.polyval(coeffs, n) == 0:
+                return n
         else:
             raise ValueError('Invalid number of shape points')
 

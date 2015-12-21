@@ -3,7 +3,6 @@
 from pkg_resources import resource_listdir, resource_string
 import re
 
-from mpmath import mp
 import numpy as np
 
 
@@ -21,7 +20,7 @@ class BaseTabulatedQuadRule(object):
                 continue
 
             # Parse the line
-            args = [mp.mpf(f) for f in l.split()]
+            args = [float(f) for f in l.split()]
 
             if len(args) == self.ndim:
                 pts.append(args)

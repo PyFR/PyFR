@@ -9,7 +9,6 @@ import mpi4py.rc
 mpi4py.rc.initialize = False
 
 import h5py
-from mpmath import mp
 
 from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
@@ -24,7 +23,6 @@ from pyfr.util import subclasses
 from pyfr.writers import BaseWriter, get_writer_by_name, get_writer_by_extn
 
 
-@mp.workdps(60)
 def main():
     ap = ArgumentParser(prog='pyfr')
     sp = ap.add_subparsers(dest='cmd', help='sub-command help')
