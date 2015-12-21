@@ -213,27 +213,21 @@ class BaseElements(object, metaclass=ABCMeta):
 
     def _get_smats(self, pts, retdets=False):
         npts = len(pts)
+        smats_mpts, djacs_mpts = self._smats_mpts
 
         # Interpolation matrix to pts
         M0 = self.basis.mbasis.nodal_basis_at(pts)
 
         # Interpolate smats
-        smats = np.array([np.dot(M0, smat) for smat in self._smats_mpts])
+        smats = np.array([np.dot(M0, smat) for smat in smats_mpts])
         smats = smats.reshape(self.ndims, npts, self.ndims, -1)
 
         # Interpolate djacs
         if retdets:
-            djacs = np.dot(M0, self._djacs_mpts)
-
-        return (smats, djacs) if retdets else smats
-
-    def _ploc_at_pts_np(self, pts):
-        op = self.basis.sbasis.nodal_basis_at(pts)
-
-        ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
-        ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
-
-        return ploc
+            djacs = np.dot(M0, djacs_mpts)
+            return smats, djacs
+        else:
+            return smats
 
     @lazyprop
     def _smats_mpts(self):
@@ -247,7 +241,7 @@ class BaseElements(object, metaclass=ABCMeta):
         neles = self.neles
 
         # Coordinate at pts
-        x = self._ploc_at_pts_np(mpts)
+        x = self.ploc_at_np('mpts')
 
         # Jacobian at pts
         jacop = np.rollaxis(mbasis.jac_nodal_basis_at(mpts), 2)
@@ -271,9 +265,9 @@ class BaseElements(object, metaclass=ABCMeta):
             smats[0,:,0], smats[0,:,1] = d, -b
             smats[1,:,0], smats[1,:,1] = -c, a
 
-            self._djacs_mpts = a*d - b*c
+            djacs = a*d - b*c
         else:
-            # Cpmpute x cross x_(chi)
+            # Compute x cross x_(chi)
             jac = np.rollaxis(jac, 2)
             tt = [np.cross(x, dx, axisa=1, axisb=0, axisc=1) for dx in jac]
             tt = np.array(tt).reshape(ndims, nmpts, -1)
@@ -289,9 +283,9 @@ class BaseElements(object, metaclass=ABCMeta):
             smats[2] = 0.5*(dtt[1][0] - dtt[0][1])
 
             # Exploit the fact that det(J) = x0 . (x1 ^ x2)
-            self._djacs_mpts = np.einsum('ij...,ji...->j...', jac[0], smats[0])
+            djacs = np.einsum('ij...,ji...->j...', jac[0], smats[0])
 
-        return smats.reshape(ndims, self.nmpts, -1)
+        return smats.reshape(ndims, self.nmpts, -1), djacs
 
     def get_mag_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
