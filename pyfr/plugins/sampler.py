@@ -82,7 +82,7 @@ class SamplerPlugin(BasePlugin):
 
         # If necessary then convert to primitive form
         if self.fmt == 'primitive' and samps.size:
-            samps = self.elementscls.conv_to_pri(samps.T, self.cfg)
+            samps = self.elementscls.con_to_pri(samps.T, self.cfg)
             samps = np.array(samps).T
 
         return samps.tolist()

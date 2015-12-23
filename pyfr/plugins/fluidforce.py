@@ -135,7 +135,7 @@ class FluidForcePlugin(BasePlugin):
             ufpts = ufpts.swapaxes(0, 1)
 
             # Compute the pressure
-            p = self.elementscls.conv_to_pri(ufpts, self.cfg)[-1]
+            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
 
             # Get the quadrature weights and normal vectors
             qwts = self._qwts[etype, fidx]
