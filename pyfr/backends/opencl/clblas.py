@@ -5,7 +5,7 @@ from ctypes import (POINTER, c_int, c_double, c_float, c_size_t, c_uint,
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, traits
+from pyfr.backends.base import ComputeKernel
 from pyfr.ctypesutil import load_library
 
 
@@ -70,7 +70,6 @@ class OpenCLClBLASKernels(object):
     def __del__(self):
         self._wrappers.clblasTeardown()
 
-    @traits(a={'dense'})
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         w = self._wrappers
 
