@@ -4,7 +4,7 @@ from ctypes import CDLL, cast, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, traits
+from pyfr.backends.base import ComputeKernel
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
 
 
@@ -60,7 +60,6 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
         self._wrappers = CBlasWrappers(libname)
         self._cblas_type = libtype
 
-    @traits(a={'dense'})
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:

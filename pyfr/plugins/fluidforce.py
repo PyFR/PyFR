@@ -90,14 +90,12 @@ class FluidForcePlugin(BasePlugin):
                     # Product to give J^-T at the solution points
                     rcpjact[etype] = smat*rcpdjac
 
-                area = eles.basis.faces[fidx][3]
-
                 # Unit physical normals and their magnitudes (including |J|)
                 npn = eles.get_norm_pnorms(eidx, fidx)
                 mpn = eles.get_mag_pnorms(eidx, fidx)
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn*area)
+                norms[etype, fidx].append(mpn[:, None]*npn)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
@@ -135,7 +133,7 @@ class FluidForcePlugin(BasePlugin):
             ufpts = ufpts.swapaxes(0, 1)
 
             # Compute the pressure
-            p = self.elementscls.conv_to_pri(ufpts, self.cfg)[-1]
+            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
 
             # Get the quadrature weights and normal vectors
             qwts = self._qwts[etype, fidx]

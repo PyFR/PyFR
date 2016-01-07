@@ -27,7 +27,7 @@ def chop(fn):
         arr = fn(*args, **kwargs)
 
         # Determine a tolerance and flush
-        arr[abs(arr) < np.finfo(arr.dtype).resolution] = 0
+        arr[abs(arr) < 10*np.finfo(arr.dtype).resolution] = 0
 
         return arr
     return newfn

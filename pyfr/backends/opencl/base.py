@@ -50,8 +50,8 @@ class OpenCLBackend(BaseBackend):
         # Compute the alignment requirement for the context
         self.alignb = device.mem_base_addr_align // 8
 
-        from pyfr.backends.opencl import (blasext, clblas, packing, provider,
-                                          types)
+        from pyfr.backends.opencl import (blasext, clblas, gimmik, packing,
+                                          provider, types)
 
         # Register our data types
         self.base_matrix_cls = types.OpenCLMatrixBase
@@ -74,6 +74,7 @@ class OpenCLBackend(BaseBackend):
         kprovs = [provider.OpenCLPointwiseKernelProvider,
                   blasext.OpenCLBlasExtKernels,
                   packing.OpenCLPackingKernels,
+                  gimmik.OpenCLGiMMiKKernels,
                   clblas.OpenCLClBLASKernels]
         self._providers = [k(self) for k in kprovs]
 

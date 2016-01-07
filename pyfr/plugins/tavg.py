@@ -53,7 +53,7 @@ class TavgPlugin(BasePlugin):
         for soln, ploc in zip(intg.soln, self.plocs):
             # Get the primitive variable names and solutions
             pnames = self.elementscls.privarmap[self.ndims]
-            psolns = self.elementscls.conv_to_pri(soln.swapaxes(0, 1),
+            psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
                                                   self.cfg)
 
             # Prepare the substitutions dictionary
@@ -100,5 +100,5 @@ class TavgPlugin(BasePlugin):
 
                 self._writer.write(accmex, metadata, intg.tcurr)
 
-                self.tout += self.dtout
+                self.tout = intg.tcurr + self.dtout
                 self.accmex = [np.zeros_like(a) for a in accmex]

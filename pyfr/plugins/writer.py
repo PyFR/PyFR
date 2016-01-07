@@ -49,4 +49,4 @@ class WriterPlugin(BasePlugin):
 
         self._writer.write(intg.soln, metadata, intg.tcurr)
 
-        self.tout_next += self.dt_out
+        self.tout_next = intg.tcurr + self.dt_out
