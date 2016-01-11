@@ -26,7 +26,7 @@ class memoize(object):
         except AttributeError:
             cache = instance._memoize_cache = {}
 
-        key = (self.func, pickle.dumps(args[1:], 1), pickle.dumps(kwargs, 1))
+        key = (self.func, pickle.dumps(args[1:]), pickle.dumps(kwargs))
 
         try:
             res = cache[key]

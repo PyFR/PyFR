@@ -6,7 +6,7 @@ import os
 import numpy as np
 
 from pyfr.shapes import BaseShape
-from pyfr.util import subclass_where
+from pyfr.util import memoize, subclass_where
 from pyfr.writers import BaseWriter
 
 
@@ -23,33 +23,102 @@ class VTKWriter(BaseWriter):
 
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
-            self._proc_fields = self._proc_fields_soln
+            self._pre_proc_fields = self._pre_proc_fields_soln
+            self._post_proc_fields = self._post_proc_fields_soln
+            self._soln_fields = self.elementscls.privarmap[self.ndims]
             self._vtk_vars = self.elementscls.visvarmap[self.ndims]
         # Otherwise we're dealing with simple scalar data
         else:
-            self._proc_fields = self._proc_fields_scal
+            self._pre_proc_fields = self._pre_proc_fields_scal
+            self._post_proc_fields = self._post_proc_fields_scal
             self._soln_fields = self.stats.get('data', 'fields').split(',')
             self._vtk_vars = {k: [k] for k in self._soln_fields}
 
-    def _proc_fields_soln(self, vsol):
+        # See if we are computing gradients
+        if args.gradients:
+            self._pre_proc_fields_ref = self._pre_proc_fields
+            self._pre_proc_fields = self._pre_proc_fields_grad
+            self._post_proc_fields = self._post_proc_fields_grad
+
+            # Update list of solution fields
+            self._soln_fields.extend(
+                '{0}-{1}'.format(f, d)
+                for f in list(self._soln_fields) for d in range(self.ndims)
+            )
+
+            # Update the list of VTK variables
+            nf = lambda f: ['{0}-{1}'.format(f, d) for d in range(self.ndims)]
+            for var, fields in list(self._vtk_vars.items()):
+                if len(fields) == 1:
+                    self._vtk_vars['grad ' + var] = nf(fields[0])
+                else:
+                    for f in fields:
+                        self._vtk_vars['grad {0} {1}'.format(var, f)] = nf(f)
+
+    def _pre_proc_fields_soln(self, name, mesh, soln):
+        # Convert from conservative to primitive variables
+        return np.array(self.elementscls.con_to_pri(soln, self.cfg))
+
+    def _pre_proc_fields_scal(self, name, mesh, soln):
+        return soln
+
+    def _post_proc_fields_soln(self, vsoln):
         # Primitive and visualisation variable maps
         privarmap = self.elementscls.privarmap[self.ndims]
         visvarmap = self.elementscls.visvarmap[self.ndims]
-
-        # Convert from conservative to primitive variables
-        vsol = np.array(self.elementscls.conv_to_pri(vsol, self.cfg))
 
         # Prepare the fields
         fields = []
         for vnames in visvarmap.values():
             ix = [privarmap.index(vn) for vn in vnames]
 
-            fields.append(vsol[ix])
+            fields.append(vsoln[ix])
 
         return fields
 
-    def _proc_fields_scal(self, vsol):
-        return [vsol[self._soln_fields.index(vn)] for vn in self._vtk_vars]
+    def _post_proc_fields_scal(self, vsoln):
+        return [vsoln[self._soln_fields.index(vn)] for vn in self._vtk_vars]
+
+    def _pre_proc_fields_grad(self, name, mesh, soln):
+        # Call the reference pre-processor
+        soln = self._pre_proc_fields_ref(name, mesh, soln)
+
+        # Dimensions
+        nvars, nupts = soln.shape[:2]
+
+        # Get the shape class
+        basiscls = subclass_where(BaseShape, name=name)
+
+        # Construct an instance of the relevant elements class
+        eles = self.elementscls(basiscls, mesh, self.cfg)
+
+        # Get the smats and |J|^-1 to untransform the gradient
+        smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
+        rcpdjac = eles.rcpdjac_at_np('upts')
+
+        # Gradient operator
+        gradop = eles.basis.m4.astype(self.dtype)
+
+        # Evaluate the transformed gradient of the solution
+        gradsoln = np.dot(gradop, soln.swapaxes(0, 1).reshape(nupts, -1))
+        gradsoln = gradsoln.reshape(self.ndims, nupts, nvars, -1)
+
+        # Untransform
+        gradsoln = np.einsum('ijkl,jkml->mikl', smat*rcpdjac, gradsoln,
+                             dtype=self.dtype, casting='same_kind')
+        gradsoln = gradsoln.reshape(nvars*self.ndims, nupts, -1)
+
+        return np.vstack([soln, gradsoln])
+
+    def _post_proc_fields_grad(self, vsoln):
+        # Prepare the fields
+        fields = []
+        for vname, vfields in self._vtk_vars.items():
+            ix = [self._soln_fields.index(vf) for vf in vfields]
+
+            fields.append(vsoln[ix])
+
+        return fields
 
     def _get_npts_ncells_nnodes(self, mk):
         m_inf = self.mesh_inf[mk]
@@ -78,7 +147,7 @@ class VTKWriter(BaseWriter):
         comps = ['3', '', '', '']
 
         for fname, varnames in vvars.items():
-            names.append(fname.capitalize())
+            names.append(fname.title())
             types.append(dtype)
             comps.append(str(len(varnames)))
 
@@ -93,6 +162,25 @@ class VTKWriter(BaseWriter):
             return names, types, comps, sizes
         else:
             return names, types, comps
+
+    @memoize
+    def _get_shape(self, name, nspts):
+        shapecls = subclass_where(BaseShape, name=name)
+        return shapecls(nspts, self.cfg)
+
+    @memoize
+    def _get_std_ele(self, name, nspts):
+        return self._get_shape(name, nspts).std_ele(self.divisor)
+
+    @memoize
+    def _get_mesh_op(self, name, nspts, svpts):
+        shape = self._get_shape(name, nspts)
+        return shape.sbasis.nodal_basis_at(svpts).astype(self.dtype)
+
+    @memoize
+    def _get_soln_op(self, name, nspts, svpts):
+        shape = self._get_shape(name, nspts)
+        return shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
 
     def write_out(self):
         name, extn = os.path.splitext(self.outf)
@@ -203,34 +291,30 @@ class VTKWriter(BaseWriter):
 
     def _write_data(self, vtuf, mk, sk):
         name = self.mesh_inf[mk][0]
-        mesh = self.mesh[mk]
-        soln = self.soln[sk]
-
-        # Get the shape and sub division classes
-        shapecls = subclass_where(BaseShape, name=name)
-        subdvcls = subclass_where(BaseShapeSubDiv, name=name)
+        mesh = self.mesh[mk].astype(self.dtype)
+        soln = self.soln[sk].swapaxes(0, 1).astype(self.dtype)
 
         # Dimensions
         nspts, neles = mesh.shape[:2]
 
         # Sub divison points inside of a standard element
-        svpts = shapecls.std_ele(self.divisor)
+        svpts = self._get_std_ele(name, nspts)
         nsvpts = len(svpts)
 
-        # Shape
-        soln_b = shapecls(nspts, self.cfg)
-
         # Generate the operator matrices
-        mesh_vtu_op = soln_b.sbasis.nodal_basis_at(svpts)
-        soln_vtu_op = soln_b.ubasis.nodal_basis_at(svpts)
+        mesh_vtu_op = self._get_mesh_op(name, nspts, svpts)
+        soln_vtu_op = self._get_soln_op(name, nspts, svpts)
 
-        # Calculate node locations of vtu elements
+        # Calculate node locations of VTU elements
         vpts = np.dot(mesh_vtu_op, mesh.reshape(nspts, -1))
         vpts = vpts.reshape(nsvpts, -1, self.ndims)
 
-        # Calculate solution at node locations of vtu elements
-        vsol = np.dot(soln_vtu_op, soln.reshape(-1, self.nvars*neles))
-        vsol = vsol.reshape(nsvpts, self.nvars, -1).swapaxes(0, 1)
+        # Pre-process the solution
+        soln = self._pre_proc_fields(name, mesh, soln).swapaxes(0, 1)
+
+        # Interpolate the solution to the vis points
+        vsoln = np.dot(soln_vtu_op, soln.reshape(len(soln), -1))
+        vsoln = vsoln.reshape(nsvpts, -1, neles).swapaxes(0, 1)
 
         # Append dummy z dimension for points in 2D
         if self.ndims == 2:
@@ -240,9 +324,10 @@ class VTKWriter(BaseWriter):
         self._write_darray(vpts.swapaxes(0, 1), vtuf, self.dtype)
 
         # Perform the sub division
+        subdvcls = subclass_where(BaseShapeSubDiv, name=name)
         nodes = subdvcls.subnodes(self.divisor)
 
-        # Prepare vtu cell arrays
+        # Prepare VTU cell arrays
         vtu_con = np.tile(nodes, (neles, 1))
         vtu_con += (np.arange(neles)*nsvpts)[:, None]
 
@@ -250,16 +335,16 @@ class VTKWriter(BaseWriter):
         vtu_off = np.tile(subdvcls.subcelloffs(self.divisor), (neles, 1))
         vtu_off += (np.arange(neles)*len(nodes))[:, None]
 
-        # Tile vtu cell type numbers
+        # Tile VTU cell type numbers
         vtu_typ = np.tile(subdvcls.subcelltypes(self.divisor), neles)
 
-        # Write vtu node connectivity, connectivity offsets and cell types
+        # Write VTU node connectivity, connectivity offsets and cell types
         self._write_darray(vtu_con, vtuf, np.int32)
         self._write_darray(vtu_off, vtuf, np.int32)
         self._write_darray(vtu_typ, vtuf, np.uint8)
 
         # Process and write out the various fields
-        for arr in self._proc_fields(vsol):
+        for arr in self._post_proc_fields(vsoln):
             self._write_darray(arr.T, vtuf, self.dtype)
 
 

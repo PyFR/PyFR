@@ -15,8 +15,7 @@
               amul='in view fpdtype_t'
               amur='in view fpdtype_t'
               nl='in fpdtype_t[${str(ndims)}]'
-              magnl='in fpdtype_t'
-              magnr='in fpdtype_t'>
+              magnl='in fpdtype_t'>
     // Perform the Riemann solve
     fpdtype_t ficomm[${nvars}], fvcomm;
     ${pyfr.expand('rsolve', 'ul', 'ur', 'nl', 'ficomm')};
@@ -51,6 +50,6 @@
 % endif
 
     ul[${i}] =  magnl*(ficomm[${i}] + fvcomm);
-    ur[${i}] = -magnr*(ficomm[${i}] + fvcomm);
+    ur[${i}] = -magnl*(ficomm[${i}] + fvcomm);
 % endfor
 </%pyfr:kernel>

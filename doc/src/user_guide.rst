@@ -24,9 +24,8 @@ Python packages:
 1. `h5py <http://www.h5py.org/>`_ >= 2.5
 2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
 3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-4. `mpmath <http://code.google.com/p/mpmath/>`_ >= 0.18
-5. `numpy <http://www.numpy.org/>`_ >= 1.8
-6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
+4. `numpy <http://www.numpy.org/>`_ >= 1.8
+5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
 compatible with 32-bit Python distributions.
@@ -48,7 +47,7 @@ AMD and NVIDIA. The backend requires:
 
 1. OpenCL
 2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
-   >= 2013.2, != 2015.2, != 2015.2.1
+   >= 2015.2.4
 3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
 OpenMP Backend
@@ -815,6 +814,31 @@ Example::
     file = residual.csv
     header = true
 
+[soln-plugin-dtstats]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Write time-step statistics out to a CSV file. Parameterised with
+
+1. ``flushsteps`` --- flush to disk every ``flushsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-dtstats]
+    flushsteps = 100
+    file = dtstats.csv
+    header = true
+
 [soln-plugin-sampler]
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -1080,7 +1104,7 @@ simulation on a mixed unstructured mesh:
    generating a series of PyFR solution files called
    ``couette_flow_2d-*.pyfrs``::
 
-        pyfr run -p couette_flow_2d.pyfrm couette_flow_2d.ini
+        pyfr run -b cuda -p couette_flow_2d.pyfrm couette_flow_2d.ini
 
 6. Run pyfr on the solution file ``couette_flow_2d-040.pyfrs``
    converting it into an unstructured VTK file called
@@ -1130,7 +1154,7 @@ simulation on a structured mesh:
 6. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-        mpirun -n 2 pyfr run -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
+        mpirun -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
 7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called

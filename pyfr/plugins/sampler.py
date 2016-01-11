@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import ast
-import os
 
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BasePlugin, init_csv
 
 
 def _closest_upt(etypes, eupts, p):
@@ -64,20 +63,7 @@ class SamplerPlugin(BasePlugin):
 
         # If we're the root rank then open the output file
         if rank == root:
-            # Determine the file path
-            fname = self.cfg.get(cfgsect, 'file')
-
-            # Append the '.csv' extension
-            if not fname.endswith('.csv'):
-                fname += '.csv'
-
-            # Open for appending
-            self.outf = open(fname, 'a')
-
-            # Output a header if required
-            if (os.path.getsize(fname) == 0 and
-                self.cfg.getbool(cfgsect, 'header', True)):
-                print(self._header, file=self.outf)
+            self.outf = init_csv(self.cfg, cfgsect, self._header)
 
     @property
     def _header(self):
@@ -96,7 +82,7 @@ class SamplerPlugin(BasePlugin):
 
         # If necessary then convert to primitive form
         if self.fmt == 'primitive' and samps.size:
-            samps = self.elementscls.conv_to_pri(samps.T, self.cfg)
+            samps = self.elementscls.con_to_pri(samps.T, self.cfg)
             samps = np.array(samps).T
 
         return samps.tolist()

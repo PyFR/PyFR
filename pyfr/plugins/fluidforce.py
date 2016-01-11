@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from collections import defaultdict
-import os
 
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BasePlugin, init_csv
 
 
 class FluidForcePlugin(BasePlugin):
@@ -48,25 +47,13 @@ class FluidForcePlugin(BasePlugin):
                 raise RuntimeError('Boundary {0} does not exist'
                                    .format(suffix))
 
-            # Determine the file path
-            fname = self.cfg.get(cfgsect, 'file')
+            # CSV header
+            header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
+            if self._viscous:
+                header += ['vx', 'vy', 'vz'][:self.ndims]
 
-            # Append the '.csv' extension
-            if not fname.endswith('.csv'):
-                fname += '.csv'
-
-            # Open for appending
-            self.outf = open(fname, 'a')
-
-            # Output a header if required
-            if (os.path.getsize(fname) == 0 and
-                self.cfg.getbool(cfgsect, 'header', True)):
-                header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
-
-                if self._viscous:
-                    header += ['vx', 'vy', 'vz'][:self.ndims]
-
-                print(','.join(header), file=self.outf)
+            # Open
+            self.outf = init_csv(self.cfg, cfgsect, header)
 
         # Interpolation matrices and quadrature weights
         self._m0 = m0 = {}
@@ -94,26 +81,21 @@ class FluidForcePlugin(BasePlugin):
                 if self._viscous and etype not in m4:
                     m4[etype] = eles.basis.m4
 
-                    # Obtain SMat at the face
-                    smat = eles.smat_at_np('upts')
+                    # Get the smats at the solution points
+                    smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
 
-                    # Transpose SMat (= Smat^T)
-                    smat = smat.transpose(2, 0, 1, 3)
-
-                    # Obtain |J|^-1
+                    # Get |J|^-1 at the solution points
                     rcpdjac = eles.rcpdjac_at_np('upts')
 
-                    # Compute |J|^-1 SMat^T
+                    # Product to give J^-T at the solution points
                     rcpjact[etype] = smat*rcpdjac
-
-                area = eles.basis.faces[fidx][3]
 
                 # Unit physical normals and their magnitudes (including |J|)
                 npn = eles.get_norm_pnorms(eidx, fidx)
                 mpn = eles.get_mag_pnorms(eidx, fidx)
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn*area)
+                norms[etype, fidx].append(mpn[:, None]*npn)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
@@ -151,7 +133,7 @@ class FluidForcePlugin(BasePlugin):
             ufpts = ufpts.swapaxes(0, 1)
 
             # Compute the pressure
-            p = self.elementscls.conv_to_pri(ufpts, self.cfg)[-1]
+            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
 
             # Get the quadrature weights and normal vectors
             qwts = self._qwts[etype, fidx]

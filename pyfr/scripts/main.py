@@ -9,9 +9,8 @@ import mpi4py.rc
 mpi4py.rc.initialize = False
 
 import h5py
-from mpmath import mp
 
-from pyfr.backends import get_backend
+from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler
 from pyfr.partitioners import BasePartitioner, get_partitioner
@@ -24,7 +23,6 @@ from pyfr.util import subclasses
 from pyfr.writers import BaseWriter, get_writer_by_name, get_writer_by_extn
 
 
-@mp.workdps(60)
 def main():
     ap = ArgumentParser(prog='pyfr')
     sp = ap.add_subparsers(dest='cmd', help='sub-command help')
@@ -72,15 +70,13 @@ def main():
                            'from the extension of outf')
     ap_export.add_argument('-d', '--divisor', type=int, default=0,
                            help='Sets the level to which high order elements '
-                           'are divided along each edge. The total node count '
-                           'produced by divisor is equivalent to that of '
-                           'solution order, which is used as the default. '
-                           'Note: the output is linear between nodes, so '
-                           'increased resolution may be required.')
+                           'are divided; output is linear between nodes, so '
+                           'increased resolution may be required')
+    ap_export.add_argument('-g', '--gradients', action='store_true',
+                           help='Compute gradients')
     ap_export.add_argument('-p', '--precision', choices=['single', 'double'],
-                           default='single', help='Selects the precision of '
-                           'floating point numbers written to the output file; '
-                           'single is the default.')
+                           default='single', help='Output number precision, '
+                           'defaults to single')
     ap_export.set_defaults(process=process_export)
 
     # Run command
@@ -98,8 +94,9 @@ def main():
     ap_restart.set_defaults(process=process_restart)
 
     # Options common to run and restart
+    backends = sorted(cls.name for cls in subclasses(BaseBackend))
     for p in [ap_run, ap_restart]:
-        p.add_argument('--backend', '-b', default='cuda',
+        p.add_argument('--backend', '-b', choices=backends, required=True,
                        help='Backend to use')
         p.add_argument('--progress', '-p', action='store_true',
                        help='show a progress bar')

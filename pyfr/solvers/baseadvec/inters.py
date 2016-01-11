@@ -21,7 +21,6 @@ class BaseAdvectionIntInters(BaseInters):
 
         # Generate the constant matrices
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
-        self._mag_pnorm_rhs = const_mat(rhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
     def _gen_perm(self, lhs, rhs):

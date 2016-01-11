@@ -1,13 +1,44 @@
 # -*- coding: utf-8 -*-
 
 from collections import Iterable
+from math import sqrt
 
-from mpmath import mp
 import numpy as np
 
-from pyfr.mputil import jacobi, jacobi_diff
 from pyfr.nputil import chop
 from pyfr.util import lazyprop, subclass_where
+
+
+def jacobi(n, a, b, z):
+    j = [1]
+
+    if n >= 1:
+        j.append(((a + b + 2)*z + a - b) / 2)
+    if n >= 2:
+        apb, bbmaa = a + b, b*b - a*a
+
+        for q in range(2, n + 1):
+            qapbpq, apbp2q = q*(apb + q), apb + 2*q
+            apbp2qm1, apbp2qm2  = apbp2q - 1, apbp2q - 2
+
+            aq = apbp2q*apbp2qm1/(2*qapbpq)
+            bq = apbp2qm1*bbmaa/(2*qapbpq*apbp2qm2)
+            cq = apbp2q*(a + q - 1)*(b + q - 1)/(qapbpq*apbp2qm2)
+
+            # Update
+            j.append((aq*z - bq)*j[-1] - cq*j[-2])
+
+    return j
+
+
+def jacobi_diff(n, a, b, z):
+    dj = [0]
+
+    if n >= 1:
+        dj.extend(jp*(i + a + b + 2)/2
+                  for i, jp in enumerate(jacobi(n - 1, a + 1, b + 1, z)))
+
+    return dj
 
 
 def get_polybasis(name, order, pts=[]):
@@ -26,20 +57,16 @@ class BasePolyBasis(object):
         if len(pts) and not isinstance(pts[0], Iterable):
             pts = [(p,) for p in pts]
 
-        P = [self.ortho_basis_at_mp(*p) for p in pts]
-        P = np.array(P, dtype=np.float)
-
-        return P.T
+        return np.array([self.ortho_basis_at_py(*p) for p in pts]).T
 
     @chop
     def jac_ortho_basis_at(self, pts):
         if len(pts) and not isinstance(pts[0], Iterable):
             pts = [(p,) for p in pts]
 
-        J = [self.jac_ortho_basis_at_mp(*p) for p in pts]
-        J = np.array(J, dtype=np.float)
+        J = [self.jac_ortho_basis_at_py(*p) for p in pts]
 
-        return J.swapaxes(0, 2)
+        return np.array(J).swapaxes(0, 2)
 
     @chop
     def nodal_basis_at(self, epts):
@@ -57,13 +84,13 @@ class BasePolyBasis(object):
 class LinePolyBasis(BasePolyBasis):
     name = 'line'
 
-    def ortho_basis_at_mp(self, p):
+    def ortho_basis_at_py(self, p):
         jp = jacobi(self.order - 1, 0, 0, p)
-        return [mp.sqrt(i + 0.5)*p for i, p in enumerate(jp)]
+        return [sqrt(i + 0.5)*p for i, p in enumerate(jp)]
 
-    def jac_ortho_basis_at_mp(self, p):
+    def jac_ortho_basis_at_py(self, p):
         djp = jacobi_diff(self.order - 1, 0, 0, p)
-        return [mp.sqrt(i + 0.5)*p for i, p in enumerate(djp)]
+        return [sqrt(i + 0.5)*p for i, p in enumerate(djp)]
 
     @lazyprop
     def degrees(self):
@@ -73,7 +100,7 @@ class LinePolyBasis(BasePolyBasis):
 class TriPolyBasis(BasePolyBasis):
     name = 'tri'
 
-    def ortho_basis_at_mp(self, p, q):
+    def ortho_basis_at_py(self, p, q):
         a = 2*(1 + p)/(1 - q) - 1 if q != 1 else -1
         b = q
 
@@ -82,13 +109,13 @@ class TriPolyBasis(BasePolyBasis):
             pa = pi*(1 - b)**i
 
             for j, pj in enumerate(jacobi(self.order - i - 1, 2*i + 1, 0, b)):
-                cij = mp.sqrt((2*i + 1)*(2*i + 2*j + 2)) / 2**(i + 1)
+                cij = sqrt((2*i + 1)*(2*i + 2*j + 2)) / 2**(i + 1)
 
                 ob.append(cij*pa*pj)
 
         return ob
 
-    def jac_ortho_basis_at_mp(self, p, q):
+    def jac_ortho_basis_at_py(self, p, q):
         a = 2*(1 + p)/(1 - q) - 1 if q != 1 else -1
         b = q
 
@@ -101,7 +128,7 @@ class TriPolyBasis(BasePolyBasis):
             dg = jacobi_diff(self.order - i - 1, 2*i + 1, 0, b)
 
             for j, (gj, dgj) in enumerate(zip(g, dg)):
-                cij = mp.sqrt((2*i + 1)*(2*i + 2*j + 2)) / 2**(i + 1)
+                cij = sqrt((2*i + 1)*(2*i + 2*j + 2)) / 2**(i + 1)
 
                 tmp = (1 - b)**(i - 1) if i > 0 else 1
 
@@ -122,15 +149,15 @@ class TriPolyBasis(BasePolyBasis):
 class QuadPolyBasis(BasePolyBasis):
     name = 'quad'
 
-    def ortho_basis_at_mp(self, p, q):
-        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
+    def ortho_basis_at_py(self, p, q):
+        sk = [sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
 
         return [pi*pj for pi in pa for pj in pb]
 
-    def jac_ortho_basis_at_mp(self, p , q):
-        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
+    def jac_ortho_basis_at_py(self, p , q):
+        sk = [sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
 
@@ -149,29 +176,29 @@ class QuadPolyBasis(BasePolyBasis):
 class TetPolyBasis(BasePolyBasis):
     name = 'tet'
 
-    def ortho_basis_at_mp(self, p, q, r):
+    def ortho_basis_at_py(self, p, q, r):
         a = -2*(1 + p)/(q + r) - 1 if r != -q else -1
         b = 2*(1 + q)/(1 - r) - 1 if r != 1 else -1
         c = r
 
         ob = []
         for i, pi in enumerate(jacobi(self.order - 1, 0, 0, a)):
-            ci = mp.mpf(2)**(-2*i - 1)*mp.sqrt(2*i + 1)*(1 - b)**i
+            ci = 2**(-2*i - 1)*sqrt(2*i + 1)*(1 - b)**i
 
             for j, pj in enumerate(jacobi(self.order - i - 1, 2*i + 1, 0, b)):
-                cj = mp.sqrt(i + j + 1)*2**-j*(1 - c)**(i + j)
+                cj = sqrt(i + j + 1)*2**-j*(1 - c)**(i + j)
                 cij = ci*cj
                 pij = pi*pj
 
                 jp = jacobi(self.order - i - j - 1, 2*(i + j + 1), 0, c)
                 for k, pk in enumerate(jp):
-                    ck = mp.sqrt(2*(k + j + i) + 3)
+                    ck = sqrt(2*(k + j + i) + 3)
 
                     ob.append(cij*ck*pij*pk)
 
         return ob
 
-    def jac_ortho_basis_at_mp(self, p, q, r):
+    def jac_ortho_basis_at_py(self, p, q, r):
         a = -2*(1 + p)/(q + r) - 1 if r != -q else -1
         b = 2*(1 + q)/(1 - r) - 1 if r != 1 else -1
         c = r
@@ -181,18 +208,18 @@ class TetPolyBasis(BasePolyBasis):
 
         ob = []
         for i, (fi, dfi) in enumerate(zip(f, df)):
-            ci = mp.mpf(2)**(-2*i - 1)*mp.sqrt(2*i + 1)
+            ci = 2**(-2*i - 1)*sqrt(2*i + 1)
             g = jacobi(self.order - i - 1, 2*i + 1, 0, b)
             dg = jacobi_diff(self.order - i - 1, 2*i + 1, 0, b)
 
             for j, (gj, dgj) in enumerate(zip(g, dg)):
-                cj = mp.sqrt(i + j + 1)*2**-j
+                cj = sqrt(i + j + 1)*2**-j
                 cij = ci*cj
                 h = jacobi(self.order - i - j - 1, 2*(i + j + 1), 0, c)
                 dh = jacobi_diff(self.order - i - j - 1, 2*(i + j + 1), 0, c)
 
                 for k, (hk, dhk) in enumerate(zip(h, dh)):
-                    ck = mp.sqrt(2*(k + j + i) + 3)
+                    ck = sqrt(2*(k + j + i) + 3)
                     cijk = cij*ck
 
                     tmp1 = (1 - c)**(i + j - 1) if i + j > 0 else 1
@@ -224,7 +251,7 @@ class TetPolyBasis(BasePolyBasis):
 class PriPolyBasis(BasePolyBasis):
     name = 'pri'
 
-    def ortho_basis_at_mp(self, p, q, r):
+    def ortho_basis_at_py(self, p, q, r):
         a = 2*(1 + p)/(1 - q) - 1 if q != 1 else -1
         b = q
         c = r
@@ -234,16 +261,16 @@ class PriPolyBasis(BasePolyBasis):
             ci = (1 - b)**i / 2**(i + 1)
 
             for j, pj in enumerate(jacobi(self.order - i - 1, 2*i + 1, 0, b)):
-                cij = mp.sqrt((2*i + 1)*(2*i + 2*j + 2))*ci
+                cij = sqrt((2*i + 1)*(2*i + 2*j + 2))*ci
 
                 pab.append(cij*pi*pj)
 
-        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
+        sk = [sqrt(k + 0.5) for k in range(self.order)]
         pc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, c))]
 
         return [pij*pk for pij in pab for pk in pc]
 
-    def jac_ortho_basis_at_mp(self, p, q, r):
+    def jac_ortho_basis_at_py(self, p, q, r):
         a = 2*(1 + p)/(1 - q) - 1 if q != 1 else -1
         b = q
         c = r
@@ -257,7 +284,7 @@ class PriPolyBasis(BasePolyBasis):
             dg = jacobi_diff(self.order - i - 1, 2*i + 1, 0, b)
 
             for j, (gj, dgj) in enumerate(zip(g, dg)):
-                cij = mp.sqrt((2*i + 1)*(2*i + 2*j + 2)) / 2**(i + 1)
+                cij = sqrt((2*i + 1)*(2*i + 2*j + 2)) / 2**(i + 1)
 
                 tmp = (1 - b)**(i - 1) if i > 0 else 1
 
@@ -267,7 +294,7 @@ class PriPolyBasis(BasePolyBasis):
 
                 pab.append([cij*pij, cij*qij, cij*rij])
 
-        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
+        sk = [sqrt(k + 0.5) for k in range(self.order)]
         hc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, c))]
         dhc = [s*jp for s, jp in zip(sk, jacobi_diff(self.order - 1, 0, 0, c))]
 
@@ -285,12 +312,12 @@ class PriPolyBasis(BasePolyBasis):
 class PyrPolyBasis(BasePolyBasis):
     name = 'pyr'
 
-    def ortho_basis_at_mp(self, p, q, r):
+    def ortho_basis_at_py(self, p, q, r):
         a = 2*p/(1 - r) if r != 1 else 0
         b = 2*q/(1 - r) if r != 1 else 0
         c = r
 
-        sk = [mp.mpf(2)**(-k - 0.25)*mp.sqrt(k + 0.5)
+        sk = [2**(-k - 0.25)*sqrt(k + 0.5)
               for k in range(self.order)]
         pa = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, a))]
         pb = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, b))]
@@ -303,18 +330,18 @@ class PyrPolyBasis(BasePolyBasis):
 
                 pc = jacobi(self.order - max(i, j) - 1, 2*(i + j + 1), 0, c)
                 for k, pk in enumerate(pc):
-                    ck = mp.sqrt(2*(k + j + i) + 3)
+                    ck = sqrt(2*(k + j + i) + 3)
 
                     ob.append(cij*ck*pij*pk)
 
         return ob
 
-    def jac_ortho_basis_at_mp(self, p, q, r):
+    def jac_ortho_basis_at_py(self, p, q, r):
         a = 2*p/(1 - r) if r != 1 else 0
         b = 2*q/(1 - r) if r != 1 else 0
         c = r
 
-        sk = [mp.mpf(2)**(-k - 0.25)*mp.sqrt(k + 0.5)
+        sk = [2**(-k - 0.25)*sqrt(k + 0.5)
               for k in range(self.order)]
         fc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, a))]
         gc = [s*jp for s, jp in zip(sk, jacobi(self.order - 1, 0, 0, b))]
@@ -331,7 +358,7 @@ class PyrPolyBasis(BasePolyBasis):
                 )
 
                 for k, (hk, dhk) in enumerate(zip(h, dh)):
-                    ck = mp.sqrt(2*(k + j + i) + 3)
+                    ck = sqrt(2*(k + j + i) + 3)
 
                     tmp = (1 - c)**(i + j-1) if i + j > 0 else 1
 
@@ -355,16 +382,16 @@ class PyrPolyBasis(BasePolyBasis):
 class HexPolyBasis(BasePolyBasis):
     name = 'hex'
 
-    def ortho_basis_at_mp(self, p, q, r):
-        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
+    def ortho_basis_at_py(self, p, q, r):
+        sk = [sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
         pc = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, r))]
 
         return [pi*pj*pk for pi in pa for pj in pb for pk in pc]
 
-    def jac_ortho_basis_at_mp(self, p, q, r):
-        sk = [mp.sqrt(k + 0.5) for k in range(self.order)]
+    def jac_ortho_basis_at_py(self, p, q, r):
+        sk = [sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]
         pc = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, r))]

@@ -4,7 +4,6 @@ import itertools as it
 from math import exp, sqrt
 import re
 
-from mpmath import mp
 import numpy as np
 
 from pyfr.nputil import block_diag, chop
@@ -53,6 +52,22 @@ class BaseShape(object):
             self.nsptsord = nsptord = self.order_from_nspts(nspts)
             self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
+            # Basis for free-stream metric
+            # We need p-th order pseudo grid points, which includes
+            # p-th order points on faces.
+            # It guarantees th q-th order collocation projection on the face
+            # on the both adjacent cells.
+            # Ref. 1 JCP 281, 28-54, Sec 4.2
+            # Ref. 2 JSC 26(3), 301-327, Definition 1
+            if nsptord >= self.order + 1:
+                # Construct metric basis when q > p
+                self.mbasis = get_polybasis(
+                    self.name, self.order + 1, self.mpts
+                )
+            # Use sbasis when q <= p
+            else:
+                self.mbasis = self.sbasis
+
     @classmethod
     def nspts_from_order(cls, sptord):
         return np.polyval(cls.npts_coeffs, sptord) // cls.npts_cdenom
@@ -63,12 +78,10 @@ class BaseShape(object):
         coeffs = list(cls.npts_coeffs)
         coeffs[-1] -= cls.npts_cdenom*int(nspts)
 
-        # Solve to obtain the order (a positive integer)
-        roots = mp.polyroots(coeffs)
-        roots = [int(x) for x in roots if mp.isint(x) and x > 0]
-
-        if roots:
-            return roots[0]
+        # Iterate
+        for n in range(1, 15):
+            if np.polyval(coeffs, n) == 0:
+                return n
         else:
             raise ValueError('Invalid number of shape points')
 
@@ -103,7 +116,7 @@ class BaseShape(object):
         if 'surf-flux' in self.antialias:
             fp = [_proj_l2(self._iqrules[kind],
                            self.facebases[kind])
-                  for kind, proj, norm, area in self.faces]
+                  for kind, proj, norm in self.faces]
 
             m = np.dot(m, block_diag(fp))
 
@@ -180,7 +193,7 @@ class BaseShape(object):
     @lazyprop
     def _iqrules(self):
         return {kind: self._get_qrule('interfaces', kind, flags='s')
-                for kind in {k for k, p, n, a in self.faces}}
+                for kind in {k for k, p, n in self.faces}}
 
     @property
     def qpts(self):
@@ -194,7 +207,7 @@ class BaseShape(object):
     def fpts(self):
         ppts = []
 
-        for kind, proj, norm, area in self.faces:
+        for kind, proj, norm in self.faces:
             # Obtain the flux points in reference space for the face type
             if 'surf-flux' in self.antialias:
                 r = self._iqrules[kind]
@@ -213,7 +226,7 @@ class BaseShape(object):
     def fpts_wts(self):
         pwts = []
 
-        for kind, proj, norm, area in self.faces:
+        for kind, proj, norm in self.faces:
             # Obtain the weights in reference space for the face type
             if 'surf-flux' in self.antialias:
                 r = self._iqrules[kind]
@@ -238,7 +251,7 @@ class BaseShape(object):
             'tri': ('williams-shunn', 36)
         }
 
-        for kind, proj, norm, area in self.faces:
+        for kind, proj, norm in self.faces:
             # Obtain a quadrature rule for integrating on the reference face
             # and evaluate this rule at the nodal basis defined by the flux
             # points
@@ -247,7 +260,7 @@ class BaseShape(object):
 
             # Do the quadrature
             M = self.ubasis.ortho_basis_at(_proj_pts(proj, qr.pts))
-            S = np.einsum('i...,ik,ji->kj', area*qr.wts, L, M)
+            S = np.einsum('i...,ik,ji->kj', qr.wts, L, M)
 
             coeffs.append(S)
 
@@ -259,7 +272,7 @@ class BaseShape(object):
 
     @property
     def facenorms(self):
-        return [norm for kind, proj, norm, area in self.faces]
+        return [norm for kind, proj, norm in self.faces]
 
     @lazyprop
     def norm_fpts(self):
@@ -274,7 +287,7 @@ class BaseShape(object):
     def facebases(self):
         fb = {}
 
-        for kind in {k for k, p, n, a in self.faces}:
+        for kind in {k for k, p, n in self.faces}:
             rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
             npts = self.npts_for_face[kind](self.order)
 
@@ -296,11 +309,22 @@ class BaseShape(object):
         else:
             cnt = lambda k: self.npts_for_face[k](self.order)
 
-        return [cnt(kind) for kind, proj, norm, area in self.faces]
+        return [cnt(kind) for kind, proj, norm in self.faces]
 
     @property
     def nfpts(self):
         return sum(self.nfacefpts)
+
+    @lazyprop
+    def mpts(self):
+        if self.nsptsord >= self.order + 1:
+            return self.std_ele(self.order)
+        else:
+            return self.spts
+
+    @lazyprop
+    def nmpts(self):
+        return len(self.mpts)
 
 
 class TensorProdShape(object):
@@ -318,12 +342,12 @@ class QuadShape(TensorProdShape, BaseShape):
     npts_coeffs = [1, 0, 0]
     npts_cdenom = 1
 
-    # Faces: type, reference-to-face projection, normal, relative area
+    # Faces: type, reference-to-face projection, normal
     faces = [
-        ('line', lambda s: (s, -1), (0, -1), 1),
-        ('line', lambda s: (1, s), (1, 0), 1),
-        ('line', lambda s: (s, 1), (0, 1), 1),
-        ('line', lambda s: (-1, s), (-1, 0), 1),
+        ('line', lambda s: (s, -1), (0, -1)),
+        ('line', lambda s: (1, s), (1, 0)),
+        ('line', lambda s: (s, 1), (0, 1)),
+        ('line', lambda s: (-1, s), (-1, 0)),
     ]
 
 
@@ -335,14 +359,14 @@ class HexShape(TensorProdShape, BaseShape):
     npts_coeffs = [1, 0, 0, 0]
     npts_cdenom = 1
 
-    # Faces: type, reference-to-face projection, normal, relative area
+    # Faces: type, reference-to-face projection, normal
     faces = [
-        ('quad', lambda s, t: (s, t, -1), (0, 0, -1), 1),
-        ('quad', lambda s, t: (s, -1, t), (0, -1, 0), 1),
-        ('quad', lambda s, t: (1, s, t), (1, 0, 0), 1),
-        ('quad', lambda s, t: (s, 1, t), (0, 1, 0), 1),
-        ('quad', lambda s, t: (-1, s, t), (-1, 0, 0), 1),
-        ('quad', lambda s, t: (s, t, 1), (0, 0, 1), 1),
+        ('quad', lambda s, t: (s, t, -1), (0, 0, -1)),
+        ('quad', lambda s, t: (s, -1, t), (0, -1, 0)),
+        ('quad', lambda s, t: (1, s, t), (1, 0, 0)),
+        ('quad', lambda s, t: (s, 1, t), (0, 1, 0)),
+        ('quad', lambda s, t: (-1, s, t), (-1, 0, 0)),
+        ('quad', lambda s, t: (s, t, 1), (0, 0, 1)),
     ]
 
 
@@ -354,11 +378,11 @@ class TriShape(BaseShape):
     npts_coeffs = [1, 1, 0]
     npts_cdenom = 2
 
-    # Faces: type, reference-to-face projection, normal, relative area
+    # Faces: type, reference-to-face projection, normal
     faces = [
-        ('line', lambda s: (s, -1), (0, -1), 1),
-        ('line', lambda s: (-s, s), (1/sqrt(2), 1/sqrt(2)), sqrt(2)),
-        ('line', lambda s: (-1, s), (-1, 0), 1),
+        ('line', lambda s: (s, -1), (0, -1)),
+        ('line', lambda s: (-s, s), (1, 1)),
+        ('line', lambda s: (-1, s), (-1, 0)),
     ]
 
     @classmethod
@@ -378,13 +402,12 @@ class TetShape(BaseShape):
     npts_coeffs = [1, 3, 2, 0]
     npts_cdenom = 6
 
-    # Faces: type, reference-to-face projection, normal, relative area
+    # Faces: type, reference-to-face projection, normal
     faces = [
-        ('tri', lambda s, t: (s, t, -1), (0, 0, -1), 1),
-        ('tri', lambda s, t: (s, -1, t), (0, -1, 0), 1),
-        ('tri', lambda s, t: (-1, t, s), (-1, 0, 0), 1),
-        ('tri', lambda s, t: (s, t, -s - t - 1),
-         (1/sqrt(3), 1/sqrt(3), 1/sqrt(3)), sqrt(3)),
+        ('tri', lambda s, t: (s, t, -1), (0, 0, -1)),
+        ('tri', lambda s, t: (s, -1, t), (0, -1, 0)),
+        ('tri', lambda s, t: (-1, t, s), (-1, 0, 0)),
+        ('tri', lambda s, t: (s, t, -s - t - 1), (1, 1, 1)),
     ]
 
     @classmethod
@@ -405,13 +428,13 @@ class PriShape(BaseShape):
     npts_coeffs = [1, 1, 0, 0]
     npts_cdenom = 2
 
-    # Faces: type, reference-to-face projection, normal, relative area
+    # Faces: type, reference-to-face projection, normal
     faces = [
-        ('tri', lambda s, t: (s, t, -1), (0, 0, -1), 1),
-        ('tri', lambda s, t: (s, t, 1), (0, 0, 1), 1),
-        ('quad', lambda s, t: (s, -1, t), (0, -1, 0), 1),
-        ('quad', lambda s, t: (-s, s, t), (1/sqrt(2), 1/sqrt(2), 0), sqrt(2)),
-        ('quad', lambda s, t: (-1, s, t), (-1, 0, 0), 1),
+        ('tri', lambda s, t: (s, t, -1), (0, 0, -1)),
+        ('tri', lambda s, t: (s, t, 1), (0, 0, 1)),
+        ('quad', lambda s, t: (s, -1, t), (0, -1, 0)),
+        ('quad', lambda s, t: (-s, s, t), (1, 1, 0)),
+        ('quad', lambda s, t: (-1, s, t), (-1, 0, 0)),
     ]
 
     @classmethod
@@ -432,17 +455,13 @@ class PyrShape(BaseShape):
     npts_coeffs = [2, 3, 1, 0]
     npts_cdenom = 6
 
-    # Normalisation and relative area constants
-    n = 1 / sqrt(5)
-    j = sqrt(5) / 2
-
-    # Faces: type, reference-to-face projection, normal, relative area
+    # Faces: type, reference-to-face projection, normal
     faces = [
-        ('quad', lambda s, t: (s, t, -1), (0, 0, -1), 1),
-        ('tri', lambda s, t: (s + (t + 1)/2, (t - 1)/2, t), (0, -2*n, n), j),
-        ('tri', lambda s, t: ((1 - t)/2, -s - (t + 1)/2, t), (2*n, 0, n), j),
-        ('tri', lambda s, t: (-s - (t + 1)/2, (1 - t)/2, t), (0, 2*n, n), j),
-        ('tri', lambda s, t: ((t - 1)/2, s + (t + 1)/2, t), (-2*n, 0, n), j),
+        ('quad', lambda s, t: (s, t, -1), (0, 0, -1)),
+        ('tri', lambda s, t: (s + (t + 1)/2, (t - 1)/2, t), (0, -1, 0.5)),
+        ('tri', lambda s, t: ((1 - t)/2, -s - (t + 1)/2, t), (1, 0, 0.5)),
+        ('tri', lambda s, t: (-s - (t + 1)/2, (1 - t)/2, t), (0, 1, 0.5)),
+        ('tri', lambda s, t: ((t - 1)/2, s + (t + 1)/2, t), (-1, 0, 0.5)),
     ]
 
     @classmethod

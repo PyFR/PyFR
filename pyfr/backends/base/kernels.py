@@ -172,3 +172,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         # Bind
         setattr(self, name, types.MethodType(kernel_meth, self))
+
+
+class NotSuitableError(Exception):
+    pass
