@@ -47,7 +47,7 @@ AMD and NVIDIA. The backend requires:
 
 1. OpenCL
 2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
-   >= 2013.2, != 2015.2, != 2015.2.1
+   >= 2015.2.4
 3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
 
 OpenMP Backend
@@ -812,6 +812,31 @@ Example::
     [soln-plugin-residual]
     nsteps = 10
     file = residual.csv
+    header = true
+
+[soln-plugin-dtstats]
+^^^^^^^^^^^^^^^^^^^^^^
+
+Write time-step statistics out to a CSV file. Parameterised with
+
+1. ``flushsteps`` --- flush to disk every ``flushsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-dtstats]
+    flushsteps = 100
+    file = dtstats.csv
     header = true
 
 [soln-plugin-sampler]
