@@ -3,6 +3,8 @@
 from abc import ABCMeta, abstractmethod
 import uuid
 
+import numpy as np
+
 
 class BaseReader(object, metaclass=ABCMeta):
     @abstractmethod
@@ -17,6 +19,6 @@ class BaseReader(object, metaclass=ABCMeta):
         mesh = self._to_raw_pyfrm()
 
         # Add metadata
-        mesh['mesh_uuid'] = str(uuid.uuid4())
+        mesh['mesh_uuid'] = np.array(str(uuid.uuid4()), dtype='S')
 
         return mesh
