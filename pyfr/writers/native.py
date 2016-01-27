@@ -103,8 +103,6 @@ class NativeWriter(object):
             bn = re.sub(r'\\{n[^}]*\\}', r'(\s*\d+\s*)', bn)
             bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
 
-            print(bn)
-
             for f in os.listdir(self.basedir):
                 m = re.match(bn, f)
                 if m:
