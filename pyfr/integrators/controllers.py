@@ -15,7 +15,7 @@ class BaseController(BaseIntegrator):
 
         # Current and minimum time steps
         self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
-        self.dtmin = 1.0e-14
+        self.dtmin = 1.0e-12
 
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')

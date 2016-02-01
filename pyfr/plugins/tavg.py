@@ -67,7 +67,7 @@ class TavgPlugin(BasePlugin):
         return [np.dstack(exs).swapaxes(1, 2) for exs in exprs]
 
     def __call__(self, intg):
-        dowrite = abs(self.tout - intg.tcurr) < intg.dtmin
+        dowrite = abs(self.tout - intg.tcurr) < self.tol
         doaccum = intg.nacptsteps % self.nsteps == 0
 
         if dowrite or doaccum:

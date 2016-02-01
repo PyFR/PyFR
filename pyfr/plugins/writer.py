@@ -35,7 +35,7 @@ class WriterPlugin(BasePlugin):
             self.tout_next += self.dt_out
 
     def __call__(self, intg):
-        if abs(self.tout_next - intg.tcurr) > intg.dtmin:
+        if abs(self.tout_next - intg.tcurr) > self.tol:
             return
 
         stats = Inifile()
