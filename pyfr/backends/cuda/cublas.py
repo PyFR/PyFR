@@ -95,9 +95,12 @@ class CUDACUBLASKernels(object):
         # can be *before* we are garbage collected (negating the need to call
         # cublasDestroy as we're terminating anyway).  We therefore need to
         # check for a valid context before calling cublasDestroy
-        import pycuda.autoinit
-        if pycuda.autoinit.context:
-            self._wrappers.cublasDestroy(self._handle)
+        try:
+            import pycuda.autoinit
+            if pycuda.autoinit.context:
+                self._wrappers.cublasDestroy(self._handle)
+        except TypeError:
+            pass
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         w = self._wrappers
