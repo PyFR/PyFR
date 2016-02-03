@@ -2,36 +2,43 @@
 
 import numpy as np
 import pycuda.driver as cuda
-from pycuda.gpuarray import GPUArray, splay
+from pycuda.gpuarray import GPUArray
 from pycuda.reduction import ReductionKernel
 
-from pyfr.backends.cuda.provider import CUDAKernelProvider
+from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
 from pyfr.backends.base import ComputeKernel
 from pyfr.nputil import npdtype_to_ctype
 
 
 class CUDABlasExtKernels(CUDAKernelProvider):
-    def axnpby(self, y, *xn):
-        if any(y.traits != x.traits for x in xn):
+    def axnpby(self, *arr, subdims=None):
+        if any(arr[0].traits != x.traits for x in arr[1:]):
             raise ValueError('Incompatible matrix types')
 
-        nv, cnt = len(xn), y.leaddim*y.nrow
+        nv = len(arr)
+        ncola, ncolb = arr[0].datashape[1:]
+        nrow, ldim, lsdim, dtype = arr[0].traits
 
         # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(n=nv)
+        src = self.backend.lookup.get_template('axnpby').render(
+            subdims=subdims or range(ncola), nv=nv
+        )
 
-        # Build
+        # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32] + [np.intp, y.dtype]*(1 + nv))
+                                  [np.int32]*4 + [np.intp]*nv + [dtype]*nv)
 
-        # Compute a suitable block and grid
-        grid, block = splay(cnt)
+        # Determine the grid/block
+        block = (128, 1, 1)
+        grid = get_grid_for_block(block, ncolb)
 
         class AxnpbyKernel(ComputeKernel):
-            def run(self, queue, beta, *alphan):
-                args = [i for axn in zip(xn, alphan) for i in axn]
+            def run(self, queue, *consts):
+                args = list(arr) + list(consts)
+
                 kern.prepared_async_call(grid, block, queue.cuda_stream_comp,
-                                         cnt, y, beta, *args)
+                                         nrow, ncolb, ldim, lsdim,
+                                         *args)
 
         return AxnpbyKernel()
 

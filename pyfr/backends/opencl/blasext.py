@@ -2,7 +2,7 @@
 
 import numpy as np
 import pyopencl as cl
-from pyopencl.array import Array, splay
+from pyopencl.array import Array
 from pyopencl.reduction import ReductionKernel
 
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
@@ -11,30 +11,28 @@ from pyfr.nputil import npdtype_to_ctype
 
 
 class OpenCLBlasExtKernels(OpenCLKernelProvider):
-    def axnpby(self, *arr):
+    def axnpby(self, *arr, subdims=None):
         if any(arr[0].traits != x.traits for x in arr[1:]):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, leaddim, leadsubdim, dtype = arr[0].traits
+        ncola, ncolb = arr[0].datashape[1:]
+        nrow, ldim, lsdim, dtype = arr[0].traits
 
         # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(nv=nv)
+        src = self.backend.lookup.get_template('axnpby').render(
+            subdims=subdims or range(ncola), nv=nv
+        )
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32] + [np.intp]*nv + [dtype]*nv)
-
-        # Determine the total element count in the matrices
-        cnt = leaddim*nrow
-
-        # Compute a suitable global and local workgroup sizes
-        gs, ls = splay(self.backend.qdflt, cnt)
+                                  [np.int32]*4 + [np.intp]*nv + [dtype]*nv)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
                 args = [x.data for x in arr] + list(consts)
-                kern(queue.cl_queue_comp, gs, ls, cnt, *args)
+                kern(queue.cl_queue_comp, (ncolb,), None, nrow, ncolb,
+                     ldim, lsdim, *args)
 
         return AxnpbyKernel()
 
