@@ -2,6 +2,7 @@
 
 import math
 import re
+import time
 
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
@@ -37,6 +38,9 @@ class BaseController(BaseIntegrator):
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist([])
 
+        # Record the starting wall clock time
+        self._wstart = time.time()
+
         # Load any plugins specified in the config file
         for s in self.cfg.sections():
             m = re.match('soln-plugin-(.+?)(?:-(.+))?$', s)
@@ -51,6 +55,12 @@ class BaseController(BaseIntegrator):
 
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
+
+    def collect_stats(self, stats):
+        super().collect_stats(stats)
+
+        wtime = time.time() - self._wstart
+        stats.set('solver-time-integrator', 'wall-time', wtime)
 
     def _accept_step(self, dt, idxcurr, err=None):
         self.tcurr += dt
