@@ -170,10 +170,16 @@ Parameterises the CUDA backend with
 
      *int* | ``round-robin`` | ``local-rank``
 
+2. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
+   non-zero entires in a constant matrix:
+
+     *int*
+
 Example::
 
     [backend-cuda]
     device-id = round-robin
+    gimmik-max-nnz = 512
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -192,12 +198,18 @@ Parameterises the OpenCL backend with
 
     *int* | *string* | ``local-rank``
 
+4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
+   non-zero entires in a constant matrix:
+
+     *int*
+
 Example::
 
     [backend-opencl]
     platform-id = 0
     device-type = gpu
     device-id = local-rank
+    gimmik-max-nnz = 512
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
@@ -208,7 +220,7 @@ Parameterises the OpenMP backend with
 
     *string*
 
-2. ``cflags`` --- Additional C compiler flags:
+2. ``cflags`` --- additional C compiler flags:
 
     *string*
 
