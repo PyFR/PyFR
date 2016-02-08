@@ -3,7 +3,6 @@
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import wraps
-from inspect import getcallargs
 from itertools import count
 from weakref import WeakValueDictionary, WeakKeyDictionary
 

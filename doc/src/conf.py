@@ -76,7 +76,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'PyFR'
-copyright = u'2013-2015, Imperial College London'
+copyright = u'2013-2016, Imperial College London'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
