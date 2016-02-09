@@ -1,56 +1,21 @@
 # -*- coding: utf-8 -*-
 
 import math
-import re
 
-from pyfr.integrators.base import BaseIntegrator
+from pyfr.integrators.std.base import BaseStdIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
 
-class BaseController(BaseIntegrator):
+class BaseStdController(BaseStdIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        # Current and minimum time steps
-        self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
-        self.dtmin = 1.0e-12
 
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
-        # Bank index of solution
-        self._idxcurr = 0
-
-        # Solution cache
-        self._curr_soln = None
-
-        # Accepted and rejected step counters
-        self.nacptsteps = 0
-        self.nrjctsteps = 0
-        self.nacptchain = 0
-
         # Stats on the most recent step
         self.stepinfo = []
-
-        # Event handlers for advance_to
-        self.completed_step_handlers = proxylist([])
-
-        # Load any plugins specified in the config file
-        for s in self.cfg.sections():
-            m = re.match('soln-plugin-(.+?)(?:-(.+))?$', s)
-            if m:
-                cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
-
-                # Instantiate
-                plugin = get_plugin(name, self, cfgsect, suffix)
-
-                # Register as an event handler
-                self.completed_step_handlers.append(plugin)
-
-        # Delete the memory-intensive elements map from the system
-        del self.system.ele_map
 
     def _accept_step(self, dt, idxcurr, err=None):
         self.tcurr += dt
@@ -87,16 +52,8 @@ class BaseController(BaseIntegrator):
     def nsteps(self):
         return self.nacptsteps + self.nrjctsteps
 
-    @property
-    def soln(self):
-        # If we do not have the solution cached then fetch it
-        if not self._curr_soln:
-            self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
 
-        return self._curr_soln
-
-
-class NoneController(BaseController):
+class StdNoneController(BaseStdController):
     controller_name = 'none'
 
     @property
@@ -118,7 +75,7 @@ class NoneController(BaseController):
             self._accept_step(dt, idxcurr)
 
 
-class PIController(BaseController):
+class StdPIController(BaseStdController):
     controller_name = 'pi'
 
     def __init__(self, *args, **kwargs):
@@ -148,7 +105,7 @@ class PIController(BaseController):
 
     @memoize
     def _get_errest_kerns(self):
-        return self._kernel('errest', nargs=3)
+        return self._get_kernels('errest', nargs=3)
 
     def _errest(self, x, y, z):
         comm, rank, root = get_comm_rank_root()

@@ -2,11 +2,13 @@
 
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import deque
+import re
 
 import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.plugins import get_plugin
 from pyfr.util import proxylist
 
 
@@ -17,9 +19,12 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.cfg = cfg
         self.isrestart = initsoln is not None
 
-        # Sanity checks
-        if self._controller_needs_errest and not self._stepper_has_errest:
-            raise TypeError('Incompatible stepper/controller combination')
+        # Ensure the system is compatible with our formulation
+        if self.formulation not in systemcls.elementscls.formulations:
+            raise RuntimeError(
+                'System {0} does not support time stepping formulation {1}'
+                .format(systemcls.name, self.formulation)
+            )
 
         # Start time
         self.tstart = cfg.getfloat('solver-time-integrator', 'tstart', 0.0)
@@ -32,13 +37,26 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         else:
             self.tcurr = self.tstart
 
+        # List of target times to advance to
         self.tlist = deque([self.tend])
 
-        # Determine the amount of temp storage required by thus method
+        # Accepted and rejected step counters
+        self.nacptsteps = 0
+        self.nrjctsteps = 0
+        self.nacptchain = 0
+
+        # Current and minimum time steps
+        self._dt = self.cfg.getfloat('solver-time-integrator', 'dt')
+        self.dtmin = 1.0e-12
+
+        # Determine the amount of temp storage required by this method
         nreg = self._stepper_nregs
 
         # Construct the relevant mesh partition
         self.system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
+
+        # Storage register banks
+        self._regs, self._regidx = self._get_reg_banks(nreg)
 
         # Extract the UUID of the mesh (to be saved with solutions)
         self.mesh_uuid = mesh['mesh_uuid']
@@ -46,22 +64,63 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         # Get a queue for subclasses to use
         self._queue = backend.queue()
 
+        # Global degree of freedom count
+        self._gnofs = self._get_gndofs()
+
+        # Bank index of solution
+        self._idxcurr = 0
+
+        # Solution cache
+        self._curr_soln = None
+
+        # Event handlers for advance_to
+        self.completed_step_handlers = proxylist(self._get_plugins())
+
+        # Delete the memory-intensive elements map from the system
+        del self.system.ele_map
+
+    def _get_reg_banks(self, nreg):
+        regs, regidx = [], list(range(nreg))
+
+        # Create a proxylist of matrix-banks for each storage register
+        for i in regidx:
+            regs.append(
+                proxylist([self.backend.matrix_bank(em, i)
+                           for em in self.system.ele_banks])
+            )
+
+        return regs, regidx
+
+    def _get_gndofs(self):
+        comm, rank, root = get_comm_rank_root()
+
         # Get the number of degrees of freedom in this partition
         ndofs = sum(self.system.ele_ndofs)
 
-        comm, rank, root = get_comm_rank_root()
-
         # Sum to get the global number over all partitions
-        self._gndofs = comm.allreduce(ndofs, op=get_mpi('sum'))
+        return comm.allreduce(ndofs, op=get_mpi('sum'))
 
-    def _kernel(self, name, nargs):
+    def _get_plugins(self):
+        plugins = []
+
+        for s in self.cfg.sections():
+            m = re.match('soln-plugin-(.+?)(?:-(.+))?$', s)
+            if m:
+                cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
+
+                # Instantiate
+                plugins.append(get_plugin(name, self, cfgsect, suffix))
+
+        return plugins
+
+    def _get_kernels(self, name, nargs, **kwargs):
         # Transpose from [nregs][neletypes] to [neletypes][nregs]
         transregs = zip(*self._regs)
 
         # Generate an kernel for each element type
         kerns = proxylist([])
         for tr in transregs:
-            kerns.append(self.backend.kernel(name, *tr[:nargs]))
+            kerns.append(self.backend.kernel(name, *tr[:nargs], **kwargs))
 
         return kerns
 
@@ -84,20 +143,20 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         tlist.extend(ta)
         tlist.extend(tb)
 
+    @property
+    def soln(self):
+        # If we do not have the solution cached then fetch it
+        if not self._curr_soln:
+            self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
+
+        return self._curr_soln
+
     @abstractmethod
     def step(self, t, dt):
         pass
 
     @abstractmethod
     def advance_to(self, t):
-        pass
-
-    @abstractproperty
-    def _controller_needs_errest(self):
-        pass
-
-    @abstractproperty
-    def _stepper_has_errest(self):
         pass
 
     @abstractproperty

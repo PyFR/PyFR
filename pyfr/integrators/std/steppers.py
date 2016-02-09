@@ -1,23 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.integrators.base import BaseIntegrator
-from pyfr.util import memoize, proxylist
+from pyfr.integrators.std.base import BaseStdIntegrator
+from pyfr.util import memoize
 
 
-class BaseStepper(BaseIntegrator):
+class BaseStdStepper(BaseStdIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        backend = self.backend
-        elemats = self.system.ele_banks
-
-        # Create a proxylist of matrix-banks for each storage register
-        self._regs = regs = []
-        self._regidx = regidx = []
-        for i in range(self._stepper_nregs):
-            b = proxylist([backend.matrix_bank(em, i) for em in elemats])
-            regs.append(b)
-            regidx.append(i)
 
         # Add kernel cache
         self._axnpby_kerns = {}
@@ -30,7 +19,7 @@ class BaseStepper(BaseIntegrator):
 
     @memoize
     def _get_axnpby_kerns(self, n):
-        return self._kernel('axnpby', nargs=n)
+        return self._get_kernels('axnpby', nargs=n)
 
     def _add(self, *args):
         # Get a suitable set of axnpby kernels
@@ -43,7 +32,7 @@ class BaseStepper(BaseIntegrator):
         self._queue % axnpby(*args[::2])
 
 
-class EulerStepper(BaseStepper):
+class StdEulerStepper(BaseStdStepper):
     stepper_name = 'euler'
 
     @property
@@ -72,7 +61,7 @@ class EulerStepper(BaseStepper):
         return ut
 
 
-class TVDRK3Stepper(BaseStepper):
+class StdTVDRK3Stepper(BaseStdStepper):
     stepper_name = 'tvd-rk3'
 
     @property
@@ -117,7 +106,7 @@ class TVDRK3Stepper(BaseStepper):
         return r1
 
 
-class RK4Stepper(BaseStepper):
+class StdRK4StdStepper(BaseStdStepper):
     stepper_name = 'rk4'
 
     @property
@@ -180,7 +169,7 @@ class RK4Stepper(BaseStepper):
         return r1
 
 
-class RKVdH2RStepper(BaseStepper):
+class StdRKVdH2RStepper(BaseStdStepper):
     # Coefficients
     a = []
     b = []
@@ -244,7 +233,7 @@ class RKVdH2RStepper(BaseStepper):
         return (r2, rold, rerr) if errest else r2
 
 
-class RK34Stepper(RKVdH2RStepper):
+class StdRK34Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk34'
 
     a = [
@@ -272,7 +261,7 @@ class RK34Stepper(RKVdH2RStepper):
         return 3
 
 
-class RK45Stepper(RKVdH2RStepper):
+class StdRK45Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk45'
 
     a = [
