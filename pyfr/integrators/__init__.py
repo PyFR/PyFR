@@ -26,7 +26,7 @@ def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
 
         cc = subclass_where(BaseDualController, controller_name=cn)
         pc = subclass_where(BaseDualPseudoStepper, pseudo_stepper_name=pn)
-        sn = subclass_where(BaseDualStepper, stepper_name=sn)
+        sc = subclass_where(BaseDualStepper, stepper_name=sn)
 
         bases = [(cn, cc), (pn, pc), (sn, sc)]
     else:

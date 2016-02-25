@@ -12,6 +12,8 @@ class BaseFluidElements(object):
     convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
 
+    dualcoeffs = convarmap
+
     visvarmap = {
         2: {'density': ['rho'],
             'velocity': ['u', 'v'],
