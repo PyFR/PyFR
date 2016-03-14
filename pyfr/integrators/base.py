@@ -9,7 +9,7 @@ import numpy as np
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins import get_plugin
-from pyfr.util import proxylist
+from pyfr.util import memoize, proxylist
 
 
 class BaseIntegrator(object, metaclass=ABCMeta):
@@ -73,6 +73,9 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         # Solution cache
         self._curr_soln = None
 
+        # Add kernel cache
+        self._axnpby_kerns = {}
+
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist(self._get_plugins())
 
@@ -127,6 +130,20 @@ class BaseIntegrator(object, metaclass=ABCMeta):
     def _prepare_reg_banks(self, *bidxes):
         for reg, ix in zip(self._regs, bidxes):
             reg.active = ix
+
+    @memoize
+    def _get_axnpby_kerns(self, n, subdims=None):
+        return self._get_kernels('axnpby', nargs=n, subdims=subdims)
+
+    def _add(self, *args):
+        # Get a suitable set of axnpby kernels
+        axnpby = self._get_axnpby_kerns(len(args) // 2)
+
+        # Bank indices are in odd-numbered arguments
+        self._prepare_reg_banks(*args[1::2])
+
+        # Bind and run the axnpby kernels
+        self._queue % axnpby(*args[::2])
 
     def call_plugin_dt(self, dt):
         ta = self.tlist

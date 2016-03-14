@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.integrators.std.base import BaseStdIntegrator
-from pyfr.util import memoize
 
 
 class BaseStdStepper(BaseStdIntegrator):
@@ -16,20 +15,6 @@ class BaseStdStepper(BaseStdIntegrator):
 
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)
         stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
-
-    @memoize
-    def _get_axnpby_kerns(self, n):
-        return self._get_kernels('axnpby', nargs=n)
-
-    def _add(self, *args):
-        # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(len(args) // 2)
-
-        # Bank indices are in odd-numbered arguments
-        self._prepare_reg_banks(*args[1::2])
-
-        # Bind and run the axnpby kernels
-        self._queue % axnpby(*args[::2])
 
 
 class StdEulerStepper(BaseStdStepper):
