@@ -23,6 +23,8 @@ class DtStatsPlugin(BasePlugin):
         # The root rank needs to open the output file
         if rank == root:
             self.outf = init_csv(self.cfg, cfgsect, 'n,t,dt,action,error')
+        else:
+            self.outf = None
 
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
@@ -33,10 +35,8 @@ class DtStatsPlugin(BasePlugin):
         self.count += len(intg.stepinfo)
         self.tprev = intg.tcurr
 
-        comm, rank, root = get_comm_rank_root()
-
         # If we're the root rank then output
-        if rank == root:
+        if self.outf:
             for s in self.stats:
                 print(','.join(str(c) for c in s), file=self.outf)
 

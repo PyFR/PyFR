@@ -97,7 +97,7 @@ class BaseAdvectionBCInters(BaseInters):
         else:
             return [npeval(cfg.getexpr(sect, k), cc) for k in opts]
 
-    def _exp_opts(self, opts, lhs, default=None):
+    def _exp_opts(self, opts, lhs, default={}):
         cfg, sect = self.cfg, self.cfgsect
 
         subs = cfg.items('constants')
@@ -106,14 +106,10 @@ class BaseAdvectionBCInters(BaseInters):
 
         exprs = {}
         for k in opts:
-            if default is None:
-                ex = cfg.getexpr(sect, k, subs=subs)
-            elif isinstance(default, dict):
-                ex = cfg.getexpr(sect, k, default.get(k, None), subs=subs)
+            if k in default:
+                exprs[k] = cfg.getexpr(sect, k, default[k], subs=subs)
             else:
-                ex = cfg.getexpr(sect, k, default, subs=subs)
-
-            exprs[k] = ex
+                exprs[k] = cfg.getexpr(sect, k, subs=subs)
 
         if any('ploc' in ex for ex in exprs.values()):
             plocpts = self._const_mat(lhs, 'get_ploc_for_inter')
