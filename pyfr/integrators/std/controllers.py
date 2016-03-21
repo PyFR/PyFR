@@ -87,6 +87,11 @@ class StdPIController(BaseStdController):
         self._atol = self.cfg.getfloat(sect, 'atol')
         self._rtol = self.cfg.getfloat(sect, 'rtol')
 
+        # Error norm
+        self._norm = self.cfg.get(sect, 'errest-norm', 'l2')
+        if self._norm not in {'l2', 'uniform'}:
+            raise ValueError('Invalid error norm')
+
         # PI control values
         self._alpha = self.cfg.getfloat(sect, 'pi-alpha', 0.7)
         self._beta = self.cfg.getfloat(sect, 'pi-beta', 0.4)
@@ -105,23 +110,33 @@ class StdPIController(BaseStdController):
 
     @memoize
     def _get_errest_kerns(self):
-        return self._get_kernels('errest', nargs=3)
+        return self._get_kernels('errest', nargs=3, norm=self._norm)
 
     def _errest(self, x, y, z):
         comm, rank, root = get_comm_rank_root()
 
         errest = self._get_errest_kerns()
 
-        # Obtain an estimate for the error
+        # Obtain an estimate for the squared error
         self._prepare_reg_banks(x, y, z)
         self._queue % errest(self._atol, self._rtol)
 
-        # Reduce locally (element types) and globally (MPI ranks)
-        rl = sum(errest.retval)
-        rg = comm.allreduce(rl, op=get_mpi('sum'))
+        # L2 norm
+        if self._norm == 'l2':
+            # Reduce locally (element types) and globally (MPI ranks)
+            rl = sum(errest.retval)
+            rg = comm.allreduce(rl, op=get_mpi('sum'))
 
-        # Normalise
-        err = math.sqrt(rg / self._gndofs)
+            # Normalise
+            err = math.sqrt(rg / self._gndofs)
+        # Uniform norm
+        else:
+            # Reduce locally (element types) and globally (MPI ranks)
+            rl = max(errest.retval)
+            rg = comm.allreduce(rl, op=get_mpi('max'))
+
+            # Normalise
+            err = math.sqrt(rg)
 
         return err if not math.isnan(err) else 100
 

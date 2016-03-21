@@ -41,7 +41,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         return CopyKernel()
 
-    def errest(self, x, y, z):
+    def errest(self, x, y, z, *, norm):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
@@ -49,7 +49,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         dtype = x.dtype
 
         # Render the reduction kernel template
-        src = self.backend.lookup.get_template('errest').render()
+        src = self.backend.lookup.get_template('errest').render(norm=norm)
 
         # Build
         rkern = self._build_kernel(

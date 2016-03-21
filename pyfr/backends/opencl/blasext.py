@@ -46,16 +46,19 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         return CopyKernel()
 
-    def errest(self, x, y, z):
+    def errest(self, x, y, z, *, norm):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
         cnt = x.leaddim*x.nrow
         dtype = x.dtype
 
+        # Norm type
+        reduce_expr = 'a + b' if norm == 'l2' else 'max(a, b)'
+
         # Build the reduction kernel
         rkern = ReductionKernel(
-            self.backend.ctx, dtype, neutral='0', reduce_expr='a + b',
+            self.backend.ctx, dtype, neutral='0', reduce_expr=reduce_expr,
             map_expr='pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2)',
             arguments='__global {0}* x, __global {0}* y, __global {0}* z, '
                       '{0} atol, {0} rtol'.format(npdtype_to_ctype(dtype))

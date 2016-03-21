@@ -53,7 +53,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         return CopyKernel()
 
-    def errest(self, x, y, z):
+    def errest(self, x, y, z, *, norm):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
@@ -62,9 +62,12 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         yarr = GPUArray(y.leaddim*y.nrow, y.dtype, gpudata=y)
         zarr = GPUArray(z.leaddim*z.nrow, z.dtype, gpudata=z)
 
+        # Norm type
+        reduce_expr = 'a + b' if norm == 'l2' else 'max(a, b)'
+
         # Build the reduction kernel
         rkern = ReductionKernel(
-            x.dtype, neutral='0', reduce_expr='a + b',
+            x.dtype, neutral='0', reduce_expr=reduce_expr,
             map_expr='pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2)',
             arguments='{0}* x, {0}* y, {0}* z, {0} atol, {0} rtol'
                       .format(npdtype_to_ctype(x.dtype))
