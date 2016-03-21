@@ -65,7 +65,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self._queue = backend.queue()
 
         # Global degree of freedom count
-        self._gnofs = self._get_gndofs()
+        self._gndofs = self._get_gndofs()
 
         # Bank index of solution
         self._idxcurr = 0
