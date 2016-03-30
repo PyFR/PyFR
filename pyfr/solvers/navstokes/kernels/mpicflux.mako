@@ -49,6 +49,6 @@
     fvcomm += ${tau}*(ul[${i}] - ur[${i}]);
 % endif
 
-    ul[${i}] =  magnl*(ficomm[${i}] + fvcomm);
+    ul[${i}] = magnl*(ficomm[${i}] + fvcomm);
 % endfor
 </%pyfr:kernel>
