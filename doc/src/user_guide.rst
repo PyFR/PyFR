@@ -39,6 +39,17 @@ or greater. The backend requires:
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
 2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
 
+MIC Backend
+^^^^^^^^^^^
+
+The MIC backend targets Intel Xeon Phi co-processors. The backend
+requires:
+
+1. ICC >= 14.0
+2. Intel MKL >= 11.1
+3. Intel MPSS >= 3.3
+4. `pymic <https://github.com/01org/pyMIC>`_ >= 0.7 (post commit 4d8a2da)
+
 OpenCL Backend
 ^^^^^^^^^^^^^^
 
@@ -68,6 +79,14 @@ have one of the following partitioners installed:
 1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
 2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
 
+Importing CGNS Meshes
+^^^^^^^^^^^^^^^^^^^^^
+
+To import CGNS meshes it is necessary to have the following installed:
+
+1. `CGNS <http://cgns.github.io/>`_ >= 3.3 (develop branch post commit
+   e0faea6)
+
 Installation
 ------------
 
@@ -96,7 +115,8 @@ PyFR |release| uses three distinct file formats:
 The following commands are available from the ``pyfr`` program:
 
 1. ``pyfr import`` --- convert a `Gmsh
-   <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
+   <http:http://geuz.org/gmsh/>`_ .msh file or `CGNS
+   <http://cgns.github.io/>`_ .cgns file into a PyFR .pyfrm file.
 
    Example::
 
@@ -180,6 +200,19 @@ Example::
     [backend-cuda]
     device-id = round-robin
     gimmik-max-nnz = 512
+
+[backend-mic]
+^^^^^^^^^^^^^^^^
+
+Parameterises the MIC backend with
+
+1. ``device-id`` --- for selecting which device(s) to run on:
+
+    *int* | ``local-rank``
+
+1. ``mkl-root`` --- path to MKL root directory:
+
+    *string*
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -1012,13 +1045,13 @@ with
 
            *float*
 
-        - ``theta`` --- azimuth angle of inflow measured in
-          the x-y plane relative to the global positive x-axis
+        - ``theta`` --- azimuth angle (in degrees) of inflow measured
+          in the x-y plane relative to the positive x-axis
 
            *float*
 
-        - ``phi`` --- inclination angle of inflow measured
-          relative to the global positive z-axis
+        - ``phi`` --- inclination angle (in degrees) of inflow measured
+          relative to the positive z-axis
 
            *float*
 

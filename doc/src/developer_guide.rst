@@ -224,10 +224,18 @@ inheritance diagram:
 Backend
 -------
 
-A `Backend`_ holds information/data for a backend. There are three types
+A `Backend`_ holds information/data for a backend. There are four types
 of `Backend`_ available in PyFR |release|:
 
 .. autoclass:: pyfr.backends.cuda.base.CUDABackend
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.mic.base.MICBackend
     :members:
     :undoc-members:
     :inherited-members:
@@ -256,6 +264,7 @@ Types of `Backend`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
+                         pyfr.backends.mic.base
     :parts: 1
 
 Pointwise Kernel Provider
@@ -275,10 +284,18 @@ the context for Mako (i.e. details about the `Backend`_ etc.) and then
 uses Mako to begin rendering the `PyFR-Mako`_ specification. When Mako
 encounters a :code:`pyfr:kernel` an instance of a `Kernel Generator`_
 is created, which is used to render the body of the
-:code:`pyfr:kernel`. There are three types of `Pointwise Kernel
+:code:`pyfr:kernel`. There are four types of `Pointwise Kernel
 Provider`_ available in PyFR |release|:
 
 .. autoclass:: pyfr.backends.cuda.provider.CUDAPointwiseKernelProvider
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.mic.provider.MICPointwiseKernelProvider
     :members:
     :undoc-members:
     :inherited-members:
@@ -308,6 +325,7 @@ inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.openmp.provider
                          pyfr.backends.cuda.provider
                          pyfr.backends.opencl.provider
+                         pyfr.backends.mic.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
     :parts: 1
 
@@ -319,10 +337,18 @@ into low-level platform-specific code. Specifically, a `Kernel
 Generator`_ has a method named :code:`render`, which applies `Backend`_
 specific regex and adds `Backend`_ specific 'boiler plate' code to
 produce the low-level platform-specific source -- which is compiled,
-linked, and loaded. There are three types of `Kernel Generator`_
+linked, and loaded. There are four types of `Kernel Generator`_
 available in PyFR |release|:
 
 .. autoclass:: pyfr.backends.cuda.generator.CUDAKernelGenerator
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.backends.mic.generator.MICKernelGenerator
     :members:
     :undoc-members:
     :inherited-members:
@@ -351,6 +377,7 @@ Types of `Kernel Generator`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
                          pyfr.backends.opencl.generator.OpenCLKernelGenerator
                          pyfr.backends.openmp.generator.OpenMPKernelGenerator
+                         pyfr.backends.mic.generator.MICKernelGenerator
     :parts: 1
 
 =========
