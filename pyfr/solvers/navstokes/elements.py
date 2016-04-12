@@ -48,7 +48,9 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                     (nfpts, 1, neles), aliases=avis_upts_temp, tags=tags
                 )
 
-            backend.pointwise.register('pyfr.solvers.navstokes.kernels.entropy')
+            backend.pointwise.register(
+                'pyfr.solvers.navstokes.kernels.entropy'
+            )
             backend.pointwise.register('pyfr.solvers.navstokes.kernels.avis')
 
             def artf_vis():

@@ -888,7 +888,13 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^
 
 Periodically samples specific points in the volume and writes them out
-to a CSV file. Parameterised with
+to a CSV file.  The plugin actually samples the solution point
+closest to each sample point a slight discrepancy in the output
+sampling locations is to be expected.  A nearest-neighbour search is
+used to locate the closest solution point to the sample point.  The
+location process automatically takes advantage of
+`scipy.spatial.cKDTree <http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.cKDTree.html>`_
+where available.  Parameterised with
 
 1. ``nsteps`` --- sample every ``nsteps``:
 

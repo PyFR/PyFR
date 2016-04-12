@@ -8,19 +8,53 @@ from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin, init_csv
 
 
-def _closest_upt(etypes, eupts, p):
-    # Compute the distances between each point and p
-    dists = [np.linalg.norm(e - p, axis=2) for e in eupts]
+def _closest_upts_bf(etypes, eupts, pts):
+    for p in pts:
+        # Compute the distances between each point and p
+        dists = [np.linalg.norm(e - p, axis=2) for e in eupts]
 
-    # Get the index of the closest point to p for each element type
-    amins = [np.unravel_index(np.argmin(d), d.shape) for d in dists]
+        # Get the index of the closest point to p for each element type
+        amins = [np.unravel_index(np.argmin(d), d.shape) for d in dists]
 
-    # Dereference to get the actual distances and locations
-    dmins = [d[a] for d, a in zip(dists, amins)]
-    plocs = [e[a] for e, a in zip(eupts, amins)]
+        # Dereference to get the actual distances and locations
+        dmins = [d[a] for d, a in zip(dists, amins)]
+        plocs = [e[a] for e, a in zip(eupts, amins)]
 
-    # Find the minimum across all element types
-    return min(zip(dmins, plocs, etypes, amins))
+        # Find the minimum across all element types
+        yield min(zip(dmins, plocs, etypes, amins))
+
+
+def _closest_upts_kd(etypes, eupts, pts):
+    from scipy.spatial import cKDTree
+
+    # Flatten the physical location arrays
+    feupts = [e.reshape(-1, e.shape[-1]) for e in eupts]
+
+    # For each element type construct a KD-tree of the upt locations
+    trees = [cKDTree(f) for f in feupts]
+
+    for p in pts:
+        # Query the distance/index of the closest upt to p
+        dmins, amins = zip(*[t.query(p) for t in trees])
+
+        # Unravel the indices
+        amins = [np.unravel_index(i, e.shape[:2])
+                 for i, e in zip(amins, eupts)]
+
+        # Dereference to obtain the precise locations
+        plocs = [e[a] for e, a in zip(eupts, amins)]
+
+        # Reduce across element types
+        yield min(zip(dmins, plocs, etypes, amins))
+
+
+def _closest_upts(etypes, eupts, pts):
+    try:
+        # Attempt to use a KD-tree based approach
+        yield from _closest_upts_kd(etypes, eupts, pts)
+    except ImportError:
+        # Otherwise fall back to brute force
+        yield from _closest_upts_bf(etypes, eupts, pts)
 
 
 class SamplerPlugin(BasePlugin):
@@ -50,11 +84,12 @@ class SamplerPlugin(BasePlugin):
         # Physical location of the solution points
         plocs = [p.swapaxes(1, 2) for p in intg.system.ele_ploc_upts]
 
-        for p in self.pts:
-            # Find the nearest point in our partition
-            cp = _closest_upt(intg.system.ele_types, plocs, p)
+        # Locate the closest solution points in our partition
+        closest = _closest_upts(intg.system.ele_types, plocs, self.pts)
 
-            # Reduce over all partitions
+        # Process these points
+        for cp in closest:
+            # Reduce cp over all partitions
             mcp, mrank = comm.allreduce(cp, op=get_mpi('minloc'))
 
             # Store the rank responsible along with the info

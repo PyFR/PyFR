@@ -14,7 +14,7 @@
     ulout[${i}] = urout[${i}] = urin[${i}];
 % else:
     ulout[${i}] = urout[${i}] = urin[${i}]*${0.5 + c['ldg-beta']}
-                        + ulin[${i}]*${0.5 - c['ldg-beta']};
+                              + ulin[${i}]*${0.5 - c['ldg-beta']};
 % endif
 % endfor
 </%pyfr:kernel>
