@@ -3,6 +3,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import deque
 import re
+import time
 
 import numpy as np
 
@@ -75,6 +76,9 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         # Add kernel cache
         self._axnpby_kerns = {}
+
+        # Record the starting wall clock time
+        self._wstart = time.time()
 
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist(self._get_plugins())
@@ -193,4 +197,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
             self.advance_to(t)
 
     def collect_stats(self, stats):
+        wtime = time.time() - self._wstart
+
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
+        stats.set('solver-time-integrator', 'wall-time', wtime)

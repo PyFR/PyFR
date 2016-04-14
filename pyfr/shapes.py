@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import itertools as it
-from math import exp, sqrt
+from math import exp
 import re
 
 import numpy as np
