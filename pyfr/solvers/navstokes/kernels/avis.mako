@@ -9,20 +9,17 @@
 
 
 <%pyfr:kernel name='avis' ndim='1'
-              s='in view fpdtype_t[${str(nupts)}]'
-              amu_e='out view fpdtype_t[${str(nrow_amu)}]'
-              amu_f='out view fpdtype_t[${str(nfpts)}]'>
-
+              s='in fpdtype_t[${str(nupts)}]'
+              amu_e='out fpdtype_t[${str(nrow_amu)}]'
+              amu_f='out fpdtype_t[${str(nfpts)}]'>
     // Smoothness indicator
-    fpdtype_t totEn = 0.0, pnEn = 1e-15, s2;
-    fpdtype_t se0= ${math.log10(c['s0'])};
+    fpdtype_t totEn = 0.0, pnEn = 1e-15;
+    fpdtype_t se0 = ${math.log10(c['s0'])};
 
 % for i, deg in enumerate(ubdegs):
-    s2 = s[${i}]*s[${i}];
-    totEn += s2;
-
+    totEn += s[${i}]*s[${i}];
 % if deg >= order:
-    pnEn += s2;
+    pnEn += s[${i}]*s[${i}];
 % endif
 % endfor
 

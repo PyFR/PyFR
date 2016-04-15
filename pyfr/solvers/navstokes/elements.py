@@ -16,6 +16,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         if visc_corr not in {'sutherland', 'none'}:
             raise ValueError('Invalid viscosity-correction option')
+
         tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                        visc_corr=visc_corr,
                        c=self.cfg.items_as('constants', float))
@@ -76,33 +77,23 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                     ubdegs=self.basis.ubasis.degrees,
                 ))
 
-                # Column view for avis_upts/fpts matrices
-                col_view = lambda mat: backend.view(
-                    matmap=np.array([mat.mid]*mat.ncol),
-                    rcmap=np.array(list(ndrange(1, mat.ncol))),
-                    stridemap=np.array([[mat.leaddim]]*mat.ncol),
-                    vshape=(mat.nrow,)
-                )
-
-                avis_fpts_cv = col_view(self._avis_fpts)
-                avis_upts_temp_cv = col_view(avis_upts_temp)
-
                 if 'flux' in self.antialias:
-                    ame_e = col_view(avis_qpts)
+                    ame_e = avis_qpts
                     tplargs['nrow_amu'] = self.nqpts
                 else:
-                    ame_e = col_view(avis_upts)
+                    ame_e = avis_upts
                     tplargs['nrow_amu'] = nupts
 
                 # Element-wise artificial viscosity kernel
                 avis = backend.kernel(
-                    'avis', tplargs, dims=[neles], s=avis_upts_temp_cv,
-                    amu_e=ame_e, amu_f=avis_fpts_cv
+                    'avis', tplargs, dims=[neles], s=avis_upts_temp,
+                    amu_e=ame_e, amu_f=self._avis_fpts
                 )
 
                 return ComputeMetaKernel([ent, mul, avis])
 
             self.kernels['avis'] = artf_vis
+
             tplargs['art_vis'] = 'mu'
         elif shock_capturing == 'none':
             avis_upts = avis_qpts = None
