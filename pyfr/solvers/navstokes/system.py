@@ -32,8 +32,10 @@ class NavierStokesSystem(BaseAdvectionDiffusionSystem):
         q1 << kernels['iint', 'con_u']()
         q1 << kernels['bcint', 'con_u'](t=t)
         q1 << kernels['eles', 'tgradpcoru_upts']()
-        if ('eles', 'avis') in kernels:
-            q1 << kernels['eles', 'avis']()
+        if ('eles', 'art_visc') in kernels:
+            q1 << kernels['eles', 'entropy']()
+            q1 << kernels['eles', 'modal_entropy']()
+            q1 << kernels['eles', 'art_visc']()
             q1 << kernels['mpiint', 'avis_fpts_pack']()
 
         q2 << kernels['mpiint', 'scal_fpts_send']()

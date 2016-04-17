@@ -2,10 +2,8 @@
 
 import numpy as np
 
-from pyfr.backends.base.kernels import ComputeMetaKernel
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
 from pyfr.solvers.euler.elements import BaseFluidElements
-from pyfr.util import ndrange
 
 
 class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
@@ -49,50 +47,45 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                     (nfpts, 1, neles), aliases=avis_upts_temp, tags=tags
                 )
 
+            # Entropy kernel
             backend.pointwise.register(
                 'pyfr.solvers.navstokes.kernels.entropy'
             )
+
+            self.kernels['entropy'] = lambda: backend.kernel(
+                'entropy', tplargs=tplargs, dims=[nupts, neles],
+                u=self.scal_upts_inb, s=avis_upts
+            )
+
+            # Modal entropy coefficient kernel
+            rcpvdm = np.linalg.inv(self.basis.ubasis.vdm.T)
+            rcpvdm = self._be.const_matrix(rcpvdm, tags={'align'})
+            self.kernels['modal_entropy'] = lambda: backend.kernel(
+                'mul', rcpvdm, avis_upts, out=avis_upts_temp
+            )
+
+            # Artificial viscosity kernel
             backend.pointwise.register('pyfr.solvers.navstokes.kernels.avis')
+            art_visc_tplargs = dict(
+                tplargs, nupts=nupts, nfpts=nfpts, order=self.basis.order,
+                ubdegs=self.basis.ubasis.degrees
+            )
+            art_visc_tplargs['c'].update(
+                self.cfg.items_as('solver-artificial-viscosity', float)
+            )
 
-            def artf_vis():
-                # Compute entropy and save to avis_upts
-                ent = backend.kernel(
-                    'entropy', tplargs=tplargs, dims=[nupts, neles],
-                    u=self.scal_upts_inb, s=avis_upts
-                )
+            if 'flux' in self.antialias:
+                ame_e = avis_qpts
+                art_visc_tplargs['nrow_amu'] = self.nqpts
+            else:
+                ame_e = avis_upts
+                art_visc_tplargs['nrow_amu'] = nupts
 
-                # Compute modal coefficients of entropy
-                rcpvdm = np.linalg.inv(self.basis.ubasis.vdm.T)
-                rcpvdm = self._be.const_matrix(rcpvdm, tags={'align'})
-                mul = backend.kernel(
-                    'mul', rcpvdm, avis_upts, out=avis_upts_temp
-                )
-
-                # Additional constants for element-wise artificial viscosity
-                tplargs['c'].update(
-                    self.cfg.items_as('solver-artificial-viscosity', float)
-                )
-                tplargs.update(dict(
-                    nupts=nupts, nfpts=nfpts, order=self.basis.order,
-                    ubdegs=self.basis.ubasis.degrees,
-                ))
-
-                if 'flux' in self.antialias:
-                    ame_e = avis_qpts
-                    tplargs['nrow_amu'] = self.nqpts
-                else:
-                    ame_e = avis_upts
-                    tplargs['nrow_amu'] = nupts
-
-                # Element-wise artificial viscosity kernel
-                avis = backend.kernel(
-                    'avis', tplargs, dims=[neles], s=avis_upts_temp,
-                    amu_e=ame_e, amu_f=self._avis_fpts
-                )
-
-                return ComputeMetaKernel([ent, mul, avis])
-
-            self.kernels['avis'] = artf_vis
+            # Element-wise artificial viscosity kernel
+            self.kernels['art_visc'] = lambda: backend.kernel(
+                'avis', tplargs=art_visc_tplargs, dims=[neles],
+                s=avis_upts_temp, amu_e=ame_e, amu_f=self._avis_fpts
+            )
 
             tplargs['art_vis'] = 'mu'
         elif shock_capturing == 'none':
