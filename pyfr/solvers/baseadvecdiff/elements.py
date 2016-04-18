@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.solvers.baseadvec import BaseAdvectionElements
+import numpy as np
+
 from pyfr.backends.base.kernels import ComputeMetaKernel
+from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
@@ -21,6 +23,79 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 bufs |= {'scal_upts_cpy'}
 
         return bufs
+
+    def _set_backend_art_visc(self, backend):
+        nvars, neles = self.nvars, self.neles
+        nupts, nfpts = self.nupts, self.nfpts
+        tags = {'align'}
+
+        # Register pointwise kernels
+        backend.pointwise.register(
+            'pyfr.solvers.baseadvecdiff.kernels.shockvar'
+        )
+        backend.pointwise.register(
+            'pyfr.solvers.baseadvecdiff.kernels.shocksensor'
+        )
+
+        # Obtain the scalar variable to be used for shock sensing
+        shockvar = self.convarmap[self.ndims].index(self.shockvar)
+
+        # Common template arguments
+        tplargs = dict(
+            nvars=nvars, nupts=nupts, nfpts=nfpts,
+            c=self.cfg.items_as('solver-artificial-viscosity', float),
+            order=self.basis.order, ubdegs=self.basis.ubasis.degrees,
+            shockvar=shockvar
+        )
+
+        # Allocate required scratch space for artificial viscosity
+        if 'flux' in self.antialias:
+            self.avis_qpts = backend.matrix((self.nqpts, 1, neles),
+                                            extent='avis_qpts', tags=tags)
+            self.avis_upts = backend.matrix((nupts, 1, neles),
+                                            aliases=self.avis_qpts, tags=tags)
+        else:
+            self.avis_upts = backend.matrix((nupts, 1, neles),
+                                             extent='avis_upts', tags=tags)
+
+        if nfpts >= nupts:
+            self._avis_fpts = backend.matrix((nfpts, 1, neles),
+                                             extent='avis_fpts', tags=tags)
+            avis_upts_temp = backend.matrix(
+                (nupts, 1, neles), aliases=self._avis_fpts, tags=tags
+            )
+        else:
+            avis_upts_temp = backend.matrix((nupts, 1, neles),
+                                            extent='avis_fpts', tags=tags)
+            self._avis_fpts = backend.matrix(
+                (nfpts, 1, neles), aliases=avis_upts_temp, tags=tags
+            )
+
+        # Extract the scalar variable to be used for shock sensing
+        self.kernels['shockvar'] = lambda: backend.kernel(
+            'shockvar', tplargs=tplargs, dims=[nupts, neles],
+            u=self.scal_upts_inb, s=self.avis_upts
+        )
+
+        # Obtain the modal coefficients
+        rcpvdm = np.linalg.inv(self.basis.ubasis.vdm.T)
+        rcpvdm = backend.const_matrix(rcpvdm, tags={'align'})
+        self.kernels['shockvar_modal'] = lambda: backend.kernel(
+            'mul', rcpvdm, self.avis_upts, out=avis_upts_temp
+        )
+
+        if 'flux' in self.antialias:
+            ame_e = self.avis_qpts
+            tplargs['nrow_amu'] = self.nqpts
+        else:
+            ame_e = self.avis_upts
+            tplargs['nrow_amu'] = nupts
+
+        # Apply the sensor to estimate the required artificial viscosity
+        self.kernels['shocksensor'] = lambda: backend.kernel(
+            'shocksensor', tplargs=tplargs, dims=[neles],
+            s=avis_upts_temp, amu_e=ame_e, amu_f=self._avis_fpts
+        )
 
     def set_backend(self, backend, nscal_upts):
         super().set_backend(backend, nscal_upts)
@@ -72,3 +147,18 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 return ComputeMetaKernel(muls)
 
             self.kernels['gradcoru_qpts'] = gradcoru_qpts
+
+        # Shock capturing
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if shock_capturing == 'artificial-viscosity':
+            self._set_backend_art_visc(backend)
+        elif shock_capturing == 'none':
+            self.avis_qpts = self.avis_upts = None
+        else:
+            raise ValueError('Invalid shock capturing scheme')
+
+    def get_avis_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        return (self._avis_fpts.mid,)*nfp, rcmap

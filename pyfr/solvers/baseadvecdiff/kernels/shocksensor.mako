@@ -7,8 +7,7 @@
     pi = math.pi
 %>
 
-
-<%pyfr:kernel name='avis' ndim='1'
+<%pyfr:kernel name='shocksensor' ndim='1'
               s='in fpdtype_t[${str(nupts)}]'
               amu_e='out fpdtype_t[${str(nrow_amu)}]'
               amu_f='out fpdtype_t[${str(nfpts)}]'>

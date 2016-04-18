@@ -2,6 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
 <%include file='pyfr.solvers.navstokes.kernels.flux'/>
 
@@ -22,12 +23,14 @@
 
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {{0}};
-    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'amul', 'fvl')};
+    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'fvl')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradul', 'fvl', 'amul')};
 % endif
 
 % if beta != 0.5:
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
-    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'amur', 'fvr')};
+    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'amur')};
 % endif
 
 % for i in range(nvars):

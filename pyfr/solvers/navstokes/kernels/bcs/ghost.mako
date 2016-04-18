@@ -1,5 +1,6 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
 <%include file='pyfr.solvers.navstokes.kernels.flux'/>
 
@@ -12,7 +13,8 @@
     ${pyfr.expand('bc_ldg_grad_state', 'ul', 'nl', 'gradul', 'gradur')};
 
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
-    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'amul', 'fvr')};
+    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'amul')};
 
     // Inviscid (Riemann solve) state
     ${pyfr.expand('bc_rsolve_state', 'ul', 'nl', 'ur', 'ploc', 't')};
