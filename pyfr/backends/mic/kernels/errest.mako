@@ -10,11 +10,17 @@ errest(long *n, double *out,
     fpdtype_t *x = *xp, *y = *yp, *z = *zp;
     fpdtype_t atol = *atolp, rtol = *rtolp;
 
-    fpdtype_t sum = 0.0;
+    fpdtype_t err = 0.0;
 
-    #pragma omp parallel for reduction(+:sum)
+% if norm == 'l2':
+    #pragma omp parallel for reduction(+:err)
     for (int i = 0; i < *n; i++)
-        sum += pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2);
+        err += pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2);
+% else:
+    #pragma omp parallel for reduction(max:err)
+    for (int i = 0; i < *n; i++)
+        err = max(err, pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2));
+% endif
 
-    *out = sum;
+    *out = err;
 }
