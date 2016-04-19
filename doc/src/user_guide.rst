@@ -379,6 +379,10 @@ Parameterises the time-integration scheme used by the solver with
 
            *float*
 
+        - ``errest-norm`` --- norm to use for estimating the error
+
+           ``uniform`` | ``l2``
+
         - ``safety-fact`` --- safety factor for step size adjustment
           (suitable range 0.80-0.95)
 
@@ -404,6 +408,7 @@ Example::
     dt = 0.001
     atol = 0.00001
     rtol = 0.00001
+    errest-norm = l2
     safety-fact = 0.9
     min-fact = 0.3
     max-fact = 2.5
