@@ -59,14 +59,7 @@ class BaseShape(object):
             # on the both adjacent cells.
             # Ref. 1 JCP 281, 28-54, Sec 4.2
             # Ref. 2 JSC 26(3), 301-327, Definition 1
-            if nsptord >= self.order + 1:
-                # Construct metric basis when q > p
-                self.mbasis = get_polybasis(
-                    self.name, self.order + 1, self.mpts
-                )
-            # Use sbasis when q <= p
-            else:
-                self.mbasis = self.sbasis
+            self.mbasis = get_polybasis(self.name, self.order + 1, self.mpts)
 
     @classmethod
     def nspts_from_order(cls, sptord):
@@ -317,11 +310,8 @@ class BaseShape(object):
 
     @lazyprop
     def mpts(self):
-        if self.nsptsord >= self.order + 1:
-            return self.std_ele(self.order)
-        else:
-            return self.spts
-
+        return self.std_ele(self.order)
+    
     @lazyprop
     def nmpts(self):
         return len(self.mpts)
