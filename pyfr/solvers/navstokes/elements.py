@@ -25,11 +25,11 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             self.kernels['tdisf'] = lambda: backend.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nqpts, self.neles],
                 u=self._scal_qpts, smats=self.smat_at('qpts'),
-                f=self._vect_qpts, amu=self.avis_qpts
+                f=self._vect_qpts, amu=self.avis
             )
         else:
             self.kernels['tdisf'] = lambda: backend.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nupts, self.neles],
                 u=self.scal_upts_inb, smats=self.smat_at('upts'),
-                f=self._vect_upts, amu=self.avis_upts
+                f=self._vect_upts, amu=self.avis
             )

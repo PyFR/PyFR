@@ -64,9 +64,7 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
                 else:
                     ka.append('__global {0.dtype}* restrict {0.name}_v')
 
-                # If we are a matrix (ndim = 2) or a non-MPI stacked
-                # vector then a leading (sub) dimension is required
-                if self.ndim == 2 or (va.ncdim > 0 and not va.ismpi):
+                if self.needs_lsdim(va):
                     ka.append('int lsd{0.name}')
 
             # Format
@@ -98,13 +96,16 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
         return '{0}_v[{1}]'.format(arg.name, ix)
 
     def _deref_arg_array_2d(self, arg):
-        # Matrix name_v[lsdim*_y + _x]
-        if arg.ncdim == 0:
-            ix = 'lsd{}*_y + _x'.format(arg.name)
-        # Stacked matrix; name_v[(_y*nv + \1)*lsdim + _x]
+        # Broadcast vector: name_v[_x]
+        if arg.isbroadcast:
+            ix = '_x'
+        # Matrix: name_v[lsdim*_y + _x]
+        elif arg.ncdim == 0:
+            ix = 'lsd{0}*_y + _x'.format(arg.name)
+        # Stacked matrix: name_v[(_y*nv + \1)*lsdim + _x]
         elif arg.ncdim == 1:
             ix = r'(_y*{0} + \1)*lsd{1} + _x'.format(arg.cdims[0], arg.name)
-        # Doubly stacked matrix; name_v[((\1*_ny + _y)*nv + \2)*lsdim + _x]
+        # Doubly stacked matrix: name_v[((\1*_ny + _y)*nv + \2)*lsdim + _x]
         else:
             ix = (r'((\1*_ny + _y)*{0} + \2)*lsd{1} + _x'
                   .format(arg.cdims[1], arg.name))

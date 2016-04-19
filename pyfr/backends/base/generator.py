@@ -19,10 +19,10 @@ class Arg(object):
     def __init__(self, name, spec, body):
         self.name = name
 
-        specptn = (r'(?:(in|inout|out)\s+)?'       # Intent
-                   r'(?:(mpi|scalar|view)\s+)?'    # Attrs
-                   r'([A-Za-z_]\w*)'               # Data type
-                   r'((?:\[\d+\]){0,2})$')         # Constant array dimensions
+        specptn = (r'(?:(in|inout|out)\s+)?'                # Intent
+                   r'(?:(broadcast|mpi|scalar|view)\s+)?'   # Attrs
+                   r'([A-Za-z_]\w*)'                        # Data type
+                   r'((?:\[\d+\]){0,2})$')                  # Dimensions
         dimsptn = r'(?<=\[)\d+(?=\])'
         usedptn = r'(?:[^A-Za-z]|^){0}[^A-Za-z0-9]'.format(name)
 
@@ -43,13 +43,18 @@ class Arg(object):
         self.ncdim = len(self.cdims)
 
         # Attributes
+        self.isbroadcast = 'broadcast' in self.attrs
         self.ismpi = 'mpi' in self.attrs
         self.isused = bool(re.search(usedptn, body))
         self.isview = 'view' in self.attrs
         self.isscalar = 'scalar' in self.attrs
         self.isvector = 'scalar' not in self.attrs
 
-        # Currently scalar arguments must be of type fpdtype_t
+        # Validation
+        if self.isbroadcast and self.intent != 'in':
+            raise ValueError('Broadcast arguments must be of intent in')
+        if self.isbroadcast and self.ncdim != 0:
+            raise ValueError('Broadcast arguments can not have dimensions')
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
@@ -71,9 +76,15 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         self.scalargs = [v for v in sargs if v.isscalar]
         self.vectargs = [v for v in sargs if v.isvector]
 
+        # If we are 1D ensure that none of our arguments are broadcasts
+        if ndim == 1 and any(v.isbroadcast for v in self.vectargs):
+            raise ValueError('Broadcast arguments are not supported in 1D '
+                             'kernels')
+
         # If we are 2D ensure none of our arguments are views
         if ndim == 2 and any(v.isview for v in self.vectargs):
-            raise ValueError('View arguments are not supported for 2D kernels')
+            raise ValueError('View arguments are not supported for 2D '
+                             'kernels')
 
         # Similarly, check for MPI matrices
         if ndim == 2 and any(v.ismpi for v in self.vectargs):
@@ -101,12 +112,19 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
             # Non-stacked vector or MPI type
             elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
                 argt.append([np.intp])
+            # Broadcast vector
+            elif va.isbroadcast:
+                argt.append([np.intp])
             # Stacked vector/matrix/stacked matrix
             else:
                 argt.append([np.intp, np.int32])
 
         # Return
         return self.ndim, argn, argt
+
+    def needs_lsdim(self, arg):
+        return ((self.ndim == 2 and not arg.isbroadcast) or
+                (arg.ncdim > 0 and not arg.ismpi))
 
     @abstractmethod
     def render(self):

@@ -127,9 +127,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 kargs.append('{0} {1.dtype}* __restrict__ {1.name}_v'
                              .format(const, va).strip())
 
-                # If we are a matrix (ndim = 2) or a non-MPI stacked
-                # vector then a leading (sub) dimension is required
-                if self.ndim == 2 or (va.ncdim > 0 and not va.ismpi):
+                if self.needs_lsdim(va):
                     kargs.append('int lsd{0.name}'.format(va))
 
         return 'void {0}({1})'.format(self.name, ', '.join(kargs))
@@ -170,13 +168,13 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             # Leading (sub) dimension
             lsdim = 'lsd' + arg.name if not arg.ismpi else '_nx'
 
-            # Vector name_v[_x]
+            # Vector: name_v[_x]
             if arg.ncdim == 0:
                 ix = '_x'
-            # Stacked vector; name_v[lsdim*\1 + _x]
+            # Stacked vector: name_v[lsdim*\1 + _x]
             elif arg.ncdim == 1:
                 ix = r'{0}*\1 + _x'.format(lsdim)
-            # Doubly stacked vector; name_v[lsdim*nv*\1 + lsdim*\2 + _x]
+            # Doubly stacked vector: name_v[lsdim*nv*\1 + lsdim*\2 + _x]
             else:
                 ix = r'{0}*{1}*\1 + {0}*\2 + _x'.format(lsdim, arg.cdims[1])
 
@@ -185,15 +183,18 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def _offset_arg_array_2d(self, arg):
         stmts = []
 
-        # Matrix; name + _y*lsdim + cb
-        if arg.ncdim == 0:
+        # Broadcast vector: name + cb
+        if arg.isbroadcast:
+            stmts.append('{0}_v + cb'.format(arg.name))
+        # Matrix: name + _y*lsdim + cb
+        elif arg.ncdim == 0:
             stmts.append('{0}_v + _y*lsd{0} + cb'.format(arg.name))
-        # Stacked matrix; name + (_y*nv + <0>)*lsdim + cb
+        # Stacked matrix: name + (_y*nv + <0>)*lsdim + cb
         elif arg.ncdim == 1:
             stmts.extend('{0}_v + (_y*{1} + {2})*lsd{0} + cb'
                          .format(arg.name, arg.cdims[0], i)
                          for i in range(arg.cdims[0]))
-        # Doubly stacked matrix; name + ((<0>*_ny + _y)*nv + <1>)*lsdim + cb
+        # Doubly stacked matrix: name + ((<0>*_ny + _y)*nv + <1>)*lsdim + cb
         else:
             stmts.extend('{0}_v + (({1}*_ny + _y)*{2} + {3})*lsd{0} + cb'
                          .format(arg.name, i, arg.cdims[1], j)
