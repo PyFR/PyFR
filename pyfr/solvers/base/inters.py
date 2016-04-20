@@ -66,9 +66,6 @@ class BaseInters(object):
     def _vect_view(self, inter, meth):
         return self._view(inter, meth, (self.ndims, self.nvars))
 
-    def _avis_view(self, inter, meth):
-        return self._view(inter, meth)
-
     def _xchg_view(self, inter, meth, vshape=tuple()):
         vm = _get_inter_objs(inter, meth, self._elemap)
         vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
@@ -79,6 +76,3 @@ class BaseInters(object):
 
     def _vect_xchg_view(self, inter, meth):
         return self._xchg_view(inter, meth, (self.ndims, self.nvars))
-
-    def _avis_xchg_view(self, inter, meth):
-        return self._xchg_view(inter, meth)

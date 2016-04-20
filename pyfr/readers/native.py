@@ -6,7 +6,6 @@ import re
 import h5py
 import numpy as np
 
-from pyfr.shapes import BaseShape
 from pyfr.util import memoize
 
 

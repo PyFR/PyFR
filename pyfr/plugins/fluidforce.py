@@ -156,8 +156,9 @@ class FluidForcePlugin(BasePlugin):
                 duupts = duupts.reshape(ndims, nupts, -1)
 
                 # Interpolate gradient to flux points
-                dufpts = np.array([np.dot(m0, duupts[i]) for i in range(ndims)])
-                dufpts = dufpts.reshape(ndims, nfpts, nvars, -1).swapaxes(1, 2)
+                dufpts = np.array([np.dot(m0, du) for du in duupts])
+                dufpts = dufpts.reshape(ndims, nfpts, nvars, -1)
+                dufpts = dufpts.swapaxes(1, 2)
 
                 # Viscous stress
                 vis = self.stress_tensor(ufpts, dufpts)
@@ -183,7 +184,7 @@ class FluidForcePlugin(BasePlugin):
     def stress_tensor(self, u, du):
         c = self._constants
 
-        # Density, Energy
+        # Density, energy
         rho, E = u[0], u[-1]
 
         # Gradient of density and momentum
@@ -195,6 +196,7 @@ class FluidForcePlugin(BasePlugin):
         # Bulk tensor
         bulk = np.eye(self.ndims)[:, :, None, None]*np.trace(gradu)
 
+        # Viscosity
         mu = c['mu']
 
         if self._viscorr == 'sutherland':
@@ -202,4 +204,4 @@ class FluidForcePlugin(BasePlugin):
             Trat = cpT/c['cpTref']
             mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
 
-        return -mu*(gradu + gradu.swapaxes(0, 1) - 2 / 3*bulk)
+        return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
