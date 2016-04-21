@@ -13,8 +13,8 @@
               ur='inout mpi fpdtype_t[${str(nvars)}]'
               gradul='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               gradur='in mpi fpdtype_t[${str(ndims)}][${str(nvars)}]'
-              amul='in view fpdtype_t'
-              amur='in mpi fpdtype_t'
+              artviscl='in view fpdtype_t'
+              artviscr='in mpi fpdtype_t'
               nl='in fpdtype_t[${str(ndims)}]'
               magnl='in fpdtype_t'>
     // Perform the Riemann solve
@@ -24,13 +24,13 @@
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'fvl')};
-    ${pyfr.expand('artificial_viscosity_add', 'gradul', 'fvl', 'amul')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradul', 'fvl', 'artviscl')};
 % endif
 
 % if beta != 0.5:
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
-    ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'amur')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'artviscr')};
 % endif
 
 % for i in range(nvars):

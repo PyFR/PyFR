@@ -9,14 +9,14 @@
 <%pyfr:kernel name='tflux' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'
               smats='in fpdtype_t[${str(ndims)}][${str(ndims)}]'
-              amu='in broadcast fpdtype_t'
+              artvisc='in broadcast fpdtype_t'
               f='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'>
     // Compute the flux (F = Fi + Fv)
     fpdtype_t ftemp[${ndims}][${nvars}];
     fpdtype_t p, v[${ndims}];
     ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'p', 'v')};
     ${pyfr.expand('viscous_flux_add', 'u', 'f', 'ftemp')};
-    ${pyfr.expand('artificial_viscosity_add', 'f', 'ftemp', 'amu')};
+    ${pyfr.expand('artificial_viscosity_add', 'f', 'ftemp', 'artvisc')};
 
     // Transform the fluxes
 % for i, j in pyfr.ndrange(ndims, nvars):

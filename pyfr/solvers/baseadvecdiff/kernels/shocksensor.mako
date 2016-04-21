@@ -4,7 +4,7 @@
 
 <%pyfr:kernel name='shocksensor' ndim='1'
               s='in fpdtype_t[${str(nupts)}]'
-              amu='out fpdtype_t'>
+              artvisc='out fpdtype_t'>
     // Smoothness indicator
     fpdtype_t totEn = 0.0, pnEn = 1e-15;
 
@@ -21,8 +21,8 @@
     // Compute cell-wise artificial viscosity
     fpdtype_t mu = (se < se0 - ${c['kappa']})
                  ? 0.0
-                 : ${0.5*c['max-amu']}*(1.0 + sin(${0.5*math.pi/c['kappa']}*(se - se0)));
-    mu = (se < se0 + ${c['kappa']}) ? mu : ${c['max-amu']};
+                 : ${0.5*c['max-artvisc']}*(1.0 + sin(${0.5*math.pi/c['kappa']}*(se - se0)));
+    mu = (se < se0 + ${c['kappa']}) ? mu : ${c['max-artvisc']};
 
-    amu = mu;
+    artvisc = mu;
 </%pyfr:kernel>

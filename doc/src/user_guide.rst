@@ -719,7 +719,7 @@ Example::
 
 Parameterises artificial viscosity for shock capturing with
 
-1. ``max-amu`` --- maximum artificial viscosity:
+1. ``max-artvisc`` --- maximum artificial viscosity:
 
     *float*
 
@@ -734,7 +734,7 @@ Parameterises artificial viscosity for shock capturing with
 Example::
 
     [solver-artificial-viscosity]
-    max-amu = 0.01
+    max-artvisc = 0.01
     s0 = 0.01
     kappa = 5.0
 
