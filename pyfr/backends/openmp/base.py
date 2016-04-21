@@ -3,7 +3,6 @@
 import numpy as np
 
 from pyfr.backends.base import BaseBackend
-from pyfr.template import DottedTemplateLookup
 
 
 class OpenMPBackend(BaseBackend):
@@ -28,12 +27,6 @@ class OpenMPBackend(BaseBackend):
         self.view_cls = types.OpenMPView
         self.xchg_matrix_cls = types.OpenMPXchgMatrix
         self.xchg_view_cls = types.OpenMPXchgView
-
-        # Template lookup
-        self.lookup = DottedTemplateLookup(
-            'pyfr.backends.openmp.kernels',
-            fpdtype=self.fpdtype, alignb=self.alignb
-        )
 
         # Kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,

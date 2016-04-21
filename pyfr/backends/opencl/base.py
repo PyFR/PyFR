@@ -4,7 +4,6 @@ import numpy as np
 
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
-from pyfr.template import DottedTemplateLookup
 
 
 class OpenCLBackend(BaseBackend):
@@ -63,12 +62,6 @@ class OpenCLBackend(BaseBackend):
         self.view_cls = types.OpenCLView
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
         self.xchg_view_cls = types.OpenCLXchgView
-
-        # Template lookup
-        self.lookup = DottedTemplateLookup(
-            'pyfr.backends.opencl.kernels',
-            fpdtype=self.fpdtype, alignb=self.alignb
-        )
 
         # Instantiate the base kernel providers
         kprovs = [provider.OpenCLPointwiseKernelProvider,

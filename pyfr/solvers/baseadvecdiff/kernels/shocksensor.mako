@@ -2,11 +2,6 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%
-    import math
-    pi = math.pi
-%>
-
 <%pyfr:kernel name='shocksensor' ndim='1'
               s='in fpdtype_t[${str(nupts)}]'
               amu='out fpdtype_t'>
@@ -26,7 +21,7 @@
     // Compute cell-wise artificial viscosity
     fpdtype_t mu = (se < se0 - ${c['kappa']})
                  ? 0.0
-                 : ${0.5*c['max-amu']}*(1.0 + sin(${0.5*pi/c['kappa']}*(se - se0)));
+                 : ${0.5*c['max-amu']}*(1.0 + sin(${0.5*math.pi/c['kappa']}*(se - se0)));
     mu = (se < se0 + ${c['kappa']}) ? mu : ${c['max-amu']};
 
     amu = mu;

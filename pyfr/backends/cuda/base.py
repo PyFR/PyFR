@@ -5,7 +5,6 @@ import re
 
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
-from pyfr.template import DottedTemplateLookup
 
 
 class CUDABackend(BaseBackend):
@@ -57,12 +56,6 @@ class CUDABackend(BaseBackend):
         self.view_cls = types.CUDAView
         self.xchg_matrix_cls = types.CUDAXchgMatrix
         self.xchg_view_cls = types.CUDAXchgView
-
-        # Template lookup
-        self.lookup = DottedTemplateLookup(
-            'pyfr.backends.cuda.kernels',
-            fpdtype=self.fpdtype, alignb=self.alignb
-        )
 
         # Instantiate the base kernel providers
         kprovs = [provider.CUDAPointwiseKernelProvider,

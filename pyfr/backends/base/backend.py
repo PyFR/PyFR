@@ -4,11 +4,14 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import wraps
 from itertools import count
-from weakref import WeakValueDictionary, WeakKeyDictionary
+import math
+from weakref import WeakKeyDictionary, WeakValueDictionary
 
 import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
+from pyfr.template import DottedTemplateLookup
+from pyfr.util import lazyprop
 
 
 def recordmat(fn):
@@ -49,6 +52,13 @@ class BaseBackend(object, metaclass=ABCMeta):
 
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
+
+    @lazyprop
+    def lookup(self):
+        pkg = 'pyfr.backends.{0}.kernels'.format(self.name)
+        dfltargs = dict(alignb=self.alignb, fpdtype=self.fpdtype, math=math)
+
+        return DottedTemplateLookup(pkg, dfltargs)
 
     def malloc(self, obj, extent):
         # If no extent has been specified then autocommit
