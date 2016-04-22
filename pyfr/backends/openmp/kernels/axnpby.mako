@@ -2,7 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-static PYFR_NOINLINE void
+static void
 axnpby_inner(int n, fpdtype_t *__restrict__ y, fpdtype_t beta,
              ${', '.join('const fpdtype_t *__restrict__ x{0}, '
                          'fpdtype_t a{0}'.format(i) for i in range(n))})

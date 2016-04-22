@@ -6,7 +6,6 @@
 #include <tgmath.h>
 
 #define PYFR_ALIGN_BYTES ${alignb}
-#define PYFR_NOINLINE __attribute__ ((noinline))
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))
