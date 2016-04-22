@@ -93,9 +93,9 @@ data_files = [
 
 # Hard dependencies
 install_requires = [
-    'h5py >= 2.4',
+    'h5py >= 2.6',
     'mako >= 1.0.0',
-    'mpi4py >= 1.3',
+    'mpi4py >= 2.0',
     'numpy >= 1.8',
     'pytools >= 2014.3'
 ]
