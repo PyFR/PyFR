@@ -6,15 +6,6 @@ import re
 import numpy as np
 
 
-def procbody(body, fpdtype):
-    # At single precision suffix all floating point constants by 'f'
-    if fpdtype == np.float32:
-        body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
-                      r'\g<0>f', body)
-
-    return body
-
-
 class Arg(object):
     def __init__(self, name, spec, body):
         self.name = name
@@ -63,7 +54,6 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
     def __init__(self, name, ndim, args, body, fpdtype):
         self.name = name
         self.ndim = ndim
-        self.body = procbody(body, fpdtype)
         self.fpdtype = fpdtype
 
         # Parse and sort our argument list
@@ -89,6 +79,12 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         # Similarly, check for MPI matrices
         if ndim == 2 and any(v.ismpi for v in self.vectargs):
             raise ValueError('MPI matrices are not supported for 2D kernels')
+
+        # Render the main body of our kernel
+        self.body = self._render_body(body)
+
+        # Determine the dimensions to be iterated over
+        self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
 
     def argspec(self):
         # Argument names and types
@@ -129,3 +125,66 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
     @abstractmethod
     def render(self):
         pass
+
+    def _deref_arg_view(self, arg):
+        ptns = ['{0}_v[{0}_vix[_x]]',
+                r'{0}_v[{0}_vix[_x] + {0}_vcstri[_x]*\1]',
+                r'{0}_v[{0}_vix[_x] + {0}_vrstri[_x]*\1 + {0}_vcstri[_x]*\2]']
+
+        return ptns[arg.ncdim].format(arg.name)
+
+    def _deref_arg_array_1d(self, arg):
+        # Leading (sub) dimension
+        lsdim = 'lsd' + arg.name if not arg.ismpi else '_nx'
+
+        # Vector: name_v[_x]
+        if arg.ncdim == 0:
+            ix = '_x'
+        # Stacked vector: name_v[lsdim*\1 + _x]
+        elif arg.ncdim == 1:
+            ix = r'{0}*\1 + _x'.format(lsdim)
+        # Doubly stacked vector: name_v[(nv*\1 + \2)*lsdim + _x]
+        else:
+            ix = r'({0}*\1 + \2)*{1} + _x'.format(arg.cdims[1], lsdim)
+
+        return '{0}_v[{1}]'.format(arg.name, ix)
+
+    def _deref_arg_array_2d(self, arg):
+        # Broadcast vector: name_v[_x]
+        if arg.isbroadcast:
+            ix = '_x'
+        # Matrix: name_v[lsdim*_y + _x]
+        elif arg.ncdim == 0:
+            ix = 'lsd{}*_y + _x'.format(arg.name)
+        # Stacked matrix: name_v[(_y*nv + \1)*lsdim + _x]
+        elif arg.ncdim == 1:
+            ix = r'(_y*{0} + \1)*lsd{1} + _x'.format(arg.cdims[0], arg.name)
+        # Doubly stacked matrix: name_v[((\1*_ny + _y)*nv + \2)*lsdim + _x]
+        else:
+            ix = (r'((\1*_ny + _y)*{0} + \2)*lsd{1} + _x'
+                  .format(arg.cdims[1], arg.name))
+
+        return '{0}_v[{1}]'.format(arg.name, ix)
+
+    def _render_body(self, body):
+        ptns = [r'\b{0}\b', r'\b{0}\[(\d+)\]', r'\b{0}\[(\d+)\]\[(\d+)\]']
+
+        # At single precision suffix all floating point constants by 'f'
+        if self.fpdtype == np.float32:
+            body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
+                          r'\g<0>f', body)
+
+        # Dereference vector arguments
+        for va in self.vectargs:
+            if va.isview:
+                darg = self._deref_arg_view(va)
+            else:
+                if self.ndim == 1:
+                    darg = self._deref_arg_array_1d(va)
+                else:
+                    darg = self._deref_arg_array_2d(va)
+
+            # Substitute
+            body = re.sub(ptns[va.ncdim].format(va.name), darg, body)
+
+        return body
