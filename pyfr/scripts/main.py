@@ -224,6 +224,9 @@ def _process_common(args, mesh, soln, cfg):
     # Execute!
     solver.run()
 
+    # Finalise MPI
+    MPI.Finalize()
+
 
 def process_run(args):
     _process_common(
