@@ -77,7 +77,7 @@ class CUBLASWrappers(object):
             try:
                 raise self._statuses[status]
             except KeyError:
-                raise CublasError
+                raise CUBLASError
 
 
 class CUDACUBLASKernels(object):

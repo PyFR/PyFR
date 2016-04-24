@@ -150,8 +150,8 @@ class StdPIController(BaseStdController):
         saff = self._saffac
         sord = self._stepper_order
 
-        expa = self._alpha / self._stepper_order
-        expb = self._beta / self._stepper_order
+        expa = self._alpha / sord
+        expb = self._beta / sord
 
         while self.tcurr < t:
             # Decide on the time step

@@ -48,7 +48,7 @@ class MICSourceModule(object):
             # Load
             self._mod = dev.load_library(os.path.join(tmpdir, ln))
         finally:
-            pass #rm(tmpdir)
+            rm(tmpdir)
 
     def function(self, name, argtypes, restype=None):
         return getattr(self._mod, name)
