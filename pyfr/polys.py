@@ -19,7 +19,7 @@ def jacobi(n, a, b, z):
 
         for q in range(2, n + 1):
             qapbpq, apbp2q = q*(apb + q), apb + 2*q
-            apbp2qm1, apbp2qm2  = apbp2q - 1, apbp2q - 2
+            apbp2qm1, apbp2qm2 = apbp2q - 1, apbp2q - 2
 
             aq = apbp2q*apbp2qm1/(2*qapbpq)
             bq = apbp2qm1*bbmaa/(2*qapbpq*apbp2qm2)
@@ -156,7 +156,7 @@ class QuadPolyBasis(BasePolyBasis):
 
         return [pi*pj for pi in pa for pj in pb]
 
-    def jac_ortho_basis_at_py(self, p , q):
+    def jac_ortho_basis_at_py(self, p, q):
         sk = [sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]

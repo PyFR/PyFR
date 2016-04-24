@@ -178,8 +178,8 @@ class CGNSWrappers(object):
         # http://cgns.github.io/CGNS_docs_current/midlevel/grid.html
         datatype = self.RealDouble
 
-        self.lib.cg_coord_read(file, base, zone, bytes(name, 'utf-8'), datatype,
-                               i, j, x.ctypes.data)
+        self.lib.cg_coord_read(file, base, zone, bytes(name, 'utf-8'),
+                               datatype, i, j, x.ctypes.data)
 
     def nbocos(self, zone):
         file = zone['base']['file']

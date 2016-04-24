@@ -79,5 +79,4 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
                 self._retarr = rkern(xarr, yarr, zarr, atol, rtol,
                                      queue=qcomp)
 
-
         return ErrestKernel()

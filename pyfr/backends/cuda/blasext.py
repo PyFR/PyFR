@@ -82,5 +82,4 @@ class CUDABlasExtKernels(CUDAKernelProvider):
                 self._retarr = rkern(xarr, yarr, zarr, atol, rtol,
                                      stream=queue.cuda_stream_comp)
 
-
         return ErrestKernel()
