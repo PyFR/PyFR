@@ -37,7 +37,7 @@ The CUDA backend targets NVIDIA GPUs with a compute capability of 2.0
 or greater. The backend requires:
 
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
-2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
+2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2015.1
 
 MIC Backend
 ^^^^^^^^^^^
@@ -195,11 +195,16 @@ Parameterises the CUDA backend with
 
      *int*
 
+3. ``mpi-type`` --- type of MPI library that is being used:
+
+     ``standard`` | ``cuda-aware``
+
 Example::
 
     [backend-cuda]
     device-id = round-robin
     gimmik-max-nnz = 512
+    mpi-type = standard
 
 [backend-mic]
 ^^^^^^^^^^^^^^^^

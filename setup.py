@@ -102,7 +102,7 @@ install_requires = [
 
 # Soft dependencies
 extras_require = {
-    'cuda': ['pycuda >= 2011.2'],
+    'cuda': ['pycuda >= 2015.1'],
     'mic': ['pymic >= 0.7'],
     'opencl': ['pyopencl >= 2015.2.4']
 }
