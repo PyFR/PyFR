@@ -92,7 +92,7 @@ class StdTVDRK3Stepper(BaseStdStepper):
         return r1
 
 
-class StdRK4StdStepper(BaseStdStepper):
+class StdRK4Stepper(BaseStdStepper):
     stepper_name = 'rk4'
 
     @property
