@@ -34,7 +34,7 @@ def load_library(name):
 def platform_libname(name):
     if sys.platform == 'darwin':
         return 'lib{0}.dylib'.format(name)
-    elif sys.platform == 'Windows':
+    elif sys.platform == 'win32':
         return '{0}.dll'.format(name)
     else:
         return 'lib{0}.so'.format(name)
