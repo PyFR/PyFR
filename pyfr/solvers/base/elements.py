@@ -260,15 +260,14 @@ class BaseElements(object, metaclass=ABCMeta):
         smats_mpts, djacs_mpts = self._smats_djacs_mpts
 
         # Interpolation matrix to pts
-        M0 = self.basis.mbasis.nodal_basis_at(pts)
+        m0 = self.basis.mbasis.nodal_basis_at(pts)
 
         # Interpolate smats
-        smats = np.array([np.dot(M0, smat) for smat in smats_mpts])
+        smats = np.array([np.dot(m0, smat) for smat in smats_mpts])
         smats = smats.reshape(self.ndims, npts, self.ndims, -1)
 
-        # Interpolate djacs
         if retdets:
-            return smats, np.dot(M0, djacs_mpts)
+            return smats, np.dot(m0, djacs_mpts)
         else:
             return smats
 
@@ -300,7 +299,6 @@ class BaseElements(object, metaclass=ABCMeta):
         smats = np.empty_like(jac)
 
         if ndims == 2:
-            # Just compute smats whose order is q-1
             a, b, c, d = jac[0,:,0], jac[0,:,1], jac[1,:,0], jac[1,:,1]
 
             smats[0,:,0], smats[0,:,1] = d, -b
