@@ -45,7 +45,11 @@ class BaseTabulatedQuadRule(object):
 class BaseStoredQuadRule(BaseTabulatedQuadRule):
     @classmethod
     def _iter_rules(cls):
-        for path in resource_listdir(__name__, cls.shape):
+        rpaths = getattr(cls, '_rpaths', None)
+        if rpaths is None:
+            cls._rpaths = rpaths = resource_listdir(__name__, cls.shape)
+
+        for path in rpaths:
             m = re.match(r'([a-zA-Z0-9\-~+]+)-n(\d+)'
                          r'(?:-d(\d+))?(?:-([spu]+))?\.txt$', path)
             if m:
