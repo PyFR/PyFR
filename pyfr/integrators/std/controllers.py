@@ -97,7 +97,7 @@ class StdPIController(BaseStdController):
         self._beta = self.cfg.getfloat(sect, 'pi-beta', 0.4)
 
         # Estimate of previous error
-        self._errprev = 0.0
+        self._errprev = 1.0
 
         # Step size adjustment factors
         self._saffac = self.cfg.getfloat(sect, 'safety-fact', 0.8)
