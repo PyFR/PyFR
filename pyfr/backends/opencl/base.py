@@ -41,6 +41,10 @@ class OpenCLBackend(BaseBackend):
         else:
             raise ValueError('No suitable OpenCL device found')
 
+        # Determine if the device supports double precision arithmetic
+        if self.fpdtype == np.float64 and not device.double_fp_config:
+            raise ValueError('Device does not support double precision')
+
         # Create a OpenCL context on this device
         self.ctx = cl.Context([device])
 
