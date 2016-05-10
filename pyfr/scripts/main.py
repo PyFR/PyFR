@@ -44,38 +44,39 @@ def main():
     # Partition command
     ap_partition = sp.add_parser('partition', help='partition --help')
     ap_partition.add_argument('np', help='number of partitions or a colon '
-                              'delimited list of weighs')
+                              'delimited list of weights')
     ap_partition.add_argument('mesh', help='input mesh file')
-    ap_partition.add_argument('solns', nargs='*',
+    ap_partition.add_argument('solns', metavar='soln', nargs='*',
                               help='input solution files')
-    ap_partition.add_argument(dest='outd', help='output directory')
+    ap_partition.add_argument('outd', help='output directory')
     partitioners = sorted(cls.name for cls in subclasses(BasePartitioner))
     ap_partition.add_argument('-p', dest='partitioner', choices=partitioners,
                               help='partitioner to use')
     ap_partition.add_argument('--popt', dest='popts', action='append',
                               default=[], metavar='key:value',
                               help='partitioner-specific option')
+    ap_partition.add_argument('-t', dest='order', type=int, default=3,
+                              help='target polynomial order; aids in '
+                              'load-balancing mixed meshes')
     ap_partition.set_defaults(process=process_partition)
 
     # Export command
-    ap_export = sp.add_parser('export', help='export --help',
-                              description='Converts .pyfr[ms] files for '
-                              'visualisation in external software.')
+    ap_export = sp.add_parser('export', help='export --help')
     ap_export.add_argument('meshf', help='PyFR mesh file to be converted')
     ap_export.add_argument('solnf', help='PyFR solution file to be converted')
-    ap_export.add_argument('outf', type=str, help='Output filename')
+    ap_export.add_argument('outf', type=str, help='output file')
     types = [cls.name for cls in subclasses(BaseWriter)]
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
-                           help='Output file type; this is usually inferred '
+                           help='output file type; this is usually inferred '
                            'from the extension of outf')
     ap_export.add_argument('-d', '--divisor', type=int, default=0,
-                           help='Sets the level to which high order elements '
+                           help='sets the level to which high order elements '
                            'are divided; output is linear between nodes, so '
                            'increased resolution may be required')
     ap_export.add_argument('-g', '--gradients', action='store_true',
-                           help='Compute gradients')
+                           help='compute gradients')
     ap_export.add_argument('-p', '--precision', choices=['single', 'double'],
-                           default='single', help='Output number precision, '
+                           default='single', help='output number precision; '
                            'defaults to single')
     ap_export.set_defaults(process=process_export)
 
@@ -97,7 +98,7 @@ def main():
     backends = sorted(cls.name for cls in subclasses(BaseBackend))
     for p in [ap_run, ap_restart]:
         p.add_argument('--backend', '-b', choices=backends, required=True,
-                       help='Backend to use')
+                       help='backend to use')
         p.add_argument('--progress', '-p', action='store_true',
                        help='show a progress bar')
 
@@ -144,11 +145,12 @@ def process_partition(args):
 
     # Create the partitioner
     if args.partitioner:
-        part = get_partitioner(args.partitioner, pwts, opts)
+        part = get_partitioner(args.partitioner, pwts, order=args.order,
+                               opts=opts)
     else:
         for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
             try:
-                part = get_partitioner(name, pwts)
+                part = get_partitioner(name, pwts, order=args.order)
                 break
             except OSError:
                 pass
