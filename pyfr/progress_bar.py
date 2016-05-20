@@ -60,14 +60,14 @@ class ProgressBar(object):
         if delta < self._mindelta and self.stcurr != self.stend:
             return
 
-        # Starting, current, elapsed and ending simulation times
+        # Starting, current, elapsed, and ending simulation times
         st, cu, el, en = self.ststrt, self.stcurr, self.stelap, self.stend
 
         # Relative times
         rcu, ren = cu - st,  en - st
 
         # Fraction of the simulation we've completed
-        frac = float(rcu) / ren
+        frac = rcu / ren
 
         # Elapsed and estimated remaining wall time
         wela = format_hms(wallt)
@@ -76,7 +76,7 @@ class ProgressBar(object):
         # Decide how many '+', '=' and ' ' to output for the progress bar
         n = self._nbarcol - len(wela) - len(wrem) - 1
         nps = int(n * (rcu - el)/ren)
-        neq = int(n * el/ren)
+        neq = int(round(n * el/ren))
         nsp = n - nps - neq
 
         # Render the progress bar
