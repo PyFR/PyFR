@@ -47,10 +47,6 @@ class CGNSWrappers(object):
         lib.cg_close.argtypes = [c_int]
         lib.cg_close.errcheck = self._errcheck
 
-        # cg_nbases
-        lib.cg_nbases.argtypes = [c_int, POINTER(c_int)]
-        lib.cg_nbases.errcheck = self._errcheck
-
         # cg_base_read
         lib.cg_base_read.argtypes = [c_int, c_int, c_char_p, POINTER(c_int),
                                      POINTER(c_int)]
@@ -128,11 +124,6 @@ class CGNSWrappers(object):
 
     def close(self, file):
         self.lib.cg_close(file)
-
-    def nbases(self, file):
-        nb = c_int()
-        self.lib.cg_nbases(file, nb)
-        return nb.value
 
     def base_read(self, file, idx):
         celldim, physdim = c_int(), c_int()
