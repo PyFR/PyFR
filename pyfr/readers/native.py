@@ -2,6 +2,7 @@
 
 from collections import Mapping, OrderedDict
 import re
+import os
 
 import h5py
 import numpy as np
@@ -11,6 +12,7 @@ from pyfr.util import memoize
 
 class NativeReader(Mapping):
     def __init__(self, fname):
+        self.fname = os.path.abspath(fname)
         self._file = h5py.File(fname, 'r')
 
     def __getitem__(self, aname):
