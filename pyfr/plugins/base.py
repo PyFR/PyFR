@@ -52,10 +52,11 @@ class BasePlugin(object, metaclass=ABCMeta):
 
         if self.cfg.hasopt(cfgsect, 'post-action'):
             self.postact = self.cfg.getpath(cfgsect, 'post-action', abs=False)
-            self.postactmode = self.cfg.get(cfgsect, 'post-action-mode')
+            self.postactmode = self.cfg.get(cfgsect, 'post-action-mode',
+                                            'blocking')
 
             if self.postactmode not in {'blocking', 'non-blocking'}:
-                raise ValueError('Invalid post action type')
+                raise ValueError('Invalid post action mode')
 
         # Check that we support this particular system
         if not ('*' in self.systems or intg.system.name in self.systems):
@@ -71,14 +72,14 @@ class BasePlugin(object, metaclass=ABCMeta):
 
         # If we have a post-action and are the root rank then fire it
         if rank == root and self.postact:
-            # First, wait for any running post-actions to complete
+            # If a post-action is currently running then wait for it
             if self.postactaid is not None:
                 prefork.wait(self.postactaid)
 
             # Prepare the command line
             cmdline = shlex.split(self.postact.format(**kwargs))
 
-            # Invoke; either synchronously or asynchronously
+            # Invoke
             if self.postactmode == 'blocking':
                 prefork.call(cmdline)
             else:

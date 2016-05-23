@@ -25,7 +25,7 @@ Python packages:
 2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
 3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
 4. `numpy <http://www.numpy.org/>`_ >= 1.8
-5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
+5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
 compatible with 32-bit Python distributions.
@@ -795,12 +795,23 @@ Parameterised with
 
     *string*
 
+4. ``post-action`` --- command to execute after writing the file:
+
+    *string*
+
+5. ``post-action-mode`` --- how the post-action command should be
+   executed:
+
+    ``blocking`` | ``non-blocking``
+
 Example::
 
     [soln-plugin-writer]
     dt-out = 0.01
     basedir = .
     basename = files-{t:.2f}
+    post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
+    post-action-mode = blocking
 
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
