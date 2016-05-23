@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 from collections import Mapping, OrderedDict
-import re
 import os
+import re
 
 import h5py
 import numpy as np
