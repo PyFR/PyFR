@@ -7,27 +7,28 @@ from pyfr.backends.base import ComputeKernel
 
 
 class MICBlasExtKernels(MICKernelProvider):
-    def axnpby(self, *arr):
+    def axnpby(self, *arr, subdims=None):
         if any(arr[0].traits != x.traits for x in arr[1:]):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, leaddim, leadsubdim, dtype = arr[0].traits
+        ncola, ncolb = arr[0].datashape[1:]
+        nrow, ldim, lsdim, dtype = arr[0].traits
 
         # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(nv=nv)
+        src = self.backend.lookup.get_template('axnpby').render(
+            subdims=subdims or range(ncola), nv=nv
+        )
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32] + [np.intp]*nv + [dtype]*nv)
-
-        # Determine the total element count in the matrices
-        cnt = leaddim*nrow
+                                  [np.int32]*4 + [np.intp]*nv + [dtype]*nv)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
                 args = [x.data for x in arr] + list(consts)
-                queue.mic_stream_comp.invoke(kern, cnt, *args)
+                queue.mic_stream_comp.invoke(kern, nrow, ncolb, ldim, lsdim,
+                                             *args)
 
         return AxnpbyKernel()
 
@@ -44,7 +45,7 @@ class MICBlasExtKernels(MICKernelProvider):
 
         return CopyKernel()
 
-    def errest(self, x, y, z):
+    def errest(self, x, y, z, *, norm):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
@@ -56,7 +57,7 @@ class MICBlasExtKernels(MICKernelProvider):
         retd = self.backend.sdflt.bind(reth, update_device=False)
 
         # Render the reduction kernel template
-        src = self.backend.lookup.get_template('errest').render()
+        src = self.backend.lookup.get_template('errest').render(norm=norm)
 
         # Build
         rkern = self._build_kernel(

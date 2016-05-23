@@ -25,13 +25,12 @@ class ResidualPlugin(BasePlugin):
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
 
+        # Call ourself in case output is needed after the first step
+        self(intg)
+
     def __call__(self, intg):
-        # If an output is due next step
-        if (intg.nacptsteps + 1) % self.nsteps == 0:
-            self._prev = [s.copy() for s in intg.soln]
-            self._tprev = intg.tcurr
         # If an output is due this step
-        elif intg.nacptsteps % self.nsteps == 0:
+        if intg.nacptsteps % self.nsteps == 0 and intg.nacptsteps:
             # MPI info
             comm, rank, root = get_comm_rank_root()
 
@@ -63,3 +62,8 @@ class ResidualPlugin(BasePlugin):
                 self.outf.flush()
 
             del self._prev, self._tprev
+
+        # If an output is due next step
+        if (intg.nacptsteps + 1) % self.nsteps == 0:
+            self._prev = [s.copy() for s in intg.soln]
+            self._tprev = intg.tcurr

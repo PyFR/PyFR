@@ -3,22 +3,31 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 __global__ void
-axnpby(int n, fpdtype_t* y, fpdtype_t beta,
-       ${', '.join('const fpdtype_t* x{0}, fpdtype_t a{0}'.format(i)
-                   for i in range(n))})
+axnpby(int nrow, int ncolb, int ldim, int lsdim,
+       ${', '.join('fpdtype_t* __restrict__ x' + str(i) for i in range(nv))},
+       ${', '.join('fpdtype_t a' + str(i) for i in range(nv))})
 {
-    int strt = blockIdx.x*blockDim.x + threadIdx.x;
-    int incr = gridDim.x*blockDim.x;
+    int j = blockIdx.x*blockDim.x + threadIdx.x;
+    int idx;
 
-    for (int i = strt; i < n; i += incr)
-    {
-        fpdtype_t axn = ${pyfr.dot('a{j}', 'x{j}[i]', j=n)};
-
-        if (beta == 0.0)
-            y[i] = axn;
-        else if (beta == 1.0)
-            y[i] += axn;
-        else
-            y[i] = beta*y[i] + axn;
-    }
+    % for k in subdims:
+    if (j < ncolb && a0 == 0.0)
+        for (int i = 0; i < nrow; ++i)
+        {
+            idx = i*ldim + ${k}*lsdim + j;
+            x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=(1, nv))};
+        }
+    else if (j < ncolb && a0 == 1.0)
+        for (int i = 0; i < nrow; ++i)
+        {
+            idx = i*ldim + ${k}*lsdim + j;
+            x0[idx] += ${pyfr.dot('a{l}', 'x{l}[idx]', l=(1, nv))};
+        }
+    else if (j < ncolb)
+        for (int i = 0; i < nrow; ++i)
+        {
+            idx = i*ldim + ${k}*lsdim + j;
+            x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=nv)};
+        }
+    % endfor
 }

@@ -20,11 +20,12 @@ derived from the Mako templating engine. The current release (PyFR
 - Dimensionality - 2D, 3D
 - Element Types - Triangles, Quadrilaterals, Hexahedra, Prisms,
   Tetrahedra, Pyramids
-- Platforms - CPU Clusters, Nvidia GPU Clusters, AMD GPU Clusters
+- Platforms - CPU Clusters, Nvidia GPU Clusters, AMD GPU Clusters, Intel
+  Xeon Phi Clusters
 - Spatial Discretisation - High-Order Flux Reconstruction
 - Temporal Discretisation - Explicit Runge-Kutta
 - Precision - Single, Double
-- Mesh Files Imported - Gmsh (.msh)
+- Mesh Files Imported - Gmsh (.msh), CGNS (.cgns)
 - Solution Files Exported - Unstructured VTK (.vtu, .pvtu)
 
 Who is Developing PyFR?

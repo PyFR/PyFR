@@ -4,11 +4,15 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements(object):
+    formulations = ['std', 'dual']
+
     privarmap = {2: ['rho', 'u', 'v', 'p'],
                  3: ['rho', 'u', 'v', 'w', 'p']}
 
     convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
                  3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+
+    dualcoeffs = convarmap
 
     visvarmap = {
         2: {'density': ['rho'],

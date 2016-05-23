@@ -35,6 +35,11 @@ class CUDABackend(BaseBackend):
         # Take the required alignment to be 128 bytes
         self.alignb = 128
 
+        # Get the MPI runtime type
+        self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')
+        if self.mpitype not in {'standard', 'cuda-aware'}:
+            raise ValueError('Invalid CUDA backend MPI type')
+
         # Some CUDA devices share L1 cache and shared memory; on these
         # devices CUDA allows us to specify a preference between L1
         # cache and shared memory.  For the sake of CUBLAS (which
