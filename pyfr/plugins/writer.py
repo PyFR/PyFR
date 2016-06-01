@@ -44,7 +44,7 @@ class WriterPlugin(BasePlugin):
         intg.collect_stats(stats)
 
         # Prepare the metadata
-        metadata = dict(config=self.cfg.tostr(),
+        metadata = dict(intg.cfgmeta,
                         stats=stats.tostr(),
                         mesh_uuid=intg.mesh_uuid)
 
