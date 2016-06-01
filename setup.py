@@ -39,7 +39,6 @@ modules = [
     'pyfr.quadrules',
     'pyfr.readers',
     'pyfr.partitioners',
-    'pyfr.scripts',
     'pyfr.solvers',
     'pyfr.solvers.base',
     'pyfr.solvers.baseadvec',
@@ -109,7 +108,7 @@ extras_require = {
 
 # Scripts
 console_scripts = [
-    'pyfr = pyfr.scripts.main:main'
+    'pyfr = pyfr.__main__:main'
 ]
 
 # Info
