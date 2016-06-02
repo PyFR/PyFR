@@ -80,6 +80,11 @@ class BasePolyBasis(object):
     def vdm(self):
         return self.ortho_basis_at(self.pts)
 
+    @lazyprop
+    @chop
+    def invvdm(self):
+        return np.linalg.inv(self.vdm)
+
 
 class LinePolyBasis(BasePolyBasis):
     name = 'line'

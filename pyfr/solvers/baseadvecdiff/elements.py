@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
 from pyfr.backends.base.kernels import ComputeMetaKernel
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
@@ -80,10 +78,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         if shock_capturing == 'artificial-viscosity':
             tags = {'align'}
 
-            # Register pointwise kernels
-            backend.pointwise.register(
-                'pyfr.solvers.baseadvecdiff.kernels.shockvar'
-            )
+            # Register the kernels
             backend.pointwise.register(
                 'pyfr.solvers.baseadvecdiff.kernels.shocksensor'
             )
@@ -91,41 +86,22 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             # Obtain the scalar variable to be used for shock sensing
             shockvar = self.convarmap[self.ndims].index(self.shockvar)
 
-            # Common template arguments
+            # Template arguments
             tplargs = dict(
-                nvars=self.nvars, nupts=self.nupts, shockvar=shockvar,
+                nvars=self.nvars, nupts=self.nupts, svar=shockvar,
                 c=self.cfg.items_as('solver-artificial-viscosity', float),
                 order=self.basis.order, ubdegs=self.basis.ubasis.degrees,
+                invvdm=self.basis.ubasis.invvdm.T
             )
 
             # Allocate space for the artificial viscosity
             self.artvisc = backend.matrix((1, self.neles), extent='artvisc',
                                           tags=tags)
 
-            # Scratch space
-            tmp_upts = backend.matrix((2*self.nupts, 1, self.neles),
-                                      aliases=self._vect_upts, tags=tags)
-            svar_upts = tmp_upts.rslice(0, self.nupts)
-            modal_svar_upts = tmp_upts.rslice(self.nupts, 2*self.nupts)
-
-
-            # Extract the scalar variable to be used for shock sensing
-            self.kernels['shockvar'] = lambda: backend.kernel(
-                'shockvar', tplargs=tplargs, dims=[self.nupts, self.neles],
-                u=self.scal_upts_inb, s=svar_upts
-            )
-
-            # Obtain the modal coefficients
-            rcpvdm = np.linalg.inv(self.basis.ubasis.vdm.T)
-            rcpvdm = backend.const_matrix(rcpvdm, tags={'align'})
-            self.kernels['shockvar_modal'] = lambda: backend.kernel(
-                'mul', rcpvdm, svar_upts, out=modal_svar_upts
-            )
-
             # Apply the sensor to estimate the required artificial viscosity
             self.kernels['shocksensor'] = lambda: backend.kernel(
                 'shocksensor', tplargs=tplargs, dims=[self.neles],
-                s=modal_svar_upts, artvisc=self.artvisc
+                u=self.scal_upts_inb, artvisc=self.artvisc
             )
         elif shock_capturing == 'none':
             self.artvisc = None

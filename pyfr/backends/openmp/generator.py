@@ -17,6 +17,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                           int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
                           int cb, ce;
                           loop_sched_1d(_nx, align, &cb, &ce);
+                          #pragma omp simd
                           for (int _x = cb; _x < ce; _x++)
                           {{
                               {body}

@@ -20,9 +20,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             q1 << kernels['eles', 'copy_soln']()
         q1 << kernels['iint', 'con_u']()
         q1 << kernels['bcint', 'con_u'](t=t)
-        if ('eles', 'shockvar') in kernels:
-            q1 << kernels['eles', 'shockvar']()
-            q1 << kernels['eles', 'shockvar_modal']()
+        if ('eles', 'shocksensor') in kernels:
             q1 << kernels['eles', 'shocksensor']()
             q1 << kernels['mpiint', 'artvisc_fpts_pack']()
         q1 << kernels['eles', 'tgradpcoru_upts']()
