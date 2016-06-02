@@ -17,8 +17,10 @@ class BaseIntegrator(object, metaclass=ABCMeta):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         self.backend = backend
         self.rallocs = rallocs
-        self.cfg = cfg
         self.isrestart = initsoln is not None
+        self.cfg = cfg
+        self.prevcfgs = {f: initsoln[f] for f in initsoln or []
+                         if f.startswith('config-')}
 
         # Ensure the system is compatible with our formulation
         if self.formulation not in systemcls.elementscls.formulations:
@@ -201,3 +203,17 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
         stats.set('solver-time-integrator', 'wall-time', wtime)
+
+    @property
+    def cfgmeta(self):
+        cfg = self.cfg.tostr()
+
+        if self.prevcfgs:
+            ret = dict(self.prevcfgs, config=cfg)
+
+            if cfg != ret['config-' + str(len(self.prevcfgs) - 1)]:
+                ret['config-' + str(len(self.prevcfgs))] = cfg
+
+            return ret
+        else:
+            return {'config': cfg, 'config-0': cfg}

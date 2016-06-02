@@ -39,7 +39,6 @@ modules = [
     'pyfr.quadrules',
     'pyfr.readers',
     'pyfr.partitioners',
-    'pyfr.scripts',
     'pyfr.solvers',
     'pyfr.solvers.base',
     'pyfr.solvers.baseadvec',
@@ -98,7 +97,7 @@ install_requires = [
     'mako >= 1.0.0',
     'mpi4py >= 2.0',
     'numpy >= 1.8',
-    'pytools >= 2014.3'
+    'pytools >= 2016.2.1'
 ]
 
 # Soft dependencies
@@ -110,7 +109,7 @@ extras_require = {
 
 # Scripts
 console_scripts = [
-    'pyfr = pyfr.scripts.main:main'
+    'pyfr = pyfr.__main__:main'
 ]
 
 # Info
