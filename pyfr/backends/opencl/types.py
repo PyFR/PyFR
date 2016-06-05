@@ -10,7 +10,7 @@ from pyfr.util import lazyprop
 class OpenCLMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
-        self.data = basedata.get_sub_region(offset, self.nbytes + 1)
+        self.data = basedata.get_sub_region(offset, self.nbytes)
         self.offset = offset
 
         # Process any initial value
@@ -51,7 +51,7 @@ class OpenCLMatrixRSlice(base.MatrixRSlice):
     @lazyprop
     def data(self):
         return self.parent.basedata.get_sub_region(self.offset,
-                                                   self.nrow*self.pitch + 1)
+                                                   self.nrow*self.pitch)
 
     @property
     def _as_parameter_(self):
