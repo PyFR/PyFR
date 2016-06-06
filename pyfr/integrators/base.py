@@ -201,6 +201,11 @@ class BaseIntegrator(object, metaclass=ABCMeta):
     def collect_stats(self, stats):
         wtime = time.time() - self._wstart
 
+        # Rank allocation
+        stats.set('backend', 'rank-allocation',
+                  ','.join(str(r) for r in self.rallocs.mprankmap))
+
+        # Simulation and wall clock times
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
         stats.set('solver-time-integrator', 'wall-time', wtime)
 

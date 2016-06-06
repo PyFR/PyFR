@@ -173,7 +173,7 @@ Parameterises the backend with
 
 2. ``rank-allocator`` --- MPI rank allocator:
 
-    ``linear``
+    ``linear`` | ``random``
 
 Example::
 
