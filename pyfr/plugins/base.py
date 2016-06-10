@@ -22,7 +22,7 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
 
     # Output a header if required
     if os.path.getsize(fname) == 0 and cfg.getbool(cfgsect, headerkey, True):
-        print(header, file=outf)
+        print(','.join(header), file=outf)
 
     # Return the file
     return outf
