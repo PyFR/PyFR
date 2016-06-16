@@ -28,17 +28,13 @@ class OpenMPGiMMiKKernels(OpenMPKernelProvider):
             raise NotSuitableError('Matrix too dense for GiMMiK')
 
         # Generate the GiMMiK kernel
-        gimmik_mm = generate_mm(a.get(), dtype=a.dtype, platform='c',
-                                alpha=alpha, beta=beta)
-
-        # Generate and build the OpenMP-wrapped GiMMiK kernel
-        tpl = self.backend.lookup.get_template('par-gimmik')
-        src = tpl.render(gimmik_mm=gimmik_mm)
-        par_gimmik_mm = self._build_kernel('par_gimmik_mm', src,
-                                           [np.int32] + [np.intp, np.int32]*2)
+        src = generate_mm(a.get(), dtype=a.dtype, platform='c-omp',
+                          alpha=alpha, beta=beta)
+        gimmik_mm = self._build_kernel('gimmik_mm', src,
+                                       [np.int32] + [np.intp, np.int32]*2)
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                par_gimmik_mm(b.ncol, b, b.leaddim, out, out.leaddim)
+                gimmik_mm(b.ncol, b, b.leaddim, out, out.leaddim)
 
         return MulKernel()
