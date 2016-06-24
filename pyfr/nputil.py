@@ -21,16 +21,36 @@ def block_diag(arrs):
     return out
 
 
-def chop(fn):
-    @ft.wraps(fn)
-    def newfn(*args, **kwargs):
-        arr = fn(*args, **kwargs)
+def clean(origfn=None, tol=1e-10):
+    def cleanfn(fn):
+        @ft.wraps(fn)
+        def newfn(*args, **kwargs):
+            arr = fn(*args, **kwargs).copy()
 
-        # Determine a tolerance and flush
-        arr[abs(arr) < 10*np.finfo(arr.dtype).resolution] = 0
+            # Flush small elements to zero
+            arr[np.abs(arr) < tol] = 0
 
-        return arr
-    return newfn
+            # Coalesce similar elements
+            amfl = np.abs(arr.flat)
+            amix = np.argsort(amfl)
+
+            i, ix = 0, amix[0]
+            for j, jx in enumerate(amix[1:], start=1):
+                if amfl[jx] - amfl[ix] >= tol:
+                    if j - i > 1:
+                        amfl[amix[i:j]] = np.median(amfl[amix[i:j]])
+                    i, ix = j, jx
+
+            if i != j:
+                amfl[amix[i:]] = np.median(amfl[amix[i:]])
+
+            # Fix up the signs and assign
+            arr.flat = np.copysign(amfl, arr.flat)
+
+            return arr
+        return newfn
+
+    return cleanfn(origfn) if origfn else cleanfn
 
 
 _npeval_syms = {

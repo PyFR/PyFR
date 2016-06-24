@@ -14,8 +14,8 @@ class OpenMPBackend(BaseBackend):
         # Take the alignment requirement to be 32-bytes
         self.alignb = 32
 
-        from pyfr.backends.openmp import (blasext, cblas, packing, provider,
-                                          types)
+        from pyfr.backends.openmp import (blasext, cblas, gimmik, packing,
+                                          provider, types)
 
         # Register our data types
         self.base_matrix_cls = types.OpenMPMatrixBase
@@ -32,6 +32,7 @@ class OpenMPBackend(BaseBackend):
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
+                    gimmik.OpenMPGiMMiKKernels,
                     cblas.OpenMPCBLASKernels]
         self._providers = [k(self) for k in kprovcls]
 

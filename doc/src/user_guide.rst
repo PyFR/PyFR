@@ -21,11 +21,12 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `h5py <http://www.h5py.org/>`_ >= 2.6
-2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
-4. `numpy <http://www.numpy.org/>`_ >= 1.8
-5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
+1. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
+2. `h5py <http://www.h5py.org/>`_ >= 2.6
+3. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
+4. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
+5. `numpy <http://www.numpy.org/>`_ >= 1.8
+6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
 compatible with 32-bit Python distributions.
@@ -173,7 +174,7 @@ Parameterises the backend with
 
 2. ``rank-allocator`` --- MPI rank allocator:
 
-    ``linear``
+    ``linear`` | ``random``
 
 Example::
 

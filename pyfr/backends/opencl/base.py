@@ -81,14 +81,10 @@ class OpenCLBackend(BaseBackend):
     def _malloc_impl(self, nbytes):
         import pyopencl as cl
 
-        # Allocate the device buffer; note here that we over allocate
-        # by a byte.  This is needed to work around some issues in
-        # related to the construction of sub buffers.  (For which the
-        # solution is to increase the size of the region by one byte;
-        # hence requiring an extra byte of allocation.)
-        buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, nbytes + 1)
+        # Allocate the device buffer
+        buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, nbytes)
 
         # Zero the buffer
-        cl.enqueue_copy(self.qdflt, buf, np.zeros(nbytes + 1, dtype=np.uint8))
+        cl.enqueue_copy(self.qdflt, buf, np.zeros(nbytes, dtype=np.uint8))
 
         return buf

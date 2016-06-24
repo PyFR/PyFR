@@ -62,10 +62,9 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        tplc, self._ploc = self._exp_opts(
+        tplc = self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
         )
-
         self._tpl_c.update(tplc)
 
 
@@ -75,10 +74,9 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        tplc, self._ploc = self._exp_opts(
+        tplc = self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
         )
-
         self._tpl_c.update(tplc)
 
 

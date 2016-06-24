@@ -111,9 +111,7 @@ class BaseAdvectionBCInters(BaseInters):
             else:
                 exprs[k] = cfg.getexpr(sect, k, subs=subs)
 
-        if any('ploc' in ex for ex in exprs.values()):
-            plocpts = self._const_mat(lhs, 'get_ploc_for_inter')
-        else:
-            plocpts = None
+        if any('ploc' in ex for ex in exprs.values()) and not self._ploc:
+            self._ploc = self._const_mat(lhs, 'get_ploc_for_inter')
 
-        return exprs, plocpts
+        return exprs

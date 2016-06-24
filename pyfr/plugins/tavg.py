@@ -94,7 +94,7 @@ class TavgPlugin(BasePlugin):
                 stats.set('tavg', 'tend', intg.tcurr)
                 intg.collect_stats(stats)
 
-                metadata = dict(config=self.cfg.tostr(),
+                metadata = dict(intg.cfgmeta,
                                 stats=stats.tostr(),
                                 mesh_uuid=intg.mesh_uuid)
 

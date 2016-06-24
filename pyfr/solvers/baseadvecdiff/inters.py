@@ -57,7 +57,10 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         # one side to take β = -β for the cflux and conu kernels. We
         # pick this side (arbitrarily) by comparing the physical ranks
         # of the two partitions.
-        self._tpl_c['ldg-beta'] *= 1.0 if lhsprank > rhsprank else -1.0
+        if (lhsprank + rhsprank) % 2:
+            self._tpl_c['ldg-beta'] *= 1.0 if lhsprank > rhsprank else -1.0
+        else:
+            self._tpl_c['ldg-beta'] *= 1.0 if rhsprank > lhsprank else -1.0
 
         # Null kernel generators
         null_mpi_kern = lambda: NullMPIKernel()
