@@ -35,6 +35,9 @@ class CUDABackend(BaseBackend):
         # Take the required alignment to be 128 bytes
         self.alignb = 128
 
+        # Take the SoA size to be 32 elements
+        self.soasz = 32
+
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')
         if self.mpitype not in {'standard', 'cuda-aware'}:

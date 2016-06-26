@@ -5,45 +5,58 @@ from pyfr.backends.base.generator import BaseKernelGenerator
 
 class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
-        # Kernel spec
-        spec = self._render_spec()
-
         if self.ndim == 1:
-            tpl = '''
-                  {spec}
-                  {{
-                      #pragma omp parallel
-                      {{
-                          int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
-                          int cb, ce;
-                          loop_sched_1d(_nx, align, &cb, &ce);
-                          #pragma omp simd
-                          for (int _x = cb; _x < ce; _x++)
-                          {{
-                              {body}
-                          }}
-                      }}
-                  }}'''
+            inner = '''
+                    int cb, ce;
+                    loop_sched_1d(_nx, align, &cb, &ce);
+                    int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
+                    for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
+                    {{
+                        #pragma omp simd
+                        for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                        {{
+                            {body}
+                        }}
+                    }}
+                    for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi; _xj++)
+                    {{
+                        {body}
+                    }}'''.format(body=self.body)
         else:
-            tpl = '''{spec}
-                  {{
-                      #pragma omp parallel
-                      {{
-                          int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
-                          int rb, re, cb, ce;
-                          loop_sched_2d(_ny, _nx, align, &rb, &re, &cb, &ce);
-                          for (int _y = rb; _y < re; _y++)
-                          {{
-                              #pragma omp simd
-                              for (int _x = cb; _x < ce; _x++)
-                              {{
-                                  {body}
-                              }}
-                          }}
-                      }}
-                  }}'''
+            inner = '''
+                    int rb, re, cb, ce;
+                    loop_sched_2d(_ny, _nx, align, &rb, &re, &cb, &ce);
+                    int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
+                    for (int _y = rb; _y < re; _y++)
+                    {{
+                        for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
+                        {{
+                            #pragma omp simd
+                            for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                            {{
+                                {body}
+                            }}
+                        }}
+                        for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi;
+                             _xj++)
+                        {{
+                            {body}
+                        }}
+                    }}'''.format(body=self.body)
 
-        return tpl.format(spec=spec, body=self.body)
+        return '''{spec}
+               {{
+                   #define X_IDX (_xi + _xj)
+                   #define X_IDX_AOSOA(v, nv)\
+                       ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
+                   int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
+                   #pragma omp parallel
+                   {{
+                       {inner}
+                   }}
+                   #undef X_IDX
+                   #undef X_IDX_AOSOA
+               }}'''.format(spec=self._render_spec(), inner=inner)
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions
@@ -60,9 +73,6 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 kargs.append('const int* __restrict__ {0.name}_vix'
                              .format(va))
 
-                if va.ncdim >= 1:
-                    kargs.append('const int* __restrict__ {0.name}_vcstri'
-                                 .format(va))
                 if va.ncdim == 2:
                     kargs.append('const int* __restrict__ {0.name}_vrstri'
                                  .format(va))
@@ -74,7 +84,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 kargs.append('{0} {1.dtype}* __restrict__ {1.name}_v'
                              .format(const, va).strip())
 
-                if self.needs_lsdim(va):
-                    kargs.append('int lsd{0.name}'.format(va))
+                if self.needs_ldim(va):
+                    kargs.append('int ld{0.name}'.format(va))
 
         return 'void {0}({1})'.format(self.name, ', '.join(kargs))

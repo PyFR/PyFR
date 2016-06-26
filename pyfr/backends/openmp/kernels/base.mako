@@ -6,6 +6,7 @@
 #include <tgmath.h>
 
 #define PYFR_ALIGN_BYTES ${alignb}
+#define SOA_SZ ${soasz}
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))

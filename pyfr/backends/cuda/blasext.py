@@ -16,17 +16,17 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        ncola, ncolb = arr[0].datashape[1:]
-        nrow, ldim, lsdim, dtype = arr[0].traits
+        nrow, ldim, dtype = arr[0].traits
+        ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
         src = self.backend.lookup.get_template('axnpby').render(
-            subdims=subdims or range(ncola), nv=nv
+            subdims=subdims or range(ncola), ncola=ncola, nv=nv
         )
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*4 + [np.intp]*nv + [dtype]*nv)
+                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
 
         # Determine the grid/block
         block = (128, 1, 1)
@@ -37,8 +37,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
                 args = list(arr) + list(consts)
 
                 kern.prepared_async_call(grid, block, queue.cuda_stream_comp,
-                                         nrow, ncolb, ldim, lsdim,
-                                         *args)
+                                         nrow, ncolb, ldim, *args)
 
         return AxnpbyKernel()
 

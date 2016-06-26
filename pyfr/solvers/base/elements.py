@@ -347,17 +347,16 @@ class BaseElements(object, metaclass=ABCMeta):
         nfp = self.nfacefpts[fidx]
 
         rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        cstri = ((self._scal_fpts.leadsubdim,),)*nfp
 
-        return (self._scal_fpts.mid,)*nfp, rcmap, cstri
+        return (self._scal_fpts.mid,)*nfp, rcmap
 
     def get_vect_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
         rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        rcstri = ((self.nfpts, self._vect_fpts.leadsubdim),)*nfp
+        rstri = (self.nfpts,)*nfp
 
-        return (self._vect_fpts.mid,)*nfp, rcmap, rcstri
+        return (self._vect_fpts.mid,)*nfp, rcmap, rstri
 
     def get_ploc_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]

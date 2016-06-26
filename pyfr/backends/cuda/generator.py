@@ -24,10 +24,14 @@ class CUDAKernelGenerator(BaseKernelGenerator):
         return '''{spec}
                {{
                    int _x = blockIdx.x*blockDim.x + threadIdx.x;
+                   #define X_IDX (_x)
+                   #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
                    {limits}
                    {{
                        {body}
                    }}
+                   #undef X_IDX
+                   #undef X_IDX_AOSOA
                }}'''.format(spec=spec, limits=limits, body=self.body)
 
     def _render_spec(self):
@@ -45,9 +49,6 @@ class CUDAKernelGenerator(BaseKernelGenerator):
                 kargs.append('const int* __restrict__ {0.name}_vix'
                              .format(va))
 
-                if va.ncdim >= 1:
-                    kargs.append('const int* __restrict__ {0.name}_vcstri'
-                                 .format(va))
                 if va.ncdim == 2:
                     kargs.append('const int* __restrict__ {0.name}_vrstri'
                                  .format(va))
@@ -59,7 +60,7 @@ class CUDAKernelGenerator(BaseKernelGenerator):
                 kargs.append('{0} {1.dtype}* __restrict__ {1.name}_v'
                              .format(const, va).strip())
 
-                if self.needs_lsdim(va):
-                    kargs.append('int lsd{0.name}'.format(va))
+                if self.needs_ldim(va):
+                    kargs.append('int ld{0.name}'.format(va))
 
         return '__global__ void {0}({1})'.format(self.name, ', '.join(kargs))

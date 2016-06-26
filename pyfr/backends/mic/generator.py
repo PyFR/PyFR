@@ -9,42 +9,58 @@ class MICKernelGenerator(BaseKernelGenerator):
         spec, unpack = self._render_spec_unpack()
 
         if self.ndim == 1:
-            tpl = '''{spec}
-                  {{
-                      {unpack}
-                      #pragma omp parallel
-                      {{
-                          int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
-                          int cb, ce;
-                          loop_sched_1d(_nx, align, &cb, &ce);
-                          #pragma omp simd
-                          for (int _x = cb; _x < ce; _x++)
-                          {{
-                              {body}
-                          }}
-                      }}
-                  }}'''
+            inner = '''
+                    int cb, ce;
+                    loop_sched_1d(_nx, align, &cb, &ce);
+                    int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
+                    for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
+                    {{
+                        #pragma omp simd
+                        for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                        {{
+                            {body}
+                        }}
+                    }}
+                    for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi; _xj++)
+                    {{
+                        {body}
+                    }}'''.format(body=self.body)
         else:
-            tpl = '''{spec}
-                  {{
-                      {unpack}
-                      #pragma omp parallel
-                      {{
-                          int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
-                          int rb, re, cb, ce;
-                          loop_sched_2d(_ny, _nx, align, &rb, &re, &cb, &ce);
-                          for (int _y = rb; _y < re; _y++)
-                          {{
-                              #pragma omp simd
-                              for (int _x = cb; _x < ce; _x++)
-                              {{
-                                  {body}
-                              }}
-                          }}
-                      }}
-                  }}'''
+            inner = '''
+                    int rb, re, cb, ce;
+                    loop_sched_2d(_ny, _nx, align, &rb, &re, &cb, &ce);
+                    int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
+                    for (int _y = rb; _y < re; _y++)
+                    {{
+                        for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
+                        {{
+                            #pragma omp simd
+                            for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                            {{
+                                {body}
+                            }}
+                        }}
+                        for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi;
+                             _xj++)
+                        {{
+                            {body}
+                        }}
+                    }}'''.format(body=self.body)
 
-        return tpl.format(spec=spec, unpack=unpack, body=self.body)
+        return '''{spec}
+               {{
+                   {unpack}
+                   #define X_IDX (_xi + _xj)
+                   #define X_IDX_AOSOA(v, nv)\
+                       ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
+                   int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
+                   #pragma omp parallel
+                   {{
+                       {inner}
+                   }}
+                   #undef X_IDX
+                   #undef X_IDX_AOSOA
+               }}'''.format(spec=spec, unpack=unpack, inner=inner)
 
     def _render_spec_unpack(self):
         # Start by unpacking the dimensions
@@ -68,10 +84,6 @@ class MICKernelGenerator(BaseKernelGenerator):
                 kpack.append('const int *{0.name}_vix = *arg{{0}};'
                              .format(va))
 
-                if va.ncdim >= 1:
-                    kspec.append('void **arg{0}')
-                    kpack.append('const int *{0.name}_vcstri = *arg{{0}};'
-                                 .format(va))
                 if va.ncdim == 2:
                     kspec.append('void **arg{0}')
                     kpack.append('const int *{0.name}_vrstri = *arg{{0}};'
@@ -85,9 +97,9 @@ class MICKernelGenerator(BaseKernelGenerator):
                 kpack.append('{0} {1.dtype}* {1.name}_v = *arg{{0}};'
                              .format(const, va).strip())
 
-                if self.needs_lsdim(va):
+                if self.needs_ldim(va):
                     kspec.append('long *arg{0}')
-                    kpack.append('int lsd{0.name} = *arg{{0}};'.format(va))
+                    kpack.append('int ld{0.name} = *arg{{0}};'.format(va))
 
         # Number the arguments
         params = ', '.join(a.format(i) for i, a in enumerate(kspec))

@@ -14,6 +14,9 @@ class OpenMPBackend(BaseBackend):
         # Take the alignment requirement to be 32-bytes
         self.alignb = 32
 
+        # Compute the SoA size
+        self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
+
         from pyfr.backends.openmp import (blasext, cblas, gimmik, packing,
                                           provider, types)
 

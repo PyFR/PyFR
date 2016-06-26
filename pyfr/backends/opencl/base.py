@@ -53,6 +53,9 @@ class OpenCLBackend(BaseBackend):
         # Compute the alignment requirement for the context
         self.alignb = device.mem_base_addr_align // 8
 
+        # Compute the SoA size
+        self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
+
         from pyfr.backends.opencl import (blasext, clblas, gimmik, packing,
                                           provider, types)
 

@@ -16,7 +16,7 @@ class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, 'iiiPPPPP')
+        kern = self._build_kernel('pack_view', src, 'iiiPPPP')
 
         # Compute the grid and thread-block size
         block = (128, 1, 1)
@@ -31,7 +31,7 @@ class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
                     # Pack
                     kern.prepared_async_call(
                         grid, block, scomp, v.n, v.nvrow, v.nvcol, v.basedata,
-                        v.mapping, v.cstrides or 0, v.rstrides or 0, m
+                        v.mapping, v.rstrides or 0, m
                     )
         # Otherwise, we need to both pack the buffer and copy it back
         else:
@@ -46,7 +46,7 @@ class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
                     # Pack
                     kern.prepared_async_call(
                         grid, block, scomp, v.n, v.nvrow, v.nvcol, v.basedata,
-                        v.mapping, v.cstrides or 0, v.rstrides or 0, m
+                        v.mapping, v.rstrides or 0, m
                     )
 
                     # Copy the packed buffer to the host

@@ -24,10 +24,14 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
         return '''{spec}
                {{
                    int _x = get_global_id(0);
+                   #define X_IDX (_x)
+                   #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
                    {limits}
                    {{
                        {body}
                    }}
+                   #undef X_IDX
+                   #undef X_IDX_AOSOA
                }}'''.format(spec=spec, limits=limits, body=self.body)
 
     def _render_spec(self):
@@ -46,8 +50,6 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
                 ka.append('__global {0.dtype}* restrict {0.name}_v')
                 ka.append('__global const int* restrict {0.name}_vix')
 
-                if va.ncdim >= 1:
-                    ka.append('__global const int* restrict {0.name}_vcstri')
                 if va.ncdim == 2:
                     ka.append('__global const int* restrict {0.name}_vrstri')
             # Arrays
@@ -57,8 +59,8 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
                 else:
                     ka.append('__global {0.dtype}* restrict {0.name}_v')
 
-                if self.needs_lsdim(va):
-                    ka.append('int lsd{0.name}')
+                if self.needs_ldim(va):
+                    ka.append('int ld{0.name}')
 
             # Format
             kargs.extend(k.format(va) for k in ka)

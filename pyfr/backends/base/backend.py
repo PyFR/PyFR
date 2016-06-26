@@ -56,7 +56,8 @@ class BaseBackend(object, metaclass=ABCMeta):
     @lazyprop
     def lookup(self):
         pkg = 'pyfr.backends.{0}.kernels'.format(self.name)
-        dfltargs = dict(alignb=self.alignb, fpdtype=self.fpdtype, math=math)
+        dfltargs = dict(alignb=self.alignb, fpdtype=self.fpdtype,
+                        soasz=self.soasz, math=math)
 
         return DottedTemplateLookup(pkg, dfltargs)
 
@@ -147,12 +148,12 @@ class BaseBackend(object, metaclass=ABCMeta):
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
 
-    def view(self, matmap, rcmap, stridemap=None, vshape=tuple(), tags=set()):
-        return self.view_cls(self, matmap, rcmap, stridemap, vshape, tags)
+    def view(self, matmap, rcmap, rstridemap=None, vshape=tuple(), tags=set()):
+        return self.view_cls(self, matmap, rcmap, rstridemap, vshape, tags)
 
-    def xchg_view(self, matmap, rcmap, stridemap=None, vshape=tuple(),
+    def xchg_view(self, matmap, rcmap, rstridemap=None, vshape=tuple(),
                   tags=set()):
-        return self.xchg_view_cls(self, matmap, rcmap, stridemap, vshape,
+        return self.xchg_view_cls(self, matmap, rcmap, rstridemap, vshape,
                                   tags)
 
     def kernel(self, name, *args, **kwargs):
