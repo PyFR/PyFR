@@ -30,7 +30,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         # Determine the grid/block
         block = (128, 1, 1)
-        grid = get_grid_for_block(block, ncolb)
+        grid = get_grid_for_block(block, ncolb, nrow)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):

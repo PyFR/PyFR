@@ -31,7 +31,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
                 args = [x.data for x in arr] + list(consts)
-                kern(queue.cl_queue_comp, (ncolb,), None, nrow, ncolb,
+                kern(queue.cl_queue_comp, (ncolb, nrow), None, nrow, ncolb,
                      ldim, *args)
 
         return AxnpbyKernel()
