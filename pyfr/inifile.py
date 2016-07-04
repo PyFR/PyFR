@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from ast import literal_eval
 from collections import OrderedDict
 from configparser import SafeConfigParser, NoSectionError, NoOptionError
 import io
@@ -95,6 +96,9 @@ class Inifile(object):
 
     def getint(self, section, option, default=_sentinel):
         return int(self.get(section, option, default))
+
+    def getliteral(self, section, option, default=_sentinel):
+        return literal_eval(self.get(section, option, default))
 
     def items(self, section):
         return OrderedDict(self._cp.items(section))

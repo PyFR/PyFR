@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import ast
-
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
@@ -71,7 +69,7 @@ class SamplerPlugin(BasePlugin):
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # List of points to be sampled and format
-        self.pts = ast.literal_eval(self.cfg.get(cfgsect, 'samp-pts'))
+        self.pts = self.cfg.getliteral(cfgsect, 'samp-pts')
         self.fmt = self.cfg.get(cfgsect, 'format', 'primitive')
 
         # MPI info

@@ -200,12 +200,22 @@ Parameterises the CUDA backend with
 
      ``standard`` | ``cuda-aware``
 
+4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+
+     *int*
+
+5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+
+    *int*, *int*
+
 Example::
 
     [backend-cuda]
     device-id = round-robin
     gimmik-max-nnz = 512
     mpi-type = standard
+    block-1d = 64
+    block-2d = 128, 2
 
 [backend-mic]
 ^^^^^^^^^^^^^^^^
@@ -242,6 +252,16 @@ Parameterises the OpenCL backend with
 
      *int*
 
+5. ``local-size-1d`` --- local work size for one dimensional pointwise
+   kernels:
+
+    *int*
+
+6. ``local-size-2d`` --- local work size for two dimensional pointwise
+   kernels:
+
+    *int*, *int*
+
 Example::
 
     [backend-opencl]
@@ -249,6 +269,8 @@ Example::
     device-type = gpu
     device-id = local-rank
     gimmik-max-nnz = 512
+    local-size-1d = 16
+    local-size-2d = 128, 1
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^

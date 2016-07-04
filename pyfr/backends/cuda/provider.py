@@ -33,8 +33,16 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
     kernel_generator_cls = generator.CUDAKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
-        # Determine the grid/block
-        block = (128, 2, 1) if len(dims) == 2 else (16, 1, 1)
+        cfg = self.backend.cfg
+
+        # Determine the block size
+        if len(dims) == 1:
+            block = (cfg.getint('backend-cuda', 'block-1d', '64'), 1, 1)
+        else:
+            block = cfg.getliteral('backend-cuda', 'block-2d', '128, 1')
+            block += (1,)
+
+        # Use this to compute the grid size
         grid = get_grid_for_block(block, *dims[::-1])
 
         class PointwiseKernel(ComputeKernel):
