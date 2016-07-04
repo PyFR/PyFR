@@ -164,7 +164,8 @@ class BaseSystem(object, metaclass=ABCMeta):
 
         for pn, pobj in zip(provnames, provobjs):
             for kn, kgetter in it.chain(*pobj.kernels.items()):
-                kernels[pn, kn].append(kgetter())
+                if not kn.startswith('_'):
+                    kernels[pn, kn].append(kgetter())
 
     @abstractmethod
     def rhs(self, t, uinbank, foutbank):

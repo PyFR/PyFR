@@ -2,6 +2,7 @@
 
 import numpy as np
 
+from pyfr.backends.base.kernels import ComputeMetaKernel
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
@@ -21,6 +22,11 @@ class NavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 
         be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
+
+        if abs(self._tpl_c['ldg-beta']) == 0.5:
+            self.kernels['copy_fpts'] = lambda: ComputeMetaKernel(
+                [ele.kernels['_copy_fpts']() for ele in elemap.values()]
+            )
 
         self.kernels['con_u'] = lambda: be.kernel(
             'intconu', tplargs=tplargs, dims=[self.ninterfpts],

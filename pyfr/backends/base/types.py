@@ -139,9 +139,9 @@ class MatrixRSlice(object):
         self.p, self.q = int(p), int(q)
         self.nrow, self.ncol = self.q - self.p, mat.ncol
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.leaddim = mat.leaddim
+        self.leaddim, self.pitch = mat.leaddim, mat.pitch
 
-        self.pitch = self.leaddim*self.itemsize
+        self.nbytes = self.nrow*self.pitch
         self.traits = (self.nrow, self.leaddim, self.dtype)
 
         self.tags = mat.tags | {'slice'}

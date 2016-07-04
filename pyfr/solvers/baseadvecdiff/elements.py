@@ -30,6 +30,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             'pyfr.solvers.baseadvecdiff.kernels.gradcoru'
         )
 
+        self.kernels['_copy_fpts'] = lambda: backend.kernel(
+            'copy', self._vect_fpts.rslice(0, self.nfpts), self._scal_fpts
+        )
         self.kernels['tgradpcoru_upts'] = lambda: backend.kernel(
             'mul', self.opmat('M4 - M6*M0'), self.scal_upts_inb,
             out=self._vect_upts

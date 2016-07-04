@@ -18,6 +18,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         if ('eles', 'copy_soln') in kernels:
             q1 << kernels['eles', 'copy_soln']()
+        if ('iint', 'copy_fpts') in kernels:
+            q1 << kernels['iint', 'copy_fpts']()
         q1 << kernels['iint', 'con_u']()
         q1 << kernels['bcint', 'con_u'](t=t)
         if ('eles', 'shocksensor') in kernels:
