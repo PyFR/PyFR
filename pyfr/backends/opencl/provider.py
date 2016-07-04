@@ -31,11 +31,15 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
     kernel_generator_cls = generator.OpenCLKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
+        # Global and local sizes
+        gs = tuple(dims[::-1])
+        ls = (128, 2) if len(dims) == 2 else (16,)
+
         class PointwiseKernel(ComputeKernel):
             def run(self, queue, **kwargs):
                 kwargs = {k: float(v) for k, v in kwargs.items()}
                 narglst = [kwargs.get(ka, ka) for ka in arglst]
                 narglst = [getattr(arg, 'data', arg) for arg in narglst]
-                fun(queue.cl_queue_comp, (dims[-1],), None, *narglst)
+                fun(queue.cl_queue_comp, gs, ls, *narglst)
 
         return PointwiseKernel()

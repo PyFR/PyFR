@@ -9,21 +9,24 @@ class CUDAKernelGenerator(BaseKernelGenerator):
 
         # Specialise
         if self.ndim == 1:
+            self._ix = 'int _x = blockIdx.x*blockDim.x + threadIdx.x;'
             self._limits = 'if (_x < _nx)'
         else:
-            self._limits = 'for (int _y = 0; _y < _ny && _x < _nx; ++_y)'
+            self._ix = ('int _x = blockIdx.x*blockDim.x + threadIdx.x;'
+                        'int _y = blockIdx.y*blockDim.y + threadIdx.y;')
+            self._limits = 'if (_x < _nx && _y < _ny)'
 
     def render(self):
         # Kernel spec
         spec = self._render_spec()
 
-        # Iteration limits (if statement/for loop)
-        limits = self._limits
+        # Iteration indicies and limits
+        ix, limits = self._ix, self._limits
 
         # Combine
         return '''{spec}
                {{
-                   int _x = blockIdx.x*blockDim.x + threadIdx.x;
+                   {ix}
                    #define X_IDX (_x)
                    #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
                    {limits}
@@ -32,7 +35,7 @@ class CUDAKernelGenerator(BaseKernelGenerator):
                    }}
                    #undef X_IDX
                    #undef X_IDX_AOSOA
-               }}'''.format(spec=spec, limits=limits, body=self.body)
+               }}'''.format(spec=spec, ix=ix, limits=limits, body=self.body)
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions

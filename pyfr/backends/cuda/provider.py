@@ -9,8 +9,8 @@ from pyfr.util import memoize
 
 
 def get_grid_for_block(block, nrow, ncol=1):
-    return ((nrow + (-nrow % block[0])) // block[0],
-            (ncol + (-ncol % block[1])) // block[1])
+    return (int((nrow + (-nrow % block[0])) // block[0]),
+            int((ncol + (-ncol % block[1])) // block[1]))
 
 
 class CUDAKernelProvider(BaseKernelProvider):
@@ -34,8 +34,8 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
 
     def _instantiate_kernel(self, dims, fun, arglst):
         # Determine the grid/block
-        block = (128, 1, 1)
-        grid = get_grid_for_block(block, dims[-1])
+        block = (128, 2, 1) if len(dims) == 2 else (16, 1, 1)
+        grid = get_grid_for_block(block, *dims[::-1])
 
         class PointwiseKernel(ComputeKernel):
             def run(self, queue, **kwargs):
