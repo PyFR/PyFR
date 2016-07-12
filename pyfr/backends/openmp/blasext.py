@@ -35,9 +35,19 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
+        if dst.nbytes >= 2**31:
+            raise ValueError('Matrix too large for copy')
+
+        # Render the kernel template
+        ksrc = self.backend.lookup.get_template('par-memcpy').render()
+
+        # Build the kernel
+        kern = self._build_kernel('par_memcpy', ksrc,
+                                  [np.intp, np.intp, np.int32])
+
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                dst.data[:] = src.data.reshape(dst.data.shape)
+                kern(dst, src, dst.nbytes)
 
         return CopyKernel()
 
