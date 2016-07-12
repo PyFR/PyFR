@@ -209,7 +209,7 @@ class MatrixBank(Sequence):
 
 
 class View(object):
-    def __init__(self, backend, matmap, rcmap, rstridemap, vshape, tags):
+    def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
         self.nvcol = vshape[-1] if len(vshape) >= 1 else 1
@@ -248,8 +248,8 @@ class View(object):
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
         # Row/column displacements
-        rowdisp = rcmap[:, 0]*leaddim
-        coldisp = (rcmap[:, 1] // k)*(self.nvcol*k) + rcmap[:, 1] % k
+        rowdisp = rmap*leaddim
+        coldisp = (cmap // k)*(self.nvcol*k) + cmap % k
 
         mapping = (offset + rowdisp + coldisp)[None,:]
         self.mapping = backend.base_matrix_cls(
@@ -265,9 +265,9 @@ class View(object):
 
 
 class XchgView(object):
-    def __init__(self, backend, matmap, rcmap, rstridemap, vshape, tags):
+    def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         # Create a normal view
-        self.view = backend.view(matmap, rcmap, rstridemap, vshape, tags)
+        self.view = backend.view(matmap, rmap, cmap, rstridemap, vshape, tags)
 
         # Dimensions
         self.n = n = self.view.n

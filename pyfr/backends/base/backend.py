@@ -148,13 +148,15 @@ class BaseBackend(object, metaclass=ABCMeta):
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
 
-    def view(self, matmap, rcmap, rstridemap=None, vshape=tuple(), tags=set()):
-        return self.view_cls(self, matmap, rcmap, rstridemap, vshape, tags)
+    def view(self, matmap, rmap, cmap, rstridemap=None, vshape=tuple(),
+             tags=set()):
+        return self.view_cls(self, matmap, rmap, cmap, rstridemap, vshape,
+                             tags)
 
-    def xchg_view(self, matmap, rcmap, rstridemap=None, vshape=tuple(),
+    def xchg_view(self, matmap, rmap, cmap, rstridemap=None, vshape=tuple(),
                   tags=set()):
-        return self.xchg_view_cls(self, matmap, rcmap, rstridemap, vshape,
-                                  tags)
+        return self.xchg_view_cls(self, matmap, rmap, cmap, rstridemap,
+                                  vshape, tags)
 
     def kernel(self, name, *args, **kwargs):
         for prov in self._providers:

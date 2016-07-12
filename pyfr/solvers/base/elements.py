@@ -103,9 +103,9 @@ class BaseElements(object, metaclass=ABCMeta):
 
     @lazyprop
     def _srtd_face_fpts(self):
-        plocfpts = self.plocfpts.transpose(1, 2, 0).tolist()
+        plocfpts = self.plocfpts.transpose(1, 2, 0)
 
-        return [[fuzzysort(pts, ffpts) for pts in plocfpts]
+        return [[np.array(fuzzysort(pts.tolist(), ffpts)) for pts in plocfpts]
                 for ffpts in self.basis.facefpts]
 
     @abstractproperty
@@ -346,17 +346,19 @@ class BaseElements(object, metaclass=ABCMeta):
     def get_scal_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        cmap = (eidx,)*nfp
 
-        return (self._scal_fpts.mid,)*nfp, rcmap
+        return (self._scal_fpts.mid,)*nfp, rmap, cmap
 
     def get_vect_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        cmap = (eidx,)*nfp
         rstri = (self.nfpts,)*nfp
 
-        return (self._vect_fpts.mid,)*nfp, rcmap, rstri
+        return (self._vect_fpts.mid,)*nfp, rmap, cmap, rstri
 
     def get_ploc_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
