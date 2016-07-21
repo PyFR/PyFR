@@ -11,8 +11,8 @@ class OpenMPBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        # Take the alignment requirement to be 32-bytes
-        self.alignb = 32
+        # Take the alignment requirement to be 64-bytes
+        self.alignb = 64
 
         # Compute the SoA size
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
