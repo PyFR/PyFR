@@ -95,7 +95,7 @@ class LinePolyBasis(BasePolyBasis):
 
     def jac_ortho_basis_at_py(self, p):
         djp = jacobi_diff(self.order - 1, 0, 0, p)
-        return [sqrt(i + 0.5)*p for i, p in enumerate(djp)]
+        return [(sqrt(i + 0.5)*p,) for i, p in enumerate(djp)]
 
     @lazyprop
     def degrees(self):
