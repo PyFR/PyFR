@@ -8,8 +8,8 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     # Use the density field for shock sensing
     shockvar = 'rho'
 
-    def set_backend(self, backend, nscalupts):
-        super().set_backend(backend, nscalupts)
+    def set_backend(self, backend, nscalupts, nonce):
+        super().set_backend(backend, nscalupts, nonce)
         backend.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
 
         shock_capturing = self.cfg.get('solver', 'shock-capturing')

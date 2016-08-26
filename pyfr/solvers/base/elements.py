@@ -134,7 +134,7 @@ class BaseElements(object, metaclass=ABCMeta):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
     @abstractmethod
-    def set_backend(self, backend, nscal_upts):
+    def set_backend(self, backend, nscal_upts, nonce):
         self._be = backend
 
         # Sizes
@@ -144,7 +144,7 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Convenience functions for scalar/vector allocation
         alloc = lambda ex, n: abufs.append(
-            backend.matrix(n, extent=ex, tags={'align'})
+            backend.matrix(n, extent=nonce + ex, tags={'align'})
         ) or abufs[-1]
         salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
         valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))

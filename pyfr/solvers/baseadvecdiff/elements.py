@@ -22,8 +22,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         return bufs
 
-    def set_backend(self, backend, nscal_upts):
-        super().set_backend(backend, nscal_upts)
+    def set_backend(self, backend, nscal_upts, nonce):
+        super().set_backend(backend, nscal_upts, nonce)
 
         # Register pointwise kernels
         backend.pointwise.register(
@@ -97,9 +97,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 invvdm=self.basis.ubasis.invvdm.T
             )
 
-            # Allocate space for the artificial viscosity
-            self.artvisc = backend.matrix((1, self.neles), extent='artvisc',
-                                          tags=tags)
+            # Allocate space for the artificial viscosity vector
+            self.artvisc = backend.matrix((1, self.neles),
+                                          extent=nonce + 'artvisc', tags=tags)
 
             # Apply the sensor to estimate the required artificial viscosity
             self.kernels['shocksensor'] = lambda: backend.kernel(

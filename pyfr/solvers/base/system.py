@@ -19,13 +19,19 @@ class BaseSystem(object, metaclass=ABCMeta):
     # Number of queues to allocate
     _nqueues = None
 
+    # Nonce sequence
+    _nonce_seq = it.count()
+
     def __init__(self, backend, rallocs, mesh, initsoln, nreg, cfg):
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
 
+        # Obtain a nonce to uniquely identify this system
+        nonce = str(next(self._nonce_seq))
+
         # Load the elements
-        eles, elemap = self._load_eles(rallocs, mesh, initsoln, nreg)
+        eles, elemap = self._load_eles(rallocs, mesh, initsoln, nreg, nonce)
         backend.commit()
 
         # Retain the element map; this may be deleted by clients
@@ -59,7 +65,7 @@ class BaseSystem(object, metaclass=ABCMeta):
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
         backend.commit()
 
-    def _load_eles(self, rallocs, mesh, initsoln, nreg):
+    def _load_eles(self, rallocs, mesh, initsoln, nreg, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Look for and load each element type from the mesh
@@ -98,7 +104,7 @@ class BaseSystem(object, metaclass=ABCMeta):
             eles.set_ics_from_cfg()
 
         # Allocate these elements on the backend
-        eles.set_backend(self.backend, nreg)
+        eles.set_backend(self.backend, nreg, nonce)
 
         return eles, elemap
 

@@ -22,8 +22,8 @@ class BaseAdvectionElements(BaseElements):
 
         return bufs
 
-    def set_backend(self, backend, nscal_upts):
-        super().set_backend(backend, nscal_upts)
+    def set_backend(self, backend, nscal_upts, nonce):
+        super().set_backend(backend, nscal_upts, nonce)
 
         # Register pointwise kernels with the backend
         backend.pointwise.register(
