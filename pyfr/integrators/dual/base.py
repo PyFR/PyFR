@@ -11,7 +11,7 @@ class BaseDualIntegrator(BaseIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._dtau = self.cfg.getfloat('solver-time-integrator', 'dtau')
+        self._dtau = self.cfg.getfloat('solver-time-integrator', 'pseudo-dt')
         self.dtaumin = 1.0e-12
 
     @property
@@ -28,8 +28,4 @@ class BaseDualIntegrator(BaseIntegrator):
 
     @abstractmethod
     def finalise_step(self, currsoln):
-        pass
-
-    @abstractmethod
-    def _point_implicit_coeff(self, dt, stepper_coeff):
         pass
