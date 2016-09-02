@@ -21,11 +21,11 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `h5py <http://www.h5py.org/>`_ >= 2.5
+1. `h5py <http://www.h5py.org/>`_ >= 2.6
 2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
+3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
 4. `numpy <http://www.numpy.org/>`_ >= 1.8
-5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
+5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
 compatible with 32-bit Python distributions.
@@ -37,7 +37,7 @@ The CUDA backend targets NVIDIA GPUs with a compute capability of 2.0
 or greater. The backend requires:
 
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
-2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
+2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2015.1
 
 MIC Backend
 ^^^^^^^^^^^
@@ -173,7 +173,7 @@ Parameterises the backend with
 
 2. ``rank-allocator`` --- MPI rank allocator:
 
-    ``linear``
+    ``linear`` | ``random``
 
 Example::
 
@@ -195,11 +195,16 @@ Parameterises the CUDA backend with
 
      *int*
 
+3. ``mpi-type`` --- type of MPI library that is being used:
+
+     ``standard`` | ``cuda-aware``
+
 Example::
 
     [backend-cuda]
     device-id = round-robin
     gimmik-max-nnz = 512
+    mpi-type = standard
 
 [backend-mic]
 ^^^^^^^^^^^^^^^^
@@ -790,12 +795,23 @@ Parameterised with
 
     *string*
 
+4. ``post-action`` --- command to execute after writing the file:
+
+    *string*
+
+5. ``post-action-mode`` --- how the post-action command should be
+   executed:
+
+    ``blocking`` | ``non-blocking``
+
 Example::
 
     [soln-plugin-writer]
     dt-out = 0.01
     basedir = .
     basename = files-{t:.2f}
+    post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
+    post-action-mode = blocking
 
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

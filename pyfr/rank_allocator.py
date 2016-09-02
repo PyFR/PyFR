@@ -2,6 +2,7 @@
 
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
+import random
 import re
 
 from pyfr.mpiutil import get_comm_rank_root
@@ -22,36 +23,35 @@ class BaseRankAllocator(object, metaclass=ABCMeta):
 
         comm, rank, root = get_comm_rank_root()
 
+        # Have the root rank determine the connectivity of the mesh
         if rank == root:
-            # Determine the (physical) connectivity of the mesh
             prankconn = self._get_mesh_connectivity(mesh)
-            nparts = len(prankconn) or 1
+            nparts = len(prankconn)
 
             if nparts != comm.size:
-                raise RuntimeError('Mesh has %d partitions but running with '
-                                   '%d MPI ranks' % (nparts, comm.size))
+                raise RuntimeError('Mesh has {0} partitions but running with '
+                                   '{1} MPI ranks'.format(nparts, comm.size))
         else:
             prankconn = None
 
-        # Get subclass dependant info about each rank (e.g, hostname)
+        # Get subclass dependant info about each rank (e.g., hostname)
         rinfo = comm.gather(self._get_rank_info(), root=root)
 
+        # If we are the root rank then perform the rank allocation
         if rank == root:
-            # Use this info to construct a mapping from MPI ranks to
-            # physical mesh ranks
             mprankmap = self._get_mprankmap(prankconn, rinfo)
         else:
             mprankmap = None
 
-        # Broadcast the connectivity and physical to each MPI rank
-        self.prankconn = comm.bcast(prankconn, root=root)
-        self.mprankmap = comm.bcast(mprankmap, root=root)
+        # Broadcast the connectivity and rank mappings to all other ranks
+        self.prankconn = prankconn = comm.bcast(prankconn, root=root)
+        self.mprankmap = mprankmap = comm.bcast(mprankmap, root=root)
 
-        # Invert this mapping
-        self.pmrankmap = {v: k for k, v in self.mprankmap.items()}
+        # Invert the mapping to obtain the physical-to-MPI rank mapping
+        self.pmrankmap = sorted(range(comm.size), key=mprankmap.__getitem__)
 
-        # Compute the physical rank of ourself
-        self.prank = self.mprankmap[rank]
+        # Compute our physical rank
+        self.prank = mprankmap[rank]
 
     def _get_mesh_connectivity(self, mesh):
         conn = defaultdict(list)
@@ -61,14 +61,11 @@ class BaseRankAllocator(object, metaclass=ABCMeta):
                 lhs, rhs = int(m.group(1)), int(m.group(2))
                 conn[lhs].append(rhs)
 
-                if 'con_p%dp%d' % (rhs, lhs) not in mesh:
-                    raise ValueError('MPI interface (%d, %d) is not symmetric'
-                                     % (lhs, rhs))
+                if 'con_p{0}p{1}'.format(rhs, lhs) not in mesh:
+                    raise ValueError('MPI interface ({0}, {1}) is not '
+                                     'symmetric'.format(lhs, rhs))
 
-        if sorted(conn) != list(range(len(conn))):
-            raise ValueError('Mesh has invalid partition numbers')
-
-        return conn
+        return [conn[i] for i in range(len(conn) or 1)]
 
     @abstractmethod
     def _get_rank_info(self):
@@ -86,4 +83,14 @@ class LinearRankAllocator(BaseRankAllocator):
         return None
 
     def _get_mprankmap(self, prankconn, rinfo):
-        return {i: i for i in range(len(rinfo))}
+        return list(range(len(rinfo)))
+
+
+class RandomRankAllocator(BaseRankAllocator):
+    name = 'random'
+
+    def _get_rank_info(self):
+        return None
+
+    def _get_mprankmap(self, prankconn, rinfo):
+        return random.sample(range(len(rinfo)), len(rinfo))

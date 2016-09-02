@@ -97,7 +97,7 @@ class StdPIController(BaseStdController):
         self._beta = self.cfg.getfloat(sect, 'pi-beta', 0.4)
 
         # Estimate of previous error
-        self._errprev = 0.0
+        self._errprev = 1.0
 
         # Step size adjustment factors
         self._saffac = self.cfg.getfloat(sect, 'safety-fact', 0.8)
@@ -150,8 +150,8 @@ class StdPIController(BaseStdController):
         saff = self._saffac
         sord = self._stepper_order
 
-        expa = self._alpha / self._stepper_order
-        expb = self._beta / self._stepper_order
+        expa = self._alpha / sord
+        expb = self._beta / sord
 
         while self.tcurr < t:
             # Decide on the time step

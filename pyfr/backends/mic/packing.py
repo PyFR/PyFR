@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import ComputeKernel, NullComputeKernel
+from pyfr.backends.base import ComputeKernel
 from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.mic.provider import MICKernelProvider
 
