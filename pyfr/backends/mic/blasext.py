@@ -17,7 +17,7 @@ class MICBlasExtKernels(MICKernelProvider):
 
         # Render the kernel template
         src = self.backend.lookup.get_template('axnpby').render(
-            subdims=subdims or range(ncola), nv=nv
+            subdims=subdims or range(ncola), ncola=ncola, nv=nv
         )
 
         # Build the kernel

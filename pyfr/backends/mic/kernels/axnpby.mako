@@ -20,7 +20,7 @@ axnpby(long *nrowp, long *ncolbp, long *ldimp,
         int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
         int rb, re, cb, ce, idx;
         fpdtype_t axn;
-        loop_sched_2d(nrow, ncolb, align, &rb, &re, &cb, &ce);
+        loop_sched_2d(*nrowp, *ncolbp, align, &rb, &re, &cb, &ce);
         int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
 
         for (int r = rb; r < re; r++)
