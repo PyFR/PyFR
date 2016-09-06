@@ -14,12 +14,12 @@ class OpenMPPackingKernels(OpenMPKernelProvider, BasePackingKernels):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, 'iiiPPPPP')
+        kern = self._build_kernel('pack_view', src, 'iiiPPPP')
 
         class PackXchgViewKernel(ComputeKernel):
             def run(self, queue):
                 kern(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
-                     v.cstrides or 0, v.rstrides or 0, m)
+                     v.rstrides or 0, m)
 
         return PackXchgViewKernel()
 

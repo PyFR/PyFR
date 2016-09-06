@@ -118,7 +118,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
             # Matrix
             if isinstance(ka, mattypes):
-                arglst += [ka, ka.leadsubdim] if len(atypes) == 2 else [ka]
+                arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
             # View
             elif isinstance(ka, viewtypes):
                 if isinstance(ka, self.backend.view_cls):
@@ -127,8 +127,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
                     view = ka.view
 
                 arglst += [view.basedata, view.mapping]
-                arglst += [view.cstrides] if len(atypes) >= 3 else []
-                arglst += [view.rstrides] if len(atypes) == 4 else []
+                arglst += [view.rstrides] if len(atypes) == 3 else []
             # Other; let the backend handle it
             else:
                 arglst.append(ka)

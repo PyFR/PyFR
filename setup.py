@@ -92,6 +92,7 @@ data_files = [
 
 # Hard dependencies
 install_requires = [
+    'gimmik >= 2.0',
     'h5py >= 2.6',
     'mako >= 1.0.0',
     'mpi4py >= 2.0',

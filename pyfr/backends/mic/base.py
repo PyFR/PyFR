@@ -4,7 +4,6 @@ import numpy as np
 
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
-from pyfr.template import DottedTemplateLookup
 
 
 class MICBackend(BaseBackend):
@@ -31,6 +30,9 @@ class MICBackend(BaseBackend):
         # Take the alignment requirement to be 64-bytes
         self.alignb = 64
 
+        # Compute the SoA size
+        self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
+
         from pyfr.backends.mic import (blasext, cblas, packing, provider,
                                        types)
 
@@ -44,12 +46,6 @@ class MICBackend(BaseBackend):
         self.view_cls = types.MICView
         self.xchg_matrix_cls = types.MICXchgMatrix
         self.xchg_view_cls = types.MICXchgView
-
-        # Template lookup
-        self.lookup = DottedTemplateLookup(
-            'pyfr.backends.mic.kernels',
-            fpdtype=self.fpdtype, alignb=self.alignb
-        )
 
         # Kernel provider classes
         kprovcls = [provider.MICPointwiseKernelProvider,

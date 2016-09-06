@@ -103,9 +103,9 @@ class BaseElements(object, metaclass=ABCMeta):
 
     @lazyprop
     def _srtd_face_fpts(self):
-        plocfpts = self.plocfpts.transpose(1, 2, 0).tolist()
+        plocfpts = self.plocfpts.transpose(1, 2, 0)
 
-        return [[fuzzysort(pts, ffpts) for pts in plocfpts]
+        return [[np.array(fuzzysort(pts.tolist(), ffpts)) for pts in plocfpts]
                 for ffpts in self.basis.facefpts]
 
     @abstractproperty
@@ -134,7 +134,7 @@ class BaseElements(object, metaclass=ABCMeta):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
     @abstractmethod
-    def set_backend(self, backend, nscal_upts):
+    def set_backend(self, backend, nscal_upts, nonce):
         self._be = backend
 
         # Sizes
@@ -144,7 +144,7 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Convenience functions for scalar/vector allocation
         alloc = lambda ex, n: abufs.append(
-            backend.matrix(n, extent=ex, tags={'align'})
+            backend.matrix(n, extent=nonce + ex, tags={'align'})
         ) or abufs[-1]
         salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
         valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
@@ -193,7 +193,14 @@ class BaseElements(object, metaclass=ABCMeta):
 
     @memoize
     def smat_at_np(self, name):
-        return self._get_smats(getattr(self.basis, name))
+        smats_mpts, _ = self._smats_djacs_mpts
+
+        # Interpolation matrix to pts
+        m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
+
+        # Interpolate the smats
+        smats = np.array([np.dot(m0, smat) for smat in smats_mpts])
+        return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
     @memoize
     def smat_at(self, name):
@@ -201,7 +208,13 @@ class BaseElements(object, metaclass=ABCMeta):
 
     @memoize
     def rcpdjac_at_np(self, name):
-        _, djac = self._get_smats(getattr(self.basis, name), retdets=True)
+        _, djacs_mpts = self._smats_djacs_mpts
+
+        # Interpolation matrix to pts
+        m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
+
+        # Interpolate the djacs
+        djac = np.dot(m0, djacs_mpts)
 
         if np.any(djac < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
@@ -226,7 +239,7 @@ class BaseElements(object, metaclass=ABCMeta):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
 
     def _gen_pnorm_fpts(self):
-        smats = self._get_smats(self.basis.fpts).transpose(1, 3, 0, 2)
+        smats = self.smat_at_np('fpts').transpose(1, 3, 0, 2)
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
         # Jacobian and N is the normal for each fpt.  Using
@@ -254,22 +267,6 @@ class BaseElements(object, metaclass=ABCMeta):
     def _mag_pnorm_fpts(self):
         self._gen_pnorm_fpts()
         return self._mag_pnorm_fpts
-
-    def _get_smats(self, pts, retdets=False):
-        npts = len(pts)
-        smats_mpts, djacs_mpts = self._smats_djacs_mpts
-
-        # Interpolation matrix to pts
-        m0 = self.basis.mbasis.nodal_basis_at(pts)
-
-        # Interpolate smats
-        smats = np.array([np.dot(m0, smat) for smat in smats_mpts])
-        smats = smats.reshape(self.ndims, npts, self.ndims, -1)
-
-        if retdets:
-            return smats, np.dot(m0, djacs_mpts)
-        else:
-            return smats
 
     @lazyprop
     def _smats_djacs_mpts(self):
@@ -346,26 +343,19 @@ class BaseElements(object, metaclass=ABCMeta):
     def get_scal_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        cstri = ((self._scal_fpts.leadsubdim,),)*nfp
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        cmap = (eidx,)*nfp
 
-        return (self._scal_fpts.mid,)*nfp, rcmap, cstri
+        return (self._scal_fpts.mid,)*nfp, rmap, cmap
 
     def get_vect_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        rcstri = ((self.nfpts, self._vect_fpts.leadsubdim),)*nfp
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        cmap = (eidx,)*nfp
+        rstri = (self.nfpts,)*nfp
 
-        return (self._vect_fpts.mid,)*nfp, rcmap, rcstri
-
-    def get_avis_fpts_for_inter(self, eidx, fidx):
-        nfp = self.nfacefpts[fidx]
-
-        rcmap = [(fpidx, eidx) for fpidx in self._srtd_face_fpts[fidx][eidx]]
-        cstri = ((self._avis_fpts.leadsubdim,),)*nfp
-
-        return (self._avis_fpts.mid,)*nfp, rcmap, cstri
+        return (self._vect_fpts.mid,)*nfp, rmap, cmap, rstri
 
     def get_ploc_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]

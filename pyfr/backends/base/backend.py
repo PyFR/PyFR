@@ -4,11 +4,14 @@ from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import wraps
 from itertools import count
-from weakref import WeakValueDictionary, WeakKeyDictionary
+import math
+from weakref import WeakKeyDictionary, WeakValueDictionary
 
 import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
+from pyfr.template import DottedTemplateLookup
+from pyfr.util import lazyprop
 
 
 def recordmat(fn):
@@ -49,6 +52,14 @@ class BaseBackend(object, metaclass=ABCMeta):
 
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
+
+    @lazyprop
+    def lookup(self):
+        pkg = 'pyfr.backends.{0}.kernels'.format(self.name)
+        dfltargs = dict(alignb=self.alignb, fpdtype=self.fpdtype,
+                        soasz=self.soasz, math=math)
+
+        return DottedTemplateLookup(pkg, dfltargs)
 
     def malloc(self, obj, extent):
         # If no extent has been specified then autocommit
@@ -137,13 +148,15 @@ class BaseBackend(object, metaclass=ABCMeta):
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
 
-    def view(self, matmap, rcmap, stridemap=None, vshape=tuple(), tags=set()):
-        return self.view_cls(self, matmap, rcmap, stridemap, vshape, tags)
+    def view(self, matmap, rmap, cmap, rstridemap=None, vshape=tuple(),
+             tags=set()):
+        return self.view_cls(self, matmap, rmap, cmap, rstridemap, vshape,
+                             tags)
 
-    def xchg_view(self, matmap, rcmap, stridemap=None, vshape=tuple(),
+    def xchg_view(self, matmap, rmap, cmap, rstridemap=None, vshape=tuple(),
                   tags=set()):
-        return self.xchg_view_cls(self, matmap, rcmap, stridemap, vshape,
-                                  tags)
+        return self.xchg_view_cls(self, matmap, rmap, cmap, rstridemap,
+                                  vshape, tags)
 
     def kernel(self, name, *args, **kwargs):
         for prov in self._providers:

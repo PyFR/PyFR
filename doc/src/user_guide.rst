@@ -21,11 +21,12 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `h5py <http://www.h5py.org/>`_ >= 2.6
-2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
-4. `numpy <http://www.numpy.org/>`_ >= 1.8
-5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
+1. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
+2. `h5py <http://www.h5py.org/>`_ >= 2.6
+3. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
+4. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
+5. `numpy <http://www.numpy.org/>`_ >= 1.8
+6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
 compatible with 32-bit Python distributions.
@@ -199,12 +200,22 @@ Parameterises the CUDA backend with
 
      ``standard`` | ``cuda-aware``
 
+4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+
+     *int*
+
+5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+
+    *int*, *int*
+
 Example::
 
     [backend-cuda]
     device-id = round-robin
     gimmik-max-nnz = 512
     mpi-type = standard
+    block-1d = 64
+    block-2d = 128, 2
 
 [backend-mic]
 ^^^^^^^^^^^^^^^^
@@ -241,6 +252,16 @@ Parameterises the OpenCL backend with
 
      *int*
 
+5. ``local-size-1d`` --- local work size for one dimensional pointwise
+   kernels:
+
+    *int*
+
+6. ``local-size-2d`` --- local work size for two dimensional pointwise
+   kernels:
+
+    *int*, *int*
+
 Example::
 
     [backend-opencl]
@@ -248,6 +269,8 @@ Example::
     device-type = gpu
     device-id = local-rank
     gimmik-max-nnz = 512
+    local-size-1d = 16
+    local-size-2d = 128, 1
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
@@ -729,7 +752,7 @@ Example::
 
 Parameterises artificial viscosity for shock capturing with
 
-1. ``max-amu`` --- maximum artificial viscosity:
+1. ``max-artvisc`` --- maximum artificial viscosity:
 
     *float*
 
@@ -744,7 +767,7 @@ Parameterises artificial viscosity for shock capturing with
 Example::
 
     [solver-artificial-viscosity]
-    max-amu = 0.01
+    max-artvisc = 0.01
     s0 = 0.01
     kappa = 5.0
 

@@ -29,18 +29,18 @@ class CUDAMatrixBase(base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty(self.datashape, dtype=self.dtype)
+        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
         cuda.memcpy_dtoh(buf, self.data)
 
-        # Slice to give the expected I/O shape
-        return buf[...,:self.ioshape[-1]]
+        # Unpack
+        return self._unpack(buf[:, :self.ncol])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and assign
-        buf = np.zeros(self.datashape, dtype=self.dtype)
-        buf[...,:self.ioshape[-1]] = ary
+        # Allocate a new buffer with suitable padding and pack it
+        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
+        buf[:, :self.ncol] = self._pack(ary)
 
         # Copy
         cuda.memcpy_htod(self.data, buf)

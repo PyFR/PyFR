@@ -12,23 +12,22 @@ class MICBlasExtKernels(MICKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        ncola, ncolb = arr[0].datashape[1:]
-        nrow, ldim, lsdim, dtype = arr[0].traits
+        nrow, ldim, dtype = arr[0].traits
+        ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
         src = self.backend.lookup.get_template('axnpby').render(
-            subdims=subdims or range(ncola), nv=nv
+            subdims=subdims or range(ncola), ncola=ncola, nv=nv
         )
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*4 + [np.intp]*nv + [dtype]*nv)
+                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
                 args = [x.data for x in arr] + list(consts)
-                queue.mic_stream_comp.invoke(kern, nrow, ncolb, ldim, lsdim,
-                                             *args)
+                queue.mic_stream_comp.invoke(kern, nrow, ncolb, ldim, *args)
 
         return AxnpbyKernel()
 
