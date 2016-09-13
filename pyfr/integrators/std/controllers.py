@@ -48,10 +48,6 @@ class BaseStdController(BaseStdIntegrator):
 
         self._idxcurr = idxold
 
-    @property
-    def nsteps(self):
-        return self.nacptsteps + self.nrjctsteps
-
 
 class StdNoneController(BaseStdController):
     controller_name = 'none'

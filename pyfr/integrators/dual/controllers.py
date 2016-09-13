@@ -34,10 +34,6 @@ class BaseDualController(BaseDualIntegrator):
         # Fire off any event handlers
         self.completed_step_handlers(self)
 
-    @property
-    def nsteps(self):
-        return self.nacptsteps + self.nrjctsteps
-
 
 class DualNoneController(BaseDualController):
     controller_name = 'none'

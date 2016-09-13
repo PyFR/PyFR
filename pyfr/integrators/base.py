@@ -198,6 +198,10 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         for t in self.tlist:
             self.advance_to(t)
 
+    @property
+    def nsteps(self):
+        return self.nacptsteps + self.nrjctsteps
+
     def collect_stats(self, stats):
         wtime = time.time() - self._wstart
 
@@ -208,6 +212,11 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         # Simulation and wall clock times
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
         stats.set('solver-time-integrator', 'wall-time', wtime)
+
+        # Step counts
+        stats.set('solver-time-integrator', 'nsteps', self.nsteps)
+        stats.set('solver-time-integrator', 'nacptsteps', self.nacptsteps)
+        stats.set('solver-time-integrator', 'nrjctsteps', self.nrjctsteps)
 
     @property
     def cfgmeta(self):
