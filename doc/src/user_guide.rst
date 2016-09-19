@@ -67,7 +67,7 @@ OpenMP Backend
 
 The OpenMP backend targets multi-core CPUs. The backend requires:
 
-1. GCC >= 4.7
+1. GCC >= 4.9
 2. A BLAS library compiled as a shared library
    (e.g. `OpenBLAS <http://www.openblas.net/>`_)
 
@@ -226,7 +226,7 @@ Parameterises the MIC backend with
 
     *int* | ``local-rank``
 
-1. ``mkl-root`` --- path to MKL root directory:
+2. ``mkl-root`` --- path to MKL root directory:
 
     *string*
 
