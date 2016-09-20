@@ -375,60 +375,119 @@ Example::
 
 Parameterises the time-integration scheme used by the solver with
 
-1. ``scheme`` --- time-integration scheme:
+1. ``formulation`` --- formulation:
 
-    ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
-
-2. ``tstart`` --- initial time:
-
-    *float*
-
-3. ``tend`` --- final time:
-
-    *float*
-
-4. ``dt`` --- time-step:
-
-    *float*
-
-5. ``controller`` --- time-step size controller:
-
-    ``none`` | ``pi``
+    ``std`` | ``dual``
 
     where
 
-    ``pi`` only works with ``rk34`` and ``rk45`` and requires
+    ``std`` requires
 
-        - ``atol`` --- absolute error tolerance
+        - ``scheme`` --- time-integration scheme
 
-           *float*
+           ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
-        - ``rtol`` --- relative error tolerance
-
-           *float*
-
-        - ``errest-norm`` --- norm to use for estimating the error
-
-           ``uniform`` | ``l2``
-
-        - ``safety-fact`` --- safety factor for step size adjustment
-          (suitable range 0.80-0.95)
+        - ``tstart`` --- initial time
 
            *float*
 
-        - ``min-fact`` --- minimum factor that the time-step can change
-          between iterations (suitable range 0.1-0.5)
+        - ``tend`` --- final time
 
            *float*
 
-        - ``max-fact`` --- maximum factor that the time-step can change
-          between iterations (suitable range 2.0-6.0)
+        - ``dt`` --- time-step
 
            *float*
+
+        - ``controller`` --- time-step controller
+
+           ``none`` | ``pi``
+
+           where
+
+           ``pi`` only works with ``rk34`` and ``rk45`` and requires
+
+            - ``atol`` --- absolute error tolerance
+
+               *float*
+
+            - ``rtol`` --- relative error tolerance
+
+               *float*
+
+            - ``errest-norm`` --- norm to use for estimating the error
+
+               ``uniform`` | ``l2``
+
+            - ``safety-fact`` --- safety factor for step size adjustment
+              (suitable range 0.80-0.95)
+
+               *float*
+
+            - ``min-fact`` --- minimum factor that the time-step can change
+              between iterations (suitable range 0.1-0.5)
+
+               *float*
+
+            - ``max-fact`` --- maximum factor that the time-step can change
+              between iterations (suitable range 2.0-6.0)
+
+               *float*
+
+    ``dual`` requires
+
+        - ``scheme`` --- time-integration scheme
+
+           ``backward-euler`` | ``bdf2`` | ``bdf3``
+
+        - ``pseudo-scheme`` --- pseudo-time-integration scheme
+
+           ``euler`` | ``tvd-rk3`` | ``rk4``
+
+        - ``tstart`` --- initial time
+
+           *float*
+
+        - ``tend`` --- final time
+
+           *float*
+
+        - ``dt`` --- time-step
+
+           *float*
+
+        - ``pseudo-dt`` --- pseudo-time-step
+
+           *float*
+
+        - ``controller`` --- pseudo-time-step controller
+
+           ``none``
+
+           where
+
+           ``none`` requires
+
+            - ``pseudo-niters-max`` --- minimum number of iterations
+
+               *int*
+
+            - ``pseudo-niters-min`` --- maximum number of iterations
+
+               *int*
+
+            - ``pseudo-aresid`` --- absolute residual tolerance
+
+               *float*
+
+            - ``pseudo-rresid`` --- relative residual tolerance
+
+               *float*
 
 Example::
 
     [solver-time-integrator]
+    formulation = std
     scheme = rk45
     controller = pi
     tstart = 0.0
