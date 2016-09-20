@@ -107,7 +107,7 @@ advances a `System`_ by a single time-step. There are 11 types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.dual.steppers.BDF2DualStepper
+.. autoclass:: pyfr.integrators.dual.steppers.DualBDF2Stepper
     :members:
     :undoc-members:
     :inherited-members:
@@ -115,7 +115,7 @@ advances a `System`_ by a single time-step. There are 11 types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.dual.steppers.BDF3DualStepper
+.. autoclass:: pyfr.integrators.dual.steppers.DualBDF3Stepper
     :members:
     :undoc-members:
     :inherited-members:
@@ -123,7 +123,7 @@ advances a `System`_ by a single time-step. There are 11 types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.dual.steppers.BackwardEulerDualStepper
+.. autoclass:: pyfr.integrators.dual.steppers.DualBackwardEulerStepper
     :members:
     :undoc-members:
     :inherited-members:
