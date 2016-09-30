@@ -12,9 +12,6 @@ containing various element types. It is also designed to target a range
 of hardware platforms via use of an in-built domain specific language
 derived from the Mako templating engine.
 
-PyFR is being developed in the `Vincent Lab <https://www.imperial.ac.uk/aeronautics/research/vincentlab/>`_,
-Department of Aeronautics, Imperial College London, UK.
-
 Authors
 -------
 
