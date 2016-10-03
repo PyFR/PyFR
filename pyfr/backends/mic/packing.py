@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import ComputeKernel, NullComputeKernel
+from pyfr.backends.base import ComputeKernel
 from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.mic.provider import MICKernelProvider
 
@@ -14,13 +14,13 @@ class MICPackingKernels(MICKernelProvider, BasePackingKernels):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, 'iiiPPPPP')
+        kern = self._build_kernel('pack_view', src, 'iiiPPPP')
 
         class PackXchgViewKernel(ComputeKernel):
             def run(self, queue):
                 # Kernel arguments
                 args = [v.n, v.nvrow, v.nvcol, v.basedata.dev_ptr,
-                        v.mapping, v.cstrides, v.rstrides, m]
+                        v.mapping, v.rstrides, m]
                 args = [getattr(arg, 'data', arg) for arg in args]
 
                 # Pack

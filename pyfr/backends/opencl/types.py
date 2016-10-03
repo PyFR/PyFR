@@ -10,7 +10,7 @@ from pyfr.util import lazyprop
 class OpenCLMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
-        self.data = basedata.get_sub_region(offset, self.nbytes + 1)
+        self.data = basedata.get_sub_region(offset, self.nbytes)
         self.offset = offset
 
         # Process any initial value
@@ -22,18 +22,18 @@ class OpenCLMatrixBase(base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty(self.datashape, dtype=self.dtype)
+        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
         cl.enqueue_copy(self.backend.qdflt, buf, self.data)
 
-        # Slice to give the expected I/O shape
-        return buf[...,:self.ioshape[-1]]
+        # Unpack
+        return self._unpack(buf[:, :self.ncol])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and assign
-        buf = np.zeros(self.datashape, dtype=self.dtype)
-        buf[...,:self.ioshape[-1]] = ary
+        # Allocate a new buffer with suitable padding and pack it
+        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
+        buf[:, :self.ncol] = self._pack(ary)
 
         # Copy
         cl.enqueue_copy(self.backend.qdflt, self.data, buf)
@@ -51,7 +51,7 @@ class OpenCLMatrixRSlice(base.MatrixRSlice):
     @lazyprop
     def data(self):
         return self.parent.basedata.get_sub_region(self.offset,
-                                                   self.nrow*self.pitch + 1)
+                                                   self.nrow*self.pitch)
 
     @property
     def _as_parameter_(self):

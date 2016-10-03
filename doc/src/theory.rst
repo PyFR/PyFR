@@ -57,6 +57,11 @@ correction function. Linear stability issues are discussed in:
   Problems on Tetrahedra. D. M. Williams, A. Jameson. Journal of 
   Scientific Computing, Volume 59, Pages 721-759, 2014
   <http://link.springer.com/article/10.1007%2Fs10915-013-9780-2>`_
+- `An Extended Range of Stable-Symmetric-Conservative Flux Reconstruction
+  Correction Functions. P. E. Vincent, A. M. Farrington, F. D. Witherden,
+  A. Jameson. Computer Methods in Applied Mechanics and Engineering,
+  Volume 296, Pages 248-272, 2015 
+  <http://www.sciencedirect.com/science/article/pii/S0045782515002418>`_
 
 Non-Linear Stability
 --------------------

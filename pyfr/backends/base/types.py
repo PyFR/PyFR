@@ -25,23 +25,26 @@ class MatrixBase(object, metaclass=ABCMeta):
 
         if ndim == 2:
             nrow, ncol = shape
-        elif ndim == 3 or ndim == 4:
-            nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
-            ncol = shape[-2]*shape[-1] + (1 - shape[-2])*(shape[-1] % -ldmod)
+            aosoashape = shape
+        else:
+            nvar, narr, k = shape[-2], shape[-1], backend.soasz
+            nparr = narr - narr % -k
 
-        # Pad the final dimension
-        shape[-1] -= shape[-1] % -ldmod
+            nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
+            ncol = nvar*nparr
+            aosoashape = shape[:-2] + [nparr // k, nvar, k]
 
         # Assign
         self.nrow, self.ncol = int(nrow), int(ncol)
-        self.ioshape, self.datashape = ioshape, shape
+
+        self.datashape = aosoashape
+        self.ioshape = ioshape
 
         self.leaddim = self.ncol - (self.ncol % -ldmod)
-        self.leadsubdim = shape[-1]
 
         self.pitch = self.leaddim*self.itemsize
         self.nbytes = self.nrow*self.pitch
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
+        self.traits = (self.nrow, self.leaddim, self.dtype)
 
         # Process the initial value
         if initval is not None:
@@ -75,6 +78,28 @@ class MatrixBase(object, metaclass=ABCMeta):
     @abstractmethod
     def _get(self):
         pass
+
+    def _pack(self, ary):
+        # If necessary convert from SoA to AoSoA packing
+        if ary.ndim > 2:
+            n, k = ary.shape[-1], self.backend.soasz
+
+            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % k)],
+                         mode='constant')
+            ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
+            ary = ary.reshape(self.nrow, self.ncol)
+
+        return np.ascontiguousarray(ary, dtype=self.dtype)
+
+    def _unpack(self, ary):
+        # If necessary unpack from AoSoA to SoA
+        if len(self.ioshape) > 2:
+            ary = ary.reshape(self.datashape)
+            ary = ary.swapaxes(-2, -3)
+            ary = ary.reshape(self.ioshape[:-1] + (-1,))
+            ary = ary[..., :self.ioshape[-1]]
+
+        return ary
 
 
 class Matrix(MatrixBase):
@@ -114,10 +139,10 @@ class MatrixRSlice(object):
         self.p, self.q = int(p), int(q)
         self.nrow, self.ncol = self.q - self.p, mat.ncol
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.leaddim, self.leadsubdim = mat.leaddim, mat.leadsubdim
+        self.leaddim, self.pitch = mat.leaddim, mat.pitch
 
-        self.pitch = self.leaddim*self.itemsize
-        self.traits = (self.nrow, self.leaddim, self.leadsubdim, self.dtype)
+        self.nbytes = self.nrow*self.pitch
+        self.traits = (self.nrow, self.leaddim, self.dtype)
 
         self.tags = mat.tags | {'slice'}
 
@@ -184,11 +209,11 @@ class MatrixBank(Sequence):
 
 
 class View(object):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
+    def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
         self.nvcol = vshape[-1] if len(vshape) >= 1 else 1
-        self.rstrides = self.cstrides = None
+        self.rstrides = None
 
         # Get the different matrices which we map onto
         self._mats = [backend.mats[i] for i in np.unique(matmap)]
@@ -211,6 +236,9 @@ class View(object):
         if any(m.dtype != self.refdtype for m in self._mats):
             raise TypeError('Mixed data types are not supported')
 
+        # SoA size
+        k = backend.soasz
+
         # Base offsets and leading dimensions for each point
         offset = np.empty(self.n, dtype=np.int32)
         leaddim = np.empty(self.n, dtype=np.int32)
@@ -219,32 +247,27 @@ class View(object):
             ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
 
-        # Go from matrices + (row, column) indcies to displacements
-        # relative to the base allocation address
-        mapping = (offset + rcmap[:,0]*leaddim + rcmap[:,1])[None,:]
+        # Row/column displacements
+        rowdisp = rmap*leaddim
+        coldisp = (cmap // k)*(self.nvcol*k) + cmap % k
+
+        mapping = (offset + rowdisp + coldisp)[None,:]
         self.mapping = backend.base_matrix_cls(
             backend, np.int32, (1, self.n), mapping, None, None, tags
         )
 
         # Row strides
         if self.nvrow > 1:
-            rstrides = (stridemap[:,0]*leaddim)[None,:]
+            rstrides = (rstridemap*leaddim)[None,:]
             self.rstrides = backend.base_matrix_cls(
                 backend, np.int32, (1, self.n), rstrides, None, None, tags
             )
 
-        # Column strides
-        if self.nvcol > 1:
-            cstrides = stridemap[:,-1][None,:]
-            self.cstrides = backend.base_matrix_cls(
-                backend, np.int32, (1, self.n), cstrides, None, None, tags
-            )
-
 
 class XchgView(object):
-    def __init__(self, backend, matmap, rcmap, stridemap, vshape, tags):
+    def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         # Create a normal view
-        self.view = backend.view(matmap, rcmap, stridemap, vshape, tags)
+        self.view = backend.view(matmap, rmap, cmap, rstridemap, vshape, tags)
 
         # Dimensions
         self.n = n = self.view.n

@@ -6,23 +6,14 @@ import re
 import numpy as np
 
 
-def procbody(body, fpdtype):
-    # At single precision suffix all floating point constants by 'f'
-    if fpdtype == np.float32:
-        body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
-                      r'\g<0>f', body)
-
-    return body
-
-
 class Arg(object):
     def __init__(self, name, spec, body):
         self.name = name
 
-        specptn = (r'(?:(in|inout|out)\s+)?'       # Intent
-                   r'(?:(mpi|scalar|view)\s+)?'    # Attrs
-                   r'([A-Za-z_]\w*)'               # Data type
-                   r'((?:\[\d+\]){0,2})$')         # Constant array dimensions
+        specptn = (r'(?:(in|inout|out)\s+)?'                # Intent
+                   r'(?:(broadcast|mpi|scalar|view)\s+)?'   # Attrs
+                   r'([A-Za-z_]\w*)'                        # Data type
+                   r'((?:\[\d+\]){0,2})$')                  # Dimensions
         dimsptn = r'(?<=\[)\d+(?=\])'
         usedptn = r'(?:[^A-Za-z]|^){0}[^A-Za-z0-9]'.format(name)
 
@@ -43,13 +34,18 @@ class Arg(object):
         self.ncdim = len(self.cdims)
 
         # Attributes
+        self.isbroadcast = 'broadcast' in self.attrs
         self.ismpi = 'mpi' in self.attrs
         self.isused = bool(re.search(usedptn, body))
         self.isview = 'view' in self.attrs
         self.isscalar = 'scalar' in self.attrs
         self.isvector = 'scalar' not in self.attrs
 
-        # Currently scalar arguments must be of type fpdtype_t
+        # Validation
+        if self.isbroadcast and self.intent != 'in':
+            raise ValueError('Broadcast arguments must be of intent in')
+        if self.isbroadcast and self.ncdim != 0:
+            raise ValueError('Broadcast arguments can not have dimensions')
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
@@ -58,7 +54,6 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
     def __init__(self, name, ndim, args, body, fpdtype):
         self.name = name
         self.ndim = ndim
-        self.body = procbody(body, fpdtype)
         self.fpdtype = fpdtype
 
         # Parse and sort our argument list
@@ -71,13 +66,25 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         self.scalargs = [v for v in sargs if v.isscalar]
         self.vectargs = [v for v in sargs if v.isvector]
 
+        # If we are 1D ensure that none of our arguments are broadcasts
+        if ndim == 1 and any(v.isbroadcast for v in self.vectargs):
+            raise ValueError('Broadcast arguments are not supported in 1D '
+                             'kernels')
+
         # If we are 2D ensure none of our arguments are views
         if ndim == 2 and any(v.isview for v in self.vectargs):
-            raise ValueError('View arguments are not supported for 2D kernels')
+            raise ValueError('View arguments are not supported for 2D '
+                             'kernels')
 
         # Similarly, check for MPI matrices
         if ndim == 2 and any(v.ismpi for v in self.vectargs):
             raise ValueError('MPI matrices are not supported for 2D kernels')
+
+        # Render the main body of our kernel
+        self.body = self._render_body(body)
+
+        # Determine the dimensions to be iterated over
+        self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
 
     def argspec(self):
         # Argument names and types
@@ -97,9 +104,12 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
 
             # View
             if va.isview:
-                argt.append([np.intp]*(2 + va.ncdim))
+                argt.append([np.intp]*(2 + (va.ncdim == 2)))
             # Non-stacked vector or MPI type
             elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
+                argt.append([np.intp])
+            # Broadcast vector
+            elif va.isbroadcast:
                 argt.append([np.intp])
             # Stacked vector/matrix/stacked matrix
             else:
@@ -108,6 +118,86 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         # Return
         return self.ndim, argn, argt
 
+    def needs_ldim(self, arg):
+        return ((self.ndim == 2 and not arg.isbroadcast) or
+                (arg.ncdim > 0 and not arg.ismpi))
+
     @abstractmethod
     def render(self):
         pass
+
+    def _deref_arg_view(self, arg):
+        ptns = ['{0}_v[{0}_vix[X_IDX]]',
+                r'{0}_v[{0}_vix[X_IDX] + SOA_SZ*\1]',
+                r'{0}_v[{0}_vix[X_IDX] + {0}_vrstri[X_IDX]*\1 + SOA_SZ*\2]']
+
+        return ptns[arg.ncdim].format(arg.name)
+
+    def _deref_arg_array_1d(self, arg):
+        # Leading dimension
+        ldim = 'ld' + arg.name if not arg.ismpi else '_nx'
+
+        # Vector:
+        #   name => name_v[X_IDX]
+        if arg.ncdim == 0:
+            ix = 'X_IDX'
+        # Stacked vector:
+        #   name[\1] => name_v[ldim*\1 + X_IDX]
+        elif arg.ncdim == 1:
+            ix = r'{0}*\1 + X_IDX'.format(ldim)
+        # Doubly stacked MPI vector:
+        #   name[\1][\2] => name_v[(nv*\1 + \2)*ldim + X_IDX]
+        elif arg.ismpi:
+            ix = r'({0}*\1 + \2)*{1} + X_IDX'.format(arg.cdims[1], ldim)
+        # Doubly stacked vector:
+        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
+        else:
+            ix = (r'ld{0}*\1 + X_IDX_AOSOA(\2, {1})'
+                   .format(arg.name, arg.cdims[1]))
+
+        return '{0}_v[{1}]'.format(arg.name, ix)
+
+    def _deref_arg_array_2d(self, arg):
+        # Broadcast vector:
+        #   name => name_v[X_IDX]
+        if arg.isbroadcast:
+            ix = 'X_IDX'
+        # Matrix:
+        #   name => name_v[ldim*_y + X_IDX]
+        elif arg.ncdim == 0:
+            ix = 'ld{0}*_y + X_IDX'.format(arg.name)
+        # Stacked matrix:
+        #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv)]
+        elif arg.ncdim == 1:
+            ix = (r'ld{0}*_y + X_IDX_AOSOA(\1, {1})'
+                   .format(arg.name, arg.cdims[0]))
+        # Doubly stacked matrix:
+        #   name[\1][\2] => name_v[(\1*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
+        else:
+            ix = (r'(\1*_ny + _y)*ld{0} + X_IDX_AOSOA(\2, {1})'
+                   .format(arg.name, arg.cdims[1]))
+
+        return '{0}_v[{1}]'.format(arg.name, ix)
+
+    def _render_body(self, body):
+        ptns = [r'\b{0}\b', r'\b{0}\[(\d+)\]', r'\b{0}\[(\d+)\]\[(\d+)\]']
+
+        # At single precision suffix all floating point constants by 'f'
+        if self.fpdtype == np.float32:
+            body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
+                          r'\g<0>f', body)
+
+        # Dereference vector arguments
+        for va in self.vectargs:
+            if va.isview:
+                darg = self._deref_arg_view(va)
+            else:
+                if self.ndim == 1:
+                    darg = self._deref_arg_array_1d(va)
+                else:
+                    darg = self._deref_arg_array_2d(va)
+
+            # Substitute
+            body = re.sub(ptns[va.ncdim].format(va.name), darg, body)
+
+        return body

@@ -24,10 +24,10 @@ Controller
 
 A `Controller`_ acts to advance the simulation in time. Specifically, a
 `Controller`_ has a method named :code:`advance_to` which advances a
-`System`_ to a specified time. There are two types of `Controller`_
+`System`_ to a specified time. There are three types of `Controller`_
 available in PyFR |release|:
 
-.. autoclass:: pyfr.integrators.controllers.NoneController
+.. autoclass:: pyfr.integrators.std.controllers.StdNoneController
     :members:
     :undoc-members:
     :inherited-members:
@@ -35,18 +35,28 @@ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.controllers.PIController
+.. autoclass:: pyfr.integrators.std.controllers.StdPIController
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.dual.controllers.DualNoneController
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
 
 Types of `Controller`_ are related via the following inheritance
 diagram:
 
-.. inheritance-diagram:: pyfr.integrators.controllers
+.. inheritance-diagram:: pyfr.integrators.std.controllers
+                         pyfr.integrators.dual.controllers
     :parts: 1
 
 Stepper
@@ -54,10 +64,10 @@ Stepper
 
 A `Stepper`_ acts to advance the simulation by a single time-step.
 Specifically, a `Stepper`_ has a method named :code:`step` which
-advances a `System`_ by a single time-step. There are five types of
+advances a `System`_ by a single time-step. There are 11 types of
 `Stepper`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.integrators.steppers.EulerStepper
+.. autoclass:: pyfr.integrators.std.steppers.StdEulerStepper
     :members:
     :undoc-members:
     :inherited-members:
@@ -65,7 +75,7 @@ advances a `System`_ by a single time-step. There are five types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.steppers.RK4Stepper
+.. autoclass:: pyfr.integrators.std.steppers.StdRK4Stepper
     :members:
     :undoc-members:
     :inherited-members:
@@ -73,7 +83,7 @@ advances a `System`_ by a single time-step. There are five types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.steppers.RK34Stepper
+.. autoclass:: pyfr.integrators.std.steppers.StdRK34Stepper
     :members:
     :undoc-members:
     :inherited-members:
@@ -81,7 +91,7 @@ advances a `System`_ by a single time-step. There are five types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.steppers.RK45Stepper
+.. autoclass:: pyfr.integrators.std.steppers.StdRK45Stepper
     :members:
     :undoc-members:
     :inherited-members:
@@ -89,7 +99,54 @@ advances a `System`_ by a single time-step. There are five types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.integrators.steppers.TVDRK3Stepper
+.. autoclass:: pyfr.integrators.std.steppers.StdTVDRK3Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.dual.steppers.DualBDF2Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.dual.steppers.DualBDF3Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.dual.steppers.DualBackwardEulerStepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+.. autoclass:: pyfr.integrators.dual.pseudosteppers.DualPseudoRK4Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.dual.pseudosteppers.DualPseudoTVDRK3Stepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.integrators.dual.pseudosteppers.DualPseudoEulerStepper
     :members:
     :undoc-members:
     :inherited-members:
@@ -99,7 +156,9 @@ advances a `System`_ by a single time-step. There are five types of
 
 Types of `Stepper`_ are related via the following inheritance diagram:
 
-.. inheritance-diagram:: pyfr.integrators.steppers
+.. inheritance-diagram:: pyfr.integrators.dual.steppers
+                         pyfr.integrators.dual.pseudosteppers
+                         pyfr.integrators.std.steppers
     :parts: 1
 
 System

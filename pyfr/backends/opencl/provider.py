@@ -31,11 +31,22 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
     kernel_generator_cls = generator.OpenCLKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
+        cfg = self.backend.cfg
+
+        # Determine the local work size
+        if len(dims) == 1:
+            ls = (cfg.getint('backend-opencl', 'local-size-1d', '64'),)
+        else:
+            ls = cfg.getliteral('backend-opencl', 'local-size-2d', '128, 1')
+
+        # Global work size
+        gs = tuple(dims[::-1])
+
         class PointwiseKernel(ComputeKernel):
             def run(self, queue, **kwargs):
                 kwargs = {k: float(v) for k, v in kwargs.items()}
                 narglst = [kwargs.get(ka, ka) for ka in arglst]
                 narglst = [getattr(arg, 'data', arg) for arg in narglst]
-                fun(queue.cl_queue_comp, (dims[-1],), None, *narglst)
+                fun(queue.cl_queue_comp, gs, ls, *narglst)
 
         return PointwiseKernel()

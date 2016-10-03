@@ -54,7 +54,7 @@ class TavgPlugin(BasePlugin):
             # Get the primitive variable names and solutions
             pnames = self.elementscls.privarmap[self.ndims]
             psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
-                                                  self.cfg)
+                                                 self.cfg)
 
             # Prepare the substitutions dictionary
             ploc = dict(zip('xyz', ploc.swapaxes(0, 1)))
@@ -94,7 +94,7 @@ class TavgPlugin(BasePlugin):
                 stats.set('tavg', 'tend', intg.tcurr)
                 intg.collect_stats(stats)
 
-                metadata = dict(config=self.cfg.tostr(),
+                metadata = dict(intg.cfgmeta,
                                 stats=stats.tostr(),
                                 mesh_uuid=intg.mesh_uuid)
 

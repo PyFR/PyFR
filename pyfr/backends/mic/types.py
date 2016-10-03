@@ -3,7 +3,6 @@
 import numpy as np
 
 import pyfr.backends.base as base
-from pyfr.util import lazyprop
 
 
 class MICMatrixBase(base.MatrixBase):
@@ -22,7 +21,7 @@ class MICMatrixBase(base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty(self.datashape, dtype=self.dtype)
+        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy using the default stream
         self.backend.sdflt.transfer_device2host(
@@ -31,13 +30,13 @@ class MICMatrixBase(base.MatrixBase):
         )
         self.backend.sdflt.sync()
 
-        # Slice to give the expected I/O shape
-        return buf[...,:self.ioshape[-1]]
+        # Unpack
+        return self._unpack(buf[:, :self.ncol])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and assign
-        buf = np.zeros(self.datashape, dtype=self.dtype)
-        buf[...,:self.ioshape[-1]] = ary
+        # Allocate a new buffer with suitable padding and pack it
+        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
+        buf[:, :self.ncol] = self._pack(ary)
 
         # Copy using the default stream
         self.backend.sdflt.transfer_host2device(

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from ctypes import c_int, c_ssize_t, c_void_p, pythonapi, py_object
+
 import numpy as np
 import pycuda.driver as cuda
 
@@ -7,10 +9,15 @@ import pyfr.backends.base as base
 from pyfr.util import lazyprop
 
 
+_make_pybuf = pythonapi.PyMemoryView_FromMemory
+_make_pybuf.argtypes = [c_void_p, c_ssize_t, c_int]
+_make_pybuf.restype = py_object
+
+
 class CUDAMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
-        self.basedata = int(basedata)
-        self.data = self.basedata + offset
+        self.basedata = basedata
+        self.data = int(self.basedata) + offset
         self.offset = offset
 
         # Process any initial value
@@ -22,18 +29,18 @@ class CUDAMatrixBase(base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty(self.datashape, dtype=self.dtype)
+        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
         cuda.memcpy_dtoh(buf, self.data)
 
-        # Slice to give the expected I/O shape
-        return buf[...,:self.ioshape[-1]]
+        # Unpack
+        return self._unpack(buf[:, :self.ncol])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and assign
-        buf = np.zeros(self.datashape, dtype=self.dtype)
-        buf[...,:self.ioshape[-1]] = ary
+        # Allocate a new buffer with suitable padding and pack it
+        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
+        buf[:, :self.ncol] = self._pack(ary)
 
         # Copy
         cuda.memcpy_htod(self.data, buf)
@@ -53,7 +60,7 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 class CUDAMatrixRSlice(base.MatrixRSlice):
     @lazyprop
     def data(self):
-        return int(self.parent.basedata + self.offset)
+        return int(self.parent.basedata) + int(self.offset)
 
     @property
     def _as_parameter_(self):
@@ -81,9 +88,14 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
         # Call the standard matrix constructor
         super().__init__(backend, ioshape, initval, extent, aliases, tags)
 
-        # Allocate a page-locked buffer on the host for MPI to send/recv from
-        self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
-                                           self.dtype, 'C')
+        # If MPI is CUDA-aware then construct a buffer out of our CUDA
+        # device allocation and pass this directly to MPI
+        if backend.mpitype == 'cuda-aware':
+            self.hdata = _make_pybuf(self.data, self.nbytes, 0x200)
+        # Otherwise, allocate a buffer on the host for MPI to send/recv from
+        else:
+            self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
+                                               self.dtype, 'C')
 
 
 class CUDAXchgView(base.XchgView):

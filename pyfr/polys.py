@@ -5,7 +5,7 @@ from math import sqrt
 
 import numpy as np
 
-from pyfr.nputil import chop
+from pyfr.nputil import clean
 from pyfr.util import lazyprop, subclass_where
 
 
@@ -19,7 +19,7 @@ def jacobi(n, a, b, z):
 
         for q in range(2, n + 1):
             qapbpq, apbp2q = q*(apb + q), apb + 2*q
-            apbp2qm1, apbp2qm2  = apbp2q - 1, apbp2q - 2
+            apbp2qm1, apbp2qm2 = apbp2q - 1, apbp2q - 2
 
             aq = apbp2q*apbp2qm1/(2*qapbpq)
             bq = apbp2qm1*bbmaa/(2*qapbpq*apbp2qm2)
@@ -52,14 +52,14 @@ class BasePolyBasis(object):
         self.order = order
         self.pts = pts
 
-    @chop
+    @clean
     def ortho_basis_at(self, pts):
         if len(pts) and not isinstance(pts[0], Iterable):
             pts = [(p,) for p in pts]
 
         return np.array([self.ortho_basis_at_py(*p) for p in pts]).T
 
-    @chop
+    @clean
     def jac_ortho_basis_at(self, pts):
         if len(pts) and not isinstance(pts[0], Iterable):
             pts = [(p,) for p in pts]
@@ -68,17 +68,22 @@ class BasePolyBasis(object):
 
         return np.array(J).swapaxes(0, 2)
 
-    @chop
+    @clean
     def nodal_basis_at(self, epts):
         return np.linalg.solve(self.vdm, self.ortho_basis_at(epts)).T
 
-    @chop
+    @clean
     def jac_nodal_basis_at(self, epts):
         return np.linalg.solve(self.vdm, self.jac_ortho_basis_at(epts))
 
     @lazyprop
     def vdm(self):
         return self.ortho_basis_at(self.pts)
+
+    @lazyprop
+    @clean
+    def invvdm(self):
+        return np.linalg.inv(self.vdm)
 
 
 class LinePolyBasis(BasePolyBasis):
@@ -90,7 +95,7 @@ class LinePolyBasis(BasePolyBasis):
 
     def jac_ortho_basis_at_py(self, p):
         djp = jacobi_diff(self.order - 1, 0, 0, p)
-        return [sqrt(i + 0.5)*p for i, p in enumerate(djp)]
+        return [(sqrt(i + 0.5)*p,) for i, p in enumerate(djp)]
 
     @lazyprop
     def degrees(self):
@@ -156,7 +161,7 @@ class QuadPolyBasis(BasePolyBasis):
 
         return [pi*pj for pi in pa for pj in pb]
 
-    def jac_ortho_basis_at_py(self, p , q):
+    def jac_ortho_basis_at_py(self, p, q):
         sk = [sqrt(k + 0.5) for k in range(self.order)]
         pa = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, p))]
         pb = [c*jp for c, jp in zip(sk, jacobi(self.order - 1, 0, 0, q))]

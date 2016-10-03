@@ -13,10 +13,10 @@ def _get_inter_objs(interside, getter, elemap):
 
 def get_opt_view_perm(interside, mat, elemap):
     vm = _get_inter_objs(interside, mat, elemap)
-    matmap, rcmap = [np.concatenate([m[i] for m in vm]) for i in range(2)]
+    mmap, rmap, cmap = [np.concatenate([m[i] for m in vm]) for i in range(3)]
 
     # Sort
-    return np.lexsort((matmap, rcmap[:,1], rcmap[:,0]))
+    return np.lexsort((cmap, rmap, mmap))
 
 
 class BaseInters(object):

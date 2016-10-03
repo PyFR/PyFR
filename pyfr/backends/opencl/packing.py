@@ -17,13 +17,13 @@ class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*5)
+        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
 
         class PackXchgViewKernel(ComputeKernel):
             def run(self, queue):
                 # Kernel arguments
                 args = [v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
-                        v.cstrides, v.rstrides, m]
+                        v.rstrides, m]
                 args = [getattr(arg, 'data', arg) for arg in args]
 
                 # Pack

@@ -16,8 +16,8 @@ class BaseAdvectionIntInters(BaseInters):
         self._gen_perm(lhs, rhs)
 
         # Generate the left and right hand side view matrices
-        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
-        self._scal0_rhs = self._scal_view(rhs, 'get_scal_fpts_for_inter')
+        self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
+        self._scal_rhs = self._scal_view(rhs, 'get_scal_fpts_for_inter')
 
         # Generate the constant matrices
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
@@ -42,24 +42,24 @@ class BaseAdvectionMPIInters(BaseInters):
         const_mat = self._const_mat
 
         # Generate the left hand view matrix and its dual
-        self._scal0_lhs = self._scal_xchg_view(lhs, 'get_scal_fpts_for_inter')
-        self._scal0_rhs = be.xchg_matrix_for_view(self._scal0_lhs)
+        self._scal_lhs = self._scal_xchg_view(lhs, 'get_scal_fpts_for_inter')
+        self._scal_rhs = be.xchg_matrix_for_view(self._scal_lhs)
 
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
         # Kernels
         self.kernels['scal_fpts_pack'] = lambda: be.kernel(
-            'pack', self._scal0_lhs
+            'pack', self._scal_lhs
         )
         self.kernels['scal_fpts_send'] = lambda: be.kernel(
-            'send_pack', self._scal0_lhs, self._rhsrank, self.MPI_TAG
+            'send_pack', self._scal_lhs, self._rhsrank, self.MPI_TAG
         )
         self.kernels['scal_fpts_recv'] = lambda: be.kernel(
-            'recv_pack', self._scal0_rhs, self._rhsrank, self.MPI_TAG
+            'recv_pack', self._scal_rhs, self._rhsrank, self.MPI_TAG
         )
         self.kernels['scal_fpts_unpack'] = lambda: be.kernel(
-            'unpack', self._scal0_rhs
+            'unpack', self._scal_rhs
         )
 
 
@@ -78,7 +78,7 @@ class BaseAdvectionBCInters(BaseInters):
         self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter', elemap)
 
         # LHS view and constant matrices
-        self._scal0_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
+        self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
         self._ploc = None
@@ -111,9 +111,7 @@ class BaseAdvectionBCInters(BaseInters):
             else:
                 exprs[k] = cfg.getexpr(sect, k, subs=subs)
 
-        if any('ploc' in ex for ex in exprs.values()):
-            plocpts = self._const_mat(lhs, 'get_ploc_for_inter')
-        else:
-            plocpts = None
+        if any('ploc' in ex for ex in exprs.values()) and not self._ploc:
+            self._ploc = self._const_mat(lhs, 'get_ploc_for_inter')
 
-        return exprs, plocpts
+        return exprs

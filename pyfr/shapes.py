@@ -6,7 +6,7 @@ import re
 
 import numpy as np
 
-from pyfr.nputil import block_diag, chop
+from pyfr.nputil import block_diag, clean
 from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
 from pyfr.util import lazyprop
@@ -17,7 +17,7 @@ def _proj_pts(projector, pts):
     return np.vstack(np.broadcast_arrays(*projector(*pts))).T
 
 
-@chop
+@clean
 def _proj_l2(qrule, basis):
     return np.dot(basis.vdm.T, qrule.wts*basis.ortho_basis_at(qrule.pts))
 
@@ -78,7 +78,7 @@ class BaseShape(object):
         else:
             raise ValueError('Invalid number of shape points')
 
-    @chop
+    @clean
     def opmat(self, expr):
         if not re.match(r'[M0-9\-+*() ]+$', expr):
             raise ValueError('Invalid operator matrix expression')
@@ -142,7 +142,7 @@ class BaseShape(object):
         return block_diag([self.m9]*self.ndims)
 
     @lazyprop
-    @chop
+    @clean
     def m11(self):
         ub = self.ubasis
 
@@ -259,7 +259,7 @@ class BaseShape(object):
 
         return np.vstack(coeffs)
 
-    @chop
+    @clean
     def gbasis_at(self, pts):
         return np.dot(self.gbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T
 
@@ -311,7 +311,7 @@ class BaseShape(object):
     @lazyprop
     def mpts(self):
         return self.std_ele(self.order)
-    
+
     @lazyprop
     def nmpts(self):
         return len(self.mpts)

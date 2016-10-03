@@ -3,22 +3,33 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 __kernel void
-axnpby(int n,
-       ${', '.join('__global fpdtype_t* restrict x' + str(i) for i in range(nv))},
-       ${', '.join('fpdtype_t alpha' + str(i) for i in range(nv))})
+axnpby(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict x0,
+       ${', '.join('__global const fpdtype_t* restrict x' + str(i)
+                   for i in range(1, nv))},
+       ${', '.join('fpdtype_t a' + str(i) for i in range(nv))})
 {
-    int strt = get_global_id(0);
-    int incr = get_global_size(0);
+    int i = get_global_id(1), j = get_global_id(0);
+    int idx;
 
-    for (int i = strt; i < n; i += incr)
+    if (j < ncolb && a0 == 0.0)
     {
-        fpdtype_t axn = ${pyfr.dot('alpha{j}', 'x{j}[i]', j=(1, nv))};
-
-        if (alpha0 == 0.0)
-            x0[i] = axn;
-        else if (alpha0 == 1.0)
-            x0[i] += axn;
-        else
-            x0[i] = alpha0*x0[i] + axn;
+    % for k in subdims:
+        idx = i*ldim + SOA_IX(j, ${k}, ${ncola});
+        x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=(1, nv))};
+    % endfor
+    }
+    else if (j < ncolb && a0 == 1.0)
+    {
+    % for k in subdims:
+        idx = i*ldim + SOA_IX(j, ${k}, ${ncola});
+        x0[idx] += ${pyfr.dot('a{l}', 'x{l}[idx]', l=(1, nv))};
+    % endfor
+    }
+    else if (j < ncolb)
+    {
+    % for k in subdims:
+        idx = i*ldim + SOA_IX(j, ${k}, ${ncola});
+        x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=nv)};
+    % endfor
     }
 }

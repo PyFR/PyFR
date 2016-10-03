@@ -23,19 +23,11 @@ derived from the Mako templating engine. The current release (PyFR
 - Platforms - CPU Clusters, Nvidia GPU Clusters, AMD GPU Clusters, Intel
   Xeon Phi Clusters
 - Spatial Discretisation - High-Order Flux Reconstruction
-- Temporal Discretisation - Explicit Runge-Kutta
+- Temporal Discretisation - Explicit and Implicit (via Dual
+  Time-Stepping)
 - Precision - Single, Double
 - Mesh Files Imported - Gmsh (.msh), CGNS (.cgns)
 - Solution Files Exported - Unstructured VTK (.vtu, .pvtu)
-
-Who is Developing PyFR?
------------------------
-
-PyFR is being developed in the `Vincent Lab
-<https://www.imperial.ac.uk/aeronautics/research/vincentlab/>`_, 
-Department of Aeronautics, Imperial College London, UK. More details 
-about the development team are available 
-`here <http://www.pyfr.org/team.php>`_.
 
 How do I Cite PyFR?
 -------------------
@@ -56,6 +48,7 @@ Sciences Research Council <http://www.epsrc.ac.uk/>`_, `Innovate UK
 <https://www.gov.uk/government/organisations/innovate-uk>`_, the
 `European Commission
 <http://ec.europa.eu/programmes/horizon2020/>`_,
-`BAE Systems <http://www.baesystems.com/>`_, and
-`Airbus <http://www.airbus.com/>`_. We are also grateful for hardware
-donations from Nvidia, Intel, and AMD.
+`BAE Systems <http://www.baesystems.com/>`_,
+`Airbus <http://www.airbus.com/>`_, and the
+`Air Force Office of Scientific Research <http://www.wpafb.af.mil/afrl/afosr>`_.
+We are also grateful for hardware donations from Nvidia, Intel, and AMD.

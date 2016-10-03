@@ -2,6 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
 <%include file='pyfr.solvers.navstokes.kernels.flux'/>
 
@@ -12,8 +13,8 @@
               ur='inout view fpdtype_t[${str(nvars)}]'
               gradul='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               gradur='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
-              amul='in view fpdtype_t'
-              amur='in view fpdtype_t'
+              artviscl='in view fpdtype_t'
+              artviscr='in view fpdtype_t'
               nl='in fpdtype_t[${str(ndims)}]'
               magnl='in fpdtype_t'>
     // Perform the Riemann solve
@@ -22,12 +23,14 @@
 
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {{0}};
-    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'amul', 'fvl')};
+    ${pyfr.expand('viscous_flux_add', 'ul', 'gradul', 'fvl')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradul', 'fvl', 'artviscl')};
 % endif
 
 % if beta != 0.5:
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
-    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'amur', 'fvr')};
+    ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
+    ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'artviscr')};
 % endif
 
 % for i in range(nvars):

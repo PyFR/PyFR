@@ -31,16 +31,16 @@ class MICSourceModule(object):
             # Compile and link
             cmd = [
                 'icc',
-                '-shared',                       # Create a shared library
-                '-std=c99',                      # Enable C99 support
-                '-Ofast',                        # Optimise
-                '-mmic',                         # Compile for the MIC
-                '-fopenmp',                      # Enable OpenMP support
-                '-L{0}/lib/mic'.format(mklroot), # MKL stuff
-                '-lmkl_intel_lp64',              #  ...
-                '-lmkl_core',                    #  ...
-                '-lmkl_intel_thread',            #  ...
-                '-fPIC',                         # Position-independent code
+                '-shared',                        # Create a shared library
+                '-std=c99',                       # Enable C99 support
+                '-Ofast',                         # Optimise
+                '-mmic',                          # Compile for the MIC
+                '-fopenmp',                       # Enable OpenMP support
+                '-L{0}/lib/mic'.format(mklroot),  # MKL stuff
+                '-lmkl_intel_lp64',               #  ...
+                '-lmkl_core',                     #  ...
+                '-lmkl_intel_thread',             #  ...
+                '-fPIC',                          # Position-independent code
                 '-o', ln, cn
             ]
             call_capture_output(cmd, cwd=tmpdir)
@@ -48,7 +48,7 @@ class MICSourceModule(object):
             # Load
             self._mod = dev.load_library(os.path.join(tmpdir, ln))
         finally:
-            pass #rm(tmpdir)
+            rm(tmpdir)
 
     def function(self, name, argtypes, restype=None):
         return getattr(self._mod, name)

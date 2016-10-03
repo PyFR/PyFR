@@ -93,6 +93,9 @@ class NativeWriter(object):
         # Increment the output number
         self.nout += 1
 
+        # Return the path
+        return path
+
     def _restore_nout(self):
         nout = 0
 

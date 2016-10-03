@@ -18,10 +18,14 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         if ('eles', 'copy_soln') in kernels:
             q1 << kernels['eles', 'copy_soln']()
+        if ('iint', 'copy_fpts') in kernels:
+            q1 << kernels['iint', 'copy_fpts']()
         q1 << kernels['iint', 'con_u']()
         q1 << kernels['bcint', 'con_u'](t=t)
+        if ('eles', 'shocksensor') in kernels:
+            q1 << kernels['eles', 'shocksensor']()
+            q1 << kernels['mpiint', 'artvisc_fpts_pack']()
         q1 << kernels['eles', 'tgradpcoru_upts']()
-
         q2 << kernels['mpiint', 'scal_fpts_send']()
         q2 << kernels['mpiint', 'scal_fpts_recv']()
         q2 << kernels['mpiint', 'scal_fpts_unpack']()
@@ -33,7 +37,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1 << kernels['eles', 'gradcoru_upts']()
         q1 << kernels['eles', 'gradcoru_fpts']()
         q1 << kernels['mpiint', 'vect_fpts_pack']()
-        runall([q1])
+        if ('eles', 'shockvar') in kernels:
+            q2 << kernels['mpiint', 'artvisc_fpts_send']()
+            q2 << kernels['mpiint', 'artvisc_fpts_recv']()
+            q2 << kernels['mpiint', 'artvisc_fpts_unpack']()
+
+        runall([q1, q2])
 
         if ('eles', 'gradcoru_qpts') in kernels:
             q1 << kernels['eles', 'gradcoru_qpts']()

@@ -9,7 +9,8 @@ class OpenMPMatrixBase(base.MatrixBase):
         self.basedata = basedata.ctypes.data
 
         self.data = basedata[offset:offset + self.nrow*self.pitch]
-        self.data = self.data.view(self.dtype).reshape(self.datashape)
+        self.data = self.data.view(self.dtype)
+        self.data = self.data.reshape(self.nrow, self.leaddim)
 
         self.offset = offset
 
@@ -24,12 +25,10 @@ class OpenMPMatrixBase(base.MatrixBase):
         del self._initval
 
     def _get(self):
-        # Trim any padding in the final dimension
-        return self.data[...,:self.ioshape[-1]]
+        return self._unpack(self.data[:, :self.ncol])
 
     def _set(self, ary):
-        # Assign
-        self.data[...,:ary.shape[-1]] = ary
+        self.data[:, :self.ncol] = self._pack(ary)
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
@@ -41,11 +40,7 @@ class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
 class OpenMPMatrixRSlice(base.MatrixRSlice):
     @lazyprop
     def data(self):
-        # Since slices do not retain any information about the
-        # high-order structure of an array it is fine to compact mat
-        # down to two dimensions and simply slice this
-        mat = self.parent
-        return mat.data.reshape(mat.nrow, mat.leaddim)[self.p:self.q]
+        return self.parent.data[self.p:self.q]
 
     @lazyprop
     def _as_parameter_(self):

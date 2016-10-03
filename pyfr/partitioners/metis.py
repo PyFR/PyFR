@@ -164,7 +164,7 @@ class METISPartitioner(BasePartitioner):
             opts[oidx] = v
 
         # Select the partitioning function
-        if self.opts['ptype'] == 'rb':
+        if self.opts['ptype'] == self.enum_opts['ptype']['rb']:
             part_graph_fn = w.METIS_PartGraphRecursive
         else:
             part_graph_fn = w.METIS_PartGraphKway

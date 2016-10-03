@@ -47,10 +47,6 @@ class CGNSWrappers(object):
         lib.cg_close.argtypes = [c_int]
         lib.cg_close.errcheck = self._errcheck
 
-        # cg_nbases
-        lib.cg_nbases.argtypes = [c_int, POINTER(c_int)]
-        lib.cg_nbases.errcheck = self._errcheck
-
         # cg_base_read
         lib.cg_base_read.argtypes = [c_int, c_int, c_char_p, POINTER(c_int),
                                      POINTER(c_int)]
@@ -129,11 +125,6 @@ class CGNSWrappers(object):
     def close(self, file):
         self.lib.cg_close(file)
 
-    def nbases(self, file):
-        nb = c_int()
-        self.lib.cg_nbases(file, nb)
-        return nb.value
-
     def base_read(self, file, idx):
         celldim, physdim = c_int(), c_int()
         name = create_string_buffer(32)
@@ -178,8 +169,8 @@ class CGNSWrappers(object):
         # http://cgns.github.io/CGNS_docs_current/midlevel/grid.html
         datatype = self.RealDouble
 
-        self.lib.cg_coord_read(file, base, zone, bytes(name, 'utf-8'), datatype,
-                               i, j, x.ctypes.data)
+        self.lib.cg_coord_read(file, base, zone, bytes(name, 'utf-8'),
+                               datatype, i, j, x.ctypes.data)
 
     def nbocos(self, zone):
         file = zone['base']['file']

@@ -5,7 +5,6 @@ import re
 
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
-from pyfr.template import DottedTemplateLookup
 
 
 class CUDABackend(BaseBackend):
@@ -36,6 +35,14 @@ class CUDABackend(BaseBackend):
         # Take the required alignment to be 128 bytes
         self.alignb = 128
 
+        # Take the SoA size to be 32 elements
+        self.soasz = 32
+
+        # Get the MPI runtime type
+        self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')
+        if self.mpitype not in {'standard', 'cuda-aware'}:
+            raise ValueError('Invalid CUDA backend MPI type')
+
         # Some CUDA devices share L1 cache and shared memory; on these
         # devices CUDA allows us to specify a preference between L1
         # cache and shared memory.  For the sake of CUBLAS (which
@@ -57,12 +64,6 @@ class CUDABackend(BaseBackend):
         self.view_cls = types.CUDAView
         self.xchg_matrix_cls = types.CUDAXchgMatrix
         self.xchg_view_cls = types.CUDAXchgView
-
-        # Template lookup
-        self.lookup = DottedTemplateLookup(
-            'pyfr.backends.cuda.kernels',
-            fpdtype=self.fpdtype, alignb=self.alignb
-        )
 
         # Instantiate the base kernel providers
         kprovs = [provider.CUDAPointwiseKernelProvider,

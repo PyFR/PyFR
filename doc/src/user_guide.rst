@@ -21,11 +21,12 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `h5py <http://www.h5py.org/>`_ >= 2.5
-2. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-3. `mpi4py <http://mpi4py.scipy.org/>`_ >= 1.3
-4. `numpy <http://www.numpy.org/>`_ >= 1.8
-5. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2014.3
+1. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
+2. `h5py <http://www.h5py.org/>`_ >= 2.6
+3. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
+4. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
+5. `numpy <http://www.numpy.org/>`_ >= 1.8
+6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
 compatible with 32-bit Python distributions.
@@ -37,7 +38,7 @@ The CUDA backend targets NVIDIA GPUs with a compute capability of 2.0
 or greater. The backend requires:
 
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
-2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2011.2
+2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2015.1
 
 MIC Backend
 ^^^^^^^^^^^
@@ -66,7 +67,7 @@ OpenMP Backend
 
 The OpenMP backend targets multi-core CPUs. The backend requires:
 
-1. GCC >= 4.7
+1. GCC >= 4.9
 2. A BLAS library compiled as a shared library
    (e.g. `OpenBLAS <http://www.openblas.net/>`_)
 
@@ -173,7 +174,7 @@ Parameterises the backend with
 
 2. ``rank-allocator`` --- MPI rank allocator:
 
-    ``linear``
+    ``linear`` | ``random``
 
 Example::
 
@@ -195,11 +196,26 @@ Parameterises the CUDA backend with
 
      *int*
 
+3. ``mpi-type`` --- type of MPI library that is being used:
+
+     ``standard`` | ``cuda-aware``
+
+4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+
+     *int*
+
+5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+
+    *int*, *int*
+
 Example::
 
     [backend-cuda]
     device-id = round-robin
     gimmik-max-nnz = 512
+    mpi-type = standard
+    block-1d = 64
+    block-2d = 128, 2
 
 [backend-mic]
 ^^^^^^^^^^^^^^^^
@@ -210,7 +226,7 @@ Parameterises the MIC backend with
 
     *int* | ``local-rank``
 
-1. ``mkl-root`` --- path to MKL root directory:
+2. ``mkl-root`` --- path to MKL root directory:
 
     *string*
 
@@ -236,6 +252,16 @@ Parameterises the OpenCL backend with
 
      *int*
 
+5. ``local-size-1d`` --- local work size for one dimensional pointwise
+   kernels:
+
+    *int*
+
+6. ``local-size-2d`` --- local work size for two dimensional pointwise
+   kernels:
+
+    *int*, *int*
+
 Example::
 
     [backend-opencl]
@@ -243,6 +269,8 @@ Example::
     device-type = gpu
     device-id = local-rank
     gimmik-max-nnz = 512
+    local-size-1d = 16
+    local-size-2d = 128, 1
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
@@ -347,56 +375,119 @@ Example::
 
 Parameterises the time-integration scheme used by the solver with
 
-1. ``scheme`` --- time-integration scheme:
+1. ``formulation`` --- formulation:
 
-    ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
-
-2. ``tstart`` --- initial time:
-
-    *float*
-
-3. ``tend`` --- final time:
-
-    *float*
-
-4. ``dt`` --- time-step:
-
-    *float*
-
-5. ``controller`` --- time-step size controller:
-
-    ``none`` | ``pi``
+    ``std`` | ``dual``
 
     where
 
-    ``pi`` only works with ``rk34`` and ``rk45`` and requires
+    ``std`` requires
 
-        - ``atol`` --- absolute error tolerance
+        - ``scheme`` --- time-integration scheme
 
-           *float*
+           ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
-        - ``rtol`` --- relative error tolerance
-
-           *float*
-
-        - ``safety-fact`` --- safety factor for step size adjustment
-          (suitable range 0.80-0.95)
+        - ``tstart`` --- initial time
 
            *float*
 
-        - ``min-fact`` --- minimum factor that the time-step can change
-          between iterations (suitable range 0.1-0.5)
+        - ``tend`` --- final time
 
            *float*
 
-        - ``max-fact`` --- maximum factor that the time-step can change
-          between iterations (suitable range 2.0-6.0)
+        - ``dt`` --- time-step
 
            *float*
+
+        - ``controller`` --- time-step controller
+
+           ``none`` | ``pi``
+
+           where
+
+           ``pi`` only works with ``rk34`` and ``rk45`` and requires
+
+            - ``atol`` --- absolute error tolerance
+
+               *float*
+
+            - ``rtol`` --- relative error tolerance
+
+               *float*
+
+            - ``errest-norm`` --- norm to use for estimating the error
+
+               ``uniform`` | ``l2``
+
+            - ``safety-fact`` --- safety factor for step size adjustment
+              (suitable range 0.80-0.95)
+
+               *float*
+
+            - ``min-fact`` --- minimum factor that the time-step can change
+              between iterations (suitable range 0.1-0.5)
+
+               *float*
+
+            - ``max-fact`` --- maximum factor that the time-step can change
+              between iterations (suitable range 2.0-6.0)
+
+               *float*
+
+    ``dual`` requires
+
+        - ``scheme`` --- time-integration scheme
+
+           ``backward-euler`` | ``bdf2`` | ``bdf3``
+
+        - ``pseudo-scheme`` --- pseudo-time-integration scheme
+
+           ``euler`` | ``tvd-rk3`` | ``rk4``
+
+        - ``tstart`` --- initial time
+
+           *float*
+
+        - ``tend`` --- final time
+
+           *float*
+
+        - ``dt`` --- time-step
+
+           *float*
+
+        - ``pseudo-dt`` --- pseudo-time-step
+
+           *float*
+
+        - ``controller`` --- pseudo-time-step controller
+
+           ``none``
+
+           where
+
+           ``none`` requires
+
+            - ``pseudo-niters-max`` --- minimum number of iterations
+
+               *int*
+
+            - ``pseudo-niters-min`` --- maximum number of iterations
+
+               *int*
+
+            - ``pseudo-aresid`` --- absolute residual tolerance
+
+               *float*
+
+            - ``pseudo-rresid`` --- relative residual tolerance
+
+               *float*
 
 Example::
 
     [solver-time-integrator]
+    formulation = std
     scheme = rk45
     controller = pi
     tstart = 0.0
@@ -404,6 +495,7 @@ Example::
     dt = 0.001
     atol = 0.00001
     rtol = 0.00001
+    errest-norm = l2
     safety-fact = 0.9
     min-fact = 0.3
     max-fact = 2.5
@@ -719,7 +811,7 @@ Example::
 
 Parameterises artificial viscosity for shock capturing with
 
-1. ``max-amu`` --- maximum artificial viscosity:
+1. ``max-artvisc`` --- maximum artificial viscosity:
 
     *float*
 
@@ -734,7 +826,7 @@ Parameterises artificial viscosity for shock capturing with
 Example::
 
     [solver-artificial-viscosity]
-    max-amu = 0.01
+    max-artvisc = 0.01
     s0 = 0.01
     kappa = 5.0
 
@@ -785,12 +877,23 @@ Parameterised with
 
     *string*
 
+4. ``post-action`` --- command to execute after writing the file:
+
+    *string*
+
+5. ``post-action-mode`` --- how the post-action command should be
+   executed:
+
+    ``blocking`` | ``non-blocking``
+
 Example::
 
     [soln-plugin-writer]
     dt-out = 0.01
     basedir = .
     basename = files-{t:.2f}
+    post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
+    post-action-mode = blocking
 
 [soln-plugin-fluidforce-name]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

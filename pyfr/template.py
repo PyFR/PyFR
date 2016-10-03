@@ -1,4 +1,4 @@
- # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 
 import pkgutil
 
@@ -7,9 +7,9 @@ from mako.template import Template
 
 
 class DottedTemplateLookup(TemplateLookup):
-    def __init__(self, pkg, **kwargs):
+    def __init__(self, pkg, dfltargs):
         self.dfltpkg = pkg
-        self.dfltargs = kwargs
+        self.dfltargs = dfltargs
 
     def adjust_uri(self, uri, relto):
         return uri

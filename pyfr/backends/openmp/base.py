@@ -3,7 +3,6 @@
 import numpy as np
 
 from pyfr.backends.base import BaseBackend
-from pyfr.template import DottedTemplateLookup
 
 
 class OpenMPBackend(BaseBackend):
@@ -12,11 +11,14 @@ class OpenMPBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        # Take the alignment requirement to be 32-bytes
-        self.alignb = 32
+        # Take the alignment requirement to be 64-bytes
+        self.alignb = 64
 
-        from pyfr.backends.openmp import (blasext, cblas, packing, provider,
-                                          types)
+        # Compute the SoA size
+        self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
+
+        from pyfr.backends.openmp import (blasext, cblas, gimmik, packing,
+                                          provider, types)
 
         # Register our data types
         self.base_matrix_cls = types.OpenMPMatrixBase
@@ -29,16 +31,11 @@ class OpenMPBackend(BaseBackend):
         self.xchg_matrix_cls = types.OpenMPXchgMatrix
         self.xchg_view_cls = types.OpenMPXchgView
 
-        # Template lookup
-        self.lookup = DottedTemplateLookup(
-            'pyfr.backends.openmp.kernels',
-            fpdtype=self.fpdtype, alignb=self.alignb
-        )
-
         # Kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
+                    gimmik.OpenMPGiMMiKKernels,
                     cblas.OpenMPCBLASKernels]
         self._providers = [k(self) for k in kprovcls]
 

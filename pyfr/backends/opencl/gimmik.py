@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from gimmik import generate_mm
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, NotSuitableError
@@ -13,15 +14,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
         self.max_nnz = backend.cfg.getint('backend-opencl', 'gimmik-max-nnz',
                                           512)
 
-        try:
-            from gimmik.generator import generateKernel
-
-            self._gen_gimmik = generateKernel
-            self.mul = self._mul_gimmik
-        except ImportError:
-            pass
-
-    def _mul_gimmik(self, a, b, out, alpha=1.0, beta=0.0):
+    def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
@@ -35,17 +28,16 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             raise NotSuitableError('Matrix too dense for GiMMiK')
 
         # Generate
-        src = self._gen_gimmik(
-            a.get(), 'opencl', alpha=alpha, beta=beta,
-            double=a.dtype == np.float64, reduced=True,
-        )
+        src = generate_mm(a.get(), dtype=a.dtype, platform='opencl',
+                          alpha=alpha, beta=beta)
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src, [np.intp]*2 + [np.int32]*3)
+        fun = self._build_kernel('gimmik_mm', src,
+                                 [np.int32] + [np.intp, np.int32]*2)
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun(queue.cl_queue_comp, (b.ncol,), None, b.data, out.data,
-                    b.ncol, b.leaddim, out.leaddim)
+                fun(queue.cl_queue_comp, (b.ncol,), None, b.ncol,
+                    b.data, b.leaddim, out.data, out.leaddim)
 
         return MulKernel()

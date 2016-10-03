@@ -4,7 +4,6 @@ import numpy as np
 
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
-from pyfr.template import DottedTemplateLookup
 
 
 class OpenCLBackend(BaseBackend):
@@ -41,6 +40,10 @@ class OpenCLBackend(BaseBackend):
         else:
             raise ValueError('No suitable OpenCL device found')
 
+        # Determine if the device supports double precision arithmetic
+        if self.fpdtype == np.float64 and not device.double_fp_config:
+            raise ValueError('Device does not support double precision')
+
         # Create a OpenCL context on this device
         self.ctx = cl.Context([device])
 
@@ -49,6 +52,9 @@ class OpenCLBackend(BaseBackend):
 
         # Compute the alignment requirement for the context
         self.alignb = device.mem_base_addr_align // 8
+
+        # Compute the SoA size
+        self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
 
         from pyfr.backends.opencl import (blasext, clblas, gimmik, packing,
                                           provider, types)
@@ -64,12 +70,6 @@ class OpenCLBackend(BaseBackend):
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
         self.xchg_view_cls = types.OpenCLXchgView
 
-        # Template lookup
-        self.lookup = DottedTemplateLookup(
-            'pyfr.backends.opencl.kernels',
-            fpdtype=self.fpdtype, alignb=self.alignb
-        )
-
         # Instantiate the base kernel providers
         kprovs = [provider.OpenCLPointwiseKernelProvider,
                   blasext.OpenCLBlasExtKernels,
@@ -84,14 +84,10 @@ class OpenCLBackend(BaseBackend):
     def _malloc_impl(self, nbytes):
         import pyopencl as cl
 
-        # Allocate the device buffer; note here that we over allocate
-        # by a byte.  This is needed to work around some issues in
-        # related to the construction of sub buffers.  (For which the
-        # solution is to increase the size of the region by one byte;
-        # hence requiring an extra byte of allocation.)
-        buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, nbytes + 1)
+        # Allocate the device buffer
+        buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, nbytes)
 
         # Zero the buffer
-        cl.enqueue_copy(self.qdflt, buf, np.zeros(nbytes + 1, dtype=np.uint8))
+        cl.enqueue_copy(self.qdflt, buf, np.zeros(nbytes, dtype=np.uint8))
 
         return buf
