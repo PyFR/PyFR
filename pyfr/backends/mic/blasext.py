@@ -26,7 +26,7 @@ class MICBlasExtKernels(MICKernelProvider):
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
-                args = [x.data for x in arr] + list(consts)
+                args = [x.data for x in arr] + [float(c) for c in consts]
                 queue.mic_stream_comp.invoke(kern, nrow, ncolb, ldim, *args)
 
         return AxnpbyKernel()
