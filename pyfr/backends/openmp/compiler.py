@@ -76,7 +76,8 @@ class GccSourceModule(SourceModule):
                '-march=native',  # Use CPU-specific instructions
                '-fopenmp',       # Enable OpenMP support
                '-fPIC',          # Position-independent code for shared lib
-               '-o', ln, cn]
+               '-o', ln, cn,     # Output library name and input file name
+               '-lm']            # Link against the standard math library
         call_capture_output(cmd + self._cflags, cwd=tmpdir)
 
         return ln
