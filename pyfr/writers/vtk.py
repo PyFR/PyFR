@@ -25,8 +25,8 @@ class VTKWriter(BaseWriter):
         if self.dataprefix == 'soln':
             self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
-            self._soln_fields = self.elementscls.privarmap[self.ndims]
-            self._vtk_vars = self.elementscls.visvarmap[self.ndims]
+            self._soln_fields = self.elementscls.privarmap[self.ndims].copy()
+            self._vtk_vars = self.elementscls.visvarmap[self.ndims].copy()
         # Otherwise we're dealing with simple scalar data
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
