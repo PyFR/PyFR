@@ -26,7 +26,7 @@ class VTKWriter(BaseWriter):
             self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
             self._soln_fields = list(self.elementscls.privarmap[self.ndims])
-            self._vtk_vars = list(self.elementscls.visvarmap[self.ndims])
+            self._vtk_vars = dict(self.elementscls.visvarmap[self.ndims])
         # Otherwise we're dealing with simple scalar data
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
