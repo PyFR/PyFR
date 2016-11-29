@@ -104,6 +104,7 @@ data_files = [
 
 # Hard dependencies
 install_requires = [
+    'appdirs >= 1.4.0',
     'gimmik >= 2.0',
     'h5py >= 2.6',
     'mako >= 1.0.0',
