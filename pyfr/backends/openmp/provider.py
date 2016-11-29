@@ -2,7 +2,7 @@
 
 from pyfr.backends.base import (BaseKernelProvider,
                                 BasePointwiseKernelProvider, ComputeKernel)
-from pyfr.backends.openmp.compiler import GccSourceModule
+from pyfr.backends.openmp.compiler import SourceModule
 import pyfr.backends.openmp.generator as generator
 from pyfr.util import memoize
 
@@ -10,7 +10,7 @@ from pyfr.util import memoize
 class OpenMPKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes, restype=None):
-        mod = GccSourceModule(src, self.backend.cfg)
+        mod = SourceModule(src, self.backend.cfg)
         return mod.function(name, restype, argtypes)
 
 

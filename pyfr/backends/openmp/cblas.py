@@ -50,7 +50,7 @@ class OpenMPCBLASKernels(OpenMPKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
 
-        libname = backend.cfg.getpath('backend-openmp', 'cblas', abs=False)
+        libname = backend.cfg.getpath('backend-openmp', 'cblas')
         libtype = backend.cfg.get('backend-openmp', 'cblas-type', 'parallel')
 
         if libtype not in {'serial', 'parallel'}:

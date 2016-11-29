@@ -18,7 +18,7 @@ class OpenMPBackend(BaseBackend):
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
 
         from pyfr.backends.openmp import (blasext, cblas, gimmik, packing,
-                                          provider, types)
+                                          provider, types, xsmm)
 
         # Register our data types
         self.base_matrix_cls = types.OpenMPMatrixBase
@@ -31,13 +31,21 @@ class OpenMPBackend(BaseBackend):
         self.xchg_matrix_cls = types.OpenMPXchgMatrix
         self.xchg_view_cls = types.OpenMPXchgView
 
-        # Kernel provider classes
+        # Instantiate mandatory kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
-                    gimmik.OpenMPGiMMiKKernels,
-                    cblas.OpenMPCBLASKernels]
+                    gimmik.OpenMPGiMMiKKernels]
         self._providers = [k(self) for k in kprovcls]
+
+        # Instantiate optional kernel provider classes
+        for k in [xsmm.OpenMPXSMMKernels, cblas.OpenMPCBLASKernels]:
+            try:
+                self._providers.append(k(self))
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except:
+                pass
 
         # Pointwise kernels
         self.pointwise = self._providers[0]

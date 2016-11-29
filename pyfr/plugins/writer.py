@@ -13,7 +13,7 @@ class WriterPlugin(BasePlugin):
         super().__init__(intg, cfgsect, suffix)
 
         # Construct the solution writer
-        basedir = self.cfg.getpath(cfgsect, 'basedir', '.')
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(cfgsect, 'basename')
         self._writer = NativeWriter(intg, self.nvars, basedir, basename,
                                     prefix='soln')

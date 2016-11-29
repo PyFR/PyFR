@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from ctypes import CDLL, c_void_p
 import functools as ft
+import hashlib
 import itertools as it
 import os
 import pickle
@@ -159,8 +160,16 @@ def ndrange(*args):
     return it.product(*map(range, args))
 
 
+def digest(*args, hash='sha256'):
+    return getattr(hashlib, hash)(pickle.dumps(args)).hexdigest()
+
+
 def rm(path):
     if os.path.isfile(path) or os.path.islink(path):
         os.remove(path)
     else:
         shutil.rmtree(path)
+
+
+def mv(src, dst):
+    shutil.move(src, dst)

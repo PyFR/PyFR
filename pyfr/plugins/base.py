@@ -51,7 +51,7 @@ class BasePlugin(object, metaclass=ABCMeta):
         self.postactmode = None
 
         if self.cfg.hasopt(cfgsect, 'post-action'):
-            self.postact = self.cfg.getpath(cfgsect, 'post-action', abs=False)
+            self.postact = self.cfg.getpath(cfgsect, 'post-action')
             self.postactmode = self.cfg.get(cfgsect, 'post-action-mode',
                                             'blocking')
 

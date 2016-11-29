@@ -28,7 +28,7 @@ class TavgPlugin(BasePlugin):
         self.plocs = intg.system.ele_ploc_upts
 
         # Output file directory, base name, and writer
-        basedir = self.cfg.getpath(cfgsect, 'basedir', '.')
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(cfgsect, 'basename')
         self._writer = NativeWriter(intg, len(self.exprs), basedir, basename,
                                     prefix='tavg')
