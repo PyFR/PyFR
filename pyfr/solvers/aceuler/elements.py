@@ -16,10 +16,10 @@ class BaseACFluidElements(object):
                   3: ['u', 'v', 'w']}
 
     visvarmap = {
-        2: {'velocity': ['u', 'v'],
-            'pressure': ['p']},
-        3: {'velocity': ['u', 'v', 'w'],
-            'pressure': ['p']}
+        2: [('velocity', ['u', 'v']),
+            ('pressure', ['p'])],
+        3: [('velocity', ['u', 'v', 'w']),
+            ('pressure', ['p'])]
     }
 
     @staticmethod
