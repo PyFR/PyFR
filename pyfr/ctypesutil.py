@@ -14,15 +14,20 @@ def find_libc():
 
 
 def load_library(name):
-    lname = platform_libname(name)
-    sdirs = platform_libdirs()
+    # If an explicit override has been given then use it
+    lpath = os.environ.get('PYFR_{0}_LIBRARY_PATH'.format(name.upper()))
+    if lpath:
+        return ctypes.CDLL(lpath)
 
-    # First attempt to utilise the system search path
+    # Otherwise synthesise the library name and start searching
+    lname = platform_libname(name)
+
+    # Start with system search path
     try:
         return ctypes.CDLL(lname)
-    # Otherwise, if this fails then run our own search
+    # ..and if this fails then run our own search
     except OSError:
-        for sd in sdirs:
+        for sd in platform_libdirs():
             try:
                 return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)))
             except OSError:
