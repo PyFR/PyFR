@@ -63,7 +63,8 @@ class Inifile(object):
 
         return os.path.expandvars(val)
 
-    def getpath(self, section, option, default=_sentinel, vars=None, abs=True):
+    def getpath(self, section, option, default=_sentinel, vars=None,
+                abs=False):
         path = self.get(section, option, default, vars)
         path = os.path.expanduser(path)
 

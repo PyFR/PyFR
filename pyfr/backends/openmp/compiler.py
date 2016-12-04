@@ -1,83 +1,128 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from ctypes import CDLL
 import itertools as it
 import os
 import shlex
 import tempfile
 
+from appdirs import user_cache_dir
 from pytools.prefork import call_capture_output
 
 from pyfr.ctypesutil import platform_libname
 from pyfr.nputil import npdtype_to_ctypestype
-from pyfr.util import rm
+from pyfr.util import digest, lazyprop, mv, rm
 
 
-class SourceModule(object, metaclass=ABCMeta):
+class SourceModule(object):
     _dir_seq = it.count()
 
     def __init__(self, src, cfg):
-        self.src = src
-        self.cfg = cfg
+        # Find GCC (or a compatible alternative)
+        self.cc = cfg.getpath('backend-openmp', 'cc', 'cc')
 
-        # Create a scratch directory
-        tmpidx = next(self._dir_seq)
-        tmpdir = tempfile.mkdtemp(prefix='pyfr-{0}-'.format(tmpidx))
+        # User specified compiler flags
+        self.cflags = shlex.split(cfg.get('backend-openmp', 'cflags', ''))
 
-        try:
-            # Compile and link the source
-            lname = self._build(tmpdir)
+        # Get the compiler version string
+        version = call_capture_output([self.cc, '-v'])
 
-            # Load
-            self._mod = CDLL(os.path.join(tmpdir, lname))
-        finally:
-            # Unless we're debugging delete the scratch directory
-            if 'PYFR_DEBUG_OMP_KEEP_LIBS' not in os.environ:
-                rm(tmpdir)
+        # Compute a digest of the compler version, command, and source
+        self.digest = digest(version, self.cc_cmd(None, None), src)
+
+        # Attempt to load the library from the cache
+        self.mod = self._cache_loadlib()
+
+        # Otherwise, we need to compile the kernel
+        if not self.mod:
+            # Create a scratch directory
+            tmpidx = next(self._dir_seq)
+            tmpdir = tempfile.mkdtemp(prefix='pyfr-{0}-'.format(tmpidx))
+
+            try:
+                # Compile and link the source into a shared library
+                cname, lname = 'tmp.c', platform_libname('tmp')
+
+                # Write the source code out
+                with open(os.path.join(tmpdir, cname), 'w') as f:
+                    f.write(src)
+
+                # Invoke the compiler
+                call_capture_output(self.cc_cmd(cname, lname), cwd=tmpdir)
+
+                # Determine the fully qualified library name
+                lpath = os.path.join(tmpdir, lname)
+
+                # Add it to the cache and load
+                self.mod = self._cache_set_and_loadlib(lpath)
+            finally:
+                # Unless we're debugging delete the scratch directory
+                if 'PYFR_DEBUG_OMP_KEEP_LIBS' not in os.environ:
+                    rm(tmpdir)
+
+    def cc_cmd(self, srcname, libname):
+        cmd = [
+            self.cc,                # Compiler name
+            '-shared',              # Create a shared library
+            '-std=c99',             # Enable C99 support
+            '-Ofast',               # Optimise, incl. -ffast-math
+            '-march=native',        # Use CPU-specific instructions
+            '-fopenmp',             # Enable OpenMP support
+            '-fPIC',                # Generate position-independent code
+            '-o', libname, srcname, # Library and source file names
+            '-lm'                   # Link against libm
+        ]
+
+        # Append any user-provided arguments and return
+        return cmd + self.cflags
+
+    @lazyprop
+    def cachedir(self):
+        return os.environ.get('PYFR_OMP_CACHE_DIR',
+                              user_cache_dir('pyfr', 'pyfr'))
+
+    def _cache_loadlib(self):
+        # If caching is disabled then return
+        if 'PYFR_DEBUG_OMP_DISABLE_CACHE' in os.environ:
+            return
+        # Otherwise, check the cache
+        else:
+            # Determine the cached library name
+            clname = platform_libname(self.digest)
+
+            # Attempt to load the library
+            try:
+                return CDLL(os.path.join(self.cachedir, clname))
+            except OSError:
+                return
+
+    def _cache_set_and_loadlib(self, lpath):
+        # If caching is disabled then just load the library as-is
+        if 'PYFR_DEBUG_OMP_DISABLE_CACHE' in os.environ:
+            return CDLL(lpath)
+        # Otherwise, move the library into the cache and load
+        else:
+            # Determine the cached library name and path
+            clname = platform_libname(self.digest)
+            clpath = os.path.join(self.cachedir, clname)
+
+            try:
+                # Ensure the cache directory exists
+                os.makedirs(self.cachedir, exist_ok=True)
+
+                # Attempt to move the library to cache dir
+                mv(lpath, clpath)
+            # If an exception is raised, load from the original path
+            except OSError:
+                return CDLL(lpath)
+            # Otherwise, load from the cache dir
+            else:
+                return CDLL(clpath)
 
     def function(self, name, restype, argtypes):
         # Get the function
-        fn = getattr(self._mod, name)
+        fn = getattr(self.mod, name)
         fn.restype = npdtype_to_ctypestype(restype)
         fn.argtypes = [npdtype_to_ctypestype(a) for a in argtypes]
 
         return fn
-
-    @abstractmethod
-    def _build(self, tmpdir):
-        pass
-
-
-class GccSourceModule(SourceModule):
-    def __init__(self, src, cfg):
-        # Find GCC (or a compatible alternative)
-        self._cc = cfg.getpath('backend-openmp', 'cc', 'cc', abs=False)
-
-        # User specified compiler flags
-        self._cflags = shlex.split(cfg.get('backend-openmp', 'cflags', ''))
-
-        # Delegate
-        super().__init__(src, cfg)
-
-    def _build(self, tmpdir):
-        # File names
-        cn, ln = 'tmp.c', platform_libname('tmp')
-
-        # Write the source code out
-        with open(os.path.join(tmpdir, cn), 'w') as f:
-            f.write(self.src)
-
-        # Compile and link
-        cmd = [self._cc,
-               '-shared',        # Create a shared library
-               '-std=c99',       # Enable C99 support
-               '-Ofast',         # Optimise, incl. -ffast-math
-               '-march=native',  # Use CPU-specific instructions
-               '-fopenmp',       # Enable OpenMP support
-               '-fPIC',          # Position-independent code for shared lib
-               '-o', ln, cn,     # Output library name and input file name
-               '-lm']            # Link against the standard math library
-        call_capture_output(cmd + self._cflags, cwd=tmpdir)
-
-        return ln
