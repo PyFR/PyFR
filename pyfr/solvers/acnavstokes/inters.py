@@ -88,7 +88,7 @@ class ACNavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         )
 
 
-class ACNavierStokesNoSlptWallBCInters(ACNavierStokesBaseBCInters):
+class ACNavierStokesNoSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'no-slp-wall'
     cflux_state = 'ghost'
 
