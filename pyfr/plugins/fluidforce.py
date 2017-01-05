@@ -10,7 +10,7 @@ from pyfr.plugins.base import BasePlugin, init_csv
 
 class FluidForcePlugin(BasePlugin):
     name = 'fluidforce'
-    systems = ['euler', 'navier-stokes']
+    systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
@@ -21,7 +21,10 @@ class FluidForcePlugin(BasePlugin):
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # Check if we need to compute viscous force
-        self._viscous = intg.system.name == 'navier-stokes'
+        self._viscous = 'navier-stokes' in intg.system.name
+
+        # Check if the system is incompressible
+        self._ac = intg.system.name.startswith('ac')
 
         # Viscous correction
         self._viscorr = self.cfg.get('solver', 'viscosity-correction', 'none')
@@ -133,7 +136,8 @@ class FluidForcePlugin(BasePlugin):
             ufpts = ufpts.swapaxes(0, 1)
 
             # Compute the pressure
-            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
+            pidx = 0 if self._ac else -1
+            p = self.elementscls.con_to_pri(ufpts, self.cfg)[pidx]
 
             # Get the quadrature weights and normal vectors
             qwts = self._qwts[etype, fidx]
@@ -161,7 +165,10 @@ class FluidForcePlugin(BasePlugin):
                 dufpts = dufpts.swapaxes(1, 2)
 
                 # Viscous stress
-                vis = self.stress_tensor(ufpts, dufpts)
+                if self._ac:
+                    vis = self.ac_stress_tensor(dufpts)
+                else:
+                    vis = self.stress_tensor(ufpts, dufpts)
 
                 # Do the quadrature
                 f[ndims:] += np.einsum('i...,klij,jil', qwts, vis, norms)
@@ -205,3 +212,9 @@ class FluidForcePlugin(BasePlugin):
             mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
 
         return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
+
+    def ac_stress_tensor(self, du):
+        # Gradient of velocity and kinematic viscosity
+        gradu, nu = du[:, 1:], self._constants['nu']
+
+        return -nu*(gradu + gradu.swapaxes(0, 1))
