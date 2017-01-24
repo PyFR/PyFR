@@ -31,6 +31,7 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
 class BasePlugin(object, metaclass=ABCMeta):
     name = None
     systems = None
+    formulations = None
 
     @abstractmethod
     def __init__(self, intg, cfgsect, suffix=None):
@@ -62,6 +63,11 @@ class BasePlugin(object, metaclass=ABCMeta):
         if not ('*' in self.systems or intg.system.name in self.systems):
             raise RuntimeError('System {0} not supported by plugin {1}'
                                .format(intg.system.name, self.name))
+
+        # Check that we support this particular integrator formulation
+        if intg.formulation not in self.formulations:
+            raise RuntimeError('Formulation {0} not supported by plugin {1}'
+                               .format(intg.formulation, self.name))
 
     def __del__(self):
         if self.postactaid is not None:
