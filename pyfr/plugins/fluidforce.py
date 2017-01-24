@@ -11,6 +11,7 @@ from pyfr.plugins.base import BasePlugin, init_csv
 class FluidForcePlugin(BasePlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
+    formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

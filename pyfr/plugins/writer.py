@@ -8,6 +8,7 @@ from pyfr.writers.native import NativeWriter
 class WriterPlugin(BasePlugin):
     name = 'writer'
     systems = ['*']
+    formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)

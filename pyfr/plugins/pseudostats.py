@@ -4,10 +4,10 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin, init_csv
 
 
-class DtStatsPlugin(BasePlugin):
-    name = 'dtstats'
+class PseudoStatsPlugin(BasePlugin):
+    name = 'pseudostats'
     systems = ['*']
-    formulations = ['std']
+    formulations = ['dual']
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)
@@ -18,22 +18,25 @@ class DtStatsPlugin(BasePlugin):
         self.stats = []
         self.tprev = intg.tcurr
 
+        fvars = ','.join(intg.system.elementscls.convarmap[self.ndims])
+
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
         # The root rank needs to open the output file
         if rank == root:
-            self.outf = init_csv(self.cfg, cfgsect, 'n,t,dt,action,error')
+            self.outf = init_csv(self.cfg, cfgsect, 'n,t,i,' + fvars)
         else:
             self.outf = None
 
     def __call__(self, intg):
-        # Process the sequence of rejected/accepted steps
-        for i, (dt, act, err) in enumerate(intg.stepinfo, start=self.count):
-            self.stats.append((i, self.tprev, dt, act, err))
+        # Process the sequence of pseudo-residuals
+        for (npseudoiter, iternr, pseudo_resid) in intg.pseudostepinfo:
+            self.stats.append((npseudoiter, self.tprev, iternr)
+                              + pseudo_resid)
 
         # Update the total step count and save the current time
-        self.count += len(intg.stepinfo)
+        self.count += len(intg.pseudostepinfo)
         self.tprev = intg.tcurr
 
         # If we're the root rank then output
