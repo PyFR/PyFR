@@ -3,6 +3,7 @@
 from ctypes import CDLL
 import itertools as it
 import os
+import platform
 import shlex
 import tempfile
 
@@ -24,11 +25,17 @@ class SourceModule(object):
         # User specified compiler flags
         self.cflags = shlex.split(cfg.get('backend-openmp', 'cflags', ''))
 
+        # Get the processor string
+        proc = platform.processor()
+
         # Get the compiler version string
         version = call_capture_output([self.cc, '-v'])
 
-        # Compute a digest of the compler version, command, and source
-        self.digest = digest(version, self.cc_cmd(None, None), src)
+        # Get the base compiler command strig
+        cmd = self.cc_cmd(None, None)
+
+        # Compute a digest of the current processor, compiler, and source
+        self.digest = digest(proc, version, cmd, src)
 
         # Attempt to load the library from the cache
         self.mod = self._cache_loadlib()
