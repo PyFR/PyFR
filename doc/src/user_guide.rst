@@ -359,7 +359,19 @@ Parameterises the solver with
 
 1. ``system`` --- governing system:
 
-    ``euler`` | ``navier-stokes``
+    ``euler`` | ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``
+
+    where
+
+    ``euler`` | ``navier-stokes`` require
+
+        - ``viscosity-correction`` --- viscosity correction:
+
+          ``none`` | ``sutherland``
+          
+        - ``shock-capturing`` --- shock capturing scheme:
+
+          ``none`` | ``artificial-viscosity``
 
 2. ``order`` --- order of polynomial solution basis:
 
@@ -370,14 +382,6 @@ Parameterises the solver with
     ``flux`` | ``surf-flux`` | ``div-flux`` | ``flux, surf-flux`` |
     ``flux, div-flux`` | ``surf-flux, div-flux`` |
     ``flux, surf-flux, div-flux``
-
-4. ``viscosity-correction`` --- viscosity correction:
-
-    ``none`` | ``sutherland``
-
-5. ``shock-capturing`` --- shock capturing scheme:
-
-    ``none`` | ``artificial-viscosity``
 
 Example::
 
@@ -458,7 +462,7 @@ Parameterises the time-integration scheme used by the solver with
 
            ``backward-euler`` | ``bdf2`` | ``bdf3``
 
-        - ``pseudo-scheme`` --- pseudo-time-integration scheme
+        - ``pseudo-scheme`` --- pseudo time-integration scheme
 
            ``euler`` | ``tvd-rk3`` | ``rk4``
 
@@ -474,11 +478,11 @@ Parameterises the time-integration scheme used by the solver with
 
            *float*
 
-        - ``pseudo-dt`` --- pseudo-time-step
+        - ``pseudo-dt`` --- pseudo time-step
 
            *float*
 
-        - ``controller`` --- pseudo-time-step controller
+        - ``controller`` --- pseudo time-step controller
 
            ``none``
 
@@ -494,13 +498,13 @@ Parameterises the time-integration scheme used by the solver with
 
                *int*
 
-            - ``pseudo-aresid`` --- absolute residual tolerance
+            - ``pseudo-residtol`` --- pseudo residual tolerance
 
                *float*
 
-            - ``pseudo-rresid`` --- relative residual tolerance
+            - ``resid-norm`` --- pseudo residual norm
 
-               *float*
+               ``uniform`` | ``l2``
 
 Example::
 
@@ -526,6 +530,11 @@ Parameterises the interfaces with
 1. ``riemann-solver`` --- type of Riemann solver:
 
     ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem``
+
+    where
+
+    ``hll`` | ``hllc`` | ``roe`` | ``roem`` do not work with
+    ``ac-euler`` | ``ac-navier-stokes``
 
 2. ``ldg-beta`` --- beta parameter used for LDG:
 
@@ -795,23 +804,47 @@ Example::
 Parameterises solution, space (x, y, [z]), and time (t) dependent
 source terms with
 
-1. ``rho`` --- density source term:
+1. ``rho`` --- density source term for ``euler`` | ``navier-stokes``:
 
     *string*
 
-2. ``rhou`` --- x-momentum source term:
+2. ``rhou`` --- x-momentum source term for ``euler`` | ``navier-stokes``
+   :
 
     *string*
 
-3. ``rhov`` --- y-momentum source term:
+3. ``rhov`` --- y-momentum source term for ``euler`` | ``navier-stokes``
+   :
 
     *string*
 
-4. ``rhow`` --- z-momentum source term:
+4. ``rhow`` --- z-momentum source term for ``euler`` | ``navier-stokes``
+   :
 
     *string*
 
-5. ``E`` --- energy source term:
+5. ``E`` --- energy source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+6. ``p`` --- pressure source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+7. ``u`` --- x-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+8. ``v`` --- y-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+9. ``w`` --- w-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
 
     *string*
 
@@ -1096,13 +1129,37 @@ with
 
 1. ``type`` --- type of boundary condition:
 
-    ``char-riem-inv`` | ``no-slp-adia-wall`` | ``no-slp-isot-wall`` |
-    ``slp-adia-wall`` | ``sub-in-frv`` | ``sub-in-ftpttang`` |
-    ``sub-out-fp`` | ``sup-in-fa`` | ``sup-out-fn``
+    ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
+    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``slp-adia-wall`` |
+    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` |
+    ``sup-in-fa`` | ``sup-out-fn``
 
     where
 
-    ``char-riem-inv`` requires
+    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+    ``ac-out-p`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``p`` --- pressure
+
+           *float* | *string*
+
+    ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
+    requires
 
         - ``rho`` --- density
 
@@ -1124,7 +1181,8 @@ with
 
            *float* | *string*
 
-    ``no-slp-isot-wall`` requires
+    ``no-slp-isot-wall`` only works with ``navier-stokes`` |
+    ``ac-navier-stokes`` and requires
 
         - ``u`` --- x-velocity of wall
 
@@ -1143,7 +1201,8 @@ with
 
            *float*
 
-    ``sub-in-frv`` requires
+    ``sub-in-frv`` only works with ``euler`` | ``navier-stokes`` and
+    requires
 
         - ``rho`` --- density
 
@@ -1161,7 +1220,8 @@ with
 
            *float* | *string*
 
-    ``sub-in-ftpttang`` requires
+    ``sub-in-ftpttang`` only works with ``euler`` | ``navier-stokes``
+    and requires
 
         - ``pt`` --- total pressure
 
@@ -1182,13 +1242,15 @@ with
 
            *float*
 
-    ``sub-out-fp`` requires
+    ``sub-out-fp`` only works with ``euler`` | ``navier-stokes`` and
+    requires
 
         - ``p`` --- static pressure
 
            *float* | *string*
 
-    ``sup-in-fa`` requires
+    ``sup-in-fa`` only works with ``euler`` | ``navier-stokes`` and
+    requires
 
         - ``rho`` --- density
 
@@ -1222,23 +1284,28 @@ Example::
 
 Parameterises space (x, y, [z]) dependent initial conditions with
 
-1. ``rho`` --- initial density distribution:
+1. ``rho`` --- initial density distribution for ``euler`` |
+   ``navier-stokes``:
 
     *string*
 
-2. ``u`` --- initial x-velocity distribution:
+2. ``u`` --- initial x-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
-3. ``v`` --- initial y-velocity distribution:
+3. ``v`` --- initial y-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
-4. ``w`` --- initial z-velocity distribution:
+4. ``w`` --- initial z-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
-5. ``p`` --- initial static pressure distribution:
+5. ``p`` --- initial static pressure distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
