@@ -14,6 +14,10 @@ def ndrange(context, *args):
     return util.ndrange(*args)
 
 
+def ilog2range(context, x):
+    return [2**i for i in range(x.bit_length() - 2, -1, -1)]
+
+
 def npdtype_to_ctype(context, dtype):
     return nputil.npdtype_to_ctype(dtype)
 

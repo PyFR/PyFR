@@ -11,6 +11,7 @@ from pyfr.writers.native import NativeWriter
 class TavgPlugin(BasePlugin):
     name = 'tavg'
     systems = ['*']
+    formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
