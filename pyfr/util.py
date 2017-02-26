@@ -155,6 +155,9 @@ def subclass_where(cls, **kwargs):
         if hasattr(s, k) and getattr(s, k) == v:
             return s
 
+    raise KeyError("No subclasses of {0} with cls.{1} == '{2}'"
+                   .format(cls.__name__, k, v))
+
 
 def ndrange(*args):
     return it.product(*map(range, args))
