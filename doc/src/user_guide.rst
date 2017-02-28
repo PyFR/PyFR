@@ -321,27 +321,38 @@ Example::
 [constants]
 ^^^^^^^^^^^
 
-Sets constants used in the simulation with
+Sets constants used in the simulation
 
-1. ``gamma`` --- ratio of specific heats:
-
-    *float*
-
-2. ``mu`` --- dynamic viscosity:
+1. ``gamma`` --- ratio of specific heats for ``euler`` |
+   ``navier-stokes``:
 
     *float*
 
-3. ``Pr`` --- Prandtl number:
+2. ``mu`` --- dynamic viscosity for ``euler`` | ``navier-stokes``:
 
     *float*
 
-4. ``cpTref`` --- product of specific heat at constant pressure and
-   reference temperature for Sutherland's Law:
+3. ``nu`` --- kinematic viscosity for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *float*
+
+4. ``Pr`` --- Prandtl number for ``euler`` | ``navier-stokes``:
+
+    *float*
+
+5. ``cpTref`` --- product of specific heat at constant pressure and
+   reference temperature for ``navier-stokes`` with Sutherland's Law:
 
    *float*
 
-5. ``cpTs`` --- product of specific heat at constant pressure and
-   Sutherland temperature for Sutherland's Law:
+6. ``cpTs`` --- product of specific heat at constant pressure and
+   Sutherland temperature for ``navier-stokes`` with Sutherland's Law:
+
+   *float*
+
+7. ``ac-zeta`` --- artificial compressibility factor for ``ac-euler`` |
+   ``ac-navier-stokes``
 
    *float*
 
@@ -363,7 +374,7 @@ Parameterises the solver with
 
     where
 
-    ``euler`` | ``navier-stokes`` require
+    ``navier-stokes`` requires
 
         - ``viscosity-correction`` --- viscosity correction:
 
@@ -498,11 +509,11 @@ Parameterises the time-integration scheme used by the solver with
 
                *int*
 
-            - ``pseudo-residtol`` --- pseudo residual tolerance
+            - ``pseudo-resid-tol`` --- pseudo residual tolerance
 
                *float*
 
-            - ``resid-norm`` --- pseudo residual norm
+            - ``pseudo-resid-norm`` --- pseudo residual norm
 
                ``uniform`` | ``l2``
 
@@ -1038,6 +1049,32 @@ Example::
     file = dtstats.csv
     header = true
 
+[soln-plugin-pseudostats]
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Write pseudo-step convergence history out to a CSV file. Parameterised
+with
+
+1. ``flushsteps`` --- flush to disk every ``flushsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-pseudostats]
+    flushsteps = 100
+    file = pseudostats.csv
+    header = true
+
 [soln-plugin-sampler]
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -1130,9 +1167,10 @@ with
 1. ``type`` --- type of boundary condition:
 
     ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
-    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``slp-adia-wall`` |
-    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` |
-    ``sup-in-fa`` | ``sup-out-fn``
+    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``no-slp-wall`` |
+    ``slp-adia-wall`` | ``slp-wall`` | ``sub-in-frv`` |
+    ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
+    ``sup-out-fn``
 
     where
 
@@ -1181,8 +1219,9 @@ with
 
            *float* | *string*
 
-    ``no-slp-isot-wall`` only works with ``navier-stokes`` |
-    ``ac-navier-stokes`` and requires
+    ``no-slp-adia-wall`` only works with ``navier-stokes``
+
+    ``no-slp-isot-wall`` only works with ``navier-stokes`` and requires
 
         - ``u`` --- x-velocity of wall
 
@@ -1201,7 +1240,25 @@ with
 
            *float*
 
-    ``sub-in-frv`` only works with ``euler`` | ``navier-stokes`` and
+    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
+
+        - ``u`` --- x-velocity of wall
+
+           *float*
+
+        - ``v`` --- y-velocity of wall
+
+           *float*
+
+        - ``w`` --- z-velocity of wall
+
+           *float*
+
+    ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
+
+    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
+
+    ``sub-in-frv`` only works with ``navier-stokes`` and
     requires
 
         - ``rho`` --- density
@@ -1220,7 +1277,7 @@ with
 
            *float* | *string*
 
-    ``sub-in-ftpttang`` only works with ``euler`` | ``navier-stokes``
+    ``sub-in-ftpttang`` only works with ``navier-stokes``
     and requires
 
         - ``pt`` --- total pressure
@@ -1242,7 +1299,7 @@ with
 
            *float*
 
-    ``sub-out-fp`` only works with ``euler`` | ``navier-stokes`` and
+    ``sub-out-fp`` only works with ``navier-stokes`` and
     requires
 
         - ``p`` --- static pressure
@@ -1271,6 +1328,8 @@ with
         - ``p`` --- static pressure
 
            *float* | *string*
+
+    ``sup-out-fn`` only works with ``navier-stokes``
 
 Example::
 
