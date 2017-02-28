@@ -139,9 +139,7 @@ using the Flux Reconstruction approach of Huynh. The framework is
 designed to solve a range of governing systems on mixed unstructured
 grids containing various element types. It is also designed to target a
 range of hardware platforms via use of an in-built domain specific
-language derived from the Mako templating engine. PyFR is being
-developed in the Vincent Lab, Department of Aeronautics, Imperial
-College London, UK.'''
+language derived from the Mako templating engine.'''
 
 setup(name='pyfr',
       version=version,
