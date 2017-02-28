@@ -119,25 +119,28 @@ class StdPIController(BaseStdController):
         self._prepare_reg_banks(x, y, z)
         self._queue % errest(self._atol, self._rtol)
 
-        error = np.array(list(errest.retval))
         # L2 norm
         if self._norm == 'l2':
-            # Reduce locally (element types) and globally (MPI ranks)
-            rl = np.sum(error, keepdims=True).flatten()
-            comm.Allreduce(get_mpi('in_place'), rl, op=get_mpi('sum'))
+            # Reduce locally (element types + field variables)
+            err = np.array([sum(v for e in errest.retval for v in e)])
+
+            # Reduce globally (MPI ranks)
+            comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('sum'))
 
             # Normalise
-            err = np.sqrt(rl / self._gndofs)
+            err = math.sqrt(float(err) / self._gndofs)
         # L^∞ norm
         else:
-            # Reduce locally (element types) and globally (MPI ranks)
-            rl = np.max(error, keepdims=True).flatten()
-            comm.Allreduce(get_mpi('in_place'), rl, op=get_mpi('max'))
+            # Reduce locally (element types + field variables)
+            err = np.array([max(v for e in errest.retval for v in e)])
+
+            # Reduce globally (MPI ranks)
+            comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('max'))
 
             # Normalise
-            err = np.sqrt(rl)
+            err = math.sqrt(float(err))
 
-        return float(err) if not math.isnan(err) else 100
+        return err if not math.isnan(err) else 100
 
     def advance_to(self, t):
         if t < self.tcurr:

@@ -59,7 +59,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         # Determine the number of groups
         gdim = (ncolb + block[0] - 1) // block[0]
 
-        # Empty result buffer on host, shape = (nvars, nblocks)
+        # Empty result buffer on host with (nvars, ngroups)
         err_host = np.empty((ncola, gdim), dtype)
 
         # Device memory allocation
@@ -68,7 +68,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         # Get the kernel template
         src = self.backend.lookup.get_template('errest').render(
-            norm=norm, ncola=ncola, sharesz=block[0], gdim=gdim
+            norm=norm, ncola=ncola, sharesz=block[0]
         )
 
         # Build the reduction kernel

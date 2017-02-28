@@ -15,7 +15,7 @@ errest(int nrow, int ncolb, int ldim, __global fpdtype_t *__restrict__ err,
     int idx;
     int i = get_global_id(0), tid = get_local_id(0);
     int bid = get_group_id(0), sharesz = get_local_size(0);
-    int gdim = ${gdim};
+    int gdim = get_num_groups(0);
     int lastblksize = ncolb % sharesz;
 
     if (i < ncolb)

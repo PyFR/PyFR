@@ -63,9 +63,9 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         block = (128, 1, 1)
 
         # Determine the grid size
-        grid = get_grid_for_block(block, ncolb, 1)
+        grid = get_grid_for_block(block, ncolb)
 
-        # Empty result buffer on host, shape = (nvars, nblocks)
+        # Empty result buffer on host with shape (nvars, nblocks)
         err_host = cuda.pagelocked_empty((ncola, grid[0]), dtype, 'C')
 
         # Device memory allocation

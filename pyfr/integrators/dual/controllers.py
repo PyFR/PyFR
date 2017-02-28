@@ -109,20 +109,19 @@ class DualNoneController(BaseDualController):
         self._prepare_reg_banks(x, x, x)
         self._queue % errest(dtau, 0.0)
 
-        resid = np.array(list(errest.retval))
         # L2 norm
         if self._pseudo_norm == 'l2':
             # Reduce locally (element types) and globally (MPI ranks)
-            resid = np.sum(resid, axis=0)
-            comm.Allreduce(get_mpi('in_place'), resid, op=get_mpi('sum'))
+            res = np.array([sum(ev) for ev in zip(*errest.retval)])
+            comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('sum'))
 
             # Normalise and return
-            return np.sqrt(resid / self._gndofs)
+            return np.sqrt(res / self._gndofs)
         # L^∞ norm
         else:
             # Reduce locally (element types) and globally (MPI ranks)
-            resid = np.max(resid, axis=0)
-            comm.Allreduce(get_mpi('in_place'), resid, op=get_mpi('max'))
+            res = np.array([max(ev) for ev in zip(*errest.retval)])
+            comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('max'))
 
             # Normalise and return
-            return np.sqrt(resid)
+            return np.sqrt(res)
