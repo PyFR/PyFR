@@ -288,25 +288,30 @@ Parameterises the OpenMP backend with
 
     *string*
 
-3. ``cblas`` --- path to shared C BLAS library:
+3. ``alignb`` --- alignment requirement in bytes; must be a power of
+   two and at least 32:
+
+    *int*
+
+4. ``cblas`` --- path to shared C BLAS library:
 
     *string*
 
-4. ``cblas-type`` --- type of BLAS library:
+5. ``cblas-type`` --- type of BLAS library:
 
     ``serial`` | ``parallel``
 
-5. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
+6. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
    non-zero entires in a constant matrix:
 
     *int*
 
-6. ``libxsmm-block-sz`` --- blocking factor to use for libxsmm; must
+7. ``libxsmm-block-sz`` --- blocking factor to use for libxsmm; must
    be a multiple of 16:
 
     *int*
 
-7. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
+8. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
    entires in a constant matrix:
 
     *int*
