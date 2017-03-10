@@ -1477,3 +1477,50 @@ simulation on a structured mesh:
    :align: center
 
    Colour map of density distribution at 100 time units.
+
+Example --- 2D Incompressible Cylinder Flow
+===========================================
+
+Proceed with the following steps to run a serial 2D incompressible cylinder
+flow simulation on a mixed unstructured mesh:
+
+1. Create a working directory called ``inc_cylinder_2d/``
+
+2. Copy the configuration file
+   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.ini`` into
+   ``inc_cylinder_2d/``
+
+3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
+   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.msh.gz`` into
+   ``inc_cylinder_2d/``
+
+4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file into a PyFR mesh file called ``inc_cylinder_2d.pyfrm``::
+
+        zcat inc_cylinder_2d.msh.gz | pyfr import -tgmsh - inc_cylinder_2d.pyfrm
+
+5. Run pyfr to solve the incompressible Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``inc_cylinder_2d-*.pyfrs``::
+
+        pyfr run -b cuda -p inc_cylinder_2d.pyfrm inc_cylinder_2d.ini
+
+6. Run pyfr on the solution file ``inc_cylinder_2d-60.00.pyfrs``
+   converting it into an unstructured VTK file called
+   ``inc_cylinder_2d-60.00.vtu``. Note that in order to visualise the
+   high-order data, each high-order element is sub-divided into smaller
+   linear elements. The level of sub-division is controlled by the
+   integer at the end of the command::
+
+        pyfr export inc_cylinder_2d.pyfrm inc_cylinder_2d-60.00.pyfrs inc_cylinder_2d-60.00.vtu -d 4
+
+7. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/inc_cylinder_2d/inc_cylinder_2d.png
+   :width: 450px
+   :figwidth: 450px
+   :alt: couette flow
+   :align: center
+
+   Colour map of velocity magnitude distribution at 60 time units.
