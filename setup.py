@@ -40,6 +40,13 @@ modules = [
     'pyfr.readers',
     'pyfr.partitioners',
     'pyfr.solvers',
+    'pyfr.solvers.aceuler',
+    'pyfr.solvers.aceuler.kernels',
+    'pyfr.solvers.aceuler.kernels.bcs',
+    'pyfr.solvers.aceuler.kernels.rsolvers',
+    'pyfr.solvers.acnavstokes',
+    'pyfr.solvers.acnavstokes.kernels',
+    'pyfr.solvers.acnavstokes.kernels.bcs',
     'pyfr.solvers.base',
     'pyfr.solvers.baseadvec',
     'pyfr.solvers.baseadvec.kernels',
@@ -75,6 +82,11 @@ package_data = {
         'tet/*.txt',
         'tri/*.txt'
     ],
+    'pyfr.solvers.aceuler.kernels': ['*.mako'],
+    'pyfr.solvers.aceuler.kernels.bcs': ['*.mako'],
+    'pyfr.solvers.aceuler.kernels.rsolvers': ['*.mako'],
+    'pyfr.solvers.acnavstokes.kernels': ['*.mako'],
+    'pyfr.solvers.acnavstokes.kernels.bcs': ['*.mako'],
     'pyfr.solvers.baseadvec.kernels': ['*.mako'],
     'pyfr.solvers.baseadvecdiff.kernels': ['*.mako'],
     'pyfr.solvers.euler.kernels': ['*.mako'],
@@ -92,6 +104,7 @@ data_files = [
 
 # Hard dependencies
 install_requires = [
+    'appdirs >= 1.4.0',
     'gimmik >= 2.0',
     'h5py >= 2.6',
     'mako >= 1.0.0',
@@ -126,9 +139,7 @@ using the Flux Reconstruction approach of Huynh. The framework is
 designed to solve a range of governing systems on mixed unstructured
 grids containing various element types. It is also designed to target a
 range of hardware platforms via use of an in-built domain specific
-language derived from the Mako templating engine. PyFR is being
-developed in the Vincent Lab, Department of Aeronautics, Imperial
-College London, UK.'''
+language derived from the Mako templating engine.'''
 
 setup(name='pyfr',
       version=version,

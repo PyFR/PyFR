@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import math
+import numpy as np
 
 from pyfr.integrators.dual.base import BaseDualIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
@@ -9,13 +9,16 @@ from pyfr.util import memoize
 
 class BaseDualController(BaseDualIntegrator):
     def __init__(self, *args, **kwargs):
+        # Pseudo-step counter
+        self.npseudosteps = 0
+
         super().__init__(*args, **kwargs)
 
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
         # Stats on the most recent step
-        self.stepinfo = []
+        self.pseudostepinfo = []
 
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt
@@ -34,6 +37,9 @@ class BaseDualController(BaseDualIntegrator):
         # Fire off any event handlers
         self.completed_step_handlers(self)
 
+        # Clear the pseudo step info
+        self.pseudostepinfo = []
+
 
 class DualNoneController(BaseDualController):
     controller_name = 'none'
@@ -50,8 +56,8 @@ class DualNoneController(BaseDualController):
             raise ValueError('The maximum number of pseudo-iterations must '
                              'be greater than or equal to the minimum')
 
-        self._pseudo_aresid = self.cfg.getfloat(sect, 'pseudo-aresid')
-        self._pseudo_rresid = self.cfg.getfloat(sect, 'pseudo-rresid')
+        self._pseudo_residtol= self.cfg.getfloat(sect, 'pseudo-resid-tol')
+        self._pseudo_norm = self.cfg.get(sect, 'pseudo-resid-norm', 'uniform')
 
     def advance_to(self, t):
         if t < self.tcurr:
@@ -68,11 +74,20 @@ class DualNoneController(BaseDualController):
                 # Activate convergence monitoring after pseudo-niters-min
                 if i >= self._minniters - 1:
                     # Subtract the current solution from the previous solution
-                    self._add(-1.0/dtau, self._idxprev, 1.0/dtau, self._idxcurr)
+                    self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
 
                     # Compute the normalised residual and check for convergence
-                    if self._resid(self._idxprev, self._idxcurr) < 1.0:
+                    resid = self._resid(dtau, self._idxprev)
+                    self.pseudostepinfo.append((self.npseudosteps + 1, i + 1,
+                                                tuple(resid)))
+
+                    if max(resid) < self._pseudo_residtol:
                         break
+                else:
+                    self.pseudostepinfo.append((self.npseudosteps + 1, i + 1,
+                                                (None,)*self.system.nvars))
+
+                self.npseudosteps += 1
 
             # Update the dual-time stepping banks (n+1 => n, n => n-1)
             self.finalise_step(self._idxcurr)
@@ -82,21 +97,31 @@ class DualNoneController(BaseDualController):
 
     @memoize
     def _get_errest_kerns(self):
-        return self._get_kernels('errest', nargs=3, norm='uniform')
+        return self._get_kernels('errest', nargs=3, norm=self._pseudo_norm)
 
-    def _resid(self, x, y):
+    def _resid(self, dtau, x):
         comm, rank, root = get_comm_rank_root()
 
         # Get an errest kern to compute the square of the maximum residual
         errest = self._get_errest_kerns()
 
         # Prepare and run the kernel
-        self._prepare_reg_banks(x, y, y)
-        self._queue % errest(self._pseudo_aresid, self._pseudo_rresid)
+        self._prepare_reg_banks(x, x, x)
+        self._queue % errest(dtau, 0.0)
 
-        # Reduce locally (element types) and globally (MPI ranks)
-        rl = max(errest.retval)
-        rg = comm.allreduce(rl, op=get_mpi('max'))
+        # L2 norm
+        if self._pseudo_norm == 'l2':
+            # Reduce locally (element types) and globally (MPI ranks)
+            res = np.array([sum(ev) for ev in zip(*errest.retval)])
+            comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('sum'))
 
-        # Normalise
-        return math.sqrt(rg)
+            # Normalise and return
+            return np.sqrt(res / self._gndofs)
+        # L^∞ norm
+        else:
+            # Reduce locally (element types) and globally (MPI ranks)
+            res = np.array([max(ev) for ev in zip(*errest.retval)])
+            comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('max'))
+
+            # Normalise and return
+            return np.sqrt(res)

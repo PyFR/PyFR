@@ -7,6 +7,7 @@ from pyfr.plugins.base import BasePlugin, init_csv
 class DtStatsPlugin(BasePlugin):
     name = 'dtstats'
     systems = ['*']
+    formulations = ['std']
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)

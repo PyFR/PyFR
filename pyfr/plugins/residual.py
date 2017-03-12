@@ -9,6 +9,7 @@ from pyfr.plugins.base import BasePlugin, init_csv
 class ResidualPlugin(BasePlugin):
     name = 'residual'
     systems = ['*']
+    formulations = ['std']
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

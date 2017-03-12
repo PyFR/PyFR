@@ -10,6 +10,9 @@ class BaseDualPseudoStepper(BaseDualIntegrator):
         # Total number of RHS evaluations
         stats.set('solver-time-integrator', 'nfevals', self._stepper_nfevals)
 
+        # Total number of pseudo-steps
+        stats.set('solver-time-integrator', 'npseudosteps', self.npseudosteps)
+
     def _add_with_dts(self, *args, c):
         vals, regs = list(args[::2]), list(args[1::2])
 

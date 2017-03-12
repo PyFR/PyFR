@@ -11,14 +11,17 @@ class OpenMPBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        # Take the alignment requirement to be 64-bytes
-        self.alignb = 64
+        # Take the default alignment requirement to be 32-bytes
+        self.alignb = cfg.getint('backend-openmp', 'alignb', 32)
+
+        if self.alignb < 32 or (self.alignb & (self.alignb - 1)):
+            raise ValueError('Alignment must be a power of 2 and >= 32')
 
         # Compute the SoA size
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
 
         from pyfr.backends.openmp import (blasext, cblas, gimmik, packing,
-                                          provider, types)
+                                          provider, types, xsmm)
 
         # Register our data types
         self.base_matrix_cls = types.OpenMPMatrixBase
@@ -31,13 +34,21 @@ class OpenMPBackend(BaseBackend):
         self.xchg_matrix_cls = types.OpenMPXchgMatrix
         self.xchg_view_cls = types.OpenMPXchgView
 
-        # Kernel provider classes
+        # Instantiate mandatory kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
-                    gimmik.OpenMPGiMMiKKernels,
-                    cblas.OpenMPCBLASKernels]
+                    gimmik.OpenMPGiMMiKKernels]
         self._providers = [k(self) for k in kprovcls]
+
+        # Instantiate optional kernel provider classes
+        for k in [xsmm.OpenMPXSMMKernels, cblas.OpenMPCBLASKernels]:
+            try:
+                self._providers.append(k(self))
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except:
+                pass
 
         # Pointwise kernels
         self.pointwise = self._providers[0]

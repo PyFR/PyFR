@@ -48,30 +48,33 @@ class MICBlasExtKernels(MICKernelProvider):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
-        cnt = x.leaddim*x.nrow
-        dtype = x.dtype
-
-        # Allocate space for the return value
-        reth = np.zeros(1)
-        retd = self.backend.sdflt.bind(reth, update_device=False)
+        nrow, ldim, dtype = x.traits
+        ncola, ncolb = x.ioshape[1:]
 
         # Render the reduction kernel template
-        src = self.backend.lookup.get_template('errest').render(norm=norm)
+        src = self.backend.lookup.get_template('errest').render(norm=norm,
+                                                                ncola=ncola)
+
+        # Allocate space for the return value
+        errh = np.zeros(ncola)
+        errd = self.backend.sdflt.bind(errh, update_device=False)
 
         # Build
         rkern = self._build_kernel(
-            'errest', src, [np.int32] + [np.intp]*4 + [dtype]*2, restype=dtype
+            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2,
+            restype=dtype
         )
 
         class ErrestKernel(ComputeKernel):
             @property
             def retval(self):
-                return float(reth[0])
+                return errh
 
             def run(self, queue, atol, rtol):
                 queue.mic_stream_comp.invoke(
-                    rkern, cnt, retd, x.data, y.data, z.data, atol, rtol
+                    rkern, nrow, ncolb, ldim, errd,
+                    x.data, y.data, z.data, atol, rtol
                 )
-                retd.update_host()
+                errd.update_host()
 
         return ErrestKernel()

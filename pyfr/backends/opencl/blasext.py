@@ -50,33 +50,45 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
-        cnt = x.leaddim*x.nrow
-        dtype = x.dtype
+        nrow, ldim, dtype = x.traits
+        ncola, ncolb = x.ioshape[1:]
 
-        # Norm type
-        reduce_expr = 'a + b' if norm == 'l2' else 'max(a, b)'
+        # Reduction workgroup dimensions
+        block = (128,)
+
+        # Determine the number of groups
+        gdim = (ncolb + block[0] - 1) // block[0]
+
+        # Empty result buffer on host with (nvars, ngroups)
+        err_host = np.empty((ncola, gdim), dtype)
+
+        # Device memory allocation
+        err_dev = cl.Buffer(self.backend.ctx, cl.mem_flags.READ_WRITE,
+                            err_host.nbytes)
+
+        # Get the kernel template
+        src = self.backend.lookup.get_template('errest').render(
+            norm=norm, ncola=ncola, sharesz=block[0]
+        )
 
         # Build the reduction kernel
-        rkern = ReductionKernel(
-            self.backend.ctx, dtype, neutral='0', reduce_expr=reduce_expr,
-            map_expr='pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2)',
-            arguments='__global {0}* x, __global {0}* y, __global {0}* z, '
-                      '{0} atol, {0} rtol'.format(npdtype_to_ctype(dtype))
+        rkern = self._build_kernel(
+              'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
         )
+
+        # Norm type
+        reducer = np.max if norm == 'uniform' else np.sum
 
         class ErrestKernel(ComputeKernel):
             @property
             def retval(self):
-                return self._retarr.get()
+                return reducer(err_host, axis=1)
 
             def run(self, queue, atol, rtol):
-                qcomp = queue.cl_queue_comp
-
-                xarr = Array(qcomp, cnt, dtype, data=x.data)
-                yarr = Array(qcomp, cnt, dtype, data=y.data)
-                zarr = Array(qcomp, cnt, dtype, data=z.data)
-
-                self._retarr = rkern(xarr, yarr, zarr, atol, rtol,
-                                     queue=qcomp)
+                rkern(queue.cl_queue_comp, (ncolb,), block, nrow,
+                      ncolb, ldim, err_dev, x.data, y.data,
+                      z.data, atol, rtol)
+                cl.enqueue_copy(queue.cl_queue_comp, err_host, err_dev,
+                                is_blocking=False)
 
         return ErrestKernel()

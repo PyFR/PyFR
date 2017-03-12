@@ -8,12 +8,13 @@ from pyfr.writers.native import NativeWriter
 class WriterPlugin(BasePlugin):
     name = 'writer'
     systems = ['*']
+    formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
         # Construct the solution writer
-        basedir = self.cfg.getpath(cfgsect, 'basedir', '.')
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(cfgsect, 'basename')
         self._writer = NativeWriter(intg, self.nvars, basedir, basename,
                                     prefix='soln')

@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 from ctypes import CDLL, c_void_p
 import functools as ft
+import hashlib
 import itertools as it
 import os
 import pickle
@@ -154,9 +155,16 @@ def subclass_where(cls, **kwargs):
         if hasattr(s, k) and getattr(s, k) == v:
             return s
 
+    raise KeyError("No subclasses of {0} with cls.{1} == '{2}'"
+                   .format(cls.__name__, k, v))
+
 
 def ndrange(*args):
     return it.product(*map(range, args))
+
+
+def digest(*args, hash='sha256'):
+    return getattr(hashlib, hash)(pickle.dumps(args)).hexdigest()
 
 
 def rm(path):
@@ -164,3 +172,7 @@ def rm(path):
         os.remove(path)
     else:
         shutil.rmtree(path)
+
+
+def mv(src, dst):
+    shutil.move(src, dst)
