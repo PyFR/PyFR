@@ -40,7 +40,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
             ls = cfg.getliteral('backend-opencl', 'local-size-2d', '128, 1')
 
         # Global work size
-        gs = tuple(dims[::-1])
+        gs = tuple(gi - gi % -li for gi, li in zip(dims[::-1], ls))
 
         class PointwiseKernel(ComputeKernel):
             def run(self, queue, **kwargs):
