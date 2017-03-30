@@ -90,7 +90,7 @@ class TavgPlugin(BasePlugin):
                 stats = Inifile()
                 stats.set('data', 'prefix', 'tavg')
                 stats.set('data', 'fields',
-                          ','.join(k for k, v in self.exprs))
+                          ','.join(k.replace('-','_') for k, v in self.exprs))
                 stats.set('tavg', 'tstart', intg.tcurr - self.dtout)
                 stats.set('tavg', 'tend', intg.tcurr)
                 intg.collect_stats(stats)
