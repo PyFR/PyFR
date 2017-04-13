@@ -58,9 +58,6 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         # Construct the relevant mesh partition
         self.system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
 
-        # Storage register banks
-        self._regs, self._regidx = self._get_reg_banks(nreg)
-
         # Extract the UUID of the mesh (to be saved with solutions)
         self.mesh_uuid = mesh['mesh_uuid']
 
@@ -70,9 +67,6 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
 
-        # Bank index of solution
-        self._idxcurr = 0
-
         # Solution cache
         self._curr_soln = None
 
@@ -81,12 +75,6 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         # Record the starting wall clock time
         self._wstart = time.time()
-
-        # Event handlers for advance_to
-        self.completed_step_handlers = proxylist(self._get_plugins())
-
-        # Delete the memory-intensive elements map from the system
-        del self.system.ele_map
 
     def _get_reg_banks(self, nreg):
         regs, regidx = [], list(range(nreg))
@@ -122,7 +110,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         return plugins
 
-    def _get_kernels(self, name, nargs, **kwargs):
+    def _get_kernels(self, name, nargs, level=None, **kwargs):
         # Transpose from [nregs][neletypes] to [neletypes][nregs]
         transregs = zip(*self._regs)
 
@@ -133,20 +121,21 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         return kerns
 
-    def _prepare_reg_banks(self, *bidxes):
+    def _prepare_reg_banks(self, *bidxes, level=None):
         for reg, ix in zip(self._regs, bidxes):
             reg.active = ix
 
     @memoize
-    def _get_axnpby_kerns(self, n, subdims=None):
-        return self._get_kernels('axnpby', nargs=n, subdims=subdims)
+    def _get_axnpby_kerns(self, n, level=None, subdims=None):
+        return self._get_kernels('axnpby', nargs=n, level=level,
+                                 subdims=subdims)
 
-    def _add(self, *args):
+    def _add(self, *args, level=None):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(len(args) // 2)
+        axnpby = self._get_axnpby_kerns(len(args) // 2, level=level)
 
         # Bank indices are in odd-numbered arguments
-        self._prepare_reg_banks(*args[1::2])
+        self._prepare_reg_banks(*args[1::2], level=level)
 
         # Bind and run the axnpby kernels
         self._queue % axnpby(*args[::2])

@@ -14,11 +14,12 @@ class BaseElements(object, metaclass=ABCMeta):
     privarmap = None
     convarmap = None
 
-    def __init__(self, basiscls, eles, cfg):
+    def __init__(self, basiscls, eles, cfg, level=0):
         self._be = None
 
         self.eles = eles
         self.cfg = cfg
+        self.level = level
 
         self.nspts = nspts = eles.shape[0]
         self.neles = neles = eles.shape[1]
@@ -35,7 +36,7 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nvars = len(self.privarmap[ndims])
 
         # Instantiate the basis class
-        self.basis = basis = basiscls(nspts, cfg)
+        self.basis = basis = basiscls(nspts, cfg, level)
 
         # See what kind of projection the basis is using
         self.antialias = basis.antialias
@@ -144,8 +145,8 @@ class BaseElements(object, metaclass=ABCMeta):
 
         # Convenience functions for scalar/vector allocation
         alloc = lambda ex, n: abufs.append(
-            backend.matrix(n, extent=nonce + ex, tags={'align'})
-        ) or abufs[-1]
+            backend.matrix(n, extent='{0}_{1}'.format(nonce, self.level),
+                           tags={'align'})) or abufs[-1]
         salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
         valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
 

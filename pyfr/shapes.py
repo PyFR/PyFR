@@ -35,10 +35,10 @@ class BaseShape(object):
         'quad': lambda order: (order + 1)**2
     }
 
-    def __init__(self, nspts, cfg):
+    def __init__(self, nspts, cfg, level=0):
         self.nspts = nspts
         self.cfg = cfg
-        self.order = cfg.getint('solver', 'order')
+        self.order = cfg.getint('solver', 'order') - level
 
         self.antialias = cfg.get('solver', 'anti-alias', 'none')
         self.antialias = {s.strip() for s in self.antialias.split(',')}
