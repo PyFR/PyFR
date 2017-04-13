@@ -244,7 +244,7 @@ class VTKWriter(BaseWriter):
         array.tofile(vtuf)
 
     def _process_name(self, name):
-        return re.sub('\W+', '_', name)
+        return re.sub(r'\W+', '_', name)
 
     def _write_serial_header(self, vtuf, mk, off):
         names, types, comps, sizes = self._get_array_attrs(mk)
