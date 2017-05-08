@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import os
+import re
 
 import numpy as np
 
@@ -242,6 +243,9 @@ class VTKWriter(BaseWriter):
         np.uint32(array.nbytes).tofile(vtuf)
         array.tofile(vtuf)
 
+    def _process_name(self, name):
+        return re.sub(r'\W+', '_', name)
+
     def _write_serial_header(self, vtuf, mk, off):
         names, types, comps, sizes = self._get_array_attrs(mk)
         npts, ncells = self._get_npts_ncells_nnodes(mk)[:2]
@@ -256,7 +260,7 @@ class VTKWriter(BaseWriter):
             write_s('<DataArray Name="{0}" type="{1}" '
                     'NumberOfComponents="{2}" '
                     'format="appended" offset="{3}"/>\n'
-                    .format(n, t, c, off))
+                    .format(self._process_name(n), t, c, off))
 
             off += 4 + s
 
@@ -281,7 +285,8 @@ class VTKWriter(BaseWriter):
         # Write vtk DaraArray headers
         for i, (n, t, s) in enumerate(zip(names, types, comps)):
             write_s('<PDataArray Name="{0}" type="{1}" '
-                    'NumberOfComponents="{2}"/>\n'.format(n, t, s))
+                    'NumberOfComponents="{2}"/>\n'
+                    .format(self._process_name(n), t, s))
 
             if i == 0:
                 write_s('</PPoints>\n<PCells>\n')
