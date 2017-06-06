@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractmethod
-
 from pyfr.integrators.base import BaseIntegrator
 
 
@@ -22,10 +20,8 @@ class BaseDualIntegrator(BaseIntegrator):
     def _source_regidx(self):
         return self._regidx[self._pseudo_stepper_nregs:]
 
-    @abstractmethod
     def _dual_time_source(self):
         pass
 
-    @abstractmethod
     def finalise_step(self, currsoln):
         pass

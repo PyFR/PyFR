@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import deque
 import re
 import time
@@ -13,7 +12,7 @@ from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
 
-class BaseIntegrator(object, metaclass=ABCMeta):
+class BaseIntegrator(object):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         self.backend = backend
         self.rallocs = rallocs
@@ -174,23 +173,21 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         return self._curr_soln
 
-    @abstractmethod
     def step(self, t, dt):
         pass
 
-    @abstractmethod
     def advance_to(self, t):
         pass
 
-    @abstractproperty
+    @property
     def _stepper_nfevals(self):
         pass
 
-    @abstractproperty
+    @property
     def _stepper_nregs(self):
         pass
 
-    @abstractproperty
+    @property
     def _stepper_order(self):
         pass
 
