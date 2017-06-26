@@ -80,6 +80,17 @@ class BasePolyBasis(object):
     def vdm(self):
         return self.ortho_basis_at(self.pts)
 
+    def proj_to(self, tobasis):
+        if tobasis.order > self.order:
+            return self.nodal_basis_at(tobasis.pts)
+        elif tobasis.order < self.order:
+            degmap = {dd: i for i, dd in enumerate(self.degrees)}
+            todegs = [degmap[dd] for dd in tobasis.degrees]
+
+            return np.dot(tobasis.vdm.T, self.invvdm.T[todegs])
+        else:
+            return np.eye(len(self.pts))
+
     @lazyprop
     @clean
     def invvdm(self):
@@ -99,7 +110,7 @@ class LinePolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return list(range(self.order))
+        return [(i,) for i in range(self.order)]
 
 
 class TriPolyBasis(BasePolyBasis):
@@ -146,7 +157,7 @@ class TriPolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return [i + j
+        return [(i, j)
                 for i in range(self.order)
                 for j in range(self.order - i)]
 
@@ -175,7 +186,7 @@ class QuadPolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return [i + j for i in range(self.order) for j in range(self.order)]
+        return [(i, j) for i in range(self.order) for j in range(self.order)]
 
 
 class TetPolyBasis(BasePolyBasis):
@@ -247,7 +258,7 @@ class TetPolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return [i + j + k
+        return [(i, j, k)
                 for i in range(self.order)
                 for j in range(self.order - i)
                 for k in range(self.order - i - j)]
@@ -308,7 +319,7 @@ class PriPolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return [i + j + k
+        return [(i, j, k)
                 for i in range(self.order)
                 for j in range(self.order - i)
                 for k in range(self.order)]
@@ -378,7 +389,7 @@ class PyrPolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return [i + j + k
+        return [(i, j, k)
                 for i in range(self.order)
                 for j in range(self.order)
                 for k in range(self.order - max(i, j))]
@@ -412,7 +423,7 @@ class HexPolyBasis(BasePolyBasis):
 
     @lazyprop
     def degrees(self):
-        return [i + j + k
+        return [(i, j, k)
                 for i in range(self.order)
                 for j in range(self.order)
                 for k in range(self.order)]

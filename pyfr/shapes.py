@@ -146,13 +146,13 @@ class BaseShape(object):
     def m11(self):
         ub = self.ubasis
 
-        n = max(ub.degrees)
+        n = max(sum(dd) for dd in ub.degrees)
         ncut = self.cfg.getint('soln-filter', 'cutoff')
         order = self.cfg.getint('soln-filter', 'order')
         alpha = self.cfg.getfloat('soln-filter', 'alpha')
 
         A = np.ones(self.nupts)
-        for i, d in enumerate(ub.degrees):
+        for i, d in enumerate(sum(dd) for dd in ub.degrees):
             if d >= ncut < n:
                 A[i] = exp(-alpha*((d - ncut)/(n - ncut))**order)
 
