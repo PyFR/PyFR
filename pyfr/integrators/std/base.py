@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import abstractproperty
-
 from pyfr.integrators.base import BaseIntegrator
 
 
@@ -15,10 +13,10 @@ class BaseStdIntegrator(BaseIntegrator):
         if self._controller_needs_errest and not self._stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
-    @abstractproperty
+    @property
     def _controller_needs_errest(self):
         pass
 
-    @abstractproperty
+    @property
     def _stepper_has_errest(self):
         pass

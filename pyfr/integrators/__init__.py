@@ -4,6 +4,7 @@ import re
 
 from pyfr.integrators.dual import (BaseDualController, BaseDualPseudoStepper,
                                    BaseDualStepper)
+from pyfr.integrators.multip import MultiP
 from pyfr.integrators.std import BaseStdController, BaseStdStepper
 from pyfr.util import subclass_where
 
@@ -29,6 +30,9 @@ def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
         sc = subclass_where(BaseDualStepper, stepper_name=sn)
 
         bases = [(cn, cc), (pn, pc), (sn, sc)]
+
+        if 'pseudo-multigrid' in cfg.sections():
+            bases.insert(0, ('mg', MultiP))
     else:
         raise ValueError('Invalid integrator formulation')
 

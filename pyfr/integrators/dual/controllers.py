@@ -47,18 +47,6 @@ class DualNoneController(BaseDualController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        sect = 'solver-time-integrator'
-
-        self._maxniters = self.cfg.getint(sect, 'pseudo-niters-max')
-        self._minniters = self.cfg.getint(sect, 'pseudo-niters-min')
-
-        if self._maxniters < self._minniters:
-            raise ValueError('The maximum number of pseudo-iterations must '
-                             'be greater than or equal to the minimum')
-
-        self._pseudo_residtol= self.cfg.getfloat(sect, 'pseudo-resid-tol')
-        self._pseudo_norm = self.cfg.get(sect, 'pseudo-resid-norm', 'uniform')
-
     def advance_to(self, t):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
@@ -66,10 +54,12 @@ class DualNoneController(BaseDualController):
         while self.tcurr < t:
             for i in range(self._maxniters):
                 dt = max(min(t - self.tcurr, self._dt), self.dtmin)
-                dtau = max(min(t - self.tcurr, self._dtau), self.dtaumin)
+                dtau = max(min(t - self.tcurr, self._dtau), self._dtaumin)
 
                 # Take the step
                 self._idxcurr, self._idxprev = self.step(self.tcurr, dt, dtau)
+
+                nsteps = (self.npseudosteps + 1, i + 1)
 
                 # Activate convergence monitoring after pseudo-niters-min
                 if i >= self._minniters - 1:
@@ -78,14 +68,13 @@ class DualNoneController(BaseDualController):
 
                     # Compute the normalised residual and check for convergence
                     resid = self._resid(dtau, self._idxprev)
-                    self.pseudostepinfo.append((self.npseudosteps + 1, i + 1,
-                                                tuple(resid)))
+                    self.pseudostepinfo.append((*nsteps, tuple(resid)))
 
                     if max(resid) < self._pseudo_residtol:
                         break
                 else:
-                    self.pseudostepinfo.append((self.npseudosteps + 1, i + 1,
-                                                (None,)*self.system.nvars))
+                    nones = (None,)*self.system.nvars
+                    self.pseudostepinfo.append((*nsteps, nones))
 
                 self.npseudosteps += 1
 
