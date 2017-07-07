@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from collections import defaultdict
+import itertools as it
 import re
 
 from pyfr.inifile import Inifile
@@ -9,32 +11,25 @@ from pyfr.util import memoize, proxylist
 
 class MultiP(BaseDualIntegrator):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
+        sect = 'solver-dual-time-integrator-multip'
+
         # Get the solver order
         order = cfg.getint('solver', 'order')
 
-        # Get multigrid cycle
-        mgsect = 'pseudo-multigrid'
-        self.lvliters = list(cfg.getliteral(mgsect, 'pseudo-mgcycle'))
-        self.nlvls = len(self.lvliters) // 2 + 1
-        self.lvls = (list(range(self.nlvls - 1))
-                     + list(range(self.nlvls - 1, -1, -1)))
+        # Get the multigrid cycle
+        self.cycles = list(cfg.getliteral(sect, 'cycle'))
+        self.nlvls = len(self.cycles) // 2 + 1
+        self.levels = (list(range(self.nlvls - 1)) +
+                       list(range(self.nlvls - 1, -1, -1)))
         self.level = 0
 
         if self.nlvls > order:
             raise ValueError('The number of multigrid levels cannot exceed '
                              'the solution order')
 
-        # The maximum and minimum number of multigrid cycles
-        self.maxcycles = cfg.getint(mgsect, 'pseudo-mgcycles-max')
-        self.mincycles = cfg.getint(mgsect, 'pseudo-mgcycles-min')
-
-        if self.maxcycles < self.mincycles:
-            raise ValueError('The maximum number of multigrid cycles must '
-                             'be greater than or equal to the minimum')
-
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat('solver-time-integrator', 'pseudo-dt')
-        dtaufact = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+        dtaufact = cfg.getfloat(sect, 'dt-fact', 1.0)
         self.dtaus = [dtau*dtaufact**i for i in range(self.nlvls)]
 
         # Generate multiple cfgs for the multigrid systems
@@ -71,18 +66,15 @@ class MultiP(BaseDualIntegrator):
         self._mgidxcurr[self.level] = y
 
     def _init_proj_mats(self):
-        self.projmat = {}
-        cmat = self.backend.const_matrix
+        self.projmats = defaultdict(proxylist)
+        cmat = lambda m: self.backend.const_matrix(m, tags={'align'})
 
         for l in range(self.nlvls - 1):
-            r, p = proxylist([]), proxylist([])
             for etype in self.system.ele_types:
                 b1 = self._mgsystem[l].ele_map[etype].basis.ubasis
                 b2 = self._mgsystem[l + 1].ele_map[etype].basis.ubasis
-                r.append(cmat(b1.proj_to(b2), tags={'align'}))
-                p.append(cmat(b2.proj_to(b1), tags={'align'}))
-
-            self.projmat[l, l + 1], self.projmat[l + 1, l] = r, p
+                self.projmats[l, l + 1].append(cmat(b1.proj_to(b2)))
+                self.projmats[l + 1, l].append(cmat(b2.proj_to(b1)))
 
     @memoize
     def mgproject(self, l1, l2):
@@ -90,8 +82,8 @@ class MultiP(BaseDualIntegrator):
         outbanks = self._mgsystem[l2].eles_scal_upts_inb
 
         return proxylist(
-            self.backend.kernel('mul', proj, inb, out=outb)
-            for proj, inb, outb in zip(self.projmat[l1, l2], inbanks, outbanks)
+            self.backend.kernel('mul', pm, inb, out=outb)
+            for pm, inb, outb in zip(self.projmats[l1, l2], inbanks, outbanks)
         )
 
     def restrict(self, l1, l2, dt):
@@ -199,8 +191,8 @@ class MultiP(BaseDualIntegrator):
         # Create a proxylist of matrix-banks for each storage register
         for l in range(self.nlvls):
             self._mgregs.append(
-                [proxylist([self.backend.matrix_bank(em, i)
-                            for em in self._mgsystem[l].ele_banks])
+                [proxylist(self.backend.matrix_bank(em, i)
+                           for em in self._mgsystem[l].ele_banks)
                  for i in self._regidx]
             )
 
@@ -216,45 +208,47 @@ class MultiP(BaseDualIntegrator):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
+        # Multigrid levels and step counts
+        levels, cycles = self.levels, self.cycles
+
         while self.tcurr < t:
             dt = max(min(t - self.tcurr, self._dt), self.dtmin)
 
-            for i in range(self.maxcycles):
+            for i in range(self._maxniters):
                 # V-cycle
-                for j, l in enumerate(self.lvls):
+                for l, m, n in it.zip_longest(levels, levels[1:], cycles):
                     self.level = l
+
                     dtau = max(min(t - self.tcurr, self.dtaus[l]),
                                self._dtaumin)
 
-                    for k in range(self.lvliters[j]):
+                    for k in range(n):
                         self._idxcurr, idxprev = self.step(self.tcurr, dt, dtau)
 
-                    if j == len(self.lvls) - 1:
-                        pass
-                    elif l < self.lvls[j + 1]:
-                        self.restrict(l, self.lvls[j + 1], dt)
-                    else:
-                        self.prolongate(l, self.lvls[j + 1])
+                    if m and l < m:
+                        self.restrict(l, m, dt)
+                    elif m and l > m:
+                        self.prolongate(l, m)
 
-                nsteps = (self.npseudosteps + 1, i + 1)
 
-                if i >= self.mincycles - 1:
+                if i >= self._minniters - 1:
                     # Subtract the current and previous solution
                     self._add(-1, idxprev, 1, self._idxcurr)
 
-                    # Normalised residual and check for convergence
-                    resid = self._resid(self.dtaus[0], idxprev)
-                    self.pseudostepinfo.append((*nsteps, tuple(resid)))
-
-                    if max(resid) < self._pseudo_residtol:
-                        break
+                    # Compute the normalised residual
+                    resid = tuple(self._resid(self.dtaus[0], idxprev))
                 else:
-                    nones = (None,)*self.system.nvars
-                    self.pseudostepinfo.append((*nsteps, nones))
+                    resid = None
 
+                # Increment the step count
                 self.npseudosteps += 1
+                self.pseudostepinfo.append((self.npseudosteps, i + 1, resid))
 
-            # Update the dual-time stepping banks (n+1 => n, n => n-1)
+                # Check for convergence
+                if resid and max(resid) < self._pseudo_residtol:
+                    break
+
+            # Update the dual-time stepping banks
             self.finalise_step(self._idxcurr)
 
             # We are not adaptive, so accept every step

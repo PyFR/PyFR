@@ -31,7 +31,7 @@ def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
 
         bases = [(cn, cc), (pn, pc), (sn, sc)]
 
-        if 'pseudo-multigrid' in cfg.sections():
+        if 'solver-dual-time-integrator-multip' in cfg.sections():
             bases.insert(0, ('mg', MultiP))
     else:
         raise ValueError('Invalid integrator formulation')

@@ -59,24 +59,23 @@ class DualNoneController(BaseDualController):
                 # Take the step
                 self._idxcurr, self._idxprev = self.step(self.tcurr, dt, dtau)
 
-                nsteps = (self.npseudosteps + 1, i + 1)
-
                 # Activate convergence monitoring after pseudo-niters-min
                 if i >= self._minniters - 1:
                     # Subtract the current solution from the previous solution
                     self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
 
-                    # Compute the normalised residual and check for convergence
-                    resid = self._resid(dtau, self._idxprev)
-                    self.pseudostepinfo.append((*nsteps, tuple(resid)))
-
-                    if max(resid) < self._pseudo_residtol:
-                        break
+                    # Compute the normalised residual
+                    resid = tuple(self._resid(dtau, self._idxprev))
                 else:
-                    nones = (None,)*self.system.nvars
-                    self.pseudostepinfo.append((*nsteps, nones))
+                    resid = None
 
+                # Increment the step count
                 self.npseudosteps += 1
+                self.pseudostepinfo.append((self.npseudosteps, i + 1, resid))
+
+                # Check for convergence
+                if resid and max(resid) < self._pseudo_residtol:
+                    break
 
             # Update the dual-time stepping banks (n+1 => n, n => n-1)
             self.finalise_step(self._idxcurr)
