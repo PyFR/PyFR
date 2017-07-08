@@ -14,40 +14,44 @@ class MultiP(BaseDualIntegrator):
         sect = 'solver-dual-time-integrator-multip'
 
         # Get the solver order
-        order = cfg.getint('solver', 'order')
+        self._order = cfg.getint('solver', 'order')
 
         # Get the multigrid cycle
-        self.cycles = list(cfg.getliteral(sect, 'cycle'))
-        self.nlvls = len(self.cycles) // 2 + 1
-        self.levels = (list(range(self.nlvls - 1)) +
-                       list(range(self.nlvls - 1, -1, -1)))
-        self.level = 0
+        self.cycle, self.csteps = zip(*cfg.getliteral(sect, 'cycle'))
+        self.levels = sorted(set(self.cycle), reverse=True)
+        self.level = self._order
 
-        if self.nlvls > order:
-            raise ValueError('The number of multigrid levels cannot exceed '
+        if max(self.cycle) > self._order:
+            raise ValueError('The multigrid level orders cannot exceed '
                              'the solution order')
+
+        if any(abs(i - j) > 1 for i, j in zip(self.cycle, self.cycle[1:])):
+            raise ValueError('The orders of consecutive multigrid levels can '
+                             'only change by one')
+
+        if self.cycle[0] and self.cycle[-1] != self._order:
+            raise ValueError('The multigrid cycle needs to start end with the '
+                             'highest (solution) order ')
 
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat('solver-time-integrator', 'pseudo-dt')
         dtaufact = cfg.getfloat(sect, 'dt-fact', 1.0)
-        self.dtaus = [dtau*dtaufact**i for i in range(self.nlvls)]
+        self.dtaus = {l: dtau*dtaufact**(self._order - l) for l in self.levels}
 
         # Generate multiple cfgs for the multigrid systems
-        self.mgcfg = [Inifile(cfg.tostr()) for i in range(self.nlvls)]
-        for deg in range(1, self.nlvls + 1):
-            self.mgcfg[deg - 1].set('solver', 'order', order - (deg - 1))
+        self.mgcfgs = {l: Inifile(cfg.tostr()) for l in self.levels}
+        for l, mgcfg in self.mgcfgs.items():
+            mgcfg.set('solver', 'order', l)
             for sec in cfg.sections():
-                m = re.match(r'solver-(.*)-mg-p{0}'.format(deg), sec)
+                m = re.match(r'solver-(.*)-mg-p{0}'.format(l), sec)
                 if m:
-                    self.mgcfg[order - deg].rename_section(
-                        m.group(0), 'solver-' + m.group(1)
-                    )
+                    mgcfg.rename_section(m.group(0), 'solver-' + m.group(1))
 
         super().__init__(backend, systemcls, rallocs, mesh, initsoln, cfg)
 
         # Delete remaining elements maps from multigrid systems
-        for sys in self._mgsystem[1:]:
-            del sys.ele_map
+        for l in self.levels[1:]:
+            del self._mgsystem[l].ele_map
 
     @property
     def _idxcurr(self):
@@ -69,7 +73,7 @@ class MultiP(BaseDualIntegrator):
         self.projmats = defaultdict(proxylist)
         cmat = lambda m: self.backend.const_matrix(m, tags={'align'})
 
-        for l in range(self.nlvls - 1):
+        for l in self.levels[1:]:
             for etype in self.system.ele_types:
                 b1 = self._mgsystem[l].ele_map[etype].basis.ubasis
                 b2 = self._mgsystem[l + 1].ele_map[etype].basis.ubasis
@@ -97,7 +101,7 @@ class MultiP(BaseDualIntegrator):
         rhs(self.tcurr, l1idxcurr, mg1, c=1/dt, passmg=True)
 
         # mg1 = d = r - R
-        add(-1, mg1, 0 if l1 == 0 else 1, mg0)
+        add(-1, mg1, 0 if l1 == self._order else 1, mg0)
 
         # Restrict Q
         l1sys.eles_scal_upts_inb.active = l1idxcurr
@@ -160,7 +164,7 @@ class MultiP(BaseDualIntegrator):
         self._queue % axnpby(1, *svals)
 
         # Multigrid r addition
-        if self.level != 0 and not passmg:
+        if self.level != self._order and not passmg:
             axnpby = self._get_axnpby_kerns(2, level=self.level)
             self._prepare_reg_banks(fout, self._mg_regidx[0])
             self._queue % axnpby(1, -1)
@@ -185,21 +189,19 @@ class MultiP(BaseDualIntegrator):
 
     def _init_reg_banks(self):
         # Three additional banks are required for multigrid
-        self._mgregs, self._regidx = [], list(range(self.nreg + 3))
-        self._mgidxcurr = [0]*self.nlvls
+        self._mgregs, self._regidx = {}, list(range(self.nreg + 3))
+        self._mgidxcurr = dict.fromkeys(self.levels, 0)
 
         # Create a proxylist of matrix-banks for each storage register
-        for l in range(self.nlvls):
-            self._mgregs.append(
-                [proxylist(self.backend.matrix_bank(em, i)
-                           for em in self._mgsystem[l].ele_banks)
-                 for i in self._regidx]
-            )
+        self._mgregs = {l: [proxylist(self.backend.matrix_bank(em, i)
+                                      for em in self._mgsystem[l].ele_banks)
+                            for i in self._regidx]
+                        for l in self.levels}
 
     def _init_system(self, systemcls, *args):
-        self._mgsystem = [systemcls(*args, nreg=self.nreg + 3,
-                                    cfg=self.mgcfg[i])
-                          for i in range(self.nlvls)]
+        self._mgsystem = {l: systemcls(*args, nreg=self.nreg + 3,
+                                       cfg=self.mgcfgs[l])
+                          for l in self.levels}
 
         # Initialise the restriction and prolongation matrices
         self._init_proj_mats()
@@ -209,14 +211,13 @@ class MultiP(BaseDualIntegrator):
             raise ValueError('Advance time is in the past')
 
         # Multigrid levels and step counts
-        levels, cycles = self.levels, self.cycles
+        cycle, csteps = self.cycle, self.csteps
 
         while self.tcurr < t:
             dt = max(min(t - self.tcurr, self._dt), self.dtmin)
 
             for i in range(self._maxniters):
-                # V-cycle
-                for l, m, n in it.zip_longest(levels, levels[1:], cycles):
+                for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                     self.level = l
 
                     dtau = max(min(t - self.tcurr, self.dtaus[l]),
@@ -225,18 +226,17 @@ class MultiP(BaseDualIntegrator):
                     for k in range(n):
                         self._idxcurr, idxprev = self.step(self.tcurr, dt, dtau)
 
-                    if m and l < m:
+                    if m and l > m:
                         self.restrict(l, m, dt)
-                    elif m and l > m:
+                    elif m and l < m:
                         self.prolongate(l, m)
-
 
                 if i >= self._minniters - 1:
                     # Subtract the current and previous solution
                     self._add(-1, idxprev, 1, self._idxcurr)
 
                     # Compute the normalised residual
-                    resid = tuple(self._resid(self.dtaus[0], idxprev))
+                    resid = tuple(self._resid(self.dtaus[self._order], idxprev))
                 else:
                     resid = None
 
