@@ -9,7 +9,7 @@ from pyfr.integrators.dual.base import BaseDualIntegrator
 from pyfr.util import memoize, proxylist
 
 
-class MultiP(BaseDualIntegrator):
+class DualMultiPIntegrator(BaseDualIntegrator):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         sect = 'solver-dual-time-integrator-multip'
 
@@ -29,19 +29,20 @@ class MultiP(BaseDualIntegrator):
             raise ValueError('The orders of consecutive multigrid levels can '
                              'only change by one')
 
-        if self.cycle[0] and self.cycle[-1] != self._order:
+        if self.cycle[0] != self._order or self.cycle[-1] != self._order:
             raise ValueError('The multigrid cycle needs to start end with the '
                              'highest (solution) order ')
 
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat('solver-time-integrator', 'pseudo-dt')
-        dtaufact = cfg.getfloat(sect, 'dt-fact', 1.0)
-        self.dtaus = {l: dtau*dtaufact**(self._order - l) for l in self.levels}
+        dtauf = cfg.getfloat(sect, 'dt-fact', 1.0)
+        self.dtaus = {l: dtau*dtauf**(self._order - l) for l in self.levels}
 
-        # Generate multiple cfgs for the multigrid systems
-        self.mgcfgs = {l: Inifile(cfg.tostr()) for l in self.levels}
-        for l, mgcfg in self.mgcfgs.items():
+        # Generate suitable config files for each of the levels
+        self._mgcfgs = {l: Inifile(cfg.tostr()) for l in self.levels}
+        for l, mgcfg in self._mgcfgs.items():
             mgcfg.set('solver', 'order', l)
+
             for sec in cfg.sections():
                 m = re.match(r'solver-(.*)-mg-p{0}'.format(l), sec)
                 if m:
@@ -51,7 +52,7 @@ class MultiP(BaseDualIntegrator):
 
         # Delete remaining elements maps from multigrid systems
         for l in self.levels[1:]:
-            del self._mgsystem[l].ele_map
+            del self._mgsystems[l].ele_map
 
     @property
     def _idxcurr(self):
@@ -75,15 +76,16 @@ class MultiP(BaseDualIntegrator):
 
         for l in self.levels[1:]:
             for etype in self.system.ele_types:
-                b1 = self._mgsystem[l].ele_map[etype].basis.ubasis
-                b2 = self._mgsystem[l + 1].ele_map[etype].basis.ubasis
+                b1 = self._mgsystems[l].ele_map[etype].basis.ubasis
+                b2 = self._mgsystems[l + 1].ele_map[etype].basis.ubasis
+
                 self.projmats[l, l + 1].append(cmat(b1.proj_to(b2)))
                 self.projmats[l + 1, l].append(cmat(b2.proj_to(b1)))
 
     @memoize
     def mgproject(self, l1, l2):
-        inbanks = self._mgsystem[l1].eles_scal_upts_inb
-        outbanks = self._mgsystem[l2].eles_scal_upts_inb
+        inbanks = self._mgsystems[l1].eles_scal_upts_inb
+        outbanks = self._mgsystems[l2].eles_scal_upts_inb
 
         return proxylist(
             self.backend.kernel('mul', pm, inb, out=outb)
@@ -92,7 +94,7 @@ class MultiP(BaseDualIntegrator):
 
     def restrict(self, l1, l2, dt):
         l1idxcurr, l2idxcurr = self._mgidxcurr[l1], self._mgidxcurr[l2]
-        l1sys, l2sys = self._mgsystem[l1], self._mgsystem[l2]
+        l1sys, l2sys = self._mgsystems[l1], self._mgsystems[l2]
         mg0, mg1, mg2 = self._mg_regidx
 
         add, rhs = self._add, self._rhs_with_dts
@@ -133,7 +135,7 @@ class MultiP(BaseDualIntegrator):
 
     def prolongate(self, l1, l2):
         l1idxcurr, l2idxcurr = self._mgidxcurr[l1], self._mgidxcurr[l2]
-        l1sys, l2sys = self._mgsystem[l1], self._mgsystem[l2]
+        l1sys, l2sys = self._mgsystems[l1], self._mgsystems[l2]
         mg0, mg1, mg2 = self._mg_regidx
 
         # Correction with respect to the non-smoothed value from down-cycle
@@ -185,26 +187,25 @@ class MultiP(BaseDualIntegrator):
 
     @property
     def system(self):
-        return self._mgsystem[self.level]
+        return self._mgsystems[self.level]
+
+    def _init_system(self, systemcls, *args):
+        self._mgsystems = {l: systemcls(*args, nreg=self.nreg + 3, cfg=cfg)
+                           for l, cfg in self._mgcfgs.items()}
+
+        # Initialise the restriction and prolongation matrices
+        self._init_proj_mats()
 
     def _init_reg_banks(self):
-        # Three additional banks are required for multigrid
+        # Multi-p requires three additional storage registers
         self._mgregs, self._regidx = {}, list(range(self.nreg + 3))
         self._mgidxcurr = dict.fromkeys(self.levels, 0)
 
         # Create a proxylist of matrix-banks for each storage register
         self._mgregs = {l: [proxylist(self.backend.matrix_bank(em, i)
-                                      for em in self._mgsystem[l].ele_banks)
+                                      for em in sys.ele_banks)
                             for i in self._regidx]
-                        for l in self.levels}
-
-    def _init_system(self, systemcls, *args):
-        self._mgsystem = {l: systemcls(*args, nreg=self.nreg + 3,
-                                       cfg=self.mgcfgs[l])
-                          for l in self.levels}
-
-        # Initialise the restriction and prolongation matrices
-        self._init_proj_mats()
+                        for l, sys in self._mgsystems.items()}
 
     def advance_to(self, t):
         if t < self.tcurr:
@@ -224,7 +225,7 @@ class MultiP(BaseDualIntegrator):
                                self._dtaumin)
 
                     for k in range(n):
-                        self._idxcurr, idxprev = self.step(self.tcurr, dt, dtau)
+                        self._idxcurr, idxp = self.step(self.tcurr, dt, dtau)
 
                     if m and l > m:
                         self.restrict(l, m, dt)
@@ -233,10 +234,10 @@ class MultiP(BaseDualIntegrator):
 
                 if i >= self._minniters - 1:
                     # Subtract the current and previous solution
-                    self._add(-1, idxprev, 1, self._idxcurr)
+                    self._add(-1, idxp, 1, self._idxcurr)
 
                     # Compute the normalised residual
-                    resid = tuple(self._resid(self.dtaus[self._order], idxprev))
+                    resid = tuple(self._resid(self.dtaus[self._order], idxp))
                 else:
                     resid = None
 
