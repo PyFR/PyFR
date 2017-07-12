@@ -35,11 +35,11 @@ class DualMultiPIntegrator(BaseDualIntegrator):
 
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat('solver-time-integrator', 'pseudo-dt')
-        dtauf = cfg.getfloat(sect, 'dt-fact', 1.0)
+        dtauf = cfg.getfloat(sect, 'pseudo-dt-fact', 1.0)
         self.dtaus = {l: dtau*dtauf**(self._order - l) for l in self.levels}
 
-        # Generate suitable config files for each of the levels
-        self._mgcfgs = {l: Inifile(cfg.tostr()) for l in self.levels}
+        # Generate suitable config files for lower multigrid levels
+        self._mgcfgs = {l: Inifile(cfg.tostr()) for l in self.levels[1:]}
         for l, mgcfg in self._mgcfgs.items():
             mgcfg.set('solver', 'order', l)
 
@@ -47,6 +47,9 @@ class DualMultiPIntegrator(BaseDualIntegrator):
                 m = re.match(r'solver-(.*)-mg-p{0}'.format(l), sec)
                 if m:
                     mgcfg.rename_section(m.group(0), 'solver-' + m.group(1))
+
+        # Insert the original config file to the multigrid config dictionary
+        self._mgcfgs[self._order] = cfg
 
         super().__init__(backend, systemcls, rallocs, mesh, initsoln, cfg)
 
