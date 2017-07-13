@@ -537,6 +537,31 @@ Example::
     min-fact = 0.3
     max-fact = 2.5
 
+[solver-dual-time-integrator-multip]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises multi-p for dual time-stepping with
+
+1. ``pseudo-dt-fact`` --- factor by which the pseudo time-step size
+   changes between multi-p levels:
+
+    *float*
+
+2. ``cycle`` --- nature of a single multi-p cycle:
+
+    ``[(`` *int* ``,`` *int* ``), (`` *int* ``,`` *int* ``), ... (``
+    *int* ``,`` *int* ``)]``
+
+    where the first *int* in each bracketed pair is the multi-p level,
+    and the second *int* in each bracketed pair is the number of pseudo
+    time-steps taken at that multi-p level
+
+Example::
+
+    [solver-dual-time-integrator-multip]
+    pseudo-dt-fact = 2.3
+    cycle = [(3, 1), (2, 1), (1, 2), (2, 1), (3, 3)]
+
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
 
@@ -592,10 +617,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-interfaces-tri]
-^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-tri-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the triangular interfaces with
+Parameterises the triangular interfaces, or if mg-*p* is suffixed
+the triangular interfaces at multi-p level *p*, with
 
 1. ``flux-pts`` --- location of the flux points on a triangular
    interface:
@@ -619,10 +645,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn
 
-[solver-interfaces-quad]
-^^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-quad-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the quadrilateral interfaces with
+Parameterises the quadrilateral interfaces, or if mg-*p* is suffixed
+the quadrilateral interfaces at multi-p level *p*, with
 
 1. ``flux-pts`` --- location of the flux points on a quadrilateral
    interface:
@@ -647,10 +674,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-tri]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-tri-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the triangular elements with
+Parameterises the triangular elements, or if mg-*p* is suffixed
+the triangular elements at multi-p level *p*, with
 
 1. ``soln-pts`` --- location of the solution points in a triangular
    element:
@@ -674,10 +702,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn
 
-[solver-elements-quad]
-^^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-quad-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the quadrilateral elements with
+Parameterises the quadrilateral elements, or if mg-*p* is suffixed
+the quadrilateral elements at multi-p level *p*, with
 
 1. ``soln-pts`` --- location of the solution points in a quadrilateral
    element:
@@ -702,10 +731,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-hex]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-hex-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the hexahedral elements with
+Parameterises the hexahedral elements, or if mg-*p* is suffixed the
+hexahedral elements at multi-p level *p*, with
 
 1. ``soln-pts`` --- location of the solution points in a hexahedral
    element:
@@ -730,10 +760,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-tet]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-tet-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the tetrahedral elements with
+Parameterises the tetrahedral elements, or if mg-*p* is suffixed the
+tetrahedral elements at multi-p level *p*, with
 
 1. ``soln-pts`` --- location of the solution points in a tetrahedral
    element:
@@ -757,10 +788,11 @@ Example::
     quad-deg = 10
     quad-pts = shunn-ham
 
-[solver-elements-pri]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-pri-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the prismatic elements with
+Parameterises the prismatic elements, or if mg-*p* is suffixed the
+prismatic elements at multi-p level *p*, with
 
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
@@ -786,10 +818,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn~gauss-legendre
 
-[solver-elements-pyr]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-pyr-{mg-*p*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the pyramidal elements with
+Parameterises the pyramidal elements, or if mg-*p* is suffixed the
+pyramidal elements at multi-p level *p*, with
 
 1. ``soln-pts`` --- location of the solution points in a pyramidal
    element:
@@ -1097,7 +1130,13 @@ where available.  Parameterised with
 
 2. ``samp-pts`` --- list of points to sample:
 
-    ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]``
+    ``[(`` *float* ``,`` *float* ``), (`` *float* ``,`` *float* ``),
+    ...] | [(`` *float* ``,`` *float* ``,`` *float* ``),
+    (`` *float* ``,`` *float* ``,`` *float* ``), ...]``
+
+    where the two *floats* in each bracketed pair are the *x* and *y*
+    coordinates of the point, and the three *floats* in each bracketed
+    triplet are the *x*, *y* and *z* coordinates of the point
 
 3. ``format`` --- output variable format:
 
@@ -1143,8 +1182,8 @@ Time average quantities. Parameterised with
 
     *string*
 
-5. ``avg-name`` --- expression as a function of the primitive variables,
-   time (t), and space (x, y, [z]) to time average; multiple
+5. ``avg-name`` --- expression to time average, written as a function of
+   the primitive variables, time (t), and space (x, y, [z]); multiple
    expressions, each with their own *name*, may be specified:
 
     *string*
@@ -1161,12 +1200,11 @@ Example::
     avg-p2 = p*p
     avg-vel = sqrt(u*u + v*v)
 
-[soln-bcs-name]
-^^^^^^^^^^^^^^^
+[soln-bcs-*name*]
+^^^^^^^^^^^^^^^^^
 
 Parameterises constant, or if available space (x, y, [z]) and time (t)
-dependent, boundary condition labelled :code:`name` in the .pyfrm file
-with
+dependent, boundary condition labelled *name* in the .pyfrm file with
 
 1. ``type`` --- type of boundary condition:
 
