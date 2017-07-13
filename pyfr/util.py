@@ -9,7 +9,7 @@ import os
 import pickle
 import shutil
 
-from pyfr.ctypesutil import find_libc
+from pyfr.ctypesutil import get_libc_function
 
 
 class memoize(object):
@@ -55,7 +55,7 @@ class silence(object):
         self.combine = (stdout == stderr)
 
         # Acquire a handle to fflush from libc
-        self.libc_fflush = CDLL(find_libc()).fflush
+        self.libc_fflush = get_libc_function('fflush')
         self.libc_fflush.argtypes = [c_void_p]
 
     def __enter__(self):
