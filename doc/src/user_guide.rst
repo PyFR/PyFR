@@ -151,7 +151,7 @@ Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
 
 ``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
-``mpirun -n <cores/devices>``. Note that the mesh must be
+``mpiexec -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
 
@@ -1456,7 +1456,7 @@ simulation on a structured mesh:
 6. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-        mpirun -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
+        mpiexec -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
 7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called
