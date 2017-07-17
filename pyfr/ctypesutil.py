@@ -8,7 +8,10 @@ import sys
 
 def get_libc_function(fn):
     if sys.platform == 'win32':
-        libc = ctypes.windll.msvcrt
+        if sys.version_info.minor >= 5:
+            libc = ctypes.windll.msvcrt
+        else:
+            libc = ctypes.CDLL(ctypes.util.find_msvcrt())
     else:
         libc = ctypes.CDLL(ctypes.util.find_library('c'))
 
