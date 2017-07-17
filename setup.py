@@ -26,8 +26,6 @@ modules = [
     'pyfr.backends.base',
     'pyfr.backends.cuda',
     'pyfr.backends.cuda.kernels',
-    'pyfr.backends.mic',
-    'pyfr.backends.mic.kernels',
     'pyfr.backends.opencl',
     'pyfr.backends.opencl.kernels',
     'pyfr.backends.openmp',
@@ -70,7 +68,6 @@ tests = [
 # Data
 package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
-    'pyfr.backends.mic.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.quadrules': [
@@ -116,7 +113,6 @@ install_requires = [
 # Soft dependencies
 extras_require = {
     'cuda': ['pycuda >= 2015.1'],
-    'mic': ['pymic >= 0.7'],
     'opencl': ['pyopencl >= 2015.2.4']
 }
 

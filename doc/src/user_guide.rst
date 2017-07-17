@@ -41,17 +41,6 @@ or greater. The backend requires:
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
 2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2015.1
 
-MIC Backend
-^^^^^^^^^^^
-
-The MIC backend targets Intel Xeon Phi co-processors. The backend
-requires:
-
-1. ICC >= 14.0
-2. Intel MKL >= 11.1
-3. Intel MPSS >= 3.3
-4. `pymic <https://github.com/01org/pyMIC>`_ >= 0.7 (post commit 4d8a2da)
-
 OpenCL Backend
 ^^^^^^^^^^^^^^
 
@@ -219,19 +208,6 @@ Example::
     mpi-type = standard
     block-1d = 64
     block-2d = 128, 2
-
-[backend-mic]
-^^^^^^^^^^^^^
-
-Parameterises the MIC backend with
-
-1. ``device-id`` --- for selecting which device(s) to run on:
-
-    *int* | ``local-rank``
-
-2. ``mkl-root`` --- path to MKL root directory:
-
-    *string*
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
