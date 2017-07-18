@@ -41,17 +41,6 @@ or greater. The backend requires:
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
 2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2015.1
 
-MIC Backend
-^^^^^^^^^^^
-
-The MIC backend targets Intel Xeon Phi co-processors. The backend
-requires:
-
-1. ICC >= 14.0
-2. Intel MKL >= 11.1
-3. Intel MPSS >= 3.3
-4. `pymic <https://github.com/01org/pyMIC>`_ >= 0.7 (post commit 4d8a2da)
-
 OpenCL Backend
 ^^^^^^^^^^^^^^
 
@@ -151,7 +140,7 @@ Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
 
 ``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
-``mpirun -n <cores/devices>``. Note that the mesh must be
+``mpiexec -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
 
@@ -219,19 +208,6 @@ Example::
     mpi-type = standard
     block-1d = 64
     block-2d = 128, 2
-
-[backend-mic]
-^^^^^^^^^^^^^
-
-Parameterises the MIC backend with
-
-1. ``device-id`` --- for selecting which device(s) to run on:
-
-    *int* | ``local-rank``
-
-2. ``mkl-root`` --- path to MKL root directory:
-
-    *string*
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -537,6 +513,30 @@ Example::
     min-fact = 0.3
     max-fact = 2.5
 
+[solver-dual-time-integrator-multip]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises multi-p for dual time-stepping with
+
+1. ``pseudo-dt-fact`` --- factor by which the pseudo time-step size
+   changes between multi-p levels:
+
+    *float*
+
+2. ``cycle`` --- nature of a single multi-p cycle:
+
+    ``[(order,nsteps), (order,nsteps), ... (order,nsteps)]``
+
+    where ``order`` in the first and last bracketed pair must be the
+    overall polynomial order used for the simulation, and ``order`` can
+    only change by one between subsequent bracketed pairs
+
+Example::
+
+    [solver-dual-time-integrator-multip]
+    pseudo-dt-fact = 2.3
+    cycle = [(3, 1), (2, 1), (1, 2), (2, 1), (3, 3)]
+
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
 
@@ -566,10 +566,11 @@ Example::
     ldg-beta = 0.5
     ldg-tau = 0.1
 
-[solver-interfaces-line]
-^^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-line{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the line interfaces with
+Parameterises the line interfaces, or if -mg-p\ *order* is suffixed the
+line interfaces at multi-p level *order*, with
 
 1. ``flux-pts`` --- location of the flux points on a line interface:
 
@@ -592,10 +593,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-interfaces-tri]
-^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-tri{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the triangular interfaces with
+Parameterises the triangular interfaces, or if -mg-p\ *order* is
+suffixed the triangular interfaces at multi-p level *order*, with
 
 1. ``flux-pts`` --- location of the flux points on a triangular
    interface:
@@ -619,10 +621,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn
 
-[solver-interfaces-quad]
-^^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-quad{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the quadrilateral interfaces with
+Parameterises the quadrilateral interfaces, or if -mg-p\ *order* is
+suffixed the quadrilateral interfaces at multi-p level *order*, with
 
 1. ``flux-pts`` --- location of the flux points on a quadrilateral
    interface:
@@ -647,10 +650,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-tri]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-tri{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the triangular elements with
+Parameterises the triangular elements, or if -mg-p\ *order* is suffixed
+the triangular elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a triangular
    element:
@@ -674,10 +678,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn
 
-[solver-elements-quad]
-^^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-quad{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the quadrilateral elements with
+Parameterises the quadrilateral elements, or if -mg-p\ *order* is
+suffixed the quadrilateral elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a quadrilateral
    element:
@@ -702,10 +707,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-hex]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-hex{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the hexahedral elements with
+Parameterises the hexahedral elements, or if -mg-p\ *order* is suffixed
+the hexahedral elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a hexahedral
    element:
@@ -730,10 +736,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-tet]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-tet{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the tetrahedral elements with
+Parameterises the tetrahedral elements, or if -mg-p\ *order* is suffixed
+the tetrahedral elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a tetrahedral
    element:
@@ -757,10 +764,11 @@ Example::
     quad-deg = 10
     quad-pts = shunn-ham
 
-[solver-elements-pri]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-pri{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the prismatic elements with
+Parameterises the prismatic elements, or if -mg-p\ *order* is suffixed
+the prismatic elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
@@ -786,10 +794,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn~gauss-legendre
 
-[solver-elements-pyr]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-pyr{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the pyramidal elements with
+Parameterises the pyramidal elements, or if -mg-p\ *order* is suffixed
+the pyramidal elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a pyramidal
    element:
@@ -961,8 +970,8 @@ Example::
     post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
     post-action-mode = blocking
 
-[soln-plugin-fluidforce-name]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[soln-plugin-fluidforce-*name*]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
 labelled ``name`` and writes out the resulting force vectors to a CSV
@@ -1143,8 +1152,8 @@ Time average quantities. Parameterised with
 
     *string*
 
-5. ``avg-name`` --- expression as a function of the primitive variables,
-   time (t), and space (x, y, [z]) to time average; multiple
+5. ``avg-name`` --- expression to time average, written as a function of
+   the primitive variables, time (t), and space (x, y, [z]); multiple
    expressions, each with their own *name*, may be specified:
 
     *string*
@@ -1161,12 +1170,11 @@ Example::
     avg-p2 = p*p
     avg-vel = sqrt(u*u + v*v)
 
-[soln-bcs-name]
-^^^^^^^^^^^^^^^
+[soln-bcs-*name*]
+^^^^^^^^^^^^^^^^^
 
 Parameterises constant, or if available space (x, y, [z]) and time (t)
-dependent, boundary condition labelled :code:`name` in the .pyfrm file
-with
+dependent, boundary condition labelled *name* in the .pyfrm file with
 
 1. ``type`` --- type of boundary condition:
 
@@ -1456,7 +1464,7 @@ simulation on a structured mesh:
 6. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-        mpirun -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
+        mpiexec -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
 7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called

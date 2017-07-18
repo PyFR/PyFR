@@ -31,9 +31,9 @@ class PseudoStatsPlugin(BasePlugin):
 
     def __call__(self, intg):
         # Process the sequence of pseudo-residuals
-        for (npseudoiter, iternr, pseudo_resid) in intg.pseudostepinfo:
-            self.stats.append((npseudoiter, self.tprev, iternr)
-                              + pseudo_resid)
+        for (npiter, iternr, resid) in intg.pseudostepinfo:
+            resid = resid or ('-',)*intg.system.nvars
+            self.stats.append((npiter, self.tprev, iternr) + resid)
 
         # Update the total step count and save the current time
         self.count += len(intg.pseudostepinfo)

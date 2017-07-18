@@ -47,18 +47,6 @@ class DualNoneController(BaseDualController):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        sect = 'solver-time-integrator'
-
-        self._maxniters = self.cfg.getint(sect, 'pseudo-niters-max')
-        self._minniters = self.cfg.getint(sect, 'pseudo-niters-min')
-
-        if self._maxniters < self._minniters:
-            raise ValueError('The maximum number of pseudo-iterations must '
-                             'be greater than or equal to the minimum')
-
-        self._pseudo_residtol= self.cfg.getfloat(sect, 'pseudo-resid-tol')
-        self._pseudo_norm = self.cfg.get(sect, 'pseudo-resid-norm', 'uniform')
-
     def advance_to(self, t):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
@@ -66,7 +54,7 @@ class DualNoneController(BaseDualController):
         while self.tcurr < t:
             for i in range(self._maxniters):
                 dt = max(min(t - self.tcurr, self._dt), self.dtmin)
-                dtau = max(min(t - self.tcurr, self._dtau), self.dtaumin)
+                dtau = max(min(t - self.tcurr, self._dtau), self._dtaumin)
 
                 # Take the step
                 self._idxcurr, self._idxprev = self.step(self.tcurr, dt, dtau)
@@ -76,18 +64,18 @@ class DualNoneController(BaseDualController):
                     # Subtract the current solution from the previous solution
                     self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
 
-                    # Compute the normalised residual and check for convergence
-                    resid = self._resid(dtau, self._idxprev)
-                    self.pseudostepinfo.append((self.npseudosteps + 1, i + 1,
-                                                tuple(resid)))
-
-                    if max(resid) < self._pseudo_residtol:
-                        break
+                    # Compute the normalised residual
+                    resid = tuple(self._resid(dtau, self._idxprev))
                 else:
-                    self.pseudostepinfo.append((self.npseudosteps + 1, i + 1,
-                                                (None,)*self.system.nvars))
+                    resid = None
 
+                # Increment the step count
                 self.npseudosteps += 1
+                self.pseudostepinfo.append((self.npseudosteps, i + 1, resid))
+
+                # Check for convergence
+                if resid and max(resid) < self._pseudo_residtol:
+                    break
 
             # Update the dual-time stepping banks (n+1 => n, n => n-1)
             self.finalise_step(self._idxcurr)

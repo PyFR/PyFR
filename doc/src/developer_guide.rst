@@ -366,14 +366,6 @@ of `Backend`_ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.backends.mic.base.MICBackend
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
 .. autoclass:: pyfr.backends.opencl.base.OpenCLBackend
     :members:
     :undoc-members:
@@ -395,7 +387,6 @@ Types of `Backend`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
-                         pyfr.backends.mic.base
     :parts: 1
 
 Pointwise Kernel Provider
@@ -426,14 +417,6 @@ Provider`_ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.backends.mic.provider.MICPointwiseKernelProvider
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
 .. autoclass:: pyfr.backends.opencl.provider.OpenCLPointwiseKernelProvider
     :members:
     :undoc-members:
@@ -456,7 +439,6 @@ inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.openmp.provider
                          pyfr.backends.cuda.provider
                          pyfr.backends.opencl.provider
-                         pyfr.backends.mic.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
     :parts: 1
 
@@ -472,14 +454,6 @@ linked, and loaded. There are four types of `Kernel Generator`_
 available in PyFR |release|:
 
 .. autoclass:: pyfr.backends.cuda.generator.CUDAKernelGenerator
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
-.. autoclass:: pyfr.backends.mic.generator.MICKernelGenerator
     :members:
     :undoc-members:
     :inherited-members:
@@ -508,7 +482,6 @@ Types of `Kernel Generator`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
                          pyfr.backends.opencl.generator.OpenCLKernelGenerator
                          pyfr.backends.openmp.generator.OpenMPKernelGenerator
-                         pyfr.backends.mic.generator.MICKernelGenerator
     :parts: 1
 
 =========

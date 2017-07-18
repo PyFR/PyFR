@@ -6,11 +6,16 @@ import os
 import sys
 
 
-def find_libc():
+def get_libc_function(fn):
     if sys.platform == 'win32':
-        return ctypes.util.find_msvcrt()
+        if sys.version_info.minor >= 5:
+            libc = ctypes.windll.msvcrt
+        else:
+            libc = ctypes.CDLL(ctypes.util.find_msvcrt())
     else:
-        return ctypes.util.find_library('c')
+        libc = ctypes.CDLL(ctypes.util.find_library('c'))
+
+    return getattr(libc, fn)
 
 
 def load_library(name):

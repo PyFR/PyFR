@@ -3,7 +3,7 @@
 import re
 
 from pyfr.integrators.dual import (BaseDualController, BaseDualPseudoStepper,
-                                   BaseDualStepper)
+                                   BaseDualStepper, DualMultiPIntegrator)
 from pyfr.integrators.std import BaseStdController, BaseStdStepper
 from pyfr.util import subclass_where
 
@@ -29,6 +29,9 @@ def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
         sc = subclass_where(BaseDualStepper, stepper_name=sn)
 
         bases = [(cn, cc), (pn, pc), (sn, sc)]
+
+        if 'solver-dual-time-integrator-multip' in cfg.sections():
+            bases.insert(0, ('multip', DualMultiPIntegrator))
     else:
         raise ValueError('Invalid integrator formulation')
 
