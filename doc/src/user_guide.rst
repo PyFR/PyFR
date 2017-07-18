@@ -970,8 +970,8 @@ Example::
     post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
     post-action-mode = blocking
 
-[soln-plugin-fluidforce-name]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[soln-plugin-fluidforce-*name*]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
 labelled ``name`` and writes out the resulting force vectors to a CSV
