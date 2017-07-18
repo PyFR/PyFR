@@ -146,7 +146,7 @@ class BaseBackend(object, metaclass=ABCMeta):
                                     tags)
 
     def xchg_matrix_for_view(self, view, tags=set()):
-        return self.xchg_matrix((view.nvrow, view.nvcol, view.n), tags=tags)
+        return self.xchg_matrix((view.nvrow, view.nvcol*view.n), tags=tags)
 
     def view(self, matmap, rmap, cmap, rstridemap=None, vshape=tuple(),
              tags=set()):

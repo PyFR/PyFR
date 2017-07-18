@@ -6,23 +6,33 @@ import os
 import sys
 
 
-def find_libc():
+def get_libc_function(fn):
     if sys.platform == 'win32':
-        return ctypes.util.find_msvcrt()
+        if sys.version_info.minor >= 5:
+            libc = ctypes.windll.msvcrt
+        else:
+            libc = ctypes.CDLL(ctypes.util.find_msvcrt())
     else:
-        return ctypes.util.find_library('c')
+        libc = ctypes.CDLL(ctypes.util.find_library('c'))
+
+    return getattr(libc, fn)
 
 
 def load_library(name):
-    lname = platform_libname(name)
-    sdirs = platform_libdirs()
+    # If an explicit override has been given then use it
+    lpath = os.environ.get('PYFR_{0}_LIBRARY_PATH'.format(name.upper()))
+    if lpath:
+        return ctypes.CDLL(lpath)
 
-    # First attempt to utilise the system search path
+    # Otherwise synthesise the library name and start searching
+    lname = platform_libname(name)
+
+    # Start with system search path
     try:
         return ctypes.CDLL(lname)
-    # Otherwise, if this fails then run our own search
+    # ..and if this fails then run our own search
     except OSError:
-        for sd in sdirs:
+        for sd in platform_libdirs():
             try:
                 return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)))
             except OSError:

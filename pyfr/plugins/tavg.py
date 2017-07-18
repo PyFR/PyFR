@@ -11,6 +11,7 @@ from pyfr.writers.native import NativeWriter
 class TavgPlugin(BasePlugin):
     name = 'tavg'
     systems = ['*']
+    formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
@@ -28,7 +29,7 @@ class TavgPlugin(BasePlugin):
         self.plocs = intg.system.ele_ploc_upts
 
         # Output file directory, base name, and writer
-        basedir = self.cfg.getpath(cfgsect, 'basedir', '.')
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(cfgsect, 'basename')
         self._writer = NativeWriter(intg, len(self.exprs), basedir, basename,
                                     prefix='tavg')

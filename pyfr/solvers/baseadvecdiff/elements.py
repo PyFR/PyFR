@@ -89,11 +89,14 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             # Obtain the scalar variable to be used for shock sensing
             shockvar = self.convarmap[self.ndims].index(self.shockvar)
 
+            # Obtain the degrees of the polynomial modes in the basis
+            ubdegs = [sum(dd) for dd in self.basis.ubasis.degrees]
+
             # Template arguments
             tplargs = dict(
                 nvars=self.nvars, nupts=self.nupts, svar=shockvar,
                 c=self.cfg.items_as('solver-artificial-viscosity', float),
-                order=self.basis.order, ubdegs=self.basis.ubasis.degrees,
+                order=self.basis.order, ubdegs=ubdegs,
                 invvdm=self.basis.ubasis.invvdm.T
             )
 

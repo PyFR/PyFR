@@ -58,6 +58,7 @@ def _closest_upts(etypes, eupts, pts):
 class SamplerPlugin(BasePlugin):
     name = 'sampler'
     systems = ['*']
+    formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

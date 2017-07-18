@@ -56,29 +56,44 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
-        # Wrap
-        xarr = GPUArray(x.leaddim*x.nrow, x.dtype, gpudata=x)
-        yarr = GPUArray(y.leaddim*y.nrow, y.dtype, gpudata=y)
-        zarr = GPUArray(z.leaddim*z.nrow, z.dtype, gpudata=z)
+        nrow, ldim, dtype = x.traits
+        ncola, ncolb = x.ioshape[1:]
 
-        # Norm type
-        reduce_expr = 'a + b' if norm == 'l2' else 'max(a, b)'
+        # Reduction block dimensions
+        block = (128, 1, 1)
+
+        # Determine the grid size
+        grid = get_grid_for_block(block, ncolb)
+
+        # Empty result buffer on host with shape (nvars, nblocks)
+        err_host = cuda.pagelocked_empty((ncola, grid[0]), dtype, 'C')
+
+        # Device memory allocation
+        err_dev = cuda.mem_alloc(err_host.nbytes)
+
+        # Get the kernel template
+        src = self.backend.lookup.get_template('errest').render(
+            norm=norm, ncola=ncola, sharesz=block[0]
+        )
 
         # Build the reduction kernel
-        rkern = ReductionKernel(
-            x.dtype, neutral='0', reduce_expr=reduce_expr,
-            map_expr='pow(x[i]/(atol + rtol*max(fabs(y[i]), fabs(z[i]))), 2)',
-            arguments='{0}* x, {0}* y, {0}* z, {0} atol, {0} rtol'
-                      .format(npdtype_to_ctype(x.dtype))
+        rkern = self._build_kernel(
+            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
         )
+
+        # Norm type
+        reducer = np.max if norm == 'uniform' else np.sum
 
         class ErrestKernel(ComputeKernel):
             @property
             def retval(self):
-                return self._retarr.get()
+                return reducer(err_host, axis=1)
 
             def run(self, queue, atol, rtol):
-                self._retarr = rkern(xarr, yarr, zarr, atol, rtol,
-                                     stream=queue.cuda_stream_comp)
+                rkern.prepared_async_call(grid, block, queue.cuda_stream_comp,
+                                          nrow, ncolb, ldim, err_dev, x, y, z,
+                                          atol, rtol)
+                cuda.memcpy_dtoh_async(err_host, err_dev,
+                                       queue.cuda_stream_comp)
 
         return ErrestKernel()

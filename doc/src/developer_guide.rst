@@ -179,8 +179,24 @@ kernel provider. PyFR |release| has various types of kernel provider. A
 Riemann solvers and flux functions etc. These point-wise kernels are
 specified using an in-built platform-independent templating language
 derived from `Mako <http://www.makotemplates.org/>`_, henceforth
-referred to as `PyFR-Mako`_. There are two types of `System`_ available
+referred to as `PyFR-Mako`_. There are four types of `System`_ available
 in PyFR |release|:
+
+.. autoclass:: pyfr.solvers.aceuler.system.ACEulerSystem
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.acnavstokes.system.ACNavierStokesSystem
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.euler.system.EulerSystem
     :members:
@@ -202,13 +218,31 @@ Types of `System`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.solvers.navstokes.system
                          pyfr.solvers.euler.system
+                         pyfr.solvers.acnavstokes.system
+                         pyfr.solvers.aceuler.system
     :parts: 1
 
 Elements
 --------
 
 An `Elements`_ holds information/data for a group of elements. There are
-two types of `Elements`_ available in PyFR |release|:
+four types of `Elements`_ available in PyFR |release|:
+
+.. autoclass:: pyfr.solvers.aceuler.elements.ACEulerElements
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.acnavstokes.elements.ACNavierStokesElements
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.euler.elements.EulerElements
     :members:
@@ -230,14 +264,48 @@ Types of `Elements`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.solvers.navstokes.elements
                          pyfr.solvers.euler.elements
+                         pyfr.solvers.acnavstokes.elements
+                         pyfr.solvers.aceuler.elements
     :parts: 1
 
 Interfaces
 ----------
 
 An `Interfaces`_ holds information/data for a group of interfaces. There
-are four types of (non-boundary) `Interfaces`_ available in PyFR
+are eight types of (non-boundary) `Interfaces`_ available in PyFR
 |release|:
+
+.. autoclass:: pyfr.solvers.aceuler.inters.ACEulerIntInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.aceuler.inters.ACEulerMPIInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+.. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesMPIInters
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.euler.inters.EulerIntInters
     :members:
@@ -278,6 +346,10 @@ inheritance diagram:
                          pyfr.solvers.navstokes.inters.NavierStokesIntInters
                          pyfr.solvers.euler.inters.EulerMPIInters
                          pyfr.solvers.euler.inters.EulerIntInters
+                         pyfr.solvers.acnavstokes.inters.ACNavierStokesMPIInters
+                         pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
+                         pyfr.solvers.aceuler.inters.ACEulerMPIInters
+                         pyfr.solvers.aceuler.inters.ACEulerIntInters
     :parts: 1
 
 Backend
@@ -287,14 +359,6 @@ A `Backend`_ holds information/data for a backend. There are four types
 of `Backend`_ available in PyFR |release|:
 
 .. autoclass:: pyfr.backends.cuda.base.CUDABackend
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
-.. autoclass:: pyfr.backends.mic.base.MICBackend
     :members:
     :undoc-members:
     :inherited-members:
@@ -323,7 +387,6 @@ Types of `Backend`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
-                         pyfr.backends.mic.base
     :parts: 1
 
 Pointwise Kernel Provider
@@ -354,14 +417,6 @@ Provider`_ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-.. autoclass:: pyfr.backends.mic.provider.MICPointwiseKernelProvider
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
 .. autoclass:: pyfr.backends.opencl.provider.OpenCLPointwiseKernelProvider
     :members:
     :undoc-members:
@@ -384,7 +439,6 @@ inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.openmp.provider
                          pyfr.backends.cuda.provider
                          pyfr.backends.opencl.provider
-                         pyfr.backends.mic.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
     :parts: 1
 
@@ -400,14 +454,6 @@ linked, and loaded. There are four types of `Kernel Generator`_
 available in PyFR |release|:
 
 .. autoclass:: pyfr.backends.cuda.generator.CUDAKernelGenerator
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
-
-.. autoclass:: pyfr.backends.mic.generator.MICKernelGenerator
     :members:
     :undoc-members:
     :inherited-members:
@@ -436,7 +482,6 @@ Types of `Kernel Generator`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
                          pyfr.backends.opencl.generator.OpenCLKernelGenerator
                          pyfr.backends.openmp.generator.OpenMPKernelGenerator
-                         pyfr.backends.mic.generator.MICKernelGenerator
     :parts: 1
 
 =========

@@ -63,7 +63,8 @@ class Inifile(object):
 
         return os.path.expandvars(val)
 
-    def getpath(self, section, option, default=_sentinel, vars=None, abs=True):
+    def getpath(self, section, option, default=_sentinel, vars=None,
+                abs=False):
         path = self.get(section, option, default, vars)
         path = os.path.expanduser(path)
 
@@ -91,6 +92,13 @@ class Inifile(object):
         # Encase in parenthesis
         return '({0})'.format(expr)
 
+    _bool_states = {'1': True, 'yes': True, 'true': True, 'on': True,
+                    '0': False, 'no': False, 'false': False, 'off': False}
+
+    def getbool(self, section, option, default=_sentinel):
+        v = self.get(section, option, default)
+        return self._bool_states[v.lower()]
+
     def getfloat(self, section, option, default=_sentinel):
         return float(self.get(section, option, default))
 
@@ -114,15 +122,18 @@ class Inifile(object):
 
         return OrderedDict(iv)
 
-    _bool_states = {'1': True, 'yes': True, 'true': True, 'on': True,
-                    '0': False, 'no': False, 'false': False, 'off': False}
-
-    def getbool(self, section, option, default=_sentinel):
-        v = self.get(section, option, default)
-        return self._bool_states[v.lower()]
-
     def sections(self):
         return self._cp.sections()
+
+    def rename_section(self, sfrom, sto):
+        items = self._cp.items(sfrom)
+
+        self._cp.remove_section(sfrom)
+        self._cp.remove_section(sto)
+        self._cp.add_section(sto)
+
+        for k, v in items:
+            self._cp.set(sto, k, v)
 
     def tostr(self):
         buf = io.StringIO()

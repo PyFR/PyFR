@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod, abstractproperty
 from collections import deque
 import re
 import time
@@ -13,7 +12,7 @@ from pyfr.plugins import get_plugin
 from pyfr.util import memoize, proxylist
 
 
-class BaseIntegrator(object, metaclass=ABCMeta):
+class BaseIntegrator(object):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         self.backend = backend
         self.rallocs = rallocs
@@ -53,13 +52,13 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         self.dtmin = 1.0e-12
 
         # Determine the amount of temp storage required by this method
-        nreg = self._stepper_nregs
+        self.nreg = self._stepper_nregs
 
         # Construct the relevant mesh partition
-        self.system = systemcls(backend, rallocs, mesh, initsoln, nreg, cfg)
+        self._init_system(systemcls, backend, rallocs, mesh, initsoln)
 
-        # Storage register banks
-        self._regs, self._regidx = self._get_reg_banks(nreg)
+        # Storage for register banks and current index
+        self._init_reg_banks()
 
         # Extract the UUID of the mesh (to be saved with solutions)
         self.mesh_uuid = mesh['mesh_uuid']
@@ -69,9 +68,6 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
-
-        # Bank index of solution
-        self._idxcurr = 0
 
         # Solution cache
         self._curr_soln = None
@@ -88,17 +84,19 @@ class BaseIntegrator(object, metaclass=ABCMeta):
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
 
-    def _get_reg_banks(self, nreg):
-        regs, regidx = [], list(range(nreg))
+    def _init_system(self, systemcls, *args):
+        self.system = systemcls(*args, nreg=self.nreg, cfg=self.cfg)
+
+    def _init_reg_banks(self):
+        self._regs, self._regidx = [], list(range(self.nreg))
+        self._idxcurr = 0
 
         # Create a proxylist of matrix-banks for each storage register
-        for i in regidx:
-            regs.append(
+        for i in self._regidx:
+            self._regs.append(
                 proxylist([self.backend.matrix_bank(em, i)
                            for em in self.system.ele_banks])
             )
-
-        return regs, regidx
 
     def _get_gndofs(self):
         comm, rank, root = get_comm_rank_root()
@@ -138,7 +136,7 @@ class BaseIntegrator(object, metaclass=ABCMeta):
             reg.active = ix
 
     @memoize
-    def _get_axnpby_kerns(self, n, subdims=None):
+    def _get_axnpby_kerns(self, n, subdims=None, level=None):
         return self._get_kernels('axnpby', nargs=n, subdims=subdims)
 
     def _add(self, *args):
@@ -174,23 +172,21 @@ class BaseIntegrator(object, metaclass=ABCMeta):
 
         return self._curr_soln
 
-    @abstractmethod
     def step(self, t, dt):
         pass
 
-    @abstractmethod
     def advance_to(self, t):
         pass
 
-    @abstractproperty
+    @property
     def _stepper_nfevals(self):
         pass
 
-    @abstractproperty
+    @property
     def _stepper_nregs(self):
         pass
 
-    @abstractproperty
+    @property
     def _stepper_order(self):
         pass
 

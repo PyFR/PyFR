@@ -2,6 +2,8 @@
 
 import math
 
+import numpy as np
+
 from pyfr.integrators.std.base import BaseStdIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.util import memoize, proxylist
@@ -119,20 +121,24 @@ class StdPIController(BaseStdController):
 
         # L2 norm
         if self._norm == 'l2':
-            # Reduce locally (element types) and globally (MPI ranks)
-            rl = sum(errest.retval)
-            rg = comm.allreduce(rl, op=get_mpi('sum'))
+            # Reduce locally (element types + field variables)
+            err = np.array([sum(v for e in errest.retval for v in e)])
+
+            # Reduce globally (MPI ranks)
+            comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('sum'))
 
             # Normalise
-            err = math.sqrt(rg / self._gndofs)
-        # Uniform norm
+            err = math.sqrt(float(err) / self._gndofs)
+        # L^∞ norm
         else:
-            # Reduce locally (element types) and globally (MPI ranks)
-            rl = max(errest.retval)
-            rg = comm.allreduce(rl, op=get_mpi('max'))
+            # Reduce locally (element types + field variables)
+            err = np.array([max(v for e in errest.retval for v in e)])
+
+            # Reduce globally (MPI ranks)
+            comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('max'))
 
             # Normalise
-            err = math.sqrt(rg)
+            err = math.sqrt(float(err))
 
         return err if not math.isnan(err) else 100
 

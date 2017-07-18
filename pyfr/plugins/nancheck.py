@@ -8,6 +8,7 @@ from pyfr.plugins.base import BasePlugin
 class NaNCheckPlugin(BasePlugin):
     name = 'nancheck'
     systems = ['*']
+    formulations = ['dual', 'std']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

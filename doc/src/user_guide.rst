@@ -21,12 +21,13 @@ Overview
 PyFR |release| has a hard dependency on Python 3.3+ and the following
 Python packages:
 
-1. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
-2. `h5py <http://www.h5py.org/>`_ >= 2.6
-3. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-4. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
-5. `numpy <http://www.numpy.org/>`_ >= 1.8
-6. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
+1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
+2. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
+3. `h5py <http://www.h5py.org/>`_ >= 2.6
+4. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
+5. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
+6. `numpy <http://www.numpy.org/>`_ >= 1.8
+7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
 compatible with 32-bit Python distributions.
@@ -39,17 +40,6 @@ or greater. The backend requires:
 
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
 2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2015.1
-
-MIC Backend
-^^^^^^^^^^^
-
-The MIC backend targets Intel Xeon Phi co-processors. The backend
-requires:
-
-1. ICC >= 14.0
-2. Intel MKL >= 11.1
-3. Intel MPSS >= 3.3
-4. `pymic <https://github.com/01org/pyMIC>`_ >= 0.7 (post commit 4d8a2da)
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -70,6 +60,8 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
 1. GCC >= 4.9
 2. A BLAS library compiled as a shared library
    (e.g. `OpenBLAS <http://www.openblas.net/>`_)
+3. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= 1.6
+   compiled as a shared library (STATIC=0) with BLAS=0
 
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
@@ -148,7 +140,7 @@ Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
 
 ``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
-``mpirun -n <cores/devices>``. Note that the mesh must be
+``mpiexec -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
 
@@ -217,19 +209,6 @@ Example::
     block-1d = 64
     block-2d = 128, 2
 
-[backend-mic]
-^^^^^^^^^^^^^^^^
-
-Parameterises the MIC backend with
-
-1. ``device-id`` --- for selecting which device(s) to run on:
-
-    *int* | ``local-rank``
-
-2. ``mkl-root`` --- path to MKL root directory:
-
-    *string*
-
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
 
@@ -285,13 +264,33 @@ Parameterises the OpenMP backend with
 
     *string*
 
-3. ``cblas`` --- path to shared C BLAS library:
+3. ``alignb`` --- alignment requirement in bytes; must be a power of
+   two and at least 32:
+
+    *int*
+
+4. ``cblas`` --- path to shared C BLAS library:
 
     *string*
 
-4. ``cblas-type`` --- type of BLAS library:
+5. ``cblas-type`` --- type of BLAS library:
 
     ``serial`` | ``parallel``
+
+6. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
+   non-zero entires in a constant matrix:
+
+    *int*
+
+7. ``libxsmm-block-sz`` --- blocking factor to use for libxsmm; must
+   be a multiple of 16:
+
+    *int*
+
+8. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
+   entires in a constant matrix:
+
+    *int*
 
 Example::
 
@@ -303,27 +302,37 @@ Example::
 [constants]
 ^^^^^^^^^^^
 
-Sets constants used in the simulation with
+Sets constants used in the simulation
 
-1. ``gamma`` --- ratio of specific heats:
-
-    *float*
-
-2. ``mu`` --- dynamic viscosity:
+1. ``gamma`` --- ratio of specific heats for ``euler`` |
+   ``navier-stokes``:
 
     *float*
 
-3. ``Pr`` --- Prandtl number:
+2. ``mu`` --- dynamic viscosity for ``navier-stokes``:
 
     *float*
 
-4. ``cpTref`` --- product of specific heat at constant pressure and
-   reference temperature for Sutherland's Law:
+3. ``nu`` --- kinematic viscosity for ``ac-navier-stokes``:
+
+    *float*
+
+4. ``Pr`` --- Prandtl number for ``navier-stokes``:
+
+    *float*
+
+5. ``cpTref`` --- product of specific heat at constant pressure and
+   reference temperature for ``navier-stokes`` with Sutherland's Law:
 
    *float*
 
-5. ``cpTs`` --- product of specific heat at constant pressure and
-   Sutherland temperature for Sutherland's Law:
+6. ``cpTs`` --- product of specific heat at constant pressure and
+   Sutherland temperature for ``navier-stokes`` with Sutherland's Law:
+
+   *float*
+
+7. ``ac-zeta`` --- artificial compressibility factor for ``ac-euler`` |
+   ``ac-navier-stokes``
 
    *float*
 
@@ -341,7 +350,19 @@ Parameterises the solver with
 
 1. ``system`` --- governing system:
 
-    ``euler`` | ``navier-stokes``
+    ``euler`` | ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``
+
+    where
+
+    ``navier-stokes`` requires
+
+        - ``viscosity-correction`` --- viscosity correction:
+
+          ``none`` | ``sutherland``
+
+        - ``shock-capturing`` --- shock capturing scheme:
+
+          ``none`` | ``artificial-viscosity``
 
 2. ``order`` --- order of polynomial solution basis:
 
@@ -352,14 +373,6 @@ Parameterises the solver with
     ``flux`` | ``surf-flux`` | ``div-flux`` | ``flux, surf-flux`` |
     ``flux, div-flux`` | ``surf-flux, div-flux`` |
     ``flux, surf-flux, div-flux``
-
-4. ``viscosity-correction`` --- viscosity correction:
-
-    ``none`` | ``sutherland``
-
-5. ``shock-capturing`` --- shock capturing scheme:
-
-    ``none`` | ``artificial-viscosity``
 
 Example::
 
@@ -440,7 +453,7 @@ Parameterises the time-integration scheme used by the solver with
 
            ``backward-euler`` | ``bdf2`` | ``bdf3``
 
-        - ``pseudo-scheme`` --- pseudo-time-integration scheme
+        - ``pseudo-scheme`` --- pseudo time-integration scheme
 
            ``euler`` | ``tvd-rk3`` | ``rk4``
 
@@ -456,11 +469,11 @@ Parameterises the time-integration scheme used by the solver with
 
            *float*
 
-        - ``pseudo-dt`` --- pseudo-time-step
+        - ``pseudo-dt`` --- pseudo time-step
 
            *float*
 
-        - ``controller`` --- pseudo-time-step controller
+        - ``controller`` --- pseudo time-step controller
 
            ``none``
 
@@ -476,13 +489,13 @@ Parameterises the time-integration scheme used by the solver with
 
                *int*
 
-            - ``pseudo-aresid`` --- absolute residual tolerance
+            - ``pseudo-resid-tol`` --- pseudo residual tolerance
 
                *float*
 
-            - ``pseudo-rresid`` --- relative residual tolerance
+            - ``pseudo-resid-norm`` --- pseudo residual norm
 
-               *float*
+               ``uniform`` | ``l2``
 
 Example::
 
@@ -500,6 +513,30 @@ Example::
     min-fact = 0.3
     max-fact = 2.5
 
+[solver-dual-time-integrator-multip]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises multi-p for dual time-stepping with
+
+1. ``pseudo-dt-fact`` --- factor by which the pseudo time-step size
+   changes between multi-p levels:
+
+    *float*
+
+2. ``cycle`` --- nature of a single multi-p cycle:
+
+    ``[(order,nsteps), (order,nsteps), ... (order,nsteps)]``
+
+    where ``order`` in the first and last bracketed pair must be the
+    overall polynomial order used for the simulation, and ``order`` can
+    only change by one between subsequent bracketed pairs
+
+Example::
+
+    [solver-dual-time-integrator-multip]
+    pseudo-dt-fact = 2.3
+    cycle = [(3, 1), (2, 1), (1, 2), (2, 1), (3, 3)]
+
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
 
@@ -508,6 +545,11 @@ Parameterises the interfaces with
 1. ``riemann-solver`` --- type of Riemann solver:
 
     ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem``
+
+    where
+
+    ``hll`` | ``hllc`` | ``roe`` | ``roem`` do not work with
+    ``ac-euler`` | ``ac-navier-stokes``
 
 2. ``ldg-beta`` --- beta parameter used for LDG:
 
@@ -524,10 +566,11 @@ Example::
     ldg-beta = 0.5
     ldg-tau = 0.1
 
-[solver-interfaces-line]
-^^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-line{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the line interfaces with
+Parameterises the line interfaces, or if -mg-p\ *order* is suffixed the
+line interfaces at multi-p level *order*, with
 
 1. ``flux-pts`` --- location of the flux points on a line interface:
 
@@ -550,10 +593,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-interfaces-tri]
-^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-tri{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the triangular interfaces with
+Parameterises the triangular interfaces, or if -mg-p\ *order* is
+suffixed the triangular interfaces at multi-p level *order*, with
 
 1. ``flux-pts`` --- location of the flux points on a triangular
    interface:
@@ -577,10 +621,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn
 
-[solver-interfaces-quad]
-^^^^^^^^^^^^^^^^^^^^^^^^
+[solver-interfaces-quad{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the quadrilateral interfaces with
+Parameterises the quadrilateral interfaces, or if -mg-p\ *order* is
+suffixed the quadrilateral interfaces at multi-p level *order*, with
 
 1. ``flux-pts`` --- location of the flux points on a quadrilateral
    interface:
@@ -605,10 +650,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-tri]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-tri{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the triangular elements with
+Parameterises the triangular elements, or if -mg-p\ *order* is suffixed
+the triangular elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a triangular
    element:
@@ -632,10 +678,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn
 
-[solver-elements-quad]
-^^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-quad{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the quadrilateral elements with
+Parameterises the quadrilateral elements, or if -mg-p\ *order* is
+suffixed the quadrilateral elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a quadrilateral
    element:
@@ -660,10 +707,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-hex]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-hex{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the hexahedral elements with
+Parameterises the hexahedral elements, or if -mg-p\ *order* is suffixed
+the hexahedral elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a hexahedral
    element:
@@ -688,10 +736,11 @@ Example::
     quad-deg = 10
     quad-pts = gauss-legendre
 
-[solver-elements-tet]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-tet{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the tetrahedral elements with
+Parameterises the tetrahedral elements, or if -mg-p\ *order* is suffixed
+the tetrahedral elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a tetrahedral
    element:
@@ -715,10 +764,11 @@ Example::
     quad-deg = 10
     quad-pts = shunn-ham
 
-[solver-elements-pri]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-pri{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the prismatic elements with
+Parameterises the prismatic elements, or if -mg-p\ *order* is suffixed
+the prismatic elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
@@ -744,10 +794,11 @@ Example::
     quad-deg = 10
     quad-pts = williams-shunn~gauss-legendre
 
-[solver-elements-pyr]
-^^^^^^^^^^^^^^^^^^^^^
+[solver-elements-pyr{-mg-p\ *order*}]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises the pyramidal elements with
+Parameterises the pyramidal elements, or if -mg-p\ *order* is suffixed
+the pyramidal elements at multi-p level *order*, with
 
 1. ``soln-pts`` --- location of the solution points in a pyramidal
    element:
@@ -777,23 +828,47 @@ Example::
 Parameterises solution, space (x, y, [z]), and time (t) dependent
 source terms with
 
-1. ``rho`` --- density source term:
+1. ``rho`` --- density source term for ``euler`` | ``navier-stokes``:
 
     *string*
 
-2. ``rhou`` --- x-momentum source term:
+2. ``rhou`` --- x-momentum source term for ``euler`` | ``navier-stokes``
+   :
 
     *string*
 
-3. ``rhov`` --- y-momentum source term:
+3. ``rhov`` --- y-momentum source term for ``euler`` | ``navier-stokes``
+   :
 
     *string*
 
-4. ``rhow`` --- z-momentum source term:
+4. ``rhow`` --- z-momentum source term for ``euler`` | ``navier-stokes``
+   :
 
     *string*
 
-5. ``E`` --- energy source term:
+5. ``E`` --- energy source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+6. ``p`` --- pressure source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+7. ``u`` --- x-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+8. ``v`` --- y-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+9. ``w`` --- w-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
 
     *string*
 
@@ -895,8 +970,8 @@ Example::
     post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
     post-action-mode = blocking
 
-[soln-plugin-fluidforce-name]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[soln-plugin-fluidforce-*name*]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
 labelled ``name`` and writes out the resulting force vectors to a CSV
@@ -987,6 +1062,32 @@ Example::
     file = dtstats.csv
     header = true
 
+[soln-plugin-pseudostats]
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Write pseudo-step convergence history out to a CSV file. Parameterised
+with
+
+1. ``flushsteps`` --- flush to disk every ``flushsteps``:
+
+    *int*
+
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
+
+    *string*
+
+3. ``header`` --- if to output a header row or not:
+
+    *boolean*
+
+Example::
+
+    [soln-plugin-pseudostats]
+    flushsteps = 100
+    file = pseudostats.csv
+    header = true
+
 [soln-plugin-sampler]
 ^^^^^^^^^^^^^^^^^^^^^
 
@@ -1051,8 +1152,8 @@ Time average quantities. Parameterised with
 
     *string*
 
-5. ``avg-name`` --- expression as a function of the primitive variables,
-   time (t), and space (x, y, [z]) to time average; multiple
+5. ``avg-name`` --- expression to time average, written as a function of
+   the primitive variables, time (t), and space (x, y, [z]); multiple
    expressions, each with their own *name*, may be specified:
 
     *string*
@@ -1069,22 +1170,46 @@ Example::
     avg-p2 = p*p
     avg-vel = sqrt(u*u + v*v)
 
-[soln-bcs-name]
-^^^^^^^^^^^^^^^
+[soln-bcs-*name*]
+^^^^^^^^^^^^^^^^^
 
 Parameterises constant, or if available space (x, y, [z]) and time (t)
-dependent, boundary condition labelled :code:`name` in the .pyfrm file
-with
+dependent, boundary condition labelled *name* in the .pyfrm file with
 
 1. ``type`` --- type of boundary condition:
 
-    ``char-riem-inv`` | ``no-slp-adia-wall`` | ``no-slp-isot-wall`` |
-    ``slp-adia-wall`` | ``sub-in-frv`` | ``sub-in-ftpttang`` |
-    ``sub-out-fp`` | ``sup-in-fa`` | ``sup-out-fn``
+    ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
+    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``no-slp-wall`` |
+    ``slp-adia-wall`` | ``slp-wall`` | ``sub-in-frv`` |
+    ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
+    ``sup-out-fn``
 
     where
 
-    ``char-riem-inv`` requires
+    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+    ``ac-out-p`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``p`` --- pressure
+
+           *float* | *string*
+
+    ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
+    requires
 
         - ``rho`` --- density
 
@@ -1106,7 +1231,9 @@ with
 
            *float* | *string*
 
-    ``no-slp-isot-wall`` requires
+    ``no-slp-adia-wall`` only works with ``navier-stokes``
+
+    ``no-slp-isot-wall`` only works with ``navier-stokes`` and requires
 
         - ``u`` --- x-velocity of wall
 
@@ -1125,7 +1252,26 @@ with
 
            *float*
 
-    ``sub-in-frv`` requires
+    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
+
+        - ``u`` --- x-velocity of wall
+
+           *float*
+
+        - ``v`` --- y-velocity of wall
+
+           *float*
+
+        - ``w`` --- z-velocity of wall
+
+           *float*
+
+    ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
+
+    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
+
+    ``sub-in-frv`` only works with ``navier-stokes`` and
+    requires
 
         - ``rho`` --- density
 
@@ -1143,7 +1289,8 @@ with
 
            *float* | *string*
 
-    ``sub-in-ftpttang`` requires
+    ``sub-in-ftpttang`` only works with ``navier-stokes``
+    and requires
 
         - ``pt`` --- total pressure
 
@@ -1164,13 +1311,15 @@ with
 
            *float*
 
-    ``sub-out-fp`` requires
+    ``sub-out-fp`` only works with ``navier-stokes`` and
+    requires
 
         - ``p`` --- static pressure
 
            *float* | *string*
 
-    ``sup-in-fa`` requires
+    ``sup-in-fa`` only works with ``euler`` | ``navier-stokes`` and
+    requires
 
         - ``rho`` --- density
 
@@ -1192,6 +1341,8 @@ with
 
            *float* | *string*
 
+    ``sup-out-fn`` only works with ``navier-stokes``
+
 Example::
 
     [soln-bcs-bcwallupper]
@@ -1204,23 +1355,28 @@ Example::
 
 Parameterises space (x, y, [z]) dependent initial conditions with
 
-1. ``rho`` --- initial density distribution:
+1. ``rho`` --- initial density distribution for ``euler`` |
+   ``navier-stokes``:
 
     *string*
 
-2. ``u`` --- initial x-velocity distribution:
+2. ``u`` --- initial x-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
-3. ``v`` --- initial y-velocity distribution:
+3. ``v`` --- initial y-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
-4. ``w`` --- initial z-velocity distribution:
+4. ``w`` --- initial z-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
-5. ``p`` --- initial static pressure distribution:
+5. ``p`` --- initial static pressure distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
 
     *string*
 
@@ -1308,7 +1464,7 @@ simulation on a structured mesh:
 6. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
 
-        mpirun -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
+        mpiexec -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
 
 7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called
@@ -1329,3 +1485,50 @@ simulation on a structured mesh:
    :align: center
 
    Colour map of density distribution at 100 time units.
+
+Example --- 2D Incompressible Cylinder Flow
+===========================================
+
+Proceed with the following steps to run a serial 2D incompressible cylinder
+flow simulation on a mixed unstructured mesh:
+
+1. Create a working directory called ``inc_cylinder_2d/``
+
+2. Copy the configuration file
+   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.ini`` into
+   ``inc_cylinder_2d/``
+
+3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
+   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.msh.gz`` into
+   ``inc_cylinder_2d/``
+
+4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file into a PyFR mesh file called ``inc_cylinder_2d.pyfrm``::
+
+        zcat inc_cylinder_2d.msh.gz | pyfr import -tgmsh - inc_cylinder_2d.pyfrm
+
+5. Run pyfr to solve the incompressible Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``inc_cylinder_2d-*.pyfrs``::
+
+        pyfr run -b cuda -p inc_cylinder_2d.pyfrm inc_cylinder_2d.ini
+
+6. Run pyfr on the solution file ``inc_cylinder_2d-60.00.pyfrs``
+   converting it into an unstructured VTK file called
+   ``inc_cylinder_2d-60.00.vtu``. Note that in order to visualise the
+   high-order data, each high-order element is sub-divided into smaller
+   linear elements. The level of sub-division is controlled by the
+   integer at the end of the command::
+
+        pyfr export inc_cylinder_2d.pyfrm inc_cylinder_2d-60.00.pyfrs inc_cylinder_2d-60.00.vtu -d 4
+
+7. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/inc_cylinder_2d/inc_cylinder_2d.png
+   :width: 450px
+   :figwidth: 450px
+   :alt: couette flow
+   :align: center
+
+   Colour map of velocity magnitude distribution at 60 time units.

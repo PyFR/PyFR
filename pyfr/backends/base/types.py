@@ -275,7 +275,7 @@ class XchgView(object):
         self.nvcol = nvcol = self.view.nvcol
 
         # Now create an exchange matrix to pack the view into
-        self.xchgmat = backend.xchg_matrix((nvrow, nvcol, n), tags=tags)
+        self.xchgmat = backend.xchg_matrix((nvrow, nvcol*n), tags=tags)
 
 
 class Queue(object, metaclass=ABCMeta):

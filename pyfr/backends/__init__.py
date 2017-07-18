@@ -2,7 +2,6 @@
 
 from pyfr.backends.base import BaseBackend
 from pyfr.backends.cuda import CUDABackend
-from pyfr.backends.mic import MICBackend
 from pyfr.backends.opencl import OpenCLBackend
 from pyfr.backends.openmp import OpenMPBackend
 from pyfr.util import subclass_where

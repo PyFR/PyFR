@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import os
+import re
 
 import numpy as np
 
@@ -25,14 +26,14 @@ class VTKWriter(BaseWriter):
         if self.dataprefix == 'soln':
             self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
-            self._soln_fields = self.elementscls.privarmap[self.ndims]
-            self._vtk_vars = self.elementscls.visvarmap[self.ndims]
+            self._soln_fields = list(self.elementscls.privarmap[self.ndims])
+            self._vtk_vars = list(self.elementscls.visvarmap[self.ndims])
         # Otherwise we're dealing with simple scalar data
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
             self._soln_fields = self.stats.get('data', 'fields').split(',')
-            self._vtk_vars = {k: [k] for k in self._soln_fields}
+            self._vtk_vars = [(k, [k]) for k in self._soln_fields]
 
         # See if we are computing gradients
         if args.gradients:
@@ -46,14 +47,15 @@ class VTKWriter(BaseWriter):
                 for f in list(self._soln_fields) for d in range(self.ndims)
             )
 
-            # Update the list of VTK variables
+            # Update the list of VTK variables to solution fields
             nf = lambda f: ['{0}-{1}'.format(f, d) for d in range(self.ndims)]
-            for var, fields in list(self._vtk_vars.items()):
+            for var, fields in list(self._vtk_vars):
                 if len(fields) == 1:
-                    self._vtk_vars['grad ' + var] = nf(fields[0])
+                    self._vtk_vars.append(('grad ' + var, nf(fields[0])))
                 else:
-                    for f in fields:
-                        self._vtk_vars['grad {0} {1}'.format(var, f)] = nf(f)
+                    self._vtk_vars.extend(
+                        ('grad {0} {1}'.format(var, f), nf(f)) for f in fields
+                    )
 
     def _pre_proc_fields_soln(self, name, mesh, soln):
         # Convert from conservative to primitive variables
@@ -69,7 +71,7 @@ class VTKWriter(BaseWriter):
 
         # Prepare the fields
         fields = []
-        for vnames in visvarmap.values():
+        for fnames, vnames in visvarmap:
             ix = [privarmap.index(vn) for vn in vnames]
 
             fields.append(vsoln[ix])
@@ -77,7 +79,7 @@ class VTKWriter(BaseWriter):
         return fields
 
     def _post_proc_fields_scal(self, vsoln):
-        return [vsoln[self._soln_fields.index(vn)] for vn in self._vtk_vars]
+        return [vsoln[self._soln_fields.index(v)] for v, _ in self._vtk_vars]
 
     def _pre_proc_fields_grad(self, name, mesh, soln):
         # Call the reference pre-processor
@@ -113,7 +115,7 @@ class VTKWriter(BaseWriter):
     def _post_proc_fields_grad(self, vsoln):
         # Prepare the fields
         fields = []
-        for vname, vfields in self._vtk_vars.items():
+        for vname, vfields in self._vtk_vars:
             ix = [self._soln_fields.index(vf) for vf in vfields]
 
             fields.append(vsoln[ix])
@@ -146,7 +148,7 @@ class VTKWriter(BaseWriter):
         types = [dtype, 'Int32', 'Int32', 'UInt8']
         comps = ['3', '', '', '']
 
-        for fname, varnames in vvars.items():
+        for fname, varnames in vvars:
             names.append(fname.title())
             types.append(dtype)
             comps.append(str(len(varnames)))
@@ -157,7 +159,7 @@ class VTKWriter(BaseWriter):
             nb = npts*dsize
 
             sizes = [3*nb, 4*nnodes, 4*ncells, ncells]
-            sizes.extend(len(varnames)*nb for varnames in vvars.values())
+            sizes.extend(len(varnames)*nb for fname, varnames in vvars)
 
             return names, types, comps, sizes
         else:
@@ -241,6 +243,9 @@ class VTKWriter(BaseWriter):
         np.uint32(array.nbytes).tofile(vtuf)
         array.tofile(vtuf)
 
+    def _process_name(self, name):
+        return re.sub(r'\W+', '_', name)
+
     def _write_serial_header(self, vtuf, mk, off):
         names, types, comps, sizes = self._get_array_attrs(mk)
         npts, ncells = self._get_npts_ncells_nnodes(mk)[:2]
@@ -255,7 +260,7 @@ class VTKWriter(BaseWriter):
             write_s('<DataArray Name="{0}" type="{1}" '
                     'NumberOfComponents="{2}" '
                     'format="appended" offset="{3}"/>\n'
-                    .format(n, t, c, off))
+                    .format(self._process_name(n), t, c, off))
 
             off += 4 + s
 
@@ -280,7 +285,8 @@ class VTKWriter(BaseWriter):
         # Write vtk DaraArray headers
         for i, (n, t, s) in enumerate(zip(names, types, comps)):
             write_s('<PDataArray Name="{0}" type="{1}" '
-                    'NumberOfComponents="{2}"/>\n'.format(n, t, s))
+                    'NumberOfComponents="{2}"/>\n'
+                    .format(self._process_name(n), t, s))
 
             if i == 0:
                 write_s('</PPoints>\n<PCells>\n')
