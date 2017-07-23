@@ -95,40 +95,44 @@ class DualMultiPIntegrator(BaseDualIntegrator):
             for pm, inb, outb in zip(self.projmats[l1, l2], inbanks, outbanks)
         )
 
-    def restrict(self, l1, l2, dt):
+    def restrict(self, l1, l2):
         l1idxcurr, l2idxcurr = self._mgidxcurr[l1], self._mgidxcurr[l2]
         l1sys, l2sys = self._mgsystems[l1], self._mgsystems[l2]
-        mg0, mg1, mg2 = self._mg_regidx
 
-        add, rhs = self._add, self._rhs_with_dts
+        # Prevsoln is used as temporal storage at l1
+        rtemp = 0 if l1idxcurr == 1 else 1
 
-        # mg1 = R = -∇·f - dQ/dt
-        rhs(self.tcurr, l1idxcurr, mg1, c=1/dt, passmg=True)
+        # rtemp = R = -∇·f - dQ/dt
+        self.system.rhs(self.tcurr, l1idxcurr, rtemp)
 
-        # mg1 = d = r - R
-        add(-1, mg1, 0 if l1 == self._order else 1, mg0)
+        # rtemp = -d = R - r at lower levels
+        if l1 != self._order:
+            self._add(1, rtemp, -1, self._mg_regidx[0])
+
+        # Activate l2 system and get l2 regidx
+        self.level = l2
+        mg0, mg1 = self._mg_regidx
 
         # Restrict Q
         l1sys.eles_scal_upts_inb.active = l1idxcurr
         l2sys.eles_scal_upts_inb.active = l2idxcurr
         self._queue % self.mgproject(l1, l2)()
 
-        # Need to store the non-smoothed solution Q^ns for the correction
-        # mg2 = Q^ns
-        self.level = l2
-        add(0, mg2, 1, l2idxcurr)
-
-        # Restrict d and store to m1
-        l1sys.eles_scal_upts_inb.active = mg1
+        # Restrict d and store to mg1
+        l1sys.eles_scal_upts_inb.active = rtemp
         l2sys.eles_scal_upts_inb.active = mg1
         self._queue % self.mgproject(l1, l2)()
 
         # mg0 = R = -∇·f - dQ/dt
-        rhs(self.tcurr, l2idxcurr, mg0, c=1/dt, passmg=True)
+        self.system.rhs(self.tcurr, l2idxcurr, self._mg_regidx[0])
 
         # Compute the target residual r
         # mg0 = r = R + d
-        add(1, mg0, 1, mg1)
+        self._add(1, self._mg_regidx[0], -1, self._mg_regidx[1])
+
+        # Need to store the non-smoothed solution Q^ns for the correction
+        # mg1 = Q^ns
+        self._add(0, mg1, 1, l2idxcurr)
 
         # Restrict the dt source terms
         for srcidx in self._source_regidx:
@@ -139,23 +143,25 @@ class DualMultiPIntegrator(BaseDualIntegrator):
     def prolongate(self, l1, l2):
         l1idxcurr, l2idxcurr = self._mgidxcurr[l1], self._mgidxcurr[l2]
         l1sys, l2sys = self._mgsystems[l1], self._mgsystems[l2]
-        mg0, mg1, mg2 = self._mg_regidx
+
+        # Prevsoln is used as temporal storage at l2
+        rtemp = 0 if l2idxcurr == 1 else 1
 
         # Correction with respect to the non-smoothed value from down-cycle
         # mg1 = Delta = Q^s - Q^ns
-        self._add(0, mg1, 1, l1idxcurr, -1, mg2)
+        self._add(-1, self._mg_regidx[1], 1, l1idxcurr)
 
-        # Prolongate the correction and store to mg1
-        l1sys.eles_scal_upts_inb.active = mg1
-        l2sys.eles_scal_upts_inb.active = mg1
+        # Prolongate the correction and store to rtemp
+        l1sys.eles_scal_upts_inb.active = self._mg_regidx[1]
+        l2sys.eles_scal_upts_inb.active = rtemp
         self._queue % self.mgproject(l1, l2)()
 
         # Add the correction to the end quantity at l2
         # Q^m+1  = Q^s + Delta
         self.level = l2
-        self._add(1, l2idxcurr, 1, mg1)
+        self._add(1, l2idxcurr, 1, rtemp)
 
-    def _rhs_with_dts(self, t, uin, fout, c=1, passmg=False):
+    def _rhs_with_dts(self, t, uin, fout, c=1):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
@@ -169,7 +175,7 @@ class DualMultiPIntegrator(BaseDualIntegrator):
         self._queue % axnpby(1, *svals)
 
         # Multigrid r addition
-        if self.level != self._order and not passmg:
+        if self.level != self._order:
             axnpby = self._get_axnpby_kerns(2, level=self.level)
             self._prepare_reg_banks(fout, self._mg_regidx[0])
             self._queue % axnpby(1, -1)
@@ -186,29 +192,36 @@ class DualMultiPIntegrator(BaseDualIntegrator):
 
     @property
     def _mg_regidx(self):
-        return self._regidx[-3:]
+        if self.level == self._order:
+            raise AttributeError('_mg_regidx not defined when self.level == self._order')
+
+        return self._regidx[-2:]
 
     @property
     def system(self):
         return self._mgsystems[self.level]
 
     def _init_system(self, systemcls, *args):
-        self._mgsystems = {l: systemcls(*args, nreg=self.nreg + 3, cfg=cfg)
-                           for l, cfg in self._mgcfgs.items()}
+        self._mgsystems = {}
+        for l, cfg in self._mgcfgs.items():
+            self._mgsystems[l] = systemcls(
+                *args, nreg=self.nreg + (2 if l != self._order else 0), cfg=cfg
+            )
 
         # Initialise the restriction and prolongation matrices
         self._init_proj_mats()
 
     def _init_reg_banks(self):
-        # Multi-p requires three additional storage registers
-        self._mgregs, self._regidx = {}, list(range(self.nreg + 3))
+        # Multi-p requires two additional storage registers at lower levels
+        self._mgregs, self._regidx = {}, list(range(self.nreg + 2))
         self._mgidxcurr = dict.fromkeys(self.levels, 0)
 
         # Create a proxylist of matrix-banks for each storage register
-        self._mgregs = {l: [proxylist(self.backend.matrix_bank(em, i)
-                                      for em in sys.ele_banks)
-                            for i in self._regidx]
-                        for l, sys in self._mgsystems.items()}
+        for l, sys in self._mgsystems.items():
+            regs = self._mgregs[l] = []
+            for i in range(self.nreg + (2 if l != self._order else 0)):
+                regs.append(proxylist(self.backend.matrix_bank(em, i)
+                                      for em in sys.ele_banks))
 
     def advance_to(self, t):
         if t < self.tcurr:
@@ -231,7 +244,7 @@ class DualMultiPIntegrator(BaseDualIntegrator):
                         self._idxcurr, idxp = self.step(self.tcurr, dt, dtau)
 
                     if m and l > m:
-                        self.restrict(l, m, dt)
+                        self.restrict(l, m)
                     elif m and l < m:
                         self.prolongate(l, m)
 
