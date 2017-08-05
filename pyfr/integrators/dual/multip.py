@@ -243,9 +243,9 @@ class DualMultiPIntegrator(BaseDualIntegrator):
                     for k in range(n):
                         self._idxcurr, idxp = self.step(self.tcurr, dt, dtau)
 
-                    if m and l > m:
+                    if m is not None and l > m:
                         self.restrict(l, m)
-                    elif m and l < m:
+                    elif m is not None and l < m:
                         self.prolongate(l, m)
 
                 if i >= self._minniters - 1:

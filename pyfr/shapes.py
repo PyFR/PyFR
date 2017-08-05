@@ -59,7 +59,8 @@ class BaseShape(object):
             # on the both adjacent cells.
             # Ref. 1 JCP 281, 28-54, Sec 4.2
             # Ref. 2 JSC 26(3), 301-327, Definition 1
-            self.mbasis = get_polybasis(self.name, self.order + 1, self.mpts)
+            self.mbasis = get_polybasis(self.name, max(self.order + 1, 2),
+                                        self.mpts)
 
     @classmethod
     def nspts_from_order(cls, sptord):
@@ -310,7 +311,7 @@ class BaseShape(object):
 
     @lazyprop
     def mpts(self):
-        return self.std_ele(self.order)
+        return self.std_ele(max(self.order, 1))
 
     @lazyprop
     def nmpts(self):
