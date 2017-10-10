@@ -447,6 +447,10 @@ Parameterises the time-integration scheme used by the solver with
 
                *float*
 
+            - ``dt-max`` --- maximum permissible time-step
+
+               *float*
+
     ``dual`` requires
 
         - ``scheme`` --- time-integration scheme

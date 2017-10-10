@@ -81,6 +81,9 @@ class StdPIController(BaseStdController):
 
         sect = 'solver-time-integrator'
 
+        # Maximum time step
+        self.dtmax = self.cfg.getfloat(sect, 'dt-max', 1e2)
+
         # Error tolerances
         self._atol = self.cfg.getfloat(sect, 'atol')
         self._rtol = self.cfg.getfloat(sect, 'rtol')
@@ -157,7 +160,7 @@ class StdPIController(BaseStdController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt), self.dtmin)
+            dt = max(min(t - self.tcurr, self._dt, self.dtmax), self.dtmin)
 
             # Take the step
             idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
