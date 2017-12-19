@@ -447,6 +447,10 @@ Parameterises the time-integration scheme used by the solver with
 
                *float*
 
+            - ``dt-max`` --- maximum permissible time-step
+
+               *float*
+
     ``dual`` requires
 
         - ``scheme`` --- time-integration scheme
@@ -535,7 +539,7 @@ Example::
 
     [solver-dual-time-integrator-multip]
     pseudo-dt-fact = 2.3
-    cycle = [(3, 1), (2, 1), (1, 2), (2, 1), (3, 3)]
+    cycle = [(3, 1), (2, 1), (1, 1), (0, 2), (1, 1), (2, 1), (3, 3)]
 
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^

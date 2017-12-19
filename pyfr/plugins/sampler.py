@@ -88,12 +88,14 @@ class SamplerPlugin(BasePlugin):
 
         # Process these points
         for cp in closest:
-            # Reduce cp over all partitions
-            mcp, mrank = comm.allreduce((cp, rank), op=get_mpi('minloc'))
+            # Reduce over the distance
+            _, mrank = comm.allreduce((cp[0], rank), op=get_mpi('minloc'))
 
-            # Store the rank responsible along with the info
+            # Store the rank responsible along with its info
             ptsrank.append(mrank)
-            ptsinfo[mrank].append(mcp[1:])
+            ptsinfo[mrank].append(
+                comm.bcast(cp[1:] if rank == mrank else None, root=mrank)
+            )
 
         # If we're the root rank then open the output file
         if rank == root:

@@ -6,6 +6,7 @@ import os
 import platform
 import shlex
 import tempfile
+import uuid
 
 from appdirs import user_cache_dir
 from pytools.prefork import call_capture_output
@@ -112,13 +113,15 @@ class SourceModule(object):
             # Determine the cached library name and path
             clname = platform_libname(self.digest)
             clpath = os.path.join(self.cachedir, clname)
+            ctpath = os.path.join(self.cachedir, str(uuid.uuid4()))
 
             try:
                 # Ensure the cache directory exists
                 os.makedirs(self.cachedir, exist_ok=True)
 
-                # Attempt to move the library to cache dir
-                mv(lpath, clpath)
+                # Perform a two-phase move to get the library in place
+                mv(lpath, ctpath)
+                mv(ctpath, clpath)
             # If an exception is raised, load from the original path
             except OSError:
                 return CDLL(lpath)

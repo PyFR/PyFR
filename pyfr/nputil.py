@@ -31,21 +31,22 @@ def clean(origfn=None, tol=1e-10):
             arr[np.abs(arr) < tol] = 0
 
             # Coalesce similar elements
-            amfl = np.abs(arr.flat)
-            amix = np.argsort(amfl)
+            if arr.size > 1:
+                amfl = np.abs(arr.flat)
+                amix = np.argsort(amfl)
 
-            i, ix = 0, amix[0]
-            for j, jx in enumerate(amix[1:], start=1):
-                if amfl[jx] - amfl[ix] >= tol:
-                    if j - i > 1:
-                        amfl[amix[i:j]] = np.median(amfl[amix[i:j]])
-                    i, ix = j, jx
+                i, ix = 0, amix[0]
+                for j, jx in enumerate(amix[1:], start=1):
+                    if amfl[jx] - amfl[ix] >= tol:
+                        if j - i > 1:
+                            amfl[amix[i:j]] = np.median(amfl[amix[i:j]])
+                        i, ix = j, jx
 
-            if i != j:
-                amfl[amix[i:]] = np.median(amfl[amix[i:]])
+                if i != j:
+                    amfl[amix[i:]] = np.median(amfl[amix[i:]])
 
-            # Fix up the signs and assign
-            arr.flat = np.copysign(amfl, arr.flat)
+                # Fix up the signs and assign
+                arr.flat = np.copysign(amfl, arr.flat)
 
             return arr
         return newfn
@@ -85,15 +86,16 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
     arrd = arr[dim]
     srtdidx = sorted(idx, key=arrd.__getitem__)
 
-    i, ix = 0, srtdidx[0]
-    for j, jx in enumerate(srtdidx[1:], start=1):
-        if arrd[jx] - arrd[ix] >= tol:
-            if j - i > 1:
-                srtdidx[i:j] = fuzzysort(arr, srtdidx[i:j], dim + 1, tol)
-            i, ix = j, jx
+    if len(srtdidx) > 1:
+        i, ix = 0, srtdidx[0]
+        for j, jx in enumerate(srtdidx[1:], start=1):
+            if arrd[jx] - arrd[ix] >= tol:
+                if j - i > 1:
+                    srtdidx[i:j] = fuzzysort(arr, srtdidx[i:j], dim + 1, tol)
+                i, ix = j, jx
 
-    if i != j:
-        srtdidx[i:] = fuzzysort(arr, srtdidx[i:], dim + 1, tol)
+        if i != j:
+            srtdidx[i:] = fuzzysort(arr, srtdidx[i:], dim + 1, tol)
 
     return srtdidx
 
