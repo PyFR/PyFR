@@ -132,8 +132,17 @@ class NativeWriter(object):
                     name, shape, dtype=self.fpdtype
                 )
 
-            for s, dat in zip(self._loc_names, data):
-                dmap[s][:] = dat
+            # Write out our data sets using 2 GiB chunks
+            for name, dat in zip(self._loc_names, data):
+                nrows = len(dat)
+                rowsz = dat.nbytes // nrows
+                rstep = 2*1024**3 // rowsz
+
+                if rstep == 0:
+                    raise RuntimeError('Array is too large for parallel I/O')
+
+                for i in range(0, nrows, rstep):
+                    dmap[name][ix:ix + rstep] = dat[ix:ix + rstep]
 
             # Metadata information has to be transferred to all the ranks
             if rank == root:
