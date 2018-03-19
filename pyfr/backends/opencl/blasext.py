@@ -54,13 +54,11 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         ncola, ncolb = x.ioshape[1:]
 
         # Reduction workgroup dimensions
-        block = (128,)
-
-        # Determine the number of groups
-        gdim = (ncolb + block[0] - 1) // block[0]
+        ls = (128,)
+        gs = (ncolb - ncolb % -ls[0],)
 
         # Empty result buffer on host with (nvars, ngroups)
-        err_host = np.empty((ncola, gdim), dtype)
+        err_host = np.empty((ncola, gs[0] // ls[0]), dtype)
 
         # Device memory allocation
         err_dev = cl.Buffer(self.backend.ctx, cl.mem_flags.READ_WRITE,
@@ -68,7 +66,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         # Get the kernel template
         src = self.backend.lookup.get_template('errest').render(
-            norm=norm, ncola=ncola, sharesz=block[0]
+            norm=norm, ncola=ncola, sharesz=ls[0]
         )
 
         # Build the reduction kernel
@@ -85,9 +83,8 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
                 return reducer(err_host, axis=1)
 
             def run(self, queue, atol, rtol):
-                rkern(queue.cl_queue_comp, (ncolb,), block, nrow,
-                      ncolb, ldim, err_dev, x.data, y.data,
-                      z.data, atol, rtol)
+                rkern(queue.cl_queue_comp, gs, ls, nrow, ncolb, ldim, err_dev,
+                      x.data, y.data, z.data, atol, rtol)
                 cl.enqueue_copy(queue.cl_queue_comp, err_host, err_dev,
                                 is_blocking=False)
 
