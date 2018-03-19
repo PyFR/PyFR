@@ -141,7 +141,7 @@ class NativeWriter(object):
                 if rstep == 0:
                     raise RuntimeError('Array is too large for parallel I/O')
 
-                for i in range(0, nrows, rstep):
+                for ix in range(0, nrows, rstep):
                     dmap[name][ix:ix + rstep] = dat[ix:ix + rstep]
 
             # Metadata information has to be transferred to all the ranks
