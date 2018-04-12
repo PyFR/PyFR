@@ -44,8 +44,6 @@ class Arg(object):
         # Validation
         if self.isbroadcast and self.intent != 'in':
             raise ValueError('Broadcast arguments must be of intent in')
-        if self.isbroadcast and self.ncdim != 0:
-            raise ValueError('Broadcast arguments can not have dimensions')
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
@@ -65,11 +63,6 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         # Break arguments into point-scalars and point-vectors
         self.scalargs = [v for v in sargs if v.isscalar]
         self.vectargs = [v for v in sargs if v.isvector]
-
-        # If we are 1D ensure that none of our arguments are broadcasts
-        if ndim == 1 and any(v.isbroadcast for v in self.vectargs):
-            raise ValueError('Broadcast arguments are not supported in 1D '
-                             'kernels')
 
         # If we are 2D ensure none of our arguments are views
         if ndim == 2 and any(v.isview for v in self.vectargs):
@@ -105,11 +98,11 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
             # View
             if va.isview:
                 argt.append([np.intp]*(2 + (va.ncdim == 2)))
-            # Non-stacked vector or MPI type
-            elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
-                argt.append([np.intp])
             # Broadcast vector
             elif va.isbroadcast:
+                argt.append([np.intp])
+            # Non-stacked vector or MPI type
+            elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
                 argt.append([np.intp])
             # Stacked vector/matrix/stacked matrix
             else:
@@ -137,9 +130,13 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         # Leading dimension
         ldim = 'ld' + arg.name if not arg.ismpi else '_nx'
 
+        # Broadcast vector
+        #   name[\1] => name_v[\1]
+        if arg.isbroadcast:
+            ix = r'\1'
         # Vector:
         #   name => name_v[X_IDX]
-        if arg.ncdim == 0:
+        elif arg.ncdim == 0:
             ix = 'X_IDX'
         # Stacked vector:
         #   name[\1] => name_v[ldim*\1 + X_IDX]
