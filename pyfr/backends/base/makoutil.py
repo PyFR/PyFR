@@ -70,14 +70,15 @@ def _locals(body):
 
 
 @supports_caller
-def macro(context, name, params):
+def macro(context, name, params, gparams=''):
     # Check we have not already been defined
     if name in context['_macros']:
         raise RuntimeError('Attempt to redefine macro "{0}"'
                            .format(name))
 
-    # Split up the parameter list
+    # Split up the parameter and global variable list
     params = [p.strip() for p in params.split(',')]
+    gparams = [g.strip() for g in gparams.split(',')] if gparams else []
 
     # Capture the function body
     body = capture(context, context['caller'].body)
@@ -90,21 +91,27 @@ def macro(context, name, params):
         body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
 
     # Save
-    context['_macros'][name] = (params, body)
+    context['_macros'][name] = (params, gparams, body)
 
     return ''
 
 
 def expand(context, name, *params):
     # Get the macro parameter list and the body
-    mparams, body = context['_macros'][name]
+    mparams, mgparams, body = context['_macros'][name]
 
-    # Validate
+    # Validate the parameters
     if len(mparams) != len(params):
-        raise ValueError('Inconsistent macro parameter list in {} [{}], [{}]'
-                         .format(name, mparams, params))
+        raise ValueError('Inconsistent macro parameter list in {0} {1}, {2}'
+                         .format(name, list(mparams), list(params)))
 
-    # Substitute
+    # Ensure all (used) global parameters have been passed to the kernel
+    for garg in mgparams:
+        if (garg not in context['_gargs'] and
+            re.search(r'\b{0}\b'.format(garg), body)):
+            raise ValueError('Missing global {1} in {0}'.format(name, garg))
+
+    # Rename local parameters
     for name, subst in zip(mparams, params):
         body = re.sub(r'\b{0}\b'.format(name), subst, body)
 
@@ -113,6 +120,16 @@ def expand(context, name, *params):
 
 @supports_caller
 def kernel(context, name, ndim, **kwargs):
+    gargs = context['_gargs']
+
+    # Validate the argument list
+    if any(arg in gargs for arg in kwargs):
+        raise ValueError('Duplicate argument in {0}: {1} {2}'
+                         .format(name, list(kwargs), list(gargs)))
+
+    # Merge local and global arguments
+    kwargs = dict(kwargs, **gargs)
+
     # Capture the kernel body
     body = capture(context, context['caller'].body)
 
