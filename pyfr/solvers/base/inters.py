@@ -45,6 +45,16 @@ class BaseInters(object):
         # Kernels we provide
         self.kernels = {}
 
+        # Global kernel arguments
+        self._kglobal_args = {}
+        self._kglobal_vals = {}
+
+    def _set_kernel_global(self, name, spec, value=None):
+        self._kglobal_args[name] = spec
+
+        if value is not None:
+            self._kglobal_vals[name] = value
+
     def _const_mat(self, inter, meth):
         m = _get_inter_objs(inter, meth, self._elemap)
 

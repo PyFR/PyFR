@@ -12,8 +12,6 @@
               ul='inout view fpdtype_t[${str(nvars)}]'
               gradul='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               nl='in fpdtype_t[${str(ndims)}]'
-              magnl='in fpdtype_t'
-              ploc='in fpdtype_t[${str(ndims)}]'
-              t='scalar fpdtype_t'>
-    ${pyfr.expand('bc_common_flux_state', 'ul', 'gradul', 'nl', 'magnl', 'ploc', 't')};
+              magnl='in fpdtype_t'>
+    ${pyfr.expand('bc_common_flux_state', 'ul', 'gradul', 'nl', 'magnl')};
 </%pyfr:kernel>

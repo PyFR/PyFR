@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.navstokes.kernels.bcs.common'/>
 
-<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur, ploc, t'>
+<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur' gparams='ploc, t'>
     fpdtype_t pl = ${c['gamma'] - 1.0}*(ul[${nvars - 1}]
                  - (0.5/ul[0])*${pyfr.dot('ul[{i}]', i=(1, ndims + 1))});
     fpdtype_t udotu = ${2.0*c['cpTt']}*(1.0

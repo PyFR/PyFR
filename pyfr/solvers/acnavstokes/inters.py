@@ -77,14 +77,15 @@ class ACNavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
-            ulin=self._scal_lhs, ulout=self._vect_lhs,
-            nlin=self._norm_pnorm_lhs, ploc=self._ploc
+            gargs=self._kglobal_args, ulin=self._scal_lhs,
+            ulout=self._vect_lhs, nlin=self._norm_pnorm_lhs,
+            **self._kglobal_vals
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, gradul=self._vect_lhs,
+            gargs=self._kglobal_args, ul=self._scal_lhs, gradul=self._vect_lhs,
             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs,
-            ploc=self._ploc
+            **self._kglobal_vals
         )
 
 
