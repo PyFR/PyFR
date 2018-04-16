@@ -27,7 +27,7 @@ class BaseAdvectionIntInters(BaseInters):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
         self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter',
-                                       self._elemap)
+                                       self.elemap)
 
 
 class BaseAdvectionMPIInters(BaseInters):

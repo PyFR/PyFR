@@ -22,7 +22,7 @@ def get_opt_view_perm(interside, mat, elemap):
 class BaseInters(object):
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
-        self._elemap = elemap
+        self.elemap = elemap
         self.cfg = cfg
 
         # Get the number of dimensions and variables
@@ -49,6 +49,9 @@ class BaseInters(object):
         self._kglobal_args = {}
         self._kglobal_vals = {}
 
+    def prepare(self, t):
+        pass
+
     def _set_kernel_global(self, name, spec, value=None):
         self._kglobal_args[name] = spec
 
@@ -56,7 +59,7 @@ class BaseInters(object):
             self._kglobal_vals[name] = value
 
     def _const_mat(self, inter, meth):
-        m = _get_inter_objs(inter, meth, self._elemap)
+        m = _get_inter_objs(inter, meth, self.elemap)
 
         # Swizzle the dimensions and permute
         m = np.concatenate(m)
@@ -66,7 +69,7 @@ class BaseInters(object):
         return self._be.const_matrix(m)
 
     def _view(self, inter, meth, vshape=tuple()):
-        vm = _get_inter_objs(inter, meth, self._elemap)
+        vm = _get_inter_objs(inter, meth, self.elemap)
         vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
         return self._be.view(*vm, vshape=vshape)
 
@@ -77,7 +80,7 @@ class BaseInters(object):
         return self._view(inter, meth, (self.ndims, self.nvars))
 
     def _xchg_view(self, inter, meth, vshape=tuple()):
-        vm = _get_inter_objs(inter, meth, self._elemap)
+        vm = _get_inter_objs(inter, meth, self.elemap)
         vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
         return self._be.xchg_view(*vm, vshape=vshape)
 

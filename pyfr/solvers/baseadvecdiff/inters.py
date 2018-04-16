@@ -33,7 +33,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
 
         # Compute the relevant permutation
         self._perm = get_opt_view_perm(side, 'get_scal_fpts_for_inter',
-                                       self._elemap)
+                                       self.elemap)
 
 
 class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):

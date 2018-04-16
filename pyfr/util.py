@@ -45,6 +45,10 @@ class proxylist(list):
         for x in self:
             setattr(x, attr, val)
 
+    def __delattr__(self, attr):
+        for x in self:
+            delattr(x, attr)
+
     def __call__(self, *args, **kwargs):
         return proxylist(x(*args, **kwargs) for x in self)
 

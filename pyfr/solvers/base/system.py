@@ -65,6 +65,10 @@ class BaseSystem(object, metaclass=ABCMeta):
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
         backend.commit()
 
+        # Save the BC interfaces, but delete the memory-intensive elemap
+        self._bc_inters = bc_inters
+        del bc_inters.elemap
+
     def _load_eles(self, rallocs, mesh, initsoln, nregs, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
