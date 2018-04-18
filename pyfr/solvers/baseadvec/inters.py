@@ -83,7 +83,7 @@ class BaseAdvectionBCInters(BaseInters):
         self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
 
         # Make the simulation time available inside kernels
-        self._set_kernel_global('t', 'scalar fpdtype_t')
+        self._set_external('t', 'scalar fpdtype_t')
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be
@@ -114,10 +114,10 @@ class BaseAdvectionBCInters(BaseInters):
                 exprs[k] = cfg.getexpr(sect, k, subs=subs)
 
         if (any('ploc' in ex for ex in exprs.values()) and
-            'ploc' not in self._kglobal_args):
+            'ploc' not in self._external_args):
             spec = 'in fpdtype_t[{0}]'.format(self.ndims)
             value = self._const_mat(lhs, 'get_ploc_for_inter')
 
-            self._set_kernel_global('ploc', spec, value=value)
+            self._set_external('ploc', spec, value=value)
 
         return exprs

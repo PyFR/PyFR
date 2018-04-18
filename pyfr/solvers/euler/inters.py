@@ -51,9 +51,9 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
-            gargs=self._kglobal_args, ul=self._scal_lhs,
+            extrns=self._external_args, ul=self._scal_lhs,
             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs,
-            **self._kglobal_vals
+            **self._external_vals
         )
 
 

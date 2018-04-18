@@ -60,7 +60,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
     kernel_generator_cls = None
 
     @memoize
-    def _render_kernel(self, name, mod, gargs, tplargs):
+    def _render_kernel(self, name, mod, extrns, tplargs):
         # Copy the provided argument list
         tplargs = dict(tplargs)
 
@@ -70,8 +70,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
         # Macro definitions
         tplargs['_macros'] = {}
 
-        # Extra (global) kernel arguments dictionary
-        tplargs['_gargs'] = gargs
+        # External kernel arguments dictionary
+        tplargs['_extrns'] = extrns
 
         # Backchannel for obtaining kernel argument types
         tplargs['_kernel_argspecs'] = argspecs = {}
@@ -156,9 +156,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
                 return
 
         # Generate the kernel providing method
-        def kernel_meth(self, tplargs, dims, gargs={}, **kwargs):
+        def kernel_meth(self, tplargs, dims, extrns={}, **kwargs):
             # Render the source of kernel
-            src, ndim, argn, argt = self._render_kernel(name, mod, gargs,
+            src, ndim, argn, argt = self._render_kernel(name, mod, extrns,
                                                         tplargs)
 
             # Compile the kernel

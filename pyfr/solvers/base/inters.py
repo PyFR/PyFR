@@ -46,17 +46,17 @@ class BaseInters(object):
         self.kernels = {}
 
         # Global kernel arguments
-        self._kglobal_args = {}
-        self._kglobal_vals = {}
+        self._external_args = {}
+        self._external_vals = {}
 
     def prepare(self, t):
         pass
 
-    def _set_kernel_global(self, name, spec, value=None):
-        self._kglobal_args[name] = spec
+    def _set_external(self, name, spec, value=None):
+        self._external_args[name] = spec
 
         if value is not None:
-            self._kglobal_vals[name] = value
+            self._external_vals[name] = value
 
     def _const_mat(self, inter, meth):
         m = _get_inter_objs(inter, meth, self.elemap)

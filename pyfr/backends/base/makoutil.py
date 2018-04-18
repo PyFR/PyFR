@@ -70,15 +70,15 @@ def _locals(body):
 
 
 @supports_caller
-def macro(context, name, params, gparams=''):
+def macro(context, name, params, externs=''):
     # Check we have not already been defined
     if name in context['_macros']:
         raise RuntimeError('Attempt to redefine macro "{0}"'
                            .format(name))
 
-    # Split up the parameter and global variable list
+    # Split up the parameter and external variable list
     params = [p.strip() for p in params.split(',')]
-    gparams = [g.strip() for g in gparams.split(',')] if gparams else []
+    externs = [e.strip() for e in externs.split(',')] if externs else []
 
     # Capture the function body
     body = capture(context, context['caller'].body)
@@ -91,25 +91,25 @@ def macro(context, name, params, gparams=''):
         body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
 
     # Save
-    context['_macros'][name] = (params, gparams, body)
+    context['_macros'][name] = (params, externs, body)
 
     return ''
 
 
 def expand(context, name, *params):
     # Get the macro parameter list and the body
-    mparams, mgparams, body = context['_macros'][name]
+    mparams, mexterns, body = context['_macros'][name]
 
     # Validate the parameters
     if len(mparams) != len(params):
         raise ValueError('Inconsistent macro parameter list in {0} {1}, {2}'
                          .format(name, list(mparams), list(params)))
 
-    # Ensure all (used) global parameters have been passed to the kernel
-    for garg in mgparams:
-        if (garg not in context['_gargs'] and
-            re.search(r'\b{0}\b'.format(garg), body)):
-            raise ValueError('Missing global {1} in {0}'.format(name, garg))
+    # Ensure all (used) external parameters have been passed to the kernel
+    for extrn in mexterns:
+        if (extrn not in context['_extrns'] and
+            re.search(r'\b{0}\b'.format(extrn), body)):
+            raise ValueError('Missing external {1} in {0}'.format(name, extrn))
 
     # Rename local parameters
     for name, subst in zip(mparams, params):
@@ -120,15 +120,15 @@ def expand(context, name, *params):
 
 @supports_caller
 def kernel(context, name, ndim, **kwargs):
-    gargs = context['_gargs']
+    extrns = context['_extrns']
 
     # Validate the argument list
-    if any(arg in gargs for arg in kwargs):
+    if any(arg in extrns for arg in kwargs):
         raise ValueError('Duplicate argument in {0}: {1} {2}'
-                         .format(name, list(kwargs), list(gargs)))
+                         .format(name, list(kwargs), list(extrns)))
 
-    # Merge local and global arguments
-    kwargs = dict(kwargs, **gargs)
+    # Merge local and external arguments
+    kwargs = dict(kwargs, **extrns)
 
     # Capture the kernel body
     body = capture(context, context['caller'].body)
