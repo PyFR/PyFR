@@ -112,8 +112,11 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         return self.ndim, argn, argt
 
     def needs_ldim(self, arg):
-        return ((self.ndim == 2 and not arg.isbroadcast) or
-                (arg.ncdim > 0 and not arg.ismpi))
+        if arg.isbroadcast:
+            return ((self.ndim == 1 and arg.ncdim > 1) or
+                    (self.ndim == 2 and arg.ncdim > 0))
+        else:
+            return self.ndim == 2 or (arg.ncdim > 0 and not arg.ismpi)
 
     @abstractmethod
     def render(self):
