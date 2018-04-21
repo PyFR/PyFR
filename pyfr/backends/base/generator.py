@@ -5,6 +5,8 @@ import re
 
 import numpy as np
 
+from pyfr.util import match_paired_paren
+
 
 class Arg(object):
     def __init__(self, name, spec, body):
@@ -123,9 +125,11 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         pass
 
     def _deref_arg_view(self, arg):
-        ptns = ['{0}_v[{0}_vix[X_IDX]]',
-                r'{0}_v[{0}_vix[X_IDX] + SOA_SZ*\1]',
-                r'{0}_v[{0}_vix[X_IDX] + {0}_vrstri[X_IDX]*\1 + SOA_SZ*\2]']
+        ptns = [
+            '{0}_v[{0}_vix[X_IDX]]',
+            r'{0}_v[{0}_vix[X_IDX] + SOA_SZ*(\1)]',
+            r'{0}_v[{0}_vix[X_IDX] + {0}_vrstri[X_IDX]*(\1) + SOA_SZ*(\2)]'
+        ]
 
         return ptns[arg.ncdim].format(arg.name)
 
@@ -142,17 +146,17 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         elif arg.ncdim == 0:
             ix = 'X_IDX'
         # Stacked vector:
-        #   name[\1] => name_v[ldim*\1 + X_IDX]
+        #   name[\1] => name_v[ldim*(\1) + X_IDX]
         elif arg.ncdim == 1:
-            ix = r'{0}*\1 + X_IDX'.format(ldim)
+            ix = r'{0}*(\1) + X_IDX'.format(ldim)
         # Doubly stacked MPI vector:
-        #   name[\1][\2] => name_v[(nv*\1 + \2)*ldim + X_IDX]
+        #   name[\1][\2] => name_v[(nv*(\1) + (\2))*ldim + X_IDX]
         elif arg.ismpi:
-            ix = r'({0}*\1 + \2)*{1} + X_IDX'.format(arg.cdims[1], ldim)
+            ix = r'({0}*(\1) + (\2))*{1} + X_IDX'.format(arg.cdims[1], ldim)
         # Doubly stacked vector:
-        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
+        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv)]
         else:
-            ix = (r'ld{0}*\1 + X_IDX_AOSOA(\2, {1})'
+            ix = (r'ld{0}*(\1) + X_IDX_AOSOA(\2, {1})'
                    .format(arg.name, arg.cdims[1]))
 
         return '{0}_v[{1}]'.format(arg.name, ix)
@@ -172,15 +176,16 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
             ix = (r'ld{0}*_y + X_IDX_AOSOA(\1, {1})'
                    .format(arg.name, arg.cdims[0]))
         # Doubly stacked matrix:
-        #   name[\1][\2] => name_v[(\1*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
+        #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
         else:
-            ix = (r'(\1*_ny + _y)*ld{0} + X_IDX_AOSOA(\2, {1})'
+            ix = (r'((\1)*_ny + _y)*ld{0} + X_IDX_AOSOA(\2, {1})'
                    .format(arg.name, arg.cdims[1]))
 
         return '{0}_v[{1}]'.format(arg.name, ix)
 
     def _render_body(self, body):
-        ptns = [r'\b{0}\b', r'\b{0}\[(\d+)\]', r'\b{0}\[(\d+)\]\[(\d+)\]']
+        bmch = r'\[({0})\]'.format(match_paired_paren('[]'))
+        ptns = [r'\b{0}\b', r'\b{0}' + bmch, r'\b{0}' + 2*bmch]
 
         # At single precision suffix all floating point constants by 'f'
         if self.fpdtype == np.float32:

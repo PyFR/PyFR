@@ -182,3 +182,14 @@ def rm(path):
 
 def mv(src, dst):
     shutil.move(src, dst)
+
+
+def match_paired_paren(delim, n=5):
+    open, close = delim
+    ocset = '[^{1}{0}]'.format(open, close)
+
+    lft = r'{0}*?(?:\{1}'.format(ocset, open)
+    mid = r'{0}*?'.format(ocset)
+    rgt = r'\{1}{0}*?)*?'.format(ocset, close)
+
+    return lft*n + mid + rgt*n
