@@ -105,11 +105,12 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-isot-wall'
     cflux_state = 'ghost'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self._tpl_c['cpTw'], = self._eval_opts(['cpTw'])
-        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')
+        tplc = self._exp_opts(['u', 'v', 'w'][:self.ndims], lhs, default={'u': 0, 'v': 0, 'w': 0})
+        self._tpl_c.update(tplc)
 
 
 class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
