@@ -109,8 +109,10 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self._tpl_c['cpTw'], = self._eval_opts(['cpTw'])
-        tplc = self._exp_opts(['u', 'v', 'w'][:self.ndims], lhs, default={'u': 0, 'v': 0, 'w': 0})
-        self._tpl_c.update(tplc)
+        self._tpl_c.update(
+            self._exp_opts('uvw'[:self.ndims], lhs,
+                           default={'u': 0, 'v': 0, 'w': 0})
+        )
 
 
 class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
