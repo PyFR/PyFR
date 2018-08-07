@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.integrators.dual.base import BaseDualIntegrator
+from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 
 
-class BaseDualPseudoStepper(BaseDualIntegrator):
+class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
     def collect_stats(self, stats):
         super().collect_stats(stats)
 
@@ -17,23 +17,13 @@ class BaseDualPseudoStepper(BaseDualIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
-        # Coefficients for the dual-time source term
-        svals = [c*sc for sc in self._dual_time_source]
+        # Coefficients for the physical stepper
+        svals = [c*sc for sc in self._stepper_coeffs]
 
-        # Source addition -∇·f - dQ/dt
+        # Physical stepper source addition -∇·f - dQ/dt
         axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
-        self._prepare_reg_banks(fout, self._idxcurr, *self._source_regidx)
+        self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
         self._queue % axnpby(1, *svals)
-
-    def finalise_step(self, currsoln):
-        pnreg, dtsnreg = self._pseudo_stepper_nregs, len(self._dual_time_source)
-
-        # Rotate the source registers to the right by one
-        self._regidx[pnreg:pnreg + dtsnreg - 1] = (self._source_regidx[-1:]
-                                                   + self._source_regidx[:-1])
-
-        # Copy the current soln into the first source register
-        self._add(0, self._regidx[pnreg], 1, currsoln)
 
 
 class DualPseudoEulerStepper(BaseDualPseudoStepper):
@@ -54,7 +44,7 @@ class DualPseudoEulerStepper(BaseDualPseudoStepper):
     def step(self, t, dt, dtau):
         add = self._add
         rhs = self._rhs_with_dts
-        r0, r1 = self._stepper_regidx
+        r0, r1 = self._pseudo_stepper_regidx
 
         if r0 != self._idxcurr:
             r0, r1 = r1, r0
@@ -86,7 +76,7 @@ class DualPseudoTVDRK3Stepper(BaseDualPseudoStepper):
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
-        r0, r1, r2 = self._stepper_regidx
+        r0, r1, r2 = self._pseudo_stepper_regidx
 
         # Ensure r0 references the bank containing u(n+1,m)
         if r0 != self._idxcurr:
@@ -132,7 +122,7 @@ class DualPseudoRK4Stepper(BaseDualPseudoStepper):
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
-        r0, r1, r2 = self._stepper_regidx
+        r0, r1, r2 = self._pseudo_stepper_regidx
 
         # Ensure r0 references the bank containing u(n+1,m)
         if r0 != self._idxcurr:
