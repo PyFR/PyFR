@@ -47,19 +47,21 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Get the multigrid pseudostepper and pseudocontroller classes
         pn = cfg.get(sect, 'pseudo-scheme')
-        pc = subclass_where(BaseDualPseudoStepper, pseudo_stepper_name=pn)
         cn = cfg.get(sect, 'pseudo-controller')
-        cc = subclass_where(BaseDualPseudoController, pseudo_controller_name=cn)
+
+        pc = subclass_where(BaseDualPseudoStepper, pseudo_stepper_name=pn)
+        cc = subclass_where(BaseDualPseudoController,
+                            pseudo_controller_name=cn)
         cc_none = subclass_where(BaseDualPseudoController,
                                  pseudo_controller_name='none')
 
-        # Suitable pseudo-integrators for all levels
+        # Construct a pseudo-integrator for each level
         self.pintgs = {}
         for l in self.levels:
             if l == self._order:
-                bases = (cc, pc)
+                bases = [cc, pc]
             else:
-                bases = (cc_none, pc)
+                bases = [cc_none, pc]
 
                 cfg = Inifile(cfg.tostr())
                 cfg.set('solver', 'order', l)
@@ -95,9 +97,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                     # Physical stepper source addition -∇·f - dQ/dt
                     axnpby = iself._get_axnpby_kerns(len(svals) + 1,
-                                                    subdims=iself._subdims)
+                                                     subdims=iself._subdims)
                     iself._prepare_reg_banks(fout, iself._idxcurr,
-                                            *iself._stepper_regidx)
+                                             *iself._stepper_regidx)
                     iself._queue % axnpby(1, *svals)
 
                     # Multigrid r addition

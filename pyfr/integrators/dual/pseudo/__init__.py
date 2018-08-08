@@ -21,15 +21,11 @@ def get_pseudo_integrator(backend, systemcls, rallocs, mesh,
         cc = subclass_where(BaseDualPseudoController, pseudo_controller_name=cn)
         pc = subclass_where(BaseDualPseudoStepper, pseudo_stepper_name=pn)
 
-        bases = [(cn, cc), (pn, pc)]
-
         # Determine the integrator name
-        name = '_'.join(['dual'] + list(bn for bn, bc in bases)
-                        + ['pseudointegrator'])
+        name = '_'.join(['dual', cn, pn, 'pseudointegrator'])
         name = re.sub('(?:^|_|-)([a-z])', lambda m: m.group(1).upper(), name)
 
-        pseudointegrator = type(name, tuple(bc for bn, bc in bases),
-                                dict(name=name))
+        pseudointegrator = type(name, (cc, pc), dict(name=name))
 
         # Construct and return an instance of this new integrator class
         return pseudointegrator(backend, systemcls, rallocs, mesh,
