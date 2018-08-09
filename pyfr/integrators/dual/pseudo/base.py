@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import defaultdict
+from configparser import NoOptionError
 
 from pyfr.integrators.base import BaseCommon
 from pyfr.util import proxylist
@@ -20,20 +21,19 @@ class BaseDualPseudoIntegrator(BaseCommon):
         sect = 'solver-time-integrator'
 
         self._dtaumin = 1.0e-12
-        self._dtau = self.cfg.getfloat(sect, 'pseudo-dt')
+        self._dtau = cfg.getfloat(sect, 'pseudo-dt')
 
-        self.maxniters = self.cfg.getint(sect, 'pseudo-niters-max', 0)
-        self.minniters = self.cfg.getint(sect, 'pseudo-niters-min', 0)
+        self.maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
+        self.minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
 
         if self.maxniters < self.minniters:
             raise ValueError('The maximum number of pseudo-iterations must '
                              'be greater than or equal to the minimum')
 
-        self._pseudo_residtol= self.cfg.getfloat(sect, 'pseudo-resid-tol')
-        self._pseudo_norm = self.cfg.get(sect, 'pseudo-resid-norm', 'l2')
-
-        if self._pseudo_norm not in {'l2', 'uniform'}:
-            raise ValueError('Invalid pseudo-residual norm')
+        if (self._pseudo_controller_needs_lerrest and
+            not self._pseudo_stepper_has_lerrest):
+            raise TypeError('Incompatible pseudo-stepper/pseudo-controller '
+                            'combination')
 
         # Amount of temp storage required by physical stepper
         self._stepper_nregs = len(stepper_coeffs) - 1
@@ -62,9 +62,20 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self._subdims = [elementscls.convarmap[self.system.ndims].index(v)
                          for v in elementscls.dualcoeffs[self.system.ndims]]
 
-        # Pointwise kernels for integrator
-        self.ikernels = {}
-        self.intgkernels = defaultdict(proxylist)
+        # Convergence tolerances
+        self._pseudo_residtol = residtol = []
+        for v in elementscls.convarmap[self.system.ndims]:
+            try:
+                residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol-' + v))
+            except NoOptionError:
+                residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol'))
+
+        self._pseudo_norm = cfg.get(sect, 'pseudo-resid-norm', 'l2')
+        if self._pseudo_norm not in {'l2', 'uniform'}:
+            raise ValueError('Invalid pseudo-residual norm')
+
+        # Pointwise kernels for the pseudo-integrator
+        self.pintgkernels = defaultdict(proxylist)
 
     @property
     def _pseudo_stepper_regidx(self):

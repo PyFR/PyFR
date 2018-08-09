@@ -40,7 +40,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
-        dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+        self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
 
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self._minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
@@ -65,7 +65,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 cfg = Inifile(cfg.tostr())
                 cfg.set('solver', 'order', l)
-                cfg.set(sect, 'pseudo-dt', dtau*dtauf**(self._order - l))
+                cfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(self._order - l))
 
                 for sec in cfg.sections():
                     m = re.match(r'solver-(.*)-mg-p{0}'.format(l), sec)
@@ -82,7 +82,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     if iself.aux_nregs != 0:
                         return iself._regidx[-2:]
 
-                def conv_mon(iself, *args, **kwargs):
+                def convmon(iself, *args, **kwargs):
                     pass
 
                 def finalise_pseudo_advance(iself, *args, **kwargs):
@@ -115,7 +115,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.system = self.pintgs[self._order].system
 
         # Get the convergence monitoring method
-        self.mg_conv_mon = cc.conv_mon
+        self.mg_convmon = cc.convmon
 
         # Initialise the restriction and prolongation matrices
         self._init_proj_mats()
@@ -179,6 +179,16 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             for pm, inb, outb in zip(self.projmats[l1, l2], inbanks, outbanks)
         )
 
+    @memoize
+    def dtauproject(self, l1, l2):
+        inbanks = self.pintgs[l1].dtau_upts
+        outbanks = self.pintgs[l2].dtau_upts
+
+        return proxylist(
+            self.backend.kernel('mul', pm, inb, out=outb, alpha=self.dtauf)
+            for pm, inb, outb in zip(self.projmats[l1, l2], inbanks, outbanks)
+        )
+
     def restrict(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
@@ -230,6 +240,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             )
             self.pintg._queue % self.mgproject(l1, l2)()
 
+        # Project local dtau field to lower multigrid levels
+        if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
+            self.pintg._queue % self.dtauproject(l1, l2)()
+
     def prolongate(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
@@ -261,7 +275,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx[-2:]
 
-    def pseudo_advance(self, tcurr, tout, dt):
+    def pseudo_advance(self, tcurr, dt_lmtr, dt):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
 
@@ -274,7 +288,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 # Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
-                self.pintg.pseudo_advance(tcurr, tout, dt)
+                self.pintg.pseudo_advance(tcurr, dt_lmtr, dt)
 
                 if m is not None and l > m:
                     self.restrict(l, m)
@@ -282,7 +296,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     self.prolongate(l, m)
 
             # Convergence monitoring
-            if self.mg_conv_mon(self.pintg, i, self._minniters):
+            if self.mg_convmon(self.pintg, i, self._minniters):
                 break
 
         # Update the dual-time stepping banks
