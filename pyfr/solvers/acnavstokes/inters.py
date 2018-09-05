@@ -121,3 +121,18 @@ class ACNavierStokesOutflowBCInters(ACNavierStokesBaseBCInters):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self._tpl_c.update(self._exp_opts('p', lhs))
+
+
+class ACNavierStokesCharRiemInvBCInters(ACNavierStokesBaseBCInters):
+    type = 'ac-char-riem-inv'
+    cflux_state = 'ghost'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
+
+        self._tpl_c['niters'] = cfg.getint(cfgsect, 'niters', 4)
+        self._tpl_c['bc-ac-zeta'] = cfg.getfloat(cfgsect, 'ac-zeta')
+        tplc = self._exp_opts(
+            ['p', 'u', 'v', 'w'][:self.ndims + 1], lhs
+        )
+        self._tpl_c.update(tplc)
