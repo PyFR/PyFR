@@ -459,7 +459,7 @@ Parameterises the time-integration scheme used by the solver with
 
         - ``pseudo-scheme`` --- pseudo time-integration scheme
 
-           ``euler`` | ``tvd-rk3`` | ``rk4``
+           ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
 
         - ``tstart`` --- initial time
 
@@ -481,25 +481,58 @@ Parameterises the time-integration scheme used by the solver with
 
            ``none``
 
+
+        - ``pseudo-niters-max`` --- minimum number of iterations
+
+           *int*
+
+        - ``pseudo-niters-min`` --- maximum number of iterations
+
+           *int*
+
+        - ``pseudo-resid-tol`` --- pseudo residual tolerance
+
+           *float*
+
+        - ``pseudo-resid-norm`` --- pseudo residual norm
+
+           ``uniform`` | ``l2``
+
+        - ``pseudo-controller`` --- pseudo time-step controller
+
+           ``none`` | ``local-pi``
+
            where
 
-           ``none`` requires
+           ``local-pi`` only works with ``rk34`` and ``rk45`` and requires
 
-            - ``pseudo-niters-max`` --- minimum number of iterations
-
-               *int*
-
-            - ``pseudo-niters-min`` --- maximum number of iterations
-
-               *int*
-
-            - ``pseudo-resid-tol`` --- pseudo residual tolerance
+            - ``atol`` --- absolute error tolerance
 
                *float*
 
-            - ``pseudo-resid-norm`` --- pseudo residual norm
+            - ``safety-fact`` --- safety factor for pseudo time-step size
+              adjustment (suitable range 0.80-0.95)
 
-               ``uniform`` | ``l2``
+               *float*
+
+            - ``min-fact`` --- minimum factor that the local
+              pseudo time-step can change between iterations
+              (suitable range 0.98-0.998)
+
+               *float*
+
+            - ``max-fact`` --- maximum factor that the local
+              pseudo time-step can change between iterations
+              (suitable range 1.001-1.01)
+
+               *float*
+
+            - ``pseudo-dt-max-fact`` --- maximum permissible
+              local pseudo time-step given as a
+              multiplier to initial value (suitable range 2.0-5.0)
+
+               *float*
+
 
 Example::
 
@@ -1182,13 +1215,39 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
 1. ``type`` --- type of boundary condition:
 
-    ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
+    ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
     ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``no-slp-wall`` |
     ``slp-adia-wall`` | ``slp-wall`` | ``sub-in-frv`` |
     ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
     ``sup-out-fn``
 
     where
+
+    ``ac-char-riem-inv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``ac-zeta`` --- artificial compressibility factor for boundary
+         (> internal ac-zeta). Increasing ``ac-zeta`` makes the boundary
+         less reflective allowing larger deviation from the target state.
+
+           *float* | *string*
+
+        - ``p`` --- pressure
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
 
     ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
     requires
@@ -1517,14 +1576,14 @@ flow simulation on a mixed unstructured mesh:
 
         pyfr run -b cuda -p inc_cylinder_2d.pyfrm inc_cylinder_2d.ini
 
-6. Run pyfr on the solution file ``inc_cylinder_2d-60.00.pyfrs``
+6. Run pyfr on the solution file ``inc_cylinder_2d-75.00.pyfrs``
    converting it into an unstructured VTK file called
-   ``inc_cylinder_2d-60.00.vtu``. Note that in order to visualise the
+   ``inc_cylinder_2d-75.00.vtu``. Note that in order to visualise the
    high-order data, each high-order element is sub-divided into smaller
    linear elements. The level of sub-division is controlled by the
    integer at the end of the command::
 
-        pyfr export inc_cylinder_2d.pyfrm inc_cylinder_2d-60.00.pyfrs inc_cylinder_2d-60.00.vtu -d 4
+        pyfr export inc_cylinder_2d.pyfrm inc_cylinder_2d-75.00.pyfrs inc_cylinder_2d-75.00.vtu -d 4
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -1535,4 +1594,4 @@ flow simulation on a mixed unstructured mesh:
    :alt: couette flow
    :align: center
 
-   Colour map of velocity magnitude distribution at 60 time units.
+   Colour map of velocity magnitude distribution at 75 time units.
