@@ -13,7 +13,7 @@ from pyfr.util import memoize, proxylist, subclass_where
 
 class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg,
-                 tcoeffs):
+                 tcoeffs, dt):
         self.backend = backend
 
         sect = 'solver-time-integrator'
@@ -88,12 +88,12 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 def finalise_pseudo_advance(iself, *args, **kwargs):
                     pass
 
-                def _rhs_with_dts(iself, t, uin, fout, c=1):
+                def _rhs_with_dts(iself, t, uin, fout):
                     # Compute -∇·f
                     iself.system.rhs(t, uin, fout)
 
                     # Coefficients for the physical stepper
-                    svals = [c*sc for sc in iself._stepper_coeffs]
+                    svals = [sc/iself._dt for sc in iself._stepper_coeffs]
 
                     # Physical stepper source addition -∇·f - dQ/dt
                     axnpby = iself._get_axnpby_kerns(len(svals) + 1,
@@ -109,7 +109,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                         iself._queue % axnpby(1, -1)
 
             self.pintgs[l] = lpsint(backend, systemcls, rallocs, mesh,
-                                    initsoln, cfg, tcoeffs)
+                                    initsoln, cfg, tcoeffs, dt)
 
         # Get the highest p system from plugins
         self.system = self.pintgs[self._order].system
@@ -275,7 +275,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx[-2:]
 
-    def pseudo_advance(self, tcurr, dt_lmtr, dt):
+    def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
 
@@ -288,7 +288,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 # Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
-                self.pintg.pseudo_advance(tcurr, dt_lmtr, dt)
+                self.pintg.pseudo_advance(tcurr)
 
                 if m is not None and l > m:
                     self.restrict(l, m)

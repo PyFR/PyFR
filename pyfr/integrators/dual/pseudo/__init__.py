@@ -9,11 +9,11 @@ from pyfr.util import subclass_where
 
 
 def get_pseudo_integrator(backend, systemcls, rallocs, mesh,
-                          initsoln, cfg, tcoeffs):
+                          initsoln, cfg, tcoeffs, dt):
     # A new type of integrator allowing multip convergence acceleration
     if 'solver-dual-time-integrator-multip' in cfg.sections():
         return DualMultiPIntegrator(backend, systemcls, rallocs, mesh,
-                                    initsoln, cfg, tcoeffs)
+                                    initsoln, cfg, tcoeffs, dt)
     else:
         cn = cfg.get('solver-time-integrator', 'pseudo-controller')
         pn = cfg.get('solver-time-integrator', 'pseudo-scheme')
@@ -29,4 +29,4 @@ def get_pseudo_integrator(backend, systemcls, rallocs, mesh,
 
         # Construct and return an instance of this new integrator class
         return pseudointegrator(backend, systemcls, rallocs, mesh,
-                                initsoln, cfg, tcoeffs)
+                                initsoln, cfg, tcoeffs, dt)

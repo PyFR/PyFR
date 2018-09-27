@@ -5,10 +5,9 @@
 <%pyfr:kernel name='localdtau' ndim='2'
               negdivconf='inout fpdtype_t[${str(nvars)}]'
               dtau_upts='in fpdtype_t[${str(nvars)}]'
-              inv='scalar fpdtype_t'
-              dtau_lmtr='scalar fpdtype_t'>
+              inv='scalar fpdtype_t'>
 % for i in range(nvars):
-    negdivconf[${i}] = ((1.0 - inv)*min(dtau_lmtr, dtau_upts[${i}])
-                        + inv/min(dtau_lmtr, dtau_upts[${i}]))*negdivconf[${i}];
+    negdivconf[${i}] = ((1.0 - inv)*dtau_upts[${i}]
+                        + inv/dtau_upts[${i}])*negdivconf[${i}];
 % endfor
 </%pyfr:kernel>
