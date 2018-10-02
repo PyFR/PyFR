@@ -125,10 +125,10 @@ class NativeWriter(object):
     def _write_parallel(self, path, data, metadata):
         comm, rank, root = get_comm_rank_root()
 
-        with h5py.File(path, 'w', driver='mpio', comm=comm) as h5file:
+        with h5py.File(path, 'w', driver='mpio', comm=comm) as f:
             dmap = {}
             for name, shape in self._global_shape_list:
-                dmap[name] = h5file.create_dataset(
+                dmap[name] = f.create_dataset(
                     name, shape, dtype=self.fpdtype
                 )
 
@@ -152,10 +152,13 @@ class NativeWriter(object):
                 mmap = None
 
             for name, size in comm.bcast(mmap, root=root):
-                d = h5file.create_dataset(name, (), dtype='S{}'.format(size))
+                d = f.create_dataset(name, (), dtype='S{}'.format(size))
 
                 if rank == root:
                     d.write_direct(np.array(metadata[name], dtype='S'))
+
+        # Wait for everyone to finish writing
+        comm.barrier()
 
     def _write_serial(self, path, data, metadata):
         from mpi4py import MPI
@@ -181,6 +184,9 @@ class NativeWriter(object):
             # Create the output dictionary
             outdict = dict(zip(names, dats), **metadata)
 
-            with h5py.File(path, 'w') as h5file:
+            with h5py.File(path, 'w') as f:
                 for k, v in outdict.items():
-                    h5file[k] = v
+                    f[k] = v
+
+        # Wait for the root rank to finish writing
+        comm.barrier()
