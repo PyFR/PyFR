@@ -68,7 +68,7 @@ class DualNonePseudoController(BaseDualPseudoController):
             self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
 
             # Compute the normalised residual
-            resid = tuple(self._resid(self.dtau, self._idxprev))
+            resid = tuple(self._resid(self._dtau, self._idxprev))
 
             self.pseudostepinfo.append((self.npseudosteps, i + 1, resid))
             return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
@@ -76,16 +76,12 @@ class DualNonePseudoController(BaseDualPseudoController):
             self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
             return False
 
-    def pseudo_advance(self, tcurr, dt_lmtr, dt):
+    def pseudo_advance(self, tcurr):
         self.tcurr = tcurr
-
-        # Pseudo time-step limiter close to outputs
-        self.dtau_lmtr = dt_lmtr
-        self.dtau = max(min(self.dtau_lmtr, self._dtau), self._dtaumin)
 
         for i in range(self.maxniters):
             # Take the step
-            self._idxcurr, self._idxprev = self.step(self.tcurr, dt, self.dtau)
+            self._idxcurr, self._idxprev = self.step(self.tcurr)
 
             # Convergence monitoring
             if self.convmon(i, self.minniters):
@@ -158,7 +154,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.system.eles_scal_upts_inb.active = errbank
         self._queue % self.pintgkernels['localerrest']()
 
-    def convmon(self, i, minniters, dtau=None):
+    def convmon(self, i, minniters):
         # Increment the step count
         self.npseudosteps += 1
 
@@ -178,18 +174,13 @@ class DualPIPseudoController(BaseDualPseudoController):
             self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
             return False
 
-    def pseudo_advance(self, tcurr, dt_lmtr, dt):
+    def pseudo_advance(self, tcurr):
         self.tcurr = tcurr
-
-        # Pseudo time-step limiter close to outputs
-        self.dtau_lmtr = dt_lmtr
 
         for i in range(self.maxniters):
             # Take the step
-            self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr,
-                                                                   dt)
-            if self.dtau_lmtr > self._dtau:
-                self.localerrest(self._idxerr)
+            self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
+            self.localerrest(self._idxerr)
 
             if self.convmon(i, self.minniters):
                 break

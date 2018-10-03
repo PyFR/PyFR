@@ -14,7 +14,7 @@ class BaseDualIntegrator(BaseIntegrator):
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
             backend, systemcls, rallocs, mesh,
-            initsoln, cfg, self._stepper_coeffs
+            initsoln, cfg, self._stepper_coeffs, self._dt
         )
 
         # Event handlers for advance_to

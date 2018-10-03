@@ -16,12 +16,12 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Total number of pseudo-steps
         stats.set('solver-time-integrator', 'npseudosteps', self.npseudosteps)
 
-    def _rhs_with_dts(self, t, uin, fout, c=1):
+    def _rhs_with_dts(self, t, uin, fout):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
         # Coefficients for the physical stepper
-        svals = [c*sc for sc in self._stepper_coeffs]
+        svals = [sc/self._dt for sc in self._stepper_coeffs]
 
         # Physical stepper source addition -∇·f - dQ/dt
         axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
@@ -48,16 +48,17 @@ class DualEulerPseudoStepper(BaseDualPseudoStepper):
     def _pseudo_stepper_order(self):
         return 1
 
-    def step(self, t, dt, dtau):
+    def step(self, t):
         add = self._add
         rhs = self._rhs_with_dts
+
         r0, r1 = self._pseudo_stepper_regidx
 
         if r0 != self._idxcurr:
             r0, r1 = r1, r0
 
-        rhs(t, r0, r1, c=1/dt)
-        add(0, r1, 1, r0, dtau, r1)
+        rhs(t, r0, r1)
+        add(0, r1, 1, r0, self._dtau, r1)
 
         return r1, r0
 
@@ -81,9 +82,10 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
     def _pseudo_stepper_order(self):
         return 3
 
-    def step(self, t, dt, dtau):
+    def step(self, t):
         add = self._add
         rhs = self._rhs_with_dts
+        dtau = self._dtau
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
@@ -95,17 +97,17 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
 
         # First stage;
         # r2 = -∇·f(r0) - dQ/dt; r1 = r0 + dtau*r2
-        rhs(t, r0, r2, c=1/dt)
+        rhs(t, r0, r2)
         add(0, r1, 1, r0, dtau, r2)
 
         # Second stage;
         # r2 = -∇·f(r1) - dQ/dt; r1 = 3/4*r0 + 1/4*r1 + 1/4*dtau*r2
-        rhs(t, r1, r2, c=1/dt)
+        rhs(t, r1, r2)
         add(1/4, r1, 3/4, r0, dtau/4, r2)
 
         # Third stage;
         # r2 = -∇·f(r1) - dQ/dt; r1 = 1/3*r0 + 2/3*r1 + 2/3*dtau*r2
-        rhs(t, r1, r2, c=1/dt)
+        rhs(t, r1, r2)
         add(2/3, r1, 1/3, r0, 2*dtau/3, r2)
 
         # Return the index of the bank containing u(n+1,m+1)
@@ -131,9 +133,10 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
     def _pseudo_stepper_order(self):
         return 4
 
-    def step(self, t, dt, dtau):
+    def step(self, t):
         add = self._add
         rhs = self._rhs_with_dts
+        dtau = self._dtau
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
@@ -144,11 +147,11 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
             r0, r1 = r1, r0
 
         # First stage; r1 = -∇·f(r0) - dQ/dt;
-        rhs(t, r0, r1, c=1/dt)
+        rhs(t, r0, r1)
 
         # Second stage; r2 = r0 + dtau/2*r1; r2 = -∇·f(r2) - dQ/dt;
         add(0, r2, 1, r0, dtau/2, r1)
-        rhs(t, r2, r2, c=1/dt)
+        rhs(t, r2, r2)
 
         # As no subsequent stages depend on the first stage we can
         # reuse its register to start accumulating the solution with
@@ -159,7 +162,7 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
         # r2 = r0 + dtau/2*r2 - dtau/2*dQ/dt
         # r2 = -∇·f(r2) - dQ/dt;
         add(dtau/2, r2, 1, r0)
-        rhs(t, r2, r2, c=1/dt)
+        rhs(t, r2, r2)
 
         # Accumulate; r1 = r1 + dtau/3*r2
         add(1, r1, dtau/3, r2)
@@ -168,7 +171,7 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
         # r2 = r0 + dtau*r2
         # r2 = -∇·f(r2) - dQ/dt;
         add(dtau, r2, 1, r0)
-        rhs(t, r2, r2, c=1/dt)
+        rhs(t, r2, r2)
 
         # Final accumulation r1 = r1 + dtau/6*r2 = u(n+1,m+1)
         add(1, r1, dtau/6, r2)
@@ -216,8 +219,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
 
     def localdtau(self, uinbank, inv=0):
         self.system.eles_scal_upts_inb.active = uinbank
-        self._queue % self.pintgkernels['localdtau'](inv=inv,
-                                                     dtau_lmtr=self.dtau_lmtr)
+        self._queue % self.pintgkernels['localdtau'](inv=inv)
 
     @property
     def _pseudo_stepper_has_lerrest(self):
@@ -239,7 +241,7 @@ class DualRKVdH2RStepper(DualEmbeddedPairPseudoStepper):
     def _pseudo_stepper_nregs(self):
         return 4 if self._pseudo_stepper_has_lerrest else 3
 
-    def step(self, t, dt, dtau=None):
+    def step(self, t):
         add, rhs = self._add, self._rhs_with_dts
         errest = self._pseudo_stepper_has_lerrest
 
@@ -256,7 +258,7 @@ class DualRKVdH2RStepper(DualEmbeddedPairPseudoStepper):
         # Evaluate the stages in the scheme
         for i in range(self._nstages):
             # Compute -∇·f
-            rhs(t, r2 if i > 0 else r1, r2, c=1/dt)
+            rhs(t, r2 if i > 0 else r1, r2)
 
             self.localdtau(r2)
 
