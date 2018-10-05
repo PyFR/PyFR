@@ -117,7 +117,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['maxf'] = self.cfg.getfloat(sect, 'max-fact', 1.01)
         tplargs['minf'] = self.cfg.getfloat(sect, 'min-fact', 0.98)
         tplargs['saff'] = self.cfg.getfloat(sect, 'safety-fact', 0.8)
-        tplargs['dtau_maxf'] = self.cfg.getfloat(sect, 'pseudo-dt-max-fact',
+        tplargs['dtau_maxf'] = self.cfg.getfloat(sect, 'pseudo-dt-max-mult',
                                                  3.0)
 
         # Limits for the local pseudo-time-step size
