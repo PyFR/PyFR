@@ -226,7 +226,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
         return self._pseudo_controller_needs_lerrest and self.bhat
 
 
-class DualRKVdH2RStepper(DualEmbeddedPairPseudoStepper):
+class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -280,7 +280,7 @@ class DualRKVdH2RStepper(DualEmbeddedPairPseudoStepper):
         return (r2, rold, rerr) if errest else (r2, rold)
 
 
-class DualRK34Stepper(DualRKVdH2RStepper):
+class DualRK34PseudoStepper(DualRKVdH2RPseudoStepper):
     pseudo_stepper_name = 'rk34'
 
     a = [
@@ -308,7 +308,7 @@ class DualRK34Stepper(DualRKVdH2RStepper):
         return 3
 
 
-class DualRK45Stepper(DualRKVdH2RStepper):
+class DualRK45PseudoStepper(DualRKVdH2RPseudoStepper):
     pseudo_stepper_name = 'rk45'
 
     a = [

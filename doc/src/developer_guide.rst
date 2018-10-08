@@ -24,8 +24,8 @@ Controller
 
 A `Controller`_ acts to advance the simulation in time. Specifically, a
 `Controller`_ has a method named :code:`advance_to` which advances a
-`System`_ to a specified time. There are three types of `Controller`_
-available in PyFR |release|:
+`System`_ to a specified time. There are three types of physical-time
+`Controller`_ available in PyFR |release|:
 
 .. autoclass:: pyfr.integrators.std.controllers.StdNoneController
     :members:
@@ -51,6 +51,15 @@ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
+Types of physical-time `Controller`_ are related via the following
+inheritance diagram:
+
+.. inheritance-diagram:: pyfr.integrators.std.controllers
+                         pyfr.integrators.dual.phys.controllers
+    :parts: 1
+
+There are two types of pseudo-time `Controller`_ available in PyFR |release|:
+
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualNonePseudoController
     :members:
     :undoc-members:
@@ -68,12 +77,10 @@ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-Types of `Controller`_ are related via the following inheritance
-diagram:
+Types of pseudo-time `Controller`_ are related via the following
+inheritance diagram:
 
-.. inheritance-diagram:: pyfr.integrators.std.controllers
-                         pyfr.integrators.dual.phys.controllers
-                         pyfr.integrators.dual.pseudo.pseudocontrollers
+.. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudocontrollers
     :parts: 1
 
 Stepper
@@ -81,8 +88,8 @@ Stepper
 
 A `Stepper`_ acts to advance the simulation by a single time-step.
 Specifically, a `Stepper`_ has a method named :code:`step` which
-advances a `System`_ by a single time-step. There are 11 types of
-`Stepper`_ available in PyFR |release|:
+advances a `System`_ by a single time-step. There are eight types of
+physical-time `Stepper`_ available in PyFR |release|:
 
 .. autoclass:: pyfr.integrators.std.steppers.StdEulerStepper
     :members:
@@ -147,6 +154,16 @@ advances a `System`_ by a single time-step. There are 11 types of
     :private-members:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
+
+Types of physical-time `Stepper`_ are related via the following
+inheritance diagram:                     
+     
+.. inheritance-diagram:: pyfr.integrators.std.steppers
+                         pyfr.integrators.dual.phys.steppers
+    :parts: 1     
+                         
+There are five types of pseudo-time `Stepper`_ available in PyFR |release|:                      
+                                           
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
     :members:
     :undoc-members:
@@ -171,11 +188,26 @@ advances a `System`_ by a single time-step. There are 11 types of
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-Types of `Stepper`_ are related via the following inheritance diagram:
+.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK34PseudoStepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
 
-.. inheritance-diagram:: pyfr.integrators.dual.phys.steppers
-                         pyfr.integrators.dual.pseudo.pseudosteppers
-                         pyfr.integrators.std.steppers
+.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK45PseudoStepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
+Types of pseudo-time `Stepper`_ are related via the following inheritance
+diagram:
+
+.. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers
     :parts: 1
 
 System

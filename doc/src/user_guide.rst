@@ -437,13 +437,13 @@ Parameterises the time-integration scheme used by the solver with
 
                *float*
 
-            - ``min-fact`` --- minimum factor that the time-step can change
-              between iterations (suitable range 0.1-0.5)
+            - ``min-fact`` --- minimum factor by which the time-step can
+              change between iterations (suitable range 0.1-0.5)
 
                *float*
 
-            - ``max-fact`` --- maximum factor that the time-step can change
-              between iterations (suitable range 2.0-6.0)
+            - ``max-fact`` --- maximum factor by which the time-step can
+              change between iterations (suitable range 2.0-6.0)
 
                *float*
 
@@ -481,7 +481,6 @@ Parameterises the time-integration scheme used by the solver with
 
            ``none``
 
-
         - ``pseudo-niters-max`` --- minimum number of iterations
 
            *int*
@@ -515,24 +514,23 @@ Parameterises the time-integration scheme used by the solver with
 
                *float*
 
-            - ``min-fact`` --- minimum factor that the local
+            - ``min-fact`` --- minimum factor by which the local
               pseudo time-step can change between iterations
               (suitable range 0.98-0.998)
 
                *float*
 
-            - ``max-fact`` --- maximum factor that the local
+            - ``max-fact`` --- maximum factor by which the local
               pseudo time-step can change between iterations
               (suitable range 1.001-1.01)
 
                *float*
 
-            - ``pseudo-dt-max-fact`` --- maximum permissible
+            - ``pseudo-dt-max-mult`` --- maximum permissible
               local pseudo time-step given as a
-              multiplier to initial value (suitable range 2.0-5.0)
+              multiplier of ``pseudo-dt`` (suitable range 2.0-5.0)
 
                *float*
-
 
 Example::
 
@@ -1227,10 +1225,10 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
     requires
 
         - ``ac-zeta`` --- artificial compressibility factor for boundary
-         (> internal ac-zeta). Increasing ``ac-zeta`` makes the boundary
-         less reflective allowing larger deviation from the target state.
+          (increasing ``ac-zeta`` makes the boundary less reflective allowing
+          larger deviation from the target state)
 
-           *float* | *string*
+           *float*
 
         - ``p`` --- pressure
 
