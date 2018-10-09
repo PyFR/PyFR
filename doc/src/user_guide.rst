@@ -503,14 +503,15 @@ Parameterises the time-integration scheme used by the solver with
 
            where
 
-           ``local-pi`` only works with ``rk34`` and ``rk45`` and requires
+           ``local-pi`` only works with ``rk34`` and ``rk45`` and
+           requires
 
             - ``atol`` --- absolute error tolerance
 
                *float*
 
-            - ``safety-fact`` --- safety factor for pseudo time-step size
-              adjustment (suitable range 0.80-0.95)
+            - ``safety-fact`` --- safety factor for pseudo time-step
+              size adjustment (suitable range 0.80-0.95)
 
                *float*
 
@@ -1221,14 +1222,18 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
     where
 
-    ``ac-char-riem-inv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
+    ``ac-char-riem-inv`` only works with ``ac-euler`` |
+    ``ac-navier-stokes`` and requires
 
         - ``ac-zeta`` --- artificial compressibility factor for boundary
-          (increasing ``ac-zeta`` makes the boundary less reflective allowing
-          larger deviation from the target state)
+          (increasing ``ac-zeta`` makes the boundary less reflective
+          allowing larger deviation from the target state)
 
            *float*
+
+        - ``niters`` --- number of Newton iterations
+
+           *int*
 
         - ``p`` --- pressure
 
