@@ -38,7 +38,7 @@ class DualNoneController(BaseDualController):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        rem = math.fmod(t, self._dt)
+        rem = math.fmod(t - self.tcurr, self._dt)
         tol = 5.0*self.dtmin
         if rem > tol and (self._dt - rem) > tol:
             raise ValueError('End and output times must be multiplies of dt')
