@@ -50,7 +50,7 @@ AMD and NVIDIA. The backend requires:
 1. OpenCL
 2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
    >= 2015.2.4
-3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
+3. `CLBlast <https://github.com/CNugteren/CLBlast>`_
 
 OpenMP Backend
 ^^^^^^^^^^^^^^

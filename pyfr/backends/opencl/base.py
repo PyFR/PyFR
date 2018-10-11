@@ -56,7 +56,7 @@ class OpenCLBackend(BaseBackend):
         # Compute the SoA size
         self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
 
-        from pyfr.backends.opencl import (blasext, clblas, gimmik, packing,
+        from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
                                           provider, types)
 
         # Register our data types
@@ -75,7 +75,7 @@ class OpenCLBackend(BaseBackend):
                   blasext.OpenCLBlasExtKernels,
                   packing.OpenCLPackingKernels,
                   gimmik.OpenCLGiMMiKKernels,
-                  clblas.OpenCLClBLASKernels]
+                  clblast.OpenCLCLBlastKernels]
         self._providers = [k(self) for k in kprovs]
 
         # Pointwise kernels
