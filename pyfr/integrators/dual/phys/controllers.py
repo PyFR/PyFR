@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import math
-
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
@@ -37,11 +35,6 @@ class DualNoneController(BaseDualController):
     def advance_to(self, t):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
-
-        rem = math.fmod(t, self._dt)
-        tol = 5.0*self.dtmin
-        if rem > tol and (self._dt - rem) > tol:
-            raise ValueError('End and output times must be multiplies of dt')
 
         while self.tcurr < t:
             self.pseudointegrator.pseudo_advance(self.tcurr)

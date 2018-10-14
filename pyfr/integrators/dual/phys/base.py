@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import math
+
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.integrators.dual.pseudo import get_pseudo_integrator
 from pyfr.util import proxylist
@@ -44,3 +46,11 @@ class BaseDualIntegrator(BaseIntegrator):
             )
 
         return self._curr_soln
+
+    def call_plugin_dt(self, dt):
+        rem = math.fmod(dt, self._dt)
+        tol = 5.0*self.dtmin
+        if rem > tol and (self._dt - rem) > tol:
+            raise ValueError('Plugin call times must be multiples of dt')
+
+        super().call_plugin_dt(dt)
