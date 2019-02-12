@@ -70,7 +70,7 @@ def npeval(expr, locals):
         raise ValueError('Direct exponentiation is not supported; use pow')
 
     # Ensure the expression does not contain invalid characters
-    if not re.match(r'[A-Za-z0-9 \t\n\r.,+\-*/%()]+$', expr):
+    if not re.match(r'[A-Za-z0-9_ \t\n\r.,+\-*/%()]+$', expr):
         raise ValueError('Invalid characters in expression')
 
     # Disallow access to object attributes
