@@ -7,7 +7,6 @@ import re
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.integrators.dual.pseudo.pseudocontrollers import BaseDualPseudoController
-from pyfr.integrators.dual.pseudo.pseudosteppers import BaseDualPseudoStepper
 from pyfr.util import memoize, proxylist, subclass_where
 
 
@@ -49,15 +48,18 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         pn = cfg.get(sect, 'pseudo-scheme')
         cn = cfg.get(sect, 'pseudo-controller')
 
-        pc = subclass_where(BaseDualPseudoStepper, pseudo_stepper_name=pn)
         cc = subclass_where(BaseDualPseudoController,
                             pseudo_controller_name=cn)
         cc_none = subclass_where(BaseDualPseudoController,
                                  pseudo_controller_name='none')
 
         # Construct a pseudo-integrator for each level
+        from pyfr.integrators.dual.pseudo import get_pseudo_stepper_cls
+
         self.pintgs = {}
         for l in self.levels:
+            pc = get_pseudo_stepper_cls(pn, l)
+
             if l == self._order:
                 bases = [cc, pc]
             else:
