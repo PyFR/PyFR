@@ -53,9 +53,6 @@ class BaseIntegrator(object):
         # Solution cache
         self._curr_soln = None
 
-        # Add kernel cache
-        self._axnpby_kerns = {}
-
         # Record the starting wall clock time
         self._wstart = time.time()
 
