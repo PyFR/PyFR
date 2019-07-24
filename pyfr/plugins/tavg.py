@@ -42,7 +42,7 @@ class TavgPlugin(BasePlugin):
         # Time averaging parameters
         self.dtout = self.cfg.getfloat(cfgsect, 'dt-out')
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
-        self.tout = intg.tcurr + self.dtout
+        self.tout_last = intg.tcurr
 
         # Register our output times with the integrator
         intg.call_plugin_dt(self.dtout)
@@ -117,7 +117,8 @@ class TavgPlugin(BasePlugin):
         return [np.dstack(exs).swapaxes(1, 2) for exs in exprs]
 
     def __call__(self, intg):
-        dowrite = abs(self.tout - intg.tcurr) < self.tol
+        tdiff = intg.tcurr - self.tout_last
+        dowrite = tdiff >= self.dtout - self.tol
         doaccum = intg.nacptsteps % self.nsteps == 0
 
         if dowrite or doaccum:
@@ -134,13 +135,13 @@ class TavgPlugin(BasePlugin):
 
             if dowrite:
                 # Normalise
-                accmex = [a / self.dtout for a in self.accmex]
+                accmex = [a / tdiff for a in self.accmex]
 
                 stats = Inifile()
                 stats.set('data', 'prefix', 'tavg')
                 stats.set('data', 'fields',
                           ','.join(k for k, v in self.exprs))
-                stats.set('tavg', 'tstart', intg.tcurr - self.dtout)
+                stats.set('tavg', 'tstart', self.tout_last)
                 stats.set('tavg', 'tend', intg.tcurr)
                 intg.collect_stats(stats)
 
@@ -150,5 +151,5 @@ class TavgPlugin(BasePlugin):
 
                 self._writer.write(accmex, metadata, intg.tcurr)
 
-                self.tout = intg.tcurr + self.dtout
+                self.tout_last = intg.tcurr
                 self.accmex = [np.zeros_like(a) for a in accmex]
