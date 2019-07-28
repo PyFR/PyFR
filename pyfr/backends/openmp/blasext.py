@@ -12,7 +12,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, ldim, dtype = arr[0].traits
+        nrow, ncol, ldim, dtype = arr[0].traits
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
@@ -55,7 +55,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
-        nrow, ldim, dtype = x.traits
+        nrow, ncol, ldim, dtype = x.traits
         ncola, ncolb = x.ioshape[1:]
 
         # Render the reduction kernel template

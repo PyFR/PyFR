@@ -44,7 +44,7 @@ class MatrixBase(object, metaclass=ABCMeta):
 
         self.pitch = self.leaddim*self.itemsize
         self.nbytes = self.nrow*self.pitch
-        self.traits = (self.nrow, self.leaddim, self.dtype)
+        self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
 
         # Process the initial value
         if initval is not None:
@@ -142,7 +142,7 @@ class MatrixRSlice(object):
         self.leaddim, self.pitch = mat.leaddim, mat.pitch
 
         self.nbytes = self.nrow*self.pitch
-        self.traits = (self.nrow, self.leaddim, self.dtype)
+        self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
 
         self.tags = mat.tags | {'slice'}
 
