@@ -19,9 +19,9 @@ class WriterPlugin(BasePlugin):
         self._writer = NativeWriter(intg, self.nvars, basedir, basename,
                                     prefix='soln')
 
-        # Output time step and next output time
+        # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
-        self.tout_next = intg.tcurr
+        self.tout_last = intg.tcurr
 
         # Output field names
         self.fields = intg.system.elementscls.convarmap[self.ndims]
@@ -32,11 +32,9 @@ class WriterPlugin(BasePlugin):
         # If we're not restarting then write out the initial solution
         if not intg.isrestart:
             self(intg)
-        else:
-            self.tout_next += self.dt_out
 
     def __call__(self, intg):
-        if abs(self.tout_next - intg.tcurr) > self.tol:
+        if intg.tcurr - self.tout_last < self.dt_out - self.tol:
             return
 
         stats = Inifile()
@@ -56,5 +54,5 @@ class WriterPlugin(BasePlugin):
         self._invoke_postaction(mesh=intg.system.mesh.fname, soln=solnfname,
                                 t=intg.tcurr)
 
-        # Compute the next output time
-        self.tout_next = intg.tcurr + self.dt_out
+        # Update the last output time
+        self.tout_last = intg.tcurr

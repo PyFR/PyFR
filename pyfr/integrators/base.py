@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import deque
+import itertools as it
 import re
 import time
 
@@ -81,8 +82,9 @@ class BaseIntegrator(object):
             if not tlist or t - tlist[-1] > self.dtmin:
                 tlist.append(t)
 
-        tlist.extend(ta)
-        tlist.extend(tb)
+        for t in it.chain(ta, tb):
+            if not tlist or t - tlist[-1] > self.dtmin:
+                tlist.append(t)
 
     def step(self, t, dt):
         pass
