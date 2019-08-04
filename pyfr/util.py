@@ -149,14 +149,16 @@ def subclasses(cls, just_leaf=False):
 
 
 def subclass_where(cls, **kwargs):
-    k, v = next(iter(kwargs.items()))
-
     for s in subclasses(cls):
-        if hasattr(s, k) and getattr(s, k) == v:
+        for k, v in kwargs.items():
+            if not hasattr(s, k) or getattr(s, k) != v:
+                break
+        else:
             return s
 
-    raise KeyError("No subclasses of {0} with cls.{1} == '{2}'"
-                   .format(cls.__name__, k, v))
+    attrs = ', '.join('{0} = {1}'.format(k, v) for k, v in kwargs.items())
+    raise KeyError('No subclasses of {0} with attrs == ({1})'
+                   .format(cls.__name__, attrs))
 
 
 def ndrange(*args):
