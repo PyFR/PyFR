@@ -162,8 +162,28 @@ inheritance diagram:
                          pyfr.integrators.dual.phys.steppers
     :parts: 1     
                          
-There are five types of pseudo-time `Stepper`_ available in PyFR |release|:                      
-                                           
+
+
+PseudoStepper
+-------------
+
+A `PseudoStepper`_ acts to advance the simulation by a single pseudo-time-step.
+They are used to find a solution for implicit `Stepper`_ types iteratively in dual formulation.
+PyFR |release| implements six types of `PseudoStepper`_ listed below, where
+`DualDenseRKPseudoStepper` includes families of `PseudoStepper`_, whose coefficients
+are read from .txt files. PyFR |release| picks the optimal scheme from a family automatically.
+The families of schemes follow a naming convention
+
+{name}-s{stage count}-p{temporal order}-sp{optimal spatial polynomial order}.txt.
+
+.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualDenseRKPseudoStepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
     :members:
     :undoc-members:
@@ -204,7 +224,7 @@ There are five types of pseudo-time `Stepper`_ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-Types of pseudo-time `Stepper`_ are related via the following inheritance
+Types of `PseudoStepper`_ are related via the following inheritance
 diagram:
 
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers

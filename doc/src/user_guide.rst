@@ -539,7 +539,7 @@ Parameterises the time-integration scheme used by the solver with
 
         - ``pseudo-scheme`` --- pseudo time-integration scheme
 
-           ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
+           ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3`` | ``vermeire``
 
         - ``tstart`` --- initial time
 
