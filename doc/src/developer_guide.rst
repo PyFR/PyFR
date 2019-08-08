@@ -89,7 +89,7 @@ Stepper
 A `Stepper`_ acts to advance the simulation by a single time-step.
 Specifically, a `Stepper`_ has a method named :code:`step` which
 advances a `System`_ by a single time-step. There are eight types of
-physical-time `Stepper`_ available in PyFR |release|:
+`Stepper`_ available in PyFR |release|:
 
 .. autoclass:: pyfr.integrators.std.steppers.StdEulerStepper
     :members:
@@ -155,15 +155,30 @@ physical-time `Stepper`_ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-Types of physical-time `Stepper`_ are related via the following
-inheritance diagram:                     
+Types of `Stepper`_ are related via the following inheritance diagram:
      
 .. inheritance-diagram:: pyfr.integrators.std.steppers
                          pyfr.integrators.dual.phys.steppers
     :parts: 1     
                          
-There are five types of pseudo-time `Stepper`_ available in PyFR |release|:                      
-                                           
+
+
+PseudoStepper
+-------------
+
+A `PseudoStepper`_ acts to advance the simulation by a single pseudo-time-step.
+They are used to converge implicit `Stepper`_ time-steps via a dual
+time-stepping formulation. There are six types of `PseudoStepper`_ available
+in PyFR |release|:
+
+.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualDenseRKPseudoStepper
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+    :exclude-members: _abc_cache, _abc_negative_cache,
+                      _abc_negative_cache_version, _abc_registry
+
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
     :members:
     :undoc-members:
@@ -204,7 +219,12 @@ There are five types of pseudo-time `Stepper`_ available in PyFR |release|:
     :exclude-members: _abc_cache, _abc_negative_cache,
                       _abc_negative_cache_version, _abc_registry
 
-Types of pseudo-time `Stepper`_ are related via the following inheritance
+Note that DualDenseRKPseudoStepper includes families of
+`PseudoStepper`_ whose coefficients are read from .txt files named thus:
+
+`{scheme name}-s{stage count}-p{temporal order}-sp{optimal spatial polynomial order}.txt`
+
+Types of `PseudoStepper`_ are related via the following inheritance
 diagram:
 
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers
