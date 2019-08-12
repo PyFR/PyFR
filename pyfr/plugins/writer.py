@@ -31,6 +31,7 @@ class WriterPlugin(BasePlugin):
 
         # If we're not restarting then write out the initial solution
         if not intg.isrestart:
+            self.tout_last -= self.dt_out
             self(intg)
 
     def __call__(self, intg):
