@@ -22,7 +22,7 @@ class NativeReader(Mapping):
         ret = self._file[aname]
 
         if ret.shape == ():
-            ret = ret.value
+            ret = ret[()]
         else:
             ret = np.array(ret)
 

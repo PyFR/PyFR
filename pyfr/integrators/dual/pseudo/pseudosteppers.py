@@ -1,9 +1,27 @@
 # -*- coding: utf-8 -*-
 
+from itertools import chain
+from pkg_resources import resource_string
+
 import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.util import proxylist
+
+
+def _get_coefficients_from_txt(scheme):
+    coeffs_mat = []
+
+    for i, l in enumerate(scheme.splitlines(), start=1):
+        a = [float(f) for f in l.split()]
+
+        if len(a) == i:
+            coeffs_mat.append(a)
+        else:
+            raise ValueError('Invalid coefficient structure in scheme')
+
+    # The last row is the b vector
+    return coeffs_mat[:-1], coeffs_mat[-1]
 
 
 class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
@@ -337,3 +355,41 @@ class DualRK45PseudoStepper(DualRKVdH2RPseudoStepper):
     @property
     def _pseudo_stepper_order(self):
         return 4
+
+
+class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        scheme = resource_string('pyfr.integrators', 'schemes/' + self.path)
+
+        self.a, self.b = _get_coefficients_from_txt(scheme.decode())
+
+    def step(self, t):
+        add = self._add
+        rhs = self._rhs_with_dts
+
+        r = list(self._pseudo_stepper_regidx)
+
+        # Ensure r0 references the bank containing u(n+1,m)
+        if r[0] != self._idxcurr:
+            r[0], r[1] = r[1], r[0]
+
+        # First stage
+        rhs(t, r[0], r[1])
+
+        # Pre-multiply a matrix and b vector with dtau
+        a = [[self._dtau*aj for aj in ar] for ar in self.a]
+        b = [self._dtau*bi for bi in self.b]
+
+        # Other stages
+        for i in range(self._pseudo_stepper_nregs - 2):
+            add(0, r[i + 2], 1, r[0], *chain(*zip(a[i], r[1:])))
+            rhs(t, r[i + 2], r[i + 2])
+
+        # Final accumulation
+        br = chain(*zip(b[1:], r[2:]))
+        add(b[0], r[1], 1, r[0], *br)
+
+        # Return the bank indices of u(n+1,m+1) and u(n+1,m)
+        return r[1], r[0]

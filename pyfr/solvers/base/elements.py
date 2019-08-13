@@ -134,7 +134,7 @@ class BaseElements(object, metaclass=ABCMeta):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
     @abstractmethod
-    def set_backend(self, backend, nscal_upts, nonce):
+    def set_backend(self, backend, nscalupts, nonce):
         self._be = backend
 
         # Sizes
@@ -176,7 +176,7 @@ class BaseElements(object, metaclass=ABCMeta):
         # Allocate and bank the storage required by the time integrator
         self._scal_upts = [backend.matrix(self._scal_upts.shape,
                                           self._scal_upts, tags={'align'})
-                           for i in range(nscal_upts)]
+                           for i in range(nscalupts)]
         self.scal_upts_inb = inb = backend.matrix_bank(self._scal_upts)
         self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
 

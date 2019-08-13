@@ -71,7 +71,7 @@ class BaseSystem(object, metaclass=ABCMeta):
         # Look for and load each element type from the mesh
         elemap = OrderedDict()
         for f in mesh:
-            m = re.match('spt_(.+?)_p%d$' % rallocs.prank, f)
+            m = re.match('spt_(.+?)_p{0}$'.format(rallocs.prank), f)
             if m:
                 # Element type
                 t = m.group(1)
@@ -81,8 +81,7 @@ class BaseSystem(object, metaclass=ABCMeta):
         # Construct a proxylist to simplify collective operations
         eles = proxylist(elemap.values())
 
-        # Set the initial conditions either from a pyfrs file or from
-        # explicit expressions in the config file
+        # Set the initial conditions
         if initsoln:
             # Load the config and stats files from the solution
             solncfg = Inifile(initsoln['config'])
@@ -97,8 +96,8 @@ class BaseSystem(object, metaclass=ABCMeta):
                 raise RuntimeError('Invalid solution for system')
 
             # Process the solution
-            for k, ele in elemap.items():
-                soln = initsoln['soln_%s_p%d' % (k, rallocs.prank)]
+            for etype, ele in elemap.items():
+                soln = initsoln['soln_{0}_p{1}'.format(etype, rallocs.prank)]
                 ele.set_ics_from_soln(soln, solncfg)
         else:
             eles.set_ics_from_cfg()
@@ -125,7 +124,7 @@ class BaseSystem(object, metaclass=ABCMeta):
         mpi_inters = proxylist([])
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
-            interarr = mesh['con_p%dp%d' % (lhsprank, rhsprank)]
+            interarr = mesh['con_p{0}p{1}'.format(lhsprank, rhsprank)]
             interarr = interarr.astype('U4,i4,i1,i1').tolist()
 
             mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
@@ -140,7 +139,7 @@ class BaseSystem(object, metaclass=ABCMeta):
 
         bc_inters = proxylist([])
         for f in mesh:
-            m = re.match('bcon_(.+?)_p%d$' % rallocs.prank, f)
+            m = re.match('bcon_(.+?)_p{0}$'.format(rallocs.prank), f)
             if m:
                 # Get the region name
                 rgn = m.group(1)

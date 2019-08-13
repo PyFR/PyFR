@@ -14,9 +14,6 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         # Pseudo-step counter
         self.npseudosteps = 0
 
-        # Solution filtering frequency
-        self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
-
         # Stats on the most recent step
         self.pseudostepinfo = []
 

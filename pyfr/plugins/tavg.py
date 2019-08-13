@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import re
+
 import numpy as np
 
 from pyfr.inifile import Inifile
@@ -25,6 +27,9 @@ class TavgPlugin(BasePlugin):
                       for k in self.cfg.items(cfgsect)
                       if k.startswith('avg-')]
 
+        # Gradient pre-processing
+        self._init_gradients(intg)
+
         # Save a reference to the physical solution point locations
         self.plocs = intg.system.ele_ploc_upts
 
@@ -37,7 +42,7 @@ class TavgPlugin(BasePlugin):
         # Time averaging parameters
         self.dtout = self.cfg.getfloat(cfgsect, 'dt-out')
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
-        self.tout = intg.tcurr + self.dtout
+        self.tout_last = intg.tcurr
 
         # Register our output times with the integrator
         intg.call_plugin_dt(self.dtout)
@@ -47,19 +52,63 @@ class TavgPlugin(BasePlugin):
         self.prevex = self._eval_exprs(intg)
         self.accmex = [np.zeros_like(p) for p in self.prevex]
 
+    def _init_gradients(self, intg):
+        # Determine what gradients, if any, are required
+        self._gradpnames = gradpnames = set()
+        for k, ex in self.exprs:
+            gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
+
+        # If gradients are required then form the relevant operators
+        if gradpnames:
+            self._gradop, self._rcpjact = [], []
+
+            for eles in intg.system.ele_map.values():
+                self._gradop.append(eles.basis.m4)
+
+                # Get the smats at the solution points
+                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
+
+                # Get |J|^-1 at the solution points
+                rcpdjac = eles.rcpdjac_at_np('upts')
+
+                # Product to give J^-T at the solution points
+                self._rcpjact.append(smat*rcpdjac)
+
     def _eval_exprs(self, intg):
         exprs = []
 
+        # Get the primitive variable names
+        pnames = self.elementscls.privarmap[self.ndims]
+
         # Iterate over each element type in the simulation
-        for soln, ploc in zip(intg.soln, self.plocs):
-            # Get the primitive variable names and solutions
-            pnames = self.elementscls.privarmap[self.ndims]
+        for i, (soln, ploc) in enumerate(zip(intg.soln, self.plocs)):
+            # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
                                                  self.cfg)
 
             # Prepare the substitutions dictionary
-            ploc = dict(zip('xyz', ploc.swapaxes(0, 1)))
-            subs = dict(zip(pnames, psolns), t=intg.tcurr, **ploc)
+            subs = dict(zip(pnames, psolns))
+            subs.update(zip('xyz', ploc.swapaxes(0, 1)))
+
+            # Compute any required gradients
+            if self._gradpnames:
+                # Gradient operator and J^-T matrix
+                gradop, rcpjact = self._gradop[i], self._rcpjact[i]
+                nupts = gradop.shape[1]
+
+                for pname in self._gradpnames:
+                    psoln = subs[pname]
+
+                    # Compute the transformed gradient
+                    tgradpn = np.dot(gradop, psoln)
+                    tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
+
+                    # Untransform this to get the physical gradient
+                    gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
+                    gradpn = gradpn.reshape(self.ndims, nupts, -1)
+
+                    for dim, grad in zip('xyz', gradpn):
+                        subs['grad_{0}_{1}'.format(pname, dim)] = grad
 
             # Evaluate the expressions
             exprs.append([npeval(v, subs) for k, v in self.exprs])
@@ -68,7 +117,8 @@ class TavgPlugin(BasePlugin):
         return [np.dstack(exs).swapaxes(1, 2) for exs in exprs]
 
     def __call__(self, intg):
-        dowrite = abs(self.tout - intg.tcurr) < self.tol
+        tdiff = intg.tcurr - self.tout_last
+        dowrite = tdiff >= self.dtout - self.tol
         doaccum = intg.nacptsteps % self.nsteps == 0
 
         if dowrite or doaccum:
@@ -85,13 +135,13 @@ class TavgPlugin(BasePlugin):
 
             if dowrite:
                 # Normalise
-                accmex = [a / self.dtout for a in self.accmex]
+                accmex = [a / tdiff for a in self.accmex]
 
                 stats = Inifile()
                 stats.set('data', 'prefix', 'tavg')
                 stats.set('data', 'fields',
                           ','.join(k for k, v in self.exprs))
-                stats.set('tavg', 'tstart', intg.tcurr - self.dtout)
+                stats.set('tavg', 'tstart', self.tout_last)
                 stats.set('tavg', 'tend', intg.tcurr)
                 intg.collect_stats(stats)
 
@@ -101,5 +151,5 @@ class TavgPlugin(BasePlugin):
 
                 self._writer.write(accmex, metadata, intg.tcurr)
 
-                self.tout = intg.tcurr + self.dtout
+                self.tout_last = intg.tcurr
                 self.accmex = [np.zeros_like(a) for a in accmex]

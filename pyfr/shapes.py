@@ -271,7 +271,7 @@ class BaseShape(object):
     @lazyprop
     def norm_fpts(self):
         fnorms = self.facenorms
-        return np.vstack([fn]*n for fn, n in zip(fnorms, self.nfacefpts))
+        return np.vstack([[fn]*n for fn, n in zip(fnorms, self.nfacefpts)])
 
     @lazyprop
     def spts(self):
@@ -322,7 +322,7 @@ class TensorProdShape(object):
     @classmethod
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
-        return list(p[::-1] for p in it.product(pts1d, repeat=cls.ndims))
+        return [p[::-1] for p in it.product(pts1d, repeat=cls.ndims)]
 
 
 class QuadShape(TensorProdShape, BaseShape):

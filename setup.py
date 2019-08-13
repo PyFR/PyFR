@@ -7,8 +7,8 @@ import sys
 
 
 # Python version
-if sys.version_info[:2] < (3, 3):
-    print('PyFR requires Python 3.3 or newer')
+if sys.version_info[:2] < (3, 5):
+    print('PyFR requires Python 3.5 or newer')
     sys.exit(-1)
 
 # PyFR version
@@ -35,6 +35,7 @@ modules = [
     'pyfr.integrators.dual.phys',
     'pyfr.integrators.dual.pseudo',
     'pyfr.integrators.dual.pseudo.kernels',
+    'pyfr.integrators.schemes',
     'pyfr.integrators.std',
     'pyfr.plugins',
     'pyfr.quadrules',
@@ -74,6 +75,7 @@ package_data = {
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
+    'pyfr.integrators.schemes': ['*.txt'],
     'pyfr.quadrules': [
         'hex/*.txt',
         'line/*.txt',
@@ -129,7 +131,9 @@ console_scripts = [
 classifiers = [
     'License :: OSI Approved :: BSD License',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3.3',
+    'Programming Language :: Python :: 3.5',
+    'Programming Language :: Python :: 3.6',
+    'Programming Language :: Python :: 3.7',
     'Topic :: Scientific/Engineering'
 ]
 

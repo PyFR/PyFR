@@ -46,7 +46,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
         # Physical stepper coefficients
         self._stepper_coeffs = stepper_coeffs
 
-        # Construct the relevant mesh partition
+        # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
 

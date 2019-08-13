@@ -23,6 +23,7 @@ class BasePartitioner(object):
 
     def __init__(self, partwts, elewts=None, order=None, opts={}):
         self.partwts = partwts
+        self.nparts = len(partwts)
 
         if elewts is not None:
             self.elewts = elewts
@@ -244,7 +245,7 @@ class BasePartitioner(object):
         mesh = self._combine_mesh_parts(mesh)
 
         # Perform the partitioning
-        if len(self.partwts) > 1:
+        if self.nparts > 1:
             # Obtain the dual graph for this mesh
             graph, vetimap = self._construct_graph(mesh)
 
@@ -273,7 +274,7 @@ class BasePartitioner(object):
             soln = self._combine_soln_parts(soln)
 
             # Partition
-            if len(self.partwts) > 1:
+            if self.nparts > 1:
                 newsoln = self._partition_soln(soln, vparts, vetimap)
             else:
                 newsoln = soln

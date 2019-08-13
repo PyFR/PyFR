@@ -14,7 +14,7 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         # Determine the amount of temp storage required by this method
         self.nregs = self._stepper_nregs
 
-        # Construct the relevant mesh partition
+        # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
 
@@ -23,9 +23,6 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
-
-        # Add kernel cache
-        self._axnpby_kerns = {}
 
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist(self._get_plugins())

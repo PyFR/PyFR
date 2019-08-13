@@ -479,7 +479,7 @@ class TetShapeSubDiv(BaseShapeSubDiv):
 
             jump += (n + 1)*(n + 2) // 2
 
-        return np.hstack(np.ravel(c) for c in conlst)
+        return np.hstack([np.ravel(c) for c in conlst])
 
 
 class PriShapeSubDiv(BaseShapeSubDiv):
@@ -498,7 +498,7 @@ class PriShapeSubDiv(BaseShapeSubDiv):
         loff = (n + 1)*(n + 2) // 2
         lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in range(n)]
 
-        return np.hstack(np.hstack(l).flat for l in lcon)
+        return np.hstack([np.hstack(l).flat for l in lcon])
 
 
 class PyrShapeSubDiv(BaseShapeSubDiv):
@@ -546,8 +546,8 @@ class PyrShapeSubDiv(BaseShapeSubDiv):
 
             if n > 1:
                 upper_quad = qcon[n - 2] + u
-                lower_pts = np.hstack(range(k*(n + 1)+1, (k + 1)*n + k)
-                                      for k in range(1, n)) + l
+                lower_pts = np.hstack([range(k*(n + 1)+1, (k + 1)*n + k)
+                                       for k in range(1, n)]) + l
 
                 # Second set of pyramids
                 lcon.append([upper_quad[:, ::-1], lower_pts])
@@ -562,4 +562,4 @@ class PyrShapeSubDiv(BaseShapeSubDiv):
                 lcon.append([lower_col, upper_row])
                 lcon.append([lower_row[:, ::-1], upper_col])
 
-        return np.hstack(np.column_stack(l).flat for l in lcon)
+        return np.hstack([np.column_stack(l).flat for l in lcon])

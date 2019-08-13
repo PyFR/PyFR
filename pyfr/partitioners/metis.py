@@ -32,9 +32,10 @@ class METISWrappers(object):
     METIS_OPTION_RTYPE = 4
     METIS_OPTION_NITER = 6
     METIS_OPTION_NCUTS = 7
+    METIS_OPTION_SEED = 8
+    METIS_OPTION_MINCONN = 10
     METIS_OPTION_NSEPS = 15
     METIS_OPTION_UFACTOR = 16
-    METIS_OPTION_MINCONN = 9
 
     def __init__(self):
         lib = load_library('metis')
@@ -118,7 +119,7 @@ class METISPartitioner(BasePartitioner):
     name = 'metis'
 
     # Integer options
-    int_opts = {'niter', 'ncuts', 'nseps', 'ufactor'}
+    int_opts = {'niter', 'ncuts', 'seed', 'nseps', 'ufactor'}
 
     # Enumeration options
     enum_opts = {

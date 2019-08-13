@@ -50,7 +50,7 @@ AMD and NVIDIA. The backend requires:
 1. OpenCL
 2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
    >= 2015.2.4
-3. `clBLAS <https://github.com/clMathLibraries/clBLAS>`_
+3. `CLBlast <https://github.com/CNugteren/CLBlast>`_
 
 OpenMP Backend
 ^^^^^^^^^^^^^^
@@ -83,15 +83,95 @@ To import CGNS meshes it is necessary to have the following installed:
 Installation
 ------------
 
-Before running PyFR |release| it is first necessary to either install
-the software using the provided ``setup.py`` installer or add the root
-PyFR directory to ``PYTHONPATH`` using::
+Overview
+^^^^^^^^
+
+PyFR |release| can be installed using `pip <https://pypi.python.org/pypi/pip>`_
+and `virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
+quick-start guides below.
+
+Alternatively, PyFR |release| can be installed from
+`source <http://www.pyfr.org/download.php>`_. To install the software from
+source, use the provided ``setup.py`` installer or add the root PyFR directory
+to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
-To manage installation of Python dependencies we strongly recommend
-using `pip <https://pypi.python.org/pypi/pip>`_ and
-`virtualenv <https://pypi.python.org/pypi/virtualenv>`_.
+When installing from source, we strongly recommend using
+`pip <https://pypi.python.org/pypi/pip>`_ and
+`virtualenv <https://pypi.python.org/pypi/virtualenv>`_ to manage the Python
+dependencies.
+
+Quick-start macOS
+^^^^^^^^^^^^^^^^^
+
+We recommend using the package manager `homebrew <https://brew.sh/>`_.
+Open the terminal and install the dependencies with the following commands::
+
+    brew install python3 open-mpi metis
+    pip3 install virtualenv
+
+For visualisation of results, either install Paraview from the command line::
+
+    brew cask install paraview
+
+or dowload the app from the Paraview `website <https://www.paraview.org/>`_.
+Then create a virtual environment and activate it::
+
+    virtualenv --python=python3 ENV3
+    source ENV3/bin/activate
+
+Finally install PyFR with `pip <https://pypi.python.org/pypi/pip>`_ in the
+virtual environment::
+
+    pip install pyfr
+
+This concludes the installation. In order to run PyFR with the OpenMP backend
+(see `Running PyFR`_), use the following settings in the configuration file
+(``.ini``)::
+
+    [backend-openmp]
+    cc = gcc-8
+    cblas = /usr/lib/libblas.dylib
+    cblas-type = parallel
+
+Note the version of the compiler which must support the ``openmp`` flag.
+This has been tested on macOS 10.14.
+
+Quick-start Ubuntu
+^^^^^^^^^^^^^^^^^^
+
+Open the terminal and install the dependencies with the following commands::
+
+    sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
+    sudo apt install metis libmetis-dev libblas3
+    pip3 install virtualenv
+
+For visualisation of results, either install Paraview from the command line::
+
+    sudo apt install paraview
+
+or dowload the app from the Paraview `website <https://www.paraview.org/>`_.
+Then create a virtual environment and activate it::
+
+    python3 -m virtualenv ENV3
+    source ENV3/bin/activate
+
+Finally install PyFR with `pip <https://pypi.python.org/pypi/pip>`_ in the
+virtual environment::
+
+    pip install pyfr
+
+This concludes the installation. In order to run PyFR with the OpenMP backend
+(see `Running PyFR`_), use the following settings in the configuration file
+(``.ini``)::
+
+    [backend-openmp]
+    cc = gcc
+    cblas = /usr/lib/x86_64-linux-gnu/blas/libblas.so.3
+    cblas-type = parallel
+
+This has been tested on Ubuntu 18.04.
 
 Running PyFR
 ============
@@ -459,7 +539,7 @@ Parameterises the time-integration scheme used by the solver with
 
         - ``pseudo-scheme`` --- pseudo time-integration scheme
 
-           ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3``
+           ``euler`` | ``rk34`` | ``rk4`` | ``rk45`` | ``tvd-rk3`` | ``vermeire``
 
         - ``tstart`` --- initial time
 
