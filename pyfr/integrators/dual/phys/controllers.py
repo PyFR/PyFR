@@ -17,7 +17,7 @@ class BaseDualController(BaseDualIntegrator):
 
         # Filter
         if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
-            self.pseudoitegrator.system.filt(idxcurr)
+            self.pseudointegrator.system.filt(idxcurr)
 
         # Invalidate the solution cache
         self._curr_soln = None
