@@ -35,7 +35,6 @@ modules = [
     'pyfr.integrators.dual.phys',
     'pyfr.integrators.dual.pseudo',
     'pyfr.integrators.dual.pseudo.kernels',
-    'pyfr.integrators.schemes',
     'pyfr.integrators.std',
     'pyfr.plugins',
     'pyfr.quadrules',
