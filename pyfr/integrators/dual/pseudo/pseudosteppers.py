@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from itertools import chain
 from pkg_resources import resource_string
 
 import numpy as np
@@ -41,12 +40,15 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
-        # Coefficient for the current solution state
-        scoeff = self.stepper_coeffs[0]/self._dt
+        if self.stage_nregs > 1:
+            self._add(0, self._stage_regidx[self.currstg], 1, fout)
+
+        # Registers and coefficients
+        vals = self.stepper_coeffs[:2] + [1]
+        regs = [fout, self._idxcurr, self._source_regidx]
 
         # Physical stepper source addition -∇·f - dQ/dt
-        self._add(1, fout, scoeff, self._idxcurr, 1, self._source_regidx,
-                  subdims=self._subdims)
+        self._addv(vals, regs, subdims=self._subdims)
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):
@@ -329,7 +331,7 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
     def step(self, t):
         self.npseudosteps += 1
 
-        add = self._add
+        addv = self._addv
         rhs = self._rhs_with_dts
 
         r = list(self._pseudo_stepper_regidx)
@@ -347,12 +349,11 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
 
         # Other stages
         for i in range(self.pseudo_stepper_nregs - 2):
-            add(0, r[i + 2], 1, r[0], *chain(*zip(a[i], r[1:])))
+            addv([0, 1] + a[i], [r[i + 2], r[0]] + r[1:])
             rhs(t, r[i + 2], r[i + 2])
 
         # Final accumulation
-        br = chain(*zip(b[1:], r[2:]))
-        add(b[0], r[1], 1, r[0], *br)
+        addv([b[0], 1] + b[1:], [r[1], r[0]] + r[2:])
 
         # Return the bank indices of u(n+1,m+1) and u(n+1,m)
         return r[1], r[0]

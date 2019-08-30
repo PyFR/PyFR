@@ -70,9 +70,6 @@ class DualNonePseudoController(BaseDualPseudoController):
             if self.convmon(i, self.minniters, self._dtau):
                 break
 
-        # Update
-        self.finalise_pseudo_advance(self._idxcurr)
-
 
 class DualPIPseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'local-pi'
@@ -151,5 +148,3 @@ class DualPIPseudoController(BaseDualPseudoController):
             if self.convmon(i, self.minniters):
                 break
 
-        # Update
-        self.finalise_pseudo_advance(self._idxcurr)
