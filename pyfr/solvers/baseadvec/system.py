@@ -11,6 +11,8 @@ class BaseAdvectionSystem(BaseSystem):
         q1, q2 = self._queues
         kernels = self._kernels
 
+        self._bc_inters.prepare(t)
+
         self.eles_scal_upts_inb.active = uinbank
         self.eles_scal_upts_outb.active = foutbank
 
