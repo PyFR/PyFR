@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base.kernels import ComputeMetaKernel
+from pyfr.backends.base import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
 
 
@@ -22,11 +22,14 @@ class BaseAdvectionElements(BaseElements):
 
         return bufs
 
-    def set_backend(self, backend, nscalupts, nonce):
-        super().set_backend(backend, nscalupts, nonce)
+    def set_backend(self, *args, **kwargs):
+        super().set_backend(*args, **kwargs)
+
+        slicem = self._slice_mat
+        kernels = self.kernels
 
         # Register pointwise kernels with the backend
-        backend.pointwise.register(
+        self._be.pointwise.register(
             'pyfr.solvers.baseadvec.kernels.negdivconf'
         )
 
@@ -46,42 +49,43 @@ class BaseAdvectionElements(BaseElements):
         }
 
         # Interpolation from elemental points
-        if fluxaa or (divfluxaa and solnsrc):
-            self.kernels['disu'] = lambda: backend.kernel(
-                'mul', self.opmat('M8'), self.scal_upts_inb,
-                out=self._scal_fqpts
-            )
-        else:
-            self.kernels['disu'] = lambda: backend.kernel(
-                'mul', self.opmat('M0'), self.scal_upts_inb,
-                out=self._scal_fpts
-            )
+        for s, neles in self._ext_int_sides:
+            if fluxaa or (divfluxaa and solnsrc):
+                kernels['disu_' + s] = lambda s=s: self._be.kernel(
+                    'mul', self.opmat('M8'), slicem(self.scal_upts_inb, s),
+                    out=slicem(self._scal_fqpts, s)
+                )
+            else:
+                kernels['disu_' + s] = lambda s=s: self._be.kernel(
+                    'mul', self.opmat('M0'), slicem(self.scal_upts_inb, s),
+                    out=slicem(self._scal_fpts, s)
+                )
 
         # Interpolations and projections to/from quadrature points
         if divfluxaa:
-            self.kernels['tdivf_qpts'] = lambda: backend.kernel(
+            kernels['tdivf_qpts'] = lambda: self._be.kernel(
                 'mul', self.opmat('M7'), self.scal_upts_outb,
                 out=self._scal_qpts
             )
-            self.kernels['divf_upts'] = lambda: backend.kernel(
+            kernels['divf_upts'] = lambda: self._be.kernel(
                 'mul', self.opmat('M9'), self._scal_qpts,
                 out=self.scal_upts_outb
             )
 
         # First flux correction kernel
         if fluxaa:
-            self.kernels['tdivtpcorf'] = lambda: backend.kernel(
+            kernels['tdivtpcorf'] = lambda: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M10'), self._vect_qpts,
                 out=self.scal_upts_outb
             )
         else:
-            self.kernels['tdivtpcorf'] = lambda: backend.kernel(
+            kernels['tdivtpcorf'] = lambda: self._be.kernel(
                 'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
                 out=self.scal_upts_outb
             )
 
         # Second flux correction kernel
-        self.kernels['tdivtconf'] = lambda: backend.kernel(
+        kernels['tdivtconf'] = lambda: self._be.kernel(
             'mul', self.opmat('M3'), self._scal_fpts, out=self.scal_upts_outb,
             beta=1.0
         )
@@ -92,11 +96,11 @@ class BaseAdvectionElements(BaseElements):
             solnqpts = self._scal_qpts_cpy if solnsrc else None
 
             if solnsrc:
-                self.kernels['copy_soln'] = lambda: backend.kernel(
+                kernels['copy_soln'] = lambda: self._be.kernel(
                     'copy', self._scal_qpts_cpy, self._scal_qpts
                 )
 
-            self.kernels['negdivconf'] = lambda: backend.kernel(
+            kernels['negdivconf'] = lambda: self._be.kernel(
                 'negdivconf', tplargs=srctplargs,
                 dims=[self.nqpts, self.neles], tdivtconf=self._scal_qpts,
                 rcpdjac=self.rcpdjac_at('qpts'), ploc=plocqpts, u=solnqpts
@@ -106,11 +110,11 @@ class BaseAdvectionElements(BaseElements):
             solnupts = self._scal_upts_cpy if solnsrc else None
 
             if solnsrc:
-                self.kernels['copy_soln'] = lambda: backend.kernel(
+                kernels['copy_soln'] = lambda: self._be.kernel(
                     'copy', self._scal_upts_cpy, self.scal_upts_inb
                 )
 
-            self.kernels['negdivconf'] = lambda: backend.kernel(
+            kernels['negdivconf'] = lambda: self._be.kernel(
                 'negdivconf', tplargs=srctplargs,
                 dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
                 rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts
@@ -119,14 +123,14 @@ class BaseAdvectionElements(BaseElements):
         # In-place solution filter
         if self.cfg.getint('soln-filter', 'nsteps', '0'):
             def filter_soln():
-                mul = backend.kernel(
+                mul = self._be.kernel(
                     'mul', self.opmat('M11'), self.scal_upts_inb,
                     out=self._scal_upts_temp
                 )
-                copy = backend.kernel(
+                copy = self._be.kernel(
                     'copy', self.scal_upts_inb, self._scal_upts_temp
                 )
 
                 return ComputeMetaKernel([mul, copy])
 
-            self.kernels['filter_soln'] = filter_soln
+            kernels['filter_soln'] = filter_soln

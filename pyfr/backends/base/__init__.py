@@ -8,5 +8,5 @@ from pyfr.backends.base.kernels import (BaseKernelProvider,
                                         NotSuitableError, NullComputeKernel,
                                         NullMPIKernel)
 from pyfr.backends.base.types import (ConstMatrix, Matrix, MatrixBank,
-                                      MatrixBase, MatrixRSlice, Queue, View,
+                                      MatrixBase, MatrixSlice, Queue, View,
                                       XchgMatrix, XchgView)

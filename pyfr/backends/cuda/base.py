@@ -59,7 +59,7 @@ class CUDABackend(BaseBackend):
         self.const_matrix_cls = types.CUDAConstMatrix
         self.matrix_cls = types.CUDAMatrix
         self.matrix_bank_cls = types.CUDAMatrixBank
-        self.matrix_rslice_cls = types.CUDAMatrixRSlice
+        self.matrix_slice_cls = types.CUDAMatrixSlice
         self.queue_cls = types.CUDAQueue
         self.view_cls = types.CUDAView
         self.xchg_matrix_cls = types.CUDAXchgMatrix
