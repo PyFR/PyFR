@@ -87,7 +87,7 @@ class BaseElements(object, metaclass=ABCMeta):
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
 
         # Apply and reshape
-        self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
+        self._scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
         self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
 
     @lazyprop
@@ -96,7 +96,7 @@ class BaseElements(object, metaclass=ABCMeta):
         plocop = self.basis.sbasis.nodal_basis_at(self.basis.fpts)
 
         # Apply the operator to the mesh elements and reshape
-        plocfpts = np.dot(plocop, self.eles.reshape(self.nspts, -1))
+        plocfpts = plocop @ self.eles.reshape(self.nspts, -1)
         plocfpts = plocfpts.reshape(self.nfpts, self.neles, self.ndims)
 
         return plocfpts
@@ -199,7 +199,7 @@ class BaseElements(object, metaclass=ABCMeta):
         m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
 
         # Interpolate the smats
-        smats = np.array([np.dot(m0, smat) for smat in smats_mpts])
+        smats = np.array([m0 @ smat for smat in smats_mpts])
         return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
     @memoize
@@ -214,7 +214,7 @@ class BaseElements(object, metaclass=ABCMeta):
         m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
 
         # Interpolate the djacs
-        djac = np.dot(m0, djacs_mpts)
+        djac = m0 @ djacs_mpts
 
         if np.any(djac < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
@@ -229,7 +229,7 @@ class BaseElements(object, metaclass=ABCMeta):
     def ploc_at_np(self, name):
         op = self.basis.sbasis.nodal_basis_at(getattr(self.basis, name))
 
-        ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
+        ploc = op @ self.eles.reshape(self.nspts, -1)
         ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
 
         return ploc
@@ -285,7 +285,7 @@ class BaseElements(object, metaclass=ABCMeta):
         jacop = jacop.reshape(-1, nmpts)
 
         # Cast as a matrix multiply and apply to eles
-        jac = np.dot(jacop, x.reshape(nmpts, -1))
+        jac = jacop @ x.reshape(nmpts, -1)
 
         # Reshape (nmpts*ndims, neles*ndims) => (nmpts, ndims, neles, ndims)
         jac = jac.reshape(nmpts, ndims, ndims, neles)
@@ -309,7 +309,7 @@ class BaseElements(object, metaclass=ABCMeta):
                 tt = np.cross(x, dx, axisa=1, axisb=0, axisc=1)
 
                 # Jacobian of x cross x_(chi) at the pseudo grid points
-                dt = np.dot(jacop, tt.reshape(nmpts, -1))
+                dt = jacop @ tt.reshape(nmpts, -1)
                 dt = dt.reshape(nmpts, ndims, ndims, -1).swapaxes(0, 1)
 
                 dtt.append(dt)
