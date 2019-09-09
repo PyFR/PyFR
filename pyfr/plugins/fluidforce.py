@@ -132,7 +132,7 @@ class FluidForcePlugin(BasePlugin):
             uupts = solns[etype][..., self._eidxs[etype, fidx]]
 
             # Interpolate to the face
-            ufpts = np.dot(m0, uupts.reshape(nupts, -1))
+            ufpts = m0 @ uupts.reshape(nupts, -1)
             ufpts = ufpts.reshape(nfpts, nvars, -1)
             ufpts = ufpts.swapaxes(0, 1)
 
@@ -153,7 +153,7 @@ class FluidForcePlugin(BasePlugin):
                 rcpjact = self._rcpjact[etype, fidx]
 
                 # Transformed gradient at solution points
-                tduupts = np.dot(m4, uupts.reshape(nupts, -1))
+                tduupts = m4 @ uupts.reshape(nupts, -1)
                 tduupts = tduupts.reshape(ndims, nupts, nvars, -1)
 
                 # Physical gradient at solution points
@@ -161,7 +161,7 @@ class FluidForcePlugin(BasePlugin):
                 duupts = duupts.reshape(ndims, nupts, -1)
 
                 # Interpolate gradient to flux points
-                dufpts = np.array([np.dot(m0, du) for du in duupts])
+                dufpts = np.array([m0 @ du for du in duupts])
                 dufpts = dufpts.reshape(ndims, nfpts, nvars, -1)
                 dufpts = dufpts.swapaxes(1, 2)
 

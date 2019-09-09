@@ -19,7 +19,7 @@ def _proj_pts(projector, pts):
 
 @clean
 def _proj_l2(qrule, basis):
-    return np.dot(basis.vdm.T, qrule.wts*basis.ortho_basis_at(qrule.pts))
+    return basis.vdm.T @ (qrule.wts*basis.ortho_basis_at(qrule.pts))
 
 
 class BaseShape(object):
@@ -81,13 +81,13 @@ class BaseShape(object):
 
     @clean
     def opmat(self, expr):
-        if not re.match(r'[M0-9\-+*() ]+$', expr):
+        expr = expr.lower().replace('*', '@')
+
+        if not re.match(r'[m0-9\-+@() ]+$', expr):
             raise ValueError('Invalid operator matrix expression')
 
-        mats = {m: np.asmatrix(getattr(self, m.lower()))
-                for m in re.findall(r'M\d+', expr)}
-
-        return np.asarray(eval(expr, {'__builtins__': None}, mats))
+        mats = {m: getattr(self, m) for m in re.findall(r'm\d+', expr)}
+        return eval(expr, {'__builtins__': None}, mats)
 
     @lazyprop
     def m0(self):
@@ -112,7 +112,7 @@ class BaseShape(object):
                            self.facebases[kind])
                   for kind, proj, norm in self.faces]
 
-            m = np.dot(m, block_diag(fp))
+            m @= block_diag(fp)
 
         return m
 
@@ -262,7 +262,7 @@ class BaseShape(object):
 
     @clean
     def gbasis_at(self, pts):
-        return np.dot(self.gbasis_coeffs, self.ubasis.ortho_basis_at(pts)).T
+        return (self.gbasis_coeffs @ self.ubasis.ortho_basis_at(pts)).T
 
     @property
     def facenorms(self):

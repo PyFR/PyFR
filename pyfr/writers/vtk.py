@@ -102,7 +102,7 @@ class VTKWriter(BaseWriter):
         gradop = eles.basis.m4.astype(self.dtype)
 
         # Evaluate the transformed gradient of the solution
-        gradsoln = np.dot(gradop, soln.swapaxes(0, 1).reshape(nupts, -1))
+        gradsoln = gradop @ soln.swapaxes(0, 1).reshape(nupts, -1)
         gradsoln = gradsoln.reshape(self.ndims, nupts, nvars, -1)
 
         # Untransform
@@ -312,14 +312,14 @@ class VTKWriter(BaseWriter):
         soln_vtu_op = self._get_soln_op(name, nspts, svpts)
 
         # Calculate node locations of VTU elements
-        vpts = np.dot(mesh_vtu_op, mesh.reshape(nspts, -1))
+        vpts = mesh_vtu_op @ mesh.reshape(nspts, -1)
         vpts = vpts.reshape(nsvpts, -1, self.ndims)
 
         # Pre-process the solution
         soln = self._pre_proc_fields(name, mesh, soln).swapaxes(0, 1)
 
         # Interpolate the solution to the vis points
-        vsoln = np.dot(soln_vtu_op, soln.reshape(len(soln), -1))
+        vsoln = soln_vtu_op @ soln.reshape(len(soln), -1)
         vsoln = vsoln.reshape(nsvpts, -1, neles).swapaxes(0, 1)
 
         # Append dummy z dimension for points in 2D

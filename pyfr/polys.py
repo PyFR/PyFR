@@ -87,7 +87,7 @@ class BasePolyBasis(object):
             degmap = {dd: i for i, dd in enumerate(self.degrees)}
             todegs = [degmap[dd] for dd in tobasis.degrees]
 
-            return np.dot(tobasis.vdm.T, self.invvdm.T[todegs])
+            return tobasis.vdm.T @ self.invvdm.T[todegs]
         else:
             return np.eye(len(self.pts))
 
