@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod, abstractproperty
 import math
 import re
 
@@ -10,7 +9,7 @@ from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import lazyprop, memoize
 
 
-class BaseElements(object, metaclass=ABCMeta):
+class BaseElements(object):
     privarmap = None
     convarmap = None
 
@@ -50,8 +49,10 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
 
-    @abstractmethod
-    def pri_to_con(ics, cfg):
+    def pri_to_con(pris, cfg):
+        pass
+
+    def con_to_pri(cons, cfg):
         pass
 
     def set_ics_from_cfg(self):
@@ -108,7 +109,6 @@ class BaseElements(object, metaclass=ABCMeta):
         return [[np.array(fuzzysort(pts.tolist(), ffpts)) for pts in plocfpts]
                 for ffpts in self.basis.facefpts]
 
-    @abstractproperty
     def _scratch_bufs(self):
         pass
 
@@ -133,7 +133,6 @@ class BaseElements(object, metaclass=ABCMeta):
     def _soln_in_src_exprs(self):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
-    @abstractmethod
     def set_backend(self, backend, nscalupts, nonce):
         self._be = backend
 

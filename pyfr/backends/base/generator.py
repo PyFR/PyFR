@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 import re
 
 import numpy as np
@@ -50,7 +49,7 @@ class Arg(object):
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
 
-class BaseKernelGenerator(object, metaclass=ABCMeta):
+class BaseKernelGenerator(object):
     def __init__(self, name, ndim, args, body, fpdtype):
         self.name = name
         self.ndim = ndim
@@ -120,7 +119,6 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         else:
             return self.ndim == 2 or (arg.ncdim > 0 and not arg.ismpi)
 
-    @abstractmethod
     def render(self):
         pass
 

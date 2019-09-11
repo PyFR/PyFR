@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 import random
 import re
@@ -15,7 +14,7 @@ def get_rank_allocation(mesh, cfg):
     return subclass_where(BaseRankAllocator, name=name)(mesh, cfg)
 
 
-class BaseRankAllocator(object, metaclass=ABCMeta):
+class BaseRankAllocator(object):
     name = None
 
     def __init__(self, mesh, cfg):
@@ -67,11 +66,9 @@ class BaseRankAllocator(object, metaclass=ABCMeta):
 
         return [conn[i] for i in range(len(conn) or 1)]
 
-    @abstractmethod
     def _get_rank_info(self):
         pass
 
-    @abstractmethod
     def _get_mprankmap(self, prankconn, rinfo):
         pass
 
