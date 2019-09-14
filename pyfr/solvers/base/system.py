@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
 import itertools as it
 import re
@@ -10,7 +9,7 @@ from pyfr.shapes import BaseShape
 from pyfr.util import proxylist, subclasses
 
 
-class BaseSystem(object, metaclass=ABCMeta):
+class BaseSystem(object):
     elementscls = None
     intinterscls = None
     mpiinterscls = None
@@ -176,7 +175,6 @@ class BaseSystem(object, metaclass=ABCMeta):
                 if not kn.startswith('_'):
                     kernels[pn, kn].append(kgetter())
 
-    @abstractmethod
     def rhs(self, t, uinbank, foutbank):
         pass
 

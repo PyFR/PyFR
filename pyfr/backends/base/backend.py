@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from functools import wraps
 from itertools import count
@@ -25,10 +24,9 @@ def recordmat(fn):
     return newfn
 
 
-class BaseBackend(object, metaclass=ABCMeta):
+class BaseBackend(object):
     name = None
 
-    @abstractmethod
     def __init__(self, cfg):
         self.cfg = cfg
 
@@ -119,7 +117,6 @@ class BaseBackend(object, metaclass=ABCMeta):
         self._pend_aliases.clear()
         self._pend_extents.clear()
 
-    @abstractmethod
     def _malloc_impl(self, nbytes):
         pass
 

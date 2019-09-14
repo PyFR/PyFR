@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from collections import Sequence, deque
 
 import numpy as np
 
 
-class MatrixBase(object, metaclass=ABCMeta):
+class MatrixBase(object):
     _base_tags = set()
 
     def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
@@ -75,7 +74,6 @@ class MatrixBase(object, metaclass=ABCMeta):
         else:
             return self._get()
 
-    @abstractmethod
     def _get(self):
         pass
 
@@ -120,7 +118,6 @@ class Matrix(MatrixBase):
         else:
             self._set(ary)
 
-    @abstractmethod
     def _set(self, ary):
         pass
 
@@ -278,7 +275,7 @@ class XchgView(object):
         self.xchgmat = backend.xchg_matrix((nvrow, nvcol*n), tags=tags)
 
 
-class Queue(object, metaclass=ABCMeta):
+class Queue(object):
     def __init__(self, backend):
         self.backend = backend
 
@@ -325,10 +322,8 @@ class Queue(object, metaclass=ABCMeta):
         while self._items and not self._at_sequence_point(self._items[0][0]):
             self._exec_item(*self._items.popleft())
 
-    @abstractmethod
     def _at_sequence_point(self, item):
         pass
 
-    @abstractmethod
     def _wait(self):
         pass

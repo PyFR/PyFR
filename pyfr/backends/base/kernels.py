@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 import itertools as it
 import types
 
@@ -56,7 +55,7 @@ class BaseKernelProvider(object):
         self.backend = backend
 
 
-class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
+class BasePointwiseKernelProvider(BaseKernelProvider):
     kernel_generator_cls = None
 
     @memoize
@@ -90,7 +89,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         return src, ndim, argn, argt
 
-    @abstractmethod
     def _build_kernel(self, name, src, args):
         pass
 
@@ -137,7 +135,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         return arglst
 
-    @abstractmethod
     def _instantiate_kernel(self, dims, fun, arglst):
         pass
 

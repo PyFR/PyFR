@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from itertools import chain
 import uuid
@@ -10,12 +9,10 @@ import numpy as np
 from pyfr.nputil import fuzzysort
 
 
-class BaseReader(object, metaclass=ABCMeta):
-    @abstractmethod
+class BaseReader(object):
     def __init__(self):
         pass
 
-    @abstractmethod
     def _to_raw_pyfrm(self):
         pass
 
