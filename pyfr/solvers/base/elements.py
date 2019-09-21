@@ -325,19 +325,19 @@ class BaseElements(object):
 
     def get_mag_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
-        return self._mag_pnorm_fpts[fpts_idx,eidx]
+        return self._mag_pnorm_fpts[fpts_idx, eidx]
 
     def get_mag_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._mag_pnorm_fpts[fpts_idx,eidx]
+        return self._mag_pnorm_fpts[fpts_idx, eidx]
 
     def get_norm_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._norm_pnorm_fpts[fpts_idx,eidx]
+        return self._norm_pnorm_fpts[fpts_idx, eidx]
 
     def get_norm_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
-        return self._norm_pnorm_fpts[fpts_idx,eidx]
+        return self._norm_pnorm_fpts[fpts_idx, eidx]
 
     def get_scal_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
@@ -358,4 +358,4 @@ class BaseElements(object):
 
     def get_ploc_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self.plocfpts[fpts_idx,eidx]
+        return self.plocfpts[fpts_idx, eidx]
