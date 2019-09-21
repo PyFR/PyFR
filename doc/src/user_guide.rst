@@ -18,7 +18,7 @@ Dependencies
 Overview
 ^^^^^^^^
 
-PyFR |release| has a hard dependency on Python 3.3+ and the following
+PyFR |release| has a hard dependency on Python 3.5+ and the following
 Python packages:
 
 1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
@@ -77,8 +77,7 @@ Importing CGNS Meshes
 
 To import CGNS meshes it is necessary to have the following installed:
 
-1. `CGNS <http://cgns.github.io/>`_ >= 3.3 (develop branch post commit
-   e0faea6)
+1. `CGNS <http://cgns.github.io/>`_ >= 3.4
 
 Installation
 ------------
