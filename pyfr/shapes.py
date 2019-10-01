@@ -111,7 +111,7 @@ class BaseShape(object):
             fp = [_proj_l2(self._iqrules[kind], self.facebases[kind])
                   for kind, proj, norm in self.faces]
 
-            m @= block_diag(fp)
+            m = m @ block_diag(fp)
 
         return m
 
