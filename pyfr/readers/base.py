@@ -99,7 +99,7 @@ class NodalMeshAssembler(object):
         # First-order nodes associated with this face
         fnmap = self._petype_fnmap[petype][pftype]
 
-        # Connectivity; (petype, eidx, fidx, flags)
+        # Connectivity: (petype, eidx, fidx, flags)
         con = [(petype, i, j, 0) for i in range(len(foeles)) for j in fnums]
 
         # Nodes
@@ -109,6 +109,7 @@ class NodalMeshAssembler(object):
 
     def _extract_faces(self, foeles):
         fofaces = defaultdict(list)
+
         for petype, eles in foeles.items():
             for pftype in self._petype_fnums[petype]:
                 fofinf = self._foface_info(petype, pftype, eles)

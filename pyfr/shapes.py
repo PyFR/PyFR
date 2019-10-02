@@ -100,7 +100,7 @@ class BaseShape(object):
 
     @lazyprop
     def m2(self):
-        m = self.norm_fpts[...,None]*self.m0[:,None,:]
+        m = self.norm_fpts[..., None]*self.m0[:, None, :]
         return m.reshape(self.nfpts, -1)
 
     @lazyprop
@@ -108,11 +108,10 @@ class BaseShape(object):
         m = self.gbasis_at(self.upts)
 
         if 'surf-flux' in self.antialias:
-            fp = [_proj_l2(self._iqrules[kind],
-                           self.facebases[kind])
+            fp = [_proj_l2(self._iqrules[kind], self.facebases[kind])
                   for kind, proj, norm in self.faces]
 
-            m @= block_diag(fp)
+            m = m @ block_diag(fp)
 
         return m
 
@@ -157,7 +156,7 @@ class BaseShape(object):
             if d >= ncut < n:
                 A[i] = exp(-alpha*((d - ncut)/(n - ncut))**order)
 
-        return np.linalg.solve(ub.vdm, A[:,None]*ub.vdm).T
+        return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
 
     @lazyprop
     def nupts(self):
