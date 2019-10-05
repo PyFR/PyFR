@@ -28,7 +28,7 @@ class OpenMPBackend(BaseBackend):
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_bank_cls = types.OpenMPMatrixBank
-        self.matrix_rslice_cls = types.OpenMPMatrixRSlice
+        self.matrix_slice_cls = types.OpenMPMatrixSlice
         self.queue_cls = types.OpenMPQueue
         self.view_cls = types.OpenMPView
         self.xchg_matrix_cls = types.OpenMPXchgMatrix

@@ -96,7 +96,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Possible matrix types
         mattypes = (
             self.backend.const_matrix_cls, self.backend.matrix_cls,
-            self.backend.matrix_bank_cls, self.backend.matrix_rslice_cls,
+            self.backend.matrix_bank_cls, self.backend.matrix_slice_cls,
             self.backend.xchg_matrix_cls
         )
 

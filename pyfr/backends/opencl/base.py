@@ -64,7 +64,7 @@ class OpenCLBackend(BaseBackend):
         self.const_matrix_cls = types.OpenCLConstMatrix
         self.matrix_cls = types.OpenCLMatrix
         self.matrix_bank_cls = types.OpenCLMatrixBank
-        self.matrix_rslice_cls = types.OpenCLMatrixRSlice
+        self.matrix_slice_cls = types.OpenCLMatrixSlice
         self.queue_cls = types.OpenCLQueue
         self.view_cls = types.OpenCLView
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
