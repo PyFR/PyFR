@@ -22,8 +22,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         return bufs
 
-    def set_backend(self, *args, **kwargs):
-        super().set_backend(*args, **kwargs)
+    def set_backend(self, backend, nscalupts, nonce, intoff):
+        super().set_backend(backend, nscalupts, nonce, intoff)
 
         slicem = self._slice_mat
         kernel = self._be.kernel
