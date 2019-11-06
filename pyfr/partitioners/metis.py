@@ -161,8 +161,7 @@ class METISPartitioner(BasePartitioner):
 
         # Process our options
         for k, v in self.opts.items():
-            oidx = getattr(w, 'METIS_OPTION_' + k.upper())
-            opts[oidx] = v
+            opts[getattr(w, f'METIS_OPTION_{k.upper()}')] = v
 
         # Select the partitioning function
         if self.opts['ptype'] == self.enum_opts['ptype']['rb']:
@@ -175,10 +174,11 @@ class METISPartitioner(BasePartitioner):
         npart, objval = w.metis_int(len(partwts)), w.metis_int()
 
         # Partition
-        part_graph_fn(
-            nvert, nconst, vtab.ctypes, etab.ctypes, vwts.ctypes, None,
-            ewts.ctypes, npart, partwts.ctypes, None, opts.ctypes, objval,
-            parts.ctypes
-        )
+        with silence():
+            part_graph_fn(
+                nvert, nconst, vtab.ctypes, etab.ctypes, vwts.ctypes, None,
+                ewts.ctypes, npart, partwts.ctypes, None, opts.ctypes, objval,
+                parts.ctypes
+            )
 
         return parts
