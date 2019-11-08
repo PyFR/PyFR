@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from collections import Sequence, deque
 
 import numpy as np
 
 
-class MatrixBase(object, metaclass=ABCMeta):
+class MatrixBase(object):
     _base_tags = set()
 
     def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
@@ -75,7 +74,6 @@ class MatrixBase(object, metaclass=ABCMeta):
         else:
             return self._get()
 
-    @abstractmethod
     def _get(self):
         pass
 
@@ -101,6 +99,12 @@ class MatrixBase(object, metaclass=ABCMeta):
 
         return ary
 
+    def slice(self, ra=None, rb=None, ca=None, cb=None):
+        ra, rb = ra or 0, rb or self.nrow
+        ca, cb = ca or 0, cb or self.ncol
+
+        return self.backend.matrix_slice(self, ra, rb, ca, cb)
+
 
 class Matrix(MatrixBase):
     _base_tags = {'dense'}
@@ -120,39 +124,63 @@ class Matrix(MatrixBase):
         else:
             self._set(ary)
 
-    @abstractmethod
     def _set(self, ary):
         pass
 
-    def rslice(self, p, q):
-        return self.backend.matrix_rslice(self, p, q)
 
-
-class MatrixRSlice(object):
-    def __init__(self, backend, mat, p, q):
+class MatrixSlice(object):
+    def __init__(self, backend, mat, ra, rb, ca, cb):
         self.backend = backend
         self.parent = mat
+        self.datamap = {}
 
-        if p < 0 or q > mat.nrow or q < p:
+        # Parameter validation
+        if ra < 0 or rb > mat.nrow or rb < ra:
             raise ValueError('Invalid row slice')
+        if ca < 0 or cb > mat.ncol or cb < ca:
+            raise ValueError('Invalid column slice')
+        if ca*mat.itemsize % backend.alignb != 0:
+            raise ValueError('Starting column must conform to backend '
+                             'alignment requirements')
+        if isinstance(mat, MatrixBank) and any('bank' in m.tags for m in mat):
+            raise TypeError('Nested MatrixBank objects can not be sliced')
 
-        self.p, self.q = int(p), int(q)
-        self.nrow, self.ncol = self.q - self.p, mat.ncol
+        self.ra, self.rb = int(ra), int(rb)
+        self.ca, self.cb = int(ca), int(cb)
+        self.nrow, self.ncol = self.rb - self.ra, self.cb - self.ca
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
         self.leaddim, self.pitch = mat.leaddim, mat.pitch
 
-        self.nbytes = self.nrow*self.pitch
         self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
-
         self.tags = mat.tags | {'slice'}
+
+        # Only set nbytes for slices which are safe to memcpy
+        if ca == 0 and cb == mat.ncol:
+            self.nbytes = self.nrow*self.pitch
 
     @property
     def basedata(self):
+        if 'bank' in self.tags:
+            raise AttributeError('basedata undefined for banked slices')
+
         return self.parent.basedata
 
     @property
     def offset(self):
-        return self.parent.offset + self.p*self.pitch
+        if 'bank' in self.tags:
+            raise AttributeError('offset undefined for banked slices')
+
+        return self.parent.offset + self.ra*self.pitch + self.ca*self.itemsize
+
+    @property
+    def data(self):
+        try:
+            return self.datamap[self.parent.mid]
+        except KeyError:
+            data = self._init_data(self.parent)
+            self.datamap[self.parent.mid] = data
+
+            return data
 
 
 class ConstMatrix(MatrixBase):
@@ -180,7 +208,7 @@ class MatrixBank(Sequence):
             raise ValueError('Matrices in a bank must share tags')
 
         self.backend = backend
-        self.tags = tags | mats[0].tags
+        self.tags = tags | mats[0].tags | {'bank'}
 
         self._mats = mats
         self._curr_idx = initbank
@@ -195,8 +223,7 @@ class MatrixBank(Sequence):
     def __getattr__(self, attr):
         return getattr(self._curr_mat, attr)
 
-    def rslice(self, p, q):
-        raise RuntimeError('Matrix banks can not be sliced')
+    slice = MatrixBase.slice
 
     @property
     def active(self):
@@ -223,10 +250,11 @@ class View(object):
         self.refdtype = self._mats[0].dtype
 
         # Valid matrix types
-        mattypes = (backend.matrix_cls, backend.matrix_rslice_cls)
+        mattypes = (backend.matrix_cls, backend.matrix_slice_cls)
 
         # Validate the matrices
-        if any(not isinstance(m, mattypes) for m in self._mats):
+        if any(not isinstance(m, mattypes) or 'bank' in m.tags
+               for m in self._mats):
             raise TypeError('Incompatible matrix type for view')
 
         if any(m.basedata != self.basedata for m in self._mats):
@@ -278,7 +306,7 @@ class XchgView(object):
         self.xchgmat = backend.xchg_matrix((nvrow, nvcol*n), tags=tags)
 
 
-class Queue(object, metaclass=ABCMeta):
+class Queue(object):
     def __init__(self, backend):
         self.backend = backend
 
@@ -325,10 +353,8 @@ class Queue(object, metaclass=ABCMeta):
         while self._items and not self._at_sequence_point(self._items[0][0]):
             self._exec_item(*self._items.popleft())
 
-    @abstractmethod
     def _at_sequence_point(self, item):
         pass
 
-    @abstractmethod
     def _wait(self):
         pass

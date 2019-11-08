@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 import re
 
 import numpy as np
+
+from pyfr.util import match_paired_paren
 
 
 class Arg(object):
@@ -44,13 +45,11 @@ class Arg(object):
         # Validation
         if self.isbroadcast and self.intent != 'in':
             raise ValueError('Broadcast arguments must be of intent in')
-        if self.isbroadcast and self.ncdim != 0:
-            raise ValueError('Broadcast arguments can not have dimensions')
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
 
-class BaseKernelGenerator(object, metaclass=ABCMeta):
+class BaseKernelGenerator(object):
     def __init__(self, name, ndim, args, body, fpdtype):
         self.name = name
         self.ndim = ndim
@@ -65,11 +64,6 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         # Break arguments into point-scalars and point-vectors
         self.scalargs = [v for v in sargs if v.isscalar]
         self.vectargs = [v for v in sargs if v.isvector]
-
-        # If we are 1D ensure that none of our arguments are broadcasts
-        if ndim == 1 and any(v.isbroadcast for v in self.vectargs):
-            raise ValueError('Broadcast arguments are not supported in 1D '
-                             'kernels')
 
         # If we are 2D ensure none of our arguments are views
         if ndim == 2 and any(v.isview for v in self.vectargs):
@@ -105,11 +99,11 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
             # View
             if va.isview:
                 argt.append([np.intp]*(2 + (va.ncdim == 2)))
-            # Non-stacked vector or MPI type
-            elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
-                argt.append([np.intp])
             # Broadcast vector
             elif va.isbroadcast:
+                argt.append([np.intp])
+            # Non-stacked vector or MPI type
+            elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
                 argt.append([np.intp])
             # Stacked vector/matrix/stacked matrix
             else:
@@ -119,17 +113,21 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         return self.ndim, argn, argt
 
     def needs_ldim(self, arg):
-        return ((self.ndim == 2 and not arg.isbroadcast) or
-                (arg.ncdim > 0 and not arg.ismpi))
+        if arg.isbroadcast:
+            return ((self.ndim == 1 and arg.ncdim > 1) or
+                    (self.ndim == 2 and arg.ncdim > 0))
+        else:
+            return self.ndim == 2 or (arg.ncdim > 0 and not arg.ismpi)
 
-    @abstractmethod
     def render(self):
         pass
 
     def _deref_arg_view(self, arg):
-        ptns = ['{0}_v[{0}_vix[X_IDX]]',
-                r'{0}_v[{0}_vix[X_IDX] + SOA_SZ*\1]',
-                r'{0}_v[{0}_vix[X_IDX] + {0}_vrstri[X_IDX]*\1 + SOA_SZ*\2]']
+        ptns = [
+            '{0}_v[{0}_vix[X_IDX]]',
+            r'{0}_v[{0}_vix[X_IDX] + SOA_SZ*(\1)]',
+            r'{0}_v[{0}_vix[X_IDX] + {0}_vrstri[X_IDX]*(\1) + SOA_SZ*(\2)]'
+        ]
 
         return ptns[arg.ncdim].format(arg.name)
 
@@ -137,22 +135,26 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
         # Leading dimension
         ldim = 'ld' + arg.name if not arg.ismpi else '_nx'
 
+        # Broadcast vector
+        #   name[\1] => name_v[\1]
+        if arg.isbroadcast:
+            ix = r'\1'
         # Vector:
         #   name => name_v[X_IDX]
-        if arg.ncdim == 0:
+        elif arg.ncdim == 0:
             ix = 'X_IDX'
         # Stacked vector:
-        #   name[\1] => name_v[ldim*\1 + X_IDX]
+        #   name[\1] => name_v[ldim*(\1) + X_IDX]
         elif arg.ncdim == 1:
-            ix = r'{0}*\1 + X_IDX'.format(ldim)
+            ix = r'{0}*(\1) + X_IDX'.format(ldim)
         # Doubly stacked MPI vector:
-        #   name[\1][\2] => name_v[(nv*\1 + \2)*ldim + X_IDX]
+        #   name[\1][\2] => name_v[(nv*(\1) + (\2))*ldim + X_IDX]
         elif arg.ismpi:
-            ix = r'({0}*\1 + \2)*{1} + X_IDX'.format(arg.cdims[1], ldim)
+            ix = r'({0}*(\1) + (\2))*{1} + X_IDX'.format(arg.cdims[1], ldim)
         # Doubly stacked vector:
-        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
+        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv)]
         else:
-            ix = (r'ld{0}*\1 + X_IDX_AOSOA(\2, {1})'
+            ix = (r'ld{0}*(\1) + X_IDX_AOSOA(\2, {1})'
                    .format(arg.name, arg.cdims[1]))
 
         return '{0}_v[{1}]'.format(arg.name, ix)
@@ -172,15 +174,16 @@ class BaseKernelGenerator(object, metaclass=ABCMeta):
             ix = (r'ld{0}*_y + X_IDX_AOSOA(\1, {1})'
                    .format(arg.name, arg.cdims[0]))
         # Doubly stacked matrix:
-        #   name[\1][\2] => name_v[(\1*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
+        #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
         else:
-            ix = (r'(\1*_ny + _y)*ld{0} + X_IDX_AOSOA(\2, {1})'
+            ix = (r'((\1)*_ny + _y)*ld{0} + X_IDX_AOSOA(\2, {1})'
                    .format(arg.name, arg.cdims[1]))
 
         return '{0}_v[{1}]'.format(arg.name, ix)
 
     def _render_body(self, body):
-        ptns = [r'\b{0}\b', r'\b{0}\[(\d+)\]', r'\b{0}\[(\d+)\]\[(\d+)\]']
+        bmch = r'\[({0})\]'.format(match_paired_paren('[]'))
+        ptns = [r'\b{0}\b', r'\b{0}' + bmch, r'\b{0}' + 2*bmch]
 
         # At single precision suffix all floating point constants by 'f'
         if self.fpdtype == np.float32:

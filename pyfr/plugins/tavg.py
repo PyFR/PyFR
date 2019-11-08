@@ -100,7 +100,7 @@ class TavgPlugin(BasePlugin):
                     psoln = subs[pname]
 
                     # Compute the transformed gradient
-                    tgradpn = np.dot(gradop, psoln)
+                    tgradpn = gradop @ psoln
                     tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
 
                     # Untransform this to get the physical gradient

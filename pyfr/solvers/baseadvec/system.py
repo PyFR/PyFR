@@ -11,13 +11,16 @@ class BaseAdvectionSystem(BaseSystem):
         q1, q2 = self._queues
         kernels = self._kernels
 
+        self._bc_inters.prepare(t)
+
         self.eles_scal_upts_inb.active = uinbank
         self.eles_scal_upts_outb.active = foutbank
 
-        q1 << kernels['eles', 'disu']()
+        q1 << kernels['eles', 'disu_ext']()
         q1 << kernels['mpiint', 'scal_fpts_pack']()
         runall([q1])
 
+        q1 << kernels['eles', 'disu_int']()
         if ('eles', 'copy_soln') in kernels:
             q1 << kernels['eles', 'copy_soln']()
         q1 << kernels['eles', 'tdisf']()

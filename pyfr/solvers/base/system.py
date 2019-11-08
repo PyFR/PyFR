@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 from collections import defaultdict, OrderedDict
 import itertools as it
 import re
@@ -10,7 +9,7 @@ from pyfr.shapes import BaseShape
 from pyfr.util import proxylist, subclasses
 
 
-class BaseSystem(object, metaclass=ABCMeta):
+class BaseSystem(object):
     elementscls = None
     intinterscls = None
     mpiinterscls = None
@@ -65,6 +64,23 @@ class BaseSystem(object, metaclass=ABCMeta):
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
         backend.commit()
 
+        # Save the BC interfaces, but delete the memory-intensive elemap
+        self._bc_inters = bc_inters
+        del bc_inters.elemap
+
+    def _compute_int_offsets(self, rallocs, mesh):
+        lhsprank = rallocs.prank
+        intoffs = defaultdict(lambda: 0)
+
+        for rhsprank in rallocs.prankconn[lhsprank]:
+            interarr = mesh['con_p{0}p{1}'.format(lhsprank, rhsprank)]
+            interarr = interarr[['f0', 'f1']].astype('U4,i4').tolist()
+
+            for etype, eidx in interarr:
+                intoffs[etype] = max(eidx + 1, intoffs[etype])
+
+        return intoffs
+
     def _load_eles(self, rallocs, mesh, initsoln, nregs, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
@@ -102,8 +118,12 @@ class BaseSystem(object, metaclass=ABCMeta):
         else:
             eles.set_ics_from_cfg()
 
+        # Compute the index of first strictly interior element
+        intoffs = self._compute_int_offsets(rallocs, mesh)
+
         # Allocate these elements on the backend
-        eles.set_backend(self.backend, nregs, nonce)
+        for etype, ele in elemap.items():
+            ele.set_backend(self.backend, nregs, nonce, intoffs[etype])
 
         return eles, elemap
 
@@ -172,7 +192,6 @@ class BaseSystem(object, metaclass=ABCMeta):
                 if not kn.startswith('_'):
                     kernels[pn, kn].append(kgetter())
 
-    @abstractmethod
     def rhs(self, t, uinbank, foutbank):
         pass
 

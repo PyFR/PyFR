@@ -14,7 +14,16 @@ _make_pybuf.argtypes = [c_void_p, c_ssize_t, c_int]
 _make_pybuf.restype = py_object
 
 
-class CUDAMatrixBase(base.MatrixBase):
+class _CUDAMatrixCommon(object):
+    @property
+    def _as_parameter_(self):
+        return self.data
+
+    def __index__(self):
+        return self.data
+
+
+class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
         self.data = int(self.basedata) + offset
@@ -45,29 +54,15 @@ class CUDAMatrixBase(base.MatrixBase):
         # Copy
         cuda.memcpy_htod(self.data, buf)
 
-    @property
-    def _as_parameter_(self):
-        return self.data
-
-    def __index__(self):
-        return self.data
-
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
     pass
 
 
-class CUDAMatrixRSlice(base.MatrixRSlice):
-    @lazyprop
-    def data(self):
-        return int(self.parent.basedata) + int(self.offset)
-
-    @property
-    def _as_parameter_(self):
-        return self.data
-
-    def __index__(self):
-        return self.data
+class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
+    def _init_data(self, mat):
+        return (int(mat.basedata) + mat.offset +
+                self.ra*self.pitch + self.ca*self.itemsize)
 
 
 class CUDAMatrixBank(base.MatrixBank):

@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
-
 from pyfr.backends.base.kernels import BaseKernelProvider, MPIKernel
 
 
-class BasePackingKernels(BaseKernelProvider, metaclass=ABCMeta):
+class BasePackingKernels(BaseKernelProvider):
     def _sendrecv(self, mv, mpipreqfn, pid, tag):
         # If we are an exchange view then extract the exchange matrix
         if isinstance(mv, self.backend.xchg_view_cls):
@@ -24,7 +22,6 @@ class BasePackingKernels(BaseKernelProvider, metaclass=ABCMeta):
 
         return SendRecvPackKernel()
 
-    @abstractmethod
     def pack(self, mv):
         pass
 
@@ -38,6 +35,5 @@ class BasePackingKernels(BaseKernelProvider, metaclass=ABCMeta):
 
         return self._sendrecv(mv, MPI.COMM_WORLD.Recv_init, pid, tag)
 
-    @abstractmethod
     def unpack(self, mv):
         pass

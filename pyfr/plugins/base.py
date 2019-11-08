@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 import os
 import shlex
 
@@ -28,12 +27,11 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     return outf
 
 
-class BasePlugin(object, metaclass=ABCMeta):
+class BasePlugin(object):
     name = None
     systems = None
     formulations = None
 
-    @abstractmethod
     def __init__(self, intg, cfgsect, suffix=None):
         self.cfg = intg.cfg
         self.cfgsect = cfgsect
@@ -91,6 +89,5 @@ class BasePlugin(object, metaclass=ABCMeta):
             else:
                 self.postactaid = prefork.call_async(cmdline)
 
-    @abstractmethod
     def __call__(self, intg):
         pass

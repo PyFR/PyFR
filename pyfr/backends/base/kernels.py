@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod
 import itertools as it
 import types
 
@@ -56,11 +55,11 @@ class BaseKernelProvider(object):
         self.backend = backend
 
 
-class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
+class BasePointwiseKernelProvider(BaseKernelProvider):
     kernel_generator_cls = None
 
     @memoize
-    def _render_kernel(self, name, mod, tplargs):
+    def _render_kernel(self, name, mod, extrns, tplargs):
         # Copy the provided argument list
         tplargs = dict(tplargs)
 
@@ -69,6 +68,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         # Macro definitions
         tplargs['_macros'] = {}
+
+        # External kernel arguments dictionary
+        tplargs['_extrns'] = extrns
 
         # Backchannel for obtaining kernel argument types
         tplargs['_kernel_argspecs'] = argspecs = {}
@@ -79,7 +81,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         # Check the kernel exists in the template
         if name not in argspecs:
-            raise ValueError('Kernel "{}" not defined in template'
+            raise ValueError('Kernel "{0}" not defined in template'
                              .format(name))
 
         # Extract the metadata for the kernel
@@ -87,7 +89,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         return src, ndim, argn, argt
 
-    @abstractmethod
     def _build_kernel(self, name, src, args):
         pass
 
@@ -95,7 +96,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
         # Possible matrix types
         mattypes = (
             self.backend.const_matrix_cls, self.backend.matrix_cls,
-            self.backend.matrix_bank_cls, self.backend.matrix_rslice_cls,
+            self.backend.matrix_bank_cls, self.backend.matrix_slice_cls,
             self.backend.xchg_matrix_cls
         )
 
@@ -134,7 +135,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
 
         return arglst
 
-    @abstractmethod
     def _instantiate_kernel(self, dims, fun, arglst):
         pass
 
@@ -146,16 +146,17 @@ class BasePointwiseKernelProvider(BaseKernelProvider, metaclass=ABCMeta):
         if hasattr(self, name):
             # Same name different module
             if getattr(self, name)._mod != mod:
-                raise RuntimeError('Attempt to re-register "{}" with a '
+                raise RuntimeError('Attempt to re-register "{0}" with a '
                                    'different module'.format(name))
             # Otherwise (since we're already registered) return
             else:
                 return
 
         # Generate the kernel providing method
-        def kernel_meth(self, tplargs, dims, **kwargs):
+        def kernel_meth(self, tplargs, dims, extrns={}, **kwargs):
             # Render the source of kernel
-            src, ndim, argn, argt = self._render_kernel(name, mod, tplargs)
+            src, ndim, argn, argt = self._render_kernel(name, mod, extrns,
+                                                        tplargs)
 
             # Compile the kernel
             fun = self._build_kernel(name, src, list(it.chain(*argt)))

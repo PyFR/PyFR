@@ -28,9 +28,7 @@ class CGNSWrappers(object):
     }
 
     def __init__(self):
-        # Load CGNS 3.3+
-        # Previous version may yield undefined symbols from HDF5.
-        # Develop branch after the commit (e0faea6) fixes this issue.
+        # Load CGNS
         self.lib = lib = load_library('cgns')
 
         # Constants (from cgnslib.h)

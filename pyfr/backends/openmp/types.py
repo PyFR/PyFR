@@ -37,12 +37,11 @@ class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
         return self.data
 
 
-class OpenMPMatrixRSlice(base.MatrixRSlice):
-    @lazyprop
-    def data(self):
-        return self.parent.data[self.p:self.q]
+class OpenMPMatrixSlice(base.MatrixSlice):
+    def _init_data(self, mat):
+        return mat.data[self.ra:self.rb, self.ca:self.cb]
 
-    @lazyprop
+    @property
     def _as_parameter_(self):
         return self.data.ctypes.data
 

@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.navstokes.kernels.bcs.common'/>
 
-<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur, ploc, t'>
+<%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur' externs='ploc, t'>
     ur[0] = ul[0];
 % for i in range(ndims):
     ur[${i + 1}] = -ul[${i + 1}];
@@ -10,7 +10,7 @@
     ur[${nvars - 1}] = ul[${nvars - 1}];
 </%pyfr:macro>
 
-<%pyfr:macro name='bc_ldg_state' params='ul, nl, ur, ploc, t'>
+<%pyfr:macro name='bc_ldg_state' params='ul, nl, ur' externs='ploc, t'>
     ur[0] = ul[0];
 % for i in range(ndims):
     ur[${i + 1}] = 0.0;

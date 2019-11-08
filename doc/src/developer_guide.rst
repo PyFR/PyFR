@@ -32,24 +32,18 @@ A `Controller`_ acts to advance the simulation in time. Specifically, a
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.std.controllers.StdPIController
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.phys.controllers.DualNoneController
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of physical-time `Controller`_ are related via the following
 inheritance diagram:
@@ -65,8 +59,6 @@ There are two types of pseudo-time `Controller`_ available in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualPIPseudoController
@@ -74,8 +66,6 @@ There are two types of pseudo-time `Controller`_ available in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of pseudo-time `Controller`_ are related via the following
 inheritance diagram:
@@ -96,71 +86,55 @@ advances a `System`_ by a single time-step. There are eight types of
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.std.steppers.StdRK4Stepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.std.steppers.StdRK34Stepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.std.steppers.StdRK45Stepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.std.steppers.StdTVDRK3Stepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF2Stepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF3Stepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBackwardEulerStepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of `Stepper`_ are related via the following inheritance diagram:
-     
+
 .. inheritance-diagram:: pyfr.integrators.std.steppers
                          pyfr.integrators.dual.phys.steppers
-    :parts: 1     
-                         
+    :parts: 1
+
 
 
 PseudoStepper
@@ -176,48 +150,36 @@ in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualTVDRK3PseudoStepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualEulerPseudoStepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK34PseudoStepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK45PseudoStepper
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Note that DualDenseRKPseudoStepper includes families of
 `PseudoStepper`_ whose coefficients are read from .txt files named thus:
@@ -256,32 +218,24 @@ in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.acnavstokes.system.ACNavierStokesSystem
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.euler.system.EulerSystem
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.navstokes.system.NavierStokesSystem
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of `System`_ are related via the following inheritance diagram:
 
@@ -302,32 +256,24 @@ four types of `Elements`_ available in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.acnavstokes.elements.ACNavierStokesElements
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.euler.elements.EulerElements
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.navstokes.elements.NavierStokesElements
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of `Elements`_ are related via the following inheritance diagram:
 
@@ -349,64 +295,48 @@ are eight types of (non-boundary) `Interfaces`_ available in PyFR
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.aceuler.inters.ACEulerMPIInters
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesMPIInters
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.euler.inters.EulerIntInters
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.euler.inters.EulerMPIInters
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesIntInters
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesMPIInters
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of (non-boundary) `Interfaces`_ are related via the following
 inheritance diagram:
@@ -432,24 +362,18 @@ of `Backend`_ available in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.backends.opencl.base.OpenCLBackend
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.backends.openmp.base.OpenMPBackend
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of `Backend`_ are related via the following inheritance diagram:
 
@@ -483,24 +407,18 @@ Provider`_ available in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.backends.opencl.provider.OpenCLPointwiseKernelProvider
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.backends.openmp.provider.OpenMPPointwiseKernelProvider
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of `Pointwise Kernel Provider`_ are related via the following
 inheritance diagram:
@@ -527,24 +445,18 @@ available in PyFR |release|:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.backends.opencl.generator.OpenCLKernelGenerator
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 .. autoclass:: pyfr.backends.openmp.generator.OpenMPKernelGenerator
     :members:
     :undoc-members:
     :inherited-members:
     :private-members:
-    :exclude-members: _abc_cache, _abc_negative_cache,
-                      _abc_negative_cache_version, _abc_registry
 
 Types of `Kernel Generator`_ are related via the following inheritance diagram:
 

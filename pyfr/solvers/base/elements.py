@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from abc import ABCMeta, abstractmethod, abstractproperty
 import math
 import re
 
@@ -10,7 +9,7 @@ from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import lazyprop, memoize
 
 
-class BaseElements(object, metaclass=ABCMeta):
+class BaseElements(object):
     privarmap = None
     convarmap = None
 
@@ -50,8 +49,10 @@ class BaseElements(object, metaclass=ABCMeta):
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
 
-    @abstractmethod
-    def pri_to_con(ics, cfg):
+    def pri_to_con(pris, cfg):
+        pass
+
+    def con_to_pri(cons, cfg):
         pass
 
     def set_ics_from_cfg(self):
@@ -87,7 +88,7 @@ class BaseElements(object, metaclass=ABCMeta):
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
 
         # Apply and reshape
-        self._scal_upts = np.dot(interp, solnmat.reshape(solnb.nupts, -1))
+        self._scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
         self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
 
     @lazyprop
@@ -96,7 +97,7 @@ class BaseElements(object, metaclass=ABCMeta):
         plocop = self.basis.sbasis.nodal_basis_at(self.basis.fpts)
 
         # Apply the operator to the mesh elements and reshape
-        plocfpts = np.dot(plocop, self.eles.reshape(self.nspts, -1))
+        plocfpts = plocop @ self.eles.reshape(self.nspts, -1)
         plocfpts = plocfpts.reshape(self.nfpts, self.neles, self.ndims)
 
         return plocfpts
@@ -108,9 +109,36 @@ class BaseElements(object, metaclass=ABCMeta):
         return [[np.array(fuzzysort(pts.tolist(), ffpts)) for pts in plocfpts]
                 for ffpts in self.basis.facefpts]
 
-    @abstractproperty
     def _scratch_bufs(self):
         pass
+
+    @property
+    def _ext_int_sides(self):
+        # No elements on a partition boundary
+        if self._intoff == 0:
+            return [('int', self.neles)]
+        # All elements on a partition boundary
+        elif self._intoff >= self.neles:
+            return [('ext', self.neles)]
+        # Mix of elements
+        else:
+            return [('ext', self._intoff), ('int', self.neles - self._intoff)]
+
+    def _slice_mat(self, mat, side, ra=None, rb=None):
+        ix = self._intoff
+
+        # Handle stacked matrices
+        if len(mat.ioshape) >= 3:
+            ix *= mat.ioshape[-2]
+        else:
+            ix = min(ix, mat.ncol)
+
+        if side == 'ext':
+            return mat.slice(ra, rb, 0, ix)
+        elif side == 'int':
+            return mat.slice(ra, rb, ix, mat.ncol)
+        else:
+            raise ValueError('Invalid slice side')
 
     @lazyprop
     def _src_exprs(self):
@@ -133,9 +161,9 @@ class BaseElements(object, metaclass=ABCMeta):
     def _soln_in_src_exprs(self):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
-    @abstractmethod
-    def set_backend(self, backend, nscalupts, nonce):
+    def set_backend(self, backend, nscalupts, nonce, intoff):
         self._be = backend
+        self._intoff = intoff - intoff % -backend.soasz
 
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
@@ -152,8 +180,8 @@ class BaseElements(object, metaclass=ABCMeta):
         # Allocate required scalar scratch space
         if 'scal_fpts' in sbufs and 'scal_qpts' in sbufs:
             self._scal_fqpts = salloc('_scal_fqpts', nfpts + nqpts)
-            self._scal_fpts = self._scal_fqpts.rslice(0, nfpts)
-            self._scal_qpts = self._scal_fqpts.rslice(nfpts, nfpts + nqpts)
+            self._scal_fpts = self._scal_fqpts.slice(0, nfpts)
+            self._scal_qpts = self._scal_fqpts.slice(nfpts, nfpts + nqpts)
         elif 'scal_fpts' in sbufs:
             self._scal_fpts = salloc('scal_fpts', nfpts)
         elif 'scal_qpts' in sbufs:
@@ -191,6 +219,18 @@ class BaseElements(object, metaclass=ABCMeta):
         return self._be.const_matrix(self.basis.opmat(expr),
                                      tags={expr, 'align'})
 
+    def sliceat(fn):
+        @memoize
+        def newfn(self, name, side=None):
+            mat = fn(self, name)
+
+            if side is not None:
+                return self._slice_mat(mat, side)
+            else:
+                return mat
+
+        return newfn
+
     @memoize
     def smat_at_np(self, name):
         smats_mpts, _ = self._smats_djacs_mpts
@@ -199,9 +239,10 @@ class BaseElements(object, metaclass=ABCMeta):
         m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
 
         # Interpolate the smats
-        smats = np.array([np.dot(m0, smat) for smat in smats_mpts])
+        smats = np.array([m0 @ smat for smat in smats_mpts])
         return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
+    @sliceat
     @memoize
     def smat_at(self, name):
         return self._be.const_matrix(self.smat_at_np(name), tags={'align'})
@@ -214,13 +255,14 @@ class BaseElements(object, metaclass=ABCMeta):
         m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
 
         # Interpolate the djacs
-        djac = np.dot(m0, djacs_mpts)
+        djac = m0 @ djacs_mpts
 
         if np.any(djac < -1e-5):
             raise RuntimeError('Negative mesh Jacobians detected')
 
         return 1.0 / djac
 
+    @sliceat
     @memoize
     def rcpdjac_at(self, name):
         return self._be.const_matrix(self.rcpdjac_at_np(name), tags={'align'})
@@ -229,11 +271,12 @@ class BaseElements(object, metaclass=ABCMeta):
     def ploc_at_np(self, name):
         op = self.basis.sbasis.nodal_basis_at(getattr(self.basis, name))
 
-        ploc = np.dot(op, self.eles.reshape(self.nspts, -1))
+        ploc = op @ self.eles.reshape(self.nspts, -1)
         ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
 
         return ploc
 
+    @sliceat
     @memoize
     def ploc_at(self, name):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
@@ -285,7 +328,7 @@ class BaseElements(object, metaclass=ABCMeta):
         jacop = jacop.reshape(-1, nmpts)
 
         # Cast as a matrix multiply and apply to eles
-        jac = np.dot(jacop, x.reshape(nmpts, -1))
+        jac = jacop @ x.reshape(nmpts, -1)
 
         # Reshape (nmpts*ndims, neles*ndims) => (nmpts, ndims, neles, ndims)
         jac = jac.reshape(nmpts, ndims, ndims, neles)
@@ -309,7 +352,7 @@ class BaseElements(object, metaclass=ABCMeta):
                 tt = np.cross(x, dx, axisa=1, axisb=0, axisc=1)
 
                 # Jacobian of x cross x_(chi) at the pseudo grid points
-                dt = np.dot(jacop, tt.reshape(nmpts, -1))
+                dt = jacop @ tt.reshape(nmpts, -1)
                 dt = dt.reshape(nmpts, ndims, ndims, -1).swapaxes(0, 1)
 
                 dtt.append(dt)
@@ -326,19 +369,19 @@ class BaseElements(object, metaclass=ABCMeta):
 
     def get_mag_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
-        return self._mag_pnorm_fpts[fpts_idx,eidx]
+        return self._mag_pnorm_fpts[fpts_idx, eidx]
 
     def get_mag_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._mag_pnorm_fpts[fpts_idx,eidx]
+        return self._mag_pnorm_fpts[fpts_idx, eidx]
 
     def get_norm_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._norm_pnorm_fpts[fpts_idx,eidx]
+        return self._norm_pnorm_fpts[fpts_idx, eidx]
 
     def get_norm_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
-        return self._norm_pnorm_fpts[fpts_idx,eidx]
+        return self._norm_pnorm_fpts[fpts_idx, eidx]
 
     def get_scal_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
@@ -359,4 +402,4 @@ class BaseElements(object, metaclass=ABCMeta):
 
     def get_ploc_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self.plocfpts[fpts_idx,eidx]
+        return self.plocfpts[fpts_idx, eidx]
