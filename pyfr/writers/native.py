@@ -63,10 +63,8 @@ class NativeWriter(object):
             self._write = self._write_serial
 
             if rank == root:
-                self._mpi_rbufs = mpi_rbufs = []
-                self._mpi_rreqs = mpi_rreqs = []
-                self._mpi_names = mpi_names = []
-                self._loc_names = loc_names = []
+                self._loc_info = loc_info = []
+                self._mpi_info = mpi_info = []
 
                 for mrank, meleinfo in enumerate(eleinfo):
                     prank = intg.rallocs.mprankmap[mrank]
@@ -74,14 +72,9 @@ class NativeWriter(object):
                         name = self._get_name_for_data(etype, prank)
 
                         if mrank == root:
-                            loc_names.append(name)
+                            loc_info.append(name)
                         else:
-                            rbuf = np.empty(shape, dtype=self.fpdtype)
-                            rreq = comm.Recv_init(rbuf, mrank, tag)
-
-                            mpi_rbufs.append(rbuf)
-                            mpi_rreqs.append(rreq)
-                            mpi_names.append(name)
+                            mpi_info.append((name, mrank, tag, shape))
 
     def write(self, data, metadata, tcurr):
         # Determine the output path
@@ -169,23 +162,20 @@ class NativeWriter(object):
             for tag, buf in enumerate(data):
                 comm.Send(buf.copy(), root, tag)
         else:
-            # Recv all of the non-local data
-            MPI.Prequest.Startall(self._mpi_rreqs)
-            MPI.Prequest.Waitall(self._mpi_rreqs)
-
-            # Combine local and MPI data
-            names = it.chain(self._loc_names, self._mpi_names)
-            dats = it.chain(data, self._mpi_rbufs)
-
-            # Convert any metadata to ASCII
-            metadata = {k: np.array(v, dtype='S')
-                        for k, v in metadata.items()}
-
-            # Create the output dictionary
-            outdict = dict(zip(names, dats), **metadata)
-
             with h5py.File(path, 'w') as f:
-                for k, v in outdict.items():
+                # Write the metadata
+                for k, v in metadata.items():
+                    f[k] = np.array(v, dtype='S')
+
+                # Write our local data
+                for k, v in zip(self._loc_info, data):
+                    f[k] = v
+
+                # Receive and write the remote data
+                for k, mrank, tag, shape in self._mpi_info:
+                    v = np.empty(shape, dtype=self.fpdtype)
+                    comm.Recv(v, mrank, tag)
+
                     f[k] = v
 
         # Wait for the root rank to finish writing

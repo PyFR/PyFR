@@ -74,7 +74,7 @@ package_data = {
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
-    'pyfr.integrators.schemes': ['*.txt'],
+    'pyfr.integrators': ['schemes/*.txt'],
     'pyfr.quadrules': [
         'hex/*.txt',
         'line/*.txt',
