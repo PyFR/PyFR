@@ -154,8 +154,6 @@ class NativeWriter(object):
         comm.barrier()
 
     def _write_serial(self, path, data, metadata):
-        from mpi4py import MPI
-
         comm, rank, root = get_comm_rank_root()
 
         if rank != root:
