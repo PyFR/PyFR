@@ -246,18 +246,18 @@ class BasePartitioner(object):
         dtype = 'S4,i4,i1,i1'
 
         # Output
-        ret = {}
+        con = {}
 
         for k, v in con_px.items():
-            ret['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
+            con['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
 
         for k, v in con_pxpy.items():
-            ret['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
+            con['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
         for k, v in bcon_px.items():
-            ret['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
+            con['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
 
-        return ret
+        return con
 
     def partition(self, mesh):
         # Extract the current UUID from the mesh
