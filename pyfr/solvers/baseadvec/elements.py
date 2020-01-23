@@ -103,7 +103,8 @@ class BaseAdvectionElements(BaseElements):
             kernels['negdivconf'] = lambda: self._be.kernel(
                 'negdivconf', tplargs=srctplargs,
                 dims=[self.nqpts, self.neles], tdivtconf=self._scal_qpts,
-                rcpdjac=self.rcpdjac_at('qpts'), ploc=plocqpts, u=solnqpts
+                rcpdjac=self.rcpdjac_at('qpts'), ploc=plocqpts, u=solnqpts,
+                extrns=self.self._external_args, **self._external_vals
             )
         else:
             plocupts = self.ploc_at('upts') if plocsrc else None
@@ -117,7 +118,8 @@ class BaseAdvectionElements(BaseElements):
             kernels['negdivconf'] = lambda: self._be.kernel(
                 'negdivconf', tplargs=srctplargs,
                 dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
-                rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts
+                rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts,
+                extrns=self.self._external_args, **self._external_vals
             )
 
         # In-place solution filter

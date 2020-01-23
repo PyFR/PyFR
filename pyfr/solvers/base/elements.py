@@ -26,6 +26,10 @@ class BaseElements(object):
         # Kernels we provide
         self.kernels = {}
 
+        # Global kernel arguments
+        self._external_args = {}
+        self._external_vals = {}
+
         # Check the dimensionality of the problem
         if ndims != basiscls.ndims or ndims not in self.privarmap:
             raise ValueError('Invalid element matrix dimensions')
@@ -48,6 +52,12 @@ class BaseElements(object):
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
+
+    def _set_external(self, name, spec, value=None):
+        self._external_args[name] = spec
+
+        if value is not None:
+            self._external_vals[name] = value
 
     def pri_to_con(pris, cfg):
         pass
