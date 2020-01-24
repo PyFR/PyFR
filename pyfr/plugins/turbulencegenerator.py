@@ -95,10 +95,9 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 #                                value=self.turbsrc[-1])
 
             # Allocate the memory to compute and update the source term.
-            self.turbsrc_new.append(np.zeros((self.ndims, npts, ele.neles)))
+            self.turbsrc_new.append(np.zeros((npts, self.ndims, ele.neles)))
 
-#            ele.turbsrc.set(self.turbsrc_new[-1])
-            ele.turbsrc.set(np.zeros((self.ndims, npts, ele.neles)))
+            ele.turbsrc.set(self.turbsrc_new[-1])
 
         # Compute the random field variables we are going to use. Set the seed
         # to make sure the random field is consistent among the processes.
@@ -126,5 +125,5 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         elemap = intg.system.ele_map
         for idxele, ele in enumerate(elemap.values()):
-            ele.turbrsc.set(self.turbsrc_new[idxele])
+            ele.turbsrc.set(self.turbsrc_new[idxele])
 

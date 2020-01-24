@@ -52,7 +52,7 @@ class BaseAdvectionElements(BaseElements):
         if self._turbsrc:
             # Source term for turbulence generation
             npts = self.nqpts if divfluxaa else self.nupts
-            self.turbsrc = self._be.matrix((self.ndims, npts, self.neles))
+            self.turbsrc = self._be.matrix((npts, self.ndims, self.neles))
             self._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
                                 value=self.turbsrc)
 
