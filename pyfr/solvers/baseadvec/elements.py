@@ -119,7 +119,7 @@ class BaseAdvectionElements(BaseElements):
                 'negdivconf', tplargs=srctplargs,
                 dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
                 rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts,
-                extrns=self.self._external_args, **self._external_vals
+                extrns=self._external_args, **self._external_vals
             )
 
         # In-place solution filter
