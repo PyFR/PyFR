@@ -16,8 +16,6 @@ class TurbulenceGeneratorPlugin(BasePlugin):
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
 
-        comm, rank, root = get_comm_rank_root()
-
         # Constant variables
         self._constants = self.cfg.items_as('constants', float)
 
@@ -41,10 +39,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Frozen turbulence hypothesis to get characteristic times in each vel.
         # component.
-        self.tturb = lturb[Ubulkdir,:]/Ubulk
+        self.tturb = self.lturb[self.Ubulkdir,:]/self.Ubulk
 
         # Whether or not this plug-in should be active at all
-        self._isactive = self.cfg.getint(cfgsect, 'active')
+        self._isactive = self.cfg.getbool(cfgsect, 'active')
 
         # Center point and normal to (i.e. the intended direction of)
         # the generating plane.
@@ -55,13 +53,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # Underlying elements class
-        self.elementscls = intg.system.elementscls
-
-        # Whether divergence anti-alias in on or not.
-        divfluxaa = 'div-flux' in self.elementscls.antialias
+        #self.elementscls = intg.system.elementscls
 
         # get the elements
-        elemap = intg.system.ele_map
+        self.elemap = elemap = intg.system.ele_map
 
         # # Check if the system is incompressible
         # self._ac = intg.system.name.startswith('ac')
@@ -77,24 +72,33 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # source term and location of solution/quadrature points
         self.turbsrc = []
         self.turbsrc_new = []
-
-        pname = 'qpts' if divfluxaa else 'upts'
-        self.ele_ploc = [e.ploc_at_np(pname) for e in elemap.values()]
+        self.ele_ploc = []
 
         for etype, ele in elemap.items():
             # Tell the backend about the source term we are adding, only for the
             # momentum equations, so its dimensions are the same as self.ndims
+            divfluxaa = 'div-flux' in ele.antialias
+            pname = 'qpts' if divfluxaa else 'upts'
+
+
+            self.ele_ploc.append(ele.ploc_at_np(pname))
+
             npts = ele.nqpts if divfluxaa else ele.nupts
 
-            self.turbsrc.append(ele._be.matrix((self.ndims,
-                                                npts,
-                                                ele.neles)))
-
-            ele._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
-                                value=self.turbsrc[-1])
+            #self.turbsrc.append(ele._be.matrix((self.ndims,
+            #                                    npts,
+            #                                    ele.neles)))
+#
+#            print('Settings externals...')
+#
+#            ele._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
+#                                value=self.turbsrc[-1])
 
             # Allocate the memory to compute and update the source term.
             self.turbsrc_new.append(np.zeros((self.ndims, npts, ele.neles)))
+
+#            ele.turbsrc.set(self.turbsrc_new[-1])
+            ele.turbsrc.set(np.zeros((self.ndims, npts, ele.neles)))
 
         # Compute the random field variables we are going to use. Set the seed
         # to make sure the random field is consistent among the processes.
@@ -117,5 +121,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
             return
 
         # TEst
-        for turbsrc, turbsrc_new in zip(self.turbsrc, self.turbsrc_new):
-            turbsrc.set(turbsrc_new)
+#        for turbsrc, turbsrc_new in zip(self.turbsrc, self.turbsrc_new):
+ #           turbsrc.set(turbsrc_new)
+
+        elemap = intg.system.ele_map
+        for idxele, ele in enumerate(elemap.values()):
+            ele.turbrsc.set(self.turbsrc_new[idxele])
+

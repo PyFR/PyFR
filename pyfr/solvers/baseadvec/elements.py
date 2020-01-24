@@ -48,6 +48,14 @@ class BaseAdvectionElements(BaseElements):
             'srcex': self._src_exprs
         }
 
+        # External kernel argumets, if any.
+        if self._turbsrc:
+            # Source term for turbulence generation
+            npts = self.nqpts if divfluxaa else self.nupts
+            self.turbsrc = self._be.matrix((self.ndims, npts, self.neles))
+            self._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
+                                value=self.turbsrc)
+
         # Interpolation from elemental points
         for s, neles in self._ext_int_sides:
             if fluxaa or (divfluxaa and solnsrc):

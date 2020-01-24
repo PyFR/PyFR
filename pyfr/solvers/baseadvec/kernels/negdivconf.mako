@@ -14,7 +14,7 @@
 
 // source term for synthetic turbulence, only for the momentum equations
 % for i in range(ndims):
-    tdivtconf[${i} + 1] += turbsrc[${i}]
+    tdivtconf[${i} + 1] += turbsrc[${i}];
 % endfor
 
 </%pyfr:kernel>
