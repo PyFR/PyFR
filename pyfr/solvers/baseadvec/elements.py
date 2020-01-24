@@ -104,7 +104,7 @@ class BaseAdvectionElements(BaseElements):
                 'negdivconf', tplargs=srctplargs,
                 dims=[self.nqpts, self.neles], tdivtconf=self._scal_qpts,
                 rcpdjac=self.rcpdjac_at('qpts'), ploc=plocqpts, u=solnqpts,
-                extrns=self.self._external_args, **self._external_vals
+                extrns=self._external_args, **self._external_vals
             )
         else:
             plocupts = self.ploc_at('upts') if plocsrc else None
