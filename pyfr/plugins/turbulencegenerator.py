@@ -21,6 +21,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Number of Fourier modes
         self.N = self.cfg.getint(cfgsect, 'N')
+        self.factor = np.sqrt(2.0/self.N)
 
         # Input Reynolds stress
         self.reystress = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
@@ -70,34 +71,23 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         #                                           # or maybe yes
 
         # source term and location of solution/quadrature points
-        self.turbsrc = []
-        self.turbsrc_new = []
-        self.ele_ploc = []
+        self.eles_turbsrc = []
+        self.eles_ploc = []
 
         for etype, ele in elemap.items():
-            # Tell the backend about the source term we are adding, only for the
-            # momentum equations, so its dimensions are the same as self.ndims
+            # only for the momentum equations, so its dimensions are the same as self.ndims
             divfluxaa = 'div-flux' in ele.antialias
             pname = 'qpts' if divfluxaa else 'upts'
 
-
-            self.ele_ploc.append(ele.ploc_at_np(pname))
+            self.eles_ploc.append(ele.ploc_at_np(pname))
 
             npts = ele.nqpts if divfluxaa else ele.nupts
 
-            #self.turbsrc.append(ele._be.matrix((self.ndims,
-            #                                    npts,
-            #                                    ele.neles)))
-#
-#            print('Settings externals...')
-#
-#            ele._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
-#                                value=self.turbsrc[-1])
-
             # Allocate the memory to compute and update the source term.
-            self.turbsrc_new.append(np.zeros((npts, self.ndims, ele.neles)))
+            self.eles_turbsrc.append(np.zeros((npts, self.ndims, ele.neles)))
 
-            ele.turbsrc.set(self.turbsrc_new[-1])
+            # Initialize the actual source term to zero.
+            ele.turbsrc.set(self.eles_turbsrc[-1])
 
         # Compute the random field variables we are going to use. Set the seed
         # to make sure the random field is consistent among the processes.
@@ -107,23 +97,71 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         np.random.seed(seed*2)
         csi = np.random.normal(0, 1,   (self.N, self.ndims))
         np.random.seed(seed*3)
-        ome = np.random.normal(1, 1,   (self.N))
+        self.ome = np.random.normal(1, 1,   (self.N))
         np.random.seed(seed*4)
         d   = np.random.normal(0, 0.5, (self.N, self.ndims))
 
+        # Pre-compute some variables needed later.
+        cnum = np.zeros((self.N))
+        cnum = 3.*np.einsum('lm,Nl,Nm->N',self.reystress, d, d)
+        cden = 2.*np.sum(d**2., axis=-1)
 
+        c = np.sqrt(cnum/cden) #shape: N
 
+        self.p = np.cross(eta, d).swapaxes(0,1) #shape: N, ndims -> ndims, N
+        self.q = np.cross(csi, d).swapaxes(0,1)
+
+        self.dhat = d*self.Ubulk
+        self.dhat /= c[...,np.newaxis]
+
+    def compute_turbsrc(self, tsrc, ploc, t):
+        # keep in mind the shape: npts, ndims, neles
+        if tsrc.shape != ploc.shape:
+            print('ERROR! this should not happen')
+        npts, ndims, neles = ploc.shape
+
+        # reshape and swapaxes to simplify the operations
+        tsrc = tsrc.swapaxes(0, 1).reshape((ndims, -1))
+        ploc = ploc.swapaxes(0, 1).reshape((ndims, -1))
+
+        twicepi = 2.0*np.pi
+
+        #TODO add more dependencies if needed.
+
+        # that = twicepi*t/self.tturb #tauhat k
+        that = twicepi*t/self.tturb[0]
+
+        xhat = twicepi*ploc/self.lturb[0,0]
+
+        arg = np.einsum('Nd,dn->nN', self.dhat, xhat) + self.ome*that #n = nvertices, d=ndims, N=nmodes
+        modes = np.einsum('dN,nN->dnN', self.p, np.cos(arg)) \
+              + np.einsum('dN,nN->dnN', self.q, np.sin(arg))
+
+        tsrc_common = self.factor*np.sum(modes, axis=-1) #ndim x nvert
+
+        #TODO multipli by aij
+        aij = self.reystress # TODO do the proper computation
+        tsrc = 0.01*tsrc_common
+
+        # divide by the characteristic time, and multiply everything by the exp
+        # function as in Schmidt
+        tsrc /= self.tturb[:, np.newaxis]
+        tsrc *= np.exp(-np.pi*(ploc[0] - self.ctr[0])**2/2./self.lturb[0,0]**2)
+
+        # shape back and return
+        tsrc = tsrc.reshape((ndims, npts, neles)).swapaxes(1, 0)
+        ploc = ploc.reshape((ndims, npts, neles)).swapaxes(1, 0)
+
+        return tsrc
 
     def __call__(self, intg):
         # Return if not active or no action is due
         if not self._isactive or intg.nacptsteps % self.nsteps:
             return
 
-        # TEst
-#        for turbsrc, turbsrc_new in zip(self.turbsrc, self.turbsrc_new):
- #           turbsrc.set(turbsrc_new)
+        t = intg.tcurr
 
-        elemap = intg.system.ele_map
-        for idxele, ele in enumerate(elemap.values()):
-            ele.turbsrc.set(self.turbsrc_new[idxele])
-
+        for ele_turbsrc, ele, ele_ploc in zip(self.eles_turbsrc,
+                                              self.elemap.values(),
+                                              self.eles_ploc):
+            ele.turbsrc.set(self.compute_turbsrc(ele_turbsrc, ele_ploc, t))
