@@ -21,7 +21,6 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Number of Fourier modes
         self.N = self.cfg.getint(cfgsect, 'N')
-        self.factor = np.sqrt(2.0/self.N)
 
         # Input Reynolds stress
         self.reystress = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
@@ -70,24 +69,6 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # self.solns = dict(zip(etypes, intg.soln)) #no actual need to know which element
         #                                           # or maybe yes
 
-        # source term and location of solution/quadrature points
-        self.eles_turbsrc = []
-        self.eles_ploc = []
-
-        for etype, ele in elemap.items():
-            # only for the momentum equations, so its dimensions are the same as self.ndims
-            divfluxaa = 'div-flux' in ele.antialias
-            pname = 'qpts' if divfluxaa else 'upts'
-
-            self.eles_ploc.append(ele.ploc_at_np(pname))
-
-            npts = ele.nqpts if divfluxaa else ele.nupts
-
-            # Allocate the memory to compute and update the source term.
-            self.eles_turbsrc.append(np.zeros((npts, self.ndims, ele.neles)))
-
-            # Initialize the actual source term to zero.
-            ele.turbsrc.set(self.eles_turbsrc[-1])
 
         # Compute the random field variables we are going to use. Set the seed
         # to make sure the random field is consistent among the processes.
@@ -111,48 +92,66 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.p = np.cross(eta, d).swapaxes(0,1) #shape: N, ndims -> ndims, N
         self.q = np.cross(csi, d).swapaxes(0,1)
 
-        self.dhat = d*self.Ubulk
-        self.dhat /= c[...,np.newaxis]
+        dhat = d*self.Ubulk
+        dhat /= c[...,np.newaxis]
 
-    def compute_turbsrc(self, tsrc, ploc, t):
-        # keep in mind the shape: npts, ndims, neles
-        if tsrc.shape != ploc.shape:
-            print('ERROR! this should not happen')
-        npts, ndims, neles = ploc.shape
+        # source term and terms dependent on the location of solution/quadrature
+        # points
+        self.eles_turbsrc = []
+        self.eles_dhatxhat = []
+        self.eles_factor = []
 
-        # reshape and swapaxes to simplify the operations
-        tsrc = tsrc.swapaxes(0, 1).reshape((ndims, -1))
-        ploc = ploc.swapaxes(0, 1).reshape((ndims, -1))
+        for etype, ele in elemap.items():
+            # only for the momentum equations, so its dimensions are the same as self.ndims
+            divfluxaa = 'div-flux' in ele.antialias
+            pname = 'qpts' if divfluxaa else 'upts'
 
-        twicepi = 2.0*np.pi
+            npts = ele.nqpts if divfluxaa else ele.nupts
 
-        #TODO add more dependencies if needed.
+            # Allocate the memory to compute and update the source term.
+            turbsrc = np.zeros((npts, self.ndims, ele.neles)).swapaxes(0, 1).reshape((self.ndims, -1))
+            self.eles_turbsrc.append(turbsrc)
 
-        # that = twicepi*t/self.tturb #tauhat k
-        that = twicepi*t/self.tturb[0]
+            # Initialize the actual source term to zero.
+            # ele.turbsrc.set(self.eles_turbsrc[-1])
+            ele.turbsrc.set(np.zeros((npts, self.ndims, ele.neles)))
 
-        xhat = twicepi*ploc/self.lturb[0,0]
+            # Pre-compute some terms needed later.
+            ploc = ele.ploc_at_np(pname).swapaxes(0, 1).reshape((self.ndims, -1))
 
-        arg = np.einsum('Nd,dn->nN', self.dhat, xhat) + self.ome*that #n = nvertices, d=ndims, N=nmodes
+            xhat = 2.*np.pi*ploc/self.lturb[0,0] #TODO
+
+            #n = nvertices, d = ndims, N = nmodes
+            dhatxhat = np.einsum('Nd,dn->nN', dhat, xhat)
+
+            self.eles_dhatxhat.append(dhatxhat)
+
+            # the scaling factor in front of the fluctuations
+            factor = np.empty(turbsrc.shape)
+            factor[...] = np.sqrt(2.0/self.N)
+
+            #TODO multiply by aij properly
+            factor *= np.sqrt(self.reystress[0,0])*(1.0 - np.abs(ploc[1]))
+
+            # Correct it for the source term formulation by Schmidt. TODO
+            factor *= np.exp(-np.pi*(ploc[self.Ubulkdir]
+                                    - self.ctr[self.Ubulkdir])**2/2./self.lturb[0,0]**2)
+            factor /= self.tturb[:, np.newaxis]
+
+            self.eles_factor.append(factor)
+
+    def compute_turbsrc(self, ele, tsrc, dhatxhat, factor, t):
+        # keep in mind the original shape of ploc and tsrc: npts, ndims, neles
+        that = 2.0*np.pi*t/self.tturb[self.Ubulkdir]
+
+        arg = dhatxhat + self.ome*that #n = nvertices, d=ndims, N=nmodes
         modes = np.einsum('dN,nN->dnN', self.p, np.cos(arg)) \
               + np.einsum('dN,nN->dnN', self.q, np.sin(arg))
 
-        tsrc_common = self.factor*np.sum(modes, axis=-1) #ndim x nvert
-
-        #TODO multipli by aij
-        aij = self.reystress # TODO do the proper computation
-        tsrc = 0.01*tsrc_common
-
-        # divide by the characteristic time, and multiply everything by the exp
-        # function as in Schmidt
-        tsrc /= self.tturb[:, np.newaxis]
-        tsrc *= np.exp(-np.pi*(ploc[0] - self.ctr[0])**2/2./self.lturb[0,0]**2)
+        tsrc = factor*np.sum(modes, axis=-1) #ndim x nvert
 
         # shape back and return
-        tsrc = tsrc.reshape((ndims, npts, neles)).swapaxes(1, 0)
-        ploc = ploc.reshape((ndims, npts, neles)).swapaxes(1, 0)
-
-        return tsrc
+        return tsrc.reshape((ele.ndims, -1, ele.neles)).swapaxes(1, 0)
 
     def __call__(self, intg):
         # Return if not active or no action is due
@@ -161,7 +160,8 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         t = intg.tcurr
 
-        for ele_turbsrc, ele, ele_ploc in zip(self.eles_turbsrc,
-                                              self.elemap.values(),
-                                              self.eles_ploc):
-            ele.turbsrc.set(self.compute_turbsrc(ele_turbsrc, ele_ploc, t))
+        for ele, turbsrc, dhatxhat, factor in zip(self.elemap.values(),
+                                                  self.eles_turbsrc,
+                                                  self.eles_dhatxhat,
+                                                  self.eles_factor):
+            ele.turbsrc.set(self.compute_turbsrc(ele, turbsrc, dhatxhat, factor, t))
