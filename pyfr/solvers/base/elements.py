@@ -151,11 +151,6 @@ class BaseElements(object):
             raise ValueError('Invalid slice side')
 
     @lazyprop
-    def _turbsrc(self):
-        return self.cfg.getbool('soln-plugin-turbulencegenerator', 
-                                'active')
-
-    @lazyprop
     def _src_exprs(self):
         convars = self.convarmap[self.ndims]
 

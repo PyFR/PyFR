@@ -12,9 +12,43 @@
     tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + ${ex};
 % endfor
 
+fpdtype_t turbsrc[${ndims}];
+
+fpdtype_t ploc_scale[${ndims}][${ndims}] = ${ploc_scale};
+fpdtype_t t_scale[${ndims}] = ${t_scale};
+fpdtype_t dhat[${ndims}][${N}] = ${dhat};
+fpdtype_t p[${ndims}][${N}] = ${p};
+fpdtype_t q[${ndims}][${N}] = ${q};
+fpdtype_t ome[${N}] = ${ome};
+fpdtype_t aij[4] = ${aij};
+
+// the modes
+fpdtype_t dhatxhat[${ndims}];
+fpdtype_t arg;
+
+% for n in range(N):
+    % for i in range(ndims):
+        dhatxhat[${i}] = 0.0;
+        turbsrc[${i}] = 0.0;
+        % for j in range(ndims):
+            dhatxhat[${i}] += dhat[${j}][${n}]*ploc[${j}]*ploc_scale[${j}][${i}];
+        % endfor
+        arg = dhatxhat[${i}] + ome[${n}]*t*t_scale[${i}];
+        turbsrc[${i}] += p[${i}][${n}]*cos(arg) + q[${i}][${n}]*sin(arg);
+    % endfor
+% endfor
+
+
+// order is important here. TODO have a proper function which depends on
+// space for aij
+turbsrc[2] = (1.0 - fabs(ploc[1]))*(aij[3]*turbsrc[2]);
+turbsrc[1] = (1.0 - fabs(ploc[1]))*(aij[1]*turbsrc[0] + aij[2]*turbsrc[1]);
+turbsrc[0] = (1.0 - fabs(ploc[1]))*(aij[0]*turbsrc[0]);
+
 // source term for synthetic turbulence, only for the momentum equations
 % for i in range(ndims):
-    tdivtconf[${i} + 1] += turbsrc[${i}];
+    tdivtconf[${i} + 1] += factor[${i}]*turbsrc[${i}];
 % endfor
+
 
 </%pyfr:kernel>
