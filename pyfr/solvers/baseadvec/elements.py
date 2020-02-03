@@ -30,6 +30,9 @@ class BaseAdvectionElements(BaseElements):
     def prepare_turbsrc(self, ploc):
         cfgsect = 'solver-turbulencegenerator'
 
+        # Constant variables
+        constants = self.cfg.items_as('constants', float)
+
         npts, ndims, neles = ploc.shape
 
         # Update the template arguments with N, the number of Fourier modes
@@ -122,18 +125,49 @@ class BaseAdvectionElements(BaseElements):
                            'in fpdtype_t[{0}]'.format(ndims),
                            value=fmat)
 
+        # Model the Reystress properly. TODO hard coded for the moment.
+        utau2 = constants['tauw']/constants['rhom']
+        ncoeffs = 11
+        coeffs = np.empty((4,ncoeffs))
+        #uRMS/utau -> R11
+        coeffs[0,:] = [ 1.21715190e+04,-6.02428864e+04, 1.25234653e+05,-1.40761190e+05,
+                        9.07187232e+04,-3.14035259e+04, 3.36630529e+03, 1.39816885e+03,
+                       -5.47109999e+02, 6.61763704e+01, 0.0]
+        #vRMS/utau -> R22
+        coeffs[1,:] = [ 2.13721398e+03,-1.13401755e+04, 2.59234834e+04,-3.34149489e+04,
+                        2.66892076e+04,-1.36591822e+04, 4.45867524e+03,-8.78495685e+02,
+                        8.33507800e+01, 1.47856617e+00, 0.0]
+        # wRMS/utau -> R33
+        coeffs[2,:] = [-5.45793568e+03, 2.87861356e+04,-6.53703038e+04, 8.36764824e+04,
+                       -6.64138439e+04, 3.39109628e+04,-1.12132925e+04, 2.37169831e+03,
+                       -3.14605592e+02, 2.53135377e+01, 0.0]
+        # minus avg(u' v')/utau**2 -> R12
+        coeffs[3,:] = [ 7.46625281e+03,-3.96852213e+04, 9.07086776e+04,-1.16508846e+05,
+                        9.21616093e+04,-4.62093468e+04, 1.45093738e+04,-2.68039137e+03,
+                        2.40577760e+02,-2.67805765e+00, 0.0]
+
+        # Make them dimensional
+        reystress = np.zeros((4, npts*neles))
+        y = 1.0 - np.abs(ploc[1])
+        for el in range(4):
+            poly = np.poly1d(coeffs[el,:])
+            reystress[el,:] = poly(y)
+        reystress[:3] = (reystress[:3])**2
+        reystress[3]  = -reystress[3] #NOTE THE MINUS!
+        reystress *= utau2
+
         # The aij matrix
         #TODO NOTE HARDCODING DIRECTION AND SIZE, and uniformity in z
-        aij = np.zeros(4)
-        aij[0] = np.sqrt(reystress[0,0])
-        aij[1] = reystress[1,0]/aij[0]
-        aij[2] = np.sqrt(reystress[1,1] - aij[1]**2)
-        aij[3] = np.sqrt(reystress[2,2])
-        # self._set_external('aij',
-        #                    'in broadcast fpdtype_t[{0}]'.format(4),
-        #                    value=self._be.const_matrix(aij.reshape(1,4)))
+        aij = np.empty(reystress.shape)
+        aij[0] = np.sqrt(reystress[0]) #R11
+        aij[1] = reystress[3]/(aij[0] + 1e-10)   #R12
+        aij[2] = np.sqrt(np.maximum(reystress[1] - aij[1]**2, 0.0)) #R22
+        aij[3] = np.sqrt(reystress[2]) #R33
 
-        self.srctplargs['aij'] = self.arr_to_str(aij)
+        aijmat = self._be.const_matrix(aij.reshape(4, npts, neles).swapaxes(0, 1))
+        self._set_external('aij',
+                           'in fpdtype_t[{0}]'.format(4),
+                           value=aijmat)
 
 
     def set_backend(self, *args, **kwargs):
