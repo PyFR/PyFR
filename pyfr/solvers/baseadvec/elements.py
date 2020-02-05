@@ -126,6 +126,7 @@ class BaseAdvectionElements(BaseElements):
                            value=fmat)
 
         # Model the Reystress properly. TODO hard coded for the moment.
+        # parametrized with respect to the non-dimensional distance from the wall
         utau2 = constants['tauw']/constants['rhom']
         ncoeffs = 11
         coeffs = np.empty((4,ncoeffs))
@@ -142,18 +143,28 @@ class BaseAdvectionElements(BaseElements):
                        -6.64138439e+04, 3.39109628e+04,-1.12132925e+04, 2.37169831e+03,
                        -3.14605592e+02, 2.53135377e+01, 0.0]
         # minus avg(u' v')/utau**2 -> R12
+        # note that this is fine for the lower part, should be negated for the upper part
+        # as the vertical velocity, with respect to the distance from the wall, changes sign
         coeffs[3,:] = [ 7.46625281e+03,-3.96852213e+04, 9.07086776e+04,-1.16508846e+05,
                         9.21616093e+04,-4.62093468e+04, 1.45093738e+04,-2.68039137e+03,
                         2.40577760e+02,-2.67805765e+00, 0.0]
 
-        # Make them dimensional
-        reystress = np.zeros((4, npts*neles))
-        y = 1.0 - np.abs(ploc[1])
-        for el in range(4):
+        # Special treatment for the mixed term
+        reystress = np.zeros((4, ploc.shape[-1]))
+        yc = ploc[1]/constants['delta']
+        yw = 1.0 - np.abs(yc)
+        for el in range(3):
             poly = np.poly1d(coeffs[el,:])
-            reystress[el,:] = poly(y)
-        reystress[:3] = (reystress[:3])**2
-        reystress[3]  = -reystress[3] #NOTE THE MINUS!
+            reystress[el,:] = poly(yw)**2
+
+        poly = np.poly1d(coeffs[3,:])
+        reystress[3] = -np.poly1d(yw)  #MINUS as the coefficients are for -u'v'!
+        # Correct the sign of the term for the upper part of the domain for
+        # which v changes sign with respect to the closet wall (v is positive
+        # when moving away from a wall).
+        reystress[3][yc > 0.0] = -reystress[3][yc > 0.0]
+
+        # Make them dimensional
         reystress *= utau2
 
         # The aij matrix
