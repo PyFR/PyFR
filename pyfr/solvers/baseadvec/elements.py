@@ -111,9 +111,9 @@ class BaseAdvectionElements(BaseElements):
 
         # Scaling factor
         ploc = ploc.swapaxes(1, 0).reshape(ndims, -1)
-        dist = (ploc[Ubulkdir] - ctr[Ubulkdir])**2.0/lturb[Ubulkdir,:,np.newaxis]
+        dist = (ploc[Ubulkdir] - ctr[Ubulkdir])/lturb[Ubulkdir,:,np.newaxis]
 
-        factor = np.exp(-0.5*np.pi*dist)/tturb[:, np.newaxis] #ndims, nvertices
+        factor = np.exp(-0.5*np.pi*np.power(dist, 2.))/tturb[:, np.newaxis] #ndims, nvertices
 
         factor *= np.sqrt(2./N)
 
@@ -213,6 +213,7 @@ class BaseAdvectionElements(BaseElements):
             # We need the points locations, so modify plocsrc to make it
             # available in the kernel
             plocsrc = True
+            solnsrc = True
 
             # Compute/Allocate the memory for the other needed variables.
             pname = 'qpts' if divfluxaa else 'upts'

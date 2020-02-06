@@ -151,6 +151,11 @@ class BaseElements(object):
             raise ValueError('Invalid slice side')
 
     @lazyprop
+    def _turbsrc(self):
+        return self.cfg.getbool('solver-turbulencegenerator',
+                                'active', True)
+
+    @lazyprop
     def _src_exprs(self):
         convars = self.convarmap[self.ndims]
 
@@ -169,7 +174,7 @@ class BaseElements(object):
 
     @lazyprop
     def _soln_in_src_exprs(self):
-        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
+        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs) or self._turbsrc
 
     def set_backend(self, backend, nscalupts, nonce, intoff):
         self._be = backend
