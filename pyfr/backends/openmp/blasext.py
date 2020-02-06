@@ -67,8 +67,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build
         rkern = self._build_kernel(
-            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2,
-            restype=dtype
+            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
         )
 
         class ErrestKernel(ComputeKernel):
