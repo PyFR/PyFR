@@ -57,7 +57,7 @@ class BasePartitioner(object):
                     spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
 
         def offset_con(con, pr):
-            con = con.copy().astype('U4,i4,i1,i1')
+            con = con.copy().astype('U4,i4,i1,i2')
 
             for en, pn in pinf.items():
                 if pn[pr] > 0:
@@ -89,7 +89,7 @@ class BasePartitioner(object):
                 bccon[name].append(offset_con(mesh[f], l))
 
         # Output data type
-        dtype = 'S4,i4,i1,i1'
+        dtype = 'S4,i4,i1,i2'
 
         # Concatenate these arrays to from the new mesh
         newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
@@ -116,7 +116,7 @@ class BasePartitioner(object):
 
     def _construct_graph(self, mesh):
         # Edges of the dual graph
-        con = mesh['con_p0'].astype('U4,i4,i1,i1')
+        con = mesh['con_p0'].astype('U4,i4,i1,i2')
         con = np.hstack([con, con[::-1]])
 
         # Sort by the left hand side
@@ -214,7 +214,7 @@ class BasePartitioner(object):
             pcounter[etype, part] += 1
 
         # Generate the face connectivity
-        for l, r in zip(*mesh['con_p0'].astype('U4,i4,i1,i1')):
+        for l, r in zip(*mesh['con_p0'].astype('U4,i4,i1,i2')):
             letype, leidxg, lfidx, lflags = l
             retype, reidxg, rfidx, rflags = r
 
@@ -234,7 +234,7 @@ class BasePartitioner(object):
         for f in mesh:
             m = re.match('bcon_(.+?)_p0$', f)
             if m:
-                lhs = mesh[f].astype('U4,i4,i1,i1')
+                lhs = mesh[f].astype('U4,i4,i1,i2')
 
                 for lpetype, leidxg, lfidx, lflags in lhs:
                     lpart, leidxl = eleglmap[lpetype, leidxg]
@@ -243,7 +243,7 @@ class BasePartitioner(object):
                     bcon_px[m.group(1), lpart].append(conl)
 
         # Output data type
-        dtype = 'S4,i4,i1,i1'
+        dtype = 'S4,i4,i1,i2'
 
         # Output
         ret = {}
