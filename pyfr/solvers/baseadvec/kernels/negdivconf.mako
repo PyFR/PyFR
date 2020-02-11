@@ -44,13 +44,16 @@ turbsrc[2] = aij[3]*turbsrc[2];
 turbsrc[1] = aij[1]*turbsrc[0] + aij[2]*turbsrc[1];
 turbsrc[0] = aij[0]*turbsrc[0];
 
-// source term for synthetic turbulence, only for the momentum equations
-// Multiply by the density to make it dimensionally consistent.
+// source term for synthetic turbulence, only for the momentum equations for the
+// moment. Multiply by the density to make it dimensionally consistent for a
+// compressible solver. TODO
+// TODO this is valid only for an incompressible solver (no mult with density).
 % for i in range(ndims):
-    tdivtconf[${i} + 1] += u[0]*factor[${i}]*turbsrc[${i}];
+    tdivtconf[${i} + 1] += factor[${i}]*turbsrc[${i}];
 % endfor
 
 
-// TODO add pressure (i.e. energy) and density fluctuations for Ma > 0.3 flows.
+// TODO add pressure (i.e. energy) and density fluctuations for Ma > 0.3 flows,
+// (compressible solver only, of course).
 
 </%pyfr:kernel>

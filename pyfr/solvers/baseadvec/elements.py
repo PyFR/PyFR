@@ -167,6 +167,13 @@ class BaseAdvectionElements(BaseElements):
         # Make them dimensional
         reystress *= utau2
 
+        #HARD CODE ARUP BOX
+        reystressmat = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
+        reystress[0] = reystressmat[0,0]
+        reystress[1] = reystressmat[1,1]
+        reystress[2] = reystressmat[2,2]
+        reystress[3] = reystressmat[1,2]
+
         # The aij matrix
         #TODO NOTE HARDCODING DIRECTION AND SIZE, and uniformity in z
         aij = np.empty(reystress.shape)
