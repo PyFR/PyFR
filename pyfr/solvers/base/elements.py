@@ -152,7 +152,7 @@ class BaseElements(object):
 
     @lazyprop
     def _turbsrc(self):
-        return self.cfg.getbool('solver-turbulencegenerator',
+        return self.cfg.getbool('soln-plugin-turbulencegenerator', 
                                 'active', True)
 
     @lazyprop

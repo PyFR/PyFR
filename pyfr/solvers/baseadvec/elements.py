@@ -28,30 +28,19 @@ class BaseAdvectionElements(BaseElements):
         return string.replace('[','{').replace(']','}').replace('\n','')
 
     def prepare_turbsrc(self, ploc):
-        cfgsect = 'solver-turbulencegenerator'
+        cfgsect = 'soln-plugin-turbulencegenerator'
 
         # Constant variables
         constants = self.cfg.items_as('constants', float)
 
         npts, ndims, neles = ploc.shape
 
-        # Update the template arguments with N, the number of Fourier modes
-        self.srctplargs['N'] = N = self.cfg.getint('solver-turbulencegenerator',
-                                              'N')
-
-        #TODO need to tell the that it's matrix then set its value.
-        # self.turbsrc = self._be.matrix((npts, self.ndims, self.neles))
-
-        # Input Reynolds stress #TODO compute space dependent aij
-        reystress = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
-        # Reystress = np.array([[R_11, R_21, R_31],
-        #               [R_21, R_22, R_32],
-        #               [R_31, R_32, R_33]])
-
-        # characteristic lengths,3x3 matrix (XYZ x UVW)
+        # characteristic lengths,3x3 matrix (XYZ x UVW). Divide them by 2.0
+        # because the method is written in terms of radii of influence rather
+        # than characteristic lenghts.
         lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
 
-        self.srctplargs['ploc_scale'] = self.arr_to_str(np.pi*2.0/lturb)
+        self.srctplargs['lturb'] = self.arr_to_str(lturb/2.0)
 
         # Bulk velocity magnitude
         Ubulk = self.cfg.getfloat(cfgsect, 'Ubulk')
@@ -59,55 +48,57 @@ class BaseAdvectionElements(BaseElements):
         # bulk velocity direction, either 0,1, or 2 (i.e. x,y,z)
         Ubulkdir = self.cfg.getint(cfgsect, 'Ubulk-dir')
 
-        # Frozen turbulence hypothesis to get characteristic times in each vel.
-        # component.
-        tturb = lturb[Ubulkdir,:]/Ubulk
+        self.srctplargs['Ubulk'] = Ubulk
+        self.srctplargs['Ubulkdir'] = Ubulkdir
 
-        self.srctplargs['t_scale'] = self.arr_to_str(np.pi*2/tturb)
+        # Number of eddies.
+        #TODO this is done also in the plugin, so the same thing is done twice
+        # in multiple places. I do not like it! Have a general function.
+        inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
+        dirs = [i for i in range(ndims) if i != Ubulkdir]
+
+        inflowarea = np.prod(inflow)
+        eddyarea = np.prod(lturb[dirs])
+        N = int(inflowarea/eddyarea) + 1
+
+        self.srctplargs['N'] = N
+
+        # Gaussian constants they depend on the box dimensions.
+        self.srctplargs['sigma'] = self.cfg.getfloat(cfgsect, 'sigma', 0.5)
+        #TODO make them general, compute them on the fly.
+        GCs = np.zeros((ndims, ndims))
+        GCs[:,:] = 0.2807752270984263
+        self.srctplargs['GCs'] = self.arr_to_str(GCs)
+
+        # Allocate the memory for the eddies location, strength and creation
+        # time. These will be broadcast arguments which can be modified at runtime.
+        # self.turbsrc = self._be.matrix((npts, self.ndims, self.neles))
+        # self._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
+        #                     value=self.turbsrc)
+        # TODO make broadcast work pointwise, rather then element-wise as it is now.
+        self.eddies_loc = self._be.matrix((ndims, N, neles))
+        self._set_external('eddies_loc',
+                           'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
+                            value=self.eddies_loc)
+
+        self.eddies_strength = self._be.matrix((ndims, N, neles))
+        self._set_external('eddies_strength',
+                           'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
+                            value=self.eddies_strength)
+
+        self.eddies_time = self._be.matrix((N, neles))
+        self._set_external('eddies_time',
+                           'in broadcast fpdtype_t[{}]'.format(N),
+                            value=self.eddies_time)
+
+        #TODO compute the factor and aij mat in the plugin rather than here?
+
+        # Frozen turbulence hypothesis to get characteristic times in each vel.
+        # component. This is needed for the scaling factor
+        tturb = lturb[Ubulkdir,:]/Ubulk
 
         # Center point
         ctr = np.array(self.cfg.getliteral(cfgsect, 'center'))
-
-        # random vars
-        seed = 12346578
-        np.random.seed(seed)
-        eta = np.random.normal(0, 1,   (N, self.ndims))
-        np.random.seed(seed*2)
-        csi = np.random.normal(0, 1,   (N, self.ndims))
-        np.random.seed(seed*3)
-        ome = np.random.normal(1, 1,   (N))
-        np.random.seed(seed*4)
-        d   = np.random.normal(0, 0.5, (N, self.ndims))
-
-        cnum = np.zeros((N))
-        cnum = 3.*np.einsum('lm,Nl,Nm->N', reystress, d, d)
-        cden = 2.*np.sum(d**2., axis=-1)
-
-        c = np.sqrt(cnum/cden) #shape: N
-
-        dhat = d*Ubulk
-        dhat /= c[...,np.newaxis]
-
-        p = np.cross(eta, d).swapaxes(0,1) #shape: N, ndims -> ndims, N
-        q = np.cross(csi, d).swapaxes(0,1)
-
-        # self._set_external('dhat',
-        #                    'in broadcast fpdtype_t[{0}][{0}]'.format(ndims, N),
-        #                    value=self._be.const_matrix(dhat))
-        # self._set_external('p',
-        #                    'in broadcast fpdtype_t[{0}][{0}]'.format(ndims, N),
-        #                    value=self._be.const_matrix(p))
-        # self._set_external('q',
-        #                    'in broadcast fpdtype_t[{0}][{0}]'.format(ndims, N),
-        #                    value=self._be.const_matrix(q))
-        # self._set_external('ome',
-        #                    'in broadcast fpdtype_t[{0}]'.format(N),
-        #                    value=self._be.const_matrix(ome.reshape(1,N)))
-
-        self.srctplargs['dhat'] = self.arr_to_str(dhat.swapaxes(0,1))
-        self.srctplargs['p'] = self.arr_to_str(p)
-        self.srctplargs['q'] = self.arr_to_str(q)
-        self.srctplargs['ome'] = self.arr_to_str(ome)
 
         # Scaling factor
         ploc = ploc.swapaxes(1, 0).reshape(ndims, -1)
@@ -116,9 +107,6 @@ class BaseAdvectionElements(BaseElements):
         factor = np.exp(-0.5*np.pi*np.power(dist, 2.))/tturb[:, np.newaxis] #ndims, nvertices
 
         factor *= np.sqrt(2./N)
-
-        # # TODO multiply by aij properly
-        # factor *= np.sqrt(reystress[0,0])*(1.0 - np.abs(ploc[1]))
 
         fmat = self._be.const_matrix(factor.reshape(ndims, npts, neles).swapaxes(0, 1))
         self._set_external('factor',
@@ -169,6 +157,9 @@ class BaseAdvectionElements(BaseElements):
 
         #HARD CODE ARUP BOX
         reystressmat = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
+        # Reystress = np.array([[R_11, R_21, R_31],
+        #               [R_21, R_22, R_32],
+        #               [R_31, R_32, R_33]])
         reystress[0] = reystressmat[0,0]
         reystress[1] = reystressmat[1,1]
         reystress[2] = reystressmat[2,2]
@@ -215,14 +206,13 @@ class BaseAdvectionElements(BaseElements):
         }
 
         # External kernel arguments, if any.
-        if self.cfg.getint('solver-turbulencegenerator', 'N', 0):
+        if self._turbsrc:
             # Source term for turbulence generation.
-            # We need the points locations, so modify plocsrc to make it
-            # available in the kernel
+            # We need the points locations and conserved variables.
             plocsrc = True
             solnsrc = True
 
-            # Compute/Allocate the memory for the other needed variables.
+            # Compute/allocate the memory for the other needed variables.
             pname = 'qpts' if divfluxaa else 'upts'
             self.prepare_turbsrc(self.ploc_at_np(pname))
 

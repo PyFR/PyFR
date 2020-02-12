@@ -2,6 +2,14 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<% twicepi = 2.0*math.pi %>
+
+<%pyfr:macro name='gaussian' params='csi, GC, sigma, output'>
+    output = (csi > -1.0 && csi < +1.0)
+           ? (1./sigma/sqrt(twicepi*GC))*exp(-0.5*(pow(csi/sigma,2)))
+           : 0.0
+</%pyfr:macro>
+
 <%pyfr:kernel name='negdivconf' ndim='2'
               t='scalar fpdtype_t'
               tdivtconf='inout fpdtype_t[${str(nvars)}]'
@@ -12,32 +20,40 @@
     tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + ${ex};
 % endfor
 
-fpdtype_t turbsrc[${ndims}];
+// Turbulent characteristic lengths (radii of influence)
+fpdtype_t lturb[${ndims}][${ndims}] = ${lturb};
 
-fpdtype_t ploc_scale[${ndims}][${ndims}] = ${ploc_scale};
-fpdtype_t t_scale[${ndims}] = ${t_scale};
-fpdtype_t dhat[${ndims}][${N}] = ${dhat};
-fpdtype_t p[${ndims}][${N}] = ${p};
-fpdtype_t q[${ndims}][${N}] = ${q};
-fpdtype_t ome[${N}] = ${ome};
+// Guassian constants
+fpdtype_t GCs[${ndims}][${ndims}] = ${GCs};
+fpdtype_t sigma = ${sigma};
 
+// Initialize the turbsrc to 0.0
+fpdtype_t turbsrc[${ndims}] = ${','.join('0.0' for n in range(ndims))};
 
-// the modes
-fpdtype_t dhatxhat[${ndims}];
-fpdtype_t arg;
+// Working variables
+fpdtype_t eddies_loc_updated[${ndims}];
+fpdtype_t g, csi, GC, sigma, output;
 
+// Loop over the eddies
 % for n in range(N):
-    % for i in range(ndims):
-        dhatxhat[${i}] = 0.0;
-        turbsrc[${i}] = 0.0;
-        % for j in range(ndims):
-            dhatxhat[${i}] += dhat[${j}][${n}]*ploc[${j}]*ploc_scale[${j}][${i}];
-        % endfor
-        arg = dhatxhat[${i}] + ome[${n}]*t*t_scale[${i}];
-        turbsrc[${i}] += p[${i}][${n}]*cos(arg) + q[${i}][${n}]*sin(arg);
-    % endfor
-% endfor
+    // Compute the current location of the eddies
+    // TODO make these 3 lines general using the Ubulkdir var
+    eddies_loc_updated[0] = eddies_loc[0][${n}] + (t - eddies_time[${n}])*${Ubulk};
+    eddies_loc_updated[1] = eddies_loc[1][${n}];
+    eddies_loc_updated[2] = eddies_loc[2][${n}];
+    % for j in range(ndims): //U,V,W
+        g = 1.0;
+        % for i in range(ndims): //x,y,z
+            csi = (ploc[${i}] - eddies_loc_updated[${i}])/lturb[${i}][${j}];
+            GC  = GCs[${i}][${j}];
+            ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
+            g *= output;
+        %endfor
 
+        // Accumulate taking into account this components strength
+        turbsrc[${j}] += g*eddies_strength[${j}][${n}];
+    %endfor
+% endfor
 
 // order is important here.
 turbsrc[2] = aij[3]*turbsrc[2];
