@@ -58,8 +58,8 @@ class BaseAdvectionElements(BaseElements):
         dirs = [i for i in range(ndims) if i != Ubulkdir]
 
         inflowarea = np.prod(inflow)
-        eddyarea = np.prod(lturb[dirs])
-        N = int(inflowarea/eddyarea) + 1
+        eddyarea = np.prod(lturb[Ubulkdir, dirs])
+        self.N = N = int(inflowarea/eddyarea) + 1
 
         self.srctplargs['N'] = N
 
@@ -76,17 +76,17 @@ class BaseAdvectionElements(BaseElements):
         # self._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
         #                     value=self.turbsrc)
         # TODO make broadcast work pointwise, rather then element-wise as it is now.
-        self.eddies_loc = self._be.matrix((ndims, N, neles))
+        self.eddies_loc = self._be.matrix((neles, ndims, N))
         self._set_external('eddies_loc',
                            'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_loc)
 
-        self.eddies_strength = self._be.matrix((ndims, N, neles))
+        self.eddies_strength = self._be.matrix((neles, ndims, N))
         self._set_external('eddies_strength',
                            'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_strength)
 
-        self.eddies_time = self._be.matrix((N, neles))
+        self.eddies_time = self._be.matrix((neles, N))
         self._set_external('eddies_time',
                            'in broadcast fpdtype_t[{}]'.format(N),
                             value=self.eddies_time)

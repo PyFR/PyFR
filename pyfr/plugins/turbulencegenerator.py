@@ -19,6 +19,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # Set the pointer to the elements
         self.elemap = intg.system.ele_map
 
+        # Number of eddies. TODO ugly!
+        for ele in self.elemap.values():
+            self.N = ele.N
+
         # Constant variables
         self._constants = self.cfg.items_as('constants', float)
 
@@ -62,10 +66,15 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.box_dims[self.Ubulkdir] = lstreamwise
         self.box_dims[dirs] = inflow
 
-        # Determine the number of eddies.
-        inflowarea = np.prod(inflow)
-        eddyarea = np.prod(self.lturb[dirs])
-        self.N = int(inflowarea/eddyarea) + 1
+        # # Determine the number of eddies.
+        # inflowarea = np.prod(inflow)
+        # eddyarea = np.prod(self.lturb[dirs])
+        # self.N = int(inflowarea/eddyarea) + 1
+
+        # Allocate the memory for the working arrays
+        self.eddies_time = np.empty((self.N))
+        self.eddies_loc = np.empty((self.ndims, self.N))
+        self.eddies_strength = np.empty((self.ndims, self.N))
 
         # Populate the box of eddies
         self.create_eddies(intg.tcurr)
@@ -76,7 +85,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         idxe = neweddies if neweddies else np.full(N, True)
 
         # Generation time.
-        self.eddies_time[idex] = t
+        self.eddies_time[idxe] = t
 
         # Generate the new random locations and strengths. Set the seed so all
         # processors generate the same eddies.
@@ -85,7 +94,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         random = np.random.uniform(-1, 1, size=(self.ndims*2, N))
 
         # Make sure the strengths are only +/- ones.
-        strengths = random[self.dims:]
+        strengths = random[self.ndims:]
         pos = strengths >= 0.0
         neg = strengths <  0.0
         strengths[pos] = np.ceil(strengths[pos])
@@ -101,9 +110,16 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         for ele in self.elemap.values():
             # Broadcast the arrays to fit the matrix needed in ele
             # (remember it's a broadcast on element-basis)
-            ele.eddies_loc.set(self.eddies_loc[..., np.newaxis])
-            ele.eddies_strength.set(self.eddies_strength[..., np.newaxis])
-            ele.eddies_time.set(self.eddies_time[..., np.newaxis])
+            temp = np.empty((ele.neles, self.ndims, N))
+            np.copyto(temp, self.eddies_loc[np.newaxis,...])
+            ele.eddies_loc.set(temp)
+
+            np.copyto(temp, self.eddies_strength[np.newaxis,...])
+            ele.eddies_strength.set(temp)
+
+            temp = np.empty((ele.neles, N))
+            np.copyto(temp, self.eddies_time[np.newaxis,...])
+            ele.eddies_time.set(temp)
 
 
     def __call__(self, intg):

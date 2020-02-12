@@ -6,8 +6,8 @@
 
 <%pyfr:macro name='gaussian' params='csi, GC, sigma, output'>
     output = (csi > -1.0 && csi < +1.0)
-           ? (1./sigma/sqrt(twicepi*GC))*exp(-0.5*(pow(csi/sigma,2)))
-           : 0.0
+           ? (1./sigma/sqrt(${twicepi}*GC))*exp(-0.5*(pow(csi/sigma,2)))
+           : 0.0;
 </%pyfr:macro>
 
 <%pyfr:kernel name='negdivconf' ndim='2'
@@ -28,11 +28,11 @@ fpdtype_t GCs[${ndims}][${ndims}] = ${GCs};
 fpdtype_t sigma = ${sigma};
 
 // Initialize the turbsrc to 0.0
-fpdtype_t turbsrc[${ndims}] = ${','.join('0.0' for n in range(ndims))};
+fpdtype_t turbsrc[${ndims}] = ${'{'+','.join('0.0' for n in range(ndims))+'}'};
 
 // Working variables
 fpdtype_t eddies_loc_updated[${ndims}];
-fpdtype_t g, csi, GC, sigma, output;
+fpdtype_t g, csi, GC, output;
 
 // Loop over the eddies
 % for n in range(N):
@@ -41,9 +41,11 @@ fpdtype_t g, csi, GC, sigma, output;
     eddies_loc_updated[0] = eddies_loc[0][${n}] + (t - eddies_time[${n}])*${Ubulk};
     eddies_loc_updated[1] = eddies_loc[1][${n}];
     eddies_loc_updated[2] = eddies_loc[2][${n}];
-    % for j in range(ndims): //U,V,W
+    //U,V,W
+    % for j in range(ndims):
         g = 1.0;
-        % for i in range(ndims): //x,y,z
+        //x,y,z
+        % for i in range(ndims):
             csi = (ploc[${i}] - eddies_loc_updated[${i}])/lturb[${i}][${j}];
             GC  = GCs[${i}][${j}];
             ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
