@@ -81,8 +81,8 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
     def create_eddies(self, t, neweddies=None):
         # Eddies to be generated: number and indices.
-        N = np.count_nonzero(neweddies) if neweddies else self.N
-        idxe = neweddies if neweddies else np.full(N, True)
+        N    = self.N           if neweddies is None else np.count_nonzero(neweddies)
+        idxe = np.full(N, True) if neweddies is None else neweddies
 
         # Generation time.
         self.eddies_time[idxe] = t
@@ -110,27 +110,29 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         for ele in self.elemap.values():
             # Broadcast the arrays to fit the matrix needed in ele
             # (remember it's a broadcast on element-basis)
-            temp = np.empty((ele.neles, self.ndims, N))
-            np.copyto(temp, self.eddies_loc[np.newaxis,...])
+            temp = np.empty((self.ndims, self.N, ele.neles))
+
+            np.copyto(temp, self.eddies_loc[...,np.newaxis])
             ele.eddies_loc.set(temp)
 
-            np.copyto(temp, self.eddies_strength[np.newaxis,...])
+            np.copyto(temp, self.eddies_strength[...,np.newaxis])
             ele.eddies_strength.set(temp)
 
-            temp = np.empty((ele.neles, N))
-            np.copyto(temp, self.eddies_time[np.newaxis,...])
+            temp = np.empty((self.N, ele.neles))
+
+            np.copyto(temp, self.eddies_time[...,np.newaxis])
             ele.eddies_time.set(temp)
 
 
     def __call__(self, intg):
         # Return if not active or no action is due
-        if not self._isactive or intg.nacptsteps % self.nsteps:
+        if intg.nacptsteps % self.nsteps:
             return
 
         t = intg.tcurr
 
         # Check whether the eddies are outside of the box. If so generate new ones
-        eddies_xl = eddies_loc[self.Ubulkdir] + (t - eddies_time)*self.Ubulk
+        eddies_xl = self.eddies_loc[self.Ubulkdir] + (t - self.eddies_time)*self.Ubulk
         neweddies = eddies_xl > self.box_xmax
 
         if neweddies.any():
