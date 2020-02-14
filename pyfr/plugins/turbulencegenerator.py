@@ -107,22 +107,34 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.eddies_loc[:, idxe] = loc*self.box_dims[:,np.newaxis]/2.0 + self.ctr[:,np.newaxis]
 
         # Update the backend
+        self.update_backend()
+
+    def update_backend(self):
         for ele in self.elemap.values():
             divfluxaa = 'div-flux' in ele.antialias
 
             npts = ele.nqpts if divfluxaa else ele.nupts
 
             # Broadcast the arrays to fit the matrix needed in ele
-            # (remember it's a broadcast on element-basis)
-            temp = np.empty((npts, self.ndims, self.N, ele.neles))
-
-            np.copyto(temp, self.eddies_loc[np.newaxis,...,np.newaxis])
-            ele.eddies_loc.set(temp)
-
-            np.copyto(temp, self.eddies_strength[np.newaxis,...,np.newaxis])
-            ele.eddies_strength.set(temp)
-
             temp = np.empty((npts, self.N, ele.neles))
+
+            np.copyto(temp, self.eddies_loc[0][np.newaxis,...,np.newaxis])
+            ele.eddies_loc_x.set(temp)
+
+            np.copyto(temp, self.eddies_loc[1][np.newaxis,...,np.newaxis])
+            ele.eddies_loc_y.set(temp)
+
+            np.copyto(temp, self.eddies_loc[2][np.newaxis,...,np.newaxis])
+            ele.eddies_loc_z.set(temp)
+
+            np.copyto(temp, self.eddies_strength[0][np.newaxis,...,np.newaxis])
+            ele.eddies_strength_x.set(temp)
+
+            np.copyto(temp, self.eddies_strength[1][np.newaxis,...,np.newaxis])
+            ele.eddies_strength_y.set(temp)
+
+            np.copyto(temp, self.eddies_strength[2][np.newaxis,...,np.newaxis])
+            ele.eddies_strength_z.set(temp)
 
             np.copyto(temp, self.eddies_time[np.newaxis,...,np.newaxis])
             ele.eddies_time.set(temp)

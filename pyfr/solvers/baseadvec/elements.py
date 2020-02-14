@@ -52,8 +52,6 @@ class BaseAdvectionElements(BaseElements):
         self.srctplargs['Ubulkdir'] = Ubulkdir
 
         # Number of eddies.
-        #TODO this is done also in the plugin, so the same thing is done twice
-        # in multiple places. I do not like it! Have a general function.
         inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
         dirs = [i for i in range(ndims) if i != Ubulkdir]
 
@@ -70,21 +68,37 @@ class BaseAdvectionElements(BaseElements):
         GCs[:,:] = 0.2807752270984263
         self.srctplargs['GCs'] = self.arr_to_str(GCs)
 
-        # Allocate the memory for the eddies location, strength and creation
-        # time. These will be broadcast arguments which can be modified at runtime.
-        # self.turbsrc = self._be.matrix((npts, self.ndims, self.neles))
-        # self._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
-        #                     value=self.turbsrc)
-        # TODO make broadcast work pointwise, rather then element-wise as it is now.
-        self.eddies_loc = self._be.matrix((npts, ndims, N, neles))
-        self._set_external('eddies_loc',
-                           'in fpdtype_t[{}][{}]'.format(ndims, N),
-                            value=self.eddies_loc)
+        # Allocate the memory for the eddies location, strength and creation time.
+        # TODO make broadcast work pointwise for 2D Kernels.
+        self.eddies_loc_x = self._be.matrix((npts, N, neles))
+        self._set_external('eddies_loc_x',
+                           'in fpdtype_t[{}]'.format(N),
+                            value=self.eddies_loc_x)
 
-        self.eddies_strength = self._be.matrix((npts, ndims, N, neles))
-        self._set_external('eddies_strength',
-                           'in fpdtype_t[{}][{}]'.format(ndims, N),
-                            value=self.eddies_strength)
+        self.eddies_loc_y = self._be.matrix((npts, N, neles))
+        self._set_external('eddies_loc_y',
+                           'in fpdtype_t[{}]'.format(N),
+                            value=self.eddies_loc_y)
+
+        self.eddies_loc_z = self._be.matrix((npts, N, neles))
+        self._set_external('eddies_loc_z',
+                           'in fpdtype_t[{}]'.format(N),
+                            value=self.eddies_loc_z)
+
+        self.eddies_strength_x = self._be.matrix((npts, N, neles))
+        self._set_external('eddies_strength_x',
+                           'in fpdtype_t[{}]'.format(N),
+                            value=self.eddies_strength_x)
+
+        self.eddies_strength_y = self._be.matrix((npts, N, neles))
+        self._set_external('eddies_strength_y',
+                           'in fpdtype_t[{}]'.format(N),
+                            value=self.eddies_strength_y)
+
+        self.eddies_strength_z = self._be.matrix((npts, N, neles))
+        self._set_external('eddies_strength_z',
+                           'in fpdtype_t[{}]'.format(N),
+                            value=self.eddies_strength_z)
 
         self.eddies_time = self._be.matrix((npts, N, neles))
         self._set_external('eddies_time',

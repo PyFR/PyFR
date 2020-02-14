@@ -34,7 +34,7 @@ fpdtype_t sigma = ${sigma};
 fpdtype_t turbsrc[${ndims}] = ${'{'+','.join('0.0' for n in range(ndims))+'}'};
 
 // Working variables
-fpdtype_t eddies_loc_updated[${ndims}];
+fpdtype_t eddies_loc_updated[${ndims}], eddies_strength[${ndims}];
 fpdtype_t g, csi, GC, output;
 
 // int n;
@@ -43,9 +43,14 @@ fpdtype_t g, csi, GC, output;
 % for n in range(N):
     // Compute the current location of the eddies
     // TODO make these 3 lines general using the Ubulkdir var
-    eddies_loc_updated[0] = eddies_loc[0][${n}] + (t - eddies_time[${n}])*${Ubulk};
-    eddies_loc_updated[1] = eddies_loc[1][${n}];
-    eddies_loc_updated[2] = eddies_loc[2][${n}];
+    eddies_loc_updated[0] = eddies_loc_x[${n}] + (t - eddies_time[${n}])*${Ubulk};
+    eddies_loc_updated[1] = eddies_loc_y[${n}];
+    eddies_loc_updated[2] = eddies_loc_z[${n}];
+
+    // Easier storage of the strength
+    eddies_strength[0] = eddies_strength_x[${n}];
+    eddies_strength[1] = eddies_strength_y[${n}];
+    eddies_strength[2] = eddies_strength_z[${n}];
 
     // n = ${n};
     // printf("Eddy: t=%f, eddies_loc_updated=(%f, %f, %f), n=%d\n", t, eddies_loc_updated[0], eddies_loc_updated[1], eddies_loc_updated[2], n);
@@ -62,7 +67,7 @@ fpdtype_t g, csi, GC, output;
         % endfor
 
         // Accumulate taking into account this components strength
-        turbsrc[${j}] += g*eddies_strength[${j}][${n}];
+        turbsrc[${j}] += g*eddies_strength[${j}];
     % endfor
 % endfor
 
