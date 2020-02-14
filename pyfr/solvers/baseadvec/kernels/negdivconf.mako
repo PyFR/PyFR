@@ -2,12 +2,15 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+#include <stdio.h>
+
 <% twicepi = 2.0*math.pi %>
 
 <%pyfr:macro name='gaussian' params='csi, GC, sigma, output'>
-    output = (csi > -1.0 && csi < +1.0)
+    output = (fabs(csi) < 1.0)
            ? (1./sigma/sqrt(${twicepi}*GC))*exp(-0.5*(pow(csi/sigma,2)))
            : 0.0;
+           // did something with 0.1 but should be 0.0
 </%pyfr:macro>
 
 <%pyfr:kernel name='negdivconf' ndim='2'
@@ -34,6 +37,8 @@ fpdtype_t turbsrc[${ndims}] = ${'{'+','.join('0.0' for n in range(ndims))+'}'};
 fpdtype_t eddies_loc_updated[${ndims}];
 fpdtype_t g, csi, GC, output;
 
+// int n;
+
 // Loop over the eddies
 % for n in range(N):
     // Compute the current location of the eddies
@@ -41,6 +46,10 @@ fpdtype_t g, csi, GC, output;
     eddies_loc_updated[0] = eddies_loc[0][${n}] + (t - eddies_time[${n}])*${Ubulk};
     eddies_loc_updated[1] = eddies_loc[1][${n}];
     eddies_loc_updated[2] = eddies_loc[2][${n}];
+
+    // n = ${n};
+    // printf("Eddy: t=%f, eddies_loc_updated=(%f, %f, %f), n=%d\n", t, eddies_loc_updated[0], eddies_loc_updated[1], eddies_loc_updated[2], n);
+
     //U,V,W
     % for j in range(ndims):
         g = 1.0;
@@ -50,11 +59,11 @@ fpdtype_t g, csi, GC, output;
             GC  = GCs[${i}][${j}];
             ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
             g *= output;
-        %endfor
+        % endfor
 
         // Accumulate taking into account this components strength
         turbsrc[${j}] += g*eddies_strength[${j}][${n}];
-    %endfor
+    % endfor
 % endfor
 
 // order is important here.

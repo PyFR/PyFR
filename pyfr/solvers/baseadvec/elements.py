@@ -58,7 +58,7 @@ class BaseAdvectionElements(BaseElements):
         dirs = [i for i in range(ndims) if i != Ubulkdir]
 
         inflowarea = np.prod(inflow)
-        eddyarea = np.prod(lturb[Ubulkdir, dirs])
+        eddyarea = np.prod(lturb[dirs, Ubulkdir]) # LyU x LzU
         self.N = N = int(inflowarea/eddyarea) + 1
 
         self.srctplargs['N'] = N
@@ -76,19 +76,19 @@ class BaseAdvectionElements(BaseElements):
         # self._set_external('turbsrc', 'in fpdtype_t[{}]'.format(self.ndims),
         #                     value=self.turbsrc)
         # TODO make broadcast work pointwise, rather then element-wise as it is now.
-        self.eddies_loc = self._be.matrix((ndims, N, neles))
+        self.eddies_loc = self._be.matrix((npts, ndims, N, neles))
         self._set_external('eddies_loc',
-                           'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
+                           'in fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_loc)
 
-        self.eddies_strength = self._be.matrix((ndims, N, neles))
+        self.eddies_strength = self._be.matrix((npts, ndims, N, neles))
         self._set_external('eddies_strength',
-                           'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
+                           'in fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_strength)
 
-        self.eddies_time = self._be.matrix((N, neles))
+        self.eddies_time = self._be.matrix((npts, N, neles))
         self._set_external('eddies_time',
-                           'in broadcast fpdtype_t[{}]'.format(N),
+                           'in fpdtype_t[{}]'.format(N),
                             value=self.eddies_time)
 
         #TODO compute the factor and aij mat in the plugin rather than here?
@@ -106,7 +106,7 @@ class BaseAdvectionElements(BaseElements):
 
         factor = np.exp(-0.5*np.pi*np.power(dist, 2.))/tturb[:, np.newaxis] #ndims, nvertices
 
-        factor *= np.sqrt(2./N)
+        # factor *= np.sqrt(1./N)
 
         fmat = self._be.const_matrix(factor.reshape(ndims, npts, neles).swapaxes(0, 1))
         self._set_external('factor',

@@ -108,19 +108,23 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Update the backend
         for ele in self.elemap.values():
+            divfluxaa = 'div-flux' in ele.antialias
+
+            npts = ele.nqpts if divfluxaa else ele.nupts
+
             # Broadcast the arrays to fit the matrix needed in ele
             # (remember it's a broadcast on element-basis)
-            temp = np.empty((self.ndims, self.N, ele.neles))
+            temp = np.empty((npts, self.ndims, self.N, ele.neles))
 
-            np.copyto(temp, self.eddies_loc[...,np.newaxis])
+            np.copyto(temp, self.eddies_loc[np.newaxis,...,np.newaxis])
             ele.eddies_loc.set(temp)
 
-            np.copyto(temp, self.eddies_strength[...,np.newaxis])
+            np.copyto(temp, self.eddies_strength[np.newaxis,...,np.newaxis])
             ele.eddies_strength.set(temp)
 
-            temp = np.empty((self.N, ele.neles))
+            temp = np.empty((npts, self.N, ele.neles))
 
-            np.copyto(temp, self.eddies_time[...,np.newaxis])
+            np.copyto(temp, self.eddies_time[np.newaxis,...,np.newaxis])
             ele.eddies_time.set(temp)
 
 
