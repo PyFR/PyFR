@@ -35,6 +35,10 @@ class BaseAdvectionElements(BaseElements):
 
         npts, ndims, neles = ploc.shape
 
+        # Ac or compressible?
+        system = self.cfg.get('solver', 'system')
+        self.srctplargs['system'] = 'ac' if system.startswith('ac') else 'compr'
+
         # characteristic lengths,3x3 matrix (XYZ x UVW). Divide them by 2.0
         # because the method is written in terms of radii of influence rather
         # than characteristic lenghts.

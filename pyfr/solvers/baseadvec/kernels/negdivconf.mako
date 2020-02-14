@@ -78,10 +78,14 @@ turbsrc[0] = aij[0]*turbsrc[0];
 
 // source term for synthetic turbulence, only for the momentum equations for the
 // moment. Multiply by the density to make it dimensionally consistent for a
-// compressible solver. TODO
-// TODO this is valid only for an incompressible solver (no mult with density).
+// compressible solver.
+output = 1.0;
+% if system == 'compr':
+    output = u[0];
+% endif
+
 % for i in range(ndims):
-    tdivtconf[${i} + 1] += factor[${i}]*turbsrc[${i}];
+    tdivtconf[${i} + 1] += output*factor[${i}]*turbsrc[${i}];
 % endfor
 
 
