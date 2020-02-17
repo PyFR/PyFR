@@ -111,33 +111,11 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
     def update_backend(self):
         for ele in self.elemap.values():
-            divfluxaa = 'div-flux' in ele.antialias
+            ele.eddies_loc.set(self.eddies_loc)
 
-            npts = ele.nqpts if divfluxaa else ele.nupts
+            ele.eddies_strength.set(self.eddies_strength)
 
-            # Broadcast the arrays to fit the matrix needed in ele
-            temp = np.empty((npts, self.N, ele.neles))
-
-            np.copyto(temp, self.eddies_loc[0][np.newaxis,...,np.newaxis])
-            ele.eddies_loc_x.set(temp)
-
-            np.copyto(temp, self.eddies_loc[1][np.newaxis,...,np.newaxis])
-            ele.eddies_loc_y.set(temp)
-
-            np.copyto(temp, self.eddies_loc[2][np.newaxis,...,np.newaxis])
-            ele.eddies_loc_z.set(temp)
-
-            np.copyto(temp, self.eddies_strength[0][np.newaxis,...,np.newaxis])
-            ele.eddies_strength_x.set(temp)
-
-            np.copyto(temp, self.eddies_strength[1][np.newaxis,...,np.newaxis])
-            ele.eddies_strength_y.set(temp)
-
-            np.copyto(temp, self.eddies_strength[2][np.newaxis,...,np.newaxis])
-            ele.eddies_strength_z.set(temp)
-
-            np.copyto(temp, self.eddies_time[np.newaxis,...,np.newaxis])
-            ele.eddies_time.set(temp)
+            ele.eddies_time.set(self.eddies_time[np.newaxis,...])
 
 
     def __call__(self, intg):

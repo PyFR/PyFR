@@ -2,7 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-#include <stdio.h>
+// #include <stdio.h>
 
 <% twicepi = 2.0*math.pi %>
 
@@ -34,23 +34,24 @@ fpdtype_t sigma = ${sigma};
 fpdtype_t turbsrc[${ndims}] = ${'{'+','.join('0.0' for n in range(ndims))+'}'};
 
 // Working variables
-fpdtype_t eddies_loc_updated[${ndims}], eddies_strength[${ndims}];
+fpdtype_t eddies_loc_updated[${ndims}];
 fpdtype_t g, csi, GC, output;
 
 // int n;
+// printf("ldeddies_time = %d\n", ldeddies_time);
 
 // Loop over the eddies
 % for n in range(N):
     // Compute the current location of the eddies
     // TODO make these 3 lines general using the Ubulkdir var
-    eddies_loc_updated[0] = eddies_loc_x[${n}] + (t - eddies_time[${n}])*${Ubulk};
-    eddies_loc_updated[1] = eddies_loc_y[${n}];
-    eddies_loc_updated[2] = eddies_loc_z[${n}];
+    eddies_loc_updated[0] = eddies_loc[0][${n}] + (t - eddies_time[0][${n}])*${Ubulk};
+    eddies_loc_updated[1] = eddies_loc[1][${n}];
+    eddies_loc_updated[2] = eddies_loc[2][${n}];
 
     // Easier storage of the strength
-    eddies_strength[0] = eddies_strength_x[${n}];
-    eddies_strength[1] = eddies_strength_y[${n}];
-    eddies_strength[2] = eddies_strength_z[${n}];
+    // eddies_strength[0] = eddies_strength[0][${n}];
+    // eddies_strength[1] = eddies_strength[1][${n}];
+    // eddies_strength[2] = eddies_strength[2][${n}];
 
     // n = ${n};
     // printf("Eddy: t=%f, eddies_loc_updated=(%f, %f, %f), n=%d\n", t, eddies_loc_updated[0], eddies_loc_updated[1], eddies_loc_updated[2], n);
@@ -67,7 +68,7 @@ fpdtype_t g, csi, GC, output;
         % endfor
 
         // Accumulate taking into account this components strength
-        turbsrc[${j}] += g*eddies_strength[${j}];
+        turbsrc[${j}] += g*eddies_strength[${j}][${n}];
     % endfor
 % endfor
 
@@ -79,13 +80,12 @@ turbsrc[0] = aij[0]*turbsrc[0];
 // source term for synthetic turbulence, only for the momentum equations for the
 // moment. Multiply by the density to make it dimensionally consistent for a
 // compressible solver.
-output = 1.0;
-% if system == 'compr':
-    output = u[0];
-% endif
-
 % for i in range(ndims):
-    tdivtconf[${i} + 1] += output*factor[${i}]*turbsrc[${i}];
+    % if system == 'compr':
+        tdivtconf[${i} + 1] += u[0]*factor[${i}]*turbsrc[${i}];
+    % else:
+        tdivtconf[${i} + 1] += factor[${i}]*turbsrc[${i}];
+    % endif
 % endfor
 
 
