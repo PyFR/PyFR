@@ -95,56 +95,20 @@ class BaseAdvectionElements(BaseElements):
         self.srctplargs['GCs'] = self.arr_to_str(GCs)
 
         # Allocate the memory for the eddies location, strength and creation time.
-        # TODO make broadcast work pointwise for 2D Kernels.
         self.eddies_loc = self._be.matrix((self.ndims, N))
         self._set_external('eddies_loc',
                            'in broadcast fpdtype_t[{}][{}]'.format(self.ndims, N),
                             value=self.eddies_loc)
-
-        # self.eddies_loc_x = self._be.matrix((1, N))
-        # self._set_external('eddies_loc_x',
-        #                    'in fpdtype_t[1][{}]'.format(N),
-        #                     value=self.eddies_loc_x)
-
-        # self.eddies_loc_y = self._be.matrix((1, N))
-        # self._set_external('eddies_loc_y',
-        #                    'in fpdtype_t[1][{}]'.format(N),
-        #                     value=self.eddies_loc_y)
-
-        # self.eddies_loc_z = self._be.matrix((1, N))
-        # self._set_external('eddies_loc_z',
-        #                    'in fpdtype_t[1][{}]'.format(N),
-        #                     value=self.eddies_loc_z)
 
         self.eddies_strength = self._be.matrix((self.ndims, N))
         self._set_external('eddies_strength',
                            'in broadcast fpdtype_t[{}][{}]'.format(self.ndims, N),
                             value=self.eddies_strength)
 
-        # self.eddies_strength_x = self._be.matrix((1, N))
-        # self._set_external('eddies_strength_x',
-        #                    'in fpdtype_t[1][{}]'.format(N),
-        #                     value=self.eddies_strength_x)
-
-        # self.eddies_strength_y = self._be.matrix((1, N))
-        # self._set_external('eddies_strength_y',
-        #                    'in fpdtype_t[1][{}]'.format(N),
-        #                     value=self.eddies_strength_y)
-
-        # self.eddies_strength_z = self._be.matrix((1, N))
-        # self._set_external('eddies_strength_z',
-        #                    'in fpdtype_t[1][{}]'.format(N),
-        #                     value=self.eddies_strength_z)
-
         self.eddies_time = self._be.matrix((1, N))
         self._set_external('eddies_time',
                            'in broadcast fpdtype_t[1][{}]'.format(N),
                             value=self.eddies_time)
-
-        # self.eddies_time = self._be.matrix((1,N))
-        # self._set_external('eddies_time',
-        #                    'in broadcast fpdtype_t[{}]'.format(N),
-        #                     value=self.eddies_time)
 
         #TODO compute the factor and aij mat in the plugin rather than here?
 

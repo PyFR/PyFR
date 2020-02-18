@@ -10,7 +10,6 @@
     output = (fabs(csi) < 1.0)
            ? (1./sigma/sqrt(${twicepi}*GC))*exp(-0.5*(pow(csi/sigma,2)))
            : 0.0;
-           // did something with 0.1 but should be 0.0
 </%pyfr:macro>
 
 <%pyfr:kernel name='negdivconf' ndim='2'
@@ -32,7 +31,7 @@ fpdtype_t GCs[${ndims}][${ndims}] = ${GCs};
 fpdtype_t sigma = ${sigma};
 
 // Initialize the turbsrc to 0.0
-fpdtype_t turbsrc[${ndims}] = ${'{'+','.join('0.0' for n in range(ndims))+'}'};
+fpdtype_t turbsrc[${ndims}] = {0.0};
 
 // Working variables
 fpdtype_t eddies_loc_updated[${ndims}];
@@ -48,11 +47,6 @@ fpdtype_t g, csi, GC, output;
     eddies_loc_updated[0] = eddies_loc[0][${n}] + (t - eddies_time[0][${n}])*${Ubulk};
     eddies_loc_updated[1] = eddies_loc[1][${n}];
     eddies_loc_updated[2] = eddies_loc[2][${n}];
-
-    // Easier storage of the strength
-    // eddies_strength[0] = eddies_strength[0][${n}];
-    // eddies_strength[1] = eddies_strength[1][${n}];
-    // eddies_strength[2] = eddies_strength[2][${n}];
 
     // n = ${n};
     // printf("Eddy: t=%f, eddies_loc_updated=(%f, %f, %f), n=%d\n", t, eddies_loc_updated[0], eddies_loc_updated[1], eddies_loc_updated[2], n);
