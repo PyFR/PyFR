@@ -233,6 +233,18 @@ class BaseAdvectionElements(BaseElements):
                            'in fpdtype_t[{0}]'.format(4),
                            value=aijmat)
 
+        # Array to determine whether or not a sol point is actually affected by
+        # the box of eddies. Zero means not affected.
+        affected = np.ones((npts, 1, neles)).reshape((-1))
+        xmin = ctr[Ubulkdir] - np.max(lturb[Ubulkdir])
+        xmax = ctr[Ubulkdir] + np.max(lturb[Ubulkdir])
+        outside = np.logical_or(ploc[Ubulkdir] < xmin, ploc[Ubulkdir] > xmax)
+        affected[outside] = 0.0
+        affectedmat = self._be.const_matrix(affected.reshape((npts, 1, neles)))
+        self._set_external('affected',
+                           'in fpdtype_t[{0}]'.format(1),
+                           value=affectedmat)
+
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)

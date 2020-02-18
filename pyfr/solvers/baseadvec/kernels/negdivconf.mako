@@ -23,6 +23,7 @@
     tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + ${ex};
 % endfor
 
+if (affected[0] > 0.0){
 // Turbulent characteristic lengths (radii of influence)
 fpdtype_t lturb[${ndims}][${ndims}] = ${lturb};
 
@@ -91,5 +92,5 @@ turbsrc[0] = aij[0]*turbsrc[0];
 
 // TODO add pressure (i.e. energy) and density fluctuations for Ma > 0.3 flows,
 // (compressible solver only, of course).
-
+}
 </%pyfr:kernel>
