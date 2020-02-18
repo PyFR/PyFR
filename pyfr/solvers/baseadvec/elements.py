@@ -23,9 +23,33 @@ class BaseAdvectionElements(BaseElements):
 
         return bufs
 
-    def arr_to_str(self, arr):
+    @staticmethod
+    def arr_to_str(arr):
         string = np.array2string(arr, separator=',')
         return string.replace('[','{').replace(']','}').replace('\n','')
+
+    @staticmethod
+    def G(csi, sigma, GC):
+        return  (1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2)
+
+    def G2(self, csi, sigma, GC):
+        return self.G(csi, sigma, GC)**2
+
+    def determine_gaussian_constants(self, sigma, ndims, lturb, Ubulkdir):
+        from scipy.integrate import fixed_quad
+        # Compute the constants GC such that 0.5 times the integral of the
+        # guassian squared between -1 and +1 is 1.0.
+        GCs = np.zeros((ndims, ndims))
+        args = [sigma, 1.0]
+        GCs[...] = 0.5*fixed_quad(lambda csi: self.G2(csi, *args), -1, 1, n=10)[0]
+
+        # Correct the values if the characteristic lengths are different from
+        # the reference streamwise velocity. A smaller than reference length
+        # means we need a larger constant.
+        for i in range(ndims):
+            for j in range(ndims):
+                GCs[i, j] *= lturb[i, Ubulkdir]/lturb[i, j]
+        return GCs
 
     def prepare_turbsrc(self, ploc):
         cfgsect = 'soln-plugin-turbulencegenerator'
@@ -66,10 +90,8 @@ class BaseAdvectionElements(BaseElements):
         self.srctplargs['N'] = N
 
         # Gaussian constants they depend on the box dimensions.
-        self.srctplargs['sigma'] = self.cfg.getfloat(cfgsect, 'sigma', 0.5)
-        #TODO make them general, compute them on the fly.
-        GCs = np.zeros((ndims, ndims))
-        GCs[:,:] = 0.2807752270984263
+        self.srctplargs['sigma'] = sigma = self.cfg.getfloat(cfgsect, 'sigma', 0.5)
+        GCs = self.determine_gaussian_constants(sigma, ndims, lturb, Ubulkdir)
         self.srctplargs['GCs'] = self.arr_to_str(GCs)
 
         # Allocate the memory for the eddies location, strength and creation time.
