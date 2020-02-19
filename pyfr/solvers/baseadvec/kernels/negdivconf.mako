@@ -7,9 +7,7 @@
 <% twicepi = 2.0*math.pi %>
 
 <%pyfr:macro name='gaussian' params='csi, GC, sigma, output'>
-    output = (fabs(csi) < 1.0)
-           ? (1./sigma/sqrt(${twicepi}*GC))*exp(-0.5*(pow(csi/sigma,2)))
-           : 0.0;
+    output = (1./sigma/sqrt(${twicepi}*GC))*exp(-0.5*(pow(csi/sigma,2)));
 </%pyfr:macro>
 
 <%pyfr:kernel name='negdivconf' ndim='2'
@@ -54,16 +52,30 @@ fpdtype_t g, csi, GC, output;
     //U,V,W
     % for j in range(ndims):
         g = 1.0;
-        //x,y,z
-        % for i in range(ndims):
-            csi = (ploc[${i}] - eddies_loc_updated[${i}])/lturb[${i}][${j}];
-            GC  = GCs[${i}][${j}];
+
+        csi = fabs((ploc[2] - eddies_loc_updated[2])/lturb[2][${j}]);
+        if (csi < 1.0){
+            GC  = GCs[2][${j}];
             ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
             g *= output;
-        % endfor
 
-        // Accumulate taking into account this components strength
-        turbsrc[${j}] += g*eddies_strength[${j}][${n}];
+            csi = fabs((ploc[1] - eddies_loc_updated[1])/lturb[1][${j}]);
+            if (csi < 1.0){
+                GC  = GCs[1][${j}];
+                ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
+                g *= output;
+
+                csi = fabs((ploc[0] - eddies_loc_updated[0])/lturb[0][${j}]);
+                if (csi < 1.0){
+                    GC  = GCs[0][${j}];
+                    ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
+                    g *= output;
+
+                    // Accumulate taking into account this components strength
+                    turbsrc[${j}] += g*eddies_strength[${j}][${n}];
+               }
+            }
+        }
     % endfor
 % endfor
 
