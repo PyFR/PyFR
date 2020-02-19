@@ -30,7 +30,7 @@ class BaseAdvectionElements(BaseElements):
 
     @staticmethod
     def G(csi, sigma, GC, p):
-        return  (1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2)**p
+        return ((1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2))**p
 
     @staticmethod
     def determine_gaussian_constants(G, sigma, ndims, lturb, Ubulkdir):
