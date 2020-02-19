@@ -40,11 +40,14 @@ fpdtype_t g, csi, GC, output;
 
 // Loop over the eddies
 % for n in range(N):
-    // Compute the current location of the eddies
-    // TODO make these 3 lines general using the Ubulkdir var
-    eddies_loc_updated[0] = eddies_loc[0][${n}] + (t - eddies_time[0][${n}])*${Ubulk};
-    eddies_loc_updated[1] = eddies_loc[1][${n}];
-    eddies_loc_updated[2] = eddies_loc[2][${n}];
+    // Compute the current location of the eddies.
+    % for j in range(ndims):
+        % if j == Ubulkdir:
+            eddies_loc_updated[${j}] = eddies_loc[${j}][${n}] + (t - eddies_time[${j}][${n}])*${Ubulk};
+        % else:
+            eddies_loc_updated[${j}] = eddies_loc[${j}][${n}];
+        % endif
+    % endfor
 
     // n = ${n};
     // printf("Eddy: t=%f, eddies_loc_updated=(%f, %f, %f), n=%d\n", t, eddies_loc_updated[0], eddies_loc_updated[1], eddies_loc_updated[2], n);
