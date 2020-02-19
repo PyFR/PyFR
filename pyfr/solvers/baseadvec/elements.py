@@ -29,25 +29,23 @@ class BaseAdvectionElements(BaseElements):
         return string.replace('[','{').replace(']','}').replace('\n','')
 
     @staticmethod
-    def G(csi, sigma, GC):
-        return  (1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2)
+    def G(csi, sigma, GC, p):
+        return  (1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2)**p
 
-    def G2(self, csi, sigma, GC):
-        return self.G(csi, sigma, GC)**2
-
-    def determine_gaussian_constants(self, sigma, ndims, lturb, Ubulkdir):
+    @staticmethod
+    def determine_gaussian_constants(G, sigma, ndims, lturb, Ubulkdir):
         from scipy.integrate import fixed_quad
         # Compute the constants GC such that 0.5 times the integral of the
-        # guassian squared between -1 and +1 is 1.0.
+        # guassian squared, between -1 and +1, is 1.0.
         GCs = np.zeros((ndims, ndims))
-        args = [sigma, 1.0]
-        GCs[...] = 0.5*fixed_quad(lambda csi: self.G2(csi, *args), -1, 1, n=10)[0]
+        args = [sigma, 1.0, 2.0]
+        GCs[...] = 0.5*fixed_quad(lambda csi: G(csi, *args), -1, 1, n=10)[0]
 
         # Correct the values if the characteristic lengths are different from
         # the reference streamwise velocity. A smaller than reference length
         # means we need a larger constant.
-        for i in range(ndims):
-            for j in range(ndims):
+        for i in range(ndims): #x,y,z
+            for j in range(ndims): #U,V,W
                 GCs[i, j] *= lturb[i, Ubulkdir]/lturb[i, j]
         return GCs
 
@@ -60,8 +58,7 @@ class BaseAdvectionElements(BaseElements):
         npts, ndims, neles = ploc.shape
 
         # Ac or compressible?
-        system = self.cfg.get('solver', 'system')
-        self.srctplargs['system'] = 'ac' if system.startswith('ac') else 'compr'
+        self.srctplargs['system'] = 'ac' if self.system.startswith('ac') else 'compr'
 
         # characteristic lengths,3x3 matrix (XYZ x UVW). Divide them by 2.0
         # because the method is written in terms of radii of influence rather
@@ -91,8 +88,8 @@ class BaseAdvectionElements(BaseElements):
 
         # Gaussian constants they depend on the box dimensions.
         self.srctplargs['sigma'] = sigma = self.cfg.getfloat(cfgsect, 'sigma', 0.5)
-        GCs = self.determine_gaussian_constants(sigma, ndims, lturb, Ubulkdir)
-        self.srctplargs['GCs'] = self.arr_to_str(GCs)
+        self.GCs = self.determine_gaussian_constants(self.G, sigma, ndims, lturb, Ubulkdir)
+        self.srctplargs['GCs'] = self.arr_to_str(self.GCs)
 
         # Allocate the memory for the eddies location, strength and creation time.
         self.eddies_loc = self._be.matrix((self.ndims, N))
@@ -238,10 +235,11 @@ class BaseAdvectionElements(BaseElements):
 
         # External kernel arguments, if any.
         if self._turbsrc:
+            self.system = self.cfg.get('solver', 'system')
             # Source term for turbulence generation.
-            # We need the points locations and conserved variables.
+            # We need the points locations and conserved variables for compr solver.
             plocsrc = True
-            solnsrc = True
+            solnsrc = False if self.system.startswith('ac') else True
 
             # Compute/allocate the memory for the other needed variables.
             pname = 'qpts' if divfluxaa else 'upts'
