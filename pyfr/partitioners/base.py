@@ -141,6 +141,20 @@ class BasePartitioner(object):
         vwts = np.array([self.elewts[t] for t, i in vetimap])
         ewts = np.ones_like(etab)
 
+        # Correct the weights to take into account turb generation.
+        Lturb = 1.0
+        ctr_turb = (4.0, 0.0, 0.0)
+        Ubulkdir = 0
+        print('Taking into account turb. generation...')
+        for t, i in vetimap:
+            pname = 'spt_{}_p0'.format(t)
+            # Get center of this element
+            ctr = np.mean(mesh[pname][:,i,:], axis=0)
+            # Distance from the generating plane
+            dist = np.abs(ctr[Ubulkdir] - ctr_turb[Ubulkdir])
+            if dist < Lturb:
+                vwts[i] *= 10
+
         return Graph(vtab, etab, vwts, ewts), vetimap
 
     def _partition_graph(self, graph, partwts):
