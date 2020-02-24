@@ -130,7 +130,7 @@ class BaseSystem(object):
     def _load_int_inters(self, rallocs, mesh, elemap):
         key = 'con_p{0}'.format(rallocs.prank)
 
-        lhs, rhs = mesh[key].astype('U4,i4,i1,i1').tolist()
+        lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
         int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
                                        self.cfg)
 
@@ -145,7 +145,7 @@ class BaseSystem(object):
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh['con_p{0}p{1}'.format(lhsprank, rhsprank)]
-            interarr = interarr.astype('U4,i4,i1,i1').tolist()
+            interarr = interarr.astype('U4,i4,i1,i2').tolist()
 
             mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
                                          rallocs, elemap, self.cfg)
@@ -168,7 +168,7 @@ class BaseSystem(object):
                 cfgsect = 'soln-bcs-%s' % rgn
 
                 # Get the interface
-                interarr = mesh[f].astype('U4,i4,i1,i1').tolist()
+                interarr = mesh[f].astype('U4,i4,i1,i2').tolist()
 
                 # Instantiate
                 bcclass = bcmap[self.cfg.get(cfgsect, 'type')]

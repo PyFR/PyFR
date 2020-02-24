@@ -73,7 +73,7 @@ class FluidForcePlugin(BasePlugin):
             eidxs = defaultdict(list)
             norms = defaultdict(list)
 
-            for etype, eidx, fidx, flags in mesh[bc].astype('U4,i4,i1,i1'):
+            for etype, eidx, fidx, flags in mesh[bc].astype('U4,i4,i1,i2'):
                 eles = elemap[etype]
 
                 if (etype, fidx) not in m0:
