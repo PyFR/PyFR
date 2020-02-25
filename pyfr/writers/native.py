@@ -96,7 +96,7 @@ class NativeWriter(object):
         if re.search('{n[^}]*}', self.basename):
             # Quote and substitute
             bn = re.escape(self.basename)
-            bn = re.sub(r'\\{n[^}]*\\}', r'(\s*\d+\s*)', bn)
+            bn = re.sub(r'\\{n[^}]*\\}', r'(\\s*\\d+\\s*)', bn)
             bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
 
             for f in os.listdir(self.basedir):
