@@ -54,3 +54,8 @@ class BaseDualIntegrator(BaseIntegrator):
             raise ValueError('Plugin call times must be multiples of dt')
 
         super().call_plugin_dt(dt)
+
+    def collect_stats(self, stats):
+        super().collect_stats(stats)
+
+        self.pseudointegrator.collect_stats(stats)
