@@ -32,8 +32,9 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         #               [R_21, R_22, R_32],
         #               [R_31, R_32, R_33]])
 
-        # characteristic lengths,3x3 matrix (XYZ x UVW). This is twice the radii
-        # of influence of the synthetic eddies.
+        # characteristic lengths,3x3 matrix (XYZ x UVW). This corresponds to
+        # the radii of influence of the synthetic eddies, i.e. to the one-side
+        # integral length scale.
         self.lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
 
         # Bulk velocity
@@ -57,7 +58,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # in the streamwise direction.
         inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
 
-        lstreamwise = np.max(self.lturb[self.Ubulkdir])
+        lstreamwise = 2.0*np.max(self.lturb[self.Ubulkdir])
         self.box_xmax = self.ctr[self.Ubulkdir] + lstreamwise/2.0
 
         dirs = [i for i in range(self.ndims) if i != self.Ubulkdir]
@@ -65,11 +66,6 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.box_dims = np.zeros(self.ndims)
         self.box_dims[self.Ubulkdir] = lstreamwise
         self.box_dims[dirs] = inflow
-
-        # # Determine the number of eddies.
-        # inflowarea = np.prod(inflow)
-        # eddyarea = np.prod(self.lturb[dirs])
-        # self.N = int(inflowarea/eddyarea) + 1
 
         # Allocate the memory for the working arrays
         self.eddies_time = np.empty((self.N))

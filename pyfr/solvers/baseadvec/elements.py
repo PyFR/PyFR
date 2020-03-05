@@ -60,12 +60,10 @@ class BaseAdvectionElements(BaseElements):
         # Ac or compressible?
         self.srctplargs['system'] = 'ac' if self.system.startswith('ac') else 'compr'
 
-        # characteristic lengths,3x3 matrix (XYZ x UVW). Divide them by 2.0
-        # because the method is written in terms of radii of influence rather
-        # than characteristic lenghts.
+        # characteristic lengths,3x3 matrix (XYZ x UVW).
         lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
 
-        self.srctplargs['lturb'] = self.arr_to_str(lturb/2.0)
+        self.srctplargs['lturb'] = self.arr_to_str(lturb)
 
         # Bulk velocity magnitude
         Ubulk = self.cfg.getfloat(cfgsect, 'Ubulk')
@@ -81,13 +79,14 @@ class BaseAdvectionElements(BaseElements):
         dirs = [i for i in range(ndims) if i != Ubulkdir]
 
         inflowarea = np.prod(inflow)
-        eddyarea = np.prod(lturb[dirs, Ubulkdir]) # LyU x LzU
+        eddyarea = 4.0*np.prod(lturb[dirs, Ubulkdir]) # 2 LyU x 2 LzU
         self.N = N = int(inflowarea/eddyarea) + 1
+        print('n eddies = {}'.format(N))
 
         self.srctplargs['N'] = N
 
         # Gaussian constants they depend on the box dimensions.
-        self.srctplargs['sigma'] = sigma = self.cfg.getfloat(cfgsect, 'sigma', 0.5)
+        self.srctplargs['sigma'] = sigma = self.cfg.getfloat(cfgsect, 'sigma', 1.0)
         self.GCs = self.determine_gaussian_constants(self.G, sigma, ndims, lturb, Ubulkdir)
         self.srctplargs['GCs'] = self.arr_to_str(self.GCs)
 
@@ -171,15 +170,15 @@ class BaseAdvectionElements(BaseElements):
         # Make them dimensional
         reystress *= utau2
 
-        #HARD CODE ARUP BOX
-        reystressmat = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
-        # Reystress = np.array([[R_11, R_21, R_31],
-        #               [R_21, R_22, R_32],
-        #               [R_31, R_32, R_33]])
-        reystress[0] = reystressmat[0,0]
-        reystress[1] = reystressmat[1,1]
-        reystress[2] = reystressmat[2,2]
-        reystress[3] = reystressmat[1,2]
+        # #HARD CODE ARUP BOX
+        # reystressmat = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
+        # # Reystress = np.array([[R_11, R_21, R_31],
+        # #               [R_21, R_22, R_32],
+        # #               [R_31, R_32, R_33]])
+        # reystress[0] = reystressmat[0,0]
+        # reystress[1] = reystressmat[1,1]
+        # reystress[2] = reystressmat[2,2]
+        # reystress[3] = reystressmat[1,2]
 
         # The aij matrix
         #TODO NOTE HARDCODING DIRECTION AND SIZE, and uniformity in z
@@ -195,12 +194,13 @@ class BaseAdvectionElements(BaseElements):
                            value=aijmat)
 
         # Array to determine whether or not a sol point is actually affected by
-        # the box of eddies. Zero means not affected.
+        # the box of eddies. Zero means not affected, i.e. outside of the box
+        # of eddies.
         affected = np.ones((npts, 1, neles)).reshape((-1))
         xmin = ctr[Ubulkdir] - np.max(lturb[Ubulkdir])
         xmax = ctr[Ubulkdir] + np.max(lturb[Ubulkdir])
         outside = np.logical_or(ploc[Ubulkdir] < xmin, ploc[Ubulkdir] > xmax)
-        affected[outside] = 0.0
+        affected[outside] = -1.0
         affectedmat = self._be.const_matrix(affected.reshape((npts, 1, neles)))
         self._set_external('affected',
                            'in fpdtype_t[{0}]'.format(1),

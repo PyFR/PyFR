@@ -142,9 +142,10 @@ class BasePartitioner(object):
         ewts = np.ones_like(etab)
 
         # Correct the weights to take into account turb generation.
-        Lturb = 1.0
-        ctr_turb = (4.0, 0.0, 0.0)
+        Lturb = 0.55
+        ctr_turb = (2.0, 0.0, 0.0)
         Ubulkdir = 0
+        nel_affected = 0
         print('Taking into account turb. generation...')
         for t, i in vetimap:
             pname = 'spt_{}_p0'.format(t)
@@ -152,8 +153,10 @@ class BasePartitioner(object):
             ctr = np.mean(mesh[pname][:,i,:], axis=0)
             # Distance from the generating plane
             dist = np.abs(ctr[Ubulkdir] - ctr_turb[Ubulkdir])
-            if dist < Lturb:
-                vwts[i] *= 10
+            if dist < 1.01*Lturb: #safety factor of 1 %
+                vwts[i] *= 2 #4 for p3 #10 for p4
+                nel_affected +=1
+        print('nel_affected = {} out of {}'.format(nel_affected, mesh[pname].shape[1]))
 
         return Graph(vtab, etab, vwts, ewts), vetimap
 
