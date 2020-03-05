@@ -154,7 +154,7 @@ class BasePartitioner(object):
             # Distance from the generating plane
             dist = np.abs(ctr[Ubulkdir] - ctr_turb[Ubulkdir])
             if dist < 1.01*Lturb: #safety factor of 1 %
-                vwts[i] *= 2 #4 for p3 #10 for p4
+                vwts[i] *= 17
                 nel_affected +=1
         print('nel_affected = {} out of {}'.format(nel_affected, mesh[pname].shape[1]))
 
