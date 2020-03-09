@@ -90,7 +90,7 @@ class BaseAdvectionElements(BaseElements):
         self.GCs = self.determine_gaussian_constants(self.G, sigma, ndims, lturb, Ubulkdir)
         self.srctplargs['GCs'] = self.arr_to_str(self.GCs)
 
-        # Allocate the memory for the eddies location, strength and creation time.
+        # Allocate the memory for the eddies location and strength.
         self.eddies_loc = self._be.matrix((self.ndims, N))
         self._set_external('eddies_loc',
                            'in broadcast fpdtype_t[{}][{}]'.format(self.ndims, N),
@@ -100,11 +100,6 @@ class BaseAdvectionElements(BaseElements):
         self._set_external('eddies_strength',
                            'in broadcast fpdtype_t[{}][{}]'.format(self.ndims, N),
                             value=self.eddies_strength)
-
-        self.eddies_time = self._be.matrix((1, N))
-        self._set_external('eddies_time',
-                           'in broadcast fpdtype_t[1][{}]'.format(N),
-                            value=self.eddies_time)
 
         #TODO compute the factor and aij mat in the plugin rather than here?
 

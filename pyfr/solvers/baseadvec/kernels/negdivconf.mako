@@ -32,43 +32,30 @@ fpdtype_t sigma = ${sigma};
 fpdtype_t turbsrc[${ndims}] = {0.0};
 
 // Working variables
-fpdtype_t eddies_loc_updated[${ndims}];
 fpdtype_t g, csi, GC, output;
-
-// int n;
-// printf("ldeddies_time = %d\n", ldeddies_time);
 
 // Loop over the eddies
 % for n in range(N):
-    // Compute the current location of the eddies.
-    % for j in range(ndims):
-        % if j == Ubulkdir:
-            eddies_loc_updated[${j}] = eddies_loc[${j}][${n}] + (t - eddies_time[${j}][${n}])*${Ubulk};
-        % else:
-            eddies_loc_updated[${j}] = eddies_loc[${j}][${n}];
-        % endif
-    % endfor
-
     // n = ${n};
-    // printf("Eddy: t=%f, eddies_loc_updated=(%f, %f, %f), n=%d\n", t, eddies_loc_updated[0], eddies_loc_updated[1], eddies_loc_updated[2], n);
+    // printf("Eddy: t=%f, eddies_loc=(%f, %f, %f), n=%d\n", t, eddies_loc[0][${n}], eddies_loc[1][${n}], eddies_loc[2][${n}], n);
 
     //U,V,W
     % for j in range(ndims):
         g = 1.0;
 
-        csi = fabs((ploc[2] - eddies_loc_updated[2])/lturb[2][${j}]);
+        csi = fabs((ploc[2] - eddies_loc[2][${n}])/lturb[2][${j}]);
         if (csi < 1.0){
             GC  = GCs[2][${j}];
             ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
             g *= output;
 
-            csi = fabs((ploc[1] - eddies_loc_updated[1])/lturb[1][${j}]);
+            csi = fabs((ploc[1] - eddies_loc[1][${n}])/lturb[1][${j}]);
             if (csi < 1.0){
                 GC  = GCs[1][${j}];
                 ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
                 g *= output;
 
-                csi = fabs((ploc[0] - eddies_loc_updated[0])/lturb[0][${j}]);
+                csi = fabs((ploc[0] - eddies_loc[0][${n}])/lturb[0][${j}]);
                 if (csi < 1.0){
                     GC  = GCs[0][${j}];
                     ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
