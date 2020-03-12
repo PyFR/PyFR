@@ -29,25 +29,38 @@ class BaseAdvectionElements(BaseElements):
         return string.replace('[','{').replace(']','}').replace('\n','')
 
     @staticmethod
-    def G(csi, sigma, GC, p):
-        return ((1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2))**p
+    def G(csi, sigma, GC, p, clip, csimax):
+        output = ((1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2))**p
+        if clip:
+            output[np.abs(csi) > csimax] = 0.0
+        return output
 
     @staticmethod
     def determine_gaussian_constants(G, sigma, ndims, lturb, Ubulkdir):
         from scipy.integrate import fixed_quad
         # Compute the constants GC such that 0.5 times the integral of the
-        # guassian squared, between -1 and +1, is 1.0.
+        # guassian squared, between -1 and +1, is 1.0. The clipping value of
+        # the independent variable depend on the ratio between the considered
+        # length scale and the reference (max) one (a reference for each direction).
+        # The clipping value for the reference (max) lengths is 1.
         GCs = np.zeros((ndims, ndims))
-        args = [sigma, 1.0, 2.0]
-        GCs[...] = 0.5*fixed_quad(lambda csi: G(csi, *args), -1, 1, n=10)[0]
 
-        # Correct the values if the characteristic lengths are different from
-        # the reference streamwise velocity. A smaller than reference length
-        # means we need a larger constant.
+        # Reference lenghts, the maximum one per direction.
+        lturbref = np.max(lturb, axis=1)
+
+        # Clipping value: smaller than reference length means smaller clipping
+        # value.
+        csimax = lturb/lturbref[:,np.newaxis]
+
+        # Compute the constants
         for i in range(ndims): #x,y,z
             for j in range(ndims): #U,V,W
-                GCs[i, j] *= lturb[i, Ubulkdir]/lturb[i, j]
-        return GCs
+                cm = csimax[i, j]
+                args = [sigma, 1.0, 2.0, True, cm]
+                funct = lambda csi: G(csi, *args)
+                GCs[i,j] = 0.5*fixed_quad(funct, -1, 1, n=50)[0]
+
+        return csimax, GCs, lturbref
 
     def prepare_turbsrc(self, ploc):
         cfgsect = 'soln-plugin-turbulencegenerator'
@@ -63,8 +76,6 @@ class BaseAdvectionElements(BaseElements):
         # characteristic lengths,3x3 matrix (XYZ x UVW).
         lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
 
-        self.srctplargs['lturb'] = self.arr_to_str(lturb)
-
         # Bulk velocity magnitude
         Ubulk = self.cfg.getfloat(cfgsect, 'Ubulk')
 
@@ -79,7 +90,7 @@ class BaseAdvectionElements(BaseElements):
         dirs = [i for i in range(ndims) if i != Ubulkdir]
 
         inflowarea = np.prod(inflow)
-        eddyarea = 4.0*np.prod(lturb[dirs, Ubulkdir]) # 2 LyU x 2 LzU
+        eddyarea = 4.0*np.prod(np.max(lturb[dirs], axis=1)) # 2 Ly x 2 Lz
         self.N = N = int(inflowarea/eddyarea) + 1
         print('n eddies = {}'.format(N))
 
@@ -87,8 +98,10 @@ class BaseAdvectionElements(BaseElements):
 
         # Gaussian constants they depend on the box dimensions.
         self.srctplargs['sigma'] = sigma = self.cfg.getfloat(cfgsect, 'sigma', 1.0)
-        self.GCs = self.determine_gaussian_constants(self.G, sigma, ndims, lturb, Ubulkdir)
-        self.srctplargs['GCs'] = self.arr_to_str(self.GCs)
+        csimax, GCs, lturbref = self.determine_gaussian_constants(self.G, sigma, ndims, lturb, Ubulkdir)
+        self.srctplargs['csimax'] = self.arr_to_str(csimax)
+        self.srctplargs['GCs'] = self.arr_to_str(GCs)
+        self.srctplargs['lturbref'] = self.arr_to_str(lturbref)
 
         # Allocate the memory for the eddies location and strength.
         self.eddies_loc = self._be.matrix((self.ndims, N))
