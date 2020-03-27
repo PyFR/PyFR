@@ -83,7 +83,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
     @staticmethod
     def random_seed(t):
-        return int(t*1000) + 23
+        return int(t*10000) + 23
 
     def create_eddies(self, t, neweddies=None):
         # Eddies to be generated: number and indices.
