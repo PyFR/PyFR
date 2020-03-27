@@ -149,12 +149,15 @@ class BasePartitioner(object):
         print('Taking into account turb. generation...')
         for t, i in vetimap:
             pname = 'spt_{}_p0'.format(t)
-            # Get center of this element
-            ctr = np.mean(mesh[pname][:,i,:], axis=0)
+            # Bounds of this element
+            emax = np.max(mesh[pname][:,i,:], axis=0)
+            emin = np.min(mesh[pname][:,i,:], axis=0)
             # Distance from the generating plane
-            dist = np.abs(ctr[Ubulkdir] - ctr_turb[Ubulkdir])
-            if dist < 1.01*Lturb: #safety factor of 1 %
-                vwts[i] *= 17
+            dist1 = np.abs(emin[Ubulkdir] - ctr_turb[Ubulkdir])
+            dist2 = np.abs(emax[Ubulkdir] - ctr_turb[Ubulkdir])
+            dist  = np.max([dist1, dist2])
+            if dist <= Lturb:
+                vwts[i] *= 2
                 nel_affected +=1
         print('nel_affected = {} out of {}'.format(nel_affected, mesh[pname].shape[1]))
 
