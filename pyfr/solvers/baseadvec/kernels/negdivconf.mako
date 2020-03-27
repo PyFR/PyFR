@@ -4,12 +4,6 @@
 
 // #include <stdio.h>
 
-<% twicepi = 2.0*math.pi %>
-
-<%pyfr:macro name='gaussian' params='csi, GC, sigma, output'>
-    output = (1./sigma/sqrt(${twicepi}*GC))*exp(-0.5*(pow(csi/sigma,2)));
-</%pyfr:macro>
-
 <%pyfr:kernel name='negdivconf' ndim='2'
               t='scalar fpdtype_t'
               tdivtconf='inout fpdtype_t[${str(nvars)}]'
@@ -25,49 +19,56 @@ if (affected[0] > 0.0){
 fpdtype_t lturbref[${ndims}] = ${lturbref};
 
 // Guassian constants
-fpdtype_t GCs[${ndims}][${ndims}] = ${GCs};
+fpdtype_t GCsInv[${ndims}][${ndims}] = ${GCsInv};
 fpdtype_t csimax[${ndims}][${ndims}] = ${csimax};
-fpdtype_t sigma = ${sigma};
+fpdtype_t OneOverSigmaProd = pow(${sigmaInv}, ${ndims});
 
 // Initialize the turbsrc to 0.0
 fpdtype_t turbsrc[${ndims}] = {0.0};
 
 // Working variables
-fpdtype_t g, csi, GC, output;
+fpdtype_t g, arg;
+fpdtype_t csi[${ndims}];
+int Nlocal[${ndims}] = {0};
 
 // Loop over the eddies
-% for n in range(N):
-    // n = ${n};
-    // printf("Eddy: t=%f, eddies_loc=(%f, %f, %f), n=%d\n", t, eddies_loc[0][${n}], eddies_loc[1][${n}], eddies_loc[2][${n}], n);
+for (int n=0; n<${N}; n++){
+    // printf("Eddy: t=%f, eddies_loc=(%f, %f, %f), n=%d\n", t, eddies_loc[0][n], eddies_loc[1][n], eddies_loc[2][n], n);
 
     //U,V,W
     % for j in range(ndims):
-        g = 1.0;
+        csi[2] = fabs((ploc[2] - eddies_loc[2][n])/lturbref[2]);
+        if (csi[2] < csimax[2][${j}]){
 
-        csi = fabs((ploc[2] - eddies_loc[2][${n}])/lturbref[2]);
-        if (csi < csimax[2][${j}]){
-            GC  = GCs[2][${j}];
-            ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
-            g *= output;
+            csi[1] = fabs((ploc[1] - eddies_loc[1][n])/lturbref[1]);
+            if (csi[1] < csimax[1][${j}]){
 
-            csi = fabs((ploc[1] - eddies_loc[1][${n}])/lturbref[1]);
-            if (csi < csimax[1][${j}]){
-                GC  = GCs[1][${j}];
-                ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
-                g *= output;
+                csi[0] = fabs((ploc[0] - eddies_loc[0][n])/lturbref[0]);
+                if (csi[0] < csimax[0][${j}]){
 
-                csi = fabs((ploc[0] - eddies_loc[0][${n}])/lturbref[0]);
-                if (csi < csimax[0][${j}]){
-                    GC  = GCs[0][${j}];
-                    ${pyfr.expand('gaussian', 'csi', 'GC', 'sigma', 'output')};
-                    g *= output;
+                    arg = 0.0;
+                    g   = 1.0;
+                    % for i in range(ndims):
+                        g   *= GCsInv[${i}][${j}];
+                        arg += pow(${sigmaInv}*csi[${i}], 2);
+                    % endfor
+
+                    g *= OneOverSigmaProd*exp(-0.5*arg);
 
                     // Accumulate taking into account this components strength
-                    turbsrc[${j}] += g*eddies_strength[${j}][${n}];
-               }
+                    turbsrc[${j}] += g*eddies_strength[${j}][n];
+
+                    Nlocal[${j}] += 1;
+                }
             }
         }
     % endfor
+}
+
+% for j in range(ndims):
+    if (Nlocal[${j}] > 1){
+        turbsrc[${j}] *= sqrt(1.0/Nlocal[${j}]);
+    }
 % endfor
 
 // order is important here.
