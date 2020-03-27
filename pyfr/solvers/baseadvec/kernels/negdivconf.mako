@@ -24,8 +24,8 @@ fpdtype_t GCsInv[${ndims}][${ndims}] = ${GCsInv};
 fpdtype_t csimax[${ndims}][${ndims}] = ${csimax};
 fpdtype_t OneOverSigmaProd = pow(${sigmaInv}, ${ndims});
 
-// Initialize the turbsrc to 0.0
-fpdtype_t turbsrc[${ndims}] = {0.0};
+// Initialize the utilde to 0.0
+fpdtype_t utilde[${ndims}] = {0.0};
 
 // Working variables
 fpdtype_t g, arg;
@@ -57,7 +57,7 @@ for (int n=0; n<${N}; n++){
                     g *= OneOverSigmaProd*exp(-0.5*arg);
 
                     // Accumulate taking into account this components strength
-                    turbsrc[${j}] += g*eddies_strength[${j}][n];
+                    utilde[${j}] += g*eddies_strength[${j}][n];
 
                     Nlocal[${j}] += 1;
                 }
@@ -68,23 +68,23 @@ for (int n=0; n<${N}; n++){
 
 % for j in range(ndims):
     if (Nlocal[${j}] > 1){
-        turbsrc[${j}] *= sqrt(1.0/Nlocal[${j}]);
+        utilde[${j}] *= sqrt(1.0/Nlocal[${j}]);
     }
 % endfor
 
 // order is important here.
-turbsrc[2] = aij[3]*turbsrc[2];
-turbsrc[1] = aij[1]*turbsrc[0] + aij[2]*turbsrc[1];
-turbsrc[0] = aij[0]*turbsrc[0];
+utilde[2] = aij[3]*utilde[2];
+utilde[1] = aij[1]*utilde[0] + aij[2]*utilde[1];
+utilde[0] = aij[0]*utilde[0];
 
 // source term for synthetic turbulence, only for the momentum equations for the
 // moment. Multiply by the density to make it dimensionally consistent for a
 // compressible solver.
 % for i in range(ndims):
     % if system == 'compr':
-        tdivtconf[${i} + 1] += u[0]*factor[${i}]*turbsrc[${i}];
+        tdivtconf[${i} + 1] += u[0]*factor[${i}]*utilde[${i}];
     % else:
-        tdivtconf[${i} + 1] += factor[${i}]*turbsrc[${i}];
+        tdivtconf[${i} + 1] += factor[${i}]*utilde[${i}];
     % endif
 % endfor
 
