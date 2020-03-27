@@ -239,10 +239,11 @@ class BaseAdvectionElements(BaseElements):
         self.srctplargs = srctplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'srcex': self._src_exprs
+            'srcex': self._src_exprs,
+            'trsrc': self._turbsrc
         }
 
-        # External kernel arguments, if any.
+        # External kernel arguments for turbulence generation, if any.
         if self._turbsrc:
             self.system = self.cfg.get('solver', 'system')
             # Source term for turbulence generation.

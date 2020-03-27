@@ -45,6 +45,9 @@ class Inifile(object):
     def hasopt(self, section, option):
         return self._cp.has_option(section, option)
 
+    def hassect(self, section):
+        return self._cp.has_section(section)
+
     def get(self, section, option, default=_sentinel, vars=None):
         try:
             val = self._cp.get(section, option, vars=vars)
