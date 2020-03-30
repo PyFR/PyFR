@@ -30,7 +30,6 @@ fpdtype_t utilde[${ndims}] = {0.0};
 // Working variables
 fpdtype_t g, arg;
 fpdtype_t csi[${ndims}];
-int Nlocal[${ndims}] = {0};
 
 // Loop over the eddies
 for (int n=0; n<${N}; n++){
@@ -58,19 +57,11 @@ for (int n=0; n<${N}; n++){
 
                     // Accumulate taking into account this components strength
                     utilde[${j}] += g*eddies_strength[${j}][n];
-
-                    Nlocal[${j}] += 1;
                 }
             }
         }
     % endfor
 }
-
-% for j in range(ndims):
-    if (Nlocal[${j}] > 1){
-        utilde[${j}] *= sqrt(1.0/Nlocal[${j}]);
-    }
-% endfor
 
 // order is important here.
 utilde[2] = aij[3]*utilde[2];
