@@ -92,7 +92,6 @@ class BaseAdvectionElements(BaseElements):
         inflowarea = np.prod(inflow)
         eddyarea = 4.0*np.prod(np.max(lturb[dirs], axis=1)) # 2 Ly x 2 Lz
         self.N = N = int(inflowarea/eddyarea) + 1
-        print('n eddies = {}'.format(N))
 
         self.srctplargs['N'] = N
 

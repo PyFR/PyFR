@@ -23,6 +23,11 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         for ele in self.elemap.values():
             self.N = ele.N
 
+        # MPI info
+        comm, rank, root = get_comm_rank_root()
+        if rank == root:
+            print('n eddies = {}'.format(self.N))
+
         # Initialize the previous time to the current one.
         self.tprev = intg.tcurr
 
