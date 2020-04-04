@@ -43,18 +43,18 @@ class VTKWriter(BaseWriter):
 
             # Update list of solution fields
             self._soln_fields.extend(
-                '{0}-{1}'.format(f, d)
+                f'{f}-{d}'
                 for f in list(self._soln_fields) for d in range(self.ndims)
             )
 
             # Update the list of VTK variables to solution fields
-            nf = lambda f: ['{0}-{1}'.format(f, d) for d in range(self.ndims)]
+            nf = lambda f: [f'{f}-{d}' for d in range(self.ndims)]
             for var, fields in list(self._vtk_vars):
                 if len(fields) == 1:
-                    self._vtk_vars.append(('grad ' + var, nf(fields[0])))
+                    self._vtk_vars.append((f'grad {var}', nf(fields[0])))
                 else:
                     self._vtk_vars.extend(
-                        ('grad {0} {1}'.format(var, f), nf(f)) for f in fields
+                        (f'grad {var} {f}', nf(f)) for f in fields
                     )
 
     def _pre_proc_fields_soln(self, name, mesh, soln):
@@ -122,23 +122,23 @@ class VTKWriter(BaseWriter):
 
         return fields
 
-    def _get_npts_ncells_nnodes(self, mk):
-        m_inf = self.mesh_inf[mk]
+    def _get_npts_ncells_nnodes(self, sk):
+        etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
 
         # Get the shape and sub division classes
-        shapecls = subclass_where(BaseShape, name=m_inf[0])
-        subdvcls = subclass_where(BaseShapeSubDiv, name=m_inf[0])
+        shapecls = subclass_where(BaseShape, name=etype)
+        subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
 
         # Number of vis points
-        npts = shapecls.nspts_from_order(self.divisor + 1)*m_inf[1][1]
+        npts = shapecls.nspts_from_order(self.divisor + 1)*neles
 
         # Number of sub cells and nodes
-        ncells = len(subdvcls.subcells(self.divisor))*m_inf[1][1]
-        nnodes = len(subdvcls.subnodes(self.divisor))*m_inf[1][1]
+        ncells = len(subdvcls.subcells(self.divisor))*neles
+        nnodes = len(subdvcls.subnodes(self.divisor))*neles
 
         return npts, ncells, nnodes
 
-    def _get_array_attrs(self, mk=None):
+    def _get_array_attrs(self, sk=None):
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
         dsize = np.dtype(self.dtype).itemsize
 
@@ -153,9 +153,9 @@ class VTKWriter(BaseWriter):
             types.append(dtype)
             comps.append(str(len(varnames)))
 
-        # If a mesh has been given the compute the sizes
-        if mk:
-            npts, ncells, nnodes = self._get_npts_ncells_nnodes(mk)
+        # If a solution has been given the compute the sizes
+        if sk:
+            npts, ncells, nnodes = self._get_npts_ncells_nnodes(sk)
             nb = npts*dsize
 
             sizes = [3*nb, 4*nnodes, 4*ncells, ncells]
@@ -189,13 +189,13 @@ class VTKWriter(BaseWriter):
         parallel = extn == '.pvtu'
 
         parts = defaultdict(list)
-        for mk, sk in zip(self.mesh_inf, self.soln_inf):
-            prt = mk.split('_')[-1]
-            pfn = '{0}_{1}.vtu'.format(name, prt) if parallel else self.outf
+        for sk, (etype, shape) in self.soln_inf.items():
+            part = sk.split('_')[-1]
+            pname = f'{name}_{part}.vtu' if parallel else self.outf
 
-            parts[pfn].append((mk, sk))
+            parts[pname].append((f'spt_{etype}_{part}', sk))
 
-        write_s_to_fh = lambda s: fh.write(s.encode('utf-8'))
+        write_s_to_fh = lambda s: fh.write(s.encode())
 
         for pfn, misil in parts.items():
             with open(pfn, 'wb') as fh:
@@ -209,7 +209,7 @@ class VTKWriter(BaseWriter):
 
                 # Header
                 for mk, sk in misil:
-                    off = self._write_serial_header(fh, mk, off)
+                    off = self._write_serial_header(fh, sk, off)
 
                 write_s_to_fh('</UnstructuredGrid>\n'
                               '<AppendedData encoding="raw">\n_')
@@ -246,13 +246,12 @@ class VTKWriter(BaseWriter):
     def _process_name(self, name):
         return re.sub(r'\W+', '_', name)
 
-    def _write_serial_header(self, vtuf, mk, off):
-        names, types, comps, sizes = self._get_array_attrs(mk)
-        npts, ncells = self._get_npts_ncells_nnodes(mk)[:2]
+    def _write_serial_header(self, vtuf, sk, off):
+        names, types, comps, sizes = self._get_array_attrs(sk)
+        npts, ncells = self._get_npts_ncells_nnodes(sk)[:2]
 
-        write_s = lambda s: vtuf.write(s.encode('utf-8'))
-        write_s('<Piece NumberOfPoints="{0}" NumberOfCells="{1}">\n'
-                .format(npts, ncells))
+        write_s = lambda s: vtuf.write(s.encode())
+        write_s(f'<Piece NumberOfPoints="{npts}" NumberOfCells="{ncells}">\n')
         write_s('<Points>\n')
 
         # Write vtk DaraArray headers
@@ -279,7 +278,7 @@ class VTKWriter(BaseWriter):
     def _write_parallel_header(self, vtuf):
         names, types, comps = self._get_array_attrs()
 
-        write_s = lambda s: vtuf.write(s.encode('utf-8'))
+        write_s = lambda s: vtuf.write(s.encode())
         write_s('<PPoints>\n')
 
         # Write vtk DaraArray headers
@@ -299,6 +298,12 @@ class VTKWriter(BaseWriter):
         name = self.mesh_inf[mk][0]
         mesh = self.mesh[mk].astype(self.dtype)
         soln = self.soln[sk].swapaxes(0, 1).astype(self.dtype)
+
+        # Handle the case of partial solution files
+        if soln.shape[2] != mesh.shape[1]:
+            skpre, skpost = sk.rsplit('_', 1)
+
+            mesh = mesh[:, self.soln[f'{skpre}_idxs_{skpost}'], :]
 
         # Dimensions
         nspts, neles = mesh.shape[:2]

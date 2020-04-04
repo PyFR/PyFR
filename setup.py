@@ -7,8 +7,8 @@ import sys
 
 
 # Python version
-if sys.version_info[:2] < (3, 5):
-    print('PyFR requires Python 3.5 or newer')
+if sys.version_info[:2] < (3, 6):
+    print('PyFR requires Python 3.6 or newer')
     sys.exit(-1)
 
 # PyFR version
