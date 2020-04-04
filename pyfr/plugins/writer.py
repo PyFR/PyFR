@@ -13,11 +13,17 @@ class WriterPlugin(BasePlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
+        # Element info and backend data type
+        einfo = zip(intg.system.ele_types, intg.system.ele_shapes)
+        fpdtype = intg.backend.fpdtype
+
+        # Output metadata
+        mdata = [(f'soln_{etype}', shape, fpdtype) for etype, shape in einfo]
+
         # Construct the solution writer
         basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(cfgsect, 'basename')
-        self._writer = NativeWriter(intg, self.nvars, basedir, basename,
-                                    prefix='soln')
+        self._writer = NativeWriter(intg, mdata, basedir, basename)
 
         # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
