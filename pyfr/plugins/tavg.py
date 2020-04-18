@@ -33,11 +33,19 @@ class TavgPlugin(BasePlugin):
         # Save a reference to the physical solution point locations
         self.plocs = intg.system.ele_ploc_upts
 
-        # Output file directory, base name, and writer
+        # Element info and backend data type
+        einfo = zip(intg.system.ele_types, intg.system.ele_shapes)
+        fpdtype = intg.backend.fpdtype
+
+        # Output metadata
+        mdata = [(f'tavg_{etype}', (nupts, len(self.exprs), neles), fpdtype)
+                 for etype, (nupts, _, neles) in einfo]
+
+        # Output base directory and name
         basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(cfgsect, 'basename')
-        self._writer = NativeWriter(intg, len(self.exprs), basedir, basename,
-                                    prefix='tavg')
+
+        self._writer = NativeWriter(intg, mdata, basedir, basename)
 
         # Time averaging parameters
         self.dtout = self.cfg.getfloat(cfgsect, 'dt-out')
