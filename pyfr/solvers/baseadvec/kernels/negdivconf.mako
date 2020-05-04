@@ -20,15 +20,14 @@ if (affected[0] > 0.0){
 fpdtype_t lturbref[${ndims}] = ${lturbref};
 
 // Guassian constants
-fpdtype_t GCsInv[${ndims}][${ndims}] = ${GCsInv};
 fpdtype_t csimax[${ndims}][${ndims}] = ${csimax};
-fpdtype_t OneOverSigmaProd = pow(${sigmaInv}, ${ndims});
+fpdtype_t gauss_const[${ndims}] = ${gauss_const};
 
 // Initialize the utilde to 0.0
 fpdtype_t utilde[${ndims}] = {0.0};
 
 // Working variables
-fpdtype_t g, arg;
+fpdtype_t arg;
 fpdtype_t csi[${ndims}];
 
 // Loop over the eddies
@@ -46,17 +45,15 @@ for (int n=0; n<${N}; n++){
                 csi[0] = fabs((ploc[0] - eddies_loc[0][n])/lturbref[0]);
                 if (csi[0] < csimax[0][${j}]){
 
+                    // Compute the argument of the exponential
                     arg = 0.0;
-                    g   = 1.0;
                     % for i in range(ndims):
-                        g   *= GCsInv[${i}][${j}];
-                        arg += pow(${sigmaInv}*csi[${i}], 2);
+                        arg += csi[${i}]*csi[${i}];
                     % endfor
-
-                    g *= OneOverSigmaProd*exp(-0.5*arg);
+                    arg *= ${arg_const};
 
                     // Accumulate taking into account this components strength
-                    utilde[${j}] += g*eddies_strength[${j}][n];
+                    utilde[${j}] += gauss_const[${j}]*exp(arg)*eddies_strength[${j}][n];
                 }
             }
         }

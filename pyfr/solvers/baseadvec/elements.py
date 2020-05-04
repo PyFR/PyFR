@@ -97,10 +97,11 @@ class BaseAdvectionElements(BaseElements):
 
         # Gaussian constants they depend on the box dimensions.
         sigma = self.cfg.getfloat(cfgsect, 'sigma', 1.0)
-        self.srctplargs['sigmaInv'] = 1.0/sigma
+        self.srctplargs['arg_const'] = -0.5/(sigma**2)
         csimax, GCs, lturbref = self.determine_gaussian_constants(self.G, sigma, ndims, lturb, Ubulkdir)
         self.srctplargs['csimax'] = self.arr_to_str(csimax)
-        self.srctplargs['GCsInv'] = self.arr_to_str(1.0/np.sqrt(2.0*np.pi*GCs))
+        GCsInv = 1.0/np.sqrt(2.0*np.pi*GCs)
+        self.srctplargs['gauss_const'] = self.arr_to_str(np.prod(GCsInv, axis=0)/(sigma**self.ndims))
         self.srctplargs['lturbref'] = self.arr_to_str(lturbref)
 
         # Allocate the memory for the eddies location and strength.
