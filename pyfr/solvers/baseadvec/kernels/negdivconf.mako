@@ -45,7 +45,6 @@ for (int n=0; n<${N}; n++){
                 csi[0] = fabs((ploc[0] - eddies_loc[0][n])/lturbref[0]);
                 if (csi[0] < csimax[0][${j}]){
 
-                    // Compute the argument of the exponential
                     arg = 0.0;
                     % for i in range(ndims):
                         arg += csi[${i}]*csi[${i}];
