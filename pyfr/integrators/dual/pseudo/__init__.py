@@ -22,7 +22,6 @@ def register_tabulated_pseudo_steppers():
         name = m.group(1)
 
         attrs = {'pseudo_stepper_name': name, 'path': path}
-        attrs['_stepper_nfevals'] = int(m.group(2)) + 1
         attrs['_pseudo_stepper_nregs'] = int(m.group(2))
         attrs['_pseudo_stepper_order'] = int(m.group(3))
         attrs['_pseudo_stepper_has_lerrest'] = bool(m.group(5))
