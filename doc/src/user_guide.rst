@@ -18,7 +18,7 @@ Dependencies
 Overview
 ^^^^^^^^
 
-PyFR |release| has a hard dependency on Python 3.5+ and the following
+PyFR |release| has a hard dependency on Python 3.6+ and the following
 Python packages:
 
 1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
@@ -1076,6 +1076,13 @@ Parameterised with
 
     ``blocking`` | ``non-blocking``
 
+4. ``region`` --- region to be written, specified as either the
+   entire domain using ``*``, a cuboidal sub-region via diametrically
+   opposite vertices, or a sub-region of elements that have faces on a
+   specific domain boundary via the name of the domain boundary
+
+    ``*`` | ``[(x, y, z),(x, y, z)]`` | *string*
+
 Example::
 
     [soln-plugin-writer]
@@ -1084,6 +1091,7 @@ Example::
     basename = files-{t:.2f}
     post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
     post-action-mode = blocking
+    region = [(-5, -5, -5), (5, 5, 5)]
 
 [soln-plugin-fluidforce-*name*]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
