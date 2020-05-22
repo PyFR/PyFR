@@ -78,6 +78,9 @@ class BaseDualPseudoIntegrator(BaseCommon):
         # Pointwise kernels for the pseudo-integrator
         self.pintgkernels = defaultdict(proxylist)
 
+        # Pseudo-step counter
+        self.npseudosteps = 0
+
     @property
     def _pseudo_stepper_regidx(self):
         return self._regidx[:self._pseudo_stepper_nregs]

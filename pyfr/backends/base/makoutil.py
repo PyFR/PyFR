@@ -66,7 +66,11 @@ def _locals(body):
     # A statement can define multiple variables, so split by ','
     decls = it.chain.from_iterable(d.split(',') for d in decls)
 
-    return [re.match(r'\s*(\w+)', v).group(1) for v in decls]
+    # Extract the variable names
+    lvars = [re.match(r'\s*(\w+)', v).group(1) for v in decls]
+
+    # Prune invalid names
+    return [lv for lv in lvars if lv != 'if']
 
 
 @supports_caller

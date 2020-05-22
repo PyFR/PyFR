@@ -11,9 +11,6 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Pseudo-step counter
-        self.npseudosteps = 0
-
         # Stats on the most recent step
         self.pseudostepinfo = []
 
@@ -48,6 +45,9 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
             # Normalise and return
             return np.sqrt(res)
 
+    def _update_pseudostepinfo(self, niters, resid):
+        self.pseudostepinfo.append((self.ntotiters, niters, resid))
+
 
 class DualNonePseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'none'
@@ -57,9 +57,6 @@ class DualNonePseudoController(BaseDualPseudoController):
         return False
 
     def convmon(self, i, minniters):
-        # Increment the step count
-        self.npseudosteps += 1
-
         if i >= minniters - 1:
             # Subtract the current solution from the previous solution
             self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
@@ -67,10 +64,10 @@ class DualNonePseudoController(BaseDualPseudoController):
             # Compute the normalised residual
             resid = tuple(self._resid(self._dtau, self._idxprev))
 
-            self.pseudostepinfo.append((self.npseudosteps, i + 1, resid))
+            self._update_pseudostepinfo(i + 1, resid)
             return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
         else:
-            self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
+            self._update_pseudostepinfo(i + 1, None)
             return False
 
     def pseudo_advance(self, tcurr):
@@ -152,9 +149,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         self._queue % self.pintgkernels['localerrest']()
 
     def convmon(self, i, minniters):
-        # Increment the step count
-        self.npseudosteps += 1
-
         if i >= minniters - 1:
             # Subtract the current solution from the previous solution
             self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
@@ -165,10 +159,10 @@ class DualPIPseudoController(BaseDualPseudoController):
             # Reduction
             resid = tuple(self._resid(1.0, self._idxprev))
 
-            self.pseudostepinfo.append((self.npseudosteps, i + 1, resid))
+            self._update_pseudostepinfo(i + 1, resid)
             return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
         else:
-            self.pseudostepinfo.append((self.npseudosteps, i + 1, None))
+            self._update_pseudostepinfo(i + 1, None)
             return False
 
     def pseudo_advance(self, tcurr):

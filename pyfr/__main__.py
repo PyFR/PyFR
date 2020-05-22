@@ -52,6 +52,8 @@ def main():
     partitioners = sorted(cls.name for cls in subclasses(BasePartitioner))
     ap_partition.add_argument('-p', dest='partitioner', choices=partitioners,
                               help='partitioner to use')
+    ap_partition.add_argument('-r', dest='rnumf', type=FileType('w'),
+                              help='output renumbering file')
     ap_partition.add_argument('--popt', dest='popts', action='append',
                               default=[], metavar='key:value',
                               help='partitioner-specific option')
@@ -158,7 +160,7 @@ def process_partition(args):
             raise RuntimeError('No partitioners available')
 
     # Partition the mesh
-    mesh, part_soln_fn = part.partition(NativeReader(args.mesh))
+    mesh, rnum, part_soln_fn = part.partition(NativeReader(args.mesh))
 
     # Prepare the solutions
     solnit = (part_soln_fn(NativeReader(s)) for s in args.solns)
@@ -176,6 +178,14 @@ def process_partition(args):
         with h5py.File(path, 'w') as f:
             for k, v in data.items():
                 f[k] = v
+
+    # Write out the renumbering table
+    if args.rnumf:
+        print('etype,pold,iold,pnew,inew', file=args.rnumf)
+
+        for etype, emap in sorted(rnum.items()):
+            for k, v in sorted(emap.items()):
+                print(','.join(map(str, (etype, *k, *v))), file=args.rnumf)
 
 
 def process_export(args):
