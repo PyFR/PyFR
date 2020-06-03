@@ -35,8 +35,8 @@ for (int n=0; n<${N}; n++){
     // printf("Eddy: t=%f, eddies_loc=(%f, %f, %f), n=%d\n", t, eddies_loc[0][n], eddies_loc[1][n], eddies_loc[2][n], n);
 
     //U,V,W
+    csi[2] = fabs((ploc[2] - eddies_loc[2][n])/lturbref[2]);
     % for j in range(ndims):
-        csi[2] = fabs((ploc[2] - eddies_loc[2][n])/lturbref[2]);
         if (csi[2] < csimax[2][${j}]){
 
             csi[1] = fabs((ploc[1] - eddies_loc[1][n])/lturbref[1]);
