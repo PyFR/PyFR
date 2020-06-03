@@ -138,39 +138,41 @@ class BaseAdvectionElements(BaseElements):
                            value=fmat)
 
         # Model the Reystress properly. TODO hard coded for the moment.
-        # parametrized with respect to the non-dimensional distance from the wall
-        utau2 = constants['tauw']/constants['rhom']
-        ncoeffs = 11
+        # parametrized with respect to the non-dimensional distance from the wall y/delta
+        utau2 = constants['utau']**2 #constants['tauw']/constants['rhom']
+        ncoeffs = 15
         coeffs = np.empty((4,ncoeffs))
         #uRMS/utau -> R11
-        coeffs[0,:] = [ 1.21715190e+04,-6.02428864e+04, 1.25234653e+05,-1.40761190e+05,
-                        9.07187232e+04,-3.14035259e+04, 3.36630529e+03, 1.39816885e+03,
-                       -5.47109999e+02, 6.61763704e+01, 0.0]
+        coeffs[0,:] = [ 2.19486972e+06,-1.58437492e+07, 5.12883686e+07,-9.82802707e+07,
+                        1.23921817e+08,-1.08083933e+08, 6.67008924e+07,-2.92587482e+07,
+                        9.01707856e+06,-1.88954813e+06, 2.50183446e+05,-1.70298457e+04,
+                        1.26582088e+00, 6.87492352e+01,-1.48027907e-02]
         #vRMS/utau -> R22
-        coeffs[1,:] = [ 2.13721398e+03,-1.13401755e+04, 2.59234834e+04,-3.34149489e+04,
-                        2.66892076e+04,-1.36591822e+04, 4.45867524e+03,-8.78495685e+02,
-                        8.33507800e+01, 1.47856617e+00, 0.0]
+        coeffs[1,:] = [ 1.15374190e+05,-8.35012705e+05, 2.71867287e+06,-5.26252656e+06,
+                        6.74359493e+06,-6.02882218e+06, 3.86113761e+06,-1.79096772e+06,
+                        6.01467524e+05,-1.44772848e+05, 2.44335085e+04,-2.74969383e+03,
+                        1.70501429e+02, 1.19079597e+00,-2.40344727e-03]
         # wRMS/utau -> R33
-        coeffs[2,:] = [-5.45793568e+03, 2.87861356e+04,-6.53703038e+04, 8.36764824e+04,
-                       -6.64138439e+04, 3.39109628e+04,-1.12132925e+04, 2.37169831e+03,
-                       -3.14605592e+02, 2.53135377e+01, 0.0]
-        # minus avg(u' v')/utau**2 -> R12
+        coeffs[2,:] = [-4.67724204e+05, 3.35837137e+06,-1.08218347e+07, 2.06721268e+07,
+                       -2.60506922e+07, 2.28090039e+07,-1.42375116e+07, 6.40050289e+06,
+                       -2.06998191e+06, 4.76610822e+05,-7.67311913e+04, 8.46495414e+03,
+                       -6.38190408e+02, 3.37641881e+01, 3.62081709e-03]
+        # avg(u' v')/utau**2 -> R12
         # note that this is fine for the lower part, should be negated for the upper part
         # as the vertical velocity, with respect to the distance from the wall, changes sign
-        coeffs[3,:] = [ 7.46625281e+03,-3.96852213e+04, 9.07086776e+04,-1.16508846e+05,
-                        9.21616093e+04,-4.62093468e+04, 1.45093738e+04,-2.68039137e+03,
-                        2.40577760e+02,-2.67805765e+00, 0.0]
+        coeffs[3,:] = [ 1.43887186e+05,-9.24421506e+05, 2.55832472e+06,-3.91222486e+06,
+                        3.42321944e+06,-1.36252894e+06,-4.23777124e+05, 9.08513536e+05,
+                       -5.83322471e+05, 2.15251323e+05,-4.91871036e+04, 6.72652324e+03,
+                       -4.66587078e+02, 5.87033236e+00,-1.23273856e-02]
 
         # Special treatment for the mixed term
         reystress = np.zeros((4, ploc.shape[-1]))
         yc = ploc[1]/constants['delta']
         yw = 1.0 - np.abs(yc)
-        for el in range(3):
+        for el in range(4):
             poly = np.poly1d(coeffs[el,:])
-            reystress[el,:] = poly(yw)**2
+            reystress[el,:] = poly(yw) if el==3 else poly(yw)**2
 
-        poly = np.poly1d(coeffs[3,:])
-        reystress[3] = -np.poly1d(yw)  #MINUS as the coefficients are for -u'v'!
         # Correct the sign of the term for the upper part of the domain for
         # which v changes sign with respect to the closet wall (v is positive
         # when moving away from a wall).
@@ -178,6 +180,9 @@ class BaseAdvectionElements(BaseElements):
 
         # Make them dimensional
         reystress *= utau2
+
+        # the first three components should be positive
+        reystress[0:3] = np.maximum(reystress[0:3], 0.0)
 
         # #HARD CODE ARUP BOX
         # reystressmat = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
@@ -193,7 +198,7 @@ class BaseAdvectionElements(BaseElements):
         #TODO NOTE HARDCODING DIRECTION AND SIZE, and uniformity in z
         aij = np.empty(reystress.shape)
         aij[0] = np.sqrt(reystress[0]) #R11
-        aij[1] = reystress[3]/(aij[0] + 1e-10)   #R12
+        aij[1] = reystress[3]/np.maximum(aij[0], 1e-12)   #R12
         aij[2] = np.sqrt(np.maximum(reystress[1] - aij[1]**2, 0.0)) #R22
         aij[3] = np.sqrt(reystress[2]) #R33
 
