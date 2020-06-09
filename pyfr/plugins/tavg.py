@@ -5,11 +5,11 @@ import re
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.plugins.base import BasePlugin, RegionMixin
+from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.nputil import npeval
 
 
-class TavgPlugin(RegionMixin, BasePlugin):
+class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
     name = 'tavg'
     systems = ['*']
     formulations = ['dual', 'std']
@@ -153,7 +153,11 @@ class TavgPlugin(RegionMixin, BasePlugin):
 
                 # Add in any required region data and write to disk
                 data = self._add_region_data(accmex)
-                self._writer.write(data, metadata, intg.tcurr)
+                solnfname = self._writer.write(data, metadata, intg.tcurr)
+
+                # If a post-action has been registered then invoke it
+                self._invoke_postaction(mesh=intg.system.mesh.fname,
+                                        soln=solnfname, t=intg.tcurr)
 
                 self.tout_last = intg.tcurr
                 self.accmex = [np.zeros_like(a) for a in accmex]

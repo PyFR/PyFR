@@ -47,31 +47,38 @@ class BasePlugin(object):
         # Tolerance for time comparisons
         self.tol = 5*intg.dtmin
 
-        # Initalise our post-action (if any)
+        # Check that we support this particular system
+        if not ('*' in self.systems or intg.system.name in self.systems):
+            raise RuntimeError(f'System {intg.system.name} not supported by '
+                               f'plugin {self.name}')
+
+        # Check that we support this particular integrator formulation
+        if intg.formulation not in self.formulations:
+            raise RuntimeError(f'Formulation {intg.formulation} not '
+                               f'supported by plugin {self.name}')
+
+    def __call__(self, intg):
+        pass
+
+
+class PostactionMixin(object):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
         self.postact = None
         self.postactaid = None
         self.postactmode = None
 
-        if self.cfg.hasopt(cfgsect, 'post-action'):
-            self.postact = self.cfg.getpath(cfgsect, 'post-action')
-            self.postactmode = self.cfg.get(cfgsect, 'post-action-mode',
+        if self.cfg.hasopt(self.cfgsect, 'post-action'):
+            self.postact = self.cfg.getpath(self.cfgsect, 'post-action')
+            self.postactmode = self.cfg.get(self.cfgsect, 'post-action-mode',
                                             'blocking')
 
             if self.postactmode not in {'blocking', 'non-blocking'}:
                 raise ValueError('Invalid post action mode')
 
-        # Check that we support this particular system
-        if not ('*' in self.systems or intg.system.name in self.systems):
-            raise RuntimeError('System {0} not supported by plugin {1}'
-                               .format(intg.system.name, self.name))
-
-        # Check that we support this particular integrator formulation
-        if intg.formulation not in self.formulations:
-            raise RuntimeError('Formulation {0} not supported by plugin {1}'
-                               .format(intg.formulation, self.name))
-
     def __del__(self):
-        if self.postactaid is not None:
+        if getattr(self, 'postactaid', None) is not None:
             prefork.wait(self.postactaid)
 
     def _invoke_postaction(self, **kwargs):
@@ -92,9 +99,6 @@ class BasePlugin(object):
             else:
                 self.postactaid = prefork.call_async(cmdline)
 
-    def __call__(self, intg):
-        pass
-
 
 class RegionMixin(object):
     def _init_writer_for_region(self, intg, nout, prefix):
@@ -110,7 +114,7 @@ class RegionMixin(object):
             mdata = self._prepare_mdata_all(intg, nout, prefix)
             self._add_region_data = self._add_region_data_all
         # All elements inside a box
-        elif ',' in region:
+        elif '(' in region or '[' in region:
             box = self.cfg.getliteral(self.cfgsect, 'region')
             mdata = self._prepare_mdata_box(intg, nout, prefix, *box)
             self._add_region_data = self._add_region_data_subset
