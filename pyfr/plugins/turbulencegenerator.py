@@ -6,7 +6,17 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin
+from pyfr.nputil import npeval
 
+def eval_expr(expr, constants, loc):
+    # Bring simulation constants into scope
+    vars = constants
+
+    # get the physical location
+    vars.update(dict(zip('xyz', loc)))
+
+    # evaluate the expression at the given location
+    return npeval(expr, vars)
 
 class TurbulenceGeneratorPlugin(BasePlugin):
     name = 'turbulencegenerator'
@@ -33,12 +43,6 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Constant variables
         self._constants = self.cfg.items_as('constants', float)
-
-        # Input Reynolds stress
-        self.reystress = np.array(self.cfg.getliteral(cfgsect, 'ReynoldsStress'))
-        # Reystress = np.array([[R_11, R_21, R_31],
-        #               [R_21, R_22, R_32],
-        #               [R_31, R_32, R_33]])
 
         # characteristic lengths,3x3 matrix (XYZ x UVW). This corresponds to
         # the radii of influence of the synthetic eddies, i.e. to the one-side
