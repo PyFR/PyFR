@@ -61,7 +61,7 @@ _npeval_syms = {
     'cos': np.cos, 'acos': np.arccos,
     'tan': np.tan, 'atan': np.arctan, 'atan2': np.arctan2,
     'abs': np.abs, 'pow': np.power, 'sqrt': np.sqrt,
-    'tanh': np.tanh, 'pi': np.pi}
+    'tanh': np.tanh, 'pi': np.pi, 'sign': np.sign}
 
 
 def npeval(expr, locals):
