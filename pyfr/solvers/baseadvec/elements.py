@@ -2,7 +2,7 @@
 
 from pyfr.backends.base import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
-from pyfr.plugins.turbulencegenerator import eval_expr
+from pyfr.plugins.turbulencegenerator import eval_expr, get_lturbref
 
 import numpy as np
 
@@ -93,7 +93,7 @@ class BaseAdvectionElements(BaseElements):
                                                          0.4)
 
         # reference turbulent lengths
-        lturbref = np.array(self.cfg.getliteral(cfgsect, 'lturbref'))
+        lturbref = get_lturbref(self.cfg, cfgsect, constants, ndims)
 
         # Bulk velocity
         Ubulk = self.cfg.getfloat(cfgsect, 'Ubulk')

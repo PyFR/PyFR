@@ -16,7 +16,7 @@ def get_lref_etype(cfg, cfgsect, constants, loc, ndims):
     vars.update(dict(zip('xyz', loc)))
 
     # maximum component-wise
-    lturbmax = [[np.max(np.eval(cfg.getexpr(cfgsect, f'l{i}{j}'), vars))
+    lturbmax = [[np.max(npeval(cfg.getexpr(cfgsect, f'l{i}{j}'), vars))
                  for j in range(ndims)] for i in range(ndims)]
 
     #lref = max_j (l_ij)
@@ -31,6 +31,17 @@ def eval_expr(expr, constants, loc):
 
     # evaluate the expression at the given location
     return npeval(expr, vars)
+
+def get_lturbref(cfg, cfgsect, constants, ndims):
+    # try to compute them if not specified by the user
+    if cfg.hasopt('soln-plugin-turbulencegenerator', 'lturbref'):
+        return np.array(cfg.getliteral(cfgsect, 'lturbref'))
+    else:
+        vars = constants
+        lturb = [[npeval(cfg.getexpr(cfgsect, f'l{i}{j}'), vars)
+                  for j in range(ndims)] for i in range(ndims)]
+        return np.max(np.array(lturb), axis=1)
+
 
 class TurbulenceGeneratorPlugin(BasePlugin):
     name = 'turbulencegenerator'
@@ -65,7 +76,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # reference turbulent = np.max(lturb, axis=1)
         # useful to have it in the .ini file to avoid problems with weird domains
-        self.lturbref = np.array(self.cfg.getliteral(cfgsect, 'lturbref'))
+        self.lturbref = get_lturbref(self.cfg, cfgsect, self._constants, self.ndims)
         # # or
         # # physical location of solution points.
         # plocs = []
