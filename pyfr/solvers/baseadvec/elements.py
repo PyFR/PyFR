@@ -2,6 +2,7 @@
 
 from pyfr.backends.base import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
+from pyfr.plugins.turbulencegenerator import eval_expr
 
 import numpy as np
 
@@ -32,37 +33,48 @@ class BaseAdvectionElements(BaseElements):
     def G(csi, sigma, GC, p, clip, csimax):
         output = ((1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2))**p
         if clip:
-            output[np.abs(csi) > csimax] = 0.0
+            if np.size(csimax) > 1:
+                idx = np.abs(csi) > csimax[:,np.newaxis]
+                output = np.copy(np.broadcast_to(output, idx.shape))
+            else:
+                idx = np.abs(csi) > csimax
+            output[idx] = 0.0
         return output
 
     @staticmethod
-    def determine_gaussian_constants(G, sigma, ndims, lturb, Ubulkdir):
+    def determine_gaussian_constants(G, sigma, lturbexpr, lturbref, constants,
+                                     ploc, cmm):
         from scipy.integrate import fixed_quad
         # Compute the constants GC such that 0.5 times the integral of the
         # guassian squared, between -1 and +1, is 1.0. The clipping value of
         # the independent variable depend on the ratio between the considered
         # length scale and the reference (max) one (a reference for each direction).
         # The clipping value for the reference (max) lengths is 1.
-        GCs = np.zeros((ndims, ndims))
+        ndims, nvertices = ploc.shape
+        GCs = np.zeros((ndims, ndims, nvertices))
 
-        # Reference lenghts, the maximum one per direction.
-        lturbref = np.max(lturb, axis=1)
-
-        # Clipping value: smaller than reference length means smaller clipping
-        # value.
-        csimax = lturb/lturbref[:,np.newaxis]
-
-        # Compute the constants
+        # Compute the constants (one constant for all vertices at the time).
         for i in range(ndims): #x,y,z
             for j in range(ndims): #U,V,W
-                cm = csimax[i, j]
-                args = [sigma, 1.0, 2.0, True, cm]
+                lturb = eval_expr(lturbexpr[i][j], constants, ploc)
+
+                # Clipping value: smaller than reference length means smaller
+                # No less than cmm for stability reasons, no more than 1 to
+                # avoid inconsistencies.
+                csimax = np.maximum(np.minimum(lturb/lturbref[i], 1.0), cmm)
+
+                args = [sigma, 1.0, 2.0, True, csimax]
                 funct = lambda csi: G(csi, *args)
                 GCs[i,j] = 0.5*fixed_quad(funct, -1, 1, n=50)[0]
 
-        return csimax, GCs, lturbref
+        GCsInv = 1.0/np.sqrt(2.0*np.pi*GCs)
+        # ndims, ndims, nvertices -> ndims, nvertices
+        gauss_const = np.prod(GCsInv, axis=0)/(sigma**ndims)
+
+        return gauss_const
 
     def prepare_turbsrc(self, ploc):
+        import math
         cfgsect = 'soln-plugin-turbulencegenerator'
 
         # Constant variables
@@ -74,15 +86,21 @@ class BaseAdvectionElements(BaseElements):
         self.srctplargs['system'] = 'ac' if self.system.startswith('ac') else 'compr'
 
         # characteristic lengths,3x3 matrix (XYZ x UVW).
-        lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
+        # lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
 
-        # Bulk velocity magnitude
+        # minimum value of the clipping value csimax <= 1.0
+        self.srctplargs['cmm'] = cmm = self.cfg.getfloat(cfgsect, 'csimax_min',
+                                                         0.4)
+
+        # reference turbulent lengths
+        lturbref = np.array(self.cfg.getliteral(cfgsect, 'lturbref'))
+
+        # Bulk velocity
         Ubulk = self.cfg.getfloat(cfgsect, 'Ubulk')
 
         # bulk velocity direction, either 0,1, or 2 (i.e. x,y,z)
         Ubulkdir = self.cfg.getint(cfgsect, 'Ubulk-dir')
 
-        self.srctplargs['Ubulk'] = Ubulk
         self.srctplargs['Ubulkdir'] = Ubulkdir
 
         # Number of eddies.
@@ -90,45 +108,94 @@ class BaseAdvectionElements(BaseElements):
         dirs = [i for i in range(ndims) if i != Ubulkdir]
 
         inflowarea = np.prod(inflow)
-        eddyarea = 4.0*np.prod(np.max(lturb[dirs], axis=1)) # 2 Ly x 2 Lz
+        eddyarea = 4.0*np.prod(lturbref[dirs]) # 2 Ly x 2 Lz
         self.N = N = int(inflowarea/eddyarea) + 1
 
         self.srctplargs['N'] = N
 
-        # Gaussian constants they depend on the box dimensions.
-        sigma = self.cfg.getfloat(cfgsect, 'sigma', 1.0)
-        self.srctplargs['arg_const'] = -0.5/(sigma**2)
-        csimax, GCs, lturbref = self.determine_gaussian_constants(self.G, sigma, ndims, lturb, Ubulkdir)
-        self.srctplargs['csimax'] = self.arr_to_str(csimax)
-        GCsInv = 1.0/np.sqrt(2.0*np.pi*GCs)
-        self.srctplargs['gauss_const'] = self.arr_to_str(np.prod(GCsInv, axis=0)/(sigma**self.ndims))
-        self.srctplargs['lturbref'] = self.arr_to_str(lturbref)
+        # expressions for the turbulent lengths, needed here for evaluation
+        lturbexpr = [[self.cfg.getexpr(cfgsect, f'l{i}{j}')
+                      for j in range(ndims)] for i in range(ndims)]
+
+        # same as before but needed as template args to the kernel, for which
+        # we need to substitute some variables and functions. They could be
+        # computed here and used as arguments to the kernel but I want to save
+        # some memory.
+        subs = self.cfg.items('constants')
+        subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs.update(abs='fabs', pi=str(math.pi))
+
+        lturbexprkernel = [[self.cfg.getexpr(cfgsect, f'l{i}{j}', subs=subs)
+                            for j in range(ndims)] for i in range(ndims)]
+
+        self.srctplargs['lturbex'] = lturbexprkernel
 
         # Allocate the memory for the eddies location and strength.
-        self.eddies_loc = self._be.matrix((self.ndims, N))
+        self.eddies_loc = self._be.matrix((ndims, N))
         self._set_external('eddies_loc',
-                           'in broadcast fpdtype_t[{}][{}]'.format(self.ndims, N),
+                           'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_loc)
 
-        self.eddies_strength = self._be.matrix((self.ndims, N))
+        self.eddies_strength = self._be.matrix((ndims, N))
         self._set_external('eddies_strength',
-                           'in broadcast fpdtype_t[{}][{}]'.format(self.ndims, N),
+                           'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_strength)
 
         #TODO compute the factor and aij mat in the plugin rather than here?
 
         # Frozen turbulence hypothesis to get characteristic times in each vel.
         # component. This is needed for the scaling factor
-        tturb = lturb[Ubulkdir,:]/Ubulk
+        # tturb = lturb[Ubulkdir,:]/Ubulk
 
         # Center point
         ctr = np.array(self.cfg.getliteral(cfgsect, 'center'))
 
-        # Scaling factor
+        # physical location of the solution points
         ploc = ploc.swapaxes(1, 0).reshape(ndims, -1)
-        dist = (ploc[Ubulkdir] - ctr[Ubulkdir])/lturb[Ubulkdir,:,np.newaxis]
 
-        factor = np.exp(-0.5*np.pi*np.power(dist, 2.))/tturb[:, np.newaxis] #ndims, nvertices
+        # Gaussian constants they depend on the box dimensions.
+        sigma = self.cfg.getfloat(cfgsect, 'sigma', 1.0)
+        self.srctplargs['arg_const'] = -0.5/(sigma**2)
+        self.srctplargs['lturbref'] = self.arr_to_str(lturbref)
+
+        gauss_const = self.determine_gaussian_constants(self.G, sigma, lturbexpr,
+                                                        lturbref, constants,
+                                                        ploc, cmm)
+
+        # allocate the memory for the gauss constants
+        gcmat = self._be.const_matrix(gauss_const.reshape(ndims, npts, neles).swapaxes(0, 1))
+        self._set_external('gauss_const',
+                           'in fpdtype_t[{0}]'.format(ndims),
+                           value=gcmat)
+
+        # the actual values of the of the turbulent lengths. Each component
+        # of the nested lists is a np.array of size nvertices=npts*neles
+        # or a float if that component's lengths is constant
+        lxklist = [eval_expr(lturbexpr[Ubulkdir][j], constants, ploc)
+                   for j in range(ndims)]
+
+        # if any is a numpy array then all components need to be too.
+        # otherwise they are all constant and lxk just needs to be reshaped.
+        broadcast_to_ploc = any([isinstance(lxk, np.ndarray) for lxk in lxklist])
+        if broadcast_to_ploc:
+            for idxl,lxk in enumerate(lxklist):
+                if not isinstance(lxk, np.ndarray):
+                    lxklist[idxl] = np.full((ploc.shape[-1],), lxk)
+            lxk = np.array(lxklist)
+        else:
+            lxk = np.array(lxklist).reshape((ndims, 1))
+        # print('ploc shape = {}'.format(ploc.shape) + 'lxk shape = {}'.format(lxk.shape))
+
+        #clip lxk for stability
+        lxk = np.maximum(lxk, cmm*lturbref[:, np.newaxis])
+
+        # Scaling factor
+        dist = (ploc[Ubulkdir] - ctr[Ubulkdir])/lxk
+        # print('ploc[Ubulkdir] shape = {}'.format(ploc[Ubulkdir].shape))
+        # print('dist shape = {}'.format(dist.shape))
+
+        factor = np.exp(-0.5*np.pi*np.power(dist, 2.))*Ubulk/lxk #ndims, nvertices
+        # print('factor shape = {}'.format(factor.shape))
 
         # factor *= np.sqrt(1./N)
 
@@ -196,7 +263,7 @@ class BaseAdvectionElements(BaseElements):
 
         # The aij matrix
         #TODO NOTE HARDCODING DIRECTION AND SIZE, and uniformity in z
-        aij = np.empty(reystress.shape)
+        aij = np.empty((4, ploc.shape[-1]))
         aij[0] = np.sqrt(reystress[0]) #R11
         aij[1] = reystress[3]/np.maximum(aij[0], 1e-12)   #R12
         aij[2] = np.sqrt(np.maximum(reystress[1] - aij[1]**2, 0.0)) #R22
@@ -211,8 +278,8 @@ class BaseAdvectionElements(BaseElements):
         # the box of eddies. Zero means not affected, i.e. outside of the box
         # of eddies.
         affected = np.ones((npts, 1, neles)).reshape((-1))
-        xmin = ctr[Ubulkdir] - np.max(lturb[Ubulkdir])
-        xmax = ctr[Ubulkdir] + np.max(lturb[Ubulkdir])
+        xmin = ctr[Ubulkdir] - lturbref[Ubulkdir]
+        xmax = ctr[Ubulkdir] + lturbref[Ubulkdir]
         outside = np.logical_or(ploc[Ubulkdir] < xmin, ploc[Ubulkdir] > xmax)
         affected[outside] = -1.0
         affectedmat = self._be.const_matrix(affected.reshape((npts, 1, neles)))

@@ -19,16 +19,21 @@ if (affected[0] > 0.0){
 // Turbulent characteristic lengths (radii of influence)
 fpdtype_t lturbref[${ndims}] = ${lturbref};
 
-// Guassian constants
-fpdtype_t csimax[${ndims}][${ndims}] = ${csimax};
-fpdtype_t gauss_const[${ndims}] = ${gauss_const};
-
 // Initialize the utilde to 0.0
 fpdtype_t utilde[${ndims}] = {0.0};
 
 // Working variables
 fpdtype_t arg;
 fpdtype_t csi[${ndims}];
+
+// Compute csi_max[3][3] on the fly for this point as lturb/lturb ref.
+// make sure the minimum value is not less than cmm for stability reasons.
+fpdtype_t csimax[${ndims}][${ndims}] = {{1.0}};
+% for i in range(ndims):
+    % for j in range(ndims):
+        csimax[${i}][${j}] = min(max(${lturbex[i][j]}/lturbref[${i}], ${cmm}), 1.0);
+    % endfor
+% endfor
 
 // Loop over the eddies
 for (int n=0; n<${N}; n++){
