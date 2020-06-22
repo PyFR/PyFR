@@ -37,10 +37,15 @@ def get_lturbref(cfg, cfgsect, constants, ndims):
     if cfg.hasopt('soln-plugin-turbulencegenerator', 'lturbref'):
         return np.array(cfg.getliteral(cfgsect, 'lturbref'))
     else:
-        vars = constants
-        lturb = [[npeval(cfg.getexpr(cfgsect, f'l{i}{j}'), vars)
-                  for j in range(ndims)] for i in range(ndims)]
-        return np.max(np.array(lturb), axis=1)
+        try:
+            # this works only if all lenghts are constant and not space dependent.
+            vars = constants
+            lturb = [[npeval(cfg.getexpr(cfgsect, f'l{i}{j}'), vars)
+                      for j in range(ndims)] for i in range(ndims)]
+            return np.max(np.array(lturb), axis=1)
+        except:
+            msg = 'Could not determine lturbref automatically. Set it in the .ini file.'
+            raise RuntimeError(msg)
 
 
 class TurbulenceGeneratorPlugin(BasePlugin):
