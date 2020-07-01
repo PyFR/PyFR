@@ -3,6 +3,7 @@
 from collections import defaultdict
 
 import numpy as np
+import os
 
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin
@@ -64,8 +65,8 @@ class TurbulenceGeneratorPlugin(BasePlugin):
             self.N = ele.N
 
         # MPI info
-        comm, rank, root = get_comm_rank_root()
-        if rank == root:
+        comm, self.rank, self.root = get_comm_rank_root()
+        if self.rank == self.root:
             print('n eddies = {}'.format(self.N))
 
         # Initialize the previous time to the current one.
@@ -122,11 +123,36 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.eddies_loc = np.empty((self.ndims, self.N))
         self.eddies_strength = np.empty((self.ndims, self.N))
 
+        # file to read/write the eddies' properties
+        self.basedir = self.cfg.getpath(cfgsect, 'basedir', './')
+        self.basename = self.cfg.get(cfgsect, 'basename', 'eddies-{t}.csv')
+
+        # Append the relevant extension
+        if not self.basename.endswith('.csv'):
+            self.basename += '.csv'
+
+        # Output time step and last output time of the eddies file.
+        self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
+        self.tout_last = intg.tcurr
+
+        # Register our output times with the integrator
+        intg.call_plugin_dt(self.dt_out)
+
         # Populate the box of eddies
-        self.create_eddies(intg.tcurr)
+        if os.path.isfile(self._get_output_path(intg.tcurr)):
+            data = np.loadtxt(self._get_output_path(intg.tcurr), delimiter=',')
+            self.eddies_loc = data[:, :self.ndims].swapaxes(0,1)
+            self.eddies_strength = data[:, self.ndims:].swapaxes(0,1)
+        else:
+            self.create_eddies(intg.tcurr)
 
         # Update the backend
         self.update_backend()
+
+        # If we're not restarting then call ourself to write out the initial eddies
+        if not intg.isrestart:
+            self.tout_last -= self.dt_out
+            self(intg)
 
     def get_lref(self, cfgsect, locs):
         # loop over the locations of all element types
@@ -182,23 +208,40 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
             ele.eddies_strength.set(self.eddies_strength)
 
+    def _get_output_path(self, tcurr):
+        # Substitute {t} for the current time
+        fname = self.basename.format(t=tcurr)
+
+        return os.path.join(self.basedir, fname)
+
     def __call__(self, intg):
+        tdiff = intg.tcurr - self.tout_last
+        dowrite = tdiff >= self.dt_out - self.tol
+        doupdate = intg.nacptsteps % self.nsteps == 0
+
         # Return if not active or no action is due
-        if intg.nacptsteps % self.nsteps:
-            return
+        if dowrite or doupdate:
+            # Update the streamwise location of the eddies and check whether any
+            # are outside of the box. If so, generate new ones.
+            self.eddies_loc[self.Ubulkdir] += (intg.tcurr - self.tprev)*self.Ubulk
+            neweddies = self.eddies_loc[self.Ubulkdir] > self.box_xmax
 
-        t = intg.tcurr
+            if neweddies.any():
+                self.create_eddies(intg.tcurr, neweddies)
 
-        # Update the streamwise location of the eddies and check whether any are
-        # outside of the box. If so generate new ones.
-        self.eddies_loc[self.Ubulkdir] += (t - self.tprev)*self.Ubulk
-        neweddies = self.eddies_loc[self.Ubulkdir] > self.box_xmax
+            # Update the backend
+            self.update_backend()
 
-        if neweddies.any():
-            self.create_eddies(t, neweddies)
+            # Update the previous time an update was done.
+            self.tprev = intg.tcurr
 
-        # Update the backend
-        self.update_backend()
+            # write to file if requested.
+            if dowrite:
+                if self.rank == self.root:
+                    data = np.hstack((self.eddies_loc.swapaxes(0,1),
+                                      self.eddies_strength.swapaxes(0,1)))
+                    np.savetxt(self._get_output_path(intg.tcurr), data,
+                               delimiter=',')
 
-        # Update the previous time
-        self.tprev = t
+                # Update the last output time
+                self.tout_last = intg.tcurr
