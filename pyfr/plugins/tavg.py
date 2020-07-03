@@ -5,12 +5,11 @@ import re
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.nputil import npeval
-from pyfr.writers.native import NativeWriter
 
 
-class TavgPlugin(BasePlugin):
+class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
     name = 'tavg'
     systems = ['*']
     formulations = ['dual', 'std']
@@ -27,25 +26,15 @@ class TavgPlugin(BasePlugin):
                       for k in self.cfg.items(cfgsect)
                       if k.startswith('avg-')]
 
+        # Construct the file writer
+        self._writer = self._init_writer_for_region(intg, len(self.exprs),
+                                                    'tavg')
         # Gradient pre-processing
         self._init_gradients(intg)
 
         # Save a reference to the physical solution point locations
-        self.plocs = intg.system.ele_ploc_upts
-
-        # Element info and backend data type
-        einfo = zip(intg.system.ele_types, intg.system.ele_shapes)
-        fpdtype = intg.backend.fpdtype
-
-        # Output metadata
-        mdata = [(f'tavg_{etype}', (nupts, len(self.exprs), neles), fpdtype)
-                 for etype, (nupts, _, neles) in einfo]
-
-        # Output base directory and name
-        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
-        basename = self.cfg.get(cfgsect, 'basename')
-
-        self._writer = NativeWriter(intg, mdata, basedir, basename)
+        self.plocs = [intg.system.ele_ploc_upts[i][..., rgn]
+                      for i, rgn in self._ele_regions]
 
         # Time averaging parameters
         self.dtout = self.cfg.getfloat(cfgsect, 'dt-out')
@@ -70,7 +59,9 @@ class TavgPlugin(BasePlugin):
         if gradpnames:
             self._gradop, self._rcpjact = [], []
 
-            for eles in intg.system.ele_map.values():
+            for i, rgn in self._ele_regions:
+                eles = intg.system.ele_map[intg.system.ele_types[i]]
+
                 self._gradop.append(eles.basis.m4)
 
                 # Get the smats at the solution points
@@ -80,7 +71,7 @@ class TavgPlugin(BasePlugin):
                 rcpdjac = eles.rcpdjac_at_np('upts')
 
                 # Product to give J^-T at the solution points
-                self._rcpjact.append(smat*rcpdjac)
+                self._rcpjact.append(smat[..., rgn]*rcpdjac[..., rgn])
 
     def _eval_exprs(self, intg):
         exprs = []
@@ -89,7 +80,10 @@ class TavgPlugin(BasePlugin):
         pnames = self.elementscls.privarmap[self.ndims]
 
         # Iterate over each element type in the simulation
-        for i, (soln, ploc) in enumerate(zip(intg.soln, self.plocs)):
+        for i, (j, rgn) in enumerate(self._ele_regions):
+            ploc = self.plocs[i]
+            soln = intg.soln[j][..., rgn]
+
             # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
                                                  self.cfg)
@@ -157,7 +151,13 @@ class TavgPlugin(BasePlugin):
                                 stats=stats.tostr(),
                                 mesh_uuid=intg.mesh_uuid)
 
-                self._writer.write(accmex, metadata, intg.tcurr)
+                # Add in any required region data and write to disk
+                data = self._add_region_data(accmex)
+                solnfname = self._writer.write(data, metadata, intg.tcurr)
+
+                # If a post-action has been registered then invoke it
+                self._invoke_postaction(mesh=intg.system.mesh.fname,
+                                        soln=solnfname, t=intg.tcurr)
 
                 self.tout_last = intg.tcurr
                 self.accmex = [np.zeros_like(a) for a in accmex]
