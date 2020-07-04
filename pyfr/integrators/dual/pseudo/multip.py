@@ -19,7 +19,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         mgsect = 'solver-dual-time-integrator-multip'
 
         # Get the solver order and set the initial multigrid level
-        self._order = self.level = cfg.getint('solver', 'order')
+        self._order = self.level = order = cfg.getint('solver', 'order')
 
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
@@ -63,19 +63,20 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         for l in self.levels:
             pc = get_pseudo_stepper_cls(pn, l)
 
-            if l == self._order:
+            if l == order:
                 bases = [cc, pc]
+                mcfg = cfg
             else:
                 bases = [cc_none, pc]
 
-                cfg = Inifile(cfg.tostr())
-                cfg.set('solver', 'order', l)
-                cfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(self._order - l))
+                mcfg = Inifile(cfg.tostr())
+                mcfg.set('solver', 'order', l)
+                mcfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(order - l))
 
-                for sec in cfg.sections():
-                    m = re.match(r'solver-(.*)-mg-p{0}'.format(l), sec)
+                for s in cfg.sections():
+                    m = re.match(f'solver-(.*)-mg-p{l}$', s)
                     if m:
-                        cfg.rename_section(m.group(0), 'solver-' + m.group(1))
+                        mcfg.rename_section(s, f'solver-{m.group(1)}')
 
             # A class that bypasses pseudo-controller methods within a cycle
             class lpsint(*bases):
@@ -118,7 +119,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                         iself._queue % axnpby(1, -1)
 
             self.pintgs[l] = lpsint(backend, systemcls, rallocs, mesh,
-                                    initsoln, cfg, tcoeffs, dt)
+                                    initsoln, mcfg, tcoeffs, dt)
 
         # Get the highest p system from plugins
         self.system = self.pintgs[self._order].system
