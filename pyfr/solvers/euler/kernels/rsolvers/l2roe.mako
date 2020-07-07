@@ -36,9 +36,18 @@
     l1 = (l1 < ${eps}) ? ${1/(2*eps)}*(l1*l1 + ${eps**2}) : l1;
     l3 = (l3 < ${eps}) ? ${1/(2*eps)}*(l3*l3 + ${eps**2}) : l3;
 
-    // Get the jumps 
+    // Get Thorber z
+    fpdtype_t cl = sqrt(${c['gamma']}*pl/ul[0]);
+    fpdtype_t cr = sqrt(${c['gamma']}*pr/ur[0]);
+    fpdtype_t ml = sqrt(${pyfr.dot('vl[{i}]', 'vl[{i}]', i=ndims)})/cl;
+    fpdtype_t mr = sqrt(${pyfr.dot('vr[{i}]', 'vr[{i}]', i=ndims)})/cr;
+    fpdtype_t sswl = (((vl[0]-cl)>0.) && ((vr[0]-cr)<0.)) ? 1. : (((vl[0]+cl)>0.) && ((vr[0]+cr)<0.)) ? 1. : 0.;
+    fpdtype_t sswr = (((vr[0]-cr)>0.) && ((vl[0]-cl)<0.)) ? 1. : (((vr[0]+cr)>0.) && ((vl[0]+cl)<0.)) ? 1. : 0.;
+    fpdtype_t z = ((sswl == sswr) && (sswl == 0.)) ? min(1.,max(ml,mr)) : 1.;
+
+    // Get L2Roe velocity jumps
 % for i in range(ndims):
-    dv[${i}] = vr[${i}] - vl[${i}];
+    dv[${i}] = z*(vr[${i}] - vl[${i}]);
 % endfor
 
     fpdtype_t dro = ur[0] - ul[0];
