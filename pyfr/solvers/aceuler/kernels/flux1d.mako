@@ -10,10 +10,6 @@
     
     // Momentum fluxes
 % for i in range(ndims):
-% if i == 0:
-    f[${i+1}] = s[1]*s[${i+1}] + p;
-% else:
-    f[${i+1}] = s[1]*s[${i+1}];
-% endif
+    f[${i+1}] = s[1]*s[${i+1}]${' + p' if i == 0 else ''};
 % endfor
 </%pyfr:macro>
