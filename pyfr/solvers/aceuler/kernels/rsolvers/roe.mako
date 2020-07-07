@@ -21,7 +21,7 @@
 % endfor
 
     // Quanitiy jumps
-    fpdtype_t dp = ur[0] - ul[0]; 
+    fpdtype_t dpz = ${rzeta}*(ur[0] - ul[0]); 
 % for i in range(ndims):
     dv[${i}] = ur[${i+1}] - ul[${i+1}];
 % endfor
@@ -40,11 +40,11 @@
     //l3 = (l3 < ${eps}) ? ${1/(2*eps)}*(l3*l3 + ${eps**2}) : l3;
 
     // Alpha terms
-    fpdtype_t a1 = 0.5*ra*(${rzeta}*dp*(va[0] + aa) - dv[0]);
-    fpdtype_t a3 = 0.5*ra*(dv[0] - ${rzeta}*dp*(va[0] - aa));
+    fpdtype_t a1 = 0.5*ra*(dpz*(va[0] + aa) - dv[0]);
+    fpdtype_t a3 = 0.5*ra*(dv[0] - dpz*(va[0] - aa));
 
     // Compute the Eigenvectors
-    fpdtype_t v2c = (2.*a1*dv[0] - dp*(va[0] + aa)*${rzeta})*ra;
+    fpdtype_t v2c = (2.*a1*dv[0] - dpz*(va[0] + aa))*ra;
     
     v1[0] = a1*${zeta};
     v2[0] = 0.;
