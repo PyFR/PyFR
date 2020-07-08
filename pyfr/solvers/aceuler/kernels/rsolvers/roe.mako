@@ -40,24 +40,24 @@
     //l3 = (l3 < ${eps}) ? ${1/(2*eps)}*(l3*l3 + ${eps**2}) : l3;
 
     // Alpha terms
-    fpdtype_t a1 = 0.5*ra*(dpz*(va[0] + aa) - dv[0]);
-    fpdtype_t a3 = 0.5*ra*(dv[0] - dpz*(va[0] - aa));
+    fpdtype_t a1 =  0.5*ra*(dpz*(va[0] + aa) - dv[0]);
+    fpdtype_t a3 = -0.5*ra*(dpz*(va[0] - aa) - dv[0]);
 
     // Compute the Eigenvectors
-    fpdtype_t v2c = (2.*a1*dv[0] - dpz*(va[0] + aa))*ra;
+    fpdtype_t vc = (a1*(va[0] - aa) - a3*(va[0] + aa))*ra;
     
     v1[0] = a1*${zeta};
     v2[0] = 0.;
     v3[0] = a3*${zeta};
 % for i in range(ndims):
 % if i == 0:
-    v1[${i + 1}] = a1*(aa - va[0]);
+    v1[${i + 1}] = a1*(va[0] - aa);
     v2[${i + 1}] = 0.;
-    v3[${i + 1}] = a3*(aa + va[0]);
+    v3[${i + 1}] = a3*(va[0] + aa);
 % else:
-    v1[${i + 1}] = a1*ra*(aa - va[0])*va[${i}];
-    v2[${i + 1}] = dv[${i}] + va[${i}]*v2c;
-    v3[${i + 1}] = a3*ra*(va[0] + aa)*va[${i}];
+    v1[${i + 1}] = -a1*ra*(va[0] - aa)*va[${i}];
+    v2[${i + 1}] =  dv[${i}] + va[${i}]*vc;
+    v3[${i + 1}] =  a3*ra*(va[0] + aa)*va[${i}];
 % endif
 % endfor
 
