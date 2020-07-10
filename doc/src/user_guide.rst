@@ -449,9 +449,7 @@ Parameterises the solver with
 
 3. ``anti-alias`` --- type of anti-aliasing:
 
-    ``flux`` | ``surf-flux`` | ``div-flux`` | ``flux, surf-flux`` |
-    ``flux, div-flux`` | ``surf-flux, div-flux`` |
-    ``flux, surf-flux, div-flux``
+    ``flux`` | ``surf-flux`` | ``flux, surf-flux``
 
 Example::
 

@@ -11,14 +11,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if 'flux' in self.antialias:
             bufs |= {'scal_qpts', 'vect_qpts'}
-        elif 'div-flux' in self.antialias:
-            bufs |= {'scal_qpts'}
 
         if self._soln_in_src_exprs:
-            if 'div-flux' in self.antialias:
-                bufs |= {'scal_qpts_cpy'}
-            else:
-                bufs |= {'scal_upts_cpy'}
+            bufs |= {'scal_upts_cpy'}
 
         return bufs
 

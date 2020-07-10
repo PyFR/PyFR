@@ -40,7 +40,7 @@ class BaseElements(object):
         self.antialias = basis.antialias
 
         # If we need quadrature points or not
-        haveqpts = 'flux' in self.antialias or 'div-flux' in self.antialias
+        haveqpts = 'flux' in self.antialias
 
         # Sizes
         self.nupts = basis.nupts
@@ -190,8 +190,6 @@ class BaseElements(object):
         # Allocate additional scalar scratch space
         if 'scal_upts_cpy' in sbufs:
             self._scal_upts_cpy = salloc('scal_upts_cpy', nupts)
-        elif 'scal_qpts_cpy' in sbufs:
-            self._scal_qpts_cpy = salloc('scal_qpts_cpy', nqpts)
 
         # Allocate required vector scratch space
         if 'vect_upts' in sbufs:
