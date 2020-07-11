@@ -58,6 +58,7 @@ def main():
     ap_partition.add_argument('-t', dest='order', type=int, default=3,
                               help='target polynomial order; aids in '
                               'load-balancing mixed meshes')
+    ap_partition.add_argument('--cfg', type=FileType('r'), help='config file')
     ap_partition.set_defaults(process=process_partition)
 
     # Export command
@@ -146,11 +147,11 @@ def process_partition(args):
     # Create the partitioner
     if args.partitioner:
         part = get_partitioner(args.partitioner, pwts, order=args.order,
-                               opts=opts)
+                               cfg=args.cfg, opts=opts)
     else:
         for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
             try:
-                part = get_partitioner(name, pwts, order=args.order)
+                part = get_partitioner(name, pwts, order=args.order, cfg=args.cfg)
                 break
             except OSError:
                 pass

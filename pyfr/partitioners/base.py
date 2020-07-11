@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from pyfr.inifile import Inifile
 from collections import Counter, defaultdict, namedtuple
 import re
 import uuid
@@ -21,7 +22,7 @@ class BasePartitioner(object):
         6: {'quad': 8, 'tri': 3, 'tet': 3, 'hex': 38, 'pri': 14, 'pyr': 8}
     }
 
-    def __init__(self, partwts, elewts=None, order=None, opts={}):
+    def __init__(self, partwts, elewts=None, order=None, cfg=None, opts={}):
         self.partwts = partwts
         self.nparts = len(partwts)
 
@@ -31,6 +32,11 @@ class BasePartitioner(object):
             self.elewts = self.elewtsmap[min(order, max(self.elewtsmap))]
         else:
             raise ValueError('Must provide either elewts or order')
+
+        if cfg is not None:
+            self.cfg = Inifile.load(cfg)
+        else:
+            self.cfg = None
 
         # Parse the options list
         self.opts = {}
@@ -142,24 +148,42 @@ class BasePartitioner(object):
         ewts = np.ones_like(etab)
 
         # Correct the weights to take into account turb generation.
-        Lturb = 0.55
-        ctr_turb = (2.0, 0.0, 0.0)
-        Ubulkdir = 0
-        nel_affected = 0
-        print('Taking into account turb. generation...')
-        for t, i in vetimap:
-            pname = 'spt_{}_p0'.format(t)
-            # Bounds of this element
-            emax = np.max(mesh[pname][:,i,:], axis=0)
-            emin = np.min(mesh[pname][:,i,:], axis=0)
-            # Distance from the generating plane
-            dist1 = np.abs(emin[Ubulkdir] - ctr_turb[Ubulkdir])
-            dist2 = np.abs(emax[Ubulkdir] - ctr_turb[Ubulkdir])
-            dist  = np.max([dist1, dist2])
-            if dist <= Lturb:
-                vwts[i] *= 2
-                nel_affected +=1
-        print('nel_affected = {} out of {}'.format(nel_affected, mesh[pname].shape[1]))
+        cfgsect = 'soln-plugin-turbulencegenerator'
+        if self.cfg:
+            if self.cfg.hassect('soln-plugin-turbulencegenerator'):
+                lturbref = np.array(self.cfg.getliteral(cfgsect, 'lturbref'))
+                ctr = np.array(self.cfg.getliteral(cfgsect, 'center'))
+                inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
+                Ubulkdir = self.cfg.getint(cfgsect, 'Ubulk-dir')
+
+                t, _ = vetimap[0]
+                ndims = mesh['spt_{}_p0'.format(t)].shape[-1]
+                dirs = [i for i in range(ndims) if i != Ubulkdir]
+                nel_affected = 0
+
+                # determine the bounds of the box of eddies
+                delta = np.zeros(ndims)
+                delta[Ubulkdir] = lturbref[Ubulkdir]
+                delta[dirs] = 0.5*inflow + lturbref[dirs]
+                x0 = ctr - delta
+                x1 = ctr + delta
+
+                print('Taking into account turb. generation...')
+                for t, i in vetimap:
+                    pname = 'spt_{}_p0'.format(t)
+                    pts = np.moveaxis(mesh[pname], 2, 0)[:, :, i] #ndims, npoints
+
+                    # Determine which points are inside the box
+                    inside = np.ones(pts.shape[1:], dtype=np.bool)
+                    for l, p, u in zip(x0, pts, x1):
+                        inside  &= (l <= p) & (p <= u)
+
+                    if np.any(inside, axis=0):
+                        vwts[i] *= self.cfg.getfloat(cfgsect,
+                                                     'partitioner-weight', 2.0)
+                        nel_affected +=1
+                print('nel_affected = {} out of {}'.format(nel_affected,
+                                                           mesh[pname].shape[1]))
 
         return Graph(vtab, etab, vwts, ewts), vetimap
 
