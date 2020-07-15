@@ -4,7 +4,7 @@
 
 <% zeta = c['ac-zeta'] %>
 <% rzeta = 1./c['ac-zeta'] %>
-<% kmax = 5 %>
+<% kmax = 3 %>
 
 // Ininitail guess for ustar from HLL
 <%pyfr:macro name='init_ustar' params='ql,al,qr,ar,us'>
@@ -16,29 +16,31 @@
 </%pyfr:macro>
 
 // Calculate components for Newton iterations
-<%pyfr:macro name='newton_parts' params='pl,ul,al,pr,ur,ar,us,psl,psr,dpsl,dpsr'>
+<%pyfr:macro name='newton_parts' params='ql,al,qr,ar,us,psl,psr,dpsl,dpsr'>
     fpdtype_t as = sqrt(us*us + ${zeta});
 
-    if (ul-al <= us-as) { // Left Rarefaction
-        psl  = pl + 0.5*(ul*(al+ul) - us*(as+us) + ${zeta}*log((al+ul)/(as+us)));
+    if (ql[1]-al <= us-as) { // Left Rarefaction
+        psl  = ql[0] + 0.5*(ql[1]*(al+ql[1]) - us*(as+us) +
+	                    ${zeta}*log((al+ql[1])/(as+us)));
         dpsl = -0.5*(as + us);
     }
-    else {                // Left Shock
-        fpdtype_t e = ul + us;
+    else {                   // Left Shock
+        fpdtype_t e = ql[1] + us;
         fpdtype_t q = sqrt(e*e + ${4.*zeta});
-        psl  = pl + 0.5*(ul-us)*(e + q);
-        dpsl = 0.5*((ul-us)*e/q - q) - us;
+        psl  = ql[0] + 0.5*(ql[1]-us)*(e + q);
+        dpsl = 0.5*((ql[1]-us)*e/q - q) - us;
     }
 
-    if (us+as <= ur+ar) { // Right Rarefaction
-         psr  = pr + 0.5*(us*(as-us) - ur*(ar-ur) + ${zeta}*log((as+us)/(ar+ur)));
+    if (us+as <= qr[1]+ar) { // Right Rarefaction
+         psr  = qr[0] + 0.5*(us*(as-us) - qr[1]*(ar-qr[1]) +
+	                     ${zeta}*log((as+us)/(ar+qr[1])));
          dpsr = 0.5*(as - us);
     }
-    else {                // Right Shock
-         fpdtype_t e = ur + us;
+    else {                   // Right Shock
+         fpdtype_t e = qr[1] + us;
          fpdtype_t q = sqrt(e*e + ${4.*zeta});
-         psr  = pr - 0.5*(us - ur)*(e - q);
-         dpsr = 0.5*((us-ur)*e/q + q) - us;
+         psr  = qr[0] - 0.5*(us - qr[1])*(e - q);
+         dpsr = 0.5*((us-qr[1])*e/q + q) - us;
     }
 
 </%pyfr:macro>
@@ -54,8 +56,8 @@
 	        qs[1] = ql[1];
 	    }
 	    else {                                // Star State
-	        lc = (as/al)*(ql[1] + sqrt(2.*ql[1]*ql[1] + ${zeta}))/
-                             (us    + sqrt(2.*us   *us    + ${zeta}));
+	        lc = (as*(ql[1] + sqrt(2.*ql[1]*ql[1] + ${zeta})))/
+                     (al*(us    + sqrt(2.*us   *us    + ${zeta})));
 		qs[0] = ps;
 		qs[1] = us;
             }
@@ -86,8 +88,8 @@
 	        qs[1] = qr[1];	    
 	    }
 	    else {                                // Star State
-	        rc = (ar/as)*(us    + sqrt(2.*us   *us    + ${zeta}))/
-                             (qr[1] + sqrt(2.*qr[1]*qr[1] + ${zeta}));
+	        rc = (ar*(us    + sqrt(2.*us   *us    + ${zeta})))/
+                     (as*(qr[1] + sqrt(2.*qr[1]*qr[1] + ${zeta})));
 	        qs[0] = ps;
 		qs[1] = us;
 	    }
@@ -117,23 +119,18 @@
     fpdtype_t psl, dpsl;
     fpdtype_t psr, dpsr;
 
-    fpdtype_t pl = ql[0];
-    fpdtype_t ul = ql[1];
-    fpdtype_t pr = qr[0];
-    fpdtype_t ur = qr[1];
-
     // ACM speed of sound
-    fpdtype_t al = sqrt(ul*ul + ${zeta});
-    fpdtype_t ar = sqrt(ur*ur + ${zeta});
+    fpdtype_t al = sqrt(ql[1]*ql[1] + ${zeta});
+    fpdtype_t ar = sqrt(qr[1]*qr[1] + ${zeta});
 
     ${pyfr.expand('init_ustar','ql','al','qr','ar','us')};
     
 % for k in range(kmax):
-    ${pyfr.expand('newton_parts','pl','ul','al','pr','ur','ar','us','psl','psr','dpsl','dpsr')};
+    ${pyfr.expand('newton_parts','ql','al','qr','ar','us','psl','psr','dpsl','dpsr')};
     us = us - (psl - psr)/(dpsl - dpsr);
 % endfor
 
-    // Calculate some star properties
+    // Calcql[1]ate some star properties
     fpdtype_t as = sqrt(us*us + ${zeta});
     fpdtype_t ps = psr;
 
