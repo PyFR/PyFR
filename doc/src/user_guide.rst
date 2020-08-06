@@ -60,7 +60,7 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
 1. GCC >= 4.9
 2. A BLAS library compiled as a shared library
    (e.g. `OpenBLAS <http://www.openblas.net/>`_)
-3. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= 1.6
+3. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= 1.15
    compiled as a shared library (STATIC=0) with BLAS=0
 
 Running in Parallel

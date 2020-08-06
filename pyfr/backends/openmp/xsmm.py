@@ -27,7 +27,7 @@ class XSMMWrappers(object):
         self.libxsmm_dfsspmdm_create = lib.libxsmm_dfsspmdm_create
         self.libxsmm_dfsspmdm_create.argtypes = [
             c_int, c_int, c_int, c_int, c_int, c_int,
-            c_double, c_double, c_void_p
+            c_double, c_double, c_int, c_void_p
         ]
         self.libxsmm_dfsspmdm_create.restype = c_void_p
 
@@ -35,7 +35,7 @@ class XSMMWrappers(object):
         self.libxsmm_sfsspmdm_create = lib.libxsmm_sfsspmdm_create
         self.libxsmm_sfsspmdm_create.argtypes = [
             c_int, c_int, c_int, c_int, c_int, c_int,
-            c_float, c_float, c_void_p
+            c_float, c_float, c_int, c_void_p
         ]
         self.libxsmm_sfsspmdm_create.restype = c_void_p
 
@@ -138,15 +138,17 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Get the A matrix
         a_np = a.get()
 
+        c_is_nt = beta == 0 and self.backend.alignb >= 64
+
         # JIT and register an nblock size kernel for this A matrix
         blockk_ptr = create(m, nblock, k, lda, ldb, ldc, alpha_ct,
-                            beta_ct, a_np.ctypes.data)
+                            beta_ct, c_is_nt, a_np.ctypes.data)
         self._kerns.append((blockk_ptr, destroy))
 
         # If necessary, also JIT and register a clean-up kernel for A
         if n % nblock != 0:
             cleank_ptr = create(m, n % nblock, k, lda, ldb, ldc, alpha_ct,
-                                beta_ct, a_np.ctypes.data)
+                                beta_ct, c_is_nt, a_np.ctypes.data)
             self._kerns.append((cleank_ptr, destroy))
         else:
             cleank_ptr = 0
