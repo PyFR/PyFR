@@ -69,6 +69,11 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
         self._tpl_c.update(tplc)
 
 
+class EulerSupOutflowBCInters(EulerBaseBCInters):
+    type = 'sup-out-fn'
+    cflux_state = 'ghost' 
+
+
 class EulerCharRiemInvBCInters(EulerBaseBCInters):
     type = 'char-riem-inv'
 

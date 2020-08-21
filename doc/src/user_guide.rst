@@ -1494,7 +1494,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
 
-    ``sup-out-fn`` only works with ``navier-stokes``
+    ``sup-out-fn`` only works with ``euler`` | ``navier-stokes``
 
 Example::
 
