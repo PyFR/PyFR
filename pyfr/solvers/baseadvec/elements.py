@@ -9,16 +9,11 @@ class BaseAdvectionElements(BaseElements):
     def _scratch_bufs(self):
         if 'flux' in self.antialias:
             bufs = {'scal_fpts', 'scal_qpts', 'vect_qpts'}
-        elif 'div-flux' in self.antialias:
-            bufs = {'scal_fpts', 'vect_upts', 'scal_qpts'}
         else:
             bufs = {'scal_fpts', 'vect_upts'}
 
         if self._soln_in_src_exprs:
-            if 'div-flux' in self.antialias:
-                bufs |= {'scal_qpts_cpy'}
-            else:
-                bufs |= {'scal_upts_cpy'}
+            bufs |= {'scal_upts_cpy'}
 
         return bufs
 
@@ -35,7 +30,6 @@ class BaseAdvectionElements(BaseElements):
 
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
-        divfluxaa = 'div-flux' in self.antialias
 
         # What the source term expressions (if any) are a function of
         plocsrc = self._ploc_in_src_exprs
@@ -50,7 +44,7 @@ class BaseAdvectionElements(BaseElements):
 
         # Interpolation from elemental points
         for s, neles in self._ext_int_sides:
-            if fluxaa or (divfluxaa and solnsrc):
+            if fluxaa:
                 kernels['disu_' + s] = lambda s=s: self._be.kernel(
                     'mul', self.opmat('M8'), slicem(self.scal_upts_inb, s),
                     out=slicem(self._scal_fqpts, s)
@@ -60,17 +54,6 @@ class BaseAdvectionElements(BaseElements):
                     'mul', self.opmat('M0'), slicem(self.scal_upts_inb, s),
                     out=slicem(self._scal_fpts, s)
                 )
-
-        # Interpolations and projections to/from quadrature points
-        if divfluxaa:
-            kernels['tdivf_qpts'] = lambda: self._be.kernel(
-                'mul', self.opmat('M7'), self.scal_upts_outb,
-                out=self._scal_qpts
-            )
-            kernels['divf_upts'] = lambda: self._be.kernel(
-                'mul', self.opmat('M9'), self._scal_qpts,
-                out=self.scal_upts_outb
-            )
 
         # First flux correction kernel
         if fluxaa:
@@ -91,34 +74,19 @@ class BaseAdvectionElements(BaseElements):
         )
 
         # Transformed to physical divergence kernel + source term
-        if divfluxaa:
-            plocqpts = self.ploc_at('qpts') if plocsrc else None
-            solnqpts = self._scal_qpts_cpy if solnsrc else None
+        plocupts = self.ploc_at('upts') if plocsrc else None
+        solnupts = self._scal_upts_cpy if solnsrc else None
 
-            if solnsrc:
-                kernels['copy_soln'] = lambda: self._be.kernel(
-                    'copy', self._scal_qpts_cpy, self._scal_qpts
-                )
-
-            kernels['negdivconf'] = lambda: self._be.kernel(
-                'negdivconf', tplargs=srctplargs,
-                dims=[self.nqpts, self.neles], tdivtconf=self._scal_qpts,
-                rcpdjac=self.rcpdjac_at('qpts'), ploc=plocqpts, u=solnqpts
+        if solnsrc:
+            kernels['copy_soln'] = lambda: self._be.kernel(
+                'copy', self._scal_upts_cpy, self.scal_upts_inb
             )
-        else:
-            plocupts = self.ploc_at('upts') if plocsrc else None
-            solnupts = self._scal_upts_cpy if solnsrc else None
 
-            if solnsrc:
-                kernels['copy_soln'] = lambda: self._be.kernel(
-                    'copy', self._scal_upts_cpy, self.scal_upts_inb
-                )
-
-            kernels['negdivconf'] = lambda: self._be.kernel(
-                'negdivconf', tplargs=srctplargs,
-                dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
-                rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts
-            )
+        kernels['negdivconf'] = lambda: self._be.kernel(
+            'negdivconf', tplargs=srctplargs,
+            dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
+            rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts
+        )
 
         # In-place solution filter
         if self.cfg.getint('soln-filter', 'nsteps', '0'):
