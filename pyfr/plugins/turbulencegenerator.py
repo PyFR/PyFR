@@ -139,7 +139,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         intg.call_plugin_dt(self.dt_out)
 
         # Populate the box of eddies
-        if os.path.isfile(self._get_output_path(intg.tcurr)):
+        if os.path.isfile(self._get_output_path(intg.tcurr)) and intg.isrestart:
             data = np.loadtxt(self._get_output_path(intg.tcurr), delimiter=',')
             self.eddies_loc = data[:, :self.ndims].swapaxes(0,1)
             self.eddies_strength = data[:, self.ndims:].swapaxes(0,1)
