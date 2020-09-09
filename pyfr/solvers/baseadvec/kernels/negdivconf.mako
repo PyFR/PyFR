@@ -81,8 +81,16 @@ utilde[0] = aij[0]*utilde[0];
 % endfor
 
 
-// TODO add pressure (i.e. energy) and density fluctuations for Ma > 0.3 flows,
-// (compressible solver only, of course).
+// Add density and energy fluctuations (compressible solver only, of course).
+% if system == 'compr':
+    // density
+    fpdtype_t pM4 = ${pmeanex}*pow(${Mmeanex}, 4);
+    tdivtconf[0] += factor[${Ubulkdir}]*${rhofluctfactor}*pM4*utilde[${Ubulkdir}];
+
+    // energy equation
+    fpdtype_t udotu_fluct = ${pyfr.dot('utilde[{i}]', i=(0, ndims))};
+    tdivtconf[${ndims} + 1] += factor[${Ubulkdir}]*0.5*u[0]*udotu_fluct;
+% endif
 }
 % endif
 </%pyfr:kernel>

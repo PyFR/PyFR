@@ -141,6 +141,25 @@ class BaseAdvectionElements(BaseElements):
                            'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_strength)
 
+        # Variables needed by the compressible solver
+        if not self.system.startswith('ac'):
+            # # bulk pressure and mach number
+            # pbulk = self.cfg.getfloat(cfgsect, 'pbulk')
+            # Mbulk2 = self.cfg.getfloat(cfgsect, 'Mbulk')**2
+
+            # # factor for the density fluctuations (Strong Reynolds Analogy)
+            # rhobulk = Mbulk2*constants['gamma']*pbulk/Ubulk**2
+            # gm1 = constants['gamma'] - 1.0
+            # self.srctplargs['rhofluctfactor'] = rhobulk*gm1*Mbulk2/Ubulk
+
+            pmeanex = self.cfg.getexpr(cfgsect, 'pmean', subs=subs)
+            Mmeanex = self.cfg.getexpr(cfgsect, 'Mmean', subs=subs)
+            self.srctplargs['pmeanex'] = pmeanex
+            self.srctplargs['Mmeanex'] = Mmeanex
+
+            ggm1 = constants['gamma']*(constants['gamma'] - 1.0)
+            self.srctplargs['rhofluctfactor'] = ggm1/Ubulk**3
+
         #TODO compute the factor and aij mat in the plugin rather than here?
 
         # Frozen turbulence hypothesis to get characteristic times in each vel.
