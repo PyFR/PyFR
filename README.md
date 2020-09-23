@@ -14,6 +14,14 @@ example. Currently available examples are:
 - 2D Euler vortex
 - 2D incompressible cylinder flow
 
+## Contributing
+
+The first step to contribute to PyFR is to fork this repository. In your
+personal fork, you can make changes in the `develop` branch or create another
+branch. Submit a Pull Request from your forked repository when your work is
+ready to be added to the official PyFR repository. The Pull Request should be
+made to the `develop` branch of the original PyFR repository.
+
 ## Authors
 
 See the AUTHORS file.
