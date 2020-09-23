@@ -1,5 +1,9 @@
 # 2D Couette flow
 
+Steps for running this example using the OpenMP backend are given below.
+
+## Run with OpenMP
+
 To run the simulation with the OpenMP backend, you must use the appropriate
 settings for your system. This is accomplished by editing the
 `[backend-openmp]` section in the `couette_flow_2d.ini` configuration file.
@@ -21,8 +25,6 @@ cc = gcc
 cblas = /usr/lib/x86_64-linux-gnu/blas/libblas.so.3
 cblas-type = parallel
 ```
-
-## Run with OpenMP
 
 Proceed with the following steps to run a serial 2D Couette flow simulation on
 a mixed unstructured mesh using the OpenMP backend. These steps assume your
@@ -60,3 +62,6 @@ $ pyfr export couette_flow_2d.pyfrm couette_flow_2d-040.pyfrs couette_flow_2d-04
 #### Step 4
 
 Visualize the unstructured VTK file in Paraview.
+
+![density](img/density.png)
+*Color map of steady-state density distribution.*

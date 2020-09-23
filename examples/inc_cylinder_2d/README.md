@@ -6,7 +6,7 @@ Steps for running this example using the OpenMP backend are given below.
 
 To run the simulation with the OpenMP backend, you must use the appropriate
 settings for your system. This is accomplished by editing the
-`[backend-openmp]` section in the `couette_flow_2d.ini` configuration file.
+`[backend-openmp]` section in the `inc_cylinder_2d.ini` configuration file.
 
 For macOS:
 

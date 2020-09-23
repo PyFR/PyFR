@@ -1,8 +1,12 @@
 # 2D Euler vortex
 
+Steps for running this example using the OpenMP backend are given below.
+
+## Run with OpenMP
+
 To run the simulation with the OpenMP backend, you must use the appropriate
 settings for your system. This is accomplished by editing the
-`[backend-openmp]` section in the `couette_flow_2d.ini` configuration file.
+`[backend-openmp]` section in the `euler_vortex_2d.ini` configuration file.
 
 For macOS:
 
@@ -21,8 +25,6 @@ cc = gcc
 cblas = /usr/lib/x86_64-linux-gnu/blas/libblas.so.3
 cblas-type = parallel
 ```
-
-## Run with OpenMP
 
 Proceed with the following steps to run a parallel 2D Euler vortex simulation
 on a structured mesh. These steps assume your current working directory is
@@ -69,3 +71,9 @@ $ pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d-
 #### Step 5
 
 Visualize the unstructured VTK file in Paraview.
+
+![density](img/density.png)
+*Color map of density distribution at 100 time units.*
+
+![velocity](img/velocity.png)
+*Color map of velocity magnitude at 100 time units.*
