@@ -20,15 +20,15 @@ available examples are:
 
 ## Contributing
 
-If you would like to contribute to PyFR please follow the steps listed below.
-Pull Requests should be made to the `develop` branch in the original PyFR
-repository. Changes in the `develop` branch are eventually merged into
-`master` for a new release.
+To contribute to PyFR please follow the steps listed below:
 
 1. Fork this repository to your GitHub account
 2. Create a new branch in your forked repository
 3. Make changes in your new branch
-4. Submit your changes by creating a Pull Request to the original PyFR repo
+4. Submit your changes by creating a Pull Request to the `develop` branch of the original PyFR repository
+
+Modifications to the `develop` branch are eventually merged into the master
+branch for a new release.
 
 ## Authors
 
