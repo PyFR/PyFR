@@ -152,13 +152,12 @@ class BaseAdvectionElements(BaseElements):
             # gm1 = constants['gamma'] - 1.0
             # self.srctplargs['rhofluctfactor'] = rhobulk*gm1*Mbulk2/Ubulk
 
-            pmeanex = self.cfg.getexpr(cfgsect, 'pmean', subs=subs)
+            rhomeanex = self.cfg.getexpr(cfgsect, 'rhomean', subs=subs)
             Mmeanex = self.cfg.getexpr(cfgsect, 'Mmean', subs=subs)
-            self.srctplargs['pmeanex'] = pmeanex
+            self.srctplargs['rhomeanex'] = rhomeanex
             self.srctplargs['Mmeanex'] = Mmeanex
 
-            ggm1 = constants['gamma']*(constants['gamma'] - 1.0)
-            self.srctplargs['rhofluctfactor'] = ggm1/Ubulk**3
+            self.srctplargs['rhofluctfactor'] = (constants['gamma'] - 1.0)/Ubulk
 
         #TODO compute the factor and aij mat in the plugin rather than here?
 

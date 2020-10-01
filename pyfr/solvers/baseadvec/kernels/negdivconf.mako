@@ -84,8 +84,8 @@ utilde[0] = aij[0]*utilde[0];
 // Add density and energy fluctuations (compressible solver only, of course).
 % if system == 'compr':
     // density
-    fpdtype_t pM4 = ${pmeanex}*pow(${Mmeanex}, 4);
-    tdivtconf[0] += factor[${Ubulkdir}]*${rhofluctfactor}*pM4*utilde[${Ubulkdir}];
+    fpdtype_t rM2 = ${rhomeanex}*pow(${Mmeanex}, 2);
+    tdivtconf[0] += factor[${Ubulkdir}]*${rhofluctfactor}*rM2*utilde[${Ubulkdir}];
 
     // energy equation
     fpdtype_t udotu_fluct = ${pyfr.dot('utilde[{i}]', i=(0, ndims))};
