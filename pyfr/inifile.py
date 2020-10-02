@@ -85,8 +85,8 @@ class Inifile(object):
             expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
                           lambda m: subs[m.group(1)], expr)
 
-        # Convert integers to floats
-        expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?!\s*])',
+        # Convert integers not inside [] to floats
+        expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?![^[]*\])',
                       _ensure_float, expr)
 
         # Encase in parenthesis
