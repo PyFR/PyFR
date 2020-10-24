@@ -6,9 +6,10 @@ import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
-from pyfr.nputil import npeval
+
 
 class IntegratePlugin(BasePlugin):
     name = 'integrate'
@@ -25,7 +26,7 @@ class IntegratePlugin(BasePlugin):
 
         # Expressions to integrate
         c = self.cfg.items_as('constants', float)
-        self.exprs = [(k, self.cfg.getexpr(cfgsect, k, subs=c))
+        self.exprs = [self.cfg.getexpr(cfgsect, k, subs=c)
                       for k in self.cfg.items(cfgsect)
                       if k.startswith('int-')]
 
@@ -40,7 +41,7 @@ class IntegratePlugin(BasePlugin):
         
         # The root rank needs to open the output file
         if rank == root:
-            header = ["t"] + [(k) for k in self.cfg.items(cfgsect) if k.startswith('int-')]
+            header = ['t'] + [k for k in self.cfg.items(cfgsect) if k.startswith('int-')]
 
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
@@ -52,20 +53,19 @@ class IntegratePlugin(BasePlugin):
             plocupts = eles.ploc_at_np('upts')
             
             # Jacobians
-            rjacs = 1/eles.rcpdjac_at_np('upts')
-            
+            jacs = 1/eles.rcpdjac_at_np('upts')
+        
             # Weights
             rname = self.cfg.get('solver-elements-' + ename, 'soln-pts')
             wts = get_quadrule(ename, rname, eles.nupts).wts
             
             # Save
-            self.elminfo.append((plocupts, rjacs, wts))
-        
+            self.elminfo.append((plocupts, jacs, wts))
 
     def _init_gradients(self, intg):
         # Determine what gradients, if any, are required
         self._gradpnames = gradpnames = set()
-        for k, ex in self.exprs:
+        for ex in self.exprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
         # If gradients are required then form the relevant operators
@@ -85,13 +85,12 @@ class IntegratePlugin(BasePlugin):
                 self._rcpjact.append(smat*rcpdjac)
 
     def _eval_exprs(self, intg):
-
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
         exprs = np.zeros(len(self.exprs))
         # Iterate over each element type in the simulation
-        for i, (soln, (plocs, rjacs, wts)) in enumerate(zip(intg.soln, self.elminfo)):
+        for i, (soln, (plocs, jacs, wts)) in enumerate(zip(intg.soln, self.elminfo)):
     
             # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
@@ -117,22 +116,19 @@ class IntegratePlugin(BasePlugin):
                     # Untransform this to get the physical gradient
                     gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
                     gradpn = gradpn.reshape(self.ndims, nupts, -1)
-
+                    
                     for dim, grad in zip('xyz', gradpn):
-                        subs['grad_{0}_{1}'.format(pname, dim)] = grad
+                        subs[f'grad_{pname}_{dim}'] = grad
 
-            for j,(k,v) in enumerate(self.exprs):
+            for j,v in enumerate(self.exprs):
                 # Accumulate integrated evaluated expressions
-                exprs[j] += np.sum(wts[:, None]*rjacs*npeval(v, subs))
-            
+                exprs[j] += np.sum(wts[:, None]*jacs*npeval(v, subs))
             
         # Stack up the expressions for each element type and return
         return exprs
 
     def __call__(self, intg):
-        doiint = intg.nacptsteps % self.nsteps == 0
-
-        if doiint:
+        if intg.nacptsteps % self.nsteps == 0:
             # MPI info
             comm, rank, root = get_comm_rank_root()
             
