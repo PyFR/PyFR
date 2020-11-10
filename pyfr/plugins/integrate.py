@@ -40,8 +40,8 @@ class IntegratePlugin(BasePlugin):
         
         # The root rank needs to open the output file
         if rank == root:
-            header = ['t'] + [k for k in self.cfg.items(cfgsect) if \
-                              k.startswith('int-')]
+            header = ['t'] + [k for k in self.cfg.items(cfgsect)
+                              if k.startswith('int-')]
 
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
@@ -90,9 +90,10 @@ class IntegratePlugin(BasePlugin):
 
         exprs = np.zeros(len(self.exprs))
         # Iterate over each element type in the simulation
-        for i, (soln, (plocs, jacs, wts)) in \
-            enumerate(zip(intg.soln, self.elminfo)):
-    
+        for i, elminfo in enumerate(zip(intg.soln, self.elminfo)):
+            soln  = elminfo[0]
+            plocs = elminfo[1][0]
+            
             # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
                                                  self.cfg)
@@ -121,6 +122,8 @@ class IntegratePlugin(BasePlugin):
                     for dim, grad in zip('xyz', gradpn):
                         subs[f'grad_{pname}_{dim}'] = grad
 
+            jacs = elminfo[1][1]
+            wts  = elminfo[1][2]
             for j, v in enumerate(self.exprs):
                 # Accumulate integrated evaluated expressions
                 exprs[j] += np.sum(wts[:, None]*jacs*npeval(v, subs))
@@ -140,7 +143,7 @@ class IntegratePlugin(BasePlugin):
             if rank != root:
                 comm.Reduce(iintex, None, op=get_mpi('sum'), root=root)
             else:
-                comm.Reduce(get_mpi('in_place'), iintex, op=get_mpi('sum'), \
+                comm.Reduce(get_mpi('in_place'), iintex, op=get_mpi('sum'),
                             root=root)
 
                 # Build the row
