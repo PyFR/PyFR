@@ -1,69 +1,56 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.aceuler.kernels.flux1d'/>
+<%include file='pyfr.solvers.aceuler.kernels.flux'/>
 
-<% eps = 0.001 %>
 <% zeta = c['ac-zeta'] %>
 <% rzeta = 1./zeta %>
 
 <%pyfr:macro name='rsolve_t1d' params='ul, ur, nf'>
     // Compute the left and right fluxes + velocities and pressures
     fpdtype_t fl[${nvars}], fr[${nvars}];
-    fpdtype_t va[${ndims}], dv[${ndims}];
-    fpdtype_t v1[${nvars}], v2[${nvars}], v3[${nvars}];
+    fpdtype_t v1, v2, v3;
     
     ${pyfr.expand('inviscid_1dflux', 'ul','fl')};
     ${pyfr.expand('inviscid_1dflux', 'ur','fr')};
 
-    // Average velocities
-% for i in range(ndims):
-    va[${i}] = 0.5*(ul[${i+1}] + ur[${i+1}]);
-% endfor
+    // Average velocity in x
+    fpdtype_t vax = 0.5*(ul[1] + ur[1]);
 
     // Quanitiy jumps
     fpdtype_t dpz = ${rzeta}*(ur[0] - ul[0]); 
-% for i in range(ndims):
-    dv[${i}] = ur[${i+1}] - ul[${i+1}];
-% endfor
+    fpdtype_t dvx = ur[1] - ul[1];
 
     // ACM speed of sound
-    fpdtype_t aa = sqrt(va[0]*va[0] + ${zeta});
+    fpdtype_t aa = sqrt(vax*vax + ${zeta});
     fpdtype_t ra = 1./aa;
     
     // Eigenvalues
-    fpdtype_t l1 = fabs(va[0] - aa);
-    fpdtype_t l2 = fabs(va[0]);
-    fpdtype_t l3 = fabs(va[0] + aa);
-
-    // Entropy fix
-    //l1 = (l1 < ${eps}) ? ${1/(2*eps)}*(l1*l1 + ${eps**2}) : l1;
-    //l3 = (l3 < ${eps}) ? ${1/(2*eps)}*(l3*l3 + ${eps**2}) : l3;
+    fpdtype_t l1 = fabs(vax - aa);
+    fpdtype_t l2 = fabs(vax);
+    fpdtype_t l3 = fabs(vax + aa);
 
     // Alpha terms
-    fpdtype_t a1 =  0.5*ra*(dpz*(va[0] + aa) - dv[0]);
-    fpdtype_t a3 = -0.5*ra*(dpz*(va[0] - aa) - dv[0]);
+    fpdtype_t a1 =  0.5*ra*(dpz*(vax + aa) - dvx);
+    fpdtype_t a3 = -0.5*ra*(dpz*(vax - aa) - dvx);
 
     // Compute the Eigenvectors
-    fpdtype_t vc = (a1*(va[0] - aa) - a3*(va[0] + aa))*ra;
+    fpdtype_t vc = (a1*(vax - aa) - a3*(vax + aa))*ra;
     
-    v1[0] = a1*${zeta};
-    v2[0] = 0.;
-    v3[0] = a3*${zeta};
+    v1 = a1*${zeta};
+    v2 = 0.;
+    v3 = a3*${zeta};
+    nf[0] = 0.5*(fl[0] + fr[0]) - 0.5*(l1*v1 + l2*v2 + l3*v3);
 % for i in range(ndims):
 % if i == 0:
-    v1[${i + 1}] = a1*(va[0] - aa);
-    v2[${i + 1}] = 0.;
-    v3[${i + 1}] = a3*(va[0] + aa);
+    v1 = a1*(vax - aa);
+    v2 = 0.;
+    v3 = a3*(vax + aa);
 % else:
-    v1[${i + 1}] = -a1*ra*(va[0] - aa)*va[${i}];
-    v2[${i + 1}] =  dv[${i}] + va[${i}]*vc;
-    v3[${i + 1}] =  a3*ra*(va[0] + aa)*va[${i}];
+    v1 = -a1*ra*(vax - aa)*0.5*(ul[${i + 1}] + ur[${i + 1}]);
+    v2 =  (ur[${i + 1}] - ul[${i + 1}]) + vax*vc;
+    v3 =  a3*ra*(vax + aa)*0.5*(ul[${i + 1}] + ur[${i + 1}]);
 % endif
-% endfor
-
-    // Output
-% for i in range(nvars):
-    nf[${i}] = 0.5*(fl[${i}] + fr[${i}]) - 0.5*(l1*v1[${i}] + l2*v2[${i}] + l3*v3[${i}]);
+    nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}]) - 0.5*(l1*v1 + l2*v2 + l3*v3);
 % endfor
 
 </%pyfr:macro>

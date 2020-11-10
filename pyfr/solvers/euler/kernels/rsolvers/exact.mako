@@ -2,19 +2,19 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.primitives'/>
 
-<% gmrtg = (c['gamma']-1.0)/(2.0*c['gamma']) %>
-<% gprtg = (c['gamma']+1.0)/(2.0*c['gamma']) %>
-<% tgrgm = (2.0*c['gamma'])/(c['gamma']-1.0) %>
-<% tgrgp = (2.0*c['gamma'])/(c['gamma']+1.0) %>
-<% trgm = 2.0/(c['gamma']-1.0) %>
-<% trgp = 2.0/(c['gamma']+1.0) %>
-<% gmrgp = (c['gamma']-1.0)/(c['gamma']+1.0) %>
-<% hgm = 0.5*(c['gamma']-1.0) %>
-<% rgm = 1./(c['gamma']-1.0) %>
+<% gmrtg = (c['gamma'] - 1)/(2*c['gamma']) %>
+<% gprtg = (c['gamma'] + 1)/(2*c['gamma']) %>
+<% tgrgm = (2*c['gamma'])/(c['gamma'] - 1) %>
+<% tgrgp = (2*c['gamma'])/(c['gamma'] + 1) %>
+<% trgm = 2/(c['gamma'] - 1) %>
+<% trgp = 2/(c['gamma'] + 1) %>
+<% gmrgp = (c['gamma'] - 1)/(c['gamma'] + 1) %>
+<% hgm = 0.5*(c['gamma'] - 1) %>
+<% rgm = 1/(c['gamma'] - 1) %>
 <% gamma = c['gamma'] %>
 
 // Initial guess for pressure
-<%pyfr:macro name='init_p' params='rl,vl,pl,cl,rr,vr,pr,cr,p0'>
+<%pyfr:macro name='init_p' params='rl, vl, pl, cl, rr, vr, pr, cr, p0'>
     fpdtype_t bpv = 0.5*(pl + pr) + 0.125*(vl[0] - vr[0])*(rl + rr)*(cl + cr);
     bpv = max(0.,bpv);
     fpdtype_t pmin = min(pl,pr);
@@ -89,7 +89,7 @@
 
 // Exact solve solution decision tree
 <% switch = 0.0 %>
-<%pyfr:macro name='riemann_decision' params='rl,vl,pl,cl,rr,vr,pr,cr,us,p0,w0'>
+<%pyfr:macro name='riemann_decision' params='rl, vl, pl, cl, rr, vr, pr, cr, us, p0, w0'>
 
     if (${switch} <= us){
 % for i in range(ndims-1):

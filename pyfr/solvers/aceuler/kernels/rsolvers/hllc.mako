@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.aceuler.kernels.flux1d'/>
+<%include file='pyfr.solvers.aceuler.kernels.flux'/>
 
 <% zeta = c['ac-zeta'] %>
-<% rzeta = 1./c['ac-zeta'] %>
+<% rzeta = 1/c['ac-zeta'] %>
 
 <%pyfr:macro name='rsolve_t1d' params='ul, ur, nf'>
     fpdtype_t fl[${nvars}], fr[${nvars}];
@@ -21,7 +21,7 @@
     fpdtype_t sr = ua + aa;
 
     // HLLC Star region values
-    fpdtype_t inv_ds = 1./(sr-sl);
+    fpdtype_t inv_ds = 1./(sr - sl);
     fpdtype_t ps = (sr*ur[0] - sl*ul[0] + ${zeta}*(ul[1] - ur[1]))*inv_ds;
     fpdtype_t us = (${rzeta}*sl*sr*(ur[0] - ul[0]) + (ul[1]*sr - ur[1]*sl))*inv_ds;
 
@@ -31,11 +31,11 @@
     usr[0] = ps;
 % for i in range(ndims):
 % if i == 0:
-    usl[${i+1}] = us;
-    usr[${i+1}] = us;
+    usl[${i + 1}] = us;
+    usr[${i + 1}] = us;
 % else:
-    usl[${i+1}] = ul[${i+1}]*(sl - ul[1])*rsl;
-    usr[${i+1}] = ur[${i+1}]*(sr - ur[1])*rsr;
+    usl[${i + 1}] = ul[${i + 1}]*(sl - ul[1])*rsl;
+    usr[${i + 1}] = ur[${i + 1}]*(sr - ur[1])*rsr;
 % endif
 % endfor
 

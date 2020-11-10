@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.aceuler.kernels.flux1d'/>
+<%include file='pyfr.solvers.aceuler.kernels.flux'/>
 
 <%pyfr:macro name='rsolve_t1d' params='ul, ur, nf'>
     fpdtype_t fl[${nvars}], fr[${nvars}];

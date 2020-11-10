@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.euler.kernels.flux1d'/>
+<%include file='pyfr.solvers.euler.kernels.flux'/>
 
 <% eps = 0.001 %>
 
@@ -8,7 +8,7 @@
     // Compute the left and right fluxes + velocities and pressures
     fpdtype_t fl[${nvars}], fr[${nvars}];
     fpdtype_t vl[${ndims}], vr[${ndims}], va[${ndims}], dv[${ndims}];
-    fpdtype_t v1[${nvars}], v2[${nvars}], v3[${nvars}];
+    fpdtype_t v1, v2, v3;
     fpdtype_t pl, pr, r2a2;
 
     ${pyfr.expand('inviscid_1dflux', 'ul','fl','pl','vl')};
@@ -55,28 +55,28 @@
 
     // Compute the Eigenvectors
     r2a2 = 1/(2*a*a);
-    v1[0] = (dp - roa*a*dv[0])*r2a2;
-    v2[0] = dro - dp*2*r2a2;
-    v3[0] = (dp + roa*a*dv[0])*r2a2;
+    v1 = (dp - roa*a*dv[0])*r2a2;
+    v2 = dro - dp*2*r2a2;
+    v3 = (dp + roa*a*dv[0])*r2a2;
+    nf[0] = 0.5*(fl[0] + fr[0]) - (l1*v1 + l2*v2 + l3*v3);
+    
 % for i in range(ndims):
 % if i == 0:
-    v1[${i + 1}] = (dp - roa*a*dv[0])*r2a2*(va[${i}] - a);
-    v2[${i + 1}] = (dro - dp*2*r2a2)*va[${i}];
-    v3[${i + 1}] = (dp + roa*a*dv[0])*r2a2*(va[${i}] + a);
+    v1 = (dp - roa*a*dv[0])*r2a2*(va[${i}] - a);
+    v2 = (dro - dp*2*r2a2)*va[${i}];
+    v3 = (dp + roa*a*dv[0])*r2a2*(va[${i}] + a);
 % else:
-    v1[${i + 1}] = (dp - roa*a*dv[0])*r2a2*va[${i}];
-    v2[${i + 1}] = (dro - dp*2*r2a2)*va[${i}] + roa*dv[${i}];
-    v3[${i + 1}] = (dp + roa*a*dv[0])*r2a2*va[${i}];
+    v1 = (dp - roa*a*dv[0])*r2a2*va[${i}];
+    v2 = (dro - dp*2*r2a2)*va[${i}] + roa*dv[${i}];
+    v3 = (dp + roa*a*dv[0])*r2a2*va[${i}];
 % endif
+    nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}]) - (l1*v1 + l2*v2 + l3*v3);
 % endfor
-    v1[${nvars - 1}] = (dp - roa*a*dv[0])*r2a2*(ha - a*va[0]);
-    v2[${nvars - 1}] = (dro - dp*2*r2a2)*qq*0.5 + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - va[0]*dv[0]);
-    v3[${nvars - 1}] = (dp + roa*a*dv[0])*r2a2*(ha + a*va[0]);
 
-    // Output
-% for i in range(nvars):
-    nf[${i}] = 0.5*(fl[${i}] + fr[${i}]) - (l1*v1[${i}] + l2*v2[${i}] + l3*v3[${i}]);
-% endfor
+    v1 = (dp - roa*a*dv[0])*r2a2*(ha - a*va[0]);
+    v2 = (dro - dp*2*r2a2)*qq*0.5 + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - va[0]*dv[0]);
+    v3 = (dp + roa*a*dv[0])*r2a2*(ha + a*va[0]);
+    nf[${nvars - 1}] = 0.5*(fl[${nvars - 1}] + fr[${nvars - 1}]) - (l1*v1 + l2*v2 + l3*v3);
 
 </%pyfr:macro>
 
