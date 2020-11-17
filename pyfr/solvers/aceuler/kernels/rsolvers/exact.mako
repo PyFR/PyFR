@@ -12,7 +12,6 @@
     fpdtype_t sr = qr[1] + ar;
 
     us = (${rzeta}*sl*sr*(ql[0] - qr[0]) + (qr[1]*sl - ql[1]*sr))/(sl - sr);
-
 </%pyfr:macro>
 
 // Calculate components for Newton iterations
@@ -50,10 +49,10 @@
     if (0. <= us) {
         fpdtype_t lc;
         if (ql[1]-al <= us - as) {                  // Left Rarefaction
-	    if (0. <= ql[1] - al) {                 // Left State
-		lc = 1.;
-	        qs[0] = ql[0];
-	        qs[1] = ql[1];
+            if (0. <= ql[1] - al) {                 // Left State
+                lc = 1.;
+		qs[0] = ql[0];
+		qs[1] = ql[1];
 	    }
 	    else {                                  // Star State
 	        lc = (as*(ql[1] + sqrt(2.*ql[1]*ql[1] + ${zeta})))/
@@ -64,7 +63,7 @@
 	}
         else {                                      // Left Shock
 	    if (0. < (us - ql[1])/(ps - ql[0])) {   // Left State
-		lc = 1.;
+                lc = 1.;
 	        qs[0] = ql[0];
 	        qs[1] = ql[1];
  	    }
@@ -83,9 +82,9 @@
     	fpdtype_t rc;
         if (us+as <= qr[1] + ar) {                  // Right Rarefaction
 	    if (0. >= qr[1] + ar) {                 // Right State
-		rc = 1.;
-	        qs[0] = qr[0];
-	        qs[1] = qr[1];	    
+                rc = 1.;
+                qs[0] = qr[0];
+                qs[1] = qr[1];	    
 	    }
 	    else {                                  // Star State
 	        rc = (ar*(us    + sqrt(2.*us   *us    + ${zeta})))/

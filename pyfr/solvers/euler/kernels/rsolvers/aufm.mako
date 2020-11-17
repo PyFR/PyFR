@@ -31,18 +31,19 @@
     // Get Mach Number
     fpdtype_t m = s1/(s1 - s2);
 
-    // Get left, right, and delta split vectors 
+    // Get left, right, and delta split vectors
+    fpdtype_t hrcb = 0.5/cb;
     psl[0] = 0.;
     psr[0] = 0.;
-    du[0] = (pl - pr)/(2.*cb);
+    du[0] = (pl - pr)*hrcb;
 % for i in range(ndims):
-    psl[${i}+1] = n[${i}]*pl;
-    psr[${i}+1] = n[${i}]*pr;
-    du[${i}+1] = (pl*vl[${i}] - pr*vr[${i}])/(2.*cb);
+    psl[${i + 1}] = n[${i}]*pl;
+    psr[${i + 1}] = n[${i}]*pr;
+    du[${i + 1}] = (pl*vl[${i}] - pr*vr[${i}])*hrcb;
 % endfor
-    psl[${nvars}-1] = pl*nvl; 
-    psr[${nvars}-1] = pr*nvr;
-    du[${nvars}-1] = ((cb*cb/${c['gamma'] - 1})*(pl-pr) + 0.5*(pl*ql - pr*qr))/(2.0*cb);
+    psl[${nvars - 1}] = pl*nvl; 
+    psr[${nvars - 1}] = pr*nvr;
+    du[${nvars - 1}] = ((cb*cb/${c['gamma'] - 1})*(pl-pr) + 0.5*(pl*ql - pr*qr))*hrcb;
 
 
     // Output

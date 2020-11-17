@@ -47,7 +47,6 @@
 % for i in range(nvars):
     nf[${i}] = (ml > 1.) ? fp[${i}] : ((mr < 1.) ? fm[${i}] : fm[${i}] + fp[${i}]);
 % endfor
-
 </%pyfr:macro>
 
 <%include file='pyfr.solvers.euler.kernels.rsolvers.rsolve_trans'/>

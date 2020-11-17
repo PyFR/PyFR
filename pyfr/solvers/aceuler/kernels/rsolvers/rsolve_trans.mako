@@ -10,9 +10,9 @@
     ${pyfr.expand('transform_to','n', 'ul', 'utl', '1')};
     ${pyfr.expand('transform_to','n', 'ur', 'utr', '1')};
 
-    ${pyfr.expand('rsolve_t1d','utl','utr','ntf')};
+    ${pyfr.expand('rsolve_t1d', 'utl', 'utr', 'ntf')};
 
     nf[0] = ntf[0];
-    ${pyfr.expand('transform_from','n','ntf','nf', '1')};
+    ${pyfr.expand('transform_from', 'n', 'ntf', 'nf', '1')};
 
 </%pyfr:macro>

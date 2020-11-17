@@ -90,7 +90,6 @@
 // Exact solve solution decision tree
 <% switch = 0.0 %>
 <%pyfr:macro name='riemann_decision' params='rl, vl, pl, cl, rr, vr, pr, cr, us, p0, w0'>
-
     if (${switch} <= us){
 % for i in range(ndims-1):
         w0[${i+2}] = vl[${i+1}];
@@ -172,7 +171,6 @@
             }
         }
     }
-
 </%pyfr:macro>
 
 // Godunov exact Riemann solver
@@ -185,8 +183,8 @@
     fpdtype_t fsl,fsr,fdl,fdr;
     fpdtype_t w0[${nvars}];
 
-    ${pyfr.expand('inviscid_prim','ul','pl','vl')};
-    ${pyfr.expand('inviscid_prim','ur','pr','vr')};
+    ${pyfr.expand('inviscid_prim', 'ul', 'pl', 'vl')};
+    ${pyfr.expand('inviscid_prim', 'ur', 'pr', 'vr')};
 
     // Calculate Left/Right sound speeds
     fpdtype_t cl = sqrt(${c['gamma']}*pl/ul[0]);
@@ -195,23 +193,23 @@
     // Inital pressure guess
     fpdtype_t rl = ul[0];
     fpdtype_t rr = ur[0];
-    ${pyfr.expand('init_p','rl','vl','pl','cl',
-                           'rr','vr','pr','cr','p0')};
+    ${pyfr.expand('init_p', 'rl', 'vl', 'pl', 'cl',
+                            'rr', 'vr', 'pr', 'cr', 'p0')};
     fpdtype_t ud = vr[0] - vl[0];
 
     // Newton Iterations
 %for k in range(kmax):
-    ${pyfr.expand('star_flux','p0','pl','rl','cl','fsl','fdl')};
-    ${pyfr.expand('star_flux','p0','pr','rr','cr','fsr','fdr')};
+    ${pyfr.expand('star_flux', 'p0', 'pl', 'rl', 'cl', 'fsl', 'fdl')};
+    ${pyfr.expand('star_flux', 'p0', 'pr', 'rr', 'cr', 'fsr', 'fdr')};
     p1 = p0 - (fsl + fsr + ud)/(fdl + fdr);
     p0 = (p1 < 0.) ? ${pmin} : p1;
 % endfor
     fpdtype_t us = 0.5*(vl[0] + vr[0] + fsr - fsl);
 
     // Go through Riemann solve decision tree
-    ${pyfr.expand('riemann_decision','rl','vl','pl','cl',
-                                     'rr','vr','pr','cr','us','p0','w0')};
-    ${pyfr.expand('primitive_1dflux','w0','nf')};
+    ${pyfr.expand('riemann_decision', 'rl', 'vl', 'pl', 'cl',
+                                      'rr', 'vr', 'pr', 'cr', 'us', 'p0', 'w0')};
+    ${pyfr.expand('primitive_1dflux', 'w0', 'nf')};
 
 </%pyfr:macro>
 
