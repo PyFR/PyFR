@@ -19,7 +19,7 @@ class IntegratePlugin(BasePlugin):
         super().__init__(intg, cfgsect, suffix)
 
         comm, rank, root = get_comm_rank_root()
-        
+
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
@@ -37,7 +37,7 @@ class IntegratePlugin(BasePlugin):
 
         # Integration parameters
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
-        
+
         # The root rank needs to open the output file
         if rank == root:
             header = ['t'] + [k for k in self.cfg.items(cfgsect)
@@ -45,22 +45,22 @@ class IntegratePlugin(BasePlugin):
 
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
-            
-        self.elminfo = []
-        # Iterate over the element types
+
+        # Prepare the per element-type info list
+        self.eleinfo = []
         for ename, eles in intg.system.ele_map.items():
             # Locations of each solution point
             plocupts = eles.ploc_at_np('upts')
-            
+
             # Jacobians
-            jacs = 1/eles.rcpdjac_at_np('upts')
-        
-            # Weights
+            rcpdjacs = eles.rcpdjac_at_np('upts')
+
+            # Quadature weights
             rname = self.cfg.get('solver-elements-' + ename, 'soln-pts')
             wts = get_quadrule(ename, rname, eles.nupts).wts
-            
+
             # Save
-            self.elminfo.append((plocupts, jacs, wts))
+            self.eleinfo.append((plocupts, wts[:, None] / rcpdjacs))
 
     def _init_gradients(self, intg):
         # Determine what gradients, if any, are required
@@ -85,15 +85,16 @@ class IntegratePlugin(BasePlugin):
                 self._rcpjact.append(smat*rcpdjac)
 
     def _eval_exprs(self, intg):
+        exprs = np.zeros(len(self.exprs))
+
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
-        exprs = np.zeros(len(self.exprs))
+
         # Iterate over each element type in the simulation
-        for i, elminfo in enumerate(zip(intg.soln, self.elminfo)):
-            soln  = elminfo[0]
-            plocs = elminfo[1][0]
-            
+        for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
+            plocs, wts = eleinfo
+
             # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
                                                  self.cfg)
@@ -118,24 +119,21 @@ class IntegratePlugin(BasePlugin):
                     # Untransform this to get the physical gradient
                     gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
                     gradpn = gradpn.reshape(self.ndims, nupts, -1)
-                    
+
                     for dim, grad in zip('xyz', gradpn):
                         subs[f'grad_{pname}_{dim}'] = grad
 
-            jacs = elminfo[1][1]
-            wts  = elminfo[1][2]
+            # Accumulate integrated evaluated expressions
             for j, v in enumerate(self.exprs):
-                # Accumulate integrated evaluated expressions
-                exprs[j] += np.sum(wts[:, None]*jacs*npeval(v, subs))
-            
-        # Stack up the expressions for each element type and return
+                exprs[j] += np.sum(wts*npeval(v, subs))
+
         return exprs
 
     def __call__(self, intg):
         if intg.nacptsteps % self.nsteps == 0:
             # MPI info
             comm, rank, root = get_comm_rank_root()
-            
+
             # Evaluate the integation expressions
             iintex = self._eval_exprs(intg)
 
@@ -146,12 +144,8 @@ class IntegratePlugin(BasePlugin):
                 comm.Reduce(get_mpi('in_place'), iintex, op=get_mpi('sum'),
                             root=root)
 
-                # Build the row
-                row = [intg.tcurr] + iintex.tolist()
-
                 # Write
-                print(','.join(str(r) for r in row), file=self.outf)
+                print(intg.tcurr, *iintex.tolist(), sep=', ', file=self.outf)
 
                 # Flush to disk
                 self.outf.flush()
-                
