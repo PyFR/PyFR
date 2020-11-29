@@ -20,7 +20,8 @@ from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import NativeReader
 from pyfr.solvers import get_solver
 from pyfr.util import subclasses
-from pyfr.writers import BaseWriter, get_writer_by_name, get_writer_by_extn
+from pyfr.writers import (BaseWriter, get_writer_by_name, get_writer_by_extn,
+                          write_pyfrms)
 
 
 def main():
@@ -126,9 +127,7 @@ def process_import(args):
     mesh = reader.to_pyfrm()
 
     # Save to disk
-    with h5py.File(args.outmesh, 'w') as f:
-        for k, v in mesh.items():
-            f[k] = v
+    write_pyfrms(args.outmesh, mesh)
 
 
 def process_partition(args):
@@ -175,9 +174,7 @@ def process_partition(args):
         path = os.path.join(args.outd, os.path.basename(path.rstrip('/')))
 
         # Save to disk
-        with h5py.File(path, 'w') as f:
-            for k, v in data.items():
-                f[k] = v
+        write_pyfrms(path, data)
 
     # Write out the renumbering table
     if args.rnumf:
