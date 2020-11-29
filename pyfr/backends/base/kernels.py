@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import itertools as it
+import re
 import types
 
 from pyfr.util import memoize, proxylist
@@ -78,11 +79,11 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Render the template to yield the source code
         tpl = self.backend.lookup.get_template(mod)
         src = tpl.render(**tplargs)
+        src = re.sub(r'\n\n+', r'\n\n', src)
 
         # Check the kernel exists in the template
         if name not in argspecs:
-            raise ValueError('Kernel "{0}" not defined in template'
-                             .format(name))
+            raise ValueError(f'Kernel "{name}" not defined in template')
 
         # Extract the metadata for the kernel
         ndim, argn, argt = argspecs[name]
