@@ -55,7 +55,7 @@ class BasePartitioner(object):
             for i, n in enumerate(pn):
                 if n > 0:
                     offs[en][i] = off = sum(s.shape[1] for s in spts[en])
-                    spts[en].append(mesh['spt_{0}_p{1}'.format(en, i)])
+                    spts[en].append(mesh[f'spt_{en}_p{i}'])
                     rnum[en].update(((i, j), (0, off + j)) for j in range(n))
 
         def offset_con(con, pr):
@@ -97,10 +97,10 @@ class BasePartitioner(object):
         newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
 
         for k, v in spts.items():
-            newmesh['spt_{0}_p0'.format(k)] = np.hstack(v)
+            newmesh[f'spt_{k}_p0'] = np.hstack(v)
 
         for k, v in bccon.items():
-            newmesh['bcon_{0}_p0'.format(k)] = np.hstack(v).astype(dtype)
+            newmesh[f'bcon_{k}_p0'] = np.hstack(v).astype(dtype)
 
         return newmesh, rnum
 
@@ -108,7 +108,7 @@ class BasePartitioner(object):
         newsoln = defaultdict(list)
 
         for f, (en, shape) in soln.array_info('soln').items():
-            newsoln['soln_{0}_p0'.format(en)].append(soln[f])
+            newsoln[f'soln_{en}_p0'].append(soln[f])
 
         newsoln = {k: np.dstack(v) for k, v in newsoln.items()}
         newsoln['config'] = soln['config']
@@ -183,8 +183,8 @@ class BasePartitioner(object):
             spt_px[etype, part].append(spt_p0[etype][:, eidxg, :])
 
         # Stack
-        return {'spt_{0}_p{1}'.format(*k): np.array(v).swapaxes(0, 1)
-                for k, v in spt_px.items()}
+        return {f'spt_{etype}_p{pn}': np.array(v).swapaxes(0, 1)
+                for (etype, pn), v in spt_px.items()}
 
     def _partition_soln(self, soln, vetimap, vparts):
         # Get the solution arrays from the file
@@ -199,8 +199,8 @@ class BasePartitioner(object):
             soln_px[etype, part].append(soln_p0[etype][..., eidxg])
 
         # Stack
-        return {'soln_{0}_p{1}'.format(*k): np.dstack(v)
-                for k, v in soln_px.items()}
+        return {f'soln_{etype}_p{pn}': np.dstack(v)
+                for (etype, pn), v in soln_px.items()}
 
     def _partition_con(self, mesh, vetimap, vparts):
         con_px = defaultdict(list)
@@ -250,14 +250,14 @@ class BasePartitioner(object):
         # Output
         con = {}
 
-        for k, v in con_px.items():
-            con['con_p{0}'.format(k)] = np.array(v, dtype=dtype).T
+        for px, v in con_px.items():
+            con[f'con_p{px}'] = np.array(v, dtype=dtype).T
 
-        for k, v in con_pxpy.items():
-            con['con_p{0}p{1}'.format(*k)] = np.array(v, dtype=dtype)
+        for (px, py), v in con_pxpy.items():
+            con[f'con_p{px}p{py}'] = np.array(v, dtype=dtype)
 
-        for k, v in bcon_px.items():
-            con['bcon_{0}_p{1}'.format(*k)] = np.array(v, dtype=dtype)
+        for (etype, px), v in bcon_px.items():
+            con[f'bcon_{etype}_p{px}'] = np.array(v, dtype=dtype)
 
         return con, eleglmap
 

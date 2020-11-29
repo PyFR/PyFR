@@ -140,7 +140,7 @@ class NativeWriter(object):
                 mmap = None
 
             for name, size in comm.bcast(mmap, root=root):
-                d = f.create_dataset(name, (), dtype='S{}'.format(size))
+                d = f.create_dataset(name, (), dtype=f'S{size}')
 
                 if rank == root:
                     d.write_direct(np.array(metadata[name], dtype='S'))

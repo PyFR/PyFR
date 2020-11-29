@@ -87,7 +87,7 @@ class BaseSystem(object):
         # Look for and load each element type from the mesh
         elemap = OrderedDict()
         for f in mesh:
-            m = re.match('spt_(.+?)_p{0}$'.format(rallocs.prank), f)
+            m = re.match(f'spt_(.+?)_p{rallocs.prank}$', f)
             if m:
                 # Element type
                 t = m.group(1)
@@ -113,7 +113,7 @@ class BaseSystem(object):
 
             # Process the solution
             for etype, ele in elemap.items():
-                soln = initsoln['soln_{0}_p{1}'.format(etype, rallocs.prank)]
+                soln = initsoln[f'soln_{etype}_p{rallocs.prank}']
                 ele.set_ics_from_soln(soln, solncfg)
         else:
             eles.set_ics_from_cfg()
@@ -144,7 +144,7 @@ class BaseSystem(object):
         mpi_inters = proxylist([])
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
-            interarr = mesh['con_p{0}p{1}'.format(lhsprank, rhsprank)]
+            interarr = mesh[f'con_p{lhsprank}p{rhsprank}']
             interarr = interarr.astype('U4,i4,i1,i2').tolist()
 
             mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
@@ -159,13 +159,13 @@ class BaseSystem(object):
 
         bc_inters = proxylist([])
         for f in mesh:
-            m = re.match('bcon_(.+?)_p{0}$'.format(rallocs.prank), f)
+            m = re.match(f'bcon_(.+?)_p{rallocs.prank}$', f)
             if m:
                 # Get the region name
                 rgn = m.group(1)
 
                 # Determine the config file section
-                cfgsect = 'soln-bcs-%s' % rgn
+                cfgsect = f'soln-bcs-{rgn}'
 
                 # Get the interface
                 interarr = mesh[f].astype('U4,i4,i1,i2').tolist()
