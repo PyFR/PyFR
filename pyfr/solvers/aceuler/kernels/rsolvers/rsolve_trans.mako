@@ -14,5 +14,4 @@
 
     nf[0] = ntf[0];
     ${pyfr.expand('transform_from', 'n', 'ntf', 'nf', '1')};
-
 </%pyfr:macro>

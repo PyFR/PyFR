@@ -17,10 +17,10 @@
     ${pyfr.expand('inviscid_prim', 'ur', 'pr', 'vr')};
 
     // Get left, and right sound speeds and normal Mach
-    fpdtype_t cl = sqrt(${c['gamma']}*pl/ul[0]);
-    fpdtype_t cr = sqrt(${c['gamma']}*pr/ur[0]);
-    fpdtype_t ml = vl[0]/cl;
-    fpdtype_t mr = vr[0]/cr;
+    fpdtype_t cl = sqrt(${c['gamma']}*pl / ul[0]);
+    fpdtype_t cr = sqrt(${c['gamma']}*pr / ur[0]);
+    fpdtype_t ml = vl[0] / cl;
+    fpdtype_t mr = vr[0] / cr;
     
     fpdtype_t hvl = ${pyfr.dot('vl[{i + 1}]', 'vl[{i + 1}]', i=ndims-1)};
     fpdtype_t hvr = ${pyfr.dot('vr[{i + 1}]', 'vr[{i + 1}]', i=ndims-1)};
@@ -45,7 +45,7 @@
 
     // Output
 % for i in range(nvars):
-    nf[${i}] = (ml > 1.) ? fp[${i}] : ((mr < 1.) ? fm[${i}] : fm[${i}] + fp[${i}]);
+    nf[${i}] = (ml > 1) ? fp[${i}] : ((mr < 1) ? fm[${i}] : fm[${i}] + fp[${i}]);
 % endfor
 </%pyfr:macro>
 

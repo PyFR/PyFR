@@ -17,14 +17,14 @@
     // Compute Roe averaged density and enthalpy
     fpdtype_t roa = sqrt(ul[0])*sqrt(ur[0]);
     fpdtype_t ha = (sqrt(ul[0])*(pr + ur[${ndims + 1}]) + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
-                        /(sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
-    fpdtype_t invsqrulpur = 1/(sqrt(ul[0]) + sqrt(ur[0]));
+                  /(sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
+    fpdtype_t invsqrulpur = 1 / (sqrt(ul[0]) + sqrt(ur[0]));
 
 % for i in range(ndims):
     va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0]))*invsqrulpur;
 % endfor
 
-    fpdtype_t qq = ${pyfr.dot('va[{i}]', 'va[{i}]', i=ndims)};	
+    fpdtype_t qq = ${pyfr.dot('va[{i}]', 'va[{i}]', i=ndims)};  
     fpdtype_t a = sqrt(${c['gamma'] - 1}*(ha - 0.5*qq));
 
     // Compute the Eigenvalues
@@ -45,7 +45,7 @@
     fpdtype_t dp = pr - pl;
 
     // Compute the Eigenvectors
-    r2a2 = 1/(2*a*a);
+    r2a2 = 1 / (2*a*a);
     v1 = (dp - roa*a*dv[0])*r2a2;
     v2 = dro - dp*2*r2a2;
     v3 = (dp + roa*a*dv[0])*r2a2;
@@ -67,7 +67,6 @@
     v2 = (dro - dp*2*r2a2)*qq*0.5 + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - va[0]*dv[0]);
     v3 = (dp + roa*a*dv[0])*r2a2*(ha + a*va[0]);
     nf[${nvars - 1}] = 0.5*(fl[${nvars - 1}] + fr[${nvars - 1}]) - (l1*v1 + l2*v2 + l3*v3);
-
 </%pyfr:macro>
 
 <%include file='pyfr.solvers.euler.kernels.rsolvers.rsolve_trans'/>

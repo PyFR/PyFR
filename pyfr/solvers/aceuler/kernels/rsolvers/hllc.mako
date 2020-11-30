@@ -21,12 +21,12 @@
     fpdtype_t sr = ua + aa;
 
     // HLLC Star region values
-    fpdtype_t inv_ds = 1./(sr - sl);
+    fpdtype_t inv_ds = 1/(sr - sl);
     fpdtype_t ps = (sr*ur[0] - sl*ul[0] + ${zeta}*(ul[1] - ur[1]))*inv_ds;
     fpdtype_t us = (${rzeta}*sl*sr*(ur[0] - ul[0]) + (ul[1]*sr - ur[1]*sl))*inv_ds;
 
-    fpdtype_t rsl = 1./(sl - us);
-    fpdtype_t rsr = 1./(sr - us);
+    fpdtype_t rsl = 1 / (sl - us);
+    fpdtype_t rsr = 1 / (sr - us);
     usl[0] = ps;
     usr[0] = ps;
 % for i in range(ndims):

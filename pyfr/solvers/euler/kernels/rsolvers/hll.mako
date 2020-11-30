@@ -27,7 +27,7 @@
     // Estimate the left and right wave speed, sl and sr
     fpdtype_t sl = nv - a;
     fpdtype_t sr = nv + a;
-    fpdtype_t rcpsrsl = 1/(sr - sl);
+    fpdtype_t rcpsrsl = 1 / (sr - sl);
 
     // Output
 % for i in range(nvars):

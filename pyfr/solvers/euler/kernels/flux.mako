@@ -26,9 +26,8 @@
 % endfor
 </%pyfr:macro>
 
-
 <%pyfr:macro name='inviscid_1dflux' params='s, f, p, v'>
-    fpdtype_t invrho = 1/s[0], E = s[${nvars - 1}];
+    fpdtype_t invrho = 1 / s[0], E = s[${nvars - 1}];
     
     // Compute the velocities
     fpdtype_t rhov[${ndims}];
