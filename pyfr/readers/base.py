@@ -19,6 +19,11 @@ class BaseReader(object):
     def to_pyfrm(self):
         mesh = self._to_raw_pyfrm()
 
+        for k in list(mesh):
+            if k.startswith('spt'):
+                mesh[k, 'int_off'] = 0
+                mesh[k, 'lin_off'] = mesh[k].shape[1]
+
         # Add metadata
         mesh['mesh_uuid'] = np.array(str(uuid.uuid4()), dtype='S')
 

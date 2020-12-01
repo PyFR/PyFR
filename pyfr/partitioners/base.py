@@ -6,8 +6,28 @@ import uuid
 
 import numpy as np
 
+from pyfr.polys import get_polybasis
+from pyfr.shapes import BaseShape
+from pyfr.util import subclass_where
+
 
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
+
+
+def _find_curved_eles(etype, eles, tol=1e-5):
+    nspts, neles, ndims = eles.shape
+
+    shape = subclass_where(BaseShape, name=etype)
+    order = shape.order_from_nspts(nspts)
+    basis = get_polybasis(etype, order, shape.std_ele(order - 1))
+
+    lmodes = get_polybasis(etype, 2).degrees
+    hmodes = [i for i, j in enumerate(basis.degrees) if j not in lmodes]
+
+    ehmodes = basis.invvdm.T[hmodes] @ eles.reshape(nspts, -1)
+    ehmodes = ehmodes.reshape(-1, neles, ndims)
+
+    return np.any(np.abs(ehmodes) > tol, axis=(0, 2))
 
 
 class BasePartitioner(object):
@@ -159,16 +179,42 @@ class BasePartitioner(object):
             if vpartmap[l] != vpartmap[r]:
                 bndeti |= {l, r}
 
-        # Move boundary vertices to the front of the list
+        # Move these exterior vertices to the start of the list
         nvetimap, nvparts = list(bndeti), [vpartmap[eti] for eti in bndeti]
 
-        # Followed by the internal vertices
-        for eti, part in zip(vetimap, vparts):
-            if eti not in bndeti:
-                nvetimap.append(eti)
-                nvparts.append(part)
+        # Next, process the internal vertices
+        for k, v in mesh.items():
+            if k.startswith('spt'):
+                etype = k.split('_')[1]
+
+                # Start with curved elements, followed by linear elements
+                for i in np.argsort(~_find_curved_eles(etype, v)):
+                    if (etype, i) not in bndeti:
+                        nvetimap.append((etype, i))
+                        nvparts.append(vpartmap[etype, i])
 
         return nvetimap, nvparts
+
+    def _prepare_attrs(self, mesh):
+        int_offs = defaultdict(lambda: 0)
+
+        # Tag the offset of interior elements
+        for k, v in mesh.items():
+            m = re.match(r'con_p(\d+)p\d+', k)
+            if m:
+                p = m.group(1)
+                for etype, eidx in v[['f0', 'f1']].astype('U4,i4').tolist():
+                    int_offs[etype, p] = max(int_offs[etype, p], eidx + 1)
+
+        # Tag the offset of linear elements
+        for k, v in dict(mesh).items():
+            m = re.match(r'spt_(\w+)_p(\d+)', k)
+            if m:
+                midx = np.where(_find_curved_eles(m.group(1), v))[0]
+                midx = midx[-1] + 1 if midx.size else 0
+
+                mesh[k, 'lin_off'] = midx
+                mesh[k, 'int_off'] = int_offs[m.groups()]
 
     def _partition_spts(self, mesh, vetimap, vparts):
         # Get the shape point arrays from the mesh
@@ -268,34 +314,34 @@ class BasePartitioner(object):
         # Combine any pre-existing parititons
         mesh, rnum = self._combine_mesh_parts(mesh)
 
-        # Perform the partitioning
+        # Obtain the dual graph for this mesh
+        graph, vetimap = self._construct_graph(mesh)
+
+        # Partition the graph
         if self.nparts > 1:
-            # Obtain the dual graph for this mesh
-            graph, vetimap = self._construct_graph(mesh)
-
-            # Partition the graph
             vparts = self._partition_graph(graph, self.partwts)
-
-            # Renumber vertices
-            vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
-
-            # Partition the connectivity portion of the mesh
-            newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts)
-
-            # Handle the shape points
-            newmesh.update(self._partition_spts(mesh, vetimap, vparts))
-
-            # Update the rnum
-            for etype, emap in rnum.items():
-                for k, (pidx, eidx) in emap.items():
-                    emap[k] = eleglmap[etype, eidx]
-
-        # Short circuit
         else:
-            newmesh = mesh
+            vparts = [0]*len(vetimap)
+
+        # Renumber vertices
+        vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
+
+        # Partition the connectivity portion of the mesh
+        newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts)
+
+        # Handle the shape points
+        newmesh.update(self._partition_spts(mesh, vetimap, vparts))
+
+        # Update the renumbering table
+        for etype, emap in rnum.items():
+            for k, (pidx, eidx) in emap.items():
+                emap[k] = eleglmap[etype, eidx]
 
         # Generate a new UUID for the mesh
         newmesh['mesh_uuid'] = newuuid = str(uuid.uuid4())
+
+        # Annotate the shape point arrays
+        self._prepare_attrs(newmesh)
 
         # Build the solution converter
         def partition_soln(soln):
