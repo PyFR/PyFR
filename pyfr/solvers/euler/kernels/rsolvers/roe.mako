@@ -60,7 +60,7 @@
     v2 = (dro - dp*2*r2a2)*va[${i}] + roa*dv[${i}];
     v3 = (dp + roa*a*dv[0])*r2a2*va[${i}];
 % endif
-    nf[${i+1}] = 0.5*(fl[${i+1}] + fr[${i+1}]) - (l1*v1 + l2*v2 + l3*v3);
+    nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}]) - (l1*v1 + l2*v2 + l3*v3);
 % endfor
 
     v1 = (dp - roa*a*dv[0])*r2a2*(ha - a*va[0]);

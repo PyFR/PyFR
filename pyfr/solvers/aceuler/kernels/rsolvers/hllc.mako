@@ -28,15 +28,13 @@
     fpdtype_t rsl = 1 / (sl - us);
     fpdtype_t rsr = 1 / (sr - us);
     usl[0] = ps;
+    usl[1] = us;
+
     usr[0] = ps;
-% for i in range(ndims):
-% if i == 0:
-    usl[${i + 1}] = us;
-    usr[${i + 1}] = us;
-% else:
-    usl[${i + 1}] = ul[${i + 1}]*(sl - ul[1])*rsl;
-    usr[${i + 1}] = ur[${i + 1}]*(sr - ur[1])*rsr;
-% endif
+    usr[1] = us;
+% for i in range(2,ndims + 1):
+    usl[${i}] = ul[${i}]*(sl - ul[1])*rsl;
+    usr[${i}] = ur[${i}]*(sr - ur[1])*rsr;
 % endfor
 
     // Output

@@ -20,8 +20,8 @@
 
     if (ql[1] - al <= us - as)
     {   // Left Rarefaction
-        psl  = ql[0] + 0.5*(ql[1]*(al + ql[1]) - us*(as + us) +
-                     ${zeta}*log((al + ql[1]) / (as + us)));
+        psl  = ql[0] + 0.5*(ql[1]*(al + ql[1]) - us*(as + us) 
+                     + ${zeta}*log((al + ql[1]) / (as + us)));
         dpsl = -0.5*(as + us);
     }
     else
@@ -34,8 +34,8 @@
 
     if (us + as <= qr[1] + ar)
     {   // Right Rarefaction
-        psr  = qr[0] + 0.5*(us*(as - us) - qr[1]*(ar - qr[1]) +
-                     ${zeta}*log((as + us) / (ar + qr[1])));
+        psr  = qr[0] + 0.5*(us*(as - us) - qr[1]*(ar - qr[1]) 
+                     + ${zeta}*log((as + us) / (ar + qr[1])));
         dpsr = 0.5*(as - us);
     }
     else
@@ -53,7 +53,7 @@
     {
         fpdtype_t lc;
         if (ql[1] - al <= us - as)
-    {   // Left Rarefaction
+        {   // Left Rarefaction
             if (0 <= ql[1] - al)
             {   // Left State
                 lc = 1;
@@ -67,24 +67,24 @@
                 qs[0] = ps;
                 qs[1] = us;
             }
-    }
+        }
         else
-    {   // Left Shock
-        if (0 < (us - ql[1]) / (ps - ql[0]))
-        {   // Left State
+        {   // Left Shock
+            if (0 < (us - ql[1]) / (ps - ql[0]))
+            {   // Left State
                 lc = 1;
-            qs[0] = ql[0];
-            qs[1] = ql[1];
+                qs[0] = ql[0];
+                qs[1] = ql[1];
+            }
+            else
+            {   // Star State
+                fpdtype_t ssl = us + ql[1] + (ps - ql[0]) / (us - ql[1]);
+                lc = (ssl - ql[1]) / (ssl - us);
+                qs[0] = ps;
+                qs[1] = us;
+            }
         }
-        else
-        {   // Star State
-            fpdtype_t ssl = us + ql[1] + (ps - ql[0]) / (us - ql[1]);
-            lc = (ssl - ql[1]) / (ssl - us);
-        qs[0] = ps;
-        qs[1] = us;
-        }
-        }
-% for i in range(ndims-1):
+% for i in range(ndims - 1):
         qs[${i + 2}] = ql[${i + 2}]*lc;
 % endfor
     }
@@ -92,38 +92,38 @@
     {
         fpdtype_t rc;
         if (us + as <= qr[1] + ar)
-    {   // Right Rarefaction
-        if (0 >= qr[1] + ar)
-        {   // Right State
+        {   // Right Rarefaction
+            if (0 >= qr[1] + ar)
+            {   // Right State
                 rc = 1;
                 qs[0] = qr[0];
                 qs[1] = qr[1];      
-        }
-        else
-        {   // Star State
-            rc = (ar*(us    + sqrt(2*us   *us    + ${zeta})))
-            /(as*(qr[1] + sqrt(2*qr[1]*qr[1] + ${zeta})));
-            qs[0] = ps;
-        qs[1] = us;
-        }
-        }
-        else
-    {   // Right Shock
-        if (0 > (us - qr[1]) / (ps - qr[0]))
-        {   // Right State
-        rc = 1;
-            qs[0] = qr[0];
-            qs[1] = qr[1];
-        }
-        else
-        {   // Star State
-                fpdtype_t ssr = us + qr[1] + (ps - qr[0]) / (us - qr[1]);
-            rc = (ssr - qr[1]) / (ssr - us);
-        qs[0] = ps;
-        qs[1] = us;
+            }
+            else
+            {   // Star State
+                rc = (ar*(us    + sqrt(2*us   *us    + ${zeta})))
+                    /(as*(qr[1] + sqrt(2*qr[1]*qr[1] + ${zeta})));
+                qs[0] = ps;
+                qs[1] = us;
             }
         }
-% for i in range(ndims-1):      
+        else
+        {   // Right Shock
+            if (0 > (us - qr[1]) / (ps - qr[0]))
+            {   // Right State
+                rc = 1;
+                qs[0] = qr[0];
+                qs[1] = qr[1];
+            }
+            else
+            {   // Star State
+                fpdtype_t ssr = us + qr[1] + (ps - qr[0]) / (us - qr[1]);
+                rc = (ssr - qr[1]) / (ssr - us);
+                qs[0] = ps;
+                qs[1] = us;
+            }
+        }
+% for i in range(ndims - 1):      
         qs[${i + 2}] = qr[${i + 2}]*rc;
 % endfor
     }

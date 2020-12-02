@@ -23,8 +23,8 @@
         fpdtype_t h = 1/(1 - n[1]);
 
         t[offset + 0] = n[0]*u[offset + 0] + n[1]*u[offset + 1] + n[2]*u[offset + 2];
-    t[offset + 1] =  (1. - h*n[0]*n[0])*u[offset + 0] + n[0]*u[offset + 1] - h*n[0]*n[2]*u[offset + 2];
-    t[offset + 2] = -h*n[0]*n[2]*u[offset + 0] + n[2]*u[offset + 1] + (1. - h*n[2]*n[2])*u[offset + 2];
+        t[offset + 1] =  (1. - h*n[0]*n[0])*u[offset + 0] + n[0]*u[offset + 1] - h*n[0]*n[2]*u[offset + 2];
+        t[offset + 2] = -h*n[0]*n[2]*u[offset + 0] + n[2]*u[offset + 1] + (1. - h*n[2]*n[2])*u[offset + 2];
     }
     else
     {

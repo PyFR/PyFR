@@ -26,11 +26,14 @@
     }
     else if (bpv < pmin)
     {   // Two-rarefaction Riemann solve
-        fpdtype_t pre = pow(pl / pr, ${gmrtg});
-        fpdtype_t um  = (pre*vl[0]/cl + vr[0]/cr + ${trgm}*(pre - 1)) / (pre/cl + 1/cr);
+        fpdtype_t rcl = 1 / cl; 
+        fpdtype_t rcr = 1 / cr;
 
-        fpdtype_t ptl = 1 - ${hgm}*(um - vl[0])/cl;
-        fpdtype_t ptr = 1 + ${hgm}*(um - vr[0])/cr;
+        fpdtype_t pre = pow(pl / pr, ${gmrtg});
+        fpdtype_t um  = (pre*vl[0]*rcl + vr[0]*rcr + ${trgm}*(pre - 1)) / (pre*rcl + 1*rcr);
+
+        fpdtype_t ptl = 1 - ${hgm}*(um - vl[0])*rcl;
+        fpdtype_t ptr = 1 + ${hgm}*(um - vr[0])*rcr;
 
         p0 = 0.5*(pl*pow(ptl, ${tgrgm}) + pr*pow(ptr, ${tgrgm}));
     }
@@ -96,24 +99,24 @@
         w0[${i + 2}] = vl[${i + 1}];
 % endfor
         if (p0 <= pl)
-    {
-            if (${switch} <= (vl[0] - cl))
         {
+            if (${switch} <= (vl[0] - cl))
+            {
                 w0[0] = rl;
                 w0[1] = vl[0];
                 w0[${nvars - 1}] = pl;
             }
             else
-        {
+            {
                 fpdtype_t cml = cl*pow(p0/pl, ${gmrtg});
                 if (${switch} > (us - cml))
-        {
+                {
                     w0[0] = rl*pow(p0/pl, ${1/gamma});
                     w0[1] = us;
                     w0[${nvars - 1}] = p0;
                 }
                 else
-        {
+                {
                     fpdtype_t c = ${trgp}*(cl + ${hgm}*(vl[0] - ${switch}));
                     w0[0] = rl*pow(c/cl, ${trgm});
                     w0[1] = ${trgp}*(cl + ${hgm}*vl[0] + ${switch});
@@ -122,17 +125,17 @@
             }
         }
         else
-    {
+        {
             fpdtype_t p0p = p0 / pl;
             fpdtype_t sl = vl[0] - cl*sqrt(${gprtg}*p0p + ${gmrtg});
             if (${switch} <= sl)
-        {
+            {
                 w0[0] = rl;
                 w0[1] = vl[0];
                 w0[${nvars - 1}] = pl;
             }
             else
-        {
+            {
                 w0[0] = rl*(p0p + ${gmrgp}) / (p0p*${gmrgp} + 1);
                 w0[1] = us;
                 w0[${nvars - 1}] = p0;
@@ -145,42 +148,42 @@
         w0[${i + 2}] = vr[${i + 1}];
 % endfor
         if (p0 > pr)
-    {
+        {
             fpdtype_t p0p = p0 / pr;
             fpdtype_t sr = vr[0] + cr*sqrt(${gprtg}*p0p + ${gmrtg});
             if (${switch} >= sr)
-        {
+            {
                 w0[0] = rr;
                 w0[1] = vr[0];
                 w0[${nvars - 1}] = pr;
             }
             else
-        {
+            {
                 w0[0] = rr*(p0p + ${gmrgp}) / (p0p*${gmrgp} + 1);
                 w0[1] = us;
                 w0[${nvars - 1}] = p0;
             }
         }
         else
-    {
-            if (${switch} >= (vr[0] + cr))
         {
+            if (${switch} >= (vr[0] + cr))
+            {
                 w0[0] = rr;
                 w0[1] = vr[0];
                 w0[${nvars - 1}] = pr;
             }
             else
-        {
+            {
                 fpdtype_t p0p = p0 / pr;
                 fpdtype_t cmr = cr*pow(p0p, ${gmrtg});
                 if (${switch} <= (us + cmr))
-        {
+                {
                     w0[0] = rr*pow(p0p, ${1/gamma});
                     w0[1] = us;
                     w0[${nvars - 1}] = p0;
                 }
                 else
-        {
+                {
                     fpdtype_t c = ${trgp}*(cr - ${hgm}*(vr[0] - ${switch}));
                     w0[0] = rr*pow(c/cr, ${trgm});
                     w0[1] = ${trgp}*(-cr + ${hgm}*vr[0] + ${switch});
@@ -228,7 +231,6 @@
     ${pyfr.expand('riemann_decision', 'rl', 'vl', 'pl', 'cl',
                                       'rr', 'vr', 'pr', 'cr', 'us', 'p0', 'w0')};
     ${pyfr.expand('primitive_1dflux', 'w0', 'nf')};
-
 </%pyfr:macro>
 
 <%include file='pyfr.solvers.euler.kernels.rsolvers.rsolve_trans'/>

@@ -56,7 +56,7 @@
     fpdtype_t dp = pr - pl;
 
     // Compute the Eigenvectors
-    r2a2 = 1 / (2*a*a);
+    r2a2 = 0.5 / (a*a);
     v1 = (dp - roa*a*dv[0])*r2a2;
     v2 = dro - dp*2*r2a2;
     v3 = (dp + roa*a*dv[0])*r2a2;

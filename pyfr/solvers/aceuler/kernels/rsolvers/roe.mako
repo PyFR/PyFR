@@ -37,22 +37,18 @@
     fpdtype_t vc = (a1*(vax - aa) - a3*(vax + aa))*ra;
     
     v1 = a1*${zeta};
-    v2 = 0;
     v3 = a3*${zeta};
-    nf[0] = 0.5*(fl[0] + fr[0]) - 0.5*(l1*v1 + l2*v2 + l3*v3);
-% for i in range(ndims):
-% if i == 0:
-    v1 = a1*(vax - aa);
-    v2 = 0;
-    v3 = a3*(vax + aa);
-% else:
-    v1 = -a1*ra*(vax - aa)*0.5*(ul[${i + 1}] + ur[${i + 1}]);
-    v2 = (ur[${i + 1}] - ul[${i + 1}]) + vax*vc;
-    v3 =  a3*ra*(vax + aa)*0.5*(ul[${i + 1}] + ur[${i + 1}]);
-% endif
-    nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}]) - 0.5*(l1*v1 + l2*v2 + l3*v3);
-% endfor
+    nf[0] = 0.5*(fl[0] + fr[0]) - 0.5*(l1*v1 + l3*v3);
 
+    v1 = a1*(vax - aa);
+    v3 = a3*(vax + aa);
+    nf[1] = 0.5*(fl[1] + fr[1]) - 0.5*(l1*v1 + l3*v3);
+% for i in range(2,ndims + 1):
+    v1 = -a1*ra*(vax - aa)*0.5*(ul[${i}] + ur[${i}]);
+    v2 = (ur[${i}] - ul[${i}]) + vax*vc;
+    v3 =  a3*ra*(vax + aa)*0.5*(ul[${i}] + ur[${i}]);
+    nf[${i}] = 0.5*(fl[${i}] + fr[${i}]) - 0.5*(l1*v1 + l2*v2 + l3*v3);
+% endfor
 </%pyfr:macro>
 
 <%include file='pyfr.solvers.aceuler.kernels.rsolvers.rsolve_trans'/>
