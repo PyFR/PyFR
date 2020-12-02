@@ -111,7 +111,7 @@ class BasePartitioner(object):
                 bccon[name].append(offset_con(mesh[f], l))
 
         # Output data type
-        dtype = 'S4,i4,i1,i2'
+        dtype = 'U4,i4,i1,i2'
 
         # Concatenate these arrays to from the new mesh
         newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
@@ -138,7 +138,7 @@ class BasePartitioner(object):
 
     def _construct_graph(self, mesh):
         # Edges of the dual graph
-        con = mesh['con_p0'].astype('U4,i4,i1,i2')
+        con = mesh['con_p0']
         con = np.hstack([con, con[::-1]])
 
         # Sort by the left hand side
@@ -153,11 +153,11 @@ class BasePartitioner(object):
         vtab = np.concatenate(([0], vtab + 1, [len(lhs)]))
 
         # Compute the element type/index to vertex number map
-        vetimap = [tuple(lhs[i]) for i in vtab[:-1]]
+        vetimap = lhs[vtab[:-1]].tolist()
         etivmap = {k: v for v, k in enumerate(vetimap)}
 
         # Prepare the list of edges for each vertex
-        etab = np.array([etivmap[tuple(r)] for r in rhs])
+        etab = np.array([etivmap[r] for r in rhs.tolist()])
 
         # Prepare the list of vertex and edge weights
         vwts = np.array([self.elewts[t] for t, i in vetimap])
@@ -173,7 +173,7 @@ class BasePartitioner(object):
         bndeti = set()
 
         # Identify vertices whose edges cross partition boundaries
-        for l, r in zip(*mesh['con_p0'][['f0', 'f1']].astype('U4,i4')):
+        for l, r in zip(*mesh['con_p0'][['f0', 'f1']].tolist()):
             l, r = tuple(l), tuple(r)
 
             if vpartmap[l] != vpartmap[r]:
@@ -203,7 +203,7 @@ class BasePartitioner(object):
             m = re.match(r'con_p(\d+)p\d+', k)
             if m:
                 p = m.group(1)
-                for etype, eidx in v[['f0', 'f1']].astype('U4,i4').tolist():
+                for etype, eidx in v[['f0', 'f1']].tolist():
                     int_offs[etype, p] = max(int_offs[etype, p], eidx + 1)
 
         # Tag the offset of linear elements
@@ -262,7 +262,7 @@ class BasePartitioner(object):
             pcounter[etype, part] += 1
 
         # Generate the face connectivity
-        for l, r in zip(*mesh['con_p0'].astype('U4,i4,i1,i2')):
+        for l, r in zip(*mesh['con_p0'].tolist()):
             letype, leidxg, lfidx, lflags = l
             retype, reidxg, rfidx, rflags = r
 
@@ -282,7 +282,7 @@ class BasePartitioner(object):
         for f in mesh:
             m = re.match('bcon_(.+?)_p0$', f)
             if m:
-                lhs = mesh[f].astype('U4,i4,i1,i2')
+                lhs = mesh[f].tolist()
 
                 for lpetype, leidxg, lfidx, lflags in lhs:
                     lpart, leidxl = eleglmap[lpetype, leidxg]
@@ -319,7 +319,7 @@ class BasePartitioner(object):
 
         # Partition the graph
         if self.nparts > 1:
-            vparts = self._partition_graph(graph, self.partwts)
+            vparts = self._partition_graph(graph, self.partwts).tolist()
         else:
             vparts = [0]*len(vetimap)
 
