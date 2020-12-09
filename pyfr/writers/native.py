@@ -10,6 +10,16 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root
 
 
+def write_pyfrms(path, data):
+    # Save to disk
+    with h5py.File(path, 'w') as f:
+        for k in filter(lambda k: isinstance(k, str), data):
+            f[k] = data[k]
+
+        for p, q in filter(lambda k: isinstance(k, tuple), data):
+            f[p].attrs[q] = data[p, q]
+
+
 class NativeWriter(object):
     def __init__(self, intg, mdata, basedir, basename, *, extn='.pyfrs'):
         # Base output directory and file name
@@ -130,7 +140,7 @@ class NativeWriter(object):
                 mmap = None
 
             for name, size in comm.bcast(mmap, root=root):
-                d = f.create_dataset(name, (), dtype='S{}'.format(size))
+                d = f.create_dataset(name, (), dtype=f'S{size}')
 
                 if rank == root:
                     d.write_direct(np.array(metadata[name], dtype='S'))
