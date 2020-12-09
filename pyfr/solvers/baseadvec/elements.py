@@ -20,7 +20,6 @@ class BaseAdvectionElements(BaseElements):
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
-        slicem = self._slice_mat
         kernels = self.kernels
 
         # Register pointwise kernels with the backend
@@ -43,17 +42,16 @@ class BaseAdvectionElements(BaseElements):
         }
 
         # Interpolation from elemental points
-        for s, neles in self._ext_int_sides:
-            if fluxaa:
-                kernels['disu_' + s] = lambda s=s: self._be.kernel(
-                    'mul', self.opmat('M8'), slicem(self.scal_upts_inb, s),
-                    out=slicem(self._scal_fqpts, s)
-                )
-            else:
-                kernels['disu_' + s] = lambda s=s: self._be.kernel(
-                    'mul', self.opmat('M0'), slicem(self.scal_upts_inb, s),
-                    out=slicem(self._scal_fpts, s)
-                )
+        if fluxaa:
+            kernels['disu'] = lambda: self._be.kernel(
+                'mul', self.opmat('M8'), self.scal_upts_inb,
+                out=self._scal_fqpts
+            )
+        else:
+            kernels['disu'] = lambda: self._be.kernel(
+                'mul', self.opmat('M0'), self.scal_upts_inb,
+                out=self._scal_fpts
+            )
 
         # First flux correction kernel
         if fluxaa:

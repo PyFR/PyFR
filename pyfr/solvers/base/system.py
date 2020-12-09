@@ -68,19 +68,6 @@ class BaseSystem(object):
         self._bc_inters = bc_inters
         del bc_inters.elemap
 
-    def _compute_int_offsets(self, rallocs, mesh):
-        lhsprank = rallocs.prank
-        intoffs = defaultdict(lambda: 0)
-
-        for rhsprank in rallocs.prankconn[lhsprank]:
-            interarr = mesh['con_p{0}p{1}'.format(lhsprank, rhsprank)]
-            interarr = interarr[['f0', 'f1']].astype('U4,i4').tolist()
-
-            for etype, eidx in interarr:
-                intoffs[etype] = max(eidx + 1, intoffs[etype])
-
-        return intoffs
-
     def _load_eles(self, rallocs, mesh, initsoln, nregs, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
@@ -118,12 +105,9 @@ class BaseSystem(object):
         else:
             eles.set_ics_from_cfg()
 
-        # Compute the index of first strictly interior element
-        intoffs = self._compute_int_offsets(rallocs, mesh)
-
         # Allocate these elements on the backend
         for etype, ele in elemap.items():
-            ele.set_backend(self.backend, nregs, nonce, intoffs[etype])
+            ele.set_backend(self.backend, nregs, nonce)
 
         return eles, elemap
 
