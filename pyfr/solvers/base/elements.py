@@ -112,34 +112,6 @@ class BaseElements(object):
     def _scratch_bufs(self):
         pass
 
-    @property
-    def _ext_int_sides(self):
-        # No elements on a partition boundary
-        if self._intoff == 0:
-            return [('int', self.neles)]
-        # All elements on a partition boundary
-        elif self._intoff >= self.neles:
-            return [('ext', self.neles)]
-        # Mix of elements
-        else:
-            return [('ext', self._intoff), ('int', self.neles - self._intoff)]
-
-    def _slice_mat(self, mat, side, ra=None, rb=None):
-        ix = self._intoff
-
-        # Handle stacked matrices
-        if len(mat.ioshape) >= 3:
-            ix *= mat.ioshape[-2]
-        else:
-            ix = min(ix, mat.ncol)
-
-        if side == 'ext':
-            return mat.slice(ra, rb, 0, ix)
-        elif side == 'int':
-            return mat.slice(ra, rb, ix, mat.ncol)
-        else:
-            raise ValueError('Invalid slice side')
-
     @lazyprop
     def _src_exprs(self):
         convars = self.convarmap[self.ndims]
@@ -161,9 +133,8 @@ class BaseElements(object):
     def _soln_in_src_exprs(self):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
-    def set_backend(self, backend, nscalupts, nonce, intoff):
+    def set_backend(self, backend, nscalupts, nonce):
         self._be = backend
-        self._intoff = intoff - intoff % -backend.soasz
 
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
@@ -217,18 +188,6 @@ class BaseElements(object):
         return self._be.const_matrix(self.basis.opmat(expr),
                                      tags={expr, 'align'})
 
-    def sliceat(fn):
-        @memoize
-        def newfn(self, name, side=None):
-            mat = fn(self, name)
-
-            if side is not None:
-                return self._slice_mat(mat, side)
-            else:
-                return mat
-
-        return newfn
-
     @memoize
     def smat_at_np(self, name):
         smats_mpts, _ = self._smats_djacs_mpts
@@ -240,7 +199,6 @@ class BaseElements(object):
         smats = np.array([m0 @ smat for smat in smats_mpts])
         return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
-    @sliceat
     @memoize
     def smat_at(self, name):
         return self._be.const_matrix(self.smat_at_np(name), tags={'align'})
@@ -260,7 +218,6 @@ class BaseElements(object):
 
         return 1.0 / djac
 
-    @sliceat
     @memoize
     def rcpdjac_at(self, name):
         return self._be.const_matrix(self.rcpdjac_at_np(name), tags={'align'})
@@ -274,7 +231,6 @@ class BaseElements(object):
 
         return ploc
 
-    @sliceat
     @memoize
     def ploc_at(self, name):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
