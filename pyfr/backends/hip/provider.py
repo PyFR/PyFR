@@ -30,11 +30,10 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
         if len(dims) == 1:
             block = (cfg.getint('backend-hip', 'block-1d', '64'), 1, 1)
         else:
-            block = cfg.getliteral('backend-hip', 'block-2d', '128, 1')
-            block += (1,)
+            block = (cfg.getint('backend-hip', 'block-2d', '128'), 1, 1)
 
         # Use this to compute the grid size
-        grid = get_grid_for_block(block, *dims[::-1])
+        grid = get_grid_for_block(block, dims[-1])
 
         class PointwiseKernel(ComputeKernel):
             if any(isinstance(arg, str) for arg in arglst):

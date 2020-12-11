@@ -107,7 +107,14 @@ class BaseSystem(object):
 
         # Allocate these elements on the backend
         for etype, ele in elemap.items():
-            ele.set_backend(self.backend, nregs, nonce)
+            k = f'spt_{etype}_p{rallocs.prank}'
+
+            try:
+                linoff = mesh[k, 'lin_off']
+            except KeyError:
+                linoff = ele.neles
+
+            ele.set_backend(self.backend, nregs, nonce, linoff)
 
         return eles, elemap
 

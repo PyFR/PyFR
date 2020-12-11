@@ -8,6 +8,7 @@
     s[1][0] = -${jac_exprs[0][1]};
     s[1][1] =  ${jac_exprs[0][0]};
     d = s[0][0]*s[1][1] - s[0][1]*s[1][0];
+    (void) d;
 </%pyfr:macro>
 % else:
 <%pyfr:macro name='calc_smats_detj', params='V, x, s, d'>
@@ -21,5 +22,6 @@
     s[${i}][2] = j[${j}][0]*j[${k}][1] - j[${j}][1]*j[${k}][0];
 % endfor
     d = j[0][0]*s[0][0] + j[0][1]*s[0][1] + j[0][2]*s[0][2];
+    (void) d;
 </%pyfr:macro>
 % endif

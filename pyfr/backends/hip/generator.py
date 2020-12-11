@@ -16,24 +16,18 @@ class HIPKernelGenerator(BaseKernelGenerator):
         else:
             self._ix = (
                 'int _x = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;'
-                'int _y = hipBlockIdx_y*hipBlockDim_y + hipThreadIdx_y;'
             )
-            self._limits = 'if (_x < _nx && _y < _ny)'
+            self._limits = 'for (int _y = 0; _x < _nx && _y < _ny; _y++)'
 
     def render(self):
-        # Kernel spec
         spec = self._render_spec()
 
-        # Iteration indicies and limits
-        ix, limits = self._ix, self._limits
-
-        # Combine
         return f'''{spec}
                {{
-                   {ix}
+                   {self._ix}
                    #define X_IDX (_x)
                    #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
-                   {limits}
+                   {self._limits}
                    {{
                        {self.body}
                    }}
