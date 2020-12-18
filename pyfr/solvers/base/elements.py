@@ -316,8 +316,12 @@ class BaseElements(object):
             smats[1] = 0.5*(dtt[0][2] - dtt[2][0])
             smats[2] = 0.5*(dtt[1][0] - dtt[0][1])
 
-            # Exploit the fact that det(J) = x0 . (x1 ^ x2)
-            djacs = np.einsum('ij...,ji...->j...', jac[0], smats[0])
+            # We note that J = [x0; x1; x2]
+            x0, x1, x2 = jac
+
+            # Exploit the fact that det(J) = x0 · (x1 ^ x2)
+            x1cx2 = np.cross(x1, x2, axisa=0, axisb=0, axisc=1)
+            djacs = np.einsum('ij...,ji...->j...', x0, x1cx2)
 
         return smats.reshape(ndims, nmpts, -1), djacs
 
