@@ -4,15 +4,26 @@
 
 void
 axnpby(int nrow, int ncolb, int ldim,
-       ${', '.join('fpdtype_t *__restrict__ x' + str(i) for i in range(nv))},
-       ${', '.join('fpdtype_t a' + str(i) for i in range(nv))})
+       ${', '.join(f'fpdtype_t *__restrict__ x{i}' for i in range(nv))},
+       ${', '.join(f'fpdtype_t a{i}' for i in range(nv))})
 {
+% if sorted(subdims) == list(range(ncola)):
+    #pragma omp parallel
+    {
+        int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
+        int cb, ce;
+        loop_sched_1d(nrow*ldim, align, &cb, &ce);
+
+        #pragma omp simd
+        for (int i = cb; i < ce; i++)
+            x0[i] = ${pyfr.dot('a{l}', 'x{l}[i]', l=nv)};
+    }
+% else:
     #define X_IDX_AOSOA(v, nv) ((ci/SOA_SZ*(nv) + (v))*SOA_SZ + cj)
     #pragma omp parallel
     {
         int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
         int rb, re, cb, ce, idx;
-        fpdtype_t axn;
         loop_sched_2d(nrow, ncolb, align, &rb, &re, &cb, &ce);
         int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
 
@@ -25,14 +36,8 @@ axnpby(int nrow, int ncolb, int ldim,
                 {
                 % for k in subdims:
                     idx = r*ldim + X_IDX_AOSOA(${k}, ${ncola});
-                    axn = ${pyfr.dot('a{l}', 'x{l}[idx]', l=(1, nv))};
 
-                    if (a0 == 0.0)
-                        x0[idx] = axn;
-                    else if (a0 == 1.0)
-                        x0[idx] += axn;
-                    else
-                        x0[idx] = a0*x0[idx] + axn;
+                    x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=nv)};
                 % endfor
                 }
             }
@@ -41,17 +46,12 @@ axnpby(int nrow, int ncolb, int ldim,
             {
             % for k in subdims:
                 idx = r*ldim + X_IDX_AOSOA(${k}, ${ncola});
-                axn = ${pyfr.dot('a{l}', 'x{l}[idx]', l=(1, nv))};
 
-                if (a0 == 0.0)
-                    x0[idx] = axn;
-                else if (a0 == 1.0)
-                    x0[idx] += axn;
-                else
-                    x0[idx] = a0*x0[idx] + axn;
+                x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=nv)};
             % endfor
             }
         }
     }
     #undef X_IDX_AOSOA
+% endif
 }
