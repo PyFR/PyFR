@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from collections import Mapping, OrderedDict
+from collections import Mapping
 import os
 import re
 
@@ -53,7 +53,7 @@ class NativeReader(Mapping):
         fmaxpn = max(int(re.search(r'\d+$', n).group(0)) for n in names)
 
         # Extract array information
-        info = OrderedDict()
+        info = {}
         for i in range(fmaxpn + 1):
             for et in ftypes:
                 try:

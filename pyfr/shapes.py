@@ -165,11 +165,11 @@ class BaseShape(object):
 
     @lazyprop
     def upts(self):
-        rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
+        rname = self.cfg.get(f'solver-elements-{self.name}', 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).pts
 
     def _get_qrule(self, eleint, kind, **kwargs):
-        sect = 'solver-{0}-{1}'.format(eleint, kind)
+        sect = f'solver-{eleint}-{kind}'
 
         if self.cfg.hasopt(sect, 'quad-pts'):
             kwargs['rule'] = self.cfg.get(sect, 'quad-pts')
@@ -205,7 +205,7 @@ class BaseShape(object):
             if 'surf-flux' in self.antialias:
                 r = self._iqrules[kind]
             else:
-                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
                 npts = self.npts_for_face[kind](self.order)
 
                 r = get_quadrule(kind, rule, npts)
@@ -224,7 +224,7 @@ class BaseShape(object):
             if 'surf-flux' in self.antialias:
                 r = self._iqrules[kind]
             else:
-                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
                 npts = self.npts_for_face[kind](self.order)
 
                 r = get_quadrule(kind, rule, npts)
@@ -281,7 +281,7 @@ class BaseShape(object):
         fb = {}
 
         for kind in {k for k, p, n in self.faces}:
-            rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+            rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
             npts = self.npts_for_face[kind](self.order)
 
             pts = get_quadrule(kind, rule, npts).pts

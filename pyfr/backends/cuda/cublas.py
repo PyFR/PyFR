@@ -31,13 +31,12 @@ class CUBLASWrappers(object):
         0xe: CUBLASInternalError
     }
 
+    # Constants
+    CUBLAS_OP_N = 0
+    CUBLAS_OP_T = 1
+
     def __init__(self):
         lib = load_library('cublas')
-
-        # Constants
-        self.CUBLAS_OP_N = 0
-        self.CUBLAS_OP_T = 1
-        self.CUBLAS_OP_C = 2
 
         # cublasCreate
         self.cublasCreate = lib.cublasCreate_v2

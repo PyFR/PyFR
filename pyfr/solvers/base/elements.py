@@ -119,7 +119,7 @@ class BaseElements(object):
         # Variable and function substitutions
         subs = self.cfg.items('constants')
         subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
-        subs.update({v: 'u[{0}]'.format(i) for i, v in enumerate(convars)})
+        subs.update({v: f'u[{i}]' for i, v in enumerate(convars)})
         subs.update(abs='fabs', pi=str(math.pi))
 
         return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)

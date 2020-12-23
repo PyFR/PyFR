@@ -28,8 +28,8 @@ class BaseRankAllocator(object):
             nparts = len(prankconn)
 
             if nparts != comm.size:
-                raise RuntimeError('Mesh has {0} partitions but running with '
-                                   '{1} MPI ranks'.format(nparts, comm.size))
+                raise RuntimeError(f'Mesh has {nparts} partitions but running '
+                                   f'with {comm.size} MPI ranks')
         else:
             prankconn = None
 
@@ -60,9 +60,9 @@ class BaseRankAllocator(object):
                 lhs, rhs = int(m.group(1)), int(m.group(2))
                 conn[lhs].append(rhs)
 
-                if 'con_p{0}p{1}'.format(rhs, lhs) not in mesh:
-                    raise ValueError('MPI interface ({0}, {1}) is not '
-                                     'symmetric'.format(lhs, rhs))
+                if f'con_p{rhs}p{lhs}' not in mesh:
+                    raise ValueError(f'MPI interface ({lhs}, {rhs}) is not '
+                                     'symmetric')
 
         return [conn[i] for i in range(len(conn) or 1)]
 

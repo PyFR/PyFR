@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from collections import defaultdict, OrderedDict
+from collections import defaultdict
 import itertools as it
 import re
 
@@ -72,7 +72,7 @@ class BaseSystem(object):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Look for and load each element type from the mesh
-        elemap = OrderedDict()
+        elemap = {}
         for f in mesh:
             m = re.match(f'spt_(.+?)_p{rallocs.prank}$', f)
             if m:
@@ -112,7 +112,7 @@ class BaseSystem(object):
         return eles, elemap
 
     def _load_int_inters(self, rallocs, mesh, elemap):
-        key = 'con_p{0}'.format(rallocs.prank)
+        key = f'con_p{rallocs.prank}'
 
         lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
         int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,

@@ -115,7 +115,7 @@ class BaseAdvectionBCInters(BaseInters):
 
         if (any('ploc' in ex for ex in exprs.values()) and
             'ploc' not in self._external_args):
-            spec = 'in fpdtype_t[{0}]'.format(self.ndims)
+            spec = f'in fpdtype_t[{self.ndims}]'
             value = self._const_mat(lhs, 'get_ploc_for_inter')
 
             self._set_external('ploc', spec, value=value)

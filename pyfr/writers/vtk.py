@@ -232,8 +232,8 @@ class VTKWriter(BaseWriter):
 
                 # Constitutent pieces
                 for pfn in parts:
-                    write_s_to_fh('<Piece Source="{0}"/>\n'
-                                  .format(os.path.basename(pfn)))
+                    bname = os.path.basename(pfn)
+                    write_s_to_fh(f'<Piece Source="{bname}"/>\n')
 
                 write_s_to_fh('</PUnstructuredGrid>\n</VTKFile>\n')
 
@@ -256,10 +256,9 @@ class VTKWriter(BaseWriter):
 
         # Write vtk DaraArray headers
         for i, (n, t, c, s) in enumerate(zip(names, types, comps, sizes)):
-            write_s('<DataArray Name="{0}" type="{1}" '
-                    'NumberOfComponents="{2}" '
-                    'format="appended" offset="{3}"/>\n'
-                    .format(self._process_name(n), t, c, off))
+            write_s(f'<DataArray Name="{self._process_name(n)}" type="{t}" '
+                    f'NumberOfComponents="{c}" '
+                    f'format="appended" offset="{off}"/>\n')
 
             off += 4 + s
 
@@ -283,9 +282,8 @@ class VTKWriter(BaseWriter):
 
         # Write vtk DaraArray headers
         for i, (n, t, s) in enumerate(zip(names, types, comps)):
-            write_s('<PDataArray Name="{0}" type="{1}" '
-                    'NumberOfComponents="{2}"/>\n'
-                    .format(self._process_name(n), t, s))
+            write_s(f'<PDataArray Name="{self._process_name(n)}" type="{t}" '
+                    f'NumberOfComponents="{s}"/>\n')
 
             if i == 0:
                 write_s('</PPoints>\n<PCells>\n')
