@@ -1,17 +1,10 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import c_int, c_ssize_t, c_void_p, pythonapi, py_object
-
 import numpy as np
 import pycuda.driver as cuda
 
 import pyfr.backends.base as base
-from pyfr.util import lazyprop
-
-
-_make_pybuf = pythonapi.PyMemoryView_FromMemory
-_make_pybuf.argtypes = [c_void_p, c_ssize_t, c_int]
-_make_pybuf.restype = py_object
+from pyfr.util import make_pybuf
 
 
 class _CUDAMatrixCommon(object):
@@ -86,7 +79,7 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
         # If MPI is CUDA-aware then construct a buffer out of our CUDA
         # device allocation and pass this directly to MPI
         if backend.mpitype == 'cuda-aware':
-            self.hdata = _make_pybuf(self.data, self.nbytes, 0x200)
+            self.hdata = make_pybuf(self.data, self.nbytes, 0x200)
         # Otherwise, allocate a buffer on the host for MPI to send/recv from
         else:
             self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),

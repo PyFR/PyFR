@@ -2,12 +2,9 @@
 
 import numpy as np
 import pyopencl as cl
-from pyopencl.array import Array
-from pyopencl.reduction import ReductionKernel
 
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
 from pyfr.backends.base import ComputeKernel
-from pyfr.nputil import npdtype_to_ctype
 
 
 class OpenCLBlasExtKernels(OpenCLKernelProvider):

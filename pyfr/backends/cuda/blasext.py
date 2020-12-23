@@ -2,12 +2,9 @@
 
 import numpy as np
 import pycuda.driver as cuda
-from pycuda.gpuarray import GPUArray
-from pycuda.reduction import ReductionKernel
 
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
 from pyfr.backends.base import ComputeKernel
-from pyfr.nputil import npdtype_to_ctype
 
 
 class CUDABlasExtKernels(CUDAKernelProvider):

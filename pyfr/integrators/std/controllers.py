@@ -6,7 +6,7 @@ import numpy as np
 
 from pyfr.integrators.std.base import BaseStdIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.util import memoize, proxylist
+from pyfr.util import memoize
 
 
 class BaseStdController(BaseStdIntegrator):

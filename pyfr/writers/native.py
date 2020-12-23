@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import itertools as it
 import os
 import re
 

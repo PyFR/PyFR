@@ -61,7 +61,8 @@ _npeval_syms = {
     'cos': np.cos, 'acos': np.arccos,
     'tan': np.tan, 'atan': np.arctan, 'atan2': np.arctan2,
     'abs': np.abs, 'pow': np.power, 'sqrt': np.sqrt,
-    'tanh': np.tanh, 'pi': np.pi}
+    'tanh': np.tanh, 'pi': np.pi
+}
 
 
 def npeval(expr, locals):
@@ -75,7 +76,7 @@ def npeval(expr, locals):
 
     # Disallow access to object attributes
     objs = '|'.join(it.chain(_npeval_syms, locals))
-    if re.search(r'(%s|\))\s*\.' % objs, expr):
+    if re.search(rf'({objs}|\))\s*\.', expr):
         raise ValueError('Invalid expression')
 
     return eval(expr, _npeval_syms, locals)
@@ -103,7 +104,8 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
 _ctype_map = {
     np.int32: 'int', np.uint32: 'unsigned int',
     np.int64: 'long long', np.uint64: 'unsigned long long',
-    np.float32: 'float', np.float64: 'double'}
+    np.float32: 'float', np.float64: 'double'
+}
 
 
 def npdtype_to_ctype(dtype):
@@ -113,7 +115,8 @@ def npdtype_to_ctype(dtype):
 _ctypestype_map = {
     np.int32: ct.c_int32, np.uint32: ct.c_uint32,
     np.int64: ct.c_int64, np.uint64: ct.c_uint64,
-    np.float32: ct.c_float, np.float64: ct.c_double}
+    np.float32: ct.c_float, np.float64: ct.c_double
+}
 
 
 def npdtype_to_ctypestype(dtype):

@@ -10,12 +10,12 @@ from pyfr.readers.nodemaps import GmshNodeMaps
 
 
 def msh_section(mshit, section):
-    endln = '$End{}\n'.format(section)
-    endix = int(next(mshit)) - 1
+    endln = f'$End{section}\n'
+    endix = int(next(mshit))
 
-    for i, l in enumerate(mshit):
+    for i, l in enumerate(mshit, start=1):
         if l == endln:
-            raise ValueError('Unexpected end of section $' + section)
+            raise ValueError(f'Unexpected end of section ${section}')
 
         yield l.strip()
 
@@ -25,7 +25,7 @@ def msh_section(mshit, section):
         raise ValueError('Unexpected EOF')
 
     if next(mshit) != endln:
-        raise ValueError('Expected $End' + section)
+        raise ValueError(f'Expected $End{section}')
 
 
 class GmshReader(BaseReader):
@@ -89,13 +89,13 @@ class GmshReader(BaseReader):
                 sect_map[sect](mshit)
             # Else skip over it
             except KeyError:
-                endsect = '$End{0}\n'.format(sect)
+                endsect = f'$End{sect}\n'
 
                 for el in mshit:
                     if el == endsect:
                         break
                 else:
-                    raise ValueError('Expected $End' + sect)
+                    raise ValueError(f'Expected $End{sect}')
 
     def _read_mesh_format(self, mshit):
         ver, ftype, dsize = next(mshit).split()
@@ -139,7 +139,7 @@ class GmshReader(BaseReader):
 
             # Ensure we have not seen this name before
             if name in seen:
-                raise ValueError('Duplicate physical name: {}'.format(name))
+                raise ValueError(f'Duplicate physical name: {name}')
 
             # Fluid elements
             if name == 'fluid':
@@ -231,7 +231,7 @@ class GmshReader(BaseReader):
             etags, enodes = elei[3:3 + entags], elei[3 + entags:]
 
             if etype not in self._etype_map:
-                raise ValueError('Unsupported element type {0}'.format(etype))
+                raise ValueError(f'Unsupported element type {etype}')
 
             # Physical entity type (used for BCs)
             epent = etags[0]
@@ -250,7 +250,7 @@ class GmshReader(BaseReader):
             edim, etag, etype, ecount = (int(j) for j in next(mshit).split())
 
             if etype not in self._etype_map:
-                raise ValueError('Unsupported element type {0}'.format(etype))
+                raise ValueError(f'Unsupported element type {etype}')
 
             # Physical entity type (used for BCs)
             epent = self._tagpents.get((edim, etag), -1)

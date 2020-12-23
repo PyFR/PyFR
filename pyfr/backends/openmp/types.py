@@ -8,7 +8,7 @@ class OpenMPMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata.ctypes.data
 
-        self.data = basedata[offset:offset + self.nrow*self.pitch]
+        self.data = basedata[offset:offset + self.nbytes]
         self.data = self.data.view(self.dtype)
         self.data = self.data.reshape(self.nrow, self.leaddim)
 

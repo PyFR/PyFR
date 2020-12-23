@@ -8,10 +8,7 @@ import sys
 
 def get_libc_function(fn):
     if sys.platform == 'win32':
-        if sys.version_info.minor >= 5:
-            libc = ctypes.windll.msvcrt
-        else:
-            libc = ctypes.CDLL(ctypes.util.find_msvcrt())
+        libc = ctypes.windll.msvcrt
     else:
         libc = ctypes.CDLL(ctypes.util.find_library('c'))
 
@@ -20,7 +17,7 @@ def get_libc_function(fn):
 
 def load_library(name):
     # If an explicit override has been given then use it
-    lpath = os.environ.get('PYFR_{0}_LIBRARY_PATH'.format(name.upper()))
+    lpath = os.environ.get(f'PYFR_{name.upper()}_LIBRARY_PATH')
     if lpath:
         return ctypes.CDLL(lpath)
 
@@ -30,7 +27,7 @@ def load_library(name):
     # Start with system search path
     try:
         return ctypes.CDLL(lname)
-    # ..and if this fails then run our own search
+    # …and if this fails then run our own search
     except OSError:
         for sd in platform_libdirs():
             try:
@@ -38,16 +35,16 @@ def load_library(name):
             except OSError:
                 pass
         else:
-            raise OSError('Unable to load {0}'.format(name))
+            raise OSError(f'Unable to load {name}')
 
 
 def platform_libname(name):
     if sys.platform == 'darwin':
-        return 'lib{0}.dylib'.format(name)
+        return f'lib{name}.dylib'
     elif sys.platform == 'win32':
-        return '{0}.dll'.format(name)
+        return f'{name}.dll'
     else:
-        return 'lib{0}.so'.format(name)
+        return f'lib{name}.so'
 
 
 def platform_libdirs():

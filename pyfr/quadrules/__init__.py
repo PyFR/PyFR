@@ -78,8 +78,8 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
             raise ValueError('No suitable quadrature rule found')
 
         # Load the rule
-        rule = resource_string(__name__, '{}/{}'.format(self.shape, best[0]))
-        super().__init__(rule.decode('utf-8'))
+        rule = resource_string(__name__, f'{self.shape}/{best[0]}')
+        super().__init__(rule.decode())
 
 
 def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):

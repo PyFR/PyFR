@@ -8,8 +8,6 @@ import os
 import mpi4py.rc
 mpi4py.rc.initialize = False
 
-import h5py
-
 from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler

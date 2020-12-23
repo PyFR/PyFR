@@ -147,8 +147,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         if hasattr(self, name):
             # Same name different module
             if getattr(self, name)._mod != mod:
-                raise RuntimeError('Attempt to re-register "{0}" with a '
-                                   'different module'.format(name))
+                raise RuntimeError(f'Attempt to re-register "{name}" with a '
+                                   'different module')
             # Otherwise (since we're already registered) return
             else:
                 return

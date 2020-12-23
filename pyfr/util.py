@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from contextlib import contextmanager
-from ctypes import c_void_p
+from ctypes import c_int, c_ssize_t, c_void_p, pythonapi, py_object
 import functools as ft
 import hashlib
 import itertools as it
@@ -55,7 +55,7 @@ class proxylist(list):
 
 class silence(object):
     def __init__(self, stdout=os.devnull, stderr=os.devnull):
-        self.outfiles = stdout, stderr
+        self.outfiles = (stdout, stderr)
         self.combine = (stdout == stderr)
 
         # Acquire a handle to fflush from libc
@@ -131,6 +131,14 @@ def chdir(dirname):
         os.chdir(cdir)
 
 
+def make_pybuf(buf, nbytes, flags):
+    _make_pybuf = pythonapi.PyMemoryView_FromMemory
+    _make_pybuf.argtypes = [c_void_p, c_ssize_t, c_int]
+    _make_pybuf.restype = py_object
+
+    return _make_pybuf(buf, nbytes, flags)
+
+
 class lazyprop(object):
     def __init__(self, fn):
         self.fn = fn
@@ -160,9 +168,8 @@ def subclass_where(cls, **kwargs):
         else:
             return s
 
-    attrs = ', '.join('{0} = {1}'.format(k, v) for k, v in kwargs.items())
-    raise KeyError('No subclasses of {0} with attrs == ({1})'
-                   .format(cls.__name__, attrs))
+    attrs = ', '.join(f'{k} = {v}' for k, v in kwargs.items())
+    raise KeyError(f'No subclasses of {cls.__name__} with attrs == ({attrs})')
 
 
 def ndrange(*args):
@@ -186,10 +193,10 @@ def mv(src, dst):
 
 def match_paired_paren(delim, n=5):
     open, close = delim
-    ocset = '[^{1}{0}]'.format(open, close)
+    ocset = f'[^{close}{open}]'
 
-    lft = r'{0}*?(?:\{1}'.format(ocset, open)
-    mid = r'{0}*?'.format(ocset)
-    rgt = r'\{1}{0}*?)*?'.format(ocset, close)
+    lft = rf'{ocset}*?(?:\{open}'
+    mid = rf'{ocset}*?'
+    rgt = rf'\{close}{ocset}*?)*?'
 
     return lft*n + mid + rgt*n
