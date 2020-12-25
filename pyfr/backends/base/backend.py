@@ -55,7 +55,7 @@ class BaseBackend(object):
     def lookup(self):
         pkg = 'pyfr.backends.{0}.kernels'.format(self.name)
         dfltargs = dict(alignb=self.alignb, fpdtype=self.fpdtype,
-                        soasz=self.soasz, math=math)
+                        soasz=self.soasz, aosoasz=self.aosoasz, math=math)
 
         return DottedTemplateLookup(pkg, dfltargs)
 

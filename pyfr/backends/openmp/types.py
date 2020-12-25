@@ -3,6 +3,8 @@
 import pyfr.backends.base as base
 from pyfr.util import lazyprop
 
+import numpy as np
+
 
 class OpenMPMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
@@ -10,7 +12,9 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         self.data = basedata[offset:offset + self.nrow*self.pitch]
         self.data = self.data.view(self.dtype)
-        self.data = self.data.reshape(self.nrow, self.leaddim)
+        print('shape', self.data.shape)
+        self.data = self.data.reshape(self.nblock, self.nrow, self.leaddim)
+        print('shape', self.data.shape)
 
         self.offset = offset
 
@@ -25,10 +29,46 @@ class OpenMPMatrixBase(base.MatrixBase):
         del self._initval
 
     def _get(self):
-        return self._unpack(self.data[:, :self.ncol])
+        return self._unpack(self.data[:, :, :])
 
     def _set(self, ary):
-        self.data[:, :self.ncol] = self._pack(ary)
+        print('letsset', self.data.shape, ary.shape)
+        self.data[:, :, :] = self._pack(ary)
+        print('isitset', self.data.shape, ary.shape)
+
+    def _pack(self, ary):
+        #np.set_printoptions(threshold=np.inf)
+        #print('pack', ary.ndim)
+        #print('ary', self.tags, ary)
+        # If necessary convert from SoA to AoAoSoA packing
+        if ary.ndim > 2:
+            n, k = ary.shape[-1], self.backend.soasz
+            nvar, sz = ary.shape[-2], k*self.backend.aosoasz
+
+            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % sz)],
+                         mode='constant')
+            ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
+            ary = ary.reshape(self.nrow, -1, sz*nvar).swapaxes(0, 1)
+        else:
+            n, sz = ary.shape[-1], self.backend.soasz*self.backend.aosoasz
+            ary = np.pad(ary, [(0, 0)] + [(0, -n % self.nbcol)], mode='constant')
+            ary = ary.reshape(self.nrow, -1, self.nbcol).swapaxes(0, 1)
+            #ary = ary.reshape(-1, self.nrow, self.leaddim)
+
+        #print('after packing')
+        #print('ary', self.tags, ary)
+        return np.ascontiguousarray(ary, dtype=self.dtype)
+
+    def _unpack(self, ary):
+        # If necessary unpack from AoSoA to SoA
+        if len(self.ioshape) > 2:
+            ary = ary.swapaxes(0, 1)
+            ary = ary.reshape(self.datashape)
+            ary = ary.swapaxes(-2, -3)
+            ary = ary.reshape(self.ioshape[:-1] + (-1,))
+            ary = ary[..., :self.ioshape[-1]]
+
+        return ary
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
@@ -39,7 +79,7 @@ class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
 
 class OpenMPMatrixSlice(base.MatrixSlice):
     def _init_data(self, mat):
-        return mat.data[self.ra:self.rb, self.ca:self.cb]
+        return mat.data[self.ba:self.bb, self.ra:self.rb, :]
 
     @property
     def _as_parameter_(self):

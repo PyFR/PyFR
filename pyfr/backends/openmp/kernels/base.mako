@@ -4,9 +4,12 @@
 #include <omp.h>
 #include <stdlib.h>
 #include <tgmath.h>
+#include <stdio.h>
 
 #define PYFR_ALIGN_BYTES ${alignb}
 #define SOA_SZ ${soasz}
+#define AOSOA_SZ ${aosoasz}
+#define SZ (SOA_SZ*AOSOA_SZ)
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))

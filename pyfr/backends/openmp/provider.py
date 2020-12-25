@@ -10,6 +10,10 @@ from pyfr.util import memoize
 class OpenMPKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes, restype=None):
+        if (name=='tflux'):
+            f = open('tflux.c', 'w')
+            f.write(src)
+            f.close()
         mod = SourceModule(src, self.backend.cfg)
         return mod.function(name, restype, argtypes)
 

@@ -105,8 +105,10 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         if 'const' not in a.tags:
             raise NotSuitableError('libxsmm requires a constant a matrix')
 
+        print('XSMM lib bncol', b.ncol)
         # Check n is divisible by 16
         if b.ncol % 16 != 0:
+            print('not divisible by 16', b.ncol)
             raise NotSuitableError('libxsmm requires n % 16 = 0')
 
         # Check that beta is zero or one
@@ -115,6 +117,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Check the matrix is of a reasonable size
         if a.ncol*a.nrow > self.max_sz:
+            print('max size exceeded', a.ncol*a.nrow)
             raise NotSuitableError('Matrix too large for libxsmm')
 
         # Dimensions
@@ -146,8 +149,8 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         self._kerns.append((blockk_ptr, destroy))
 
         # If necessary, also JIT and register a clean-up kernel for A
-        if n % nblock != 0:
-            cleank_ptr = create(m, n % nblock, k, lda, ldb, ldc, alpha_ct,
+        if b.nbcol % nblock != 0:
+            cleank_ptr = create(m, b.nbcol % nblock, k, lda, ldb, ldc, alpha_ct,
                                 beta_ct, c_is_nt, a_np.ctypes.data)
             self._kerns.append((cleank_ptr, destroy))
         else:
@@ -161,13 +164,19 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Argument types for par_xsmm
         argt = [np.intp, np.intp, np.intp, np.int32, np.int32, np.intp,
-                np.intp]
+                np.intp, np.int32, np.int32, np.int32]
+
+        # Some extra variables
+        nbcol, bblocksz, outblocksz = b.nbcol, b.blocksz, out.blocksz
+        print('vars', nbcol, bblocksz, outblocksz)
 
         # Build
         par_xsmm = self._build_kernel('par_xsmm', src, argt)
+        #print(src)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                par_xsmm(exec_ptr, blockk_ptr, cleank_ptr, n, nblock, b, out)
+                par_xsmm(exec_ptr, blockk_ptr, cleank_ptr, n, nblock, b, out,
+                         nbcol, bblocksz, outblocksz)
 
         return MulKernel()

@@ -175,4 +175,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
 
 class NotSuitableError(Exception):
-    pass
+    def __init__(self, err):
+        print(err)
+    #pass

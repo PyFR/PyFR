@@ -163,7 +163,7 @@ class BaseElements(object):
 
     def set_backend(self, backend, nscalupts, nonce, intoff):
         self._be = backend
-        self._intoff = intoff - intoff % -backend.soasz
+        self._intoff = intoff - intoff % -(backend.soasz*backend.aosoasz)
 
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
@@ -215,7 +215,7 @@ class BaseElements(object):
     @memoize
     def opmat(self, expr):
         return self._be.const_matrix(self.basis.opmat(expr),
-                                     tags={expr, 'align'})
+                                     tags={expr, 'align', 'opmat'})
 
     def sliceat(fn):
         @memoize

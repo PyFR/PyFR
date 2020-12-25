@@ -39,8 +39,7 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
         if len(dims) == 1:
             block = (cfg.getint('backend-cuda', 'block-1d', '64'), 1, 1)
         else:
-            block = cfg.getliteral('backend-cuda', 'block-2d', '128, 1')
-            block += (1,)
+            block = (cfg.getint('backend-cuda', 'block-2d', '128'), 1, 1)
 
         # Use this to compute the grid size
         grid = get_grid_for_block(block, *dims[::-1])
