@@ -5,11 +5,11 @@ from ctypes import (POINTER, Structure, cast, c_char, c_char_p, c_int,
 
 import numpy as np
 
-from pyfr.ctypesutil import load_library
+from pyfr.ctypesutil import LibWrapper
 
 
 # Possible HIP exception types
-HIPError = type('HIPError', (Exception, ), {})
+HIPError = type('HIPError', (Exception,), {})
 HIPInvalidValue = type('HIPInvalidValue', (HIPError,), {})
 HIPOutOfMemory = type('HIPOutOfMemory', (HIPError,), {})
 HIPFileNotFound = type('HIPFileNotFound', (HIPError,), {})
@@ -92,145 +92,59 @@ class HIPDevProps(Structure):
     ]
 
 
-class HIPWrappers(object):
-    # Possible return codes
+class HIPWrappers(LibWrapper):
+    _libname = 'amdhip64'
+
+    # Error codes
     _statuses = {
         1: HIPInvalidValue,
         2: HIPOutOfMemory,
         301: HIPFileNotFound,
-        500: HIPNotFound
+        500: HIPNotFound,
+        '*': HIPError
     }
 
     # Constants
-    hipMemcpyDefault = 4
+    MemcpyDefault = 4
 
-    def __init__(self):
-        lib = load_library('amdhip64')
-
-        # hipGetDeviceProperties
-        self.hipGetDeviceProperties = lib.hipGetDeviceProperties
-        self.hipGetDeviceProperties.argtypes = [POINTER(HIPDevProps), c_int]
-        self.hipGetDeviceProperties.errcheck = self._errcheck
-
-        # hipSetDevice
-        self.hipSetDevice = lib.hipSetDevice
-        self.hipSetDevice.argtypes = [c_int]
-        self.hipSetDevice.errcheck = self._errcheck
-
-        # hipMalloc
-        self.hipMalloc = lib.hipMalloc
-        self.hipMalloc.argtypes = [POINTER(c_void_p), c_size_t]
-        self.hipMalloc.errcheck = self._errcheck
-
-        # hipFree
-        self.hipFree = lib.hipFree
-        self.hipFree.argtypes = [c_void_p]
-        self.hipFree.errcheck = self._errcheck
-
-        # hipHostMalloc
-        self.hipHostMalloc = lib.hipHostMalloc
-        self.hipHostMalloc.argtypes = [POINTER(c_void_p), c_size_t, c_uint]
-        self.hipHostMalloc.errcheck = self._errcheck
-
-        # hipHostFree
-        self.hipHostFree = lib.hipHostFree
-        self.hipHostFree.argtypes = [c_void_p]
-        self.hipHostFree.errcheck = self._errcheck
-
-        # hipMemcpy
-        self.hipMemcpy = lib.hipMemcpy
-        self.hipMemcpy.argtypes = [c_void_p, c_void_p, c_size_t, c_int]
-        self.hipMalloc.errcheck = self._errcheck
-
-        # hipMemcpyAsync
-        self.hipMemcpyAsync = lib.hipMemcpyAsync
-        self.hipMemcpyAsync.argtypes = [c_void_p, c_void_p, c_size_t,
-                                        c_int, c_void_p]
-        self.hipMemcpyAsync.errcheck = self._errcheck
-
-        # hipMemset
-        self.hipMemset = lib.hipMemset
-        self.hipMemset.argtypes = [c_void_p, c_int, c_size_t]
-        self.hipMemset.errcheck = self._errcheck
-
-        # hipStreamCreate
-        self.hipStreamCreate = lib.hipStreamCreate
-        self.hipStreamCreate.argtypes = [POINTER(c_void_p)]
-        self.hipStreamCreate.errcheck = self._errcheck
-
-        # hipStreamDestroy
-        self.hipStreamDestroy = lib.hipStreamDestroy
-        self.hipStreamDestroy.argtypes = [c_void_p]
-        self.hipStreamDestroy.errcheck = self._errcheck
-
-        # hipStreamSynchronize
-        self.hipStreamSynchronize = lib.hipStreamSynchronize
-        self.hipStreamSynchronize.argtypes = [c_void_p]
-        self.hipStreamSynchronize.errcheck = self._errcheck
-
-        # hipStreamWaitEvent
-        self.hipStreamWaitEvent = lib.hipStreamWaitEvent
-        self.hipStreamWaitEvent.argtypes = [c_void_p, c_void_p, c_uint]
-        self.hipStreamWaitEvent.errcheck = self._errcheck
-
-        # hipEventCreate
-        self.hipEventCreate = lib.hipEventCreate
-        self.hipEventCreate.argtypes = [POINTER(c_void_p)]
-        self.hipEventCreate.errcheck = self._errcheck
-
-        # hipEventDestroy
-        self.hipEventDestroy = lib.hipEventDestroy
-        self.hipEventDestroy.argtypes = [c_void_p]
-        self.hipEventDestroy.errcheck = self._errcheck
-
-        # hipEventRecord
-        self.hipEventRecord = lib.hipEventRecord
-        self.hipEventRecord.argtypes = [c_void_p, c_void_p]
-        self.hipEventRecord.errcheck = self._errcheck
-
-        # hipModuleLoad
-        self.hipModuleLoad = lib.hipModuleLoad
-        self.hipModuleLoad.argtypes = [POINTER(c_void_p), c_char_p]
-        self.hipModuleLoad.errcheck = self._errcheck
-
-        # hipModuleUnload
-        self.hipModuleUnload = lib.hipModuleUnload
-        self.hipModuleUnload.argtypes = [c_void_p]
-        self.hipModuleUnload.errcheck = self._errcheck
-
-        # hipModuleGetFunction
-        self.hipModuleGetFunction = lib.hipModuleGetFunction
-        self.hipModuleGetFunction.argtypes = [POINTER(c_void_p), c_void_p,
-                                              c_char_p]
-        self.hipModuleGetFunction.errcheck = self._errcheck
-
-        # hipModuleLaunchKernel
-        self.hipModuleLaunchKernel = lib.hipModuleLaunchKernel
-        self.hipModuleLaunchKernel.argtypes = [
-            c_void_p, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint, c_uint,
-            c_void_p, POINTER(c_void_p), c_void_p
-        ]
-
-
-    def _errcheck(self, status, fn, args):
-        if status != 0:
-            try:
-                raise self._statuses[status]
-            except KeyError:
-                raise HIPError
+    # Functions
+    _functions = [
+        (c_int, 'hipGetDeviceProperties', POINTER(HIPDevProps), c_int),
+        (c_int, 'hipSetDevice', c_int),
+        (c_int, 'hipMalloc', POINTER(c_void_p), c_size_t),
+        (c_int, 'hipFree', c_void_p),
+        (c_int, 'hipHostMalloc', POINTER(c_void_p), c_size_t, c_uint),
+        (c_int, 'hipHostFree', c_void_p),
+        (c_int, 'hipMemcpy', c_void_p, c_void_p, c_size_t, c_int),
+        (c_int, 'hipMemcpyAsync', c_void_p, c_void_p, c_size_t, c_int,
+         c_void_p),
+        (c_int, 'hipMemset', c_void_p, c_int, c_size_t),
+        (c_int, 'hipStreamCreate', POINTER(c_void_p)),
+        (c_int, 'hipStreamDestroy', c_void_p),
+        (c_int, 'hipStreamSynchronize', c_void_p),
+        (c_int, 'hipStreamWaitEvent', c_void_p, c_void_p, c_uint),
+        (c_int, 'hipEventCreate', POINTER(c_void_p)),
+        (c_int, 'hipEventDestroy', c_void_p),
+        (c_int, 'hipEventRecord', c_void_p, c_void_p),
+        (c_int, 'hipModuleLoad', POINTER(c_void_p), c_char_p),
+        (c_int, 'hipModuleUnload', c_void_p),
+        (c_int, 'hipModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
+        (c_int, 'hipModuleLaunchKernel', c_void_p, c_uint, c_uint, c_uint,
+         c_uint, c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p)
+    ]
 
 
 class _HIPBase(object):
     _destroyfn = None
 
-    def __init__(self, lib, ptr):
-        self.lib = lib
+    def __init__(self, hip, ptr):
+        self.hip = hip
         self._as_parameter_ = ptr.value
 
     def __del__(self):
         if self._destroyfn:
             try:
-                getattr(self.lib, self._destroyfn)(self)
+                getattr(self.hip.lib, self._destroyfn)(self)
             except AttributeError:
                 pass
 
@@ -241,74 +155,75 @@ class _HIPBase(object):
 class HIPDevAlloc(_HIPBase):
     _destroyfn = 'hipFree'
 
-    def __init__(self, lib, nbytes):
-        ptr = c_void_p()
-        lib.hipMalloc(ptr, nbytes)
-
-        super().__init__(lib, ptr)
+    def __init__(self, hip, nbytes):
         self.nbytes = nbytes
+
+        ptr = c_void_p()
+        hip.lib.hipMalloc(ptr, nbytes)
+
+        super().__init__(hip, ptr)
 
 
 class HIPHostAlloc(_HIPBase):
     _destroyfn = 'hipHostFree'
 
-    def __init__(self, lib, nbytes):
+    def __init__(self, hip, nbytes):
         self.nbytes = nbytes
 
         ptr = c_void_p()
-        lib.hipHostMalloc(ptr, nbytes, 0)
+        hip.lib.hipHostMalloc(ptr, nbytes, 0)
 
-        super().__init__(lib, ptr)
+        super().__init__(hip, ptr)
 
 
 class HIPStream(_HIPBase):
     _destroyfn = 'hipStreamDestroy'
 
-    def __init__(self, lib):
+    def __init__(self, hip):
         ptr = c_void_p()
-        lib.hipStreamCreate(ptr)
+        hip.lib.hipStreamCreate(ptr)
 
-        super().__init__(lib, ptr)
+        super().__init__(hip, ptr)
 
     def synchronize(self):
-        self.lib.hipStreamSynchronize(self)
+        self.hip.lib.hipStreamSynchronize(self)
 
     def wait_for_event(self, event):
-        self.lib.hipStreamWaitEvent(self, event, 0)
+        self.hip.lib.hipStreamWaitEvent(self, event, 0)
 
 
 class HIPEvent(_HIPBase):
     _destroyfn = 'hipEventDestroy'
 
-    def __init__(self, lib):
+    def __init__(self, hip):
         ptr = c_void_p()
-        lib.hipEventCreate(ptr)
+        hip.lib.hipEventCreate(ptr)
 
-        super().__init__(lib, ptr)
+        super().__init__(hip, ptr)
 
     def record(self, stream):
-        self.lib.hipEventRecord(self, stream)
+        self.hip.lib.hipEventRecord(self, stream)
 
 
 class HIPModule(_HIPBase):
     _destroyfn = 'hipModuleUnload'
 
-    def __init__(self, lib, path):
+    def __init__(self, hip, path):
         ptr = c_void_p()
-        lib.hipModuleLoad(ptr, path.encode())
+        hip.lib.hipModuleLoad(ptr, path.encode())
 
-        super().__init__(lib, ptr)
+        super().__init__(hip, ptr)
 
     def get_function(self, name, argspec):
-        return HIPFunction(self.lib, self, name, argspec)
+        return HIPFunction(self.hip, self, name, argspec)
 
 
 class HIPFunction(_HIPBase):
-    def __init__(self, lib, module, name, argtypes):
+    def __init__(self, hip, module, name, argtypes):
         ptr = c_void_p()
-        lib.hipModuleGetFunction(ptr, module, name.encode())
+        hip.lib.hipModuleGetFunction(ptr, module, name.encode())
 
-        super().__init__(lib, ptr)
+        super().__init__(hip, ptr)
 
         # Save a reference to our underlying module
         self.module = module
@@ -324,20 +239,20 @@ class HIPFunction(_HIPBase):
         for src, dst in zip(args, self._args):
             dst.value = getattr(src, '_as_parameter_', src)
 
-        self.lib.hipModuleLaunchKernel(self, *grid, *block, 0, stream,
-                                       self._arg_ptrs, 0)
+        self.hip.lib.hipModuleLaunchKernel(self, *grid, *block, 0, stream,
+                                           self._arg_ptrs, 0)
 
 
 class HIP(object):
     def __init__(self):
-        self._wrappers = HIPWrappers()
+        self.lib = HIPWrappers()
 
     def set_device(self, devid):
-        self._wrappers.hipSetDevice(devid)
+        self.lib.hipSetDevice(devid)
 
     def device_properties(self, devid):
         props = HIPDevProps()
-        self._wrappers.hipGetDeviceProperties(props, devid)
+        self.lib.hipGetDeviceProperties(props, devid)
 
         dprops = {}
         for name, *t in props._fields_:
@@ -353,12 +268,12 @@ class HIP(object):
         return dprops
 
     def mem_alloc(self, nbytes):
-        return HIPDevAlloc(self._wrappers, nbytes)
+        return HIPDevAlloc(self, nbytes)
 
     def pagelocked_empty(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize
 
-        alloc = HIPHostAlloc(self._wrappers, nbytes)
+        alloc = HIPHostAlloc(self, nbytes)
         alloc.__array_interface__ = {
             'version': 3,
             'typestr': np.dtype(dtype).str,
@@ -369,7 +284,7 @@ class HIP(object):
         return np.array(alloc, copy=False)
 
     def memcpy(self, dst, src, nbytes):
-        flags = self._wrappers.hipMemcpyDefault
+        kind = self.lib.MemcpyDefault
 
         if isinstance(dst, (np.ndarray, np.generic)):
             dst = dst.ctypes.data
@@ -377,10 +292,10 @@ class HIP(object):
         if isinstance(src, (np.ndarray, np.generic)):
             src = src.ctypes.data
 
-        self._wrappers.hipMemcpy(dst, src, nbytes, flags)
+        self.lib.hipMemcpy(dst, src, nbytes, kind)
 
     def memcpy_async(self, dst, src, nbytes, stream):
-        flags = self._wrappers.hipMemcpyDefault
+        kind = self.lib.MemcpyDefault
 
         if isinstance(dst, (np.ndarray, np.generic)):
             dst = dst.ctypes.data
@@ -388,16 +303,16 @@ class HIP(object):
         if isinstance(src, (np.ndarray, np.generic)):
             src = src.ctypes.data
 
-        self._wrappers.hipMemcpyAsync(dst, src, nbytes, flags, stream)
+        self.lib.hipMemcpyAsync(dst, src, nbytes, kind, stream)
 
     def memset(self, dst, val, nbytes):
-        self._wrappers.hipMemset(dst, val, nbytes)
+        self.lib.hipMemset(dst, val, nbytes)
 
     def load_module(self, path):
-        return HIPModule(self._wrappers, path)
+        return HIPModule(self, path)
 
     def create_stream(self):
-        return HIPStream(self._wrappers)
+        return HIPStream(self)
 
     def create_event(self):
-        return HIPEvent(self._wrappers)
+        return HIPEvent(self)

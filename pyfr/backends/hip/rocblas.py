@@ -5,7 +5,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel
-from pyfr.ctypesutil import load_library
+from pyfr.ctypesutil import LibWrapper
 
 
 # Possible RocBLAS exception types
@@ -17,8 +17,10 @@ RocBLASInternalError = type('RocBLASInternalError', (RocBLASError,), {})
 RocBLASInvalidValue = type('RocBLASInvalidValue', (RocBLASError,), {})
 
 
-class RocBLASWrappers(object):
-    # Possible return codes
+class RocBLASWrappers(LibWrapper):
+    _libname = 'rocblas'
+
+    # Error codes
     _statuses = {
         1: RocBLASInvalidHandle,
         3: RocBLASInvalidPointer,
@@ -28,51 +30,21 @@ class RocBLASWrappers(object):
     }
 
     # Constants
-    ROCBLAS_OPERATION_NONE = 111
-    ROCBLAS_OPERATION_TRANSPOSE = 112
+    OPERATION_NONE = 111
+    OPERATION_TRANSPOSE = 112
 
-    def __init__(self):
-        lib = load_library('rocblas')
-
-        # rocblas_create_handle
-        self.rocblas_create_handle = lib.rocblas_create_handle
-        self.rocblas_create_handle.argtypes = [POINTER(c_void_p)]
-        self.rocblas_create_handle.errcheck = self._errcheck
-
-        # rocblas_destroy_handle
-        self.rocblas_destroy_handle = lib.rocblas_destroy_handle
-        self.rocblas_destroy_handle.argtypes = [c_void_p]
-        self.rocblas_destroy_handle.errcheck = self._errcheck
-
-        # rocblas_set_stream
-        self.rocblas_set_stream = lib.rocblas_set_stream
-        self.rocblas_set_stream.argtypes = [c_void_p, c_void_p]
-        self.rocblas_set_stream.errcheck = self._errcheck
-
-        # rocblas_dgemm
-        self.rocblas_dgemm = lib.rocblas_dgemm
-        self.rocblas_dgemm.argtypes = [
-            c_void_p, c_int, c_int, c_int, c_int, c_int,
-            POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
-            POINTER(c_double), c_void_p, c_int
-        ]
-        self.rocblas_dgemm.errcheck = self._errcheck
-
-        # rocblas_sgemm
-        self.rocblas_sgemm = lib.rocblas_sgemm
-        self.rocblas_sgemm.argtypes = [
-            c_void_p, c_int, c_int, c_int, c_int, c_int,
-            POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
-            POINTER(c_float), c_void_p, c_int
-        ]
-        self.rocblas_sgemm.errcheck = self._errcheck
-
-    def _errcheck(self, status, fn, args):
-        if status != 0:
-            try:
-                raise self._statuses[status]
-            except KeyError:
-                raise RocBLASError
+    # Functions
+    _functions = [
+        (c_int, 'rocblas_create_handle', POINTER(c_void_p)),
+        (c_int, 'rocblas_destroy_handle', c_void_p),
+        (c_int, 'rocblas_set_stream', c_void_p, c_void_p),
+        (c_int, 'rocblas_dgemm', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_double), c_void_p, c_int),
+        (c_int, 'rocblas_sgemm', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_float), c_void_p, c_int)
+    ]
 
 
 class HIPRocBLASKernels(object):
@@ -106,7 +78,7 @@ class HIPRocBLASKernels(object):
         A, B, C = b, a, out
 
         # Do not transpose either A or B
-        opA = opB = w.ROCBLAS_OPERATION_NONE
+        opA = opB = w.OPERATION_NONE
 
         # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:

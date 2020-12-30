@@ -6,6 +6,34 @@ import os
 import sys
 
 
+class LibWrapper(object):
+    _libname = None
+    _statuses = None
+    _functions = None
+
+    def __init__(self):
+        lib = load_library(self._libname)
+
+        for fret, fname, *fargs in self._functions:
+            fn = getattr(lib, fname)
+            fn.restype = fret
+            fn.argtypes = fargs
+
+            if fret is not None:
+                fn.errcheck = self._errcheck
+
+            setattr(self, self._transname(fname), fn)
+
+    def _transname(self, fname):
+        return fname
+
+    def _errcheck(self, status, fn, args):
+        if status != 0:
+            try:
+                raise self._statuses[status]
+            except KeyError:
+                raise self._statuses['*']
+
 def get_libc_function(fn):
     if sys.platform == 'win32':
         libc = ctypes.windll.msvcrt
