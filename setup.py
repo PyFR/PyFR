@@ -3,13 +3,7 @@
 
 import re
 from setuptools import setup
-import sys
 
-
-# Python version
-if sys.version_info[:2] < (3, 6):
-    print('PyFR requires Python 3.6 or newer')
-    sys.exit(-1)
 
 # PyFR version
 vfile = open('pyfr/_version.py').read()
@@ -159,6 +153,7 @@ setup(name='pyfr',
       package_data=package_data,
       data_files=data_files,
       entry_points={'console_scripts': console_scripts},
+      python_requires='>=3.6',
       install_requires=install_requires,
       extras_require=extras_require,
       classifiers=classifiers
