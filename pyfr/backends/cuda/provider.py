@@ -10,7 +10,7 @@ from pyfr.util import memoize
 
 def get_grid_for_block(block, nrow, ncol=1):
     return (int((nrow + (-nrow % block[0])) // block[0]),
-            int((ncol + (-ncol % block[1])) // block[1]))
+            int((ncol + (-ncol % block[1])) // block[1]), 1)
 
 
 class CUDAKernelProvider(BaseKernelProvider):

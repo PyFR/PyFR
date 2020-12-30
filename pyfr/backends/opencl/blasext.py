@@ -51,8 +51,8 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         ncola, ncolb = x.ioshape[1:]
 
         # Reduction workgroup dimensions
-        ls = (128,)
-        gs = (ncolb - ncolb % -ls[0],)
+        ls = (128, 1)
+        gs = (ncolb - ncolb % -ls[0], ncola)
 
         # Empty result buffer on host with (nvars, ngroups)
         err_host = np.empty((ncola, gs[0] // ls[0]), dtype)
@@ -63,7 +63,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         # Get the kernel template
         src = self.backend.lookup.get_template('errest').render(
-            norm=norm, ncola=ncola, sharesz=ls[0]
+            norm=norm, sharesz=ls[0]
         )
 
         # Build the reduction kernel
