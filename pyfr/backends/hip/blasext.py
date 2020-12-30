@@ -61,7 +61,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         block = (128, 1, 1)
 
         # Determine the grid size
-        grid = get_grid_for_block(block, ncolb)
+        grid = get_grid_for_block(block, ncolb, ncola)
 
         # Empty result buffer on the device
         err_dev = hip.mem_alloc(ncola*grid[0]*x.itemsize)
@@ -71,7 +71,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         # Get the kernel template
         src = self.backend.lookup.get_template('errest').render(
-            norm=norm, ncola=ncola, sharesz=block[0]
+            norm=norm, sharesz=block[0]
         )
 
         # Build the reduction kernel

@@ -60,7 +60,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         block = (128, 1, 1)
 
         # Determine the grid size
-        grid = get_grid_for_block(block, ncolb)
+        grid = get_grid_for_block(block, ncolb, ncola)
 
         # Empty result buffer on host with shape (nvars, nblocks)
         err_host = cuda.pagelocked_empty((ncola, grid[0]), dtype, 'C')
@@ -70,7 +70,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         # Get the kernel template
         src = self.backend.lookup.get_template('errest').render(
-            norm=norm, ncola=ncola, sharesz=block[0]
+            norm=norm, sharesz=block[0]
         )
 
         # Build the reduction kernel
