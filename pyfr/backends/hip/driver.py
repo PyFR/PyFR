@@ -11,9 +11,15 @@ from pyfr.ctypesutil import LibWrapper
 # Possible HIP exception types
 HIPError = type('HIPError', (Exception,), {})
 HIPInvalidValue = type('HIPInvalidValue', (HIPError,), {})
+HIPNotInitialized = type('HIPNotInitialized', (HIPError,), {})
 HIPOutOfMemory = type('HIPOutOfMemory', (HIPError,), {})
+HIPInsufficientDriver = type('HIPInsufficientDriver', (HIPError,), {})
+HIPPriorLaunchFailure = type('HIPPriorLaunchFailure', (HIPError,), {})
+HIPECCNotCorrectable = type('HIPECCNotCorrectable', (HIPError,), {})
 HIPFileNotFound = type('HIPFileNotFound', (HIPError,), {})
 HIPNotFound = type('HIPNotFound', (HIPError,), {})
+HIPIllegalAddress = type('HIPIllegalAddress', (HIPError,), {})
+HIPLaunchFailure = type('HIPLaunchFailure', (HIPError,), {})
 
 
 class HIPDevProps(Structure):
@@ -99,8 +105,14 @@ class HIPWrappers(LibWrapper):
     _statuses = {
         1: HIPInvalidValue,
         2: HIPOutOfMemory,
+        3: HIPNotInitialized,
+        35: HIPInsufficientDriver,
+        53: HIPPriorLaunchFailure,
+        214: HIPECCNotCorrectable,
         301: HIPFileNotFound,
         500: HIPNotFound,
+        700: HIPIllegalAddress,
+        719: HIPLaunchFailure,
         '*': HIPError
     }
 

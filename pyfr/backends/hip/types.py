@@ -54,8 +54,7 @@ class HIPMatrixSlice(_HIPMatrixCommon, base.MatrixSlice):
 
 
 class HIPMatrixBank(base.MatrixBank):
-    def __index__(self):
-        return self._curr_mat.data
+    pass
 
 
 class HIPConstMatrix(HIPMatrixBase, base.ConstMatrix):
