@@ -5,7 +5,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel
-from pyfr.ctypesutil import load_library
+from pyfr.ctypesutil import LibWrapper
 
 
 # Possible CUBLAS exception types
@@ -19,8 +19,10 @@ CUBLASExecutionFailed = type('CUBLASExecutionFailed', (CUBLASError,), {})
 CUBLASInternalError = type('CUBLASInternalError', (CUBLASError,), {})
 
 
-class CUBLASWrappers(object):
-    # Possible return codes
+class CUBLASWrappers(LibWrapper):
+    _libname = 'cublas'
+
+    # Error codes
     _statuses = {
         0x1: CUBLASNotInitialized,
         0x3: CUBLASAllocFailed,
@@ -28,55 +30,30 @@ class CUBLASWrappers(object):
         0x8: CUBLASArchMismatch,
         0xb: CUBLASMappingError,
         0xd: CUBLASExecutionFailed,
-        0xe: CUBLASInternalError
+        0xe: CUBLASInternalError,
+        '*': CUBLASError
     }
 
     # Constants
-    CUBLAS_OP_N = 0
-    CUBLAS_OP_T = 1
+    OP_N = 0
+    OP_T = 1
+    OP_C = 2
 
-    def __init__(self):
-        lib = load_library('cublas')
+    # Functions
+    _functions = [
+        (c_int, 'cublasCreate_v2', POINTER(c_void_p)),
+        (c_int, 'cublasDestroy_v2', c_void_p),
+        (c_int, 'cublasSetStream_v2', c_void_p, c_void_p),
+        (c_int, 'cublasDgemm_v2', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_double), c_void_p, c_int),
+        (c_int, 'cublasSgemm_v2', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_float), c_void_p, c_int)
+    ]
 
-        # cublasCreate
-        self.cublasCreate = lib.cublasCreate_v2
-        self.cublasCreate.argtypes = [POINTER(c_void_p)]
-        self.cublasCreate.errcheck = self._errcheck
-
-        # cublasDestroy
-        self.cublasDestroy = lib.cublasDestroy_v2
-        self.cublasDestroy.argtypes = [c_void_p]
-        self.cublasDestroy.errcheck = self._errcheck
-
-        # cublasSetStream
-        self.cublasSetStream = lib.cublasSetStream_v2
-        self.cublasSetStream.argtypes = [c_void_p, c_void_p]
-        self.cublasSetStream.errcheck = self._errcheck
-
-        # cublasDgemm
-        self.cublasDgemm = lib.cublasDgemm_v2
-        self.cublasDgemm.argtypes = [
-            c_void_p, c_int, c_int, c_int, c_int, c_int,
-            POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
-            POINTER(c_double), c_void_p, c_int
-        ]
-        self.cublasDgemm.errcheck = self._errcheck
-
-        # cublasSgemm
-        self.cublasSgemm = lib.cublasSgemm_v2
-        self.cublasSgemm.argtypes = [
-            c_void_p, c_int, c_int, c_int, c_int, c_int,
-            POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
-            POINTER(c_float), c_void_p, c_int
-        ]
-        self.cublasSgemm.errcheck = self._errcheck
-
-    def _errcheck(self, status, fn, args):
-        if status != 0:
-            try:
-                raise self._statuses[status]
-            except KeyError:
-                raise CUBLASError
+    def _transname(self, name):
+        return name[:-3]
 
 
 class CUDACUBLASKernels(object):
@@ -116,7 +93,7 @@ class CUDACUBLASKernels(object):
         A, B, C = b, a, out
 
         # Do not transpose either A or B
-        opA = opB = w.CUBLAS_OP_N
+        opA = opB = w.OP_N
 
         # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:
