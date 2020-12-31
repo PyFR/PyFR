@@ -120,7 +120,7 @@ class StdPIController(BaseStdController):
 
         # Obtain an estimate for the squared error
         self._prepare_reg_banks(x, y, z)
-        self._queue % errest(self._atol, self._rtol)
+        self._queue.enqueue_and_run(errest, self._atol, self._rtol)
 
         # L2 norm
         if self._norm == 'l2':

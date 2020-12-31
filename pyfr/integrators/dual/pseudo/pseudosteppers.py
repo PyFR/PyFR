@@ -46,7 +46,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Physical stepper source addition -∇·f - dQ/dt
         axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
         self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
-        self._queue % axnpby(1, *svals)
+        self._queue.enqueue_and_run(axnpby, 1, *svals)
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):
@@ -245,7 +245,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
 
     def localdtau(self, uinbank, inv=0):
         self.system.eles_scal_upts_inb.active = uinbank
-        self._queue % self.pintgkernels['localdtau'](inv=inv)
+        self._queue.enqueue_and_run(self.pintgkernels['localdtau'], inv=inv)
 
     @property
     def _pseudo_stepper_has_lerrest(self):

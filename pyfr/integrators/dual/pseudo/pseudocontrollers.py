@@ -26,7 +26,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
         # Prepare and run the kernel
         self._prepare_reg_banks(x, x, x)
-        self._queue % errest(dtau, 0.0)
+        self._queue.enqueue_and_run(errest, dtau, 0.0)
 
         # L2 norm
         if self._pseudo_norm == 'l2':
@@ -146,7 +146,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
     def localerrest(self, errbank):
         self.system.eles_scal_upts_inb.active = errbank
-        self._queue % self.pintgkernels['localerrest']()
+        self._queue.enqueue_and_run(self.pintgkernels['localerrest'])
 
     def convmon(self, i, minniters):
         if i >= minniters - 1:

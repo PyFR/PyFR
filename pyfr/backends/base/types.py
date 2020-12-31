@@ -319,12 +319,12 @@ class Queue(object):
         # Active MPI requests
         self.mpi_reqs = []
 
-    def __lshift__(self, items):
-        self._items.extend(items)
+    def enqueue(self, items, *args, **kwargs):
+        self._items.extend((item, args, kwargs) for item in items)
 
-    def __mod__(self, items):
+    def enqueue_and_run(self, items, *args, **kwargs):
         self.run()
-        self << items
+        self.enqueue(items, *args, **kwargs)
         self.run()
 
     def __bool__(self):

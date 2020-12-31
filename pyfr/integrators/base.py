@@ -179,4 +179,4 @@ class BaseCommon(object):
         self._prepare_reg_banks(*args[1::2])
 
         # Bind and run the axnpby kernels
-        self._queue % axnpby(*args[::2])
+        self._queue.enqueue_and_run(axnpby, *args[::2])
