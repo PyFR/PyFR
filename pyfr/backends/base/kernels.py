@@ -8,9 +8,6 @@ from pyfr.util import memoize, proxylist
 
 
 class _BaseKernel(object):
-    def __call__(self, *args, **kwargs):
-        return self, args, kwargs
-
     @property
     def retval(self):
         return None

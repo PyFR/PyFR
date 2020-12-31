@@ -166,7 +166,7 @@ class BaseSystem(object):
         self._queues = [self.backend.queue() for i in range(self._nqueues)]
 
     def _gen_kernels(self, eles, iint, mpiint, bcint):
-        self._kernels = kernels = defaultdict(proxylist)
+        self._kernels = kernels = defaultdict(list)
 
         provnames = ['eles', 'iint', 'mpiint', 'bcint']
         provobjs = [eles, iint, mpiint, bcint]
@@ -182,7 +182,7 @@ class BaseSystem(object):
     def filt(self, uinoutbank):
         self.eles_scal_upts_inb.active = uinoutbank
 
-        self._queues[0] % self._kernels['eles', 'filter_soln']()
+        self._queues[0].enqueue_and_run(self._kernels['eles', 'filter_soln'])
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

@@ -110,13 +110,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                                                      subdims=iself._subdims)
                     iself._prepare_reg_banks(fout, iself._idxcurr,
                                              *iself._stepper_regidx)
-                    iself._queue % axnpby(1, *svals)
+                    iself._queue.enqueue_and_run(axnpby, 1, *svals)
 
                     # Multigrid r addition
                     if iself._aux_regidx:
                         axnpby = iself._get_axnpby_kerns(2)
                         iself._prepare_reg_banks(fout, iself._aux_regidx[0])
-                        iself._queue % axnpby(1, -1)
+                        iself._queue.enqueue_and_run(axnpby, 1, -1)
 
             self.pintgs[l] = lpsint(backend, systemcls, rallocs, mesh,
                                     initsoln, mcfg, tcoeffs, dt)
@@ -222,12 +222,12 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Restrict Q
         l1sys.eles_scal_upts_inb.active = l1idxcurr
         l2sys.eles_scal_upts_inb.active = l2idxcurr
-        self.pintg._queue % self.mgproject(l1, l2)()
+        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Restrict d and store to mg1
         l1sys.eles_scal_upts_inb.active = rtemp
         l2sys.eles_scal_upts_inb.active = mg1
-        self.pintg._queue % self.mgproject(l1, l2)()
+        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # mg0 = R = -∇·f - dQ/dt
         self.pintg.system.rhs(self.tcurr, l2idxcurr, self._mg_regidx[0])
@@ -248,11 +248,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             l2sys.eles_scal_upts_inb.active = (
                 self.pintgs[l2]._stepper_regidx[i]
             )
-            self.pintg._queue % self.mgproject(l1, l2)()
+            self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
-            self.pintg._queue % self.dtauproject(l1, l2)()
+            self.pintg._queue.enqueue_and_run(self.dtauproject(l1, l2))
 
     def prolongate(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
@@ -270,7 +270,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Prolongate the correction and store to rtemp
         l1sys.eles_scal_upts_inb.active = self._mg_regidx[1]
         l2sys.eles_scal_upts_inb.active = rtemp
-        self.pintg._queue % self.mgproject(l1, l2)()
+        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Add the correction to the end quantity at l2
         # Q^m+1  = Q^s + Delta
