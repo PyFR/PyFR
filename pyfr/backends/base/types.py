@@ -310,8 +310,8 @@ class Queue(object):
     def __init__(self, backend):
         self.backend = backend
 
-        # Last kernel we executed
-        self._last = None
+        # Type of the last kernel we executed
+        self._last_ktype = None
 
         # Items waiting to be executed
         self._items = deque()
@@ -337,7 +337,7 @@ class Queue(object):
 
     def _exec_item(self, item, args, kwargs):
         item.run(self, *args, **kwargs)
-        self._last = item
+        self._last_ktype = item.ktype
 
     def _exec_next(self):
         item, args, kwargs = self._items.popleft()
