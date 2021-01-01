@@ -33,6 +33,6 @@ class DottedTemplateLookup(TemplateLookup):
         # Subclass Template to support implicit arguments
         class DefaultTemplate(Template):
             def render(iself, *args, **kwargs):
-                return super().render(*args, **dict(self.dfltargs, **kwargs))
+                return super().render(*args, **self.dfltargs, **kwargs)
 
         return DefaultTemplate(src, lookup=self)
