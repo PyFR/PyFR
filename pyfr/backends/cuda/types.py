@@ -99,21 +99,19 @@ class CUDAQueue(base.Queue):
         self.cuda_stream_copy = cuda.Stream()
 
     def _wait(self):
-        last = self._last
-
-        if last and last.ktype == 'compute':
+        if self._last_ktype == 'compute':
             self.cuda_stream_comp.synchronize()
             self.cuda_stream_copy.synchronize()
-        elif last and last.ktype == 'mpi':
+        elif self._last_ktype == 'mpi':
             from mpi4py import MPI
 
             MPI.Prequest.Waitall(self.mpi_reqs)
             self.mpi_reqs = []
 
-        self._last = None
+        self._last_ktype = None
 
     def _at_sequence_point(self, item):
-        return self._last and self._last.ktype != item.ktype
+        return self._last_ktype != item.ktype
 
     @staticmethod
     def runall(queues):

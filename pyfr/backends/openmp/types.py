@@ -78,18 +78,16 @@ class OpenMPQueue(base.Queue):
             self._exec_item(*self._items.popleft())
 
     def _wait(self):
-        if self._last and self._last.ktype == 'mpi':
+        if self._last_ktype == 'mpi':
             from mpi4py import MPI
 
             MPI.Prequest.Waitall(self.mpi_reqs)
             self.mpi_reqs = []
 
-        self._last = None
+        self._last_ktype = None
 
     def _at_sequence_point(self, item):
-        last = self._last
-
-        return last and last.ktype == 'mpi' and item.ktype != 'mpi'
+        return self._last_ktype == 'mpi' and item.ktype != 'mpi'
 
     @staticmethod
     def runall(queues):
