@@ -12,7 +12,7 @@ class HIPBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        from pyfr.backends.hip.wrappers import HIP
+        from pyfr.backends.hip.driver import HIP
 
         # Create the HIP context
         self.hip = HIP()

@@ -9,7 +9,7 @@
     fpdtype_t fac[${nvars}];
 
 % for i in range(nvars):
-    err[${i}] = fabs(err[${i}]/${atol});
+    err[${i}] = fabs(${1/atol}*err[${i}]);
 
     fac[${i}] = pow(err[${i}], ${-expa}) * pow(errprev[${i}], ${expb});
     fac[${i}] = min(${maxf}, max(${minf}, ${saff}*fac[${i}]));

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from contextlib import contextmanager
-from ctypes import c_int, c_ssize_t, c_void_p, pythonapi, py_object
+from ctypes import c_int, c_ssize_t, c_void_p
 import functools as ft
 import hashlib
 import itertools as it
@@ -132,6 +132,8 @@ def chdir(dirname):
 
 
 def make_pybuf(buf, nbytes, flags):
+    from ctypes import pythonapi, py_object
+
     _make_pybuf = pythonapi.PyMemoryView_FromMemory
     _make_pybuf.argtypes = [c_void_p, c_ssize_t, c_int]
     _make_pybuf.restype = py_object
