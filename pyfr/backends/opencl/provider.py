@@ -5,7 +5,7 @@ import pyopencl as cl
 
 from pyfr.backends.base import (BaseKernelProvider,
                                 BasePointwiseKernelProvider, ComputeKernel)
-import pyfr.backends.opencl.generator as generator
+from pyfr.backends.opencl.generator import OpenCLKernelGenerator
 from pyfr.util import memoize
 
 
@@ -28,7 +28,7 @@ class OpenCLKernelProvider(BaseKernelProvider):
 
 class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
                                     BasePointwiseKernelProvider):
-    kernel_generator_cls = generator.OpenCLKernelGenerator
+    kernel_generator_cls = OpenCLKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
         cfg = self.backend.cfg
