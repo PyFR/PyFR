@@ -3,7 +3,7 @@
 from pyfr.backends.base import (BaseKernelProvider,
                                 BasePointwiseKernelProvider, ComputeKernel)
 from pyfr.backends.hip.compiler import SourceModule
-import pyfr.backends.hip.generator as generator
+from pyfr.backends.hip.generator import HIPKernelGenerator
 from pyfr.util import memoize
 
 
@@ -21,7 +21,7 @@ class HIPKernelProvider(BaseKernelProvider):
 
 class HIPPointwiseKernelProvider(HIPKernelProvider,
                                  BasePointwiseKernelProvider):
-    kernel_generator_cls = generator.HIPKernelGenerator
+    kernel_generator_cls = HIPKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
         cfg = self.backend.cfg
