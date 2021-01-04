@@ -82,7 +82,8 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
             def run(self, queue, atol, rtol):
                 rkern(queue.cl_queue_comp, gs, ls, nrow, ncolb, ldim, err_dev,
                       x.data, y.data, z.data, atol, rtol)
-                cl.enqueue_copy(queue.cl_queue_comp, err_host, err_dev,
-                                is_blocking=False)
+                cevent = cl.enqueue_copy(queue.cl_queue_comp, err_host,
+                                         err_dev, is_blocking=False)
+                queue.copy_events.append(cevent)
 
         return ErrestKernel()
