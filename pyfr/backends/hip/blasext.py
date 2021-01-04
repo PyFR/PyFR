@@ -30,10 +30,8 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
-                args = list(arr) + list(consts)
-
                 kern.exec_async(grid, block, queue.hip_stream_comp,
-                                nrow, ncolb, ldim, *args)
+                                nrow, ncolb, ldim, *arr, *consts)
 
         return AxnpbyKernel()
 

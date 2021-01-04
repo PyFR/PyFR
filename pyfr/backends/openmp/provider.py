@@ -20,7 +20,11 @@ class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
 
     def _instantiate_kernel(self, dims, fun, arglst):
         class PointwiseKernel(ComputeKernel):
-            def run(self, queue, **kwargs):
-                fun(*[kwargs.get(ka, ka) for ka in arglst])
+            if any(isinstance(arg, str) for arg in arglst):
+                def run(self, queue, **kwargs):
+                    fun(*[kwargs.get(ka, ka) for ka in arglst])
+            else:
+                def run(self, queue, **kwargs):
+                    fun(*arglst)
 
         return PointwiseKernel()

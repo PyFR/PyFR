@@ -43,10 +43,14 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
         gs = tuple(gi - gi % -li for gi, li in zip(dims[::-1], ls))
 
         class PointwiseKernel(ComputeKernel):
-            def run(self, queue, **kwargs):
-                kwargs = {k: float(v) for k, v in kwargs.items()}
-                narglst = [kwargs.get(ka, ka) for ka in arglst]
-                narglst = [getattr(arg, 'data', arg) for arg in narglst]
-                fun(queue.cl_queue_comp, gs, ls, *narglst)
+            if any(isinstance(arg, str) for arg in arglst):
+                def run(self, queue, **kwargs):
+                    narglst = [kwargs.get(ka, ka) for ka in arglst]
+                    narglst = [getattr(arg, 'data', arg) for arg in narglst]
+                    fun(queue.cl_queue_comp, gs, ls, *narglst)
+            else:
+                def run(self, queue, **kwargs):
+                    narglst = [getattr(arg, 'data', arg) for arg in arglst]
+                    fun(queue.cl_queue_comp, gs, ls, *narglst)
 
         return PointwiseKernel()
