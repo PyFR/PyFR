@@ -180,7 +180,7 @@ def process_partition(args):
 
         for etype, emap in sorted(rnum.items()):
             for k, v in sorted(emap.items()):
-                print(','.join(map(str, (etype, *k, *v))), file=args.rnumf)
+                print(etype, *k, *v, sep=',', file=args.rnumf)
 
 
 def process_export(args):

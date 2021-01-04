@@ -53,11 +53,8 @@ class ResidualPlugin(BasePlugin):
                 # Normalise
                 resid = np.sqrt(resid) / (intg.tcurr - self._tprev)
 
-                # Build the row
-                row = [intg.tcurr] + resid.tolist()
-
                 # Write
-                print(','.join(str(r) for r in row), file=self.outf)
+                print(intg.tcurr, *resid, sep=',', file=self.outf)
 
                 # Flush to disk
                 self.outf.flush()
