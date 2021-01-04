@@ -39,7 +39,7 @@ class DtStatsPlugin(BasePlugin):
         # If we're the root rank then output
         if self.outf:
             for s in self.stats:
-                print(','.join(str(c) for c in s), file=self.outf)
+                print(*s, sep=',', file=self.outf)
 
             # Periodically flush to disk
             if intg.nacptsteps % self.flushsteps == 0:

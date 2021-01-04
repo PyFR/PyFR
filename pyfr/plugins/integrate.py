@@ -145,7 +145,7 @@ class IntegratePlugin(BasePlugin):
                             root=root)
 
                 # Write
-                print(intg.tcurr, *iintex.tolist(), sep=', ', file=self.outf)
+                print(intg.tcurr, *iintex, sep=',', file=self.outf)
 
                 # Flush to disk
                 self.outf.flush()

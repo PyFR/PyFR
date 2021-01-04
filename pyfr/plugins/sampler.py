@@ -156,12 +156,9 @@ class SamplerPlugin(BasePlugin):
                 # Determine the physical mesh rank
                 prank = intg.rallocs.mprankmap[mrank]
 
-                # Prepare the output row
-                row = [[intg.tcurr], ploc, [prank, etype], idx, samp]
-                row = ','.join(str(r) for rp in row for r in rp)
-
-                # Write
-                print(row, file=self.outf)
+                # Write the output row
+                print(intg.tcurr, *ploc, prank, etype, *idx, *samp,
+                      sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
