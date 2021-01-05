@@ -40,7 +40,7 @@ class BaseInters(object):
         self._perm = Ellipsis
 
         # Kernel constants
-        self._tpl_c = cfg.items_as('constants', float)
+        self.c = cfg.items_as('constants', float)
 
         # Kernels we provide
         self.kernels = {}

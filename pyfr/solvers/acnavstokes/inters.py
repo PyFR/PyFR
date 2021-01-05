@@ -13,12 +13,12 @@ class ACNavierStokesIntInters(BaseAdvectionDiffusionIntInters):
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._tpl_c)
+                       c=self.c)
 
         self._be.pointwise.register('pyfr.solvers.acnavstokes.kernels.intconu')
         self._be.pointwise.register('pyfr.solvers.acnavstokes.kernels.intcflux')
 
-        if abs(self._tpl_c['ldg-beta']) == 0.5:
+        if abs(self.c['ldg-beta']) == 0.5:
             self.kernels['copy_fpts'] = lambda: ComputeMetaKernel(
             [ele.kernels['_copy_fpts']() for ele in elemap.values()]
         )
@@ -43,7 +43,7 @@ class ACNavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._tpl_c)
+                       c=self.c)
 
         self._be.pointwise.register('pyfr.solvers.acnavstokes.kernels.mpiconu')
         self._be.pointwise.register('pyfr.solvers.acnavstokes.kernels.mpicflux')
@@ -69,7 +69,7 @@ class ACNavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self._tpl_c, bctype=self.type,
+                       c=self.c, bctype=self.type,
                        bccfluxstate=self.cflux_state)
 
         self._be.pointwise.register('pyfr.solvers.acnavstokes.kernels.bcconu')
@@ -97,7 +97,7 @@ class ACNavierStokesNoSlpWallBCInters(ACNavierStokesBaseBCInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._tpl_c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')
+        self.c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')
 
 
 class ACNavierStokesSlpWallBCInters(ACNavierStokesBaseBCInters):
@@ -112,7 +112,7 @@ class ACNavierStokesInflowBCInters(ACNavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self._tpl_c.update(self._exp_opts('uvw'[:self.ndims], lhs))
+        self.c.update(self._exp_opts('uvw'[:self.ndims], lhs))
 
 
 class ACNavierStokesOutflowBCInters(ACNavierStokesBaseBCInters):
@@ -122,7 +122,7 @@ class ACNavierStokesOutflowBCInters(ACNavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self._tpl_c.update(self._exp_opts('p', lhs))
+        self.c.update(self._exp_opts('p', lhs))
 
 
 class ACNavierStokesCharRiemInvBCInters(ACNavierStokesBaseBCInters):
@@ -132,9 +132,9 @@ class ACNavierStokesCharRiemInvBCInters(ACNavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self._tpl_c['niters'] = cfg.getint(cfgsect, 'niters', 4)
-        self._tpl_c['bc-ac-zeta'] = cfg.getfloat(cfgsect, 'ac-zeta')
+        self.c['niters'] = cfg.getint(cfgsect, 'niters', 4)
+        self.c['bc-ac-zeta'] = cfg.getfloat(cfgsect, 'ac-zeta')
         tplc = self._exp_opts(
             ['p', 'u', 'v', 'w'][:self.ndims + 1], lhs
         )
-        self._tpl_c.update(tplc)
+        self.c.update(tplc)
