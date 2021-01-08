@@ -9,14 +9,8 @@ class HIPKernelGenerator(BaseKernelGenerator):
 
         # Specialise
         if self.ndim == 1:
-            self._ix = (
-                'int _x = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;'
-            )
             self._limits = 'if (_x < _nx)'
         else:
-            self._ix = (
-                'int _x = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;'
-            )
             self._limits = 'for (int _y = 0; _x < _nx && _y < _ny; _y++)'
 
     def render(self):
@@ -24,7 +18,7 @@ class HIPKernelGenerator(BaseKernelGenerator):
 
         return f'''{spec}
                {{
-                   {self._ix}
+                   int _x = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
                    #define X_IDX (_x)
                    #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
                    {self._limits}
