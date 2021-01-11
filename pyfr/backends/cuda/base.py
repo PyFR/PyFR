@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import os
 import re
 
 from pyfr.backends.base import BaseBackend
@@ -13,24 +12,32 @@ class CUDABackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
+        from pyfr.backends.cuda.compiler import NVRTC
+        from pyfr.backends.cuda.driver import CUDA, CUDAError
+
+        # Load and wrap CUDA and NVRTC
+        self.cuda = CUDA()
+        self.nvrtc = NVRTC()
+
         # Get the desired CUDA device
         devid = cfg.get('backend-cuda', 'device-id', 'round-robin')
         if not re.match(r'(round-robin|local-rank|\d+)$', devid):
             raise ValueError('Invalid device-id')
 
-        # Handle the local-rank case
-        if devid == 'local-rank':
-            devid = str(get_local_rank())
-
-        # In the non round-robin case set CUDA_DEVICE to be the desired
-        # CUDA device number (used by pycuda.autoinit)
-        os.environ.pop('CUDA_DEVICE', None)
-        if devid != 'round-robin':
-            os.environ['CUDA_DEVICE'] = devid
-
-        # Create a CUDA context
-        from pycuda.autoinit import context
-        import pycuda.driver as cuda
+        # For round-robin try each device until we find one that works
+        if devid == 'round-robin':
+            for i in range(self.cuda.device_count()):
+                try:
+                    self.cuda.set_device(i)
+                    break
+                except CUDAError:
+                    pass
+            else:
+                raise RuntimeError('Unable to create a CUDA context')
+        elif devid == 'local-rank':
+            self.cuda.set_device(get_local_rank())
+        else:
+            self.cuda.set_device(int(devid))
 
         # Take the required alignment to be 128 bytes
         self.alignb = 128
@@ -49,7 +56,7 @@ class CUDABackend(BaseBackend):
         # benefits greatly from more shared memory but fails to
         # declare its preference) we set the global default to
         # PREFER_SHARED.
-        context.set_cache_config(cuda.func_cache.PREFER_SHARED)
+        self.cuda.set_cache_pref(prefer_shared=True)
 
         from pyfr.backends.cuda import (blasext, cublas, gimmik, packing,
                                         provider, types)
@@ -77,12 +84,10 @@ class CUDABackend(BaseBackend):
         self.pointwise = self._providers[0]
 
     def _malloc_impl(self, nbytes):
-        import pycuda.driver as cuda
-
         # Allocate
-        data = cuda.mem_alloc(nbytes)
+        data = self.cuda.mem_alloc(nbytes)
 
         # Zero
-        cuda.memset_d32(data, 0, nbytes // 4)
+        self.cuda.memset(data, 0, nbytes)
 
         return data

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import pycuda.driver as cuda
 
 import pyfr.backends.base as base
 from pyfr.util import make_pybuf
@@ -10,9 +9,6 @@ from pyfr.util import make_pybuf
 class _CUDAMatrixCommon(object):
     @property
     def _as_parameter_(self):
-        return self.data
-
-    def __index__(self):
         return self.data
 
 
@@ -34,7 +30,7 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
-        cuda.memcpy_dtoh(buf, self.data)
+        self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
         return self._unpack(buf[:, :self.ncol])
@@ -45,7 +41,7 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         buf[:, :self.ncol] = self._pack(ary)
 
         # Copy
-        cuda.memcpy_htod(self.data, buf)
+        self.backend.cuda.memcpy(self.data, buf, self.nbytes)
 
 
 class CUDAMatrix(CUDAMatrixBase, base.Matrix):
@@ -59,8 +55,7 @@ class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
 
 
 class CUDAMatrixBank(base.MatrixBank):
-    def __index__(self):
-        return self._curr_mat.data
+    pass
 
 
 class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
@@ -82,8 +77,8 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
             self.hdata = make_pybuf(self.data, self.nbytes, 0x200)
         # Otherwise, allocate a buffer on the host for MPI to send/recv from
         else:
-            self.hdata = cuda.pagelocked_empty((self.nrow, self.ncol),
-                                               self.dtype, 'C')
+            shape, dtype = (self.nrow, self.ncol), self.dtype
+            self.hdata = backend.cuda.pagelocked_empty(shape, dtype)
 
 
 class CUDAXchgView(base.XchgView):
@@ -95,8 +90,8 @@ class CUDAQueue(base.Queue):
         super().__init__(backend)
 
         # CUDA streams
-        self.cuda_stream_comp = cuda.Stream()
-        self.cuda_stream_copy = cuda.Stream()
+        self.cuda_stream_comp = backend.cuda.create_stream()
+        self.cuda_stream_copy = backend.cuda.create_stream()
 
     def _wait(self):
         if self._last_ktype == 'compute':

@@ -33,7 +33,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                           alpha=alpha, beta=beta)
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src, 'iPiPi')
+        fun = self._build_kernel('gimmik_mm', src,
+                                 [np.int32, np.intp]*2 + [np.int32])
 
         # Determine the grid/block
         block = (128, 1, 1)
@@ -41,8 +42,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun.prepared_async_call(grid, block, queue.cuda_stream_comp,
-                                        b.ncol, b, b.leaddim, out,
-                                        out.leaddim)
+                fun.exec_async(grid, block, queue.cuda_stream_comp,
+                               b.ncol, b, b.leaddim, out, out.leaddim)
 
         return MulKernel()

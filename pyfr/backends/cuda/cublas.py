@@ -59,27 +59,18 @@ class CUBLASWrappers(LibWrapper):
 class CUDACUBLASKernels(object):
     def __init__(self, backend):
         # Load and wrap CUBLAS
-        self._wrappers = CUBLASWrappers()
+        self.lib = CUBLASWrappers()
 
         # Init
-        self._handle = c_void_p()
-        self._wrappers.cublasCreate(self._handle)
+        self._as_parameter_ = handle = c_void_p()
+        self.lib.cublasCreate(handle)
 
     def __del__(self):
-        # PyCUDA registers an atexit handler to destroy the CUDA context
-        # when Python terminates; however in exceptional circumstances this
-        # can be *before* we are garbage collected (negating the need to call
-        # cublasDestroy as we're terminating anyway).  We therefore need to
-        # check for a valid context before calling cublasDestroy
-        try:
-            import pycuda.autoinit
-            if pycuda.autoinit.context:
-                self._wrappers.cublasDestroy(self._handle)
-        except TypeError:
-            pass
+        if self._as_parameter_:
+            self.lib.cublasDestroy(self)
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
-        w = self._wrappers
+        lib = self.lib
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -92,21 +83,18 @@ class CUDACUBLASKernels(object):
         m, n, k = b.ncol, a.nrow, a.ncol
         A, B, C = b, a, out
 
-        # Do not transpose either A or B
-        opA = opB = w.OP_N
-
         # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:
-            cublasgemm = w.cublasDgemm
+            cublasgemm = lib.cublasDgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
         else:
-            cublasgemm = w.cublasSgemm
+            cublasgemm = lib.cublasSgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                w.cublasSetStream(self._handle, queue.cuda_stream_comp.handle)
-                cublasgemm(self._handle, opA, opB, m, n, k,
+                lib.cublasSetStream(self, queue.cuda_stream_comp)
+                cublasgemm(self, lib.OP_N, lib.OP_N, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 
