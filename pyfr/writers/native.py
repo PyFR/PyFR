@@ -42,36 +42,34 @@ class NativeWriter(object):
         if (h5py.get_config().mpi and
             'PYFR_FORCE_SERIAL_HDF5' not in os.environ):
             self._write = self._write_parallel
-            self._loc_names = loc_names = []
+            self._our_names = our_names = []
             self._global_shape_list = []
 
             for mrank, mfields in enumerate(mdata):
                 prank = intg.rallocs.mprankmap[mrank]
-
-                # Loop over all element types across all ranks
                 for fname, fshape, fdtype in mfields:
                     name = f'{fname}_p{prank}'
                     self._global_shape_list.append((name, fshape, fdtype))
 
                     if rank == mrank:
-                        loc_names.append(name)
+                        our_names.append(name)
         # Serial I/O
         else:
             self._write = self._write_serial
+            self._our_info = our_info = []
 
             if rank == root:
-                self._loc_info = loc_info = []
                 self._mpi_info = mpi_info = []
 
-                for mrank, mfields in enumerate(mdata):
-                    prank = intg.rallocs.mprankmap[mrank]
-                    for fname, fshape, fdtype in mfields:
-                        name = f'{fname}_p{prank}'
+            for mrank, mfields in enumerate(mdata):
+                prank = intg.rallocs.mprankmap[mrank]
+                for fname, fshape, fdtype in mfields:
+                    name = f'{fname}_p{prank}'
 
-                        if mrank == root:
-                            loc_info.append(name)
-                        else:
-                            mpi_info.append((name, mrank, fshape, fdtype))
+                    if rank == mrank:
+                        our_info.append((name, fdtype))
+                    elif rank == root:
+                        mpi_info.append((name, mrank, fshape, fdtype))
 
     def write(self, data, metadata, tcurr):
         # Determine the output path
@@ -120,7 +118,7 @@ class NativeWriter(object):
                 )
 
             # Write out our data sets using 2 GiB chunks
-            for name, dat in zip(self._loc_names, data):
+            for name, dat in zip(self._our_names, data):
                 nrows = len(dat)
                 rowsz = dat.nbytes // nrows
                 rstep = 2*1024**3 // rowsz
@@ -151,8 +149,8 @@ class NativeWriter(object):
         comm, rank, root = get_comm_rank_root()
 
         if rank != root:
-            for tag, buf in enumerate(data):
-                comm.Send(buf.copy(), root)
+            for (k, dtype), v in zip(self._our_info, data):
+                comm.Send(np.ascontiguousarray(v, dtype=dtype), root)
         else:
             with h5py.File(path, 'w') as f:
                 # Write the metadata
@@ -160,8 +158,8 @@ class NativeWriter(object):
                     f[k] = np.array(v, dtype='S')
 
                 # Write our local data
-                for k, v in zip(self._loc_info, data):
-                    f[k] = v
+                for (k, dtype), v in zip(self._our_info, data):
+                    f[k] = v.astype(dtype, copy=False)
 
                 # Receive and write the remote data
                 for k, mrank, shape, dtype in self._mpi_info:

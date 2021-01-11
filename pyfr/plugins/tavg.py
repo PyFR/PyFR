@@ -28,15 +28,14 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Expressions pre-processing
         self._prepare_exprs()
 
+        # Output data type
+        fpdtype = self.cfg.get(cfgsect, 'precision', 'single')
+
         # Construct the file writer
         self._writer = self._init_writer_for_region(intg, len(self.outfields),
-                                                    'tavg')
+                                                    'tavg', fpdtype=fpdtype)
         # Gradient pre-processing
         self._init_gradients(intg)
-
-        # Save a reference to the physical solution point locations
-        self.plocs = [intg.system.ele_ploc_upts[i][..., rgn]
-                      for i, rgn in self._ele_regions]
 
         # Time averaging parameters
         self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
@@ -95,11 +94,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
     def _init_accumex(self, intg):
         self.prevt = self.tout_last = intg.tcurr
         self.prevex = self._eval_acc_exprs(intg)
-        self.accex = [np.zeros_like(p) for p in self.prevex]
+        self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
 
         # Extra state for continuous accumulation
         if self.mode == 'continuous':
-            self.caccex = [np.zeros_like(p) for p in self.prevex]
+            self.caccex = [np.zeros_like(a) for a in self.accex]
             self.tstart_actual = intg.tcurr
 
     def _eval_acc_exprs(self, intg):
@@ -110,7 +109,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Iterate over each element type in the simulation
         for i, (j, rgn) in enumerate(self._ele_regions):
-            ploc = self.plocs[i]
             soln = intg.soln[j][..., rgn]
 
             # Convert from conservative to primitive variables
@@ -119,7 +117,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
-            subs.update(zip('xyz', ploc.swapaxes(0, 1)))
 
             # Compute any required gradients
             if self._gradpnames:
@@ -151,10 +148,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         exprs = []
 
         # Iterate over each element type our averaging region
-        for plocs, avals, in zip(self.plocs, accex):
+        for avals in accex:
             # Prepare the substitution dictionary
-            subs = dict(zip('xyz', plocs.swapaxes(0, 1)))
-            subs.update(zip(self.anames, avals.swapaxes(0, 1)))
+            subs = dict(zip(self.anames, avals.swapaxes(0, 1)))
 
             exprs.append([npeval(v, subs) for v in self.fexprs])
 
