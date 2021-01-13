@@ -20,8 +20,11 @@ class IntegratePlugin(BasePlugin):
 
         comm, rank, root = get_comm_rank_root()
 
-        # Underlying elements class
-        self.elementscls = intg.system.elementscls
+        # Underlying system
+        system = intg.system
+
+        # Underlying system elements class
+        self.elementscls = system.elementscls
 
         # Expressions to integrate
         c = self.cfg.items_as('constants', float)
@@ -29,11 +32,14 @@ class IntegratePlugin(BasePlugin):
                       for k in self.cfg.items(cfgsect)
                       if k.startswith('int-')]
 
+        # Integration region pre-processing
+        rinfo = self._prepare_region_info(intg)
+
         # Gradient pre-processing
-        self._init_gradients(intg)
+        self._init_gradients(intg, rinfo)
 
         # Save a reference to the physical solution point locations
-        self.plocs = intg.system.ele_ploc_upts
+        self.plocs = system.ele_ploc_upts
 
         # Integration parameters
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
@@ -48,21 +54,53 @@ class IntegratePlugin(BasePlugin):
 
         # Prepare the per element-type info list
         self.eleinfo = []
-        for ename, eles in intg.system.ele_map.items():
+        for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
             # Locations of each solution point
-            plocupts = eles.ploc_at_np('upts')
+            ploc = eles.ploc_at_np('upts')[..., eset]
+            ploc = ploc.swapaxes(0, 1)
 
-            # Jacobians
-            rcpdjacs = eles.rcpdjac_at_np('upts')
+            # Jacobian determinants
+            rcpdjacs = eles.rcpdjac_at_np('upts')[:, eset]
 
             # Quadature weights
-            rname = self.cfg.get('solver-elements-' + ename, 'soln-pts')
+            rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
             wts = get_quadrule(ename, rname, eles.nupts).wts
 
             # Save
-            self.eleinfo.append((plocupts, wts[:, None] / rcpdjacs))
+            self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask))
 
-    def _init_gradients(self, intg):
+    def _prepare_region_info(self, intg):
+        # All elements
+        if self.cfg.get(self.cfgsect, 'region', '*') == '*':
+            return [(slice(None), ([], []))]*len(intg.system.ele_types)
+        # Elements inside of a box
+        else:
+            x0, x1 = self.cfg.getliteral(self.cfgsect, 'region')
+
+            rinfo = []
+            for etype in intg.system.ele_types:
+                pts = intg.system.mesh[f'spt_{etype}_p{intg.rallocs.prank}']
+                pts = np.moveaxis(pts, 2, 0)
+
+                # Determine which points are inside the box
+                inside = np.ones(pts.shape[1:], dtype=np.bool)
+                for l, p, u in zip(x0, pts, x1):
+                    inside &= (l <= p) & (p <= u)
+
+                if np.all(inside):
+                    rinfo.append((slice(None), ([], [])))
+                else:
+                    # Determine which elements have some points inside the box
+                    eset = np.any(inside, axis=0).nonzero()[0]
+
+                    # Mask any points outside of the box
+                    emask = (~inside[:, eset]).nonzero()
+
+                    rinfo.append((eset, emask))
+
+            return rinfo
+
+    def _init_gradients(self, intg, rinfo):
         # Determine what gradients, if any, are required
         self._gradpnames = gradpnames = set()
         for ex in self.exprs:
@@ -70,38 +108,40 @@ class IntegratePlugin(BasePlugin):
 
         # If gradients are required then form the relevant operators
         if gradpnames:
-            self._gradop, self._rcpjact = [], []
+            emap = intg.system.ele_map
 
-            for eles in intg.system.ele_map.values():
+            self._gradop, self._rcpjact = [], []
+            for eles, (eset, emask) in zip(emap.values(), rinfo):
                 self._gradop.append(eles.basis.m4)
 
-                # Get the smats at the solution points
-                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
+                # Get the smats at the solution points and subset
+                smat = eles.smat_at_np('upts')[..., eset]
 
-                # Get |J|^-1 at the solution points
-                rcpdjac = eles.rcpdjac_at_np('upts')
+                # Get |J|^-1 at the solution points and subset
+                rcpdjac = eles.rcpdjac_at_np('upts')[:, eset]
 
                 # Product to give J^-T at the solution points
-                self._rcpjact.append(smat*rcpdjac)
+                self._rcpjact.append(rcpdjac*smat.transpose(2, 0, 1, 3))
 
     def _eval_exprs(self, intg):
-        exprs = np.zeros(len(self.exprs))
+        intvals = np.zeros(len(self.exprs))
 
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
-
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
-            plocs, wts = eleinfo
+            plocs, wts, eset, emask = eleinfo
+
+            # Subset and transpose the solution
+            soln = soln[..., eset].swapaxes(0, 1)
 
             # Convert from conservative to primitive variables
-            psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
-                                                 self.cfg)
+            psolns = self.elementscls.con_to_pri(soln, self.cfg)
 
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
-            subs.update(zip('xyz', plocs.swapaxes(0, 1)))
+            subs.update(zip('xyz', plocs))
 
             # Compute any required gradients
             if self._gradpnames:
@@ -123,11 +163,14 @@ class IntegratePlugin(BasePlugin):
                     for dim, grad in zip('xyz', gradpn):
                         subs[f'grad_{pname}_{dim}'] = grad
 
-            # Accumulate integrated evaluated expressions
             for j, v in enumerate(self.exprs):
-                exprs[j] += np.sum(wts*npeval(v, subs))
+                # Evaluate the expression at each point
+                iex = wts*npeval(v, subs)
 
-        return exprs
+                # Accumulate
+                intvals[j] += np.sum(iex) - np.sum(iex[emask])
+
+        return intvals
 
     def __call__(self, intg):
         if intg.nacptsteps % self.nsteps == 0:
