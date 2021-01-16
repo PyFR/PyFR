@@ -97,7 +97,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         if self._norm not in {'l2', 'uniform'}:
             raise ValueError('Invalid error norm')
 
-        tplargs = {'ndims': self.system.ndims, 'nvars': self.system.nvars}
+        tplargs = {'nvars': self.system.nvars}
 
         # Error tolerance
         tplargs['atol'] = self.cfg.getfloat(sect, 'atol')
