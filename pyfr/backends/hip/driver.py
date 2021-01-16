@@ -138,7 +138,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipEventCreate', POINTER(c_void_p)),
         (c_int, 'hipEventDestroy', c_void_p),
         (c_int, 'hipEventRecord', c_void_p, c_void_p),
-        (c_int, 'hipModuleLoad', POINTER(c_void_p), c_char_p),
+        (c_int, 'hipModuleLoadData', POINTER(c_void_p), c_char_p),
         (c_int, 'hipModuleUnload', c_void_p),
         (c_int, 'hipModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
         (c_int, 'hipModuleLaunchKernel', c_void_p, c_uint, c_uint, c_uint,
@@ -220,9 +220,9 @@ class HIPEvent(_HIPBase):
 class HIPModule(_HIPBase):
     _destroyfn = 'hipModuleUnload'
 
-    def __init__(self, hip, path):
+    def __init__(self, hip, code):
         ptr = c_void_p()
-        hip.lib.hipModuleLoad(ptr, path.encode())
+        hip.lib.hipModuleLoadData(ptr, code)
 
         super().__init__(hip, ptr)
 
@@ -320,8 +320,8 @@ class HIP(object):
     def memset(self, dst, val, nbytes):
         self.lib.hipMemset(dst, val, nbytes)
 
-    def load_module(self, path):
-        return HIPModule(self, path)
+    def load_module(self, code):
+        return HIPModule(self, code)
 
     def create_stream(self):
         return HIPStream(self)

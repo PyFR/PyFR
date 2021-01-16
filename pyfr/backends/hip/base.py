@@ -12,10 +12,12 @@ class HIPBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
+        from pyfr.backends.hip.compiler import HIPRTC
         from pyfr.backends.hip.driver import HIP
 
-        # Create the HIP context
+        # Load and wrap HIP and HIPRTC
         self.hip = HIP()
+        self.hiprtc = HIPRTC()
 
         # Get the desired HIP device
         devid = cfg.get('backend-hip', 'device-id', 'local-rank')
@@ -28,6 +30,9 @@ class HIPBackend(BaseBackend):
 
         # Set the device
         self.hip.set_device(int(devid))
+
+        # Get its properties
+        self.props = self.hip.device_properties(int(devid))
 
         # Take the required alignment to be 128 bytes
         self.alignb = 128

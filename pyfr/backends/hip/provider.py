@@ -16,7 +16,7 @@ class HIPKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes):
         # Compile the source code and retrieve the kernel
-        return SourceModule(self.backend, src).function(name, argtypes)
+        return SourceModule(self.backend, src).get_function(name, argtypes)
 
 
 class HIPPointwiseKernelProvider(HIPKernelProvider,
