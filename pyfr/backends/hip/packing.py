@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import ComputeKernel, NullComputeKernel
 from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
 
@@ -24,33 +24,49 @@ class HIPPackingKernels(HIPKernelProvider, BasePackingKernels):
         block = (128, 1, 1)
         grid = get_grid_for_block(block, v.n)
 
-        # Create a HIP event
-        event = hip.create_event()
+        # If MPI is HIP aware then we just need to pack the buffer
+        if self.backend.mpitype == 'hip-aware':
+            class PackXchgViewKernel(ComputeKernel):
+                def run(self, queue):
+                    scomp = queue.hip_stream_comp
 
-        class PackXchgViewKernel(ComputeKernel):
-            def run(self, queue):
-                scomp = queue.hip_stream_comp
-                scopy = queue.hip_stream_copy
+                    # Pack
+                    kern.exec_async(
+                        grid, block, scomp, v.n, v.nvrow, v.nvcol, v.basedata,
+                        v.mapping, v.rstrides or 0, m
+                    )
+        # Otherwise, we need to both pack the buffer and copy it back
+        else:
+            # Create a HIP event
+            event = hip.create_event()
 
-                # Pack
-                kern.exec_async(
-                    grid, block, scomp, v.n, v.nvrow, v.nvcol, v.basedata,
-                    v.mapping, v.rstrides or 0, m
-                )
+            class PackXchgViewKernel(ComputeKernel):
+                def run(self, queue):
+                    scomp = queue.hip_stream_comp
+                    scopy = queue.hip_stream_copy
 
-                # Copy the packed buffer to the host
-                event.record(scomp)
-                scopy.wait_for_event(event)
-                hip.memcpy_async(m.hdata, m.data, m.nbytes, scopy)
+                    # Pack
+                    kern.exec_async(
+                        grid, block, scomp, v.n, v.nvrow, v.nvcol, v.basedata,
+                        v.mapping, v.rstrides or 0, m
+                    )
+
+                    # Copy the packed buffer to the host
+                    event.record(scomp)
+                    scopy.wait_for_event(event)
+                    hip.memcpy_async(m.hdata, m.data, m.nbytes, scopy)
 
         return PackXchgViewKernel()
 
     def unpack(self, mv):
         hip = self.backend.hip
 
-        class UnpackXchgMatrixKernel(ComputeKernel):
-            def run(self, queue):
-                hip.memcpy_async(mv.data, mv.hdata, mv.nbytes,
-                                 queue.hip_stream_comp)
+        if self.backend.mpitype == 'hip-aware':
+            return NullComputeKernel()
+        else:
+            class UnpackXchgMatrixKernel(ComputeKernel):
+                def run(self, queue):
+                    hip.memcpy_async(mv.data, mv.hdata, mv.nbytes,
+                                     queue.hip_stream_comp)
 
-        return UnpackXchgMatrixKernel()
+            return UnpackXchgMatrixKernel()

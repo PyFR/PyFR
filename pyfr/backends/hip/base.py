@@ -40,6 +40,11 @@ class HIPBackend(BaseBackend):
         # Take the SoA size to be 32 elements
         self.soasz = 32
 
+        # Get the MPI runtime type
+        self.mpitype = cfg.get('backend-hip', 'mpi-type', 'standard')
+        if self.mpitype not in {'standard', 'hip-aware'}:
+            raise ValueError('Invalid HIP backend MPI type')
+
         from pyfr.backends.hip import (blasext, gimmik, packing, provider,
                                        rocblas, types)
 
