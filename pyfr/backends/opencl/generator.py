@@ -41,7 +41,7 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
         kargs = [f'int {d}' for d in self._dims]
 
         # Now add any scalar arguments
-        kargs.extend('f{sa.dtype} {sa.name}' for sa in self.scalargs)
+        kargs.extend(f'{sa.dtype} {sa.name}' for sa in self.scalargs)
 
         # Finally, add the vector arguments
         for va in self.vectargs:
