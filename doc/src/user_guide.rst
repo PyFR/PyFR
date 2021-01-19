@@ -35,11 +35,19 @@ compatible with 32-bit Python distributions.
 CUDA Backend
 ^^^^^^^^^^^^
 
-The CUDA backend targets NVIDIA GPUs with a compute capability of 2.0
+The CUDA backend targets NVIDIA GPUs with a compute capability of 3.0
 or greater. The backend requires:
 
-1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 4.2
-2. `pycuda <http://mathema.tician.de/software/pycuda/>`_ >= 2015.1
+1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 8.0
+
+HIP Backend
+^^^^^^^^^^^
+
+The HIP backend targets AMD GPUs which are supported by the ROCm stack.
+The backend requires:
+
+1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.0
+2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.32.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -71,13 +79,6 @@ have one of the following partitioners installed:
 
 1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
 2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
-
-Importing CGNS Meshes
-^^^^^^^^^^^^^^^^^^^^^
-
-To import CGNS meshes it is necessary to have the following installed:
-
-1. `CGNS <http://cgns.github.io/>`_ >= 3.4
 
 Installation
 ------------
@@ -187,8 +188,7 @@ PyFR |release| uses three distinct file formats:
 The following commands are available from the ``pyfr`` program:
 
 1. ``pyfr import`` --- convert a `Gmsh
-   <http:http://geuz.org/gmsh/>`_ .msh file or `CGNS
-   <http://cgns.github.io/>`_ .cgns file into a PyFR .pyfrm file.
+   <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
 
    Example::
 
@@ -283,6 +283,41 @@ Example::
 
     [backend-cuda]
     device-id = round-robin
+    gimmik-max-nnz = 512
+    mpi-type = standard
+    block-1d = 64
+    block-2d = 128, 2
+
+[backend-hip]
+^^^^^^^^^^^^^
+
+Parameterises the HIP backend with
+
+1. ``device-id`` --- method for selecting which device(s) to run on:
+
+     *int* | ``local-rank``
+
+2. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
+   non-zero entires in a constant matrix:
+
+     *int*
+
+3. ``mpi-type`` --- type of MPI library that is being used:
+
+     ``standard`` | ``hip-aware``
+
+4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+
+     *int*
+
+5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+
+    *int*, *int*
+
+Example::
+
+    [backend-hip]
+    device-id = local-rank
     gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
@@ -1079,7 +1114,7 @@ Parameterised with
    opposite vertices, or a sub-region of elements that have faces on a
    specific domain boundary via the name of the domain boundary
 
-    ``*`` | ``[(x, y, z),(x, y, z)]`` | *string*
+    ``*`` | ``[(x, y, [z]), (x, y, [z])]`` | *string*
 
 Example::
 
@@ -1252,7 +1287,7 @@ Example::
     header = true
 
 [soln-plugin-tavg]
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^
 
 Time average quantities. Parameterised with
 
@@ -1264,17 +1299,38 @@ Time average quantities. Parameterised with
 
     *float*
 
-3. ``basedir`` --- relative path to directory where outputs will be
+3. ``tstart`` --- time at which to start accumulating average data:
+
+    *float*
+
+4. ``basedir`` --- relative path to directory where outputs will be
    written:
 
     *string*
 
-4. ``basename`` --- pattern of output names:
+5. ``basename`` --- pattern of output names:
 
     *string*
 
-5. ``avg-name`` --- expression to time average, written as a function of
-   the primitive variables, time (t), and space (x, y, [z]); multiple
+6. ``precision`` --- output file number precision:
+
+    ``single`` | ``double``
+
+7. ``region`` --- region to be averaged, specified as either the
+   entire domain using ``*``, a cuboidal sub-region via diametrically
+   opposite vertices, or a sub-region of elements that have faces on a
+   specific domain boundary via the name of the domain boundary
+
+    ``*`` | ``[(x, y, [z]), (x, y, [z])]`` | *string*
+
+8. ``avg-*name*`` --- expression to time average, written as a function of
+   the primitive variables and gradients thereof; multiple expressions,
+   each with their own *name*, may be specified:
+
+    *string*
+
+9. ``fun-avg-*name*`` --- expression to compute at file output time,
+   written as a function of any ordinary average terms; multiple
    expressions, each with their own *name*, may be specified:
 
     *string*
@@ -1289,6 +1345,7 @@ Example::
 
     avg-p = p
     avg-p2 = p*p
+    fun-avg-varp = p2 - p*p
     avg-vel = sqrt(u*u + v*v)
 
 [soln-bcs-*name*]

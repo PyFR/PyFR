@@ -18,7 +18,6 @@ import sys
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 sys.path.insert(0, os.path.abspath('../../'))
-sys.path.insert(0, os.path.abspath('../ext/'))
 
 # -- General configuration -----------------------------------------------------
 
@@ -32,8 +31,8 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.inheritance_diagram',
     'sphinx.ext.mathjax',
-    'sphinx.ext.viewcode',
-    'tikz']
+    'sphinx.ext.viewcode'
+]
 
 # Settings for inheritance diagrams.
 graphviz_output_format = 'svg'
@@ -55,14 +54,7 @@ inheritance_edge_attrs = dict(
     penwidth='0.3')
 
 # The names of modules to mock and hence avoid import.
-autodoc_mock_imports = [
-    'pycuda',
-    'pycuda.driver',
-    'pycuda.gpuarray',
-    'pycuda.reduction',
-    'pyopencl',
-    'pyopencl.array',
-    'pyopencl.reduction']
+autodoc_mock_imports = ['pyopencl']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
