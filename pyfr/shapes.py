@@ -488,8 +488,8 @@ class PriShape(BaseShape):
 
     # Jacobian expressions for a linear element
     _jac_exprs_xy = [
-        [f'((x[2] - 1)*V[0, {j}] + (1 - x[2])*V[{i + 1}, {j}] -'
-         f' (x[2] + 1)*V[3, {j}] + (x[2] + 1)*V[{i + 4}, {j}])/4'
+        [f'((x[2] - 1)*V[0][{j}] + (1 - x[2])*V[{i + 1}][{j}] -'
+         f' (x[2] + 1)*V[3][{j}] + (x[2] + 1)*V[{i + 4}][{j}])/4'
          for j in range(3)]
         for i in range(2)
     ]
