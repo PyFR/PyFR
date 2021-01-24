@@ -36,8 +36,10 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         self.max_sz = backend.cfg.getint('backend-openmp', 'libxsmm-max-sz',
                                          125**2)
 
-        # Ensure the block size is divisible by 16
-        if self.nblock % 16 != 0:
+        # Ensure the block size is suitable
+        if backend.fpdtype == np.float64 and self.nblock % 8 != 0:
+            raise ValueError('libxsmm-block-sz must be a multiple of 8')
+        elif backend.fpdtype == np.float32 and self.nblock % 16 != 0:
             raise ValueError('libxsmm-block-sz must be a multiple of 16')
 
         # Kernel cache
@@ -47,10 +49,12 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         self._wrappers = XSMMWrappers()
 
         if backend.fpdtype == np.float64:
+            self._nmod = 8
             self._createfn = self._wrappers.libxsmm_dfsspmdm_create
             self._execfn = self._wrappers.libxsmm_dfsspmdm_execute
             self._destroyfn = self._wrappers.libxsmm_dfsspmdm_destroy
         else:
+            self._nmod = 16
             self._createfn = self._wrappers.libxsmm_sfsspmdm_create
             self._execfn = self._wrappers.libxsmm_sfsspmdm_execute
             self._destroyfn = self._wrappers.libxsmm_sfsspmdm_destroy
@@ -79,9 +83,9 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         if 'const' not in a.tags:
             raise NotSuitableError('libxsmm requires a constant a matrix')
 
-        # Check n is divisible by 16
-        if b.ncol % 16 != 0:
-            raise NotSuitableError('libxsmm requires n % 16 = 0')
+        # Check n is suitable
+        if b.ncol % self._nmod != 0:
+            raise NotSuitableError(f'libxsmm requires n % {self._nmod} = 0')
 
         # Check that beta is zero or one
         if beta != 0.0 and beta != 1.0:
