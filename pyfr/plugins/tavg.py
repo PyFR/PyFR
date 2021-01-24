@@ -57,7 +57,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Iterate over accumulation expressions first
         for k in cfg.items(cfgsect):
             if k.startswith('avg-'):
-                self.anames.append(f'avg_{k[4:]}')
+                self.anames.append(k[4:])
                 self.aexprs.append(cfg.getexpr(cfgsect, k, subs=c))
                 self.outfields.append(k)
 
