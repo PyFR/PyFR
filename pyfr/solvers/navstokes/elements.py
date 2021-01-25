@@ -10,26 +10,56 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
-        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
 
+        # Register our flux kernels
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.tfluxlin')
+
+        # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         if visc_corr not in {'sutherland', 'none'}:
             raise ValueError('Invalid viscosity-correction option')
 
-        tplargs = dict(ndims=self.ndims, nvars=self.nvars,
-                       shock_capturing=shock_capturing, visc_corr=visc_corr,
-                       c=self.cfg.items_as('constants', float))
+        # Template parameters for the flux kernels
+        tplargs = {
+            'ndims': self.ndims,
+            'nvars': self.nvars,
+            'nverts': len(self.basis.linspts),
+            'c': self.cfg.items_as('constants', float),
+            'jac_exprs': self.basis.jac_exprs,
+            'shock_capturing': shock_capturing,
+            'visc_corr': visc_corr
+        }
 
+        # Common arguments
         if 'flux' in self.antialias:
-            self.kernels['tdisf'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nqpts, self.neles],
-                u=self._scal_qpts, smats=self.smat_at('qpts'),
-                f=self._vect_qpts, artvisc=self.artvisc
-            )
+            u = lambda s: self._slice_mat(self._scal_fqpts, s, ra=self.nfpts)
+            f = lambda s: self._slice_mat(self._vect_qpts, s)
+            pts, npts = 'qpts', self.nqpts
         else:
-            self.kernels['tdisf'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nupts, self.neles],
-                u=self.scal_upts_inb, smats=self.smat_at('upts'),
-                f=self._vect_upts, artvisc=self.artvisc
+            u = lambda s: self._slice_mat(self.scal_upts_inb, s)
+            f = lambda s: self._slice_mat(self._vect_upts, s)
+            pts, npts = 'upts', self.nupts
+
+        av = self.artvisc
+
+        # Mesh regions
+        regions = self._mesh_regions
+
+        if 'curved' in regions:
+            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
+                'tflux', tplargs=tplargs, dims=[npts, regions['curved']],
+                u=u('curved'), f=f('curved'),
+                artvisc=self._slice_mat(av, 'curved') if av else None,
+                smats=self.smat_at(pts, 'curved')
+            )
+
+        if 'linear' in regions:
+            upts = getattr(self, pts)
+            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
+                'tfluxlin', tplargs=tplargs, dims=[npts, regions['linear']],
+                u=u('linear'), f=f('linear'),
+                artvisc=self._slice_mat(av, 'linear') if av else None,
+                verts=self.ploc_at('linspts', 'linear'), upts=upts
             )

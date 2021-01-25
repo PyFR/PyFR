@@ -112,6 +112,36 @@ class BaseElements(object):
     def _scratch_bufs(self):
         pass
 
+    @property
+    def _mesh_regions(self):
+        off = self._linoff
+
+        # No curved elements
+        if off == 0:
+            return {'linear': self.neles}
+        # All curved elements
+        elif off >= self.neles:
+            return {'curved': self.neles}
+        # Mix of curved and linear elements
+        else:
+            return {'curved': off, 'linear': self.neles - off}
+
+    def _slice_mat(self, mat, region, ra=None, rb=None):
+        off = self._linoff
+
+        # Handle stacked matrices
+        if len(mat.ioshape) >= 3:
+            off *= mat.ioshape[-2]
+        else:
+            off = min(off, mat.ncol)
+
+        if region == 'curved':
+            return mat.slice(ra, rb, 0, off)
+        elif region == 'linear':
+            return mat.slice(ra, rb, off, mat.ncol)
+        else:
+            raise ValueError('Invalid slice region')
+
     @lazyprop
     def _src_exprs(self):
         convars = self.convarmap[self.ndims]
@@ -133,8 +163,13 @@ class BaseElements(object):
     def _soln_in_src_exprs(self):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
-    def set_backend(self, backend, nscalupts, nonce):
+    def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
+
+        if self.basis.order >= 2:
+            self._linoff = linoff - linoff % -backend.soasz
+        else:
+            self._linoff = self.neles
 
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
@@ -188,6 +223,18 @@ class BaseElements(object):
         return self._be.const_matrix(self.basis.opmat(expr),
                                      tags={expr, 'align'})
 
+    def sliceat(fn):
+        @memoize
+        def newfn(self, name, side=None):
+            mat = fn(self, name)
+
+            if side is not None:
+                return self._slice_mat(mat, side)
+            else:
+                return mat
+
+        return newfn
+
     @memoize
     def smat_at_np(self, name):
         smats_mpts, _ = self._smats_djacs_mpts
@@ -199,6 +246,7 @@ class BaseElements(object):
         smats = np.array([m0 @ smat for smat in smats_mpts])
         return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
+    @sliceat
     @memoize
     def smat_at(self, name):
         return self._be.const_matrix(self.smat_at_np(name), tags={'align'})
@@ -218,6 +266,7 @@ class BaseElements(object):
 
         return 1.0 / djac
 
+    @sliceat
     @memoize
     def rcpdjac_at(self, name):
         return self._be.const_matrix(self.rcpdjac_at_np(name), tags={'align'})
@@ -231,9 +280,18 @@ class BaseElements(object):
 
         return ploc
 
+    @sliceat
     @memoize
     def ploc_at(self, name):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
+
+    @lazyprop
+    def upts(self):
+        return self._be.const_matrix(self.basis.upts)
+
+    @lazyprop
+    def qpts(self):
+        return self._be.const_matrix(self.basis.qpts)
 
     def _gen_pnorm_fpts(self):
         smats = self.smat_at_np('fpts').transpose(1, 3, 0, 2)

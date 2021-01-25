@@ -36,7 +36,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         q1.enqueue(kernels['mpiint', 'con_u'])
         q1.enqueue(kernels['eles', 'tgradcoru_upts'])
-        q1.enqueue(kernels['eles', 'gradcoru_upts'])
+        q1.enqueue(kernels['eles', 'gradcoru_upts_curved'])
+        q1.enqueue(kernels['eles', 'gradcoru_upts_linear'])
         q1.enqueue(kernels['eles', 'gradcoru_fpts'])
         q1.enqueue(kernels['mpiint', 'vect_fpts_pack'])
         if ('eles', 'shockvar') in kernels:
@@ -48,7 +49,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         if ('eles', 'gradcoru_qpts') in kernels:
             q1.enqueue(kernels['eles', 'gradcoru_qpts'])
-        q1.enqueue(kernels['eles', 'tdisf'])
+        q1.enqueue(kernels['eles', 'tdisf_curved'])
+        q1.enqueue(kernels['eles', 'tdisf_linear'])
         q1.enqueue(kernels['eles', 'tdivtpcorf'])
         q1.enqueue(kernels['iint', 'comm_flux'])
         q1.enqueue(kernels['bcint', 'comm_flux'], t=t)
