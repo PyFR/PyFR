@@ -262,20 +262,15 @@ Parameterises the CUDA backend with
 
      *int* | ``round-robin`` | ``local-rank``
 
-2. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
-
-     *int*
-
-3. ``mpi-type`` --- type of MPI library that is being used:
+2. ``mpi-type`` --- type of MPI library that is being used:
 
      ``standard`` | ``cuda-aware``
 
-4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+3. ``block-1d`` --- block size for one dimensional pointwise kernels:
 
      *int*
 
-5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+4. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
     *int*
 
@@ -283,7 +278,6 @@ Example::
 
     [backend-cuda]
     device-id = round-robin
-    gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
     block-2d = 128
