@@ -277,7 +277,7 @@ Parameterises the CUDA backend with
 
 5. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
@@ -286,7 +286,7 @@ Example::
     gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
-    block-2d = 128, 2
+    block-2d = 128
 
 [backend-hip]
 ^^^^^^^^^^^^^
@@ -312,7 +312,7 @@ Parameterises the HIP backend with
 
 5. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
@@ -321,7 +321,7 @@ Example::
     gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
-    block-2d = 128, 2
+    block-2d = 128
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -353,7 +353,7 @@ Parameterises the OpenCL backend with
 6. ``local-size-2d`` --- local work size for two dimensional pointwise
    kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
@@ -363,7 +363,7 @@ Example::
     device-id = local-rank
     gimmik-max-nnz = 512
     local-size-1d = 16
-    local-size-2d = 128, 1
+    local-size-2d = 128
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
