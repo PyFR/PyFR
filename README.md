@@ -32,7 +32,9 @@ branch for a new release.
 
 ## Help and Community
 
-For help in developing and using PyFR, or to connect with the wider commiunity of users please go to the [PyFR Discourse](https://pyfr.discourse.group). 
+Information on the usage and stucture of PyFR can be found in the [user guide](http://pyfr.org/user_guide.php) and [developer guide](http://pyfr.org/developer_guide.php).
+
+For further help in developing and using PyFR, or to connect with the wider community of users, please go to the [PyFR Discourse](https://pyfr.discourse.group). 
 
 ## Authors
 
