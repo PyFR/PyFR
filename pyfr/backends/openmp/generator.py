@@ -7,9 +7,6 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
         if self.ndim == 1:
             inner = '''
-                    int cb, ce;
-                    loop_sched_1d(_nx, align, &cb, &ce);
-                    int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
                     for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
                     {{
                         #pragma omp simd
@@ -24,12 +21,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     }}'''.format(body=self.body)
         else:
             inner = '''
-                    int rb, re, cb, ce;
-                    loop_sched_2d(_ny, _nx, align, &rb, &re, &cb, &ce);
-                    int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
-                    for (int _y = rb; _y < re; _y++)
+                    for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
                     {{
-                        for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
+                        for (int _y = 0; _y < _ny; _y++)
                         {{
                             #pragma omp simd
                             for (int _xj = 0; _xj < SOA_SZ; _xj++)
@@ -37,8 +31,10 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                                 {body}
                             }}
                         }}
-                        for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi;
-                             _xj++)
+                    }}
+                    for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi; _xj++)
+                    {{
+                        for (int _y = 0; _y < _ny; _y++)
                         {{
                             {body}
                         }}
@@ -52,6 +48,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
                    #pragma omp parallel
                    {{
+                       int cb, ce;
+                       loop_sched_1d(_nx, align, &cb, &ce);
+                       int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
                        {inner}
                    }}
                    #undef X_IDX

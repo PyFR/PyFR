@@ -363,6 +363,12 @@ of `Backend`_ available in PyFR |release|:
     :inherited-members:
     :private-members:
 
+.. autoclass:: pyfr.backends.hip.base.HIPBackend
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+
 .. autoclass:: pyfr.backends.opencl.base.OpenCLBackend
     :members:
     :undoc-members:
@@ -378,6 +384,7 @@ of `Backend`_ available in PyFR |release|:
 Types of `Backend`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.backends.cuda.base
+                         pyfr.backends.hip.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
     :parts: 1
@@ -408,6 +415,12 @@ Provider`_ available in PyFR |release|:
     :inherited-members:
     :private-members:
 
+.. autoclass:: pyfr.backends.hip.provider.HIPPointwiseKernelProvider
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+
 .. autoclass:: pyfr.backends.opencl.provider.OpenCLPointwiseKernelProvider
     :members:
     :undoc-members:
@@ -425,6 +438,7 @@ inheritance diagram:
 
 .. inheritance-diagram:: pyfr.backends.openmp.provider
                          pyfr.backends.cuda.provider
+                         pyfr.backends.hip.provider
                          pyfr.backends.opencl.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
     :parts: 1
@@ -441,6 +455,12 @@ linked, and loaded. There are four types of `Kernel Generator`_
 available in PyFR |release|:
 
 .. autoclass:: pyfr.backends.cuda.generator.CUDAKernelGenerator
+    :members:
+    :undoc-members:
+    :inherited-members:
+    :private-members:
+
+.. autoclass:: pyfr.backends.hip.generator.HIPKernelGenerator
     :members:
     :undoc-members:
     :inherited-members:

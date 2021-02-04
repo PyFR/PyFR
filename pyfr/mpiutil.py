@@ -56,7 +56,11 @@ def get_comm_rank_root():
 
 
 def get_local_rank():
-    envs = ['OMPI_COMM_WORLD_LOCAL_RANK', 'MV2_COMM_WORLD_LOCAL_RANK']
+    envs = [
+        'MV2_COMM_WORLD_LOCAL_RANK',
+        'OMPI_COMM_WORLD_LOCAL_RANK',
+        'SLURM_LOCALID'
+    ]
 
     for ev in envs:
         if ev in os.environ:
@@ -64,18 +68,7 @@ def get_local_rank():
     else:
         from mpi4py import MPI
 
-        hostn = MPI.Get_processor_name()
-        grank = MPI.COMM_WORLD.rank
-        lrank = 0
-
-        for i, n in enumerate(MPI.COMM_WORLD.allgather(hostn)):
-            if i >= grank:
-                break
-
-            if hostn == n:
-                lrank += 1
-
-        return lrank
+        return MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED).rank
 
 
 def get_mpi(attr):

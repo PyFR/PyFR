@@ -53,7 +53,7 @@ class BaseBackend(object):
 
     @lazyprop
     def lookup(self):
-        pkg = 'pyfr.backends.{0}.kernels'.format(self.name)
+        pkg = f'pyfr.backends.{self.name}.kernels'
         dfltargs = dict(alignb=self.alignb, fpdtype=self.fpdtype,
                         soasz=self.soasz, math=math)
 
@@ -74,8 +74,8 @@ class BaseBackend(object):
         else:
             # Check that the extent has not already been committed
             if extent in self._comm_extents:
-                raise ValueError('Extent "{}" has already been allocated'
-                                 .format(extent))
+                raise ValueError(f'Extent "{extent}" has already been '
+                                 'allocated')
 
             # Append
             self._pend_extents[extent].append(obj)
@@ -164,7 +164,7 @@ class BaseBackend(object):
                 except NotSuitableError:
                     pass
         else:
-            raise KeyError("'{}' has no providers".format(name))
+            raise KeyError(f'Kernel "{name}" has no providers')
 
     def queue(self):
         return self.queue_cls(self)

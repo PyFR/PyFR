@@ -43,7 +43,7 @@ class BaseShape(object):
         self.antialias = cfg.get('solver', 'anti-alias', 'none')
         self.antialias = {s.strip() for s in self.antialias.split(',')}
         self.antialias.discard('none')
-        if self.antialias - {'flux', 'div-flux', 'surf-flux'}:
+        if self.antialias - {'flux', 'surf-flux'}:
             raise ValueError('Invalid anti-alias options')
 
         self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
@@ -165,11 +165,11 @@ class BaseShape(object):
 
     @lazyprop
     def upts(self):
-        rname = self.cfg.get('solver-elements-' + self.name, 'soln-pts')
+        rname = self.cfg.get(f'solver-elements-{self.name}', 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).pts
 
     def _get_qrule(self, eleint, kind, **kwargs):
-        sect = 'solver-{0}-{1}'.format(eleint, kind)
+        sect = f'solver-{eleint}-{kind}'
 
         if self.cfg.hasopt(sect, 'quad-pts'):
             kwargs['rule'] = self.cfg.get(sect, 'quad-pts')
@@ -205,7 +205,7 @@ class BaseShape(object):
             if 'surf-flux' in self.antialias:
                 r = self._iqrules[kind]
             else:
-                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
                 npts = self.npts_for_face[kind](self.order)
 
                 r = get_quadrule(kind, rule, npts)
@@ -224,7 +224,7 @@ class BaseShape(object):
             if 'surf-flux' in self.antialias:
                 r = self._iqrules[kind]
             else:
-                rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+                rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
                 npts = self.npts_for_face[kind](self.order)
 
                 r = get_quadrule(kind, rule, npts)
@@ -277,11 +277,15 @@ class BaseShape(object):
         return self.std_ele(self.nsptsord - 1)
 
     @lazyprop
+    def linspts(self):
+        return self.std_ele(1)
+
+    @lazyprop
     def facebases(self):
         fb = {}
 
         for kind in {k for k, p, n in self.faces}:
-            rule = self.cfg.get('solver-interfaces-' + kind, 'flux-pts')
+            rule = self.cfg.get(f'solver-interfaces-{kind}', 'flux-pts')
             npts = self.npts_for_face[kind](self.order)
 
             pts = get_quadrule(kind, rule, npts).pts
@@ -340,6 +344,18 @@ class QuadShape(TensorProdShape, BaseShape):
         ('line', lambda s: (-1, s), (-1, 0)),
     ]
 
+    # Jacobian expressions for a linear element
+    jac_exprs = [
+        ['((1 - x[1])*V[1][0] - (x[1] + 1)*V[2][0] +'
+         ' (x[1] - 1)*V[0][0] + (x[1] + 1)*V[3][0])/4',
+         '((1 - x[1])*V[1][1] - (x[1] + 1)*V[2][1] +'
+         ' (x[1] - 1)*V[0][1] + (x[1] + 1)*V[3][1])/4'],
+        ['((1 - x[0])*V[2][0] - (x[0] + 1)*V[1][0] +'
+         ' (x[0] - 1)*V[0][0] + (x[0] + 1)*V[3][0])/4',
+         '((1 - x[0])*V[2][1] - (x[0] + 1)*V[1][1] +'
+         ' (x[0] - 1)*V[0][1] + (x[0] + 1)*V[3][1])/4']
+    ]
+
 
 class HexShape(TensorProdShape, BaseShape):
     name = 'hex'
@@ -359,6 +375,37 @@ class HexShape(TensorProdShape, BaseShape):
         ('quad', lambda s, t: (s, t, 1), (0, 0, 1)),
     ]
 
+    # Jacobian expressions for a linear element
+    jac_exprs = [
+        [f'((-x[1]*x[2] + x[1] + x[2] - 1)*V[0][{i}] +'
+         f' ( x[1]*x[2] - x[1] - x[2] + 1)*V[1][{i}] +'
+         f' ( x[1]*x[2] - x[1] + x[2] - 1)*V[2][{i}] +'
+         f' (-x[1]*x[2] + x[1] - x[2] + 1)*V[3][{i}] +'
+         f' ( x[1]*x[2] + x[1] - x[2] - 1)*V[4][{i}] +'
+         f' (-x[1]*x[2] - x[1] + x[2] + 1)*V[5][{i}] +'
+         f' (-x[1]*x[2] - x[1] - x[2] - 1)*V[6][{i}] +'
+         f' ( x[1]*x[2] + x[1] + x[2] + 1)*V[7][{i}])/8'
+         for i in range(3)],
+        [f'((-x[0]*x[2] + x[0] + x[2] - 1)*V[0][{i}] +'
+         f' ( x[0]*x[2] - x[0] + x[2] - 1)*V[1][{i}] +'
+         f' ( x[0]*x[2] - x[0] - x[2] + 1)*V[2][{i}] +'
+         f' (-x[0]*x[2] + x[0] - x[2] + 1)*V[3][{i}] +'
+         f' ( x[0]*x[2] + x[0] - x[2] - 1)*V[4][{i}] +'
+         f' (-x[0]*x[2] - x[0] - x[2] - 1)*V[5][{i}] +'
+         f' (-x[0]*x[2] - x[0] + x[2] + 1)*V[6][{i}] +'
+         f' ( x[0]*x[2] + x[0] + x[2] + 1)*V[7][{i}])/8'
+         for i in range(3)],
+        [f'((-x[0]*x[1] + x[0] + x[1] - 1)*V[0][{i}] +'
+         f' ( x[0]*x[1] - x[0] + x[1] - 1)*V[1][{i}] +'
+         f' ( x[0]*x[1] + x[0] - x[1] - 1)*V[2][{i}] +'
+         f' (-x[0]*x[1] - x[0] - x[1] - 1)*V[3][{i}] +'
+         f' ( x[0]*x[1] - x[0] - x[1] + 1)*V[4][{i}] +'
+         f' (-x[0]*x[1] + x[0] - x[1] + 1)*V[5][{i}] +'
+         f' (-x[0]*x[1] - x[0] + x[1] + 1)*V[6][{i}] +'
+         f' ( x[0]*x[1] + x[0] + x[1] + 1)*V[7][{i}])/8'
+         for i in range(3)]
+    ]
+
 
 class TriShape(BaseShape):
     name = 'tri'
@@ -373,6 +420,12 @@ class TriShape(BaseShape):
         ('line', lambda s: (s, -1), (0, -1)),
         ('line', lambda s: (-s, s), (1, 1)),
         ('line', lambda s: (-1, s), (-1, 0)),
+    ]
+
+    # Jacobian expressions for a linear element
+    jac_exprs = [
+        [f'(V[{i + 1}][{j}] - V[0][{j}])/2' for j in range(2)]
+        for i in range(2)
     ]
 
     @classmethod
@@ -398,6 +451,12 @@ class TetShape(BaseShape):
         ('tri', lambda s, t: (s, -1, t), (0, -1, 0)),
         ('tri', lambda s, t: (-1, t, s), (-1, 0, 0)),
         ('tri', lambda s, t: (s, t, -s - t - 1), (1, 1, 1)),
+    ]
+
+    # Jacobian expressions for a linear element
+    jac_exprs = [
+        [f'(V[{i + 1}][{j}] - V[0][{j}])/2' for j in range(3)]
+        for i in range(3)
     ]
 
     @classmethod
@@ -427,6 +486,20 @@ class PriShape(BaseShape):
         ('quad', lambda s, t: (-1, s, t), (-1, 0, 0)),
     ]
 
+    # Jacobian expressions for a linear element
+    _jac_exprs_xy = [
+        [f'((x[2] - 1)*V[0][{j}] + (1 - x[2])*V[{i + 1}][{j}] -'
+         f' (x[2] + 1)*V[3][{j}] + (x[2] + 1)*V[{i + 4}][{j}])/4'
+         for j in range(3)]
+        for i in range(2)
+    ]
+    _jac_exprs_z = [[f'((x[0] + 1)*V[4][{j}] + (x[0] + x[1])*V[0][{j}] -'
+                     f' (x[0] + 1)*V[1][{j}] - (x[0] + x[1])*V[3][{j}] -'
+                     f' (x[1] + 1)*V[2][{j}] + (x[1] +    1)*V[5][{j}])/4'
+                     for j in range(3)]]
+    jac_exprs = _jac_exprs_xy + _jac_exprs_z
+
+
     @classmethod
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
@@ -452,6 +525,25 @@ class PyrShape(BaseShape):
         ('tri', lambda s, t: ((1 - t)/2, -s - (t + 1)/2, t), (1, 0, 0.5)),
         ('tri', lambda s, t: (-s - (t + 1)/2, (1 - t)/2, t), (0, 1, 0.5)),
         ('tri', lambda s, t: ((t - 1)/2, s + (t + 1)/2, t), (-1, 0, 0.5)),
+    ]
+
+    # Jacobian expressions for a linear element
+    jac_exprs = [
+        ['((1 - x[1])*V[1][0] + (-x[1] - 1)*V[2][0] +'
+         ' (x[1] - 1)*V[0][0] + (x[1] + 1)*V[3][0])/4',
+         '((1 - x[1])*V[1][1] + (-x[1] - 1)*V[2][1] +'
+         '(x[1] - 1)*V[0][1] + (x[1] + 1)*V[3][1])/4',
+         '((1 - x[1])*V[1][2] + (-x[1] - 1)*V[2][2] +'
+         ' (x[1] - 1)*V[0][2] + (x[1] + 1)*V[3][2])/4'],
+        ['((1 - x[0])*V[2][0] + (-x[0] - 1)*V[1][0] +'
+         ' (x[0] - 1)*V[0][0] + (x[0] + 1)*V[3][0])/4',
+         '((1 - x[0])*V[2][1] + (-x[0] - 1)*V[1][1] +'
+         ' (x[0] - 1)*V[0][1] + (x[0] + 1)*V[3][1])/4',
+         '((1 - x[0])*V[2][2] + (-x[0] - 1)*V[1][2] +'
+         '(x[0] - 1)*V[0][2] + (x[0] + 1)*V[3][2])/4'],
+        ['(-V[0][0] - V[1][0] - V[2][0] - V[3][0] + 4*V[4][0])/8',
+         '(-V[0][1] - V[1][1] - V[2][1] - V[3][1] + 4*V[4][1])/8',
+         '(-V[0][2] - V[1][2] - V[2][2] - V[3][2] + 4*V[4][2])/8']
     ]
 
     @classmethod

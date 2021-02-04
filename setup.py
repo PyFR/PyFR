@@ -3,13 +3,7 @@
 
 import re
 from setuptools import setup
-import sys
 
-
-# Python version
-if sys.version_info[:2] < (3, 6):
-    print('PyFR requires Python 3.6 or newer')
-    sys.exit(-1)
 
 # PyFR version
 vfile = open('pyfr/_version.py').read()
@@ -26,6 +20,8 @@ modules = [
     'pyfr.backends.base',
     'pyfr.backends.cuda',
     'pyfr.backends.cuda.kernels',
+    'pyfr.backends.hip',
+    'pyfr.backends.hip.kernels',
     'pyfr.backends.opencl',
     'pyfr.backends.opencl.kernels',
     'pyfr.backends.openmp',
@@ -71,6 +67,7 @@ tests = [
 # Data
 package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
+    'pyfr.backends.hip.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
@@ -110,14 +107,13 @@ install_requires = [
     'gimmik >= 2.0',
     'h5py >= 2.6',
     'mako >= 1.0.0',
-    'mpi4py >= 2.0',
+    'mpi4py >= 3.0',
     'numpy >= 1.8',
     'pytools >= 2016.2.1'
 ]
 
 # Soft dependencies
 extras_require = {
-    'cuda': ['pycuda >= 2015.1'],
     'opencl': ['pyopencl >= 2015.2.4']
 }
 
@@ -156,6 +152,7 @@ setup(name='pyfr',
       package_data=package_data,
       data_files=data_files,
       entry_points={'console_scripts': console_scripts},
+      python_requires='>=3.6',
       install_requires=install_requires,
       extras_require=extras_require,
       classifiers=classifiers

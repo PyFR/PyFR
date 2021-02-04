@@ -35,7 +35,7 @@ class ProgressBar(object):
         self._last_wallt = 0.0
 
         self._ncol = shutil.get_terminal_size()[0] or 80
-        self._nbarcol = self._ncol - 24 - 2*len('{:.{}f}'.format(end, dps))
+        self._nbarcol = self._ncol - 24 - 2*len(f'{end:.{dps}f}')
 
         self.advance_to(curr)
 

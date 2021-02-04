@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from collections import Mapping, OrderedDict
+from collections import Mapping
 import os
 import re
 
@@ -16,17 +16,24 @@ class NativeReader(Mapping):
         self._file = h5py.File(fname, 'r')
 
     def __contains__(self, aname):
-        return aname in self._file
+        if isinstance(aname, str):
+            return aname in self._file
+        else:
+            p, q = aname
+            return p in self._file and q in self._file[p].attrs
 
     def __getitem__(self, aname):
-        ret = self._file[aname]
+        if isinstance(aname, str):
+            ret = self._file[aname]
 
-        if ret.shape == ():
-            ret = ret[()]
+            if ret.shape == ():
+                ret = ret[()]
+            else:
+                ret = np.array(ret)
+
+            return ret.decode() if isinstance(ret, bytes) else ret
         else:
-            ret = np.array(ret)
-
-        return ret.decode() if isinstance(ret, bytes) else ret
+            return self._file[aname[0]].attrs[aname[1]]
 
     def __iter__(self):
         return iter(self._file)
@@ -46,7 +53,7 @@ class NativeReader(Mapping):
         fmaxpn = max(int(re.search(r'\d+$', n).group(0)) for n in names)
 
         # Extract array information
-        info = OrderedDict()
+        info = {}
         for i in range(fmaxpn + 1):
             for et in ftypes:
                 try:

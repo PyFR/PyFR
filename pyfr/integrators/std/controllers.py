@@ -6,7 +6,7 @@ import numpy as np
 
 from pyfr.integrators.std.base import BaseStdIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.util import memoize, proxylist
+from pyfr.util import memoize
 
 
 class BaseStdController(BaseStdIntegrator):
@@ -120,7 +120,7 @@ class StdPIController(BaseStdController):
 
         # Obtain an estimate for the squared error
         self._prepare_reg_banks(x, y, z)
-        self._queue % errest(self._atol, self._rtol)
+        self._queue.enqueue_and_run(errest, self._atol, self._rtol)
 
         # L2 norm
         if self._norm == 'l2':

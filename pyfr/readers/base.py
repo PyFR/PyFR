@@ -19,6 +19,11 @@ class BaseReader(object):
     def to_pyfrm(self):
         mesh = self._to_raw_pyfrm()
 
+        for k in list(mesh):
+            if k.startswith('spt'):
+                mesh[k, 'int_off'] = 0
+                mesh[k, 'lin_off'] = mesh[k].shape[1]
+
         # Add metadata
         mesh['mesh_uuid'] = np.array(str(uuid.uuid4()), dtype='S')
 
@@ -211,7 +216,7 @@ class NodalMeshAssembler(object):
         ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i2').T}
 
         for k, v in bcon.items():
-            ret['bcon_{0}_p0'.format(k)] = np.array(v, dtype='S4,i4,i1,i2')
+            ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i4,i1,i2')
 
         return ret
 
@@ -240,6 +245,6 @@ class NodalMeshAssembler(object):
             arr = arr.swapaxes(0, 1)
             arr = arr[..., :ndim]
 
-            spts['spt_{0}_p0'.format(petype)] = arr
+            spts[f'spt_{petype}_p0'] = arr
 
         return spts

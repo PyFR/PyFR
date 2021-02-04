@@ -5,7 +5,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel
-from pyfr.ctypesutil import load_library
+from pyfr.ctypesutil import LibWrapper
 
 
 # Possible CUBLAS exception types
@@ -19,8 +19,10 @@ CUBLASExecutionFailed = type('CUBLASExecutionFailed', (CUBLASError,), {})
 CUBLASInternalError = type('CUBLASInternalError', (CUBLASError,), {})
 
 
-class CUBLASWrappers(object):
-    # Possible return codes
+class CUBLASWrappers(LibWrapper):
+    _libname = 'cublas'
+
+    # Error codes
     _statuses = {
         0x1: CUBLASNotInitialized,
         0x3: CUBLASAllocFailed,
@@ -28,82 +30,47 @@ class CUBLASWrappers(object):
         0x8: CUBLASArchMismatch,
         0xb: CUBLASMappingError,
         0xd: CUBLASExecutionFailed,
-        0xe: CUBLASInternalError
+        0xe: CUBLASInternalError,
+        '*': CUBLASError
     }
 
-    def __init__(self):
-        lib = load_library('cublas')
+    # Constants
+    OP_N = 0
+    OP_T = 1
+    OP_C = 2
 
-        # Constants
-        self.CUBLAS_OP_N = 0
-        self.CUBLAS_OP_T = 1
-        self.CUBLAS_OP_C = 2
+    # Functions
+    _functions = [
+        (c_int, 'cublasCreate_v2', POINTER(c_void_p)),
+        (c_int, 'cublasDestroy_v2', c_void_p),
+        (c_int, 'cublasSetStream_v2', c_void_p, c_void_p),
+        (c_int, 'cublasDgemm_v2', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_double), c_void_p, c_int),
+        (c_int, 'cublasSgemm_v2', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_float), c_void_p, c_int)
+    ]
 
-        # cublasCreate
-        self.cublasCreate = lib.cublasCreate_v2
-        self.cublasCreate.argtypes = [POINTER(c_void_p)]
-        self.cublasCreate.errcheck = self._errcheck
-
-        # cublasDestroy
-        self.cublasDestroy = lib.cublasDestroy_v2
-        self.cublasDestroy.argtypes = [c_void_p]
-        self.cublasDestroy.errcheck = self._errcheck
-
-        # cublasSetStream
-        self.cublasSetStream = lib.cublasSetStream_v2
-        self.cublasSetStream.argtypes = [c_void_p, c_void_p]
-        self.cublasSetStream.errcheck = self._errcheck
-
-        # cublasDgemm
-        self.cublasDgemm = lib.cublasDgemm_v2
-        self.cublasDgemm.argtypes = [
-            c_void_p, c_int, c_int, c_int, c_int, c_int,
-            POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
-            POINTER(c_double), c_void_p, c_int
-        ]
-        self.cublasDgemm.errcheck = self._errcheck
-
-        # cublasSgemm
-        self.cublasSgemm = lib.cublasSgemm_v2
-        self.cublasSgemm.argtypes = [
-            c_void_p, c_int, c_int, c_int, c_int, c_int,
-            POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
-            POINTER(c_float), c_void_p, c_int
-        ]
-        self.cublasSgemm.errcheck = self._errcheck
-
-    def _errcheck(self, status, fn, args):
-        if status != 0:
-            try:
-                raise self._statuses[status]
-            except KeyError:
-                raise CUBLASError
+    def _transname(self, name):
+        return name[:-3]
 
 
 class CUDACUBLASKernels(object):
     def __init__(self, backend):
         # Load and wrap CUBLAS
-        self._wrappers = CUBLASWrappers()
+        self.lib = CUBLASWrappers()
 
         # Init
-        self._handle = c_void_p()
-        self._wrappers.cublasCreate(self._handle)
+        self._as_parameter_ = handle = c_void_p()
+        self.lib.cublasCreate(handle)
 
     def __del__(self):
-        # PyCUDA registers an atexit handler to destroy the CUDA context
-        # when Python terminates; however in exceptional circumstances this
-        # can be *before* we are garbage collected (negating the need to call
-        # cublasDestroy as we're terminating anyway).  We therefore need to
-        # check for a valid context before calling cublasDestroy
-        try:
-            import pycuda.autoinit
-            if pycuda.autoinit.context:
-                self._wrappers.cublasDestroy(self._handle)
-        except TypeError:
-            pass
+        if self._as_parameter_:
+            self.lib.cublasDestroy(self)
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
-        w = self._wrappers
+        lib = self.lib
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -116,21 +83,18 @@ class CUDACUBLASKernels(object):
         m, n, k = b.ncol, a.nrow, a.ncol
         A, B, C = b, a, out
 
-        # Do not transpose either A or B
-        opA = opB = w.CUBLAS_OP_N
-
         # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:
-            cublasgemm = w.cublasDgemm
+            cublasgemm = lib.cublasDgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
         else:
-            cublasgemm = w.cublasSgemm
+            cublasgemm = lib.cublasSgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                w.cublasSetStream(self._handle, queue.cuda_stream_comp.handle)
-                cublasgemm(self._handle, opA, opB, m, n, k,
+                lib.cublasSetStream(self, queue.cuda_stream_comp)
+                cublasgemm(self, lib.OP_N, lib.OP_N, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 

@@ -11,6 +11,15 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         super().__init__(backend, rallocs, mesh, initsoln, cfg)
 
+        # Sanity checks
+        if self._controller_needs_errest and not self._stepper_has_errest:
+            raise TypeError('Incompatible stepper/controller combination')
+
+        # Ensure the system is compatible with our formulation
+        if 'std' not in systemcls.elementscls.formulations:
+            raise RuntimeError(f'System {systemcls.name} does not support '
+                               f'time stepping formulation std')
+
         # Determine the amount of temp storage required by this method
         self.nregs = self._stepper_nregs
 
@@ -27,16 +36,8 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         # Event handlers for advance_to
         self.completed_step_handlers = proxylist(self._get_plugins())
 
-        # Sanity checks
-        if self._controller_needs_errest and not self._stepper_has_errest:
-            raise TypeError('Incompatible stepper/controller combination')
-
-        # Ensure the system is compatible with our formulation
-        if 'std' not in systemcls.elementscls.formulations:
-            raise RuntimeError(
-                'System {0} does not support time stepping formulation std'
-                .format(systemcls.name)
-            )
+        # Delete the memory-intensive elements map from the system
+        del self.system.ele_map
 
     @property
     def soln(self):

@@ -8,7 +8,7 @@ class OpenMPMatrixBase(base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata.ctypes.data
 
-        self.data = basedata[offset:offset + self.nrow*self.pitch]
+        self.data = basedata[offset:offset + self.nbytes]
         self.data = self.data.view(self.dtype)
         self.data = self.data.reshape(self.nrow, self.leaddim)
 
@@ -38,12 +38,23 @@ class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
 
 
 class OpenMPMatrixSlice(base.MatrixSlice):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._as_parameter_map = {}
+
     def _init_data(self, mat):
         return mat.data[self.ra:self.rb, self.ca:self.cb]
 
     @property
     def _as_parameter_(self):
-        return self.data.ctypes.data
+        try:
+            return self._as_parameter_map[self.parent.mid]
+        except KeyError:
+            param = self.data.ctypes.data
+            self._as_parameter_map[self.parent.mid] = param
+
+            return param
 
 
 class OpenMPMatrixBank(base.MatrixBank):
@@ -78,18 +89,16 @@ class OpenMPQueue(base.Queue):
             self._exec_item(*self._items.popleft())
 
     def _wait(self):
-        if self._last and self._last.ktype == 'mpi':
+        if self._last_ktype == 'mpi':
             from mpi4py import MPI
 
             MPI.Prequest.Waitall(self.mpi_reqs)
             self.mpi_reqs = []
 
-        self._last = None
+        self._last_ktype = None
 
     def _at_sequence_point(self, item):
-        last = self._last
-
-        return last and last.ktype == 'mpi' and item.ktype != 'mpi'
+        return self._last_ktype == 'mpi' and item.ktype != 'mpi'
 
     @staticmethod
     def runall(queues):
