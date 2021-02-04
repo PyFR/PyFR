@@ -8,6 +8,32 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     # Use the density field for shock sensing
     shockvar = 'rho'
 
+    gradconvarmap = {k : [f'grad_{var}' for var in v] for k, v in BaseFluidElements.convarmap.items()}
+
+    gradprivarmap = {k : [f'grad_{var}' for var in v] for k, v in BaseFluidElements.privarmap.items()}
+
+    @staticmethod
+    def grad_con_to_pri(cons, grad_cons, cfg):
+        rho = cons[0]
+        grad_rho = grad_cons[0]
+        grad_E = grad_cons[-1]
+        # Divide momentum components by rho
+        vs = [rhov/rho for rhov in cons[1:-1]]
+
+        # velocity gradients
+        grad_v = [(grad_cons[i + 1] - vel*grad_rho)/rho for i, vel in enumerate(vs)]
+
+        # pressure gradient
+        gamma = cfg.getfloat('constants', 'gamma')
+        vsqr = sum(v*v for v in vs)
+        grad_p = grad_E.copy()
+        grad_p -= 0.5*vsqr*grad_rho
+        for i, (vel, grad_vel) in enumerate(zip(vs, grad_v)):
+            grad_p -= rho*vel*grad_vel
+        grad_p *= (gamma - 1)
+
+        return [grad_rho] + grad_v + [grad_p]
+
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 

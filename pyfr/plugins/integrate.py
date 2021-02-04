@@ -21,10 +21,10 @@ class IntegratePlugin(BasePlugin):
         comm, rank, root = get_comm_rank_root()
 
         # Underlying system
-        system = intg.system
+        self.system = intg.system
 
         # Underlying system elements class
-        self.elementscls = system.elementscls
+        self.elementscls = self.system.elementscls
 
         # Expressions to integrate
         c = self.cfg.items_as('constants', float)
@@ -39,7 +39,7 @@ class IntegratePlugin(BasePlugin):
         self._init_gradients(intg, rinfo)
 
         # Save a reference to the physical solution point locations
-        self.plocs = system.ele_ploc_upts
+        self.plocs = self.system.ele_ploc_upts
 
         # Integration parameters
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
@@ -54,7 +54,7 @@ class IntegratePlugin(BasePlugin):
 
         # Prepare the per element-type info list
         self.eleinfo = []
-        for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
+        for (ename, eles), (eset, emask) in zip(self.system.ele_map.items(), rinfo):
             # Locations of each solution point
             ploc = eles.ploc_at_np('upts')[..., eset]
             ploc = ploc.swapaxes(0, 1)
@@ -66,8 +66,11 @@ class IntegratePlugin(BasePlugin):
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
             wts = get_quadrule(ename, rname, eles.nupts).wts
 
+            # Corrected gradients at upts 
+            grads = eles._vect_upts
+
             # Save
-            self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask))
+            self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask, grads))
 
     def _prepare_region_info(self, intg):
         # All elements
@@ -131,7 +134,7 @@ class IntegratePlugin(BasePlugin):
 
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
-            plocs, wts, eset, emask = eleinfo
+            plocs, wts, eset, emask, grads = eleinfo
 
             # Subset and transpose the solution
             soln = soln[..., eset].swapaxes(0, 1)
@@ -145,6 +148,12 @@ class IntegratePlugin(BasePlugin):
 
             # Compute any required gradients
             if self._gradpnames:
+                # Subset and transpose the solution gradients
+                grads = grads._get()[..., eset].swapaxes(0, 2).swapaxes(1, 2)
+
+                # Transform from conservative to primitive gradients
+                pgrads = self.elementscls.grad_con_to_pri(soln, grads, self.cfg)
+
                 # Gradient operator and J^-T matrix
                 gradop, rcpjact = self._gradop[i], self._rcpjact[i]
                 nupts = gradop.shape[1]
@@ -152,12 +161,23 @@ class IntegratePlugin(BasePlugin):
                 for pname in self._gradpnames:
                     psoln = subs[pname]
 
-                    # Compute the transformed gradient
-                    tgradpn = gradop @ psoln
-                    tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
+                    # In Navier-Stokes, rely on the
+                    # LDG corrected gradients to compute
+                    # the primitive gradients, instead of
+                    # evaluating them from the solution 
+                    # nodal basis
+                    if f'grad_{pname}' in self.elementscls.gradprivarmap[self.ndims]:
+                        idx = self.elementscls.gradprivarmap[self.ndims].index(f'grad_{pname}')
+                        gradpn = pgrads[idx]
+                    else:
+                        # If the gradient does not correspond to
+                        # any primitive gradient, then use uncorrected gradient
+                        # Compute the transformed gradient
+                        tgradpn = gradop @ psoln
+                        tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
 
-                    # Untransform this to get the physical gradient
-                    gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
+                        # Untransform this to get the physical gradient
+                        gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
                     gradpn = gradpn.reshape(self.ndims, nupts, -1)
 
                     for dim, grad in zip('xyz', gradpn):
@@ -176,6 +196,15 @@ class IntegratePlugin(BasePlugin):
         if intg.nacptsteps % self.nsteps == 0:
             # MPI info
             comm, rank, root = get_comm_rank_root()
+
+            # Compute corrected gradients if needed
+            if len(self._gradpnames) > 0:
+                # Choose the appropriate register to store the gradients
+                regidx = 0 if intg._idxcurr != 0 else 1
+
+                # Compute gradients using the solution corresponding to
+                # tcurr
+                self.system.compute_grads(intg.tcurr, intg._idxcurr, regidx)
 
             # Evaluate the integation expressions
             iintex = self._eval_exprs(intg)
