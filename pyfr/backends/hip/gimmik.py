@@ -11,9 +11,6 @@ class HIPGiMMiKKernels(HIPKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
 
-        self.max_nnz = backend.cfg.getint('backend-hip', 'gimmik-max-nnz',
-                                          512)
-
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -23,9 +20,13 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         if 'const' not in a.tags:
             raise NotSuitableError('GiMMiK requires a constant a matrix')
 
-        # Check that A is reasonably sparse
-        if np.count_nonzero(a.get()) > self.max_nnz:
-            raise NotSuitableError('Matrix too dense for GiMMiK')
+        # Fetch the matrix and tally up the number of non-zeros
+        arr = a.get()
+        nnz, nuq = np.count_nonzero(arr), len(np.unique(np.abs(arr)))
+
+        # Check that A is suitable
+        if nuq > 28 and nnz / arr.size > 0.15:
+            raise NotSuitableError('Matrix inappropriate GiMMiK')
 
         # Generate
         src = generate_mm(a.get(), dtype=a.dtype, platform='cuda',

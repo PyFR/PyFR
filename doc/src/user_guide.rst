@@ -262,31 +262,25 @@ Parameterises the CUDA backend with
 
      *int* | ``round-robin`` | ``local-rank``
 
-2. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
-
-     *int*
-
-3. ``mpi-type`` --- type of MPI library that is being used:
+2. ``mpi-type`` --- type of MPI library that is being used:
 
      ``standard`` | ``cuda-aware``
 
-4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+3. ``block-1d`` --- block size for one dimensional pointwise kernels:
 
      *int*
 
-5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+4. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
     [backend-cuda]
     device-id = round-robin
-    gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
-    block-2d = 128, 2
+    block-2d = 128
 
 [backend-hip]
 ^^^^^^^^^^^^^
@@ -297,22 +291,17 @@ Parameterises the HIP backend with
 
      *int* | ``local-rank``
 
-2. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
-
-     *int*
-
-3. ``mpi-type`` --- type of MPI library that is being used:
+2. ``mpi-type`` --- type of MPI library that is being used:
 
      ``standard`` | ``hip-aware``
 
-4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+3. ``block-1d`` --- block size for one dimensional pointwise kernels:
 
      *int*
 
-5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+4. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
@@ -321,7 +310,7 @@ Example::
     gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
-    block-2d = 128, 2
+    block-2d = 128
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -353,7 +342,7 @@ Parameterises the OpenCL backend with
 6. ``local-size-2d`` --- local work size for two dimensional pointwise
    kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
@@ -363,7 +352,7 @@ Example::
     device-id = local-rank
     gimmik-max-nnz = 512
     local-size-1d = 16
-    local-size-2d = 128, 1
+    local-size-2d = 128
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
@@ -1303,35 +1292,39 @@ Time average quantities. Parameterised with
 
     *float*
 
-4. ``basedir`` --- relative path to directory where outputs will be
+4. ``mode`` --- output file accumulation mode:
+
+    ``continuous`` | ``windowed``
+
+5. ``basedir`` --- relative path to directory where outputs will be
    written:
 
     *string*
 
-5. ``basename`` --- pattern of output names:
+6. ``basename`` --- pattern of output names:
 
     *string*
 
-6. ``precision`` --- output file number precision:
+7. ``precision`` --- output file number precision:
 
     ``single`` | ``double``
 
-7. ``region`` --- region to be averaged, specified as either the
+8. ``region`` --- region to be averaged, specified as either the
    entire domain using ``*``, a cuboidal sub-region via diametrically
    opposite vertices, or a sub-region of elements that have faces on a
    specific domain boundary via the name of the domain boundary
 
     ``*`` | ``[(x, y, [z]), (x, y, [z])]`` | *string*
 
-8. ``avg-*name*`` --- expression to time average, written as a function of
+9. ``avg-*name*`` --- expression to time average, written as a function of
    the primitive variables and gradients thereof; multiple expressions,
    each with their own *name*, may be specified:
 
     *string*
 
-9. ``fun-avg-*name*`` --- expression to compute at file output time,
-   written as a function of any ordinary average terms; multiple
-   expressions, each with their own *name*, may be specified:
+10. ``fun-avg-*name*`` --- expression to compute at file output time,
+    written as a function of any ordinary average terms; multiple
+    expressions, each with their own *name*, may be specified:
 
     *string*
 
@@ -1340,6 +1333,7 @@ Example::
     [soln-plugin-tavg]
     nsteps = 10
     dt-out = 2.0
+    mode = windowed
     basedir = .
     basename = files-{t:06.2f}
 
