@@ -20,15 +20,13 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         # Divide momentum components by rho
         vs = [rhov/rho for rhov in cons[1:-1]]
 
-        # velocity gradients
-        grad_v = [(grad_cons[i + 1] - vel*grad_rho)/rho for i, vel in enumerate(vs)]
+        # Velocity gradients
+        grad_v = [(grad_rhov - v*grad_rho)/rho for grad_rhov, v in zip(grad_cons[1:-1], vs)]
 
-        # pressure gradient
+        # Pressure gradient
         gamma = cfg.getfloat('constants', 'gamma')
-        vsqr = sum(v*v for v in vs)
-        grad_p = grad_E.copy()
-        grad_p -= 0.5*vsqr*grad_rho
-        for i, (vel, grad_vel) in enumerate(zip(vs, grad_v)):
+        grad_p = grad_E - 0.5*sum(v*v for v in vs)*grad_rho
+        for vel, grad_vel in zip(vs, grad_v):
             grad_p -= rho*vel*grad_vel
         grad_p *= (gamma - 1)
 

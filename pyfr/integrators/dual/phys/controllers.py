@@ -22,6 +22,9 @@ class BaseDualController(BaseDualIntegrator):
         # Invalidate the solution cache
         self._curr_soln = None
 
+        # Invalidate the solution gradients cache
+        self._curr_grad_soln = None
+
         # Fire off any event handlers
         self.completed_step_handlers(self)
 

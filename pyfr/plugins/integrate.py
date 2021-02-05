@@ -66,11 +66,8 @@ class IntegratePlugin(BasePlugin):
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
             wts = get_quadrule(ename, rname, eles.nupts).wts
 
-            # Corrected gradients at upts 
-            grads = eles._vect_upts
-
             # Save
-            self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask, grads))
+            self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask))
 
     def _prepare_region_info(self, intg):
         # All elements
@@ -133,8 +130,8 @@ class IntegratePlugin(BasePlugin):
         pnames = self.elementscls.privarmap[self.ndims]
 
         # Iterate over each element type in the simulation
-        for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
-            plocs, wts, eset, emask, grads = eleinfo
+        for i, (soln, grad_soln, eleinfo) in enumerate(zip(intg.soln, intg.grad_soln, self.eleinfo)):
+            plocs, wts, eset, emask = eleinfo
 
             # Subset and transpose the solution
             soln = soln[..., eset].swapaxes(0, 1)
@@ -149,10 +146,10 @@ class IntegratePlugin(BasePlugin):
             # Compute any required gradients
             if self._gradpnames:
                 # Subset and transpose the solution gradients
-                grads = grads._get()[..., eset].swapaxes(0, 2).swapaxes(1, 2)
+                grad_soln = grad_soln[..., eset].swapaxes(0, 2).swapaxes(1, 2)
 
                 # Transform from conservative to primitive gradients
-                pgrads = self.elementscls.grad_con_to_pri(soln, grads, self.cfg)
+                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
 
                 # Gradient operator and J^-T matrix
                 gradop, rcpjact = self._gradop[i], self._rcpjact[i]
@@ -196,15 +193,6 @@ class IntegratePlugin(BasePlugin):
         if intg.nacptsteps % self.nsteps == 0:
             # MPI info
             comm, rank, root = get_comm_rank_root()
-
-            # Compute corrected gradients if needed
-            if len(self._gradpnames) > 0:
-                # Choose the appropriate register to store the gradients
-                regidx = 0 if intg._idxcurr != 0 else 1
-
-                # Compute gradients using the solution corresponding to
-                # tcurr
-                self.system.compute_grads(intg.tcurr, intg._idxcurr, regidx)
 
             # Evaluate the integation expressions
             iintex = self._eval_exprs(intg)

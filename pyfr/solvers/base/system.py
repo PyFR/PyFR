@@ -42,6 +42,9 @@ class BaseSystem(object):
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
 
+        # Get the gradient banks
+        self.ele_grad_banks = list(eles.vect_upts_inb)
+
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
@@ -186,6 +189,9 @@ class BaseSystem(object):
     def rhs(self, t, uinbank, foutbank):
         pass
 
+    def compute_grads(self, t, uinbank):
+        pass
+
     def filt(self, uinoutbank):
         self.eles_scal_upts_inb.active = uinoutbank
 
@@ -193,3 +199,6 @@ class BaseSystem(object):
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
+
+    def ele_vect_upts(self):
+        return [eb[0].get() for eb in self.ele_grad_banks]
