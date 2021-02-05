@@ -8,6 +8,7 @@ from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
+from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionSystem
 
 
 class IntegratePlugin(BasePlugin):
@@ -21,10 +22,10 @@ class IntegratePlugin(BasePlugin):
         comm, rank, root = get_comm_rank_root()
 
         # Underlying system
-        self.system = intg.system
+        system = intg.system
 
         # Underlying system elements class
-        self.elementscls = self.system.elementscls
+        self.elementscls = system.elementscls
 
         # Expressions to integrate
         c = self.cfg.items_as('constants', float)
@@ -39,7 +40,7 @@ class IntegratePlugin(BasePlugin):
         self._init_gradients(intg, rinfo)
 
         # Save a reference to the physical solution point locations
-        self.plocs = self.system.ele_ploc_upts
+        self.plocs = system.ele_ploc_upts
 
         # Integration parameters
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
@@ -54,7 +55,7 @@ class IntegratePlugin(BasePlugin):
 
         # Prepare the per element-type info list
         self.eleinfo = []
-        for (ename, eles), (eset, emask) in zip(self.system.ele_map.items(), rinfo):
+        for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
             # Locations of each solution point
             ploc = eles.ploc_at_np('upts')[..., eset]
             ploc = ploc.swapaxes(0, 1)
@@ -130,7 +131,7 @@ class IntegratePlugin(BasePlugin):
         pnames = self.elementscls.privarmap[self.ndims]
 
         # Iterate over each element type in the simulation
-        for i, (soln, grad_soln, eleinfo) in enumerate(zip(intg.soln, intg.grad_soln, self.eleinfo)):
+        for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
             plocs, wts, eset, emask = eleinfo
 
             # Subset and transpose the solution
@@ -145,12 +146,6 @@ class IntegratePlugin(BasePlugin):
 
             # Compute any required gradients
             if self._gradpnames:
-                # Subset and transpose the solution gradients
-                grad_soln = grad_soln[..., eset].swapaxes(0, 2).swapaxes(1, 2)
-
-                # Transform from conservative to primitive gradients
-                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
-
                 # Gradient operator and J^-T matrix
                 gradop, rcpjact = self._gradop[i], self._rcpjact[i]
                 nupts = gradop.shape[1]
@@ -158,13 +153,21 @@ class IntegratePlugin(BasePlugin):
                 for pname in self._gradpnames:
                     psoln = subs[pname]
 
-                    # In Navier-Stokes, rely on the
-                    # LDG corrected gradients to compute
+                    # In solvers deriving from BaseAdvecDiff, 
+                    # rely on the LDG corrected gradients to compute
                     # the primitive gradients, instead of
-                    # evaluating them from the solution 
-                    # nodal basis
-                    if f'grad_{pname}' in self.elementscls.gradprivarmap[self.ndims]:
-                        idx = self.elementscls.gradprivarmap[self.ndims].index(f'grad_{pname}')
+                    # evaluating them from the solution nodal basis
+                    if pname in self.elementscls.privarmap[self.ndims] \
+                    and isinstance(intg.system, BaseAdvectionDiffusionSystem):
+                        # Fetch the corrected gradients only if needed
+                        grad_soln = intg.grad_soln[i]
+
+                        # Subset and transpose the solution gradients
+                        grad_soln = grad_soln[..., eset].swapaxes(0, 2).swapaxes(1, 2)
+
+                        # Transform from conservative to primitive gradients
+                        pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
+                        idx = self.elementscls.privarmap[self.ndims].index(pname)
                         gradpn = pgrads[idx]
                     else:
                         # If the gradient does not correspond to

@@ -6,9 +6,6 @@ from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
 
 class ACNavierStokesElements(BaseACFluidElements,
                              BaseAdvectionDiffusionElements):
-    gradconvarmap = {k : [f'grad_{var}' for var in v] for k, v in BaseACFluidElements.convarmap.items()}
-    gradprivarmap = {k : [f'grad_{var}' for var in v] for k, v in BaseACFluidElements.privarmap.items()}
-
     @staticmethod
     def grad_con_to_pri(cons, grad_cons, cfg):
         return [grad for grad in grad_cons]

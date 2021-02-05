@@ -42,15 +42,13 @@ class BaseSystem(object):
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
 
-        # Get the gradient banks
-        self.ele_grad_banks = list(eles.vect_upts_inb)
-
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
         # I/O banks for the elements
         self.eles_scal_upts_inb = eles.scal_upts_inb
         self.eles_scal_upts_outb = eles.scal_upts_outb
+        self.eles_vect_upts_inb = eles.vect_upts_inb
 
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
@@ -199,6 +197,3 @@ class BaseSystem(object):
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
-
-    def ele_vect_upts(self):
-        return [eb[0].get() for eb in self.ele_grad_banks]

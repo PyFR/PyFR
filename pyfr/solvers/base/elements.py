@@ -214,7 +214,7 @@ class BaseElements(object):
 
         # Allocate and bank the storage required to store the solution grads
         # which will be used by post-processing plugins
-        self.vect_upts_inb = backend.matrix_bank([self._vect_upts])
+        self.vect_upts_inb = self._vect_upts
 
         # Find/allocate space for a solution-sized scalar that is
         # allowed to alias other scratch space in the simulation
