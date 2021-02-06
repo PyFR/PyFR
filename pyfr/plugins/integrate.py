@@ -130,6 +130,9 @@ class IntegratePlugin(BasePlugin):
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
+        # Compute any required gradients
+        if self._gradpnames:
+            grads_eles = intg.grad_pvars(self._gradpnames)
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
             plocs, wts, eset, emask = eleinfo
@@ -146,40 +149,9 @@ class IntegratePlugin(BasePlugin):
 
             # Compute any required gradients
             if self._gradpnames:
-                # Gradient operator and J^-T matrix
-                gradop, rcpjact = self._gradop[i], self._rcpjact[i]
-                nupts = gradop.shape[1]
-
-                for pname in self._gradpnames:
-                    psoln = subs[pname]
-
-                    # In solvers deriving from BaseAdvecDiff, 
-                    # rely on the LDG corrected gradients to compute
-                    # the primitive gradients, instead of
-                    # evaluating them from the solution nodal basis
-                    if pname in self.elementscls.privarmap[self.ndims] \
-                    and isinstance(intg.system, BaseAdvectionDiffusionSystem):
-                        # Fetch the corrected gradients only if needed
-                        grad_soln = intg.grad_soln[i]
-
-                        # Subset and transpose the solution gradients
-                        grad_soln = grad_soln[..., eset].swapaxes(0, 2).swapaxes(1, 2)
-
-                        # Transform from conservative to primitive gradients
-                        pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
-                        idx = self.elementscls.privarmap[self.ndims].index(pname)
-                        gradpn = pgrads[idx]
-                    else:
-                        # If the gradient does not correspond to
-                        # any primitive gradient, then use uncorrected gradient
-                        # Compute the transformed gradient
-                        tgradpn = gradop @ psoln
-                        tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
-
-                        # Untransform this to get the physical gradient
-                        gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
-                    gradpn = gradpn.reshape(self.ndims, nupts, -1)
-
+                gradps = grads_eles[i]
+                for gradpn, pname in zip(gradps, self._gradpnames):
+                    gradpn = gradpn[..., eset]
                     for dim, grad in zip('xyz', gradpn):
                         subs[f'grad_{pname}_{dim}'] = grad
 

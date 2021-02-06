@@ -188,7 +188,7 @@ class BaseSystem(object):
         pass
 
     def compute_grads(self, t, uinbank):
-        pass
+        raise NotImplementedError()
 
     def filt(self, uinoutbank):
         self.eles_scal_upts_inb.active = uinoutbank

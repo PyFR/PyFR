@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import deque
+from collections import Iterable
 import itertools as it
 import re
 import time
@@ -133,6 +134,38 @@ class BaseIntegrator(object):
         else:
             return {'config': cfg, 'config-0': cfg}
 
+    def grad_pvars(self, pnames):
+        pnames = pnames if isinstance(pnames, Iterable) else [pnames]
+        for pname in pnames:
+            if pname not in self.system.elementscls.privarmap[self.system.ndims]:
+                raise ValueError(f'Gradient of non-primitive variable {pname} can not be computed')
+
+        try:
+            # Fetch the corrected gradients only if needed
+            grad_soln = self.grad_soln
+        except NotImplementedError:
+            # If the considered solver does not explictly compute gradients
+            # of primitive variables, then raise error
+            raise RuntimeError(f'Solver {self.system.name} not compatible with corrected gradients computation')
+
+        grads_eles = []
+        for soln, grad_soln in zip(self.soln, self.grad_soln):
+            grads_ele = []
+            # Subset and transpose the solution
+            soln = soln.swapaxes(0, 1)
+
+            # Subset and transpose the solution gradients
+            grad_soln = grad_soln.swapaxes(0, 2).swapaxes(1, 2)
+
+            # Transform from conservative to primitive gradients
+            pgrads = self.system.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
+
+            # Store the gradients
+            for pname in pnames:
+                idx = self.system.elementscls.privarmap[self.system.ndims].index(pname)
+                grads_ele.append(pgrads[idx])
+            grads_eles.append(grads_ele)
+        return grads_eles
 
 class BaseCommon(object):
     def _init_reg_banks(self):
