@@ -134,12 +134,7 @@ class BaseIntegrator(object):
         else:
             return {'config': cfg, 'config-0': cfg}
 
-    def grad_pvars(self, pnames):
-        pnames = pnames if isinstance(pnames, Iterable) else [pnames]
-        for pname in pnames:
-            if pname not in self.system.elementscls.privarmap[self.system.ndims]:
-                raise ValueError(f'Gradient of non-primitive variable {pname} can not be computed')
-
+    def grad_pvars(self):
         try:
             # Fetch the corrected gradients only if needed
             grad_soln = self.grad_soln
@@ -161,9 +156,8 @@ class BaseIntegrator(object):
             pgrads = self.system.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
 
             # Store the gradients
-            for pname in pnames:
-                idx = self.system.elementscls.privarmap[self.system.ndims].index(pname)
-                grads_ele.append(pgrads[idx])
+            for grad in pgrads:
+                grads_ele.append(grad)
             grads_eles.append(grads_ele)
         return grads_eles
 
