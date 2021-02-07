@@ -13,22 +13,13 @@ class BaseStdStepper(BaseStdIntegrator):
 
 class StdEulerStepper(BaseStdStepper):
     stepper_name = 'euler'
-
-    @property
-    def _stepper_has_errest(self):
-        return False
+    stepper_has_errest = False
+    stepper_nregs = 2
+    stepper_order = 1
 
     @property
     def _stepper_nfevals(self):
         return self.nsteps
-
-    @property
-    def _stepper_nregs(self):
-        return 2
-
-    @property
-    def _stepper_order(self):
-        return 1
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
@@ -42,22 +33,13 @@ class StdEulerStepper(BaseStdStepper):
 
 class StdTVDRK3Stepper(BaseStdStepper):
     stepper_name = 'tvd-rk3'
-
-    @property
-    def _stepper_has_errest(self):
-        return False
+    stepper_has_errest = False
+    stepper_nregs = 3
+    stepper_order = 3
 
     @property
     def _stepper_nfevals(self):
         return 3*self.nsteps
-
-    @property
-    def _stepper_nregs(self):
-        return 3
-
-    @property
-    def _stepper_order(self):
-        return 3
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
@@ -88,22 +70,13 @@ class StdTVDRK3Stepper(BaseStdStepper):
 
 class StdRK4Stepper(BaseStdStepper):
     stepper_name = 'rk4'
-
-    @property
-    def _stepper_has_errest(self):
-        return False
+    stepper_has_errest = False
+    stepper_nregs = 3
+    stepper_order = 4
 
     @property
     def _stepper_nfevals(self):
         return 4*self.nsteps
-
-    @property
-    def _stepper_nregs(self):
-        return 3
-
-    @property
-    def _stepper_order(self):
-        return 4
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
@@ -165,16 +138,16 @@ class StdRKVdH2RStepper(BaseStdStepper):
         self._nstages = len(self.c)
 
     @property
-    def _stepper_has_errest(self):
-        return self._controller_needs_errest and len(self.bhat)
+    def stepper_has_errest(self):
+        return self.controller_needs_errest and len(self.bhat)
 
     @property
     def _stepper_nfevals(self):
         return len(self.b)*self.nsteps
 
     @property
-    def _stepper_nregs(self):
-        return 4 if self._stepper_has_errest else 2
+    def stepper_nregs(self):
+        return 4 if self.stepper_has_errest else 2
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
@@ -215,6 +188,7 @@ class StdRKVdH2RStepper(BaseStdStepper):
 
 class StdRK34Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk34'
+    stepper_order = 3
 
     a = [
         11847461282814 / 36547543011857,
@@ -236,13 +210,10 @@ class StdRK34Stepper(StdRKVdH2RStepper):
         -69544964788955 / 30262026368149
     ]
 
-    @property
-    def _stepper_order(self):
-        return 3
-
 
 class StdRK45Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk45'
+    stepper_order = 4
 
     a = [
         970286171893 / 4311952581923,
@@ -266,7 +237,3 @@ class StdRK45Stepper(StdRKVdH2RStepper):
         606302364029 / 971179775848,
         1097981568119 / 3980877426909
     ]
-
-    @property
-    def _stepper_order(self):
-        return 4

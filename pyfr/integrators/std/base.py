@@ -12,7 +12,7 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         super().__init__(backend, rallocs, mesh, initsoln, cfg)
 
         # Sanity checks
-        if self._controller_needs_errest and not self._stepper_has_errest:
+        if self.controller_needs_errest and not self.stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
         # Ensure the system is compatible with our formulation
@@ -21,7 +21,7 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
                                f'time stepping formulation std')
 
         # Determine the amount of temp storage required by this method
-        self.nregs = self._stepper_nregs
+        self.nregs = self.stepper_nregs
 
         # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
@@ -57,9 +57,9 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         return self._curr_grad_soln
 
     @property
-    def _controller_needs_errest(self):
+    def controller_needs_errest(self):
         pass
 
     @property
-    def _stepper_has_errest(self):
+    def stepper_has_errest(self):
         pass
