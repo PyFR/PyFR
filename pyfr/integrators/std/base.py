@@ -59,7 +59,3 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
     @property
     def controller_needs_errest(self):
         pass
-
-    @property
-    def stepper_has_errest(self):
-        pass
