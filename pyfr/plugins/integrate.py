@@ -8,7 +8,6 @@ from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
-from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionSystem
 
 
 class IntegratePlugin(BasePlugin):
@@ -103,9 +102,13 @@ class IntegratePlugin(BasePlugin):
 
     def _init_gradients(self, intg, rinfo):
         # Determine what gradients, if any, are required
-        self._gradpnames = gradpnames = set()
+        gradpnames = set()
         for ex in self.exprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
+
+        privarmap = self.elementscls.privarmap[self.ndims]
+        self._gradpinfo = [(pname, privarmap.index(pname)) 
+                            for pname in gradpnames]
 
         # If gradients are required then form the relevant operators
         if gradpnames:
@@ -131,8 +134,8 @@ class IntegratePlugin(BasePlugin):
         pnames = self.elementscls.privarmap[self.ndims]
 
         # Compute primitive gradients if required
-        if self._gradpnames:
-            grads_eles = intg.grad_pvars()
+        if self._gradpinfo:
+            grads_eles = self._grad_pvars(intg)
 
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
@@ -148,14 +151,10 @@ class IntegratePlugin(BasePlugin):
             subs = dict(zip(pnames, psolns))
             subs.update(zip('xyz', plocs))
 
-            # Prepare any required gradient
-            if self._gradpnames:
-                gradps = grads_eles[i]
-                for pname in self._gradpnames:
-                    idx = self.elementscls.privarmap[self.ndims].index(pname)
-                    gradpn = gradps[idx][..., eset]
-                    for dim, grad in zip('xyz', gradpn):
-                        subs[f'grad_{pname}_{dim}'] = grad
+            # Prepare any required gradients
+            for pname, idx in self._gradpinfo:
+                for dim, grad in zip('xyz', grads_eles[i][idx]):
+                    subs[f'grad_{pname}_{dim}'] = grad
 
             for j, v in enumerate(self.exprs):
                 # Evaluate the expression at each point
@@ -165,6 +164,27 @@ class IntegratePlugin(BasePlugin):
                 intvals[j] += np.sum(iex) - np.sum(iex[emask])
 
         return intvals
+
+    def _grad_pvars(self, intg):
+        grads_eles = []
+
+        # Iterate over each element type in the simulation
+        for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
+            eset, emask = eleinfo[2:]
+
+            # Subset and transpose the solution
+            soln = soln[..., eset].swapaxes(0, 1)
+
+            # Rearrange and subset gradient data
+            grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
+
+            # Transform from conservative to primitive gradients
+            pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
+
+            # Store the gradients
+            grads_eles.append(pgrads)
+        
+        return grads_eles
 
     def __call__(self, intg):
         if intg.nacptsteps % self.nsteps == 0:

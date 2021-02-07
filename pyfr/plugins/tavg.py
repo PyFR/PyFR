@@ -69,9 +69,13 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
     def _init_gradients(self, intg):
         # Determine what gradients, if any, are required
-        self._gradpnames = gradpnames = set()
+        gradpnames = set()
         for ex in self.aexprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
+
+        privarmap = self.elementscls.privarmap[self.ndims]
+        self._gradpinfo = [(pname, privarmap.index(pname)) 
+                            for pname in gradpnames]
 
         # If gradients are required then form the relevant operators
         if gradpnames:
@@ -108,8 +112,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         pnames = self.elementscls.privarmap[self.ndims]
 
         # Compute primitive gradients if required
-        if self._gradpnames:
-            grads_eles = intg.grad_pvars()
+        if self._gradpinfo:
+            grads_eles = self._grad_pvars(intg)
 
         # Iterate over each element type in the simulation
         for i, (j, rgn) in enumerate(self._ele_regions):
@@ -122,14 +126,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
 
-            # Prepare any required gradient
-            if self._gradpnames:
-                gradps = grads_eles[j]
-                for pname in self._gradpnames:
-                    idx = self.elementscls.privarmap[self.ndims].index(pname)
-                    gradpn = gradps[idx][..., rgn]
-                    for dim, grad in zip('xyz', gradpn):
-                        subs[f'grad_{pname}_{dim}'] = grad
+            # Prepare any required gradients
+            for pname, idx in self._gradpinfo:
+                for dim, grad in zip('xyz', grads_eles[i][idx]):
+                    subs[f'grad_{pname}_{dim}'] = grad
 
             # Evaluate the expressions
             exprs.append([npeval(v, subs) for v in self.aexprs])
@@ -149,6 +149,25 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Stack up the expressions for each element type and return
         return [np.dstack(exs).swapaxes(1, 2) for exs in exprs]
+
+    def _grad_pvars(self, intg):
+        grads_eles = []
+
+        # Iterate over each element type in the simulation
+        for i, (j, rgn) in enumerate(self._ele_regions):
+            # Subset and transpose the solution
+            soln = intg.soln[j][..., rgn].swapaxes(0, 1)
+            
+            # Rearrange and subset gradient data
+            grad_soln = np.rollaxis(intg.grad_soln[j], 2)[..., rgn]
+
+            # Transform from conservative to primitive gradients
+            pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
+
+            # Store the gradients
+            grads_eles.append(pgrads)
+
+        return grads_eles
 
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return

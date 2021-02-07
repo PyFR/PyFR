@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from collections import deque
-from collections import Iterable
 import itertools as it
 import re
 import time
@@ -134,26 +133,6 @@ class BaseIntegrator(object):
         else:
             return {'config': cfg, 'config-0': cfg}
 
-    def grad_pvars(self):
-        # Fetch the corrected gradients
-        grad_soln = self.grad_soln
-
-        grads_eles = []
-        for soln, grad_soln in zip(self.soln, self.grad_soln):
-            grads_ele = []
-            # Subset and transpose the solution
-            soln = soln.swapaxes(0, 1)
-
-            # Rearrange gradient data
-            grad_soln = np.rollaxis(grad_soln, 2)
-
-            # Transform from conservative to primitive gradients
-            pgrads = self.system.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
-
-            # Store the gradients
-            grads_eles.append(pgrads)
-
-        return grads_eles
 
 class BaseCommon(object):
     def _init_reg_banks(self):

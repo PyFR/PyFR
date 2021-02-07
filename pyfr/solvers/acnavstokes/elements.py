@@ -8,7 +8,7 @@ class ACNavierStokesElements(BaseACFluidElements,
                              BaseAdvectionDiffusionElements):
     @staticmethod
     def grad_con_to_pri(cons, grad_cons, cfg):
-        return [grad for grad in grad_cons]
+        return grad_cons
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
