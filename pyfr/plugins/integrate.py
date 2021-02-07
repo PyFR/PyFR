@@ -130,9 +130,10 @@ class IntegratePlugin(BasePlugin):
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
-        # Compute any required gradients
+        # Compute primitive gradients if required
         if self._gradpnames:
             grads_eles = intg.grad_pvars()
+
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
             plocs, wts, eset, emask = eleinfo
@@ -147,7 +148,7 @@ class IntegratePlugin(BasePlugin):
             subs = dict(zip(pnames, psolns))
             subs.update(zip('xyz', plocs))
 
-            # Compute any required gradients
+            # Prepare any required gradient
             if self._gradpnames:
                 gradps = grads_eles[i]
                 for pname in self._gradpnames:

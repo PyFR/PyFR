@@ -107,6 +107,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
+        # Compute primitive gradients if required
+        if self._gradpnames:
+            grads_eles = intg.grad_pvars()
+
         # Iterate over each element type in the simulation
         for i, (j, rgn) in enumerate(self._ele_regions):
             soln = intg.soln[j][..., rgn]
@@ -118,23 +122,12 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
 
-            # Compute any required gradients
+            # Prepare any required gradient
             if self._gradpnames:
-                # Gradient operator and J^-T matrix
-                gradop, rcpjact = self._gradop[i], self._rcpjact[i]
-                nupts = gradop.shape[1]
-
+                gradps = grads_eles[j]
                 for pname in self._gradpnames:
-                    psoln = subs[pname]
-
-                    # Compute the transformed gradient
-                    tgradpn = gradop @ psoln
-                    tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
-
-                    # Untransform this to get the physical gradient
-                    gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
-                    gradpn = gradpn.reshape(self.ndims, nupts, -1)
-
+                    idx = self.elementscls.privarmap[self.ndims].index(pname)
+                    gradpn = gradps[idx][..., rgn]
                     for dim, grad in zip('xyz', gradpn):
                         subs[f'grad_{pname}_{dim}'] = grad
 

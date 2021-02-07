@@ -48,7 +48,7 @@ class BaseSystem(object):
         # I/O banks for the elements
         self.eles_scal_upts_inb = eles.scal_upts_inb
         self.eles_scal_upts_outb = eles.scal_upts_outb
-        self.eles_vect_upts_inb = eles.vect_upts_inb
+        self.eles_vect_upts = eles._vect_upts
 
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
@@ -188,7 +188,8 @@ class BaseSystem(object):
         pass
 
     def compute_grads(self, t, uinbank):
-        raise NotImplementedError()
+        raise NotImplementedError(f'Solver "{self.name}" does not compute '
+                                  'corrected gradients of the solution')
 
     def filt(self, uinoutbank):
         self.eles_scal_upts_inb.active = uinoutbank

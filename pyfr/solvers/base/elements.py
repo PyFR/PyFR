@@ -212,10 +212,6 @@ class BaseElements(object):
         self.scal_upts_inb = inb = backend.matrix_bank(self._scal_upts)
         self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
 
-        # Allocate and bank the storage required to store the solution grads
-        # which will be used by post-processing plugins
-        self.vect_upts_inb = self._vect_upts
-
         # Find/allocate space for a solution-sized scalar that is
         # allowed to alias other scratch space in the simulation
         aliases = next((m for m in abufs if m.nbytes >= inb.nbytes), None)

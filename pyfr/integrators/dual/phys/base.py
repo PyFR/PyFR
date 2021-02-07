@@ -52,7 +52,7 @@ class BaseDualIntegrator(BaseIntegrator):
         # If we do not have the solution gradients cached then compute and fetch them
         if not self._curr_grad_soln:
             self.system.compute_grads(self.tcurr, self.pseudointegrator._idxcurr)
-            self._curr_grad_soln = self.system.eles_vect_upts_inb.get()
+            self._curr_grad_soln = self.system.eles_vect_upts.get()
 
         return self._curr_grad_soln
 
