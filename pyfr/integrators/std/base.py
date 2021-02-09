@@ -48,6 +48,15 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         return self._curr_soln
 
     @property
+    def grad_soln(self):
+        # If we do not have the solution gradients cached then compute and fetch them
+        if not self._curr_grad_soln:
+            self.system.compute_grads(self.tcurr, self._idxcurr)
+            self._curr_grad_soln = self.system.eles_vect_upts.get()
+
+        return self._curr_grad_soln
+
+    @property
     def _controller_needs_errest(self):
         pass
 

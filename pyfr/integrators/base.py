@@ -54,6 +54,9 @@ class BaseIntegrator(object):
         # Solution cache
         self._curr_soln = None
 
+        # Solution gradients cache
+        self._curr_grad_soln = None
+
         # Record the starting wall clock time
         self._wstart = time.time()
 

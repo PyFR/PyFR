@@ -65,3 +65,34 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1.enqueue(kernels['eles', 'tdivtconf'])
         q1.enqueue(kernels['eles', 'negdivconf'], t=t)
         runall([q1])
+
+    def compute_grads(self, t, uinbank):
+        runall = self.backend.runall
+        q1, q2 = self._queues
+        kernels = self._kernels
+
+        self._bc_inters.prepare(t)
+
+        self.eles_scal_upts_inb.active = uinbank
+
+        q1.enqueue(kernels['eles', 'disu'])
+        q1.enqueue(kernels['mpiint', 'scal_fpts_pack'])
+        runall([q1])
+
+        if ('iint', 'copy_fpts') in kernels:
+            q1.enqueue(kernels['iint', 'copy_fpts'])
+        q1.enqueue(kernels['iint', 'con_u'])
+        q1.enqueue(kernels['bcint', 'con_u'], t=t)
+        q1.enqueue(kernels['eles', 'tgradpcoru_upts'])
+        q2.enqueue(kernels['mpiint', 'scal_fpts_send'])
+        q2.enqueue(kernels['mpiint', 'scal_fpts_recv'])
+        q2.enqueue(kernels['mpiint', 'scal_fpts_unpack'])
+
+        runall([q1, q2])
+
+        q1.enqueue(kernels['mpiint', 'con_u'])
+        q1.enqueue(kernels['eles', 'tgradcoru_upts'])
+        q1.enqueue(kernels['eles', 'gradcoru_upts_curved'])
+        q1.enqueue(kernels['eles', 'gradcoru_upts_linear'])
+
+        runall([q1])
