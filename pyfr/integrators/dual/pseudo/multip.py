@@ -136,7 +136,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     def finalise_mg_advance(self, currsoln):
         psnregs = self.pintg._pseudo_stepper_nregs
-        snregs = self.pintg._stepper_nregs
+        snregs = self.pintg.stepper_nregs
 
         # Rotate the stepper registers to the right by one
         self.pintg._regidx[psnregs:psnregs + snregs] = (
@@ -241,7 +241,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.pintg._add(0, mg1, 1, l2idxcurr)
 
         # Restrict the physical stepper terms
-        for i in range(self.pintg._stepper_nregs):
+        for i in range(self.pintg.stepper_nregs):
             l1sys.eles_scal_upts_inb.active = (
                 self.pintgs[l1]._stepper_regidx[i]
             )

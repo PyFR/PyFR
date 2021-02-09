@@ -37,10 +37,10 @@ class BaseDualPseudoIntegrator(BaseCommon):
                             'combination')
 
         # Amount of temp storage required by physical stepper
-        self._stepper_nregs = len(stepper_coeffs) - 1
+        self.stepper_nregs = len(stepper_coeffs) - 1
 
         # Determine the amount of temp storage required in total
-        self.nregs = (self._pseudo_stepper_nregs + self._stepper_nregs +
+        self.nregs = (self._pseudo_stepper_nregs + self.stepper_nregs +
                       self.aux_nregs)
 
         # Physical stepper coefficients
@@ -88,13 +88,13 @@ class BaseDualPseudoIntegrator(BaseCommon):
     @property
     def _stepper_regidx(self):
         psnregs = self._pseudo_stepper_nregs
-        return self._regidx[psnregs:psnregs + self._stepper_nregs]
+        return self._regidx[psnregs:psnregs + self.stepper_nregs]
 
     def finalise_pseudo_advance(self, currsoln):
         psnregs = self._pseudo_stepper_nregs
 
         # Rotate the source registers to the right by one
-        self._regidx[psnregs:psnregs + self._stepper_nregs] = (
+        self._regidx[psnregs:psnregs + self.stepper_nregs] = (
             self._stepper_regidx[-1:] + self._stepper_regidx[:-1]
         )
 

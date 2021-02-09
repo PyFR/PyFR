@@ -11,7 +11,7 @@ class DualBDF2Stepper(BaseDualStepper):
     stepper_name = 'bdf2'
 
     @property
-    def _stepper_order(self):
+    def stepper_order(self):
         return 2
 
     @property
@@ -23,7 +23,7 @@ class DualBDF3Stepper(BaseDualStepper):
     stepper_name = 'bdf3'
 
     @property
-    def _stepper_order(self):
+    def stepper_order(self):
         return 3
 
     @property
@@ -35,7 +35,7 @@ class DualBackwardEulerStepper(BaseDualStepper):
     stepper_name = 'backward-euler'
 
     @property
-    def _stepper_order(self):
+    def stepper_order(self):
         return 1
 
     @property

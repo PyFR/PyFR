@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.integrators.std.base import BaseStdIntegrator
+from pyfr.util import memoize
 
 
 class BaseStdStepper(BaseStdIntegrator):
@@ -13,22 +14,13 @@ class BaseStdStepper(BaseStdIntegrator):
 
 class StdEulerStepper(BaseStdStepper):
     stepper_name = 'euler'
-
-    @property
-    def _stepper_has_errest(self):
-        return False
+    stepper_has_errest = False
+    stepper_nregs = 2
+    stepper_order = 1
 
     @property
     def _stepper_nfevals(self):
         return self.nsteps
-
-    @property
-    def _stepper_nregs(self):
-        return 2
-
-    @property
-    def _stepper_order(self):
-        return 1
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
@@ -42,22 +34,13 @@ class StdEulerStepper(BaseStdStepper):
 
 class StdTVDRK3Stepper(BaseStdStepper):
     stepper_name = 'tvd-rk3'
-
-    @property
-    def _stepper_has_errest(self):
-        return False
+    stepper_has_errest = False
+    stepper_nregs = 3
+    stepper_order = 3
 
     @property
     def _stepper_nfevals(self):
         return 3*self.nsteps
-
-    @property
-    def _stepper_nregs(self):
-        return 3
-
-    @property
-    def _stepper_order(self):
-        return 3
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
@@ -88,22 +71,13 @@ class StdTVDRK3Stepper(BaseStdStepper):
 
 class StdRK4Stepper(BaseStdStepper):
     stepper_name = 'rk4'
-
-    @property
-    def _stepper_has_errest(self):
-        return False
+    stepper_has_errest = False
+    stepper_nregs = 3
+    stepper_order = 4
 
     @property
     def _stepper_nfevals(self):
         return 4*self.nsteps
-
-    @property
-    def _stepper_nregs(self):
-        return 3
-
-    @property
-    def _stepper_order(self):
-        return 4
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
@@ -158,63 +132,79 @@ class StdRKVdH2RStepper(BaseStdStepper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Compute the c and error coeffs
+        # Register our pointwise kernel
+        self.backend.pointwise.register('pyfr.integrators.std.kernels.rkvdh2')
+
+        # Compute the coefficients
         self.c = [0.0] + [sum(self.b[:i]) + ai for i, ai in enumerate(self.a)]
         self.e = [b - bh for b, bh in zip(self.b, self.bhat)]
 
         self._nstages = len(self.c)
 
+    @memoize
+    def _get_rkvdh2_kerns(self, stage, r1, r2, rold=None, rerr=None):
+        kerns = []
+        tplargs = {
+            'a': self.a, 'b': self.b, 'e': self.e,
+            'stage': stage, 'nstages': self._nstages,
+            'nvars': self.system.nvars, 'errest': rold is not None
+        }
+
+        for dims, em in zip(self.system.ele_shapes, self.system.ele_banks):
+            if rold is not None:
+                kern = self.backend.kernel(
+                    'rkvdh2', tplargs=tplargs, dims=[dims[0], dims[2]],
+                    r1=em[r1], r2=em[r2], rold=em[rold], rerr=em[rerr],
+                )
+            else:
+                kern = self.backend.kernel(
+                    'rkvdh2', tplargs=tplargs, dims=[dims[0], dims[2]],
+                    r1=em[r1], r2=em[r2],
+                )
+
+            kerns.append(kern)
+
+        return kerns
+
     @property
-    def _stepper_has_errest(self):
-        return self._controller_needs_errest and len(self.bhat)
+    def stepper_has_errest(self):
+        return self.controller_needs_errest and len(self.bhat)
 
     @property
     def _stepper_nfevals(self):
         return len(self.b)*self.nsteps
 
     @property
-    def _stepper_nregs(self):
-        return 4 if self._stepper_has_errest else 2
+    def stepper_nregs(self):
+        return 4 if self.stepper_has_errest else 2
 
     def step(self, t, dt):
-        add, rhs = self._add, self.system.rhs
-        errest = self._stepper_has_errest
+        q, rhs = self._queue, self.system.rhs
 
         r1 = self._idxcurr
-
-        if errest:
-            r2, rold, rerr = set(self._regidx) - {r1}
-
-            # Save the current solution
-            add(0.0, rold, 1.0, r1)
-        else:
-            r2, = set(self._regidx) - {r1}
+        r2, *rs = set(self._regidx) - {r1}
 
         # Evaluate the stages in the scheme
-        for i in range(self._nstages):
+        for i, ci in enumerate(self.c):
             # Compute -∇·f
-            rhs(t + self.c[i]*dt, r2 if i > 0 else r1, r2)
+            rhs(t + ci*dt, r2 if i > 0 else r1, r2)
 
-            # Accumulate the error term in rerr
-            if errest:
-                add(1.0 if i > 0 else 0.0, rerr, self.e[i]*dt, r2)
+            # Fetch the appropriate RK accumulation kernels
+            kerns = self._get_rkvdh2_kerns(i, r1, r2, *rs)
 
-            # Sum (special-casing the final stage)
-            if i < self._nstages - 1:
-                add(1.0, r1, self.a[i]*dt, r2)
-                add((self.b[i] - self.a[i])*dt, r2, 1.0, r1)
-            else:
-                add(1.0, r1, self.b[i]*dt, r2)
+            # Execute
+            q.enqueue_and_run(kerns, dt=dt)
 
             # Swap
             r1, r2 = r2, r1
 
         # Return
-        return (r2, rold, rerr) if errest else r2
+        return (r2, *rs) if len(rs) else r2
 
 
 class StdRK34Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk34'
+    stepper_order = 3
 
     a = [
         11847461282814 / 36547543011857,
@@ -236,13 +226,10 @@ class StdRK34Stepper(StdRKVdH2RStepper):
         -69544964788955 / 30262026368149
     ]
 
-    @property
-    def _stepper_order(self):
-        return 3
-
 
 class StdRK45Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk45'
+    stepper_order = 4
 
     a = [
         970286171893 / 4311952581923,
@@ -266,7 +253,3 @@ class StdRK45Stepper(StdRKVdH2RStepper):
         606302364029 / 971179775848,
         1097981568119 / 3980877426909
     ]
-
-    @property
-    def _stepper_order(self):
-        return 4
