@@ -114,7 +114,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             ubdegs = [sum(dd) for dd in self.basis.ubasis.degrees]
 
             # Template arguments
-            tplargs = dict(
+            tplargs_artvisc = dict(
                 nvars=self.nvars, nupts=self.nupts, svar=shockvar,
                 c=self.cfg.items_as('solver-artificial-viscosity', float),
                 order=self.basis.order, ubdegs=ubdegs,
@@ -127,7 +127,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             # Apply the sensor to estimate the required artificial viscosity
             self.kernels['shocksensor'] = lambda: self._be.kernel(
-                'shocksensor', tplargs=tplargs, dims=[self.neles],
+                'shocksensor', tplargs=tplargs_artvisc, dims=[self.neles],
                 u=self.scal_upts_inb, artvisc=self.artvisc
             )
         elif shock_capturing == 'none':
