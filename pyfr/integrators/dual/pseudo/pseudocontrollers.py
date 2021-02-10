@@ -103,7 +103,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['atol'] = self.cfg.getfloat(sect, 'atol')
 
         # PI control values
-        sord = self._pseudo_stepper_order
+        sord = self.pseudo_stepper_order
         tplargs['expa'] = self.cfg.getfloat(sect, 'pi-alpha', 0.7) / sord
         tplargs['expb'] = self.cfg.getfloat(sect, 'pi-beta', 0.4) / sord
 

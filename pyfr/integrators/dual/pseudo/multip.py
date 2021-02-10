@@ -103,7 +103,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     iself.system.rhs(t, uin, fout)
 
                     # Coefficients for the physical stepper
-                    svals = [sc/iself._dt for sc in iself._stepper_coeffs]
+                    svals = [sc/iself._dt for sc in iself.stepper_coeffs]
 
                     # Physical stepper source addition -∇·f - dQ/dt
                     axnpby = iself._get_axnpby_kerns(len(svals) + 1,
@@ -135,7 +135,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             del self.pintgs[l].system.ele_map
 
     def finalise_mg_advance(self, currsoln):
-        psnregs = self.pintg._pseudo_stepper_nregs
+        psnregs = self.pintg.pseudo_stepper_nregs
         snregs = self.pintg.stepper_nregs
 
         # Rotate the stepper registers to the right by one
