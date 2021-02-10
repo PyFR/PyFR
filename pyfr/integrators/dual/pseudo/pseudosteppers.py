@@ -44,8 +44,9 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         svals = [sc/self._dt for sc in self.stepper_coeffs]
 
         # Physical stepper source addition -∇·f - dQ/dt
-        axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
-        self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
+        axnpby = self._get_axnpby_kerns(
+            fout, self._idxcurr, *self._stepper_regidx, subdims=self._subdims
+        )
         self._queue.enqueue_and_run(axnpby, 1, *svals)
 
 
