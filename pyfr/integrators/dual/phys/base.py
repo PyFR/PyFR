@@ -16,7 +16,7 @@ class BaseDualIntegrator(BaseIntegrator):
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
             backend, systemcls, rallocs, mesh,
-            initsoln, cfg, self._stepper_coeffs, self._dt
+            initsoln, cfg, self.stepper_coeffs, self._dt
         )
 
         # Event handlers for advance_to
@@ -28,10 +28,6 @@ class BaseDualIntegrator(BaseIntegrator):
     @property
     def system(self):
         return self.pseudointegrator.system
-
-    @property
-    def _stepper_coeffs(self):
-        pass
 
     @property
     def pseudostepinfo(self):

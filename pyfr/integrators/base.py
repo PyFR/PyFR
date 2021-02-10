@@ -172,15 +172,19 @@ class BaseCommon(object):
         return comm.allreduce(ndofs, op=get_mpi('sum'))
 
     @memoize
-    def _get_axnpby_kerns(self, n, subdims=None):
-        return self._get_kernels('axnpby', nargs=n, subdims=subdims)
+    def _get_axnpby_kerns(self, *rs, subdims=None):
+        kerns = []
+        for em in self.system.ele_banks:
+            regs = [em[r] for r in rs]
+            kerns.append(self.backend.kernel(
+                'axnpby', *regs, subdims=subdims
+            ))
+
+        return kerns
 
     def _add(self, *args):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(len(args) // 2)
-
-        # Bank indices are in odd-numbered arguments
-        self._prepare_reg_banks(*args[1::2])
+        axnpby = self._get_axnpby_kerns(*args[1::2])
 
         # Bind and run the axnpby kernels
         self._queue.enqueue_and_run(axnpby, *args[::2])
