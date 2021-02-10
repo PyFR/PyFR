@@ -107,25 +107,8 @@ class IntegratePlugin(BasePlugin):
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
         privarmap = self.elementscls.privarmap[self.ndims]
-        self._gradpinfo = [(pname, privarmap.index(pname)) 
+        self._gradpinfo = [(pname, privarmap.index(pname))
                             for pname in gradpnames]
-
-        # If gradients are required then form the relevant operators
-        if gradpnames:
-            emap = intg.system.ele_map
-
-            self._gradop, self._rcpjact = [], []
-            for eles, (eset, emask) in zip(emap.values(), rinfo):
-                self._gradop.append(eles.basis.m4)
-
-                # Get the smats at the solution points and subset
-                smat = eles.smat_at_np('upts')[..., eset]
-
-                # Get |J|^-1 at the solution points and subset
-                rcpdjac = eles.rcpdjac_at_np('upts')[:, eset]
-
-                # Product to give J^-T at the solution points
-                self._rcpjact.append(rcpdjac*smat.transpose(2, 0, 1, 3))
 
     def _eval_exprs(self, intg):
         intvals = np.zeros(len(self.exprs))
@@ -183,7 +166,7 @@ class IntegratePlugin(BasePlugin):
 
             # Store the gradients
             grads_eles.append(pgrads)
-        
+
         return grads_eles
 
     def __call__(self, intg):

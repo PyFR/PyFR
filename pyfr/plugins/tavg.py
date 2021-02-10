@@ -74,26 +74,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
         privarmap = self.elementscls.privarmap[self.ndims]
-        self._gradpinfo = [(pname, privarmap.index(pname)) 
+        self._gradpinfo = [(pname, privarmap.index(pname))
                             for pname in gradpnames]
-
-        # If gradients are required then form the relevant operators
-        if gradpnames:
-            self._gradop, self._rcpjact = [], []
-
-            for i, rgn in self._ele_regions:
-                eles = intg.system.ele_map[intg.system.ele_types[i]]
-
-                self._gradop.append(eles.basis.m4)
-
-                # Get the smats at the solution points
-                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                # Get |J|^-1 at the solution points
-                rcpdjac = eles.rcpdjac_at_np('upts')
-
-                # Product to give J^-T at the solution points
-                self._rcpjact.append(smat[..., rgn]*rcpdjac[..., rgn])
 
     def _init_accumex(self, intg):
         self.prevt = self.tout_last = intg.tcurr
@@ -157,7 +139,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         for i, (j, rgn) in enumerate(self._ele_regions):
             # Subset and transpose the solution
             soln = intg.soln[j][..., rgn].swapaxes(0, 1)
-            
+
             # Rearrange and subset gradient data
             grad_soln = np.rollaxis(intg.grad_soln[j], 2)[..., rgn]
 
