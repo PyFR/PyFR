@@ -3,6 +3,7 @@
 import math
 
 import numpy as np
+import sys
 
 from pyfr.integrators.std.base import BaseStdIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
@@ -39,6 +40,12 @@ class BaseStdController(BaseStdIntegrator):
 
         # Fire off any event handlers
         self.completed_step_handlers(self)
+
+        # Abort if plugins ask for it
+        if self.abort:
+            # Ensure that the callbacks registered in atexit
+            # are called only once if stopping the computation
+            sys.exit()
 
         # Clear the step info
         self.stepinfo = []

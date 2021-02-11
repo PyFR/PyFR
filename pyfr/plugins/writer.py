@@ -58,5 +58,9 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._invoke_postaction(mesh=intg.system.mesh.fname, soln=solnfname,
                                 t=intg.tcurr)
 
+        # If an abort-action has been registered then invoke it
+        code = self._invoke_abortaction(intg=intg, mesh=intg.system.mesh.fname,
+                                        soln=solnfname, t=intg.tcurr)
+
         # Update the last output time
         self.tout_last = intg.tcurr
