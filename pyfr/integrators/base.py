@@ -3,6 +3,7 @@
 from collections import deque
 import itertools as it
 import re
+import sys
 import time
 
 import numpy as np
@@ -135,6 +136,13 @@ class BaseIntegrator(object):
             return ret
         else:
             return {'config': cfg, 'config-0': cfg}
+
+    def _check_abort(self):
+        comm, rank, root = get_comm_rank_root()
+        if comm.allreduce(self.abort, op=get_mpi('lor')):
+            # Ensure that the callbacks registered in atexit
+            # are called only once if stopping the computation
+            sys.exit(1)
 
 
 class BaseCommon(object):

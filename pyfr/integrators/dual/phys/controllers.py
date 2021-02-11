@@ -28,6 +28,9 @@ class BaseDualController(BaseDualIntegrator):
         # Fire off any event handlers
         self.completed_step_handlers(self)
 
+        # Abort if plugins request it
+        self._check_abort()
+
         # Clear the pseudo step info
         self.pseudointegrator.pseudostepinfo = []
 

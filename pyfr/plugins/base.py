@@ -6,7 +6,6 @@ import shlex
 
 import numpy as np
 from pytools import prefork
-import subprocess
 
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.writers.native import NativeWriter
@@ -78,14 +77,11 @@ class PostactionMixin(object):
             if self.postactmode not in {'blocking', 'non-blocking'}:
                 raise ValueError('Invalid post action mode')
 
-        if self.cfg.hasopt(self.cfgsect, 'abort-action'):
-            self.abortact = self.cfg.getpath(self.cfgsect, 'abort-action')
-
     def __del__(self):
         if getattr(self, 'postactaid', None) is not None:
             prefork.wait(self.postactaid)
 
-    def _invoke_postaction(self, **kwargs):
+    def _invoke_postaction(self, intg, **kwargs):
         comm, rank, root = get_comm_rank_root()
 
         # If we have a post-action and are the root rank then fire it
@@ -99,26 +95,12 @@ class PostactionMixin(object):
 
             # Invoke
             if self.postactmode == 'blocking':
-                prefork.call(cmdline)
+                # Store returning code of the post-action
+                # If it is different from zero
+                # request intg to abort the computation
+                intg.abort |= not prefork.call(cmdline)
             else:
                 self.postactaid = prefork.call_async(cmdline)
-
-    def _invoke_abortaction(self, intg, **kwargs):
-        comm, rank, root = get_comm_rank_root()
-
-        # If we have an abort-action and are the root rank then fire it
-        if self.abortact:
-            if rank == root:
-                # Prepare the command line
-                cmdline = shlex.split(self.abortact.format(**kwargs))
-
-                retcode = subprocess.run(cmdline).returncode
-                comm.bcast(retcode, root=root)
-            elif rank != root:
-                retcode = comm.bcast(None, root=root)
-
-            if retcode != 0:
-                intg.abort = True
 
 
 class RegionMixin(object):
