@@ -57,6 +57,10 @@ class VTKWriter(BaseWriter):
                         (f'grad {var} {f}', nf(f)) for f in fields
                     )
 
+    @staticmethod
+    def _vtkfile_version():
+        return '0.1'
+
     def _pre_proc_fields_soln(self, name, mesh, soln):
         # Convert from conservative to primitive variables
         return np.array(self.elementscls.con_to_pri(soln, self.cfg))
@@ -202,7 +206,8 @@ class VTKWriter(BaseWriter):
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '
                               'type="UnstructuredGrid" '
-                              'version="0.1">\n<UnstructuredGrid>\n')
+                              f'version=\"{self._vtkfile_version()}\">\n'
+                              '<UnstructuredGrid>\n')
 
                 # Running byte-offset for appended data
                 off = 0
@@ -225,7 +230,8 @@ class VTKWriter(BaseWriter):
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '
                               'type="PUnstructuredGrid" '
-                              'version="0.1">\n<PUnstructuredGrid>\n')
+                              f'version=\"{self._vtkfile_version()}\">\n'
+                              '<PUnstructuredGrid>\n')
 
                 # Header
                 self._write_parallel_header(fh)

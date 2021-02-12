@@ -5,17 +5,21 @@ import numpy as np
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers.vtk import VTKWriter
-from pyfr.writers.nodemaps import VTK8NodeMaps
+from pyfr.writers.nodemaps import VTK8NodeMaps, VTK9NodeMaps
 
 
 class VTKHOWriter(VTKWriter):
-    name = 'vtkho'
+    name = 'vtk-ho'
     extn = ['']
 
-    # Types of VTK_LAGRANGE_TRIANGLE, VTK_LAGRANGE_QUADRILATERAL
-    # VTK_LAGRANGE_TETRAHEDRON, VTK_LAGRANGE_WEDGE and
-    # VTK_LAGRANGE_HEXAHEDRON
     vtk_types = dict(tri=69, quad=70, tet=71, pri=73, hex=72)
+
+    @staticmethod
+    def _vtkfile_version():
+        # With version >= 2.1, VTK9 supposes
+        # that hex connectivity corresponds to
+        # VTK9 connectivity
+        return '2.1'
 
     def _get_npts_ncells_nnodes(self, sk):
         etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
@@ -31,26 +35,21 @@ class VTKHOWriter(VTKWriter):
         shapecls = subclass_where(BaseShape, name=etype)
 
         # Number of vis points
-        # This value coincides with the number of 
-        # nodes of the vtkLagrange* correspondent 
+        # which coincides with the number of
+        # nodes of the vtkLagrange* correspondent
         # objects
         npts = shapecls.nspts_from_order(self.divisor + 1)*neles
 
-        # Number of cells and nodes
-        ncells = neles
-        nnodes = npts
-
-        return npts, ncells, nnodes
+        return npts, neles, npts
 
     def _write_data(self, vtuf, mk, sk):
-        name = self.mesh_inf[mk][0]
+        etype = self.mesh_inf[mk][0]
 
-        if name == 'pyr':
+        if etype == 'pyr':
             # No Lagrange pyr cells in VTK
             # Therefore, rely on the subdivision mechanism
             # of the vtk writer
-            super()._write_data(vtuf, mk, sk)
-            return
+            return super()._write_data(vtuf, mk, sk)
 
         mesh = self.mesh[mk].astype(self.dtype)
         soln = self.soln[sk].swapaxes(0, 1).astype(self.dtype)
@@ -65,25 +64,27 @@ class VTKHOWriter(VTKWriter):
         nspts, neles = mesh.shape[:2]
 
         # Points inside of a standard element
-        svpts = self._get_std_ele(name, nspts)
+        svpts = self._get_std_ele(etype, nspts)
         nsvpts = len(svpts)
 
         # Transform PyFR to VTK8 points
         # Read nodemaps.py for more information on
-        # why we chose VTK8 instead of VTK9 points
-        svpts = np.array(svpts)[VTK8NodeMaps.from_pyfr[(name, nsvpts)]
-                                .astype(int)]
+        # why we chose VTK8 or VTK9 maps
+        vtk_from_pyfr = (VTK8NodeMaps.from_pyfr
+                         if self._vtkfile_version() == "0.1"
+                         else VTK9NodeMaps.from_pyfr)
+        svpts = np.array(svpts)[vtk_from_pyfr[etype, nsvpts]]
 
         # Generate the operator matrices
-        mesh_vtu_op = self._get_mesh_op(name, nspts, svpts)
-        soln_vtu_op = self._get_soln_op(name, nspts, svpts)
+        mesh_vtu_op = self._get_mesh_op(etype, nspts, svpts)
+        soln_vtu_op = self._get_soln_op(etype, nspts, svpts)
 
         # Calculate node locations of VTU elements
         vpts = mesh_vtu_op @ mesh.reshape(nspts, -1)
         vpts = vpts.reshape(nsvpts, -1, self.ndims)
 
         # Pre-process the solution
-        soln = self._pre_proc_fields(name, mesh, soln).swapaxes(0, 1)
+        soln = self._pre_proc_fields(etype, mesh, soln).swapaxes(0, 1)
 
         # Interpolate the solution to the vis points
         vsoln = soln_vtu_op @ soln.reshape(len(soln), -1)
@@ -105,7 +106,7 @@ class VTKHOWriter(VTKWriter):
         vtu_off += (np.arange(neles)*nsvpts)[:, None]
 
         # Tile VTU cell type numbers
-        vtu_typ = np.tile(self.vtk_types[name], neles)
+        vtu_typ = np.tile(self.vtk_types[etype], neles)
 
         # Write VTU node connectivity, connectivity offsets and cell types
         self._write_darray(vtu_con, vtuf, np.int32)

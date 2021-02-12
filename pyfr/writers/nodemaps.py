@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
 
-"""Mappings between the ordering of PyFR nodes, and those of external formats
-
-"""
 import numpy as np
 
 
@@ -18,23 +15,16 @@ class VTK8NodeMaps(object):
     INFO: VTK updated the numbering of Lagrange hex elements in VTK9
     due to a bug in a documentation (but not a bug in the implementation), see
     https://gitlab.kitware.com/vtk/vtk/-/merge_requests/6678
-    If the *.vtu or *.pvtu files are written using xml version < 5.1,
+    If the *.vtu or *.pvtu files are written using VTKFile version < 2.1,
     then VTK and Paraview will automatically suppose that the node numbering
     is consistent with the one found in VTK8 and will automatically renumber
     Lagrange hex elements without the users being aware of it.
-    PyFR hardcodes the token xml version to 1.0, therefore we need to use
-    the VTK8 connectivity.
-    The mappings between PyFR to VTK9 are also added for the
-    sake of completeness.
     """
 
     from_pyfr = {
         ('quad', 4): np.array([0, 1, 3, 2]),
-        ('quad', 9): np.array([0, 2, 8, 6, 1, 5,
-                               7, 3, 4]),
-        ('quad', 16): np.array([0,  3, 15, 12,  1,
-                                2,  7, 11, 13, 14,
-                                4,  8,  5,  6,  9,
+        ('quad', 9): np.array([0, 2, 8, 6, 1, 5, 7, 3, 4]),
+        ('quad', 16): np.array([0,  3, 15, 12,  1, 2,  7, 11, 13, 14, 4,  8,  5,  6,  9,
                                 10]),
         ('quad', 25): np.array([0,  4, 24, 20,  1,
                                 2,  3,  9, 14, 19,
@@ -264,11 +254,9 @@ class VTK9NodeMaps(object):
     WARNING
     VTK9 changed the connectivity mapping of vtkLagrangeHexahedron
     cells. However, if the `xml version` token of a given `vtu` or
-    `pvtu` file is lower than 5.1, then VTK>=9 will suppose that the
+    `pvtu` file is lower than 2.1, then VTK>=9 will suppose that the
     connectivity is consistent with that of VTK8 and will reorder the
     nodes without the user noticing it.
-    As `xml version` is hardcoded to 1.0 in PyFR, we shouldn't use
-    these mappings. They are left herein for possible future improvements
     """
     from_pyfr = VTK8NodeMaps.from_pyfr.copy()
     from_pyfr.update(
