@@ -44,7 +44,6 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                         stats=stats.tostr(),
                         mesh_uuid=intg.mesh_uuid)
 
-
         # Extract and subset the solution
         soln = [intg.soln[i][..., rgn] for i, rgn in self._ele_regions]
 
@@ -55,8 +54,8 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         solnfname = self._writer.write(data, metadata, intg.tcurr)
 
         # If a post-action has been registered then invoke it
-        self._invoke_postaction(mesh=intg.system.mesh.fname, soln=solnfname,
-                                t=intg.tcurr)
+        self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
+                                soln=solnfname, t=intg.tcurr)
 
         # Update the last output time
         self.tout_last = intg.tcurr

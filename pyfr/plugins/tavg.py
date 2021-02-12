@@ -214,7 +214,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 solnfname = self._writer.write(data, metadata, intg.tcurr)
 
                 # If a post-action has been registered then invoke it
-                self._invoke_postaction(mesh=intg.system.mesh.fname,
+                self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
                                         soln=solnfname, t=intg.tcurr)
 
                 # Reset the accumulators
