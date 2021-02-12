@@ -32,9 +32,9 @@
     // Estimate the left and right wave speed, sl and sr
     fpdtype_t sl = nv - a;
     fpdtype_t sr = nv + a;
-    fpdtype_t s_star = (pr - pl + ul[0]*nvl*(sl - nvl) -
-                        ur[0]*nvr*(sr - nvr)) /
-                       (ul[0]*(sl - nvl) - ur[0]*(sr - nvr));
+    fpdtype_t s_star = (pr - pl + ul[0]*nvl*(sl - nvl)
+                        - ur[0]*nvr*(sr - nvr)) 
+                        / (ul[0]*(sl - nvl) - ur[0]*(sr - nvr));
 
     // Output
     rcp_lstar = 1 / (sl - s_star);
@@ -49,12 +49,10 @@
     nf_frstar = s_star*(sr*ur[${i}] - nf_fr) * rcp_rstar;
 % else:
     d_star = ${'s_star' if i == nvars - 1 else 'n[{0}]'.format(i - 1)};
-    nf_flstar = (s_star*(sl*ul[${i}] - nf_fl) +
-                 sl*(pl + ul[0]*(sl - nvl)*(s_star - nvl))*d_star) *
-                rcp_lstar;
-    nf_frstar = (s_star*(sr*ur[${i}] - nf_fr) +
-                 sr*(pr + ur[0]*(sr - nvr)*(s_star - nvr))*d_star) *
-                rcp_rstar;
+    nf_flstar = rcp_lstar*(s_star*(sl*ul[${i}] - nf_fl) 
+                + sl*(pl + ul[0]*(sl - nvl)*(s_star - nvl))*d_star);
+    nf_frstar = rcp_rstar*(s_star*(sr*ur[${i}] - nf_fr) 
+                + sr*(pr + ur[0]*(sr - nvr)*(s_star - nvr))*d_star);
 % endif
 
     nf[${i}] = (sl >= 0) ? nf_fl : (sl <= 0 && s_star >= 0) ? nf_flstar :

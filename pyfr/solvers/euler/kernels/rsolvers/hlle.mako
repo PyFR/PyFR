@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%include file='pyfr.solvers.euler.kernels.flux1d'/>
+<%include file='pyfr.solvers.euler.kernels.flux'/>
 
 <%pyfr:macro name='rsolve_t1d' params='ul, ur, nf'>
     fpdtype_t fl[${nvars}], fr[${nvars}];
@@ -12,21 +12,19 @@
     ${pyfr.expand('inviscid_1dflux', 'ul', 'fl', 'pl', 'vl')};
     ${pyfr.expand('inviscid_1dflux', 'ur', 'fr', 'pr', 'vr')};
 
-    // Compute the Roe-averaged velocity
-    fpdtype_t nv = (sqrt(ul[0])*vl[0] + sqrt(ur[0])*vr[0])
-                 / (sqrt(ul[0]) + sqrt(ur[0]));
+    // Compute the mean velocity
+    fpdtype_t nv = 0.5*(vl[0] + vr[0]);
 
-    // Compute the Roe-averaged enthalpy
-    fpdtype_t H = (sqrt(ul[0])*(pr + ur[${ndims + 1}])
-                 + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
-                / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
-
-    // Roe average sound speed
-    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*nv*nv));
+    // Einfeldt modified sound speed
+    fpdtype_t ravrho = 1 / (sqrt(ul[0]) + sqrt(ur[0]));
+    fpdtype_t eta = 0.5*sqrt(ul[0]*ur[0])*ravrho*ravrho;
+    fpdtype_t d = (${c['gamma']}*pl / sqrt(ul[0]) + ${c['gamma']}*pr / sqrt(ur[0]))*ravrho +
+              eta*(vr[0] - vl[0])*(vr[0] - vl[0]);
+    d = sqrt(d);
 
     // Estimate the left and right wave speed, sl and sr
-    fpdtype_t sl = nv - a;
-    fpdtype_t sr = nv + a;
+    fpdtype_t sl = nv - d;
+    fpdtype_t sr = nv + d;
     fpdtype_t rcpsrsl = 1 / (sr - sl);
 
     // Output

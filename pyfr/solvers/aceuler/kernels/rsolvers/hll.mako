@@ -4,17 +4,22 @@
 
 <%pyfr:macro name='rsolve_t1d' params='ul, ur, nf'>
     fpdtype_t fl[${nvars}], fr[${nvars}];
+    fpdtype_t nf_sub;
 
+    // Compute the left and right fluxes
     ${pyfr.expand('inviscid_1dflux', 'ul', 'fl')};
     ${pyfr.expand('inviscid_1dflux', 'ur', 'fr')};
 
-    // Quasi-Davis max wavespeed
-    fpdtype_t a = max(fabs(ul[1] + sqrt(ul[1]*ul[1] + ${c['ac-zeta']})),
-                      fabs(ur[1] + sqrt(ur[1]*ur[1] + ${c['ac-zeta']})));
+    // Estimate the left and right wave speed, sl and sr
+    fpdtype_t sl = ul[1] - sqrt(ul[1]*ul[1] + ${c['ac-zeta']});
+    fpdtype_t sr = ur[1] + sqrt(ur[1]*ur[1] + ${c['ac-zeta']});
+    fpdtype_t rcpsrsl = 1 / (sr - sl);
 
     // Output
 % for i in range(nvars):
-    nf[${i}] = 0.5*(fl[${i}] + fr[${i}]) + 0.5*a*(ul[${i}] - ur[${i}]);
+    nf_sub = (sr*fl[${i}] - sl*fr[${i}] + sl*sr*(ur[${i}] - ul[${i}]))*rcpsrsl;
+    
+    nf[${i}] = (0 <= sl) ? fl[${i}] : (0 >= sr) ? fr[${i}] : nf_sub;
 % endfor
 </%pyfr:macro>
 

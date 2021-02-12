@@ -69,8 +69,11 @@ def _locals(body):
     # Extract the variable names
     lvars = [re.match(r'\s*(\w+)', v).group(1) for v in decls]
 
+    # Protected intrinsics
+    protected = {'if', 'for', 'where', 'do'}
+    
     # Prune invalid names
-    return [lv for lv in lvars if lv != 'if']
+    return [lv for lv in lvars if lv not in protected]
 
 
 @supports_caller
