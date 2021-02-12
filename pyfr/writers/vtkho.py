@@ -28,8 +28,7 @@ class VTKHOWriter(VTKWriter):
             # No Lagrange pyr cells in VTK
             # Therefore, rely on the subdivision mechanism
             # of the vtk writer
-            super()._get_npts_ncells_nnodes(sk)
-            return
+            return super()._get_npts_ncells_nnodes(sk)
 
         # Get the shape and sub division classes
         shapecls = subclass_where(BaseShape, name=etype)
