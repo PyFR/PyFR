@@ -32,7 +32,7 @@
 
     usr[0] = ps;
     usr[1] = us;
-% for i in range(2,ndims + 1):
+% for i in range(2, ndims + 1):
     usl[${i}] = ul[${i}]*(sl - ul[1])*rsl;
     usr[${i}] = ur[${i}]*(sr - ur[1])*rsr;
 % endfor

@@ -11,8 +11,8 @@
     fpdtype_t v1, v2, v3;
     fpdtype_t pl, pr, r2a2;
 
-    ${pyfr.expand('inviscid_1dflux', 'ul','fl','pl','vl')};
-    ${pyfr.expand('inviscid_1dflux', 'ur','fr','pr','vr')};
+    ${pyfr.expand('inviscid_1dflux', 'ul', 'fl', 'pl', 'vl')};
+    ${pyfr.expand('inviscid_1dflux', 'ur', 'fr', 'pr', 'vr')};
 
     // Compute Roe averaged density and enthalpy
     fpdtype_t roa = sqrt(ul[0])*sqrt(ur[0]);
@@ -41,11 +41,11 @@
     fpdtype_t cr = sqrt(${c['gamma']}*pr / ur[0]);
     fpdtype_t ml = sqrt(${pyfr.dot('vl[{i}]', 'vl[{i}]', i=ndims)}) / cl;
     fpdtype_t mr = sqrt(${pyfr.dot('vr[{i}]', 'vr[{i}]', i=ndims)}) / cr;
-    fpdtype_t sswl = (((vl[0] - cl) > 0) && ((vr[0] - cr) < 0)) ? 1 :
-                     (((vl[0] + cl) > 0) && ((vr[0] + cr) < 0)) ? 1 : 0;
-    fpdtype_t sswr = (((vr[0] - cr) > 0) && ((vl[0] - cl) < 0)) ? 1 :
-                     (((vr[0] + cr) > 0) && ((vl[0] + cl) < 0)) ? 1 : 0;
-    fpdtype_t z = ((sswl == sswr) && (sswl == 0)) ? min(1, max(ml, mr)) : 1;
+    fpdtype_t sswl = (vl[0] - cl > 0 && vr[0] - cr < 0) ? 1 :
+                     (vl[0] + cl > 0 && vr[0] + cr < 0) ? 1 : 0;
+    fpdtype_t sswr = (vr[0] - cr > 0 && vl[0] - cl < 0) ? 1 :
+                     (vr[0] + cr > 0 && vl[0] + cl < 0) ? 1 : 0;
+    fpdtype_t z = (sswl == sswr && sswl == 0) ? min(1, max(ml, mr)) : 1;
 
     // Get L2Roe velocity jumps
 % for i in range(ndims):
@@ -62,16 +62,15 @@
     v3 = (dp + roa*a*dv[0])*r2a2;
     nf[0] = 0.5*(fl[0] + fr[0]) - (l1*v1 + l2*v2 + l3*v3);
     
-% for i in range(ndims):
-% if i == 0:
-    v1 = (dp - roa*a*dv[0])*r2a2*(va[${i}] - a);
-    v2 = (dro - dp*2*r2a2)*va[${i}];
-    v3 = (dp + roa*a*dv[0])*r2a2*(va[${i}] + a);
-% else:
+
+    v1 = (dp - roa*a*dv[0])*r2a2*(va[0] - a);
+    v2 = (dro - dp*2*r2a2)*va[0];
+    v3 = (dp + roa*a*dv[0])*r2a2*(va[0] + a);
+    nf[1] = 0.5*(fl[1] + fr[1]) - (l1*v1 + l2*v2 + l3*v3);
+% for i in range(1, ndims):
     v1 = (dp - roa*a*dv[0])*r2a2*va[${i}];
     v2 = (dro - dp*2*r2a2)*va[${i}] + roa*dv[${i}];
     v3 = (dp + roa*a*dv[0])*r2a2*va[${i}];
-% endif
     nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}]) - (l1*v1 + l2*v2 + l3*v3);
 % endfor
 

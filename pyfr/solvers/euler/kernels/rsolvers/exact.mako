@@ -20,12 +20,13 @@
     fpdtype_t pmax = max(pl, pr);
     fpdtype_t rpmax = pmax / pmin;
 
-    if ((rpmax <= 2) && (pmin <= bpv) && (bpv <= pmax))
+    if (rpmax <= 2 && pmin <= bpv && bpv <= pmax)
     {
         p0 = bpv;
     }
+    // Two-rarefaction Riemann solve
     else if (bpv < pmin)
-    {   // Two-rarefaction Riemann solve
+    {   
         fpdtype_t rcl = 1 / cl; 
         fpdtype_t rcr = 1 / cr;
 
@@ -37,8 +38,9 @@
 
         p0 = 0.5*(pl*pow(ptl, ${tgrgm}) + pr*pow(ptr, ${tgrgm}));
     }
+    // Two-shock Riemann solve
     else
-    {   // Two-shock Riemann solve
+    {   
         fpdtype_t gl = sqrt((${trgp}/rl) / (${gmrgp}*pl + bpv));
         fpdtype_t gr = sqrt((${trgp}/rr) / (${gmrgp}*pr + bpv));
         p0 = (gl*pl + gr*pr - (vr[0] - vl[0])) / (gl + gr);
@@ -81,12 +83,9 @@
     f[${nvars - 1}] = (E + w[${nvars - 1}])*w[1];
 
     // Momentum fluxes
-% for i in range(ndims):
-% if i == 0:
-    f[${i + 1}]= rhov[0]*w[${i + 1}] + w[${nvars - 1}];
-% else:
+    f[1]= rhov[0]*w[1] + w[${nvars - 1}];
+% for i in range(1, ndims):
     f[${i + 1}]= rhov[0]*w[${i + 1}];
-% endif
 % endfor
 </%pyfr:macro>
 
@@ -166,7 +165,7 @@
         }
         else
         {
-            if (${switch} >= (vr[0] + cr))
+            if (${switch} >= vr[0] + cr)
             {
                 w0[0] = rr;
                 w0[1] = vr[0];
@@ -219,7 +218,7 @@
     fpdtype_t ud = vr[0] - vl[0];
 
     // Newton Iterations
-%for k in range(kmax):
+% for k in range(kmax):
     ${pyfr.expand('star_flux', 'p0', 'pl', 'rl', 'cl', 'fsl', 'fdl')};
     ${pyfr.expand('star_flux', 'p0', 'pr', 'rr', 'cr', 'fsr', 'fdr')};
     p1 = p0 - (fsl + fsr + ud) / (fdl + fdr);

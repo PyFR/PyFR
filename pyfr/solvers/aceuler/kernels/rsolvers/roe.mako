@@ -10,8 +10,8 @@
     fpdtype_t fl[${nvars}], fr[${nvars}];
     fpdtype_t v1, v2, v3;
     
-    ${pyfr.expand('inviscid_1dflux', 'ul','fl')};
-    ${pyfr.expand('inviscid_1dflux', 'ur','fr')};
+    ${pyfr.expand('inviscid_1dflux', 'ul', 'fl')};
+    ${pyfr.expand('inviscid_1dflux', 'ur', 'fr')};
 
     // Average velocity in x
     fpdtype_t vax = 0.5*(ul[1] + ur[1]);
@@ -43,7 +43,7 @@
     v1 = a1*(vax - aa);
     v3 = a3*(vax + aa);
     nf[1] = 0.5*(fl[1] + fr[1]) - 0.5*(l1*v1 + l3*v3);
-% for i in range(2,ndims + 1):
+% for i in range(2, ndims + 1):
     v1 = -a1*ra*(vax - aa)*0.5*(ul[${i}] + ur[${i}]);
     v2 = (ur[${i}] - ul[${i}]) + vax*vc;
     v3 =  a3*ra*(vax + aa)*0.5*(ul[${i}] + ur[${i}]);

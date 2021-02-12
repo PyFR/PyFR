@@ -34,7 +34,7 @@
 
     fp[1] = fmp*(vl[0] + ${rg}*(2*cl - vl[0]));
     fm[1] = fmm*(vr[0] - ${rg}*(2*cr + vr[0]));
-% for i in range(1,ndims):
+% for i in range(1, ndims):
     fp[${i + 1}] = fmp*vl[${i}];
     fm[${i + 1}] = fmm*vr[${i}];
 % endfor
