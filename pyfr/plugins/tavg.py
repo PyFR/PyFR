@@ -69,27 +69,13 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
     def _init_gradients(self, intg):
         # Determine what gradients, if any, are required
-        self._gradpnames = gradpnames = set()
+        gradpnames = set()
         for ex in self.aexprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
-        # If gradients are required then form the relevant operators
-        if gradpnames:
-            self._gradop, self._rcpjact = [], []
-
-            for i, rgn in self._ele_regions:
-                eles = intg.system.ele_map[intg.system.ele_types[i]]
-
-                self._gradop.append(eles.basis.m4)
-
-                # Get the smats at the solution points
-                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                # Get |J|^-1 at the solution points
-                rcpdjac = eles.rcpdjac_at_np('upts')
-
-                # Product to give J^-T at the solution points
-                self._rcpjact.append(smat[..., rgn]*rcpdjac[..., rgn])
+        privarmap = self.elementscls.privarmap[self.ndims]
+        self._gradpinfo = [(pname, privarmap.index(pname))
+                            for pname in gradpnames]
 
     def _init_accumex(self, intg):
         self.prevt = self.tout_last = intg.tcurr
@@ -107,6 +93,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
+        # Compute primitive gradients if required
+        if self._gradpinfo:
+            grads_eles = self._grad_pvars(intg)
+
         # Iterate over each element type in the simulation
         for i, (j, rgn) in enumerate(self._ele_regions):
             soln = intg.soln[j][..., rgn]
@@ -118,25 +108,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
 
-            # Compute any required gradients
-            if self._gradpnames:
-                # Gradient operator and J^-T matrix
-                gradop, rcpjact = self._gradop[i], self._rcpjact[i]
-                nupts = gradop.shape[1]
-
-                for pname in self._gradpnames:
-                    psoln = subs[pname]
-
-                    # Compute the transformed gradient
-                    tgradpn = gradop @ psoln
-                    tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
-
-                    # Untransform this to get the physical gradient
-                    gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
-                    gradpn = gradpn.reshape(self.ndims, nupts, -1)
-
-                    for dim, grad in zip('xyz', gradpn):
-                        subs[f'grad_{pname}_{dim}'] = grad
+            # Prepare any required gradients
+            for pname, idx in self._gradpinfo:
+                for dim, grad in zip('xyz', grads_eles[i][idx]):
+                    subs[f'grad_{pname}_{dim}'] = grad
 
             # Evaluate the expressions
             exprs.append([npeval(v, subs) for v in self.aexprs])
@@ -156,6 +131,25 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Stack up the expressions for each element type and return
         return [np.dstack(exs).swapaxes(1, 2) for exs in exprs]
+
+    def _grad_pvars(self, intg):
+        grads_eles = []
+
+        # Iterate over each element type in the simulation
+        for i, (j, rgn) in enumerate(self._ele_regions):
+            # Subset and transpose the solution
+            soln = intg.soln[j][..., rgn].swapaxes(0, 1)
+
+            # Rearrange and subset gradient data
+            grad_soln = np.rollaxis(intg.grad_soln[j], 2)[..., rgn]
+
+            # Transform from conservative to primitive gradients
+            pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
+
+            # Store the gradients
+            grads_eles.append(pgrads)
+
+        return grads_eles
 
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return
@@ -220,7 +214,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 solnfname = self._writer.write(data, metadata, intg.tcurr)
 
                 # If a post-action has been registered then invoke it
-                self._invoke_postaction(mesh=intg.system.mesh.fname,
+                self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
                                         soln=solnfname, t=intg.tcurr)
 
                 # Reset the accumulators
