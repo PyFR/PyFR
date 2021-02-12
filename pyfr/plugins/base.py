@@ -98,7 +98,7 @@ class PostactionMixin(object):
                 # Store returning code of the post-action
                 # If it is different from zero
                 # request intg to abort the computation
-                intg.abort |= not prefork.call(cmdline)
+                intg.abort |= bool(prefork.call(cmdline))
             else:
                 self.postactaid = prefork.call_async(cmdline)
 
