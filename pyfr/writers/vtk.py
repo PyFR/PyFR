@@ -16,6 +16,11 @@ class VTKWriter(BaseWriter):
     name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
+    # With version >= 2.1, VTK9 supposes
+    # that hex connectivity corresponds to
+    # VTK9 connectivity
+    _vtkfile_version = '0.1'
+
     def __init__(self, args):
         super().__init__(args)
 
@@ -56,10 +61,6 @@ class VTKWriter(BaseWriter):
                     self._vtk_vars.extend(
                         (f'grad {var} {f}', nf(f)) for f in fields
                     )
-
-    @staticmethod
-    def _vtkfile_version():
-        return '0.1'
 
     def _pre_proc_fields_soln(self, name, mesh, soln):
         # Convert from conservative to primitive variables
@@ -206,7 +207,7 @@ class VTKWriter(BaseWriter):
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '
                               'type="UnstructuredGrid" '
-                              f'version=\"{self._vtkfile_version()}\">\n'
+                              f'version="{self._vtkfile_version}">\n'
                               '<UnstructuredGrid>\n')
 
                 # Running byte-offset for appended data
@@ -230,7 +231,7 @@ class VTKWriter(BaseWriter):
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '
                               'type="PUnstructuredGrid" '
-                              f'version=\"{self._vtkfile_version()}\">\n'
+                              f'version="{self._vtkfile_version}">\n'
                               '<PUnstructuredGrid>\n')
 
                 # Header

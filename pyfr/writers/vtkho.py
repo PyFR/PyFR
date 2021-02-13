@@ -4,8 +4,8 @@ import numpy as np
 
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
+from pyfr.writers.nodemaps import VTKHONodeMaps
 from pyfr.writers.vtk import VTKWriter
-from pyfr.writers.nodemaps import VTK8NodeMaps, VTK9NodeMaps
 
 
 class VTKHOWriter(VTKWriter):
@@ -14,12 +14,10 @@ class VTKHOWriter(VTKWriter):
 
     vtk_types = dict(tri=69, quad=70, tet=71, pri=73, hex=72)
 
-    @staticmethod
-    def _vtkfile_version():
-        # With version >= 2.1, VTK9 supposes
-        # that hex connectivity corresponds to
-        # VTK9 connectivity
-        return '2.1'
+    # With VTKFile version >= 2.1, VTK>=9 supposes
+    # that hex connectivity corresponds to
+    # VTK9 mapping
+    _vtkfile_version = '2.1'
 
     def _get_npts_ncells_nnodes(self, sk):
         etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
@@ -66,13 +64,10 @@ class VTKHOWriter(VTKWriter):
         svpts = self._get_std_ele(etype, nspts)
         nsvpts = len(svpts)
 
-        # Transform PyFR to VTK8 points
+        # Transform PyFR to VTK9 points
         # Read nodemaps.py for more information on
-        # why we chose VTK8 or VTK9 maps
-        vtk_from_pyfr = (VTK8NodeMaps.from_pyfr
-                         if self._vtkfile_version() == "0.1"
-                         else VTK9NodeMaps.from_pyfr)
-        svpts = np.array(svpts)[vtk_from_pyfr[etype, nsvpts]]
+        # why we chose VTK9 over VTK8 maps
+        svpts = np.array(svpts)[VTKHONodeMaps.from_pyfr[etype, nsvpts]]
 
         # Generate the operator matrices
         mesh_vtu_op = self._get_mesh_op(etype, nspts, svpts)
