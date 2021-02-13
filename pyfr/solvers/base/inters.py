@@ -64,7 +64,7 @@ class BaseInters(object):
         # Swizzle the dimensions and permute
         m = np.concatenate(m)
         m = np.atleast_2d(m.T)
-        m = m[:,self._perm]
+        m = m[:, self._perm]
 
         return self._be.const_matrix(m)
 

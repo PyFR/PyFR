@@ -6,7 +6,9 @@ import re
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
-from pyfr.integrators.dual.pseudo.pseudocontrollers import BaseDualPseudoController
+from pyfr.integrators.dual.pseudo.pseudocontrollers import (
+    BaseDualPseudoController
+)
 from pyfr.util import memoize, proxylist, subclass_where
 
 
@@ -252,7 +254,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Project local dtau field to lower multigrid levels
-        if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
+        if self.pintgs[self._order].pseudo_controller_needs_lerrest:
             self.pintg._queue.enqueue_and_run(self.dtauproject(l1, l2))
 
     def prolongate(self, l1, l2):
@@ -321,7 +323,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         for l in self.levels:
             # Total number of RHS evaluations
             stats.set('solver-time-integrator', f'nfevals-p{l}',
-                      self.pintgs[l]._pseudo_stepper_nfevals)
+                      self.pintgs[l].pseudo_stepper_nfevals)
 
             # Total number of pseudo-steps
             stats.set('solver-time-integrator', f'npseudosteps-p{l}',

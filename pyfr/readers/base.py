@@ -155,11 +155,11 @@ class NodalMeshAssembler(object):
                 rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
 
                 for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
-                    # Add periodic face flags: periodic BC number offset plus 1 to avoid +/- 0
+                    # Add periodic face flags
                     flg = int(k) + 1
 
                     # Left = +, right = -
-                    lf = resid.pop(tuple(sorted(lfn)))[:-1] + ( flg,)
+                    lf = resid.pop(tuple(sorted(lfn)))[:-1] + (flg,)
                     rf = resid.pop(tuple(sorted(rfn)))[:-1] + (-flg,)
 
                     pfaces[pftype].append([lf, rf])

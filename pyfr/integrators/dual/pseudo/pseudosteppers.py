@@ -31,7 +31,8 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
 
     def collect_stats(self, stats):
         # Total number of RHS evaluations
-        stats.set('solver-time-integrator', 'nfevals', self._pseudo_stepper_nfevals)
+        stats.set('solver-time-integrator', 'nfevals',
+                  self.pseudo_stepper_nfevals)
 
         # Total number of pseudo-steps
         stats.set('solver-time-integrator', 'npseudosteps', self.npseudosteps)
@@ -53,18 +54,12 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
 class DualEulerPseudoStepper(BaseDualPseudoStepper):
     pseudo_stepper_name = 'euler'
     pseudo_stepper_order = 1
+    pseudo_stepper_nregs = 2
+    pseudo_stepper_has_lerrest = False
 
     @property
-    def pseudo_stepper_has_lerrest(self):
-        return False
-
-    @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return self.npseudosteps
-
-    @property
-    def pseudo_stepper_nregs(self):
-        return 2
 
     def step(self, t):
         self.npseudosteps += 1
@@ -86,18 +81,12 @@ class DualEulerPseudoStepper(BaseDualPseudoStepper):
 class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
     pseudo_stepper_name = 'tvd-rk3'
     pseudo_stepper_order = 3
+    pseudo_stepper_nregs = 3
+    pseudo_stepper_has_lerrest = False
 
     @property
-    def pseudo_stepper_has_lerrest(self):
-        return False
-
-    @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return 3*self.npseudosteps
-
-    @property
-    def pseudo_stepper_nregs(self):
-        return 3
 
     def step(self, t):
         self.npseudosteps += 1
@@ -136,18 +125,12 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
 class DualRK4PseudoStepper(BaseDualPseudoStepper):
     pseudo_stepper_name = 'rk4'
     pseudo_stepper_order = 4
+    pseudo_stepper_nregs = 3
+    pseudo_stepper_has_lerrest = False
 
     @property
-    def pseudo_stepper_has_lerrest(self):
-        return False
-
-    @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return 4*self.npseudosteps
-
-    @property
-    def pseudo_stepper_nregs(self):
-        return 3
 
     def step(self, t):
         self.npseudosteps += 1
@@ -241,12 +224,12 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
 
     @property
     def pseudo_stepper_has_lerrest(self):
-        return self._pseudo_controller_needs_lerrest and self.bhat
+        return self.pseudo_controller_needs_lerrest and self.bhat
 
 
 class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
     @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return len(self.b)*self.npseudosteps
 
     @property
@@ -356,7 +339,7 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
         self.a, self.b = _get_coefficients_from_txt(scheme.decode())
 
     @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return len(self.b)*self.npseudosteps
 
     def step(self, t):

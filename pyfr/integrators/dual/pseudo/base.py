@@ -31,7 +31,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
             raise ValueError('The maximum number of pseudo-iterations must '
                              'be greater than or equal to the minimum')
 
-        if (self._pseudo_controller_needs_lerrest and
+        if (self.pseudo_controller_needs_lerrest and
             not self.pseudo_stepper_has_lerrest):
             raise TypeError('Incompatible pseudo-stepper/pseudo-controller '
                             'combination')

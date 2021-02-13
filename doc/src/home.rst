@@ -26,7 +26,7 @@ derived from the Mako templating engine. The current release (PyFR
 - Temporal Discretisation - Explicit and Implicit (via Dual
   Time-Stepping)
 - Precision - Single, Double
-- Mesh Files Imported - Gmsh (.msh), CGNS (.cgns)
+- Mesh Files Imported - Gmsh (.msh)
 - Solution Files Exported - Unstructured VTK (.vtu, .pvtu)
 
 How do I Cite PyFR?
@@ -34,16 +34,16 @@ How do I Cite PyFR?
 
 To cite PyFR, please reference the following paper:
 
-- `PyFR: An Open Source Framework for Solving Advection-Diffusion Type 
-  Problems on Streaming Architectures using the Flux Reconstruction 
-  Approach. F. D. Witherden, A. M. Farrington, P. E. Vincent. Computer 
-  Physics Communications, Volume 185, Pages 3028-3040, 2014. 
+- `PyFR: An Open Source Framework for Solving Advection-Diffusion Type
+  Problems on Streaming Architectures using the Flux Reconstruction
+  Approach. F. D. Witherden, A. M. Farrington, P. E. Vincent. Computer
+  Physics Communications, Volume 185, Pages 3028-3040, 2014.
   <http://www.sciencedirect.com/science/article/pii/S0010465514002549>`_
 
 Who is Funding PyFR?
 --------------------
 
-Development of PyFR is supported by the `Engineering and Physical 
+Development of PyFR is supported by the `Engineering and Physical
 Sciences Research Council <http://www.epsrc.ac.uk/>`_, `Innovate UK
 <https://www.gov.uk/government/organisations/innovate-uk>`_, the
 `European Commission
