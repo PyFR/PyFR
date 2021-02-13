@@ -17,7 +17,7 @@ class VTKHOWriter(VTKWriter):
     # With VTKFile version >= 2.1, VTK>=9 supposes
     # that hex connectivity corresponds to
     # VTK9 mapping
-    _vtkfile_version = '2.1'
+    vtkfile_version = '2.1'
 
     def _get_npts_ncells_nnodes(self, sk):
         etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
