@@ -108,17 +108,13 @@ class IntegratePlugin(BasePlugin):
 
         privarmap = self.elementscls.privarmap[self.ndims]
         self._gradpinfo = [(pname, privarmap.index(pname))
-                            for pname in gradpnames]
+                           for pname in gradpnames]
 
     def _eval_exprs(self, intg):
         intvals = np.zeros(len(self.exprs))
 
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
-
-        # Compute primitive gradients if required
-        if self._gradpinfo:
-            grads_eles = self._grad_pvars(intg)
 
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
@@ -135,9 +131,18 @@ class IntegratePlugin(BasePlugin):
             subs.update(zip('xyz', plocs))
 
             # Prepare any required gradients
-            for pname, idx in self._gradpinfo:
-                for dim, grad in zip('xyz', grads_eles[i][idx]):
-                    subs[f'grad_{pname}_{dim}'] = grad
+            if self._gradpinfo:
+                # Compute the gradients
+                grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
+
+                # Transform from conservative to primitive gradients
+                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
+                                                          self.cfg)
+
+                # Add them to the substitutions dictionary
+                for pname, idx in self._gradpinfo:
+                    for dim, grad in zip('xyz', pgrads[idx]):
+                        subs[f'grad_{pname}_{dim}'] = grad
 
             for j, v in enumerate(self.exprs):
                 # Evaluate the expression at each point
@@ -147,27 +152,6 @@ class IntegratePlugin(BasePlugin):
                 intvals[j] += np.sum(iex) - np.sum(iex[emask])
 
         return intvals
-
-    def _grad_pvars(self, intg):
-        grads_eles = []
-
-        # Iterate over each element type in the simulation
-        for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
-            eset, emask = eleinfo[2:]
-
-            # Subset and transpose the solution
-            soln = soln[..., eset].swapaxes(0, 1)
-
-            # Rearrange and subset gradient data
-            grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
-
-            # Transform from conservative to primitive gradients
-            pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln, self.cfg)
-
-            # Store the gradients
-            grads_eles.append(pgrads)
-
-        return grads_eles
 
     def __call__(self, intg):
         if intg.nacptsteps % self.nsteps == 0:

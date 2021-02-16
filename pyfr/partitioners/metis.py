@@ -83,7 +83,7 @@ class METISWrappers(object):
             self.metis_int = metis_int = c_int32
             self.metis_int_np = metis_int_np = np.int32
 
-        intref = lambda v=0: byref(metis_int(v))
+        def intref(v=0): return byref(metis_int(v))
 
         # Attempt to partition a two vertex graph into two partitions
         vtab = np.array([0, 1, 2], dtype=metis_int_np)

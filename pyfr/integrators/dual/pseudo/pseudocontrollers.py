@@ -51,10 +51,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
 class DualNonePseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'none'
-
-    @property
-    def _pseudo_controller_needs_lerrest(self):
-        return False
+    pseudo_controller_needs_lerrest = False
 
     def convmon(self, i, minniters):
         if i >= minniters - 1:
@@ -87,6 +84,7 @@ class DualNonePseudoController(BaseDualPseudoController):
 
 class DualPIPseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'local-pi'
+    pseudo_controller_needs_lerrest = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -139,10 +137,6 @@ class DualPIPseudoController(BaseDualPseudoController):
             )
 
         self.backend.commit()
-
-    @property
-    def _pseudo_controller_needs_lerrest(self):
-        return True
 
     def localerrest(self, errbank):
         self.system.eles_scal_upts_inb.active = errbank

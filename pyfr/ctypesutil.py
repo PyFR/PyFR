@@ -34,6 +34,7 @@ class LibWrapper(object):
             except KeyError:
                 raise self._statuses['*']
 
+
 def get_libc_function(fn):
     if sys.platform == 'win32':
         libc = ctypes.windll.msvcrt
