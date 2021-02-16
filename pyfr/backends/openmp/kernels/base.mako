@@ -4,9 +4,7 @@
 #include <omp.h>
 #include <stdlib.h>
 #include <tgmath.h>
-#include <stdio.h>
 
-#define PYFR_ALIGN_BYTES ${alignb}
 #define SOA_SZ ${soasz}
 #define AOSOA_SZ ${aosoasz}
 #define SZ (SOA_SZ*AOSOA_SZ)
@@ -16,8 +14,5 @@
 
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
-
-// OpenMP static loop scheduling functions
-<%include file='loop-sched'/>
 
 ${next.body()}

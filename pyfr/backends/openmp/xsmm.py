@@ -105,10 +105,8 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         if 'const' not in a.tags:
             raise NotSuitableError('libxsmm requires a constant a matrix')
 
-        print('XSMM lib bncol', b.ncol)
         # Check n is divisible by 16
         if b.ncol % 16 != 0:
-            print('not divisible by 16', b.ncol)
             raise NotSuitableError('libxsmm requires n % 16 = 0')
 
         # Check that beta is zero or one
@@ -117,7 +115,6 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Check the matrix is of a reasonable size
         if a.ncol*a.nrow > self.max_sz:
-            print('max size exceeded', a.ncol*a.nrow)
             raise NotSuitableError('Matrix too large for libxsmm')
 
         # Dimensions
@@ -168,11 +165,9 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Some extra variables
         nbcol, bblocksz, outblocksz = b.nbcol, b.blocksz, out.blocksz
-        print('vars', nbcol, bblocksz, outblocksz)
 
         # Build
         par_xsmm = self._build_kernel('par_xsmm', src, argt)
-        #print(src)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):

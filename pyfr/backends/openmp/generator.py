@@ -63,21 +63,17 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         return '''{spec}
                {{
-                   int lenAoAoSoA = _nx/SZ;
+                   int nblocks = _nx/SZ;
                    int rem = _nx%SZ;
                    #define X_IDX (_xi + _xj)
                    #define X_IDX_AOSOA(v, nv)\
                        ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-                   int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
                    #pragma omp parallel for
-                   for ( int ib = 0; ib < lenAoAoSoA; ib++ )
+                   for ( int ib = 0; ib < nblocks; ib++ )
                    {{
-                       //int cb, ce;
-                       //loop_sched_1d(_nx, align, &cb, &ce);
-                       //int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
                        {inner}
                    }}
-                   int ib = lenAoAoSoA;
+                   int ib = nblocks;
                    {outer}
                    #undef X_IDX
                    #undef X_IDX_AOSOA

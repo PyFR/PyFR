@@ -4,8 +4,7 @@ from collections import Sequence, deque
 import math
 
 import numpy as np
-import inspect
-import traceback
+
 
 class MatrixBase(object):
     _base_tags = set()
@@ -18,25 +17,24 @@ class MatrixBase(object):
         self.dtype = dtype
         self.itemsize = np.dtype(dtype).itemsize
 
-        # Alignment requirement for the leading dimension
-        #ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
-        ldmod = backend.soasz*backend.aosoasz #if 'align' in tags else 1
-
         # Our shape and dimensionality
         shape, ndim = list(ioshape), len(ioshape)
+
+        # AoSoA Size if present
+        aosoasz = backend.aosoasz if backend.cacheblks else 1
 
         if ndim == 2:
             nrow, ncol = shape
             aosoashape = shape
-            self.nbcol = backend.soasz*backend.aosoasz
+            self.nbcol = backend.soasz*aosoasz
         else:
             nvar, narr, k = shape[-2], shape[-1], backend.soasz
-            nparr = narr - narr % -(k*backend.aosoasz)
+            nparr = narr - narr % -(k*aosoasz)
 
             nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
             ncol = nvar*nparr
             aosoashape = shape[:-2] + [nparr // k, nvar, k]
-            self.nbcol = nvar*backend.soasz*backend.aosoasz
+            self.nbcol = nvar*backend.soasz*aosoasz
 
         # Assign
         self.nrow, self.ncol = int(nrow), int(ncol)
@@ -44,25 +42,24 @@ class MatrixBase(object):
         self.datashape = aosoashape
         self.ioshape = ioshape
 
-        self.leaddim = self.ncol - (self.ncol % -ldmod)
-        if 'opmat' in self.tags:
-            self.nbcol = self.leaddim
+        # Alignment requirement for the leading dimension
+        if backend.cacheblks:
+            ldmod = backend.soasz*aosoasz if 'opmat' not in tags else 1
+            self.leaddim = self.nbcol
+            if 'opmat' in self.tags:
+                self.leaddim = self.nbcol = self.ncol
+        else:
+            ldmod = backend.soasz if 'align' in tags else 1
+            self.leaddim = self.ncol - (self.ncol % -ldmod)
+
         self.blocksz = self.nrow*self.nbcol
         self.nblock = math.ceil(self.ncol/self.nbcol)
 
-        self.pitch = self.leaddim*self.itemsize
+        self.pitch = (self.ncol - (self.ncol % -ldmod))*self.itemsize
         self.nbytes = self.nrow*self.pitch
-        if 'opmat' not in self.tags:
-            self.leaddim = self.nbcol
+
         self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
 
-        print('matrix traits;\n nrow:', self.nrow, 'ncol', self.ncol,
-              'leaddim', self.leaddim, 'nbcol', self.nbcol,
-              'blocksz', self.blocksz, 'nblock', self.nblock,
-              '\n tags', self.tags)
-        #print('const matrix with ndim=2', inspect.stack()[2].function)
-        #traceback.print_stack()
-        print('shape', shape, 'aoaoashape', self.datashape)
         # Process the initial value
         if initval is not None:
             if initval.shape != self.ioshape:
@@ -167,10 +164,10 @@ class MatrixSlice(object):
         self.ca, self.cb = int(ca), int(cb)
         self.nrow, self.ncol = self.rb - self.ra, self.cb - self.ca
         self.nbcol, self.blocksz = mat.nbcol, mat.blocksz
+        self.ba, self.bb = self.ca//self.nbcol, self.cb//self.nbcol
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
         self.leaddim, self.pitch = mat.leaddim, mat.pitch
 
-        self.ba, self.bb = self.ca//self.nbcol, self.cb//self.nbcol
         self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
         self.tags = mat.tags | {'slice'}
 
@@ -190,8 +187,16 @@ class MatrixSlice(object):
         if 'bank' in self.tags:
             raise AttributeError('offset undefined for banked slices')
 
-        #return self.parent.offset + self.ra*self.pitch + self.ca*self.itemsize
-        return self.parent.offset + self.ra*self.leaddim*self.itemsize + self.ba*self.blocksz*self.itemsize
+        if self.backend.cacheblks:
+            offsetval = (
+                self.parent.offset + self.ra*self.leaddim*self.itemsize
+                + self.ba*self.blocksz*self.itemsize
+            )
+        else:
+            offsetval = (self.parent.offset + self.ra*self.pitch
+                         + self.ca*self.itemsize)
+
+        return offsetval
 
     @property
     def data(self):
@@ -286,36 +291,34 @@ class View(object):
             raise TypeError('Mixed data types are not supported')
 
         # SoA size
-        k, ks = backend.soasz, backend.aosoasz
+        k, ks = backend.soasz, backend.aosoasz if backend.cacheblks else 1
 
         # Base offsets and leading dimensions for each point
         offset = np.empty(self.n, dtype=np.int32)
         leaddim = np.empty(self.n, dtype=np.int32)
         blkdisp = np.empty(self.n, dtype=np.int32)
-        rstride = np.empty(self.n, dtype=np.int32)
 
         for m in self._mats:
             ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
             blkdisp[ix] = (cmap[ix] // (k*ks))*m.blocksz
-            rstride[ix] = m.blocksz // self.nvrow
 
         # Row/column displacements
         rowdisp = rmap*leaddim
-        #coldisp = (cmap // k)*(self.nvcol*k) + cmap % k
-        coldisp = ((cmap % (k*ks))//k)*k*self.nvcol + (cmap % (k*ks)) % k
+        if backend.cacheblks:
+            coldisp = ((cmap % (k*ks))//k)*k*self.nvcol + (cmap % (k*ks)) % k
+            mapping = (offset + rowdisp + coldisp + blkdisp)[None,:]
+        else:
+            coldisp = (cmap // k) * (self.nvcol * k) + cmap % k
+            mapping = (offset + rowdisp + coldisp)[None,:]
 
-        mapping = (offset + rowdisp + coldisp + blkdisp)[None,:]
-        print('viewtypeshape', mapping.shape)
         self.mapping = backend.base_matrix_cls(
             backend, np.int32, (1, self.n), mapping, None, None, tags
         )
 
         # Row strides
         if self.nvrow > 1:
-            #rstrides = (rstridemap*leaddim)[None,:]
-            print('rstride is in use')
-            rstrides = rstride[None,:]
+            rstrides = (rstridemap*leaddim)[None,:]
             self.rstrides = backend.base_matrix_cls(
                 backend, np.int32, (1, self.n), rstrides, None, None, tags
             )

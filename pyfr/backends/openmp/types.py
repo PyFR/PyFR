@@ -12,9 +12,7 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         self.data = basedata[offset:offset + self.nrow*self.pitch]
         self.data = self.data.view(self.dtype)
-        print('shape', self.data.shape)
         self.data = self.data.reshape(self.nblock, self.nrow, self.leaddim)
-        print('shape', self.data.shape)
 
         self.offset = offset
 
@@ -32,14 +30,9 @@ class OpenMPMatrixBase(base.MatrixBase):
         return self._unpack(self.data[:, :, :])
 
     def _set(self, ary):
-        print('letsset', self.data.shape, ary.shape)
         self.data[:, :, :] = self._pack(ary)
-        print('isitset', self.data.shape, ary.shape)
 
     def _pack(self, ary):
-        #np.set_printoptions(threshold=np.inf)
-        #print('pack', ary.ndim)
-        #print('ary', self.tags, ary)
         # If necessary convert from SoA to AoAoSoA packing
         if ary.ndim > 2:
             n, k = ary.shape[-1], self.backend.soasz
@@ -53,10 +46,7 @@ class OpenMPMatrixBase(base.MatrixBase):
             n, sz = ary.shape[-1], self.backend.soasz*self.backend.aosoasz
             ary = np.pad(ary, [(0, 0)] + [(0, -n % self.nbcol)], mode='constant')
             ary = ary.reshape(self.nrow, -1, self.nbcol).swapaxes(0, 1)
-            #ary = ary.reshape(-1, self.nrow, self.leaddim)
 
-        #print('after packing')
-        #print('ary', self.tags, ary)
         return np.ascontiguousarray(ary, dtype=self.dtype)
 
     def _unpack(self, ary):

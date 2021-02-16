@@ -12,8 +12,9 @@ class CUDAKernelGenerator(BaseKernelGenerator):
             self._ix = 'int _x = blockIdx.x*blockDim.x + threadIdx.x;'
             self._limits = 'if (_x < _nx)'
         else:
-            self._ix = 'int _x = blockIdx.x*blockDim.x + threadIdx.x;'
-            self._limits = 'for (int _y = 0; _x < _nx && _y < _ny; _y++)'
+            self._ix = ('int _x = blockIdx.x*blockDim.x + threadIdx.x;'
+                        'int _y = blockIdx.y*blockDim.y + threadIdx.y;')
+            self._limits = 'if (_x < _nx && _y < _ny)'
 
     def render(self):
         # Kernel spec
