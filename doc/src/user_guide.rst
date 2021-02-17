@@ -1271,7 +1271,7 @@ Example::
     [soln-plugin-sampler]
     nsteps = 10
     samp-pts = [(1.0, 0.7, 0.0), (1.0, 0.8, 0.0)]
-    format = primative
+    format = primitive
     file = point-data.csv
     header = true
 
