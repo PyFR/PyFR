@@ -167,7 +167,7 @@ class BaseElements(object):
         self._be = backend
 
         if self.basis.order >= 2:
-            self._linoff = linoff - linoff % -backend.soasz
+            self._linoff = linoff - linoff % -(backend.soasz*backend.aosoasz)
         else:
             self._linoff = self.neles
 
@@ -221,7 +221,7 @@ class BaseElements(object):
     @memoize
     def opmat(self, expr):
         return self._be.const_matrix(self.basis.opmat(expr),
-                                     tags={expr, 'align'})
+                                     tags={expr, 'align', 'opmat'})
 
     def sliceat(fn):
         @memoize

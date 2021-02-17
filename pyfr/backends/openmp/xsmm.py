@@ -115,9 +115,9 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
                 raise NotSuitableError('libxssm unable to JIT a kernel')
 
             # If necessary, also JIT and register a clean-up kernel
-            if n % nblock != 0:
-                cleanptr = self._createfn(m, n % nblock, k, lda, ldb, ldc,
-                                          alpha, beta, c_is_nt, a)
+            if b.nbcol % nblock != 0:
+                cleanptr = self._createfn(m, b.nbcol % nblock, k, lda, ldb,
+                                          ldc, alpha, beta, c_is_nt, a)
                 if not cleanptr:
                     self._destroyfn(blkptr)
                     raise NotSuitableError('libxssm unable to JIT a kernel')
@@ -134,13 +134,17 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('par-xsmm').render()
 
         # Argument types for par_xsmm
-        argt = [np.intp]*3 + [np.int32]*2 + [np.intp]*2
+        argt = [np.intp]*3 + [np.int32]*2 + [np.intp]*2 + [np.int32]*3
+
+        # Some extra variables
+        nbcol, bblocksz, outblocksz = b.nbcol, b.blocksz, out.blocksz
 
         # Build
         par_xsmm = self._build_kernel('par_xsmm', src, argt)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                par_xsmm(execptr, blkptr, cleanptr, n, nblock, b, out)
+                par_xsmm(execptr, blkptr, cleanptr, n, nblock, b, out, nbcol,
+                         bblocksz, outblocksz)
 
         return MulKernel()

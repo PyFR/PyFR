@@ -16,7 +16,7 @@ def get_opt_view_perm(interside, mat, elemap):
     mmap, rmap, cmap = [np.concatenate([m[i] for m in vm]) for i in range(3)]
 
     # Sort
-    return np.lexsort((cmap, rmap, mmap))
+    return np.lexsort((rmap, cmap, mmap))
 
 
 class BaseInters(object):

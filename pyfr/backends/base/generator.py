@@ -132,69 +132,73 @@ class BaseKernelGenerator(object):
 
     def _deref_arg_view(self, arg):
         ptns = [
-            '{0}_v[{0}_vix[X_IDX]]',
-            r'{0}_v[{0}_vix[X_IDX] + SOA_SZ*(\1)]',
-            r'{0}_v[{0}_vix[X_IDX] + {0}_vrstri[X_IDX]*(\1) + SOA_SZ*(\2)]'
+            '{0}_v[{0}_vix[{1}]]',
+            r'{0}_v[{0}_vix[{1}] + SOA_SZ*(\1)]',
+            r'{0}_v[{0}_vix[{1}] + {0}_vrstri[{1}]*(\1) + SOA_SZ*(\2)]'
         ]
 
-        return ptns[arg.ncdim].format(arg.name)
+        indx = 'ib*SZ + X_IDX' if True else 'X_IDX'
+
+        return ptns[arg.ncdim].format(arg.name, indx)
 
     def _deref_arg_array_1d(self, arg):
-        # Leading dimension
-        ldim = 'ld' + arg.name if not arg.ismpi else '_nx'
-
         # Broadcast vector
         #   name[\1] => name_v[\1]
         if arg.isbroadcast:
-            ix = r'\1'
+            ix, bx = r'\1', ''
         # Vector:
         #   name => name_v[X_IDX]
         elif arg.ncdim == 0:
-            ix = 'X_IDX'
+            ix, bx = 'X_IDX', 'ib*SZ'
+        # Tightly packed MPI Vector:
+        #   name[\1] => name_v[_nx*(\1) + X_IDX]
+        elif arg.ncdim == 1 and arg.ismpi:
+            ix, bx = r'_nx*(\1) + X_IDX', 'ib*SZ'
         # Stacked vector:
         #   name[\1] => name_v[ldim*(\1) + X_IDX]
         elif arg.ncdim == 1:
-            ix = r'{0}*(\1) + X_IDX'.format(ldim)
+            ix, bx = fr'ld{arg.name}*(\1) + X_IDX', f'ib*SZ*{arg.cdims[0]}'
         # Doubly stacked MPI vector:
         #   name[\1][\2] => name_v[(nv*(\1) + (\2))*ldim + X_IDX]
-        elif arg.ismpi:
-            ix = r'({0}*(\1) + (\2))*{1} + X_IDX'.format(arg.cdims[1], ldim)
-        # Doubly stacked vector:
-        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv)]
-        else:
-            ix = (r'ld{0}*(\1) + X_IDX_AOSOA(\2, {1})'
-                   .format(arg.name, arg.cdims[1]))
+        elif arg.ncdim == 2 and arg.ismpi:
+            ix, bx = fr'({arg.cdims[1]}*(\1) + (\2))*_nx + X_IDX', 'ib*SZ'
 
-        return '{0}_v[{1}]'.format(arg.name, ix)
+        indx = bx + ' + ' + ix if True else ix
+
+        return '{0}_v[{1}]'.format(arg.name, indx)
 
     def _deref_arg_array_2d(self, arg):
         # Broadcast vector:
         #   name => name_v[X_IDX]
         if arg.isbroadcast:
-            ix = 'X_IDX'
+            ix, bx = 'X_IDX', 'ib*SZ'
         # Matrix:
         #   name => name_v[ldim*_y + X_IDX]
         elif arg.ncdim == 0:
-            ix = f'ld{arg.name}*_y + X_IDX'
-        # Row broacast matrix
+            ix, bx = f'ld{arg.name}*_y + X_IDX', 'ib*SZ*_ny'
+        # Row broadcast matrix
         #   name[\1] => name_v[ldim*_y + \1]
         elif arg.isbroadcastr:
-            ix = fr'ld{arg.name}*_y + \1'
+            ix, bx = fr'ld{arg.name}*_y + \1', ''
         # Stacked matrix:
         #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv)]
         elif arg.ncdim == 1:
             ix = fr'ld{arg.name}*_y + X_IDX_AOSOA(\1, {arg.cdims[0]})'
+            bx = f'ib*SZ*{arg.cdims[0]}*_ny'
         # Column broadcast matrix
         #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
         elif arg.isbroadcastc:
-            ix = fr'ld{arg.name}*\1 + X_IDX_AOSOA(\2, {arg.cdims[1]})'
+            ix, bx = fr'ld{arg.name}*\1 + X_IDX_AOSOA(\2, {arg.cdims[1]})', ''
         # Doubly stacked matrix:
         #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
         else:
             ix = (fr'((\1)*_ny + _y)*ld{arg.name} + '
                   fr'X_IDX_AOSOA(\2, {arg.cdims[1]})')
+            bx = f'ib*SZ*{arg.cdims[0]}*{arg.cdims[1]}*_ny'
 
-        return f'{arg.name}_v[{ix}]'
+        indx = bx + ' + ' + ix if True else ix
+
+        return f'{arg.name}_v[{indx}]'
 
     def _render_body(self, body):
         bmch = r'\[({0})\]'.format(match_paired_paren('[]'))
