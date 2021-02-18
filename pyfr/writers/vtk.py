@@ -17,7 +17,6 @@ class VTKWriter(BaseWriter):
     name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
-    vtkfile_version = '0.1'
     vtk_types = dict(tri=69, quad=70, tet=71, pri=73, hex=72)
 
     def __init__(self, args):
@@ -31,7 +30,7 @@ class VTKWriter(BaseWriter):
         # Else use cell subdivision
         self.ho_output = args.divisor == 0
         order = self.cfg.getint('solver', 'order')
-        self.divisor = order if self.ho_output else args.divisor
+        self.divisor = args.divisor or self.cfg.getint('solver', 'order')
 
         # If outputting high-order VTK cells choose version 2.1
         # to ensure consistency with VTK9 mappings
@@ -56,7 +55,7 @@ class VTKWriter(BaseWriter):
         if self.ho_output:
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
         else:
-            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_div
+            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
         # See if we are computing gradients
         if args.gradients:
@@ -145,7 +144,7 @@ class VTKWriter(BaseWriter):
 
         return fields
 
-    def _get_npts_ncells_nnodes_div(self, sk):
+    def _get_npts_ncells_nnodes_lin(self, sk):
         etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
 
         # Get the shape and sub division classes
@@ -168,7 +167,7 @@ class VTKWriter(BaseWriter):
             # No Lagrange pyr cells in VTK
             # Therefore, rely on the subdivision mechanism
             # of the vtk writer
-            return self._get_npts_ncells_nnodes(sk)
+            return self._get_npts_ncells_nnodes_lin(sk)
 
         # Get the shape and sub division classes
         shapecls = subclass_where(BaseShape, name=etype)
@@ -387,7 +386,7 @@ class VTKWriter(BaseWriter):
 
         # Perform the sub division
         if self.ho_output:
-            nodes = np.arange(0, nsvpts)
+            nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
             types = self.vtk_types[name]
         else:
