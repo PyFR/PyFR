@@ -14,7 +14,7 @@ from pyfr.util import subclass_where
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
-def _find_curved_eles(etype, eles, tol=1e-5):
+def _find_curved_eles(etype, eles, tol=1e-15):
     nspts, neles, ndims = eles.shape
 
     shape = subclass_where(BaseShape, name=etype)
