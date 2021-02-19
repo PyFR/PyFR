@@ -385,7 +385,7 @@ class VTKWriter(BaseWriter):
         self._write_darray(vpts.swapaxes(0, 1), vtuf, self.dtype)
 
         # Perform the sub division
-        if self.ho_output:
+        if name != 'pyr' and self.ho_output:
             nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
             types = self.vtk_types_ho[name]
