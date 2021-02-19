@@ -107,8 +107,6 @@ class MatrixBase(object):
 
 
 class Matrix(MatrixBase):
-    _base_tags = {'dense'}
-
     def __init__(self, backend, ioshape, initval, extent, aliases, tags):
         super().__init__(backend, backend.fpdtype, ioshape, initval, extent,
                          aliases, tags)
@@ -184,7 +182,7 @@ class MatrixSlice(object):
 
 
 class ConstMatrix(MatrixBase):
-    _base_tags = {'const', 'dense'}
+    _base_tags = {'const'}
 
     def __init__(self, backend, initval, extent, tags):
         super().__init__(backend, backend.fpdtype, initval.shape, initval,
