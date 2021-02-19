@@ -17,7 +17,7 @@ class VTKWriter(BaseWriter):
     name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
-    vtk_types = dict(tri=69, quad=70, tet=71, pri=73, hex=72)
+    vtk_types_ho = dict(tri=69, quad=70, tet=71, pri=73, hex=72)
 
     def __init__(self, args):
         super().__init__(args)
@@ -388,7 +388,7 @@ class VTKWriter(BaseWriter):
         if self.ho_output:
             nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
-            types = self.vtk_types[name]
+            types = self.vtk_types_ho[name]
         else:
             subdvcls = subclass_where(BaseShapeSubDiv, name=name)
             nodes = subdvcls.subnodes(self.divisor)
