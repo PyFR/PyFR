@@ -6,16 +6,16 @@ from pyfr.backends.base.generator import BaseKernelGenerator
 class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
         if self.ndim == 1:
-            inner = '''
-                    for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
-                    {{
-                        #pragma omp simd
-                        for (int _xj = 0; _xj < SOA_SZ; _xj++)
-                        {{
-                            {body}
-                        }}
-                    }}'''.format(body=self.body)
-            outer = '''
+            core = '''
+                   for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
+                   {{
+                       #pragma omp simd
+                       for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                       {{
+                           {body}
+                       }}
+                   }}'''.format(body=self.body)
+            clean = '''
                     for (int _xi = 0; _xi < rem; _xi += SOA_SZ)
                     {{
                         #pragma omp simd
@@ -29,19 +29,19 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                         {body}
                     }}'''.format(body=self.body)
         else:
-            inner = '''
-                    for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
-                    {{
-                        for (int _y = 0; _y < _ny; _y++)
-                        {{
-                            #pragma omp simd
-                            for (int _xj = 0; _xj < SOA_SZ; _xj++)
-                            {{
-                                {body}
-                            }}
-                        }}
-                    }}'''.format(body=self.body)
-            outer = '''
+            core = '''
+                   for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
+                   {{
+                       for (int _y = 0; _y < _ny; _y++)
+                       {{
+                           #pragma omp simd
+                           for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                           {{
+                               {body}
+                           }}
+                       }}
+                   }}'''.format(body=self.body)
+            clean = '''
                     for (int _xi = 0; _xi < rem; _xi += SOA_SZ)
                     {{
                         for (int _y = 0; _y < _ny; _y++)
@@ -71,13 +71,13 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    #pragma omp parallel for
                    for ( int ib = 0; ib < nblocks; ib++ )
                    {{
-                       {inner}
+                       {core}
                    }}
                    int ib = nblocks;
-                   {outer}
+                   {clean}
                    #undef X_IDX
                    #undef X_IDX_AOSOA
-               }}'''.format(spec=self._render_spec(), inner=inner, outer=outer)
+               }}'''.format(spec=self._render_spec(), core=core, clean=clean)
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions

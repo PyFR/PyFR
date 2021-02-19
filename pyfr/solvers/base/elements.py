@@ -167,7 +167,7 @@ class BaseElements(object):
         self._be = backend
 
         if self.basis.order >= 2:
-            self._linoff = linoff - linoff % -(backend.soasz*backend.aosoasz)
+            self._linoff = linoff - linoff % -backend.algnsz
         else:
             self._linoff = self.neles
 

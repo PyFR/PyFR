@@ -30,8 +30,8 @@ class OpenMPGiMMiKKernels(OpenMPKernelProvider):
             raise NotSuitableError('Matrix too dense for GiMMiK')
 
         # Generate the GiMMiK kernel
-        src = generate_mm(a.get()[0,:,:], dtype=a.dtype, platform='c-omp',
-                          alpha=alpha, beta=beta)
+        src = generate_mm(a.get().reshape((a.nrow, a.ncol)), dtype=a.dtype,
+                          platform='c', alpha=alpha, beta=beta)
         gimmik_mm = self._build_kernel('gimmik_mm', src,
                                        [np.int32] + [np.intp, np.int32]*2)
         gimmik_ptr = cast(gimmik_mm, c_void_p).value

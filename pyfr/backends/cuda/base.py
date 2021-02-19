@@ -43,8 +43,12 @@ class CUDABackend(BaseBackend):
         self.alignb = 128
 
         # Take the SoA size to be 32 elements
-        self.soasz, self.aosoasz = 32, 1
-        self.cacheblks = False
+        self.soasz = 32
+        self.algnsz = self.soasz
+        self.blocks = False
+
+        # Set preference for interface sorting
+        self.intsort = 'cr'
 
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')

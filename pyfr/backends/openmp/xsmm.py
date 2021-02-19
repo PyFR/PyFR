@@ -98,6 +98,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Dimensions
         m, n, k = a.nrow, b.ncol, a.ncol
         lda, ldb, ldc = a.leaddim, b.leaddim, out.leaddim
+        nbcol, bblocksz, outblocksz = b.nbcol, b.blocksz, out.blocksz
 
         # Cache key
         ckey = (a.mid, alpha, beta, n, ldb, ldc)
@@ -135,9 +136,6 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Argument types for par_xsmm
         argt = [np.intp]*3 + [np.int32]*2 + [np.intp]*2 + [np.int32]*3
-
-        # Some extra variables
-        nbcol, bblocksz, outblocksz = b.nbcol, b.blocksz, out.blocksz
 
         # Build
         par_xsmm = self._build_kernel('par_xsmm', src, argt)

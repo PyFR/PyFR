@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from collections import Sequence, deque
-import math
 
 import numpy as np
 
@@ -20,21 +19,21 @@ class MatrixBase(object):
         # Our shape and dimensionality
         shape, ndim = list(ioshape), len(ioshape)
 
-        # AoSoA Size if present
-        aosoasz = backend.aosoasz if backend.cacheblks else 1
+        # Soa and AoSoA size
+        soasz, algnsz = backend.soasz, backend.algnsz
 
         if ndim == 2:
             nrow, ncol = shape
             aosoashape = shape
-            self.nbcol = backend.soasz*aosoasz
+            self.nbcol = algnsz
         else:
-            nvar, narr, k = shape[-2], shape[-1], backend.soasz
-            nparr = narr - narr % -(k*aosoasz)
+            nvar, narr, k = shape[-2], shape[-1], soasz
+            nparr = narr - narr % -algnsz
 
             nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
             ncol = nvar*nparr
             aosoashape = shape[:-2] + [nparr // k, nvar, k]
-            self.nbcol = nvar*backend.soasz*aosoasz
+            self.nbcol = nvar*algnsz
 
         # Assign
         self.nrow, self.ncol = int(nrow), int(ncol)
@@ -43,22 +42,26 @@ class MatrixBase(object):
         self.ioshape = ioshape
 
         # Alignment requirement for the leading dimension
-        if backend.cacheblks:
-            ldmod = backend.soasz*aosoasz if 'opmat' not in tags else 1
-            self.leaddim = self.nbcol
+        if backend.blocks:
             if 'opmat' in self.tags:
                 self.leaddim = self.nbcol = self.ncol
+                ldmod = 1
+            else:
+                self.leaddim = self.nbcol
+                ldmod = algnsz
+
+            self.blocksz = self.nrow*self.nbcol
+            self.nblock = (self.ncol - self.ncol % -self.nbcol) // self.nbcol
+
+            self.traits = (self.nrow, self.nblock, self.leaddim, self.dtype)
         else:
-            ldmod = backend.soasz if 'align' in tags else 1
+            ldmod = soasz if 'align' in tags else 1
             self.leaddim = self.ncol - (self.ncol % -ldmod)
 
-        self.blocksz = self.nrow*self.nbcol
-        self.nblock = math.ceil(self.ncol/self.nbcol)
+            self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
 
         self.pitch = (self.ncol - (self.ncol % -ldmod))*self.itemsize
         self.nbytes = self.nrow*self.pitch
-
-        self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
 
         # Process the initial value
         if initval is not None:
@@ -93,20 +96,30 @@ class MatrixBase(object):
         pass
 
     def _pack(self, ary):
-        # If necessary convert from SoA to AoSoA packing
+        # If necessary convert from SoA to AoSoA or AoAoSoA packing
         if ary.ndim > 2:
             n, k = ary.shape[-1], self.backend.soasz
+            algnsz = self.backend.algnsz
 
-            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % k)],
+            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % algnsz)],
                          mode='constant')
             ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
-            ary = ary.reshape(self.nrow, self.ncol)
+            if self.backend.blocks:
+                ary = ary.reshape(self.nrow, -1, self.nbcol).swapaxes(0, 1)
+            else:
+                ary = ary.reshape(self.nrow, self.ncol)
+        elif self.backend.blocks:
+            ary = np.pad(ary, [(0, 0)] + [(0, -ary.shape[-1] % self.nbcol)],
+                         mode='constant')
+            ary = ary.reshape(self.nrow, -1, self.nbcol).swapaxes(0, 1)
 
         return np.ascontiguousarray(ary, dtype=self.dtype)
 
     def _unpack(self, ary):
-        # If necessary unpack from AoSoA to SoA
+        # If necessary unpack from AoSoA or AoAoSoA to SoA
         if len(self.ioshape) > 2:
+            if self.backend.blocks:
+                ary = ary.swapaxes(0, 1)
             ary = ary.reshape(self.datashape)
             ary = ary.swapaxes(-2, -3)
             ary = ary.reshape(self.ioshape[:-1] + (-1,))
@@ -163,12 +176,17 @@ class MatrixSlice(object):
         self.ra, self.rb = int(ra), int(rb)
         self.ca, self.cb = int(ca), int(cb)
         self.nrow, self.ncol = self.rb - self.ra, self.cb - self.ca
-        self.nbcol, self.blocksz = mat.nbcol, mat.blocksz
-        self.ba, self.bb = self.ca//self.nbcol, self.cb//self.nbcol
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
         self.leaddim, self.pitch = mat.leaddim, mat.pitch
 
-        self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
+        if backend.blocks:
+            self.nbcol, self.blocksz = mat.nbcol, mat.blocksz
+            self.ba, self.bb = self.ca // self.nbcol, self.cb // self.nbcol
+            self.nblock = self.ncol // self.nbcol
+            self.traits = (self.nrow, self.nblock, self.leaddim, self.dtype)
+        else:
+            self.traits = (self.nrow, self.ncol, self.leaddim, self.dtype)
+
         self.tags = mat.tags | {'slice'}
 
         # Only set nbytes for slices which are safe to memcpy
@@ -187,16 +205,13 @@ class MatrixSlice(object):
         if 'bank' in self.tags:
             raise AttributeError('offset undefined for banked slices')
 
-        if self.backend.cacheblks:
-            offsetval = (
-                self.parent.offset + self.ra*self.leaddim*self.itemsize
-                + self.ba*self.blocksz*self.itemsize
-            )
+        if self.backend.blocks:
+            _offset = self.itemsize*(self.ra*self.leaddim
+                                     + self.ba*self.blocksz)
         else:
-            offsetval = (self.parent.offset + self.ra*self.pitch
-                         + self.ca*self.itemsize)
+            _offset = self.ra*self.pitch + self.ca*self.itemsize
 
-        return offsetval
+        return self.parent.offset + _offset
 
     @property
     def data(self):
@@ -291,7 +306,7 @@ class View(object):
             raise TypeError('Mixed data types are not supported')
 
         # SoA size
-        k, ks = backend.soasz, backend.aosoasz if backend.cacheblks else 1
+        k, algnsz = backend.soasz, backend.algnsz
 
         # Base offsets and leading dimensions for each point
         offset = np.empty(self.n, dtype=np.int32)
@@ -301,12 +316,14 @@ class View(object):
         for m in self._mats:
             ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
-            blkdisp[ix] = (cmap[ix] // (k*ks))*m.blocksz
+            if backend.blocks:
+                blkdisp[ix] = (cmap[ix] // algnsz)*m.blocksz
 
         # Row/column displacements
         rowdisp = rmap*leaddim
-        if backend.cacheblks:
-            coldisp = ((cmap % (k*ks))//k)*k*self.nvcol + (cmap % (k*ks)) % k
+
+        if backend.blocks:
+            coldisp = ((cmap % algnsz) // k)*k*self.nvcol + (cmap % algnsz) % k
             mapping = (offset + rowdisp + coldisp + blkdisp)[None, :]
         else:
             coldisp = (cmap // k) * (self.nvcol * k) + cmap % k

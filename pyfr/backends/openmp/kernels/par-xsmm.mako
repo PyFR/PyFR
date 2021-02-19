@@ -11,11 +11,10 @@ par_xsmm(libxsmm_xfsspmdm_execute exec, void *blockk, void *cleank,
          int n, int nblock, const fpdtype_t *b, fpdtype_t *c,
          int nbcol, int bblocksz, int cblocksz)
 {
-    int rem = nbcol % nblock;
     int nci = nbcol / nblock;
-    int nblocks = n/nbcol;
+    int rem = nbcol % nblock;
     #pragma omp parallel for
-    for (int ib = 0; ib < nblocks; ib++)
+    for (int ib = 0; ib < n / nbcol; ib++)
     {
         for (int i = 0; i < nci; i++)
             exec(blockk, b + ib*bblocksz + i*nblock, c + ib*cblocksz + i*nblock);

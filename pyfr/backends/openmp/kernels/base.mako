@@ -6,8 +6,8 @@
 #include <tgmath.h>
 
 #define SOA_SZ ${soasz}
-#define AOSOA_SZ ${aosoasz}
-#define SZ (SOA_SZ*AOSOA_SZ)
+#define SZ ${algnsz}
+#define BLK_IDX ib*SZ
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))

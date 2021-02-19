@@ -39,6 +39,11 @@ class HIPBackend(BaseBackend):
 
         # Take the SoA size to be 32 elements
         self.soasz = 32
+        self.algnsz = self.soasz
+        self.blocks = False
+
+        # Set preference for interface sorting
+        self.intsort = 'cr'
 
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-hip', 'mpi-type', 'standard')

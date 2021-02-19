@@ -19,8 +19,11 @@ class OpenMPBackend(BaseBackend):
 
         # Compute the SoA and AoSoA size
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
-        self.aosoasz = cfg.getint('backend-openmp', 'aosoa-sz', 1)
-        self.cacheblks = True
+        self.algnsz = cfg.getint('backend-openmp', 'aosoa-sz', 1)*self.soasz
+        self.blocks = True
+
+        # Set preference for interface sorting
+        self.intsort = 'rc'
 
         from pyfr.backends.openmp import (blasext, gimmik, packing,
                                           provider, types, xsmm)
@@ -43,13 +46,14 @@ class OpenMPBackend(BaseBackend):
         self._providers = [k(self) for k in kprovcls]
 
         # Instantiate optional kernel provider classes
-        for k in [xsmm.OpenMPXSMMKernels, gimmik.OpenMPGiMMiKKernels]:
-            try:
-                self._providers.append(k(self))
-            except (KeyboardInterrupt, SystemExit):
-                raise
-            except:
-                pass
+        try:
+            self._providers.append(xsmm.OpenMPXSMMKernels(self))
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except:
+            pass
+
+        self._providers.append(gimmik.OpenMPGiMMiKKernels(self))
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
