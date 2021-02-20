@@ -131,16 +131,13 @@ class BaseKernelGenerator(object):
         pass
 
     def _deref_arg_view(self, arg):
-        ix = 'BLK_IDX + X_IDX'
-
         ptns = [
-            f'{arg.name}_v[{arg.name}_vix[{ix}]]',
-            fr'{arg.name}_v[{arg.name}_vix[{ix}] + SOA_SZ*(\1)]',
-            fr'{arg.name}_v[{arg.name}_vix[{ix}] + '
-            fr'{arg.name}_vrstri[{ix}]*(\1) + SOA_SZ*(\2)]'
+            '{0}_v[{0}_vix[{1}]]',
+            r'{0}_v[{0}_vix[{1}] + SOA_SZ*(\1)]',
+            r'{0}_v[{0}_vix[{1}] + {0}_vrstri[{1}]*(\1) + SOA_SZ*(\2)]'
         ]
 
-        return ptns[arg.ncdim]
+        return ptns[arg.ncdim].format(arg.name, 'BLK_IDX + X_IDX')
 
     def _deref_arg_array_1d(self, arg):
         # Broadcast vector
@@ -188,13 +185,13 @@ class BaseKernelGenerator(object):
         #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
         elif arg.isbroadcastc:
             ix = (fr'ld{arg.name}*\1 + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
-                  f'BLK_IDX*{arg.cdims[0]}*{arg.cdims[1]}')
+                  f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}')
         # Doubly stacked matrix:
         #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
         else:
             ix = (fr'((\1)*_ny + _y)*ld{arg.name} + '
                   fr'X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
-                  f'BLK_IDX*{arg.cdims[0]}*{arg.cdims[1]}*_ny')
+                  f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}*_ny')
 
         return f'{arg.name}_v[{ix}]'
 

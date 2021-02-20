@@ -50,8 +50,8 @@ class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
 
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
-        start = self.ra*self.pitch + self.ca*self.itemsize
-        nbytes = (self.nrow - 1)*self.pitch + self.ncol*self.itemsize
+        start = (self.ra*self.leaddim + self.ca)*self.itemsize
+        nbytes = ((self.nrow - 1)*self.leaddim + self.ncol)*self.itemsize
 
         return mat.basedata.get_sub_region(mat.offset + start, nbytes)
 

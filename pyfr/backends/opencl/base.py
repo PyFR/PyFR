@@ -9,6 +9,9 @@ from pyfr.mpiutil import get_local_rank
 class OpenCLBackend(BaseBackend):
     name = 'opencl'
 
+    # Set preference for interface sorting
+    intsort = 'cr'
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -55,11 +58,8 @@ class OpenCLBackend(BaseBackend):
 
         # Compute the SoA size
         self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
-        self.algnsz = self.soasz
+        self.csubsz = self.soasz
         self.blocks = False
-
-        # Set preference for interface sorting
-        self.intsort = 'cr'
 
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
                                           provider, types)

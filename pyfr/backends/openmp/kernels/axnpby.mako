@@ -9,7 +9,7 @@ axnpby(int nrow, int nblocks, int ldim,
 {
 % if sorted(subdims) == list(range(ncola)):
     #pragma omp parallel for
-    for ( int ib = 0; ib < nblocks; ib++ )
+    for (int ib = 0; ib < nblocks; ib++)
     {
         int idx, blksz = nrow*SZ*${ncola};
         #pragma omp simd
@@ -20,7 +20,6 @@ axnpby(int nrow, int nblocks, int ldim,
         }
     }
 % else:
-    int nblocks = ncolb/SZ;
     #define X_IDX_AOSOA(v, nv) ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
     #pragma omp parallel for
     for (int ib = 0; ib < nblocks; ib++)

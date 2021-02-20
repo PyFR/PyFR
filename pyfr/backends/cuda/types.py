@@ -51,7 +51,7 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
         return (int(mat.basedata) + mat.offset +
-                self.ra*self.pitch + self.ca*self.itemsize)
+                (self.ra*self.leaddim + self.ca)*self.itemsize)
 
 
 class CUDAMatrixBank(base.MatrixBank):

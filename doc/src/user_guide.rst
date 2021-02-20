@@ -385,12 +385,7 @@ Parameterises the OpenMP backend with
 
     *int*
 
-7. ``libxsmm-block-sz`` --- blocking factor to use for libxsmm; must
-   be a multiple of 16:
-
-    *int*
-
-8. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
+7. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
    entires in a constant matrix:
 
     *int*

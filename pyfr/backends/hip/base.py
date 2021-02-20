@@ -9,6 +9,9 @@ from pyfr.mpiutil import get_local_rank
 class HIPBackend(BaseBackend):
     name = 'hip'
 
+    # Set preference for interface sorting
+    intsort = 'cr'
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -39,11 +42,8 @@ class HIPBackend(BaseBackend):
 
         # Take the SoA size to be 32 elements
         self.soasz = 32
-        self.algnsz = self.soasz
+        self.csubsz = self.soasz
         self.blocks = False
-
-        # Set preference for interface sorting
-        self.intsort = 'cr'
 
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-hip', 'mpi-type', 'standard')

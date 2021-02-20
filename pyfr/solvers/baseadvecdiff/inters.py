@@ -25,7 +25,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         # Additional kernel constants
         self.c.update(cfg.items_as('solver-interfaces', float))
 
-    def _gen_perm(self, be, lhs, rhs):
+    def _gen_perm(self, lhs, rhs):
         # In the special case of β = -0.5 it is better to sort by the
         # RHS interface; otherwise we simply opt for the LHS
         beta = self.cfg.getfloat('solver-interfaces', 'ldg-beta')
@@ -33,7 +33,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
 
         # Compute the relevant permutation
         self._perm = get_opt_view_perm(side, 'get_scal_fpts_for_inter',
-                                       self.elemap, be.intsort)
+                                       self.elemap, self._be.intsort)
 
 
 class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):

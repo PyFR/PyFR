@@ -51,7 +51,7 @@ class HIPMatrix(HIPMatrixBase, base.Matrix):
 class HIPMatrixSlice(_HIPMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
         return (int(mat.basedata) + mat.offset +
-                self.ra*self.pitch + self.ca*self.itemsize)
+                (self.ra*self.leaddim + self.ca)*self.itemsize)
 
 
 class HIPMatrixBank(base.MatrixBank):

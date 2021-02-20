@@ -32,7 +32,6 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
     def copy(self, dst, src):
         if dst.traits != src.traits:
-            print(dst.traits, src.traits)
             raise ValueError('Incompatible matrix types')
 
         if dst.nbytes >= 2**31:

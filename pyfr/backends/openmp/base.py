@@ -8,6 +8,9 @@ from pyfr.backends.base import BaseBackend
 class OpenMPBackend(BaseBackend):
     name = 'openmp'
 
+    # Set preference for interface sorting
+    intsort = 'rc'
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -19,11 +22,8 @@ class OpenMPBackend(BaseBackend):
 
         # Compute the SoA and AoSoA size
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
-        self.algnsz = cfg.getint('backend-openmp', 'aosoa-sz', 1)*self.soasz
+        self.csubsz = self.soasz*cfg.getint('backend-openmp', 'n-soa', 1)
         self.blocks = True
-
-        # Set preference for interface sorting
-        self.intsort = 'rc'
 
         from pyfr.backends.openmp import (blasext, gimmik, packing,
                                           provider, types, xsmm)
@@ -50,7 +50,7 @@ class OpenMPBackend(BaseBackend):
             self._providers.append(xsmm.OpenMPXSMMKernels(self))
         except (KeyboardInterrupt, SystemExit):
             raise
-        except:
+        except OSError:
             pass
 
         self._providers.append(gimmik.OpenMPGiMMiKKernels(self))

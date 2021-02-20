@@ -9,6 +9,9 @@ from pyfr.mpiutil import get_local_rank
 class CUDABackend(BaseBackend):
     name = 'cuda'
 
+    # Set preference for interface sorting
+    intsort = 'cr'
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -44,11 +47,8 @@ class CUDABackend(BaseBackend):
 
         # Take the SoA size to be 32 elements
         self.soasz = 32
-        self.algnsz = self.soasz
+        self.csubsz = self.soasz
         self.blocks = False
-
-        # Set preference for interface sorting
-        self.intsort = 'cr'
 
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')

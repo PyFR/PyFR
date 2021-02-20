@@ -30,9 +30,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     }}'''.format(body=self.body)
         else:
             core = '''
-                   for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
+                   for (int _y = 0; _y < _ny; _y++)
                    {{
-                       for (int _y = 0; _y < _ny; _y++)
+                       for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
                        {{
                            #pragma omp simd
                            for (int _xj = 0; _xj < SOA_SZ; _xj++)
@@ -42,9 +42,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                        }}
                    }}'''.format(body=self.body)
             clean = '''
-                    for (int _xi = 0; _xi < rem; _xi += SOA_SZ)
+                    for (int _y = 0; _y < _ny; _y++)
                     {{
-                        for (int _y = 0; _y < _ny; _y++)
+                        for (int _xi = 0; _xi < rem; _xi += SOA_SZ)
                         {{
                             #pragma omp simd
                             for (int _xj = 0; _xj < SOA_SZ; _xj++)
@@ -53,9 +53,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                             }}
                         }}
                     }}
-                    for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem%SOA_SZ; _xj++)
+                    for (int _y = 0; _y < _ny; _y++)
                     {{
-                        for (int _y = 0; _y < _ny; _y++)
+                        for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem%SOA_SZ; _xj++)
                         {{
                             {body}
                         }}
@@ -63,17 +63,18 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         return '''{spec}
                {{
-                   int nblocks = _nx/SZ;
-                   int rem = _nx%SZ;
+                   int nci = _nx / SZ;
+                   int rem = _nx % SZ;
                    #define X_IDX (_xi + _xj)
                    #define X_IDX_AOSOA(v, nv)\
                        ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
+                   #define BLK_IDX ib*SZ
                    #pragma omp parallel for
-                   for ( int ib = 0; ib < nblocks; ib++ )
+                   for (int ib = 0; ib < nci; ib++)
                    {{
                        {core}
                    }}
-                   int ib = nblocks;
+                   int ib = nci;
                    {clean}
                    #undef X_IDX
                    #undef X_IDX_AOSOA

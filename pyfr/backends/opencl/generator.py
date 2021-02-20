@@ -21,6 +21,7 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
                    int _x = get_global_id(0);
                    #define X_IDX (_x)
                    #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
+                   #define BLK_IDX 0
                    {self._limits}
                    {{
                        {self.body}

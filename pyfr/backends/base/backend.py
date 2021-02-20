@@ -54,8 +54,8 @@ class BaseBackend(object):
     @lazyprop
     def lookup(self):
         pkg = f'pyfr.backends.{self.name}.kernels'
-        dfltargs = dict(alignb=self.alignb, fpdtype=self.fpdtype,
-                        soasz=self.soasz, algnsz=self.algnsz, math=math)
+        dfltargs = dict(fpdtype=self.fpdtype, soasz=self.soasz,
+                        csubsz=self.csubsz, math=math)
 
         return DottedTemplateLookup(pkg, dfltargs)
 

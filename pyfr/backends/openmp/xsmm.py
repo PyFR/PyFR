@@ -31,16 +31,8 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
 
-        self.nblock = backend.cfg.getint('backend-openmp', 'libxsmm-block-sz',
-                                         48)
         self.max_sz = backend.cfg.getint('backend-openmp', 'libxsmm-max-sz',
                                          125**2)
-
-        # Ensure the block size is suitable
-        if backend.fpdtype == np.float64 and self.nblock % 8 != 0:
-            raise ValueError('libxsmm-block-sz must be a multiple of 8')
-        elif backend.fpdtype == np.float32 and self.nblock % 16 != 0:
-            raise ValueError('libxsmm-block-sz must be a multiple of 16')
 
         # Kernel cache
         self._kerns = {}
@@ -64,17 +56,12 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
     def __del__(self):
         if hasattr(self, '_wrappers'):
-            for blkptr, cleanptr in self._kerns.values():
+            for blkptr in self._kerns.values():
                 self._destroyfn(blkptr)
-
-                if cleanptr:
-                    self._destroyfn(cleanptr)
 
             self._wrappers.libxsmm_finalize()
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
-        nblock = self.nblock
-
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
@@ -84,7 +71,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
             raise NotSuitableError('libxsmm requires a constant a matrix')
 
         # Check n is suitable
-        if b.ncol % self._nmod != 0:
+        if b.nbcol % self._nmod != 0:
             raise NotSuitableError(f'libxsmm requires n % {self._nmod} = 0')
 
         # Check that beta is zero or one
@@ -98,35 +85,25 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Dimensions
         m, n, k = a.nrow, b.ncol, a.ncol
         lda, ldb, ldc = a.leaddim, b.leaddim, out.leaddim
-        nbcol, bblocksz, outblocksz = b.nbcol, b.blocksz, out.blocksz
+        nbcol, bblksz, outblksz = b.nbcol, b.blocksz, out.blocksz
 
         # Cache key
         ckey = (a.mid, alpha, beta, n, ldb, ldc)
 
         # Check the JIT kernel cache
         try:
-            blkptr, cleanptr = self._kerns[ckey]
+            blkptr = self._kerns[ckey]
         except KeyError:
             c_is_nt = beta == 0 and self.backend.alignb >= 64
 
-            # JIT and register an nblock size kernel for this matrix
-            blkptr = self._createfn(m, nblock, k, lda, ldb, ldc, alpha,
+            # JIT and register an nbcol size kernel for this matrix
+            blkptr = self._createfn(m, nbcol, k, lda, ldb, ldc, alpha,
                                     beta, c_is_nt, a)
             if not blkptr:
                 raise NotSuitableError('libxssm unable to JIT a kernel')
 
-            # If necessary, also JIT and register a clean-up kernel
-            if b.nbcol % nblock != 0:
-                cleanptr = self._createfn(m, b.nbcol % nblock, k, lda, ldb,
-                                          ldc, alpha, beta, c_is_nt, a)
-                if not cleanptr:
-                    self._destroyfn(blkptr)
-                    raise NotSuitableError('libxssm unable to JIT a kernel')
-            else:
-                cleanptr = 0
-
             # Update the cache
-            self._kerns[ckey] = (blkptr, cleanptr)
+            self._kerns[ckey] = blkptr
 
         # Obtain a pointer to the execute function
         execptr = cast(self._execfn, c_void_p).value
@@ -135,14 +112,13 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('par-xsmm').render()
 
         # Argument types for par_xsmm
-        argt = [np.intp]*3 + [np.int32]*2 + [np.intp]*2 + [np.int32]*3
+        argt = [np.intp]*2 + [np.int32]*2 + [np.intp, np.int32]*2
 
         # Build
         par_xsmm = self._build_kernel('par_xsmm', src, argt)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                par_xsmm(execptr, blkptr, cleanptr, n, nblock, b, out, nbcol,
-                         bblocksz, outblocksz)
+                par_xsmm(execptr, blkptr, n, nbcol, b, bblksz, out, outblksz)
 
         return MulKernel()
