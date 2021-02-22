@@ -104,18 +104,12 @@ class BaseKernelGenerator(object):
         for va in self.vectargs:
             argn.append(va.name)
 
-            # View
             if va.isview:
                 argt.append([np.intp]*(2 + (va.ncdim == 2)))
-            # Broadcast vector
-            elif va.isbroadcast:
-                argt.append([np.intp])
-            # Non-stacked vector or MPI type
-            elif self.ndim == 1 and (va.ncdim == 0 or va.ismpi):
-                argt.append([np.intp])
-            # Stacked vector/matrix/stacked matrix
-            else:
+            elif self.needs_ldim(va):
                 argt.append([np.intp, np.int32])
+            else:
+                argt.append([np.intp])
 
         # Return
         return self.ndim, argn, argt
