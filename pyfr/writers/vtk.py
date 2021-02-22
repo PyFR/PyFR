@@ -25,12 +25,21 @@ class VTKWriter(BaseWriter):
         self.dtype = np.dtype(args.precision).type
 
         # Choose whether to output subdivided cells or high order VTK cells
-        # If args.divisor holds its default value, then use
-        # high-order VTK cells as output
+        # If -o is given by the user then use high-order VTK cells as output
+        # with order equal to the solution order or to the one provided by 
+        # the user
+        # Else if neither -o nor -d are found in the input then use high-order
+        # VTK cells with order equal to the simulation order
         # Else use cell subdivision
-        self.ho_output = args.divisor == 0
-        order = self.cfg.getint('solver', 'order')
-        self.divisor = args.divisor or self.cfg.getint('solver', 'order')
+        if args.order:
+            self.ho_output = True
+            self.divisor = args.order
+        elif args.order is None and args.divisor is None:
+            self.ho_output = True
+            self.divisor = self.cfg.getint('solver', 'order')
+        else:
+            self.ho_output = False
+            self.divisor = args.divisor
 
         # If outputting high-order VTK cells choose version 2.1
         # to ensure consistency with VTK9 mappings

@@ -70,10 +70,13 @@ def main():
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
                            help='output file type; this is usually inferred '
                            'from the extension of outf')
-    ap_export.add_argument('-d', '--divisor', type=int, default=0,
-                           help='sets the level to which high order elements '
-                           'are divided; output is linear between nodes, so '
-                           'increased resolution may be required')
+    group = ap_export.add_mutually_exclusive_group(required=False)
+    group.add_argument('-d', '--divisor', type=int,
+                       help='sets the level to which high order elements '
+                       'are divided; output is linear between nodes, so '
+                       'increased resolution may be required')
+    group.add_argument('-o', '--order', type=int,
+                       help='sets the order of high order elements')
     ap_export.add_argument('-g', '--gradients', action='store_true',
                            help='compute gradients')
     ap_export.add_argument('-p', '--precision', choices=['single', 'double'],
