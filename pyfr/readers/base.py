@@ -60,7 +60,7 @@ class NodalMeshAssembler(object):
 
         # Find PyFR node map for the quad face
         fnmap = self._petype_fnmap['pyr']['quad'][0]
-        pfnmap = self._nodemaps.from_pyfr['quad', 4][fnmap]
+        pfnmap = self._nodemaps['quad', 4][fnmap]
 
         # Face nodes
         fpts = np.array([[nodepts[i] for i in fidx]
@@ -235,7 +235,7 @@ class NodalMeshAssembler(object):
             petype, nnodes = self._etype_map[etype]
 
             # Go from Gmsh to PyFR node ordering
-            peles = eles[:, self._nodemaps.from_pyfr[petype, nnodes]]
+            peles = eles[:, self._nodemaps[petype, nnodes]]
 
             # Obtain the dimensionality of the element type
             ndim = self._petype_ndim[petype]
