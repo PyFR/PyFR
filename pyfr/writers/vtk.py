@@ -25,8 +25,8 @@ class VTKWriter(BaseWriter):
         self.dtype = np.dtype(args.precision).type
 
         # Choose whether to output subdivided cells or high order VTK cells
-        # If -o is given by the user then use high-order VTK cells as output
-        # with order equal to the solution order or to the one provided by 
+        # If -k is given by the user then use high-order VTK cells as output
+        # with order equal to the solution order or to the one provided by
         # the user
         # Else if neither -o nor -d are found in the input then use high-order
         # VTK cells with order equal to the simulation order
@@ -34,7 +34,7 @@ class VTKWriter(BaseWriter):
         if args.order:
             self.ho_output = True
             self.divisor = args.order
-        elif args.order is None and args.divisor is None:
+        elif args.divisor is None:
             self.ho_output = True
             self.divisor = self.cfg.getint('solver', 'order')
         else:
@@ -369,7 +369,7 @@ class VTKWriter(BaseWriter):
             # why VTK9 maps are chosen over those of VTK8
             # High order `pyr` elements are not currently
             # supported in VTK
-            svpts = np.array(svpts)[VTKHONodeMaps.from_pyfr[name, nsvpts]]
+            svpts = np.array(svpts)[VTKHONodeMaps.to_pyfr[name, nsvpts]]
 
         # Generate the operator matrices
         mesh_vtu_op = self._get_mesh_op(name, nspts, svpts)

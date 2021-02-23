@@ -27,7 +27,7 @@ class VTKHONodeMaps(object):
     not be compatible with this implementation
     """
 
-    from_pyfr = {
+    to_pyfr = {
         ('quad', 4): np.array([0, 1, 3, 2]),
         ('quad', 9): np.array([0, 2, 8, 6, 1, 5, 7, 3, 4]),
         ('quad', 16): np.array([0,  3, 15, 12,  1,  2,  7, 11, 13, 14,  4,
@@ -485,5 +485,3 @@ class VTKHONodeMaps(object):
                                 328, 329, 330, 333, 334, 335, 336, 337, 340,
                                 341, 342, 343, 346, 347, 348, 351, 352, 355]),
     }
-
-    to_pyfr = {k: np.argsort(v) for k, v in from_pyfr.items()}
