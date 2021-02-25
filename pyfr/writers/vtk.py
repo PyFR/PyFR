@@ -259,16 +259,30 @@ class VTKWriter(BaseWriter):
                 # Running byte-offset for appended data
                 off = 0
 
+                default_divisor = self.divisor
+
                 # Header
                 for mk, sk in misil:
+                    # If using high-order VTK output mode
+                    # set the number of sub-divisions of pyr
+                    # elements to order + 2
+                    if 'pyr' in mk and self.ho_output:
+                        self.divisor += 2
                     off = self._write_serial_header(fh, sk, off)
+                    self.divisor = default_divisor
 
                 write_s_to_fh('</UnstructuredGrid>\n'
                               '<AppendedData encoding="raw">\n_')
 
                 # Data
                 for mk, sk in misil:
+                    # If using high-order VTK output mode
+                    # set the number of sub-divisions of pyr
+                    # elements to order + 2
+                    if 'pyr' in mk and self.ho_output:
+                        self.divisor += 2
                     self._write_data(fh, mk, sk)
+                    self.divisor = default_divisor
 
                 write_s_to_fh('\n</AppendedData>\n</VTKFile>')
 
