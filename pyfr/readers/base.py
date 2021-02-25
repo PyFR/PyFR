@@ -56,18 +56,14 @@ class NodalMeshAssembler(object):
         self._etype_map, self._petype_fnmap, self._nodemaps = maps
 
     def _check_pyr_parallelogram(self, foeles):
-        nodepts = self._nodepts
-
         # Find PyFR node map for the quad face
         fnmap = self._petype_fnmap['pyr']['quad'][0]
         pfnmap = self._nodemaps['quad', 4][fnmap]
 
         # Face nodes
-        fpts = np.array([[nodepts[i] for i in fidx]
-                         for fidx in foeles[:, pfnmap]])
-        fpts = fpts.swapaxes(0, 1)
+        fpts = self._nodepts[foeles[:, pfnmap]].swapaxes(0, 1)
 
-        # Check parallelogram or not
+        # Check if parallelogram or not
         if np.any(np.abs(fpts[0] - fpts[1] - fpts[2] + fpts[3]) > 1e-10):
             raise ValueError('Pyramids with non-parallelogram bases are '
                              'currently unsupported')
@@ -81,7 +77,7 @@ class NodalMeshAssembler(object):
             # Number of nodes in the first-order representation
             focount = self._petype_focount[petype]
 
-            foelemap[petype, epent] = eles[:,:focount]
+            foelemap[petype, epent] = eles[:, :focount]
 
             # Check if pyramids have a parallelogram base or not
             if petype == 'pyr':
@@ -141,15 +137,14 @@ class NodalMeshAssembler(object):
 
     def _pair_periodic_fluid_faces(self, bpart, resid):
         pfaces = defaultdict(list)
-        nodepts = self._nodepts
 
         for k, (lpent, rpent) in self._pfacespents.items():
             for pftype in bpart[lpent]:
                 lfnodes = bpart[lpent][pftype]
                 rfnodes = bpart[rpent][pftype]
 
-                lfpts = np.array([[nodepts[n] for n in fn] for fn in lfnodes])
-                rfpts = np.array([[nodepts[n] for n in fn] for fn in rfnodes])
+                lfpts = self._nodepts[lfnodes]
+                rfpts = self._nodepts[rfnodes]
 
                 lfidx = fuzzysort(lfpts.mean(axis=1).T, range(len(lfnodes)))
                 rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
@@ -223,9 +218,6 @@ class NodalMeshAssembler(object):
     def get_shape_points(self):
         spts = {}
 
-        # Global node map (node index to coords)
-        nodepts = self._nodepts
-
         for etype, pent in self._elenodes:
             if pent != self._felespent:
                 continue
@@ -241,9 +233,7 @@ class NodalMeshAssembler(object):
             ndim = self._petype_ndim[petype]
 
             # Build the array
-            arr = np.array([[nodepts[i] for i in nn] for nn in peles])
-            arr = arr.swapaxes(0, 1)
-            arr = arr[..., :ndim]
+            arr = self._nodepts[peles, :ndim].swapaxes(0, 1)
 
             spts[f'spt_{petype}_p0'] = arr
 
