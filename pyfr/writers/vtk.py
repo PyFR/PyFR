@@ -48,6 +48,19 @@ class VTKWriter(BaseWriter):
         # why VTK9 maps are chosen over those of VTK8
         self.vtkfile_version = '2.1' if self.ho_output else '0.1'
 
+        # Solution physical time
+        self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
+
+        # Divisor for each type element
+        self.etypes_div = {etype: self.divisor
+                           for sk, (etype, shape) in self.soln_inf.items()}
+
+        # If using high-order VTK output mode
+        # set the number of sub-divisions of pyr
+        # elements to divisor + 2
+        if 'pyr' in self.etypes_div.keys() and self.ho_output:
+            self.etypes_div['pyr'] += 2
+
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
             self._pre_proc_fields = self._pre_proc_fields_soln
@@ -161,11 +174,11 @@ class VTKWriter(BaseWriter):
         subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
 
         # Number of vis points
-        npts = shapecls.nspts_from_order(self.divisor + 1)*neles
+        npts = shapecls.nspts_from_order(self.etypes_div[etype] + 1)*neles
 
         # Number of sub cells and nodes
-        ncells = len(subdvcls.subcells(self.divisor))*neles
-        nnodes = len(subdvcls.subnodes(self.divisor))*neles
+        ncells = len(subdvcls.subcells(self.etypes_div[etype]))*neles
+        nnodes = len(subdvcls.subnodes(self.etypes_div[etype]))*neles
 
         return npts, ncells, nnodes
 
@@ -185,7 +198,7 @@ class VTKWriter(BaseWriter):
         # which coincides with the number of
         # nodes of the vtkLagrange* correspondent
         # objects
-        npts = shapecls.nspts_from_order(self.divisor + 1)*neles
+        npts = shapecls.nspts_from_order(self.etypes_div[etype] + 1)*neles
 
         return npts, neles, npts
 
@@ -223,7 +236,7 @@ class VTKWriter(BaseWriter):
 
     @memoize
     def _get_std_ele(self, name, nspts):
-        return self._get_shape(name, nspts).std_ele(self.divisor)
+        return self._get_shape(name, nspts).std_ele(self.etypes_div[name])
 
     @memoize
     def _get_mesh_op(self, name, nspts, svpts):
@@ -259,30 +272,16 @@ class VTKWriter(BaseWriter):
                 # Running byte-offset for appended data
                 off = 0
 
-                default_divisor = self.divisor
-
                 # Header
                 for mk, sk in misil:
-                    # If using high-order VTK output mode
-                    # set the number of sub-divisions of pyr
-                    # elements to order + 2
-                    if 'pyr' in mk and self.ho_output:
-                        self.divisor += 2
                     off = self._write_serial_header(fh, sk, off)
-                    self.divisor = default_divisor
 
                 write_s_to_fh('</UnstructuredGrid>\n'
                               '<AppendedData encoding="raw">\n_')
 
                 # Data
                 for mk, sk in misil:
-                    # If using high-order VTK output mode
-                    # set the number of sub-divisions of pyr
-                    # elements to order + 2
-                    if 'pyr' in mk and self.ho_output:
-                        self.divisor += 2
                     self._write_data(fh, mk, sk)
-                    self.divisor = default_divisor
 
                 write_s_to_fh('\n</AppendedData>\n</VTKFile>')
 
@@ -318,6 +317,7 @@ class VTKWriter(BaseWriter):
         npts, ncells = self._get_npts_ncells_nnodes(sk)[:2]
 
         write_s = lambda s: vtuf.write(s.encode())
+        self._write_time_value(write_s)
         write_s(f'<Piece NumberOfPoints="{npts}" NumberOfCells="{ncells}">\n')
         write_s('<Points>\n')
 
@@ -345,6 +345,7 @@ class VTKWriter(BaseWriter):
         names, types, comps = self._get_array_attrs()
 
         write_s = lambda s: vtuf.write(s.encode())
+        self._write_time_value(write_s)
         write_s('<PPoints>\n')
 
         # Write vtk DaraArray headers
@@ -358,6 +359,16 @@ class VTKWriter(BaseWriter):
                 write_s('</PCells>\n<PPointData>\n')
 
         write_s('</PPointData>\n')
+
+    def _write_time_value(self, write_s):
+        write_s('<FieldData>\n')
+        write_s(f'<DataArray Name="TimeValue" type="Float64" '
+                f'NumberOfComponents="1" '
+                f'NumberOfTuples="1" '
+                f'format="ascii">\n')
+        write_s(f'{self.tcurr}\n')
+        write_s('</DataArray>\n')
+        write_s('</FieldData>\n')
 
     def _write_data(self, vtuf, mk, sk):
         name = self.mesh_inf[mk][0]
@@ -414,9 +425,9 @@ class VTKWriter(BaseWriter):
             types = self.vtk_types_ho[name]
         else:
             subdvcls = subclass_where(BaseShapeSubDiv, name=name)
-            nodes = subdvcls.subnodes(self.divisor)
-            subcellsoff = subdvcls.subcelloffs(self.divisor)
-            types = subdvcls.subcelltypes(self.divisor)
+            nodes = subdvcls.subnodes(self.etypes_div[name])
+            subcellsoff = subdvcls.subcelloffs(self.etypes_div[name])
+            types = subdvcls.subcelltypes(self.etypes_div[name])
 
         # Prepare VTU cell arrays
         vtu_con = np.tile(nodes, (neles, 1))
