@@ -404,7 +404,7 @@ class GmshReader(BaseReader):
 
         self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
 
-    def _to_raw_pyfrm(self):
+    def _to_raw_pyfrm(self, lintol):
         # Assemble a nodal mesh
         maps = self._etype_map, self._petype_fnmap, self._nodemaps
         pents = self._felespent, self._bfacespents, self._pfacespents
@@ -412,5 +412,5 @@ class GmshReader(BaseReader):
 
         rawm = {}
         rawm.update(mesh.get_connectivity())
-        rawm.update(mesh.get_shape_points())
+        rawm.update(mesh.get_shape_points(lintol))
         return rawm
