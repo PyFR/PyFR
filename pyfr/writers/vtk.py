@@ -24,6 +24,9 @@ class VTKWriter(BaseWriter):
 
         self.dtype = np.dtype(args.precision).type
 
+        # Divisor for each type element
+        self.etypes_div = defaultdict(lambda: self.divisor)
+
         # Choose whether to output subdivided cells or high order VTK cells
         # If -k is given by the user then use high-order VTK cells as output
         # with order equal to the solution order or to the one provided by
@@ -41,6 +44,12 @@ class VTKWriter(BaseWriter):
             self.ho_output = False
             self.divisor = args.divisor
 
+        # If using high-order VTK output mode
+        # set the number of sub-divisions of pyr
+        # elements to divisor + 2
+        if self.ho_output:
+            self.etypes_div['pyr'] += 2
+
         # If outputting high-order VTK cells choose version 2.1
         # to ensure consistency with VTK9 mappings
         # of high order vtkLagrangeHexahedron cells
@@ -50,16 +59,6 @@ class VTKWriter(BaseWriter):
 
         # Solution physical time
         self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
-
-        # Divisor for each type element
-        self.etypes_div = {etype: self.divisor
-                           for sk, (etype, shape) in self.soln_inf.items()}
-
-        # If using high-order VTK output mode
-        # set the number of sub-divisions of pyr
-        # elements to divisor + 2
-        if 'pyr' in self.etypes_div.keys() and self.ho_output:
-            self.etypes_div['pyr'] += 2
 
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
