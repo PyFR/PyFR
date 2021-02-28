@@ -44,11 +44,15 @@ class VTKWriter(BaseWriter):
             self.ho_output = False
             self.divisor = args.divisor
 
-        # If using high-order VTK output mode
-        # set the number of sub-divisions of pyr
-        # elements to divisor + 2
         if self.ho_output:
+            # If using high-order VTK output mode
+            # set the number of sub-divisions of pyr
+            # elements to divisor + 2
             self.etypes_div['pyr'] += 2
+
+            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
+        else:
+            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
         # If outputting high-order VTK cells choose version 2.1
         # to ensure consistency with VTK9 mappings
@@ -72,11 +76,6 @@ class VTKWriter(BaseWriter):
             self._post_proc_fields = self._post_proc_fields_scal
             self._soln_fields = self.stats.get('data', 'fields').split(',')
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
-
-        if self.ho_output:
-            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
-        else:
-            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
         # See if we are computing gradients
         if args.gradients:
@@ -186,8 +185,8 @@ class VTKWriter(BaseWriter):
 
         if etype == 'pyr':
             # No Lagrange pyr cells in VTK
-            # Therefore, rely on the subdivision mechanism
-            # of the vtk writer
+            # Therefore, rely on sub-division with
+            # linear cells
             return self._get_npts_ncells_nnodes_lin(sk)
 
         # Get the shape and sub division classes
