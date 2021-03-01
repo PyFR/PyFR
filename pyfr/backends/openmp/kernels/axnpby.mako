@@ -3,7 +3,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 void
-axnpby(int nrow, int nblocks, int ldim,
+axnpby(int nrow, int nblocks,
        ${', '.join(f'fpdtype_t *__restrict__ x{i}' for i in range(nv))},
        ${', '.join(f'fpdtype_t a{i}' for i in range(nv))})
 {
@@ -34,7 +34,7 @@ axnpby(int nrow, int nblocks, int ldim,
                 for (int _xj = 0; _xj < SOA_SZ; _xj++)
                 {
                 % for k in subdims:
-                    idx = _y*ldim + ib*SZ*${ncola}*nrow + X_IDX_AOSOA(${k}, ${ncola});
+                    idx = _y*SZ*${ncola} + ib*SZ*${ncola}*nrow + X_IDX_AOSOA(${k}, ${ncola});
                     x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=nv)};
                 % endfor
                 }

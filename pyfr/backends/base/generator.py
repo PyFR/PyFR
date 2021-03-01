@@ -18,7 +18,7 @@ class Arg(object):
             ((?:\[\d+\]){0,2})$                               # Dimensions
         '''
         dimsptn = r'(?<=\[)\d+(?=\])'
-        usedptn = r'(?:[^A-Za-z]|^){0}[^A-Za-z0-9]'.format(name)
+        usedptn = fr'(?:[^A-Za-z]|^){name}[^A-Za-z0-9]'
 
         # Parse our specification
         m = re.match(specptn, spec, re.X)
@@ -160,8 +160,13 @@ class BaseKernelGenerator(object):
         #   name[\1][\2] => name_v[(nv*(\1) + (\2))*ldim + X_IDX]
         elif arg.ncdim == 2 and arg.ismpi:
             ix = fr'({arg.cdims[1]}*(\1) + (\2))*_nx + X_IDX + BLK_IDX'
+        # Doubly stacked vector:
+        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv)]
+        else:
+            ix = (fr'ld{arg.name}*(\1) + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
+                  f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}')
 
-        return '{0}_v[{1}]'.format(arg.name, ix)
+        return f'{arg.name}_v[{ix}]'
 
     def _deref_arg_array_2d(self, arg):
         # Broadcast vector:
@@ -196,7 +201,7 @@ class BaseKernelGenerator(object):
         return f'{arg.name}_v[{ix}]'
 
     def _render_body(self, body):
-        bmch = r'\[({0})\]'.format(match_paired_paren('[]'))
+        bmch = fr'\[({match_paired_paren("[]")})\]'
         ptns = [r'\b{0}\b', r'\b{0}' + bmch, r'\b{0}' + 2*bmch]
 
         # At single precision suffix all floating point constants by 'f'

@@ -3,7 +3,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 void
-errest(int nrow, int nblocks, int ldim, fpdtype_t *__restrict__ error,
+errest(int nrow, int nblocks, fpdtype_t *__restrict__ error,
        fpdtype_t *__restrict__ x, fpdtype_t *__restrict__ y,
        fpdtype_t *__restrict__ z, fpdtype_t atol, fpdtype_t rtol)
 {
@@ -29,7 +29,7 @@ errest(int nrow, int nblocks, int ldim, fpdtype_t *__restrict__ error,
                 for (int _xj = 0; _xj < SOA_SZ; _xj++)
                 {
                 % for i in range(ncola):
-                    idx = _y*ldim + ib*SZ*${ncola}*nrow + X_IDX_AOSOA(${i}, ${ncola});
+                    idx = _y*SZ*${ncola} + ib*SZ*${ncola}*nrow + X_IDX_AOSOA(${i}, ${ncola});
                 % if norm == 'uniform':
                     err${i} = max(err${i}, pow(x[idx]/(atol + rtol*max(fabs(y[idx]), fabs(z[idx]))), 2));
                 % else:

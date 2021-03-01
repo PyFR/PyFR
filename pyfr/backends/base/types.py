@@ -45,10 +45,8 @@ class MatrixBase(object):
         if backend.blocks:
             if 'opmat' in self.tags:
                 self.leaddim = self.nbcol = self.ncol
-                ldmod = 1
             else:
                 self.leaddim = self.nbcol
-                ldmod = csubsz
 
             self.blocksz = self.nrow*self.nbcol
             self.nblock = (self.ncol - self.ncol % -self.nbcol) // self.nbcol
@@ -56,7 +54,7 @@ class MatrixBase(object):
 
             self.traits = (self.nrow, self.nblock, self.leaddim, self.dtype)
         else:
-            ldmod = soasz if 'align' in tags else 1
+            ldmod = backend.alignb // self.itemsize if 'align' in tags else 1
             self.leaddim = self.ncol - (self.ncol % -ldmod)
             self.nbytes = self.nrow*self.leaddim*self.itemsize
 
@@ -327,7 +325,7 @@ class View(object):
             coldisp = ((cmap % csubsz) // k)*k*self.nvcol + (cmap % csubsz) % k
             mapping = (offset + rowdisp + coldisp + blkdisp)[None, :]
         else:
-            coldisp = (cmap // k) * (self.nvcol * k) + cmap % k
+            coldisp = (cmap // k)*k*self.nvcol + cmap % k
             mapping = (offset + rowdisp + coldisp)[None, :]
 
         self.mapping = backend.base_matrix_cls(

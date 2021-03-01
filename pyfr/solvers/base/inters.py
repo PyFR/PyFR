@@ -16,8 +16,10 @@ def get_opt_view_perm(interside, mat, elemap, intsort):
     mmap, rmap, cmap = [np.concatenate([m[i] for m in vm]) for i in range(3)]
 
     # Sort
-    return (np.lexsort((rmap, cmap, mmap)) if intsort == 'rc' else
-            np.lexsort((cmap, rmap, mmap)))
+    if intsort == 'rc':
+        return np.lexsort((rmap, cmap, mmap))
+    else:
+        return np.lexsort((cmap, rmap, mmap))
 
 
 class BaseInters(object):

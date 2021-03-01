@@ -48,8 +48,6 @@ class OpenMPBackend(BaseBackend):
         # Instantiate optional kernel provider classes
         try:
             self._providers.append(xsmm.OpenMPXSMMKernels(self))
-        except (KeyboardInterrupt, SystemExit):
-            raise
         except OSError:
             pass
 

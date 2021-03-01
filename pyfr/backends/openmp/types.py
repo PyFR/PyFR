@@ -25,10 +25,10 @@ class OpenMPMatrixBase(base.MatrixBase):
         del self._initval
 
     def _get(self):
-        return self._unpack(self.data[:, :, :])
+        return self._unpack(self.data[:])
 
     def _set(self, ary):
-        self.data[:, :, :] = self._pack(ary)
+        self.data[:] = self._pack(ary)
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):

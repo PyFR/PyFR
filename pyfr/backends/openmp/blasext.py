@@ -12,8 +12,8 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, nblocks, ldim, dtype = arr[0].traits
-        ncola, ncolb = arr[0].ioshape[1:]
+        nrow, nblocks, _, dtype = arr[0].traits
+        ncola = arr[0].ioshape[-2]
 
         # Render the kernel template
         src = self.backend.lookup.get_template('axnpby').render(
@@ -22,11 +22,11 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
+                                  [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
-                kern(nrow, nblocks, ldim, *arr, *consts)
+                kern(nrow, nblocks, *arr, *consts)
 
         return AxnpbyKernel()
 
@@ -58,8 +58,8 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
-        nrow, nblocks, ldim, dtype = x.traits
-        ncola, ncolb = x.ioshape[1:]
+        nrow, nblocks, _, dtype = x.traits
+        ncola = x.ioshape[-2]
 
         # Render the reduction kernel template
         src = self.backend.lookup.get_template('errest').render(norm=norm,
@@ -70,7 +70,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build
         rkern = self._build_kernel(
-            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
+            'errest', src, [np.int32]*2 + [np.intp]*4 + [dtype]*2
         )
 
         class ErrestKernel(ComputeKernel):
@@ -79,7 +79,6 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
                 return error
 
             def run(self, queue, atol, rtol):
-                rkern(nrow, nblocks, ldim, error.ctypes.data,
-                      x, y, z, atol, rtol)
+                rkern(nrow, nblocks, error.ctypes.data, x, y, z, atol, rtol)
 
         return ErrestKernel()
