@@ -34,17 +34,9 @@ class VTKWriter(BaseWriter):
         # Else if neither -o nor -d are found in the input then use high-order
         # VTK cells with order equal to the simulation order
         # Else use cell subdivision
-        if args.order:
+        if args.order or args.divisor is None:
             self.ho_output = True
-            self.divisor = args.order
-        elif args.divisor is None:
-            self.ho_output = True
-            self.divisor = self.cfg.getint('solver', 'order')
-        else:
-            self.ho_output = False
-            self.divisor = args.divisor
-
-        if self.ho_output:
+            self.divisor = args.order or self.cfg.getint('solver', 'order')
             # If using high-order VTK output mode
             # set the number of sub-divisions of pyr
             # elements to divisor + 2
@@ -52,6 +44,8 @@ class VTKWriter(BaseWriter):
 
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
         else:
+            self.ho_output = False
+            self.divisor = args.divisor
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
         # If outputting high-order VTK cells choose version 2.1
