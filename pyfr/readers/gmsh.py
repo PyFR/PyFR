@@ -327,27 +327,30 @@ class GmshReader(BaseReader):
         self._read_nodes_impl(mshit)
 
     def _read_nodes_impl_v2(self, mshit):
-        self._nodepts = nodepts = {}
+        nodemap = {}
 
+        # Read in the nodes as a dict
         for l in msh_section(mshit, 'Nodes'):
             nv = l.split()
-            nodepts[int(nv[0])] = np.array([float(x) for x in nv[1:]])
+            nodemap[int(nv[0])] = nv[1:]
+
+        # Pack them into a dense array
+        self._nodepts = nodepts = np.empty((max(nodemap) + 1, 3))
+        for k, nv in nodemap.items():
+            nodepts[k] = [float(x) for x in nv]
 
     def _read_nodes_impl_v41(self, mshit):
-        self._nodepts = nodepts = {}
+        # Entity count, node count, minimum and maximum node numbers
+        ne, nn, ixl, ixu = (int(i) for i in next(mshit).split())
 
-        # Entity and total node count
-        ne, nn = (int(i) for i in next(mshit).split()[:2])
+        self._nodepts = nodepts = np.empty((ixu + 1, 3))
 
         for i in range(ne):
             nen = int(next(mshit).split()[-1])
             nix = [int(next(mshit)[:-1]) for _ in range(nen)]
 
             for j in nix:
-                nodepts[j] = np.array([float(x) for x in next(mshit).split()])
-
-        if nn != len(nodepts):
-            raise ValueError('Invalid node count')
+                nodepts[j] = [float(x) for x in next(mshit).split()]
 
         if next(mshit) != '$EndNodes\n':
             raise ValueError('Expected $EndNodes')
@@ -401,7 +404,7 @@ class GmshReader(BaseReader):
 
         self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
 
-    def _to_raw_pyfrm(self):
+    def _to_raw_pyfrm(self, lintol):
         # Assemble a nodal mesh
         maps = self._etype_map, self._petype_fnmap, self._nodemaps
         pents = self._felespent, self._bfacespents, self._pfacespents
@@ -409,5 +412,5 @@ class GmshReader(BaseReader):
 
         rawm = {}
         rawm.update(mesh.get_connectivity())
-        rawm.update(mesh.get_shape_points())
+        rawm.update(mesh.get_shape_points(lintol))
         return rawm

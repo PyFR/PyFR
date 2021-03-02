@@ -7,22 +7,20 @@ import uuid
 import numpy as np
 
 from pyfr.nputil import fuzzysort
+from pyfr.polys import get_polybasis
+from pyfr.shapes import BaseShape
+from pyfr.util import subclass_where
 
 
 class BaseReader(object):
     def __init__(self):
         pass
 
-    def _to_raw_pyfrm(self):
+    def _to_raw_pyfrm(self, lintol):
         pass
 
-    def to_pyfrm(self):
-        mesh = self._to_raw_pyfrm()
-
-        for k in list(mesh):
-            if k.startswith('spt'):
-                mesh[k, 'int_off'] = 0
-                mesh[k, 'lin_off'] = mesh[k].shape[1]
+    def to_pyfrm(self, lintol):
+        mesh = self._to_raw_pyfrm(lintol)
 
         # Add metadata
         mesh['mesh_uuid'] = np.array(str(uuid.uuid4()), dtype='S')
@@ -56,18 +54,14 @@ class NodalMeshAssembler(object):
         self._etype_map, self._petype_fnmap, self._nodemaps = maps
 
     def _check_pyr_parallelogram(self, foeles):
-        nodepts = self._nodepts
-
         # Find PyFR node map for the quad face
         fnmap = self._petype_fnmap['pyr']['quad'][0]
         pfnmap = self._nodemaps['quad', 4][fnmap]
 
         # Face nodes
-        fpts = np.array([[nodepts[i] for i in fidx]
-                         for fidx in foeles[:, pfnmap]])
-        fpts = fpts.swapaxes(0, 1)
+        fpts = self._nodepts[foeles[:, pfnmap]].swapaxes(0, 1)
 
-        # Check parallelogram or not
+        # Check if parallelogram or not
         if np.any(np.abs(fpts[0] - fpts[1] - fpts[2] + fpts[3]) > 1e-10):
             raise ValueError('Pyramids with non-parallelogram bases are '
                              'currently unsupported')
@@ -81,7 +75,7 @@ class NodalMeshAssembler(object):
             # Number of nodes in the first-order representation
             focount = self._petype_focount[petype]
 
-            foelemap[petype, epent] = eles[:,:focount]
+            foelemap[petype, epent] = eles[:, :focount]
 
             # Check if pyramids have a parallelogram base or not
             if petype == 'pyr':
@@ -141,15 +135,14 @@ class NodalMeshAssembler(object):
 
     def _pair_periodic_fluid_faces(self, bpart, resid):
         pfaces = defaultdict(list)
-        nodepts = self._nodepts
 
         for k, (lpent, rpent) in self._pfacespents.items():
             for pftype in bpart[lpent]:
                 lfnodes = bpart[lpent][pftype]
                 rfnodes = bpart[rpent][pftype]
 
-                lfpts = np.array([[nodepts[n] for n in fn] for fn in lfnodes])
-                rfpts = np.array([[nodepts[n] for n in fn] for fn in rfnodes])
+                lfpts = self._nodepts[lfnodes]
+                rfpts = self._nodepts[rfnodes]
 
                 lfidx = fuzzysort(lfpts.mean(axis=1).T, range(len(lfnodes)))
                 rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
@@ -220,11 +213,54 @@ class NodalMeshAssembler(object):
 
         return ret
 
-    def get_shape_points(self):
+    def _linearise_eles(self, lintol):
+        lidx = {}
+
+        for etype, pent in self._elenodes:
+            if pent != self._felespent:
+                continue
+
+            # Elements and type information
+            elesix = self._elenodes[etype, pent]
+            petype, nnodes = self._etype_map[etype]
+
+            # Obtain the dimensionality of the element type
+            ndim = self._petype_ndim[petype]
+
+            # Node maps between input and PyFR orderings
+            itop = self._nodemaps[petype, nnodes]
+            ptoi = np.argsort(itop)
+
+            # Construct the element array
+            eles = self._nodepts[elesix[:, itop], :ndim].swapaxes(0, 1)
+
+            # Generate the associated polynomial bases
+            shape = subclass_where(BaseShape, name=petype)
+            order = shape.order_from_nspts(nnodes)
+            hbasis = get_polybasis(petype, order, shape.std_ele(order - 1))
+            lbasis = get_polybasis(petype, 2, shape.std_ele(1))
+
+            htol = hbasis.nodal_basis_at(lbasis.pts)
+            ltoh = lbasis.nodal_basis_at(hbasis.pts)
+
+            leles = (ltoh @ htol) @ eles.reshape(nnodes, -1)
+            leles = leles.reshape(nnodes, -1, ndim)
+
+            # Use this to determine which elements are linear
+            num = np.max(np.abs(eles - leles), axis=0)
+            den = np.max(eles, axis=0) - np.min(eles, axis=0)
+            lin = lidx[petype] = np.any(num / den < lintol, axis=1)
+
+            for ix in np.nonzero(lin)[0]:
+                self._nodepts[elesix[ix], :ndim] = leles[ptoi, ix]
+
+        return lidx
+
+    def get_shape_points(self, lintol):
         spts = {}
 
-        # Global node map (node index to coords)
-        nodepts = self._nodepts
+        # Apply tolerance-based linearisation to the elements
+        lidx = self._linearise_eles(lintol)
 
         for etype, pent in self._elenodes:
             if pent != self._felespent:
@@ -241,10 +277,9 @@ class NodalMeshAssembler(object):
             ndim = self._petype_ndim[petype]
 
             # Build the array
-            arr = np.array([[nodepts[i] for i in nn] for nn in peles])
-            arr = arr.swapaxes(0, 1)
-            arr = arr[..., :ndim]
+            arr = self._nodepts[peles, :ndim].swapaxes(0, 1)
 
             spts[f'spt_{petype}_p0'] = arr
+            spts[f'spt_{petype}_p0', 'linear'] = lidx[petype]
 
         return spts
