@@ -108,18 +108,17 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     svals = [sc/iself._dt for sc in iself.stepper_coeffs]
 
                     # Physical stepper source addition -∇·f - dQ/dt
+                    axnpby = iself._get_axnpby_kerns(
+                        fout, iself._idxcurr, *iself._stepper_regidx,
+                        subdims=iself._subdims
+                    )
+                    iself._queue.enqueue_and_run(axnpby, 1, *svals)
+
+                    # Multigrid r addition
                     if iself._aux_regidx:
-                        axnpby = iself._get_axnpby_kerns(
-                            fout, iself._idxcurr, *iself._stepper_regidx,
-                            iself._aux_regidx[0], subdims=iself._subdims
-                        )
-                        iself._queue.enqueue_and_run(axnpby, 1, *svals, -1)
-                    else:
-                        axnpby = iself._get_axnpby_kerns(
-                            fout, iself._idxcurr, *iself._stepper_regidx,
-                            subdims=iself._subdims
-                        )
-                        iself._queue.enqueue_and_run(axnpby, 1, *svals)
+                        axnpby = iself._get_axnpby_kerns(fout,
+                                                         iself._aux_regidx[0])
+                        iself._queue.enqueue_and_run(axnpby, 1, -1)
 
             self.pintgs[l] = lpsint(backend, systemcls, rallocs, mesh,
                                     initsoln, mcfg, tcoeffs, dt)
