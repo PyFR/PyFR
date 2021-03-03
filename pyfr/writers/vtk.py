@@ -42,21 +42,17 @@ class VTKWriter(BaseWriter):
             # elements to divisor + 2
             self.etypes_div['pyr'] += 2
 
+            # If outputting high-order VTK cells choose version 2.1
+            # to ensure consistency with VTK9 mappings
+            # of high order vtkLagrangeHexahedron cells
+            self.vtkfile_version = '2.1'
+
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
         else:
             self.ho_output = False
             self.divisor = args.divisor
+            self.vtkfile_version = '0.1'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
-
-        # If outputting high-order VTK cells choose version 2.1
-        # to ensure consistency with VTK9 mappings
-        # of high order vtkLagrangeHexahedron cells
-        # See nodemaps.py for more information on
-        # why VTK9 maps are chosen over those of VTK8
-        self.vtkfile_version = '2.1' if self.ho_output else '0.1'
-
-        # Solution physical time
-        self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
 
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
@@ -64,12 +60,14 @@ class VTKWriter(BaseWriter):
             self._post_proc_fields = self._post_proc_fields_soln
             self._soln_fields = list(self.elementscls.privarmap[self.ndims])
             self._vtk_vars = list(self.elementscls.visvarmap[self.ndims])
+            self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
         # Otherwise we're dealing with simple scalar data
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
             self._soln_fields = self.stats.get('data', 'fields').split(',')
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
+            self.tcurr = None
 
         # See if we are computing gradients
         if args.gradients:
@@ -309,7 +307,10 @@ class VTKWriter(BaseWriter):
         npts, ncells = self._get_npts_ncells_nnodes(sk)[:2]
 
         write_s = lambda s: vtuf.write(s.encode())
-        self._write_time_value(write_s)
+
+        if self.tcurr is not None:
+            self._write_time_value(write_s)
+
         write_s(f'<Piece NumberOfPoints="{npts}" NumberOfCells="{ncells}">\n')
         write_s('<Points>\n')
 
@@ -337,7 +338,10 @@ class VTKWriter(BaseWriter):
         names, types, comps = self._get_array_attrs()
 
         write_s = lambda s: vtuf.write(s.encode())
-        self._write_time_value(write_s)
+
+        if self.tcurr is not None:
+            self._write_time_value(write_s)
+
         write_s('<PPoints>\n')
 
         # Write vtk DaraArray headers
@@ -353,14 +357,11 @@ class VTKWriter(BaseWriter):
         write_s('</PPointData>\n')
 
     def _write_time_value(self, write_s):
-        write_s('<FieldData>\n')
-        write_s(f'<DataArray Name="TimeValue" type="Float64" '
-                f'NumberOfComponents="1" '
-                f'NumberOfTuples="1" '
-                f'format="ascii">\n')
-        write_s(f'{self.tcurr}\n')
-        write_s('</DataArray>\n')
-        write_s('</FieldData>\n')
+        write_s('<FieldData>\n'
+                '<DataArray Name="TimeValue" type="Float64" '
+                'NumberOfComponents="1" NumberOfTuples="1" format="ascii">\n'
+                f'{self.tcurr}\n'
+                '</DataArray>\n</FieldData>\n')
 
     def _write_data(self, vtuf, mk, sk):
         name = self.mesh_inf[mk][0]
