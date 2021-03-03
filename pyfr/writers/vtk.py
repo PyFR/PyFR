@@ -9,6 +9,7 @@ import numpy as np
 from pyfr.shapes import BaseShape
 from pyfr.util import memoize, subclass_where
 from pyfr.writers import BaseWriter
+from pyfr.writers.nodemaps import VTKHONodeMaps
 
 
 class VTKWriter(BaseWriter):
@@ -16,11 +17,42 @@ class VTKWriter(BaseWriter):
     name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
+    vtk_types_ho = dict(tri=69, quad=70, tet=71, pri=73, hex=72)
+
     def __init__(self, args):
         super().__init__(args)
 
         self.dtype = np.dtype(args.precision).type
-        self.divisor = args.divisor or self.cfg.getint('solver', 'order')
+
+        # Divisor for each type element
+        self.etypes_div = defaultdict(lambda: self.divisor)
+
+        # Choose whether to output subdivided cells or high order VTK cells
+        # If -k is given by the user then use high-order VTK cells as output
+        # with order equal to the solution order or to the one provided by
+        # the user
+        # Else if neither -o nor -d are found in the input then use high-order
+        # VTK cells with order equal to the simulation order
+        # Else use cell subdivision
+        if args.order or args.divisor is None:
+            self.ho_output = True
+            self.divisor = args.order or self.cfg.getint('solver', 'order')
+            # If using high-order VTK output mode
+            # set the number of sub-divisions of pyr
+            # elements to divisor + 2
+            self.etypes_div['pyr'] += 2
+
+            # If outputting high-order VTK cells choose version 2.1
+            # to ensure consistency with VTK9 mappings
+            # of high order vtkLagrangeHexahedron cells
+            self.vtkfile_version = '2.1'
+
+            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
+        else:
+            self.ho_output = False
+            self.divisor = args.divisor
+            self.vtkfile_version = '0.1'
+            self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
@@ -28,12 +60,14 @@ class VTKWriter(BaseWriter):
             self._post_proc_fields = self._post_proc_fields_soln
             self._soln_fields = list(self.elementscls.privarmap[self.ndims])
             self._vtk_vars = list(self.elementscls.visvarmap[self.ndims])
+            self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
         # Otherwise we're dealing with simple scalar data
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
             self._soln_fields = self.stats.get('data', 'fields').split(',')
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
+            self.tcurr = None
 
         # See if we are computing gradients
         if args.gradients:
@@ -122,7 +156,7 @@ class VTKWriter(BaseWriter):
 
         return fields
 
-    def _get_npts_ncells_nnodes(self, sk):
+    def _get_npts_ncells_nnodes_lin(self, sk):
         etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
 
         # Get the shape and sub division classes
@@ -130,13 +164,33 @@ class VTKWriter(BaseWriter):
         subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
 
         # Number of vis points
-        npts = shapecls.nspts_from_order(self.divisor + 1)*neles
+        npts = shapecls.nspts_from_order(self.etypes_div[etype] + 1)*neles
 
         # Number of sub cells and nodes
-        ncells = len(subdvcls.subcells(self.divisor))*neles
-        nnodes = len(subdvcls.subnodes(self.divisor))*neles
+        ncells = len(subdvcls.subcells(self.etypes_div[etype]))*neles
+        nnodes = len(subdvcls.subnodes(self.etypes_div[etype]))*neles
 
         return npts, ncells, nnodes
+
+    def _get_npts_ncells_nnodes_ho(self, sk):
+        etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
+
+        if etype == 'pyr':
+            # No Lagrange pyr cells in VTK
+            # Therefore, rely on sub-division with
+            # linear cells
+            return self._get_npts_ncells_nnodes_lin(sk)
+
+        # Get the shape and sub division classes
+        shapecls = subclass_where(BaseShape, name=etype)
+
+        # Number of vis points
+        # which coincides with the number of
+        # nodes of the vtkLagrange* correspondent
+        # objects
+        npts = shapecls.nspts_from_order(self.etypes_div[etype] + 1)*neles
+
+        return npts, neles, npts
 
     def _get_array_attrs(self, sk=None):
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
@@ -172,7 +226,7 @@ class VTKWriter(BaseWriter):
 
     @memoize
     def _get_std_ele(self, name, nspts):
-        return self._get_shape(name, nspts).std_ele(self.divisor)
+        return self._get_shape(name, nspts).std_ele(self.etypes_div[name])
 
     @memoize
     def _get_mesh_op(self, name, nspts, svpts):
@@ -202,7 +256,8 @@ class VTKWriter(BaseWriter):
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '
                               'type="UnstructuredGrid" '
-                              'version="0.1">\n<UnstructuredGrid>\n')
+                              f'version="{self.vtkfile_version}">\n'
+                              '<UnstructuredGrid>\n')
 
                 # Running byte-offset for appended data
                 off = 0
@@ -225,7 +280,8 @@ class VTKWriter(BaseWriter):
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '
                               'type="PUnstructuredGrid" '
-                              'version="0.1">\n<PUnstructuredGrid>\n')
+                              f'version="{self.vtkfile_version}">\n'
+                              '<PUnstructuredGrid>\n')
 
                 # Header
                 self._write_parallel_header(fh)
@@ -251,6 +307,10 @@ class VTKWriter(BaseWriter):
         npts, ncells = self._get_npts_ncells_nnodes(sk)[:2]
 
         write_s = lambda s: vtuf.write(s.encode())
+
+        if self.tcurr is not None:
+            self._write_time_value(write_s)
+
         write_s(f'<Piece NumberOfPoints="{npts}" NumberOfCells="{ncells}">\n')
         write_s('<Points>\n')
 
@@ -278,6 +338,10 @@ class VTKWriter(BaseWriter):
         names, types, comps = self._get_array_attrs()
 
         write_s = lambda s: vtuf.write(s.encode())
+
+        if self.tcurr is not None:
+            self._write_time_value(write_s)
+
         write_s('<PPoints>\n')
 
         # Write vtk DaraArray headers
@@ -291,6 +355,13 @@ class VTKWriter(BaseWriter):
                 write_s('</PCells>\n<PPointData>\n')
 
         write_s('</PPointData>\n')
+
+    def _write_time_value(self, write_s):
+        write_s('<FieldData>\n'
+                '<DataArray Name="TimeValue" type="Float64" '
+                'NumberOfComponents="1" NumberOfTuples="1" format="ascii">\n'
+                f'{self.tcurr}\n'
+                '</DataArray>\n</FieldData>\n')
 
     def _write_data(self, vtuf, mk, sk):
         name = self.mesh_inf[mk][0]
@@ -309,6 +380,14 @@ class VTKWriter(BaseWriter):
         # Sub divison points inside of a standard element
         svpts = self._get_std_ele(name, nspts)
         nsvpts = len(svpts)
+
+        if name != 'pyr' and self.ho_output:
+            # Transform PyFR to VTK9 points
+            # See nodemaps.py for more information on
+            # why VTK9 maps are chosen over those of VTK8
+            # High order `pyr` elements are not currently
+            # supported in VTK
+            svpts = np.array(svpts)[VTKHONodeMaps.to_pyfr[name, nsvpts]]
 
         # Generate the operator matrices
         mesh_vtu_op = self._get_mesh_op(name, nspts, svpts)
@@ -333,19 +412,26 @@ class VTKWriter(BaseWriter):
         self._write_darray(vpts.swapaxes(0, 1), vtuf, self.dtype)
 
         # Perform the sub division
-        subdvcls = subclass_where(BaseShapeSubDiv, name=name)
-        nodes = subdvcls.subnodes(self.divisor)
+        if name != 'pyr' and self.ho_output:
+            nodes = np.arange(nsvpts)
+            subcellsoff = nsvpts
+            types = self.vtk_types_ho[name]
+        else:
+            subdvcls = subclass_where(BaseShapeSubDiv, name=name)
+            nodes = subdvcls.subnodes(self.etypes_div[name])
+            subcellsoff = subdvcls.subcelloffs(self.etypes_div[name])
+            types = subdvcls.subcelltypes(self.etypes_div[name])
 
         # Prepare VTU cell arrays
         vtu_con = np.tile(nodes, (neles, 1))
         vtu_con += (np.arange(neles)*nsvpts)[:, None]
 
         # Generate offset into the connectivity array
-        vtu_off = np.tile(subdvcls.subcelloffs(self.divisor), (neles, 1))
+        vtu_off = np.tile(subcellsoff, (neles, 1))
         vtu_off += (np.arange(neles)*len(nodes))[:, None]
 
         # Tile VTU cell type numbers
-        vtu_typ = np.tile(subdvcls.subcelltypes(self.divisor), neles)
+        vtu_typ = np.tile(types, neles)
 
         # Write VTU node connectivity, connectivity offsets and cell types
         self._write_darray(vtu_con, vtuf, np.int32)

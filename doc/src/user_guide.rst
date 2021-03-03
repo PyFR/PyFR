@@ -211,9 +211,31 @@ The following commands are available from the ``pyfr`` program:
         pyfr restart mesh.pyfrm solution.pyfrs
 
 5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu or .pvtu file. Example::
+   unstructured VTK .vtu or .pvtu file. Two output options
+   are provided. The first one uses high-order VTK cells
+   relying on the latter library to enhance the solution
+   visualization which can be controlled using the 
+   `Nonlinear subdivision` option in Paraview or VTK.
+   The order of the output non-linear cells is controlled 
+   using the ``-k`` or ``--order`` integer arguments.
+   Example::
 
-        pyfr export mesh.pyfrm solution.pyfrs solution.vtu
+        pyfr export -k 4 mesh.pyfrm solution.pyfrs solution.vtu   
+
+   The second one decomposes each element into
+   a set of linear cells. The level of sub-division is 
+   controlled by an integer accompannied by argument ``-d``
+   Example::
+
+        pyfr export -d 4 mesh.pyfrm solution.pyfrs solution.vtu
+
+   If neither arguments ``-d`` nor ``-k`` are provided by the user
+   then the export command defaults to::
+
+        pyfr export -k solution_order mesh.pyfrm solution.pyfrs solution.vtu
+
+   where ``solution_order`` refers to the ``order`` of the simulation data
+   found in the solution file.
 
 Running in Parallel
 ^^^^^^^^^^^^^^^^^^^
