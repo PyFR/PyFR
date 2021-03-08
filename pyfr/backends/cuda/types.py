@@ -27,18 +27,20 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
+        buf = np.empty((self.nblocks, self.nrow, self.leaddim),
+                       dtype=self.dtype)
 
         # Copy
         self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf[:, :self.ncol])
+        return self._unpack(buf[:])
 
     def _set(self, ary):
         # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
-        buf[:, :self.ncol] = self._pack(ary)
+        buf = np.zeros((self.nblocks, self.nrow, self.leaddim),
+                       dtype=self.dtype)
+        buf[:] = self._pack(ary)
 
         # Copy
         self.backend.cuda.memcpy(self.data, buf, self.nbytes)

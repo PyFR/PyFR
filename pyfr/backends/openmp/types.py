@@ -10,7 +10,7 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         self.data = basedata[offset:offset + self.nbytes]
         self.data = self.data.view(self.dtype)
-        self.data = self.data.reshape(self.nblock, self.nrow, self.leaddim)
+        self.data = self.data.reshape(self.nblocks, self.nrow, self.leaddim)
 
         self.offset = offset
 

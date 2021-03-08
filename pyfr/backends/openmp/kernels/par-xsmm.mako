@@ -12,7 +12,5 @@ par_xsmm(libxsmm_xfsspmdm_execute exec, void *blockk, int n, int nbcol,
 {
     #pragma omp parallel for
     for (int ib = 0; ib < n / nbcol; ib++)
-    {
         exec(blockk, b + ib*bblocksz, c + ib*cblocksz);
-    }
 }

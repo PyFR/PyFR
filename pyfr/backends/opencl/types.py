@@ -27,18 +27,20 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
+        buf = np.empty((self.nblocks, self.nrow, self.leaddim),
+                       dtype=self.dtype)
 
         # Copy
         cl.enqueue_copy(self.backend.qdflt, buf, self.data)
 
         # Unpack
-        return self._unpack(buf[:, :self.ncol])
+        return self._unpack(buf[:])
 
     def _set(self, ary):
         # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
-        buf[:, :self.ncol] = self._pack(ary)
+        buf = np.zeros((self.nblocks, self.nrow, self.leaddim),
+                       dtype=self.dtype)
+        buf[:] = self._pack(ary)
 
         # Copy
         cl.enqueue_copy(self.backend.qdflt, self.data, buf)

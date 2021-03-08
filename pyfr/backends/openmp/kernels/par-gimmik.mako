@@ -10,7 +10,5 @@ par_gimmik(gimmik_execute g_exec, int n, int nbcol,
 {
     #pragma omp parallel for
     for (int ib = 0; ib < n / nbcol; ib++)
-    {
         g_exec(nbcol, b + ib*bblocksz, nbcol, c + ib*cblocksz, nbcol);
-    }
 }

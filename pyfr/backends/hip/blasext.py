@@ -12,7 +12,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, ncol, ldim, dtype = arr[0].traits
+        _, nrow, ncol, ldim, dtype = arr[0].traits
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
@@ -52,7 +52,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         hip = self.backend.hip
-        nrow, ncol, ldim, dtype = x.traits
+        _, nrow, ncol, ldim, dtype = x.traits
         ncola, ncolb = x.ioshape[1:]
 
         # Reduction block dimensions
