@@ -11,6 +11,8 @@ class OpenMPBackend(BaseBackend):
     # Set preference for interface sorting
     intsort = 'rc'
 
+    blocks = True
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -23,7 +25,6 @@ class OpenMPBackend(BaseBackend):
         # Compute the SoA and AoSoA size
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz*cfg.getint('backend-openmp', 'n-soa', 1)
-        self.blocks = True
 
         from pyfr.backends.openmp import (blasext, gimmik, packing,
                                           provider, types, xsmm)

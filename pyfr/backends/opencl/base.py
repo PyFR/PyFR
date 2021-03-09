@@ -12,6 +12,8 @@ class OpenCLBackend(BaseBackend):
     # Set preference for interface sorting
     intsort = 'cr'
 
+    blocks = False
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -59,7 +61,6 @@ class OpenCLBackend(BaseBackend):
         # Compute the SoA size
         self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz
-        self.blocks = False
 
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
                                           provider, types)

@@ -34,13 +34,10 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf[:])
+        return self._unpack(buf)
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nblocks, self.nrow, self.leaddim),
-                       dtype=self.dtype)
-        buf[:] = self._pack(ary)
+        buf = self._pack(ary)
 
         # Copy
         self.backend.cuda.memcpy(self.data, buf, self.nbytes)

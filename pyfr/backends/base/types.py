@@ -21,15 +21,17 @@ class MatrixBase(object):
 
         # SoA and block column size
         soasz, csubsz = backend.soasz, backend.csubsz
-        blocked = backend.blocks and 'opmat' not in self.tags
+
+        self.blocked = backend.blocks and 'opmat' not in self.tags
+        self.aligned = True if 'align' in self.tags else False
 
         if ndim == 2:
             nrow, ncol = shape
             aosoashape = shape
 
             # Alignment requirement for the leading dimension
-            ldmod = soasz if 'align' in tags else 1
-            nbcol = csubsz if blocked else ncol - (ncol % -ldmod)
+            ldmod = csubsz if self.aligned else 1
+            nbcol = csubsz if self.blocked else ncol - (ncol % -ldmod)
         else:
             nvar, narr, k = shape[-2], shape[-1], soasz
             nparr = narr - narr % -csubsz
@@ -37,7 +39,7 @@ class MatrixBase(object):
             nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
             ncol = nvar*nparr
             aosoashape = shape[:-2] + [nparr // k, nvar, k]
-            nbcol = nvar*csubsz if blocked else ncol
+            nbcol = nvar*csubsz if self.blocked else ncol
 
         # Assign
         self.nrow, self.ncol, self.nbcol = int(nrow), int(ncol), int(nbcol)
@@ -91,8 +93,9 @@ class MatrixBase(object):
         # Convert from SoA to [blocked] AoSoA packing
         n, k, csubsz = ary.shape[-1], self.backend.soasz, self.backend.csubsz
 
-        ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % csubsz)],
-                     mode='constant')
+        if self.aligned or self.blocked:
+            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % csubsz)],
+                         mode='constant')
 
         if ary.ndim > 2:
             ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)

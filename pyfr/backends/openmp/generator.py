@@ -24,7 +24,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                             {self.body}
                         }}
                     }}
-                    for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem%SOA_SZ; _xj++)
+                    for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem % SOA_SZ; _xj++)
                     {{
                         {self.body}
                     }}'''
@@ -55,7 +55,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     }}
                     for (int _y = 0; _y < _ny; _y++)
                     {{
-                        for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem%SOA_SZ; _xj++)
+                        for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem % SOA_SZ; _xj++)
                         {{
                             {self.body}
                         }}
@@ -79,6 +79,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    #undef X_IDX
                    #undef X_IDX_AOSOA
                }}'''
+
+    def needs_ldim(self, arg):
+        return False
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions
@@ -104,7 +107,4 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 kargs.append(f'{const} {va.dtype}* __restrict__ {va.name}_v'
                              .strip())
 
-                if self.needs_ldim(va):
-                    kargs.append(f'int ld{va.name}')
-
-        return f'void {self.name}({", ".join(kargs)})'
+        return 'void {0}({1})'.format(self.name, ', '.join(kargs))

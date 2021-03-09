@@ -12,7 +12,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        _, nrow, ncol, ldim, dtype = arr[0].traits
+        nrow, ncol, ldim, dtype = arr[0].traits[1:]
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
@@ -52,7 +52,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         cuda = self.backend.cuda
-        _, nrow, ncol, ldim, dtype = x.traits
+        nrow, ncol, ldim, dtype = x.traits[1:]
         ncola, ncolb = x.ioshape[1:]
 
         # Reduction block dimensions

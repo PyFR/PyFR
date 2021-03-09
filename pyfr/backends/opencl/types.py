@@ -34,13 +34,10 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         cl.enqueue_copy(self.backend.qdflt, buf, self.data)
 
         # Unpack
-        return self._unpack(buf[:])
+        return self._unpack(buf)
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nblocks, self.nrow, self.leaddim),
-                       dtype=self.dtype)
-        buf[:] = self._pack(ary)
+        buf = self._pack(ary)
 
         # Copy
         cl.enqueue_copy(self.backend.qdflt, self.data, buf)

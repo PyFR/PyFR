@@ -12,6 +12,8 @@ class CUDABackend(BaseBackend):
     # Set preference for interface sorting
     intsort = 'cr'
 
+    blocks = False
+
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -48,7 +50,6 @@ class CUDABackend(BaseBackend):
         # Take the SoA size to be 32 elements
         self.soasz = 32
         self.csubsz = self.soasz
-        self.blocks = False
 
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-cuda', 'mpi-type', 'standard')
