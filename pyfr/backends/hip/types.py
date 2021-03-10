@@ -27,14 +27,13 @@ class HIPMatrixBase(_HIPMatrixCommon, base.MatrixBase):
 
     def _get(self):
         # Allocate an empty buffer
-        buf = np.empty((self.nblocks, self.nrow, self.leaddim),
-                       dtype=self.dtype)
+        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
         self.backend.hip.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf)
+        return self._unpack(buf[None, :, :])
 
     def _set(self, ary):
         buf = self._pack(ary)

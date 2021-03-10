@@ -85,7 +85,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Dimensions
         m, n, k = a.nrow, b.ncol, a.ncol
         lda, ldb, ldc = a.leaddim, b.leaddim, out.leaddim
-        nbcol, bblksz, outblksz = b.nbcol, b.blocksz, out.blocksz
+        nbcol = b.nbcol
 
         # Cache key
         ckey = (a.mid, alpha, beta, n, ldb, ldc)
@@ -109,16 +109,17 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         execptr = cast(self._execfn, c_void_p).value
 
         # Render our parallel wrapper kernel
-        src = self.backend.lookup.get_template('par-xsmm').render()
+        src = self.backend.lookup.get_template('batch-gemm').render(lib='xsmm')
 
         # Argument types for par_xsmm
         argt = [np.intp]*2 + [np.int32]*2 + [np.intp, np.int32]*2
 
         # Build
-        par_xsmm = self._build_kernel('par_xsmm', src, argt)
+        batch_gemm = self._build_kernel('batch_gemm', src, argt)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                par_xsmm(execptr, blkptr, n, nbcol, b, bblksz, out, outblksz)
+                batch_gemm(execptr, blkptr, n, nbcol, b, b.blocksz, out,
+                           out.blocksz)
 
         return MulKernel()

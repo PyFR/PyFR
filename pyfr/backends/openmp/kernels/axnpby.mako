@@ -11,7 +11,7 @@ axnpby(int nrow, int nblocks,
     #pragma omp parallel for
     for (int ib = 0; ib < nblocks; ib++)
     {
-        int idx, blksz = nrow*SZ*${ncola};
+        int idx, blksz = nrow*BLK_SZ*${ncola};
         #pragma omp simd
         for (int i = 0; i < blksz; i++)
         {
@@ -28,13 +28,13 @@ axnpby(int nrow, int nblocks,
 
         for (int _y = 0; _y < nrow; _y++)
         {
-            for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
+            for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
             {
                 #pragma omp simd
                 for (int _xj = 0; _xj < SOA_SZ; _xj++)
                 {
                 % for k in subdims:
-                    idx = _y*SZ*${ncola} + ib*SZ*${ncola}*nrow + X_IDX_AOSOA(${k}, ${ncola});
+                    idx = _y*BLK_SZ*${ncola} + ib*BLK_SZ*${ncola}*nrow + X_IDX_AOSOA(${k}, ${ncola});
                     x0[idx] = ${pyfr.dot('a{l}', 'x{l}[idx]', l=nv)};
                 % endfor
                 }

@@ -23,7 +23,7 @@ class MatrixBase(object):
         soasz, csubsz = backend.soasz, backend.csubsz
 
         self.blocked = backend.blocks and 'opmat' not in self.tags
-        self.aligned = True if 'align' in self.tags else False
+        self.aligned = 'align' in self.tags
 
         if ndim == 2:
             nrow, ncol = shape

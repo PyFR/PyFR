@@ -6,7 +6,7 @@
 #include <tgmath.h>
 
 #define SOA_SZ ${soasz}
-#define SZ ${csubsz}
+#define BLK_SZ ${csubsz}
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 #define max(a, b) ((a) > (b) ? (a) : (b))

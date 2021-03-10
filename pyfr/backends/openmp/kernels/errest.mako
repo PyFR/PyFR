@@ -23,13 +23,13 @@ errest(int nrow, int nblocks, fpdtype_t *__restrict__ error,
 
         for (int _y = 0; _y < nrow; _y++)
         {
-            for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
+            for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
             {
                 #pragma omp simd
                 for (int _xj = 0; _xj < SOA_SZ; _xj++)
                 {
                 % for i in range(ncola):
-                    idx = _y*SZ*${ncola} + ib*SZ*${ncola}*nrow + X_IDX_AOSOA(${i}, ${ncola});
+                    idx = _y*BLK_SZ*${ncola} + ib*BLK_SZ*${ncola}*nrow + X_IDX_AOSOA(${i}, ${ncola});
                 % if norm == 'uniform':
                     err${i} = max(err${i}, pow(x[idx]/(atol + rtol*max(fabs(y[idx]), fabs(z[idx]))), 2));
                 % else:

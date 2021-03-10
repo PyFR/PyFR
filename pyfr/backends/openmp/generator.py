@@ -7,7 +7,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
         if self.ndim == 1:
             core = f'''
-                   for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
+                   for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
                    {{
                        #pragma omp simd
                        for (int _xj = 0; _xj < SOA_SZ; _xj++)
@@ -16,7 +16,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                        }}
                    }}'''
             clean = f'''
-                    for (int _xi = 0; _xi < (rem/SOA_SZ)*SOA_SZ; _xi += SOA_SZ)
+                    for (int _xi = 0; _xi < _remi; _xi += SOA_SZ)
                     {{
                         #pragma omp simd
                         for (int _xj = 0; _xj < SOA_SZ; _xj++)
@@ -24,7 +24,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                             {self.body}
                         }}
                     }}
-                    for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem % SOA_SZ; _xj++)
+                    for (int _xi = _remi, _xj = 0; _xj < _remj; _xj++)
                     {{
                         {self.body}
                     }}'''
@@ -32,7 +32,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             core = f'''
                    for (int _y = 0; _y < _ny; _y++)
                    {{
-                       for (int _xi = 0; _xi < SZ; _xi += SOA_SZ)
+                       for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
                        {{
                            #pragma omp simd
                            for (int _xj = 0; _xj < SOA_SZ; _xj++)
@@ -44,7 +44,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
             clean = f'''
                     for (int _y = 0; _y < _ny; _y++)
                     {{
-                        for (int _xi = 0; _xi < (rem/SOA_SZ)*SOA_SZ; _xi += SOA_SZ)
+                        for (int _xi = 0; _xi < _remi; _xi += SOA_SZ)
                         {{
                             #pragma omp simd
                             for (int _xj = 0; _xj < SOA_SZ; _xj++)
@@ -55,7 +55,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     }}
                     for (int _y = 0; _y < _ny; _y++)
                     {{
-                        for (int _xi = (rem/SOA_SZ)*SOA_SZ, _xj = 0; _xj < rem % SOA_SZ; _xj++)
+                        for (int _xi = _remi, _xj = 0; _xj < _remj; _xj++)
                         {{
                             {self.body}
                         }}
@@ -63,12 +63,13 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         return f'''{self._render_spec()}
                {{
-                   int nci = _nx / SZ;
-                   int rem = _nx % SZ;
+                   int nci = _nx / BLK_SZ;
+                   int _remi = ((_nx % BLK_SZ) / SOA_SZ)*SOA_SZ;
+                   int _remj = (_nx % BLK_SZ) % SOA_SZ;
                    #define X_IDX (_xi + _xj)
                    #define X_IDX_AOSOA(v, nv)\
                        ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-                   #define BLK_IDX ib*SZ
+                   #define BLK_IDX ib*BLK_SZ
                    #pragma omp parallel for
                    for (int ib = 0; ib < nci; ib++)
                    {{

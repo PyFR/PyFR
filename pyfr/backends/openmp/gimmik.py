@@ -37,17 +37,18 @@ class OpenMPGiMMiKKernels(OpenMPKernelProvider):
         gimmik_ptr = cast(gimmik_mm, c_void_p).value
 
         # Render our parallel wrapper kernel
-        src = self.backend.lookup.get_template('par-gimmik').render()
+        src = self.backend.lookup.get_template('batch-gemm') \
+                          .render(lib='gimmik')
 
         # Argument types for par_gimmik
         argt = [np.intp] + [np.int32]*2 + [np.intp, np.int32]*2
 
         # Build
-        par_gimmik = self._build_kernel('par_gimmik', src, argt)
+        batch_gemm = self._build_kernel('batch_gemm', src, argt)
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                par_gimmik(gimmik_ptr, b.ncol, b.nbcol, b, b.blocksz, out,
+                batch_gemm(gimmik_ptr, b.ncol, b.nbcol, b, b.blocksz, out,
                            out.blocksz)
 
         return MulKernel()
