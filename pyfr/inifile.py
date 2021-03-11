@@ -110,12 +110,20 @@ class Inifile(object):
     def items(self, section):
         return dict(self._cp.items(section))
 
-    def items_as(self, section, type):
+    def items_as(self, section, type_to):
         iv = {}
 
         for k, v in self._cp.items(section):
             try:
-                iv[k] = type(v)
+                x = self.getliteral(section, k)
+            except ValueError:
+                print(f"ERROR getliteral, unable to evaulate, see: ini [{section}], '{k}'")
+                raise
+
+            try:
+                iv[k] = type_to(x)
+            except TypeError:
+                iv[k] = [type_to(y) for y in x]
             except ValueError:
                 pass
 
