@@ -116,9 +116,9 @@ class Inifile(object):
         for k, v in self._cp.items(section):
             try:
                 x = self.getliteral(section, k)
-            except ValueError:
-                print(f"ERROR getliteral, unable to evaulate, see: ini [{section}], '{k}'")
-                raise
+            except:
+                raise ValueError(f"ERROR getliteral, unable to evaluate, see:"
+                                 f" ini [{section}], '{k}'")
 
             try:
                 iv[k] = type_to(x)
