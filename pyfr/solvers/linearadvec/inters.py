@@ -12,8 +12,9 @@ class LinearAdvecIntInters(BaseAdvectionIntInters):
         self._be.pointwise.register('pyfr.solvers.linearadvec.kernels.intcflux')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
+        upwind_fact = float(self.cfg.get('solver-interfaces', 'alpha', 1))
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self.c)
+                       c=self.c, alpha=upwind_fact)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
