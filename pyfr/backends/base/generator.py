@@ -142,24 +142,25 @@ class BaseKernelGenerator(object):
         if arg.isbroadcast:
             ix = r'\1'
         # Vector:
-        #   name => name_v[X_IDX]
+        #   name => name_v[X_IDX + BLK_IDX]
         elif arg.ncdim == 0:
             ix = 'X_IDX + BLK_IDX'
         # Tightly packed MPI Vector:
-        #   name[\1] => name_v[_nx*(\1) + X_IDX]
+        #   name[\1] => name_v[nx*(\1) + X_IDX + BLK_IDX]
         elif arg.ncdim == 1 and arg.ismpi:
             ix = r'_nx*(\1) + X_IDX + BLK_IDX'
         # Stacked vector:
-        #   name[\1] => name_v[ldim*(\1) + X_IDX]
+        #   name[\1] => name_v[ldim*(\1) + X_IDX + BLK_IDX*nv]
         elif arg.ncdim == 1:
             lx = f'ld{arg.name}' if ldim else 'BLK_SZ'
             ix = fr'{lx}*(\1) + X_IDX + BLK_IDX*{arg.cdims[0]}'
         # Doubly stacked MPI vector:
-        #   name[\1][\2] => name_v[(nv*(\1) + (\2))*ldim + X_IDX]
+        #   name[\1][\2] => name_v[(nv*(\1) + (\2))*nx + X_IDX + BLK_IDX]
         elif arg.ncdim == 2 and arg.ismpi:
             ix = fr'({arg.cdims[1]}*(\1) + (\2))*_nx + X_IDX + BLK_IDX'
         # Doubly stacked vector:
-        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv)]
+        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv) +
+        #                          BLK_IDX*ns*nv]
         else:
             lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[1]}'
             ix = (fr'{lx}*(\1) + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
@@ -171,11 +172,11 @@ class BaseKernelGenerator(object):
         ldim = self.needs_ldim(arg)
 
         # Broadcast vector:
-        #   name => name_v[X_IDX]
+        #   name => name_v[X_IDX + BLK_IDX]
         if arg.isbroadcast:
             ix = 'X_IDX + BLK_IDX'
         # Matrix:
-        #   name => name_v[ldim*_y + X_IDX]
+        #   name => name_v[ldim*_y + X_IDX + BLK_IDX*ny]
         elif arg.ncdim == 0:
             lx = f'ld{arg.name}' if ldim else 'BLK_SZ'
             ix = f'{lx}*_y + X_IDX + BLK_IDX*_ny'
@@ -185,19 +186,21 @@ class BaseKernelGenerator(object):
             lx = f'ld{arg.name}' if ldim else 'BLK_SZ'
             ix = fr'{lx}*_y + \1'
         # Stacked matrix:
-        #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv)]
+        #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv) + BLK_IDX*nv*ny]
         elif arg.ncdim == 1:
             lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[0]}'
             ix = (fr'{lx}*_y + X_IDX_AOSOA(\1, {arg.cdims[0]}) + '
                   f'BLK_IDX*{arg.cdims[0]}*_ny')
         # Column broadcast matrix
-        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
+        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv) +
+        #                          BLK_IDX*ns*nv]
         elif arg.isbroadcastc:
             lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[1]}'
             ix = (fr'{lx}*\1 + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
                   f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}')
         # Doubly stacked matrix:
-        #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
+        #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv) +
+        #                          BLK_IDX*ns*nv*ny]
         else:
             lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[1]}'
             ix = (fr'((\1)*_ny + _y)*{lx} + '

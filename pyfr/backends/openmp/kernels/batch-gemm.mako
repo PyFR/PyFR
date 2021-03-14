@@ -12,13 +12,13 @@ void
 % if lib == 'xsmm':
 batch_gemm(libxsmm_xfsspmdm_execute exec, void *blockk,
 % else:
-batch_gemm(gimmik_execute exec,
+batch_gemm(gimmik_execute exec, int nbcol,
 % endif
-           int n, int nbcol,
+           int nblocks,
            const fpdtype_t *b, int bblocksz, fpdtype_t *c, int cblocksz)
 {
     #pragma omp parallel for
-    for (int ib = 0; ib < n / nbcol; ib++)
+    for (int ib = 0; ib < nblocks; ib++)
         % if lib == 'xsmm':
         exec(blockk, b + ib*bblocksz, c + ib*cblocksz);
         % else:

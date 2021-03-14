@@ -83,12 +83,11 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
             raise NotSuitableError('Matrix too large for libxsmm')
 
         # Dimensions
-        m, n, k = a.nrow, b.ncol, a.ncol
+        m, k = a.nrow, b.ncol, a.ncol
         lda, ldb, ldc = a.leaddim, b.leaddim, out.leaddim
-        nbcol = b.nbcol
 
         # Cache key
-        ckey = (a.mid, alpha, beta, n, ldb, ldc)
+        ckey = (a.mid, alpha, beta, b.nblocks, ldb, ldc)
 
         # Check the JIT kernel cache
         try:
@@ -97,7 +96,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
             c_is_nt = beta == 0 and self.backend.alignb >= 64
 
             # JIT and register an nbcol size kernel for this matrix
-            blkptr = self._createfn(m, nbcol, k, lda, ldb, ldc, alpha,
+            blkptr = self._createfn(m, b.nbcol, k, lda, ldb, ldc, alpha,
                                     beta, c_is_nt, a)
             if not blkptr:
                 raise NotSuitableError('libxssm unable to JIT a kernel')
@@ -112,14 +111,14 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('batch-gemm').render(lib='xsmm')
 
         # Argument types for par_xsmm
-        argt = [np.intp]*2 + [np.int32]*2 + [np.intp, np.int32]*2
+        argt = [np.intp]*2 + [np.int32] + [np.intp, np.int32]*2
 
         # Build
         batch_gemm = self._build_kernel('batch_gemm', src, argt)
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                batch_gemm(execptr, blkptr, n, nbcol, b, b.blocksz, out,
+                batch_gemm(execptr, blkptr, b.nblocks, b, b.blocksz, out,
                            out.blocksz)
 
         return MulKernel()

@@ -48,7 +48,7 @@ class OpenMPGiMMiKKernels(OpenMPKernelProvider):
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                batch_gemm(gimmik_ptr, b.ncol, b.nbcol, b, b.blocksz, out,
+                batch_gemm(gimmik_ptr, b.nbcol, b.nblocks, b, b.blocksz, out,
                            out.blocksz)
 
         return MulKernel()
