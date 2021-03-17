@@ -1425,7 +1425,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
 
-    ``ac-out-p`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    ``ac-out-fp`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
     requires
 
         - ``p`` --- pressure
