@@ -42,7 +42,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         dblocksz, sblocksz = dst.blocksz, src.blocksz
         datasz = src.nrow*src.leaddim*src.itemsize
-        ncol, nbcol = src.ncol, src.nbcol
+        ncol, bldim = src.ncol, src.leaddim
 
         # Build the kernel
         kern = self._build_kernel('par_memcpy', ksrc,
@@ -50,7 +50,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                kern(dst, dblocksz, src, sblocksz, datasz, ncol, nbcol)
+                kern(dst, dblocksz, src, sblocksz, datasz, ncol, bldim)
 
         return CopyKernel()
 

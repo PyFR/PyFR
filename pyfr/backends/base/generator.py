@@ -115,6 +115,9 @@ class BaseKernelGenerator(object):
         # Return
         return self.ndim, argn, argt
 
+    def ldim_size(self, name, *factor):
+        return f'ld{name}'
+
     def needs_ldim(self, arg):
         if arg.isbroadcast:
             return ((self.ndim == 1 and arg.ncdim > 1) or
@@ -135,8 +138,6 @@ class BaseKernelGenerator(object):
         return ptns[arg.ncdim].format(arg.name, 'BLK_IDX + X_IDX')
 
     def _deref_arg_array_1d(self, arg):
-        ldim = self.needs_ldim(arg)
-
         # Broadcast vector
         #   name[\1] => name_v[\1]
         if arg.isbroadcast:
@@ -152,7 +153,7 @@ class BaseKernelGenerator(object):
         # Stacked vector:
         #   name[\1] => name_v[ldim*(\1) + X_IDX + BLK_IDX*nv]
         elif arg.ncdim == 1:
-            lx = f'ld{arg.name}' if ldim else 'BLK_SZ'
+            lx = self.ldim_size(arg.name)
             ix = fr'{lx}*(\1) + X_IDX + BLK_IDX*{arg.cdims[0]}'
         # Doubly stacked MPI vector:
         #   name[\1][\2] => name_v[(nv*(\1) + (\2))*nx + X_IDX + BLK_IDX]
@@ -162,15 +163,13 @@ class BaseKernelGenerator(object):
         #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv) +
         #                          BLK_IDX*ns*nv]
         else:
-            lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[1]}'
+            lx = self.ldim_size(arg.name, arg.cdims[1])
             ix = (fr'{lx}*(\1) + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
                   f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}')
 
         return f'{arg.name}_v[{ix}]'
 
     def _deref_arg_array_2d(self, arg):
-        ldim = self.needs_ldim(arg)
-
         # Broadcast vector:
         #   name => name_v[X_IDX + BLK_IDX]
         if arg.isbroadcast:
@@ -178,31 +177,31 @@ class BaseKernelGenerator(object):
         # Matrix:
         #   name => name_v[ldim*_y + X_IDX + BLK_IDX*ny]
         elif arg.ncdim == 0:
-            lx = f'ld{arg.name}' if ldim else 'BLK_SZ'
+            lx = self.ldim_size(arg.name)
             ix = f'{lx}*_y + X_IDX + BLK_IDX*_ny'
         # Row broadcast matrix
         #   name[\1] => name_v[ldim*_y + \1]
         elif arg.isbroadcastr:
-            lx = f'ld{arg.name}' if ldim else 'BLK_SZ'
+            lx = self.ldim_size(arg.name)
             ix = fr'{lx}*_y + \1'
         # Stacked matrix:
         #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv) + BLK_IDX*nv*ny]
         elif arg.ncdim == 1:
-            lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[0]}'
+            lx = self.ldim_size(arg.name, arg.cdims[0])
             ix = (fr'{lx}*_y + X_IDX_AOSOA(\1, {arg.cdims[0]}) + '
                   f'BLK_IDX*{arg.cdims[0]}*_ny')
         # Column broadcast matrix
         #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv) +
         #                          BLK_IDX*ns*nv]
         elif arg.isbroadcastc:
-            lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[1]}'
+            lx = self.ldim_size(arg.name, arg.cdims[1])
             ix = (fr'{lx}*\1 + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
                   f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}')
         # Doubly stacked matrix:
         #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv) +
         #                          BLK_IDX*ns*nv*ny]
         else:
-            lx = f'ld{arg.name}' if ldim else f'BLK_SZ*{arg.cdims[1]}'
+            lx = self.ldim_size(arg.name, arg.cdims[1])
             ix = (fr'((\1)*_ny + _y)*{lx} + '
                   fr'X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
                   f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}*_ny')

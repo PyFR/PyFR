@@ -22,7 +22,6 @@ class MatrixBase(object):
         # SoA and block column size
         soasz, csubsz = backend.soasz, backend.csubsz
 
-        self.blocked = backend.blocks and 'opmat' not in self.tags
         self.aligned = 'align' in self.tags
 
         if ndim == 2:
@@ -31,7 +30,7 @@ class MatrixBase(object):
 
             # Alignment requirement for the leading dimension
             ldmod = csubsz if self.aligned else 1
-            nbcol = csubsz if self.blocked else ncol - (ncol % -ldmod)
+            leaddim = csubsz if backend.blocks else ncol - (ncol % -ldmod)
         else:
             nvar, narr, k = shape[-2], shape[-1], soasz
             nparr = narr - narr % -csubsz
@@ -39,20 +38,18 @@ class MatrixBase(object):
             nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
             ncol = nvar*nparr
             aosoashape = shape[:-2] + [nparr // k, nvar, k]
-            nbcol = nvar*csubsz if self.blocked else ncol
+            leaddim = nvar*csubsz if backend.blocks else ncol
 
         # Assign
-        self.nrow, self.ncol, self.nbcol = int(nrow), int(ncol), int(nbcol)
+        self.nrow, self.ncol, self.leaddim = int(nrow), int(ncol), int(leaddim)
 
         self.datashape = aosoashape
         self.ioshape = ioshape
 
-        self.splitsz = self.nbcol if backend.blocks else soasz
-        self.blocksz = self.nrow*self.nbcol
-        self.nblocks = (self.ncol - self.ncol % -self.nbcol) // self.nbcol
+        self.splitsz = self.leaddim if backend.blocks else soasz
+        self.blocksz = self.nrow*self.leaddim
+        self.nblocks = (self.ncol - self.ncol % -self.leaddim) // self.leaddim
         self.nbytes = self.nblocks*self.blocksz*self.itemsize
-
-        self.leaddim = self.nbcol
 
         self.traits = (self.nblocks, self.nrow, self.ncol, self.leaddim,
                        self.dtype)
@@ -93,27 +90,27 @@ class MatrixBase(object):
         # Convert from SoA to [blocked] AoSoA packing
         n, k, csubsz = ary.shape[-1], self.backend.soasz, self.backend.csubsz
 
-        if self.aligned or self.blocked:
+        if self.aligned or self.backend.blocks:
             ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % csubsz)],
                          mode='constant')
 
         if ary.ndim > 2:
             ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
 
-        ary = ary.reshape(self.nrow, -1, self.nbcol).swapaxes(0, 1)
+        ary = ary.reshape(self.nrow, -1, self.leaddim).swapaxes(0, 1)
 
         return np.ascontiguousarray(ary, dtype=self.dtype)
 
     def _unpack(self, ary):
         # Unpack from [blocked] AoSoA to SoA
         ary = ary.swapaxes(0, 1)
-        if len(self.ioshape) == 2:
-            ary = ary.reshape(self.nrow, -1)
-        else:
+
+        if len(self.ioshape) > 2:
             ary = ary.reshape(self.datashape)
             ary = ary.swapaxes(-2, -3)
-            ary = ary.reshape(self.ioshape[:-1] + (-1,))
-            ary = ary[..., :self.ioshape[-1]]
+
+        ary = ary.reshape(self.ioshape[:-1] + (-1,))
+        ary = ary[..., :self.ioshape[-1]]
 
         return ary
 
@@ -167,13 +164,11 @@ class MatrixSlice(object):
         self.ca, self.cb = int(ca), int(cb)
         self.nrow, self.ncol = self.rb - self.ra, self.cb - self.ca
         self.dtype, self.itemsize = mat.dtype, mat.itemsize
-        self.leaddim = mat.leaddim
-
-        self.nbcol, self.blocksz = mat.nbcol, mat.blocksz
-        self.nblocks = self.ncol // self.nbcol
+        self.leaddim, self.blocksz = mat.leaddim, mat.blocksz
+        self.nblocks = (self.ncol - self.ncol % -self.leaddim) // self.leaddim
 
         if backend.blocks:
-            self.ba, self.bb = self.ca // self.nbcol, self.cb // self.nbcol
+            self.ba, self.bb = self.ca // self.leaddim, self.cb // self.leaddim
 
         self.traits = (self.nblocks, self.nrow, self.ncol, self.leaddim,
                        self.dtype)
@@ -182,7 +177,7 @@ class MatrixSlice(object):
 
         # Only set nbytes for slices which are safe to memcpy
         if ca == 0 and cb == mat.ncol:
-            self.nbytes = self.nrow*self.nbcol*self.nblocks*self.itemsize
+            self.nbytes = self.nrow*self.leaddim*self.nblocks*self.itemsize
 
     @property
     def basedata(self):
@@ -306,7 +301,7 @@ class View(object):
         for m in self._mats:
             ix = np.where(matmap == m.mid)
             offset[ix], leaddim[ix] = m.offset // m.itemsize, m.leaddim
-            blkdisp[ix] = (cmap[ix] // (m.nbcol // self.nvcol))*m.blocksz
+            blkdisp[ix] = (cmap[ix]*self.nvcol // m.leaddim)*m.blocksz
 
         # Row/column displacements
         rowdisp = rmap*leaddim

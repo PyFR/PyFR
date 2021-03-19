@@ -71,7 +71,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
             raise NotSuitableError('libxsmm requires a constant a matrix')
 
         # Check n is suitable
-        if b.nbcol % self._nmod != 0:
+        if b.leaddim % self._nmod != 0:
             raise NotSuitableError(f'libxsmm requires n % {self._nmod} = 0')
 
         # Check that beta is zero or one
@@ -83,8 +83,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
             raise NotSuitableError('Matrix too large for libxsmm')
 
         # Dimensions
-        m, k = a.nrow, b.ncol, a.ncol
-        lda, ldb, ldc = a.leaddim, b.leaddim, out.leaddim
+        ldb, ldc = b.leaddim, out.leaddim
 
         # Cache key
         ckey = (a.mid, alpha, beta, b.nblocks, ldb, ldc)
@@ -95,9 +94,13 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         except KeyError:
             c_is_nt = beta == 0 and self.backend.alignb >= 64
 
-            # JIT and register an nbcol size kernel for this matrix
-            blkptr = self._createfn(m, b.nbcol, k, lda, ldb, ldc, alpha,
-                                    beta, c_is_nt, a)
+            a_np = np.ascontiguousarray(a.get(), dtype=a.dtype)
+
+            m, k = a_np.shape
+
+            # JIT and register an block leaddim size kernel for this matrix
+            blkptr = self._createfn(m, b.leaddim, k, k, ldb, ldc, alpha,
+                                    beta, c_is_nt, a_np.ctypes.data)
             if not blkptr:
                 raise NotSuitableError('libxssm unable to JIT a kernel')
 
@@ -111,7 +114,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('batch-gemm').render(lib='xsmm')
 
         # Argument types for par_xsmm
-        argt = [np.intp]*2 + [np.int32] + [np.intp, np.int32]*2
+        argt = [np.intp] + [np.intp, np.int32]*3
 
         # Build
         batch_gemm = self._build_kernel('batch_gemm', src, argt)

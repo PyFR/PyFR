@@ -221,7 +221,7 @@ class BaseElements(object):
     @memoize
     def opmat(self, expr):
         return self._be.const_matrix(self.basis.opmat(expr),
-                                     tags={expr, 'align', 'opmat'})
+                                     tags={expr, 'align'})
 
     def sliceat(fn):
         @memoize
