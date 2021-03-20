@@ -27,7 +27,7 @@ class BaseAdvectionIntInters(BaseInters):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
         self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter',
-                                       self.elemap)
+                                       self.elemap, self._be.intsort)
 
 
 class BaseAdvectionMPIInters(BaseInters):
@@ -75,7 +75,8 @@ class BaseAdvectionBCInters(BaseInters):
         # For BC interfaces, which only have an LHS state, we take the
         # permutation which results in an optimal memory access pattern
         # iterating over this state.
-        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter', elemap)
+        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter', elemap,
+                                       self._be.intsort)
 
         # LHS view and constant matrices
         self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')

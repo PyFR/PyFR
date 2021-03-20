@@ -5,13 +5,19 @@
 #include <string.h>
 
 void
-par_memcpy(char *dst, const char *src, int n)
+par_memcpy(fpdtype_t *dst, int dblocksz, const fpdtype_t *src, int sblocksz,
+           int datasz, int n, int bldim)
 {
-    #pragma omp parallel
+    if (dblocksz == sblocksz)
     {
-        int begin, end;
-        loop_sched_1d(n, 1, &begin, &end);
-
-        memcpy(dst + begin, src + begin, end - begin);
+        #pragma omp parallel for
+        for (int i = 0; i < n / bldim * dblocksz; i++)
+            memcpy(dst + i, src + i, sizeof(fpdtype_t));
+    }
+    else
+    {
+        #pragma omp parallel for
+        for (int ib = 0; ib < n / bldim; ib++)
+            memcpy(dst + dblocksz*ib, src + sblocksz*ib, datasz);
     }
 }
