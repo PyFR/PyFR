@@ -7,10 +7,6 @@ from pyfr.backends.base import BaseBackend
 
 class OpenMPBackend(BaseBackend):
     name = 'openmp'
-
-    # Set preference for interface sorting
-    intsort = 'rc'
-
     blocks = True
 
     def __init__(self, cfg):

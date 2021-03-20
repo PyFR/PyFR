@@ -11,17 +11,6 @@ def _get_inter_objs(interside, getter, elemap):
     return [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
 
 
-def get_opt_view_perm(interside, mat, elemap, intsort):
-    vm = _get_inter_objs(interside, mat, elemap)
-    mmap, rmap, cmap = [np.concatenate([m[i] for m in vm]) for i in range(3)]
-
-    # Sort
-    if intsort == 'rc':
-        return np.lexsort((rmap, cmap, mmap))
-    else:
-        return np.lexsort((cmap, rmap, mmap))
-
-
 class BaseInters(object):
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
@@ -71,7 +60,14 @@ class BaseInters(object):
 
         return self._be.const_matrix(m)
 
-    def _view(self, inter, meth, vshape=tuple()):
+    def _get_perm_for_view(self, inter, meth):
+        vm = _get_inter_objs(inter, meth, self.elemap)
+        vm = [np.concatenate(m) for m in zip(*vm)]
+        mm = self._be.view(*vm, vshape=()).mapping.get()
+
+        return np.argsort(mm[0])
+
+    def _view(self, inter, meth, vshape=()):
         vm = _get_inter_objs(inter, meth, self.elemap)
         vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
         return self._be.view(*vm, vshape=vshape)
