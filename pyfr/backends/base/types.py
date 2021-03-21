@@ -41,18 +41,17 @@ class MatrixBase(object):
             leaddim = nvar*csubsz if backend.blocks else ncol
 
         # Assign
-        self.nrow, self.ncol, self.leaddim = int(nrow), int(ncol), int(leaddim)
+        self.nrow, self.ncol, self.leaddim = nrow, ncol, leaddim
 
         self.datashape = aosoashape
         self.ioshape = ioshape
 
-        self.splitsz = self.leaddim if backend.blocks else soasz
-        self.blocksz = self.nrow*self.leaddim
-        self.nblocks = (self.ncol - self.ncol % -self.leaddim) // self.leaddim
-        self.nbytes = self.nblocks*self.blocksz*self.itemsize
+        self.splitsz = leaddim if backend.blocks else soasz
+        self.blocksz = nrow*leaddim
+        self.nblocks = (ncol - (ncol % -leaddim)) // leaddim
 
-        self.traits = (self.nblocks, self.nrow, self.ncol, self.leaddim,
-                       self.dtype)
+        self.nbytes = self.nblocks*self.blocksz*self.itemsize
+        self.traits = (self.nblocks, nrow, ncol, leaddim, dtype)
 
         # Process the initial value
         if initval is not None:
