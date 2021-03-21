@@ -8,10 +8,6 @@ from pyfr.mpiutil import get_local_rank
 
 class CUDABackend(BaseBackend):
     name = 'cuda'
-
-    # Set preference for interface sorting
-    intsort = 'cr'
-
     blocks = False
 
     def __init__(self, cfg):

@@ -8,10 +8,6 @@ from pyfr.mpiutil import get_local_rank
 
 class HIPBackend(BaseBackend):
     name = 'hip'
-
-    # Set preference for interface sorting
-    intsort = 'cr'
-
     blocks = False
 
     def __init__(self, cfg):

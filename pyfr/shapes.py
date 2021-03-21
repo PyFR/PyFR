@@ -64,7 +64,7 @@ class BaseShape(object):
 
     @classmethod
     def nspts_from_order(cls, sptord):
-        return np.polyval(cls.npts_coeffs, sptord) // cls.npts_cdenom
+        return int(np.polyval(cls.npts_coeffs, sptord)) // cls.npts_cdenom
 
     @classmethod
     def order_from_nspts(cls, nspts):
@@ -161,7 +161,7 @@ class BaseShape(object):
     @lazyprop
     def nupts(self):
         n = self.order + 1
-        return np.polyval(self.npts_coeffs, n) // self.npts_cdenom
+        return int(np.polyval(self.npts_coeffs, n)) // self.npts_cdenom
 
     @lazyprop
     def upts(self):
