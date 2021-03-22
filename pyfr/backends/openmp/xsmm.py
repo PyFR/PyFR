@@ -94,7 +94,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         except KeyError:
             c_is_nt = beta == 0 and self.backend.alignb >= 64
 
-            a_np = np.ascontiguousarray(a.get(), dtype=a.dtype)
+            a_np = np.ascontiguousarray(a.get())
 
             m, k = a_np.shape
 
