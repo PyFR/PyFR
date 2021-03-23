@@ -94,8 +94,7 @@ class MatrixBase(object):
         if ary.ndim == 2:
             ary = np.pad(ary, [(0, 0)] + [(0, -n % self.leaddim)])
         else:
-            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % csubsz)],
-                         mode='constant')
+            ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % csubsz)])
             ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
 
         ary = ary.reshape(self.nrow, -1, self.leaddim).swapaxes(0, 1)
@@ -103,9 +102,8 @@ class MatrixBase(object):
         return np.ascontiguousarray(ary, dtype=self.dtype)
 
     def _unpack(self, ary):
-        # Unpack from [blocked] AoSoA to SoA
-        ary = ary.reshape(self.datashape)
-        ary = ary.swapaxes(-2, -3)
+        # Unpack from blocked AoSoA to blocked SoA
+        ary = ary.reshape(self.datashape).swapaxes(-2, -3)
 
         if len(self.ioshape) > 2:
             ary = np.moveaxis(ary, 0, -3)
