@@ -40,17 +40,17 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         # Render the kernel template
         ksrc = self.backend.lookup.get_template('par-memcpy').render()
 
-        dblocksz, sblocksz = dst.blocksz, src.blocksz
-        datasz = src.nrow*src.leaddim*src.itemsize
-        ncol, bldim = src.ncol, src.leaddim
+        dbbytes, sbbytes = dst.blocksz*dst.itemsize, src.blocksz*src.itemsize
+        bnbytes = src.nrow*src.leaddim*src.itemsize
+        nblocks = src.nblocks
 
         # Build the kernel
         kern = self._build_kernel('par_memcpy', ksrc,
-                                  [np.intp, np.int32]*2 + [np.int32]*3)
+                                  [np.intp, np.int32]*2 + [np.int32]*2)
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                kern(dst, dblocksz, src, sblocksz, datasz, ncol, bldim)
+                kern(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
 
         return CopyKernel()
 

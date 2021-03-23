@@ -22,33 +22,35 @@ class MatrixBase(object):
         # SoA and block column size
         soasz, csubsz = backend.soasz, backend.csubsz
 
-        self.aligned = 'align' in self.tags
-
         if ndim == 2:
             nrow, ncol = shape
-            aosoashape = shape
 
             # Alignment requirement for the leading dimension
-            ldmod = csubsz if self.aligned else 1
+            ldmod = csubsz if 'align' in self.tags else 1
             leaddim = csubsz if backend.blocks else ncol - (ncol % -ldmod)
+
+            nblocks = (ncol - (ncol % -leaddim)) // leaddim
+            datashape = [nblocks, nrow, leaddim]
         else:
             nvar, narr, k = shape[-2], shape[-1], soasz
             nparr = narr - narr % -csubsz
 
             nrow = shape[0] if ndim == 3 else shape[0]*shape[1]
             ncol = nvar*nparr
-            aosoashape = shape[:-2] + [nparr // k, nvar, k]
             leaddim = nvar*csubsz if backend.blocks else ncol
+
+            nblocks = (ncol - (ncol % -leaddim)) // leaddim
+            datashape = [nblocks, *shape[:-2], nparr // (nblocks*k), nvar, k]
 
         # Assign
         self.nrow, self.ncol, self.leaddim = nrow, ncol, leaddim
 
-        self.datashape = aosoashape
+        self.datashape = datashape
         self.ioshape = ioshape
 
         self.splitsz = leaddim if backend.blocks else soasz
         self.blocksz = nrow*leaddim
-        self.nblocks = (ncol - (ncol % -leaddim)) // leaddim
+        self.nblocks = nblocks
 
         self.nbytes = self.nblocks*self.blocksz*self.itemsize
         self.traits = (self.nblocks, nrow, ncol, leaddim, dtype)
@@ -89,11 +91,11 @@ class MatrixBase(object):
         # Convert from SoA to [blocked] AoSoA packing
         n, k, csubsz = ary.shape[-1], self.backend.soasz, self.backend.csubsz
 
-        if self.aligned or self.backend.blocks:
+        if ary.ndim == 2:
+            ary = np.pad(ary, [(0, 0)] + [(0, -n % self.leaddim)])
+        else:
             ary = np.pad(ary, [(0, 0)]*(ary.ndim - 1) + [(0, -n % csubsz)],
                          mode='constant')
-
-        if ary.ndim > 2:
             ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
 
         ary = ary.reshape(self.nrow, -1, self.leaddim).swapaxes(0, 1)
@@ -102,11 +104,11 @@ class MatrixBase(object):
 
     def _unpack(self, ary):
         # Unpack from [blocked] AoSoA to SoA
-        ary = ary.swapaxes(0, 1)
+        ary = ary.reshape(self.datashape)
+        ary = ary.swapaxes(-2, -3)
 
         if len(self.ioshape) > 2:
-            ary = ary.reshape(self.datashape)
-            ary = ary.swapaxes(-2, -3)
+            ary = np.moveaxis(ary, 0, -3)
 
         ary = ary.reshape(self.ioshape[:-1] + (-1,))
         ary = ary[..., :self.ioshape[-1]]
