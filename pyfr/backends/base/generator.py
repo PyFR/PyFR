@@ -11,15 +11,17 @@ class Arg(object):
     def __init__(self, name, spec, body):
         self.name = name
 
-        specptn = (r'(?:(in|inout|out)\s+)?'                # Intent
-                   r'(?:(broadcast|mpi|scalar|view)\s+)?'   # Attrs
-                   r'([A-Za-z_]\w*)'                        # Data type
-                   r'((?:\[\d+\]){0,2})$')                  # Dimensions
+        specptn = r'''
+            (?:(in|inout|out)\s+)?                            # Intent
+            (?:(broadcast(?:-row|-col)?|mpi|scalar|view)\s+)? # Attrs
+            ([A-Za-z_]\w*)                                    # Data type
+            ((?:\[\d+\]){0,2})$                               # Dimensions
+        '''
         dimsptn = r'(?<=\[)\d+(?=\])'
         usedptn = r'(?:[^A-Za-z]|^){0}[^A-Za-z0-9]'.format(name)
 
         # Parse our specification
-        m = re.match(specptn, spec)
+        m = re.match(specptn, spec, re.X)
         if not m:
             raise ValueError('Invalid argument specification')
 
@@ -35,16 +37,22 @@ class Arg(object):
         self.ncdim = len(self.cdims)
 
         # Attributes
-        self.isbroadcast = 'broadcast' in self.attrs
-        self.ismpi = 'mpi' in self.attrs
+        self.isbroadcast = self.attrs == 'broadcast'
+        self.isbroadcastr = self.attrs == 'broadcast-row'
+        self.isbroadcastc = self.attrs == 'broadcast-col'
+        self.ismpi = self.attrs == 'mpi'
         self.isused = bool(re.search(usedptn, body))
-        self.isview = 'view' in self.attrs
-        self.isscalar = 'scalar' in self.attrs
-        self.isvector = 'scalar' not in self.attrs
+        self.isview = self.attrs == 'view'
+        self.isscalar = self.attrs == 'scalar'
+        self.isvector = not self.isscalar
 
         # Validation
-        if self.isbroadcast and self.intent != 'in':
-            raise ValueError('Broadcast arguments must be of intent in')
+        if self.attrs.startswith('broadcast') and self.intent != 'in':
+             raise ValueError('Broadcast arguments must be of intent in')
+        if self.isbroadcastr and self.ncdim != 1:
+            raise ValueError('Row broadcasts must have one dimension')
+        if self.isbroadcastc and self.ncdim != 2:
+            raise ValueError('Column broadcasts must have two dimensions')
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
@@ -184,19 +192,26 @@ class BaseKernelGenerator(object):
         # Matrix:
         #   name => name_v[ldim*_y + X_IDX]
         elif arg.ncdim == 0:
-            ix = 'ld{0}*_y + X_IDX'.format(arg.name)
+            ix = f'ld{arg.name}*_y + X_IDX'
+        # Row broacast matrix
+        #   name[\1] => name_v[ldim*_y + \1]
+        elif arg.isbroadcastr:
+            ix = fr'ld{arg.name}*_y + \1'
         # Stacked matrix:
         #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv)]
         elif arg.ncdim == 1:
-            ix = (r'ld{0}*_y + X_IDX_AOSOA(\1, {1})'
-                   .format(arg.name, arg.cdims[0]))
+            ix = fr'ld{arg.name}*_y + X_IDX_AOSOA(\1, {arg.cdims[0]})'
+        # Column broadcast matrix
+        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
+        elif arg.isbroadcastc:
+            ix = fr'ld{arg.name}*\1 + X_IDX_AOSOA(\2, {arg.cdims[1]})'
         # Doubly stacked matrix:
         #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
         else:
-            ix = (r'((\1)*_ny + _y)*ld{0} + X_IDX_AOSOA(\2, {1})'
-                   .format(arg.name, arg.cdims[1]))
+            ix = (fr'((\1)*_ny + _y)*ld{arg.name} + '
+                  fr'X_IDX_AOSOA(\2, {arg.cdims[1]})')
 
-        return '{0}_v[{1}]'.format(arg.name, ix)
+        return f'{arg.name}_v[{ix}]'
 
     def _render_body(self, body):
         bmch = r'\[({0})\]'.format(match_paired_paren('[]'))

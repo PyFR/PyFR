@@ -19,7 +19,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         mgsect = 'solver-dual-time-integrator-multip'
 
         # Get the solver order and set the initial multigrid level
-        self._order = self.level = cfg.getint('solver', 'order')
+        self._order = self.level = order = cfg.getint('solver', 'order')
 
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
@@ -36,6 +36,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         if self.cycle[0] != self._order or self.cycle[-1] != self._order:
             raise ValueError('The multigrid cycle needs to start end with the '
                              'highest (solution) order ')
+
+        # Initialise the number of cycles
+        self.npmgcycles = 0
 
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
@@ -60,19 +63,20 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         for l in self.levels:
             pc = get_pseudo_stepper_cls(pn, l)
 
-            if l == self._order:
+            if l == order:
                 bases = [cc, pc]
+                mcfg = cfg
             else:
                 bases = [cc_none, pc]
 
-                cfg = Inifile(cfg.tostr())
-                cfg.set('solver', 'order', l)
-                cfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(self._order - l))
+                mcfg = Inifile(cfg.tostr())
+                mcfg.set('solver', 'order', l)
+                mcfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(order - l))
 
-                for sec in cfg.sections():
-                    m = re.match(r'solver-(.*)-mg-p{0}'.format(l), sec)
+                for s in cfg.sections():
+                    m = re.match(f'solver-(.*)-mg-p{l}$', s)
                     if m:
-                        cfg.rename_section(m.group(0), 'solver-' + m.group(1))
+                        mcfg.rename_section(s, f'solver-{m.group(1)}')
 
             # A class that bypasses pseudo-controller methods within a cycle
             class lpsint(*bases):
@@ -83,6 +87,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 def _aux_regidx(iself):
                     if iself.aux_nregs != 0:
                         return iself._regidx[-2:]
+
+                @property
+                def ntotiters(iself):
+                    return self.npmgcycles
 
                 def convmon(iself, *args, **kwargs):
                     pass
@@ -102,16 +110,16 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                                                      subdims=iself._subdims)
                     iself._prepare_reg_banks(fout, iself._idxcurr,
                                              *iself._stepper_regidx)
-                    iself._queue % axnpby(1, *svals)
+                    iself._queue.enqueue_and_run(axnpby, 1, *svals)
 
                     # Multigrid r addition
                     if iself._aux_regidx:
                         axnpby = iself._get_axnpby_kerns(2)
                         iself._prepare_reg_banks(fout, iself._aux_regidx[0])
-                        iself._queue % axnpby(1, -1)
+                        iself._queue.enqueue_and_run(axnpby, 1, -1)
 
             self.pintgs[l] = lpsint(backend, systemcls, rallocs, mesh,
-                                    initsoln, cfg, tcoeffs, dt)
+                                    initsoln, mcfg, tcoeffs, dt)
 
         # Get the highest p system from plugins
         self.system = self.pintgs[self._order].system
@@ -214,12 +222,12 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Restrict Q
         l1sys.eles_scal_upts_inb.active = l1idxcurr
         l2sys.eles_scal_upts_inb.active = l2idxcurr
-        self.pintg._queue % self.mgproject(l1, l2)()
+        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Restrict d and store to mg1
         l1sys.eles_scal_upts_inb.active = rtemp
         l2sys.eles_scal_upts_inb.active = mg1
-        self.pintg._queue % self.mgproject(l1, l2)()
+        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # mg0 = R = -∇·f - dQ/dt
         self.pintg.system.rhs(self.tcurr, l2idxcurr, self._mg_regidx[0])
@@ -240,11 +248,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             l2sys.eles_scal_upts_inb.active = (
                 self.pintgs[l2]._stepper_regidx[i]
             )
-            self.pintg._queue % self.mgproject(l1, l2)()
+            self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
-            self.pintg._queue % self.dtauproject(l1, l2)()
+            self.pintg._queue.enqueue_and_run(self.dtauproject(l1, l2))
 
     def prolongate(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
@@ -262,7 +270,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Prolongate the correction and store to rtemp
         l1sys.eles_scal_upts_inb.active = self._mg_regidx[1]
         l2sys.eles_scal_upts_inb.active = rtemp
-        self.pintg._queue % self.mgproject(l1, l2)()
+        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Add the correction to the end quantity at l2
         # Q^m+1  = Q^s + Delta
@@ -297,9 +305,26 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 elif m is not None and l < m:
                     self.prolongate(l, m)
 
+            # Update the number of p-multigrid cycles
+            self.npmgcycles += 1
+
             # Convergence monitoring
             if self.mg_convmon(self.pintg, i, self._minniters):
                 break
 
         # Update the dual-time stepping banks
         self.finalise_mg_advance(self.pintg._idxcurr)
+
+    def collect_stats(self, stats):
+        # Collect the stats for each level
+        for l in self.levels:
+            # Total number of RHS evaluations
+            stats.set('solver-time-integrator', f'nfevals-p{l}',
+                      self.pintgs[l]._pseudo_stepper_nfevals)
+
+            # Total number of pseudo-steps
+            stats.set('solver-time-integrator', f'npseudosteps-p{l}',
+                      self.pintgs[l].npseudosteps)
+
+        # Total number of p-multigrid cycles
+        stats.set('solver-time-integrator', 'npmgcycles', self.npmgcycles)

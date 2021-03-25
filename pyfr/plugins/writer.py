@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.inifile import Inifile
-from pyfr.plugins.base import BasePlugin
-from pyfr.writers.native import NativeWriter
+from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 
 
-class WriterPlugin(BasePlugin):
+class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     name = 'writer'
     systems = ['*']
     formulations = ['dual', 'std']
@@ -14,10 +13,7 @@ class WriterPlugin(BasePlugin):
         super().__init__(intg, cfgsect, suffix)
 
         # Construct the solution writer
-        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
-        basename = self.cfg.get(cfgsect, 'basename')
-        self._writer = NativeWriter(intg, self.nvars, basedir, basename,
-                                    prefix='soln')
+        self._writer = self._init_writer_for_region(intg, self.nvars, 'soln')
 
         # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
@@ -48,8 +44,15 @@ class WriterPlugin(BasePlugin):
                         stats=stats.tostr(),
                         mesh_uuid=intg.mesh_uuid)
 
+
+        # Extract and subset the solution
+        soln = [intg.soln[i][..., rgn] for i, rgn in self._ele_regions]
+
+        # Add in any required region data
+        data = self._add_region_data(soln)
+
         # Write out the file
-        solnfname = self._writer.write(intg.soln, metadata, intg.tcurr)
+        solnfname = self._writer.write(data, metadata, intg.tcurr)
 
         # If a post-action has been registered then invoke it
         self._invoke_postaction(mesh=intg.system.mesh.fname, soln=solnfname,

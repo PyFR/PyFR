@@ -1,15 +1,13 @@
 # -*- coding: utf-8 -*-
 
 import itertools as it
+import re
 import types
 
 from pyfr.util import memoize, proxylist
 
 
 class _BaseKernel(object):
-    def __call__(self, *args, **kwargs):
-        return self, args, kwargs
-
     @property
     def retval(self):
         return None
@@ -78,11 +76,11 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Render the template to yield the source code
         tpl = self.backend.lookup.get_template(mod)
         src = tpl.render(**tplargs)
+        src = re.sub(r'\n\n+', r'\n\n', src)
 
         # Check the kernel exists in the template
         if name not in argspecs:
-            raise ValueError('Kernel "{0}" not defined in template'
-                             .format(name))
+            raise ValueError(f'Kernel "{name}" not defined in template')
 
         # Extract the metadata for the kernel
         ndim, argn, argt = argspecs[name]
@@ -146,8 +144,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         if hasattr(self, name):
             # Same name different module
             if getattr(self, name)._mod != mod:
-                raise RuntimeError('Attempt to re-register "{0}" with a '
-                                   'different module'.format(name))
+                raise RuntimeError(f'Attempt to re-register "{name}" with a '
+                                   'different module')
             # Otherwise (since we're already registered) return
             else:
                 return

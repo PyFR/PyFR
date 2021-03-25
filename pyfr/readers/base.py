@@ -19,6 +19,11 @@ class BaseReader(object):
     def to_pyfrm(self):
         mesh = self._to_raw_pyfrm()
 
+        for k in list(mesh):
+            if k.startswith('spt'):
+                mesh[k, 'int_off'] = 0
+                mesh[k, 'lin_off'] = mesh[k].shape[1]
+
         # Add metadata
         mesh['mesh_uuid'] = np.array(str(uuid.uuid4()), dtype='S')
 
@@ -138,7 +143,7 @@ class NodalMeshAssembler(object):
         pfaces = defaultdict(list)
         nodepts = self._nodepts
 
-        for lpent, rpent in self._pfacespents.values():
+        for k, (lpent, rpent) in self._pfacespents.items():
             for pftype in bpart[lpent]:
                 lfnodes = bpart[lpent][pftype]
                 rfnodes = bpart[rpent][pftype]
@@ -150,8 +155,12 @@ class NodalMeshAssembler(object):
                 rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
 
                 for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
-                    lf = resid.pop(tuple(sorted(lfn)))
-                    rf = resid.pop(tuple(sorted(rfn)))
+                    # Add periodic face flags: periodic BC number offset plus 1 to avoid +/- 0
+                    flg = int(k) + 1
+
+                    # Left = +, right = -
+                    lf = resid.pop(tuple(sorted(lfn)))[:-1] + ( flg,)
+                    rf = resid.pop(tuple(sorted(rfn)))[:-1] + (-flg,)
 
                     pfaces[pftype].append([lf, rf])
 
@@ -182,7 +191,7 @@ class NodalMeshAssembler(object):
         # Pair the fluid-fluid faces
         fpairs, resid = self._pair_fluid_faces(ffaces)
 
-        # Identify periodic boundary face pairs
+        # Tag and pair periodic boundary faces
         pfpairs = self._pair_periodic_fluid_faces(bpart, resid)
 
         # Identify the fixed boundary faces
@@ -204,10 +213,10 @@ class NodalMeshAssembler(object):
             bcon[pbcrgn] = bf[pent]
 
         # Output
-        ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i1').T}
+        ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i2').T}
 
         for k, v in bcon.items():
-            ret['bcon_{0}_p0'.format(k)] = np.array(v, dtype='S4,i4,i1,i1')
+            ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i4,i1,i2')
 
         return ret
 
@@ -236,6 +245,6 @@ class NodalMeshAssembler(object):
             arr = arr.swapaxes(0, 1)
             arr = arr[..., :ndim]
 
-            spts['spt_{0}_p0'.format(petype)] = arr
+            spts[f'spt_{petype}_p0'] = arr
 
         return spts

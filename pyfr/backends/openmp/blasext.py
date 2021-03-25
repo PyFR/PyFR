@@ -26,8 +26,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
-                args = list(arr) + list(consts)
-                kern(nrow, ncolb, ldim, *args)
+                kern(nrow, ncolb, ldim, *arr, *consts)
 
         return AxnpbyKernel()
 
@@ -67,8 +66,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build
         rkern = self._build_kernel(
-            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2,
-            restype=dtype
+            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
         )
 
         class ErrestKernel(ComputeKernel):

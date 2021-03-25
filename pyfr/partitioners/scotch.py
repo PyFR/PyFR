@@ -4,83 +4,43 @@ from ctypes import POINTER, c_int, c_double, c_void_p
 
 import numpy as np
 
-from pyfr.ctypesutil import load_library
+from pyfr.ctypesutil import LibWrapper
 from pyfr.partitioners.base import BasePartitioner
 
 
-class SCOTCHWrappers(object):
-    def __init__(self):
-        lib = load_library('scotch')
+# Possible Scotch exception types
+SCOTCHError = type('SCOTCHError', (Exception,), {})
 
-        # Types
-        self.SCOTCH_Arch = SCOTCH_Arch = c_double*128
-        self.SCOTCH_Graph = SCOTCH_Graph = c_double*128
-        self.SCOTCH_Strat = SCOTCH_Strat = c_double*128
 
-        # SCOTCH_archInit
-        self.SCOTCH_archInit = lib.SCOTCH_archInit
-        self.SCOTCH_archInit.argtypes = [POINTER(SCOTCH_Arch)]
-        self.SCOTCH_archInit.errcheck = self._errcheck
+class SCOTCHWrappers(LibWrapper):
+    _libname = 'scotch'
 
-        # SCOTCH_archExit
-        self.SCOTCH_archExit = lib.SCOTCH_archExit
-        self.SCOTCH_archExit.argtypes = [POINTER(SCOTCH_Arch)]
-        self.SCOTCH_archExit.restype = None
+    # Error codes
+    _statuses = {
+        '*': SCOTCHError
+    }
 
-        # SCOTCH_archCmpltw
-        self.SCOTCH_archCmpltw = lib.SCOTCH_archCmpltw
-        self.SCOTCH_archCmpltw.argtypes = [
-            POINTER(SCOTCH_Arch), c_int, c_void_p
-        ]
-        self.SCOTCH_archCmpltw.errcheck = self._errcheck
+    # Types
+    SCOTCH_Arch = c_double*128
+    SCOTCH_Graph = c_double*128
+    SCOTCH_Strat = c_double*128
 
-        # SCOTCH_graphInit
-        self.SCOTCH_graphInit = lib.SCOTCH_graphInit
-        self.SCOTCH_graphInit.argtypes = [POINTER(SCOTCH_Graph)]
-        self.SCOTCH_graphInit.errcheck = self._errcheck
-
-        # SCOTCH_graphExit
-        self.SCOTCH_graphExit = lib.SCOTCH_graphExit
-        self.SCOTCH_graphExit.argtypes = [POINTER(SCOTCH_Graph)]
-        self.SCOTCH_graphExit.restype = None
-
-        # SCOTCH_graphBuild
-        self.SCOTCH_graphBuild = lib.SCOTCH_graphBuild
-        self.SCOTCH_graphBuild.argtypes = [
-            POINTER(SCOTCH_Graph), c_int, c_int,
-            c_void_p, c_void_p, c_void_p, c_void_p,
-            c_int, c_void_p, c_void_p
-        ]
-        self.SCOTCH_graphBuild.errcheck = self._errcheck
-
-        # SCOTCH_graphPart
-        self.SCOTCH_graphMap = lib.SCOTCH_graphMap
-        self.SCOTCH_graphMap.argtypes = [
-            POINTER(SCOTCH_Graph), POINTER(SCOTCH_Arch),
-            POINTER(SCOTCH_Strat), c_void_p
-        ]
-        self.SCOTCH_graphMap.errcheck = self._errcheck
-
-        # SCOTCH_stratInit
-        self.SCOTCH_stratInit = lib.SCOTCH_stratInit
-        self.SCOTCH_stratInit.argtypes = [POINTER(SCOTCH_Strat)]
-        self.SCOTCH_stratInit.errcheck = self._errcheck
-
-        # SCOTCH_stratExit
-        self.SCOTCH_stratExit = lib.SCOTCH_stratExit
-        self.SCOTCH_stratExit.argtypes = [POINTER(SCOTCH_Strat)]
-        self.SCOTCH_stratExit.restype = None
-
-        # SCOTCH_stratGraphMapBuild
-        self.SCOTCH_stratGraphMapBuild = lib.SCOTCH_stratGraphMapBuild
-        self.SCOTCH_stratGraphMapBuild.argtypes = [
-            POINTER(SCOTCH_Strat), c_int, c_int, c_double
-        ]
-        self.SCOTCH_stratGraphMapBuild.errcheck = self._errcheck
-
-    def _errcheck(self, status, fn, args):
-        if status != 0:
-            raise RuntimeError('Scotch error')
+    # Functions
+    _functions = [
+        (c_int, 'SCOTCH_archInit', POINTER(SCOTCH_Arch)),
+        (c_int, 'SCOTCH_graphInit', POINTER(SCOTCH_Graph)),
+        (c_int, 'SCOTCH_stratInit', POINTER(SCOTCH_Strat)),
+        (c_int, 'SCOTCH_archCmpltw', POINTER(SCOTCH_Arch), c_int, c_void_p),
+        (c_int, 'SCOTCH_graphBuild', POINTER(SCOTCH_Graph), c_int, c_int,
+         c_void_p, c_void_p, c_void_p, c_void_p, c_int, c_void_p, c_void_p),
+        (c_int, 'SCOTCH_graphMap', POINTER(SCOTCH_Graph), POINTER(SCOTCH_Arch),
+         POINTER(SCOTCH_Strat), c_void_p),
+        (c_int, 'SCOTCH_stratGraphMapBuild', POINTER(SCOTCH_Strat), c_int,
+         c_int, c_double),
+        (None, 'SCOTCH_archExit', POINTER(SCOTCH_Arch)),
+        (None, 'SCOTCH_graphExit', POINTER(SCOTCH_Graph)),
+        (None, 'SCOTCH_stratExit', POINTER(SCOTCH_Strat))
+    ]
 
 
 class SCOTCHPartitioner(BasePartitioner):

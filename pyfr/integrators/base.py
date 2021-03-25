@@ -123,8 +123,8 @@ class BaseIntegrator(object):
         if self.prevcfgs:
             ret = dict(self.prevcfgs, config=cfg)
 
-            if cfg != ret['config-' + str(len(self.prevcfgs) - 1)]:
-                ret['config-' + str(len(self.prevcfgs))] = cfg
+            if cfg != ret[f'config-{len(self.prevcfgs) - 1}']:
+                ret[f'config-{len(self.prevcfgs)}'] = cfg
 
             return ret
         else:
@@ -156,7 +156,8 @@ class BaseCommon(object):
 
     def _prepare_reg_banks(self, *bidxes):
         for reg, ix in zip(self._regs, bidxes):
-            reg.active = ix
+            for r in reg:
+                r.active = ix
 
     def _get_gndofs(self):
         comm, rank, root = get_comm_rank_root()
@@ -179,4 +180,4 @@ class BaseCommon(object):
         self._prepare_reg_banks(*args[1::2])
 
         # Bind and run the axnpby kernels
-        self._queue % axnpby(*args[::2])
+        self._queue.enqueue_and_run(axnpby, *args[::2])
