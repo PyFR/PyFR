@@ -79,6 +79,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    {clean}
                    #undef X_IDX
                    #undef X_IDX_AOSOA
+                   #undef BLK_IDX
                }}'''
 
     def ldim_size(self, name, *factor):

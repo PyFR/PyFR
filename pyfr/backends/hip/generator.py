@@ -28,6 +28,7 @@ class HIPKernelGenerator(BaseKernelGenerator):
                    }}
                    #undef X_IDX
                    #undef X_IDX_AOSOA
+                   #undef BLK_IDX
                }}'''
 
     def _render_spec(self):
