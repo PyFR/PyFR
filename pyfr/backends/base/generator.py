@@ -173,7 +173,7 @@ class BaseKernelGenerator(object):
         #   name[\1] => name_v[ldim*_y + \1]
         elif arg.isbroadcastr:
             lx = self.ldim_size(arg.name)
-            ix = fr'{lx}*_y + \1'
+            ix = fr'{lx}*_y + BCAST_BLK(\1, {lx})'
         # Stacked matrix:
         #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv) + BLK_IDX*nv*ny]
         elif arg.ncdim == 1:
