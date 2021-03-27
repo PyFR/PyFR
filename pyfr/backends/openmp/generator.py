@@ -70,6 +70,8 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    #define X_IDX_AOSOA(v, nv)\
                        ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
                    #define BLK_IDX ib*BLK_SZ
+                   #define BCAST_BLK(i, ld)\
+                       ((i) % (ld) + ((i) / (ld))*(ld)*_ny)
                    #pragma omp parallel for
                    for (int ib = 0; ib < nci; ib++)
                    {{
@@ -80,6 +82,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    #undef X_IDX
                    #undef X_IDX_AOSOA
                    #undef BLK_IDX
+                   #undef BCAST_BLK
                }}'''
 
     def ldim_size(self, name, *factor):
