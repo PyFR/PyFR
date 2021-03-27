@@ -10,5 +10,6 @@ par_memcpy(char *dst, int dbbytes, const char *src, int sbbytes, int bnbytes,
 {
     #pragma omp parallel for
     for (int ib = 0; ib < nblocks; ib++)
-        memcpy(dst + dbbytes*ib, src + sbbytes*ib, bnbytes);
+        memcpy(dst + ((size_t) dbbytes)*ib, src + ((size_t) sbbytes)*ib,
+               bnbytes);
 }
