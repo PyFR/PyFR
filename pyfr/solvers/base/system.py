@@ -77,8 +77,7 @@ class BaseSystem(object):
         # Look for and load each element type from the mesh
         elemap = {}
         for f in mesh:
-            m = re.match(f'spt_(.+?)_p{rallocs.prank}$', f)
-            if m:
+            if (m := re.match(f'spt_(.+?)_p{rallocs.prank}$', f)):
                 # Element type
                 t = m.group(1)
 
@@ -154,8 +153,7 @@ class BaseSystem(object):
 
         bc_inters = proxylist([])
         for f in mesh:
-            m = re.match(f'bcon_(.+?)_p{rallocs.prank}$', f)
-            if m:
+            if (m := re.match(f'bcon_(.+?)_p{rallocs.prank}$', f)):
                 # Get the region name
                 rgn = m.group(1)
 

@@ -68,8 +68,7 @@ class BaseIntegrator(object):
         plugins = []
 
         for s in self.cfg.sections():
-            m = re.match('soln-plugin-(.+?)(?:-(.+))?$', s)
-            if m:
+            if (m := re.match('soln-plugin-(.+?)(?:-(.+))?$', s)):
                 cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
 
                 # Instantiate

@@ -95,8 +95,7 @@ class NativeWriter(object):
             bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
 
             for f in os.listdir(self.basedir):
-                m = re.match(bn, f)
-                if m:
+                if (m := re.match(bn, f)):
                     nout = max(nout, int(m.group(1)) + 1)
 
         return nout
