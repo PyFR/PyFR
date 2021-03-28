@@ -79,13 +79,9 @@ class BasePartitioner(object):
         intcon, mpicon, bccon = [], {}, defaultdict(list)
 
         for f in mesh:
-            mi = re.match(r'con_p(\d+)$', f)
-            mm = re.match(r'con_p(\d+)p(\d+)$', f)
-            bc = re.match(r'bcon_(.+?)_p(\d+)$', f)
-
-            if mi:
+            if (mi := re.match(r'con_p(\d+)$', f)):
                 intcon.append(offset_con(mesh[f], int(mi.group(1))))
-            elif mm:
+            elif (mm := re.match(r'con_p(\d+)p(\d+)$', f)):
                 l, r = int(mm.group(1)), int(mm.group(2))
                 lcon = offset_con(mesh[f], l)
 
@@ -94,7 +90,7 @@ class BasePartitioner(object):
                     intcon.append(np.vstack([lcon, rcon]))
                 else:
                     mpicon[l, r] = lcon
-            elif bc:
+            elif (bc := re.match(r'bcon_(.+?)_p(\d+)$', f)):
                 name, l = bc.group(1), int(bc.group(2))
                 bccon[name].append(offset_con(mesh[f], l))
 
@@ -245,8 +241,7 @@ class BasePartitioner(object):
 
         # Generate boundary conditions
         for f in filter(lambda f: isinstance(f, str), mesh):
-            m = re.match('bcon_(.+?)_p0$', f)
-            if m:
+            if (m := re.match('bcon_(.+?)_p0$', f)):
                 lhs = mesh[f].tolist()
 
                 for lpetype, leidxg, lfidx, lflags in lhs:
