@@ -1,4 +1,5 @@
 .. highlightlang:: python
+.. highlight:: Python
 
 ***************
 Developer Guide

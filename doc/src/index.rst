@@ -9,10 +9,10 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   home
-   theory
+   installation
    user_guide
    developer_guide
+   examples
 
 Indices and Tables
 ******************
