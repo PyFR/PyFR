@@ -70,7 +70,7 @@ The following commands are available from the ``pyfr`` program:
    found in the solution file.
 
 Running in Parallel
-^^^^^^^^^^^^^^^^^^^
+-------------------
 
 ``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
 ``mpiexec -n <cores/devices>``. Note that the mesh must be
@@ -78,12 +78,21 @@ pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
 
 Configuration File (.ini)
--------------------------
+=========================
 
 The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
-their associated parameters are described below.
+their associated parameters are described below. Note that both ``;`` and 
+``#`` may be used as comment characters.
+
+Backends
+--------
+
+There are several configuration setting for the backends. The base 
+section ``[backend]`` is required, whereas PyFR has internal defualts for the 
+other hardware specific backend settings; however, for best perfomance it is 
+advisable to configure those applicable for the target hardware.
 
 [backend]
 ^^^^^^^^^
@@ -240,6 +249,9 @@ Example::
     cblas= example/path/libBLAS.dylib
     cblas-type = parallel
 
+Systems
+-------
+
 [constants]
 ^^^^^^^^^^^
 
@@ -277,12 +289,19 @@ Sets constants used in the simulation
 
    *float*
 
+Other constant may be set by the user which can then be used throughout the ``.ini`` file.
+
 Example::
 
     [constants]
+    ; PyFR Constants
     gamma = 1.4
     mu = 0.001
     Pr = 0.72
+
+    ; User Defined Constants
+    V_in = 1.0
+    P_out = 20.0
 
 [solver]
 ^^^^^^^^
@@ -541,6 +560,375 @@ Example::
     ldg-beta = 0.5
     ldg-tau = 0.1
 
+[solver-source-terms]
+^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises solution, space (x, y, [z]), and time (t) dependent
+source terms with
+
+1. ``rho`` --- density source term for ``euler`` | ``navier-stokes``:
+
+    *string*
+
+2. ``rhou`` --- x-momentum source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+3. ``rhov`` --- y-momentum source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+4. ``rhow`` --- z-momentum source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+5. ``E`` --- energy source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+6. ``p`` --- pressure source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+7. ``u`` --- x-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+8. ``v`` --- y-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+9. ``w`` --- w-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+Example::
+
+    [solver-source-terms]
+    rho = t
+    rhou = x*y*sin(y)
+    rhov = z*rho
+    rhow = 1.0
+    E = 1.0/(1.0+x)
+
+[solver-artificial-viscosity]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises artificial viscosity for shock capturing with
+
+1. ``max-artvisc`` --- maximum artificial viscosity:
+
+    *float*
+
+2. ``s0`` --- sensor cut-off:
+
+    *float*
+
+3. ``kappa`` --- sensor range:
+
+    *float*
+
+Example::
+
+    [solver-artificial-viscosity]
+    max-artvisc = 0.01
+    s0 = 0.01
+    kappa = 5.0
+
+[soln-filter]
+^^^^^^^^^^^^^
+
+Parameterises an exponential solution filter with
+
+1. ``nsteps`` --- apply filter every ``nsteps``:
+
+    *int*
+
+2. ``alpha`` --- strength of filter:
+
+    *float*
+
+3. ``order`` --- order of filter:
+
+    *int*
+
+4. ``cutoff`` --- cutoff frequency below which no filtering is applied:
+
+    *int*
+
+Example::
+
+    [soln-filter]
+    nsteps = 10
+    alpha = 36.0
+    order = 16
+    cutoff = 1
+
+Boundary and Initial Conditions
+-------------------------------
+
+[soln-bcs-*name*]
+^^^^^^^^^^^^^^^^^
+
+Parameterises constant, or if available space (x, y, [z]) and time (t)
+dependent, boundary condition labelled *name* in the .pyfrm file with
+
+1. ``type`` --- type of boundary condition:
+
+    ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
+    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``no-slp-wall`` |
+    ``slp-adia-wall`` | ``slp-wall`` | ``sub-in-frv`` |
+    ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
+    ``sup-out-fn``
+
+    where
+
+    ``ac-char-riem-inv`` only works with ``ac-euler`` |
+    ``ac-navier-stokes`` and requires
+
+        - ``ac-zeta`` --- artificial compressibility factor for boundary
+          (increasing ``ac-zeta`` makes the boundary less reflective
+          allowing larger deviation from the target state)
+
+           *float*
+
+        - ``niters`` --- number of Newton iterations
+
+           *int*
+
+        - ``p`` --- pressure
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+
+    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+    ``ac-out-fp`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``p`` --- pressure
+
+           *float* | *string*
+
+    ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
+    requires
+
+        - ``rho`` --- density
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+        - ``p`` --- static pressure
+
+           *float* | *string*
+
+    ``no-slp-adia-wall`` only works with ``navier-stokes``
+
+    ``no-slp-isot-wall`` only works with ``navier-stokes`` and requires
+
+        - ``u`` --- x-velocity of wall
+
+           *float*
+
+        - ``v`` --- y-velocity of wall
+
+           *float*
+
+        - ``w`` --- z-velocity of wall
+
+           *float*
+
+        - ``cpTw`` --- product of specific heat capacity at constant
+          pressure and temperature of wall
+
+           *float*
+
+    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
+
+        - ``u`` --- x-velocity of wall
+
+           *float*
+
+        - ``v`` --- y-velocity of wall
+
+           *float*
+
+        - ``w`` --- z-velocity of wall
+
+           *float*
+
+    ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
+
+    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
+
+    ``sub-in-frv`` only works with ``navier-stokes`` and
+    requires
+
+        - ``rho`` --- density
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+    ``sub-in-ftpttang`` only works with ``navier-stokes``
+    and requires
+
+        - ``pt`` --- total pressure
+
+           *float*
+
+        - ``cpTt`` --- product of specific heat capacity at constant
+          pressure and total temperature
+
+           *float*
+
+        - ``theta`` --- azimuth angle (in degrees) of inflow measured
+          in the x-y plane relative to the positive x-axis
+
+           *float*
+
+        - ``phi`` --- inclination angle (in degrees) of inflow measured
+          relative to the positive z-axis
+
+           *float*
+
+    ``sub-out-fp`` only works with ``navier-stokes`` and
+    requires
+
+        - ``p`` --- static pressure
+
+           *float* | *string*
+
+    ``sup-in-fa`` only works with ``euler`` | ``navier-stokes`` and
+    requires
+
+        - ``rho`` --- density
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+        - ``p`` --- static pressure
+
+           *float* | *string*
+
+    ``sup-out-fn`` only works with ``euler`` | ``navier-stokes``
+
+Example::
+
+    [soln-bcs-bcwallupper]
+    type = no-slp-isot-wall
+    cpTw = 10.0
+    u = 1.0
+
+[soln-ics]
+^^^^^^^^^^
+
+Parameterises space (x, y, [z]) dependent initial conditions with
+
+1. ``rho`` --- initial density distribution for ``euler`` |
+   ``navier-stokes``:
+
+    *string*
+
+2. ``u`` --- initial x-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+3. ``v`` --- initial y-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+4. ``w`` --- initial z-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+5. ``p`` --- initial static pressure distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+Example::
+
+    [soln-ics]
+    rho = 1.0
+    u = x*y*sin(y)
+    v = z
+    w = 1.0
+    p = 1.0/(1.0+x)
+
+Element Quadrature
+------------------
+
+Flux reconstruction is a high-order nodal spectral element method, and as such, the user must specify the method used to place points within elements. This must be specified for all element types used as well as the associated interface types. For example, a 3D mesh comprised only of prisms requires a prism element quadrature and an interface quadrature for quads and triangles.
+
 [solver-interfaces-line{-mg-p\ *order*}]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -797,117 +1185,10 @@ Example::
     quad-deg = 10
     quad-pts = witherden-vincent
 
-[solver-source-terms]
-^^^^^^^^^^^^^^^^^^^^^
+Plugins
+-------
 
-Parameterises solution, space (x, y, [z]), and time (t) dependent
-source terms with
-
-1. ``rho`` --- density source term for ``euler`` | ``navier-stokes``:
-
-    *string*
-
-2. ``rhou`` --- x-momentum source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-3. ``rhov`` --- y-momentum source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-4. ``rhow`` --- z-momentum source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-5. ``E`` --- energy source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-6. ``p`` --- pressure source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-7. ``u`` --- x-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-8. ``v`` --- y-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-9. ``w`` --- w-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-Example::
-
-    [solver-source-terms]
-    rho = t
-    rhou = x*y*sin(y)
-    rhov = z*rho
-    rhow = 1.0
-    E = 1.0/(1.0+x)
-
-[solver-artificial-viscosity]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Parameterises artificial viscosity for shock capturing with
-
-1. ``max-artvisc`` --- maximum artificial viscosity:
-
-    *float*
-
-2. ``s0`` --- sensor cut-off:
-
-    *float*
-
-3. ``kappa`` --- sensor range:
-
-    *float*
-
-Example::
-
-    [solver-artificial-viscosity]
-    max-artvisc = 0.01
-    s0 = 0.01
-    kappa = 5.0
-
-[soln-filter]
-^^^^^^^^^^^^^
-
-Parameterises an exponential solution filter with
-
-1. ``nsteps`` --- apply filter every ``nsteps``:
-
-    *int*
-
-2. ``alpha`` --- strength of filter:
-
-    *float*
-
-3. ``order`` --- order of filter:
-
-    *int*
-
-4. ``cutoff`` --- cutoff frequency below which no filtering is applied:
-
-    *int*
-
-Example::
-
-    [soln-filter]
-    nsteps = 10
-    alpha = 36.0
-    order = 16
-    cutoff = 1
+Plugins allow for powerful additional functionality to be swapped in and out.
 
 [soln-plugin-writer]
 ^^^^^^^^^^^^^^^^^^^^
@@ -1154,13 +1435,13 @@ Time average quantities. Parameterised with
 
     ``*`` | ``[(x, y, [z]), (x, y, [z])]`` | *string*
 
-9. ``avg-*name*`` --- expression to time average, written as a function of
+9. ``avg``-*name* --- expression to time average, written as a function of
    the primitive variables and gradients thereof; multiple expressions,
    each with their own *name*, may be specified:
 
     *string*
 
-10. ``fun-avg-*name*`` --- expression to compute at file output time,
+10. ``fun-avg``-*name* --- expression to compute at file output time,
     written as a function of any ordinary average terms; multiple
     expressions, each with their own *name*, may be specified:
 
@@ -1180,251 +1461,40 @@ Example::
     fun-avg-varp = p2 - p*p
     avg-vel = sqrt(u*u + v*v)
 
-[soln-bcs-*name*]
-^^^^^^^^^^^^^^^^^
+[soln-plugin-integrate]
+^^^^^^^^^^^^^^^^^^^^^^^
 
-Parameterises constant, or if available space (x, y, [z]) and time (t)
-dependent, boundary condition labelled *name* in the .pyfrm file with
+Integrate quantities over the compuational domain. Parameterised with:
 
-1. ``type`` --- type of boundary condition:
+1. ``nsteps`` --- calculate the integral every ``nsteps`` time steps:
 
-    ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
-    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``no-slp-wall`` |
-    ``slp-adia-wall`` | ``slp-wall`` | ``sub-in-frv`` |
-    ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
-    ``sup-out-fn``
+    *int*
 
-    where
-
-    ``ac-char-riem-inv`` only works with ``ac-euler`` |
-    ``ac-navier-stokes`` and requires
-
-        - ``ac-zeta`` --- artificial compressibility factor for boundary
-          (increasing ``ac-zeta`` makes the boundary less reflective
-          allowing larger deviation from the target state)
-
-           *float*
-
-        - ``niters`` --- number of Newton iterations
-
-           *int*
-
-        - ``p`` --- pressure
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-
-    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-    ``ac-out-fp`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``p`` --- pressure
-
-           *float* | *string*
-
-    ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
-    requires
-
-        - ``rho`` --- density
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-        - ``p`` --- static pressure
-
-           *float* | *string*
-
-    ``no-slp-adia-wall`` only works with ``navier-stokes``
-
-    ``no-slp-isot-wall`` only works with ``navier-stokes`` and requires
-
-        - ``u`` --- x-velocity of wall
-
-           *float*
-
-        - ``v`` --- y-velocity of wall
-
-           *float*
-
-        - ``w`` --- z-velocity of wall
-
-           *float*
-
-        - ``cpTw`` --- product of specific heat capacity at constant
-          pressure and temperature of wall
-
-           *float*
-
-    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
-
-        - ``u`` --- x-velocity of wall
-
-           *float*
-
-        - ``v`` --- y-velocity of wall
-
-           *float*
-
-        - ``w`` --- z-velocity of wall
-
-           *float*
-
-    ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
-
-    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
-
-    ``sub-in-frv`` only works with ``navier-stokes`` and
-    requires
-
-        - ``rho`` --- density
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-    ``sub-in-ftpttang`` only works with ``navier-stokes``
-    and requires
-
-        - ``pt`` --- total pressure
-
-           *float*
-
-        - ``cpTt`` --- product of specific heat capacity at constant
-          pressure and total temperature
-
-           *float*
-
-        - ``theta`` --- azimuth angle (in degrees) of inflow measured
-          in the x-y plane relative to the positive x-axis
-
-           *float*
-
-        - ``phi`` --- inclination angle (in degrees) of inflow measured
-          relative to the positive z-axis
-
-           *float*
-
-    ``sub-out-fp`` only works with ``navier-stokes`` and
-    requires
-
-        - ``p`` --- static pressure
-
-           *float* | *string*
-
-    ``sup-in-fa`` only works with ``euler`` | ``navier-stokes`` and
-    requires
-
-        - ``rho`` --- density
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-        - ``p`` --- static pressure
-
-           *float* | *string*
-
-    ``sup-out-fn`` only works with ``euler`` | ``navier-stokes``
-
-Example::
-
-    [soln-bcs-bcwallupper]
-    type = no-slp-isot-wall
-    cpTw = 10.0
-    u = 1.0
-
-[soln-ics]
-^^^^^^^^^^
-
-Parameterises space (x, y, [z]) dependent initial conditions with
-
-1. ``rho`` --- initial density distribution for ``euler`` |
-   ``navier-stokes``:
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
 
     *string*
 
-2. ``u`` --- initial x-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+3. ``header`` --- if to output a header row or not:
 
-    *string*
+    *boolean*
 
-3. ``v`` --- initial y-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
-
-    *string*
-
-4. ``w`` --- initial z-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
-
-    *string*
-
-5. ``p`` --- initial static pressure distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+4. ``int``-*name* --- expression to integrate, written as a function of
+   the primitive variables and gradients thereof; multiple expressions,
+   each with their own *name*, may be specified:
 
     *string*
 
 Example::
 
-    [soln-ics]
-    rho = 1.0
-    u = x*y*sin(y)
-    v = z
-    w = 1.0
-    p = 1.0/(1.0+x)
+    [soln-plugin-integrate]
+    nsteps = 50
+    file = integral.csv
+    header = true
+    vor1 = (grad_w_y - grad_v_z)
+    vor2 = (grad_u_z - grad_w_x)
+    vor3 = (grad_v_x - grad_u_y)
+
+    int-E = rho*(u*u + v*v + w*w)
+    int-enst = rho*(%(vor1)s*%(vor1)s + %(vor2)s*%(vor2)s + %(vor3)s*%(vor3)s)
+
