@@ -4,8 +4,8 @@
 Examples
 ********
 
-Eulers' Equations
-=================
+Euler Equations
+===============
 
 2D Euler Vortex
 ---------------
@@ -107,8 +107,8 @@ simulation on a mixed unstructured mesh:
 
    Colour map of steady-state density distribution.
 
-Incompressible Equations via Artifical Compressibility
-======================================================
+Incompressible Navier--Stokes Equations
+=======================================
 
 2D Incompressible Cylinder Flow
 -------------------------------

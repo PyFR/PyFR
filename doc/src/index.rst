@@ -4,10 +4,18 @@
 PyFR
 ####
 
+.. _website: http://www.pyfr.org/
+.. _forum: https://pyfr.discourse.group/
+
+PyFR is an open-source flow solver that uses the high-order flux reconstruction 
+method. For more information on the PyFR project visit our 
+website_, or to ask a question visit our 
+forum_.
+
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
    installation
    user_guide

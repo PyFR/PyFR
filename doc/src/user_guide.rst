@@ -924,8 +924,8 @@ Example::
     w = 1.0
     p = 1.0/(1.0+x)
 
-Element Quadrature
-------------------
+Nodal Point Sets
+----------------
 
 Flux reconstruction is a high-order nodal spectral element method, and as such, the user must specify the method used to place points within elements. This must be specified for all element types used as well as the associated interface types. For example, a 3D mesh comprised only of prisms requires a prism element quadrature and an interface quadrature for quads and triangles.
 
