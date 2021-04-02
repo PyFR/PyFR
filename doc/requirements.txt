@@ -4,3 +4,5 @@ mkdocs
 sphinx-rtd-theme
 sphinxcontrib-contentui
 numpy
+pytools
+mako
