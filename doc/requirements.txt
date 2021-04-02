@@ -1,8 +1,9 @@
-Sphinx==3.5.3
+Sphinx >= 3.5.3
 graphviz
 mkdocs
 sphinx-rtd-theme
 sphinxcontrib-contentui
+sphinxcontrib-fancybox
 
 appdirs >= 1.4.0
 gimmik >= 2.0

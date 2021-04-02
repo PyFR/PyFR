@@ -34,7 +34,7 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx_rtd_theme',
     'sphinx.ext.autosectionlabel',
-    'sphinxcontrib.contentui'
+    'sphinxcontrib.contentui',
 ]
 
 # Settings for inheritance diagrams.
@@ -44,11 +44,12 @@ inheritance_graph_attrs = dict(
     layout='dot',
     rankdir='LR',
     ranksep='0.05',
-    splines='ortho')
+    splines='ortho',
+    ratio='compress')
 inheritance_node_attrs = dict(
     color='"#333333"',
     fillcolor='"#d8e6b8"',
-    fontsize='5.5',
+    fontsize='6.5',
     penwidth='0.3',
     shape='box',
     style='"rounded,filled"')

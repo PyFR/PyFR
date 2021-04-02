@@ -251,6 +251,7 @@ Types of `PseudoStepper`_ are related via the following inheritance
 diagram:
 
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers
+    :top-classes: pyfr.integrators.dual.pseudo.base.BaseDualPseudoIntegrator
     :parts: 1
 
 System
