@@ -3,3 +3,4 @@ graphviz
 mkdocs
 sphinx-rtd-theme
 sphinxcontrib-contentui
+numpy
