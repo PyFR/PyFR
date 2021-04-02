@@ -2,3 +2,4 @@ Sphinx~=3.5
 graphviz
 mkdocs
 sphinx-rtd-theme
+sphinxcontrib-contentui

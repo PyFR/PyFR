@@ -33,7 +33,8 @@ extensions = [
     'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
     'sphinx_rtd_theme',
-    'sphinx.ext.autosectionlabel'
+    'sphinx.ext.autosectionlabel',
+    'sphinxcontrib.contentui'
 ]
 
 # Settings for inheritance diagrams.
