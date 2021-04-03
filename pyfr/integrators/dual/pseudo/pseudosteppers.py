@@ -6,7 +6,7 @@ from pkg_resources import resource_string
 import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
-from pyfr.util import proxylist
+from pyfr.util import memoize, proxylist
 
 
 def _get_coefficients_from_txt(scheme):
@@ -216,6 +216,29 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
                 )
             )
 
+        # Register a pointwise kernel for the low-storage stepper
+        self.backend.pointwise.register(
+            'pyfr.integrators.dual.pseudo.kernels.rkvdh2pseudo'
+        )
+
+    @memoize
+    def _get_rkvdh2pseudo_kerns(self, stage, r1, r2, rold, rerr=None):
+        kerns = []
+        tplargs = {'a': self.a, 'b': self.b, 'e': self.e, 'stage': stage,
+                   'nstages': self._nstages, 'nvars': self.system.nvars,
+                   'errest': rerr is not None}
+
+        for dims, em, dtaum in zip(self.system.ele_shapes,
+                                   self.system.ele_banks, self.dtau_upts):
+            kern = self.backend.kernel(
+                'rkvdh2pseudo', tplargs=tplargs, dims=[dims[0], dims[2]],
+                dtau=dtaum, r1=em[r1], r2=em[r2], rold=em[rold],
+                rerr=em[rerr] if rerr else None,
+            )
+            kerns.append(kern)
+
+        return kerns
+
     def localdtau(self, uinbank, inv=0):
         self.system.eles_scal_upts_inb.active = uinbank
         self._queue.enqueue_and_run(self.pintgkernels['localdtau'], inv=inv)
@@ -237,42 +260,27 @@ class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
     def step(self, t):
         self.npseudosteps += 1
 
-        add, rhs = self._add, self._rhs_with_dts
-        errest = self.pseudo_stepper_has_lerrest
+        q, rhs = self._queue, self._rhs_with_dts
 
         rold = self._idxcurr
-
-        if errest:
-            r2, r1, rerr = set(self._pseudo_stepper_regidx) - {rold}
-        else:
-            r2, r1 = set(self._pseudo_stepper_regidx) - {rold}
-
-        # Copy the current solution
-        add(0.0, r1, 1.0, rold)
+        r1, r2, *rerr = set(self._pseudo_stepper_regidx) - {rold}
 
         # Evaluate the stages in the scheme
         for i in range(self._nstages):
-            # Compute -∇·f
-            rhs(t, r2 if i > 0 else r1, r2)
+            # Compute -∇·f - dQ/dt
+            rhs(t, r2 if i > 0 else rold, r2)
 
-            self.localdtau(r2)
+            # Fetch the appropriate RK accumulation kernels
+            kerns = self._get_rkvdh2pseudo_kerns(i, r1, r2, rold, *rerr)
 
-            if errest:
-                # Accumulate the error term in rerr
-                add(1.0 if i > 0 else 0.0, rerr, self.e[i], r2)
-
-            # Sum (special-casing the final stage)
-            if i < self._nstages - 1:
-                add(1.0, r1, self.a[i], r2)
-                add(self.b[i] - self.a[i], r2, 1.0, r1)
-            else:
-                add(1.0, r1, self.b[i], r2)
+            # Execute
+            q.enqueue_and_run(kerns)
 
             # Swap
             r1, r2 = r2, r1
 
         # Return
-        return (r2, rold, rerr) if errest else (r2, rold)
+        return (r2, rold, *rerr)
 
 
 class DualRK34PseudoStepper(DualRKVdH2RPseudoStepper):
