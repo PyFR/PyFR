@@ -1,7 +1,5 @@
 .. highlightlang:: none
 
-.. _installation:
-
 ************
 Installation
 ************
@@ -84,8 +82,8 @@ This has been tested on Ubuntu 18.04.
 
 .. _compile-from-source:
 
-Installing from source
-======================
+Compiling from source
+=====================
 
 PyFR can be obtained `here <http://www.pyfr.org/download.php>`_. To install the software from source, use the provided ``setup.py`` installer or add the root PyFR directory to ``PYTHONPATH`` using::
 
