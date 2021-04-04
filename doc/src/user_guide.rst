@@ -4,7 +4,7 @@
 User Guide
 **********
 
-This will provide infomation on :ref:`runnging-pyfr` and how calcualtion
+This will provide infomation on :ref:`running-pyfr` and how calcualtion
 the :ref:`configuration-file` is setup.
 
 For information on how to install PyFR see :ref:`installation`.
@@ -1491,7 +1491,7 @@ Example::
     fun-avg-varp = p2 - p*p
     avg-vel = sqrt(u*u + v*v)
 
-.. _integrate_plugin:
+.. _integrate-plugin:
     
 [soln-plugin-integrate]
 ^^^^^^^^^^^^^^^^^^^^^^^
