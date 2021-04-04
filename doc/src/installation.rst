@@ -108,7 +108,7 @@ Python packages:
 6. `numpy <http://www.numpy.org/>`_ >= 1.8
 7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
-Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
+Note that due to a bug in `numpy <http://www.numpy.org/>`_, PyFR is not
 compatible with 32-bit Python distributions.
 
 CUDA Backend
