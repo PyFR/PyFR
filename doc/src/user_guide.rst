@@ -252,6 +252,10 @@ Example::
 Systems
 -------
 
+These sections of the input file broadly setup and control the physical
+system being solved, as well as charateristics of the spatial and
+temporal schemes to be used. 
+
 [constants]
 ^^^^^^^^^^^
 
@@ -675,6 +679,9 @@ Example::
 Boundary and Initial Conditions
 -------------------------------
 
+These sections allow users to set the boundary conditions and initial
+conditions of the calculation.
+
 [soln-bcs-*name*]
 ^^^^^^^^^^^^^^^^^
 
@@ -884,6 +891,16 @@ Example::
     type = no-slp-isot-wall
     cpTw = 10.0
     u = 1.0
+
+Periodic Boundary Conditions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Simple periodic boundary conditions are supported; however, there behaviour
+is not controlled through the ``.ini`` file, instead it is handled at
+the mesh generation stage. Two faces may be taged with
+``periodic_l_``*int* and ``periodic_r_``*int*, where *int* is a unique
+integer. Currently, only periodicity in a single cardinal direction is
+supported, for example, the planes :math:`(x,y,0)` and :math:`(x,y,10)`. 
 
 [soln-ics]
 ^^^^^^^^^^
