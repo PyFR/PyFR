@@ -898,9 +898,10 @@ Periodic Boundary Conditions
 Simple periodic boundary conditions are supported; however, there behaviour
 is not controlled through the ``.ini`` file, instead it is handled at
 the mesh generation stage. Two faces may be taged with
-``periodic_l_`` *int* and ``periodic_r_`` *int*, where *int* is a unique
-integer. Currently, only periodicity in a single cardinal direction is
-supported, for example, the planes :math:`(x,y,0)` and :math:`(x,y,10)`. 
+``periodic_l_x`` and ``periodic_r_x``, where ``x`` is a unique
+integer for the pair of boundaries. Currently, only periodicity in a
+single cardinal direction is supported, for example, the planes
+:math:`(x,y,0)` and :math:`(x,y,10)`. 
 
 [soln-ics]
 ^^^^^^^^^^
