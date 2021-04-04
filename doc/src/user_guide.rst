@@ -679,8 +679,8 @@ Example::
 Boundary and Initial Conditions
 -------------------------------
 
-These sections allow users to set the boundary conditions and initial
-conditions of the calculation.
+These sections allow users to set the boundary and initial
+conditions of calculations.
 
 [soln-bcs-*name*]
 ^^^^^^^^^^^^^^^^^
@@ -898,7 +898,7 @@ Periodic Boundary Conditions
 Simple periodic boundary conditions are supported; however, there behaviour
 is not controlled through the ``.ini`` file, instead it is handled at
 the mesh generation stage. Two faces may be taged with
-``periodic_l_``*int* and ``periodic_r_``*int*, where *int* is a unique
+``periodic_l_`` *int* and ``periodic_r_`` *int*, where *int* is a unique
 integer. Currently, only periodicity in a single cardinal direction is
 supported, for example, the planes :math:`(x,y,0)` and :math:`(x,y,10)`. 
 
