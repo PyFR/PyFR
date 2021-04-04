@@ -45,9 +45,7 @@ This concludes the installation. In order to run PyFR with the OpenMP backend
 
     [backend-openmp]
     cc = gcc-8
-    cblas = /usr/lib/libblas.dylib
-    cblas-type = parallel
-
+    
 Note the version of the compiler which must support the ``openmp`` flag.
 This has been tested on macOS 10.14.
 
@@ -57,7 +55,7 @@ Ubuntu
 Open the terminal and install the dependencies with the following commands::
 
     sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
-    sudo apt install metis libmetis-dev libblas3
+    sudo apt install metis libmetis-dev
     pip3 install virtualenv
 
 For visualisation of results, either install Paraview from the command line::
@@ -81,15 +79,13 @@ This concludes the installation. In order to run PyFR with the OpenMP backend
 
     [backend-openmp]
     cc = gcc
-    cblas = /usr/lib/x86_64-linux-gnu/blas/libblas.so.3
-    cblas-type = parallel
 
 This has been tested on Ubuntu 18.04.
 
 .. _compile-from-source:
 
-Compiling from source
-=====================
+Installing from source
+======================
 
 PyFR can be obtained `here <http://www.pyfr.org/download.php>`_. To install the software from source, use the provided ``setup.py`` installer or add the root PyFR directory to ``PYTHONPATH`` using::
 
@@ -150,10 +146,8 @@ OpenMP Backend
 
 The OpenMP backend targets multi-core CPUs. The backend requires:
 
-1. GCC >= 4.9
-2. A BLAS library compiled as a shared library
-   (e.g. `OpenBLAS <http://www.openblas.net/>`_)
-3. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= 1.15
+1. GCC >= 4.9 or another C compiler with OpenMP support
+2. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= 1.15
    compiled as a shared library (STATIC=0) with BLAS=0
 
 Parallel
