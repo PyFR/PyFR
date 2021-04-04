@@ -4,6 +4,9 @@
 User Guide
 **********
 
+This will provide infomation on :ref:`runnging-pyfr` and how calcualtion
+the :ref:`configuration-file` is setup.
+
 For information on how to install PyFR see :ref:`installation`.
 
 .. _running-pyfr:
@@ -76,6 +79,8 @@ Running in Parallel
 ``mpiexec -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
+
+.. _configuration-file:
 
 Configuration File (.ini)
 =========================
@@ -945,7 +950,14 @@ Example::
 Nodal Point Sets
 ----------------
 
-Flux reconstruction is a high-order nodal spectral element method, and as such, the user must specify the method used to place points within elements. This must be specified for all element types used as well as the associated interface types. For example, a 3D mesh comprised only of prisms requires a prism element quadrature and an interface quadrature for quads and triangles.
+Flux reconstruction is a high-order nodal spectral element method, and
+as such, the user must specify the methods used to place points within
+elements. This must be specified for all element types used as well as
+the associated interface types. For example, a 3D mesh comprised only
+of prisms requires a prism element point layout and an interface point
+layout for quads and triangles. The over-integration anti-aliasing
+method will also require the user to specify additional information
+about the desired point layouts.
 
 [solver-interfaces-line{-mg-p\ *order*}]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1479,6 +1491,8 @@ Example::
     fun-avg-varp = p2 - p*p
     avg-vel = sqrt(u*u + v*v)
 
+.. _integrate_plugin:
+    
 [soln-plugin-integrate]
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1516,3 +1530,14 @@ Example::
     int-E = rho*(u*u + v*v + w*w)
     int-enst = rho*(%(vor1)s*%(vor1)s + %(vor2)s*%(vor2)s + %(vor3)s*%(vor3)s)
 
+Additional Information
+----------------------
+
+The ini file format is very versatile. A feature that can be useful in
+defining initial conditions is the substitution feature and this is
+demonstrated in the :ref:`integrate-plugin` example.
+
+To prevent situations where you have solutions files for unknown
+configurations, the contents of the ini file is added as an attribute
+to pyfrs files. These files use the HDF5 format and can be straightforwardly 
+probed with tools such as h5dump.
