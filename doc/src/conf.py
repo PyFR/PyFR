@@ -61,7 +61,8 @@ inheritance_edge_attrs = dict(
 autodoc_mock_imports = ['pyopencl',
                         'h5py',
                         'mpi4py',
-                        'pycuda'
+                        'gimmik',
+                        'numpy',
                        ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -128,18 +129,14 @@ pygments_style = 'sphinx'
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-# html_theme = 'classic'
 html_theme = "sphinx_rtd_theme"
 html_logo  = "../fig/logo.svg"
 html_favicon = "../fig/pyfr_favicon.png"
-
-
 
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    'analytics_id': 'G-RPKQBYNX01',  #  Provided by Google in your dashboard
     'analytics_anonymize_ip': False,
     'logo_only': True,
     'display_version': False,
@@ -288,7 +285,7 @@ man_pages = [
 #  dir menu entry, description, category)
 texinfo_documents = [
   ('index', 'PyFR', u'PyFR Documentation',
-   u'Imperial College London', 'PyFR', 'One line description of project.',
+   u'Imperial College London', 'PyFR', 'A high-order flux reconstruction solver.',
    'Miscellaneous'),
 ]
 

@@ -6,6 +6,4 @@ sphinxcontrib-contentui
 sphinxcontrib-fancybox
 
 appdirs >= 1.4.0
-gimmik >= 2.0
-numpy >= 1.8
 pytools >= 2016.2.1

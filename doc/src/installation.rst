@@ -11,7 +11,8 @@ PyFR |release| can be installed using `pip <https://pypi.python.org/pypi/pip>`_
 and `virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
 quick-start guides below.
 
-Alternatively, PyFR |release| can be installed from `source <http://www.pyfr.org/download.php>`_, see :ref:`compile-from-source`.
+Alternatively, PyFR |release| can be installed from 
+`source <http://www.pyfr.org/download.php>`_, see :ref:`compile-from-source`.
 
 macOS
 -----
@@ -85,7 +86,9 @@ This has been tested on Ubuntu 18.04.
 Compiling from source
 =====================
 
-PyFR can be obtained `here <http://www.pyfr.org/download.php>`_. To install the software from source, use the provided ``setup.py`` installer or add the root PyFR directory to ``PYTHONPATH`` using::
+PyFR can be obtained `here <http://www.pyfr.org/download.php>`_. To install the 
+software from source, use the provided ``setup.py`` installer or add the root 
+PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
@@ -104,8 +107,8 @@ Python packages:
 2. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
 3. `h5py <http://www.h5py.org/>`_ >= 2.6
 4. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-5. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
-6. `numpy <http://www.numpy.org/>`_ >= 1.8
+5. `mpi4py <http://mpi4py.scipy.org/>`_ >= 3.0
+6. `numpy <http://www.numpy.org/>`_ >= 1.20
 7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in `numpy <http://www.numpy.org/>`_, PyFR is not
@@ -132,7 +135,7 @@ OpenCL Backend
 ^^^^^^^^^^^^^^
 
 The OpenCL backend targets a range of accelerators including GPUs from
-AMD and NVIDIA. The backend requires:
+AMD, Intel, and NVIDIA. The backend requires:
 
 1. OpenCL
 2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
