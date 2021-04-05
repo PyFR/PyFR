@@ -59,12 +59,8 @@ class BasePartitioner(object):
                 if n > 0:
                     offs[en][i] = off = sum(s.shape[1] for s in spts[en])
                     spts[en].append(mesh[f'spt_{en}_p{i}'])
+                    linf[en].append(mesh[f'spt_{en}_p{i}', 'linear'])
                     rnum[en].update(((i, j), (0, off + j)) for j in range(n))
-
-                    try:
-                        linf[en].append(mesh[f'spt_{en}_p{i}', 'linear'])
-                    except KeyError:
-                        linf[en].append(np.full(spts[en][-1].shape[1], False))
 
         def offset_con(con, pr):
             con = con.copy().astype('U4,i4,i1,i2')
