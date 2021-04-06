@@ -1220,6 +1220,14 @@ Plugins
 -------
 
 Plugins allow for powerful additional functionality to be swapped in and out.
+It is possible to load multiple instances of the same plugin by appending an
+integer tag, for example::
+
+  [soln-plugin-writer]
+  ...
+
+  [soln-plugin-writer-2]
+  ...
 
 [soln-plugin-writer]
 ^^^^^^^^^^^^^^^^^^^^
