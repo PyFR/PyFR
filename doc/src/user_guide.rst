@@ -1483,7 +1483,7 @@ Time average quantities. Parameterised with
 
     *string*
 
-    As ``fun-avg`` terms are evaulated at write time, these are only indirectly
+    As ``fun-avg`` terms are evaluated at write time, these are only indirectly
     effected by the averaging mode. 
 
 Example::
