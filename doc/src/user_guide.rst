@@ -298,7 +298,8 @@ Sets constants used in the simulation
 
    *float*
 
-Other constant may be set by the user which can then be used throughout the ``.ini`` file.
+Other constant may be set by the user which can then be used throughout the 
+``.ini`` file.
 
 Example::
 
@@ -900,7 +901,7 @@ Example::
 Periodic Boundary Conditions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Simple periodic boundary conditions are supported; however, there behaviour
+Simple periodic boundary conditions are supported; however, their behaviour
 is not controlled through the ``.ini`` file, instead it is handled at
 the mesh generation stage. Two faces may be taged with
 ``periodic_l_x`` and ``periodic_r_x``, where ``x`` is a unique
@@ -1445,6 +1446,11 @@ Time average quantities. Parameterised with
 
     ``continuous`` | ``windowed``
 
+    The default is ``windowed``. Continuous uses an accumulation over the entire
+    averaging period currently available, whereas windowed averages only over 
+    the number of steps. Oweing to the associativity and commutativity
+    of average operators it is posible to recover one mode from the other. 
+
 5. ``basedir`` --- relative path to directory where outputs will be
    written:
 
@@ -1477,6 +1483,9 @@ Time average quantities. Parameterised with
 
     *string*
 
+    As ``fun-avg`` terms are evaulated at write time, these are only indirectly
+    effected by the averaging mode. 
+
 Example::
 
     [soln-plugin-tavg]
@@ -1486,10 +1495,16 @@ Example::
     basedir = .
     basename = files-{t:06.2f}
 
-    avg-p = p
-    avg-p2 = p*p
-    fun-avg-varp = p2 - p*p
-    avg-vel = sqrt(u*u + v*v)
+    avg-u = u
+    avg-v = v
+    avg-uu = u*u
+    avg-vv = v*v
+    avg-uv = u*v
+    
+    fun-avg-upup = uu - u*u
+    fun-avg-vpvp = vv - v*v
+    fun-avg-upvp = uv - u*v
+    fun-avg-urms = sqrt(uu - u*u + vv - v*v)
 
 .. _integrate-plugin:
     
