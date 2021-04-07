@@ -113,7 +113,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Render our parallel wrapper kernel
         src = self.backend.lookup.get_template('batch-gemm').render(lib='xsmm')
 
-        # Argument types for par_xsmm
+        # Argument types for batch_gemm
         argt = [np.intp] + [np.intp, np.int32]*3
 
         # Build
