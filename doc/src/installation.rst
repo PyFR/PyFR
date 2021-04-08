@@ -11,8 +11,8 @@ PyFR |release| can be installed using `pip <https://pypi.python.org/pypi/pip>`_
 and `virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
 quick-start guides below.
 
-Alternatively, PyFR |release| can be installed from 
-`source <http://www.pyfr.org/download.php>`_, see :ref:`compile-from-source`.
+Alternatively, PyFR |release| can be installed from
+`source <https://github.com/PyFR/PyFR/tree/master>`_, see :ref:`compile-from-source`.
 
 macOS
 -----
@@ -39,14 +39,14 @@ virtual environment::
     pip install pyfr
 
 This concludes the installation. In order to run PyFR with the OpenMP backend
-(see :ref:`running-pyfr`), use the following settings in the configuration file
-(``.ini``)::
+(see :ref:`running-pyfr`), use the following settings in the
+:ref:`configuration-file`::
 
-    [backend-openmp]
-    cc = gcc-8
-    
-Note the version of the compiler which must support the ``openmp`` flag.
-This has been tested on macOS 10.14.
+[backend-openmp]
+cc = gcc-8
+
+Note the version of the compiler which must support the ``openmp`` flag .This has 
+been tested on macOS 10.14.
 
 Ubuntu
 ------
@@ -72,12 +72,7 @@ virtual environment::
 
     pip install pyfr
 
-This concludes the installation. In order to run PyFR with the OpenMP backend
-(see :ref:`running-pyfr`), use the following settings in the configuration file
-(``.ini``)::
-
-    [backend-openmp]
-    cc = gcc
+This concludes the installation.
 
 This has been tested on Ubuntu 18.04.
 
@@ -86,8 +81,8 @@ This has been tested on Ubuntu 18.04.
 Compiling from source
 =====================
 
-PyFR can be obtained `here <http://www.pyfr.org/download.php>`_. To install the 
-software from source, use the provided ``setup.py`` installer or add the root 
+PyFR can be obtained `here <https://github.com/PyFR/PyFR/tree/master>`_. To install the
+software from source, use the provided ``setup.py`` installer or add the root
 PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH

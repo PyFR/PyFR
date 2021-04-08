@@ -55,12 +55,16 @@ A `Controller`_ acts to advance the simulation in time. Specifically, a
         :inherited-members:
         :private-members:
 
+|
+
 Types of physical-time `Controller`_ are related via the following
 inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.std.controllers
                          pyfr.integrators.dual.phys.controllers
     :parts: 1
+
+|
 
 There are two types of pseudo-time `Controller`_ available in PyFR |release|:
 
@@ -82,11 +86,15 @@ There are two types of pseudo-time `Controller`_ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+|
+
 Types of pseudo-time `Controller`_ are related via the following
 inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudocontrollers
     :parts: 1
+
+|
 
 Stepper
 -------
@@ -117,7 +125,7 @@ advances a `System`_ by a single time-step. There are eight types of
 
 .. toggle-header::
     :header: *StdRK34Stepper* **Click to show**
-    
+
     .. autoclass:: pyfr.integrators.std.steppers.StdRK34Stepper
         :members:
         :undoc-members:
@@ -151,7 +159,6 @@ advances a `System`_ by a single time-step. There are eight types of
         :inherited-members:
         :private-members:
 
-
 .. toggle-header::
     :header: *DualBDF3Stepper* **Click to show**
 
@@ -160,7 +167,6 @@ advances a `System`_ by a single time-step. There are eight types of
         :undoc-members:
         :inherited-members:
         :private-members:
-
 
 .. toggle-header::
     :header: *DualBackwardEulerStepper* **Click to show**
@@ -171,13 +177,15 @@ advances a `System`_ by a single time-step. There are eight types of
         :inherited-members:
         :private-members:
 
+|
+
 Types of `Stepper`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.std.steppers
                          pyfr.integrators.dual.phys.steppers
     :parts: 1
 
-
+|
 
 PseudoStepper
 -------------
@@ -186,7 +194,6 @@ A `PseudoStepper`_ acts to advance the simulation by a single pseudo-time-step.
 They are used to converge implicit `Stepper`_ time-steps via a dual
 time-stepping formulation. There are six types of `PseudoStepper`_ available
 in PyFR |release|:
-
 
 .. toggle-header::
     :header: *DualDenseRKPseudoStepper* **Click to show**
@@ -199,7 +206,7 @@ in PyFR |release|:
 
 .. toggle-header::
     :header: *DualRK4PseudoStepper* **Click to show**
-    
+
     .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
         :members:
         :undoc-members:
@@ -242,6 +249,8 @@ in PyFR |release|:
         :inherited-members:
         :private-members:
 
+|
+
 Note that DualDenseRKPseudoStepper includes families of
 `PseudoStepper`_ whose coefficients are read from .txt files named thus:
 
@@ -253,6 +262,8 @@ diagram:
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers
     :top-classes: pyfr.integrators.dual.pseudo.base.BaseDualPseudoIntegrator
     :parts: 1
+
+|
 
 System
 ------
@@ -311,13 +322,18 @@ in PyFR |release|:
         :inherited-members:
         :private-members:
 
+|
+
 Types of `System`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.solvers.navstokes.system
                          pyfr.solvers.euler.system
                          pyfr.solvers.acnavstokes.system
                          pyfr.solvers.aceuler.system
+    :top-classes: pyfr.solvers.base.system.BaseSystem
     :parts: 1
+
+|
 
 Elements
 --------
@@ -361,13 +377,18 @@ four types of `Elements`_ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+|
+
 Types of `Elements`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.solvers.navstokes.elements
                          pyfr.solvers.euler.elements
                          pyfr.solvers.acnavstokes.elements
                          pyfr.solvers.aceuler.elements
+    :top-classes: pyfr.solvers.base.elements.BaseElements
     :parts: 1
+
+|
 
 Interfaces
 ----------
@@ -448,6 +469,8 @@ are eight types of (non-boundary) `Interfaces`_ available in PyFR
         :inherited-members:
         :private-members:
 
+|
+
 Types of (non-boundary) `Interfaces`_ are related via the following
 inheritance diagram:
 
@@ -459,7 +482,10 @@ inheritance diagram:
                          pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
                          pyfr.solvers.aceuler.inters.ACEulerMPIInters
                          pyfr.solvers.aceuler.inters.ACEulerIntInters
+    :top-classes: pyfr.solvers.base.inters.BaseInters
     :parts: 1
+
+|
 
 Backend
 -------
@@ -503,13 +529,19 @@ of `Backend`_ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+|
+
 Types of `Backend`_ are related via the following inheritance diagram:
+
 
 .. inheritance-diagram:: pyfr.backends.cuda.base
                          pyfr.backends.hip.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
+    :top-classes: pyfr.backends.base.base.BaseBackend
     :parts: 1
+
+|
 
 Pointwise Kernel Provider
 -------------------------
@@ -567,6 +599,8 @@ Provider`_ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+|
+
 Types of `Pointwise Kernel Provider`_ are related via the following
 inheritance diagram:
 
@@ -575,7 +609,10 @@ inheritance diagram:
                          pyfr.backends.hip.provider
                          pyfr.backends.opencl.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
+    :top-classes: pyfr.backends.base.kernels.BaseKernelProvider
     :parts: 1
+
+|
 
 Kernel Generator
 ----------------
@@ -624,12 +661,17 @@ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+|
+
 Types of `Kernel Generator`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
                          pyfr.backends.opencl.generator.OpenCLKernelGenerator
                          pyfr.backends.openmp.generator.OpenMPKernelGenerator
+    :top-classes: pyfr.backends.base.generator.BaseKernelGenerator
     :parts: 1
+
+|
 
 =========
 PyFR-Mako

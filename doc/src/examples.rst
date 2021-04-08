@@ -39,11 +39,9 @@ simulation on a structured mesh:
 
 7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
    converting it into an unstructured VTK file called
-   ``euler_vortex_2d-100.0.vtu``. To visualise the results using 
-   subdivision, a control integer is added at the end of the 
-   command::
+   ``euler_vortex_2d-100.0.vtu``::
 
-        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d-100.0.vtu -d 4
+        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d-100.0.vtu
 
 8. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -88,12 +86,9 @@ simulation on a mixed unstructured mesh:
 
 6. Run pyfr on the solution file ``couette_flow_2d-040.pyfrs``
    converting it into an unstructured VTK file called
-   ``couette_flow_2d-040.vtu``. Note that in order to visualise the
-   high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the
-   integer at the end of the command::
+   ``couette_flow_2d-040.vtu``::
 
-        pyfr export couette_flow_2d.pyfrm couette_flow_2d-040.pyfrs couette_flow_2d-040.vtu -d 4
+        pyfr export couette_flow_2d.pyfrm couette_flow_2d-040.pyfrs couette_flow_2d-040.vtu
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -138,12 +133,9 @@ flow simulation on a mixed unstructured mesh:
 
 6. Run pyfr on the solution file ``inc_cylinder_2d-75.00.pyfrs``
    converting it into an unstructured VTK file called
-   ``inc_cylinder_2d-75.00.vtu``. Note that in order to visualise the
-   high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the
-   integer at the end of the command::
+   ``inc_cylinder_2d-75.00.vtu``::
 
-        pyfr export inc_cylinder_2d.pyfrm inc_cylinder_2d-75.00.pyfrs inc_cylinder_2d-75.00.vtu -d 4
+        pyfr export inc_cylinder_2d.pyfrm inc_cylinder_2d-75.00.pyfrs inc_cylinder_2d-75.00.vtu
 
 7. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_

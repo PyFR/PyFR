@@ -4,9 +4,6 @@
 User Guide
 **********
 
-This will provide infomation on :ref:`running-pyfr` and how calcualtion
-the :ref:`configuration-file` is setup.
-
 For information on how to install PyFR see :ref:`installation`.
 
 .. _running-pyfr:
@@ -45,37 +42,30 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr restart mesh.pyfrm solution.pyfrs
 
-5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu or .pvtu file. Two output options
-   are provided. The first one uses high-order VTK cells
-   relying on the latter library to enhance the solution
-   visualization which can be controlled using the 
-   `Nonlinear subdivision` option in Paraview or VTK.
-   The order of the output non-linear cells is controlled 
-   using the ``-k`` or ``--order`` integer arguments.
+5. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an unstructured
+   VTK ``.vtu`` or ``.pvtu`` file. If a ``-k`` flag is provided with an integer
+   argument then ``.pyfrs`` elements are converted to high-order VTK cells
+   which are exported, where the order of the VTK cells is equal to the value
+   of the integer argument.
    Example::
 
-        pyfr export -k 4 mesh.pyfrm solution.pyfrs solution.vtu   
+        pyfr export -k 4 mesh.pyfrm solution.pyfrs solution.vtu
 
-   The second one decomposes each element into
-   a set of linear cells. The level of sub-division is 
-   controlled by an integer accompannied by argument ``-d``
+   If a ``-d`` flag is provided with an integer argument then ``.pyfrs``
+   elements are subdivided into linear VTK cells which are exported, where the
+   number of sub-divisions is equal to the value of the integer argument.
    Example::
 
         pyfr export -d 4 mesh.pyfrm solution.pyfrs solution.vtu
 
-   If neither arguments ``-d`` nor ``-k`` are provided by the user
-   then the export command defaults to::
-
-        pyfr export -k solution_order mesh.pyfrm solution.pyfrs solution.vtu
-
-   where ``solution_order`` refers to the ``order`` of the simulation data
-   found in the solution file.
+   If no flags are provided then ``.pyfrs`` elements are converted to high-order
+   VTK cells which are exported, where the order of the cells is equal to the
+   order of the solution data in the ``.pyfrs`` file.
 
 Running in Parallel
 -------------------
 
-``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
+PyFR can be run in parallel. To do so prefix ``pyfr`` with
 ``mpiexec -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
@@ -88,16 +78,18 @@ Configuration File (.ini)
 The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
-their associated parameters are described below. Note that both ``;`` and 
+their associated parameters are described below. Note that both ``;`` and
 ``#`` may be used as comment characters.
 
 Backends
 --------
 
-There are several configuration setting for the backends. The base 
-section ``[backend]`` is required, whereas PyFR has internal defualts for the 
-other hardware specific backend settings; however, for best perfomance it is 
-advisable to configure those applicable for the target hardware.
+The backend components detail how the solver will be configured for specific
+computational resources. The while the section ``[backend]`` is required, the
+other configurations are optional. If a hardware specific backend configuration
+is omitted, then PyFR will fall back to in built default settings; however, for
+best performance it is advisable to configure those backends applicable for
+your target hardware.
 
 [backend]
 ^^^^^^^^^
@@ -251,15 +243,13 @@ Example::
 
     [backend-openmp]
     cc = gcc
-    cblas= example/path/libBLAS.dylib
-    cblas-type = parallel
 
 Systems
 -------
 
-These sections of the input file broadly setup and control the physical
-system being solved, as well as charateristics of the spatial and
-temporal schemes to be used. 
+These sections of the input file setup and control the physical system being
+solved, as well as charateristics of the spatial and temporal schemes to be
+used.
 
 [constants]
 ^^^^^^^^^^^
@@ -298,7 +288,7 @@ Sets constants used in the simulation
 
    *float*
 
-Other constant may be set by the user which can then be used throughout the 
+Other constant may be set by the user which can then be used throughout the
 ``.ini`` file.
 
 Example::
@@ -898,16 +888,13 @@ Example::
     cpTw = 10.0
     u = 1.0
 
-Periodic Boundary Conditions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
 Simple periodic boundary conditions are supported; however, their behaviour
 is not controlled through the ``.ini`` file, instead it is handled at
 the mesh generation stage. Two faces may be taged with
 ``periodic_l_x`` and ``periodic_r_x``, where ``x`` is a unique
 integer for the pair of boundaries. Currently, only periodicity in a
 single cardinal direction is supported, for example, the planes
-:math:`(x,y,0)` and :math:`(x,y,10)`. 
+``(x,y,0)``` and ``(x,y,10)``.
 
 [soln-ics]
 ^^^^^^^^^^
@@ -951,14 +938,12 @@ Example::
 Nodal Point Sets
 ----------------
 
-Flux reconstruction is a high-order nodal spectral element method, and
-as such, the user must specify the methods used to place points within
-elements. This must be specified for all element types used as well as
-the associated interface types. For example, a 3D mesh comprised only
-of prisms requires a prism element point layout and an interface point
-layout for quads and triangles. The over-integration anti-aliasing
-method will also require the user to specify additional information
-about the desired point layouts.
+Solution point sets must be specified for each element type that is used and
+flux point sets must be specified for each interface type that is used. If
+anti-aliasing is enabled then quadrature point for each element and interface
+type that is used must also be specified. For example, a 3D mesh comprised only
+of prisms requires a prism element point set and an interface point set for
+quads and triangles.
 
 [solver-interfaces-line{-mg-p\ *order*}]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1220,14 +1205,17 @@ Plugins
 -------
 
 Plugins allow for powerful additional functionality to be swapped in and out.
-It is possible to load multiple instances of the same plugin by appending an
-integer tag, for example::
+It is possible to load multiple instances of the same plugin by appending a
+tag, for example::
 
-  [soln-plugin-writer]
-  ...
+    [soln-plugin-writer]
+    ...
 
-  [soln-plugin-writer-2]
-  ...
+    [soln-plugin-writer-2]
+    ...
+
+    [soln-plugin-writer-three]
+    ...
 
 [soln-plugin-writer]
 ^^^^^^^^^^^^^^^^^^^^
@@ -1455,9 +1443,9 @@ Time average quantities. Parameterised with
     ``continuous`` | ``windowed``
 
     The default is ``windowed``. Continuous uses an accumulation over the entire
-    averaging period currently available, whereas windowed averages only over 
-    the number of steps. Oweing to the associativity and commutativity
-    of average operators it is posible to recover one mode from the other. 
+    averaging period, whereas windowed averages only over
+    ``nsteps``. Owing to the associativity and commutativity
+    of average operators it is possible to recover one mode from the other.
 
 5. ``basedir`` --- relative path to directory where outputs will be
    written:
@@ -1492,7 +1480,7 @@ Time average quantities. Parameterised with
     *string*
 
     As ``fun-avg`` terms are evaluated at write time, these are only indirectly
-    effected by the averaging mode. 
+    effected by the averaging mode.
 
 Example::
 
@@ -1508,14 +1496,14 @@ Example::
     avg-uu = u*u
     avg-vv = v*v
     avg-uv = u*v
-    
+
     fun-avg-upup = uu - u*u
     fun-avg-vpvp = vv - v*v
     fun-avg-upvp = uv - u*v
     fun-avg-urms = sqrt(uu - u*u + vv - v*v)
 
 .. _integrate-plugin:
-    
+
 [soln-plugin-integrate]
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -1562,5 +1550,5 @@ demonstrated in the :ref:`integrate-plugin` example.
 
 To prevent situations where you have solutions files for unknown
 configurations, the contents of the ini file is added as an attribute
-to pyfrs files. These files use the HDF5 format and can be straightforwardly 
+to pyfrs files. These files use the HDF5 format and can be straightforwardly
 probed with tools such as h5dump.
