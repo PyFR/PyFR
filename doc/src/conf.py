@@ -63,6 +63,7 @@ autodoc_mock_imports = ['pyopencl',
                         'gimmik',
                         'numpy',
                         'mako',
+                        'appdirs'
                        ]
 
 # Add any paths that contain templates here, relative to this directory.

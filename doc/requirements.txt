@@ -5,5 +5,4 @@ sphinx-rtd-theme
 sphinxcontrib-contentui
 sphinxcontrib-fancybox
 
-appdirs >= 1.4.0
 pytools >= 2016.2.1
