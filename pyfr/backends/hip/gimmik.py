@@ -44,7 +44,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun.exec_async(grid, block, queue.hip_stream_comp,
-                               b.ncol, b, b.leaddim, out, out.leaddim)
+                fun.exec_async(grid, block, queue.stream_comp, b.ncol, b,
+                               b.leaddim, out, out.leaddim)
 
         return MulKernel()
