@@ -9,7 +9,7 @@
 
 <%pyfr:kernel name='tfluxlin' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'
-              artvisc='in broadcast fpdtype_t'
+              artvisc='in broadcast-col fpdtype_t'
               f='inout fpdtype_t[${str(ndims)}][${str(nvars)}]'
               verts='in broadcast-col fpdtype_t[${str(nverts)}][${str(ndims)}]'
               upts='in broadcast-row fpdtype_t[${str(ndims)}]'>
