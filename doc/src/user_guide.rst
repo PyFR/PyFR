@@ -940,10 +940,10 @@ Nodal Point Sets
 
 Solution point sets must be specified for each element type that is used and
 flux point sets must be specified for each interface type that is used. If
-anti-aliasing is enabled then quadrature point for each element and interface
-type that is used must also be specified. For example, a 3D mesh comprised only
-of prisms requires a prism element point set and an interface point set for
-quads and triangles.
+anti-aliasing is enabled then quadrature point sets for each element and
+interface type that is used must also be specified. For example, a 3D mesh
+comprised only of prisms requires a solution point set for prism elements and
+flux point set for quadrilateral and triangular interfaces.
 
 [solver-interfaces-line{-mg-p\ *order*}]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1544,11 +1544,11 @@ Example::
 Additional Information
 ----------------------
 
-The ini file format is very versatile. A feature that can be useful in
+The :ref:`INI<configuration-file>` file format is very versatile. A feature that can be useful in
 defining initial conditions is the substitution feature and this is
 demonstrated in the :ref:`integrate-plugin` example.
 
 To prevent situations where you have solutions files for unknown
-configurations, the contents of the ini file is added as an attribute
-to pyfrs files. These files use the HDF5 format and can be straightforwardly
-probed with tools such as h5dump.
+configurations, the contents of the ``.ini`` file is added as an attribute
+to ``.pyfrs`` files. These files use the HDF5 format and can be
+straightforwardly probed with tools such as h5dump.

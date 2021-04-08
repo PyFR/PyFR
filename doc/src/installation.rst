@@ -42,11 +42,11 @@ This concludes the installation. In order to run PyFR with the OpenMP backend
 (see :ref:`running-pyfr`), use the following settings in the
 :ref:`configuration-file`::
 
-[backend-openmp]
-cc = gcc-8
+    [backend-openmp]
+    cc = gcc-8
 
-Note the version of the compiler which must support the ``openmp`` flag .This has 
-been tested on macOS 10.14.
+Note the version of the compiler which must support the ``openmp`` flag.
+This has been tested on macOS 10.14.
 
 Ubuntu
 ------
