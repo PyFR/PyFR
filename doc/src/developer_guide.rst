@@ -260,7 +260,6 @@ Types of `PseudoStepper`_ are related via the following inheritance
 diagram:
 
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers
-    :top-classes: pyfr.integrators.dual.pseudo.base.BaseDualPseudoIntegrator
     :parts: 1
 
 |
@@ -330,7 +329,6 @@ Types of `System`_ are related via the following inheritance diagram:
                          pyfr.solvers.euler.system
                          pyfr.solvers.acnavstokes.system
                          pyfr.solvers.aceuler.system
-    :top-classes: pyfr.solvers.base.system.BaseSystem
     :parts: 1
 
 |
@@ -385,7 +383,6 @@ Types of `Elements`_ are related via the following inheritance diagram:
                          pyfr.solvers.euler.elements
                          pyfr.solvers.acnavstokes.elements
                          pyfr.solvers.aceuler.elements
-    :top-classes: pyfr.solvers.base.elements.BaseElements
     :parts: 1
 
 |
@@ -482,7 +479,6 @@ inheritance diagram:
                          pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
                          pyfr.solvers.aceuler.inters.ACEulerMPIInters
                          pyfr.solvers.aceuler.inters.ACEulerIntInters
-    :top-classes: pyfr.solvers.base.inters.BaseInters
     :parts: 1
 
 |
@@ -538,7 +534,6 @@ Types of `Backend`_ are related via the following inheritance diagram:
                          pyfr.backends.hip.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
-    :top-classes: pyfr.backends.base.base.BaseBackend
     :parts: 1
 
 |
@@ -609,7 +604,6 @@ inheritance diagram:
                          pyfr.backends.hip.provider
                          pyfr.backends.opencl.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
-    :top-classes: pyfr.backends.base.kernels.BaseKernelProvider
     :parts: 1
 
 |
@@ -668,7 +662,6 @@ Types of `Kernel Generator`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
                          pyfr.backends.opencl.generator.OpenCLKernelGenerator
                          pyfr.backends.openmp.generator.OpenMPKernelGenerator
-    :top-classes: pyfr.backends.base.generator.BaseKernelGenerator
     :parts: 1
 
 |
