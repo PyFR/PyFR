@@ -6,7 +6,7 @@ from pkg_resources import resource_string
 import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
-from pyfr.util import memoize, proxylist
+from pyfr.util import memoize
 
 
 def _get_coefficients_from_txt(scheme):
@@ -193,28 +193,10 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
 
         self._nstages = len(self.b)
 
-        # Register a kernel to multiply rhs with local pseudo time-step
-        self.backend.pointwise.register(
-            'pyfr.integrators.dual.pseudo.kernels.localdtau'
-        )
-
-        tplargs = dict(ndims=self.system.ndims, nvars=self.system.nvars)
-
-        self.dtau_upts = proxylist([])
-        for ele, shape in zip(self.system.ele_map.values(),
-                              self.system.ele_shapes):
-            # Allocate storage for the local pseudo time-step
-            dtaumat = self.backend.matrix(shape, np.ones(shape)*self._dtau,
-                                          tags={'align'})
-            self.dtau_upts.append(dtaumat)
-
-            # Append the local dtau kernels to the proxylist
-            self.pintgkernels['localdtau'].append(
-                self.backend.kernel(
-                    'localdtau', tplargs=tplargs, dims=[ele.nupts, ele.neles],
-                    negdivconf=ele.scal_upts_inb, dtau_upts=dtaumat
-                )
-            )
+        # Allocate storage for the local pseudo time-step field
+        self.dtau_upts = [self.backend.matrix(shape, np.ones(shape)*self._dtau,
+                                              tags={'align'})
+                          for shape in self.system.ele_shapes]
 
         # Register a pointwise kernel for the low-storage stepper
         self.backend.pointwise.register(
@@ -238,10 +220,6 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
             kerns.append(kern)
 
         return kerns
-
-    def localdtau(self, uinbank, inv=0):
-        self.system.eles_scal_upts_inb.active = uinbank
-        self._queue.enqueue_and_run(self.pintgkernels['localdtau'], inv=inv)
 
     @property
     def pseudo_stepper_has_lerrest(self):

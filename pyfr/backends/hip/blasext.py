@@ -47,13 +47,13 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         return CopyKernel()
 
-    def errest(self, x, y, z, *, norm):
-        if x.traits != y.traits != z.traits:
+    def reduction(self, *rs, method, norm, dt_mat=None):
+        if any(r.traits != rs[0].traits for r in rs[1:]):
             raise ValueError('Incompatible matrix types')
 
         hip = self.backend.hip
-        nrow, ncol, ldim, dtype = x.traits[1:]
-        ncola, ncolb = x.ioshape[1:]
+        nrow, ncol, ldim, dtype = rs[0].traits[1:]
+        ncola, ncolb = rs[0].ioshape[1:]
 
         # Reduction block dimensions
         block = (128, 1, 1)
@@ -62,33 +62,44 @@ class HIPBlasExtKernels(HIPKernelProvider):
         grid = get_grid_for_block(block, ncolb, ncola)
 
         # Empty result buffer on the device
-        err_dev = hip.mem_alloc(ncola*grid[0]*x.itemsize)
+        reduced_dev = hip.mem_alloc(ncola*grid[0]*rs[0].itemsize)
 
         # Empty result buffer on the host
-        err_host = hip.pagelocked_empty((ncola, grid[0]), dtype)
+        reduced_host = hip.pagelocked_empty((ncola, grid[0]), dtype)
+
+        tplargs = dict(norm=norm, sharesz=block[0], method=method)
+
+        if method == 'resid':
+            tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
 
         # Get the kernel template
-        src = self.backend.lookup.get_template('errest').render(
-            norm=norm, sharesz=block[0]
-        )
+        src = self.backend.lookup.get_template('reduction').render(**tplargs)
+
+        regs = list(rs) + [dt_mat] if dt_mat else rs
+
+        # Argument types for reduction kernel
+        if method == 'errest':
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]*2
+        elif method == 'resid' and dt_mat:
+            argt = [np.int32]*3 + [np.intp]*4 + [dtype]
+        else:
+            argt = [np.int32]*3 + [np.intp]*3 + [dtype]
 
         # Build the reduction kernel
-        rkern = self._build_kernel(
-            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
-        )
+        rkern = self._build_kernel('reduction', src, argt)
 
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum
 
-        class ErrestKernel(ComputeKernel):
+        class ReductionKernel(ComputeKernel):
             @property
             def retval(self):
-                return reducer(err_host, axis=1)
+                return reducer(reduced_host, axis=1)
 
-            def run(self, queue, atol, rtol):
-                rkern.exec_async(grid, block, queue.stream_comp, nrow, ncolb,
-                                 ldim, err_dev, x, y, z, atol, rtol)
-                hip.memcpy_async(err_host, err_dev, err_dev.nbytes,
-                                 queue.stream_comp)
+            def run(self, queue, *facs):
+                rkern.exec_async(grid, block, queue.stream_comp,
+                                 nrow, ncolb, ldim, reduced_dev, *regs, *facs)
+                hip.memcpy_async(reduced_host, reduced_dev,
+                                 reduced_dev.nbytes, queue.stream_comp)
 
-        return ErrestKernel()
+        return ReductionKernel()

@@ -5,7 +5,6 @@ from configparser import NoOptionError
 from itertools import chain
 
 from pyfr.integrators.base import BaseCommon
-from pyfr.util import proxylist
 
 
 class BaseDualPseudoIntegrator(BaseCommon):
@@ -49,8 +48,9 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
 
-        # Storage for register banks and current index
-        self._init_reg_banks()
+        # Register index list and current index
+        self._regidx = list(range(self.nregs))
+        self._idxcurr = 0
 
         # Get a queue for the pseudointegrator
         self._queue = backend.queue()
@@ -79,7 +79,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
             raise ValueError('Invalid pseudo-residual norm')
 
         # Pointwise kernels for the pseudo-integrator
-        self.pintgkernels = defaultdict(proxylist)
+        self.pintgkernels = defaultdict(list)
 
         # Pseudo-step counter
         self.npseudosteps = 0
