@@ -37,7 +37,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun(queue.cl_queue_comp, (b.ncol,), None, b.ncol,
-                    b.data, b.leaddim, out.data, out.leaddim)
+                fun(queue.cmd_q_comp, (b.ncol,), None, b.ncol, b.data,
+                    b.leaddim, out.data, out.leaddim)
 
         return MulKernel()

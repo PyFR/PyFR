@@ -47,10 +47,10 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
                 def run(self, queue, **kwargs):
                     narglst = [kwargs.get(ka, ka) for ka in arglst]
                     narglst = [getattr(arg, 'data', arg) for arg in narglst]
-                    fun(queue.cl_queue_comp, gs, ls, *narglst)
+                    fun(queue.cmd_q_comp, gs, ls, *narglst)
             else:
                 def run(self, queue, **kwargs):
                     narglst = [getattr(arg, 'data', arg) for arg in arglst]
-                    fun(queue.cl_queue_comp, gs, ls, *narglst)
+                    fun(queue.cmd_q_comp, gs, ls, *narglst)
 
         return PointwiseKernel()

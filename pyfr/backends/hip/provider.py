@@ -38,10 +38,10 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
         class PointwiseKernel(ComputeKernel):
             if any(isinstance(arg, str) for arg in arglst):
                 def run(self, queue, **kwargs):
-                    fun.exec_async(grid, block, queue.hip_stream_comp,
+                    fun.exec_async(grid, block, queue.stream_comp,
                                    *[kwargs.get(ka, ka) for ka in arglst])
             else:
                 def run(self, queue, **kwargs):
-                    fun.exec_async(grid, block, queue.hip_stream_comp, *arglst)
+                    fun.exec_async(grid, block, queue.stream_comp, *arglst)
 
         return PointwiseKernel()
