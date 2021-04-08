@@ -6,7 +6,9 @@ import re
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
-from pyfr.integrators.dual.pseudo.pseudocontrollers import BaseDualPseudoController
+from pyfr.integrators.dual.pseudo.pseudocontrollers import (
+    BaseDualPseudoController
+)
 from pyfr.util import memoize, proxylist, subclass_where
 
 
@@ -103,19 +105,19 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     iself.system.rhs(t, uin, fout)
 
                     # Coefficients for the physical stepper
-                    svals = [sc/iself._dt for sc in iself._stepper_coeffs]
+                    svals = [sc/iself._dt for sc in iself.stepper_coeffs]
 
                     # Physical stepper source addition -∇·f - dQ/dt
-                    axnpby = iself._get_axnpby_kerns(len(svals) + 1,
-                                                     subdims=iself._subdims)
-                    iself._prepare_reg_banks(fout, iself._idxcurr,
-                                             *iself._stepper_regidx)
+                    axnpby = iself._get_axnpby_kerns(
+                        fout, iself._idxcurr, *iself._stepper_regidx,
+                        subdims=iself._subdims
+                    )
                     iself._queue.enqueue_and_run(axnpby, 1, *svals)
 
                     # Multigrid r addition
                     if iself._aux_regidx:
-                        axnpby = iself._get_axnpby_kerns(2)
-                        iself._prepare_reg_banks(fout, iself._aux_regidx[0])
+                        axnpby = iself._get_axnpby_kerns(fout,
+                                                         iself._aux_regidx[0])
                         iself._queue.enqueue_and_run(axnpby, 1, -1)
 
             self.pintgs[l] = lpsint(backend, systemcls, rallocs, mesh,
@@ -135,8 +137,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             del self.pintgs[l].system.ele_map
 
     def finalise_mg_advance(self, currsoln):
-        psnregs = self.pintg._pseudo_stepper_nregs
-        snregs = self.pintg._stepper_nregs
+        psnregs = self.pintg.pseudo_stepper_nregs
+        snregs = self.pintg.stepper_nregs
 
         # Rotate the stepper registers to the right by one
         self.pintg._regidx[psnregs:psnregs + snregs] = (
@@ -241,7 +243,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.pintg._add(0, mg1, 1, l2idxcurr)
 
         # Restrict the physical stepper terms
-        for i in range(self.pintg._stepper_nregs):
+        for i in range(self.pintg.stepper_nregs):
             l1sys.eles_scal_upts_inb.active = (
                 self.pintgs[l1]._stepper_regidx[i]
             )
@@ -251,7 +253,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
 
         # Project local dtau field to lower multigrid levels
-        if self.pintgs[self._order]._pseudo_controller_needs_lerrest:
+        if self.pintgs[self._order].pseudo_controller_needs_lerrest:
             self.pintg._queue.enqueue_and_run(self.dtauproject(l1, l2))
 
     def prolongate(self, l1, l2):
@@ -320,7 +322,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         for l in self.levels:
             # Total number of RHS evaluations
             stats.set('solver-time-integrator', f'nfevals-p{l}',
-                      self.pintgs[l]._pseudo_stepper_nfevals)
+                      self.pintgs[l].pseudo_stepper_nfevals)
 
             # Total number of pseudo-steps
             stats.set('solver-time-integrator', f'npseudosteps-p{l}',

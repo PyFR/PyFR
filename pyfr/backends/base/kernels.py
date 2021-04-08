@@ -4,7 +4,7 @@ import itertools as it
 import re
 import types
 
-from pyfr.util import memoize, proxylist
+from pyfr.util import memoize
 
 
 class _BaseKernel(object):
@@ -34,10 +34,11 @@ class NullMPIKernel(MPIKernel):
 
 class _MetaKernel(object):
     def __init__(self, kernels):
-        self._kernels = proxylist(kernels)
+        self._kernels = list(kernels)
 
     def run(self, queue, *args, **kwargs):
-        self._kernels.run(queue, *args, **kwargs)
+        for k in self._kernels:
+            k.run(queue, *args, **kwargs)
 
 
 class ComputeMetaKernel(_MetaKernel, ComputeKernel):

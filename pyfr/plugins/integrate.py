@@ -102,26 +102,13 @@ class IntegratePlugin(BasePlugin):
 
     def _init_gradients(self, intg, rinfo):
         # Determine what gradients, if any, are required
-        self._gradpnames = gradpnames = set()
+        gradpnames = set()
         for ex in self.exprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
-        # If gradients are required then form the relevant operators
-        if gradpnames:
-            emap = intg.system.ele_map
-
-            self._gradop, self._rcpjact = [], []
-            for eles, (eset, emask) in zip(emap.values(), rinfo):
-                self._gradop.append(eles.basis.m4)
-
-                # Get the smats at the solution points and subset
-                smat = eles.smat_at_np('upts')[..., eset]
-
-                # Get |J|^-1 at the solution points and subset
-                rcpdjac = eles.rcpdjac_at_np('upts')[:, eset]
-
-                # Product to give J^-T at the solution points
-                self._rcpjact.append(rcpdjac*smat.transpose(2, 0, 1, 3))
+        privarmap = self.elementscls.privarmap[self.ndims]
+        self._gradpinfo = [(pname, privarmap.index(pname))
+                           for pname in gradpnames]
 
     def _eval_exprs(self, intg):
         intvals = np.zeros(len(self.exprs))
@@ -143,24 +130,18 @@ class IntegratePlugin(BasePlugin):
             subs = dict(zip(pnames, psolns))
             subs.update(zip('xyz', plocs))
 
-            # Compute any required gradients
-            if self._gradpnames:
-                # Gradient operator and J^-T matrix
-                gradop, rcpjact = self._gradop[i], self._rcpjact[i]
-                nupts = gradop.shape[1]
+            # Prepare any required gradients
+            if self._gradpinfo:
+                # Compute the gradients
+                grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
 
-                for pname in self._gradpnames:
-                    psoln = subs[pname]
+                # Transform from conservative to primitive gradients
+                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
+                                                          self.cfg)
 
-                    # Compute the transformed gradient
-                    tgradpn = gradop @ psoln
-                    tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
-
-                    # Untransform this to get the physical gradient
-                    gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
-                    gradpn = gradpn.reshape(self.ndims, nupts, -1)
-
-                    for dim, grad in zip('xyz', gradpn):
+                # Add them to the substitutions dictionary
+                for pname, idx in self._gradpinfo:
+                    for dim, grad in zip('xyz', pgrads[idx]):
                         subs[f'grad_{pname}_{dim}'] = grad
 
             for j, v in enumerate(self.exprs):

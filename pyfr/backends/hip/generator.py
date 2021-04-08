@@ -21,12 +21,16 @@ class HIPKernelGenerator(BaseKernelGenerator):
                    int _x = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
                    #define X_IDX (_x)
                    #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
+                   #define BLK_IDX 0
+                   #define BCAST_BLK(i, ld) i
                    {self._limits}
                    {{
                        {self.body}
                    }}
                    #undef X_IDX
                    #undef X_IDX_AOSOA
+                   #undef BLK_IDX
+                   #undef BCAST_BLK
                }}'''
 
     def _render_spec(self):

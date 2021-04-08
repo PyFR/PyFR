@@ -3,6 +3,7 @@
 from collections import deque
 import itertools as it
 import re
+import sys
 import time
 
 import numpy as np
@@ -54,8 +55,14 @@ class BaseIntegrator(object):
         # Solution cache
         self._curr_soln = None
 
+        # Solution gradients cache
+        self._curr_grad_soln = None
+
         # Record the starting wall clock time
         self._wstart = time.time()
+
+        # Abort computation
+        self.abort = False
 
     def _get_plugins(self):
         plugins = []
@@ -130,6 +137,13 @@ class BaseIntegrator(object):
         else:
             return {'config': cfg, 'config-0': cfg}
 
+    def _check_abort(self):
+        comm, rank, root = get_comm_rank_root()
+        if comm.allreduce(self.abort, op=get_mpi('lor')):
+            # Ensure that the callbacks registered in atexit
+            # are called only once if stopping the computation
+            sys.exit(1)
+
 
 class BaseCommon(object):
     def _init_reg_banks(self):
@@ -169,15 +183,19 @@ class BaseCommon(object):
         return comm.allreduce(ndofs, op=get_mpi('sum'))
 
     @memoize
-    def _get_axnpby_kerns(self, n, subdims=None):
-        return self._get_kernels('axnpby', nargs=n, subdims=subdims)
+    def _get_axnpby_kerns(self, *rs, subdims=None):
+        kerns = []
+        for em in self.system.ele_banks:
+            regs = [em[r] for r in rs]
+            kerns.append(self.backend.kernel(
+                'axnpby', *regs, subdims=subdims
+            ))
+
+        return kerns
 
     def _add(self, *args):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(len(args) // 2)
-
-        # Bank indices are in odd-numbered arguments
-        self._prepare_reg_banks(*args[1::2])
+        axnpby = self._get_axnpby_kerns(*args[1::2])
 
         # Bind and run the axnpby kernels
         self._queue.enqueue_and_run(axnpby, *args[::2])

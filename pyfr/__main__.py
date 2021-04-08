@@ -38,6 +38,8 @@ def main():
     ap_import.add_argument('-t', dest='type', choices=types,
                            help='input file type; this is usually inferred '
                            'from the extension of inmesh')
+    ap_import.add_argument('-l', dest='lintol', type=float, default=1e-5,
+                           help='linearisation tolerance')
     ap_import.set_defaults(process=process_import)
 
     # Partition command
@@ -70,10 +72,14 @@ def main():
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
                            help='output file type; this is usually inferred '
                            'from the extension of outf')
-    ap_export.add_argument('-d', '--divisor', type=int, default=0,
-                           help='sets the level to which high order elements '
-                           'are divided; output is linear between nodes, so '
-                           'increased resolution may be required')
+    output_options = ap_export.add_mutually_exclusive_group(required=False)
+    output_options.add_argument('-d', '--divisor', type=int,
+                                help='sets the level to which high order '
+                                'elements are divided; output is linear '
+                                'between nodes, so increased resolution '
+                                'may be required')
+    output_options.add_argument('-k', '--order', type=int, dest="order",
+                                help='sets the order of high order elements')
     ap_export.add_argument('-g', '--gradients', action='store_true',
                            help='compute gradients')
     ap_export.add_argument('-p', '--precision', choices=['single', 'double'],
@@ -122,7 +128,7 @@ def process_import(args):
         reader = get_reader_by_extn(extn, args.inmesh)
 
     # Get the mesh in the PyFR format
-    mesh = reader.to_pyfrm()
+    mesh = reader.to_pyfrm(args.lintol)
 
     # Save to disk
     write_pyfrms(args.outmesh, mesh)

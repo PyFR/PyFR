@@ -8,6 +8,7 @@ from pyfr.mpiutil import get_local_rank
 
 class HIPBackend(BaseBackend):
     name = 'hip'
+    blocks = False
 
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -39,6 +40,7 @@ class HIPBackend(BaseBackend):
 
         # Take the SoA size to be 32 elements
         self.soasz = 32
+        self.csubsz = self.soasz
 
         # Get the MPI runtime type
         self.mpitype = cfg.get('backend-hip', 'mpi-type', 'standard')

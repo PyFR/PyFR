@@ -64,7 +64,7 @@ class BaseShape(object):
 
     @classmethod
     def nspts_from_order(cls, sptord):
-        return np.polyval(cls.npts_coeffs, sptord) // cls.npts_cdenom
+        return int(np.polyval(cls.npts_coeffs, sptord)) // cls.npts_cdenom
 
     @classmethod
     def order_from_nspts(cls, nspts):
@@ -122,7 +122,7 @@ class BaseShape(object):
 
     @lazyprop
     def m6(self):
-        m = self.norm_fpts.T[:,None,:]*self.m3
+        m = self.norm_fpts.T[:, None, :]*self.m3
         return m.reshape(-1, self.nfpts)
 
     @lazyprop
@@ -161,7 +161,7 @@ class BaseShape(object):
     @lazyprop
     def nupts(self):
         n = self.order + 1
-        return np.polyval(self.npts_coeffs, n) // self.npts_cdenom
+        return int(np.polyval(self.npts_coeffs, n)) // self.npts_cdenom
 
     @lazyprop
     def upts(self):
@@ -302,9 +302,9 @@ class BaseShape(object):
     @lazyprop
     def nfacefpts(self):
         if 'surf-flux' in self.antialias:
-            cnt = lambda k: len(self._iqrules[k].pts)
+            def cnt(k): return len(self._iqrules[k].pts)
         else:
-            cnt = lambda k: self.npts_for_face[k](self.order)
+            def cnt(k): return self.npts_for_face[k](self.order)
 
         return [cnt(kind) for kind, proj, norm in self.faces]
 

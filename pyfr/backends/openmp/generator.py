@@ -6,84 +6,113 @@ from pyfr.backends.base.generator import BaseKernelGenerator
 class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
         if self.ndim == 1:
-            inner = '''
-                    for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
+            core = f'''
+                   for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+                   {{
+                       #pragma omp simd
+                       for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                       {{
+                           {self.body}
+                       }}
+                   }}'''
+            clean = f'''
+                    for (int _xi = 0; _xi < _remi; _xi += SOA_SZ)
                     {{
                         #pragma omp simd
                         for (int _xj = 0; _xj < SOA_SZ; _xj++)
                         {{
-                            {body}
+                            {self.body}
                         }}
                     }}
-                    for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi; _xj++)
+                    for (int _xi = _remi, _xj = 0; _xj < _remj; _xj++)
                     {{
-                        {body}
-                    }}'''.format(body=self.body)
+                        {self.body}
+                    }}'''
         else:
-            inner = '''
-                    for (int _xi = cb; _xi < cb + nci; _xi += SOA_SZ)
+            core = f'''
+                   for (int _y = 0; _y < _ny; _y++)
+                   {{
+                       for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+                       {{
+                           #pragma omp simd
+                           for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                           {{
+                               {self.body}
+                           }}
+                       }}
+                   }}'''
+            clean = f'''
+                    for (int _y = 0; _y < _ny; _y++)
                     {{
-                        for (int _y = 0; _y < _ny; _y++)
+                        for (int _xi = 0; _xi < _remi; _xi += SOA_SZ)
                         {{
                             #pragma omp simd
                             for (int _xj = 0; _xj < SOA_SZ; _xj++)
                             {{
-                                {body}
+                                {self.body}
                             }}
                         }}
                     }}
-                    for (int _xi = cb + nci, _xj = 0; _xj < ce - _xi; _xj++)
+                    for (int _y = 0; _y < _ny; _y++)
                     {{
-                        for (int _y = 0; _y < _ny; _y++)
+                        for (int _xi = _remi, _xj = 0; _xj < _remj; _xj++)
                         {{
-                            {body}
+                            {self.body}
                         }}
-                    }}'''.format(body=self.body)
+                    }}'''
 
-        return '''{spec}
+        return f'''{self._render_spec()}
                {{
+                   int nci = _nx / BLK_SZ;
+                   int _remi = ((_nx % BLK_SZ) / SOA_SZ)*SOA_SZ;
+                   int _remj = (_nx % BLK_SZ) % SOA_SZ;
                    #define X_IDX (_xi + _xj)
                    #define X_IDX_AOSOA(v, nv)\
                        ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-                   int align = PYFR_ALIGN_BYTES / sizeof(fpdtype_t);
-                   #pragma omp parallel
+                   #define BLK_IDX ib*BLK_SZ
+                   #define BCAST_BLK(i, ld)\
+                       ((i) % (ld) + ((i) / (ld))*(ld)*_ny)
+                   #pragma omp parallel for
+                   for (int ib = 0; ib < nci; ib++)
                    {{
-                       int cb, ce;
-                       loop_sched_1d(_nx, align, &cb, &ce);
-                       int nci = ((ce - cb) / SOA_SZ)*SOA_SZ;
-                       {inner}
+                       {core}
                    }}
+                   int ib = nci;
+                   {clean}
                    #undef X_IDX
                    #undef X_IDX_AOSOA
-               }}'''.format(spec=self._render_spec(), inner=inner)
+                   #undef BLK_IDX
+                   #undef BCAST_BLK
+               }}'''
+
+    def ldim_size(self, name, *factor):
+        return '*'.join(['BLK_SZ'] + [str(f) for f in factor])
+
+    def needs_ldim(self, arg):
+        return False
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions
         kargs = ['int ' + d for d in self._dims]
 
         # Now add any scalar arguments
-        kargs.extend('{0.dtype} {0.name}'.format(sa) for sa in self.scalargs)
+        kargs.extend(f'{sa.dtype} {sa.name}' for sa in self.scalargs)
 
         # Finally, add the vector arguments
         for va in self.vectargs:
             # Views
             if va.isview:
-                kargs.append('{0.dtype}* __restrict__ {0.name}_v'.format(va))
-                kargs.append('const int* __restrict__ {0.name}_vix'
-                             .format(va))
+                kargs.append(f'{va.dtype}* __restrict__ {va.name}_v')
+                kargs.append(f'const int* __restrict__ {va.name}_vix')
 
                 if va.ncdim == 2:
-                    kargs.append('const int* __restrict__ {0.name}_vrstri'
-                                 .format(va))
+                    kargs.append(f'const int* __restrict__ {va.name}_vrstri')
             # Arrays
             else:
                 # Intent in arguments should be marked constant
                 const = 'const' if va.intent == 'in' else ''
 
-                kargs.append('{0} {1.dtype}* __restrict__ {1.name}_v'
-                             .format(const, va).strip())
-
-                if self.needs_ldim(va):
-                    kargs.append('int ld{0.name}'.format(va))
+                kargs.append(f'{const} {va.dtype}* __restrict__ {va.name}_v'
+                             .strip())
 
         return 'void {0}({1})'.format(self.name, ', '.join(kargs))

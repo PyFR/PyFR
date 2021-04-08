@@ -11,7 +11,7 @@ from pyfr.mpiutil import get_comm_rank_root
 
 def write_pyfrms(path, data):
     # Save to disk
-    with h5py.File(path, 'w') as f:
+    with h5py.File(path, 'w', libver='latest') as f:
         for k in filter(lambda k: isinstance(k, str), data):
             f[k] = data[k]
 

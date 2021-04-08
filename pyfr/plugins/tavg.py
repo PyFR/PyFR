@@ -5,8 +5,8 @@ import re
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.nputil import npeval
+from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 
 
 class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
@@ -69,27 +69,13 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
     def _init_gradients(self, intg):
         # Determine what gradients, if any, are required
-        self._gradpnames = gradpnames = set()
+        gradpnames = set()
         for ex in self.aexprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
-        # If gradients are required then form the relevant operators
-        if gradpnames:
-            self._gradop, self._rcpjact = [], []
-
-            for i, rgn in self._ele_regions:
-                eles = intg.system.ele_map[intg.system.ele_types[i]]
-
-                self._gradop.append(eles.basis.m4)
-
-                # Get the smats at the solution points
-                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                # Get |J|^-1 at the solution points
-                rcpdjac = eles.rcpdjac_at_np('upts')
-
-                # Product to give J^-T at the solution points
-                self._rcpjact.append(smat[..., rgn]*rcpdjac[..., rgn])
+        privarmap = self.elementscls.privarmap[self.ndims]
+        self._gradpinfo = [(pname, privarmap.index(pname))
+                           for pname in gradpnames]
 
     def _init_accumex(self, intg):
         self.prevt = self.tout_last = intg.tcurr
@@ -108,34 +94,27 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         pnames = self.elementscls.privarmap[self.ndims]
 
         # Iterate over each element type in the simulation
-        for i, (j, rgn) in enumerate(self._ele_regions):
-            soln = intg.soln[j][..., rgn]
+        for i, rgn in self._ele_regions:
+            soln = intg.soln[i][..., rgn].swapaxes(0, 1)
 
             # Convert from conservative to primitive variables
-            psolns = self.elementscls.con_to_pri(soln.swapaxes(0, 1),
-                                                 self.cfg)
+            psolns = self.elementscls.con_to_pri(soln, self.cfg)
 
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
 
-            # Compute any required gradients
-            if self._gradpnames:
-                # Gradient operator and J^-T matrix
-                gradop, rcpjact = self._gradop[i], self._rcpjact[i]
-                nupts = gradop.shape[1]
+            # Prepare any required gradients
+            if self._gradpinfo:
+                # Compute the gradients
+                grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., rgn]
 
-                for pname in self._gradpnames:
-                    psoln = subs[pname]
+                # Transform from conservative to primitive gradients
+                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
+                                                          self.cfg)
 
-                    # Compute the transformed gradient
-                    tgradpn = gradop @ psoln
-                    tgradpn = tgradpn.reshape(self.ndims, nupts, -1)
-
-                    # Untransform this to get the physical gradient
-                    gradpn = np.einsum('ijkl,jkl->ikl', rcpjact, tgradpn)
-                    gradpn = gradpn.reshape(self.ndims, nupts, -1)
-
-                    for dim, grad in zip('xyz', gradpn):
+                # Add them to the substitutions dictionary
+                for pname, idx in self._gradpinfo:
+                    for dim, grad in zip('xyz', pgrads[idx]):
                         subs[f'grad_{pname}_{dim}'] = grad
 
             # Evaluate the expressions
@@ -220,7 +199,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 solnfname = self._writer.write(data, metadata, intg.tcurr)
 
                 # If a post-action has been registered then invoke it
-                self._invoke_postaction(mesh=intg.system.mesh.fname,
+                self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
                                         soln=solnfname, t=intg.tcurr)
 
                 # Reset the accumulators

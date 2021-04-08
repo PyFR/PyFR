@@ -4,6 +4,8 @@ from collections import defaultdict
 import itertools as it
 import re
 
+import numpy as np
+
 from pyfr.inifile import Inifile
 from pyfr.shapes import BaseShape
 from pyfr.util import proxylist, subclasses
@@ -48,6 +50,7 @@ class BaseSystem(object):
         # I/O banks for the elements
         self.eles_scal_upts_inb = eles.scal_upts_inb
         self.eles_scal_upts_outb = eles.scal_upts_outb
+        self.eles_vect_upts = eles._vect_upts
 
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
@@ -110,7 +113,8 @@ class BaseSystem(object):
             k = f'spt_{etype}_p{rallocs.prank}'
 
             try:
-                linoff = mesh[k, 'lin_off']
+                curved = ~mesh[k, 'linear']
+                linoff = np.max(*np.nonzero(curved), initial=-1) + 1
             except KeyError:
                 linoff = ele.neles
 
@@ -185,6 +189,10 @@ class BaseSystem(object):
 
     def rhs(self, t, uinbank, foutbank):
         pass
+
+    def compute_grads(self, t, uinbank):
+        raise NotImplementedError(f'Solver "{self.name}" does not compute '
+                                  'corrected gradients of the solution')
 
     def filt(self, uinoutbank):
         self.eles_scal_upts_inb.active = uinoutbank

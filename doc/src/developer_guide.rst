@@ -1,4 +1,5 @@
 .. highlightlang:: python
+.. highlight:: Python
 
 ***************
 Developer Guide
@@ -27,23 +28,34 @@ A `Controller`_ acts to advance the simulation in time. Specifically, a
 `System`_ to a specified time. There are three types of physical-time
 `Controller`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.integrators.std.controllers.StdNoneController
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *StdNoneController* **Click to show**
 
-.. autoclass:: pyfr.integrators.std.controllers.StdPIController
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.integrators.std.controllers.StdNoneController
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.integrators.dual.phys.controllers.DualNoneController
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *StdPIController* **Click to show**
+
+    .. autoclass:: pyfr.integrators.std.controllers.StdPIController
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *DualNoneController* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.phys.controllers.DualNoneController
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of physical-time `Controller`_ are related via the following
 inheritance diagram:
@@ -52,26 +64,37 @@ inheritance diagram:
                          pyfr.integrators.dual.phys.controllers
     :parts: 1
 
+|
+
 There are two types of pseudo-time `Controller`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualNonePseudoController
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *DualNonePseudoController* **Click to show**
 
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualNonePseudoController
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualPIPseudoController
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *DualPIPseudoController* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualPIPseudoController
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of pseudo-time `Controller`_ are related via the following
 inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudocontrollers
     :parts: 1
+
+|
 
 Stepper
 -------
@@ -81,53 +104,80 @@ Specifically, a `Stepper`_ has a method named :code:`step` which
 advances a `System`_ by a single time-step. There are eight types of
 `Stepper`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.integrators.std.steppers.StdEulerStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
 
-.. autoclass:: pyfr.integrators.std.steppers.StdRK4Stepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *StdEulerStepper* **Click to show**
 
-.. autoclass:: pyfr.integrators.std.steppers.StdRK34Stepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.integrators.std.steppers.StdEulerStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.integrators.std.steppers.StdRK45Stepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *StdRK4Stepper* **Click to show**
 
-.. autoclass:: pyfr.integrators.std.steppers.StdTVDRK3Stepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.integrators.std.steppers.StdRK4Stepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF2Stepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *StdRK34Stepper* **Click to show**
 
-.. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF3Stepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.integrators.std.steppers.StdRK34Stepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.integrators.dual.phys.steppers.DualBackwardEulerStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *StdRK45Stepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.std.steppers.StdRK45Stepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *StdTVDRK3Stepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.std.steppers.StdTVDRK3Stepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *DualBDF2Stepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF2Stepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *DualBDF3Stepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF3Stepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *DualBackwardEulerStepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBackwardEulerStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of `Stepper`_ are related via the following inheritance diagram:
 
@@ -135,7 +185,7 @@ Types of `Stepper`_ are related via the following inheritance diagram:
                          pyfr.integrators.dual.phys.steppers
     :parts: 1
 
-
+|
 
 PseudoStepper
 -------------
@@ -145,41 +195,61 @@ They are used to converge implicit `Stepper`_ time-steps via a dual
 time-stepping formulation. There are six types of `PseudoStepper`_ available
 in PyFR |release|:
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualDenseRKPseudoStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *DualDenseRKPseudoStepper* **Click to show**
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualDenseRKPseudoStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualTVDRK3PseudoStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *DualRK4PseudoStepper* **Click to show**
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualEulerPseudoStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK34PseudoStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *DualTVDRK3PseudoStepper* **Click to show**
 
-.. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK45PseudoStepper
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualTVDRK3PseudoStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *DualEulerPseudoStepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualEulerPseudoStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *DualRK34PseudoStepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK34PseudoStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *DualRK45PseudoStepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK45PseudoStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Note that DualDenseRKPseudoStepper includes families of
 `PseudoStepper`_ whose coefficients are read from .txt files named thus:
@@ -190,7 +260,10 @@ Types of `PseudoStepper`_ are related via the following inheritance
 diagram:
 
 .. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers
+    :top-classes: pyfr.integrators.dual.pseudo.base.BaseDualPseudoIntegrator
     :parts: 1
+
+|
 
 System
 ------
@@ -213,29 +286,43 @@ derived from `Mako <http://www.makotemplates.org/>`_, henceforth
 referred to as `PyFR-Mako`_. There are four types of `System`_ available
 in PyFR |release|:
 
-.. autoclass:: pyfr.solvers.aceuler.system.ACEulerSystem
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACEulerSystem* **Click to show**
 
-.. autoclass:: pyfr.solvers.acnavstokes.system.ACNavierStokesSystem
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.aceuler.system.ACEulerSystem
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.solvers.euler.system.EulerSystem
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACNavierStokesSystem* **Click to show**
 
-.. autoclass:: pyfr.solvers.navstokes.system.NavierStokesSystem
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.acnavstokes.system.ACNavierStokesSystem
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *EulerSystem* **Click to show**
+
+    .. autoclass:: pyfr.solvers.euler.system.EulerSystem
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *NavierStokesSystem* **Click to show**
+
+    .. autoclass:: pyfr.solvers.navstokes.system.NavierStokesSystem
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of `System`_ are related via the following inheritance diagram:
 
@@ -243,7 +330,10 @@ Types of `System`_ are related via the following inheritance diagram:
                          pyfr.solvers.euler.system
                          pyfr.solvers.acnavstokes.system
                          pyfr.solvers.aceuler.system
+    :top-classes: pyfr.solvers.base.system.BaseSystem
     :parts: 1
+
+|
 
 Elements
 --------
@@ -251,29 +341,43 @@ Elements
 An `Elements`_ holds information/data for a group of elements. There are
 four types of `Elements`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.solvers.aceuler.elements.ACEulerElements
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACEulerElements* **Click to show**
 
-.. autoclass:: pyfr.solvers.acnavstokes.elements.ACNavierStokesElements
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.aceuler.elements.ACEulerElements
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.solvers.euler.elements.EulerElements
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACNavierStokesElements* **Click to show**
 
-.. autoclass:: pyfr.solvers.navstokes.elements.NavierStokesElements
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.acnavstokes.elements.ACNavierStokesElements
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *EulerElements* **Click to show**
+
+    .. autoclass:: pyfr.solvers.euler.elements.EulerElements
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *NavierStokesElements* **Click to show**
+
+    .. autoclass:: pyfr.solvers.navstokes.elements.NavierStokesElements
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of `Elements`_ are related via the following inheritance diagram:
 
@@ -281,7 +385,10 @@ Types of `Elements`_ are related via the following inheritance diagram:
                          pyfr.solvers.euler.elements
                          pyfr.solvers.acnavstokes.elements
                          pyfr.solvers.aceuler.elements
+    :top-classes: pyfr.solvers.base.elements.BaseElements
     :parts: 1
+
+|
 
 Interfaces
 ----------
@@ -290,53 +397,79 @@ An `Interfaces`_ holds information/data for a group of interfaces. There
 are eight types of (non-boundary) `Interfaces`_ available in PyFR
 |release|:
 
-.. autoclass:: pyfr.solvers.aceuler.inters.ACEulerIntInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACEulerIntInters* **Click to show**
 
-.. autoclass:: pyfr.solvers.aceuler.inters.ACEulerMPIInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.aceuler.inters.ACEulerIntInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACEulerMPIInters* **Click to show**
 
-.. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesMPIInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.aceuler.inters.ACEulerMPIInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.solvers.euler.inters.EulerIntInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACNavierStokesIntInters* **Click to show**
 
-.. autoclass:: pyfr.solvers.euler.inters.EulerMPIInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesIntInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *ACNavierStokesMPIInters* **Click to show**
 
-.. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesMPIInters
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesMPIInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *EulerIntInters* **Click to show**
+
+    .. autoclass:: pyfr.solvers.euler.inters.EulerIntInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *EulerMPIInters* **Click to show**
+
+    .. autoclass:: pyfr.solvers.euler.inters.EulerMPIInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *NavierStokesIntInters* **Click to show**
+
+    .. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesIntInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *NavierStokesMPIInters* **Click to show**
+
+    .. autoclass:: pyfr.solvers.navstokes.inters.NavierStokesMPIInters
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of (non-boundary) `Interfaces`_ are related via the following
 inheritance diagram:
@@ -349,7 +482,10 @@ inheritance diagram:
                          pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
                          pyfr.solvers.aceuler.inters.ACEulerMPIInters
                          pyfr.solvers.aceuler.inters.ACEulerIntInters
+    :top-classes: pyfr.solvers.base.inters.BaseInters
     :parts: 1
+
+|
 
 Backend
 -------
@@ -357,37 +493,55 @@ Backend
 A `Backend`_ holds information/data for a backend. There are four types
 of `Backend`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.backends.cuda.base.CUDABackend
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *CUDABackend* **Click to show**
 
-.. autoclass:: pyfr.backends.hip.base.HIPBackend
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.backends.cuda.base.CUDABackend
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.backends.opencl.base.OpenCLBackend
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *HIPBackend* **Click to show**
 
-.. autoclass:: pyfr.backends.openmp.base.OpenMPBackend
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.backends.hip.base.HIPBackend
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *OpenCLBackend* **Click to show**
+
+    .. autoclass:: pyfr.backends.opencl.base.OpenCLBackend
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *OpenMPBackend* **Click to show**
+
+    .. autoclass:: pyfr.backends.openmp.base.OpenMPBackend
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of `Backend`_ are related via the following inheritance diagram:
+
 
 .. inheritance-diagram:: pyfr.backends.cuda.base
                          pyfr.backends.hip.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
+    :top-classes: pyfr.backends.base.base.BaseBackend
     :parts: 1
+
+|
 
 Pointwise Kernel Provider
 -------------------------
@@ -409,29 +563,43 @@ is created, which is used to render the body of the
 :code:`pyfr:kernel`. There are four types of `Pointwise Kernel
 Provider`_ available in PyFR |release|:
 
-.. autoclass:: pyfr.backends.cuda.provider.CUDAPointwiseKernelProvider
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *CUDAPointwiseKernelProvider* **Click to show**
 
-.. autoclass:: pyfr.backends.hip.provider.HIPPointwiseKernelProvider
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.backends.cuda.provider.CUDAPointwiseKernelProvider
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.backends.opencl.provider.OpenCLPointwiseKernelProvider
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *HIPPointwiseKernelProvider* **Click to show**
 
-.. autoclass:: pyfr.backends.openmp.provider.OpenMPPointwiseKernelProvider
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.backends.hip.provider.HIPPointwiseKernelProvider
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *OpenCLPointwiseKernelProvider* **Click to show**
+
+    .. autoclass:: pyfr.backends.opencl.provider.OpenCLPointwiseKernelProvider
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *OpenMPPointwiseKernelProvider* **Click to show**
+
+    .. autoclass:: pyfr.backends.openmp.provider.OpenMPPointwiseKernelProvider
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of `Pointwise Kernel Provider`_ are related via the following
 inheritance diagram:
@@ -441,7 +609,10 @@ inheritance diagram:
                          pyfr.backends.hip.provider
                          pyfr.backends.opencl.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
+    :top-classes: pyfr.backends.base.kernels.BaseKernelProvider
     :parts: 1
+
+|
 
 Kernel Generator
 ----------------
@@ -454,40 +625,60 @@ produce the low-level platform-specific source -- which is compiled,
 linked, and loaded. There are four types of `Kernel Generator`_
 available in PyFR |release|:
 
-.. autoclass:: pyfr.backends.cuda.generator.CUDAKernelGenerator
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *CUDAKernelGenerator* **Click to show**
 
-.. autoclass:: pyfr.backends.hip.generator.HIPKernelGenerator
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.backends.cuda.generator.CUDAKernelGenerator
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
 
-.. autoclass:: pyfr.backends.opencl.generator.OpenCLKernelGenerator
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+.. toggle-header::
+    :header: *HIPKernelGenerator* **Click to show**
 
-.. autoclass:: pyfr.backends.openmp.generator.OpenMPKernelGenerator
-    :members:
-    :undoc-members:
-    :inherited-members:
-    :private-members:
+    .. autoclass:: pyfr.backends.hip.generator.HIPKernelGenerator
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *OpenCLKernelGenerator* **Click to show**
+
+    .. autoclass:: pyfr.backends.opencl.generator.OpenCLKernelGenerator
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *OpenMPKernelGenerator* **Click to show**
+
+    .. autoclass:: pyfr.backends.openmp.generator.OpenMPKernelGenerator
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+|
 
 Types of `Kernel Generator`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
                          pyfr.backends.opencl.generator.OpenCLKernelGenerator
                          pyfr.backends.openmp.generator.OpenMPKernelGenerator
+    :top-classes: pyfr.backends.base.generator.BaseKernelGenerator
     :parts: 1
+
+|
 
 =========
 PyFR-Mako
 =========
+
+.. highlightlang:: none
+.. highlight:: none
 
 PyFR-Mako Kernels
 -----------------
@@ -555,7 +746,7 @@ and are closed with a footer of the form::
 PyFR-Mako macros are embedded within a kernel using an expression of
 the following form::
 
-    ${pyfr.expand('macro-name', ['parameter-name', ...])};
+        ${pyfr.expand('macro-name', ['parameter-name', ...])};
 
 where
 

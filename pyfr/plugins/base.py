@@ -81,7 +81,7 @@ class PostactionMixin(object):
         if getattr(self, 'postactaid', None) is not None:
             prefork.wait(self.postactaid)
 
-    def _invoke_postaction(self, **kwargs):
+    def _invoke_postaction(self, intg, **kwargs):
         comm, rank, root = get_comm_rank_root()
 
         # If we have a post-action and are the root rank then fire it
@@ -95,7 +95,10 @@ class PostactionMixin(object):
 
             # Invoke
             if self.postactmode == 'blocking':
-                prefork.call(cmdline)
+                # Store returning code of the post-action
+                # If it is different from zero
+                # request intg to abort the computation
+                intg.abort |= bool(prefork.call(cmdline))
             else:
                 self.postactaid = prefork.call_async(cmdline)
 

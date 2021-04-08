@@ -33,12 +33,10 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         cl.enqueue_copy(self.backend.qdflt, buf, self.data)
 
         # Unpack
-        return self._unpack(buf[:, :self.ncol])
+        return self._unpack(buf[None, :, :])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
-        buf[:, :self.ncol] = self._pack(ary)
+        buf = self._pack(ary)
 
         # Copy
         cl.enqueue_copy(self.backend.qdflt, self.data, buf)
@@ -50,8 +48,8 @@ class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
 
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
-        start = self.ra*self.pitch + self.ca*self.itemsize
-        nbytes = (self.nrow - 1)*self.pitch + self.ncol*self.itemsize
+        start = (self.ra*self.leaddim + self.ca)*self.itemsize
+        nbytes = ((self.nrow - 1)*self.leaddim + self.ncol)*self.itemsize
 
         return mat.basedata.get_sub_region(mat.offset + start, nbytes)
 

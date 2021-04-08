@@ -30,6 +30,14 @@ To contribute to PyFR please follow the steps listed below:
 Modifications to the `develop` branch are eventually merged into the master
 branch for a new release.
 
+## Help and Community
+
+Information on the usage and structure of PyFR can be found in the 
+[documentation](http://pyfr.readthedocs.io/en/latest/).
+
+For further help in developing and using PyFR, or to connect with the wider
+community of users, please go to the [PyFR Discourse](https://pyfr.discourse.group). 
+
 ## Authors
 
 See the AUTHORS file.

@@ -2,7 +2,7 @@
 
 import math
 
-from pyfr.solvers.base import BaseInters, get_opt_view_perm
+from pyfr.solvers.base import BaseInters
 from pyfr.nputil import npeval
 
 
@@ -26,8 +26,7 @@ class BaseAdvectionIntInters(BaseInters):
     def _gen_perm(self, lhs, rhs):
         # Arbitrarily, take the permutation which results in an optimal
         # memory access pattern for the LHS of the interface
-        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter',
-                                       self.elemap)
+        self._perm = self._get_perm_for_view(lhs, 'get_scal_fpts_for_inter')
 
 
 class BaseAdvectionMPIInters(BaseInters):
@@ -75,7 +74,7 @@ class BaseAdvectionBCInters(BaseInters):
         # For BC interfaces, which only have an LHS state, we take the
         # permutation which results in an optimal memory access pattern
         # iterating over this state.
-        self._perm = get_opt_view_perm(lhs, 'get_scal_fpts_for_inter', elemap)
+        self._perm = self._get_perm_for_view(lhs, 'get_scal_fpts_for_inter')
 
         # LHS view and constant matrices
         self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')

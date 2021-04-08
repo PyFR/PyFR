@@ -33,12 +33,10 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf[:, :self.ncol])
+        return self._unpack(buf[None, :, :])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
-        buf[:, :self.ncol] = self._pack(ary)
+        buf = self._pack(ary)
 
         # Copy
         self.backend.cuda.memcpy(self.data, buf, self.nbytes)
@@ -51,7 +49,7 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
         return (int(mat.basedata) + mat.offset +
-                self.ra*self.pitch + self.ca*self.itemsize)
+                (self.ra*self.leaddim + self.ca)*self.itemsize)
 
 
 class CUDAMatrixBank(base.MatrixBank):

@@ -31,7 +31,8 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
 
     def collect_stats(self, stats):
         # Total number of RHS evaluations
-        stats.set('solver-time-integrator', 'nfevals', self._pseudo_stepper_nfevals)
+        stats.set('solver-time-integrator', 'nfevals',
+                  self.pseudo_stepper_nfevals)
 
         # Total number of pseudo-steps
         stats.set('solver-time-integrator', 'npseudosteps', self.npseudosteps)
@@ -41,32 +42,24 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         self.system.rhs(t, uin, fout)
 
         # Coefficients for the physical stepper
-        svals = [sc/self._dt for sc in self._stepper_coeffs]
+        svals = [sc/self._dt for sc in self.stepper_coeffs]
 
         # Physical stepper source addition -∇·f - dQ/dt
-        axnpby = self._get_axnpby_kerns(len(svals) + 1, subdims=self._subdims)
-        self._prepare_reg_banks(fout, self._idxcurr, *self._stepper_regidx)
+        axnpby = self._get_axnpby_kerns(
+            fout, self._idxcurr, *self._stepper_regidx, subdims=self._subdims
+        )
         self._queue.enqueue_and_run(axnpby, 1, *svals)
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):
     pseudo_stepper_name = 'euler'
+    pseudo_stepper_order = 1
+    pseudo_stepper_nregs = 2
+    pseudo_stepper_has_lerrest = False
 
     @property
-    def _pseudo_stepper_has_lerrest(self):
-        return False
-
-    @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return self.npseudosteps
-
-    @property
-    def _pseudo_stepper_nregs(self):
-        return 2
-
-    @property
-    def _pseudo_stepper_order(self):
-        return 1
 
     def step(self, t):
         self.npseudosteps += 1
@@ -87,22 +80,13 @@ class DualEulerPseudoStepper(BaseDualPseudoStepper):
 
 class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
     pseudo_stepper_name = 'tvd-rk3'
+    pseudo_stepper_order = 3
+    pseudo_stepper_nregs = 3
+    pseudo_stepper_has_lerrest = False
 
     @property
-    def _pseudo_stepper_has_lerrest(self):
-        return False
-
-    @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return 3*self.npseudosteps
-
-    @property
-    def _pseudo_stepper_nregs(self):
-        return 3
-
-    @property
-    def _pseudo_stepper_order(self):
-        return 3
 
     def step(self, t):
         self.npseudosteps += 1
@@ -140,22 +124,13 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
 
 class DualRK4PseudoStepper(BaseDualPseudoStepper):
     pseudo_stepper_name = 'rk4'
+    pseudo_stepper_order = 4
+    pseudo_stepper_nregs = 3
+    pseudo_stepper_has_lerrest = False
 
     @property
-    def _pseudo_stepper_has_lerrest(self):
-        return False
-
-    @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return 4*self.npseudosteps
-
-    @property
-    def _pseudo_stepper_nregs(self):
-        return 3
-
-    @property
-    def _pseudo_stepper_order(self):
-        return 4
 
     def step(self, t):
         self.npseudosteps += 1
@@ -248,30 +223,24 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
         self._queue.enqueue_and_run(self.pintgkernels['localdtau'], inv=inv)
 
     @property
-    def _pseudo_stepper_has_lerrest(self):
-        return self._pseudo_controller_needs_lerrest and self.bhat
+    def pseudo_stepper_has_lerrest(self):
+        return self.pseudo_controller_needs_lerrest and self.bhat
 
 
 class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Compute the c vector
-        self.c = [0.0] + [sum(self.b[:i]) + ai for i, ai in enumerate(self.a)]
-
     @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return len(self.b)*self.npseudosteps
 
     @property
-    def _pseudo_stepper_nregs(self):
-        return 4 if self._pseudo_stepper_has_lerrest else 3
+    def pseudo_stepper_nregs(self):
+        return 4 if self.pseudo_stepper_has_lerrest else 3
 
     def step(self, t):
         self.npseudosteps += 1
 
         add, rhs = self._add, self._rhs_with_dts
-        errest = self._pseudo_stepper_has_lerrest
+        errest = self.pseudo_stepper_has_lerrest
 
         rold = self._idxcurr
 
@@ -310,6 +279,7 @@ class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
 
 class DualRK34PseudoStepper(DualRKVdH2RPseudoStepper):
     pseudo_stepper_name = 'rk34'
+    pseudo_stepper_order = 3
 
     a = [
         11847461282814 / 36547543011857,
@@ -331,13 +301,10 @@ class DualRK34PseudoStepper(DualRKVdH2RPseudoStepper):
         -69544964788955 / 30262026368149
     ]
 
-    @property
-    def _pseudo_stepper_order(self):
-        return 3
-
 
 class DualRK45PseudoStepper(DualRKVdH2RPseudoStepper):
     pseudo_stepper_name = 'rk45'
+    pseudo_stepper_order = 4
 
     a = [
         970286171893 / 4311952581923,
@@ -362,10 +329,6 @@ class DualRK45PseudoStepper(DualRKVdH2RPseudoStepper):
         1097981568119 / 3980877426909
     ]
 
-    @property
-    def _pseudo_stepper_order(self):
-        return 4
-
 
 class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
     def __init__(self, *args, **kwargs):
@@ -376,7 +339,7 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
         self.a, self.b = _get_coefficients_from_txt(scheme.decode())
 
     @property
-    def _pseudo_stepper_nfevals(self):
+    def pseudo_stepper_nfevals(self):
         return len(self.b)*self.npseudosteps
 
     def step(self, t):
@@ -399,7 +362,7 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
         b = [self._dtau*bi for bi in self.b]
 
         # Other stages
-        for i in range(self._pseudo_stepper_nregs - 2):
+        for i in range(self.pseudo_stepper_nregs - 2):
             add(0, r[i + 2], 1, r[0], *chain(*zip(a[i], r[1:])))
             rhs(t, r[i + 2], r[i + 2])
 
