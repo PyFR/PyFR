@@ -84,12 +84,9 @@ their associated parameters are described below. Note that both ``;`` and
 Backends
 --------
 
-The backend components detail how the solver will be configured for specific
-computational resources. The while the section ``[backend]`` is required, the
-other configurations are optional. If a hardware specific backend configuration
-is omitted, then PyFR will fall back to in built default settings; however, for
-best performance it is advisable to configure those backends applicable for
-your target hardware.
+The backend sections detail how the solver will be configured for a range of
+different hardware platforms. If a hardware specific backend section is omitted,
+then PyFR will fall back to built-in default settings.
 
 [backend]
 ^^^^^^^^^
@@ -1442,10 +1439,9 @@ Time average quantities. Parameterised with
 
     ``continuous`` | ``windowed``
 
-    The default is ``windowed``. Continuous uses an accumulation over the entire
-    averaging period, whereas windowed averages only over
-    ``nsteps``. Owing to the associativity and commutativity
-    of average operators it is possible to recover one mode from the other.
+    Windowed outputs averages over each ``dt- out`` period. Whereas, continuous
+    outputs averages over all ``dt-out`` periods thus far completed within a
+    given invocation of PyFR. The default is ``windowed``.
 
 5. ``basedir`` --- relative path to directory where outputs will be
    written:
