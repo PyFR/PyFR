@@ -92,10 +92,11 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         try:
             blkptr = self._kerns[ckey]
         except KeyError:
-            c_is_nt = beta == 0 and self.backend.alignb >= 64
+            c_is_nt = (beta == 0 and
+                       out.nbytes >= 32*1024**2 and
+                       self.backend.alignb >= 64)
 
             a_np = np.ascontiguousarray(a.get())
-
             m, k = a_np.shape
 
             # JIT and register an block leaddim size kernel for this matrix
