@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from collections import Mapping
+from collections.abc import Mapping
 import os
 import re
 
