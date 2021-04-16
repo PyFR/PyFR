@@ -27,7 +27,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # Check that A is suitable
         if nuq > 28 and nnz / arr.size > 0.15:
-            raise NotSuitableError('Matrix inappropriate GiMMiK')
+            raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
         # Generate
         src = generate_mm(arr, dtype=a.dtype, platform='cuda',

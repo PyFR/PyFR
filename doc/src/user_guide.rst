@@ -231,11 +231,6 @@ Parameterises the OpenMP backend with
 
     *int*
 
-5. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
-   entires in a constant matrix:
-
-    *int*
-
 Example::
 
     [backend-openmp]

@@ -31,9 +31,6 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
 
-        self.max_sz = backend.cfg.getint('backend-openmp', 'libxsmm-max-sz',
-                                         125**2)
-
         # Kernel cache
         self._kerns = {}
 
@@ -77,10 +74,6 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Check that beta is zero or one
         if beta != 0.0 and beta != 1.0:
             raise NotSuitableError('libxssm requires β = 0 or β = 1')
-
-        # Check the matrix is of a reasonable size
-        if a.ncol*a.nrow > self.max_sz:
-            raise NotSuitableError('Matrix too large for libxsmm')
 
         # Dimensions
         ldb, ldc = b.leaddim, out.leaddim
