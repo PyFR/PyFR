@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from configparser import NoOptionError
+from itertools import chain
 
 from pyfr.integrators.base import BaseCommon
 from pyfr.util import proxylist
@@ -36,15 +37,13 @@ class BaseDualPseudoIntegrator(BaseCommon):
             raise TypeError('Incompatible pseudo-stepper/pseudo-controller '
                             'combination')
 
-        # Amount of temp storage required by physical stepper
+        # Physical stepper coefficients and amount of temp storage required
+        self.stepper_coeffs = stepper_coeffs
         self.stepper_nregs = len(stepper_coeffs) - 1
 
         # Determine the amount of temp storage required in total
-        self.nregs = (self.pseudo_stepper_nregs + self.stepper_nregs +
+        self.nregs = (self.pseudo_stepper_nregs + self.stepper_nregs + 1 +
                       self.aux_nregs)
-
-        # Physical stepper coefficients
-        self.stepper_coeffs = stepper_coeffs
 
         # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
@@ -62,6 +61,10 @@ class BaseDualPseudoIntegrator(BaseCommon):
         elementscls = self.system.elementscls
         self._subdims = [elementscls.convarmap[self.system.ndims].index(v)
                          for v in elementscls.dualcoeffs[self.system.ndims]]
+
+        # Prepare the physical stepper source for the first iteration
+        if self.stepper_nregs:
+            self._accumulate_source()
 
         # Convergence tolerances
         self._pseudo_residtol = residtol = []
@@ -86,9 +89,21 @@ class BaseDualPseudoIntegrator(BaseCommon):
         return self._regidx[:self.pseudo_stepper_nregs]
 
     @property
+    def _source_regidx(self):
+        return self._regidx[self.pseudo_stepper_nregs + self.stepper_nregs]
+
+    @property
     def _stepper_regidx(self):
         psnregs = self.pseudo_stepper_nregs
         return self._regidx[psnregs:psnregs + self.stepper_nregs]
+
+    def _accumulate_source(self):
+        svals = [sc / self._dt for sc in self.stepper_coeffs[1:]]
+
+        # Accumulate physical stepper sources into a single register
+        self._add(0, self._source_regidx,
+                  *chain(*zip(svals, self._stepper_regidx)),
+                  subdims=self._subdims)
 
     def finalise_pseudo_advance(self, currsoln):
         psnregs = self.pseudo_stepper_nregs
@@ -100,3 +115,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
 
         # Copy the current soln into the first source register
         self._add(0, self._regidx[psnregs], 1, currsoln)
+
+        # Physical stepper source term
+        self._accumulate_source()

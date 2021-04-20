@@ -41,14 +41,12 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
-        # Coefficients for the physical stepper
-        svals = [sc/self._dt for sc in self.stepper_coeffs]
+        # Coefficient for the current solution state
+        scoeff = self.stepper_coeffs[0]/self._dt
 
         # Physical stepper source addition -∇·f - dQ/dt
-        axnpby = self._get_axnpby_kerns(
-            fout, self._idxcurr, *self._stepper_regidx, subdims=self._subdims
-        )
-        self._queue.enqueue_and_run(axnpby, 1, *svals)
+        self._add(1, fout, scoeff, self._idxcurr, 1, self._source_regidx,
+                  subdims=self._subdims)
 
 
 class DualEulerPseudoStepper(BaseDualPseudoStepper):
