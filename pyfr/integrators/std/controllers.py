@@ -6,7 +6,6 @@ import numpy as np
 
 from pyfr.integrators.std.base import BaseStdIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.util import memoize
 
 
 class BaseStdController(BaseStdIntegrator):
@@ -115,23 +114,19 @@ class StdPIController(BaseStdController):
     def controller_needs_errest(self):
         return True
 
-    @memoize
-    def _get_errest_kerns(self):
-        return self._get_kernels('errest', nargs=3, norm=self._norm)
-
-    def _errest(self, x, y, z):
+    def _errest(self, rcurr, rprev, rerr):
         comm, rank, root = get_comm_rank_root()
 
-        errest = self._get_errest_kerns()
+        errest = self._get_reduction_kerns(rcurr, rprev, rerr, method='errest',
+                                           norm=self._norm)
 
         # Obtain an estimate for the squared error
-        self._prepare_reg_banks(x, y, z)
         self._queue.enqueue_and_run(errest, self._atol, self._rtol)
 
         # L2 norm
         if self._norm == 'l2':
             # Reduce locally (element types + field variables)
-            err = np.array([sum(v for e in errest.retval for v in e)])
+            err = np.array([sum(v for e in errest for v in e.retval)])
 
             # Reduce globally (MPI ranks)
             comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('sum'))
@@ -141,7 +136,7 @@ class StdPIController(BaseStdController):
         # L^∞ norm
         else:
             # Reduce locally (element types + field variables)
-            err = np.array([max(v for e in errest.retval for v in e)])
+            err = np.array([max(v for e in errest for v in e.retval)])
 
             # Reduce globally (MPI ranks)
             comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('max'))
@@ -172,7 +167,7 @@ class StdPIController(BaseStdController):
             idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
 
             # Estimate the error
-            err = self._errest(idxerr, idxcurr, idxprev)
+            err = self._errest(idxcurr, idxprev, idxerr)
 
             # Determine time step adjustment factor
             fac = err**-expa * self._errprev**expb

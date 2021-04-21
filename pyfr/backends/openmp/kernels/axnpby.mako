@@ -4,7 +4,7 @@
 
 void
 axnpby(int nrow, int nblocks,
-       ${', '.join(f'fpdtype_t *__restrict__ x{i}' for i in range(nv))},
+       ${', '.join(f'fpdtype_t *restrict x{i}' for i in range(nv))},
        ${', '.join(f'fpdtype_t a{i}' for i in range(nv))})
 {
 % if sorted(subdims) == list(range(ncola)):
