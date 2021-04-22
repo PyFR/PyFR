@@ -11,7 +11,7 @@ import numpy as np
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins import get_plugin
-from pyfr.util import memoize, proxylist
+from pyfr.util import memoize
 
 
 class BaseIntegrator(object):
@@ -145,33 +145,6 @@ class BaseIntegrator(object):
 
 
 class BaseCommon(object):
-    def _init_reg_banks(self):
-        self._regs, self._regidx = [], list(range(self.nregs))
-        self._idxcurr = 0
-
-        # Create a proxylist of matrix-banks for each storage register
-        for i in self._regidx:
-            self._regs.append(
-                proxylist([self.backend.matrix_bank(em, i)
-                           for em in self.system.ele_banks])
-            )
-
-    def _get_kernels(self, name, nargs, **kwargs):
-        # Transpose from [nregs][neletypes] to [neletypes][nregs]
-        transregs = zip(*self._regs)
-
-        # Generate an kernel for each element type
-        kerns = proxylist([])
-        for tr in transregs:
-            kerns.append(self.backend.kernel(name, *tr[:nargs], **kwargs))
-
-        return kerns
-
-    def _prepare_reg_banks(self, *bidxes):
-        for reg, ix in zip(self._regs, bidxes):
-            for r in reg:
-                r.active = ix
-
     def _get_gndofs(self):
         comm, rank, root = get_comm_rank_root()
 
@@ -183,18 +156,26 @@ class BaseCommon(object):
 
     @memoize
     def _get_axnpby_kerns(self, *rs, subdims=None):
-        kerns = []
-        for em in self.system.ele_banks:
-            regs = [em[r] for r in rs]
-            kerns.append(self.backend.kernel(
-                'axnpby', *regs, subdims=subdims
-            ))
+        kerns = [self.backend.kernel('axnpby', *[em[r] for r in rs],
+                                     subdims=subdims)
+                 for em in self.system.ele_banks]
 
         return kerns
 
-    def _add(self, *args):
+    @memoize
+    def _get_reduction_kerns(self, *rs, **kwargs):
+        dtau_mats = getattr(self, 'dtau_upts', [])
+
+        kerns = []
+        for em, dtaum in it.zip_longest(self.system.ele_banks, dtau_mats):
+            kerns.append(self.backend.kernel('reduction', *[em[r] for r in rs],
+                                             dt_mat=dtaum, **kwargs))
+
+        return kerns
+
+    def _add(self, *args, subdims=None):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(*args[1::2])
+        axnpby = self._get_axnpby_kerns(*args[1::2], subdims=subdims)
 
         # Bind and run the axnpby kernels
         self._queue.enqueue_and_run(axnpby, *args[::2])

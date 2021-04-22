@@ -27,8 +27,9 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
 
-        # Storage for register banks and current index
-        self._init_reg_banks()
+        # Register index list and current index
+        self._regidx = list(range(self.nregs))
+        self._idxcurr = 0
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
