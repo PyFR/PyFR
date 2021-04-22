@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from ctypes import cast, c_void_p
+
 from gimmik import generate_mm
 import numpy as np
 
@@ -28,13 +30,26 @@ class OpenMPGiMMiKKernels(OpenMPKernelProvider):
             raise NotSuitableError('Matrix too dense for GiMMiK')
 
         # Generate the GiMMiK kernel
-        src = generate_mm(a.get(), dtype=a.dtype, platform='c-omp',
+        src = generate_mm(a.get(), dtype=a.dtype, platform='c',
                           alpha=alpha, beta=beta)
         gimmik_mm = self._build_kernel('gimmik_mm', src,
                                        [np.int32] + [np.intp, np.int32]*2)
+        gimmik_ptr = cast(gimmik_mm, c_void_p).value
+
+        # Render our parallel wrapper kernel
+        src = self.backend.lookup.get_template('batch-gemm').render(
+            lib='gimmik'
+        )
+
+        # Argument types for batch_gemm
+        argt = [np.intp] + [np.int32]*2 + [np.intp, np.int32]*2
+
+        # Build
+        batch_gemm = self._build_kernel('batch_gemm', src, argt)
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                gimmik_mm(b.ncol, b, b.leaddim, out, out.leaddim)
+                batch_gemm(gimmik_ptr, b.leaddim, b.nblocks, b, b.blocksz, out,
+                           out.blocksz)
 
         return MulKernel()

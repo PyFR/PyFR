@@ -27,10 +27,10 @@ class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
                 args = [getattr(arg, 'data', arg) for arg in args]
 
                 # Pack
-                pevent = kern(queue.cl_queue_comp, (v.n,), None, *args)
+                pevent = kern(queue.cmd_q_comp, (v.n,), None, *args)
 
                 # Copy the packed buffer to the host
-                cevent = cl.enqueue_copy(queue.cl_queue_copy, m.hdata, m.data,
+                cevent = cl.enqueue_copy(queue.cmd_q_copy, m.hdata, m.data,
                                          is_blocking=False, wait_for=[pevent])
                 queue.copy_events.append(cevent)
 
@@ -39,8 +39,8 @@ class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
     def unpack(self, mv):
         class UnpackXchgMatrixKernel(ComputeKernel):
             def run(self, queue):
-                cevent = cl.enqueue_copy(queue.cl_queue_comp, mv.data,
-                                         mv.hdata, is_blocking=False)
+                cevent = cl.enqueue_copy(queue.cmd_q_comp, mv.data, mv.hdata,
+                                         is_blocking=False)
                 queue.copy_events.append(cevent)
 
         return UnpackXchgMatrixKernel()

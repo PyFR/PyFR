@@ -126,12 +126,12 @@ class BaseAdvectionElements(BaseElements):
         self.srctplargs['lturbex'] = lturbexprkernel
 
         # Allocate the memory for the eddies location and strength.
-        self.eddies_loc = self._be.matrix((ndims, N))
+        self.eddies_loc = self._be.matrix((ndims, N), tags={'align'})
         self._set_external('eddies_loc',
                            'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_loc)
 
-        self.eddies_strength = self._be.matrix((ndims, N))
+        self.eddies_strength = self._be.matrix((ndims, N), tags={'align'})
         self._set_external('eddies_strength',
                            'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
                             value=self.eddies_strength)

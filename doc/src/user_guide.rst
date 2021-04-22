@@ -4,180 +4,12 @@
 User Guide
 **********
 
-Getting Started
-===============
+For information on how to install PyFR see :ref:`installation`.
 
-Downloading the Source
-----------------------
-
-PyFR can be obtained `here <http://www.pyfr.org/download.php>`_.
-
-Dependencies
-------------
-
-Overview
-^^^^^^^^
-
-PyFR |release| has a hard dependency on Python 3.6+ and the following
-Python packages:
-
-1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
-2. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
-3. `h5py <http://www.h5py.org/>`_ >= 2.6
-4. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-5. `mpi4py <http://mpi4py.scipy.org/>`_ >= 2.0
-6. `numpy <http://www.numpy.org/>`_ >= 1.8
-7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
-
-Note that due to a bug in `numpy <http://www.numpy.org/>`_ PyFR is not
-compatible with 32-bit Python distributions.
-
-CUDA Backend
-^^^^^^^^^^^^
-
-The CUDA backend targets NVIDIA GPUs with a compute capability of 3.0
-or greater. The backend requires:
-
-1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 8.0
-
-HIP Backend
-^^^^^^^^^^^
-
-The HIP backend targets AMD GPUs which are supported by the ROCm stack.
-The backend requires:
-
-1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.0
-2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.32.0
-
-OpenCL Backend
-^^^^^^^^^^^^^^
-
-The OpenCL backend targets a range of accelerators including GPUs from
-AMD and NVIDIA. The backend requires:
-
-1. OpenCL
-2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
-   >= 2015.2.4
-3. `CLBlast <https://github.com/CNugteren/CLBlast>`_
-
-OpenMP Backend
-^^^^^^^^^^^^^^
-
-The OpenMP backend targets multi-core CPUs. The backend requires:
-
-1. GCC >= 4.9
-2. A BLAS library compiled as a shared library
-   (e.g. `OpenBLAS <http://www.openblas.net/>`_)
-3. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= 1.15
-   compiled as a shared library (STATIC=0) with BLAS=0
-
-Running in Parallel
-^^^^^^^^^^^^^^^^^^^
-
-To partition meshes for running in parallel it is also necessary to
-have one of the following partitioners installed:
-
-1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
-2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
-
-Installation
-------------
-
-Overview
-^^^^^^^^
-
-PyFR |release| can be installed using `pip <https://pypi.python.org/pypi/pip>`_
-and `virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
-quick-start guides below.
-
-Alternatively, PyFR |release| can be installed from
-`source <http://www.pyfr.org/download.php>`_. To install the software from
-source, use the provided ``setup.py`` installer or add the root PyFR directory
-to ``PYTHONPATH`` using::
-
-    user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
-
-When installing from source, we strongly recommend using
-`pip <https://pypi.python.org/pypi/pip>`_ and
-`virtualenv <https://pypi.python.org/pypi/virtualenv>`_ to manage the Python
-dependencies.
-
-Quick-start macOS
-^^^^^^^^^^^^^^^^^
-
-We recommend using the package manager `homebrew <https://brew.sh/>`_.
-Open the terminal and install the dependencies with the following commands::
-
-    brew install python3 open-mpi metis
-    pip3 install virtualenv
-
-For visualisation of results, either install Paraview from the command line::
-
-    brew cask install paraview
-
-or dowload the app from the Paraview `website <https://www.paraview.org/>`_.
-Then create a virtual environment and activate it::
-
-    virtualenv --python=python3 ENV3
-    source ENV3/bin/activate
-
-Finally install PyFR with `pip <https://pypi.python.org/pypi/pip>`_ in the
-virtual environment::
-
-    pip install pyfr
-
-This concludes the installation. In order to run PyFR with the OpenMP backend
-(see `Running PyFR`_), use the following settings in the configuration file
-(``.ini``)::
-
-    [backend-openmp]
-    cc = gcc-8
-    cblas = /usr/lib/libblas.dylib
-    cblas-type = parallel
-
-Note the version of the compiler which must support the ``openmp`` flag.
-This has been tested on macOS 10.14.
-
-Quick-start Ubuntu
-^^^^^^^^^^^^^^^^^^
-
-Open the terminal and install the dependencies with the following commands::
-
-    sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
-    sudo apt install metis libmetis-dev libblas3
-    pip3 install virtualenv
-
-For visualisation of results, either install Paraview from the command line::
-
-    sudo apt install paraview
-
-or dowload the app from the Paraview `website <https://www.paraview.org/>`_.
-Then create a virtual environment and activate it::
-
-    python3 -m virtualenv ENV3
-    source ENV3/bin/activate
-
-Finally install PyFR with `pip <https://pypi.python.org/pypi/pip>`_ in the
-virtual environment::
-
-    pip install pyfr
-
-This concludes the installation. In order to run PyFR with the OpenMP backend
-(see `Running PyFR`_), use the following settings in the configuration file
-(``.ini``)::
-
-    [backend-openmp]
-    cc = gcc
-    cblas = /usr/lib/x86_64-linux-gnu/blas/libblas.so.3
-    cblas-type = parallel
-
-This has been tested on Ubuntu 18.04.
+.. _running-pyfr:
 
 Running PyFR
 ============
-
-Overview
---------
 
 PyFR |release| uses three distinct file formats:
 
@@ -210,29 +42,51 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr restart mesh.pyfrm solution.pyfrs
 
-5. ``pyfr export`` --- convert a PyFR .pyfrs file into an
-   unstructured VTK .vtu or .pvtu file. Example::
+5. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an unstructured
+   VTK ``.vtu`` or ``.pvtu`` file. If a ``-k`` flag is provided with an integer
+   argument then ``.pyfrs`` elements are converted to high-order VTK cells
+   which are exported, where the order of the VTK cells is equal to the value
+   of the integer argument.
+   Example::
 
-        pyfr export mesh.pyfrm solution.pyfrs solution.vtu
+        pyfr export -k 4 mesh.pyfrm solution.pyfrs solution.vtu
+
+   If a ``-d`` flag is provided with an integer argument then ``.pyfrs``
+   elements are subdivided into linear VTK cells which are exported, where the
+   number of sub-divisions is equal to the value of the integer argument.
+   Example::
+
+        pyfr export -d 4 mesh.pyfrm solution.pyfrs solution.vtu
+
+   If no flags are provided then ``.pyfrs`` elements are converted to high-order
+   VTK cells which are exported, where the order of the cells is equal to the
+   order of the solution data in the ``.pyfrs`` file.
 
 Running in Parallel
-^^^^^^^^^^^^^^^^^^^
+-------------------
 
-``pyfr`` can be run in parallel. To do so prefix ``pyfr`` with
+PyFR can be run in parallel. To do so prefix ``pyfr`` with
 ``mpiexec -n <cores/devices>``. Note that the mesh must be
 pre-partitioned, and the number of cores or devices must be equal to
 the number of partitions.
 
-Configuration File (.ini)
--------------------------
+.. _configuration-file:
 
-Overview
-^^^^^^^^
+Configuration File (.ini)
+=========================
 
 The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
-their associated parameters are described below.
+their associated parameters are described below. Note that both ``;`` and
+``#`` may be used as comment characters.
+
+Backends
+--------
+
+The backend sections detail how the solver will be configured for a range of
+different hardware platforms. If a hardware specific backend section is omitted,
+then PyFR will fall back to built-in default settings.
 
 [backend]
 ^^^^^^^^^
@@ -262,31 +116,25 @@ Parameterises the CUDA backend with
 
      *int* | ``round-robin`` | ``local-rank``
 
-2. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
-
-     *int*
-
-3. ``mpi-type`` --- type of MPI library that is being used:
+2. ``mpi-type`` --- type of MPI library that is being used:
 
      ``standard`` | ``cuda-aware``
 
-4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+3. ``block-1d`` --- block size for one dimensional pointwise kernels:
 
      *int*
 
-5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+4. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
     [backend-cuda]
     device-id = round-robin
-    gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
-    block-2d = 128, 2
+    block-2d = 128
 
 [backend-hip]
 ^^^^^^^^^^^^^
@@ -297,22 +145,17 @@ Parameterises the HIP backend with
 
      *int* | ``local-rank``
 
-2. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
-
-     *int*
-
-3. ``mpi-type`` --- type of MPI library that is being used:
+2. ``mpi-type`` --- type of MPI library that is being used:
 
      ``standard`` | ``hip-aware``
 
-4. ``block-1d`` --- block size for one dimensional pointwise kernels:
+3. ``block-1d`` --- block size for one dimensional pointwise kernels:
 
      *int*
 
-5. ``block-2d`` --- block size for two dimensional pointwise kernels:
+4. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
@@ -321,7 +164,7 @@ Example::
     gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
-    block-2d = 128, 2
+    block-2d = 128
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -353,7 +196,7 @@ Parameterises the OpenCL backend with
 6. ``local-size-2d`` --- local work size for two dimensional pointwise
    kernels:
 
-    *int*, *int*
+    *int*
 
 Example::
 
@@ -363,7 +206,7 @@ Example::
     device-id = local-rank
     gimmik-max-nnz = 512
     local-size-1d = 16
-    local-size-2d = 128, 1
+    local-size-2d = 128
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
@@ -383,26 +226,8 @@ Parameterises the OpenMP backend with
 
     *int*
 
-4. ``cblas`` --- path to shared C BLAS library:
-
-    *string*
-
-5. ``cblas-type`` --- type of BLAS library:
-
-    ``serial`` | ``parallel``
-
-6. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
+4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
    non-zero entires in a constant matrix:
-
-    *int*
-
-7. ``libxsmm-block-sz`` --- blocking factor to use for libxsmm; must
-   be a multiple of 16:
-
-    *int*
-
-8. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
-   entires in a constant matrix:
 
     *int*
 
@@ -410,8 +235,13 @@ Example::
 
     [backend-openmp]
     cc = gcc
-    cblas= example/path/libBLAS.dylib
-    cblas-type = parallel
+
+Systems
+-------
+
+These sections of the input file setup and control the physical system being
+solved, as well as charateristics of the spatial and temporal schemes to be
+used.
 
 [constants]
 ^^^^^^^^^^^
@@ -450,12 +280,20 @@ Sets constants used in the simulation
 
    *float*
 
+Other constant may be set by the user which can then be used throughout the
+``.ini`` file.
+
 Example::
 
     [constants]
+    ; PyFR Constants
     gamma = 1.4
     mu = 0.001
     Pr = 0.72
+
+    ; User Defined Constants
+    V_in = 1.0
+    P_out = 20.0
 
 [solver]
 ^^^^^^^^
@@ -714,6 +552,391 @@ Example::
     ldg-beta = 0.5
     ldg-tau = 0.1
 
+[solver-source-terms]
+^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises solution, space (x, y, [z]), and time (t) dependent
+source terms with
+
+1. ``rho`` --- density source term for ``euler`` | ``navier-stokes``:
+
+    *string*
+
+2. ``rhou`` --- x-momentum source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+3. ``rhov`` --- y-momentum source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+4. ``rhow`` --- z-momentum source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+5. ``E`` --- energy source term for ``euler`` | ``navier-stokes``
+   :
+
+    *string*
+
+6. ``p`` --- pressure source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+7. ``u`` --- x-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+8. ``v`` --- y-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+9. ``w`` --- w-velocity source term for ``ac-euler`` |
+   ``ac-navier-stokes``:
+
+    *string*
+
+Example::
+
+    [solver-source-terms]
+    rho = t
+    rhou = x*y*sin(y)
+    rhov = z*rho
+    rhow = 1.0
+    E = 1.0/(1.0+x)
+
+[solver-artificial-viscosity]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises artificial viscosity for shock capturing with
+
+1. ``max-artvisc`` --- maximum artificial viscosity:
+
+    *float*
+
+2. ``s0`` --- sensor cut-off:
+
+    *float*
+
+3. ``kappa`` --- sensor range:
+
+    *float*
+
+Example::
+
+    [solver-artificial-viscosity]
+    max-artvisc = 0.01
+    s0 = 0.01
+    kappa = 5.0
+
+[soln-filter]
+^^^^^^^^^^^^^
+
+Parameterises an exponential solution filter with
+
+1. ``nsteps`` --- apply filter every ``nsteps``:
+
+    *int*
+
+2. ``alpha`` --- strength of filter:
+
+    *float*
+
+3. ``order`` --- order of filter:
+
+    *int*
+
+4. ``cutoff`` --- cutoff frequency below which no filtering is applied:
+
+    *int*
+
+Example::
+
+    [soln-filter]
+    nsteps = 10
+    alpha = 36.0
+    order = 16
+    cutoff = 1
+
+Boundary and Initial Conditions
+-------------------------------
+
+These sections allow users to set the boundary and initial
+conditions of calculations.
+
+[soln-bcs-*name*]
+^^^^^^^^^^^^^^^^^
+
+Parameterises constant, or if available space (x, y, [z]) and time (t)
+dependent, boundary condition labelled *name* in the .pyfrm file with
+
+1. ``type`` --- type of boundary condition:
+
+    ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
+    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``no-slp-wall`` |
+    ``slp-adia-wall`` | ``slp-wall`` | ``sub-in-frv`` |
+    ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
+    ``sup-out-fn``
+
+    where
+
+    ``ac-char-riem-inv`` only works with ``ac-euler`` |
+    ``ac-navier-stokes`` and requires
+
+        - ``ac-zeta`` --- artificial compressibility factor for boundary
+          (increasing ``ac-zeta`` makes the boundary less reflective
+          allowing larger deviation from the target state)
+
+           *float*
+
+        - ``niters`` --- number of Newton iterations
+
+           *int*
+
+        - ``p`` --- pressure
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+
+    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+    ``ac-out-fp`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
+    requires
+
+        - ``p`` --- pressure
+
+           *float* | *string*
+
+    ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
+    requires
+
+        - ``rho`` --- density
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+        - ``p`` --- static pressure
+
+           *float* | *string*
+
+    ``no-slp-adia-wall`` only works with ``navier-stokes``
+
+    ``no-slp-isot-wall`` only works with ``navier-stokes`` and requires
+
+        - ``u`` --- x-velocity of wall
+
+           *float*
+
+        - ``v`` --- y-velocity of wall
+
+           *float*
+
+        - ``w`` --- z-velocity of wall
+
+           *float*
+
+        - ``cpTw`` --- product of specific heat capacity at constant
+          pressure and temperature of wall
+
+           *float*
+
+    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
+
+        - ``u`` --- x-velocity of wall
+
+           *float*
+
+        - ``v`` --- y-velocity of wall
+
+           *float*
+
+        - ``w`` --- z-velocity of wall
+
+           *float*
+
+    ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
+
+    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
+
+    ``sub-in-frv`` only works with ``navier-stokes`` and
+    requires
+
+        - ``rho`` --- density
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+    ``sub-in-ftpttang`` only works with ``navier-stokes``
+    and requires
+
+        - ``pt`` --- total pressure
+
+           *float*
+
+        - ``cpTt`` --- product of specific heat capacity at constant
+          pressure and total temperature
+
+           *float*
+
+        - ``theta`` --- azimuth angle (in degrees) of inflow measured
+          in the x-y plane relative to the positive x-axis
+
+           *float*
+
+        - ``phi`` --- inclination angle (in degrees) of inflow measured
+          relative to the positive z-axis
+
+           *float*
+
+    ``sub-out-fp`` only works with ``navier-stokes`` and
+    requires
+
+        - ``p`` --- static pressure
+
+           *float* | *string*
+
+    ``sup-in-fa`` only works with ``euler`` | ``navier-stokes`` and
+    requires
+
+        - ``rho`` --- density
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+        - ``p`` --- static pressure
+
+           *float* | *string*
+
+    ``sup-out-fn`` only works with ``euler`` | ``navier-stokes``
+
+Example::
+
+    [soln-bcs-bcwallupper]
+    type = no-slp-isot-wall
+    cpTw = 10.0
+    u = 1.0
+
+Simple periodic boundary conditions are supported; however, their behaviour
+is not controlled through the ``.ini`` file, instead it is handled at
+the mesh generation stage. Two faces may be taged with
+``periodic_l_x`` and ``periodic_r_x``, where ``x`` is a unique
+integer for the pair of boundaries. Currently, only periodicity in a
+single cardinal direction is supported, for example, the planes
+``(x,y,0)``` and ``(x,y,10)``.
+
+[soln-ics]
+^^^^^^^^^^
+
+Parameterises space (x, y, [z]) dependent initial conditions with
+
+1. ``rho`` --- initial density distribution for ``euler`` |
+   ``navier-stokes``:
+
+    *string*
+
+2. ``u`` --- initial x-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+3. ``v`` --- initial y-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+4. ``w`` --- initial z-velocity distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+5. ``p`` --- initial static pressure distribution for ``euler`` |
+   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+
+    *string*
+
+Example::
+
+    [soln-ics]
+    rho = 1.0
+    u = x*y*sin(y)
+    v = z
+    w = 1.0
+    p = 1.0/(1.0+x)
+
+Nodal Point Sets
+----------------
+
+Solution point sets must be specified for each element type that is used and
+flux point sets must be specified for each interface type that is used. If
+anti-aliasing is enabled then quadrature point sets for each element and
+interface type that is used must also be specified. For example, a 3D mesh
+comprised only of prisms requires a solution point set for prism elements and
+flux point set for quadrilateral and triangular interfaces.
+
 [solver-interfaces-line{-mg-p\ *order*}]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -970,117 +1193,21 @@ Example::
     quad-deg = 10
     quad-pts = witherden-vincent
 
-[solver-source-terms]
-^^^^^^^^^^^^^^^^^^^^^
+Plugins
+-------
 
-Parameterises solution, space (x, y, [z]), and time (t) dependent
-source terms with
+Plugins allow for powerful additional functionality to be swapped in and out.
+It is possible to load multiple instances of the same plugin by appending a
+tag, for example::
 
-1. ``rho`` --- density source term for ``euler`` | ``navier-stokes``:
+    [soln-plugin-writer]
+    ...
 
-    *string*
+    [soln-plugin-writer-2]
+    ...
 
-2. ``rhou`` --- x-momentum source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-3. ``rhov`` --- y-momentum source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-4. ``rhow`` --- z-momentum source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-5. ``E`` --- energy source term for ``euler`` | ``navier-stokes``
-   :
-
-    *string*
-
-6. ``p`` --- pressure source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-7. ``u`` --- x-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-8. ``v`` --- y-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-9. ``w`` --- w-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-Example::
-
-    [solver-source-terms]
-    rho = t
-    rhou = x*y*sin(y)
-    rhov = z*rho
-    rhow = 1.0
-    E = 1.0/(1.0+x)
-
-[solver-artificial-viscosity]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Parameterises artificial viscosity for shock capturing with
-
-1. ``max-artvisc`` --- maximum artificial viscosity:
-
-    *float*
-
-2. ``s0`` --- sensor cut-off:
-
-    *float*
-
-3. ``kappa`` --- sensor range:
-
-    *float*
-
-Example::
-
-    [solver-artificial-viscosity]
-    max-artvisc = 0.01
-    s0 = 0.01
-    kappa = 5.0
-
-[soln-filter]
-^^^^^^^^^^^^^
-
-Parameterises an exponential solution filter with
-
-1. ``nsteps`` --- apply filter every ``nsteps``:
-
-    *int*
-
-2. ``alpha`` --- strength of filter:
-
-    *float*
-
-3. ``order`` --- order of filter:
-
-    *int*
-
-4. ``cutoff`` --- cutoff frequency below which no filtering is applied:
-
-    *int*
-
-Example::
-
-    [soln-filter]
-    nsteps = 10
-    alpha = 36.0
-    order = 16
-    cutoff = 1
+    [soln-plugin-writer-three]
+    ...
 
 [soln-plugin-writer]
 ^^^^^^^^^^^^^^^^^^^^
@@ -1282,7 +1409,7 @@ Example::
     [soln-plugin-sampler]
     nsteps = 10
     samp-pts = [(1.0, 0.7, 0.0), (1.0, 0.8, 0.0)]
-    format = primative
+    format = primitive
     file = point-data.csv
     header = true
 
@@ -1303,440 +1430,116 @@ Time average quantities. Parameterised with
 
     *float*
 
-4. ``basedir`` --- relative path to directory where outputs will be
+4. ``mode`` --- output file accumulation mode:
+
+    ``continuous`` | ``windowed``
+
+    Windowed outputs averages over each ``dt- out`` period. Whereas, continuous
+    outputs averages over all ``dt-out`` periods thus far completed within a
+    given invocation of PyFR. The default is ``windowed``.
+
+5. ``basedir`` --- relative path to directory where outputs will be
    written:
 
     *string*
 
-5. ``basename`` --- pattern of output names:
+6. ``basename`` --- pattern of output names:
 
     *string*
 
-6. ``precision`` --- output file number precision:
+7. ``precision`` --- output file number precision:
 
     ``single`` | ``double``
 
-7. ``region`` --- region to be averaged, specified as either the
+8. ``region`` --- region to be averaged, specified as either the
    entire domain using ``*``, a cuboidal sub-region via diametrically
    opposite vertices, or a sub-region of elements that have faces on a
    specific domain boundary via the name of the domain boundary
 
     ``*`` | ``[(x, y, [z]), (x, y, [z])]`` | *string*
 
-8. ``avg-*name*`` --- expression to time average, written as a function of
+9. ``avg``-*name* --- expression to time average, written as a function of
    the primitive variables and gradients thereof; multiple expressions,
    each with their own *name*, may be specified:
 
     *string*
 
-9. ``fun-avg-*name*`` --- expression to compute at file output time,
-   written as a function of any ordinary average terms; multiple
-   expressions, each with their own *name*, may be specified:
+10. ``fun-avg``-*name* --- expression to compute at file output time,
+    written as a function of any ordinary average terms; multiple
+    expressions, each with their own *name*, may be specified:
 
     *string*
+
+    As ``fun-avg`` terms are evaluated at write time, these are only indirectly
+    effected by the averaging mode.
 
 Example::
 
     [soln-plugin-tavg]
     nsteps = 10
     dt-out = 2.0
+    mode = windowed
     basedir = .
     basename = files-{t:06.2f}
 
-    avg-p = p
-    avg-p2 = p*p
-    fun-avg-varp = p2 - p*p
-    avg-vel = sqrt(u*u + v*v)
+    avg-u = u
+    avg-v = v
+    avg-uu = u*u
+    avg-vv = v*v
+    avg-uv = u*v
 
-[soln-bcs-*name*]
-^^^^^^^^^^^^^^^^^
+    fun-avg-upup = uu - u*u
+    fun-avg-vpvp = vv - v*v
+    fun-avg-upvp = uv - u*v
+    fun-avg-urms = sqrt(uu - u*u + vv - v*v)
 
-Parameterises constant, or if available space (x, y, [z]) and time (t)
-dependent, boundary condition labelled *name* in the .pyfrm file with
+.. _integrate-plugin:
 
-1. ``type`` --- type of boundary condition:
+[soln-plugin-integrate]
+^^^^^^^^^^^^^^^^^^^^^^^
 
-    ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
-    ``no-slp-adia-wall`` | ``no-slp-isot-wall`` | ``no-slp-wall`` |
-    ``slp-adia-wall`` | ``slp-wall`` | ``sub-in-frv`` |
-    ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
-    ``sup-out-fn``
+Integrate quantities over the compuational domain. Parameterised with:
 
-    where
+1. ``nsteps`` --- calculate the integral every ``nsteps`` time steps:
 
-    ``ac-char-riem-inv`` only works with ``ac-euler`` |
-    ``ac-navier-stokes`` and requires
+    *int*
 
-        - ``ac-zeta`` --- artificial compressibility factor for boundary
-          (increasing ``ac-zeta`` makes the boundary less reflective
-          allowing larger deviation from the target state)
-
-           *float*
-
-        - ``niters`` --- number of Newton iterations
-
-           *int*
-
-        - ``p`` --- pressure
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-
-    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-    ``ac-out-p`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``p`` --- pressure
-
-           *float* | *string*
-
-    ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
-    requires
-
-        - ``rho`` --- density
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-        - ``p`` --- static pressure
-
-           *float* | *string*
-
-    ``no-slp-adia-wall`` only works with ``navier-stokes``
-
-    ``no-slp-isot-wall`` only works with ``navier-stokes`` and requires
-
-        - ``u`` --- x-velocity of wall
-
-           *float*
-
-        - ``v`` --- y-velocity of wall
-
-           *float*
-
-        - ``w`` --- z-velocity of wall
-
-           *float*
-
-        - ``cpTw`` --- product of specific heat capacity at constant
-          pressure and temperature of wall
-
-           *float*
-
-    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
-
-        - ``u`` --- x-velocity of wall
-
-           *float*
-
-        - ``v`` --- y-velocity of wall
-
-           *float*
-
-        - ``w`` --- z-velocity of wall
-
-           *float*
-
-    ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
-
-    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
-
-    ``sub-in-frv`` only works with ``navier-stokes`` and
-    requires
-
-        - ``rho`` --- density
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-    ``sub-in-ftpttang`` only works with ``navier-stokes``
-    and requires
-
-        - ``pt`` --- total pressure
-
-           *float*
-
-        - ``cpTt`` --- product of specific heat capacity at constant
-          pressure and total temperature
-
-           *float*
-
-        - ``theta`` --- azimuth angle (in degrees) of inflow measured
-          in the x-y plane relative to the positive x-axis
-
-           *float*
-
-        - ``phi`` --- inclination angle (in degrees) of inflow measured
-          relative to the positive z-axis
-
-           *float*
-
-    ``sub-out-fp`` only works with ``navier-stokes`` and
-    requires
-
-        - ``p`` --- static pressure
-
-           *float* | *string*
-
-    ``sup-in-fa`` only works with ``euler`` | ``navier-stokes`` and
-    requires
-
-        - ``rho`` --- density
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-        - ``p`` --- static pressure
-
-           *float* | *string*
-
-    ``sup-out-fn`` only works with ``euler`` | ``navier-stokes``
-
-Example::
-
-    [soln-bcs-bcwallupper]
-    type = no-slp-isot-wall
-    cpTw = 10.0
-    u = 1.0
-
-[soln-ics]
-^^^^^^^^^^
-
-Parameterises space (x, y, [z]) dependent initial conditions with
-
-1. ``rho`` --- initial density distribution for ``euler`` |
-   ``navier-stokes``:
+2. ``file`` --- output file path; should the file already exist it
+   will be appended to:
 
     *string*
 
-2. ``u`` --- initial x-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+3. ``header`` --- if to output a header row or not:
 
-    *string*
+    *boolean*
 
-3. ``v`` --- initial y-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
-
-    *string*
-
-4. ``w`` --- initial z-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
-
-    *string*
-
-5. ``p`` --- initial static pressure distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+4. ``int``-*name* --- expression to integrate, written as a function of
+   the primitive variables and gradients thereof; multiple expressions,
+   each with their own *name*, may be specified:
 
     *string*
 
 Example::
 
-    [soln-ics]
-    rho = 1.0
-    u = x*y*sin(y)
-    v = z
-    w = 1.0
-    p = 1.0/(1.0+x)
+    [soln-plugin-integrate]
+    nsteps = 50
+    file = integral.csv
+    header = true
+    vor1 = (grad_w_y - grad_v_z)
+    vor2 = (grad_u_z - grad_w_x)
+    vor3 = (grad_v_x - grad_u_y)
 
-Example --- 2D Couette Flow
-===========================
+    int-E = rho*(u*u + v*v + w*w)
+    int-enst = rho*(%(vor1)s*%(vor1)s + %(vor2)s*%(vor2)s + %(vor3)s*%(vor3)s)
 
-Proceed with the following steps to run a serial 2D Couette flow
-simulation on a mixed unstructured mesh:
+Additional Information
+----------------------
 
-1. Create a working directory called ``couette_flow_2d/``
+The :ref:`INI<configuration-file>` file format is very versatile. A feature that can be useful in
+defining initial conditions is the substitution feature and this is
+demonstrated in the :ref:`integrate-plugin` example.
 
-2. Copy the configuration file
-   ``PyFR/examples/couette_flow_2d/couette_flow_2d.ini`` into
-   ``couette_flow_2d/``
-
-3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
-   ``PyFR/examples/couette_flow_2d/couette_flow_2d.msh`` into
-   ``couette_flow_2d/``
-
-4. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``couette_flow_2d.pyfrm``::
-
-        pyfr import couette_flow_2d.msh couette_flow_2d.pyfrm
-
-5. Run pyfr to solve the Navier-Stokes equations on the mesh,
-   generating a series of PyFR solution files called
-   ``couette_flow_2d-*.pyfrs``::
-
-        pyfr run -b cuda -p couette_flow_2d.pyfrm couette_flow_2d.ini
-
-6. Run pyfr on the solution file ``couette_flow_2d-040.pyfrs``
-   converting it into an unstructured VTK file called
-   ``couette_flow_2d-040.vtu``. Note that in order to visualise the
-   high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the
-   integer at the end of the command::
-
-        pyfr export couette_flow_2d.pyfrm couette_flow_2d-040.pyfrs couette_flow_2d-040.vtu -d 4
-
-7. Visualise the unstructured VTK file in `Paraview
-   <http://www.paraview.org/>`_
-
-.. figure:: ../fig/couette_flow_2d/couette_flow_2d.png
-   :width: 450px
-   :figwidth: 450px
-   :alt: couette flow
-   :align: center
-
-   Colour map of steady-state density distribution.
-
-Example --- 2D Euler Vortex
-===========================
-
-Proceed with the following steps to run a parallel 2D Euler vortex
-simulation on a structured mesh:
-
-1. Create a working directory called ``euler_vortex_2d/``
-
-2. Copy the configuration file
-   ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.ini`` into
-   ``euler_vortex_2d/``
-
-3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ file
-   ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.msh`` into
-   ``euler_vortex_2d/``
-
-4. Run pyfr to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``euler_vortex_2d.pyfrm``::
-
-        pyfr import euler_vortex_2d.msh euler_vortex_2d.pyfrm
-
-5. Run pyfr to partition the PyFR mesh file into two pieces::
-
-        pyfr partition 2 euler_vortex_2d.pyfrm .
-
-6. Run pyfr to solve the Euler equations on the mesh, generating a
-   series of PyFR solution files called ``euler_vortex_2d*.pyfrs``::
-
-        mpiexec -n 2 pyfr run -b cuda -p euler_vortex_2d.pyfrm euler_vortex_2d.ini
-
-7. Run pyfr on the solution file ``euler_vortex_2d-100.0.pyfrs``
-   converting it into an unstructured VTK file called
-   ``euler_vortex_2d-100.0.vtu``. Note that in order to visualise the
-   high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the
-   integer at the end of the command::
-
-        pyfr export euler_vortex_2d.pyfrm euler_vortex_2d-100.0.pyfrs euler_vortex_2d-100.0.vtu -d 4
-
-8. Visualise the unstructured VTK file in `Paraview
-   <http://www.paraview.org/>`_
-
-.. figure:: ../fig/euler_vortex_2d/euler_vortex_2d.png
-   :width: 450px
-   :figwidth: 450px
-   :alt: euler vortex
-   :align: center
-
-   Colour map of density distribution at 100 time units.
-
-Example --- 2D Incompressible Cylinder Flow
-===========================================
-
-Proceed with the following steps to run a serial 2D incompressible cylinder
-flow simulation on a mixed unstructured mesh:
-
-1. Create a working directory called ``inc_cylinder_2d/``
-
-2. Copy the configuration file
-   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.ini`` into
-   ``inc_cylinder_2d/``
-
-3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
-   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.msh.gz`` into
-   ``inc_cylinder_2d/``
-
-4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``inc_cylinder_2d.pyfrm``::
-
-        zcat inc_cylinder_2d.msh.gz | pyfr import -tgmsh - inc_cylinder_2d.pyfrm
-
-5. Run pyfr to solve the incompressible Navier-Stokes equations on the mesh,
-   generating a series of PyFR solution files called
-   ``inc_cylinder_2d-*.pyfrs``::
-
-        pyfr run -b cuda -p inc_cylinder_2d.pyfrm inc_cylinder_2d.ini
-
-6. Run pyfr on the solution file ``inc_cylinder_2d-75.00.pyfrs``
-   converting it into an unstructured VTK file called
-   ``inc_cylinder_2d-75.00.vtu``. Note that in order to visualise the
-   high-order data, each high-order element is sub-divided into smaller
-   linear elements. The level of sub-division is controlled by the
-   integer at the end of the command::
-
-        pyfr export inc_cylinder_2d.pyfrm inc_cylinder_2d-75.00.pyfrs inc_cylinder_2d-75.00.vtu -d 4
-
-7. Visualise the unstructured VTK file in `Paraview
-   <http://www.paraview.org/>`_
-
-.. figure:: ../fig/inc_cylinder_2d/inc_cylinder_2d.png
-   :width: 450px
-   :figwidth: 450px
-   :alt: couette flow
-   :align: center
-
-   Colour map of velocity magnitude distribution at 75 time units.
+To prevent situations where you have solutions files for unknown
+configurations, the contents of the ``.ini`` file is added as an attribute
+to ``.pyfrs`` files. These files use the HDF5 format and can be
+straightforwardly probed with tools such as h5dump.

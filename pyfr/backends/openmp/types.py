@@ -10,7 +10,7 @@ class OpenMPMatrixBase(base.MatrixBase):
 
         self.data = basedata[offset:offset + self.nbytes]
         self.data = self.data.view(self.dtype)
-        self.data = self.data.reshape(self.nrow, self.leaddim)
+        self.data = self.data.reshape(self.nblocks, self.nrow, self.leaddim)
 
         self.offset = offset
 
@@ -25,10 +25,10 @@ class OpenMPMatrixBase(base.MatrixBase):
         del self._initval
 
     def _get(self):
-        return self._unpack(self.data[:, :self.ncol])
+        return self._unpack(self.data)
 
     def _set(self, ary):
-        self.data[:, :self.ncol] = self._pack(ary)
+        self.data[:] = self._pack(ary)
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
@@ -44,7 +44,7 @@ class OpenMPMatrixSlice(base.MatrixSlice):
         self._as_parameter_map = {}
 
     def _init_data(self, mat):
-        return mat.data[self.ra:self.rb, self.ca:self.cb]
+        return mat.data[self.ba:self.bb, self.ra:self.rb, :]
 
     @property
     def _as_parameter_(self):

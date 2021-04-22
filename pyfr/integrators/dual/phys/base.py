@@ -16,7 +16,7 @@ class BaseDualIntegrator(BaseIntegrator):
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
             backend, systemcls, rallocs, mesh,
-            initsoln, cfg, self._stepper_coeffs, self._dt
+            initsoln, cfg, self.stepper_coeffs, self._dt
         )
 
         # Event handlers for advance_to
@@ -28,10 +28,6 @@ class BaseDualIntegrator(BaseIntegrator):
     @property
     def system(self):
         return self.pseudointegrator.system
-
-    @property
-    def _stepper_coeffs(self):
-        pass
 
     @property
     def pseudostepinfo(self):
@@ -46,6 +42,15 @@ class BaseDualIntegrator(BaseIntegrator):
             )
 
         return self._curr_soln
+
+    @property
+    def grad_soln(self):
+        # If we do not have the solution gradients cached then compute and fetch them
+        if not self._curr_grad_soln:
+            self.system.compute_grads(self.tcurr, self.pseudointegrator._idxcurr)
+            self._curr_grad_soln = self.system.eles_vect_upts.get()
+
+        return self._curr_grad_soln
 
     def call_plugin_dt(self, dt):
         rem = math.fmod(dt, self._dt)

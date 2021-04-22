@@ -33,12 +33,10 @@ class HIPMatrixBase(_HIPMatrixCommon, base.MatrixBase):
         self.backend.hip.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf[:, :self.ncol])
+        return self._unpack(buf[None, :, :])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
-        buf[:, :self.ncol] = self._pack(ary)
+        buf = self._pack(ary)
 
         # Copy
         self.backend.hip.memcpy(self.data, buf, self.nbytes)
@@ -51,7 +49,7 @@ class HIPMatrix(HIPMatrixBase, base.Matrix):
 class HIPMatrixSlice(_HIPMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
         return (int(mat.basedata) + mat.offset +
-                self.ra*self.pitch + self.ca*self.itemsize)
+                (self.ra*self.leaddim + self.ca)*self.itemsize)
 
 
 class HIPMatrixBank(base.MatrixBank):
@@ -90,13 +88,13 @@ class HIPQueue(base.Queue):
         super().__init__(backend)
 
         # HIP streams
-        self.hip_stream_comp = backend.hip.create_stream()
-        self.hip_stream_copy = backend.hip.create_stream()
+        self.stream_comp = backend.hip.create_stream()
+        self.stream_copy = backend.hip.create_stream()
 
     def _wait(self):
         if self._last_ktype == 'compute':
-            self.hip_stream_comp.synchronize()
-            self.hip_stream_copy.synchronize()
+            self.stream_comp.synchronize()
+            self.stream_copy.synchronize()
         elif self._last_ktype == 'mpi':
             from mpi4py import MPI
 

@@ -13,7 +13,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, ncol, ldim, dtype = arr[0].traits
+        nrow, ncol, ldim, dtype = arr[0].traits[1:]
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Render the kernel template
@@ -28,8 +28,8 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
                 arrd = [x.data for x in arr]
-                kern(queue.cl_queue_comp, (ncolb, nrow), None, nrow, ncolb,
-                     ldim, *arrd, *consts)
+                kern(queue.cmd_q_comp, (ncolb, nrow), None, nrow, ncolb, ldim,
+                     *arrd, *consts)
 
         return AxnpbyKernel()
 
@@ -39,7 +39,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                cl.enqueue_copy(queue.cl_queue_comp, dst.data, src.data)
+                cl.enqueue_copy(queue.cmd_q_comp, dst.data, src.data)
 
         return CopyKernel()
 
@@ -47,7 +47,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
-        nrow, ncol, ldim, dtype = x.traits
+        nrow, ncol, ldim, dtype = x.traits[1:]
         ncola, ncolb = x.ioshape[1:]
 
         # Reduction workgroup dimensions
@@ -80,10 +80,10 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
                 return reducer(err_host, axis=1)
 
             def run(self, queue, atol, rtol):
-                rkern(queue.cl_queue_comp, gs, ls, nrow, ncolb, ldim, err_dev,
+                rkern(queue.cmd_q_comp, gs, ls, nrow, ncolb, ldim, err_dev,
                       x.data, y.data, z.data, atol, rtol)
-                cevent = cl.enqueue_copy(queue.cl_queue_comp, err_host,
-                                         err_dev, is_blocking=False)
+                cevent = cl.enqueue_copy(queue.cmd_q_comp, err_host, err_dev,
+                                         is_blocking=False)
                 queue.copy_events.append(cevent)
 
         return ErrestKernel()

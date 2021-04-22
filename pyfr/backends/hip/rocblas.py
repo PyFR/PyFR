@@ -90,7 +90,7 @@ class HIPRocBLASKernels(object):
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                w.rocblas_set_stream(self._handle, queue.hip_stream_comp)
+                w.rocblas_set_stream(self._handle, queue.stream_comp)
                 rocblas_gemm(self._handle, opA, opB, m, n, k,
                              alpha_ct, A, A.leaddim, B, B.leaddim,
                              beta_ct, C, C.leaddim)

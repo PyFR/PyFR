@@ -22,8 +22,14 @@ class BaseDualController(BaseDualIntegrator):
         # Invalidate the solution cache
         self._curr_soln = None
 
+        # Invalidate the solution gradients cache
+        self._curr_grad_soln = None
+
         # Fire off any event handlers
         self.completed_step_handlers(self)
+
+        # Abort if plugins request it
+        self._check_abort()
 
         # Clear the pseudo step info
         self.pseudointegrator.pseudostepinfo = []

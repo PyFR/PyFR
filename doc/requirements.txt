@@ -1,0 +1,8 @@
+Sphinx >= 3.5.3
+graphviz
+mkdocs
+sphinx-rtd-theme
+sphinxcontrib-contentui
+sphinxcontrib-fancybox
+
+pytools >= 2016.2.1

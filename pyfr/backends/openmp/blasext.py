@@ -12,8 +12,8 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, ncol, ldim, dtype = arr[0].traits
-        ncola, ncolb = arr[0].ioshape[1:]
+        nblocks, nrow, *_, dtype = arr[0].traits
+        ncola = arr[0].ioshape[-2]
 
         # Render the kernel template
         src = self.backend.lookup.get_template('axnpby').render(
@@ -22,11 +22,11 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
+                                  [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
-                kern(nrow, ncolb, ldim, *arr, *consts)
+                kern(nrow, nblocks, *arr, *consts)
 
         return AxnpbyKernel()
 
@@ -34,19 +34,20 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
-        if dst.nbytes >= 2**31:
-            raise ValueError('Matrix too large for copy')
-
         # Render the kernel template
         ksrc = self.backend.lookup.get_template('par-memcpy').render()
 
+        dbbytes, sbbytes = dst.blocksz*dst.itemsize, src.blocksz*src.itemsize
+        bnbytes = src.nrow*src.leaddim*src.itemsize
+        nblocks = src.nblocks
+
         # Build the kernel
         kern = self._build_kernel('par_memcpy', ksrc,
-                                  [np.intp, np.intp, np.int32])
+                                  [np.intp, np.int32]*2 + [np.int32]*2)
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                kern(dst, src, dst.nbytes)
+                kern(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
 
         return CopyKernel()
 
@@ -54,8 +55,8 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         if x.traits != y.traits != z.traits:
             raise ValueError('Incompatible matrix types')
 
-        nrow, ncol, ldim, dtype = x.traits
-        ncola, ncolb = x.ioshape[1:]
+        nblocks, nrow, *_, dtype = x.traits
+        ncola = x.ioshape[-2]
 
         # Render the reduction kernel template
         src = self.backend.lookup.get_template('errest').render(norm=norm,
@@ -66,7 +67,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build
         rkern = self._build_kernel(
-            'errest', src, [np.int32]*3 + [np.intp]*4 + [dtype]*2
+            'errest', src, [np.int32]*2 + [np.intp]*4 + [dtype]*2
         )
 
         class ErrestKernel(ComputeKernel):
@@ -75,7 +76,6 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
                 return error
 
             def run(self, queue, atol, rtol):
-                rkern(nrow, ncolb, ldim, error.ctypes.data,
-                      x, y, z, atol, rtol)
+                rkern(nrow, nblocks, error.ctypes.data, x, y, z, atol, rtol)
 
         return ErrestKernel()

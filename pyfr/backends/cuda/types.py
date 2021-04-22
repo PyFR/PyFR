@@ -33,12 +33,10 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf[:, :self.ncol])
+        return self._unpack(buf[None, :, :])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
-        buf[:, :self.ncol] = self._pack(ary)
+        buf = self._pack(ary)
 
         # Copy
         self.backend.cuda.memcpy(self.data, buf, self.nbytes)
@@ -51,7 +49,7 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
         return (int(mat.basedata) + mat.offset +
-                self.ra*self.pitch + self.ca*self.itemsize)
+                (self.ra*self.leaddim + self.ca)*self.itemsize)
 
 
 class CUDAMatrixBank(base.MatrixBank):
@@ -90,13 +88,13 @@ class CUDAQueue(base.Queue):
         super().__init__(backend)
 
         # CUDA streams
-        self.cuda_stream_comp = backend.cuda.create_stream()
-        self.cuda_stream_copy = backend.cuda.create_stream()
+        self.stream_comp = backend.cuda.create_stream()
+        self.stream_copy = backend.cuda.create_stream()
 
     def _wait(self):
         if self._last_ktype == 'compute':
-            self.cuda_stream_comp.synchronize()
-            self.cuda_stream_copy.synchronize()
+            self.stream_comp.synchronize()
+            self.stream_copy.synchronize()
         elif self._last_ktype == 'mpi':
             from mpi4py import MPI
 

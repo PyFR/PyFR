@@ -13,6 +13,7 @@ CUDAError = type('CUDAError', (Exception,), {})
 CUDAInvalidValue = type('CUDAInvalidValue', (CUDAError,), {})
 CUDAOutofMemory = type('CUDAOutofMemory', (CUDAError,), {})
 CUDANotInitalized = type('CUDANotInitalized', (CUDAError,), {})
+CUDANoDevice = type('CUDANoDevice', (CUDAError,), {})
 CUDAInvalidDevice = type('CUDAInvalidDevice', (CUDAError,), {})
 CUDAECCUncorrectable = type('CUDAECCUncorrectable', (CUDAError,), {})
 CUDAOSError = type('CUDAOSError', (CUDAError, OSError), {})
@@ -31,6 +32,7 @@ class CUDAWrappers(LibWrapper):
         1: CUDAInvalidValue,
         2: CUDAOutofMemory,
         3: CUDANotInitalized,
+        100: CUDANoDevice,
         101: CUDAInvalidDevice,
         214: CUDAECCUncorrectable,
         304: CUDAOSError,

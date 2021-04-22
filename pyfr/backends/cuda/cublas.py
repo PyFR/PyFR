@@ -93,7 +93,7 @@ class CUDACUBLASKernels(object):
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                lib.cublasSetStream(self, queue.cuda_stream_comp)
+                lib.cublasSetStream(self, queue.stream_comp)
                 cublasgemm(self, lib.OP_N, lib.OP_N, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)

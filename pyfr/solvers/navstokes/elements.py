@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import numpy as np
+
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
 from pyfr.solvers.euler.elements import BaseFluidElements
 
@@ -7,6 +9,28 @@ from pyfr.solvers.euler.elements import BaseFluidElements
 class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     # Use the density field for shock sensing
     shockvar = 'rho'
+
+    @staticmethod
+    def grad_con_to_pri(cons, grad_cons, cfg):
+        rho, *rhouvw = cons[:-1]
+        grad_rho, *grad_rhouvw, grad_E = grad_cons
+        
+        # Divide momentum components by ρ
+        uvw = [rhov/rho for rhov in rhouvw]
+
+        # Velocity gradients
+        # ∇(\vec{u}) = 1/ρ·[∇(ρ\vec{u}) - \vec{u} \otimes ∇ρ]
+        grad_uvw = [(grad_rhov - v*grad_rho)/rho 
+                    for grad_rhov, v in zip(grad_rhouvw, uvw)]
+
+        # Pressure gradient
+        # ∇p = (gamma - 1)·[∇E - 1/2*(\vec{u}·∇(ρ\vec{u}) - ρ\vec{u}·∇(\vec{u}))]
+        gamma = cfg.getfloat('constants', 'gamma')
+        grad_p = grad_E - 0.5*(np.einsum('ijk, iljk -> ljk', uvw, grad_rhouvw) +
+                               np.einsum('ijk, iljk -> ljk', rhouvw, grad_uvw))
+        grad_p *= (gamma - 1)
+
+        return [grad_rho] + grad_uvw + [grad_p]
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)

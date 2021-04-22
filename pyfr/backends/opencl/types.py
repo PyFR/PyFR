@@ -33,12 +33,10 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         cl.enqueue_copy(self.backend.qdflt, buf, self.data)
 
         # Unpack
-        return self._unpack(buf[:, :self.ncol])
+        return self._unpack(buf[None, :, :])
 
     def _set(self, ary):
-        # Allocate a new buffer with suitable padding and pack it
-        buf = np.zeros((self.nrow, self.leaddim), dtype=self.dtype)
-        buf[:, :self.ncol] = self._pack(ary)
+        buf = self._pack(ary)
 
         # Copy
         cl.enqueue_copy(self.backend.qdflt, self.data, buf)
@@ -50,8 +48,8 @@ class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
 
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
     def _init_data(self, mat):
-        start = self.ra*self.pitch + self.ca*self.itemsize
-        nbytes = (self.nrow - 1)*self.pitch + self.ncol*self.itemsize
+        start = (self.ra*self.leaddim + self.ca)*self.itemsize
+        nbytes = ((self.nrow - 1)*self.leaddim + self.ncol)*self.itemsize
 
         return mat.basedata.get_sub_region(mat.offset + start, nbytes)
 
@@ -85,16 +83,16 @@ class OpenCLQueue(base.Queue):
         super().__init__(backend)
 
         # OpenCL command queues
-        self.cl_queue_comp = cl.CommandQueue(backend.ctx)
-        self.cl_queue_copy = cl.CommandQueue(backend.ctx)
+        self.cmd_q_comp = cl.CommandQueue(backend.ctx)
+        self.cmd_q_copy = cl.CommandQueue(backend.ctx)
 
         # Active copy event list
         self.copy_events = []
 
     def _wait(self):
         if self._last_ktype == 'compute':
-            self.cl_queue_comp.finish()
-            self.cl_queue_copy.finish()
+            self.cmd_q_comp.finish()
+            self.cmd_q_copy.finish()
             self.copy_events.clear()
         elif self._last_ktype == 'mpi':
             from mpi4py import MPI
