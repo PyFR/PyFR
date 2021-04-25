@@ -63,46 +63,28 @@ class IntegratePlugin(BasePlugin):
         for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
             # Obtain quadrature info
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
-
             if self.qdeg:
                 if self.cfg.hasopt(cfgsect, f'quad-pts-{ename}'):
                     rname = self.cfg.get(cfgsect, f'quad-pts-{ename}')
 
-                # Quadature weights
+                # Quadrature rule
                 r = get_quadrule(ename, rname, qdeg=self.qdeg)
-                wts = r.wts
 
                 # Solution interpolation matrix to quadrature points
                 m0 = eles.basis.ubasis.nodal_basis_at(r.pts)
                 self.m0s.append(m0)
-
-                # Locations of each quadrature point
-                op = eles.basis.sbasis.nodal_basis_at(r.pts)
-                ploc = op @ eles.eles.reshape(eles.nspts, -1)
-                ploc = ploc.reshape(-1, eles.neles, eles.ndims)
-                ploc = ploc.transpose(2, 0, 1)
-
-                # Jacobian determinants at each quadrature point
-                op = eles.basis.mbasis.nodal_basis_at(r.pts)
-                _, djacs_mpts = eles._smats_djacs_mpts
-                rcpdjacs = 1 / (op @ djacs_mpts)
             else:
-                # Locations of each solution point
-                ploc = eles.ploc_at_np('upts').swapaxes(0, 1)
+                # Default to the quadrature rule of the solution points
+                r = get_quadrule(ename, rname, eles.nupts)
 
-                # Jacobian determinants
-                rcpdjacs = eles.rcpdjac_at_np('upts')
+            # Locations of each quadrature point
+            ploc = eles.ploc_at_np(r.pts).swapaxes(0, 1)[..., eset]
 
-                # Quadature weights
-                wts = get_quadrule(ename, rname, eles.nupts).wts
-
-            # Extract quadrature points of elements
-            # located in the region of interest
-            ploc = ploc[..., eset]
-            rcpdjacs = rcpdjacs[:, eset]
+            # Jacobian determinants at each quadrature point
+            rcpdjacs = eles.rcpdjac_at_np(r.pts)[:, eset]
 
             # Save
-            self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask))
+            self.eleinfo.append((ploc, r.wts[:, None] / rcpdjacs, eset, emask))
 
     def _prepare_region_info(self, intg):
         # All elements
