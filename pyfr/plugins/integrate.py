@@ -32,11 +32,6 @@ class IntegratePlugin(BasePlugin):
                       for k in self.cfg.items(cfgsect)
                       if k.startswith('int-')]
 
-        # Select a quadrature different from that of the
-        # solution points if using the token qdeg
-        qdeg = self.cfg.getint(cfgsect, 'quad-deg', -1)
-        self.qdeg = qdeg if qdeg != -1 else None
-
         # Integration region pre-processing
         rinfo = self._prepare_region_info(intg)
 
@@ -59,20 +54,20 @@ class IntegratePlugin(BasePlugin):
 
         # Prepare the per element-type info list
         self.eleinfo = []
-        self.m0s = []
         for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
             # Obtain quadrature info
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
-            if self.qdeg:
+            m0 = None
+            if self.cfg.hasopt(cfgsect, 'quad-deg'):
                 if self.cfg.hasopt(cfgsect, f'quad-pts-{ename}'):
                     rname = self.cfg.get(cfgsect, f'quad-pts-{ename}')
 
                 # Quadrature rule
-                r = get_quadrule(ename, rname, qdeg=self.qdeg)
+                qdeg = self.cfg.getint(cfgsect, 'quad-deg')
+                r = get_quadrule(ename, rname, qdeg=qdeg)
 
                 # Solution interpolation matrix to quadrature points
                 m0 = eles.basis.ubasis.nodal_basis_at(r.pts)
-                self.m0s.append(m0)
             else:
                 # Default to the quadrature rule of the solution points
                 r = get_quadrule(ename, rname, eles.nupts)
@@ -84,7 +79,8 @@ class IntegratePlugin(BasePlugin):
             rcpdjacs = eles.rcpdjac_at_np(r.pts)[:, eset]
 
             # Save
-            self.eleinfo.append((ploc, r.wts[:, None] / rcpdjacs, eset, emask))
+            self.eleinfo.append((ploc, r.wts[:, None] / rcpdjacs, m0, eset,
+                                 emask))
 
     def _prepare_region_info(self, intg):
         # All elements
@@ -135,14 +131,14 @@ class IntegratePlugin(BasePlugin):
 
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
-            plocs, wts, eset, emask = eleinfo
+            plocs, wts, m0, eset, emask = eleinfo
 
             # Subset and transpose the solution
             soln = soln[..., eset].swapaxes(0, 1)
 
             # Interpolate the solution to the quadrature points
-            if self.qdeg:
-                soln = self.m0s[i] @ soln
+            if m0 is not None:
+                soln = m0 @ soln
 
             # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln, self.cfg)
@@ -157,8 +153,8 @@ class IntegratePlugin(BasePlugin):
                 grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
 
                 # Interpolate the gradients to the quadrature points
-                if self.qdeg:
-                    grad_soln = self.m0s[i] @ grad_soln
+                if m0 is not None:
+                    grad_soln = m0 @ grad_soln
 
                 # Transform from conservative to primitive gradients
                 pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
