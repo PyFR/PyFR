@@ -53,11 +53,10 @@ class IntegratePlugin(BasePlugin):
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
 
         # Prepare the per element-type info list
-        self.eleinfo = []
+        self.eleinfo = eleinfo = []
         for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
             # Obtain quadrature info
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
-            m0 = None
             if self.cfg.hasopt(cfgsect, 'quad-deg'):
                 if self.cfg.hasopt(cfgsect, f'quad-pts-{ename}'):
                     rname = self.cfg.get(cfgsect, f'quad-pts-{ename}')
@@ -71,6 +70,7 @@ class IntegratePlugin(BasePlugin):
             else:
                 # Default to the quadrature rule of the solution points
                 r = get_quadrule(ename, rname, eles.nupts)
+                m0 = None
 
             # Locations of each quadrature point
             ploc = eles.ploc_at_np(r.pts).swapaxes(0, 1)[..., eset]
@@ -79,8 +79,7 @@ class IntegratePlugin(BasePlugin):
             rcpdjacs = eles.rcpdjac_at_np(r.pts)[:, eset]
 
             # Save
-            self.eleinfo.append((ploc, r.wts[:, None] / rcpdjacs, m0, eset,
-                                 emask))
+            eleinfo.append((ploc, r.wts[:, None] / rcpdjacs, m0, eset, emask))
 
     def _prepare_region_info(self, intg):
         # All elements
