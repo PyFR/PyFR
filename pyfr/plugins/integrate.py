@@ -79,8 +79,8 @@ class IntegratePlugin(BasePlugin):
                 # Locations of each quadrature point
                 op = eles.basis.sbasis.nodal_basis_at(r.pts)
                 ploc = op @ eles.eles.reshape(eles.nspts, -1)
-                ploc = ploc.reshape(-1, eles.neles, eles.ndims).swapaxes(1, 2)
-                ploc = ploc.swapaxes(0, 1)
+                ploc = ploc.reshape(-1, eles.neles, eles.ndims)
+                ploc = ploc.transpose(2, 0, 1)
 
                 # Jacobian determinants at each quadrature point
                 op = eles.basis.mbasis.nodal_basis_at(r.pts)
@@ -88,14 +88,18 @@ class IntegratePlugin(BasePlugin):
                 rcpdjacs = 1 / (op @ djacs_mpts)
             else:
                 # Locations of each solution point
-                ploc = eles.ploc_at_np('upts')[..., eset]
-                ploc = ploc.swapaxes(0, 1)
+                ploc = eles.ploc_at_np('upts').swapaxes(0, 1)
 
                 # Jacobian determinants
-                rcpdjacs = eles.rcpdjac_at_np('upts')[:, eset]
+                rcpdjacs = eles.rcpdjac_at_np('upts')
 
                 # Quadature weights
                 wts = get_quadrule(ename, rname, eles.nupts).wts
+
+            # Extract quadrature points of elements
+            # located in the region of interest
+            ploc = ploc[..., eset]
+            rcpdjacs = rcpdjacs[:, eset]
 
             # Save
             self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask))
@@ -163,8 +167,7 @@ class IntegratePlugin(BasePlugin):
 
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
-            subs.update(zip('xyz', plocs))
-            subs.update({'t': intg.tcurr})
+            subs.update(zip('xyz', plocs), t=intg.tcurr)
 
             # Prepare any required gradients
             if self._gradpinfo:
