@@ -32,6 +32,11 @@ class IntegratePlugin(BasePlugin):
                       for k in self.cfg.items(cfgsect)
                       if k.startswith('int-')]
 
+        # Select a quadrature different from that of the
+        # solution points if using the token qdeg
+        qdeg = self.cfg.getint(cfgsect, 'quad-deg', -1)
+        self.qdeg = qdeg if qdeg != -1 else None
+
         # Integration region pre-processing
         rinfo = self._prepare_region_info(intg)
 
@@ -54,17 +59,43 @@ class IntegratePlugin(BasePlugin):
 
         # Prepare the per element-type info list
         self.eleinfo = []
+        self.m0s = []
         for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
-            # Locations of each solution point
-            ploc = eles.ploc_at_np('upts')[..., eset]
-            ploc = ploc.swapaxes(0, 1)
-
-            # Jacobian determinants
-            rcpdjacs = eles.rcpdjac_at_np('upts')[:, eset]
-
-            # Quadature weights
+            # Obtain quadrature info
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
-            wts = get_quadrule(ename, rname, eles.nupts).wts
+
+            if self.qdeg:
+                if self.cfg.hasopt(cfgsect, f'quad-pts-{ename}'):
+                    rname = self.cfg.get(cfgsect, f'quad-pts-{ename}')
+
+                # Quadature weights
+                r = get_quadrule(ename, rname, qdeg=self.qdeg)
+                wts = r.wts
+
+                # Solution interpolation matrix to quadrature points
+                m0 = eles.basis.ubasis.nodal_basis_at(r.pts)
+                self.m0s.append(m0)
+
+                # Locations of each quadrature point
+                op = eles.basis.sbasis.nodal_basis_at(r.pts)
+                ploc = op @ eles.eles.reshape(eles.nspts, -1)
+                ploc = ploc.reshape(-1, eles.neles, eles.ndims).swapaxes(1, 2)
+                ploc = ploc.swapaxes(0, 1)
+
+                # Jacobian determinants at each quadrature point
+                op = eles.basis.mbasis.nodal_basis_at(r.pts)
+                _, djacs_mpts = eles._smats_djacs_mpts
+                rcpdjacs = 1 / (op @ djacs_mpts)
+            else:
+                # Locations of each solution point
+                ploc = eles.ploc_at_np('upts')[..., eset]
+                ploc = ploc.swapaxes(0, 1)
+
+                # Jacobian determinants
+                rcpdjacs = eles.rcpdjac_at_np('upts')[:, eset]
+
+                # Quadature weights
+                wts = get_quadrule(ename, rname, eles.nupts).wts
 
             # Save
             self.eleinfo.append((ploc, wts[:, None] / rcpdjacs, eset, emask))
@@ -123,6 +154,10 @@ class IntegratePlugin(BasePlugin):
             # Subset and transpose the solution
             soln = soln[..., eset].swapaxes(0, 1)
 
+            # Interpolate the solution to the quadrature points
+            if self.qdeg:
+                soln = self.m0s[i] @ soln
+
             # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln, self.cfg)
 
@@ -135,6 +170,10 @@ class IntegratePlugin(BasePlugin):
             if self._gradpinfo:
                 # Compute the gradients
                 grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
+
+                # Interpolate the gradients to the quadrature points
+                if self.qdeg:
+                    grad_soln = self.m0s[i] @ grad_soln
 
                 # Transform from conservative to primitive gradients
                 pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
