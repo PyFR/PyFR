@@ -129,6 +129,7 @@ class IntegratePlugin(BasePlugin):
             # Prepare the substitutions dictionary
             subs = dict(zip(pnames, psolns))
             subs.update(zip('xyz', plocs))
+            subs.update({'t': intg.tcurr})
 
             # Prepare any required gradients
             if self._gradpinfo:
