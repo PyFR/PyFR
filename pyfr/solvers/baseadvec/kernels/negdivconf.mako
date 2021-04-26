@@ -15,7 +15,7 @@
 % endfor
 
 % if trsrc:
-if (affected[0] > 0.0){
+if (affected > 0.0){
 // Turbulent characteristic lengths (radii of influence)
 fpdtype_t lturbref[${ndims}] = ${lturbref};
 

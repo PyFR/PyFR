@@ -245,10 +245,10 @@ class BaseAdvectionElements(BaseElements):
                            'in fpdtype_t[{0}]'.format(4),
                            value=aijmat)
 
-        # Array to determine whether or not a sol point is actually affected by
+        # Array to determine whether or not an element is actually affected by
         # the box of eddies. Less than zero means not affected, i.e. outside of
         # the box of eddies.
-        affected = -np.ones((npts, 1, neles))
+        affected = -np.ones((1, neles))
         ploc = ploc.reshape((ndims, npts, neles))
 
         delta = np.zeros(ndims)
@@ -266,11 +266,11 @@ class BaseAdvectionElements(BaseElements):
             # indices of the elements that have at least one solution point
             # inside the box
             inside_eles = np.any(inside, axis=0).nonzero()[0]
-            affected[:, 0, inside_eles] = +1.0
+            affected[0, inside_eles] = +1.0
 
-        affectedmat = self._be.const_matrix(affected)
+        affectedmat = self._be.const_matrix(affected, tags={'align'})
         self._set_external('affected',
-                           'in fpdtype_t[{0}]'.format(1),
+                           'in broadcast-col fpdtype_t',
                            value=affectedmat)
 
     def set_backend(self, *args, **kwargs):
