@@ -256,7 +256,8 @@ class BaseElements(object):
         _, djacs_mpts = self._smats_djacs_mpts
 
         # Interpolation matrix to pts
-        m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
+        pt = getattr(self.basis, name) if isinstance(name, str) else name
+        m0 = self.basis.mbasis.nodal_basis_at(pt)
 
         # Interpolate the djacs
         djac = m0 @ djacs_mpts
@@ -273,7 +274,8 @@ class BaseElements(object):
 
     @memoize
     def ploc_at_np(self, name):
-        op = self.basis.sbasis.nodal_basis_at(getattr(self.basis, name))
+        pt = getattr(self.basis, name) if isinstance(name, str) else name
+        op = self.basis.sbasis.nodal_basis_at(pt)
 
         ploc = op @ self.eles.reshape(self.nspts, -1)
         ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)

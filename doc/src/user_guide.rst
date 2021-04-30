@@ -1513,8 +1513,13 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     *boolean*
 
-4. ``int``-*name* --- expression to integrate, written as a function of
-   the primitive variables and gradients thereof; multiple expressions,
+4. ``quad-deg`` --- degree of quadrature rule (optional):
+
+5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+
+6. ``int``-*name* --- expression to integrate, written as a function of
+   the primitive variables and gradients thereof, the physical coordinates
+   [x, y, [z]] and/or the physical time [t]; multiple expressions,
    each with their own *name*, may be specified:
 
     *string*
@@ -1525,6 +1530,7 @@ Example::
     nsteps = 50
     file = integral.csv
     header = true
+    quad-deg = 9
     vor1 = (grad_w_y - grad_v_z)
     vor2 = (grad_u_z - grad_w_x)
     vor3 = (grad_v_x - grad_u_y)
