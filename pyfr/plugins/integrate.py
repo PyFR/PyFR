@@ -4,6 +4,7 @@ import re
 
 import numpy as np
 
+from pyfr.inifile import NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
@@ -52,36 +53,30 @@ class IntegratePlugin(BasePlugin):
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
 
-        # Whether to use a quadrature different to that of the solution points
-        quad = self.cfg.hasopt(cfgsect, 'quad-deg')
-
         # Prepare the per element-type info list
         self.eleinfo = eleinfo = []
         for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
             # Obtain quadrature info
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
 
-            # Raise error with edge cases
-            if not quad and (self.cfg.hasopt(cfgsect, f'quad-pts-{ename}')
-                             or self.cfg.hasopt(cfgsect, f'quad-deg-{ename}')):
-                raise ValueError('Option "quad-deg" is not found')
-
-            if quad:
+            try:
                 # Quadrature rule (default to that of the solution points)
                 qrule = self.cfg.get(cfgsect, f'quad-pts-{ename}', rname)
 
                 # Quadrature rule degree
-                qdeg = self.cfg.getint(cfgsect, 'quad-deg')
-                if self.cfg.hasopt(cfgsect, f'quad-deg-{ename}'):
+                try:
                     qdeg = self.cfg.getint(cfgsect, f'quad-deg-{ename}')
+                except NoOptionError:
+                    qdeg = self.cfg.getint(cfgsect, 'quad-deg')
 
                 r = get_quadrule(ename, qrule, qdeg=qdeg)
-            else:
+
+                # Interpolation to quadrature points matrix
+                m0 = eles.basis.ubasis.nodal_basis_at(r.pts)
+            except NoOptionError:
                 # Default to the quadrature rule of the solution points
                 r = get_quadrule(ename, rname, eles.nupts)
-
-            # Interpolation to quadrature points matrix
-            m0 = eles.basis.ubasis.nodal_basis_at(r.pts) if quad else None
+                m0 = None
 
             # Locations of each quadrature point
             ploc = eles.ploc_at_np(r.pts).swapaxes(0, 1)[..., eset]
