@@ -84,7 +84,7 @@ utilde[0] = aij[0]*utilde[0];
 // Add density and energy fluctuations (compressible solver only, of course).
 % if system == 'compr':
     // density
-    fpdtype_t rM2 = ${rhomeanex}*pow(${Mmeanex}, 2);
+    fpdtype_t rM2 = ${rhomeanex}*${Mmeanex}*${Mmeanex};
     tdivtconf[0] += factor[${Ubulkdir}]*${rhofluctfactor}*rM2*utilde[${Ubulkdir}];
 
     // energy equation
