@@ -14,27 +14,11 @@ Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
 class BasePartitioner(object):
-    # Approximate element weightings at each polynomial order
-    elewtsmap = {
-        1: {'quad': 5, 'tri': 3, 'tet': 3, 'hex': 9, 'pri': 6, 'pyr': 4},
-        2: {'quad': 6, 'tri': 3, 'tet': 3, 'hex': 16, 'pri': 8, 'pyr': 5},
-        3: {'quad': 6, 'tri': 3, 'tet': 3, 'hex': 24, 'pri': 10, 'pyr': 6},
-        4: {'quad': 7, 'tri': 3, 'tet': 3, 'hex': 30, 'pri': 12, 'pyr': 7},
-        5: {'quad': 7, 'tri': 3, 'tet': 3, 'hex': 34, 'pri': 13, 'pyr': 7},
-        6: {'quad': 8, 'tri': 3, 'tet': 3, 'hex': 38, 'pri': 14, 'pyr': 8}
-    }
-
-    def __init__(self, partwts, elewts=None, order=None, nsubeles=64, opts={}):
+    def __init__(self, partwts, elewts, nsubeles=64, opts={}):
         self.partwts = partwts
+        self.elewts = elewts
         self.nparts = len(partwts)
         self.nsubeles = nsubeles
-
-        if elewts is not None:
-            self.elewts = elewts
-        elif order is not None:
-            self.elewts = self.elewtsmap[min(order, max(self.elewtsmap))]
-        else:
-            raise ValueError('Must provide either elewts or order')
 
         # Parse the options list
         self.opts = {}
