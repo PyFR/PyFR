@@ -12,7 +12,8 @@ and `virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
 quick-start guides below.
 
 Alternatively, PyFR |release| can be installed from
-`source <https://github.com/PyFR/PyFR/tree/master>`_, see :ref:`compile-from-source`.
+`source <https://github.com/PyFR/PyFR/tree/master>`_, see
+:ref:`compile-from-source`.
 
 macOS
 -----
@@ -23,11 +24,11 @@ Open the terminal and install the dependencies with the following commands::
     brew install python3 open-mpi metis
     pip3 install virtualenv
 
-For visualisation of results, either install Paraview from the command line::
+For visualisation of results, either install ParaView from the command line::
 
     brew cask install paraview
 
-or dowload the app from the Paraview `website <https://www.paraview.org/>`_.
+or dowload the app from the ParaView `website <https://www.paraview.org/>`_.
 Then create a virtual environment and activate it::
 
     virtualenv --python=python3 ENV3
@@ -57,15 +58,15 @@ Open the terminal and install the dependencies with the following commands::
     sudo apt install metis libmetis-dev
     pip3 install virtualenv
 
-For visualisation of results, either install Paraview from the command line::
+For visualisation of results, either install ParaView from the command line::
 
     sudo apt install paraview
 
-or dowload the app from the Paraview `website <https://www.paraview.org/>`_.
+or dowload the app from the ParaView `website <https://www.paraview.org/>`_.
 Then create a virtual environment and activate it::
 
-    python3 -m virtualenv ENV3
-    source ENV3/bin/activate
+    python3 -m virtualenv pyfr-venv
+    source pyfr-venv/bin/activate
 
 Finally install PyFR with `pip <https://pypi.python.org/pypi/pip>`_ in the
 virtual environment::
@@ -81,9 +82,9 @@ This has been tested on Ubuntu 18.04.
 Compiling from source
 =====================
 
-PyFR can be obtained `here <https://github.com/PyFR/PyFR/tree/master>`_. To install the
-software from source, use the provided ``setup.py`` installer or add the root
-PyFR directory to ``PYTHONPATH`` using::
+PyFR can be obtained `here <https://github.com/PyFR/PyFR/tree/master>`_.
+To install the software from source, use the provided ``setup.py``
+installer or add the root PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
@@ -106,8 +107,8 @@ Python packages:
 6. `numpy <http://www.numpy.org/>`_ >= 1.20
 7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
-Note that due to a bug in `numpy <http://www.numpy.org/>`_, PyFR is not
-compatible with 32-bit Python distributions.
+Note that due to a bug in NumPy, PyFR is not compatible with 32-bit
+Python distributions.
 
 CUDA Backend
 ^^^^^^^^^^^^
@@ -152,5 +153,5 @@ Parallel
 To partition meshes for running in parallel it is also necessary to
 have one of the following partitioners installed:
 
-1. `metis <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
-2. `scotch <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+1. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
+2. `SCOTCH <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
