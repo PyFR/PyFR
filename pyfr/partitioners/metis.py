@@ -11,9 +11,9 @@ from pyfr.util import silence
 
 
 # Possible METIS exception types
-METISError = type('METISError', (Exception,), {})
-METISErrorInput = type('METISErrorInput', (METISError,), {})
-METISErrorMemory = type('METISErrorMemory', (METISError,), {})
+class METISError(Exception): pass
+class METISErrorInput(METISError): pass
+class METISErrorMemory(METISError): pass
 
 
 class METISWrappers(object):

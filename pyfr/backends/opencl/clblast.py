@@ -9,7 +9,7 @@ from pyfr.ctypesutil import LibWrapper
 
 
 # Possible CLBlast exception types
-CLBlastError = type('CLBlastError', (Exception,), {})
+class CLBlastError(Exception): pass
 
 
 class CLBlastWrappers(LibWrapper):

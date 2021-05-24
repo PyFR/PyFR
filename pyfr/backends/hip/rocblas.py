@@ -9,12 +9,12 @@ from pyfr.ctypesutil import LibWrapper
 
 
 # Possible RocBLAS exception types
-RocBLASError = type('RocBLASError', (Exception,), {})
-RocBLASInvalidHandle = type('RocBLASInvalidHandle', (RocBLASError,), {})
-RocBLASInvalidPointer = type('RocBLASInvalidPointer', (RocBLASError,), {})
-RocBLASInvalidSize = type('RocBLASInvalidSize', (RocBLASError,), {})
-RocBLASInternalError = type('RocBLASInternalError', (RocBLASError,), {})
-RocBLASInvalidValue = type('RocBLASInvalidValue', (RocBLASError,), {})
+class RocBLASError(Exception): pass
+class RocBLASInvalidHandle(RocBLASError): pass
+class RocBLASInvalidPointer(RocBLASError): pass
+class RocBLASInvalidSize(RocBLASError): pass
+class RocBLASInternalError(RocBLASError): pass
+class RocBLASInvalidValue(RocBLASError): pass
 
 
 class RocBLASWrappers(LibWrapper):

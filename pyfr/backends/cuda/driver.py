@@ -9,19 +9,21 @@ from pyfr.ctypesutil import LibWrapper
 
 
 # Possible CUDA exception types
-CUDAError = type('CUDAError', (Exception,), {})
-CUDAInvalidValue = type('CUDAInvalidValue', (CUDAError,), {})
-CUDAOutofMemory = type('CUDAOutofMemory', (CUDAError,), {})
-CUDANotInitalized = type('CUDANotInitalized', (CUDAError,), {})
-CUDANoDevice = type('CUDANoDevice', (CUDAError,), {})
-CUDAInvalidDevice = type('CUDAInvalidDevice', (CUDAError,), {})
-CUDAECCUncorrectable = type('CUDAECCUncorrectable', (CUDAError,), {})
-CUDAOSError = type('CUDAOSError', (CUDAError, OSError), {})
-CUDAInvalidHandle = type('CUDAInvalidHandle', (CUDAError,), {})
-CUDAIllegalAddress = type('CUDAIllegalAddress', (CUDAError,), {})
-CUDALaunchOutOfResources = type('CUDALaunchOutOfResources', (CUDAError,), {})
-CUDALaunchFailed = type('CUDALaunchFailed', (CUDAError,), {})
-CUDASystemDriverMismatch = type('CUDASystemDriverMismatch', (CUDAError,), {})
+class CUDAError(Exception): pass
+class CUDAInvalidValue(CUDAError): pass
+class CUDAOutofMemory(CUDAError): pass
+class CUDANotInitalized(CUDAError): pass
+class CUDANoDevice(CUDAError): pass
+class CUDAInvalidDevice(CUDAError): pass
+class CUDAECCUncorrectable(CUDAError): pass
+class CUDAErrorInvalidPTX(CUDAError): pass
+class CUDAErrorUnsupportedPTXVersion(CUDAError): pass
+class CUDAOSError(CUDAError, OSError): pass
+class CUDAInvalidHandle(CUDAError): pass
+class CUDAIllegalAddress(CUDAError): pass
+class CUDALaunchOutOfResources(CUDAError): pass
+class CUDALaunchFailed(CUDAError): pass
+class CUDASystemDriverMismatch(CUDAError): pass
 
 
 class CUDAWrappers(LibWrapper):
@@ -35,6 +37,8 @@ class CUDAWrappers(LibWrapper):
         100: CUDANoDevice,
         101: CUDAInvalidDevice,
         214: CUDAECCUncorrectable,
+        218: CUDAErrorInvalidPTX,
+        222: CUDAErrorUnsupportedPTXVersion,
         304: CUDAOSError,
         400: CUDAInvalidHandle,
         700: CUDAIllegalAddress,
