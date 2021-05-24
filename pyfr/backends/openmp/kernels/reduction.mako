@@ -41,7 +41,7 @@ reduction(int nrow, int nblocks, fpdtype_t *restrict reduced,
                 % if method == 'errest':
                     temp = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
                 % elif method == 'resid':
-                    temp = (rcurr[idx] - rold[idx])/(dt_fac${'*dt_mat[idx]' if dt_type == 'matrix' else ''});
+                    temp = (rcurr[idx] - rold[idx])/(1.0e-8 + dt_fac${'*dt_mat[idx]' if dt_type == 'matrix' else ''});
                 % endif
 
                 % if norm == 'uniform':
