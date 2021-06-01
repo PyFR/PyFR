@@ -110,6 +110,8 @@ Python packages:
 Note that due to a bug in NumPy, PyFR is not compatible with 32-bit
 Python distributions.
 
+.. _install cuda backend:
+
 CUDA Backend
 ^^^^^^^^^^^^
 
@@ -137,6 +139,8 @@ AMD, Intel, and NVIDIA. The backend requires:
 2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
    >= 2015.2.4
 3. `CLBlast <https://github.com/CNugteren/CLBlast>`_
+
+.. _install openmp backend:
 
 OpenMP Backend
 ^^^^^^^^^^^^^^
