@@ -1,3 +1,13 @@
 .wy-side-nav-search, .wy-nav-top {
     background: #94b24d;
 }
+
+.rst-content .section ol li > *, .rst-content .section ul li > * {
+    margin-bottom: 0px;
+    margin-top: 0px;
+}
+
+.rst-content .section ol li > ol, .rst-content .section ol li > ul, .rst-content .section ul li > ol, .rst-content .section ul li > ul {
+    margin-bottom: 0px;
+    margin-top: 0px;
+}

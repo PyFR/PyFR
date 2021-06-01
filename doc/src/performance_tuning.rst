@@ -9,6 +9,8 @@ performance of PyFR.  Note, however, that it is typically not worth
 pursuing the advice in this section until a simulation is working
 acceptably and generating the desired results.
 
+.. _perf openmp backend:
+
 OpenMP Backend
 ==============
 
@@ -48,6 +50,8 @@ zone.  Thus, on a two socket system it is suggested to run PyFR with
 two MPI ranks, with each process being bound to a single socket.  The
 specifics of how to accomplish this depend on both the job scheduler
 and MPI distribution.
+
+.. _perf cuda backend:
 
 CUDA Backend
 ============
