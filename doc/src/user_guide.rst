@@ -161,7 +161,6 @@ Example::
 
     [backend-hip]
     device-id = local-rank
-    gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
     block-2d = 128
