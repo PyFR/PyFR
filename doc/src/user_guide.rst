@@ -161,7 +161,6 @@ Example::
 
     [backend-hip]
     device-id = local-rank
-    gimmik-max-nnz = 512
     mpi-type = standard
     block-1d = 64
     block-2d = 128
@@ -228,11 +227,6 @@ Parameterises the OpenMP backend with
 
 4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
    non-zero entires in a constant matrix:
-
-    *int*
-
-5. ``libxsmm-max-sz`` --- cutoff for libxsmm in terms of the number of
-   entires in a constant matrix:
 
     *int*
 
@@ -1518,8 +1512,13 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     *boolean*
 
-4. ``int``-*name* --- expression to integrate, written as a function of
-   the primitive variables and gradients thereof; multiple expressions,
+4. ``quad-deg`` --- degree of quadrature rule (optional):
+
+5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+
+6. ``int``-*name* --- expression to integrate, written as a function of
+   the primitive variables and gradients thereof, the physical coordinates
+   [x, y, [z]] and/or the physical time [t]; multiple expressions,
    each with their own *name*, may be specified:
 
     *string*
@@ -1530,6 +1529,7 @@ Example::
     nsteps = 50
     file = integral.csv
     header = true
+    quad-deg = 9
     vor1 = (grad_w_y - grad_v_z)
     vor2 = (grad_u_z - grad_w_x)
     vor3 = (grad_v_x - grad_u_y)

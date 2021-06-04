@@ -27,7 +27,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # Check that A is suitable
         if nuq > 28 and nnz / arr.size > 0.15:
-            raise NotSuitableError('Matrix inappropriate GiMMiK')
+            raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
         # Generate
         src = generate_mm(arr, dtype=a.dtype, platform='cuda',
@@ -43,7 +43,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun.exec_async(grid, block, queue.cuda_stream_comp,
-                               b.ncol, b, b.leaddim, out, out.leaddim)
+                fun.exec_async(grid, block, queue.stream_comp, b.ncol, b,
+                               b.leaddim, out, out.leaddim)
 
         return MulKernel()

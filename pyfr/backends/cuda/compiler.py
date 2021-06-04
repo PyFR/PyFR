@@ -8,14 +8,14 @@ from pyfr.nputil import npdtype_to_ctypestype
 
 
 # Possible NVRTC exception types
-NVRTCError = type('NVRTCError', (Exception,), {})
-NVRTCOutOfMemory = type('NVRTCOutOfMemory', (NVRTCError,), {})
-NVRTCProgCreationFailure = type('NVRTCProgCreationFailure', (NVRTCError,), {})
-NVRTCInvalidInput = type('NVRTCInvalidInput', (NVRTCError,), {})
-NVRTCInvalidProgram = type('NVRTCInvalidProgram', (NVRTCError,), {})
-NVRTCInvalidOption = type('NVRTCInvalidOption', (NVRTCError,), {})
-NVRTCCompilationError = type('NVRTCCompilationError', (NVRTCError,), {})
-NVRTCInternalError = type('NVRTCInternalError', (NVRTCError,), {})
+class NVRTCError(Exception): pass
+class NVRTCOutOfMemory(NVRTCError): pass
+class NVRTCProgCreationFailure(NVRTCError): pass
+class NVRTCInvalidInput(NVRTCError): pass
+class NVRTCInvalidProgram(NVRTCError): pass
+class NVRTCInvalidOption(NVRTCError): pass
+class NVRTCCompilationError(NVRTCError): pass
+class NVRTCInternalError(NVRTCError): pass
 
 
 class NVRTCWrappers(LibWrapper):

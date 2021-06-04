@@ -51,31 +51,43 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         return CopyKernel()
 
-    def errest(self, x, y, z, *, norm):
-        if x.traits != y.traits != z.traits:
+    def reduction(self, *rs, method, norm, dt_mat=None):
+        if any(r.traits != rs[0].traits for r in rs[1:]):
             raise ValueError('Incompatible matrix types')
 
-        nblocks, nrow, *_, dtype = x.traits
-        ncola = x.ioshape[-2]
+        nblocks, nrow, *_, dtype = rs[0].traits
+        ncola = rs[0].ioshape[-2]
+
+        tplargs = dict(norm=norm, ncola=ncola, method=method)
+
+        if method == 'resid':
+            tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
 
         # Render the reduction kernel template
-        src = self.backend.lookup.get_template('errest').render(norm=norm,
-                                                                ncola=ncola)
+        src = self.backend.lookup.get_template('reduction').render(**tplargs)
 
-        # Array for the error estimate
-        error = np.zeros(ncola, dtype=dtype)
+        # Array for the reduced data
+        reduced = np.zeros(ncola, dtype=dtype)
+
+        regs = list(rs) + [dt_mat] if dt_mat else rs
+
+        # Argument types for reduction kernel
+        if method == 'errest':
+            argt = [np.int32]*2 + [np.intp]*4 + [dtype]*2
+        elif method == 'resid' and dt_mat:
+            argt = [np.int32]*2 + [np.intp]*4 + [dtype]
+        else:
+            argt = [np.int32]*2 + [np.intp]*3 + [dtype]
 
         # Build
-        rkern = self._build_kernel(
-            'errest', src, [np.int32]*2 + [np.intp]*4 + [dtype]*2
-        )
+        rkern = self._build_kernel('reduction', src, argt)
 
-        class ErrestKernel(ComputeKernel):
+        class ReductionKernel(ComputeKernel):
             @property
             def retval(self):
-                return error
+                return reduced
 
-            def run(self, queue, atol, rtol):
-                rkern(nrow, nblocks, error.ctypes.data, x, y, z, atol, rtol)
+            def run(self, queue, *facs):
+                rkern(nrow, nblocks, reduced.ctypes.data, *regs, *facs)
 
-        return ErrestKernel()
+        return ReductionKernel()

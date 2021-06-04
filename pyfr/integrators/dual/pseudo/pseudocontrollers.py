@@ -4,7 +4,6 @@ import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.util import memoize
 
 
 class BaseDualPseudoController(BaseDualPseudoIntegrator):
@@ -14,36 +13,43 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         # Stats on the most recent step
         self.pseudostepinfo = []
 
-    @memoize
-    def _get_errest_kerns(self):
-        return self._get_kernels('errest', nargs=3, norm=self._pseudo_norm)
+    def convmon(self, i, minniters, dt_fac=1):
+        if i >= minniters - 1:
+            # Compute the normalised residual
+            resid = self._resid(self._idxcurr, self._idxprev, dt_fac)
 
-    def _resid(self, dtau, x):
+            self._update_pseudostepinfo(i + 1, resid)
+            return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
+        else:
+            self._update_pseudostepinfo(i + 1, None)
+            return False
+
+    def _resid(self, rcurr, rold, dt_fac):
         comm, rank, root = get_comm_rank_root()
 
-        # Get an errest kern to compute the square of the maximum residual
-        errest = self._get_errest_kerns()
+        # Get a reduction kern to compute the square of the maximum residual
+        resid = self._get_reduction_kerns(rcurr, rold, method='resid',
+                                          norm=self._pseudo_norm)
 
-        # Prepare and run the kernel
-        self._prepare_reg_banks(x, x, x)
-        self._queue.enqueue_and_run(errest, dtau, 0.0)
+        # Run the kernel
+        self._queue.enqueue_and_run(resid, dt_fac)
 
         # L2 norm
         if self._pseudo_norm == 'l2':
             # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([sum(ev) for ev in zip(*errest.retval)])
+            res = np.array([sum(ev) for ev in zip(*[r.retval for r in resid])])
             comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('sum'))
 
             # Normalise and return
-            return np.sqrt(res / self._gndofs)
+            return tuple(np.sqrt(res / self._gndofs))
         # L^∞ norm
         else:
             # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([max(ev) for ev in zip(*errest.retval)])
+            res = np.array([max(ev) for ev in zip(*[r.retval for r in resid])])
             comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('max'))
 
             # Normalise and return
-            return np.sqrt(res)
+            return tuple(np.sqrt(res))
 
     def _update_pseudostepinfo(self, niters, resid):
         self.pseudostepinfo.append((self.ntotiters, niters, resid))
@@ -53,20 +59,6 @@ class DualNonePseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'none'
     pseudo_controller_needs_lerrest = False
 
-    def convmon(self, i, minniters):
-        if i >= minniters - 1:
-            # Subtract the current solution from the previous solution
-            self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
-
-            # Compute the normalised residual
-            resid = tuple(self._resid(self._dtau, self._idxprev))
-
-            self._update_pseudostepinfo(i + 1, resid)
-            return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
-        else:
-            self._update_pseudostepinfo(i + 1, None)
-            return False
-
     def pseudo_advance(self, tcurr):
         self.tcurr = tcurr
 
@@ -75,7 +67,7 @@ class DualNonePseudoController(BaseDualPseudoController):
             self._idxcurr, self._idxprev = self.step(self.tcurr)
 
             # Convergence monitoring
-            if self.convmon(i, self.minniters):
+            if self.convmon(i, self.minniters, self._dtau):
                 break
 
         # Update
@@ -141,23 +133,6 @@ class DualPIPseudoController(BaseDualPseudoController):
     def localerrest(self, errbank):
         self.system.eles_scal_upts_inb.active = errbank
         self._queue.enqueue_and_run(self.pintgkernels['localerrest'])
-
-    def convmon(self, i, minniters):
-        if i >= minniters - 1:
-            # Subtract the current solution from the previous solution
-            self._add(-1.0, self._idxprev, 1.0, self._idxcurr)
-
-            # Divide by 1/dtau
-            self.localdtau(self._idxprev, inv=1)
-
-            # Reduction
-            resid = tuple(self._resid(1.0, self._idxprev))
-
-            self._update_pseudostepinfo(i + 1, resid)
-            return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
-        else:
-            self._update_pseudostepinfo(i + 1, None)
-            return False
 
     def pseudo_advance(self, tcurr):
         self.tcurr = tcurr

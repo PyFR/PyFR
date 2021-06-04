@@ -83,16 +83,16 @@ class OpenCLQueue(base.Queue):
         super().__init__(backend)
 
         # OpenCL command queues
-        self.cl_queue_comp = cl.CommandQueue(backend.ctx)
-        self.cl_queue_copy = cl.CommandQueue(backend.ctx)
+        self.cmd_q_comp = cl.CommandQueue(backend.ctx)
+        self.cmd_q_copy = cl.CommandQueue(backend.ctx)
 
         # Active copy event list
         self.copy_events = []
 
     def _wait(self):
         if self._last_ktype == 'compute':
-            self.cl_queue_comp.finish()
-            self.cl_queue_copy.finish()
+            self.cmd_q_comp.finish()
+            self.cmd_q_copy.finish()
             self.copy_events.clear()
         elif self._last_ktype == 'mpi':
             from mpi4py import MPI

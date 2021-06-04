@@ -12,10 +12,10 @@ class Arg(object):
         self.name = name
 
         specptn = r'''
-            (?:(in|inout|out)\s+)?                            # Intent
-            (?:(broadcast(?:-row|-col)|mpi|scalar|view)\s+)?  # Attrs
-            ([A-Za-z_]\w*)                                    # Data type
-            ((?:\[\d+\]){0,2})$                               # Dimensions
+            (?:(in|inout|out)\s+)?                           # Intent
+            (?:(broadcast(?:-row|-col)|mpi|scalar|view)\s+)? # Attrs
+            ([A-Za-z_]\w*)                                   # Data type
+            ((?:\[\d+\]){0,2})$                              # Dimensions
         '''
         dimsptn = r'(?<=\[)\d+(?=\])'
         usedptn = fr'(?:[^A-Za-z]|^){name}[^A-Za-z0-9]'

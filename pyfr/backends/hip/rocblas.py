@@ -9,12 +9,12 @@ from pyfr.ctypesutil import LibWrapper
 
 
 # Possible RocBLAS exception types
-RocBLASError = type('RocBLASError', (Exception,), {})
-RocBLASInvalidHandle = type('RocBLASInvalidHandle', (RocBLASError,), {})
-RocBLASInvalidPointer = type('RocBLASInvalidPointer', (RocBLASError,), {})
-RocBLASInvalidSize = type('RocBLASInvalidSize', (RocBLASError,), {})
-RocBLASInternalError = type('RocBLASInternalError', (RocBLASError,), {})
-RocBLASInvalidValue = type('RocBLASInvalidValue', (RocBLASError,), {})
+class RocBLASError(Exception): pass
+class RocBLASInvalidHandle(RocBLASError): pass
+class RocBLASInvalidPointer(RocBLASError): pass
+class RocBLASInvalidSize(RocBLASError): pass
+class RocBLASInternalError(RocBLASError): pass
+class RocBLASInvalidValue(RocBLASError): pass
 
 
 class RocBLASWrappers(LibWrapper):
@@ -90,7 +90,7 @@ class HIPRocBLASKernels(object):
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                w.rocblas_set_stream(self._handle, queue.hip_stream_comp)
+                w.rocblas_set_stream(self._handle, queue.stream_comp)
                 rocblas_gemm(self._handle, opA, opB, m, n, k,
                              alpha_ct, A, A.leaddim, B, B.leaddim,
                              beta_ct, C, C.leaddim)

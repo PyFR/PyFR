@@ -9,14 +9,14 @@ from pyfr.ctypesutil import LibWrapper
 
 
 # Possible CUBLAS exception types
-CUBLASError = type('CUBLASError', (Exception,), {})
-CUBLASNotInitialized = type('CUBLASNotInitialized', (CUBLASError,), {})
-CUBLASAllocFailed = type('CUBLASAllocFailed', (CUBLASError,), {})
-CUBLASInvalidValue = type('CUBLASInvalidValue', (CUBLASError,), {})
-CUBLASArchMismatch = type('CUBLASArchMismatch', (CUBLASError,), {})
-CUBLASMappingError = type('CUBLASMappingError', (CUBLASError,), {})
-CUBLASExecutionFailed = type('CUBLASExecutionFailed', (CUBLASError,), {})
-CUBLASInternalError = type('CUBLASInternalError', (CUBLASError,), {})
+class CUBLASError(Exception): pass
+class CUBLASNotInitialized(CUBLASError): pass
+class CUBLASAllocFailed(CUBLASError): pass
+class CUBLASInvalidValue(CUBLASError): pass
+class CUBLASArchMismatch(CUBLASError): pass
+class CUBLASMappingError(CUBLASError): pass
+class CUBLASExecutionFailed(CUBLASError): pass
+class CUBLASInternalError(CUBLASError): pass
 
 
 class CUBLASWrappers(LibWrapper):
@@ -93,7 +93,7 @@ class CUDACUBLASKernels(object):
 
         class MulKernel(ComputeKernel):
             def run(iself, queue):
-                lib.cublasSetStream(self, queue.cuda_stream_comp)
+                lib.cublasSetStream(self, queue.stream_comp)
                 cublasgemm(self, lib.OP_N, lib.OP_N, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)

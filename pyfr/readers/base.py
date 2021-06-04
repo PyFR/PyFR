@@ -56,7 +56,7 @@ class NodalMeshAssembler(object):
     def _check_pyr_parallelogram(self, foeles):
         # Find PyFR node map for the quad face
         fnmap = self._petype_fnmap['pyr']['quad'][0]
-        pfnmap = self._nodemaps['quad', 4][fnmap]
+        pfnmap = [self._nodemaps['quad', 4][i] for i in fnmap]
 
         # Face nodes
         fpts = self._nodepts[foeles[:, pfnmap]].swapaxes(0, 1)
@@ -249,7 +249,7 @@ class NodalMeshAssembler(object):
             # Use this to determine which elements are linear
             num = np.max(np.abs(eles - leles), axis=0)
             den = np.max(eles, axis=0) - np.min(eles, axis=0)
-            lin = lidx[petype] = np.any(num / den < lintol, axis=1)
+            lin = lidx[petype] = np.all(num / den < lintol, axis=1)
 
             for ix in np.nonzero(lin)[0]:
                 self._nodepts[elesix[ix], :ndim] = leles[ptoi, ix]

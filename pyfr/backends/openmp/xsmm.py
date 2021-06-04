@@ -31,9 +31,6 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
 
-        self.max_sz = backend.cfg.getint('backend-openmp', 'libxsmm-max-sz',
-                                         125**2)
-
         # Kernel cache
         self._kerns = {}
 
@@ -78,10 +75,6 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         if beta != 0.0 and beta != 1.0:
             raise NotSuitableError('libxssm requires β = 0 or β = 1')
 
-        # Check the matrix is of a reasonable size
-        if a.ncol*a.nrow > self.max_sz:
-            raise NotSuitableError('Matrix too large for libxsmm')
-
         # Dimensions
         ldb, ldc = b.leaddim, out.leaddim
 
@@ -92,10 +85,11 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         try:
             blkptr = self._kerns[ckey]
         except KeyError:
-            c_is_nt = beta == 0 and self.backend.alignb >= 64
+            c_is_nt = (beta == 0 and
+                       out.nbytes >= 32*1024**2 and
+                       self.backend.alignb >= 64)
 
             a_np = np.ascontiguousarray(a.get())
-
             m, k = a_np.shape
 
             # JIT and register an block leaddim size kernel for this matrix
@@ -113,7 +107,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Render our parallel wrapper kernel
         src = self.backend.lookup.get_template('batch-gemm').render(lib='xsmm')
 
-        # Argument types for par_xsmm
+        # Argument types for batch_gemm
         argt = [np.intp] + [np.intp, np.int32]*3
 
         # Build

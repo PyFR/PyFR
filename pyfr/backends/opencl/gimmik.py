@@ -12,7 +12,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
         super().__init__(backend)
 
         self.max_nnz = backend.cfg.getint('backend-opencl', 'gimmik-max-nnz',
-                                          512)
+                                          2048)
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
@@ -37,7 +37,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
 
         class MulKernel(ComputeKernel):
             def run(self, queue):
-                fun(queue.cl_queue_comp, (b.ncol,), None, b.ncol,
-                    b.data, b.leaddim, out.data, out.leaddim)
+                fun(queue.cmd_q_comp, (b.ncol,), None, b.ncol, b.data,
+                    b.leaddim, out.data, out.leaddim)
 
         return MulKernel()
