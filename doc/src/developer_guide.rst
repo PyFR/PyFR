@@ -1,4 +1,3 @@
-.. highlightlang:: python
 .. highlight:: Python
 
 ***************
@@ -677,7 +676,6 @@ Types of `Kernel Generator`_ are related via the following inheritance diagram:
 PyFR-Mako
 =========
 
-.. highlightlang:: none
 .. highlight:: none
 
 PyFR-Mako Kernels
