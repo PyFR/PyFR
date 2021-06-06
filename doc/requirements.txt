@@ -2,7 +2,6 @@ Sphinx >= 3.5.3
 graphviz
 mkdocs
 sphinx-rtd-theme
-sphinx-highlights
 sphinxcontrib-contentui
 sphinxcontrib-fancybox
 

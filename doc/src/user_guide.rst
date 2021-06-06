@@ -1,4 +1,4 @@
-.. highlightlang:: none
+.. highlight:: none
 
 **********
 User Guide
