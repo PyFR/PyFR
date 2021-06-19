@@ -49,6 +49,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         if ('eles', 'gradcoru_qpts') in kernels:
             q1.enqueue(kernels['eles', 'gradcoru_qpts'])
+        if ('eles', 'qptsu') in kernels:
+            q1.enqueue(kernels['eles', 'qptsu'])
         q1.enqueue(kernels['eles', 'tdisf_curved'])
         q1.enqueue(kernels['eles', 'tdisf_linear'])
         q1.enqueue(kernels['eles', 'tdivtpcorf'])

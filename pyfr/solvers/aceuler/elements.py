@@ -50,7 +50,7 @@ class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
 
         # Common arguments
         if 'flux' in self.antialias:
-            u = lambda s: self._slice_mat(self._scal_fqpts, s, ra=self.nfpts)
+            u = lambda s: self._slice_mat(self._scal_qpts, s)
             f = lambda s: self._slice_mat(self._vect_qpts, s)
             pts, npts = 'qpts', self.nqpts
         else:

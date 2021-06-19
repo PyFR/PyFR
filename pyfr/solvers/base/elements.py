@@ -184,13 +184,9 @@ class BaseElements(object):
         valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
 
         # Allocate required scalar scratch space
-        if 'scal_fpts' in sbufs and 'scal_qpts' in sbufs:
-            self._scal_fqpts = salloc('_scal_fqpts', nfpts + nqpts)
-            self._scal_fpts = self._scal_fqpts.slice(0, nfpts)
-            self._scal_qpts = self._scal_fqpts.slice(nfpts, nfpts + nqpts)
-        elif 'scal_fpts' in sbufs:
+        if 'scal_fpts' in sbufs:
             self._scal_fpts = salloc('scal_fpts', nfpts)
-        elif 'scal_qpts' in sbufs:
+        if 'scal_qpts' in sbufs:
             self._scal_qpts = salloc('scal_qpts', nqpts)
 
         # Allocate additional scalar scratch space
