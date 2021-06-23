@@ -50,7 +50,8 @@ class BaseSystem(object):
         # I/O banks for the elements
         self.eles_scal_upts_inb = eles.scal_upts_inb
         self.eles_scal_upts_outb = eles.scal_upts_outb
-        self.eles_vect_upts = eles._vect_upts
+        if hasattr(eles, '_vect_upts'):
+            self.eles_vect_upts = eles._vect_upts
 
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
