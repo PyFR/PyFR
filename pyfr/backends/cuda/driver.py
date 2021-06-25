@@ -57,6 +57,19 @@ class CUDAWrappers(LibWrapper):
     FUNC_CACHE_PREFER_L1 = 2
     FUNC_CACHE_PREFER_EQUAL = 3
 
+    # Attribute Constants
+    FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK = 0
+    FUNC_ATTRIBUTE_SHARED_SIZE_BYTES = 1
+    FUNC_ATTRIBUTE_CONST_SIZE_BYTES = 2
+    FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES = 3
+    FUNC_ATTRIBUTE_NUM_REGS = 4
+    FUNC_ATTRIBUTE_PTX_VERSION = 5
+    FUNC_ATTRIBUTE_BINARY_VERSION = 6
+    FUNC_ATTRIBUTE_CACHE_MODE_CA = 7
+    FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
+    FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
+
+
     # Functions
     _functions = [
         (c_int, 'cuInit', c_int),
@@ -87,6 +100,7 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
+        (c_int, 'cuFuncSetAttribute', c_void_p, c_int, c_int),
         (c_int, 'cuFuncSetCacheConfig', c_void_p, c_int)
     ]
 
@@ -198,11 +212,20 @@ class CUDAFunction(_CUDABase):
         pref = self.cuda._get_cache_pref(prefer_l1, prefer_shared)
         self.cuda.lib.cuFuncSetCacheConfig(self, pref)
 
-    def exec_async(self, grid, block, stream, *args):
+    def set_shared_size(self, *, shared=0, carveout=None):
+        attr = self.cua.lib.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+        self.cuda.lib.cuFuncSetAttribute(self, attr, shared)
+
+        if carveout is not None:
+            attr = self.cua.lib.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT
+            self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
+
+
+    def exec_async(self, grid, block, stream, *args, shared=0):
         for src, dst in zip(args, self._args):
             dst.value = getattr(src, '_as_parameter_', src)
 
-        self.cuda.lib.cuLaunchKernel(self, *grid, *block, 0, stream,
+        self.cuda.lib.cuLaunchKernel(self, *grid, *block, shared, stream,
                                      self._arg_ptrs, None)
 
 

@@ -93,7 +93,7 @@ class NVRTC(object):
 
 
 class SourceModule(object):
-    def __init__(self, backend, src):
+    def __init__(self, backend, src, additional_opt=False):
         # Prepare the source code
         src = f'extern "C"\n{{\n{src}\n}}'
 
@@ -106,6 +106,8 @@ class SourceModule(object):
             '--ftz=true',
             '--fmad=true'
         ]
+        if additional_opt:
+            flags += ['--use_fast_math', '--extra-device-vectorization']
 
         # Compile to PTX
         ptx = backend.nvrtc.compile('kernel', src, flags)
@@ -114,10 +116,11 @@ class SourceModule(object):
         self.mod = backend.cuda.load_module(ptx)
 
     def get_function(self, name, argtypes, *, prefer_l1=None,
-                     prefer_shared=None):
+                     prefer_shared=None, shared=0, carveout=None):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
 
         fun = self.mod.get_function(name, argtypes)
         fun.set_cache_pref(prefer_l1=prefer_l1, prefer_shared=prefer_shared)
+        fun.set_shared_size(shared=shared, carveout=carveout)
 
         return fun

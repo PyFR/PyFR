@@ -58,7 +58,7 @@ class CUDABackend(BaseBackend):
         # benefits greatly from more shared memory but fails to
         # declare its preference) we set the global default to
         # PREFER_SHARED.
-        self.cuda.set_cache_pref(prefer_shared=True)
+        self.cuda.set_cache_pref(prefer_shared=True, prefer_l1=True)
 
         from pyfr.backends.cuda import (blasext, cublas, gimmik, packing,
                                         provider, types)
