@@ -18,9 +18,8 @@ class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4,
-                                  prefer_l1=True
-                                 )
+        kern = self._build_kernel('pack_view', src,
+                                  [np.int32]*3 + [np.intp]*4)
 
         # Compute the grid and thread-block size
         block = (128, 1, 1)

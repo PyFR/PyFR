@@ -128,7 +128,7 @@ Parameterises the CUDA backend with
 
     *int*
 
-5. ``cflags`` --- additional Nvidia realtime compiler (``nvrtc``) flags:
+5. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
     
     *string*
 

@@ -217,7 +217,7 @@ class CUDAFunction(_CUDABase):
         self.cuda.lib.cuFuncSetAttribute(self, attr, dynm_shared)
 
         if carveout is not None:
-            attr = self.cua.lib.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT
+            attr = self.cuda.lib.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT
             self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
 
     def exec_async(self, grid, block, stream, *args, dynm_shared=0):

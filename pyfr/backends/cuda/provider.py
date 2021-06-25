@@ -14,10 +14,10 @@ def get_grid_for_block(block, nrow, ncol=1):
 
 class CUDAKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes, **kwargs):
+    def _build_kernel(self, name, src, argtypes):
         # Compile the source code and retrieve the function
         mod = SourceModule(self.backend, src)
-        return mod.get_function(name, argtypes, **kwargs)
+        return mod.get_function(name, argtypes)
 
 
 class CUDAPointwiseKernelProvider(CUDAKernelProvider,
