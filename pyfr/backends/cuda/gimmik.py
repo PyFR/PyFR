@@ -35,9 +35,10 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # Build
         fun = self._build_kernel('gimmik_mm', src,
-                                 [np.int32, np.intp]*2 + [np.int32],
-                                 prefer_l1=True
+                                 [np.int32, np.intp]*2 + [np.int32]
                                 )
+        fun.set_cache_pref(prefer_l=True)
+
 
         # Determine the grid/block
         block = (128, 1, 1)

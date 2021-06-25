@@ -213,7 +213,7 @@ class CUDAFunction(_CUDABase):
         self.cuda.lib.cuFuncSetCacheConfig(self, pref)
 
     def set_shared_size(self, *, shared=0, carveout=None):
-        attr = self.cua.lib.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+        attr = self.cuda.lib.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
         self.cuda.lib.cuFuncSetAttribute(self, attr, shared)
 
         if carveout is not None:

@@ -115,12 +115,7 @@ class SourceModule(object):
         # Load it as a module
         self.mod = backend.cuda.load_module(ptx)
 
-    def get_function(self, name, argtypes, *, prefer_l1=None,
-                     prefer_shared=None, shared=0, carveout=None):
+    def get_function(self, name, argtypes, *):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
 
-        fun = self.mod.get_function(name, argtypes)
-        fun.set_cache_pref(prefer_l1=prefer_l1, prefer_shared=prefer_shared)
-        fun.set_shared_size(shared=shared, carveout=carveout)
-
-        return fun
+        return self.mod.get_function(name, argtypes)
