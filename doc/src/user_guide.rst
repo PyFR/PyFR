@@ -128,6 +128,11 @@ Parameterises the CUDA backend with
 
     *int*
 
+5. ``opflags`` --- additional optimisation flags to be passed to Nvidia 
+   real-time compiler:
+    
+    *string*
+
 Example::
 
     [backend-cuda]

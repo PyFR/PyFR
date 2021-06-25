@@ -212,19 +212,19 @@ class CUDAFunction(_CUDABase):
         pref = self.cuda._get_cache_pref(prefer_l1, prefer_shared)
         self.cuda.lib.cuFuncSetCacheConfig(self, pref)
 
-    def set_shared_size(self, *, shared=0, carveout=None):
+    def set_shared_size(self, *, dynm_shared=0, carveout=None):
         attr = self.cuda.lib.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
-        self.cuda.lib.cuFuncSetAttribute(self, attr, shared)
+        self.cuda.lib.cuFuncSetAttribute(self, attr, dynm_shared)
 
         if carveout is not None:
             attr = self.cua.lib.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT
             self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
 
-    def exec_async(self, grid, block, stream, *args, shared=0):
+    def exec_async(self, grid, block, stream, *args, dynm_shared=0):
         for src, dst in zip(args, self._args):
             dst.value = getattr(src, '_as_parameter_', src)
 
-        self.cuda.lib.cuLaunchKernel(self, *grid, *block, shared, stream,
+        self.cuda.lib.cuLaunchKernel(self, *grid, *block, dynm_shared, stream,
                                      self._arg_ptrs, None)
 
 

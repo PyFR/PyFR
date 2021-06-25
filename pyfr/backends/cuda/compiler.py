@@ -93,7 +93,7 @@ class NVRTC(object):
 
 
 class SourceModule(object):
-    def __init__(self, backend, src, additional_opt=False):
+    def __init__(self, backend, src):
         # Prepare the source code
         src = f'extern "C"\n{{\n{src}\n}}'
 
@@ -106,8 +106,11 @@ class SourceModule(object):
             '--ftz=true',
             '--fmad=true'
         ]
-        if additional_opt:
-            flags += ['--use_fast_math', '--extra-device-vectorization']
+
+        additional_opt = backend.cfg.get('backend-cuda', 'opflags', 'None')
+
+        if additional_opt != 'None':
+            flags += additional_opt.split(',')
 
         # Compile to PTX
         ptx = backend.nvrtc.compile('kernel', src, flags)
@@ -115,7 +118,7 @@ class SourceModule(object):
         # Load it as a module
         self.mod = backend.cuda.load_module(ptx)
 
-    def get_function(self, name, argtypes, *):
+    def get_function(self, name, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
 
         return self.mod.get_function(name, argtypes)
