@@ -220,7 +220,6 @@ class CUDAFunction(_CUDABase):
             attr = self.cua.lib.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT
             self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
 
-
     def exec_async(self, grid, block, stream, *args, shared=0):
         for src, dst in zip(args, self._args):
             dst.value = getattr(src, '_as_parameter_', src)
