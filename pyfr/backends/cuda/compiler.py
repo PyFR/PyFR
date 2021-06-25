@@ -2,6 +2,7 @@
 
 from ctypes import (POINTER, create_string_buffer, c_char_p, c_int, c_size_t,
                     c_void_p)
+import shlex
 
 from pyfr.ctypesutil import LibWrapper
 from pyfr.nputil import npdtype_to_ctypestype
@@ -107,11 +108,8 @@ class SourceModule(object):
             '--fmad=true'
         ]
 
-        additional_opt = backend.cfg.get('backend-cuda', 'opflags', 'None')
-
-        if additional_opt != 'None':
-            flags += additional_opt.split(',')
-
+        shlex.split(cfg.get('backend-cuda', 'cflags', ''))
+        
         # Compile to PTX
         ptx = backend.nvrtc.compile('kernel', src, flags)
 
