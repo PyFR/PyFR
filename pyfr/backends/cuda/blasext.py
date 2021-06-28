@@ -22,8 +22,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv
-                                 )
+                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
 
         # Determine the grid/block
         block = (128, 1, 1)
