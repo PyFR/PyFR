@@ -6,6 +6,7 @@
 
 <%pyfr:kernel name='tfluxlin' ndim='2'
               u='in fpdtype_t[${str(nvars)}]'
+              f='out fpdtype_t[${str(ndims)}][${str(nvars)}]'
               verts='in broadcast-col fpdtype_t[${str(nverts)}][${str(ndims)}]'
               upts='in broadcast-row fpdtype_t[${str(ndims)}]'>
     // Compute the flux
