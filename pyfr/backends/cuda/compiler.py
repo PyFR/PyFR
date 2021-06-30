@@ -2,20 +2,21 @@
 
 from ctypes import (POINTER, create_string_buffer, c_char_p, c_int, c_size_t,
                     c_void_p)
+import shlex
 
 from pyfr.ctypesutil import LibWrapper
 from pyfr.nputil import npdtype_to_ctypestype
 
 
 # Possible NVRTC exception types
-NVRTCError = type('NVRTCError', (Exception,), {})
-NVRTCOutOfMemory = type('NVRTCOutOfMemory', (NVRTCError,), {})
-NVRTCProgCreationFailure = type('NVRTCProgCreationFailure', (NVRTCError,), {})
-NVRTCInvalidInput = type('NVRTCInvalidInput', (NVRTCError,), {})
-NVRTCInvalidProgram = type('NVRTCInvalidProgram', (NVRTCError,), {})
-NVRTCInvalidOption = type('NVRTCInvalidOption', (NVRTCError,), {})
-NVRTCCompilationError = type('NVRTCCompilationError', (NVRTCError,), {})
-NVRTCInternalError = type('NVRTCInternalError', (NVRTCError,), {})
+class NVRTCError(Exception): pass
+class NVRTCOutOfMemory(NVRTCError): pass
+class NVRTCProgCreationFailure(NVRTCError): pass
+class NVRTCInvalidInput(NVRTCError): pass
+class NVRTCInvalidProgram(NVRTCError): pass
+class NVRTCInvalidOption(NVRTCError): pass
+class NVRTCCompilationError(NVRTCError): pass
+class NVRTCInternalError(NVRTCError): pass
 
 
 class NVRTCWrappers(LibWrapper):
@@ -107,17 +108,15 @@ class SourceModule(object):
             '--fmad=true'
         ]
 
+        flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
+        
         # Compile to PTX
         ptx = backend.nvrtc.compile('kernel', src, flags)
 
         # Load it as a module
         self.mod = backend.cuda.load_module(ptx)
 
-    def get_function(self, name, argtypes, *, prefer_l1=None,
-                     prefer_shared=None):
+    def get_function(self, name, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
 
-        fun = self.mod.get_function(name, argtypes)
-        fun.set_cache_pref(prefer_l1=prefer_l1, prefer_shared=prefer_shared)
-
-        return fun
+        return self.mod.get_function(name, argtypes)

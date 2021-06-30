@@ -94,11 +94,13 @@ class ACNavierStokesNoSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'no-slp-wall'
     cflux_state = 'ghost'
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self.c['v'] = self._eval_opts('uvw'[:self.ndims], default='0')
-
+        self.c.update(
+            self._exp_opts('uvw'[:self.ndims], lhs,
+                           default={'u': 0, 'v': 0, 'w': 0})
+        )
 
 class ACNavierStokesSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'slp-wall'

@@ -131,19 +131,15 @@ class BaseShape(object):
 
     @lazyprop
     def m8(self):
-        return np.vstack([self.m0, self.m7])
-
-    @lazyprop
-    def m9(self):
         return _proj_l2(self._eqrule, self.ubasis)
 
     @property
-    def m10(self):
-        return block_diag([self.m9]*self.ndims)
+    def m9(self):
+        return block_diag([self.m8]*self.ndims)
 
     @lazyprop
     @clean
-    def m11(self):
+    def m10(self):
         ub = self.ubasis
 
         n = max(sum(dd) for dd in ub.degrees)

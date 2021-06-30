@@ -310,21 +310,21 @@ class BaseAdvectionElements(BaseElements):
             self.prepare_turbsrc(self.ploc_at_np('upts'))
 
         # Interpolation from elemental points
+        kernels['disu'] = lambda: self._be.kernel(
+            'mul', self.opmat('M0'), self.scal_upts_inb,
+            out=self._scal_fpts
+        )
+
         if fluxaa:
-            kernels['disu'] = lambda: self._be.kernel(
-                'mul', self.opmat('M8'), self.scal_upts_inb,
-                out=self._scal_fqpts
-            )
-        else:
-            kernels['disu'] = lambda: self._be.kernel(
-                'mul', self.opmat('M0'), self.scal_upts_inb,
-                out=self._scal_fpts
+            kernels['qptsu'] = lambda: self._be.kernel(
+                'mul', self.opmat('M7'), self.scal_upts_inb,
+                out=self._scal_qpts
             )
 
         # First flux correction kernel
         if fluxaa:
             kernels['tdivtpcorf'] = lambda: self._be.kernel(
-                'mul', self.opmat('(M1 - M3*M2)*M10'), self._vect_qpts,
+                'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
                 out=self.scal_upts_outb
             )
         else:
@@ -359,7 +359,7 @@ class BaseAdvectionElements(BaseElements):
         if self.cfg.getint('soln-filter', 'nsteps', '0'):
             def filter_soln():
                 mul = self._be.kernel(
-                    'mul', self.opmat('M11'), self.scal_upts_inb,
+                    'mul', self.opmat('M10'), self.scal_upts_inb,
                     out=self._scal_upts_temp
                 )
                 copy = self._be.kernel(

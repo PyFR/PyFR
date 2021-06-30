@@ -9,19 +9,21 @@ from pyfr.ctypesutil import LibWrapper
 
 
 # Possible CUDA exception types
-CUDAError = type('CUDAError', (Exception,), {})
-CUDAInvalidValue = type('CUDAInvalidValue', (CUDAError,), {})
-CUDAOutofMemory = type('CUDAOutofMemory', (CUDAError,), {})
-CUDANotInitalized = type('CUDANotInitalized', (CUDAError,), {})
-CUDANoDevice = type('CUDANoDevice', (CUDAError,), {})
-CUDAInvalidDevice = type('CUDAInvalidDevice', (CUDAError,), {})
-CUDAECCUncorrectable = type('CUDAECCUncorrectable', (CUDAError,), {})
-CUDAOSError = type('CUDAOSError', (CUDAError, OSError), {})
-CUDAInvalidHandle = type('CUDAInvalidHandle', (CUDAError,), {})
-CUDAIllegalAddress = type('CUDAIllegalAddress', (CUDAError,), {})
-CUDALaunchOutOfResources = type('CUDALaunchOutOfResources', (CUDAError,), {})
-CUDALaunchFailed = type('CUDALaunchFailed', (CUDAError,), {})
-CUDASystemDriverMismatch = type('CUDASystemDriverMismatch', (CUDAError,), {})
+class CUDAError(Exception): pass
+class CUDAInvalidValue(CUDAError): pass
+class CUDAOutofMemory(CUDAError): pass
+class CUDANotInitalized(CUDAError): pass
+class CUDANoDevice(CUDAError): pass
+class CUDAInvalidDevice(CUDAError): pass
+class CUDAECCUncorrectable(CUDAError): pass
+class CUDAErrorInvalidPTX(CUDAError): pass
+class CUDAErrorUnsupportedPTXVersion(CUDAError): pass
+class CUDAOSError(CUDAError, OSError): pass
+class CUDAInvalidHandle(CUDAError): pass
+class CUDAIllegalAddress(CUDAError): pass
+class CUDALaunchOutOfResources(CUDAError): pass
+class CUDALaunchFailed(CUDAError): pass
+class CUDASystemDriverMismatch(CUDAError): pass
 
 
 class CUDAWrappers(LibWrapper):
@@ -35,6 +37,8 @@ class CUDAWrappers(LibWrapper):
         100: CUDANoDevice,
         101: CUDAInvalidDevice,
         214: CUDAECCUncorrectable,
+        218: CUDAErrorInvalidPTX,
+        222: CUDAErrorUnsupportedPTXVersion,
         304: CUDAOSError,
         400: CUDAInvalidHandle,
         700: CUDAIllegalAddress,
@@ -52,6 +56,19 @@ class CUDAWrappers(LibWrapper):
     FUNC_CACHE_PREFER_SHARED = 1
     FUNC_CACHE_PREFER_L1 = 2
     FUNC_CACHE_PREFER_EQUAL = 3
+
+    # Attribute Constants
+    FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK = 0
+    FUNC_ATTRIBUTE_SHARED_SIZE_BYTES = 1
+    FUNC_ATTRIBUTE_CONST_SIZE_BYTES = 2
+    FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES = 3
+    FUNC_ATTRIBUTE_NUM_REGS = 4
+    FUNC_ATTRIBUTE_PTX_VERSION = 5
+    FUNC_ATTRIBUTE_BINARY_VERSION = 6
+    FUNC_ATTRIBUTE_CACHE_MODE_CA = 7
+    FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
+    FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
+
 
     # Functions
     _functions = [
@@ -83,6 +100,7 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
+        (c_int, 'cuFuncSetAttribute', c_void_p, c_int, c_int),
         (c_int, 'cuFuncSetCacheConfig', c_void_p, c_int)
     ]
 
@@ -194,11 +212,19 @@ class CUDAFunction(_CUDABase):
         pref = self.cuda._get_cache_pref(prefer_l1, prefer_shared)
         self.cuda.lib.cuFuncSetCacheConfig(self, pref)
 
-    def exec_async(self, grid, block, stream, *args):
+    def set_shared_size(self, *, dynm_shared=0, carveout=None):
+        attr = self.cuda.lib.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+        self.cuda.lib.cuFuncSetAttribute(self, attr, dynm_shared)
+
+        if carveout is not None:
+            attr = self.cuda.lib.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT
+            self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
+
+    def exec_async(self, grid, block, stream, *args, dynm_shared=0):
         for src, dst in zip(args, self._args):
             dst.value = getattr(src, '_as_parameter_', src)
 
-        self.cuda.lib.cuLaunchKernel(self, *grid, *block, 0, stream,
+        self.cuda.lib.cuLaunchKernel(self, *grid, *block, dynm_shared, stream,
                                      self._arg_ptrs, None)
 
 
