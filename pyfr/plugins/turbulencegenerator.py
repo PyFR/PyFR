@@ -9,20 +9,6 @@ from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin
 from pyfr.nputil import npeval
 
-def get_lref_etype(cfg, cfgsect, constants, loc, ndims):
-    # Bring simulation constants into scope
-    vars = constants
-
-    # get the physical location. loc should have a shape like (ndims, -1)
-    vars.update(dict(zip('xyz', loc)))
-
-    # maximum component-wise
-    lturbmax = [[np.max(npeval(cfg.getexpr(cfgsect, f'l{i}{j}'), vars))
-                 for j in range(ndims)] for i in range(ndims)]
-
-    #lref = max_j (l_ij)
-    return np.max(np.array(lturbmax), axis=1)
-
 def eval_expr(expr, constants, loc):
     # Bring simulation constants into scope
     vars = constants
@@ -48,6 +34,14 @@ def get_lturbref(cfg, cfgsect, constants, ndims):
             msg = 'Could not determine lturbref automatically. Set it in the .ini file.'
             raise RuntimeError(msg)
 
+def computeNeddies(inflow, Ubulkdir, lturbref):
+    ndims = lturbref.size
+    dirs = [i for i in range(ndims) if i != Ubulkdir]
+
+    inflowarea = np.prod(inflow)
+    eddyarea = 4.0*np.prod(lturbref[dirs]) # 2 Ly x 2 Lz
+    return int(inflowarea/eddyarea) + 1
+
 
 class TurbulenceGeneratorPlugin(BasePlugin):
     name = 'turbulencegenerator'
@@ -60,14 +54,8 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # Set the pointer to the elements
         self.elemap = intg.system.ele_map
 
-        # Number of eddies. TODO ugly!
-        for ele in self.elemap.values():
-            self.N = ele.N
-
         # MPI info
         comm, self.rank, self.root = get_comm_rank_root()
-        if self.rank == self.root:
-            print('n eddies = {}'.format(self.N))
 
         # Initialize the previous time to the current one.
         self.tprev = intg.tcurr
@@ -75,22 +63,9 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # Constant variables
         self._constants = self.cfg.items_as('constants', float)
 
-        # characteristic lengths,3x3 matrix (XYZ x UVW). This corresponds to
-        # the radii of influence of the synthetic eddies, i.e. to the one-side
-        # integral length scale.
-        # self.lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
-
         # reference turbulent = np.max(lturb, axis=1)
         # useful to have it in the .ini file to avoid problems with weird domains
         self.lturbref = get_lturbref(self.cfg, cfgsect, self._constants, self.ndims)
-        # # or
-        # # physical location of solution points.
-        # plocs = []
-        # for ele in self.elemap.values():
-        #     pname = 'qpts' if 'div-flux' in ele.antialias else 'upts'
-        #     plocs.append(ele.ploc_at_np(pname).swapaxes(1, 0).reshape(self.ndims, -1))
-        # self.lturbref = self.get_lref(cfgsect, plocs)
-        # print('lref = ' + f'{self.lref}')
 
         # Bulk velocity
         self.Ubulk = self.cfg.getfloat(cfgsect, 'Ubulk')
@@ -118,6 +93,9 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.box_dims = np.zeros(self.ndims)
         self.box_dims[self.Ubulkdir] = lstreamwise
         self.box_dims[dirs] = inflow
+
+        # Number of eddies
+        self.N = computeNeddies(inflow, self.Ubulkdir, self.lturbref)
 
         # Allocate the memory for the working arrays
         self.eddies_loc = np.empty((self.ndims, self.N))
@@ -153,22 +131,6 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         if not intg.isrestart:
             self.tout_last -= self.dt_out
             self(intg)
-
-    def get_lref(self, cfgsect, locs):
-        # loop over the locations of all element types
-        lref = np.zeros(self.ndims)
-        for loc in locs:
-            lref_etype = get_lref_etype(self.cfg, cfgsect, self._constants, loc,
-                                        self.ndims)
-            lref = np.maximum(lref, lref_etype)
-
-        # get the max across all ranks.
-        #WARNING this works only if the expression in the .ini file is formulated
-        # such that it gives the correct values anywhere in the domain
-        # so you might want to use a max,min function in there
-        lref = comm.allreduce(lref, op=get_mpi('max'))
-        print('lref = ' + f'{lref}')
-        return lref
 
     @staticmethod
     def random_seed(t):

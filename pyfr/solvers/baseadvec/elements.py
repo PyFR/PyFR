@@ -2,7 +2,7 @@
 
 from pyfr.backends.base import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
-from pyfr.plugins.turbulencegenerator import eval_expr, get_lturbref
+from pyfr.plugins.turbulencegenerator import eval_expr, get_lturbref, computeNeddies
 
 import numpy as np
 
@@ -80,9 +80,6 @@ class BaseAdvectionElements(BaseElements):
         # Ac or compressible?
         self.srctplargs['system'] = 'ac' if self.system.startswith('ac') else 'compr'
 
-        # characteristic lengths,3x3 matrix (XYZ x UVW).
-        # lturb = np.array(self.cfg.getliteral(cfgsect, 'lturb'))
-
         # minimum value of the clipping value csimax <= 1.0
         self.srctplargs['cmm'] = cmm = self.cfg.getfloat(cfgsect, 'csimax_min',
                                                          0.4)
@@ -100,13 +97,7 @@ class BaseAdvectionElements(BaseElements):
 
         # Number of eddies.
         inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
-        dirs = [i for i in range(ndims) if i != Ubulkdir]
-
-        inflowarea = np.prod(inflow)
-        eddyarea = 4.0*np.prod(lturbref[dirs]) # 2 Ly x 2 Lz
-        self.N = N = int(inflowarea/eddyarea) + 1
-
-        self.srctplargs['N'] = N
+        self.srctplargs['N'] = N = computeNeddies(inflow, Ubulkdir, lturbref)
 
         # expressions for the turbulent lengths, needed here for evaluation
         lturbexpr = [[self.cfg.getexpr(cfgsect, f'l{i}{j}')
@@ -138,27 +129,14 @@ class BaseAdvectionElements(BaseElements):
 
         # Variables needed by the compressible solver
         if not self.system.startswith('ac'):
-            # # bulk pressure and mach number
-            # pbulk = self.cfg.getfloat(cfgsect, 'pbulk')
-            # Mbulk2 = self.cfg.getfloat(cfgsect, 'Mbulk')**2
-
-            # # factor for the density fluctuations (Strong Reynolds Analogy)
-            # rhobulk = Mbulk2*constants['gamma']*pbulk/Ubulk**2
-            # gm1 = constants['gamma'] - 1.0
-            # self.srctplargs['rhofluctfactor'] = rhobulk*gm1*Mbulk2/Ubulk
-
+            # variables for the density fluctuations (Strong Reynolds Analogy):
+            # mean density and mean Mach number
             rhomeanex = self.cfg.getexpr(cfgsect, 'rhomean', subs=subs)
             Mmeanex = self.cfg.getexpr(cfgsect, 'Mmean', subs=subs)
             self.srctplargs['rhomeanex'] = rhomeanex
             self.srctplargs['Mmeanex'] = Mmeanex
 
             self.srctplargs['rhofluctfactor'] = (constants['gamma'] - 1.0)/Ubulk
-
-        #TODO compute the factor and aij mat in the plugin rather than here?
-
-        # Frozen turbulence hypothesis to get characteristic times in each vel.
-        # component. This is needed for the scaling factor
-        # tturb = lturb[Ubulkdir,:]/Ubulk
 
         # Center point
         ctr = np.array(self.cfg.getliteral(cfgsect, 'center'))
@@ -197,20 +175,14 @@ class BaseAdvectionElements(BaseElements):
             lxk = np.array(lxklist)
         else:
             lxk = np.array(lxklist).reshape((ndims, 1))
-        # print('ploc shape = {}'.format(ploc.shape) + 'lxk shape = {}'.format(lxk.shape))
 
         #clip lxk for stability
         lxk = np.maximum(lxk, cmm*lturbref[:, np.newaxis])
 
         # Scaling factor
         dist = (ploc[Ubulkdir] - ctr[Ubulkdir])/lxk
-        # print('ploc[Ubulkdir] shape = {}'.format(ploc[Ubulkdir].shape))
-        # print('dist shape = {}'.format(dist.shape))
 
         factor = np.exp(-0.5*np.pi*np.power(dist, 2.))*Ubulk/lxk #ndims, nvertices
-        # print('factor shape = {}'.format(factor.shape))
-
-        # factor *= np.sqrt(1./N)
 
         fmat = self._be.const_matrix(factor.reshape(ndims, npts, neles).swapaxes(0, 1))
         self._set_external('factor',
@@ -253,6 +225,7 @@ class BaseAdvectionElements(BaseElements):
 
         delta = np.zeros(ndims)
         delta[Ubulkdir] = lturbref[Ubulkdir]
+        dirs = [i for i in range(ndims) if i != Ubulkdir]
         delta[dirs] = 0.5*inflow + lturbref[dirs]
         x0 = ctr - delta
         x1 = ctr + delta
