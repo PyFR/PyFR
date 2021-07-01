@@ -282,13 +282,13 @@ class BaseAdvectionElements(BaseElements):
             'trsrc': self._turbsrc
         }
 
-        # External kernel arguments for turbulence generation, if any.
+        # Synthetic turbulence generation via source term.
         if self._turbsrc:
             self.system = self.cfg.get('solver', 'system')
-            # Source term for turbulence generation. We need the points
-            # locations and conserved variables for the compressible solver.
+            # Points locations are always needed while the conserved variables
+            # are needed only by the compressible solver.
             plocsrc = True
-            solnsrc = False if self.system.startswith('ac') else True
+            solnsrc = solnsrc if self.system.startswith('ac') else True
 
             # Compute/allocate the memory for the other needed variables.
             self.prepare_turbsrc(self.ploc_at_np('upts'))

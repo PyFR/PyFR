@@ -175,7 +175,7 @@ class BaseElements(object):
 
     @lazyprop
     def _soln_in_src_exprs(self):
-        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs) or self._turbsrc
+        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
