@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from collections import defaultdict
-
 import numpy as np
 import os
 
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin
 from pyfr.nputil import npeval
+
 
 def eval_expr(expr, constants, loc):
     # Bring simulation constants into scope
@@ -19,27 +18,30 @@ def eval_expr(expr, constants, loc):
     # evaluate the expression at the given location
     return npeval(expr, vars)
 
+
 def get_lturbref(cfg, cfgsect, constants, ndims):
     # try to compute them if not specified by the user
     if cfg.hasopt('soln-plugin-turbulencegenerator', 'lturbref'):
         return np.array(cfg.getliteral(cfgsect, 'lturbref'))
     else:
         try:
-            # this works only if all lenghts are constant and not space dependent.
+            # this works only if all lenghts are constant and space independent
             vars = constants
             lturb = [[npeval(cfg.getexpr(cfgsect, f'l{i}{j}'), vars)
                       for j in range(ndims)] for i in range(ndims)]
             return np.max(np.array(lturb), axis=1)
         except:
-            msg = 'Could not determine lturbref automatically. Set it in the .ini file.'
+            msg = ('Could not determine lturbref automatically. '
+                   ' Set it in the .ini file.')
             raise RuntimeError(msg)
+
 
 def computeNeddies(inflow, Ubulkdir, lturbref):
     ndims = lturbref.size
     dirs = [i for i in range(ndims) if i != Ubulkdir]
 
     inflowarea = np.prod(inflow)
-    eddyarea = 4.0*np.prod(lturbref[dirs]) # 2 Ly x 2 Lz
+    eddyarea = 4.0*np.prod(lturbref[dirs])  # 2 Ly x 2 Lz
     return int(inflowarea/eddyarea) + 1
 
 
@@ -55,7 +57,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.elemap = intg.system.ele_map
 
         # MPI info
-        comm, self.rank, self.root = get_comm_rank_root()
+        _, self.rank, self.root = get_comm_rank_root()
 
         # Initialize the previous time to the current one.
         self.tprev = intg.tcurr
@@ -63,9 +65,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # Constant variables
         self._constants = self.cfg.items_as('constants', float)
 
-        # reference turbulent = np.max(lturb, axis=1)
-        # useful to have it in the .ini file to avoid problems with weird domains
-        self.lturbref = get_lturbref(self.cfg, cfgsect, self._constants, self.ndims)
+        # reference turbulent = np.max(lturb, axis=1). Useful to have it in
+        # the .ini file to avoid problems with weird domains
+        self.lturbref = get_lturbref(
+            self.cfg, cfgsect, self._constants, self.ndims)
 
         # Bulk velocity
         self.Ubulk = self.cfg.getfloat(cfgsect, 'Ubulk')
@@ -117,17 +120,19 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         intg.call_plugin_dt(self.dt_out)
 
         # Populate the box of eddies
-        if os.path.isfile(self._get_output_path(intg.tcurr)) and intg.isrestart:
+        if (os.path.isfile(self._get_output_path(intg.tcurr)) and
+                intg.isrestart):
             data = np.loadtxt(self._get_output_path(intg.tcurr), delimiter=',')
-            self.eddies_loc = data[:, :self.ndims].swapaxes(0,1)
-            self.eddies_strength = data[:, self.ndims:].swapaxes(0,1)
+            self.eddies_loc = data[:, :self.ndims].swapaxes(0, 1)
+            self.eddies_strength = data[:, self.ndims:].swapaxes(0, 1)
         else:
             self.create_eddies(intg.tcurr)
 
         # Update the backend
         self.update_backend()
 
-        # If we're not restarting then call ourself to write out the initial eddies
+        # If we're not restarting then call ourself to write out the initial
+        # eddies
         if not intg.isrestart:
             self.tout_last -= self.dt_out
             self(intg)
@@ -138,7 +143,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
     def create_eddies(self, t, neweddies=None):
         # Eddies to be generated: number and indices.
-        N    = self.N           if neweddies is None else np.count_nonzero(neweddies)
+        N = self.N if neweddies is None else np.count_nonzero(neweddies)
         idxe = np.full(N, True) if neweddies is None else neweddies
 
         # Generate the new random locations and strengths. Set the seed so all
@@ -149,7 +154,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # Make sure the strengths are only +/- ones.
         strengths = random[self.ndims:]
         pos = strengths >= 0.0
-        neg = strengths <  0.0
+        neg = strengths < 0.0
         strengths[pos] = np.ceil(strengths[pos])
         strengths[neg] = np.floor(strengths[neg])
 
@@ -157,7 +162,8 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Locations.
         loc = random[:self.ndims]
-        self.eddies_loc[:, idxe] = loc*(self.box_dims[:,np.newaxis]/2.0) + self.ctr[:,np.newaxis]
+        self.eddies_loc[:, idxe] = loc * \
+            (self.box_dims[:, np.newaxis]/2.0) + self.ctr[:, np.newaxis]
 
         # New eddies are generated at the inlet of the box, except at startup,
         # when the variable neweddies in None.
@@ -183,9 +189,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Return if not active or no action is due
         if dowrite or doupdate:
-            # Update the streamwise location of the eddies and check whether any
-            # are outside of the box. If so, generate new ones.
-            self.eddies_loc[self.Ubulkdir] += (intg.tcurr - self.tprev)*self.Ubulk
+            # Update the streamwise location of the eddies and check whether
+            # any are outside of the box. If so, generate new ones.
+            self.eddies_loc[self.Ubulkdir] += (intg.tcurr -
+                                               self.tprev)*self.Ubulk
             neweddies = self.eddies_loc[self.Ubulkdir] > self.box_xmax
 
             if neweddies.any():
@@ -200,8 +207,8 @@ class TurbulenceGeneratorPlugin(BasePlugin):
             # write to file if requested.
             if dowrite:
                 if self.rank == self.root:
-                    data = np.hstack((self.eddies_loc.swapaxes(0,1),
-                                      self.eddies_strength.swapaxes(0,1)))
+                    data = np.hstack((self.eddies_loc.swapaxes(0, 1),
+                                      self.eddies_strength.swapaxes(0, 1)))
                     np.savetxt(self._get_output_path(intg.tcurr), data,
                                delimiter=',')
 

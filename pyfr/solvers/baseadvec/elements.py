@@ -2,9 +2,11 @@
 
 from pyfr.backends.base import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
-from pyfr.plugins.turbulencegenerator import eval_expr, get_lturbref, computeNeddies
+from pyfr.plugins.turbulencegenerator import (eval_expr, get_lturbref,
+                                              computeNeddies)
 
 import numpy as np
+
 
 class BaseAdvectionElements(BaseElements):
     @property
@@ -22,14 +24,15 @@ class BaseAdvectionElements(BaseElements):
     @staticmethod
     def arr_to_str(arr):
         string = np.array2string(arr, separator=',')
-        return string.replace('[','{').replace(']','}').replace('\n','')
+        return string.replace('[', '{').replace(']', '}').replace('\n', '')
 
     @staticmethod
     def G(csi, sigma, GC, p, clip, csimax):
-        output = ((1./sigma/np.sqrt(2.0*np.pi*GC))*np.exp(-0.5*((csi)/sigma)**2))**p
+        output = ((1./sigma/np.sqrt(2.0*np.pi*GC))
+                  * np.exp(-0.5*((csi)/sigma)**2))**p
         if clip:
             if np.size(csimax) > 1:
-                idx = np.abs(csi) > csimax[:,np.newaxis]
+                idx = np.abs(csi) > csimax[:, np.newaxis]
                 output = np.copy(np.broadcast_to(output, idx.shape))
             else:
                 idx = np.abs(csi) > csimax
@@ -43,14 +46,14 @@ class BaseAdvectionElements(BaseElements):
         # Compute the constants GC such that 0.5 times the integral of the
         # guassian squared, between -1 and +1, is 1.0. The clipping value of
         # the independent variable depend on the ratio between the considered
-        # length scale and the reference (max) one (a reference for each direction).
-        # The clipping value for the reference (max) lengths is 1.
+        # length scale and the reference (max) one (a reference for each
+        # direction). The clipping value for the reference (max) lengths is 1.
         ndims, nvertices = ploc.shape
         GCs = np.zeros((ndims, ndims, nvertices))
 
         # Compute the constants (one constant for all vertices at the time).
-        for i in range(ndims): #x,y,z
-            for j in range(ndims): #U,V,W
+        for i in range(ndims):  # x,y,z
+            for j in range(ndims):  # U,V,W
                 lturb = eval_expr(lturbexpr[i][j], constants, ploc)
 
                 # Clipping value: smaller than reference length means smaller
@@ -59,8 +62,8 @@ class BaseAdvectionElements(BaseElements):
                 csimax = np.maximum(np.minimum(lturb/lturbref[i], 1.0), cmm)
 
                 args = [sigma, 1.0, 2.0, True, csimax]
-                funct = lambda csi: G(csi, *args)
-                GCs[i,j] = 0.5*fixed_quad(funct, -1, 1, n=50)[0]
+                def funct(csi): return G(csi, *args)
+                GCs[i, j] = 0.5*fixed_quad(funct, -1, 1, n=50)[0]
 
         GCsInv = 1.0/np.sqrt(2.0*np.pi*GCs)
         # ndims, ndims, nvertices -> ndims, nvertices
@@ -69,7 +72,6 @@ class BaseAdvectionElements(BaseElements):
         return gauss_const
 
     def prepare_turbsrc(self, ploc):
-        import math
         cfgsect = 'soln-plugin-turbulencegenerator'
 
         # Constant variables
@@ -78,7 +80,8 @@ class BaseAdvectionElements(BaseElements):
         npts, ndims, neles = ploc.shape
 
         # Ac or compressible?
-        self.srctplargs['system'] = 'ac' if self.system.startswith('ac') else 'compr'
+        self.srctplargs['system'] = 'ac' if self.system.startswith(
+            'ac') else 'compr'
 
         # minimum value of the clipping value csimax <= 1.0
         self.srctplargs['cmm'] = cmm = self.cfg.getfloat(cfgsect, 'csimax_min',
@@ -109,7 +112,7 @@ class BaseAdvectionElements(BaseElements):
         # some memory.
         subs = self.cfg.items('constants')
         subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
-        subs.update(abs='fabs', pi=str(math.pi))
+        subs.update(abs='fabs', pi=str(np.pi))
 
         lturbexprkernel = [[self.cfg.getexpr(cfgsect, f'l{i}{j}', subs=subs)
                             for j in range(ndims)] for i in range(ndims)]
@@ -120,12 +123,12 @@ class BaseAdvectionElements(BaseElements):
         self.eddies_loc = self._be.matrix((ndims, N), tags={'align'})
         self._set_external('eddies_loc',
                            'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
-                            value=self.eddies_loc)
+                           value=self.eddies_loc)
 
         self.eddies_strength = self._be.matrix((ndims, N), tags={'align'})
         self._set_external('eddies_strength',
                            'in broadcast fpdtype_t[{}][{}]'.format(ndims, N),
-                            value=self.eddies_strength)
+                           value=self.eddies_strength)
 
         # Variables needed by the compressible solver
         if not self.system.startswith('ac'):
@@ -136,7 +139,8 @@ class BaseAdvectionElements(BaseElements):
             self.srctplargs['rhomeanex'] = rhomeanex
             self.srctplargs['Mmeanex'] = Mmeanex
 
-            self.srctplargs['rhofluctfactor'] = (constants['gamma'] - 1.0)/Ubulk
+            self.srctplargs['rhofluctfactor'] = (
+                constants['gamma'] - 1.0)/Ubulk
 
         # Center point
         ctr = np.array(self.cfg.getliteral(cfgsect, 'center'))
@@ -149,12 +153,13 @@ class BaseAdvectionElements(BaseElements):
         self.srctplargs['arg_const'] = -0.5/(sigma**2)
         self.srctplargs['lturbref'] = self.arr_to_str(lturbref)
 
-        gauss_const = self.determine_gaussian_constants(self.G, sigma, lturbexpr,
-                                                        lturbref, constants,
-                                                        ploc, cmm)
+        gauss_const = self.determine_gaussian_constants(self.G, sigma,
+                                                        lturbexpr, lturbref,
+                                                        constants, ploc, cmm)
 
         # allocate the memory for the gauss constants
-        gcmat = self._be.const_matrix(gauss_const.reshape(ndims, npts, neles).swapaxes(0, 1))
+        gcmat = self._be.const_matrix(
+            gauss_const.reshape(ndims, npts, neles).swapaxes(0, 1))
         self._set_external('gauss_const',
                            'in fpdtype_t[{0}]'.format(ndims),
                            value=gcmat)
@@ -167,52 +172,58 @@ class BaseAdvectionElements(BaseElements):
 
         # if any is a numpy array then all components need to be too.
         # otherwise they are all constant and lxk just needs to be reshaped.
-        broadcast_to_ploc = any([isinstance(lxk, np.ndarray) for lxk in lxklist])
+        broadcast_to_ploc = any([isinstance(lxk, np.ndarray)
+                                 for lxk in lxklist])
         if broadcast_to_ploc:
-            for idxl,lxk in enumerate(lxklist):
+            for idxl, lxk in enumerate(lxklist):
                 if not isinstance(lxk, np.ndarray):
                     lxklist[idxl] = np.full((ploc.shape[-1],), lxk)
             lxk = np.array(lxklist)
         else:
             lxk = np.array(lxklist).reshape((ndims, 1))
 
-        #clip lxk for stability
+        # clip lxk for stability
         lxk = np.maximum(lxk, cmm*lturbref[:, np.newaxis])
 
         # Scaling factor
         dist = (ploc[Ubulkdir] - ctr[Ubulkdir])/lxk
 
-        factor = np.exp(-0.5*np.pi*np.power(dist, 2.))*Ubulk/lxk #ndims, nvertices
+        factor = np.exp(-0.5*np.pi*np.power(dist, 2.)) * \
+            Ubulk/lxk  # ndims, nvertices
 
-        fmat = self._be.const_matrix(factor.reshape(ndims, npts, neles).swapaxes(0, 1))
+        fmat = self._be.const_matrix(
+            factor.reshape(ndims, npts, neles).swapaxes(0, 1))
         self._set_external('factor',
                            'in fpdtype_t[{0}]'.format(ndims),
                            value=fmat)
 
         # Compute and save the target Reynolds stress. Assume symmetry and
-        # periodicity in the z direction. TODO hardcoded for the moment.
+        # periodicity in the z direction.
+        # TODO hardcoded for the moment.
         # #              [[R_00, R_01, R_02],
         # #               [R_10, R_11, R_12],
         # #               [R_20, R_21, R_22]]
-        reystressexpr = [self.cfg.getexpr(cfgsect, f'r{i}{i}', '0') for i in range(ndims)]
-        reystressexpr.append(self.cfg.getexpr(cfgsect, f'r01', '0'))
-        #[r00, r11, r22, r01=r10]
+        reystressexpr = [self.cfg.getexpr(
+            cfgsect, f'r{i}{i}', '0') for i in range(ndims)]
+        reystressexpr.append(self.cfg.getexpr(cfgsect, 'r01', '0'))
+        # [r00, r11, r22, r01=r10]
         reystress = np.zeros((4, ploc.shape[-1]))
-        for idx,expr in enumerate(reystressexpr):
+        for idx, expr in enumerate(reystressexpr):
             reystress[idx] = eval_expr(expr, constants, ploc)
 
         # the first three components should be positive
         reystress[0:3] = np.maximum(reystress[0:3], 0.0)
 
         # The aij matrix
-        #TODO NOTE HARDCODING DIRECTION AND SIZE, and uniformity in z
+        # TODO NOTE HARDCODING DIRECTION AND SIZE, and uniformity in z
         aij = np.empty((4, ploc.shape[-1]))
-        aij[0] = np.sqrt(reystress[0]) #R00
-        aij[1] = reystress[3]/np.maximum(aij[0], 1e-12)   #R01
-        aij[2] = np.sqrt(np.maximum(reystress[1] - aij[1]**2, 0.0)) #R11
-        aij[3] = np.sqrt(reystress[2]) #R22
+        aij[0] = np.sqrt(reystress[0])  # R00
+        aij[1] = reystress[3]/np.maximum(aij[0], 1e-12)  # R01
+        aij[2] = np.sqrt(np.maximum(reystress[1] - aij[1]**2, 0.0))  # R11
+        aij[3] = np.sqrt(reystress[2])  # R22
 
-        aijmat = self._be.const_matrix(aij.reshape(4, npts, neles).swapaxes(0, 1))
+        aijmat = self._be.const_matrix(
+            aij.reshape(4, npts, neles).swapaxes(0, 1))
         self._set_external('aij',
                            'in fpdtype_t[{0}]'.format(4),
                            value=aijmat)
@@ -233,7 +244,7 @@ class BaseAdvectionElements(BaseElements):
         # Determine which points are inside the box
         inside = np.ones(ploc.shape[1:], dtype=np.bool)
         for l, p, u in zip(x0, ploc, x1):
-            inside  &= (l <= p) & (p <= u)
+            inside &= (l <= p) & (p <= u)
 
         if np.sum(inside):
             # indices of the elements that have at least one solution point
@@ -274,8 +285,8 @@ class BaseAdvectionElements(BaseElements):
         # External kernel arguments for turbulence generation, if any.
         if self._turbsrc:
             self.system = self.cfg.get('solver', 'system')
-            # Source term for turbulence generation.
-            # We need the points locations and conserved variables for compr solver.
+            # Source term for turbulence generation. We need the points
+            # locations and conserved variables for the compressible solver.
             plocsrc = True
             solnsrc = False if self.system.startswith('ac') else True
 
