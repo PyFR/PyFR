@@ -138,7 +138,8 @@ class BasePartitioner(object):
             if self.cfg.hassect('soln-plugin-turbulencegenerator'):
                 lturbref = np.array(self.cfg.getliteral(cfgsect, 'lturbref'))
                 ctr = np.array(self.cfg.getliteral(cfgsect, 'center'))
-                inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
+                inflow = np.array(self.cfg.getliteral(
+                    cfgsect, 'plane-dimensions'))
                 Ubulkdir = self.cfg.getint(cfgsect, 'Ubulk-dir')
 
                 t, _ = vetimap[0]
@@ -156,19 +157,20 @@ class BasePartitioner(object):
                 print('Taking into account turb. generation...')
                 for t, i in vetimap:
                     pname = 'spt_{}_p0'.format(t)
-                    pts = np.moveaxis(mesh[pname], 2, 0)[:, :, i] #ndims, npoints
+                    pts = np.moveaxis(mesh[pname], 2, 0)[
+                        :, :, i]  # ndims, npoints
 
                     # Determine which points are inside the box
                     inside = np.ones(pts.shape[1:], dtype=np.bool)
                     for l, p, u in zip(x0, pts, x1):
-                        inside  &= (l <= p) & (p <= u)
+                        inside &= (l <= p) & (p <= u)
 
                     if np.any(inside, axis=0):
                         vwts[i] *= self.cfg.getfloat(cfgsect,
                                                      'partitioner-weight', 2.0)
-                        nel_affected +=1
+                        nel_affected += 1
                 print('nel_affected = {} out of {}'.format(nel_affected,
-                                                           mesh[pname].shape[1]))
+                    mesh[pname].shape[1]))
 
         return Graph(vtab, etab, vwts, ewts), vetimap
 
