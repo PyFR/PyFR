@@ -15,6 +15,7 @@ class HIPNotInitialized(HIPError): pass
 class HIPOutOfMemory(HIPError): pass
 class HIPInsufficientDriver(HIPError): pass
 class HIPPriorLaunchFailure(HIPError): pass
+class HIPInvalidDevice(HIPError): pass
 class HIPECCNotCorrectable(HIPError): pass
 class HIPFileNotFound(HIPError): pass
 class HIPNotFound(HIPError): pass
@@ -108,6 +109,7 @@ class HIPWrappers(LibWrapper):
         3: HIPNotInitialized,
         35: HIPInsufficientDriver,
         53: HIPPriorLaunchFailure,
+        101: HIPInvalidDevice,
         214: HIPECCNotCorrectable,
         301: HIPFileNotFound,
         500: HIPNotFound,
