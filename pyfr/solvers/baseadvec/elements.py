@@ -149,7 +149,7 @@ class BaseAdvectionElements(BaseElements):
         ploc = ploc.swapaxes(1, 0).reshape(ndims, -1)
 
         # Gaussian constants they depend on the box dimensions.
-        sigma = self.cfg.getfloat(cfgsect, 'sigma', 1.0)
+        sigma = self.cfg.getfloat(cfgsect, 'sigma', 0.75)
         self.srctplargs['arg_const'] = -0.5/(sigma**2)
         self.srctplargs['lturbrefinv'] = self.arr_to_str(1.0/lturbref)
 
