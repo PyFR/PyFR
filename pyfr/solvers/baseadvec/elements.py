@@ -151,7 +151,7 @@ class BaseAdvectionElements(BaseElements):
         # Gaussian constants they depend on the box dimensions.
         sigma = self.cfg.getfloat(cfgsect, 'sigma', 1.0)
         self.srctplargs['arg_const'] = -0.5/(sigma**2)
-        self.srctplargs['lturbref'] = self.arr_to_str(lturbref)
+        self.srctplargs['lturbrefinv'] = self.arr_to_str(1.0/lturbref)
 
         gauss_const = self.determine_gaussian_constants(self.G, sigma,
                                                         lturbexpr, lturbref,

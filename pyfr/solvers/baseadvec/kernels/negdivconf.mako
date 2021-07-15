@@ -15,13 +15,13 @@
 % if trsrc:
 if (affected > 0.0){
 // Turbulent characteristic lengths (radii of influence)
-fpdtype_t lturbref[${ndims}] = ${lturbref};
+fpdtype_t lturbrefinv[${ndims}] = ${lturbrefinv};
 
 // Initialize the utilde to 0.0
 fpdtype_t utilde[${ndims}] = {0.0};
 
 // Working variables
-fpdtype_t arg;
+fpdtype_t arg, arg2, pexp;
 fpdtype_t csi[${ndims}];
 
 // Compute csi_max[3][3] on the fly for this point as lturb/lturb ref.
@@ -29,7 +29,7 @@ fpdtype_t csi[${ndims}];
 fpdtype_t csimax[${ndims}][${ndims}] = {{1.0}};
 % for i in range(ndims):
     % for j in range(ndims):
-        csimax[${i}][${j}] = min(max(${lturbex[i][j]}/lturbref[${i}], ${cmm}), 1.0);
+        csimax[${i}][${j}] = min(max(${lturbex[i][j]}*lturbrefinv[${i}], ${cmm}), 1.0);
     % endfor
 % endfor
 
@@ -38,14 +38,14 @@ for (int n=0; n<${N}; n++){
     // printf("Eddy: t=%f, eddies_loc=(%f, %f, %f), n=%d\n", t, eddies_loc[0][n], eddies_loc[1][n], eddies_loc[2][n], n);
 
     //U,V,W
-    csi[2] = fabs((ploc[2] - eddies_loc[2][n])/lturbref[2]);
+    csi[2] = fabs((ploc[2] - eddies_loc[2][n])*lturbrefinv[2]);
     % for j in range(ndims):
         if (csi[2] < csimax[2][${j}]){
 
-            csi[1] = fabs((ploc[1] - eddies_loc[1][n])/lturbref[1]);
+            csi[1] = fabs((ploc[1] - eddies_loc[1][n])*lturbrefinv[1]);
             if (csi[1] < csimax[1][${j}]){
 
-                csi[0] = fabs((ploc[0] - eddies_loc[0][n])/lturbref[0]);
+                csi[0] = fabs((ploc[0] - eddies_loc[0][n])*lturbrefinv[0]);
                 if (csi[0] < csimax[0][${j}]){
 
                     arg = 0.0;
@@ -55,7 +55,10 @@ for (int n=0; n<${N}; n++){
                     arg *= ${arg_const};
 
                     // Accumulate taking into account this components strength
-                    utilde[${j}] += gauss_const[${j}]*exp(arg)*eddies_strength[${j}][n];
+                    arg2 = arg*arg;
+                    // polynomial approximation of exp(arg)
+                    pexp = 0.0006401098467575985*arg2*arg2*arg + 0.012770347332254533*arg2*arg2 + 0.10273980299300066*arg2*arg + 0.42908015717558884*arg2 + 0.9716933049901688*arg + 1.0;
+                    utilde[${j}] += gauss_const[${j}]*pexp*eddies_strength[${j}][n];
                 }
             }
         }
