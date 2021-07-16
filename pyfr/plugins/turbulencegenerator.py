@@ -53,6 +53,11 @@ class TurbulenceGeneratorPlugin(BasePlugin):
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
 
+        # do not allow multiple instances
+        if suffix:
+            raise RuntimeError('Only one instance of the turbulencegenerator '
+               'plugin is allowed.')
+
         # Set the pointer to the elements
         self.elemap = intg.system.ele_map
 
