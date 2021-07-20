@@ -15,18 +15,18 @@ class HIPBlasExtKernels(HIPKernelProvider):
         nrow, ncol, ldim, dtype = arr[0].traits[1:]
         ncola, ncolb = arr[0].ioshape[1:]
 
+        # Determine the grid/block
+        block = (128, 1, 1)
+        grid = get_grid_for_block(block, ncolb, nrow)
+
         # Render the kernel template
         src = self.backend.lookup.get_template('axnpby').render(
-            subdims=subdims or range(ncola), ncola=ncola, nv=nv
+            block=block, subdims=subdims or range(ncola), ncola=ncola, nv=nv
         )
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
-
-        # Determine the grid/block
-        block = (128, 1, 1)
-        grid = get_grid_for_block(block, ncolb, nrow)
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
@@ -67,7 +67,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         # Empty result buffer on the host
         reduced_host = hip.pagelocked_empty((ncola, grid[0]), dtype)
 
-        tplargs = dict(norm=norm, sharesz=block[0], method=method)
+        tplargs = dict(norm=norm, blocksz=block[0], method=method)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'

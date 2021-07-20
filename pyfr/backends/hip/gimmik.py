@@ -28,19 +28,20 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         if nuq > 28 and nnz / arr.size > 0.15:
             raise NotSuitableError('Matrix inappropriate GiMMiK')
 
+        # Determine the grid/block
+        block = (128, 1, 1)
+        grid = get_grid_for_block(block, b.ncol)
+
         # Generate
         src = generate_mm(a.get(), dtype=a.dtype, platform='cuda',
                           alpha=alpha, beta=beta)
+        src = src.replace('void', f'__launch_bounds__({block[0]}) void')
         src = src.replace('blockDim.x*blockIdx.x + threadIdx.x',
                           'hipBlockDim_x*hipBlockIdx_x + hipThreadIdx_x')
 
         # Build
         fun = self._build_kernel('gimmik_mm', src,
                                  [np.int32, np.intp]*2 + [np.int32])
-
-        # Determine the grid/block
-        block = (128, 1, 1)
-        grid = get_grid_for_block(block, b.ncol)
 
         class MulKernel(ComputeKernel):
             def run(self, queue):

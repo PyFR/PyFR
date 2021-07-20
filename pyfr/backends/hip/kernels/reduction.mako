@@ -2,7 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-__global__ void
+__global__ __launch_bounds__(${blocksz}) void
 reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
           fpdtype_t *__restrict__ rcurr, fpdtype_t *__restrict__ rold,
 % if method == 'errest':
@@ -15,9 +15,9 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
 {
     int tid = hipThreadIdx_x;
     int i = hipBlockIdx_x*hipBlockDim_x + tid;
-    int lastblksize = ncolb % ${sharesz};
+    int lastblksize = ncolb % ${blocksz};
 
-    __shared__ fpdtype_t sdata[${sharesz}];
+    __shared__ fpdtype_t sdata[${blocksz}];
     fpdtype_t r, acc = 0;
 
     if (i < ncolb)
@@ -46,7 +46,7 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
     // Unrolled reduction within full blocks
     if (hipBlockIdx_x != hipGridDim_x - 1)
     {
-    % for n in pyfr.ilog2range(sharesz):
+    % for n in pyfr.ilog2range(blocksz):
         if (tid < ${n})
         {
         % if norm == 'uniform':
