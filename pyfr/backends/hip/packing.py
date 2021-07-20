@@ -14,15 +14,15 @@ class HIPPackingKernels(HIPKernelProvider, BasePackingKernels):
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
 
-        # Render the kernel template
-        src = self.backend.lookup.get_template('pack').render()
-
-        # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
-
         # Compute the grid and thread-block size
         block = (128, 1, 1)
         grid = get_grid_for_block(block, v.n)
+
+        # Render the kernel template
+        src = self.backend.lookup.get_template('pack').render(blocksz=block[0])
+
+        # Build
+        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
 
         # If MPI is HIP aware then we just need to pack the buffer
         if self.backend.mpitype == 'hip-aware':
