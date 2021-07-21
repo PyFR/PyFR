@@ -524,15 +524,24 @@ class VTKWriter(BaseWriter):
         for fname, varnames in vvars:
             names.append(fname.title())
             types.append(dtype)
-            comps.append(str(len(varnames)))
+            # Append dummy z dimension for vectors in 2D
+            if self.ndims == 2 and len(varnames) == 2:
+                comps.append(str(len(varnames) + 1))
+            else:
+                comps.append(str(len(varnames)))
 
-        # If a solution has been given the compute the sizes
+        # If a solution has been given then compute the sizes
         if sk:
             npts, ncells, nnodes = self._get_npts_ncells_nnodes(sk)
             nb = npts*dsize
 
             sizes = [3*nb, 4*nnodes, 4*ncells, ncells]
-            sizes.extend(len(varnames)*nb for fname, varnames in vvars)
+            for fname, varnames in vvars:
+                # Append dummy z dimension for vectors in 2D
+                if self.ndims == 2 and len(varnames) == 2:
+                    sizes.append((len(varnames) + 1)*nb)
+                else:
+                    sizes.append(len(varnames)*nb)
 
             return names, types, comps, sizes
         else:
@@ -754,6 +763,11 @@ class VTKWriter(BaseWriter):
 
         # Process and write out the various fields
         for arr in self._post_proc_fields(vsoln):
+            # Append dummy z dimension for vectors in 2D
+            if self.ndims == 2 and arr.shape[0] == 2:
+                zeros = np.zeros((1, arr.shape[1], arr.shape[2]),
+                                 dtype=self.dtype)
+                arr = np.append(arr, zeros, axis=0)
             self._write_darray(arr.T, vtuf, self.dtype)
 
 
