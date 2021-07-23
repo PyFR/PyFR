@@ -1,4 +1,4 @@
-.. highlightlang:: none
+.. highlight:: none
 
 **********
 User Guide
@@ -127,6 +127,10 @@ Parameterises the CUDA backend with
 4. ``block-2d`` --- block size for two dimensional pointwise kernels:
 
     *int*
+
+5. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
+    
+    *string*
 
 Example::
 
@@ -882,8 +886,8 @@ Example::
 Simple periodic boundary conditions are supported; however, their behaviour
 is not controlled through the ``.ini`` file, instead it is handled at
 the mesh generation stage. Two faces may be taged with
-``periodic_l_x`` and ``periodic_r_x``, where ``x`` is a unique
-integer for the pair of boundaries. Currently, only periodicity in a
+``periodic_x_l`` and ``periodic_x_r``, where ``x`` is a unique
+identifier for the pair of boundaries. Currently, only periodicity in a
 single cardinal direction is supported, for example, the planes
 ``(x,y,0)``` and ``(x,y,10)``.
 

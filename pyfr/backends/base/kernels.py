@@ -95,8 +95,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Possible matrix types
         mattypes = (
             self.backend.const_matrix_cls, self.backend.matrix_cls,
-            self.backend.matrix_bank_cls, self.backend.matrix_slice_cls,
-            self.backend.xchg_matrix_cls
+            self.backend.matrix_bank_cls, self.backend.xchg_matrix_cls,
+            self.backend.matrix_slice_cls
         )
 
         # Possible view types
@@ -118,7 +118,11 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
             # Matrix
             if isinstance(ka, mattypes):
-                arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
+                # Check that argument is not a row sliced matrix
+                if isinstance(ka, mattypes[-1]) and ka.nrow != ka.parent.nrow:
+                    raise ValueError('Row sliced matrices are not supported')
+                else:
+                    arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
             # View
             elif isinstance(ka, viewtypes):
                 if isinstance(ka, self.backend.view_cls):
