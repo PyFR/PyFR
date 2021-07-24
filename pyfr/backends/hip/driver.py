@@ -119,7 +119,8 @@ class HIPWrappers(LibWrapper):
     }
 
     # Constants
-    MemcpyDefault = 4
+    EVENT_DISABLE_TIMING = 2
+    MEMCPY_DEFAULT = 4
 
     # Functions
     _functions = [
@@ -137,7 +138,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipStreamDestroy', c_void_p),
         (c_int, 'hipStreamSynchronize', c_void_p),
         (c_int, 'hipStreamWaitEvent', c_void_p, c_void_p, c_uint),
-        (c_int, 'hipEventCreate', POINTER(c_void_p)),
+        (c_int, 'hipEventCreateWithFlags', POINTER(c_void_p), c_uint),
         (c_int, 'hipEventDestroy', c_void_p),
         (c_int, 'hipEventRecord', c_void_p, c_void_p),
         (c_int, 'hipModuleLoadData', POINTER(c_void_p), c_char_p),
@@ -211,7 +212,7 @@ class HIPEvent(_HIPBase):
 
     def __init__(self, hip):
         ptr = c_void_p()
-        hip.lib.hipEventCreate(ptr)
+        hip.lib.hipEventCreateWithFlags(ptr, hip.lib.EVENT_DISABLE_TIMING)
 
         super().__init__(hip, ptr)
 
@@ -298,7 +299,7 @@ class HIP(object):
         return np.array(alloc, copy=False)
 
     def memcpy(self, dst, src, nbytes):
-        kind = self.lib.MemcpyDefault
+        kind = self.lib.MEMCPY_DEFAULT
 
         if isinstance(dst, (np.ndarray, np.generic)):
             dst = dst.ctypes.data
@@ -309,7 +310,7 @@ class HIP(object):
         self.lib.hipMemcpy(dst, src, nbytes, kind)
 
     def memcpy_async(self, dst, src, nbytes, stream):
-        kind = self.lib.MemcpyDefault
+        kind = self.lib.MEMCPY_DEFAULT
 
         if isinstance(dst, (np.ndarray, np.generic)):
             dst = dst.ctypes.data
