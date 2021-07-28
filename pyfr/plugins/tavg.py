@@ -5,8 +5,10 @@ import re
 import numpy as np
 
 from pyfr.inifile import Inifile
+from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
+from pyfr.writers.native import NativeWriter
 
 
 class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
@@ -17,23 +19,33 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
+        # Underlying elements class
+        self.elementscls = intg.system.elementscls
+
         # Averaging mode
         self.mode = self.cfg.get(cfgsect, 'mode', 'windowed')
         if self.mode not in {'continuous', 'windowed'}:
             raise ValueError('Invalid averaging mode')
-
-        # Underlying elements class
-        self.elementscls = intg.system.elementscls
 
         # Expressions pre-processing
         self._prepare_exprs()
 
         # Output data type
         fpdtype = self.cfg.get(cfgsect, 'precision', 'single')
+        if fpdtype == 'single':
+            self.fpdtype = np.float32
+        elif fpdtype == 'double':
+            self.fpdtype = np.float64
+        else:
+            raise ValueError('Invalid floating point data type')
+
+        # Base output directory and file name
+        basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
+        basename = self.cfg.get(self.cfgsect, 'basename')
 
         # Construct the file writer
-        self._writer = self._init_writer_for_region(intg, len(self.outfields),
-                                                    'tavg', fpdtype=fpdtype)
+        self._writer = NativeWriter(intg, basedir, basename, 'tavg')
+
         # Gradient pre-processing
         self._init_gradients(intg)
 
@@ -94,8 +106,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         pnames = self.elementscls.privarmap[self.ndims]
 
         # Iterate over each element type in the simulation
-        for i, rgn in self._ele_regions:
-            soln = intg.soln[i][..., rgn].swapaxes(0, 1)
+        for idx, etype, rgn in self._ele_regions:
+            soln = intg.soln[idx][..., rgn].swapaxes(0, 1)
 
             # Convert from conservative to primitive variables
             psolns = self.elementscls.con_to_pri(soln, self.cfg)
@@ -106,7 +118,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             # Prepare any required gradients
             if self._gradpinfo:
                 # Compute the gradients
-                grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., rgn]
+                grad_soln = np.rollaxis(intg.grad_soln[idx], 2)[..., rgn]
 
                 # Transform from conservative to primitive gradients
                 pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
@@ -163,6 +175,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             self.prevex = currex
 
             if dowrite:
+                comm, rank, root = get_comm_rank_root()
+
                 if self.mode == 'windowed':
                     accex = self.accex
                     tstart = self.tout_last
@@ -174,29 +188,35 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     tstart = self.tstart_actual
 
                 # Normalise the accumulated expressions
-                data = [a / (intg.tcurr - tstart) for a in accex]
+                tavg = [a / (intg.tcurr - tstart) for a in accex]
 
                 # Evaluate any functional expressions
                 if self.fexprs:
-                    funex = self._eval_fun_exprs(intg, data)
-                    data = [np.hstack([a, f]) for a, f in zip(data, funex)]
+                    funex = self._eval_fun_exprs(intg, tavg)
+                    tavg = [np.hstack([a, f]) for a, f in zip(tavg, funex)]
 
-                # Prepare the stats record
-                stats = Inifile()
-                stats.set('data', 'prefix', 'tavg')
-                stats.set('data', 'fields', ','.join(self.outfields))
-                stats.set('tavg', 'tstart', tstart)
-                stats.set('tavg', 'tend', intg.tcurr)
-                intg.collect_stats(stats)
+                # Form the output records to be written to disk
+                data = dict(self._ele_region_data)
+                for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
+                    data[etype] = d.astype(self.fpdtype)
 
-                # Prepare the metadata
-                metadata = dict(intg.cfgmeta,
-                                stats=stats.tostr(),
-                                mesh_uuid=intg.mesh_uuid)
+                # If we are the root rank then prepare the metadata
+                if rank == root:
+                    stats = Inifile()
+                    stats.set('data', 'prefix', 'tavg')
+                    stats.set('data', 'fields', ','.join(self.outfields))
+                    stats.set('tavg', 'tstart', tstart)
+                    stats.set('tavg', 'tend', intg.tcurr)
+                    intg.collect_stats(stats)
 
-                # Add in any required region data and write to disk
-                data = self._add_region_data(data)
-                solnfname = self._writer.write(data, metadata, intg.tcurr)
+                    metadata = dict(intg.cfgmeta,
+                                    stats=stats.tostr(),
+                                    mesh_uuid=intg.mesh_uuid)
+                else:
+                    metadata = None
+
+                # Write to disk
+                solnfname = self._writer.write(data, intg.tcurr, metadata)
 
                 # If a post-action has been registered then invoke it
                 self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
