@@ -110,6 +110,9 @@ class StdPIController(BaseStdController):
         self._maxfac = self.cfg.getfloat(sect, 'max-fact', 2.5)
         self._minfac = self.cfg.getfloat(sect, 'min-fact', 0.3)
 
+        if not self._minfac < 1 <= self._maxfac:
+            raise ValueError('Invalid max-fact, min-fact')
+
     @property
     def controller_needs_errest(self):
         return True
