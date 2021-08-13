@@ -37,7 +37,7 @@ class FluidForcePlugin(BasePlugin):
         self.elementscls = intg.system.elementscls
 
         # Boundary to integrate over
-        bc = 'bcon_{0}_p{1}'.format(suffix, intg.rallocs.prank)
+        bc = f'bcon_{suffix}_p{intg.rallocs.prank}'
 
         # Moments origin
         origin = self.cfg.get(cfgsect, 'morigin', '*')
@@ -53,8 +53,7 @@ class FluidForcePlugin(BasePlugin):
         # The root rank needs to open the output file
         if rank == root:
             if not any(bcranks):
-                raise RuntimeError('Boundary {0} does not exist'
-                                   .format(suffix))
+                raise RuntimeError(f'Boundary {suffix} does not exist')
 
             # CSV header
             header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
@@ -117,14 +116,12 @@ class FluidForcePlugin(BasePlugin):
                 npn = eles.get_norm_pnorms(eidx, fidx)
                 mpn = eles.get_mag_pnorms(eidx, fidx)
 
+                eidxs[etype, fidx].append(eidx)
+                norms[etype, fidx].append(mpn[:, None]*npn)
                 # Get the flux points position of the given face and element indices
                 # relative to the moment origin
                 if self.morigin:
                     rfpt = eles.get_fpts(eidx, fidx) - np.array(self.morigin)
-
-                eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn)
-                if self.morigin:
                     rfpts[etype, fidx].append(rfpt)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
@@ -230,13 +227,8 @@ class FluidForcePlugin(BasePlugin):
         else:
             comm.Reduce(get_mpi('in_place'), f, op=get_mpi('sum'), root=root)
 
-            # Build the row
-            row = [intg.tcurr] + f.tolist()
-            if self.morigin:
-                row += m.tolist()
-
             # Write
-            print(','.join(str(r) for r in row), file=self.outf)
+            print(intg.tcurr, *f, sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
@@ -260,7 +252,7 @@ class FluidForcePlugin(BasePlugin):
         mu = c['mu']
 
         if self._viscorr == 'sutherland':
-            cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0))
+            cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0)/rho**2)
             Trat = cpT/c['cpTref']
             mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
 
