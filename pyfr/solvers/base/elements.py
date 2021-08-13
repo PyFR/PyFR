@@ -177,11 +177,11 @@ class BaseElements(object):
         sbufs, abufs = self._scratch_bufs, []
 
         # Convenience functions for scalar/vector allocation
-        def alloc(ex, n): return abufs.append(
+        alloc = lambda ex, n: abufs.append(
             backend.matrix(n, extent=nonce + ex, tags={'align'})
         ) or abufs[-1]
-        def salloc(ex, n): return alloc(ex, (n, nvars, neles))
-        def valloc(ex, n): return alloc(ex, (ndims, n, nvars, neles))
+        salloc = lambda ex, n: alloc(ex, (n, nvars, neles))
+        valloc = lambda ex, n: alloc(ex, (ndims, n, nvars, neles))
 
         # Allocate required scalar scratch space
         if 'scal_fpts' in sbufs:
