@@ -62,14 +62,9 @@ class FluidForcePlugin(BasePlugin):
                 header += ['vx', 'vy', 'vz'][:self.ndims]
             if self._mcomp:
                 # Add headers of moments
-                if self.ndims == 2:
-                    header += ['mpz']
-                    if self._viscous:
-                        header += ['mvz']
-                else:
-                    header += ['mpx', 'mpy', 'mpz']
-                    if self._viscous:
-                        header += ['mvx', 'mvy', 'mvz']
+                header += ['mpx', 'mpy', 'mpz'][3 - mcomp:]
+                if self._viscous:
+                    header += ['mvx', 'mvy', 'mvz'][3 - mcomp:]
 
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
