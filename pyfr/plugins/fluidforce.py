@@ -114,7 +114,7 @@ class FluidForcePlugin(BasePlugin):
                 # Get the flux points position of the given face and element
                 # indices relative to the moment origin
                 if self._mcomp:
-                    rfpt = eles.get_fpts(eidx, fidx) - morigin
+                    rfpt = self.get_fpts(eles, eidx, fidx) - morigin
                     rfpts[etype, fidx].append(rfpt)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
@@ -201,11 +201,13 @@ class FluidForcePlugin(BasePlugin):
                 f[ndims:] += np.einsum('i...,klij,jil', qwts, vis, norms)
                 if self._mcomp:
                     # Viscous force at each flux point
-                    viscf = np.einsum('ijkl, lkj->lki', vis, norms)
+                    viscf = np.einsum('ijkl,lkj->lki', vis, norms)
 
                     # Viscous force moments
-                    m[self._mcomp:] += np.einsum('i,ji', qwts,
-                                                 np.cross(rfpts, viscf)).sum()
+                    mop = 'i,ji' if self.ndims == 2 else 'i,jik'
+                    m[self._mcomp:] += np.einsum(mop, qwts,
+                                                 np.cross(rfpts, viscf)
+                                                 ).sum(axis=0)
 
         # Reduce and output if we're the root rank
         if rank != root:
@@ -249,3 +251,7 @@ class FluidForcePlugin(BasePlugin):
         gradu, nu = du[:, 1:], self._constants['nu']
 
         return -nu*(gradu + gradu.swapaxes(0, 1))
+
+    def get_fpts(self, eles, eidx, fidx):
+        fpts_idx = eles.basis.facefpts[fidx]
+        return eles.plocfpts[fpts_idx, eidx]

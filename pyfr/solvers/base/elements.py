@@ -397,10 +397,6 @@ class BaseElements(object):
         fpts_idx = self.basis.facefpts[fidx]
         return self._norm_pnorm_fpts[fpts_idx, eidx]
 
-    def get_fpts(self, eidx, fidx):
-        fpts_idx = self.basis.facefpts[fidx]
-        return self.plocfpts[fpts_idx, eidx]
-
     def get_scal_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
 
