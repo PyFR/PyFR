@@ -44,6 +44,8 @@ class FluidForcePlugin(BasePlugin):
         self._mcomp = mcomp if self.cfg.hasopt(cfgsect, 'morigin') else 0
         if self._mcomp:
             morigin = np.array(self.cfg.getliteral(cfgsect, 'morigin'))
+            if morigin.shape[1] != self.ndims:
+                raise ValueError(f'morigin must have {self.ndims} components')
 
         # Get the mesh and elements
         mesh, elemap = intg.system.mesh, intg.system.ele_map
