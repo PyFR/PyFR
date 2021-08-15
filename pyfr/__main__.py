@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import sys
-sys.path.append('/home/gonzalo/PyFR_fork/PyFR/')
+
 from argparse import ArgumentParser, FileType
 import itertools as it
 import os
