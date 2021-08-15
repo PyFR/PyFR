@@ -44,7 +44,7 @@ class FluidForcePlugin(BasePlugin):
         self._mcomp = mcomp if self.cfg.hasopt(cfgsect, 'morigin') else 0
         if self._mcomp:
             morigin = np.array(self.cfg.getliteral(cfgsect, 'morigin'))
-            if morigin.shape[1] != self.ndims:
+            if len(morigin) != self.ndims:
                 raise ValueError(f'morigin must have {self.ndims} components')
 
         # Get the mesh and elements
@@ -85,6 +85,7 @@ class FluidForcePlugin(BasePlugin):
             eidxs = defaultdict(list)
             norms = defaultdict(list)
             rfpts = defaultdict(list)
+            rfpts_c_norms = defaultdict(list)
 
             for etype, eidx, fidx, flags in mesh[bc].astype('U4,i4,i1,i2'):
                 eles = elemap[etype]
@@ -110,18 +111,22 @@ class FluidForcePlugin(BasePlugin):
                 # Unit physical normals and their magnitudes (including |J|)
                 npn = eles.get_norm_pnorms(eidx, fidx)
                 mpn = eles.get_mag_pnorms(eidx, fidx)
+                wnorm = mpn[:, None]*npn
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn)
+                norms[etype, fidx].append(wnorm)
                 # Get the flux points position of the given face and element
                 # indices relative to the moment origin
                 if self._mcomp:
                     rfpt = self.get_fpts(eles, eidx, fidx) - morigin
                     rfpts[etype, fidx].append(rfpt)
+                    rfpts_c_norms[etype, fidx].append(np.cross(rfpt, wnorm))
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
             self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
+            self._rfpts_c_norms = {k: np.array(v)
+                                   for k, v in rfpts_c_norms.items()}
 
             if self._viscous:
                 self._rcpjact = {k: rcpjact[k[0]][..., v]
@@ -169,11 +174,11 @@ class FluidForcePlugin(BasePlugin):
             # Do the quadrature
             f[:ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
             if self._mcomp:
-                rfpts = self._rfpts[etype, fidx]
+                rfpts_c_norms = self._rfpts_c_norms[etype, fidx]
+
                 # Pressure force moments
                 mop = 'i...,ij,ji' if self.ndims == 2 else 'i...,ij,jik'
-                m[:self._mcomp] += np.einsum(mop, qwts, p,
-                                             np.cross(rfpts, norms))
+                m[:self._mcomp] += np.einsum(mop, qwts, p, rfpts_c_norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
@@ -202,14 +207,16 @@ class FluidForcePlugin(BasePlugin):
                 # Do the quadrature
                 f[ndims:] += np.einsum('i...,klij,jil', qwts, vis, norms)
                 if self._mcomp:
+                    # Get the relative flux points position
+                    rfpts = self._rfpts[etype, fidx]
+
                     # Viscous force at each flux point
                     viscf = np.einsum('ijkl,lkj->lki', vis, norms)
 
                     # Viscous force moments
-                    mop = 'i,ji' if self.ndims == 2 else 'i,jik'
+                    mop = 'i,ji->' if self.ndims == 2 else 'i,jik->k'
                     m[self._mcomp:] += np.einsum(mop, qwts,
-                                                 np.cross(rfpts, viscf)
-                                                 ).sum(axis=0)
+                                                 np.cross(rfpts, viscf))
 
         # Reduce and output if we're the root rank
         if rank != root:
