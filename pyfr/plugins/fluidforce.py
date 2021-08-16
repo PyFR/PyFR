@@ -219,13 +219,15 @@ class FluidForcePlugin(BasePlugin):
                                                  np.cross(rfpts, viscf))
 
         # Reduce and output if we're the root rank
+        red = np.array([*f, *m])
         if rank != root:
-            comm.Reduce(f, None, op=get_mpi('sum'), root=root)
+            comm.Reduce(red, None, op=get_mpi('sum'), root=root)
         else:
-            comm.Reduce(get_mpi('in_place'), f, op=get_mpi('sum'), root=root)
+            comm.Reduce(get_mpi('in_place'), red, op=get_mpi('sum'),
+                        root=root)
 
             # Write
-            print(intg.tcurr, *f, *m, sep=',', file=self.outf)
+            print(intg.tcurr, *red, sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
