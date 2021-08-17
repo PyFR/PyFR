@@ -118,7 +118,8 @@ class FluidForcePlugin(BasePlugin):
                 # Get the flux points position of the given face and element
                 # indices relative to the moment origin
                 if self._mcomp:
-                    rfpt = self.get_fpts(eles, eidx, fidx) - morigin
+                    fpts_idx = eles.basis.facefpts[fidx]
+                    rfpt = eles.plocfpts[fpts_idx, eidx]
                     rfpts[etype, fidx].append(rfpt)
                     rfpts_c_norms[etype, fidx].append(np.cross(rfpt, wnorm))
 
@@ -258,7 +259,3 @@ class FluidForcePlugin(BasePlugin):
         gradu, nu = du[:, 1:], self._constants['nu']
 
         return -nu*(gradu + gradu.swapaxes(0, 1))
-
-    def get_fpts(self, eles, eidx, fidx):
-        fpts_idx = eles.basis.facefpts[fidx]
-        return eles.plocfpts[fpts_idx, eidx]
