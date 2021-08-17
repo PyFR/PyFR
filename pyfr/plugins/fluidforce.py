@@ -125,7 +125,7 @@ class FluidForcePlugin(BasePlugin):
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
             self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
-            self._rfpts_c_norms = {k: np.array(v)
+            self._rfpts_c_norms = {k: np.atleast_3d(np.array(v))
                                    for k, v in rfpts_c_norms.items()}
 
             if self._viscous:
@@ -142,13 +142,12 @@ class FluidForcePlugin(BasePlugin):
 
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
-        ndims, nvars = self.ndims, self.nvars
+        ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
 
-        # Force vector
-        f = np.zeros(2*ndims if self._viscous else ndims)
-
-        # Moments vector
-        m = np.zeros(2*self._mcomp if self._viscous else self._mcomp)
+        # Force and moment vector
+        n = 2 if self._viscous else 1
+        fm = np.zeros(n*(ndims + mcomp))
+        f, m = fm[:n*ndims], fm[n*ndims:]
 
         for etype, fidx in self._m0:
             # Get the interpolation operator
@@ -177,8 +176,8 @@ class FluidForcePlugin(BasePlugin):
                 rfpts_c_norms = self._rfpts_c_norms[etype, fidx]
 
                 # Pressure force moments
-                mop = 'i...,ij,ji' if self.ndims == 2 else 'i...,ij,jik'
-                m[:self._mcomp] += np.einsum(mop, qwts, p, rfpts_c_norms)
+                m[:self._mcomp] += np.einsum('i...,ij,jik->k', qwts, p,
+                                             rfpts_c_norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
@@ -214,20 +213,17 @@ class FluidForcePlugin(BasePlugin):
                     viscf = np.einsum('ijkl,lkj->lki', vis, norms)
 
                     # Viscous force moments
-                    mop = 'i,ji->' if self.ndims == 2 else 'i,jik->k'
-                    m[self._mcomp:] += np.einsum(mop, qwts,
-                                                 np.cross(rfpts, viscf))
+                    rcf = np.atleast_3d(np.cross(rfpts, viscf))
+                    m[self._mcomp:] += np.einsum('i,jik->k', qwts, rcf)
 
         # Reduce and output if we're the root rank
-        red = np.array([*f, *m])
         if rank != root:
-            comm.Reduce(red, None, op=get_mpi('sum'), root=root)
+            comm.Reduce(fm, None, op=get_mpi('sum'), root=root)
         else:
-            comm.Reduce(get_mpi('in_place'), red, op=get_mpi('sum'),
-                        root=root)
+            comm.Reduce(get_mpi('in_place'), fm, op=get_mpi('sum'), root=root)
 
             # Write
-            print(intg.tcurr, *red, sep=',', file=self.outf)
+            print(intg.tcurr, *fm, sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
