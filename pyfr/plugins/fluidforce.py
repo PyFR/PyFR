@@ -145,10 +145,16 @@ class FluidForcePlugin(BasePlugin):
         solns = dict(zip(intg.system.ele_types, intg.soln))
         ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
 
-        # Force and moment vector
+        # Force and moment vectors
         n = 2 if self._viscous else 1
-        fm = np.zeros(n*(ndims + mcomp))
-        f, m = fm[:n*ndims], fm[n*ndims:]
+        fm = np.zeros((ndims + mcomp, n))
+
+        # Pressure and viscous components
+        fp, mp = fm[:ndims, 0], fm[ndims:, 0]
+        if self._viscous:
+            fv, mv = fm[:ndims, 1], fm[ndims:, 1]
+        else:
+            fv, mv = [], []
 
         for etype, fidx in self._m0:
             # Get the interpolation operator
@@ -172,13 +178,13 @@ class FluidForcePlugin(BasePlugin):
             norms = self._norms[etype, fidx]
 
             # Do the quadrature
-            f[:ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
+            fp += np.einsum('i...,ij,jik', qwts, p, norms)
             if self._mcomp:
                 rfpts_c_norms = self._rfpts_c_norms[etype, fidx]
 
                 # Pressure force moments
-                m[:self._mcomp] += np.einsum('i...,ij,jik->k', qwts, p,
-                                             rfpts_c_norms)
+                mp += np.einsum('i...,ij,jik->k', qwts, p,
+                                rfpts_c_norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
@@ -205,7 +211,7 @@ class FluidForcePlugin(BasePlugin):
                     vis = self.stress_tensor(ufpts, dufpts)
 
                 # Do the quadrature
-                f[ndims:] += np.einsum('i...,klij,jil', qwts, vis, norms)
+                fv += np.einsum('i...,klij,jil', qwts, vis, norms)
                 if self._mcomp:
                     # Get the relative flux points position
                     rfpts = self._rfpts[etype, fidx]
@@ -215,7 +221,7 @@ class FluidForcePlugin(BasePlugin):
 
                     # Viscous force moments
                     rcf = np.atleast_3d(np.cross(rfpts, viscf))
-                    m[self._mcomp:] += np.einsum('i,jik->k', qwts, rcf)
+                    mv += np.einsum('i,jik->k', qwts, rcf)
 
         # Reduce and output if we're the root rank
         if rank != root:
@@ -224,7 +230,7 @@ class FluidForcePlugin(BasePlugin):
             comm.Reduce(get_mpi('in_place'), fm, op=get_mpi('sum'), root=root)
 
             # Write
-            print(intg.tcurr, *fm, sep=',', file=self.outf)
+            print(intg.tcurr, *fp, *fv, *mp, *mv, sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
