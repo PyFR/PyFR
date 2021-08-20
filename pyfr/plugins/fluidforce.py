@@ -110,15 +110,15 @@ class FluidForcePlugin(BasePlugin):
                 # Unit physical normals and their magnitudes (including |J|)
                 npn = eles.get_norm_pnorms(eidx, fidx)
                 mpn = eles.get_mag_pnorms(eidx, fidx)
-                wnorm = mpn[:, None]*npn
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(wnorm)
+                norms[etype, fidx].append(mpn[:, None]*npn)
+
                 # Get the flux points position of the given face and element
                 # indices relative to the moment origin
                 if self._mcomp:
                     fpts_idx = eles.basis.facefpts[fidx]
-                    rfpt = eles.plocfpts[fpts_idx, eidx]
+                    rfpt = eles.plocfpts[fpts_idx, eidx] - morigin
                     rfpts[etype, fidx].append(rfpt)
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
@@ -175,16 +175,6 @@ class FluidForcePlugin(BasePlugin):
 
             # Do the quadrature
             fp += np.einsum('i...,ij,jik', qwts, p, norms)
-            if self._mcomp:
-                # Get the flux points positions relative to the moment origin
-                rfpt = self._rfpts[etype, fidx]
-
-                # Do the cross product with the normal vectors
-                rfpts_c_norms = np.atleast_3d(np.cross(rfpt, norms))
-
-                # Pressure force moments
-                mp += np.einsum('i...,ij,jik->k', qwts, p,
-                                rfpts_c_norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
@@ -212,15 +202,26 @@ class FluidForcePlugin(BasePlugin):
 
                 # Do the quadrature
                 fv += np.einsum('i...,klij,jil', qwts, vis, norms)
-                if self._mcomp:
-                    # Get the relative flux points position
-                    rfpts = self._rfpts[etype, fidx]
 
+            if self._mcomp:
+                # Get the flux points positions relative to the moment origin
+                rfpts = self._rfpts[etype, fidx]
+
+                # Do the cross product with the normal vectors
+                rfpts_c_norms = np.atleast_3d(np.cross(rfpts, norms))
+
+                # Pressure force moments
+                mp += np.einsum('i...,ij,jik->k', qwts, p,
+                                rfpts_c_norms)
+
+                if self._viscous:
                     # Viscous force at each flux point
                     viscf = np.einsum('ijkl,lkj->lki', vis, norms)
 
                     # Viscous force moments
                     rcf = np.atleast_3d(np.cross(rfpts, viscf))
+
+                    # Do the quadrature
                     mv += np.einsum('i,jik->k', qwts, rcf)
 
         # Reduce and output if we're the root rank
