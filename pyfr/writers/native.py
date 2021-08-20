@@ -20,10 +20,16 @@ def write_pyfrms(path, data):
 
 
 class NativeWriter(object):
-    def __init__(self, intg, mdata, basedir, basename, *, extn='.pyfrs'):
+    def __init__(self, intg, basedir, basename, prefix, *, extn='.pyfrs'):
         # Base output directory and file name
         self.basedir = basedir
         self.basename = basename
+
+        # Data prefix
+        self.prefix = prefix
+
+        # Our physical rank
+        self.prank = intg.rallocs.prank
 
         # Append the relevant extension
         if not self.basename.endswith(extn):
@@ -35,43 +41,15 @@ class NativeWriter(object):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # Gather the output metadata across all ranks
-        mdata = comm.allgather(mdata)
-
         # Parallel I/O
         if (h5py.get_config().mpi and
             'PYFR_FORCE_SERIAL_HDF5' not in os.environ):
             self._write = self._write_parallel
-            self._our_names = our_names = []
-            self._global_shape_list = []
-
-            for mrank, mfields in enumerate(mdata):
-                prank = intg.rallocs.mprankmap[mrank]
-                for fname, fshape, fdtype in mfields:
-                    name = f'{fname}_p{prank}'
-                    self._global_shape_list.append((name, fshape, fdtype))
-
-                    if rank == mrank:
-                        our_names.append(name)
         # Serial I/O
         else:
             self._write = self._write_serial
-            self._our_info = our_info = []
 
-            if rank == root:
-                self._mpi_info = mpi_info = []
-
-            for mrank, mfields in enumerate(mdata):
-                prank = intg.rallocs.mprankmap[mrank]
-                for fname, fshape, fdtype in mfields:
-                    name = f'{fname}_p{prank}'
-
-                    if rank == mrank:
-                        our_info.append((name, fdtype))
-                    elif rank == root:
-                        mpi_info.append((name, mrank, fshape, fdtype))
-
-    def write(self, data, metadata, tcurr):
+    def write(self, data, tcurr, metadata=None):
         # Determine the output path
         path = self._get_output_path(tcurr)
 
@@ -106,40 +84,58 @@ class NativeWriter(object):
 
         return os.path.join(self.basedir, fname)
 
+    def _prepare_data_info(self, data):
+        info = {}
+
+        for k, v in data.items():
+            info[f'{self.prefix}_{k}_p{self.prank}'] = (v.shape, v.dtype.str)
+
+        return info
+
     def _write_parallel(self, path, data, metadata):
         comm, rank, root = get_comm_rank_root()
 
+        info = self._prepare_data_info(data)
+
+        # If we are the root rank then process any metadata
+        if rank == root:
+            data = dict(data)
+
+            for k, v in metadata.items():
+                if isinstance(v, str):
+                    data[k] = np.array(v.encode(), dtype='S')
+                    info[k] = ((), data[k].dtype.str)
+                else:
+                    data[k] = v
+                    info[k] = (v.shape, v.dtype.str)
+        elif metadata:
+            raise ValueError('Metadata must be written by the root rank')
+
+        # Distribute the data info to all of the ranks
+        ginfo = comm.allgather(info)
+
         with h5py.File(path, 'w', driver='mpio', comm=comm) as f:
-            dmap = {}
-            for name, shape, dtype in self._global_shape_list:
-                dmap[name] = f.create_dataset(
-                    name, shape, dtype=dtype
-                )
+            # Parallel HDF5 requires that data sets be created collectively
+            for minfo in ginfo:
+                for name, (shape, dtype) in minfo.items():
+                    f.create_dataset(name, shape, dtype=dtype)
 
-            # Write out our data sets using 2 GiB chunks
-            for name, dat in zip(self._our_names, data):
-                nrows = len(dat)
-                rowsz = dat.nbytes // nrows
-                rstep = 2*1024**3 // rowsz
+            # Write out our local data
+            for name, dat in zip(info, data.values()):
+                fdata = f[name]
 
-                if rstep == 0:
-                    raise RuntimeError('Array is too large for parallel I/O')
+                if dat.shape:
+                    nrows = len(dat)
+                    rowsz = dat.nbytes // nrows
+                    rstep = 2*1024**3 // rowsz
 
-                for ix in range(0, nrows, rstep):
-                    dmap[name][ix:ix + rstep] = dat[ix:ix + rstep]
+                    if rstep == 0:
+                        raise IOError('Array is too large for parallel I/O')
 
-            # Metadata information has to be transferred to all the ranks
-            if rank == root:
-                mmap = [(k, len(v.encode()))
-                        for k, v in metadata.items()]
-            else:
-                mmap = None
-
-            for name, size in comm.bcast(mmap, root=root):
-                d = f.create_dataset(name, (), dtype=f'S{size}')
-
-                if rank == root:
-                    d.write_direct(np.array(metadata[name], dtype='S'))
+                    for ix in range(0, nrows, rstep):
+                        fdata[ix:ix + rstep] = dat[ix:ix + rstep]
+                else:
+                    fdata.write_direct(dat)
 
         # Wait for everyone to finish writing
         comm.barrier()
@@ -147,25 +143,41 @@ class NativeWriter(object):
     def _write_serial(self, path, data, metadata):
         comm, rank, root = get_comm_rank_root()
 
+        info = self._prepare_data_info(data)
+
         if rank != root:
-            for (k, dtype), v in zip(self._our_info, data):
-                comm.Send(np.ascontiguousarray(v, dtype=dtype), root)
+            if metadata:
+                raise ValueError('Metadata must be written by the root rank')
+
+            # Send the info about our data to the root rank
+            comm.gather(info, root=root)
+
+            # Send the data itself
+            for v in data.values():
+                comm.Send(np.ascontiguousarray(v), root)
         else:
             with h5py.File(path, 'w') as f:
+                # Collect info about what remote ranks want to write
+                ginfo = comm.gather({}, root=root)
+
                 # Write the metadata
                 for k, v in metadata.items():
-                    f[k] = np.array(v, dtype='S')
+                    if isinstance(v, str):
+                        f[k] = np.array(v.encode(), dtype='S')
+                    else:
+                        f[k] = v
 
                 # Write our local data
-                for (k, dtype), v in zip(self._our_info, data):
-                    f[k] = v.astype(dtype, copy=False)
+                for k, v in zip(info, data.values()):
+                    f[k] = v
 
                 # Receive and write the remote data
-                for k, mrank, shape, dtype in self._mpi_info:
-                    v = np.empty(shape, dtype=dtype)
-                    comm.Recv(v, mrank)
+                for mrank, minfo in enumerate(ginfo):
+                    for k, (shape, dtype) in minfo.items():
+                        v = np.empty(shape, dtype=dtype)
+                        comm.Recv(v, mrank)
 
-                    f[k] = v
+                        f[k] = v
 
         # Wait for the root rank to finish writing
         comm.barrier()
