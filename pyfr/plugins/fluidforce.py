@@ -85,7 +85,6 @@ class FluidForcePlugin(BasePlugin):
             eidxs = defaultdict(list)
             norms = defaultdict(list)
             rfpts = defaultdict(list)
-            rfpts_c_norms = defaultdict(list)
 
             for etype, eidx, fidx, flags in mesh[bc].astype('U4,i4,i1,i2'):
                 eles = elemap[etype]
@@ -121,13 +120,10 @@ class FluidForcePlugin(BasePlugin):
                     fpts_idx = eles.basis.facefpts[fidx]
                     rfpt = eles.plocfpts[fpts_idx, eidx]
                     rfpts[etype, fidx].append(rfpt)
-                    rfpts_c_norms[etype, fidx].append(np.cross(rfpt, wnorm))
 
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
             self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
-            self._rfpts_c_norms = {k: np.atleast_3d(np.array(v))
-                                   for k, v in rfpts_c_norms.items()}
 
             if self._viscous:
                 self._rcpjact = {k: rcpjact[k[0]][..., v]
@@ -180,7 +176,11 @@ class FluidForcePlugin(BasePlugin):
             # Do the quadrature
             fp += np.einsum('i...,ij,jik', qwts, p, norms)
             if self._mcomp:
-                rfpts_c_norms = self._rfpts_c_norms[etype, fidx]
+                # Get the flux points positions relative to the moment origin
+                rfpt = self._rfpts[etype, fidx]
+
+                # Do the cross product with the normal vectors
+                rfpts_c_norms = np.atleast_3d(np.cross(rfpt, norms))
 
                 # Pressure force moments
                 mp += np.einsum('i...,ij,jik->k', qwts, p,
