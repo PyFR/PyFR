@@ -81,7 +81,8 @@ class FluidForcePlugin(BasePlugin):
 
         # If we have the boundary then process the interface
         if bc in mesh:
-            # Element indices and associated face normals
+            # Element indices, associated face normals and relative flux
+            # points position with respect to the moments origin
             eidxs = defaultdict(list)
             norms = defaultdict(list)
             rfpts = defaultdict(list)
