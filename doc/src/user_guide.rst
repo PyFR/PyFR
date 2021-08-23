@@ -1284,7 +1284,7 @@ Example::
     nsteps = 10
     file = wing-forces.csv
     header = true
-    morigin = [0.0, 0.0, 0.5]
+    morigin = (0.0, 0.0, 0.5)
 
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
