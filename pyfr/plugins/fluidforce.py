@@ -216,10 +216,10 @@ class FluidForcePlugin(BasePlugin):
                                 rfpts_c_norms)
 
                 if self._viscous:
-                    # Viscous force at each flux point
+                    # Normal viscous force at each flux point
                     viscf = np.einsum('ijkl,lkj->lki', vis, norms)
 
-                    # Viscous force moments
+                    # Normal viscous force moments at each flux point
                     rcf = np.atleast_3d(np.cross(rfpts, viscf))
 
                     # Do the quadrature
