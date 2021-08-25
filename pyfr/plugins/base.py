@@ -59,6 +59,15 @@ class BasePlugin(object):
     def __call__(self, intg):
         pass
 
+    def get_data(self):
+        return {}
+
+    def get_data_prefix(self):
+        prefix = f'plugins/{self.name}'
+        if self.suffix:
+            prefix += f'-{self.suffix}'
+        return f'{prefix}/'
+
 
 class PostactionMixin(object):
     def __init__(self, *args, **kwargs):
