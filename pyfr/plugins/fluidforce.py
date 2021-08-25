@@ -145,7 +145,6 @@ class FluidForcePlugin(BasePlugin):
         # Force and moment vectors
         n = 2 if self._viscous else 1
         fm = np.zeros((ndims + mcomp)*n)
-        f, m = np.split(fm, [ndims*n])
 
         for etype, fidx in self._m0:
             # Get the interpolation operator
@@ -169,7 +168,7 @@ class FluidForcePlugin(BasePlugin):
             norms = self._norms[etype, fidx]
 
             # Do the quadrature
-            f[:ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
+            fm[:ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
@@ -196,7 +195,8 @@ class FluidForcePlugin(BasePlugin):
                     vis = self.stress_tensor(ufpts, dufpts)
 
                 # Do the quadrature
-                f[ndims:] += np.einsum('i...,klij,jil', qwts, vis, norms)
+                fm[ndims:n * ndims] += np.einsum('i...,klij,jil', qwts, vis,
+                                                 norms)
 
             if self._mcomp:
                 # Get the flux points positions relative to the moment origin
@@ -206,8 +206,9 @@ class FluidForcePlugin(BasePlugin):
                 rfpts_c_norms = np.atleast_3d(np.cross(rfpts, norms))
 
                 # Pressure force moments
-                m[:mcomp] += np.einsum('i...,ij,jik->k', qwts, p,
-                                       rfpts_c_norms)
+                mop = 'i...,ij,jik->k'
+                fm[n * ndims: n * ndims + mcomp] += np.einsum(mop, qwts, p,
+                                                              rfpts_c_norms)
 
                 if self._viscous:
                     # Normal viscous force at each flux point
@@ -217,7 +218,7 @@ class FluidForcePlugin(BasePlugin):
                     rcf = np.atleast_3d(np.cross(rfpts, viscf))
 
                     # Do the quadrature
-                    m[mcomp:] += np.einsum('i,jik->k', qwts, rcf)
+                    fm[n * ndims + mcomp:] += np.einsum('i,jik->k', qwts, rcf)
 
         # Reduce and output if we're the root rank
         if rank != root:
