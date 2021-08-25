@@ -39,6 +39,13 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         if not intg.isrestart:
             self.tout_last -= self.dt_out
 
+    @staticmethod
+    def _get_plugin_data_prefix(name, suffix):
+        prefix = f'plugins/{name}'
+        if suffix:
+            prefix += f'-{suffix}'
+        return prefix
+
     def __call__(self, intg):
         if intg.tcurr - self.tout_last < self.dt_out - self.tol:
             return
@@ -60,13 +67,15 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Fetch data from other plugins and add it to metadata with ad-hoc keys
         for csh in intg.completed_step_handlers:
-            if isinstance(csh, BasePlugin):
+            try:
                 opdata = csh.get_data()
 
-                if rank == root and opdata:
-                    prefix = csh.get_data_prefix()
-                    newkeys = [prefix + key for key in opdata.keys()]
-                    metadata.update(dict(zip(newkeys, opdata.values())))
+                if rank == root:
+                    prefix = self._get_plugin_data_prefix(csh.name, csh.suffix)
+                    metadata.update(
+                        {f'{prefix}/{k}': v for k, v in opdata.items()})
+            except AttributeError:
+                pass
 
         # Fetch and (if necessary) subset the solution
         data = dict(self._ele_region_data)
