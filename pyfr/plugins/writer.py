@@ -58,6 +58,14 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         else:
             metadata = None
 
+        # Fetch data from other plugins and add it to metadata
+        for csh in intg.completed_step_handlers:
+            if getattr(csh, 'have_data', False):
+                opdata = csh.get_data()
+
+                if rank == root:
+                    metadata.update(opdata)
+
         # Fetch and (if necessary) subset the solution
         data = dict(self._ele_region_data)
         for idx, etype, rgn in self._ele_regions:
