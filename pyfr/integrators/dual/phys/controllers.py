@@ -10,6 +10,9 @@ class BaseDualController(BaseDualIntegrator):
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
+        # Fire off any event handlers
+        self.completed_step_handlers(self)
+
     def _accept_step(self, idxcurr):
         self.tcurr += self._dt
         self.nacptsteps += 1

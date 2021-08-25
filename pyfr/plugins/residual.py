@@ -26,9 +26,6 @@ class ResidualPlugin(BasePlugin):
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
 
-        # Call ourself in case output is needed after the first step
-        self(intg)
-
     def __call__(self, intg):
         # If an output is due this step
         if intg.nacptsteps % self.nsteps == 0 and intg.nacptsteps:

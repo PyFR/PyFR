@@ -34,10 +34,10 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Register our output times with the integrator
         intg.call_plugin_dt(self.dt_out)
 
-        # If we're not restarting then write out the initial solution
+        # If we're not restarting then make sure we write out the initial
+        # solution when we are called for the first time
         if not intg.isrestart:
             self.tout_last -= self.dt_out
-            self(intg)
 
     def __call__(self, intg):
         if intg.tcurr - self.tout_last < self.dt_out - self.tol:
