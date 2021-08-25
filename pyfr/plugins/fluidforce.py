@@ -60,12 +60,11 @@ class FluidForcePlugin(BasePlugin):
 
             # CSV header
             header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
+            if self._mcomp:
+                header += ['mpx', 'mpy', 'mpz'][3 - mcomp:]
             if self._viscous:
                 header += ['vx', 'vy', 'vz'][:self.ndims]
-            if self._mcomp:
-                # Add headers of moments
-                header += ['mpx', 'mpy', 'mpz'][3 - mcomp:]
-                if self._viscous:
+                if self._mcomp:
                     header += ['mvx', 'mvy', 'mvz'][3 - mcomp:]
 
             # Open
@@ -143,8 +142,7 @@ class FluidForcePlugin(BasePlugin):
         ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
 
         # Force and moment vectors
-        n = 2 if self._viscous else 1
-        fm = np.zeros((ndims + mcomp)*n)
+        fm = np.zeros((ndims + mcomp, 2 if self._viscous else 1))
 
         for etype, fidx in self._m0:
             # Get the interpolation operator
@@ -168,7 +166,7 @@ class FluidForcePlugin(BasePlugin):
             norms = self._norms[etype, fidx]
 
             # Do the quadrature
-            fm[:ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
+            fm[:ndims, 0] += np.einsum('i...,ij,jik', qwts, p, norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
@@ -195,8 +193,7 @@ class FluidForcePlugin(BasePlugin):
                     vis = self.stress_tensor(ufpts, dufpts)
 
                 # Do the quadrature
-                fm[ndims:n * ndims] += np.einsum('i...,klij,jil', qwts, vis,
-                                                 norms)
+                fm[:ndims, 1] += np.einsum('i...,klij,jil', qwts, vis, norms)
 
             if self._mcomp:
                 # Get the flux points positions relative to the moment origin
@@ -207,8 +204,7 @@ class FluidForcePlugin(BasePlugin):
 
                 # Pressure force moments
                 mop = 'i...,ij,jik->k'
-                fm[n * ndims: n * ndims + mcomp] += np.einsum(mop, qwts, p,
-                                                              rfpts_c_norms)
+                fm[ndims:, 0] += np.einsum(mop, qwts, p, rfpts_c_norms)
 
                 if self._viscous:
                     # Normal viscous force at each flux point
@@ -218,7 +214,7 @@ class FluidForcePlugin(BasePlugin):
                     rcf = np.atleast_3d(np.cross(rfpts, viscf))
 
                     # Do the quadrature
-                    fm[n * ndims + mcomp:] += np.einsum('i,jik->k', qwts, rcf)
+                    fm[ndims:, 1] += np.einsum('i,jik->k', qwts, rcf)
 
         # Reduce and output if we're the root rank
         if rank != root:
@@ -227,7 +223,7 @@ class FluidForcePlugin(BasePlugin):
             comm.Reduce(get_mpi('in_place'), fm, op=get_mpi('sum'), root=root)
 
             # Write
-            print(intg.tcurr, *fm, sep=',', file=self.outf)
+            print(intg.tcurr, *fm.T.ravel(), sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
