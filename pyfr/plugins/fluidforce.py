@@ -142,7 +142,7 @@ class FluidForcePlugin(BasePlugin):
         ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
 
         # Force and moment vectors
-        fm = np.zeros((ndims + mcomp, 2 if self._viscous else 1))
+        fm = np.zeros((2 if self._viscous else 1, ndims + mcomp))
 
         for etype, fidx in self._m0:
             # Get the interpolation operator
@@ -166,7 +166,7 @@ class FluidForcePlugin(BasePlugin):
             norms = self._norms[etype, fidx]
 
             # Do the quadrature
-            fm[:ndims, 0] += np.einsum('i...,ij,jik', qwts, p, norms)
+            fm[0, :ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
@@ -193,7 +193,7 @@ class FluidForcePlugin(BasePlugin):
                     vis = self.stress_tensor(ufpts, dufpts)
 
                 # Do the quadrature
-                fm[:ndims, 1] += np.einsum('i...,klij,jil', qwts, vis, norms)
+                fm[1, :ndims] += np.einsum('i...,klij,jil', qwts, vis, norms)
 
             if self._mcomp:
                 # Get the flux points positions relative to the moment origin
@@ -204,7 +204,7 @@ class FluidForcePlugin(BasePlugin):
 
                 # Pressure force moments
                 mop = 'i...,ij,jik->k'
-                fm[ndims:, 0] += np.einsum(mop, qwts, p, rfpts_c_norms)
+                fm[0, ndims:] += np.einsum(mop, qwts, p, rfpts_c_norms)
 
                 if self._viscous:
                     # Normal viscous force at each flux point
@@ -214,7 +214,7 @@ class FluidForcePlugin(BasePlugin):
                     rcf = np.atleast_3d(np.cross(rfpts, viscf))
 
                     # Do the quadrature
-                    fm[ndims:, 1] += np.einsum('i,jik->k', qwts, rcf)
+                    fm[1, ndims:] += np.einsum('i,jik->k', qwts, rcf)
 
         # Reduce and output if we're the root rank
         if rank != root:
@@ -223,7 +223,7 @@ class FluidForcePlugin(BasePlugin):
             comm.Reduce(get_mpi('in_place'), fm, op=get_mpi('sum'), root=root)
 
             # Write
-            print(intg.tcurr, *fm.T.ravel(), sep=',', file=self.outf)
+            print(intg.tcurr, *fm.ravel(), sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
