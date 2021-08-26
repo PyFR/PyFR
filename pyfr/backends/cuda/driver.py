@@ -52,23 +52,12 @@ class CUDAWrappers(LibWrapper):
     COMPUTE_CAPABILITY_MAJOR = 75
     COMPUTE_CAPABILITY_MINOR = 76
     EVENT_DISABLE_TIMING = 2
+    FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
+    FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     FUNC_CACHE_PREFER_NONE = 0
     FUNC_CACHE_PREFER_SHARED = 1
     FUNC_CACHE_PREFER_L1 = 2
     FUNC_CACHE_PREFER_EQUAL = 3
-
-    # Attribute Constants
-    FUNC_ATTRIBUTE_MAX_THREADS_PER_BLOCK = 0
-    FUNC_ATTRIBUTE_SHARED_SIZE_BYTES = 1
-    FUNC_ATTRIBUTE_CONST_SIZE_BYTES = 2
-    FUNC_ATTRIBUTE_LOCAL_SIZE_BYTES = 3
-    FUNC_ATTRIBUTE_NUM_REGS = 4
-    FUNC_ATTRIBUTE_PTX_VERSION = 5
-    FUNC_ATTRIBUTE_BINARY_VERSION = 6
-    FUNC_ATTRIBUTE_CACHE_MODE_CA = 7
-    FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
-    FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
-
 
     # Functions
     _functions = [
@@ -213,11 +202,11 @@ class CUDAFunction(_CUDABase):
         self.cuda.lib.cuFuncSetCacheConfig(self, pref)
 
     def set_shared_size(self, *, dynm_shared=0, carveout=None):
-        attr = self.cuda.lib.FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES
+        attr = self.cuda.lib.FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES
         self.cuda.lib.cuFuncSetAttribute(self, attr, dynm_shared)
 
         if carveout is not None:
-            attr = self.cuda.lib.FUNC_ATTRIBUTE_PREFERRED_SHARED_MEMORY_CARVEOUT
+            attr = self.cuda.lib.FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT
             self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
 
     def exec_async(self, grid, block, stream, *args, dynm_shared=0):
