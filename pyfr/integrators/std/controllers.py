@@ -18,8 +18,9 @@ class BaseStdController(BaseStdIntegrator):
         # Stats on the most recent step
         self.stepinfo = []
 
-        # Fire off any event handlers
-        self.completed_step_handlers(self)
+        # Fire off any event handlers if not restarting
+        if not self.isrestart:
+            self.completed_step_handlers(self)
 
     def _accept_step(self, dt, idxcurr, err=None):
         self.tcurr += dt
