@@ -41,6 +41,15 @@ class NativeReader(Mapping):
     def __len__(self):
         return len(self._file)
 
+    def get_datasets(self, data, aname):
+        try:
+            data[aname] = self[aname]
+        except AttributeError:
+            for key in self._file[aname].keys():
+                nname = f'{aname}/{key}'
+                data = self.get_datasets(data, nname)
+        return data
+
     @memoize
     def array_info(self, prefix):
         # Entries in the file which start with the prefix

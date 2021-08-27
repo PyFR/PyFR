@@ -264,15 +264,6 @@ class BasePartitioner(object):
 
         return con, eleglmap
 
-    def _get_datasets(self, data, aname, soln):
-        try:
-            data[aname] = soln[aname]
-        except AttributeError:
-            for key in soln._file[aname].keys():
-                nname = f'{aname}/{key}'
-                data = self._get_datasets(data, nname, soln)
-        return data
-
     def partition(self, mesh):
         # Extract the current UUID from the mesh
         curruuid = mesh['mesh_uuid']
@@ -329,10 +320,9 @@ class BasePartitioner(object):
                     newsoln[f] = soln[f]
 
                 if re.match('plugins', f):
-                    # this is a group so dive in recursively to get the datasets
-                    data = self._get_datasets({}, f, soln)
-                    for k, v in data.items():
-                        newsoln[k] = v
+                    # this is a group so dive in recursively to get a
+                    # dictionary of datasets
+                    newsoln.update(soln.get_datasets({}, f))
 
             # Apply the new UUID
             newsoln['mesh_uuid'] = newuuid
