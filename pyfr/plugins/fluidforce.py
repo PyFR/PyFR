@@ -200,11 +200,10 @@ class FluidForcePlugin(BasePlugin):
                 rfpts = self._rfpts[etype, fidx]
 
                 # Do the cross product with the normal vectors
-                rfpts_c_norms = np.atleast_3d(np.cross(rfpts, norms))
+                rcn = np.atleast_3d(np.cross(rfpts, norms))
 
                 # Pressure force moments
-                mop = 'i...,ij,jik->k'
-                fm[0, ndims:] += np.einsum(mop, qwts, p, rfpts_c_norms)
+                fm[0, ndims:] += np.einsum('i...,ij,jik->k', qwts, p, rcn)
 
                 if self._viscous:
                     # Normal viscous force at each flux point
