@@ -316,13 +316,8 @@ class BasePartitioner(object):
 
             # Copy over the metadata
             for f in soln:
-                if re.match('stats|config', f):
+                if re.match('stats|config|plugins.*', f):
                     newsoln[f] = soln[f]
-
-                if re.match('plugins', f):
-                    # this is a group so dive in recursively to get a
-                    # dictionary of datasets
-                    newsoln.update(soln.get_datasets({}, f))
 
             # Apply the new UUID
             newsoln['mesh_uuid'] = newuuid
