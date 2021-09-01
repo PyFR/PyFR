@@ -59,7 +59,7 @@ class BasePlugin(object):
     def __call__(self, intg):
         pass
 
-    def get_data(self):
+    def serialise(self, intg):
         return {}
 
 
