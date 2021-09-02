@@ -76,6 +76,13 @@ class BaseIntegrator(object):
 
         return plugins
 
+    @staticmethod
+    def get_plugin_data_prefix(name, suffix):
+        prefix = f'plugins/{name}'
+        if suffix:
+            prefix += f'-{suffix}'
+        return prefix
+
     def call_plugin_dt(self, dt):
         ta = self.tlist
         tb = deque(np.arange(self.tcurr, self.tend, dt).tolist())

@@ -39,13 +39,6 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         if not intg.isrestart:
             self.tout_last -= self.dt_out
 
-    @staticmethod
-    def _get_plugin_data_prefix(name, suffix):
-        prefix = f'plugins/{name}'
-        if suffix:
-            prefix += f'-{suffix}'
-        return prefix
-
     def __call__(self, intg):
         if intg.tcurr - self.tout_last < self.dt_out - self.tol:
             return
@@ -71,7 +64,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 opdata = csh.serialise(intg)
 
                 if rank == root:
-                    prefix = self._get_plugin_data_prefix(csh.name, csh.suffix)
+                    prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
                     metadata.update(
                         {f'{prefix}/{k}': v for k, v in opdata.items()})
             except AttributeError:
