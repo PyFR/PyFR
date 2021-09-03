@@ -7,7 +7,7 @@ import re
 import h5py
 import numpy as np
 
-from pyfr.util import memoize, lazyprop
+from pyfr.util import lazyprop, memoize
 
 
 class NativeReader(Mapping):

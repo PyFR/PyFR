@@ -61,14 +61,14 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Fetch data from other plugins and add it to metadata with ad-hoc keys
         for csh in intg.completed_step_handlers:
             try:
-                opdata = csh.serialise(intg)
-
-                if rank == root:
-                    prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
-                    metadata.update(
-                        {f'{prefix}/{k}': v for k, v in opdata.items()})
+                pdata = csh.serialise(intg)
+                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
             except AttributeError:
-                pass
+                pdata = {}
+                prefix = ''
+
+            if rank == root:
+                metadata.update({f'{prefix}/{k}': v for k, v in pdata.items()})
 
         # Fetch and (if necessary) subset the solution
         data = dict(self._ele_region_data)
