@@ -77,10 +77,10 @@ class BaseIntegrator(object):
         return plugins
 
     @staticmethod
-    def get_plugin_data_prefix(name, suffix):
-        prefix = f'plugins/{name}'
-        if suffix:
-            prefix += f'-{suffix}'
+    def get_plugin_data_prefix(plugin):
+        prefix = f'plugins/{plugin.name}'
+        if plugin.suffix:
+            prefix += f'-{plugin.suffix}'
         return prefix
 
     def call_plugin_dt(self, dt):
