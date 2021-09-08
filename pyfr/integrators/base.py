@@ -72,12 +72,12 @@ class BaseIntegrator(object):
                 cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
 
                 data = {}
-                if initsoln:
+                if initsoln is not None:
                     # get the plugin data stored in the solution, if any
                     prefix = self.get_plugin_data_prefix(name, suffix)
                     for f in initsoln:
-                        if re.match(prefix + '/', f):
-                            data[f.split('/')[-1]] = initsoln[f]
+                        if f.startswith(f'{prefix}/'):
+                            data[f.split('/')[2]] = initsoln[f]
 
                 # Instantiate
                 plugins.append(get_plugin(name, self, cfgsect, suffix, **data))
