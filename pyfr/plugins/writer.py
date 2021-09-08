@@ -62,7 +62,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         for csh in intg.completed_step_handlers:
             try:
                 pdata = csh.serialise(intg)
-                prefix = intg.get_plugin_data_prefix(csh)
+                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
             except AttributeError:
                 pdata = {}
                 prefix = ''
