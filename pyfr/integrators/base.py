@@ -80,8 +80,9 @@ class BaseIntegrator(object):
     def get_plugin_data_prefix(name, suffix):
         prefix = f'plugins/{name}'
         if suffix:
-            prefix += f'-{suffix}'
-        return prefix
+            return prefix + f'-{suffix}'
+        else:
+            return prefix
 
     def call_plugin_dt(self, dt):
         ta = self.tlist
