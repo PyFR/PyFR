@@ -86,11 +86,10 @@ class BaseIntegrator(object):
 
     @staticmethod
     def get_plugin_data_prefix(name, suffix):
-        prefix = f'plugins/{name}'
         if suffix:
-            return prefix + f'-{suffix}'
+            return f'plugins/{name}-{suffix}'
         else:
-            return prefix
+            return f'plugins/{name}'
 
     def call_plugin_dt(self, dt):
         ta = self.tlist
