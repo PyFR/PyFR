@@ -1569,8 +1569,8 @@ the constant pi, expression containing the following functions are supported:
 
 5. ``tanh`` --- hyperbolic tangent
 
-5. ``pow`` --- power
+6. ``pow`` --- power
 
-6. ``abs`` --- absolute value
+7. ``abs`` --- absolute value
 
-7. ``min, max`` --- minimum and maximum
+8. ``min, max`` --- minimum and maximum
