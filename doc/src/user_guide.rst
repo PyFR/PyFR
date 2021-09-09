@@ -1552,12 +1552,12 @@ can be useful in defining initial conditions is the substitution feature and
 this is demonstrated in the :ref:`integrate-plugin` example.
 
 To prevent situations where you have solutions files for unknown
-configurations, the contents of the ``.ini`` file is added as an attribute
+configurations, the contents of the ``.ini`` file are added as an attribute
 to ``.pyfrs`` files. These files use the HDF5 format and can be
 straightforwardly probed with tools such as h5dump.
 
 In several places within the ``.ini`` file expressions may be used. As well as
-the constant pi, expression containing the following functions are supported:
+the constant pi, expressions containing the following functions are supported:
 
 1. ``+, -, *, /`` --- basic arithmetic
 
@@ -1569,7 +1569,7 @@ the constant pi, expression containing the following functions are supported:
 
 5. ``tanh`` --- hyperbolic tangent
 
-6. ``pow`` --- power
+6. ``pow`` --- power, note ``**`` is not supported
 
 7. ``abs`` --- absolute value
 
