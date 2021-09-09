@@ -129,7 +129,7 @@ Parameterises the CUDA backend with
     *int*
 
 5. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
-    
+
     *string*
 
 Example::
@@ -1547,11 +1547,30 @@ Example::
 Additional Information
 ----------------------
 
-The :ref:`INI<configuration-file>` file format is very versatile. A feature that can be useful in
-defining initial conditions is the substitution feature and this is
-demonstrated in the :ref:`integrate-plugin` example.
+The :ref:`INI<configuration-file>` file format is very versatile. A feature that
+can be useful in defining initial conditions is the substitution feature and
+this is demonstrated in the :ref:`integrate-plugin` example.
 
 To prevent situations where you have solutions files for unknown
 configurations, the contents of the ``.ini`` file is added as an attribute
 to ``.pyfrs`` files. These files use the HDF5 format and can be
 straightforwardly probed with tools such as h5dump.
+
+In several places within the ``.ini`` file expressions may be used. As well as
+the constant pi, expression containing the following functions are supported:
+
+1. ``+, -, *, /`` --- basic arithmetic
+
+2. ``sin, cos, tan`` --- basic trigonometric functions (radians)
+
+3. ``asin, acos, atan, atan2`` --- inverse trigonometric functions
+
+4. ``exp, log`` --- exponential and logarithm
+
+5. ``tanh`` --- hyperbolic tangent
+
+5. ``pow`` --- power
+
+6. ``abs`` --- absolute value
+
+7. ``min, max`` --- minimum and maximum
