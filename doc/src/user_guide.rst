@@ -1557,7 +1557,8 @@ to ``.pyfrs`` files. These files use the HDF5 format and can be
 straightforwardly probed with tools such as h5dump.
 
 In several places within the ``.ini`` file expressions may be used. As well as
-the constant pi, expressions containing the following functions are supported:
+the constant ``pi``, expressions containing the following functions are
+supported:
 
 1. ``+, -, *, /`` --- basic arithmetic
 
@@ -1565,12 +1566,15 @@ the constant pi, expressions containing the following functions are supported:
 
 3. ``asin, acos, atan, atan2`` --- inverse trigonometric functions
 
-4. ``exp, log`` --- exponential and logarithm
+4. ``exp, log`` --- exponential and the natural logarithm
 
 5. ``tanh`` --- hyperbolic tangent
 
 6. ``pow`` --- power, note ``**`` is not supported
 
-7. ``abs`` --- absolute value
+7. ``sqrt`` --- square root
 
-8. ``min, max`` --- minimum and maximum
+8. ``abs`` --- absolute value
+
+9. ``min, max`` --- two variable minimum and maximum functions, arguments can be
+arrays
