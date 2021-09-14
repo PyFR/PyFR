@@ -16,6 +16,13 @@ class HIPKernelGenerator(BaseKernelGenerator):
         if self.ndim == 1:
             self._limits = 'if (_x < _nx)'
         else:
+            self._limits = '''
+                int _ysize = (_ny + hipBlockDim_y - 1) / hipBlockDim_y;
+                int _ystart = hipThreadIdx_y*_ysize;
+                int _yend = (_ystart + _ysize > _ny) ? _ny : _ystart + _ysize;
+                for (int _y = _ystart; _x < _nx && _y < _yend; _y++)
+            '''
+
             self._limits = 'for (int _y = 0; _x < _nx && _y < _ny; _y++)'
 
     def render(self):
