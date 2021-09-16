@@ -136,11 +136,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # Update the backend
         self.update_backend()
 
-        # If we're not restarting then call ourself to write out the initial
-        # eddies
+        # If we're not restarting make sure we to write out the initial eddies
+        # when called for the first time.
         if not intg.isrestart:
             self.tout_last -= self.dt_out
-            self(intg)
 
     @staticmethod
     def random_seed(t):
