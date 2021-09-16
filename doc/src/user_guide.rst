@@ -129,7 +129,7 @@ Parameterises the CUDA backend with
     *int*
 
 5. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
-    
+
     *string*
 
 Example::
@@ -886,8 +886,8 @@ Example::
 Simple periodic boundary conditions are supported; however, their behaviour
 is not controlled through the ``.ini`` file, instead it is handled at
 the mesh generation stage. Two faces may be taged with
-``periodic_l_x`` and ``periodic_r_x``, where ``x`` is a unique
-integer for the pair of boundaries. Currently, only periodicity in a
+``periodic_x_l`` and ``periodic_x_r``, where ``x`` is a unique
+identifier for the pair of boundaries. Currently, only periodicity in a
 single cardinal direction is supported, for example, the planes
 ``(x,y,0)``` and ``(x,y,10)``.
 
@@ -1260,8 +1260,8 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
-labelled ``name`` and writes out the resulting force vectors to a CSV
-file. Parameterised with
+labelled ``name`` and writes out the resulting force and moments (if requested)
+vectors to a CSV file. Parameterised with
 
 1. ``nsteps`` --- integrate every ``nsteps``:
 
@@ -1276,12 +1276,15 @@ file. Parameterised with
 
     *boolean*
 
+4. ``morigin`` --- origin used to compute the moments (optional)
+
 Example::
 
     [soln-plugin-fluidforce-wing]
     nsteps = 10
     file = wing-forces.csv
     header = true
+    morigin = (0.0, 0.0, 0.5)
 
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -1544,11 +1547,34 @@ Example::
 Additional Information
 ----------------------
 
-The :ref:`INI<configuration-file>` file format is very versatile. A feature that can be useful in
-defining initial conditions is the substitution feature and this is
-demonstrated in the :ref:`integrate-plugin` example.
+The :ref:`INI<configuration-file>` file format is very versatile. A feature that
+can be useful in defining initial conditions is the substitution feature and
+this is demonstrated in the :ref:`integrate-plugin` example.
 
 To prevent situations where you have solutions files for unknown
-configurations, the contents of the ``.ini`` file is added as an attribute
+configurations, the contents of the ``.ini`` file are added as an attribute
 to ``.pyfrs`` files. These files use the HDF5 format and can be
 straightforwardly probed with tools such as h5dump.
+
+In several places within the ``.ini`` file expressions may be used. As well as
+the constant ``pi``, expressions containing the following functions are
+supported:
+
+1. ``+, -, *, /`` --- basic arithmetic
+
+2. ``sin, cos, tan`` --- basic trigonometric functions (radians)
+
+3. ``asin, acos, atan, atan2`` --- inverse trigonometric functions
+
+4. ``exp, log`` --- exponential and the natural logarithm
+
+5. ``tanh`` --- hyperbolic tangent
+
+6. ``pow`` --- power, note ``**`` is not supported
+
+7. ``sqrt`` --- square root
+
+8. ``abs`` --- absolute value
+
+9. ``min, max`` --- two variable minimum and maximum functions, arguments can be
+arrays
