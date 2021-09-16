@@ -20,7 +20,7 @@ class BaseDualIntegrator(BaseIntegrator):
         )
 
         # Event handlers for advance_to
-        self.completed_step_handlers = proxylist(self._get_plugins())
+        self.completed_step_handlers = proxylist(self._get_plugins(initsoln))
 
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
