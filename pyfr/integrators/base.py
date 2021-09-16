@@ -73,7 +73,7 @@ class BaseIntegrator(object):
 
                 data = {}
                 if initsoln is not None:
-                    # get the plugin data stored in the solution, if any
+                    # Get the plugin data stored in the solution, if any
                     prefix = self.get_plugin_data_prefix(name, suffix)
                     for f in initsoln:
                         if f.startswith(f'{prefix}/'):
