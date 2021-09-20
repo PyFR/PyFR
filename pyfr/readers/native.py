@@ -7,7 +7,7 @@ import re
 import h5py
 import numpy as np
 
-from pyfr.util import memoize
+from pyfr.util import lazyprop, memoize
 
 
 class NativeReader(Mapping):
@@ -17,10 +17,10 @@ class NativeReader(Mapping):
 
     def __contains__(self, aname):
         if isinstance(aname, str):
-            return aname in self._file
+            return aname in self._keys
         else:
             p, q = aname
-            return p in self._file and q in self._file[p].attrs
+            return p in self._keys and q in self._file[p].attrs
 
     def __getitem__(self, aname):
         if isinstance(aname, str):
@@ -36,10 +36,22 @@ class NativeReader(Mapping):
             return self._file[aname[0]].attrs[aname[1]]
 
     def __iter__(self):
-        return iter(self._file)
+        return iter(self._keys)
 
     def __len__(self):
-        return len(self._file)
+        return len(self._keys)
+
+    @lazyprop
+    def _keys(self):
+        keys = set()
+
+        def visitor(name, item):
+            if isinstance(item, h5py.Dataset):
+                keys.add(name)
+
+        self._file.visititems(visitor)
+
+        return keys
 
     @memoize
     def array_info(self, prefix):

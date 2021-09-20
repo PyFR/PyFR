@@ -59,6 +59,9 @@ class BasePlugin(object):
     def __call__(self, intg):
         pass
 
+    def serialise(self, intg):
+        return {}
+
 
 class PostactionMixin(object):
     def __init__(self, *args, **kwargs):

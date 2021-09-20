@@ -362,7 +362,7 @@ class BasePartitioner(object):
 
             # Copy over the metadata
             for f in soln:
-                if re.match('stats|config', f):
+                if re.match('stats|config|plugins', f):
                     newsoln[f] = soln[f]
 
             # Apply the new UUID

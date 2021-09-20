@@ -64,17 +64,32 @@ class BaseIntegrator(object):
         # Abort computation
         self.abort = False
 
-    def _get_plugins(self):
+    def _get_plugins(self, initsoln):
         plugins = []
 
         for s in self.cfg.sections():
             if (m := re.match('soln-plugin-(.+?)(?:-(.+))?$', s)):
                 cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
 
+                data = {}
+                if initsoln is not None:
+                    # Get the plugin data stored in the solution, if any
+                    prefix = self.get_plugin_data_prefix(name, suffix)
+                    for f in initsoln:
+                        if f.startswith(f'{prefix}/'):
+                            data[f.split('/')[2]] = initsoln[f]
+
                 # Instantiate
-                plugins.append(get_plugin(name, self, cfgsect, suffix))
+                plugins.append(get_plugin(name, self, cfgsect, suffix, **data))
 
         return plugins
+
+    @staticmethod
+    def get_plugin_data_prefix(name, suffix):
+        if suffix:
+            return f'plugins/{name}-{suffix}'
+        else:
+            return f'plugins/{name}'
 
     def call_plugin_dt(self, dt):
         ta = self.tlist
