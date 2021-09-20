@@ -50,7 +50,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
     systems = ['ac-navier-stokes', 'navier-stokes']
     formulations = ['dual', 'std']
 
-    def __init__(self, intg, cfgsect, suffix):
+    def __init__(self, intg, cfgsect, suffix, eddies_loc=None, eddies_strength=None):
         super().__init__(intg, cfgsect, suffix)
 
         # do not allow multiple instances
@@ -109,43 +109,36 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.eddies_loc = np.empty((self.ndims, self.N))
         self.eddies_strength = np.empty((self.ndims, self.N))
 
-        # file to read/write the eddies' properties
-        self.basedir = self.cfg.getpath(cfgsect, 'basedir', './')
-        self.basename = self.cfg.get(cfgsect, 'basename', 'eddies-{t}.csv')
+        # Populate the box of eddies. If present, check that the eddies stored
+        # in the previous solution are consistent with the current settings.
+        restore = False if eddies_loc is None else True
+        if intg.isrestart and restore:
+            if eddies_loc.shape != (self.ndims, self.N):
+                restore = False
 
-        # Append the relevant extension
-        if not self.basename.endswith('.csv'):
-            self.basename += '.csv'
+        if restore:
+            self.eddies_loc = eddies_loc
+            self.eddies_strength = eddies_strength
 
-        # Output time step and last output time of the eddies file.
-        self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
-        self.tout_last = intg.tcurr
-
-        # Register our output times with the integrator
-        intg.call_plugin_dt(self.dt_out)
-
-        # Populate the box of eddies
-        if (os.path.isfile(self._get_output_path(intg.tcurr)) and
-                intg.isrestart):
-            data = np.loadtxt(self._get_output_path(intg.tcurr), delimiter=',')
-            self.eddies_loc = data[:, :self.ndims].swapaxes(0, 1)
-            self.eddies_strength = data[:, self.ndims:].swapaxes(0, 1)
+            # update their location if necessary
+            self._update_eddies(intg.tcurr)
         else:
-            self.create_eddies(intg.tcurr)
+            self._create_eddies(intg.tcurr)
 
         # Update the backend
-        self.update_backend()
-
-        # If we're not restarting make sure we to write out the initial eddies
-        # when called for the first time.
-        if not intg.isrestart:
-            self.tout_last -= self.dt_out
+        self._update_backend()
 
     @staticmethod
     def random_seed(t):
         return int(t*10000) + 23
 
-    def create_eddies(self, t, neweddies=None):
+    def serialise(self, intg):
+        self._update_eddies(intg.tcurr)
+        eddies = {'eddies_loc' : self.eddies_loc,
+                  'eddies_strength' : self.eddies_strength}
+        return eddies
+
+    def _create_eddies(self, t, neweddies=None):
         # Eddies to be generated: number and indices.
         N = self.N if neweddies is None else np.count_nonzero(neweddies)
         idxe = np.full(N, True) if neweddies is None else neweddies
@@ -174,47 +167,32 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         if neweddies is not None:
             self.eddies_loc[self.Ubulkdir, idxe] = self.box_xmin
 
-    def update_backend(self):
+    def _update_eddies(self, tcurr):
+        # Update the streamwise location of the eddies and check whether
+        # any are outside of the box. If so, generate new ones.
+        self.eddies_loc[self.Ubulkdir] += (tcurr -
+                                           self.tprev)*self.Ubulk
+        neweddies = self.eddies_loc[self.Ubulkdir] > self.box_xmax
+
+        if neweddies.any():
+            self._create_eddies(tcurr, neweddies)
+
+        # Update the previous time an update was done.
+        self.tprev = tcurr
+
+    def _update_backend(self):
         for ele in self.elemap.values():
             ele.eddies_loc.set(self.eddies_loc)
 
             ele.eddies_strength.set(self.eddies_strength)
 
-    def _get_output_path(self, tcurr):
-        # Substitute {t} for the current time
-        fname = self.basename.format(t=tcurr)
-
-        return os.path.join(self.basedir, fname)
-
     def __call__(self, intg):
-        tdiff = intg.tcurr - self.tout_last
-        dowrite = tdiff >= self.dt_out - self.tol
-        doupdate = intg.nacptsteps % self.nsteps == 0
-
-        # Return if not active or no action is due
-        if dowrite or doupdate:
-            # Update the streamwise location of the eddies and check whether
-            # any are outside of the box. If so, generate new ones.
-            self.eddies_loc[self.Ubulkdir] += (intg.tcurr -
-                                               self.tprev)*self.Ubulk
-            neweddies = self.eddies_loc[self.Ubulkdir] > self.box_xmax
-
-            if neweddies.any():
-                self.create_eddies(intg.tcurr, neweddies)
+        # Return if not active
+        if intg.nacptsteps % self.nsteps == 0:
+            # Update the location of the eddies
+            self._update_eddies(intg.tcurr)
 
             # Update the backend
-            self.update_backend()
+            self._update_backend()
 
-            # Update the previous time an update was done.
-            self.tprev = intg.tcurr
 
-            # write to file if requested.
-            if dowrite:
-                if self.rank == self.root:
-                    data = np.hstack((self.eddies_loc.swapaxes(0, 1),
-                                      self.eddies_strength.swapaxes(0, 1)))
-                    np.savetxt(self._get_output_path(intg.tcurr), data,
-                               delimiter=',')
-
-                # Update the last output time
-                self.tout_last = intg.tcurr
