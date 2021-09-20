@@ -120,15 +120,7 @@ Parameterises the CUDA backend with
 
      ``standard`` | ``cuda-aware``
 
-3. ``block-1d`` --- block size for one dimensional pointwise kernels:
-
-     *int*
-
-4. ``block-2d`` --- block size for two dimensional pointwise kernels:
-
-    *int*
-
-5. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
+3. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
 
     *string*
 
@@ -137,8 +129,6 @@ Example::
     [backend-cuda]
     device-id = round-robin
     mpi-type = standard
-    block-1d = 64
-    block-2d = 128
 
 [backend-hip]
 ^^^^^^^^^^^^^
@@ -153,21 +143,11 @@ Parameterises the HIP backend with
 
      ``standard`` | ``hip-aware``
 
-3. ``block-1d`` --- block size for one dimensional pointwise kernels:
-
-     *int*
-
-4. ``block-2d`` --- block size for two dimensional pointwise kernels:
-
-    *int*
-
 Example::
 
     [backend-hip]
     device-id = local-rank
     mpi-type = standard
-    block-1d = 64
-    block-2d = 128
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -191,16 +171,6 @@ Parameterises the OpenCL backend with
 
      *int*
 
-5. ``local-size-1d`` --- local work size for one dimensional pointwise
-   kernels:
-
-    *int*
-
-6. ``local-size-2d`` --- local work size for two dimensional pointwise
-   kernels:
-
-    *int*
-
 Example::
 
     [backend-opencl]
@@ -208,8 +178,6 @@ Example::
     device-type = gpu
     device-id = local-rank
     gimmik-max-nnz = 512
-    local-size-1d = 16
-    local-size-2d = 128
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
