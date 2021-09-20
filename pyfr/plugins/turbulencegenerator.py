@@ -102,6 +102,9 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.box_dims[self.Ubulkdir] = lstreamwise
         self.box_dims[dirs] = inflow
 
+        # Characteristic time
+        self.tref = self.lturbref[self.Ubulkdir]/self.Ubulk
+
         # Number of eddies
         self.N = computeNeddies(inflow, self.Ubulkdir, self.lturbref)
 
@@ -121,31 +124,31 @@ class TurbulenceGeneratorPlugin(BasePlugin):
             self.eddies_strength = eddies_strength
 
             # update their location if necessary
-            self._update_eddies(intg.tcurr)
+            self._update_eddies(intg.tcurr, intg.nacptsteps)
         else:
-            self._create_eddies(intg.tcurr)
+            self._create_eddies(intg.tcurr, intg.nacptsteps)
 
         # Update the backend
         self._update_backend()
 
     @staticmethod
-    def random_seed(t):
-        return int(t*10000) + 23
+    def random_seed(t, nacptsteps, tref, fact=0.01, an=23):
+        return nacptsteps + int(t/(fact*tref)) + an
 
     def serialise(self, intg):
-        self._update_eddies(intg.tcurr)
+        self._update_eddies(intg.tcurr, intg.nacptsteps)
         eddies = {'eddies_loc' : self.eddies_loc,
                   'eddies_strength' : self.eddies_strength}
         return eddies
 
-    def _create_eddies(self, t, neweddies=None):
+    def _create_eddies(self, t, nacptsteps, neweddies=None):
         # Eddies to be generated: number and indices.
         N = self.N if neweddies is None else np.count_nonzero(neweddies)
         idxe = np.full(N, True) if neweddies is None else neweddies
 
         # Generate the new random locations and strengths. Set the seed so all
         # processors generate the same eddies.
-        np.random.seed(self.random_seed(t))
+        np.random.seed(self.random_seed(t, nacptsteps, self.tref))
         random = np.random.uniform(-1, 1, size=(self.ndims*2, N))
 
         # Make sure the strengths are only +/- ones.
@@ -167,7 +170,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         if neweddies is not None:
             self.eddies_loc[self.Ubulkdir, idxe] = self.box_xmin
 
-    def _update_eddies(self, tcurr):
+    def _update_eddies(self, tcurr, nacptsteps):
         # Update the streamwise location of the eddies and check whether
         # any are outside of the box. If so, generate new ones.
         self.eddies_loc[self.Ubulkdir] += (tcurr -
@@ -175,7 +178,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         neweddies = self.eddies_loc[self.Ubulkdir] > self.box_xmax
 
         if neweddies.any():
-            self._create_eddies(tcurr, neweddies)
+            self._create_eddies(tcurr, nacptsteps, neweddies)
 
         # Update the previous time an update was done.
         self.tprev = tcurr
@@ -190,7 +193,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         # Return if not active
         if intg.nacptsteps % self.nsteps == 0:
             # Update the location of the eddies
-            self._update_eddies(intg.tcurr)
+            self._update_eddies(intg.tcurr, intg.nacptsteps)
 
             # Update the backend
             self._update_backend()
