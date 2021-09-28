@@ -2,7 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<% se0 = math.log10(c['s0']) %>
+<% se0 = math.log10(c['s0']/order**4) %>
 
 <%pyfr:kernel name='shocksensor' ndim='1'
               u='in fpdtype_t[${str(nupts)}][${str(nvars)}]'
@@ -10,12 +10,12 @@
     // Smoothness indicator
     fpdtype_t totEn = 0.0, pnEn = 1e-15, tmp;
 
-% for i, deg in enumerate(ubdegs):
+% for ivdm, bmode in zip(invvdm, ind_modes):
     tmp = ${' + '.join('{jx}*u[{j}][{svar}]'.format(j=j, jx=jx, svar=svar)
-                       for j, jx in enumerate(invvdm[i]) if jx != 0)};
+                       for j, jx in enumerate(ivdm) if jx != 0)};
 
     totEn += tmp*tmp;
-% if deg >= order:
+% if bmode:
     pnEn += tmp*tmp;
 % endif
 % endfor

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base.kernels import ComputeMetaKernel
+from pyfr.polys import get_polybasis
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
@@ -111,13 +112,18 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             shockvar = self.convarmap[self.ndims].index(self.shockvar)
 
             # Obtain the degrees of the polynomial modes in the basis
-            ubdegs = [sum(dd) for dd in self.basis.ubasis.degrees]
+            ubasis = self.basis.ubasis
+            ubdegs_p = ubasis.degrees
+            # Obtain the degrees of the polynomial modes in the basis projected to one order lower
+            ubdegs_pm1 = get_polybasis(ubasis.name, max(0, ubasis.order - 1)).degrees
+            # Find indicator modes (modes which aren't in the projected basis)
+            ind_modes = [ubdeg not in ubdegs_pm1 for ubdeg in ubdegs_p]
 
             # Template arguments
             tplargs_artvisc = dict(
                 nvars=self.nvars, nupts=self.nupts, svar=shockvar,
                 c=self.cfg.items_as('solver-artificial-viscosity', float),
-                order=self.basis.order, ubdegs=ubdegs,
+                order=self.basis.order, ind_modes=ind_modes,
                 invvdm=self.basis.ubasis.invvdm.T
             )
 
