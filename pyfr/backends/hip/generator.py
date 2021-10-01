@@ -23,8 +23,6 @@ class HIPKernelGenerator(BaseKernelGenerator):
                 for (int _y = _ystart; _x < _nx && _y < _yend; _y++)
             '''
 
-            self._limits = 'for (int _y = 0; _x < _nx && _y < _ny; _y++)'
-
     def render(self):
         spec = self._render_spec()
 
