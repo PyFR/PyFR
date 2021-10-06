@@ -183,4 +183,5 @@ class METISPartitioner(BasePartitioner):
 
         if np.max(parts) >= len(partwts):
             raise RuntimeError('Metis Partitioner Error: partition index > npart-1 ')
+            
         return parts

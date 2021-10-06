@@ -158,8 +158,8 @@ class BasePartitioner(object):
             nsp = len(svetimap) // self.nsubeles + 1
 
             # Partition the graph
-            if nsp==1:
-                svparts = [0] * len(svetimap)
+            if nsp == 1:
+                svparts = [0]*len(svetimap)
             else:
                 svparts = self._partition_graph(sgraph, [1]*nsp)
 
