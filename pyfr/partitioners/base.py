@@ -158,7 +158,10 @@ class BasePartitioner(object):
             nsp = len(svetimap) // self.nsubeles + 1
 
             # Partition the graph
-            svparts = self._partition_graph(sgraph, [1]*nsp)
+            if nsp==1:
+                svparts = [0] * len(svetimap)
+            else:
+                svparts = self._partition_graph(sgraph, [1]*nsp)
 
             # Group elements according to their type (linear vs curved)
             # and sub-partition number
