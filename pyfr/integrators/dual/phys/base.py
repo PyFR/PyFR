@@ -25,6 +25,12 @@ class BaseDualIntegrator(BaseIntegrator):
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
 
+        # Delete also the multip elements maps, if present.
+        try:
+            self.pseudointegrator.delete_ele_maps()
+        except AttributeError:
+            pass
+
     @property
     def system(self):
         return self.pseudointegrator.system
