@@ -80,8 +80,8 @@ class BaseAdvectionElements(BaseElements):
         npts, ndims, neles = ploc.shape
 
         # Ac or compressible?
-        self.srctplargs['system'] = 'ac' if self.system.startswith(
-            'ac') else 'compr'
+        self.srctplargs['system'] = 'ac' if self.cfg.get('solver',
+                    'system').startswith('ac') else 'compr'
 
         # minimum value of the clipping value csimax <= 1.0
         self.srctplargs['cmm'] = cmm = self.cfg.getfloat(cfgsect, 'csimax_min',
@@ -131,7 +131,7 @@ class BaseAdvectionElements(BaseElements):
                            value=self.eddies_strength)
 
         # Variables needed by the compressible solver
-        if not self.system.startswith('ac'):
+        if not self.cfg.get('solver', 'system').startswith('ac'):
             # variables for the density fluctuations (Strong Reynolds Analogy):
             # mean density and mean Mach number
             rhomeanex = self.cfg.getexpr(cfgsect, 'rhomean', subs=subs)
@@ -284,12 +284,6 @@ class BaseAdvectionElements(BaseElements):
 
         # Synthetic turbulence generation via source term.
         if self._turbsrc:
-            self.system = self.cfg.get('solver', 'system')
-            # Points locations are always needed while the conserved variables
-            # are needed only by the compressible solver.
-            plocsrc = True
-            solnsrc = solnsrc if self.system.startswith('ac') else True
-
             # Compute/allocate the memory for the other needed variables.
             self.prepare_turbsrc(self.ploc_at_np('upts'))
 

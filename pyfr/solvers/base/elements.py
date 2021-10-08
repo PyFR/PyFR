@@ -157,6 +157,19 @@ class BaseElements(object):
         return self.cfg.hassect('soln-plugin-turbulencegenerator')
 
     @lazyprop
+    def _soln_in_turbsrc(self):
+        if self._turbsrc:
+            # Only needed by the compressible solver
+            return False if self.cfg.get('solver',
+                    'system').startswith('ac') else True
+        else:
+            return False
+
+    @lazyprop
+    def _ploc_in_turbsrc(self):
+        return True if self._turbsrc else False
+
+    @lazyprop
     def _src_exprs(self):
         convars = self.convarmap[self.ndims]
 
@@ -171,11 +184,11 @@ class BaseElements(object):
 
     @lazyprop
     def _ploc_in_src_exprs(self):
-        return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)
+        return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs) or self._ploc_in_turbsrc
 
     @lazyprop
     def _soln_in_src_exprs(self):
-        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
+        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs) or self._soln_in_turbsrc
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
