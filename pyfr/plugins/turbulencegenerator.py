@@ -59,7 +59,12 @@ class TurbulenceGeneratorPlugin(BasePlugin):
                'plugin is allowed.')
 
         # Set the pointer to the elements
-        self.elemap = intg.system.ele_map
+        self.elemaps = [intg.system.ele_map]
+        try:
+            for l in intg.pseudointegrator.levels[1:]:
+                self.elemaps.append(intg.pseudointegrator.pintgs[l].system.ele_map)
+        except AttributeError:
+            pass
 
         # MPI info
         _, self.rank, self.root = get_comm_rank_root()
@@ -184,10 +189,10 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.tprev = tcurr
 
     def _update_backend(self):
-        for ele in self.elemap.values():
-            ele.eddies_loc.set(self.eddies_loc)
-
-            ele.eddies_strength.set(self.eddies_strength)
+        for elemap in self.elemaps:
+            for ele in elemap.values():
+                ele.eddies_loc.set(self.eddies_loc)
+                ele.eddies_strength.set(self.eddies_strength)
 
     def __call__(self, intg):
         # Return if not active
