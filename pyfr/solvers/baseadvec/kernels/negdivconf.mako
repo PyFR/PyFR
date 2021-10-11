@@ -21,7 +21,7 @@ fpdtype_t lturbrefinv[${ndims}] = ${lturbrefinv};
 fpdtype_t utilde[${ndims}] = {0.0};
 
 // Working variables
-fpdtype_t arg, arg2, pexp;
+fpdtype_t arg, arg2, pexp, clip;
 fpdtype_t csi[${ndims}];
 
 // Compute csi_max[3][3] on the fly for this point as lturb/lturb ref.
@@ -50,13 +50,11 @@ for (int n=0; n<${N}; n++){
     //U,V,W
     // Accumulate taking into account this components strength
     % for j in range(ndims):
-        if (csi[2] < csimax[2][${j}]){
-            if (csi[1] < csimax[1][${j}]){
-                if (csi[0] < csimax[0][${j}]){
-                    utilde[${j}] += gauss_const[${j}]*pexp*eddies_strength[${j}][n];
-                }
-            }
-        }
+        clip = 1.0;
+        % for i in range(ndims):
+            clip *= csi[${i}] < csimax[${i}][${j}] ? 1.0 : 0.0;
+        % endfor
+        utilde[${j}] += clip*gauss_const[${j}]*pexp*eddies_strength[${j}][n];
     % endfor
 }
 
