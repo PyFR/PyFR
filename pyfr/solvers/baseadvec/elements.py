@@ -3,8 +3,8 @@
 from pyfr.backends.base import ComputeMetaKernel
 from pyfr.solvers.base import BaseElements
 from pyfr.plugins.turbulencegenerator import (eval_expr, get_lturbref,
-                                              computeNeddies)
-
+                                              computeNeddies, affected_eles,
+                                              get_Nactive)
 import numpy as np
 
 
@@ -102,6 +102,9 @@ class BaseAdvectionElements(BaseElements):
         inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
         self.srctplargs['N'] = N = computeNeddies(inflow, Ubulkdir, lturbref)
 
+        # Number of active eddies considered for each element
+        self.srctplargs['Nactive'] = Nactive = get_Nactive(self.cfg, cfgsect, N)
+
         # expressions for the turbulent lengths, needed here for evaluation
         lturbexpr = [[self.cfg.getexpr(cfgsect, f'l{i}{j}')
                       for j in range(ndims)] for i in range(ndims)]
@@ -146,6 +149,7 @@ class BaseAdvectionElements(BaseElements):
         ctr = np.array(self.cfg.getliteral(cfgsect, 'center'))
 
         # physical location of the solution points
+        # npoints, ndims, neles -> ndims, npoints, neles -> ndims, ntotpoints
         ploc = ploc.swapaxes(1, 0).reshape(ndims, -1)
 
         # Gaussian constants they depend on the box dimensions.
@@ -231,31 +235,21 @@ class BaseAdvectionElements(BaseElements):
         # Array to determine whether or not an element is actually affected by
         # the box of eddies. Less than zero means not affected, i.e. outside of
         # the box of eddies.
+        ploc = ploc.reshape((ndims, npts, neles)).swapaxes(0, 1) #  original shape
+        inside_eles = affected_eles(ploc, Ubulkdir, lturbref, inflow, ctr)
         affected = -np.ones((1, neles))
-        ploc = ploc.reshape((ndims, npts, neles))
-
-        delta = np.zeros(ndims)
-        delta[Ubulkdir] = lturbref[Ubulkdir]
-        dirs = [i for i in range(ndims) if i != Ubulkdir]
-        delta[dirs] = 0.5*inflow + lturbref[dirs]
-        x0 = ctr - delta
-        x1 = ctr + delta
-
-        # Determine which points are inside the box
-        inside = np.ones(ploc.shape[1:], dtype=np.bool)
-        for l, p, u in zip(x0, ploc, x1):
-            inside &= (l <= p) & (p <= u)
-
-        if np.sum(inside):
-            # indices of the elements that have at least one solution point
-            # inside the box
-            inside_eles = np.any(inside, axis=0).nonzero()[0]
-            affected[0, inside_eles] = +1.0
+        affected[0, inside_eles] = +1.0
 
         affectedmat = self._be.const_matrix(affected, tags={'align'})
         self._set_external('affected',
                            'in broadcast-col fpdtype_t',
                            value=affectedmat)
+
+        # Indices of the eddies considered active for each element
+        self.active_eddies = self._be.matrix((1, Nactive, neles), tags={'align'})
+        self._set_external('active_eddies',
+                           'in broadcast-col fpdtype_t[1][{}]'.format(Nactive),
+                           value=self.active_eddies)
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)

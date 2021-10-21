@@ -2,11 +2,39 @@
 
 import numpy as np
 import os
+from scipy.spatial import cKDTree
 
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin
 from pyfr.nputil import npeval
 
+def get_Nactive(cfg, cfgsect, N):
+    Nactive = cfg.getint(cfgsect, 'Nactive', 5)
+    return np.minimum(N, Nactive)
+
+def affected_eles(ploc, Ubulkdir, lturbref, inflow, ctr):
+    npts, ndims, neles = ploc.shape
+
+    ploc = ploc.swapaxes(0, 1)
+
+    delta = np.zeros(ndims)
+    delta[Ubulkdir] = lturbref[Ubulkdir]
+    dirs = [i for i in range(ndims) if i != Ubulkdir]
+    delta[dirs] = 0.5*inflow + lturbref[dirs]
+    x0 = ctr - delta
+    x1 = ctr + delta
+
+    # Determine which points are inside the box
+    inside = np.ones(ploc.shape[1:], dtype=np.bool)
+    for l, p, u in zip(x0, ploc, x1):
+        inside &= (l <= p) & (p <= u)
+
+    if np.sum(inside):
+        # indices of the elements that have at least one solution point
+        # inside the box
+        return np.any(inside, axis=0).nonzero()[0]
+    else:
+        return None
 
 def eval_expr(expr, constants, loc):
     # Bring simulation constants into scope
@@ -95,7 +123,7 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         # Determine the dimensions of the box of eddies and store the extension
         # in the streamwise direction.
-        inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
+        self.inflow = np.array(self.cfg.getliteral(cfgsect, 'plane-dimensions'))
 
         lstreamwise = 2.0*self.lturbref[self.Ubulkdir]
         self.box_xmax = self.ctr[self.Ubulkdir] + lstreamwise/2.0
@@ -105,17 +133,42 @@ class TurbulenceGeneratorPlugin(BasePlugin):
 
         self.box_dims = np.zeros(self.ndims)
         self.box_dims[self.Ubulkdir] = lstreamwise
-        self.box_dims[dirs] = inflow
+        self.box_dims[dirs] = self.inflow
 
         # Characteristic time
         self.tref = self.lturbref[self.Ubulkdir]/self.Ubulk
 
+        # Determine the indices and the centers of the elements that are
+        # affected by the turbulence generator.
+        # This is needed only for the higher-p system as the elements are the
+        # same for all levels.
+        self.affected = []
+        for ele in self.elemaps[0].values():
+            ploc = ele.ploc_at_np('upts')
+            idx = affected_eles(ploc, self.Ubulkdir, self.lturbref, self.inflow,
+                                self.ctr)
+            if idx is not None:
+                aectr = np.mean(ploc[:, :, idx], axis=0) #  npts, ndims, neles
+                self.affected.append((idx, aectr))
+            else:
+                self.affected.append((None, None))
+
         # Number of eddies
-        self.N = computeNeddies(inflow, self.Ubulkdir, self.lturbref)
+        self.N = computeNeddies(self.inflow, self.Ubulkdir, self.lturbref)
+
+        # Number of active eddies considered for each element
+        self.Nactive = get_Nactive(self.cfg, cfgsect, self.N)
 
         # Allocate the memory for the working arrays
         self.eddies_loc = np.empty((self.ndims, self.N))
         self.eddies_strength = np.empty((self.ndims, self.N))
+
+        # Array to store the indices of active eddies for each element
+        #TODO can we have matrix of integers on the backend?
+        self.active_eddies = []
+        for ele in self.elemaps[0].values():
+            self.active_eddies.append(np.zeros((ele.neles, self.Nactive)))
+                                                #dtype=np.uint))
 
         # Populate the box of eddies. If present, check that the eddies stored
         # in the previous solution are consistent with the current settings.
@@ -133,8 +186,28 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         else:
             self._create_eddies(intg.tcurr, intg.nacptsteps)
 
+        # Create kd-tree of eddies
+        self._create_kdtree()
+
         # Update the backend
         self._update_backend()
+
+    def _create_kdtree(self):
+        self.kdtree = cKDTree(self.eddies_loc.swapaxes(0, 1))
+
+    def _query_kdtree(self, aectr):
+        dists, closest_eddies = self.kdtree.query(
+            aectr.swapaxes(0, 1),
+            k=self.Nactive,
+            eps=np.min(self.lturbref)*0.1,
+            distance_upper_bound=np.max(self.lturbref)*1.2,
+            workers=1) #TODO how to get the openmp num threads here?
+
+        # Make sure we get only valid indices.
+        closest_eddies[closest_eddies >= self.kdtree.n] = 0
+
+        # n_affected_eles, Nactive
+        return closest_eddies
 
     @staticmethod
     def random_seed(t, nacptsteps, tref, fact=0.01, an=23):
@@ -189,16 +262,43 @@ class TurbulenceGeneratorPlugin(BasePlugin):
         self.tprev = tcurr
 
     def _update_backend(self):
-        for elemap in self.elemaps:
-            for ele in elemap.values():
+        # First higher-p level only.
+        for (idx, aectr), ele, active_eddies in zip(self.affected,
+                                                    self.elemaps[0].values(),
+                                                    self.active_eddies):
+            ele.eddies_loc.set(self.eddies_loc)
+            ele.eddies_strength.set(self.eddies_strength)
+
+            # active eddies, if we are actually generating turbulence
+            if aectr is not None:
+                closest_eddies = self._query_kdtree(aectr)
+                active_eddies[idx] = closest_eddies
+                ele.active_eddies.set(
+                    active_eddies.swapaxes(0, 1).reshape(1, self.Nactive, ele.neles)
+                    )
+
+        # Lower-p levels
+        netypes = len(self.elemaps[0])
+        for elemap in self.elemaps[1:]:
+            for etid, ele in enumerate(elemap.values()):
                 ele.eddies_loc.set(self.eddies_loc)
                 ele.eddies_strength.set(self.eddies_strength)
+
+                aeid = etid % netypes
+                idx, aectr = self.affected[aeid]
+                if aectr is not None:
+                    ele.active_eddies.set(
+                        self.active_eddies[aeid].swapaxes(0, 1).reshape(1, self.Nactive, ele.neles)
+                        )
 
     def __call__(self, intg):
         # Return if not active
         if intg.nacptsteps % self.nsteps == 0:
             # Update the location of the eddies
             self._update_eddies(intg.tcurr, intg.nacptsteps)
+
+            # Update kd-tree of eddies
+            self._create_kdtree()
 
             # Update the backend
             self._update_backend()

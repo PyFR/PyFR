@@ -23,6 +23,7 @@ fpdtype_t utilde[${ndims}] = {0.0};
 // Working variables
 fpdtype_t arg, arg2, pexp, clip;
 fpdtype_t csi[${ndims}];
+int idx;
 
 // Compute csi_max[3][3] on the fly for this point as lturb/lturb ref.
 // make sure the minimum value is not less than cmm for stability reasons.
@@ -32,9 +33,11 @@ fpdtype_t csimax[${ndims}][${ndims}] = {{1.0}};
 % endfor
 
 // Loop over the eddies
-for (int n=0; n<${N}; n++){
+% for n in range(Nactive):
+    idx = active_eddies[0][${n}];
+
     % for j in range(ndims):
-        csi[${j}] = fabs((ploc[${j}] - eddies_loc[${j}][n])*lturbrefinv[${j}]);
+        csi[${j}] = fabs((ploc[${j}] - eddies_loc[${j}][idx])*lturbrefinv[${j}]);
     % endfor
 
     arg = 0.0;
@@ -54,9 +57,9 @@ for (int n=0; n<${N}; n++){
         % for i in range(ndims):
             clip *= csi[${i}] < csimax[${i}][${j}] ? 1.0 : 0.0;
         % endfor
-        utilde[${j}] += clip*gauss_const[${j}]*pexp*eddies_strength[${j}][n];
+        utilde[${j}] += clip*gauss_const[${j}]*pexp*eddies_strength[${j}][idx];
     % endfor
-}
+% endfor
 
 // order is important here.
 utilde[2] = aij[3]*utilde[2];
