@@ -13,8 +13,8 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
           fpdtype_t dt_fac)
 % endif
 {
-    int tid = hipThreadIdx_x;
-    int i = hipBlockIdx_x*hipBlockDim_x + tid;
+    int tid = threadIdx.x;
+    int i = blockIdx.x*blockDim.x + tid;
     int lastblksize = ncolb % ${blocksz};
 
     __shared__ fpdtype_t sdata[${blocksz}];
@@ -24,7 +24,7 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
     {
         for (int j = 0; j < nrow; j++)
         {
-            int idx = j*ldim + SOA_IX(i, hipBlockIdx_y, hipGridDim_y);
+            int idx = j*ldim + SOA_IX(i, blockIdx.y, gridDim.y);
         % if method == 'errest':
             r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
         % elif method == 'resid':
@@ -44,7 +44,7 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
     __syncthreads();
 
     // Unrolled reduction within full blocks
-    if (hipBlockIdx_x != hipGridDim_x - 1)
+    if (blockIdx.x != gridDim.x - 1)
     {
     % for n in pyfr.ilog2range(blocksz):
         if (tid < ${n})
@@ -77,5 +77,5 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
 
     // Copy to global memory
     if (tid == 0)
-        reduced[hipBlockIdx_y*hipGridDim_x + hipBlockIdx_x] = sdata[0];
+        reduced[blockIdx.y*gridDim.x + blockIdx.x] = sdata[0];
 }

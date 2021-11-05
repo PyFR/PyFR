@@ -126,7 +126,7 @@ HIP Backend
 The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
-1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.0
+1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.5.0
 2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.32.0
 
 OpenCL Backend
