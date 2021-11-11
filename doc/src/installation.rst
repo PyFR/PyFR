@@ -96,7 +96,7 @@ dependencies.
 Dependencies
 ------------
 
-PyFR |release| has a hard dependency on Python 3.6+ and the following
+PyFR |release| has a hard dependency on Python 3.9+ and the following
 Python packages:
 
 1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
