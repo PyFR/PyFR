@@ -169,7 +169,7 @@ class BaseElements(object):
         if self.basis.order >= 2:
             self._linoff = linoff - linoff % -backend.csubsz
         else:
-            self._linoff = self.neles
+            self._linoff = 0
 
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
