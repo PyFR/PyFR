@@ -111,13 +111,16 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             # Obtain the scalar variable to be used for shock sensing
             shockvar = self.convarmap[self.ndims].index(self.shockvar)
 
-            # Obtain the degrees of the polynomial modes in the basis
-            ubasis = self.basis.ubasis
-            ubdegs_p = ubasis.degrees
-            # Obtain the degrees of the polynomial modes in the basis projected to one order lower
-            ubdegs_pm1 = get_polybasis(ubasis.name, max(0, ubasis.order - 1)).degrees
-            # Find indicator modes (modes which aren't in the projected basis)
-            ind_modes = [ubdeg not in ubdegs_pm1 for ubdeg in ubdegs_p]
+            # Obtain the name, degrees, and order of our solution basis
+            ubname = self.basis.ubasis.name
+            ubdegs = self.basis.ubasis.degrees
+            uborder = self.basis.ubasis.order
+
+            # Obtain the degrees of a basis whose order is one lower
+            lubdegs = get_polybasis(ubname, max(0, uborder - 1)).degrees
+
+            # Compute the intersection
+            ind_modes = [d not in lubdegs for d in ubdegs]
 
             # Template arguments
             tplargs_artvisc = dict(
