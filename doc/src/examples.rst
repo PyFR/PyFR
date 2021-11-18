@@ -4,6 +4,11 @@
 Examples
 ********
 
+PyFR includes several test cases to showcase the functionality of the
+solver.  It is important to note, however, that these examples are all
+relatively small 2D simulations and, as such, are *not* suitable for
+scalability or performance studies.
+
 Euler Equations
 ===============
 

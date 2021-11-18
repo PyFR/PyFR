@@ -127,7 +127,7 @@ The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
 1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.5.0
-2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.32.0
+2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.41.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -152,6 +152,11 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
    14b6cea61376653b2712e3eefa72b13c5e76e421 compiled as a shared
    library (STATIC=0) with BLAS=0 and CODE_BUF_MAXSIZE=262144
 
+In order for PyFR to find libxsmm it must be located in a directory
+which is on the library search path.  Alternatively, the path can be
+specified explicitly by exporting the environment variable
+``PYFR_XSMM_LIBRARY_PATH=/path/to/libxsmm.so``.
+
 Parallel
 ^^^^^^^^
 
@@ -160,3 +165,9 @@ have one of the following partitioners installed:
 
 1. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
 2. `SCOTCH <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+
+In order for PyFR to find these libraries they must be located in a
+directory which is on the library search path.  Alternatively, the
+paths can be specified explicitly by exporting the environment
+variables ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
+``PYFR_SCOTCH_LIBRARY_PATH=/path/to/libscotch.so``.
