@@ -47,7 +47,7 @@ This concludes the installation. In order to run PyFR with the OpenMP backend
     cc = gcc-8
 
 Note the version of the compiler which must support the ``openmp`` flag.
-This has been tested on macOS 10.14.
+This has been tested on macOS 11.6 for Intel and ARM CPUs.
 
 Ubuntu
 ------
@@ -75,7 +75,7 @@ virtual environment::
 
 This concludes the installation.
 
-This has been tested on Ubuntu 18.04.
+This has been tested on Ubuntu 20.04.
 
 .. _compile-from-source:
 
@@ -96,12 +96,12 @@ dependencies.
 Dependencies
 ------------
 
-PyFR |release| has a hard dependency on Python 3.6+ and the following
+PyFR |release| has a hard dependency on Python 3.8+ and the following
 Python packages:
 
 1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
 2. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
-3. `h5py <http://www.h5py.org/>`_ >= 2.6
+3. `h5py <http://www.h5py.org/>`_ >= 2.10
 4. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
 5. `mpi4py <http://mpi4py.scipy.org/>`_ >= 3.0
 6. `numpy <http://www.numpy.org/>`_ >= 1.20

@@ -1246,6 +1246,8 @@ vectors to a CSV file. Parameterised with
 
 4. ``morigin`` --- origin used to compute the moments (optional)
 
+    ``(x, y, [z])``
+
 Example::
 
     [soln-plugin-fluidforce-wing]
