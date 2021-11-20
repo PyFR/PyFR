@@ -107,7 +107,7 @@ data_files = [
 install_requires = [
     'appdirs >= 1.4.0',
     'gimmik >= 2.0',
-    'h5py >= 2.6',
+    'h5py >= 2.10',
     'mako >= 1.0.0',
     'mpi4py >= 3.0',
     'numpy >= 1.20',
@@ -128,8 +128,8 @@ console_scripts = [
 classifiers = [
     'License :: OSI Approved :: BSD License',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3.8',
     'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
     'Topic :: Scientific/Engineering'
 ]
 
