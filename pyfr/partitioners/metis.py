@@ -181,4 +181,8 @@ class METISPartitioner(BasePartitioner):
                 parts.ctypes
             )
 
+        # Check for invalid partition numbers
+        if np.max(parts) >= len(partwts):
+            raise RuntimeError('Invalid partition number from METIS')
+            
         return parts

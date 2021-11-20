@@ -8,8 +8,8 @@ axnpby(int nrow, int ncolb, int ldim, fpdtype_t* __restrict__ x0,
                    for i in range(1, nv))},
        ${', '.join(f'fpdtype_t a{i}' for i in range(nv))})
 {
-    int i = hipBlockIdx_y*hipBlockDim_y + hipThreadIdx_y;
-    int j = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
+    int i = blockIdx.y*blockDim.y + threadIdx.y;
+    int j = blockIdx.x*blockDim.x + threadIdx.x;
     int idx;
 
     if (j < ncolb && a0 == 0.0)

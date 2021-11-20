@@ -95,7 +95,7 @@ class HIPRTC(object):
 class SourceModule(object):
     def __init__(self, backend, src):
         # Prepare the source code
-        src = f'#include <hip/hip_runtime.h>\nextern "C"\n{{\n{src}\n}}'
+        src = f'extern "C"\n{{\n{src}\n}}'
 
         # Get the compute architecture
         arch = backend.props['gcn_arch_name']

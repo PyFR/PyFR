@@ -16,14 +16,19 @@ class HIPKernelGenerator(BaseKernelGenerator):
         if self.ndim == 1:
             self._limits = 'if (_x < _nx)'
         else:
-            self._limits = 'for (int _y = 0; _x < _nx && _y < _ny; _y++)'
+            self._limits = '''
+                int _ysize = (_ny + blockDim.y - 1) / blockDim.y;
+                int _ystart = threadIdx.y*_ysize;
+                int _yend = (_ystart + _ysize > _ny) ? _ny : _ystart + _ysize;
+                for (int _y = _ystart; _x < _nx && _y < _yend; _y++)
+            '''
 
     def render(self):
         spec = self._render_spec()
 
         return f'''{spec}
                {{
-                   int _x = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
+                   int _x = blockIdx.x*blockDim.x + threadIdx.x;
                    #define X_IDX (_x)
                    #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
                    #define BLK_IDX 0

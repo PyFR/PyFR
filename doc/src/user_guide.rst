@@ -120,16 +120,8 @@ Parameterises the CUDA backend with
 
      ``standard`` | ``cuda-aware``
 
-3. ``block-1d`` --- block size for one dimensional pointwise kernels:
+3. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
 
-     *int*
-
-4. ``block-2d`` --- block size for two dimensional pointwise kernels:
-
-    *int*
-
-5. ``cflags`` --- additional NVIDIA realtime compiler (``nvrtc``) flags:
-    
     *string*
 
 Example::
@@ -137,8 +129,6 @@ Example::
     [backend-cuda]
     device-id = round-robin
     mpi-type = standard
-    block-1d = 64
-    block-2d = 128
 
 [backend-hip]
 ^^^^^^^^^^^^^
@@ -153,21 +143,11 @@ Parameterises the HIP backend with
 
      ``standard`` | ``hip-aware``
 
-3. ``block-1d`` --- block size for one dimensional pointwise kernels:
-
-     *int*
-
-4. ``block-2d`` --- block size for two dimensional pointwise kernels:
-
-    *int*
-
 Example::
 
     [backend-hip]
     device-id = local-rank
     mpi-type = standard
-    block-1d = 64
-    block-2d = 128
 
 [backend-opencl]
 ^^^^^^^^^^^^^^^^
@@ -191,16 +171,6 @@ Parameterises the OpenCL backend with
 
      *int*
 
-5. ``local-size-1d`` --- local work size for one dimensional pointwise
-   kernels:
-
-    *int*
-
-6. ``local-size-2d`` --- local work size for two dimensional pointwise
-   kernels:
-
-    *int*
-
 Example::
 
     [backend-opencl]
@@ -208,8 +178,6 @@ Example::
     device-type = gpu
     device-id = local-rank
     gimmik-max-nnz = 512
-    local-size-1d = 16
-    local-size-2d = 128
 
 [backend-openmp]
 ^^^^^^^^^^^^^^^^
@@ -1260,8 +1228,8 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
-labelled ``name`` and writes out the resulting force vectors to a CSV
-file. Parameterised with
+labelled ``name`` and writes out the resulting force and moment (if requested)
+vectors to a CSV file. Parameterised with
 
 1. ``nsteps`` --- integrate every ``nsteps``:
 
@@ -1276,12 +1244,17 @@ file. Parameterised with
 
     *boolean*
 
+4. ``morigin`` --- origin used to compute moments (optional):
+
+    ``(x, y, [z])``
+
 Example::
 
     [soln-plugin-fluidforce-wing]
     nsteps = 10
     file = wing-forces.csv
     header = true
+    morigin = (0.0, 0.0, 0.5)
 
 [soln-plugin-nancheck]
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -1544,11 +1517,34 @@ Example::
 Additional Information
 ----------------------
 
-The :ref:`INI<configuration-file>` file format is very versatile. A feature that can be useful in
-defining initial conditions is the substitution feature and this is
-demonstrated in the :ref:`integrate-plugin` example.
+The :ref:`INI<configuration-file>` file format is very versatile. A feature that
+can be useful in defining initial conditions is the substitution feature and
+this is demonstrated in the :ref:`integrate-plugin` example.
 
 To prevent situations where you have solutions files for unknown
-configurations, the contents of the ``.ini`` file is added as an attribute
+configurations, the contents of the ``.ini`` file are added as an attribute
 to ``.pyfrs`` files. These files use the HDF5 format and can be
 straightforwardly probed with tools such as h5dump.
+
+In several places within the ``.ini`` file expressions may be used. As well as
+the constant ``pi``, expressions containing the following functions are
+supported:
+
+1. ``+, -, *, /`` --- basic arithmetic
+
+2. ``sin, cos, tan`` --- basic trigonometric functions (radians)
+
+3. ``asin, acos, atan, atan2`` --- inverse trigonometric functions
+
+4. ``exp, log`` --- exponential and the natural logarithm
+
+5. ``tanh`` --- hyperbolic tangent
+
+6. ``pow`` --- power, note ``**`` is not supported
+
+7. ``sqrt`` --- square root
+
+8. ``abs`` --- absolute value
+
+9. ``min, max`` --- two variable minimum and maximum functions, arguments can be
+arrays

@@ -33,14 +33,13 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
     def _instantiate_kernel(self, dims, fun, arglst):
         cfg = self.backend.cfg
 
-        # Determine the local work size
+        # Determine the work group sizes
         if len(dims) == 1:
-            ls = (cfg.getint('backend-opencl', 'local-size-1d', '64'),)
+            ls = (64,)
+            gs = (dims[0] - dims[0] % -ls[0],)
         else:
-            ls = (cfg.getint('backend-opencl', 'local-size-2d', '128'),)
-
-        # Global work size
-        gs = tuple(gi - gi % -li for gi, li in zip(dims[::-1], ls))
+            ls = (64, 4)
+            gs = (dims[1] - dims[1] % -ls[0], ls[1])
 
         class PointwiseKernel(ComputeKernel):
             if any(isinstance(arg, str) for arg in arglst):

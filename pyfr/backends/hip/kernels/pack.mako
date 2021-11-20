@@ -8,7 +8,7 @@ pack_view(int n, int nrv, int ncv,
           const int* __restrict__ vrstri,
           fpdtype_t* __restrict__ pmat)
 {
-    int i = hipBlockIdx_x*hipBlockDim_x + hipThreadIdx_x;
+    int i = blockIdx.x*blockDim.x + threadIdx.x;
 
     if (i < n && ncv == 1)
         pmat[i] = v[vix[i]];

@@ -24,22 +24,18 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Determine the block size for pointwise kernels
-        cfg = self.backend.cfg
-        self._blocksz = {
-            1: (cfg.getint('backend-hip', 'block-1d', '64'), 1, 1),
-            2: (cfg.getint('backend-hip', 'block-2d', '128'), 1, 1)
-        }
+        self._block1d = (64, 1, 1)
+        self._block2d = (64, 4, 1)
 
-        # Pass these to the HIP kernel generator
+        # Pass these block sizes to the generator
         class KernelGenerator(HIPKernelGenerator):
-            block1d = self._blocksz[1]
-            block2d = self._blocksz[2]
+            block1d = self._block1d
+            block2d = self._block2d
 
         self.kernel_generator_cls = KernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
-        block = self._blocksz[len(dims)]
+        block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
 
         class PointwiseKernel(ComputeKernel):

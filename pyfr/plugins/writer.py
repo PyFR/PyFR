@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.inifile import Inifile
+from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
+from pyfr.writers.native import NativeWriter
 
 
 class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
@@ -12,8 +14,12 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
+        # Base output directory and file name
+        basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
+        basename = self.cfg.get(self.cfgsect, 'basename')
+
         # Construct the solution writer
-        self._writer = self._init_writer_for_region(intg, self.nvars, 'soln')
+        self._writer = NativeWriter(intg, basedir, basename, 'soln')
 
         # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
@@ -22,36 +28,54 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Output field names
         self.fields = intg.system.elementscls.convarmap[self.ndims]
 
+        # Output data type
+        self.fpdtype = intg.backend.fpdtype
+
         # Register our output times with the integrator
         intg.call_plugin_dt(self.dt_out)
 
-        # If we're not restarting then write out the initial solution
+        # If we're not restarting then make sure we write out the initial
+        # solution when we are called for the first time
         if not intg.isrestart:
             self.tout_last -= self.dt_out
-            self(intg)
 
     def __call__(self, intg):
         if intg.tcurr - self.tout_last < self.dt_out - self.tol:
             return
 
-        stats = Inifile()
-        stats.set('data', 'fields', ','.join(self.fields))
-        stats.set('data', 'prefix', 'soln')
-        intg.collect_stats(stats)
+        comm, rank, root = get_comm_rank_root()
 
-        # Prepare the metadata
-        metadata = dict(intg.cfgmeta,
-                        stats=stats.tostr(),
-                        mesh_uuid=intg.mesh_uuid)
+        # If we are the root rank then prepare the metadata
+        if rank == root:
+            stats = Inifile()
+            stats.set('data', 'fields', ','.join(self.fields))
+            stats.set('data', 'prefix', 'soln')
+            intg.collect_stats(stats)
 
-        # Extract and subset the solution
-        soln = [intg.soln[i][..., rgn] for i, rgn in self._ele_regions]
+            metadata = dict(intg.cfgmeta,
+                            stats=stats.tostr(),
+                            mesh_uuid=intg.mesh_uuid)
+        else:
+            metadata = None
 
-        # Add in any required region data
-        data = self._add_region_data(soln)
+        # Fetch data from other plugins and add it to metadata with ad-hoc keys
+        for csh in intg.completed_step_handlers:
+            try:
+                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
+                pdata = csh.serialise(intg)
+            except AttributeError:
+                pdata = {}
+
+            if rank == root:
+                metadata.update({f'{prefix}/{k}': v for k, v in pdata.items()})
+
+        # Fetch and (if necessary) subset the solution
+        data = dict(self._ele_region_data)
+        for idx, etype, rgn in self._ele_regions:
+            data[etype] = intg.soln[idx][..., rgn].astype(self.fpdtype)
 
         # Write out the file
-        solnfname = self._writer.write(data, metadata, intg.tcurr)
+        solnfname = self._writer.write(data, intg.tcurr, metadata)
 
         # If a post-action has been registered then invoke it
         self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,

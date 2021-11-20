@@ -47,7 +47,7 @@ This concludes the installation. In order to run PyFR with the OpenMP backend
     cc = gcc-8
 
 Note the version of the compiler which must support the ``openmp`` flag.
-This has been tested on macOS 10.14.
+This has been tested on macOS 11.6 for ARM and Intel CPUs.
 
 Ubuntu
 ------
@@ -75,7 +75,7 @@ virtual environment::
 
 This concludes the installation.
 
-This has been tested on Ubuntu 18.04.
+This has been tested on Ubuntu 20.04.
 
 .. _compile-from-source:
 
@@ -96,12 +96,12 @@ dependencies.
 Dependencies
 ------------
 
-PyFR |release| has a hard dependency on Python 3.6+ and the following
+PyFR |release| has a hard dependency on Python 3.9+ and the following
 Python packages:
 
 1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
 2. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
-3. `h5py <http://www.h5py.org/>`_ >= 2.6
+3. `h5py <http://www.h5py.org/>`_ >= 2.10
 4. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
 5. `mpi4py <http://mpi4py.scipy.org/>`_ >= 3.0
 6. `numpy <http://www.numpy.org/>`_ >= 1.20
@@ -126,8 +126,8 @@ HIP Backend
 The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
-1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.0
-2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.32.0
+1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.5.0
+2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.41.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -150,7 +150,12 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
 1. GCC >= 4.9 or another C compiler with OpenMP support
 2. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
    14b6cea61376653b2712e3eefa72b13c5e76e421 compiled as a shared
-   library (STATIC=0) with BLAS=0
+   library (STATIC=0) with BLAS=0 and CODE_BUF_MAXSIZE=262144
+
+In order for PyFR to find libxsmm it must be located in a directory
+which is on the library search path.  Alternatively, the path can be
+specified explicitly by exporting the environment variable
+``PYFR_XSMM_LIBRARY_PATH=/path/to/libxsmm.so``.
 
 Parallel
 ^^^^^^^^
@@ -160,3 +165,9 @@ have one of the following partitioners installed:
 
 1. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
 2. `SCOTCH <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+
+In order for PyFR to find these libraries they must be located in a
+directory which is on the library search path.  Alternatively, the
+paths can be specified explicitly by exporting the environment
+variables ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
+``PYFR_SCOTCH_LIBRARY_PATH=/path/to/libscotch.so``.
