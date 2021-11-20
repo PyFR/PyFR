@@ -1228,7 +1228,7 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Periodically integrates the pressure and viscous stress on the boundary
-labelled ``name`` and writes out the resulting force and moments (if requested)
+labelled ``name`` and writes out the resulting force and moment (if requested)
 vectors to a CSV file. Parameterised with
 
 1. ``nsteps`` --- integrate every ``nsteps``:
@@ -1244,7 +1244,9 @@ vectors to a CSV file. Parameterised with
 
     *boolean*
 
-4. ``morigin`` --- origin used to compute the moments (optional)
+4. ``morigin`` --- origin used to compute moments (optional):
+
+    ``(x, y, [z])``
 
 Example::
 

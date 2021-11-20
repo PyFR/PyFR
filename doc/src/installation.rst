@@ -47,7 +47,7 @@ This concludes the installation. In order to run PyFR with the OpenMP backend
     cc = gcc-8
 
 Note the version of the compiler which must support the ``openmp`` flag.
-This has been tested on macOS 10.14.
+This has been tested on macOS 11.6 for ARM and Intel CPUs.
 
 Ubuntu
 ------
@@ -75,7 +75,7 @@ virtual environment::
 
 This concludes the installation.
 
-This has been tested on Ubuntu 18.04.
+This has been tested on Ubuntu 20.04.
 
 .. _compile-from-source:
 
