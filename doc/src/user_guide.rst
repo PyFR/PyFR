@@ -376,7 +376,7 @@ Parameterises the time-integration scheme used by the solver with
 
         - ``scheme`` --- time-integration scheme
 
-           ``backward-euler`` | ``bdf2`` | ``bdf3``
+           ``backward-euler`` | ``bdf2`` | ``bdf3`` | ``sdirk33`` | ``sdirk43``
 
         - ``pseudo-scheme`` --- pseudo time-integration scheme
 

@@ -188,9 +188,12 @@ class BaseCommon(object):
 
         return kerns
 
-    def _add(self, *args, subdims=None):
+    def _addv(self, consts, regidxs, subdims=None):
         # Get a suitable set of axnpby kernels
-        axnpby = self._get_axnpby_kerns(*args[1::2], subdims=subdims)
+        axnpby = self._get_axnpby_kerns(*regidxs, subdims=subdims)
 
         # Bind and run the axnpby kernels
-        self._queue.enqueue_and_run(axnpby, *args[::2])
+        self._queue.enqueue_and_run(axnpby, *consts)
+
+    def _add(self, *args, subdims=None):
+        self._addv(args[::2], args[1::2], subdims=subdims)

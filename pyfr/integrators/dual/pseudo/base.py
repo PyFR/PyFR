@@ -2,7 +2,6 @@
 
 from collections import defaultdict
 from configparser import NoOptionError
-from itertools import chain
 
 from pyfr.integrators.base import BaseCommon
 
@@ -12,7 +11,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
     aux_nregs = 0
 
     def __init__(self, backend, systemcls, rallocs, mesh,
-                 initsoln, cfg, stepper_coeffs, dt):
+                 initsoln, cfg, stepper_nregs, stage_nregs, dt):
         self.backend = backend
         self.rallocs = rallocs
         self.isrestart = initsoln is not None
@@ -36,13 +35,15 @@ class BaseDualPseudoIntegrator(BaseCommon):
             raise TypeError('Incompatible pseudo-stepper/pseudo-controller '
                             'combination')
 
-        # Physical stepper coefficients and amount of temp storage required
-        self.stepper_coeffs = stepper_coeffs
-        self.stepper_nregs = len(stepper_coeffs) - 1
+        # Amount of stage storage required by DIRK stepper
+        self.stage_nregs = stage_nregs
+
+        # Amount of temp storage required by physical stepper
+        self.stepper_nregs = stepper_nregs
 
         # Determine the amount of temp storage required in total
-        self.nregs = (self.pseudo_stepper_nregs + self.stepper_nregs + 1 +
-                      self.aux_nregs)
+        self.nregs = (self.pseudo_stepper_nregs + self.stepper_nregs +
+                      self.stage_nregs + 1 + self.aux_nregs)
 
         # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
@@ -61,10 +62,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
         elementscls = self.system.elementscls
         self._subdims = [elementscls.convarmap[self.system.ndims].index(v)
                          for v in elementscls.dualcoeffs[self.system.ndims]]
-
-        # Prepare the physical stepper source for the first iteration
-        if self.stepper_nregs:
-            self._accumulate_source()
 
         # Convergence tolerances
         self._pseudo_residtol = residtol = []
@@ -90,31 +87,45 @@ class BaseDualPseudoIntegrator(BaseCommon):
 
     @property
     def _source_regidx(self):
-        return self._regidx[self.pseudo_stepper_nregs + self.stepper_nregs]
+        sr = self.pseudo_stepper_nregs + self.stepper_nregs + self.stage_nregs
+        return self._regidx[sr]
+
+    @property
+    def _stage_regidx(self):
+        bsnregs = self.pseudo_stepper_nregs + self.stepper_nregs
+        return self._regidx[bsnregs:bsnregs + self.stage_nregs]
 
     @property
     def _stepper_regidx(self):
         psnregs = self.pseudo_stepper_nregs
         return self._regidx[psnregs:psnregs + self.stepper_nregs]
 
-    def _accumulate_source(self):
-        svals = [sc / self._dt for sc in self.stepper_coeffs[1:]]
+    def init_stage(self, currstg, stepper_coeffs):
+        self.currstg = currstg
+        self.stepper_coeffs = stepper_coeffs
+
+        svals = [0] + self.stepper_coeffs[2:]
+        sregs = ([self._source_regidx] + self._stepper_regidx
+                 + self._stage_regidx[:self.currstg])
 
         # Accumulate physical stepper sources into a single register
-        self._add(0, self._source_regidx,
-                  *chain(*zip(svals, self._stepper_regidx)),
-                  subdims=self._subdims)
+        self._addv(svals, sregs, subdims=self._subdims)
 
-    def finalise_pseudo_advance(self, currsoln):
+    def discard_oldest_source(self):
         psnregs = self.pseudo_stepper_nregs
+        snregs = self.stepper_nregs
 
         # Rotate the source registers to the right by one
-        self._regidx[psnregs:psnregs + self.stepper_nregs] = (
-            self._stepper_regidx[-1:] + self._stepper_regidx[:-1]
-        )
+        self._regidx[psnregs:psnregs + snregs] = (self._stepper_regidx[-1:]
+                                                  + self._stepper_regidx[:-1])
 
+    def store_current_soln(self):
         # Copy the current soln into the first source register
-        self._add(0, self._regidx[psnregs], 1, currsoln)
+        self._add(0, self._stepper_regidx[0], 1, self._idxcurr)
 
-        # Physical stepper source term
-        self._accumulate_source()
+    def obtain_solution(self, bcoeffs):
+        consts = [0, 1] + bcoeffs
+        regidxs = ([self._idxcurr, self._stepper_regidx[0]]
+                   + self._stage_regidx)
+
+        self._addv(consts, regidxs, subdims=self._subdims)
