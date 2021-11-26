@@ -5,6 +5,7 @@ import itertools as it
 import re
 
 from mako.runtime import supports_caller, capture
+import numpy as np
 
 import pyfr.nputil as nputil
 import pyfr.util as util
@@ -39,6 +40,16 @@ def array(context, ex_, **kwargs):
     ni = ni if isinstance(ni, Iterable) else [ni]
 
     return '{ ' + ', '.join(ex_.format(**{ix: i}) for i in range(*ni)) + ' }'
+
+
+def polyfit(context, f, a, b, n, var, nqpts=500):
+    x = np.linspace(a, b, nqpts)
+    y = f(x)
+
+    coeffs = np.polynomial.polynomial.polyfit(x, y, n)
+    pfexpr = f' + {var}*('.join(str(c) for c in coeffs) + ')'*n
+
+    return f'({pfexpr})'
 
 
 def _strip_parens(s):
