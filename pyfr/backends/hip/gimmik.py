@@ -33,9 +33,8 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         grid = get_grid_for_block(block, b.ncol)
 
         # Generate
-        src = generate_mm(a.get(), dtype=a.dtype, platform='cuda',
+        src = generate_mm(a.get(), dtype=a.dtype, platform='hip',
                           alpha=alpha, beta=beta)
-        src = src.replace('void', f'__launch_bounds__({block[0]}) void')
 
         # Build
         fun = self._build_kernel('gimmik_mm', src,
