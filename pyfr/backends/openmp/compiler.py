@@ -8,7 +8,7 @@ import shlex
 import tempfile
 import uuid
 
-from appdirs import user_cache_dir
+from platformdirs import user_cache_dir
 from pytools.prefork import call_capture_output
 
 from pyfr.ctypesutil import platform_libname
