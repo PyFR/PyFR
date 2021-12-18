@@ -87,14 +87,12 @@ class CUDAQueue(base.Queue):
     def __init__(self, backend):
         super().__init__(backend)
 
-        # CUDA streams
-        self.stream_comp = backend.cuda.create_stream()
-        self.stream_copy = backend.cuda.create_stream()
+        # CUDA stream
+        self.stream = backend.cuda.create_stream()
 
     def _wait(self):
         if self._last_ktype == 'compute':
-            self.stream_comp.synchronize()
-            self.stream_copy.synchronize()
+            self.stream.synchronize()
         elif self._last_ktype == 'mpi':
             from mpi4py import MPI
 

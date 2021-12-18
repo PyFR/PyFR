@@ -64,7 +64,7 @@ class HIPRocBLASKernels(object):
             pass
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
-        w = self._wrappers
+        h, w = self._handle, self._wrappers
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -89,9 +89,9 @@ class HIPRocBLASKernels(object):
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(ComputeKernel):
-            def run(iself, queue):
-                w.rocblas_set_stream(self._handle, queue.stream_comp)
-                rocblas_gemm(self._handle, opA, opB, m, n, k,
+            def run(self, queue):
+                w.rocblas_set_stream(h, queue.stream)
+                rocblas_gemm(h, opA, opB, m, n, k,
                              alpha_ct, A, A.leaddim, B, B.leaddim,
                              beta_ct, C, C.leaddim)
 

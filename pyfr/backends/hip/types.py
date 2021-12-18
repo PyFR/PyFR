@@ -87,14 +87,12 @@ class HIPQueue(base.Queue):
     def __init__(self, backend):
         super().__init__(backend)
 
-        # HIP streams
-        self.stream_comp = backend.hip.create_stream()
-        self.stream_copy = backend.hip.create_stream()
+        # HIP stream
+        self.stream = backend.hip.create_stream()
 
     def _wait(self):
         if self._last_ktype == 'compute':
-            self.stream_comp.synchronize()
-            self.stream_copy.synchronize()
+            self.stream.synchronize()
         elif self._last_ktype == 'mpi':
             from mpi4py import MPI
 

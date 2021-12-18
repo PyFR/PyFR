@@ -30,8 +30,8 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
-                kern.exec_async(grid, block, queue.stream_comp, nrow, ncolb,
-                                ldim, *arr, *consts)
+                kern.exec_async(grid, block, queue.stream, nrow, ncolb, ldim,
+                                *arr, *consts)
 
         return AxnpbyKernel()
 
@@ -43,7 +43,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                cuda.memcpy_async(dst, src, dst.nbytes, queue.stream_comp)
+                cuda.memcpy(dst, src, dst.nbytes, queue.stream)
 
         return CopyKernel()
 
@@ -97,9 +97,9 @@ class CUDABlasExtKernels(CUDAKernelProvider):
                 return reducer(reduced_host, axis=1)
 
             def run(self, queue, *facs):
-                rkern.exec_async(grid, block, queue.stream_comp,
+                rkern.exec_async(grid, block, queue.stream,
                                  nrow, ncolb, ldim, reduced_dev, *regs, *facs)
-                cuda.memcpy_async(reduced_host, reduced_dev,
-                                  reduced_dev.nbytes, queue.stream_comp)
+                cuda.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
+                            queue.stream)
 
         return ReductionKernel()

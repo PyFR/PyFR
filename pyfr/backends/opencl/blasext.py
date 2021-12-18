@@ -28,7 +28,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
                 arrd = [x.data for x in arr]
-                kern(queue.cmd_q_comp, (ncolb, nrow), None, nrow, ncolb, ldim,
+                kern(queue.cmd_q, (ncolb, nrow), None, nrow, ncolb, ldim,
                      *arrd, *consts)
 
         return AxnpbyKernel()
@@ -39,7 +39,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                cl.enqueue_copy(queue.cmd_q_comp, dst.data, src.data)
+                cl.enqueue_copy(queue.cmd_q, dst.data, src.data)
 
         return CopyKernel()
 
@@ -92,9 +92,9 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
                 return reducer(reduced_host, axis=1)
 
             def run(self, queue, *facs):
-                rkern(queue.cmd_q_comp, gs, ls,
-                      nrow, ncolb, ldim, reduced_dev, *rdata, *facs)
-                cevent = cl.enqueue_copy(queue.cmd_q_comp, reduced_host,
+                rkern(queue.cmd_q, gs, ls, nrow, ncolb, ldim, reduced_dev,
+                      *rdata, *facs)
+                cevent = cl.enqueue_copy(queue.cmd_q, reduced_host,
                                          reduced_dev, is_blocking=False)
                 queue.copy_events.append(cevent)
 
