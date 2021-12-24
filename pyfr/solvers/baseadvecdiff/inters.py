@@ -22,7 +22,7 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
             self._artvisc_lhs = self._artvisc_rhs = None
 
         # Additional kernel constants
-        self.c.update(cfg.items_as('solver-interfaces', float))
+        self.c |= cfg.items_as('solver-interfaces', float)
 
     def _gen_perm(self, lhs, rhs):
         # In the special case of β = -0.5 it is better to sort by the
@@ -46,7 +46,7 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         self._vect_rhs = be.xchg_matrix_for_view(self._vect_lhs)
 
         # Additional kernel constants
-        self.c.update(cfg.items_as('solver-interfaces', float))
+        self.c |= cfg.items_as('solver-interfaces', float)
 
         # We require cflux(l,r,n_l) = -cflux(r,l,n_r) and
         # conu(l,r) = conu(r,l) and where l and r are left and right
@@ -131,7 +131,7 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
         self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
 
         # Additional kernel constants
-        self.c.update(cfg.items_as('solver-interfaces', float))
+        self.c |= cfg.items_as('solver-interfaces', float)
 
         # Generate the additional view matrices for artificial viscosity
         if cfg.get('solver', 'shock-capturing') == 'artificial-viscosity':

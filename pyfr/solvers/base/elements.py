@@ -64,7 +64,7 @@ class BaseElements(object):
 
         # Get the physical location of each solution point
         coords = self.ploc_at_np('upts').swapaxes(0, 1)
-        vars.update(dict(zip('xyz', coords)))
+        vars |= dict(zip('xyz', coords))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
@@ -148,9 +148,9 @@ class BaseElements(object):
 
         # Variable and function substitutions
         subs = self.cfg.items('constants')
-        subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
-        subs.update({v: f'u[{i}]' for i, v in enumerate(convars)})
-        subs.update(abs='fabs', pi=str(math.pi))
+        subs |= dict(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs |= dict(abs='fabs', pi=str(math.pi))
+        subs |= {v: f'u[{i}]' for i, v in enumerate(convars)}
 
         return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)
                 for v in convars]
