@@ -131,20 +131,6 @@ def chdir(dirname):
         os.chdir(cdir)
 
 
-class lazyprop(object):
-    def __init__(self, fn):
-        self.fn = fn
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return None
-
-        value = self.fn(instance)
-        setattr(instance, self.fn.__name__, value)
-
-        return value
-
-
 def subclasses(cls, just_leaf=False):
     sc = cls.__subclasses__()
     ssc = [g for s in sc for g in subclasses(s, just_leaf)]

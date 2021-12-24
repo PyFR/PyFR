@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import defaultdict
-from functools import wraps
+from functools import cached_property, wraps
 from itertools import count
 import math
 from weakref import WeakKeyDictionary, WeakValueDictionary
@@ -10,7 +10,6 @@ import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
 from pyfr.template import DottedTemplateLookup
-from pyfr.util import lazyprop
 
 
 def recordmat(fn):
@@ -51,7 +50,7 @@ class BaseBackend(object):
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
 
-    @lazyprop
+    @cached_property
     def lookup(self):
         pkg = f'pyfr.backends.{self.name}.kernels'
         dfltargs = dict(fpdtype=self.fpdtype, soasz=self.soasz,

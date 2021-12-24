@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import itertools as it
+from functools import cached_property
 from math import exp
 import re
 
@@ -9,7 +10,6 @@ import numpy as np
 from pyfr.nputil import block_diag, clean
 from pyfr.polys import get_polybasis
 from pyfr.quadrules import get_quadrule
-from pyfr.util import lazyprop
 
 
 def _proj_pts(projector, pts):
@@ -89,21 +89,21 @@ class BaseShape(object):
         mats = {m: getattr(self, m) for m in re.findall(r'm\d+', expr)}
         return eval(expr, {'__builtins__': None}, mats)
 
-    @lazyprop
+    @cached_property
     def m0(self):
         return self.ubasis.nodal_basis_at(self.fpts)
 
-    @lazyprop
+    @cached_property
     def m1(self):
         m = np.rollaxis(self.ubasis.jac_nodal_basis_at(self.upts), 2)
         return m.reshape(self.nupts, -1)
 
-    @lazyprop
+    @cached_property
     def m2(self):
         m = self.norm_fpts[..., None]*self.m0[:, None, :]
         return m.reshape(self.nfpts, -1)
 
-    @lazyprop
+    @cached_property
     def m3(self):
         m = self.gbasis_at(self.upts)
 
@@ -115,21 +115,21 @@ class BaseShape(object):
 
         return m
 
-    @lazyprop
+    @cached_property
     def m4(self):
         m = self.m1.reshape(self.nupts, -1, self.nupts).swapaxes(0, 1)
         return m.reshape(-1, self.nupts)
 
-    @lazyprop
+    @cached_property
     def m6(self):
         m = self.norm_fpts.T[:, None, :]*self.m3
         return m.reshape(-1, self.nfpts)
 
-    @lazyprop
+    @cached_property
     def m7(self):
         return self.ubasis.nodal_basis_at(self.qpts)
 
-    @lazyprop
+    @cached_property
     def m8(self):
         return _proj_l2(self._eqrule, self.ubasis)
 
@@ -137,7 +137,7 @@ class BaseShape(object):
     def m9(self):
         return block_diag([self.m8]*self.ndims)
 
-    @lazyprop
+    @cached_property
     @clean
     def m10(self):
         ub = self.ubasis
@@ -154,12 +154,12 @@ class BaseShape(object):
 
         return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
 
-    @lazyprop
+    @cached_property
     def nupts(self):
         n = self.order + 1
         return int(np.polyval(self.npts_coeffs, n)) // self.npts_cdenom
 
-    @lazyprop
+    @cached_property
     def upts(self):
         rname = self.cfg.get(f'solver-elements-{self.name}', 'soln-pts')
         return get_quadrule(self.name, rname, self.nupts).pts
@@ -175,11 +175,11 @@ class BaseShape(object):
 
         return get_quadrule(kind, **kwargs)
 
-    @lazyprop
+    @cached_property
     def _eqrule(self):
         return self._get_qrule('elements', self.name)
 
-    @lazyprop
+    @cached_property
     def _iqrules(self):
         return {kind: self._get_qrule('interfaces', kind, flags='s')
                 for kind in {k for k, p, n in self.faces}}
@@ -192,7 +192,7 @@ class BaseShape(object):
     def nqpts(self):
         return len(self.qpts)
 
-    @lazyprop
+    @cached_property
     def fpts(self):
         ppts = []
 
@@ -211,7 +211,7 @@ class BaseShape(object):
 
         return np.vstack(ppts)
 
-    @lazyprop
+    @cached_property
     def fpts_wts(self):
         pwts = []
 
@@ -229,7 +229,7 @@ class BaseShape(object):
 
         return np.hstack(pwts)
 
-    @lazyprop
+    @cached_property
     def gbasis_coeffs(self):
         coeffs = []
 
@@ -263,20 +263,20 @@ class BaseShape(object):
     def facenorms(self):
         return [norm for kind, proj, norm in self.faces]
 
-    @lazyprop
+    @cached_property
     def norm_fpts(self):
         fnorms = self.facenorms
         return np.vstack([[fn]*n for fn, n in zip(fnorms, self.nfacefpts)])
 
-    @lazyprop
+    @cached_property
     def spts(self):
         return self.std_ele(self.nsptsord - 1)
 
-    @lazyprop
+    @cached_property
     def linspts(self):
         return self.std_ele(1)
 
-    @lazyprop
+    @cached_property
     def facebases(self):
         fb = {}
 
@@ -290,12 +290,12 @@ class BaseShape(object):
 
         return fb
 
-    @lazyprop
+    @cached_property
     def facefpts(self):
         nf = np.cumsum([0] + self.nfacefpts)
         return [list(range(nf[i], nf[i + 1])) for i in range(len(nf) - 1)]
 
-    @lazyprop
+    @cached_property
     def nfacefpts(self):
         if 'surf-flux' in self.antialias:
             def cnt(k): return len(self._iqrules[k].pts)
@@ -308,11 +308,11 @@ class BaseShape(object):
     def nfpts(self):
         return sum(self.nfacefpts)
 
-    @lazyprop
+    @cached_property
     def mpts(self):
         return self.std_ele(max(self.order, 1))
 
-    @lazyprop
+    @cached_property
     def nmpts(self):
         return len(self.mpts)
 
