@@ -9,10 +9,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1, q2 = self._queues
         kernels = self._kernels
 
-        self._bc_inters.prepare(t)
-
-        self.eles_scal_upts_inb.active = uinbank
-        self.eles_scal_upts_outb.active = foutbank
+        self._prepare_rhs(t, uinbank, foutbank)
 
         q1.enqueue(kernels['eles', 'disu'])
         q1.enqueue(kernels['mpiint', 'scal_fpts_pack'])
@@ -73,9 +70,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q1, q2 = self._queues
         kernels = self._kernels
 
-        self._bc_inters.prepare(t)
-
-        self.eles_scal_upts_inb.active = uinbank
+        self._prepare_rhs(t, uinbank, None)
 
         q1.enqueue(kernels['eles', 'disu'])
         q1.enqueue(kernels['mpiint', 'scal_fpts_pack'])

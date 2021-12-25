@@ -9,7 +9,7 @@ from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.integrators.dual.pseudo.pseudocontrollers import (
     BaseDualPseudoController
 )
-from pyfr.util import memoize, proxylist, subclass_where
+from pyfr.util import memoize, subclass_where
 
 
 class DualMultiPIntegrator(BaseDualPseudoIntegrator):
@@ -180,7 +180,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return self.pintgs[self.level]
 
     def _init_proj_mats(self):
-        self.projmats = defaultdict(proxylist)
+        self.projmats = defaultdict(list)
         cmat = lambda m: self.backend.const_matrix(m, tags={'align'})
 
         for l in self.levels[1:]:
@@ -192,24 +192,25 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 self.projmats[l + 1, l].append(cmat(b2.proj_to(b1)))
 
     @memoize
-    def mgproject(self, l1, l2):
-        inbanks = self.pintgs[l1].system.eles_scal_upts_inb
-        outbanks = self.pintgs[l2].system.eles_scal_upts_inb
+    def mgproject(self, l1, l1reg, l2, l2reg):
+        projk = []
+        for i, a in enumerate(self.projmats[l1, l2]):
+            b = self.pintgs[l1].system.ele_banks[i][l1reg]
+            c = self.pintgs[l2].system.ele_banks[i][l2reg]
+            projk.append(self.backend.kernel('mul', a, b, out=c))
 
-        return proxylist(
-            self.backend.kernel('mul', pm, inb, out=outb)
-            for pm, inb, outb in zip(self.projmats[l1, l2], inbanks, outbanks)
-        )
+        return projk
 
     @memoize
     def dtauproject(self, l1, l2):
-        inbanks = self.pintgs[l1].dtau_upts
-        outbanks = self.pintgs[l2].dtau_upts
+        projk = []
+        for i, a in enumerate(self.projmats[l1, l2]):
+            b = self.pintgs[l1].dtau_upts[i]
+            c = self.pintgs[l2].dtau_upts[i]
+            projk.append(self.backend.kernel('mul', a, b, out=c,
+                                             alpha=self.dtauf))
 
-        return proxylist(
-            self.backend.kernel('mul', pm, inb, out=outb, alpha=self.dtauf)
-            for pm, inb, outb in zip(self.projmats[l1, l2], inbanks, outbanks)
-        )
+        return projk
 
     def restrict(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
@@ -218,9 +219,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1sys, l2sys = self.pintgs[l1].system, self.pintgs[l2].system
 
         # Restrict the physical source term
-        l1sys.eles_scal_upts_inb.active = self.pintgs[l1]._source_regidx
-        l2sys.eles_scal_upts_inb.active = self.pintgs[l2]._source_regidx
-        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
+        l1src = self.pintgs[l1]._source_regidx
+        l2dst = self.pintgs[l2]._source_regidx
+        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l1src, l2, l2dst))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
@@ -240,15 +241,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.level = l2
         mg0, mg1 = self._mg_regidx
 
-        # Restrict Q
-        l1sys.eles_scal_upts_inb.active = l1idxcurr
-        l2sys.eles_scal_upts_inb.active = l2idxcurr
-        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
-
-        # Restrict d and store to mg1
-        l1sys.eles_scal_upts_inb.active = rtemp
-        l2sys.eles_scal_upts_inb.active = mg1
-        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
+        # Restrict Q and d
+        self.pintg._queue.enqueue(self.mgproject(l1, l1idxcurr, l2, l2idxcurr))
+        self.pintg._queue.enqueue(self.mgproject(l1, rtemp, l2, mg1))
+        self.pintg._queue.run()
 
         # mg0 = R = -∇·f - dQ/dt
         self.pintg._rhs_with_dts(self.tcurr, l2idxcurr, mg0, mg_add=False)
@@ -275,9 +271,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.pintg._add(-1, self._mg_regidx[1], 1, l1idxcurr)
 
         # Prolongate the correction and store to rtemp
-        l1sys.eles_scal_upts_inb.active = self._mg_regidx[1]
-        l2sys.eles_scal_upts_inb.active = rtemp
-        self.pintg._queue.enqueue_and_run(self.mgproject(l1, l2))
+        self.pintg._queue.enqueue_and_run(
+            self.mgproject(l1, self._mg_regidx[1], l2, rtemp)
+        )
 
         # Add the correction to the end quantity at l2
         # Q^m+1  = Q^s + Delta

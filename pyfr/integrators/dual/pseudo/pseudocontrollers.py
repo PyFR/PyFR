@@ -122,7 +122,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             err_prev = self.backend.matrix(shape, np.ones(shape),
                                            tags={'align'})
 
-            # Append the error kernels to the proxylist
+            # Append the error kernels to the list
             self.pintgkernels['localerrest'].append(
                 self.backend.kernel(
                     'localerrest', tplargs=tplargs,
@@ -134,7 +134,9 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.backend.commit()
 
     def localerrest(self, errbank):
-        self.system.eles_scal_upts_inb.active = errbank
+        for u in self.system.eles_scal_upts_inb:
+            u.active = errbank
+
         self._queue.enqueue_and_run(self.pintgkernels['localerrest'])
 
     def pseudo_advance(self, tcurr):

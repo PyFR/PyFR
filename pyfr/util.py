@@ -42,22 +42,6 @@ def memoize(meth):
 
     return newmeth
 
-class proxylist(list):
-    def __getattr__(self, attr):
-        return proxylist(getattr(x, attr) for x in self)
-
-    def __setattr__(self, attr, val):
-        for x in self:
-            setattr(x, attr, val)
-
-    def __delattr__(self, attr):
-        for x in self:
-            delattr(x, attr)
-
-    def __call__(self, *args, **kwargs):
-        return proxylist(x(*args, **kwargs) for x in self)
-
-
 class silence(object):
     def __init__(self, stdout=os.devnull, stderr=os.devnull):
         self.outfiles = (stdout, stderr)
