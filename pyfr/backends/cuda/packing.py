@@ -3,11 +3,10 @@
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, NullComputeKernel
-from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
 
 
-class CUDAPackingKernels(CUDAKernelProvider, BasePackingKernels):
+class CUDAPackingKernels(CUDAKernelProvider):
     def pack(self, mv):
         cuda = self.backend.cuda
 

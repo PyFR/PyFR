@@ -168,6 +168,3 @@ class BaseBackend(object):
 
     def queue(self):
         return self.queue_cls(self)
-
-    def runall(self, sequence):
-        self.queue_cls.runall(sequence)

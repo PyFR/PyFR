@@ -4,11 +4,10 @@ import numpy as np
 import pyopencl as cl
 
 from pyfr.backends.base import ComputeKernel
-from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
 
 
-class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
+class OpenCLPackingKernels(OpenCLKernelProvider):
     def pack(self, mv):
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view

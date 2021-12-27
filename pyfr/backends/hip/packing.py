@@ -3,11 +3,10 @@
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, NullComputeKernel
-from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
 
 
-class HIPPackingKernels(HIPKernelProvider, BasePackingKernels):
+class HIPPackingKernels(HIPKernelProvider):
     def pack(self, mv):
         hip = self.backend.hip
 

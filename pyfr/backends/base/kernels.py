@@ -7,7 +7,7 @@ import types
 from pyfr.util import memoize
 
 
-class _BaseKernel(object):
+class ComputeKernel(object):
     @property
     def retval(self):
         return None
@@ -16,19 +16,7 @@ class _BaseKernel(object):
         pass
 
 
-class ComputeKernel(_BaseKernel):
-    ktype = 'compute'
-
-
-class MPIKernel(_BaseKernel):
-    ktype = 'mpi'
-
-
 class NullComputeKernel(ComputeKernel):
-    pass
-
-
-class NullMPIKernel(MPIKernel):
     pass
 
 
@@ -42,10 +30,6 @@ class _MetaKernel(object):
 
 
 class ComputeMetaKernel(_MetaKernel, ComputeKernel):
-    pass
-
-
-class MPIMetaKernel(_MetaKernel, MPIKernel):
     pass
 
 
