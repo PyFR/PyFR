@@ -109,7 +109,7 @@ install_requires = [
     'gimmik >= 2.0',
     'h5py >= 2.6',
     'mako >= 1.0.0',
-    'mpi4py >= 3.0',
+    'mpi4py >= 3.1.0',
     'numpy >= 1.20',
     'pytools >= 2016.2.1'
 ]

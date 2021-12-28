@@ -131,16 +131,6 @@ def chdir(dirname):
         os.chdir(cdir)
 
 
-def make_pybuf(buf, nbytes, flags):
-    from ctypes import pythonapi, py_object
-
-    _make_pybuf = pythonapi.PyMemoryView_FromMemory
-    _make_pybuf.argtypes = [c_void_p, c_ssize_t, c_int]
-    _make_pybuf.restype = py_object
-
-    return _make_pybuf(buf, nbytes, flags)
-
-
 class lazyprop(object):
     def __init__(self, fn):
         self.fn = fn

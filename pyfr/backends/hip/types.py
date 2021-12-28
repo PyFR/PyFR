@@ -3,7 +3,6 @@
 import numpy as np
 
 import pyfr.backends.base as base
-from pyfr.util import make_pybuf
 
 
 class _HIPMatrixCommon(object):
@@ -69,10 +68,17 @@ class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
         # Call the standard matrix constructor
         super().__init__(backend, ioshape, initval, extent, aliases, tags)
 
-        # If MPI is HIP-aware then construct a buffer out of our HIP
-        # device allocation and pass this directly to MPI
+        # If MPI is HIP-aware then simply annotate our device buffer
         if backend.mpitype == 'hip-aware':
-            self.hdata = make_pybuf(self.data, self.nbytes, 0x200)
+            class HostData(object):
+                __array_interface__ = {
+                    'version': 3,
+                    'typestr': np.dtype(self.dtype).str,
+                    'data': (self.data, False),
+                    'shape': (self.nrow, self.ncol)
+                }
+
+            self.hdata = np.array(HostData(), copy=False)
         # Otherwise, allocate a buffer on the host for MPI to send/recv from
         else:
             shape, dtype = (self.nrow, self.ncol), self.dtype

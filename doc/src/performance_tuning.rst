@@ -69,12 +69,6 @@ this functionality can be enabled through the ``mpi-type`` key as::
         [backend-cuda]
         mpi-type = cuda-aware
 
-Note that if `UCX <https://www.openucx.org/>`_ is used as a transport,
-as is the case for recent builds of OpenMPI, it may be necessary to
-set::
-
-        $ export UCX_MEMTYPE_CACHE=n
-
 Partitioning
 ============
 
