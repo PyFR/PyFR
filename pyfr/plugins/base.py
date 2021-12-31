@@ -118,7 +118,11 @@ class RegionMixin(object):
         # All elements inside a box
         elif '(' in region or '[' in region:
             box = self.cfg.getliteral(self.cfgsect, 'region')
-            self._prepare_region_data_box(intg, *box)
+            if self.name == "fwhsurfwriter":
+                self._prepare_region_data_drum(intg, box)
+            else:
+                self._prepare_region_data_box(intg, *box)
+
         # All elements on a boundary
         else:
             self._prepare_region_data_bcs(intg, region)
@@ -143,6 +147,57 @@ class RegionMixin(object):
             if np.sum(inside):
                 eset[etype] = np.any(inside, axis=0).nonzero()[0]
 
+        self._prepare_region_data_eset(intg, eset)
+
+    def _prepare_region_data_drum(self, intg, drum):
+        elespts = {}
+        eset = {}
+        
+        drum = np.asarray(drum)
+        nstations = drum.shape[0]-1
+
+        mesh = intg.system.mesh
+        for etype in intg.system.ele_types:
+            elespts[etype] = mesh[f'spt_{etype}_p{intg.rallocs.prank}']
+
+        slope = []
+        for i in range(0,nstations):
+            slope.append((drum[i+1,1]-drum[i,1])/(drum[i+1,0]-drum[i,0]))
+        
+        # shift the z origin to have a symmetric drum around the origin
+        pz_max = -1e20
+        pz_min = 1e20
+        pz_shift=0.
+        if self.ndims==3:
+            for etype in intg.system.ele_types:
+                pts = np.moveaxis(elespts[etype],2,0)
+                for px,py,pz in zip(pts[0],pts[1],pts[2]):
+                    pz_max = np.max([pz_max, np.max(pz)])
+                    pz_min = np.min([pz_min, np.min(pz)])
+
+            #if pz_min > 1.e-16: 
+            pz_shift = (pz_min+pz_max)*.5 
+
+        for etype in intg.system.ele_types:
+            pts = np.moveaxis(elespts[etype],2,0)
+            
+            # Determine which points are inside the fwh surface
+            inside = np.zeros(pts.shape[1:], dtype=np.bool)
+
+            if self.ndims==3:
+                for px,py,pz in zip(pts[0],pts[1],pts[2]):
+                    pz -= pz_shift
+                    for i in range(0,nstations):
+                        inside += ((drum[i,0] <= px) & (px <= drum[i+1,0])) & (np.sqrt(py*py+pz*pz) < (drum[i,1] + (px-drum[i,0])*slope[i]))
+            else:
+                for px,py in zip(pts[0],pts[1]):
+                    for i in range(0,nstations):
+                        inside +=  ((drum[i,0] <= px) & (px <= drum[i+1,0])) & (np.abs(py) < (drum[i,1] + (px-drum[i,0])*slope[i]))
+
+            if np.sum(inside):
+                eset[etype] = np.any(inside, axis=0).nonzero()[0]
+
+        self.region_eset=eset
         self._prepare_region_data_eset(intg, eset)
 
     def _prepare_region_data_bcs(self, intg, bcname):
