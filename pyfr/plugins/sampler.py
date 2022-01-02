@@ -6,7 +6,7 @@ from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin, init_csv
 
 
-def _closest_upts_bf(etypes, eupts, pts):
+def _closest_upts_bf(eupts, pts):
     for p in pts:
         # Compute the distances between each point and p
         dists = [np.linalg.norm(e - p, axis=2) for e in eupts]
@@ -14,15 +14,14 @@ def _closest_upts_bf(etypes, eupts, pts):
         # Get the index of the closest point to p for each element type
         amins = [np.unravel_index(np.argmin(d), d.shape) for d in dists]
 
-        # Dereference to get the actual distances and locations
+        # Dereference to get the actual distances
         dmins = [d[a] for d, a in zip(dists, amins)]
-        plocs = [e[a] for e, a in zip(eupts, amins)]
 
         # Find the minimum across all element types
-        yield min(zip(dmins, plocs, etypes, amins))
+        yield min(zip(dmins, range(len(eupts)), amins))
 
 
-def _closest_upts_kd(etypes, eupts, pts):
+def _closest_upts_kd(eupts, pts):
     from scipy.spatial import cKDTree
 
     # Flatten the physical location arrays
@@ -39,20 +38,47 @@ def _closest_upts_kd(etypes, eupts, pts):
         amins = [np.unravel_index(i, e.shape[:2])
                  for i, e in zip(amins, eupts)]
 
-        # Dereference to obtain the precise locations
-        plocs = [e[a] for e, a in zip(eupts, amins)]
-
         # Reduce across element types
-        yield min(zip(dmins, plocs, etypes, amins))
+        yield min(zip(dmins, range(len(eupts)), amins))
 
 
-def _closest_upts(etypes, eupts, pts):
+def _closest_upts(eupts, pts):
     try:
         # Attempt to use a KD-tree based approach
-        yield from _closest_upts_kd(etypes, eupts, pts)
+        yield from _closest_upts_kd(eupts, pts)
     except ImportError:
         # Otherwise fall back to brute force
-        yield from _closest_upts_bf(etypes, eupts, pts)
+        yield from _closest_upts_bf(eupts, pts)
+
+
+def _plocs_to_tlocs(sbasis, spts, plocs, tlocs):
+    plocs, itlocs = np.array(plocs), np.array(tlocs)
+
+    # Evaluate the initial guesses
+    iplocs = np.einsum('ij,jik->ik', sbasis.nodal_basis_at(itlocs), spts)
+
+    # Iterates
+    kplocs, ktlocs = iplocs.copy(), itlocs.copy()
+
+    # Apply three iterations of Newton's method
+    for k in range(3):
+        jac_ops = sbasis.jac_nodal_basis_at(ktlocs)
+        kjplocs = np.einsum('ijk,jkl->kli', jac_ops, spts)
+        ktlocs -= np.linalg.solve(kjplocs, kplocs - plocs)
+
+        ops = sbasis.nodal_basis_at(ktlocs)
+        np.einsum('ij,jik->ik', ops, spts, out=kplocs)
+
+    # Compute the initial and final distances from the target location
+    idists = np.linalg.norm(plocs - iplocs, axis=1)
+    kdists = np.linalg.norm(plocs - kplocs, axis=1)
+
+    # Replace any points which failed to converge with their initial guesses
+    closer = np.where(idists < kdists)
+    ktlocs[closer] = itlocs[closer]
+    kplocs[closer] = iplocs[closer]
+
+    return ktlocs, kplocs
 
 
 class SamplerPlugin(BasePlugin):
@@ -80,30 +106,33 @@ class SamplerPlugin(BasePlugin):
         if rank == root:
             ptsrank = []
 
-        # Sample points our partition is responsible for
-        self._ourpts = ourpts = []
-
         # Physical location of the solution points
         plocs = [p.swapaxes(1, 2) for p in intg.system.ele_ploc_upts]
 
+        # Points we're responsible for, grouped by element type
+        elepts = [[] for i in range(len(plocs))]
+
         # Locate the closest solution points in our partition
-        closest = _closest_upts(intg.system.ele_types, plocs, self.pts)
+        closest = _closest_upts(plocs, self.pts)
 
         # Process these points
-        for dist, *info in closest:
+        for i, (dist, etype, amins) in enumerate(closest):
             # Reduce over the distance
             _, mrank = comm.allreduce((dist, rank), op=get_mpi('minloc'))
 
             # If we have the closest point then save the relevant info
             if rank == mrank:
-                ourpts.append(info)
+                elepts[etype].append((i, *amins))
 
             # Note what rank is responsible for the point
             if rank == root:
                 ptsrank.append(mrank)
 
-        # Collate
-        ptsinfo = comm.gather(ourpts, root=root)
+        # Refine
+        self._ourpts = ourpts = self._refine_pts(intg, elepts)
+
+        # Send the refined sample locations to the root rank
+        ptsplocs = comm.gather([pl for et, ei, pl, op in ourpts], root=root)
 
         if rank == root:
             nvars = self.nvars
@@ -112,19 +141,18 @@ class SamplerPlugin(BasePlugin):
             self._ptsbuf = ptsbuf = np.empty((len(self.pts), self.nvars))
 
             # Tally up how many points each rank is responsible for
-            nptsrank = [len(pi) for pi in ptsinfo]
+            nptsrank = [len(ploc) for ploc in ptsplocs]
 
             # Compute the counts and displacements, sans nvars
             ptscounts = np.array(nptsrank, dtype=np.int32)
             ptsdisps = np.cumsum([0] + nptsrank[:-1], dtype=np.int32)
 
             # Apply the displacements to each ranks points
-            miters = [enumerate(pinfo, start=pdisp)
-                      for pinfo, pdisp in zip(ptsinfo, ptsdisps)]
+            miters = [enumerate(ploc, start=pdisp)
+                      for ploc, pdisp in zip(ptsplocs, ptsdisps)]
 
-            # With this form the final point info list
-            self._ptsinfo = [(intg.rallocs.mprankmap[pr], *next(miters[pr]))
-                             for pr in ptsrank]
+            # With this form the final point (offset, location) list
+            self._ptsinfo = [next(miters[pr]) for pr in ptsrank]
 
             # Form the MPI Gatherv receive buffer tuple
             self._ptsrecv = (ptsbuf, (nvars*ptscounts, nvars*ptsdisps))
@@ -136,8 +164,7 @@ class SamplerPlugin(BasePlugin):
 
     @property
     def _header(self):
-        colnames = ['t'] + ['x', 'y', 'z'][:self.ndims]
-        colnames += ['prank', 'etype', 'uidx', 'eidx']
+        colnames = ['t', 'x', 'y', 'z'][:self.ndims + 1]
 
         if self.fmt == 'primitive':
             colnames += self.elementscls.privarmap[self.ndims]
@@ -145,6 +172,39 @@ class SamplerPlugin(BasePlugin):
             colnames += self.elementscls.convarmap[self.ndims]
 
         return ','.join(colnames)
+
+    def _refine_pts(self, intg, elepts):
+        elelist = intg.system.ele_map.values()
+        ptsinfo = []
+
+        # Loop over all the points for each element type
+        for etype, (eles, epts) in enumerate(zip(elelist, elepts)):
+            if not epts:
+                continue
+
+            idx, uidx, eidx = zip(*epts)
+            spts = eles.eles[:, eidx, :]
+
+            basis = eles.basis
+            tlocs = [basis.upts[i] for i in uidx]
+            plocs = [self.pts[i] for i in idx]
+
+            # Use Newton's method to find the precise transformed locations
+            ntlocs, nplocs = _plocs_to_tlocs(basis.sbasis, spts, plocs, tlocs)
+
+            # Form the corresponding interpolation operators
+            intops = basis.ubasis.nodal_basis_at(ntlocs)
+
+            # Append to the point info list
+            ptsinfo.extend(
+                (*info, etype) for info in zip(idx, eidx, nplocs, intops)
+            )
+
+        # Sort our info array by its original index
+        ptsinfo.sort()
+
+        # Strip the index, move etype to the front, and return
+        return [(etype, *info) for idx, *info, etype in ptsinfo]
 
     def _process_samples(self, samps):
         samps = np.array(samps)
@@ -164,21 +224,21 @@ class SamplerPlugin(BasePlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # Solution matrices indexed by element type
-        solns = dict(zip(intg.system.ele_types, intg.soln))
+        # Get the solution matrices
+        solns = intg.soln
 
-        # Sample the solution matrices at these points
-        samples = [solns[et][ui, :, ei] for _, et, (ui, ei) in self._ourpts]
+        # Perform the sampling and interpolation
+        samples = [op @ solns[et][:, :, ei] for et, ei, _, op in self._ourpts]
         samples = self._process_samples(samples)
 
         # Gather to the root rank
         comm.Gatherv(samples, self._ptsrecv, root=root)
 
-        # If we are the root rank then output
+        # If we're the root rank then output
         if rank == root:
-            for prank, off, (ploc, etype, idx) in self._ptsinfo:
-                print(intg.tcurr, *ploc, prank, etype, *idx,
-                      *self._ptsbuf[off], sep=',', file=self.outf)
+            for off, ploc in self._ptsinfo:
+                print(intg.tcurr, *ploc, *self._ptsbuf[off], sep=',',
+                      file=self.outf)
 
             # Flush to disk
             self.outf.flush()
