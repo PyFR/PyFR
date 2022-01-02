@@ -76,9 +76,12 @@ class SamplerPlugin(BasePlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # MPI rank responsible for each point and rank-indexed info
-        self._ptsrank = ptsrank = []
-        self._ptsinfo = ptsinfo = [[] for i in range(comm.size)]
+        # MPI rank responsible for each point
+        if rank == root:
+            ptsrank = []
+
+        # Sample points our partition is responsible for
+        self._ourpts = ourpts = []
 
         # Physical location of the solution points
         plocs = [p.swapaxes(1, 2) for p in intg.system.ele_ploc_upts]
@@ -87,19 +90,49 @@ class SamplerPlugin(BasePlugin):
         closest = _closest_upts(intg.system.ele_types, plocs, self.pts)
 
         # Process these points
-        for cp in closest:
+        for dist, *info in closest:
             # Reduce over the distance
-            _, mrank = comm.allreduce((cp[0], rank), op=get_mpi('minloc'))
+            _, mrank = comm.allreduce((dist, rank), op=get_mpi('minloc'))
 
-            # Store the rank responsible along with its info
-            ptsrank.append(mrank)
-            ptsinfo[mrank].append(
-                comm.bcast(cp[1:] if rank == mrank else None, root=mrank)
-            )
+            # If we have the closest point then save the relevant info
+            if rank == mrank:
+                ourpts.append(info)
 
-        # If we're the root rank then open the output file
+            # Note what rank is responsible for the point
+            if rank == root:
+                ptsrank.append(mrank)
+
+        # Collate
+        ptsinfo = comm.gather(ourpts, root=root)
+
         if rank == root:
+            nvars = self.nvars
+
+            # Allocate a buffer to store the sampled points
+            self._ptsbuf = ptsbuf = np.empty((len(self.pts), self.nvars))
+
+            # Tally up how many points each rank is responsible for
+            nptsrank = [len(pi) for pi in ptsinfo]
+
+            # Compute the counts and displacements, sans nvars
+            ptscounts = np.array(nptsrank, dtype=np.int32)
+            ptsdisps = np.cumsum([0] + nptsrank[:-1], dtype=np.int32)
+
+            # Apply the displacements to each ranks points
+            miters = [enumerate(pinfo, start=pdisp)
+                      for pinfo, pdisp in zip(ptsinfo, ptsdisps)]
+
+            # With this form the final point info list
+            self._ptsinfo = [(intg.rallocs.mprankmap[pr], *next(miters[pr]))
+                             for pr in ptsrank]
+
+            # Form the MPI Gatherv receive buffer tuple
+            self._ptsrecv = (ptsbuf, (nvars*ptscounts, nvars*ptsdisps))
+
+            # Open the output file
             self.outf = init_csv(self.cfg, cfgsect, self._header)
+        else:
+            self._ptsrecv = None
 
     @property
     def _header(self):
@@ -121,7 +154,7 @@ class SamplerPlugin(BasePlugin):
             samps = self.elementscls.con_to_pri(samps.T, self.cfg)
             samps = np.array(samps).T
 
-        return samps.tolist()
+        return np.ascontiguousarray(samps, dtype=float)
 
     def __call__(self, intg):
         # Return if no output is due
@@ -134,31 +167,18 @@ class SamplerPlugin(BasePlugin):
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
 
-        # Points we're responsible for sampling
-        ourpts = self._ptsinfo[comm.rank]
-
         # Sample the solution matrices at these points
-        samples = [solns[et][ui, :, ei] for _, et, (ui, ei) in ourpts]
+        samples = [solns[et][ui, :, ei] for _, et, (ui, ei) in self._ourpts]
         samples = self._process_samples(samples)
 
-        # Gather to the root rank to give a list of points per rank
-        samples = comm.gather(samples, root=root)
+        # Gather to the root rank
+        comm.Gatherv(samples, self._ptsrecv, root=root)
 
-        # If we're the root rank then output
+        # If we are the root rank then output
         if rank == root:
-            # Collate
-            iters = [zip(pi, sp) for pi, sp in zip(self._ptsinfo, samples)]
-
-            for mrank in self._ptsrank:
-                # Unpack
-                (ploc, etype, idx), samp = next(iters[mrank])
-
-                # Determine the physical mesh rank
-                prank = intg.rallocs.mprankmap[mrank]
-
-                # Write the output row
-                print(intg.tcurr, *ploc, prank, etype, *idx, *samp,
-                      sep=',', file=self.outf)
+            for prank, off, (ploc, etype, idx) in self._ptsinfo:
+                print(intg.tcurr, *ploc, prank, etype, *idx,
+                      *self._ptsbuf[off], sep=',', file=self.outf)
 
             # Flush to disk
             self.outf.flush()
