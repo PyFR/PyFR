@@ -102,8 +102,8 @@ class BaseAdvectionBCInters(BaseInters):
         cfg, sect = self.cfg, self.cfgsect
 
         subs = cfg.items('constants')
-        subs.update(x='ploc[0]', y='ploc[1]', z='ploc[2]')
-        subs.update(abs='fabs', pi=str(math.pi))
+        subs |= dict(x='ploc[0]', y='ploc[1]', z='ploc[2]')
+        subs |= dict(abs='fabs', pi=str(math.pi))
 
         exprs = {}
         for k in opts:

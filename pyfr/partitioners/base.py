@@ -294,7 +294,7 @@ class BasePartitioner(object):
         newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts)
 
         # Handle the shape points
-        newmesh.update(self._partition_spts(mesh, vetimap, vparts))
+        newmesh |= self._partition_spts(mesh, vetimap, vparts)
 
         # Update the renumbering table
         for etype, emap in rnum.items():

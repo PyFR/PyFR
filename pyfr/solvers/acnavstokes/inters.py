@@ -97,10 +97,8 @@ class ACNavierStokesNoSlpWallBCInters(ACNavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self.c.update(
-            self._exp_opts('uvw'[:self.ndims], lhs,
-                           default={'u': 0, 'v': 0, 'w': 0})
-        )
+        self.c |= self._exp_opts('uvw'[:self.ndims], lhs,
+                                 default={'u': 0, 'v': 0, 'w': 0})
 
 class ACNavierStokesSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'slp-wall'
@@ -114,7 +112,7 @@ class ACNavierStokesInflowBCInters(ACNavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self.c.update(self._exp_opts('uvw'[:self.ndims], lhs))
+        self.c |= self._exp_opts('uvw'[:self.ndims], lhs)
 
 
 class ACNavierStokesOutflowBCInters(ACNavierStokesBaseBCInters):
@@ -124,7 +122,7 @@ class ACNavierStokesOutflowBCInters(ACNavierStokesBaseBCInters):
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
-        self.c.update(self._exp_opts('p', lhs))
+        self.c |= self._exp_opts('p', lhs)
 
 
 class ACNavierStokesCharRiemInvBCInters(ACNavierStokesBaseBCInters):
@@ -136,7 +134,6 @@ class ACNavierStokesCharRiemInvBCInters(ACNavierStokesBaseBCInters):
 
         self.c['niters'] = cfg.getint(cfgsect, 'niters', 4)
         self.c['bc-ac-zeta'] = cfg.getfloat(cfgsect, 'ac-zeta')
-        tplc = self._exp_opts(
+        self.c |= self._exp_opts(
             ['p', 'u', 'v', 'w'][:self.ndims + 1], lhs
         )
-        self.c.update(tplc)

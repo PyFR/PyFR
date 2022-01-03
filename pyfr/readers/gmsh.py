@@ -410,7 +410,4 @@ class GmshReader(BaseReader):
         pents = self._felespent, self._bfacespents, self._pfacespents
         mesh = NodalMeshAssembler(self._nodepts, self._elenodes, pents, maps)
 
-        rawm = {}
-        rawm.update(mesh.get_connectivity())
-        rawm.update(mesh.get_shape_points(lintol))
-        return rawm
+        return mesh.get_connectivity() | mesh.get_shape_points(lintol)
