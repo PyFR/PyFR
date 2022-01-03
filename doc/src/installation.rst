@@ -99,12 +99,12 @@ Dependencies
 PyFR |release| has a hard dependency on Python 3.9+ and the following
 Python packages:
 
-1. `appdirs <https://github.com/ActiveState/appdirs>`_ >= 1.4.0
-2. `gimmik <https://github.com/vincentlab/GiMMiK>`_ >= 2.0
-3. `h5py <http://www.h5py.org/>`_ >= 2.10
-4. `mako <http://www.makotemplates.org/>`_ >= 1.0.0
-5. `mpi4py <http://mpi4py.scipy.org/>`_ >= 3.0
-6. `numpy <http://www.numpy.org/>`_ >= 1.20
+1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 2.2
+2. `h5py <https://www.h5py.org/>`_ >= 2.10
+3. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
+4. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
+5. `numpy <https://www.numpy.org/>`_ >= 1.20
+6. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
 7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 
 Note that due to a bug in NumPy, PyFR is not compatible with 32-bit
