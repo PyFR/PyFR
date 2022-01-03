@@ -8,7 +8,7 @@ import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.shapes import BaseShape
-from pyfr.util import proxylist, subclasses
+from pyfr.util import subclasses
 
 
 class BaseSystem(object):
@@ -39,7 +39,7 @@ class BaseSystem(object):
         self.ele_map = elemap
 
         # Get the banks, types, num DOFs and shapes of the elements
-        self.ele_banks = list(eles.scal_upts_inb)
+        self.ele_banks = [list(e.scal_upts_inb) for e in eles]
         self.ele_types = list(elemap)
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
@@ -48,10 +48,10 @@ class BaseSystem(object):
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
         # I/O banks for the elements
-        self.eles_scal_upts_inb = eles.scal_upts_inb
-        self.eles_scal_upts_outb = eles.scal_upts_outb
+        self.eles_scal_upts_inb = [e.scal_upts_inb for e in eles]
+        self.eles_scal_upts_outb = [e.scal_upts_outb for e in eles]
         if hasattr(eles, '_vect_upts'):
-            self.eles_vect_upts = eles._vect_upts
+            self.eles_vect_upts = [e._vect_upts for e in eles]
 
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
@@ -70,7 +70,8 @@ class BaseSystem(object):
 
         # Save the BC interfaces, but delete the memory-intensive elemap
         self._bc_inters = bc_inters
-        del bc_inters.elemap
+        for b in bc_inters:
+            del b.elemap
 
     def _load_eles(self, rallocs, mesh, initsoln, nregs, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
@@ -84,8 +85,7 @@ class BaseSystem(object):
 
                 elemap[t] = self.elementscls(basismap[t], mesh[f], self.cfg)
 
-        # Construct a proxylist to simplify collective operations
-        eles = proxylist(elemap.values())
+        eles = list(elemap.values())
 
         # Set the initial conditions
         if initsoln:
@@ -106,7 +106,8 @@ class BaseSystem(object):
                 soln = initsoln[f'soln_{etype}_p{rallocs.prank}']
                 ele.set_ics_from_soln(soln, solncfg)
         else:
-            eles.set_ics_from_cfg()
+            for ele in eles:
+                ele.set_ics_from_cfg()
 
         # Allocate these elements on the backend
         for etype, ele in elemap.items():
@@ -129,14 +130,12 @@ class BaseSystem(object):
         int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
                                        self.cfg)
 
-        # Although we only have a single internal interfaces instance
-        # we wrap it in a proxylist for consistency
-        return proxylist([int_inters])
+        return [int_inters]
 
     def _load_mpi_inters(self, rallocs, mesh, elemap):
         lhsprank = rallocs.prank
 
-        mpi_inters = proxylist([])
+        mpi_inters = []
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh[f'con_p{lhsprank}p{rhsprank}']
@@ -152,7 +151,7 @@ class BaseSystem(object):
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
 
-        bc_inters = proxylist([])
+        bc_inters = []
         for f in mesh:
             if (m := re.match(f'bcon_(.+?)_p{rallocs.prank}$', f)):
                 # Get the region name
@@ -179,12 +178,24 @@ class BaseSystem(object):
         self._kernels = kernels = defaultdict(list)
 
         provnames = ['eles', 'iint', 'mpiint', 'bcint']
-        provobjs = [eles, iint, mpiint, bcint]
+        provlists = [eles, iint, mpiint, bcint]
 
-        for pn, pobj in zip(provnames, provobjs):
-            for kn, kgetter in it.chain(*pobj.kernels.items()):
+        for pn, plst in zip(provnames, provlists):
+            for kn, kgetter in it.chain(*[p.kernels.items() for p in plst]):
                 if not kn.startswith('_'):
                     kernels[pn, kn].append(kgetter())
+
+    def _prepare_rhs(self, t, uinbank, foutbank):
+        for b in self._bc_inters:
+            b.prepare(t)
+
+        if uinbank is not None:
+            for u in self.eles_scal_upts_inb:
+                u.active = uinbank
+
+        if foutbank is not None:
+            for f in self.eles_scal_upts_outb:
+                f.active = foutbank
 
     def rhs(self, t, uinbank, foutbank):
         pass
@@ -194,7 +205,8 @@ class BaseSystem(object):
                                   'corrected gradients of the solution')
 
     def filt(self, uinoutbank):
-        self.eles_scal_upts_inb.active = uinoutbank
+        for u in self.eles_scal_upts_inb:
+            u.active = uinoutbank
 
         self._queues[0].enqueue_and_run(self._kernels['eles', 'filter_soln'])
 
