@@ -90,11 +90,16 @@ class AcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
 
 class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
+
+    DEBUG = 0
     name = 'fwhsurfwriter'
     systems = ['*']
     formulations = ['dual', 'std']
 
     vtkfile_version = '2.1'
+
+    vtk_types = dict(line=3, tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
+    vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
 
     # number of first order nodes/faces per element
     _petype_focount_map = {'line': 2, 'tri': 3, 'quad': 4,
@@ -150,12 +155,10 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     'pri' : {'quad': -2, 'tri': 0}, 
                     'pyr' : {'quad': 0, 'tri': -1}}
 
-    vtk_types = dict(tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
-    vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
-
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
+        self.DEBUG = self.cfg.getint(cfgsect,'debug')
         # Base output directory and file name
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
@@ -220,9 +223,9 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Write out the file
         solnfname = self._writer.write(data, intg.tcurr, metadata)
-        if self.ndims==3:
-            self.write_vtu_out(self.fwhfname+".vtu")
-            self.write_vtk_out(self.fwhfname+".vtk")
+        self.write_vtu_out(self.fwhfname+".vtu")
+        if self.DEBUG:
+           self.write_vtk_out(self.fwhfname+".vtk",'unstructured')
 
         # If a post-action has been registered then invoke it
         self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
@@ -349,18 +352,20 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         else:
             return names, types, comps
 
-    def write_vtk_out(self,fname):
+    def write_vtk_out(self,fname,dsettoplogy):
+
+        dsetname = {'unstructured': "UNSTRUCTURED_GRID", 'polydata': "POLYDATA"}
 
         write_s_to_fh = lambda s: fh.write(s)
-
+        
         with open(fname, 'w', encoding="ascii") as fh:
             write_s_to_fh(f'# vtk DataFile Version {self.vtkfile_version}\n'
                           'FWH Surface\n'
                           'ASCII\n'
-                          'DATASET POLYDATA\n')
+                          f'DATASET {dsetname[dsettoplogy]}\n')
 
             self._write_vtk_points(fh)
-            self._write_vtk_cells(fh)
+            self._write_vtk_cells(fh,dsettoplogy)
 
     def _write_vtk_points(self,vtkf):
         ndims=3
@@ -378,11 +383,19 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         for etype,v in self.fwhfnodes.items():
             npts, ncells = self._get_npts_ncells(etype)
-            mesh = np.array(self.fwhfnodes[etype]).astype(fpdtype) # eidx,nnodes,dim
-            vpts = mesh.reshape(-1, ndims)
+            vpts = np.array(self.fwhfnodes[etype]).astype(fpdtype) # eidx,nnodes,dim
+            # Append dummy z dimension for points in 2D
+            if self.ndims == 2:
+                vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
+            vpts = vpts.reshape(-1, ndims)
             np.savetxt(vtkf,vpts,fmt='%1.16f %1.16f %1.16f')
 
-    def _write_vtk_cells(self,vtkf):
+    def _write_vtk_cells(self,vtkf,dsettoplogy):
+
+        ncells = {}
+        npts = {}
+        cellsname = {'unstructured': "CELLS", 'polydata': "POLYGONS"}
+        cname = cellsname[dsettoplogy]
 
         write_s = lambda s: vtkf.write(s)
 
@@ -390,30 +403,37 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         ncells_tot = nsize = 0
         for etype in keys:
-            ncells = self._get_npts_ncells(etype)[1]
-            ncells_tot += ncells
+            npts[etype],ncells[etype] = self._get_npts_ncells(etype)
+            ncells_tot += ncells[etype]
 
             nfopts = self._petype_focount_map[etype]
-            nsize += (nfopts+1) * ncells
+            nsize += (nfopts+1) * ncells[etype]
 
-        write_s(f'POLYGONS {ncells_tot} {nsize}\n')
+        write_s(f'{cname} {ncells_tot} {nsize}\n')
 
+        # Writing cell connectivity
         npts_tot = 0
         for etype in keys:
-            npts, ncells = self._get_npts_ncells(etype)
-
             nfopts = self._petype_focount_map[etype]
             nodes = np.arange(nfopts)
 
             # Prepare VTU cell arrays
-            vtk_con = np.tile(nodes, (ncells, 1))
-            vtk_con += (np.arange(ncells)*nfopts)[:, None]
+            vtk_con = np.tile(nodes, (ncells[etype], 1))
+            vtk_con += (np.arange(ncells[etype])*nfopts)[:, None]
             vtk_con += npts_tot
             vtk_con = np.insert(vtk_con,0,nfopts,axis=1)
             
             np.savetxt(vtkf,vtk_con,fmt='%d')
 
-            npts_tot += npts
+            npts_tot += npts[etype]
+        
+        # Writing Cell Types:
+        if cname == cellsname['unstructured']:
+            write_s(f'CELL_TYPES {ncells_tot}\n')
+            for etype in keys:
+                # Prepare VTU cell types array
+                vtk_types = np.ones(ncells[etype]) * self.vtk_types[etype]
+                np.savetxt(vtkf,vtk_types,fmt='%d')
     
 
     def write_vtu_out(self,fname):
@@ -483,13 +503,16 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
     def _write_data(self, vtuf, mk):
         fpdtype = self.fpdtype 
-        mesh = np.array(self.fwhfnodes[mk]).astype(fpdtype) # eidx,nnodes,dim
+        vpts = np.array(self.fwhfnodes[mk]).astype(fpdtype) # eidx,nnodes,dim
         neles = self._get_npts_ncells(mk)[1]
         nfopts = self._petype_focount_map[mk]
         fopts = np.arange(nfopts)
 
+        # Append dummy z dimension for points in 2D
+        if self.ndims == 2:
+            vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
         # Write mesh points
-        self._write_darray(mesh, vtuf, fpdtype) # simple nodes writer
+        self._write_darray(vpts, vtuf, fpdtype) # simple nodes writer
 
         # Prepare VTU cell-node connectivity arrays
         vtu_con = np.tile(fopts, (neles, 1))
