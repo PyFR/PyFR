@@ -111,7 +111,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     # Some fnmap face points may need to be flipped to maintain a c.c.w or c.c. 
     # face node counting
     _petype_fnmap = {
-        ('tri',  3 ):  {'line': [[2, 0], [0, 1], [1, 2]]},
+        ('tri',  3 ):  {'line': [[0, 1], [1, 2], [2, 0]]},
         ('tri',  6 ):  {'line': [[5, 0], [0, 2], [2, 5]]},
         ('tri',  10 ):  {'line': [[9, 0], [0, 3], [3, 9]]},
         ('tri',  15 ):  {'line': [[14, 0], [0, 4], [4, 14]]},
@@ -158,7 +158,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        self.DEBUG = self.cfg.getint(cfgsect,'debug')
+        self.DEBUG = self.cfg.getint(cfgsect,'debug',0)
         # Base output directory and file name
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
