@@ -101,6 +101,10 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                        'tet': 4, 'pyr': 5, 'pri': 6, 'hex': 8} 
     
     # map of first order face nodes
+    # To generate this fnmap, we use vtk_nodemaps and then apply gmsh_fnmap 
+    # to extract the correct first order face node ordering.
+    # Some fnmap face points may need to be flipped to maintain a c.c.w or c.c. 
+    # face node counting
     _petype_fnmap = {
         ('tri',  3 ):  {'line': [[2, 0], [0, 1], [1, 2]]},
         ('tri',  6 ):  {'line': [[5, 0], [0, 2], [2, 5]]},
@@ -139,10 +143,12 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     }
 
     # offset to get local fidx/fnum inside each facetype map
-    _fnum_offset = {'tet': {'tri': 0},
-                    'hex': {'quad': 0},
-                    'pri': {'quad': -2, 'tri': 0}, 
-                    'pyr': {'quad': 0, 'tri': -1}}
+    _fnum_offset = {'tri' : {'line': 0},
+                    'quad': {'line': 0},
+                    'tet' : {'tri': 0},
+                    'hex' : {'quad': 0},
+                    'pri' : {'quad': -2, 'tri': 0}, 
+                    'pyr' : {'quad': 0, 'tri': -1}}
 
     vtk_types = dict(tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
     vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
@@ -302,7 +308,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 nidx = self._petype_fnmap[etype,nelnodes][pftype][fidx]
                 nset[pftype].append(felespts[etype,eidx][nidx,:])
 
-        self.fwhnodes = nset
+        self.fwhfnodes = nset
         self.fwhfset = fset
         self.fwheset = feleset
         self.fwhelespts = felespts
@@ -353,10 +359,10 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                           'ASCII\n'
                           'DATASET POLYDATA\n')
 
-            self._write_vtk_points(fh,fname)
-            self._write_vtk_cells(fh,fname)
+            self._write_vtk_points(fh)
+            self._write_vtk_cells(fh)
 
-    def _write_vtk_points(self,vtkf,fname):
+    def _write_vtk_points(self,vtkf):
         ndims=3
         fpdtype = self.fpdtype 
         vdtype = 'Float32' if fpdtype == np.float32 else 'Float64'
@@ -364,23 +370,23 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         write_s = lambda s: vtkf.write(s)
         npts_tot=ncells_tot=0
 
-        for etype,v in self.fwhnodes.items():
+        for etype,v in self.fwhfnodes.items():
             npts, ncells = self._get_npts_ncells(etype)
             npts_tot += npts
             ncells_tot += ncells
         write_s(f'POINTS {npts_tot} {vdtype}\n')
 
-        for etype,v in self.fwhnodes.items():
+        for etype,v in self.fwhfnodes.items():
             npts, ncells = self._get_npts_ncells(etype)
-            mesh = np.array(self.fwhnodes[etype]).astype(fpdtype) # eidx,nnodes,dim
+            mesh = np.array(self.fwhfnodes[etype]).astype(fpdtype) # eidx,nnodes,dim
             vpts = mesh.reshape(-1, ndims)
             np.savetxt(vtkf,vpts,fmt='%1.16f %1.16f %1.16f')
 
-    def _write_vtk_cells(self,vtkf,fname):
+    def _write_vtk_cells(self,vtkf):
 
         write_s = lambda s: vtkf.write(s)
 
-        keys = list(self.fwhnodes)
+        keys = list(self.fwhfnodes)
 
         ncells_tot = nsize = 0
         for etype in keys:
@@ -425,14 +431,14 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             off = 0
 
             # Header
-            for etype,v in self.fwhnodes.items():
+            for etype,v in self.fwhfnodes.items():
                 off = self._write_serial_header(fh, etype, off)
 
             write_s_to_fh('</UnstructuredGrid>\n'
                           '<AppendedData encoding="raw">\n_')
 
             # Data
-            for etype,v in self.fwhnodes.items():
+            for etype,v in self.fwhfnodes.items():
                 self._write_data(fh, etype)
 
             write_s_to_fh('\n</AppendedData>\n</VTKFile>')
@@ -477,7 +483,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
     def _write_data(self, vtuf, mk):
         fpdtype = self.fpdtype 
-        mesh = np.array(self.fwhnodes[mk]).astype(fpdtype) # eidx,nnodes,dim
+        mesh = np.array(self.fwhfnodes[mk]).astype(fpdtype) # eidx,nnodes,dim
         neles = self._get_npts_ncells(mk)[1]
         nfopts = self._petype_focount_map[mk]
         fopts = np.arange(nfopts)
