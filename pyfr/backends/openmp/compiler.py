@@ -16,10 +16,10 @@ from pyfr.nputil import npdtype_to_ctypestype
 from pyfr.util import digest, lazyprop, mv, rm
 
 
-class SourceModule(object):
+class OpenMPCompiler(object):
     _dir_seq = it.count()
 
-    def __init__(self, src, cfg):
+    def __init__(self, cfg):
         # Find GCC (or a compatible alternative)
         self.cc = cfg.getpath('backend-openmp', 'cc', 'cc')
 
@@ -27,25 +27,26 @@ class SourceModule(object):
         self.cflags = shlex.split(cfg.get('backend-openmp', 'cflags', ''))
 
         # Get the processor string
-        proc = platform.processor()
+        self.proc = platform.processor()
 
         # Get the compiler version string
-        version = call_capture_output([self.cc, '-v'])
+        self.version = call_capture_output([self.cc, '-v'])
 
         # Get the base compiler command strig
-        cmd = self.cc_cmd(None, None)
+        self.cmd = self.cc_cmd(None, None)
 
+    def build(self, src):
         # Compute a digest of the current processor, compiler, and source
-        self.digest = digest(proc, version, cmd, src)
+        ckey = digest(self.proc, self.version, self.cmd, src)
 
         # Attempt to load the library from the cache
-        self.mod = self._cache_loadlib()
+        mod = self._cache_loadlib(ckey)
 
         # Otherwise, we need to compile the kernel
-        if not self.mod:
+        if not mod:
             # Create a scratch directory
             tmpidx = next(self._dir_seq)
-            tmpdir = tempfile.mkdtemp(prefix='pyfr-{0}-'.format(tmpidx))
+            tmpdir = tempfile.mkdtemp(prefix=f'pyfr-{tmpidx}-')
 
             try:
                 # Compile and link the source into a shared library
@@ -62,11 +63,13 @@ class SourceModule(object):
                 lpath = os.path.join(tmpdir, lname)
 
                 # Add it to the cache and load
-                self.mod = self._cache_set_and_loadlib(lpath)
+                mod = self._cache_set_and_loadlib(ckey, lpath)
             finally:
                 # Unless we're debugging delete the scratch directory
                 if 'PYFR_DEBUG_OMP_KEEP_LIBS' not in os.environ:
                     rm(tmpdir)
+
+        return OpenMPCompilerModule(mod)
 
     def cc_cmd(self, srcname, libname):
         cmd = [
@@ -89,14 +92,14 @@ class SourceModule(object):
         return os.environ.get('PYFR_OMP_CACHE_DIR',
                               user_cache_dir('pyfr', 'pyfr'))
 
-    def _cache_loadlib(self):
+    def _cache_loadlib(self, ckey):
         # If caching is disabled then return
         if 'PYFR_DEBUG_OMP_DISABLE_CACHE' in os.environ:
             return
         # Otherwise, check the cache
         else:
             # Determine the cached library name
-            clname = platform_libname(self.digest)
+            clname = platform_libname(ckey)
 
             # Attempt to load the library
             try:
@@ -104,14 +107,14 @@ class SourceModule(object):
             except OSError:
                 return
 
-    def _cache_set_and_loadlib(self, lpath):
+    def _cache_set_and_loadlib(self, ckey, lpath):
         # If caching is disabled then just load the library as-is
         if 'PYFR_DEBUG_OMP_DISABLE_CACHE' in os.environ:
             return CDLL(lpath)
         # Otherwise, move the library into the cache and load
         else:
             # Determine the cached library name and path
-            clname = platform_libname(self.digest)
+            clname = platform_libname(ckey)
             clpath = os.path.join(self.cachedir, clname)
             ctpath = os.path.join(self.cachedir, str(uuid.uuid4()))
 
@@ -129,8 +132,12 @@ class SourceModule(object):
             else:
                 return CDLL(clpath)
 
+
+class OpenMPCompilerModule(object):
+    def __init__(self, mod):
+        self.mod = mod
+
     def function(self, name, restype, argtypes):
-        # Get the function
         fn = getattr(self.mod, name)
         fn.restype = npdtype_to_ctypestype(restype)
         fn.argtypes = [npdtype_to_ctypestype(a) for a in argtypes]

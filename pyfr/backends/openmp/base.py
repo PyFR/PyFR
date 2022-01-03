@@ -3,6 +3,7 @@
 import numpy as np
 
 from pyfr.backends.base import BaseBackend
+from pyfr.backends.openmp.compiler import OpenMPCompiler
 
 
 class OpenMPBackend(BaseBackend):
@@ -21,6 +22,9 @@ class OpenMPBackend(BaseBackend):
         # Compute the SoA and AoSoA size
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz*cfg.getint('backend-openmp', 'n-soa', 1)
+
+        # C source compiler
+        self.compiler = OpenMPCompiler(cfg)
 
         from pyfr.backends.openmp import (blasext, gimmik, packing,
                                           provider, types, xsmm)
