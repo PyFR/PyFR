@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from functools import cached_property
+
 import pyfr.backends.base as base
-from pyfr.util import lazyprop
 
 
 class OpenMPMatrixBase(base.MatrixBase):
@@ -32,7 +33,7 @@ class OpenMPMatrixBase(base.MatrixBase):
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    @lazyprop
+    @cached_property
     def hdata(self):
         return self.data
 

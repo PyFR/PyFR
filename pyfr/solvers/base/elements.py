@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
+from functools import cached_property
 import math
 import re
 
 import numpy as np
 
 from pyfr.nputil import npeval, fuzzysort
-from pyfr.util import lazyprop, memoize
+from pyfr.util import memoize
 
 
 class BaseElements(object):
@@ -91,7 +92,7 @@ class BaseElements(object):
         self._scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
         self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
 
-    @lazyprop
+    @cached_property
     def plocfpts(self):
         # Construct the physical location operator matrix
         plocop = self.basis.sbasis.nodal_basis_at(self.basis.fpts)
@@ -102,7 +103,7 @@ class BaseElements(object):
 
         return plocfpts
 
-    @lazyprop
+    @cached_property
     def _srtd_face_fpts(self):
         plocfpts = self.plocfpts.transpose(1, 2, 0)
 
@@ -142,7 +143,7 @@ class BaseElements(object):
         else:
             raise ValueError('Invalid slice region')
 
-    @lazyprop
+    @cached_property
     def _src_exprs(self):
         convars = self.convarmap[self.ndims]
 
@@ -155,11 +156,11 @@ class BaseElements(object):
         return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)
                 for v in convars]
 
-    @lazyprop
+    @cached_property
     def _ploc_in_src_exprs(self):
         return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)
 
-    @lazyprop
+    @cached_property
     def _soln_in_src_exprs(self):
         return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
 
@@ -283,11 +284,11 @@ class BaseElements(object):
     def ploc_at(self, name):
         return self._be.const_matrix(self.ploc_at_np(name), tags={'align'})
 
-    @lazyprop
+    @cached_property
     def upts(self):
         return self._be.const_matrix(self.basis.upts)
 
-    @lazyprop
+    @cached_property
     def qpts(self):
         return self._be.const_matrix(self.basis.qpts)
 
@@ -311,17 +312,17 @@ class BaseElements(object):
         self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[..., None]
         self._mag_pnorm_fpts = mag_pnorm_fpts
 
-    @lazyprop
+    @cached_property
     def _norm_pnorm_fpts(self):
         self._gen_pnorm_fpts()
         return self._norm_pnorm_fpts
 
-    @lazyprop
+    @cached_property
     def _mag_pnorm_fpts(self):
         self._gen_pnorm_fpts()
         return self._mag_pnorm_fpts
 
-    @lazyprop
+    @cached_property
     def _smats_djacs_mpts(self):
         # Metric basis with grid point (q<=p) or pseudo grid points (q>p)
         mpts = self.basis.mpts

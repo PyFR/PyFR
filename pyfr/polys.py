@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 
 from collections.abc import Iterable
+from functools import cached_property
 from math import sqrt
 
 import numpy as np
 
 from pyfr.nputil import clean
-from pyfr.util import lazyprop, subclass_where
+from pyfr.util import subclass_where
 
 
 def jacobi(n, a, b, z):
@@ -76,7 +77,7 @@ class BasePolyBasis(object):
     def jac_nodal_basis_at(self, epts):
         return np.linalg.solve(self.vdm, self.jac_ortho_basis_at(epts))
 
-    @lazyprop
+    @cached_property
     def vdm(self):
         return self.ortho_basis_at(self.pts)
 
@@ -91,7 +92,7 @@ class BasePolyBasis(object):
         else:
             return np.eye(len(self.pts))
 
-    @lazyprop
+    @cached_property
     @clean
     def invvdm(self):
         return np.linalg.inv(self.vdm)
@@ -108,7 +109,7 @@ class LinePolyBasis(BasePolyBasis):
         djp = jacobi_diff(self.order - 1, 0, 0, p)
         return [(sqrt(i + 0.5)*p,) for i, p in enumerate(djp)]
 
-    @lazyprop
+    @cached_property
     def degrees(self):
         return [(i,) for i in range(self.order)]
 
@@ -155,7 +156,7 @@ class TriPolyBasis(BasePolyBasis):
 
         return ob
 
-    @lazyprop
+    @cached_property
     def degrees(self):
         return [(i, j)
                 for i in range(self.order)
@@ -184,7 +185,7 @@ class QuadPolyBasis(BasePolyBasis):
                 for pi, dpi in zip(pa, dpa)
                 for pj, dpj in zip(pb, dpb)]
 
-    @lazyprop
+    @cached_property
     def degrees(self):
         return [(i, j) for i in range(self.order) for j in range(self.order)]
 
@@ -256,7 +257,7 @@ class TetPolyBasis(BasePolyBasis):
 
         return ob
 
-    @lazyprop
+    @cached_property
     def degrees(self):
         return [(i, j, k)
                 for i in range(self.order)
@@ -317,7 +318,7 @@ class PriPolyBasis(BasePolyBasis):
         return [[pij*hk, qij*hk, rij*dhk]
                 for pij, qij, rij in pab for hk, dhk in zip(hc, dhc)]
 
-    @lazyprop
+    @cached_property
     def degrees(self):
         return [(i, j, k)
                 for i in range(self.order)
@@ -387,7 +388,7 @@ class PyrPolyBasis(BasePolyBasis):
 
         return ob
 
-    @lazyprop
+    @cached_property
     def degrees(self):
         return [(i, j, k)
                 for i in range(self.order)
@@ -421,7 +422,7 @@ class HexPolyBasis(BasePolyBasis):
                 for pj, dpj in zip(pb, dpb)
                 for pk, dpk in zip(pc, dpc)]
 
-    @lazyprop
+    @cached_property
     def degrees(self):
         return [(i, j, k)
                 for i in range(self.order)

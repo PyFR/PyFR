@@ -12,30 +12,35 @@ import shutil
 from pyfr.ctypesutil import get_libc_function
 
 
-class memoize(object):
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, instance, owner):
-        return self.func if instance is None else ft.partial(self, instance)
-
-    def __call__(self, *args, **kwargs):
-        instance = args[0]
-
+def memoize(meth):
+    @ft.wraps(meth)
+    def newmeth(self, *args, **kwargs):
         try:
-            cache = instance._memoize_cache
+            cache = self._memoize_cache_
         except AttributeError:
-            cache = instance._memoize_cache = {}
+            cache = self._memoize_cache_ = {}
 
-        key = (self.func, pickle.dumps(args[1:]), pickle.dumps(kwargs))
+        if kwargs:
+            key = (meth, args, tuple(kwargs.items()))
+        else:
+            key = (meth, args)
 
         try:
-            res = cache[key]
+            return cache[key]
         except KeyError:
-            res = cache[key] = self.func(*args, **kwargs)
+            pass
+        except TypeError:
+            key = (meth, pickle.dumps((args, kwargs)))
 
+            try:
+                return cache[key]
+            except KeyError:
+                pass
+
+        res = cache[key] = meth(self, *args, **kwargs)
         return res
 
+    return newmeth
 
 class proxylist(list):
     def __getattr__(self, attr):
@@ -129,20 +134,6 @@ def chdir(dirname):
         yield
     finally:
         os.chdir(cdir)
-
-
-class lazyprop(object):
-    def __init__(self, fn):
-        self.fn = fn
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return None
-
-        value = self.fn(instance)
-        setattr(instance, self.fn.__name__, value)
-
-        return value
 
 
 def subclasses(cls, just_leaf=False):

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
 from collections.abc import Mapping
+from functools import cached_property
 import os
 import re
 
 import h5py
 import numpy as np
 
-from pyfr.util import lazyprop, memoize
+from pyfr.util import memoize
 
 
 class NativeReader(Mapping):
@@ -41,7 +42,7 @@ class NativeReader(Mapping):
     def __len__(self):
         return len(self._keys)
 
-    @lazyprop
+    @cached_property
     def _keys(self):
         keys = set()
 
