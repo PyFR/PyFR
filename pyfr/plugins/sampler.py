@@ -4,12 +4,13 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.plugins.base import BasePlugin, init_csv
+from pyfr.quadrules import get_quadrule
 
 
-def _closest_upts_bf(eupts, pts):
+def _closest_pts_bf(epts, pts):
     for p in pts:
         # Compute the distances between each point and p
-        dists = [np.linalg.norm(e - p, axis=2) for e in eupts]
+        dists = [np.linalg.norm(e - p, axis=2) for e in epts]
 
         # Get the index of the closest point to p for each element type
         amins = [np.unravel_index(np.argmin(d), d.shape) for d in dists]
@@ -18,17 +19,17 @@ def _closest_upts_bf(eupts, pts):
         dmins = [d[a] for d, a in zip(dists, amins)]
 
         # Find the minimum across all element types
-        yield min(zip(dmins, range(len(eupts)), amins))
+        yield min(zip(dmins, range(len(epts)), amins))
 
 
-def _closest_upts_kd(eupts, pts):
+def _closest_pts_kd(epts, pts):
     from scipy.spatial import cKDTree
 
     # Flatten the physical location arrays
-    feupts = [e.reshape(-1, e.shape[-1]) for e in eupts]
+    fepts = [e.reshape(-1, e.shape[-1]) for e in epts]
 
     # For each element type construct a KD-tree of the upt locations
-    trees = [cKDTree(f) for f in feupts]
+    trees = [cKDTree(f) for f in fepts]
 
     for p in pts:
         # Query the distance/index of the closest upt to p
@@ -36,19 +37,19 @@ def _closest_upts_kd(eupts, pts):
 
         # Unravel the indices
         amins = [np.unravel_index(i, e.shape[:2])
-                 for i, e in zip(amins, eupts)]
+                 for i, e in zip(amins, epts)]
 
         # Reduce across element types
-        yield min(zip(dmins, range(len(eupts)), amins))
+        yield min(zip(dmins, range(len(epts)), amins))
 
 
-def _closest_upts(eupts, pts):
+def _closest_pts(epts, pts):
     try:
         # Attempt to use a KD-tree based approach
-        yield from _closest_upts_kd(eupts, pts)
+        yield from _closest_pts_kd(epts, pts)
     except ImportError:
         # Otherwise fall back to brute force
-        yield from _closest_upts_bf(eupts, pts)
+        yield from _closest_pts_bf(epts, pts)
 
 
 def _plocs_to_tlocs(sbasis, spts, plocs, tlocs):
@@ -102,27 +103,27 @@ class SamplerPlugin(BasePlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # MPI rank responsible for each point
+        # MPI rank responsible for each sample point
         if rank == root:
             ptsrank = []
 
-        # Physical location of the solution points
-        plocs = [p.swapaxes(1, 2) for p in intg.system.ele_ploc_upts]
+        # Sample points we're responsible for, grouped by element type
+        elepts = [[] for i in range(len(intg.system.ele_map))]
 
-        # Points we're responsible for, grouped by element type
-        elepts = [[] for i in range(len(plocs))]
+        # Search locations in transformed and physical space
+        tlocs, plocs = self._search_pts(intg)
 
-        # Locate the closest solution points in our partition
-        closest = _closest_upts(plocs, self.pts)
+        # For each sample point find our nearest search location
+        closest = _closest_pts(plocs, self.pts)
 
         # Process these points
-        for i, (dist, etype, amins) in enumerate(closest):
+        for i, (dist, etype, (uidx, eidx)) in enumerate(closest):
             # Reduce over the distance
             _, mrank = comm.allreduce((dist, rank), op=get_mpi('minloc'))
 
             # If we have the closest point then save the relevant info
             if rank == mrank:
-                elepts[etype].append((i, *amins))
+                elepts[etype].append((i, eidx, tlocs[etype][uidx]))
 
             # Note what rank is responsible for the point
             if rank == root:
@@ -173,6 +174,27 @@ class SamplerPlugin(BasePlugin):
 
         return ','.join(colnames)
 
+    def _search_pts(self, intg):
+        tlocs, plocs = [], []
+
+        # Use a strictly interior point set
+        qrule_map = {
+            'quad': 'gauss-legendre',
+            'tri': 'williams-shunn',
+            'hex': 'gauss-legendre',
+            'pri': 'williams-shunn~gauss-legendre',
+            'pyr': 'gauss-legendre',
+            'tet': 'shunn-ham'
+        }
+
+        for etype, eles in intg.system.ele_map.items():
+            pts = get_quadrule(etype, qrule_map[etype], eles.basis.nupts).pts
+
+            tlocs.append(pts)
+            plocs.append(eles.ploc_at_np(pts).swapaxes(1, 2))
+
+        return tlocs, plocs
+
     def _refine_pts(self, intg, elepts):
         elelist = intg.system.ele_map.values()
         ptsinfo = []
@@ -182,18 +204,16 @@ class SamplerPlugin(BasePlugin):
             if not epts:
                 continue
 
-            idx, uidx, eidx = zip(*epts)
+            idx, eidx, tlocs = zip(*epts)
             spts = eles.eles[:, eidx, :]
-
-            basis = eles.basis
-            tlocs = [basis.upts[i] for i in uidx]
             plocs = [self.pts[i] for i in idx]
 
             # Use Newton's method to find the precise transformed locations
-            ntlocs, nplocs = _plocs_to_tlocs(basis.sbasis, spts, plocs, tlocs)
+            ntlocs, nplocs = _plocs_to_tlocs(eles.basis.sbasis, spts, plocs,
+                                             tlocs)
 
             # Form the corresponding interpolation operators
-            intops = basis.ubasis.nodal_basis_at(ntlocs)
+            intops = eles.basis.ubasis.nodal_basis_at(ntlocs)
 
             # Append to the point info list
             ptsinfo.extend(
