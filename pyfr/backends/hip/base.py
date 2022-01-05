@@ -54,7 +54,6 @@ class HIPBackend(BaseBackend):
         self.base_matrix_cls = types.HIPMatrixBase
         self.const_matrix_cls = types.HIPConstMatrix
         self.matrix_cls = types.HIPMatrix
-        self.matrix_bank_cls = types.HIPMatrixBank
         self.matrix_slice_cls = types.HIPMatrixSlice
         self.queue_cls = types.HIPQueue
         self.view_cls = types.HIPView

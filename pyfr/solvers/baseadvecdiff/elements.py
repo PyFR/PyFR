@@ -35,8 +35,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         self.kernels['_copy_fpts'] = lambda: kernel(
             'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
         )
-        self.kernels['tgradpcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M4 - M6*M0'), self.scal_upts_inb,
+        self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
+            'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
             out=self._vect_upts
         )
         self.kernels['tgradcoru_upts'] = lambda: kernel(
@@ -135,9 +135,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                            extent=nonce + 'artvisc', tags=tags)
 
             # Apply the sensor to estimate the required artificial viscosity
-            self.kernels['shocksensor'] = lambda: self._be.kernel(
+            self.kernels['shocksensor'] = lambda uin: self._be.kernel(
                 'shocksensor', tplargs=tplargs_artvisc, dims=[self.neles],
-                u=self.scal_upts_inb, artvisc=self.artvisc
+                u=self.scal_upts[uin], artvisc=self.artvisc
             )
         elif shock_capturing == 'none':
             self.artvisc = None

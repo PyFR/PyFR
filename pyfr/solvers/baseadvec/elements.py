@@ -42,33 +42,33 @@ class BaseAdvectionElements(BaseElements):
         }
 
         # Interpolation from elemental points
-        kernels['disu'] = lambda: self._be.kernel(
-            'mul', self.opmat('M0'), self.scal_upts_inb,
+        kernels['disu'] = lambda uin: self._be.kernel(
+            'mul', self.opmat('M0'), self.scal_upts[uin],
             out=self._scal_fpts
         )
 
         if fluxaa:
-            kernels['qptsu'] = lambda: self._be.kernel(
-                'mul', self.opmat('M7'), self.scal_upts_inb,
+            kernels['qptsu'] = lambda uin: self._be.kernel(
+                'mul', self.opmat('M7'), self.scal_upts[uin],
                 out=self._scal_qpts
             )
 
         # First flux correction kernel
         if fluxaa:
-            kernels['tdivtpcorf'] = lambda: self._be.kernel(
+            kernels['tdivtpcorf'] = lambda fout: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
-                out=self.scal_upts_outb
+                out=self.scal_upts[fout]
             )
         else:
-            kernels['tdivtpcorf'] = lambda: self._be.kernel(
+            kernels['tdivtpcorf'] = lambda fout: self._be.kernel(
                 'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
-                out=self.scal_upts_outb
+                out=self.scal_upts[fout]
             )
 
         # Second flux correction kernel
-        kernels['tdivtconf'] = lambda: self._be.kernel(
-            'mul', self.opmat('M3'), self._scal_fpts, out=self.scal_upts_outb,
-            beta=1.0
+        kernels['tdivtconf'] = lambda fout: self._be.kernel(
+            'mul', self.opmat('M3'), self._scal_fpts,
+            out=self.scal_upts[fout], beta=1.0
         )
 
         # Transformed to physical divergence kernel + source term
@@ -76,25 +76,25 @@ class BaseAdvectionElements(BaseElements):
         solnupts = self._scal_upts_cpy if solnsrc else None
 
         if solnsrc:
-            kernels['copy_soln'] = lambda: self._be.kernel(
-                'copy', self._scal_upts_cpy, self.scal_upts_inb
+            kernels['copy_soln'] = lambda uin: self._be.kernel(
+                'copy', self._scal_upts_cpy, self.scal_upts[uin]
             )
 
-        kernels['negdivconf'] = lambda: self._be.kernel(
+        kernels['negdivconf'] = lambda fout: self._be.kernel(
             'negdivconf', tplargs=srctplargs,
-            dims=[self.nupts, self.neles], tdivtconf=self.scal_upts_outb,
+            dims=[self.nupts, self.neles], tdivtconf=self.scal_upts[fout],
             rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts
         )
 
         # In-place solution filter
         if self.cfg.getint('soln-filter', 'nsteps', '0'):
-            def filter_soln():
+            def filter_soln(uin):
                 mul = self._be.kernel(
-                    'mul', self.opmat('M10'), self.scal_upts_inb,
+                    'mul', self.opmat('M10'), self.scal_upts[uin],
                     out=self._scal_upts_temp
                 )
                 copy = self._be.kernel(
-                    'copy', self.scal_upts_inb, self._scal_upts_temp
+                    'copy', self.scal_upts[uin], self._scal_upts_temp
                 )
 
                 return ComputeMetaKernel([mul, copy])

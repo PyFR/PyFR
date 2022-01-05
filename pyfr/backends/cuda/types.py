@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from functools import cached_property
+
 import numpy as np
 
 import pyfr.backends.base as base
 
 
 class _CUDAMatrixCommon(object):
-    @property
+    @cached_property
     def _as_parameter_(self):
         return self.data
 
@@ -46,13 +48,9 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 
 
 class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
-    def _init_data(self, mat):
-        return (int(mat.basedata) + mat.offset +
-                (self.ra*self.leaddim + self.ca)*self.itemsize)
-
-
-class CUDAMatrixBank(base.MatrixBank):
-    pass
+    @cached_property
+    def data(self):
+        return int(self.basedata) + self.offset
 
 
 class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):

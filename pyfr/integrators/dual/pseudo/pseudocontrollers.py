@@ -123,7 +123,7 @@ class DualPIPseudoController(BaseDualPseudoController):
                                            tags={'align'})
 
             # Append the error kernels to the list
-            for i, err in enumerate(ele.scal_upts_inb):
+            for i, err in enumerate(ele.scal_upts):
                 self.pintgkernels['localerrest', i].append(
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,

@@ -72,11 +72,11 @@ class BaseElements(object):
                for dv in self.privarmap[self.ndims]]
 
         # Allocate
-        self._scal_upts = np.empty((self.nupts, self.nvars, self.neles))
+        self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
-            self._scal_upts[:, i, :] = v
+            self.scal_upts[:, i, :] = v
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -89,8 +89,8 @@ class BaseElements(object):
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
 
         # Apply and reshape
-        self._scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
-        self._scal_upts = self._scal_upts.reshape(nupts, nvars, neles)
+        self.scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
+        self.scal_upts = self.scal_upts.reshape(nupts, nvars, neles)
 
     @cached_property
     def plocfpts(self):
@@ -128,6 +128,9 @@ class BaseElements(object):
             return {'curved': off, 'linear': self.neles - off}
 
     def _slice_mat(self, mat, region, ra=None, rb=None):
+        if mat is None:
+            return None
+
         off = self._linoff
 
         # Handle stacked matrices
@@ -202,18 +205,18 @@ class BaseElements(object):
         if 'vect_fpts' in sbufs:
             self._vect_fpts = valloc('vect_fpts', nfpts)
 
-        # Allocate and bank the storage required by the time integrator
-        self._scal_upts = [backend.matrix(self._scal_upts.shape,
-                                          self._scal_upts, tags={'align'})
+        # Allocate the storage required by the time integrator
+        self.scal_upts = [backend.matrix(self.scal_upts.shape,
+                                         self.scal_upts, tags={'align'})
                            for i in range(nscalupts)]
-        self.scal_upts_inb = inb = backend.matrix_bank(self._scal_upts)
-        self.scal_upts_outb = backend.matrix_bank(self._scal_upts)
 
-        # Find/allocate space for a solution-sized scalar that is
-        # allowed to alias other scratch space in the simulation
-        aliases = next((m for m in abufs if m.nbytes >= inb.nbytes), None)
-        self._scal_upts_temp = backend.matrix(inb.ioshape, aliases=aliases,
-                                              tags=inb.tags)
+        # Find/allocate space for a solution-sized scalar
+        tags = self.scal_upts[0].tags
+        nbytes = self.scal_upts[0].nbytes
+        ioshape = self.scal_upts[0].ioshape
+        aliases = next((m for m in abufs if m.nbytes >= nbytes), None)
+        self._scal_upts_temp = backend.matrix(ioshape, aliases=aliases,
+                                              tags=tags)
 
     @memoize
     def opmat(self, expr):

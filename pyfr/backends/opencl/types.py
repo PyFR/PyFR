@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from functools import cached_property
+
 import numpy as np
 import pyopencl as cl
 
@@ -7,7 +9,7 @@ import pyfr.backends.base as base
 
 
 class _OpenCLMatrixCommon(object):
-    @property
+    @cached_property
     def _as_parameter_(self):
         return self.data.int_ptr
 
@@ -47,15 +49,11 @@ class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
 
 
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
-    def _init_data(self, mat):
-        start = (self.ra*self.leaddim + self.ca)*self.itemsize
+    @cached_property
+    def data(self):
         nbytes = ((self.nrow - 1)*self.leaddim + self.ncol)*self.itemsize
 
-        return mat.basedata.get_sub_region(mat.offset + start, nbytes)
-
-
-class OpenCLMatrixBank(base.MatrixBank):
-    pass
+        return self.basedata.get_sub_region(self.offset, nbytes)
 
 
 class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):

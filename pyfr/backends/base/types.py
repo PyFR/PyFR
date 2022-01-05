@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from collections import deque
-from collections.abc import Sequence
 
 import numpy as np
 
@@ -145,7 +144,6 @@ class MatrixSlice(object):
     def __init__(self, backend, mat, ra, rb, ca, cb):
         self.backend = backend
         self.parent = mat
-        self.datamap = {}
 
         # Parameter validation
         if ra < 0 or rb > mat.nrow or rb < ra:
@@ -155,8 +153,6 @@ class MatrixSlice(object):
         if ca % mat.splitsz != 0:
             raise ValueError('Starting column must conform to backend '
                              'alignment requirements')
-        if isinstance(mat, MatrixBank) and any('bank' in m.tags for m in mat):
-            raise TypeError('Nested MatrixBank objects can not be sliced')
 
         self.ra, self.rb = int(ra), int(rb)
         self.ca, self.cb = int(ca), int(cb)
@@ -179,32 +175,16 @@ class MatrixSlice(object):
 
     @property
     def basedata(self):
-        if 'bank' in self.tags:
-            raise AttributeError('basedata undefined for banked slices')
-
         return self.parent.basedata
 
     @property
     def offset(self):
-        if 'bank' in self.tags:
-            raise AttributeError('offset undefined for banked slices')
-
         if self.backend.blocks:
             _offset = self.ba*self.blocksz + self.ra*self.leaddim
         else:
             _offset = self.ra*self.leaddim + self.ca
 
         return self.parent.offset + _offset*self.itemsize
-
-    @property
-    def data(self):
-        try:
-            return self.datamap[self.parent.mid]
-        except KeyError:
-            data = self._init_data(self.parent)
-            self.datamap[self.parent.mid] = data
-
-            return data
 
 
 class ConstMatrix(MatrixBase):
@@ -227,46 +207,6 @@ class XchgMatrix(Matrix):
         return MPI.COMM_WORLD.Send_init(self.hdata, pid, tag)
 
 
-class MatrixBank(Sequence):
-    def __init__(self, backend, mats, initbank, tags):
-        mats = list(mats)
-
-        # Ensure all matrices have the same traits
-        if any(m.traits != mats[0].traits for m in mats[1:]):
-            raise ValueError('Matrices in a bank must be homogeneous')
-
-        # Check that all matrices share tags
-        if any(m.tags != mats[0].tags for m in mats[1:]):
-            raise ValueError('Matrices in a bank must share tags')
-
-        self.backend = backend
-        self.tags = tags | mats[0].tags | {'bank'}
-
-        self._mats = mats
-        self._curr_idx = initbank
-        self._curr_mat = mats[initbank]
-
-    def __len__(self):
-        return len(self._mats)
-
-    def __getitem__(self, idx):
-        return self._mats[idx]
-
-    def __getattr__(self, attr):
-        return getattr(self._curr_mat, attr)
-
-    slice = MatrixBase.slice
-
-    @property
-    def active(self):
-        return self._curr_idx
-
-    @active.setter
-    def active(self, idx):
-        self._curr_idx = idx
-        self._curr_mat = self._mats[idx]
-
-
 class View(object):
     def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         self.n = len(matmap)
@@ -285,8 +225,7 @@ class View(object):
         mattypes = (backend.matrix_cls, backend.matrix_slice_cls)
 
         # Validate the matrices
-        if any(not isinstance(m, mattypes) or 'bank' in m.tags
-               for m in self._mats):
+        if any(not isinstance(m, mattypes) for m in self._mats):
             raise TypeError('Incompatible matrix type for view')
 
         if any(m.basedata != self.basedata for m in self._mats):
