@@ -188,7 +188,7 @@ class BaseSystem(object):
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
 
-        for mn, mgetter in it.chain(*mpiint.mpireqs.items()):
+        for mn, mgetter in it.chain(*[m.mpireqs.items() for m in mpiint]):
             mpireqs[mn[:-4] + 'send_recv'].append(mgetter())
 
     def _prepare_rhs(self, t, uinbank, foutbank):
