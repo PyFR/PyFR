@@ -30,8 +30,8 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         class AxnpbyKernel(ComputeKernel):
             def run(self, queue, *consts):
-                kern.exec_async(grid, block, queue.stream_comp, nrow, ncolb,
-                                ldim, *arr, *consts)
+                kern.exec_async(grid, block, queue.stream, nrow, ncolb, ldim,
+                                *arr, *consts)
 
         return AxnpbyKernel()
 
@@ -43,7 +43,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         class CopyKernel(ComputeKernel):
             def run(self, queue):
-                hip.memcpy_async(dst, src, dst.nbytes, queue.stream_comp)
+                hip.memcpy(dst, src, dst.nbytes, queue.stream)
 
         return CopyKernel()
 
@@ -97,9 +97,9 @@ class HIPBlasExtKernels(HIPKernelProvider):
                 return reducer(reduced_host, axis=1)
 
             def run(self, queue, *facs):
-                rkern.exec_async(grid, block, queue.stream_comp,
+                rkern.exec_async(grid, block, queue.stream,
                                  nrow, ncolb, ldim, reduced_dev, *regs, *facs)
-                hip.memcpy_async(reduced_host, reduced_dev,
-                                 reduced_dev.nbytes, queue.stream_comp)
+                hip.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
+                           queue.stream)
 
         return ReductionKernel()

@@ -51,14 +51,16 @@ class BaseAdvectionMPIInters(BaseInters):
         self.kernels['scal_fpts_pack'] = lambda: be.kernel(
             'pack', self._scal_lhs
         )
-        self.kernels['scal_fpts_send'] = lambda: be.kernel(
-            'send_pack', self._scal_lhs, self._rhsrank, self.MPI_TAG
-        )
-        self.kernels['scal_fpts_recv'] = lambda: be.kernel(
-            'recv_pack', self._scal_rhs, self._rhsrank, self.MPI_TAG
-        )
         self.kernels['scal_fpts_unpack'] = lambda: be.kernel(
             'unpack', self._scal_rhs
+        )
+
+        # Associated MPI requests
+        self.mpireqs['scal_fpts_send'] = lambda: self._scal_lhs.sendreq(
+            self._rhsrank, self.MPI_TAG
+        )
+        self.mpireqs['scal_fpts_recv'] = lambda: self._scal_rhs.recvreq(
+            self._rhsrank, self.MPI_TAG
         )
 
 

@@ -216,7 +216,15 @@ class ConstMatrix(MatrixBase):
 
 
 class XchgMatrix(Matrix):
-    pass
+    def recvreq(self, pid, tag):
+        from mpi4py import MPI
+
+        return MPI.COMM_WORLD.Recv_init(self.hdata, pid, tag)
+
+    def sendreq(self, pid, tag):
+        from mpi4py import MPI
+
+        return MPI.COMM_WORLD.Send_init(self.hdata, pid, tag)
 
 
 class MatrixBank(Sequence):
@@ -332,56 +340,35 @@ class XchgView(object):
         # Now create an exchange matrix to pack the view into
         self.xchgmat = backend.xchg_matrix((nvrow, nvcol*n), tags=tags)
 
+    def recvreq(self, pid, tag):
+        return self.xchgmat.recvreq(pid, tag)
+
+    def sendreq(self, pid, tag):
+        return self.xchgmat.sendreq(pid, tag)
+
 
 class Queue(object):
     def __init__(self, backend):
+        from mpi4py import MPI
+
         self.backend = backend
 
-        # Type of the last kernel we executed
-        self._last_ktype = None
+        # MPI wrappers
+        self._startall = MPI.Prequest.Startall
+        self._waitall = MPI.Prequest.Waitall
 
         # Items waiting to be executed
-        self._items = deque()
-
-        # Active MPI requests
-        self.mpi_reqs = []
+        self._items = []
 
     def enqueue(self, items, *args, **kwargs):
         self._items.extend((item, args, kwargs) for item in items)
 
     def enqueue_and_run(self, items, *args, **kwargs):
-        self.run()
+        if self._items:
+            self.run()
+
         self.enqueue(items, *args, **kwargs)
         self.run()
 
     def __bool__(self):
         return bool(self._items)
-
-    def run(self):
-        while self._items:
-            self._exec_next()
-        self._wait()
-
-    def _exec_item(self, item, args, kwargs):
-        item.run(self, *args, **kwargs)
-        self._last_ktype = item.ktype
-
-    def _exec_next(self):
-        item, args, kwargs = self._items.popleft()
-
-        # If we are at a sequence point then wait for current items
-        if self._at_sequence_point(item):
-            self._wait()
-
-        # Execute the item
-        self._exec_item(item, args, kwargs)
-
-    def _exec_nowait(self):
-        while self._items and not self._at_sequence_point(self._items[0][0]):
-            self._exec_item(*self._items.popleft())
-
-    def _at_sequence_point(self, item):
-        pass
-
-    def _wait(self):
-        pass

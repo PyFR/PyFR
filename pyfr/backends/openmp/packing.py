@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import ComputeKernel, NullComputeKernel
-from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
 
 
-class OpenMPPackingKernels(OpenMPKernelProvider, BasePackingKernels):
+class OpenMPPackingKernels(OpenMPKernelProvider):
     def pack(self, mv):
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -24,5 +23,4 @@ class OpenMPPackingKernels(OpenMPKernelProvider, BasePackingKernels):
         return PackXchgViewKernel()
 
     def unpack(self, mv):
-        # No-op
         return NullComputeKernel()

@@ -3,11 +3,10 @@
 import numpy as np
 
 from pyfr.backends.base import ComputeKernel, NullComputeKernel
-from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
 
 
-class HIPPackingKernels(HIPKernelProvider, BasePackingKernels):
+class HIPPackingKernels(HIPKernelProvider):
     def pack(self, mv):
         hip = self.backend.hip
 
@@ -30,27 +29,21 @@ class HIPPackingKernels(HIPKernelProvider, BasePackingKernels):
                 def run(self, queue):
                     # Pack
                     kern.exec_async(
-                        grid, block, queue.stream_comp, v.n, v.nvrow, v.nvcol,
+                        grid, block, queue.stream, v.n, v.nvrow, v.nvcol,
                         v.basedata, v.mapping, v.rstrides or 0, m
                     )
         # Otherwise, we need to both pack the buffer and copy it back
         else:
-            # Create a HIP event
-            event = hip.create_event()
-
             class PackXchgViewKernel(ComputeKernel):
                 def run(self, queue):
                     # Pack
                     kern.exec_async(
-                        grid, block, queue.stream_comp, v.n, v.nvrow, v.nvcol,
+                        grid, block, queue.stream, v.n, v.nvrow, v.nvcol,
                         v.basedata, v.mapping, v.rstrides or 0, m
                     )
 
                     # Copy the packed buffer to the host
-                    event.record(queue.stream_comp)
-                    queue.stream_copy.wait_for_event(event)
-                    hip.memcpy_async(m.hdata, m.data, m.nbytes,
-                                     queue.stream_copy)
+                    hip.memcpy(m.hdata, m.data, m.nbytes, queue.stream)
 
         return PackXchgViewKernel()
 
@@ -62,7 +55,6 @@ class HIPPackingKernels(HIPKernelProvider, BasePackingKernels):
         else:
             class UnpackXchgMatrixKernel(ComputeKernel):
                 def run(self, queue):
-                    hip.memcpy_async(mv.data, mv.hdata, mv.nbytes,
-                                     queue.stream_comp)
+                    hip.memcpy(mv.data, mv.hdata, mv.nbytes, queue.stream)
 
             return UnpackXchgMatrixKernel()

@@ -6,6 +6,7 @@ import re
 
 import numpy as np
 
+from pyfr.backends.base import NullComputeKernel
 from pyfr.inifile import Inifile
 from pyfr.shapes import BaseShape
 from pyfr.util import subclasses
@@ -16,9 +17,6 @@ class BaseSystem(object):
     intinterscls = None
     mpiinterscls = None
     bbcinterscls = None
-
-    # Number of queues to allocate
-    _nqueues = None
 
     # Nonce sequence
     _nonce_seq = it.count()
@@ -63,9 +61,12 @@ class BaseSystem(object):
         bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
 
-        # Prepare the queues and kernels
-        self._gen_queues()
+        # Queue
+        self._queue = backend.queue()
+
+        # Prepare the kernels and any associated MPI requests
         self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
+        self._gen_mpireqs(mpi_inters)
         backend.commit()
 
         # Save the BC interfaces, but delete the memory-intensive elemap
@@ -171,9 +172,6 @@ class BaseSystem(object):
 
         return bc_inters
 
-    def _gen_queues(self):
-        self._queues = [self.backend.queue() for i in range(self._nqueues)]
-
     def _gen_kernels(self, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
 
@@ -183,7 +181,15 @@ class BaseSystem(object):
         for pn, plst in zip(provnames, provlists):
             for kn, kgetter in it.chain(*[p.kernels.items() for p in plst]):
                 if not kn.startswith('_'):
-                    kernels[pn, kn].append(kgetter())
+                    k = kgetter()
+                    if not isinstance(k, NullComputeKernel):
+                        kernels[pn, kn].append(k)
+
+    def _gen_mpireqs(self, mpiint):
+        self._mpireqs = mpireqs = defaultdict(list)
+
+        for mn, mgetter in it.chain(*mpiint.mpireqs.items()):
+            mpireqs[mn[:-4] + 'send_recv'].append(mgetter())
 
     def _prepare_rhs(self, t, uinbank, foutbank):
         for b in self._bc_inters:
@@ -208,7 +214,7 @@ class BaseSystem(object):
         for u in self.eles_scal_upts_inb:
             u.active = uinoutbank
 
-        self._queues[0].enqueue_and_run(self._kernels['eles', 'filter_soln'])
+        self._queue.enqueue_and_run(self._kernels['eles', 'filter_soln'])
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

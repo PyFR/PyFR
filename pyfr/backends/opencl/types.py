@@ -82,42 +82,27 @@ class OpenCLQueue(base.Queue):
     def __init__(self, backend):
         super().__init__(backend)
 
-        # OpenCL command queues
-        self.cmd_q_comp = cl.CommandQueue(backend.ctx)
-        self.cmd_q_copy = cl.CommandQueue(backend.ctx)
+        # OpenCL command queue
+        self.cmd_q = cl.CommandQueue(backend.ctx)
 
         # Active copy event list
         self.copy_events = []
 
-    def _wait(self):
-        if self._last_ktype == 'compute':
-            self.cmd_q_comp.finish()
-            self.cmd_q_copy.finish()
-            self.copy_events.clear()
-        elif self._last_ktype == 'mpi':
-            from mpi4py import MPI
+    def run(self, mpireqs=[]):
+        # Start any MPI requests
+        if mpireqs:
+            self._startall(mpireqs)
 
-            MPI.Prequest.Waitall(self.mpi_reqs)
-            self.mpi_reqs = []
+        # Submit the kernels to the command queue
+        for item, args, kwargs in self._items:
+            item.run(self, *args, **kwargs)
 
-        self._last_ktype = None
+        # If we started any MPI requests, wait for them
+        if mpireqs:
+            self.cmd_q.flush()
+            self._waitall(mpireqs)
 
-    def _at_sequence_point(self, item):
-        return self._last_ktype != item.ktype
-
-    @staticmethod
-    def runall(queues):
-        # First run any items which will not result in an implicit wait
-        for q in queues:
-            q._exec_nowait()
-
-        # So long as there are items remaining in the queues
-        while any(queues):
-            # Execute a (potentially) blocking item from each queue
-            for q in filter(None, queues):
-                q._exec_next()
-                q._exec_nowait()
-
-        # Wait for all tasks to complete
-        for q in queues:
-            q._wait()
+        # Wait for the kernels to finish and clear the queue
+        self.cmd_q.finish()
+        self.copy_events.clear()
+        self._items.clear()

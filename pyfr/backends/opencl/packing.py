@@ -4,11 +4,10 @@ import numpy as np
 import pyopencl as cl
 
 from pyfr.backends.base import ComputeKernel
-from pyfr.backends.base.packing import BasePackingKernels
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
 
 
-class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
+class OpenCLPackingKernels(OpenCLKernelProvider):
     def pack(self, mv):
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -27,11 +26,11 @@ class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
                 args = [getattr(arg, 'data', arg) for arg in args]
 
                 # Pack
-                pevent = kern(queue.cmd_q_comp, (v.n,), None, *args)
+                kern(queue.cmd_q, (v.n,), None, *args)
 
                 # Copy the packed buffer to the host
-                cevent = cl.enqueue_copy(queue.cmd_q_copy, m.hdata, m.data,
-                                         is_blocking=False, wait_for=[pevent])
+                cevent = cl.enqueue_copy(queue.cmd_q, m.hdata, m.data,
+                                         is_blocking=False)
                 queue.copy_events.append(cevent)
 
         return PackXchgViewKernel()
@@ -39,7 +38,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider, BasePackingKernels):
     def unpack(self, mv):
         class UnpackXchgMatrixKernel(ComputeKernel):
             def run(self, queue):
-                cevent = cl.enqueue_copy(queue.cmd_q_comp, mv.data, mv.hdata,
+                cevent = cl.enqueue_copy(queue.cmd_q, mv.data, mv.hdata,
                                          is_blocking=False)
                 queue.copy_events.append(cevent)
 
