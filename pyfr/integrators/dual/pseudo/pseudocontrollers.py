@@ -123,21 +123,19 @@ class DualPIPseudoController(BaseDualPseudoController):
                                            tags={'align'})
 
             # Append the error kernels to the list
-            self.pintgkernels['localerrest'].append(
-                self.backend.kernel(
-                    'localerrest', tplargs=tplargs,
-                    dims=[ele.nupts, ele.neles], err=ele.scal_upts_inb,
-                    errprev=err_prev, dtau_upts=dtaumat
+            for i, err in enumerate(ele.scal_upts_inb):
+                self.pintgkernels['localerrest', i].append(
+                    self.backend.kernel(
+                        'localerrest', tplargs=tplargs,
+                        dims=[ele.nupts, ele.neles], err=err,
+                        errprev=err_prev, dtau_upts=dtaumat
+                    )
                 )
-            )
 
         self.backend.commit()
 
     def localerrest(self, errbank):
-        for u in self.system.eles_scal_upts_inb:
-            u.active = errbank
-
-        self._queue.enqueue_and_run(self.pintgkernels['localerrest'])
+        self._queue.enqueue_and_run(self.pintgkernels['localerrest', errbank])
 
     def pseudo_advance(self, tcurr):
         self.tcurr = tcurr
