@@ -109,7 +109,7 @@ class SourceModule(object):
         ]
 
         flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
-        
+
         # Compile to PTX
         ptx = backend.nvrtc.compile('kernel', src, flags)
 

@@ -52,7 +52,6 @@ class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
     @cached_property
     def data(self):
         nbytes = ((self.nrow - 1)*self.leaddim + self.ncol)*self.itemsize
-
         return self.basedata.get_sub_region(self.offset, nbytes)
 
 
