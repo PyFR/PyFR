@@ -187,14 +187,19 @@ class BaseSystem(object):
                 if 'uin' in kparams or 'fout' in kparams:
                     for i in range(nregs):
                         kern = kgetter(i)
+                        if isinstance(kern, NullComputeKernel):
+                            continue
 
                         if 'uin' in kparams:
                             kernels[f'{pn}/{kn}', i, None].append(kern)
                         else:
                             kernels[f'{pn}/{kn}', None, i].append(kern)
                 else:
-                    kernels[f'{pn}/{kn}', None, None].append(kgetter())
+                    kern = kgetter()
+                    if isinstance(kern, NullComputeKernel):
+                        continue
 
+                    kernels[f'{pn}/{kn}', None, None].append(kern)
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)

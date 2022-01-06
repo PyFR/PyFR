@@ -25,8 +25,6 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
     kernel_generator_cls = CUDAKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
-        cfg = self.backend.cfg
-
         # Determine the block size
         if len(dims) == 1:
             block = (64, 1, 1)

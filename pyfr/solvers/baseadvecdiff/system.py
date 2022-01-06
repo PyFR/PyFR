@@ -16,13 +16,13 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q.enqueue(kernels['mpiint/scal_fpts_pack'])
         q.run()
 
-        if ('eles/copy_soln') in kernels:
+        if 'eles/copy_soln' in kernels:
             q.enqueue(kernels['eles/copy_soln'])
-        if ('iint/copy_fpts') in kernels:
+        if 'iint/copy_fpts' in kernels:
             q.enqueue(kernels['iint/copy_fpts'])
         q.enqueue(kernels['iint/con_u'])
         q.enqueue(kernels['bcint/con_u'], t=t)
-        if ('eles/shocksensor') in kernels:
+        if 'eles/shocksensor' in kernels:
             q.enqueue(kernels['eles/shocksensor'])
             q.enqueue(kernels['mpiint/artvisc_fpts_pack'])
         q.enqueue(kernels['eles/tgradpcoru_upts'])
@@ -37,11 +37,10 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q.enqueue(kernels['mpiint/vect_fpts_pack'])
         q.run(mpireqs['artvisc_fpts_send_recv'])
 
-        if ('eles/shockvar') in kernels:
+        if 'eles/shockvar' in kernels:
             q.enqueue(kernels['mpiint/artvisc_fpts_unpack'])
-        if ('eles/gradcoru_qpts') in kernels:
+        if 'eles/gradcoru_qpts' in kernels:
             q.enqueue(kernels['eles/gradcoru_qpts'])
-        if ('eles/qptsu') in kernels:
             q.enqueue(kernels['eles/qptsu'])
         q.enqueue(kernels['eles/tdisf_curved'])
         q.enqueue(kernels['eles/tdisf_linear'])
@@ -67,7 +66,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         q.enqueue(kernels['mpiint/scal_fpts_pack'])
         q.run()
 
-        if ('iint/copy_fpts') in kernels:
+        if 'iint/copy_fpts' in kernels:
             q.enqueue(kernels['iint/copy_fpts'])
         q.enqueue(kernels['iint/con_u'])
         q.enqueue(kernels['bcint/con_u'], t=t)

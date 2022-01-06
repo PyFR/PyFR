@@ -16,9 +16,9 @@ class BaseAdvectionSystem(BaseSystem):
         q.enqueue(kernels['mpiint/scal_fpts_pack'])
         q.run()
 
-        if ('eles/copy_soln') in kernels:
+        if 'eles/copy_soln' in kernels:
             q.enqueue(kernels['eles/copy_soln'])
-        if ('eles/qptsu') in kernels:
+        if 'eles/qptsu' in kernels:
             q.enqueue(kernels['eles/qptsu'])
         q.enqueue(kernels['eles/tdisf_curved'])
         q.enqueue(kernels['eles/tdisf_linear'])
