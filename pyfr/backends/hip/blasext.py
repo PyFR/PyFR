@@ -3,7 +3,7 @@
 import numpy as np
 
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 
 
 class HIPBlasExtKernels(HIPKernelProvider):
@@ -28,7 +28,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
 
-        class AxnpbyKernel(ComputeKernel):
+        class AxnpbyKernel(Kernel):
             def run(self, queue, *consts):
                 kern.exec_async(grid, block, queue.stream, nrow, ncolb, ldim,
                                 *arr, *consts)
@@ -41,7 +41,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
-        class CopyKernel(ComputeKernel):
+        class CopyKernel(Kernel):
             def run(self, queue):
                 hip.memcpy(dst, src, dst.nbytes, queue.stream)
 
@@ -91,7 +91,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum
 
-        class ReductionKernel(ComputeKernel):
+        class ReductionKernel(Kernel):
             @property
             def retval(self):
                 return reducer(reduced_host, axis=1)

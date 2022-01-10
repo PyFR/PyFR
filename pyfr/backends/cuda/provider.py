@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, ComputeKernel)
+                                BasePointwiseKernelProvider, Kernel)
 from pyfr.backends.cuda.generator import CUDAKernelGenerator
 from pyfr.backends.cuda.compiler import SourceModule
 from pyfr.util import memoize
@@ -34,7 +34,7 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
         # Use this to compute the grid size
         grid = get_grid_for_block(block, dims[-1])
 
-        class PointwiseKernel(ComputeKernel):
+        class PointwiseKernel(Kernel):
             if any(isinstance(arg, str) for arg in arglst):
                 def run(self, queue, **kwargs):
                     fun.exec_async(grid, block, queue.stream,

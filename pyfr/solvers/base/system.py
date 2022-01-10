@@ -7,7 +7,7 @@ import re
 
 import numpy as np
 
-from pyfr.backends.base import NullComputeKernel
+from pyfr.backends.base import NullKernel
 from pyfr.inifile import Inifile
 from pyfr.shapes import BaseShape
 from pyfr.util import memoize, subclasses
@@ -187,7 +187,7 @@ class BaseSystem(object):
                 if 'uin' in kparams or 'fout' in kparams:
                     for i in range(nregs):
                         kern = kgetter(i)
-                        if isinstance(kern, NullComputeKernel):
+                        if isinstance(kern, NullKernel):
                             continue
 
                         if 'uin' in kparams:
@@ -196,7 +196,7 @@ class BaseSystem(object):
                             kernels[f'{pn}/{kn}', None, i].append(kern)
                 else:
                     kern = kgetter()
-                    if isinstance(kern, NullComputeKernel):
+                    if isinstance(kern, NullKernel):
                         continue
 
                     kernels[f'{pn}/{kn}', None, None].append(kern)

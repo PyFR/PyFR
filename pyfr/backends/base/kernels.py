@@ -7,7 +7,7 @@ import types
 from pyfr.util import memoize
 
 
-class ComputeKernel(object):
+class Kernel(object):
     @property
     def retval(self):
         return None
@@ -16,21 +16,17 @@ class ComputeKernel(object):
         pass
 
 
-class NullComputeKernel(ComputeKernel):
+class NullKernel(Kernel):
     pass
 
 
-class _MetaKernel(object):
+class MetaKernel(Kernel):
     def __init__(self, kernels):
         self._kernels = list(kernels)
 
     def run(self, queue, *args, **kwargs):
         for k in self._kernels:
             k.run(queue, *args, **kwargs)
-
-
-class ComputeMetaKernel(_MetaKernel, ComputeKernel):
-    pass
 
 
 class BaseKernelProvider(object):
@@ -150,7 +146,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
             # Process the argument list
             argb = self._build_arglst(dims, argn, argt, kwargs)
 
-            # Return a ComputeKernel subclass instance
+            # Return a Kernel subclass instance
             return self._instantiate_kernel(dims, fun, argb)
 
         # Attach the module to the method as an attribute

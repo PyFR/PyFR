@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, NullComputeKernel
+from pyfr.backends.base import Kernel, NullKernel
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
 
 
@@ -25,7 +25,7 @@ class HIPPackingKernels(HIPKernelProvider):
 
         # If MPI is HIP aware then we just need to pack the buffer
         if self.backend.mpitype == 'hip-aware':
-            class PackXchgViewKernel(ComputeKernel):
+            class PackXchgViewKernel(Kernel):
                 def run(self, queue):
                     # Pack
                     kern.exec_async(
@@ -34,7 +34,7 @@ class HIPPackingKernels(HIPKernelProvider):
                     )
         # Otherwise, we need to both pack the buffer and copy it back
         else:
-            class PackXchgViewKernel(ComputeKernel):
+            class PackXchgViewKernel(Kernel):
                 def run(self, queue):
                     # Pack
                     kern.exec_async(
@@ -51,9 +51,9 @@ class HIPPackingKernels(HIPKernelProvider):
         hip = self.backend.hip
 
         if self.backend.mpitype == 'hip-aware':
-            return NullComputeKernel()
+            return NullKernel()
         else:
-            class UnpackXchgMatrixKernel(ComputeKernel):
+            class UnpackXchgMatrixKernel(Kernel):
                 def run(self, queue):
                     hip.memcpy(mv.data, mv.hdata, mv.nbytes, queue.stream)
 

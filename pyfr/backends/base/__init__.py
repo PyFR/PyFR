@@ -3,8 +3,8 @@
 from pyfr.backends.base.backend import BaseBackend
 from pyfr.backends.base.kernels import (BaseKernelProvider,
                                         BasePointwiseKernelProvider,
-                                        ComputeKernel, ComputeMetaKernel,
-                                        NotSuitableError, NullComputeKernel)
+                                        Kernel, MetaKernel, NotSuitableError,
+                                        NullKernel)
 from pyfr.backends.base.types import (ConstMatrix, Matrix, MatrixBase,
                                       MatrixSlice, Queue, View, XchgMatrix,
                                       XchgView)

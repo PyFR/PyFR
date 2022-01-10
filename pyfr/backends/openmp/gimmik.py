@@ -5,7 +5,7 @@ from ctypes import cast, c_void_p
 from gimmik import generate_mm
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, NotSuitableError
+from pyfr.backends.base import Kernel, NotSuitableError
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
 
 
@@ -47,7 +47,7 @@ class OpenMPGiMMiKKernels(OpenMPKernelProvider):
         # Build
         batch_gemm = self._build_kernel('batch_gemm', src, argt)
 
-        class MulKernel(ComputeKernel):
+        class MulKernel(Kernel):
             def run(self, queue):
                 batch_gemm(gimmik_ptr, b.leaddim, b.nblocks, b, b.blocksz, out,
                            out.blocksz)

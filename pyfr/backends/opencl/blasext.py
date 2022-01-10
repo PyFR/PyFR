@@ -4,7 +4,7 @@ import numpy as np
 import pyopencl as cl
 
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 
 
 class OpenCLBlasExtKernels(OpenCLKernelProvider):
@@ -25,7 +25,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
 
-        class AxnpbyKernel(ComputeKernel):
+        class AxnpbyKernel(Kernel):
             def run(self, queue, *consts):
                 arrd = [x.data for x in arr]
                 kern(queue.cmd_q, (ncolb, nrow), None, nrow, ncolb, ldim,
@@ -37,7 +37,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
-        class CopyKernel(ComputeKernel):
+        class CopyKernel(Kernel):
             def run(self, queue):
                 cl.enqueue_copy(queue.cmd_q, dst.data, src.data)
 
@@ -86,7 +86,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum
 
-        class ReductionKernel(ComputeKernel):
+        class ReductionKernel(Kernel):
             @property
             def retval(self):
                 return reducer(reduced_host, axis=1)

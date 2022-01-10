@@ -3,7 +3,7 @@
 import numpy as np
 
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 
 
 class OpenMPBlasExtKernels(OpenMPKernelProvider):
@@ -24,7 +24,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
 
-        class AxnpbyKernel(ComputeKernel):
+        class AxnpbyKernel(Kernel):
             def run(self, queue, *consts):
                 kern(nrow, nblocks, *arr, *consts)
 
@@ -45,7 +45,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         kern = self._build_kernel('par_memcpy', ksrc,
                                   [np.intp, np.int32]*2 + [np.int32]*2)
 
-        class CopyKernel(ComputeKernel):
+        class CopyKernel(Kernel):
             def run(self, queue):
                 kern(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
 
@@ -82,7 +82,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         # Build
         rkern = self._build_kernel('reduction', src, argt)
 
-        class ReductionKernel(ComputeKernel):
+        class ReductionKernel(Kernel):
             @property
             def retval(self):
                 return reduced

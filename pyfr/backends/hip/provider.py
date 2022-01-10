@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, ComputeKernel)
+                                BasePointwiseKernelProvider, Kernel)
 from pyfr.backends.hip.compiler import SourceModule
 from pyfr.backends.hip.generator import HIPKernelGenerator
 from pyfr.util import memoize
@@ -38,7 +38,7 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
         block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
 
-        class PointwiseKernel(ComputeKernel):
+        class PointwiseKernel(Kernel):
             if any(isinstance(arg, str) for arg in arglst):
                 def run(self, queue, **kwargs):
                     fun.exec_async(grid, block, queue.stream,
