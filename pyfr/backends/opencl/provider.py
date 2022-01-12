@@ -30,7 +30,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
                                     BasePointwiseKernelProvider):
     kernel_generator_cls = OpenCLKernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst):
+    def _instantiate_kernel(self, dims, fun, arglst, argmv):
         # Determine the work group sizes
         if len(dims) == 1:
             ls = (64,)
@@ -50,4 +50,4 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
                     narglst = [getattr(arg, 'data', arg) for arg in arglst]
                     fun(queue.cmd_q, gs, ls, *narglst)
 
-        return PointwiseKernel()
+        return PointwiseKernel(*argmv)

@@ -8,6 +8,11 @@ from pyfr.util import memoize
 
 
 class Kernel(object):
+    def __init__(self, mats=[], views=[], misc=[]):
+        self.mats = mats
+        self.views = views
+        self.misc = misc
+
     @property
     def retval(self):
         return None
@@ -81,6 +86,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Possible view types
         viewtypes = (self.backend.view_cls, self.backend.xchg_view_cls)
 
+        # Backend matrices and views this kernel operates on
+        argmats, argviews = [], []
+
         # First arguments are the iteration dimensions
         ndim, arglst = len(dims), [int(d) for d in dims]
 
@@ -97,6 +105,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
             # Matrix
             if isinstance(ka, mattypes):
+                argmats.append(ka)
+
                 # Check that argument is not a row sliced matrix
                 if isinstance(ka, mattypes[-1]) and ka.nrow != ka.parent.nrow:
                     raise ValueError('Row sliced matrices are not supported')
@@ -104,6 +114,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                     arglst += [ka, ka.leaddim] if len(atypes) == 2 else [ka]
             # View
             elif isinstance(ka, viewtypes):
+                argviews.append(ka)
+
                 if isinstance(ka, self.backend.view_cls):
                     view = ka
                 else:
@@ -115,9 +127,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
             else:
                 arglst.append(ka)
 
-        return arglst
+        return arglst, (argmats, argviews)
 
-    def _instantiate_kernel(self, dims, fun, arglst):
+    def _instantiate_kernel(self, dims, fun, arglst, argmv):
         pass
 
     def register(self, mod):
@@ -144,10 +156,10 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
             fun = self._build_kernel(name, src, list(it.chain(*argt)))
 
             # Process the argument list
-            argb = self._build_arglst(dims, argn, argt, kwargs)
+            argb, argmv = self._build_arglst(dims, argn, argt, kwargs)
 
             # Return a Kernel subclass instance
-            return self._instantiate_kernel(dims, fun, argb)
+            return self._instantiate_kernel(dims, fun, argb, argmv)
 
         # Attach the module to the method as an attribute
         kernel_meth._mod = mod
