@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import ComputeKernel, NullComputeKernel
+from pyfr.backends.base import Kernel, NullKernel
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
 
 
@@ -16,11 +16,11 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
         # Build
         kern = self._build_kernel('pack_view', src, 'iPPPP')
 
-        class PackXchgViewKernel(ComputeKernel):
+        class PackXchgViewKernel(Kernel):
             def run(self, queue):
                 kern(v.n, v.basedata, v.mapping, v.rstrides or 0, m)
 
         return PackXchgViewKernel()
 
     def unpack(self, mv):
-        return NullComputeKernel()
+        return NullKernel()

@@ -4,7 +4,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_size_t, c_void_p
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -58,7 +58,7 @@ class OpenCLCLBlastKernels(object):
         else:
             clblastgemm = w.CLBlastSgemm
 
-        class MulKernel(ComputeKernel):
+        class MulKernel(Kernel):
             def run(self, queue):
                 qptr = c_void_p(queue.cmd_q.int_ptr)
                 clblastgemm(w.LayoutRowMajor, w.TransposeNo, w.TransposeNo,

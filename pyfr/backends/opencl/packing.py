@@ -3,7 +3,7 @@
 import numpy as np
 import pyopencl as cl
 
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
 
 
@@ -18,7 +18,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         # Build
         kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
 
-        class PackXchgViewKernel(ComputeKernel):
+        class PackXchgViewKernel(Kernel):
             def run(self, queue):
                 # Kernel arguments
                 args = [v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
@@ -36,7 +36,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         return PackXchgViewKernel()
 
     def unpack(self, mv):
-        class UnpackXchgMatrixKernel(ComputeKernel):
+        class UnpackXchgMatrixKernel(Kernel):
             def run(self, queue):
                 cevent = cl.enqueue_copy(queue.cmd_q, mv.data, mv.hdata,
                                          is_blocking=False)

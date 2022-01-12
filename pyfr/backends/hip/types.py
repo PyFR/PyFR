@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from functools import cached_property
+
 import numpy as np
 
 import pyfr.backends.base as base
 
 
 class _HIPMatrixCommon(object):
-    @property
+    @cached_property
     def _as_parameter_(self):
         return self.data
 
@@ -46,13 +48,9 @@ class HIPMatrix(HIPMatrixBase, base.Matrix):
 
 
 class HIPMatrixSlice(_HIPMatrixCommon, base.MatrixSlice):
-    def _init_data(self, mat):
-        return (int(mat.basedata) + mat.offset +
-                (self.ra*self.leaddim + self.ca)*self.itemsize)
-
-
-class HIPMatrixBank(base.MatrixBank):
-    pass
+    @cached_property
+    def data(self):
+        return int(self.basedata) + self.offset
 
 
 class HIPConstMatrix(HIPMatrixBase, base.ConstMatrix):

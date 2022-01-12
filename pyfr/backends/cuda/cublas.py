@@ -4,7 +4,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -91,7 +91,7 @@ class CUDACUBLASKernels(object):
             cublasgemm = lib.cublasSgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        class MulKernel(ComputeKernel):
+        class MulKernel(Kernel):
             def run(iself, queue):
                 lib.cublasSetStream(self, queue.stream)
                 cublasgemm(self, lib.OP_N, lib.OP_N, m, n, k,

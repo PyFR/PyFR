@@ -3,7 +3,7 @@
 from gimmik import generate_mm
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, NotSuitableError
+from pyfr.backends.base import Kernel, NotSuitableError
 from pyfr.backends.opencl.provider import OpenCLKernelProvider
 
 
@@ -35,7 +35,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
         fun = self._build_kernel('gimmik_mm', src,
                                  [np.int32] + [np.intp, np.int32]*2)
 
-        class MulKernel(ComputeKernel):
+        class MulKernel(Kernel):
             def run(self, queue):
                 fun(queue.cmd_q, (b.ncol,), None, b.ncol, b.data,
                     b.leaddim, out.data, out.leaddim)

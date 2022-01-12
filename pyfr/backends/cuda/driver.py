@@ -287,4 +287,3 @@ class CUDA(object):
 
     def create_stream(self):
         return CUDAStream(self)
-

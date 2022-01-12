@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, NullComputeKernel
+from pyfr.backends.base import Kernel, NullKernel
 from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
 
 
@@ -25,7 +25,7 @@ class CUDAPackingKernels(CUDAKernelProvider):
 
         # If MPI is CUDA aware then we just need to pack the buffer
         if self.backend.mpitype == 'cuda-aware':
-            class PackXchgViewKernel(ComputeKernel):
+            class PackXchgViewKernel(Kernel):
                 def run(self, queue):
                     # Pack
                     kern.exec_async(
@@ -34,7 +34,7 @@ class CUDAPackingKernels(CUDAKernelProvider):
                     )
         # Otherwise, we need to both pack the buffer and copy it back
         else:
-            class PackXchgViewKernel(ComputeKernel):
+            class PackXchgViewKernel(Kernel):
                 def run(self, queue):
                     # Pack
                     kern.exec_async(
@@ -51,9 +51,9 @@ class CUDAPackingKernels(CUDAKernelProvider):
         cuda = self.backend.cuda
 
         if self.backend.mpitype == 'cuda-aware':
-            return NullComputeKernel()
+            return NullKernel()
         else:
-            class UnpackXchgMatrixKernel(ComputeKernel):
+            class UnpackXchgMatrixKernel(Kernel):
                 def run(self, queue):
                     cuda.memcpy(mv.data, mv.hdata, mv.nbytes, queue.stream)
 

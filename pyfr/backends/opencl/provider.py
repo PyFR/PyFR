@@ -4,7 +4,7 @@ import numpy as np
 import pyopencl as cl
 
 from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, ComputeKernel)
+                                BasePointwiseKernelProvider, Kernel)
 from pyfr.backends.opencl.generator import OpenCLKernelGenerator
 from pyfr.util import memoize
 
@@ -31,8 +31,6 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
     kernel_generator_cls = OpenCLKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst):
-        cfg = self.backend.cfg
-
         # Determine the work group sizes
         if len(dims) == 1:
             ls = (64,)
@@ -41,7 +39,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
             ls = (64, 4)
             gs = (dims[1] - dims[1] % -ls[0], ls[1])
 
-        class PointwiseKernel(ComputeKernel):
+        class PointwiseKernel(Kernel):
             if any(isinstance(arg, str) for arg in arglst):
                 def run(self, queue, **kwargs):
                     narglst = [kwargs.get(ka, ka) for ka in arglst]

@@ -1,15 +1,16 @@
 # -*- coding: utf-8 -*-
 
 from collections import defaultdict
+import inspect
 import itertools as it
 import re
 
 import numpy as np
 
-from pyfr.backends.base import NullComputeKernel
+from pyfr.backends.base import NullKernel
 from pyfr.inifile import Inifile
 from pyfr.shapes import BaseShape
-from pyfr.util import subclasses
+from pyfr.util import memoize, subclasses
 
 
 class BaseSystem(object):
@@ -37,7 +38,7 @@ class BaseSystem(object):
         self.ele_map = elemap
 
         # Get the banks, types, num DOFs and shapes of the elements
-        self.ele_banks = [list(e.scal_upts_inb) for e in eles]
+        self.ele_banks = [e.scal_upts for e in eles]
         self.ele_types = list(elemap)
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
@@ -45,9 +46,6 @@ class BaseSystem(object):
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
-        # I/O banks for the elements
-        self.eles_scal_upts_inb = [e.scal_upts_inb for e in eles]
-        self.eles_scal_upts_outb = [e.scal_upts_outb for e in eles]
         if hasattr(eles, '_vect_upts'):
             self.eles_vect_upts = [e._vect_upts for e in eles]
 
@@ -65,7 +63,7 @@ class BaseSystem(object):
         self._queue = backend.queue()
 
         # Prepare the kernels and any associated MPI requests
-        self._gen_kernels(eles, int_inters, mpi_inters, bc_inters)
+        self._gen_kernels(nregs, eles, int_inters, mpi_inters, bc_inters)
         self._gen_mpireqs(mpi_inters)
         backend.commit()
 
@@ -172,7 +170,7 @@ class BaseSystem(object):
 
         return bc_inters
 
-    def _gen_kernels(self, eles, iint, mpiint, bcint):
+    def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
 
         provnames = ['eles', 'iint', 'mpiint', 'bcint']
@@ -180,10 +178,28 @@ class BaseSystem(object):
 
         for pn, plst in zip(provnames, provlists):
             for kn, kgetter in it.chain(*[p.kernels.items() for p in plst]):
-                if not kn.startswith('_'):
-                    k = kgetter()
-                    if not isinstance(k, NullComputeKernel):
-                        kernels[pn, kn].append(k)
+                # Skip private kernels
+                if kn.startswith('_'):
+                    continue
+
+                # See if the kernel depends on uin/fout
+                kparams = inspect.signature(kgetter).parameters
+                if 'uin' in kparams or 'fout' in kparams:
+                    for i in range(nregs):
+                        kern = kgetter(i)
+                        if isinstance(kern, NullKernel):
+                            continue
+
+                        if 'uin' in kparams:
+                            kernels[f'{pn}/{kn}', i, None].append(kern)
+                        else:
+                            kernels[f'{pn}/{kn}', None, i].append(kern)
+                else:
+                    kern = kgetter()
+                    if isinstance(kern, NullKernel):
+                        continue
+
+                    kernels[f'{pn}/{kn}', None, None].append(kern)
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
@@ -191,17 +207,18 @@ class BaseSystem(object):
         for mn, mgetter in it.chain(*[m.mpireqs.items() for m in mpiint]):
             mpireqs[mn[:-4] + 'send_recv'].append(mgetter())
 
-    def _prepare_rhs(self, t, uinbank, foutbank):
-        for b in self._bc_inters:
-            b.prepare(t)
+    @memoize
+    def _get_kernels(self, uinbank, foutbank):
+        kernels = defaultdict(list)
 
-        if uinbank is not None:
-            for u in self.eles_scal_upts_inb:
-                u.active = uinbank
+        # Filter down the kernels dictionary
+        for (kn, ui, fo), k in self._kernels.items():
+            if ((ui is None and fo is None) or
+                (ui is not None and ui == uinbank) or
+                (fo is not None and fo == foutbank)):
+                kernels[kn] = k
 
-        if foutbank is not None:
-            for f in self.eles_scal_upts_outb:
-                f.active = foutbank
+        return kernels
 
     def rhs(self, t, uinbank, foutbank):
         pass
@@ -211,10 +228,9 @@ class BaseSystem(object):
                                   'corrected gradients of the solution')
 
     def filt(self, uinoutbank):
-        for u in self.eles_scal_upts_inb:
-            u.active = uinoutbank
+        kkey = ('eles/filter_soln', uinoutbank, None)
 
-        self._queue.enqueue_and_run(self._kernels['eles', 'filter_soln'])
+        self._queue.enqueue_and_run(self._kernels[kkey])
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

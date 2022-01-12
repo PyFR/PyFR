@@ -132,9 +132,6 @@ class BaseBackend(object):
     def matrix_slice(self, mat, ra, rb, ca, cb):
         return self.matrix_slice_cls(self, mat, ra, rb, ca, cb)
 
-    def matrix_bank(self, mats, initbank=0, tags=set()):
-        return self.matrix_bank_cls(self, mats, initbank, tags)
-
     @recordmat
     def xchg_matrix(self, ioshape, initval=None, extent=None, aliases=None,
                     tags=set()):

@@ -14,20 +14,18 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
     def grad_con_to_pri(cons, grad_cons, cfg):
         rho, *rhouvw = cons[:-1]
         grad_rho, *grad_rhouvw, grad_E = grad_cons
-        
-        # Divide momentum components by ρ
-        uvw = [rhov/rho for rhov in rhouvw]
 
-        # Velocity gradients
-        # ∇(\vec{u}) = 1/ρ·[∇(ρ\vec{u}) - \vec{u} \otimes ∇ρ]
-        grad_uvw = [(grad_rhov - v*grad_rho)/rho 
+        # Divide momentum components by ρ
+        uvw = [rhov / rho for rhov in rhouvw]
+
+        # Velocity gradients: ∇u⃗ = 1/ρ·[∇(ρu⃗) - u⃗ ⊗ ∇ρ]
+        grad_uvw = [(grad_rhov - v*grad_rho) / rho
                     for grad_rhov, v in zip(grad_rhouvw, uvw)]
 
-        # Pressure gradient
-        # ∇p = (gamma - 1)·[∇E - 1/2*(\vec{u}·∇(ρ\vec{u}) - ρ\vec{u}·∇(\vec{u}))]
+        # Pressure gradient: ∇p = (γ - 1)·[∇E - 1/2*(u⃗·∇(ρu⃗) - ρu⃗·∇u⃗)]
         gamma = cfg.getfloat('constants', 'gamma')
-        grad_p = grad_E - 0.5*(np.einsum('ijk, iljk -> ljk', uvw, grad_rhouvw) +
-                               np.einsum('ijk, iljk -> ljk', rhouvw, grad_uvw))
+        grad_p = grad_E - 0.5*(np.einsum('ijk,iljk->ljk', uvw, grad_rhouvw) +
+                               np.einsum('ijk,iljk->ljk', rhouvw, grad_uvw))
         grad_p *= (gamma - 1)
 
         return [grad_rho] + grad_uvw + [grad_p]
@@ -56,34 +54,35 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             'visc_corr': visc_corr
         }
 
-        # Common arguments
-        if 'flux' in self.antialias:
-            u = lambda s: self._slice_mat(self._scal_qpts, s)
-            f = lambda s: self._slice_mat(self._vect_qpts, s)
-            pts, npts = 'qpts', self.nqpts
-        else:
-            u = lambda s: self._slice_mat(self.scal_upts_inb, s)
-            f = lambda s: self._slice_mat(self._vect_upts, s)
-            pts, npts = 'upts', self.nupts
-
+        # Helpers
+        c, l = 'curved', 'linear'
+        r, s = self._mesh_regions, self._slice_mat
         av = self.artvisc
 
-        # Mesh regions
-        regions = self._mesh_regions
-
-        if 'curved' in regions:
+        if c in r and 'flux' not in self.antialias:
+            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
+                'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
+                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
+                artvisc=s(av, c), smats=self.smat_at('upts', c)
+            )
+        elif c in r:
             self.kernels['tdisf_curved'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[npts, regions['curved']],
-                u=u('curved'), f=f('curved'),
-                artvisc=self._slice_mat(av, 'curved') if av else None,
-                smats=self.smat_at(pts, 'curved')
+                'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
+                u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
+                artvisc=s(av, c), smats=self.smat_at('qpts', c)
             )
 
-        if 'linear' in regions:
-            upts = getattr(self, pts)
+        if l in r and 'flux' not in self.antialias:
+            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
+                'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
+                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
+                artvisc=s(av, l), verts=self.ploc_at('linspts', l),
+                upts=self.upts
+            )
+        elif l in r:
             self.kernels['tdisf_linear'] = lambda: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[npts, regions['linear']],
-                u=u('linear'), f=f('linear'),
-                artvisc=self._slice_mat(av, 'linear') if av else None,
-                verts=self.ploc_at('linspts', 'linear'), upts=upts
+                'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
+                u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
+                artvisc=s(av, l), verts=self.ploc_at('linspts', l),
+                upts=self.qpts
             )

@@ -39,27 +39,13 @@ class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
 
 
 class OpenMPMatrixSlice(base.MatrixSlice):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    @cached_property
+    def data(self):
+        return self.parent.data[self.ba:self.bb, self.ra:self.rb, :]
 
-        self._as_parameter_map = {}
-
-    def _init_data(self, mat):
-        return mat.data[self.ba:self.bb, self.ra:self.rb, :]
-
-    @property
+    @cached_property
     def _as_parameter_(self):
-        try:
-            return self._as_parameter_map[self.parent.mid]
-        except KeyError:
-            param = self.data.ctypes.data
-            self._as_parameter_map[self.parent.mid] = param
-
-            return param
-
-
-class OpenMPMatrixBank(base.MatrixBank):
-    pass
+        return self.data.ctypes.data
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
