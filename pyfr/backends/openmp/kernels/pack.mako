@@ -2,13 +2,20 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-void
-pack_view(int n,
-          const fpdtype_t *__restrict__ v,
-          const int *__restrict__ vix,
-          const int *__restrict__ vrstri,
-          fpdtype_t *__restrict__ pmat)
+struct kargs
 {
+    int n;
+    fpdtype_t *v;
+    int *vix, *vrstri;
+    fpdtype_t *pmat;
+};
+
+void pack_view(const struct kargs *restrict args)
+{
+    int n = args->n;
+    int *vix = args->vix, *vrstri = args->vrstri;
+    fpdtype_t *v = args->v, *pmat = args->pmat;
+
     #pragma omp simd
     for (int i = 0; i < n; i++)
     {

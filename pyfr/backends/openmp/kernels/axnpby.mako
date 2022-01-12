@@ -2,11 +2,20 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-void
-axnpby(int nrow, int nblocks,
-       ${', '.join(f'fpdtype_t *restrict x{i}' for i in range(nv))},
-       ${', '.join(f'fpdtype_t a{i}' for i in range(nv))})
+struct kargs
 {
+    int nrow, nblocks;
+    fpdtype_t ${','.join(f'*x{i}' for i in range(nv))};
+    fpdtype_t ${','.join(f'a{i}' for i in range(nv))};
+};
+
+void axnpby(const struct kargs *restrict args)
+{
+    int nrow = args->nrow, nblocks = args->nblocks;
+% for i in range(nv):
+    fpdtype_t *x${i} = args->x${i}, a${i} = args->a${i};
+% endfor
+
 % if sorted(subdims) == list(range(ncola)):
     #pragma omp parallel for
     for (int ib = 0; ib < nblocks; ib++)

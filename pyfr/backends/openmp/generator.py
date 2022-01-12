@@ -5,6 +5,8 @@ from pyfr.backends.base.generator import BaseKernelGenerator
 
 class OpenMPKernelGenerator(BaseKernelGenerator):
     def render(self):
+        kargdefn, kargassn = self._render_args('args')
+
         if self.ndim == 1:
             core = f'''
                    for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
@@ -61,8 +63,11 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                         }}
                     }}'''
 
-        return f'''{self._render_spec()}
+        return f'''
+               struct kargs {{ {kargdefn}; }};
+               void {self.name}(const struct kargs *restrict args)
                {{
+                   {kargassn};
                    int nci = _nx / BLK_SZ;
                    int _remi = ((_nx % BLK_SZ) / SOA_SZ)*SOA_SZ;
                    int _remj = (_nx % BLK_SZ) % SOA_SZ;
@@ -91,28 +96,32 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
     def needs_ldim(self, arg):
         return False
 
-    def _render_spec(self):
+    def _render_args(self, argn):
         # We first need the argument list; starting with the dimensions
-        kargs = ['int ' + d for d in self._dims]
+        kargs = [('int ', d) for d in self._dims]
 
         # Now add any scalar arguments
-        kargs.extend(f'{sa.dtype} {sa.name}' for sa in self.scalargs)
+        kargs.extend((sa.dtype, sa.name) for sa in self.scalargs)
 
         # Finally, add the vector arguments
         for va in self.vectargs:
             # Views
             if va.isview:
-                kargs.append(f'{va.dtype}* __restrict__ {va.name}_v')
-                kargs.append(f'const int* __restrict__ {va.name}_vix')
+                kargs.append((f'{va.dtype}*', f'{va.name}_v'))
+                kargs.append(('const int*', f'{va.name}_vix'))
 
                 if va.ncdim == 2:
-                    kargs.append(f'const int* __restrict__ {va.name}_vrstri')
+                    kargs.append(('const int*', f'{va.name}_vrstri'))
             # Arrays
             else:
                 # Intent in arguments should be marked constant
-                const = 'const' if va.intent == 'in' else ''
+                if va.intent == 'in':
+                    kargs.append((f'const {va.dtype}*', f'{va.name}_v'))
+                else:
+                    kargs.append((f'{va.dtype}*', f'{va.name}_v'))
 
-                kargs.append(f'{const} {va.dtype}* __restrict__ {va.name}_v'
-                             .strip())
+        # Argument definition and assignment operations
+        kargdefn = ';\n'.join(f'{t} {n}' for t, n in kargs)
+        kargassn = ';\n'.join(f'{t} {n} = {argn}->{n}' for t, n in kargs)
 
-        return 'void {0}({1})'.format(self.name, ', '.join(kargs))
+        return kargdefn, kargassn

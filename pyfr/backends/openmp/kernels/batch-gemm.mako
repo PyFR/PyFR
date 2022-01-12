@@ -1,27 +1,33 @@
 # -*- coding: utf-8 -*-
 <%inherit file='base'/>
 
-// libxsmm prototype
-typedef void (*libxsmm_xfsspmdm_execute)(void *, const fpdtype_t *,
-                                         fpdtype_t *);
-
-// gimmik prototype
-typedef void (*gimmik_execute)(int, const fpdtype_t *, int, fpdtype_t *, int);
-
-void
+struct kargs
+{
 % if lib == 'xsmm':
-batch_gemm(libxsmm_xfsspmdm_execute exec, void *blockk,
+    void (*exec)(void *, const fpdtype_t *, fpdtype_t *);
+    void *blockk;
 % else:
-batch_gemm(gimmik_execute exec, int bldim,
+    void (*exec)(int, const fpdtype_t *, int, fpdtype_t *, int);
+    int bldim;
 % endif
-           int nblocks,
-           const fpdtype_t *b, int bblocksz, fpdtype_t *c, int cblocksz)
+    int nblocks;
+    const fpdtype_t *b;
+    int bblocksz;
+    fpdtype_t *c;
+    int cblocksz;
+};
+
+void batch_gemm(const struct kargs *restrict args)
 {
     #pragma omp parallel for
-    for (int ib = 0; ib < nblocks; ib++)
+    for (int ib = 0; ib < args->nblocks; ib++)
     % if lib == 'xsmm':
-        exec(blockk, b + ib*bblocksz, c + ib*cblocksz);
+        args->exec(args->blockk,
+                   args->b + ib*args->bblocksz,
+                   args->c + ib*args->cblocksz);
     % else:
-        exec(bldim, b + ib*bblocksz, bldim, c + ib*cblocksz, bldim);
+        args->exec(args->bldim,
+                   args->b + ib*args->bblocksz, args->bldim,
+                   args->c + ib*args->cblocksz, args->bldim);
     % endif
 }
