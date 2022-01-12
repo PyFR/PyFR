@@ -7,8 +7,9 @@ Installation
 Quick-start
 ===========
 
-PyFR |release| can be installed using `pip <https://pypi.python.org/pypi/pip>`_
-and `virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
+PyFR |release| can be installed using
+`pip <https://pypi.python.org/pypi/pip>`_ and
+`virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
 quick-start guides below.
 
 Alternatively, PyFR |release| can be installed from
@@ -19,57 +20,63 @@ macOS
 -----
 
 We recommend using the package manager `homebrew <https://brew.sh/>`_.
-Open the terminal and install the dependencies with the following commands::
+Open the terminal and install the dependencies with the following
+commands::
 
     brew install python3 open-mpi metis
     pip3 install virtualenv
 
-For visualisation of results, either install ParaView from the command line::
+For visualisation of results, either install ParaView from the command
+line::
 
     brew cask install paraview
 
-or dowload the app from the ParaView `website <https://www.paraview.org/>`_.
-Then create a virtual environment and activate it::
+or download the app from the ParaView
+`website <https://www.paraview.org/>`_. Then create a virtual
+environment and activate it::
 
     virtualenv --python=python3 ENV3
     source ENV3/bin/activate
 
-Finally install PyFR with `pip <https://pypi.python.org/pypi/pip>`_ in the
-virtual environment::
+Finally, install PyFR with `pip <https://pypi.python.org/pypi/pip>`_
+in the virtual environment::
 
     pip install pyfr
 
-This concludes the installation. In order to run PyFR with the OpenMP backend
-(see :ref:`running-pyfr`), use the following settings in the
+This concludes the installation. In order to run PyFR with the OpenMP
+backend (see :ref:`running-pyfr`), use the following settings in the
 :ref:`configuration-file`::
 
     [backend-openmp]
     cc = gcc-8
 
-Note the version of the compiler which must support the ``openmp`` flag.
-This has been tested on macOS 11.6 for ARM and Intel CPUs.
+Note the version of the compiler which must support the ``openmp``
+flag. This has been tested on macOS 11.6 for ARM and Intel CPUs.
 
 Ubuntu
 ------
 
-Open the terminal and install the dependencies with the following commands::
+Open the terminal and install the dependencies with the following
+commands::
 
     sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
     sudo apt install metis libmetis-dev
     pip3 install virtualenv
 
-For visualisation of results, either install ParaView from the command line::
+For visualisation of results, either install ParaView from the command
+line::
 
     sudo apt install paraview
 
-or dowload the app from the ParaView `website <https://www.paraview.org/>`_.
-Then create a virtual environment and activate it::
+or download the app from the ParaView
+`website <https://www.paraview.org/>`_.  Then create a virtual
+environment and activate it::
 
     python3 -m virtualenv pyfr-venv
     source pyfr-venv/bin/activate
 
-Finally install PyFR with `pip <https://pypi.python.org/pypi/pip>`_ in the
-virtual environment::
+Finally, install PyFR with
+`pip <https://pypi.python.org/pypi/pip>`_ in the virtual environment::
 
     pip install pyfr
 
@@ -82,16 +89,17 @@ This has been tested on Ubuntu 20.04.
 Compiling from source
 =====================
 
-PyFR can be obtained `here <https://github.com/PyFR/PyFR/tree/master>`_.
-To install the software from source, use the provided ``setup.py``
-installer or add the root PyFR directory to ``PYTHONPATH`` using::
+PyFR can be obtained
+`here <https://github.com/PyFR/PyFR/tree/master>`_.  To install the
+software from source, use the provided ``setup.py`` installer or add
+the root PyFR directory to ``PYTHONPATH`` using::
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
 When installing from source, we strongly recommend using
 `pip <https://pypi.python.org/pypi/pip>`_ and
-`virtualenv <https://pypi.python.org/pypi/virtualenv>`_ to manage the Python
-dependencies.
+`virtualenv <https://pypi.python.org/pypi/virtualenv>`_ to manage the
+Python dependencies.
 
 Dependencies
 ------------
@@ -127,7 +135,8 @@ The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
 1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.5.0
-2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >= 2.41.0
+2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >=
+   2.41.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -136,9 +145,14 @@ The OpenCL backend targets a range of accelerators including GPUs from
 AMD, Intel, and NVIDIA. The backend requires:
 
 1. OpenCL
-2. `pyopencl <http://mathema.tician.de/software/pyopencl/>`_
-   >= 2015.2.4
-3. `CLBlast <https://github.com/CNugteren/CLBlast>`_
+2. `CLBlast <https://github.com/CNugteren/CLBlast>`_
+
+Note that when running on NVIDIA GPUs the OpenCL backend terminate with
+a segmentation fault after the simulation has finished.  This is due
+to a long-standing bug in how the NVIDIA OpenCL implementation handles
+sub-buffers.  As it occurs during the termination phase—after all data
+has been written out to disk—the issue does *not* impact the
+functionality or correctness of PyFR.
 
 .. _install openmp backend:
 

@@ -114,11 +114,6 @@ install_requires = [
     'pytools >= 2016.2.1'
 ]
 
-# Soft dependencies
-extras_require = {
-    'opencl': ['pyopencl >= 2015.2.4']
-}
-
 # Scripts
 console_scripts = [
     'pyfr = pyfr.__main__:main'
@@ -156,6 +151,5 @@ setup(name='pyfr',
       entry_points={'console_scripts': console_scripts},
       python_requires='>=3.8',
       install_requires=install_requires,
-      extras_require=extras_require,
       classifiers=classifiers
 )
