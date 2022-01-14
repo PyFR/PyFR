@@ -34,17 +34,19 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst):
+    def _instantiate_kernel(self, dims, fun, arglst, argmv):
+        narglst = list(arglst)
         block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
 
-        class PointwiseKernel(Kernel):
-            if any(isinstance(arg, str) for arg in arglst):
-                def run(self, queue, **kwargs):
-                    fun.exec_async(grid, block, queue.stream,
-                                   *[kwargs.get(ka, ka) for ka in arglst])
-            else:
-                def run(self, queue, **kwargs):
-                    fun.exec_async(grid, block, queue.stream, *arglst)
+        # Identify any runtime arguments
+        rtargs = [(i, k) for i, k in enumerate(arglst) if isinstance(k, str)]
 
-        return PointwiseKernel()
+        class PointwiseKernel(Kernel):
+            def run(self, queue, **kwargs):
+                for i, k in rtargs:
+                    narglst[i] = kwargs[k]
+
+                fun.exec_async(grid, block, queue.stream, *narglst)
+
+        return PointwiseKernel(*argmv)

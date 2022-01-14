@@ -57,14 +57,8 @@ inheritance_edge_attrs = dict(
     penwidth='0.3')
 
 # The names of modules to mock and hence avoid import.
-autodoc_mock_imports = ['pyopencl',
-                        'h5py',
-                        'mpi4py',
-                        'gimmik',
-                        'numpy',
-                        'mako',
-                        'platformdirs'
-                       ]
+autodoc_mock_imports = ['h5py', 'mpi4py', 'gimmik', 'numpy', 'mako',
+                        'platformdirs']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']

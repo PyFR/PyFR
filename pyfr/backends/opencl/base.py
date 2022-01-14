@@ -13,7 +13,10 @@ class OpenCLBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        import pyopencl as cl
+        from pyfr.backends.opencl.driver import OpenCL
+
+        # Load and wrap OpenCL
+        self.cl = OpenCL()
 
         # Get the platform/device info from the config file
         platid = cfg.get('backend-opencl', 'platform-id', '0').lower()
@@ -24,11 +27,8 @@ class OpenCLBackend(BaseBackend):
         if devid == 'local-rank':
             devid = str(get_local_rank())
 
-        # Map the device type to the corresponding PyOpenCL constant
-        devtype = getattr(cl.device_type, devtype)
-
         # Determine the OpenCL platform to use
-        for i, platform in enumerate(cl.get_platforms()):
+        for i, platform in enumerate(self.cl.get_platforms()):
             if platid == str(i) or platid == platform.name.lower():
                 break
         else:
@@ -42,17 +42,14 @@ class OpenCLBackend(BaseBackend):
             raise ValueError('No suitable OpenCL device found')
 
         # Determine if the device supports double precision arithmetic
-        if self.fpdtype == np.float64 and not device.double_fp_config:
+        if self.fpdtype == np.float64 and not device.has_fp64:
             raise ValueError('Device does not support double precision')
 
-        # Create a OpenCL context on this device
-        self.ctx = cl.Context([device])
-
-        # Create a queue for initialisation-type operations
-        self.qdflt = cl.CommandQueue(self.ctx)
+        # Set the device
+        self.cl.set_device(device)
 
         # Compute the alignment requirement for the context
-        self.alignb = device.mem_base_addr_align // 8
+        self.alignb = device.mem_align
 
         # Compute the SoA size
         self.soasz = 2*self.alignb // np.dtype(self.fpdtype).itemsize
@@ -83,12 +80,10 @@ class OpenCLBackend(BaseBackend):
         self.pointwise = self._providers[0]
 
     def _malloc_impl(self, nbytes):
-        import pyopencl as cl
-
         # Allocate the device buffer
-        buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, nbytes)
+        buf = self.cl.mem_alloc(nbytes)
 
         # Zero the buffer
-        cl.enqueue_copy(self.qdflt, buf, np.zeros(nbytes, dtype=np.uint8))
+        self.cl.zero(buf, 0, nbytes)
 
         return buf

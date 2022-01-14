@@ -3,7 +3,6 @@
 from functools import cached_property
 
 import numpy as np
-import pyopencl as cl
 
 import pyfr.backends.base as base
 
@@ -11,14 +10,19 @@ import pyfr.backends.base as base
 class _OpenCLMatrixCommon(object):
     @cached_property
     def _as_parameter_(self):
-        return self.data.int_ptr
+        return int(self.data)
 
 
 class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
     def onalloc(self, basedata, offset):
         self.basedata = basedata
-        self.data = basedata.get_sub_region(offset, self.nbytes)
         self.offset = offset
+
+        # If necessary, slice the buffer
+        if offset:
+            self.data = basedata.slice(offset, self.nbytes)
+        else:
+            self.data = basedata
 
         # Process any initial value
         if self._initval is not None:
@@ -32,7 +36,7 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
-        cl.enqueue_copy(self.backend.qdflt, buf, self.data)
+        self.backend.cl.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
         return self._unpack(buf[None, :, :])
@@ -41,7 +45,7 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         buf = self._pack(ary)
 
         # Copy
-        cl.enqueue_copy(self.backend.qdflt, self.data, buf)
+        self.backend.cl.memcpy(self.data, buf, self.nbytes)
 
 
 class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
@@ -51,8 +55,11 @@ class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
     @cached_property
     def data(self):
-        nbytes = ((self.nrow - 1)*self.leaddim + self.ncol)*self.itemsize
-        return self.basedata.get_sub_region(self.offset, nbytes)
+        if self.offset:
+            nbytes = ((self.nrow - 1)*self.leaddim + self.ncol)*self.itemsize
+            return self.basedata.slice(self.offset, nbytes)
+        else:
+            return self.basedata
 
 
 class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):
@@ -80,10 +87,7 @@ class OpenCLQueue(base.Queue):
         super().__init__(backend)
 
         # OpenCL command queue
-        self.cmd_q = cl.CommandQueue(backend.ctx)
-
-        # Active copy event list
-        self.copy_events = []
+        self.cmd_q = backend.cl.queue()
 
     def run(self, mpireqs=[]):
         # Start any MPI requests
@@ -101,5 +105,4 @@ class OpenCLQueue(base.Queue):
 
         # Wait for the kernels to finish and clear the queue
         self.cmd_q.finish()
-        self.copy_events.clear()
         self._items.clear()
