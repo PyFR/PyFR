@@ -13,7 +13,6 @@ from platformdirs import user_cache_dir
 from pytools.prefork import call_capture_output
 
 from pyfr.ctypesutil import platform_libname
-from pyfr.nputil import npdtype_to_ctypestype
 from pyfr.util import digest, mv, rm
 
 
@@ -140,7 +139,7 @@ class OpenMPCompilerModule(object):
 
     def function(self, name, restype, argtypes):
         fn = getattr(self.mod, name)
-        fn.restype = npdtype_to_ctypestype(restype)
-        fn.argtypes = [npdtype_to_ctypestype(a) for a in argtypes]
+        fn.restype = restype
+        fn.argtypes = argtypes
 
         return fn

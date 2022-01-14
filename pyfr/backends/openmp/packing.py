@@ -15,12 +15,13 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
 
         # Build
         kern = self._build_kernel('pack_view', src, 'iPPPP')
+        kern.set_args(v.n, v.basedata, v.mapping, v.rstrides or 0, m)
 
         class PackXchgViewKernel(Kernel):
             def run(self, queue):
-                kern(v.n, v.basedata, v.mapping, v.rstrides or 0, m)
+                kern()
 
-        return PackXchgViewKernel()
+        return PackXchgViewKernel(mats=[mv])
 
     def unpack(self, mv):
         return NullKernel()

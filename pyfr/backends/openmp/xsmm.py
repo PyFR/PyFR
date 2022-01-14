@@ -107,15 +107,13 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Render our parallel wrapper kernel
         src = self.backend.lookup.get_template('batch-gemm').render(lib='xsmm')
 
-        # Argument types for batch_gemm
-        argt = [np.intp] + [np.intp, np.int32]*3
-
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src, argt)
+        batch_gemm = self._build_kernel('batch_gemm', src, 'PPiPiPi')
+        batch_gemm.set_args(execptr, blkptr, b.nblocks, b, b.blocksz, out,
+                            out.blocksz)
 
         class MulKernel(Kernel):
-            def run(iself, queue):
-                batch_gemm(execptr, blkptr, b.nblocks, b, b.blocksz, out,
-                           out.blocksz)
+            def run(self, queue):
+                batch_gemm()
 
-        return MulKernel()
+        return MulKernel(mats=[b, out], misc=[self])
