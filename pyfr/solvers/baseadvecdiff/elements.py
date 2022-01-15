@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base.kernels import MetaKernel
 from pyfr.polys import get_polybasis
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
@@ -80,7 +79,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                            vfpts.slice(i*nfpts, (i + 1)*nfpts))
                     for i in range(self.ndims)]
 
-            return MetaKernel(muls)
+            return self._be.unordered_meta_kernel(muls)
 
         self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
@@ -95,7 +94,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                         vqpts.slice(i*nqpts, (i + 1)*nqpts))
                         for i in range(self.ndims)]
 
-                return MetaKernel(muls)
+                return self._be.unordered_meta_kernel(muls)
 
             self.kernels['gradcoru_qpts'] = gradcoru_qpts
 

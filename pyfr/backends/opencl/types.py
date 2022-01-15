@@ -83,6 +83,14 @@ class OpenCLXchgView(base.XchgView):
     pass
 
 
+class OpenCLOrderedMetaKernel(base.MetaKernel):
+    pass
+
+
+class OpenCLUnorderedMetaKernel(base.MetaKernel):
+    pass
+
+
 class OpenCLQueue(base.Queue):
     def __init__(self, backend):
         super().__init__(backend)

@@ -23,6 +23,16 @@ def recordmat(fn):
     return newfn
 
 
+def recordkern(fn):
+    @wraps(fn)
+    def newfn(self, *args, **kwargs):
+        k = fn(self, *args, **kwargs)
+        k.kid = next(self._kern_counter)
+
+        return k
+    return newfn
+
+
 class BaseBackend:
     name = None
 
@@ -40,7 +50,10 @@ class BaseBackend:
 
         # Allocated matrices
         self.mats = WeakValueDictionary()
+
+        # Counters
         self._mat_counter = count()
+        self._kern_counter = count()
 
         # Aliases and extents
         self._pend_aliases = {}
@@ -150,6 +163,7 @@ class BaseBackend:
         return self.xchg_view_cls(self, matmap, rmap, cmap, rstridemap,
                                   vshape, tags)
 
+    @recordkern
     def kernel(self, name, *args, **kwargs):
         for prov in self._providers:
             kern = getattr(prov, name, None)
@@ -160,6 +174,14 @@ class BaseBackend:
                     pass
         else:
             raise KeyError(f'Kernel "{name}" has no providers')
+
+    @recordkern
+    def ordered_meta_kernel(self, kerns):
+        return self.ordered_meta_kernel_cls(kerns)
+
+    @recordkern
+    def unordered_meta_kernel(self, kerns):
+        return self.unordered_meta_kernel_cls(kerns)
 
     def queue(self):
         return self.queue_cls(self)

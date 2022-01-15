@@ -67,6 +67,8 @@ class OpenCLBackend(BaseBackend):
         self.view_cls = types.OpenCLView
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
         self.xchg_view_cls = types.OpenCLXchgView
+        self.ordered_meta_kernel_cls = types.OpenCLOrderedMetaKernel
+        self.unordered_meta_kernel_cls = types.OpenCLUnorderedMetaKernel
 
         # Instantiate the base kernel providers
         kprovs = [provider.OpenCLPointwiseKernelProvider,

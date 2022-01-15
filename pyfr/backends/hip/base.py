@@ -59,6 +59,8 @@ class HIPBackend(BaseBackend):
         self.view_cls = types.HIPView
         self.xchg_matrix_cls = types.HIPXchgMatrix
         self.xchg_view_cls = types.HIPXchgView
+        self.ordered_meta_kernel_cls = types.HIPOrderedMetaKernel
+        self.unordered_meta_kernel_cls = types.HIPUnorderedMetaKernel
 
         # Instantiate the base kernel providers
         kprovs = [provider.HIPPointwiseKernelProvider,

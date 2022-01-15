@@ -27,6 +27,8 @@ class NullKernel(Kernel):
 
 class MetaKernel(Kernel):
     def __init__(self, kernels):
+        super().__init__()
+
         self._kernels = list(kernels)
 
     def run(self, queue, *args, **kwargs):

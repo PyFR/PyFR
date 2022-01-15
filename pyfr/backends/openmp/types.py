@@ -64,6 +64,14 @@ class OpenMPView(base.View):
     pass
 
 
+class OpenMPOrderedMetaKernel(base.MetaKernel):
+    pass
+
+
+class OpenMPUnorderedMetaKernel(base.MetaKernel):
+    pass
+
+
 class OpenMPQueue(base.Queue):
     def run(self, mpireqs=[]):
         # Start any MPI requests

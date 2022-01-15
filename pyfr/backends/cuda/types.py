@@ -87,6 +87,14 @@ class CUDAXchgView(base.XchgView):
     pass
 
 
+class CUDAOrderedMetaKernel(base.MetaKernel):
+    pass
+
+
+class CUDAUnorderedMetaKernel(base.MetaKernel):
+    pass
+
+
 class CUDAQueue(base.Queue):
     def __init__(self, backend):
         super().__init__(backend)

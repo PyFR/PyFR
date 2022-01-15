@@ -87,6 +87,14 @@ class HIPXchgView(base.XchgView):
     pass
 
 
+class HIPOrderedMetaKernel(base.MetaKernel):
+    pass
+
+
+class HIPUnorderedMetaKernel(base.MetaKernel):
+    pass
+
+
 class HIPQueue(base.Queue):
     def __init__(self, backend):
         super().__init__(backend)
