@@ -162,6 +162,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         
         # prepare fwh surface mesh data
         self.prepare_surfmesh(intg,self.region_eset)
+        self._prepare_region_data_eset(intg,self.fwheset)
 
         # Base output directory and file name
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
@@ -223,10 +224,11 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Write out the file
         solnfname = self._writer.write(data, intg.tcurr, metadata)
-        name = os.path.splitext(solnfname)[0]
-        self.write_vtu_out(f'{name}.vtu')
-        if self.DEBUG:
-           self.write_vtk_out(f'{name}.vtk','unstructured')
+        # Write VTU file:
+        fname = os.path.splitext(solnfname)[0]
+        self.write_vtu_out(f'{fname}.vtu',self.vtufnodes)
+
+        exit(0)
 
         # If a post-action has been registered then invoke it
         self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
@@ -238,14 +240,11 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Need to print fwh surface geometric data only once
         intg.completed_step_handlers.remove(self)
 
-
     def prepare_surfmesh(self,intg,eset):
         pts = {}
-        self.fwheset = defaultdict(list) # fwh surface 3D elements ids set
-        self.fwhelespts = {}               # fwh 3D elements to nodes set
-        self.fwhfset = defaultdict(list)    # fwh face pairs set
-        self.vtufnodes = defaultdict(list)    # fwh face to nodes set
-        self.fwhranks = []                    # active ranks for fwh
+        self.fwheset = defaultdict(list)  # fwh surface 3D elements ids set
+        self.fwhfset = defaultdict(list)  # fwh face pairs set
+        self.fwhranks = []                # active ranks for fwh
 
         comm, rank, root = get_comm_rank_root()
         prank = intg.rallocs.prank
@@ -256,9 +255,9 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             pts[etype] = np.swapaxes(mesh[f'spt_{etype}_p{prank}'],0,1)
 
         # Collect fwh interfaces and their info
-        self.collect_intinters(prank,mesh,pts,eset)
-        self.collect_mpiinters(comm,intg.rallocs,mesh,pts,eset)
-        self.collect_bndinters(prank,mesh,pts,eset)
+        self.collect_intinters(prank,mesh,eset)
+        self.collect_mpiinters(comm,intg.rallocs,mesh,eset)
+        self.collect_bndinters(prank,mesh,eset)
 
         # determine active ranks for fwh
         self.isfwhactive = False
@@ -272,16 +271,16 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     self.fwhranks.append(i)
 
         self.fwhranks=comm.bcast(self.fwhranks,root=root)
-        
-        # Prepare face VTU nodes:
-        self.prepare_vtufnodes()
 
-    def collect_intinters(self,prank,mesh,pts,eset):
+        # Prepare VTU face nodes for writing:
+        self.vtufnodes = self.collect_vtufnodes(pts,self.fwhfset)
+
+    def collect_intinters(self,prank,mesh,eset):
         flhs, frhs = mesh[f'con_p{prank}'].astype('U4,i4,i1,i2').tolist()
         for ifaceL,ifaceR in zip(flhs,frhs):    
-            etype,eidx = ifaceR[0:2]
+            etype, eidx = ifaceR[0:2]
             flagR = (eidx in eset[etype]) if etype in eset else False
-            etype,eidx = ifaceL[0:2]
+            etype, eidx = ifaceL[0:2]
             flagL = (eidx in eset[etype]) if etype in eset else False
             # interior faces
             if (not (flagL & flagR)) & (flagL | flagR):
@@ -290,25 +289,19 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     self.fwhfset[pftype].append([ifaceL,ifaceR])
                 else:
                     etype, eidx = ifaceR[0:2]
-                    # ensure we are using the element inside 
-                    # the region as the left element
                     self.fwhfset[pftype].append([ifaceR,ifaceL])
                 self.fwheset[etype].append(eidx)
-                self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
             # periodic faces:
             elif (flagL & flagR) & (ifaceL[3] != 0 ): 
-                pftype = self._get_pftype_from_fpairs(ifaceL,ifaceR)
-                self.fwhfset[pftype].append([ifaceL,ifaceR])
-                self.fwhfset[pftype].append([ifaceR,ifaceL])  
-                
+                pftype = self._get_pftype_from_fpairs(ifaceL,ifaceR)  
                 etype, eidx = ifaceL[0:2]
+                self.fwhfset[pftype].append([ifaceL,ifaceR])
                 self.fwheset[etype].append(eidx)
-                self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
                 etype, eidx = ifaceR[0:2]
                 self.fwheset[etype].append(eidx)
-                self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
+                self.fwhfset[pftype].append([ifaceR,ifaceL])
 
-    def collect_mpiinters(self,comm,rallocs,mesh,pts,eset):
+    def collect_mpiinters(self,comm,rallocs,mesh,eset):
         prank = rallocs.prank
         # send flags
         for rhs_prank in rallocs.prankconn[prank]:
@@ -336,9 +329,8 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     pftype = self._fnum_to_pftype(etype,fidx)
                     self.fwhfset[pftype].append([ifaceL,ifaceR])
                     self.fwheset[etype].append(eidx)
-                    self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
 
-    def collect_bndinters(self,prank,mesh,pts,eset):
+    def collect_bndinters(self,prank,mesh,eset):
         for f in mesh:
             if (m := re.match(f'bcon_(.+?)_p{prank}$', f)):
                 bname = m.group(1)
@@ -351,31 +343,43 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                         pftype = self._fnum_to_pftype(etype,fidx)
                         self.fwhfset[pftype].append([ifaceL,ifaceR])
                         self.fwheset[etype].append(eidx)
-                        self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
 
-    def prepare_vtufnodes(self):
-        for pftype, fpairs in self.fwhfset.items():
+        
+    def collect_vtufnodes(self,pts,fset):
+        vtufnodes = defaultdict(list)    # fwh face to vtu nodes set
+        for pftype, fpairs in fset.items():
             flhs = np.moveaxis(fpairs,0,1)[0]
             for ifaceL in flhs:
                 etype,eidx,fidx = ifaceL[0:3]
                 eidx = np.int(eidx)
                 fidx = np.int(fidx) + self._fnum_offset[etype][pftype] 
-                nelnodes = self.fwhelespts[etype,eidx].shape[0]
-                nidx = self._petype_fnmap[etype,nelnodes][pftype][fidx]
-                self.vtufnodes[pftype].append(self.fwhelespts[etype,eidx][nidx,:])
+                nelemnodes = pts[etype][eidx].shape[0]
+                nidx = self._petype_fnmap[etype,nelemnodes][pftype][fidx]
+                vtufnodes[pftype].append(pts[etype][eidx][nidx,:])
+        return vtufnodes
 
-    def write_vtu_out(self,fname):
+    def prepare_vtufnodes_info(self, fnodes):
+        info = defaultdict(dict)
+        for k, v in fnodes.items():
+            npts, ncells, names, types, comps, sizes = self._get_array_attrs(k,fnodes)
+            info[k]['vtu_attr'] = [names, types, comps, sizes]
+            info[k]['mesh_attr'] = [npts, ncells]
+            info[k]['shape'] = np.asarray(v).shape 
+            info[k]['dtype'] = np.asarray(v).dtype.str
+        return info
+
+    def write_vtu_out(self,fname,vtufnodes):
 
         comm, rank, root = get_comm_rank_root()
         # prepare nodes info for each rank
-        info = self.prepare_vtufnodes_info(self.vtufnodes)
+        info = self.prepare_vtufnodes_info(vtufnodes)
 
         # Communicate and prepare data for writing
         if rank != root:
             # Send the info about our data points to the root rank
             comm.gather(info, root=root)
             # Send the data points itself
-            for etype,arrs in self.vtufnodes.items():
+            for etype,arrs in vtufnodes.items():
                 comm.Send(np.array(arrs).astype(info[etype]['dtype']), root)
         #root
         else:
@@ -385,7 +389,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             vpts_global = {}
             # root nodes first
             for etype in info:
-                vpts_global[etype] = np.array(self.vtufnodes[etype])
+                vpts_global[etype] = np.array(vtufnodes[etype])
 
             # update info and receive/stack nodes from other ranks
             for mrank, minfo in enumerate(ginfo):
@@ -507,12 +511,12 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     def _fnum_to_pftype(self,inetype,fnum):
         return self._fnum_pftype_map[inetype][fnum][1]
 
-    def _get_npts_ncells(self,mk): 
-        ncells = np.asarray(self.vtufnodes[mk]).shape[0]
+    def _get_npts_ncells(self,mk,vtufnodes): 
+        ncells = np.asarray(vtufnodes[mk]).shape[0]
         npts = ncells * self._petype_focount_map[mk]
         return npts, ncells
 
-    def _get_array_attrs(self,mk=None):
+    def _get_array_attrs(self,mk,vtufnodes):
         fpdtype = self.fpdtype 
         vdtype = 'Float32' if fpdtype == np.float32 else 'Float64'
         dsize = np.dtype(fpdtype).itemsize 
@@ -521,22 +525,8 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         types = [vdtype, 'Int32', 'Int32', 'UInt8']
         comps = ['3', '', '', '']
 
-        if mk:
-            npts, ncells = self._get_npts_ncells(mk)
-            nb = npts*dsize
-            sizes = [3*nb, 4*npts, 4*ncells, ncells]
+        npts, ncells = self._get_npts_ncells(mk,vtufnodes)
+        nb = npts*dsize
+        sizes = [3*nb, 4*npts, 4*ncells, ncells]
 
-            return names, types, comps, sizes
-        else:
-            return names, types, comps
-
-    def prepare_vtufnodes_info(self, fnodes):
-        info = defaultdict(dict)
-        for k, v in fnodes.items():
-            names, types, comps, sizes = self._get_array_attrs(k)
-            npts, ncells = self._get_npts_ncells(k)
-            info[k]['vtu_attr'] = [names, types, comps, sizes]
-            info[k]['mesh_attr'] = [npts, ncells]
-            info[k]['shape'] = np.asarray(v).shape 
-            info[k]['dtype'] = np.asarray(v).dtype.str
-        return info
+        return npts, ncells, names, types, comps, sizes

@@ -198,7 +198,6 @@ class RegionMixin(object):
                 eset[etype] = np.any(inside, axis=0).nonzero()[0]
 
         self.region_eset=eset
-        self._prepare_region_data_eset(intg, eset)
 
     def _prepare_region_data_bcs(self, intg, bcname):
         comm, rank, root = get_comm_rank_root()
