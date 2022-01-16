@@ -96,47 +96,6 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     systems = ['*']
     formulations = ['dual', 'std']
 
-    vtkfile_version = '2.1'
-
-    vtk_types = dict(line=3, tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
-    vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
-
-    # number of first order nodes/faces per element
-    _petype_focount_map = {'line': 2, 'tri': 3, 'quad': 4,
-                       'tet': 4, 'pyr': 5, 'pri': 6, 'hex': 8} 
-    
-    # map of first order face nodes
-    # To generate this fnmap, we use vtk_nodemaps and then apply gmsh_fnmap 
-    # to extract the correct first order face node ordering.
-    # Some fnmap face points may need to be flipped to maintain a c.c.w or c.c. 
-    # face node counting
-    _petype_fnmap = {
-        ('tri',  3 ):  {'line': [[0, 1], [1, 2], [2, 0]]},
-        ('tri',  6 ):  {'line': [[5, 0], [0, 2], [2, 5]]},
-        ('tri',  10 ):  {'line': [[9, 0], [0, 3], [3, 9]]},
-        ('tri',  15 ):  {'line': [[14, 0], [0, 4], [4, 14]]},
-        ('quad',  4 ):  {'line': [[0, 1], [1, 3], [3, 2], [2, 0]]},
-        ('quad',  9 ):  {'line': [[0, 2], [2, 8], [8, 6], [6, 0]]},
-        ('quad',  16 ):  {'line': [[0, 3], [3, 15], [15, 12], [12, 0]]},
-        ('quad',  25 ):  {'line': [[0, 4], [4, 24], [24, 20], [20, 0]]},
-        ('tet',  4 ):  {'tri': [[1, 0, 3], [3, 0, 2], [2, 1, 3], [0, 1, 2]]},
-        ('tet',  10 ):  {'tri': [[2, 0, 9], [9, 0, 5], [5, 2, 9], [0, 2, 5]]},
-        ('tet',  20 ):  {'tri': [[3, 0, 19], [19, 0, 9], [9, 3, 19], [0, 3, 9]]},
-        ('tet',  35 ):  {'tri': [[4, 0, 34], [34, 0, 14], [14, 4, 34], [0, 4, 14]]},
-        ('hex',  8 ):  {'quad': [[0, 1, 3, 2], [0, 1, 5, 4], [1, 3, 7, 5], [3, 2, 6, 7], [0, 2, 6, 4], [4, 5, 7, 6]]},
-        ('hex',  27 ):  {'quad': [[0, 2, 8, 6], [0, 2, 20, 18], [2, 8, 26, 20], [8, 6, 24, 26], [0, 6, 24, 18], [18, 20, 26, 24]]},
-        ('hex',  64 ):  {'quad': [[0, 3, 15, 12], [0, 3, 51, 48], [3, 15, 63, 51], [15, 12, 60, 63], [0, 12, 60, 48], [48, 51, 63, 60]]},
-        ('hex',  125 ):  {'quad': [[0, 4, 24, 20], [0, 4, 104, 100], [4, 24, 124, 104], [24, 20, 120, 124], [0, 20, 120, 100], [100, 104, 124, 120]]},
-        ('pri',  6 ):  {'quad': [[0, 1, 4, 3], [1, 2, 5, 4], [0, 3, 5, 2]], 'tri': [[0, 2, 1], [3, 4, 5]]},
-        ('pri',  18 ):  {'quad': [[0, 2, 14, 12], [2, 5, 17, 14], [0, 12, 17, 5]], 'tri': [[0, 5, 2], [12, 14, 17]]},
-        ('pri',  40 ):  {'quad': [[0, 3, 33, 30], [3, 9, 39, 33], [0, 30, 39, 9]], 'tri': [[0, 9, 3], [30, 33, 39]]},
-        ('pri',  75 ):  {'quad': [[0, 4, 64, 60], [4, 14, 74, 64], [0, 60, 74, 14]], 'tri': [[0, 14, 4], [60, 64, 74]]},
-        ('pyr',  5 ):  {'quad': [[2, 3, 1, 0]], 'tri': [[0, 1, 4], [1, 3, 4], [3, 2, 4], [0, 4, 2]]},
-        ('pyr',  14 ):  {'quad': [[6, 8, 2, 0]], 'tri': [[0, 2, 13], [2, 8, 13], [8, 6, 13], [0, 13, 6]]},
-        ('pyr',  30 ):  {'quad': [[12, 15, 3, 0]], 'tri': [[0, 3, 29], [3, 15, 29], [15, 12, 29], [0, 29, 12]]},
-        ('pyr',  55 ):  {'quad': [[20, 24, 4, 0]], 'tri': [[0, 4, 54], [4, 24, 54], [24, 20, 54], [0, 54, 20]]},
-    }
-
     # reverse map from face index to face type
     _fnum_pftype_map = {
             'tri' : [(0, 'line'), (1, 'line'), (2, 'line')], 
@@ -147,14 +106,6 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             'pyr' : [(0, 'quad'), (1, 'tri'), (2, 'tri'), (3, 'tri'), (4, 'tri')]
     }
 
-    # offset to get local fidx/fnum inside each facetype map
-    _fnum_offset = {'tri' : {'line': 0},
-                    'quad': {'line': 0},
-                    'tet' : {'tri': 0},
-                    'hex' : {'quad': 0},
-                    'pri' : {'quad': -2, 'tri': 0}, 
-                    'pyr' : {'quad': 0, 'tri': -1}}
-
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
@@ -163,6 +114,8 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # prepare fwh surface mesh data
         self.prepare_surfmesh(intg,self.region_eset)
         self._prepare_region_data_eset(intg,self.fwheset)
+        self._vtuwriter = VTUSurfWriter(intg,self.fwheset,self.fwhfset)
+
 
         # Base output directory and file name
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
@@ -225,8 +178,8 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Write out the file
         solnfname = self._writer.write(data, intg.tcurr, metadata)
         # Write VTU file:
-        fname = os.path.splitext(solnfname)[0]
-        self.write_vtu_out(f'{fname}.vtu',self.vtufnodes)
+        mfname = os.path.splitext(solnfname)[0]
+        self._vtuwriter._write(mfname)
 
         exit(0)
 
@@ -271,9 +224,6 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     self.fwhranks.append(i)
 
         self.fwhranks=comm.bcast(self.fwhranks,root=root)
-
-        # Prepare VTU face nodes for writing:
-        self.vtufnodes = self.collect_vtufnodes(pts,self.fwhfset)
 
     def collect_intinters(self,prank,mesh,eset):
         flhs, frhs = mesh[f'con_p{prank}'].astype('U4,i4,i1,i2').tolist()
@@ -344,10 +294,90 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                         self.fwhfset[pftype].append([ifaceL,ifaceR])
                         self.fwheset[etype].append(eidx)
 
-        
-    def collect_vtufnodes(self,pts,fset):
-        vtufnodes = defaultdict(list)    # fwh face to vtu nodes set
-        for pftype, fpairs in fset.items():
+    def _get_pftype_from_fpairs(self,ifaceL,ifaceR):
+        pftype0 = self._fnum_to_pftype(ifaceL[0],ifaceL[2])
+        pftype1 = self._fnum_to_pftype(ifaceR[0],ifaceR[2])
+        if pftype0 != pftype1:
+            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
+        else:
+           return pftype0
+
+    def _fnum_to_pftype(self,inetype,fnum):
+        return self._fnum_pftype_map[inetype][fnum][1]
+
+class VTUSurfWriter(object):
+
+    vtkfile_version = '2.1'
+    vtk_types = dict(line=3, tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
+    vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
+    # number of first order nodes/faces per element
+    _petype_focount_map = {'line': 2, 'tri': 3, 'quad': 4,
+                       'tet': 4, 'pyr': 5, 'pri': 6, 'hex': 8} 
+    # map of first order face nodes
+    # To generate this fnmap, we use vtk_nodemaps and then apply gmsh_fnmap 
+    # to extract the correct first order face node ordering.
+    # Some fnmap face points may need to be flipped to maintain a c.c.w or c.c. 
+    # face node counting
+    _petype_fnmap = {
+        ('tri',  3 ):  {'line': [[0, 1], [1, 2], [2, 0]]},
+        ('tri',  6 ):  {'line': [[5, 0], [0, 2], [2, 5]]},
+        ('tri',  10 ):  {'line': [[9, 0], [0, 3], [3, 9]]},
+        ('tri',  15 ):  {'line': [[14, 0], [0, 4], [4, 14]]},
+        ('quad',  4 ):  {'line': [[0, 1], [1, 3], [3, 2], [2, 0]]},
+        ('quad',  9 ):  {'line': [[0, 2], [2, 8], [8, 6], [6, 0]]},
+        ('quad',  16 ):  {'line': [[0, 3], [3, 15], [15, 12], [12, 0]]},
+        ('quad',  25 ):  {'line': [[0, 4], [4, 24], [24, 20], [20, 0]]},
+        ('tet',  4 ):  {'tri': [[1, 0, 3], [3, 0, 2], [2, 1, 3], [0, 1, 2]]},
+        ('tet',  10 ):  {'tri': [[2, 0, 9], [9, 0, 5], [5, 2, 9], [0, 2, 5]]},
+        ('tet',  20 ):  {'tri': [[3, 0, 19], [19, 0, 9], [9, 3, 19], [0, 3, 9]]},
+        ('tet',  35 ):  {'tri': [[4, 0, 34], [34, 0, 14], [14, 4, 34], [0, 4, 14]]},
+        ('hex',  8 ):  {'quad': [[0, 1, 3, 2], [0, 1, 5, 4], [1, 3, 7, 5], [3, 2, 6, 7], [0, 2, 6, 4], [4, 5, 7, 6]]},
+        ('hex',  27 ):  {'quad': [[0, 2, 8, 6], [0, 2, 20, 18], [2, 8, 26, 20], [8, 6, 24, 26], [0, 6, 24, 18], [18, 20, 26, 24]]},
+        ('hex',  64 ):  {'quad': [[0, 3, 15, 12], [0, 3, 51, 48], [3, 15, 63, 51], [15, 12, 60, 63], [0, 12, 60, 48], [48, 51, 63, 60]]},
+        ('hex',  125 ):  {'quad': [[0, 4, 24, 20], [0, 4, 104, 100], [4, 24, 124, 104], [24, 20, 120, 124], [0, 20, 120, 100], [100, 104, 124, 120]]},
+        ('pri',  6 ):  {'quad': [[0, 1, 4, 3], [1, 2, 5, 4], [0, 3, 5, 2]], 'tri': [[0, 2, 1], [3, 4, 5]]},
+        ('pri',  18 ):  {'quad': [[0, 2, 14, 12], [2, 5, 17, 14], [0, 12, 17, 5]], 'tri': [[0, 5, 2], [12, 14, 17]]},
+        ('pri',  40 ):  {'quad': [[0, 3, 33, 30], [3, 9, 39, 33], [0, 30, 39, 9]], 'tri': [[0, 9, 3], [30, 33, 39]]},
+        ('pri',  75 ):  {'quad': [[0, 4, 64, 60], [4, 14, 74, 64], [0, 60, 74, 14]], 'tri': [[0, 14, 4], [60, 64, 74]]},
+        ('pyr',  5 ):  {'quad': [[2, 3, 1, 0]], 'tri': [[0, 1, 4], [1, 3, 4], [3, 2, 4], [0, 4, 2]]},
+        ('pyr',  14 ):  {'quad': [[6, 8, 2, 0]], 'tri': [[0, 2, 13], [2, 8, 13], [8, 6, 13], [0, 13, 6]]},
+        ('pyr',  30 ):  {'quad': [[12, 15, 3, 0]], 'tri': [[0, 3, 29], [3, 15, 29], [15, 12, 29], [0, 29, 12]]},
+        ('pyr',  55 ):  {'quad': [[20, 24, 4, 0]], 'tri': [[0, 4, 54], [4, 24, 54], [24, 20, 54], [0, 54, 20]]},
+    }
+    # offset to get local fidx/fnum inside each facetype map
+    _fnum_offset = {'tri' : {'line': 0},
+                    'quad': {'line': 0},
+                    'tet' : {'tri': 0},
+                    'hex' : {'quad': 0},
+                    'pri' : {'quad': -2, 'tri': 0}, 
+                    'pyr' : {'quad': 0, 'tri': -1}}
+
+    vtufnodes = defaultdict(list) # fwh face to vtu nodes set
+
+    def __init__(self, intg, eset, fset):
+        self.mesh = intg.system.mesh
+        self.rallocs = intg.rallocs
+        self.etypes = list(eset)
+        self.fset = fset
+        self.eset = eset
+
+        self.ndims = intg.system.ndims
+
+        # Output data type
+        self.fpdtype = intg.backend.fpdtype
+
+        self.prepare_vtufnodes()
+
+    def _write(self,fname):
+        fname = f'{fname}.vtu'
+        self.write_vtu_out(fname)
+
+    def prepare_vtufnodes(self): 
+        pts = {}
+        for etype in self.etypes:
+            pts[etype] = np.swapaxes(self.mesh[f'spt_{etype}_p{self.rallocs.prank}'],0,1) 
+
+        for pftype, fpairs in self.fset.items():
             flhs = np.moveaxis(fpairs,0,1)[0]
             for ifaceL in flhs:
                 etype,eidx,fidx = ifaceL[0:3]
@@ -355,31 +385,30 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 fidx = np.int(fidx) + self._fnum_offset[etype][pftype] 
                 nelemnodes = pts[etype][eidx].shape[0]
                 nidx = self._petype_fnmap[etype,nelemnodes][pftype][fidx]
-                vtufnodes[pftype].append(pts[etype][eidx][nidx,:])
-        return vtufnodes
+                self.vtufnodes[pftype].append(pts[etype][eidx][nidx,:])
 
-    def prepare_vtufnodes_info(self, fnodes):
+    def prepare_vtufnodes_info(self):
         info = defaultdict(dict)
-        for k, v in fnodes.items():
-            npts, ncells, names, types, comps, sizes = self._get_array_attrs(k,fnodes)
+        for k, v in self.vtufnodes.items():
+            npts, ncells, names, types, comps, sizes = self._get_array_attrs(k)
             info[k]['vtu_attr'] = [names, types, comps, sizes]
             info[k]['mesh_attr'] = [npts, ncells]
             info[k]['shape'] = np.asarray(v).shape 
             info[k]['dtype'] = np.asarray(v).dtype.str
         return info
 
-    def write_vtu_out(self,fname,vtufnodes):
+    def write_vtu_out(self,fname):
 
         comm, rank, root = get_comm_rank_root()
         # prepare nodes info for each rank
-        info = self.prepare_vtufnodes_info(vtufnodes)
+        info = self.prepare_vtufnodes_info()
 
         # Communicate and prepare data for writing
         if rank != root:
             # Send the info about our data points to the root rank
             comm.gather(info, root=root)
             # Send the data points itself
-            for etype,arrs in vtufnodes.items():
+            for etype,arrs in self.vtufnodes.items():
                 comm.Send(np.array(arrs).astype(info[etype]['dtype']), root)
         #root
         else:
@@ -389,7 +418,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             vpts_global = {}
             # root nodes first
             for etype in info:
-                vpts_global[etype] = np.array(vtufnodes[etype])
+                vpts_global[etype] = np.array(self.vtufnodes[etype])
 
             # update info and receive/stack nodes from other ranks
             for mrank, minfo in enumerate(ginfo):
@@ -499,24 +528,12 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._write_darray(vtu_off, vtuf, np.int32)
         self._write_darray(vtu_typ, vtuf, np.uint8)
 
-
-    def _get_pftype_from_fpairs(self,ifaceL,ifaceR):
-        pftype0 = self._fnum_to_pftype(ifaceL[0],ifaceL[2])
-        pftype1 = self._fnum_to_pftype(ifaceR[0],ifaceR[2])
-        if pftype0 != pftype1:
-            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
-        else:
-           return pftype0
-
-    def _fnum_to_pftype(self,inetype,fnum):
-        return self._fnum_pftype_map[inetype][fnum][1]
-
-    def _get_npts_ncells(self,mk,vtufnodes): 
-        ncells = np.asarray(vtufnodes[mk]).shape[0]
+    def _get_npts_ncells(self,mk): 
+        ncells = np.asarray(self.vtufnodes[mk]).shape[0]
         npts = ncells * self._petype_focount_map[mk]
         return npts, ncells
 
-    def _get_array_attrs(self,mk,vtufnodes):
+    def _get_array_attrs(self,mk):
         fpdtype = self.fpdtype 
         vdtype = 'Float32' if fpdtype == np.float32 else 'Float64'
         dsize = np.dtype(fpdtype).itemsize 
@@ -525,7 +542,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         types = [vdtype, 'Int32', 'Int32', 'UInt8']
         comps = ['3', '', '', '']
 
-        npts, ncells = self._get_npts_ncells(mk,vtufnodes)
+        npts, ncells = self._get_npts_ncells(mk)
         nb = npts*dsize
         sizes = [3*nb, 4*npts, 4*ncells, ncells]
 
