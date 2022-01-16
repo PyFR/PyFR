@@ -14,7 +14,6 @@ def get_grid_for_block(block, nrow, ncol=1):
 class HIPKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes):
-        # Compile the source code and retrieve the kernel
         return SourceModule(self.backend, src).get_function(name, argtypes)
 
 
@@ -34,18 +33,24 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
         self.kernel_generator_cls = KernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst, argmv):
-        narglst = list(arglst)
+        rtargs = []
         block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
 
-        # Identify any runtime arguments
-        rtargs = [(i, k) for i, k in enumerate(arglst) if isinstance(k, str)]
+        params = fun.make_params(grid, block)
+
+        # Process the arguments
+        for i, k in enumerate(arglst):
+            if isinstance(k, str):
+                rtargs.append((i, k))
+            else:
+                params.set_arg(i, k)
 
         class PointwiseKernel(Kernel):
             def run(self, queue, **kwargs):
                 for i, k in rtargs:
-                    narglst[i] = kwargs[k]
+                    params.set_arg(i, kwargs[k])
 
-                fun.exec_async(grid, block, queue.stream, *narglst)
+                fun.exec_async(queue.stream, params)
 
         return PointwiseKernel(*argmv)

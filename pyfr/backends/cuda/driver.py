@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, cast, c_char, c_char_p, c_int, c_size_t, c_uint,
-                    c_void_p, pointer)
+from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_int,
+                    c_size_t, c_uint, c_ulonglong, c_void_p)
 
 import numpy as np
 
@@ -24,6 +24,43 @@ class CUDAIllegalAddress(CUDAError): pass
 class CUDALaunchOutOfResources(CUDAError): pass
 class CUDALaunchFailed(CUDAError): pass
 class CUDASystemDriverMismatch(CUDAError): pass
+
+
+class CUDAKernelNodeParams(Structure):
+    _fields_ = [
+        ('func', c_void_p),
+        ('grid', c_uint * 3),
+        ('block', c_uint * 3),
+        ('shared_mem_bytes', c_uint),
+        ('kernel_params', POINTER(c_void_p)),
+        ('extra', POINTER(c_void_p))
+    ]
+
+    def __init__(self, func, grid, block, sharedb):
+        super().__init__()
+
+        # Save a reference to our underlying function
+        self._func = func
+
+        # For each argument type instantiate the corresponding ctypes type
+        self._args = args = [atype() for atype in func.argtypes]
+
+        # Obtain pointers to these arguments
+        self._arg_ptrs = (c_void_p * len(args))(*map(addressof, args))
+
+        # Fill out the structure
+        self.func = int(func)
+        self.grid[:] = grid
+        self.block[:] = block
+        self.shared_mem_bytes = sharedb
+        self.kernel_params = self._arg_ptrs
+
+    def set_arg(self, i, v):
+        self._args[i].value = getattr(v, '_as_parameter_', v)
+
+    def set_args(self, *kargs, start=0):
+        for i, v in enumerate(kargs, start=start):
+            self.set_arg(i, v)
 
 
 class CUDAWrappers(LibWrapper):
@@ -182,23 +219,13 @@ class CUDAFunction(_CUDABase):
             attr = self.cuda.lib.FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT
             self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
 
-    def exec_async(self, grid, block, stream, *args, sharedb=0):
-        try:
-            kargs = self._kargs
-        except AttributeError:
-            # For each argument instantiate the corresponding ctypes type
-            self._kargs = kargs = [atype() for atype in self.argtypes]
+    def make_params(self, grid, block, sharedb=0):
+        return CUDAKernelNodeParams(self, grid, block, sharedb)
 
-            # Obtain pointers to these arguments
-            karg_ptrs = [cast(pointer(arg), c_void_p) for arg in kargs]
-            self._karg_ptrs = (c_void_p * len(kargs))(*karg_ptrs)
-
-        # Set the arguments
-        for src, dst in zip(args, kargs):
-            dst.value = getattr(src, '_as_parameter_', src)
-
-        self.cuda.lib.cuLaunchKernel(self, *grid, *block, sharedb, stream,
-                                     self._karg_ptrs, None)
+    def exec_async(self, stream, params):
+        self.cuda.lib.cuLaunchKernel(self, *params.grid, *params.block,
+                                     params.shared_mem_bytes, stream,
+                                     params.kernel_params, None)
 
 
 class CUDA:

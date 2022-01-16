@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
 from pyfr.backends.base import Kernel, NullKernel
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
 
@@ -21,31 +19,26 @@ class HIPPackingKernels(HIPKernelProvider):
         src = self.backend.lookup.get_template('pack').render(blocksz=block[0])
 
         # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
+        kern = self._build_kernel('pack_view', src, 'iiiPPPP')
+
+        # Set the arguments
+        params = kern.make_params(grid, block)
+        params.set_args(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
+                        v.rstrides or 0, m)
 
         # If MPI is HIP aware then we just need to pack the buffer
         if self.backend.mpitype == 'hip-aware':
             class PackXchgViewKernel(Kernel):
                 def run(self, queue):
-                    # Pack
-                    kern.exec_async(
-                        grid, block, queue.stream, v.n, v.nvrow, v.nvcol,
-                        v.basedata, v.mapping, v.rstrides or 0, m
-                    )
+                    kern.exec_async(queue.stream, params)
         # Otherwise, we need to both pack the buffer and copy it back
         else:
             class PackXchgViewKernel(Kernel):
                 def run(self, queue):
-                    # Pack
-                    kern.exec_async(
-                        grid, block, queue.stream, v.n, v.nvrow, v.nvcol,
-                        v.basedata, v.mapping, v.rstrides or 0, m
-                    )
-
-                    # Copy the packed buffer to the host
+                    kern.exec_async(queue.stream, params)
                     hip.memcpy(m.hdata, m.data, m.nbytes, queue.stream)
 
-        return PackXchgViewKernel()
+        return PackXchgViewKernel(mats=[mv])
 
     def unpack(self, mv):
         hip = self.backend.hip

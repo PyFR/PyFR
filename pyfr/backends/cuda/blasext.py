@@ -28,12 +28,16 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         block = (128, 1, 1)
         grid = get_grid_for_block(block, ncolb, nrow)
 
+        # Set the parameters
+        params = kern.make_params(grid, block)
+        params.set_args(nrow, ncolb, ldim, *arr)
+
         class AxnpbyKernel(Kernel):
             def run(self, queue, *consts):
-                kern.exec_async(grid, block, queue.stream, nrow, ncolb, ldim,
-                                *arr, *consts)
+                params.set_args(*consts, start=3 + nv)
+                kern.exec_async(queue.stream, params)
 
-        return AxnpbyKernel()
+        return AxnpbyKernel(mats=arr)
 
     def copy(self, dst, src):
         cuda = self.backend.cuda
@@ -88,6 +92,13 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
 
+        # Set the parameters
+        params = rkern.make_params(grid, block)
+        params.set_args(nrow, ncolb, ldim, reduced_dev, *regs)
+
+        # Runtime argument offset
+        facoff = argt.index(dtype)
+
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum
 
@@ -97,9 +108,9 @@ class CUDABlasExtKernels(CUDAKernelProvider):
                 return reducer(reduced_host, axis=1)
 
             def run(self, queue, *facs):
-                rkern.exec_async(grid, block, queue.stream,
-                                 nrow, ncolb, ldim, reduced_dev, *regs, *facs)
+                params.set_args(*facs, start=facoff)
+                rkern.exec_async(queue.stream, params)
                 cuda.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
                             queue.stream)
 
-        return ReductionKernel()
+        return ReductionKernel(mats=regs)

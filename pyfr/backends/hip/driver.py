@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, Structure, cast, c_char, c_char_p, c_int,
-                    c_size_t, c_uint, c_void_p, pointer)
+from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_int,
+                    c_size_t, c_uint, c_void_p)
 
 import numpy as np
 
@@ -97,6 +97,43 @@ class HIPDevProps(Structure):
         ('b_pageable_memory_access_using_page_tables', c_int),
         ('reserved', c_int*64)
     ]
+
+
+class HIPKernelNodeParams(Structure):
+    _fields_ = [
+        ('func', c_void_p),
+        ('grid', c_uint * 3),
+        ('block', c_uint * 3),
+        ('shared_mem_bytes', c_uint),
+        ('kernel_params', POINTER(c_void_p)),
+        ('extra', POINTER(c_void_p))
+    ]
+
+    def __init__(self, func, grid, block, sharedb):
+        super().__init__()
+
+        # Save a reference to our underlying function
+        self._func = func
+
+        # For each argument type instantiate the corresponding ctypes type
+        self._args = args = [atype() for atype in func.argtypes]
+
+        # Obtain pointers to these arguments
+        self._arg_ptrs = (c_void_p * len(args))(*map(addressof, args))
+
+        # Fill out the structure
+        self.func = int(func)
+        self.grid[:] = grid
+        self.block[:] = block
+        self.shared_mem_bytes = sharedb
+        self.kernel_params = self._arg_ptrs
+
+    def set_arg(self, i, v):
+        self._args[i].value = getattr(v, '_as_parameter_', v)
+
+    def set_args(self, *kargs, start=0):
+        for i, v in enumerate(kargs, start=start):
+            self.set_arg(i, v)
 
 
 class HIPWrappers(LibWrapper):
@@ -219,22 +256,17 @@ class HIPFunction(_HIPBase):
 
         super().__init__(hip, ptr)
 
-        # Save a reference to our underlying module
+        # Save a reference to our underlying module and argument types
         self.module = module
+        self.argtypes = list(argtypes)
 
-        # For each argument type instantiate the corresponding ctypes type
-        self._args = args = [atype() for atype in argtypes]
+    def make_params(self, grid, block, sharedb=0):
+        return HIPKernelNodeParams(self, grid, block, sharedb)
 
-        # Obtain pointers to these arguments
-        self._arg_ptrs = [cast(pointer(arg), c_void_p) for arg in args]
-        self._arg_ptrs = (c_void_p * len(args))(*self._arg_ptrs)
-
-    def exec_async(self, grid, block, stream, *args):
-        for src, dst in zip(args, self._args):
-            dst.value = getattr(src, '_as_parameter_', src)
-
-        self.hip.lib.hipModuleLaunchKernel(self, *grid, *block, 0, stream,
-                                           self._arg_ptrs, 0)
+    def exec_async(self, stream, params):
+        self.hip.lib.hipModuleLaunchKernel(self, *params.grid, *params.block,
+                                           params.shared_mem_bytes, stream,
+                                           params.kernel_params, None)
 
 
 class HIP:

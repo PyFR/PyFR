@@ -14,9 +14,7 @@ def get_grid_for_block(block, nrow, ncol=1):
 class CUDAKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes):
-        # Compile the source code and retrieve the function
-        mod = SourceModule(self.backend, src)
-        return mod.get_function(name, argtypes)
+        return SourceModule(self.backend, src).get_function(name, argtypes)
 
 
 class CUDAPointwiseKernelProvider(CUDAKernelProvider,
@@ -24,6 +22,8 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
     kernel_generator_cls = CUDAKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst, argmv):
+        rtargs = []
+
         # Determine the block size
         if len(dims) == 1:
             block = (64, 1, 1)
@@ -33,13 +33,20 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
         # Use this to compute the grid size
         grid = get_grid_for_block(block, dims[-1])
 
-        class PointwiseKernel(Kernel):
-            if any(isinstance(arg, str) for arg in arglst):
-                def run(self, queue, **kwargs):
-                    fun.exec_async(grid, block, queue.stream,
-                                   *[kwargs.get(ka, ka) for ka in arglst])
+        params = fun.make_params(grid, block)
+
+        # Process the arguments
+        for i, k in enumerate(arglst):
+            if isinstance(k, str):
+                rtargs.append((i, k))
             else:
-                def run(self, queue, **kwargs):
-                    fun.exec_async(grid, block, queue.stream, *arglst)
+                params.set_arg(i, k)
+
+        class PointwiseKernel(Kernel):
+            def run(self, queue, **kwargs):
+                for i, k in rtargs:
+                    params.set_arg(i, kwargs[k])
+
+                fun.exec_async(queue.stream, params)
 
         return PointwiseKernel(*argmv)
