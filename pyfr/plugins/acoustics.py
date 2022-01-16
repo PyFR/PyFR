@@ -159,10 +159,13 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         super().__init__(intg, cfgsect, suffix)
 
         self.DEBUG = self.cfg.getint(cfgsect,'debug',0)
+        
+        # prepare fwh surface mesh data
+        self.prepare_surfmesh(intg,self.region_eset)
+
         # Base output directory and file name
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
-        self.fwhfname = os.path.join(basedir,basename)
 
         # Construct the solution writer
         self._writer = NativeWriter(intg, basedir, basename, 'soln')
@@ -188,9 +191,6 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     def __call__(self, intg):
 
         comm, rank, root = get_comm_rank_root()
-
-        # prepare fwh surface mesh data
-        self._prepare_surfmesh(intg,self.region_eset)
 
         # If we are the root rank then prepare the metadata
         if rank == root:
@@ -223,9 +223,10 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Write out the file
         solnfname = self._writer.write(data, intg.tcurr, metadata)
-        self.write_vtu_out(self.fwhfname+".vtu")
+        name = os.path.splitext(solnfname)[0]
+        self.write_vtu_out(f'{name}.vtu')
         if self.DEBUG:
-           self.write_vtk_out(self.fwhfname+".vtk",'unstructured')
+           self.write_vtk_out(f'{name}.vtk','unstructured')
 
         # If a post-action has been registered then invoke it
         self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
@@ -238,89 +239,122 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         intg.completed_step_handlers.remove(self)
 
 
-    def _prepare_surfmesh(self,intg,eset):
+    def prepare_surfmesh(self,intg,eset):
         pts = {}
-        feleset = defaultdict(list) # fwh surface 3D elements ids set
-        felespts = {}               # fwh 3D elements to nodes set
-        fset = defaultdict(list)    # fwh face pairs set
-        nset = defaultdict(list)    # fwh face to nodes set
+        self.fwheset = defaultdict(list) # fwh surface 3D elements ids set
+        self.fwhelespts = {}               # fwh 3D elements to nodes set
+        self.fwhfset = defaultdict(list)    # fwh face pairs set
+        self.vtufnodes = defaultdict(list)    # fwh face to nodes set
 
+        comm, rank, root = get_comm_rank_root()
+        prank = intg.rallocs.prank
         mesh = intg.system.mesh
-        for etype in intg.system.ele_types:
-            pts[etype] = np.swapaxes(mesh[f'spt_{etype}_p{intg.rallocs.prank}'],0,1)
+        
+        # Collect elements pts from the mesh
+        for etype in eset:
+            pts[etype] = np.swapaxes(mesh[f'spt_{etype}_p{prank}'],0,1)
 
-        key = f'con_p{intg.rallocs.prank}'
-        flhs, frhs = mesh[key].astype('U4,i4,i1,i2').tolist()
+        # Collect fwh interfaces and their info
+        self.collect_intinters(prank,mesh,pts,eset)
+        self.collect_mpiinters(comm,intg.rallocs,mesh,pts,eset)
+        self.collect_bndinters(prank,mesh,pts,eset)
+        
+        # Prepare face VTU nodes:
+        self.prepare_vtufnodes()
 
-        # Collect interior interfaces of the fwh surf and their info
-        etypes = list(eset)
-        for ifaceL,ifaceR in zip(flhs,frhs):
-            
+    def collect_intinters(self,prank,mesh,pts,eset):
+        flhs, frhs = mesh[f'con_p{prank}'].astype('U4,i4,i1,i2').tolist()
+        for ifaceL,ifaceR in zip(flhs,frhs):    
             etype,eidx = ifaceR[0:2]
-            flagR = (eidx in eset[etype]) if etype in etypes else False
-
+            flagR = (eidx in eset[etype]) if etype in eset else False
             etype,eidx = ifaceL[0:2]
-            flagL = (eidx in eset[etype]) if etype in etypes else False
-
+            flagL = (eidx in eset[etype]) if etype in eset else False
+            # interior faces
             if (not (flagL & flagR)) & (flagL | flagR):
                 pftype = self._get_pftype_from_fpairs(ifaceL,ifaceR)
                 if flagL:
-                    fset[pftype].append([ifaceL,ifaceR])
+                    self.fwhfset[pftype].append([ifaceL,ifaceR])
                 else:
                     etype, eidx = ifaceR[0:2]
-                    fset[pftype].append([ifaceR,ifaceL]) # ensure we are using the element inside the region as the left element
-                feleset[etype].append(eidx)
-                felespts[etype,eidx] = pts[etype][eidx,:,:]
-            
+                    # ensure we are using the element inside 
+                    # the region as the left element
+                    self.fwhfset[pftype].append([ifaceR,ifaceL])
+                self.fwheset[etype].append(eidx)
+                self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
             # periodic faces:
             elif (flagL & flagR) & (ifaceL[3] != 0 ): 
                 pftype = self._get_pftype_from_fpairs(ifaceL,ifaceR)
-                fset[pftype].append([ifaceL,ifaceR])
-                fset[pftype].append([ifaceR,ifaceL])  
+                self.fwhfset[pftype].append([ifaceL,ifaceR])
+                self.fwhfset[pftype].append([ifaceR,ifaceL])  
                 
                 etype, eidx = ifaceL[0:2]
-                feleset[etype].append(eidx)
-                felespts[etype,eidx] = pts[etype][eidx,:,:]
-
+                self.fwheset[etype].append(eidx)
+                self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
                 etype, eidx = ifaceR[0:2]
-                feleset[etype].append(eidx)
-                felespts[etype,eidx] = pts[etype][eidx,:,:]
+                self.fwheset[etype].append(eidx)
+                self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
 
-        # Collect boundary interfaces of the fwh surf and their info
-        ghostR = ['ghost',-1e20,-1,-1e20]
-        for k,v in mesh.items():
-            if 'bcon' in k:   
-                bclhs = v.astype('U4,i4,i1,i2').tolist()
+    def collect_mpiinters(self,comm,rallocs,mesh,pts,eset):
+        prank = rallocs.prank
+        # send flags
+        for rhs_prank in rallocs.prankconn[prank]:
+            mpiint = mesh[f'con_p{prank}p{rhs_prank}'].astype('U4,i4,i1,i2').tolist()
+            flagL = np.zeros((len(mpiint)),dtype=bool)
+            for ii, ifaceL in enumerate(mpiint):
+                etype, eidx, fidx = ifaceL[0:3]
+                flagL[ii] = (eidx in eset[etype]) if etype in eset else False
+            rhs_mrank = rallocs.pmrankmap[rhs_prank]
+            comm.Send(flagL,rhs_mrank,tag=52)
+
+        # receive flags and collect mpi interfaces    
+        for rhs_prank in rallocs.prankconn[prank]:
+            conkey = f'con_p{prank}p{rhs_prank}'
+            mpiint = mesh[conkey].astype('U4,i4,i1,i2').tolist()
+            flagR = np.empty((len(mpiint)),dtype=bool)
+            rhs_mrank = rallocs.pmrankmap[rhs_prank]
+            comm.Recv(flagR,rhs_mrank,tag=52)
+
+            ifaceR = [conkey,-1e20,-1,rhs_mrank]
+            for ii, ifaceL in enumerate(mpiint):
+                etype, eidx, fidx = ifaceL[0:3]
+                flagL = (eidx in eset[etype]) if etype in eset else False
+                if (not (flagL & flagR[ii])) & flagL :
+                    pftype = self._fnum_to_pftype(etype,fidx)
+                    self.fwhfset[pftype].append([ifaceL,ifaceR])
+                    self.fwheset[etype].append(eidx)
+                    self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
+
+    def collect_bndinters(self,prank,mesh,pts,eset):
+        for f in mesh:
+            if (m := re.match(f'bcon_(.+?)_p{prank}$', f)):
+                bname = m.group(1)
+                bclhs = mesh[f].astype('U4,i4,i1,i2').tolist()
+                ifaceR = [f'bcon_{bname}_p{prank}',-1e20,-1,-1e20]
                 for ifaceL in bclhs:
                     etype, eidx, fidx = ifaceL[0:3]
-                    if (etype in etypes) & (eidx in eset[etype]):
+                    flagL = (eidx in eset[etype]) if etype in eset else False
+                    if flagL:
                         pftype = self._fnum_to_pftype(etype,fidx)
-                        fset[pftype].append([ifaceL,ghostR])
-                        feleset[etype].append(eidx)
-                        felespts[etype,eidx] = pts[etype][eidx,:,:]
+                        self.fwhfset[pftype].append([ifaceL,ifaceR])
+                        self.fwheset[etype].append(eidx)
+                        self.fwhelespts[etype,eidx] = pts[etype][eidx,:,:]
 
-        # Collect face nodes:
-        for pftype, fpairs in fset.items():
-            ffp = np.moveaxis(fpairs,0,1)
-            ii = 0
-            for ifaceL, ifaceR in zip(ffp[0],ffp[1]):
-                etype,eidx,fidx = ifaceL[:3]
+    def prepare_vtufnodes(self):
+        for pftype, fpairs in self.fwhfset.items():
+            flhs = np.moveaxis(fpairs,0,1)[0]
+            for ifaceL in flhs:
+                etype,eidx,fidx = ifaceL[0:3]
                 eidx = np.int(eidx)
                 fidx = np.int(fidx) + self._fnum_offset[etype][pftype] 
-                nelnodes = felespts[etype,eidx].shape[0]
+                nelnodes = self.fwhelespts[etype,eidx].shape[0]
                 nidx = self._petype_fnmap[etype,nelnodes][pftype][fidx]
-                nset[pftype].append(felespts[etype,eidx][nidx,:])
-
-        self.fwhfnodes = nset
-        self.fwhfset = fset
-        self.fwheset = feleset
-        self.fwhelespts = felespts
+                self.vtufnodes[pftype].append(self.fwhelespts[etype,eidx][nidx,:])
 
     def _get_pftype_from_fpairs(self,ifaceL,ifaceR):
         pftype0 = self._fnum_to_pftype(ifaceL[0],ifaceL[2])
         pftype1 = self._fnum_to_pftype(ifaceR[0],ifaceR[2])
         if pftype0 != pftype1:
-            raise KeyError("pftypeL: "+f'{pftype0}'+" is not equal to pftypeR: "+f'{pftype1}')
+            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
         else:
            return pftype0
 
@@ -328,9 +362,8 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         return self._fnum_pftype_map[inetype][fnum][1]
 
     def _get_npts_ncells(self,mk): 
-        ncells = np.asarray(self.fwhfset[mk]).shape[0]
+        ncells = np.asarray(self.vtufnodes[mk]).shape[0]
         npts = ncells * self._petype_focount_map[mk]
-
         return npts, ncells
 
     def _get_array_attrs(self,mk=None):
@@ -345,7 +378,6 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         if mk:
             npts, ncells = self._get_npts_ncells(mk)
             nb = npts*dsize
-
             sizes = [3*nb, 4*npts, 4*ncells, ncells]
 
             return names, types, comps, sizes
@@ -375,15 +407,15 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         write_s = lambda s: vtkf.write(s)
         npts_tot=ncells_tot=0
 
-        for etype,v in self.fwhfnodes.items():
+        for etype,v in self.vtufnodes.items():
             npts, ncells = self._get_npts_ncells(etype)
             npts_tot += npts
             ncells_tot += ncells
         write_s(f'POINTS {npts_tot} {vdtype}\n')
 
-        for etype,v in self.fwhfnodes.items():
+        for etype,v in self.vtufnodes.items():
             npts, ncells = self._get_npts_ncells(etype)
-            vpts = np.array(self.fwhfnodes[etype]).astype(fpdtype) # eidx,nnodes,dim
+            vpts = np.array(self.vtufnodes[etype]).astype(fpdtype) # eidx,nnodes,dim
             # Append dummy z dimension for points in 2D
             if self.ndims == 2:
                 vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
@@ -399,7 +431,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         write_s = lambda s: vtkf.write(s)
 
-        keys = list(self.fwhfnodes)
+        keys = list(self.vtufnodes)
 
         ncells_tot = nsize = 0
         for etype in keys:
@@ -435,33 +467,80 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 vtk_types = np.ones(ncells[etype]) * self.vtk_types[etype]
                 np.savetxt(vtkf,vtk_types,fmt='%d')
     
+    def prepare_vtufnodes_info(self, fnodes):
+        info = defaultdict(dict)
+        for k, v in fnodes.items():
+            names, types, comps, sizes = self._get_array_attrs(k)
+            npts, ncells = self._get_npts_ncells(k)
+            info[k]['vtu_attr'] = [names, types, comps, sizes]
+            info[k]['mesh_attr'] = [npts, ncells]
+            info[k]['shape'] = np.asarray(v).shape 
+            info[k]['dtype'] = np.asarray(v).dtype.str
+        return info
 
     def write_vtu_out(self,fname):
 
-        write_s_to_fh = lambda s: fh.write(s.encode())
+        comm, rank, root = get_comm_rank_root()
+        # prepare nodes info for each rank
+        info = self.prepare_vtufnodes_info(self.vtufnodes)
 
-        with open(fname, 'wb') as fh:
-            write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
-                          'byte_order="LittleEndian" '
-                          'type="UnstructuredGrid" '
-                          f'version="{self.vtkfile_version}">\n'
-                          '<UnstructuredGrid>\n')
+        # Communicate and prepare data for writing
+        if rank != root:
+            # Send the info about our data points to the root rank
+            comm.gather(info, root=root)
+            # Send the data points itself
+            for etype,arrs in self.vtufnodes.items():
+                comm.Send(np.array(arrs).astype(info[etype]['dtype']), root)
+        #root
+        else:
+            # Collect info about what remote ranks want to write 
+            ginfo = comm.gather({}, root)
+            # Update the info and receive the node arrays
+            vpts_global = {}
+            # root nodes first
+            for etype in info:
+                vpts_global[etype] = np.array(self.vtufnodes[etype])
 
-            # Running byte-offset for appended data
-            off = 0
+            # update info and receive/stack nodes from other ranks
+            for mrank, minfo in enumerate(ginfo):
+                for etype, vals in minfo.items():
+                    if etype in info:
+                        info[etype]['vtu_attr'][3] = [sum(x) for x in zip(info[etype]['vtu_attr'][3], vals['vtu_attr'][3])]
+                        info[etype]['mesh_attr'] = [sum(x) for x in zip(info[etype]['mesh_attr'],vals['mesh_attr'])]
+                        shapes = [x for x in info[etype]['shape']]
+                        shapes[0] += vals['shape'][0]
+                        info[etype]['shape'] = tuple(shapes)
+                    else:
+                        info[etype] = vals
+                    varr = np.empty(vals['shape'], dtype=vals['dtype'])
+                    comm.Recv(varr, mrank)
+                    vpts_global[etype] = np.vstack((vpts_global[etype],varr)) if etype in vpts_global else varr
 
-            # Header
-            for etype,v in self.fwhfnodes.items():
-                off = self._write_serial_header(fh, etype, off)
+            # Writing
+            write_s_to_fh = lambda s: fh.write(s.encode())
 
-            write_s_to_fh('</UnstructuredGrid>\n'
-                          '<AppendedData encoding="raw">\n_')
+            with open(fname, 'wb') as fh:
+                write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
+                            'byte_order="LittleEndian" '
+                            'type="UnstructuredGrid" '
+                            f'version="{self.vtkfile_version}">\n'
+                            '<UnstructuredGrid>\n')
 
-            # Data
-            for etype,v in self.fwhfnodes.items():
-                self._write_data(fh, etype)
+                # Running byte-offset for appended data
+                off = 0
+                # Header
+                for etype in info:
+                    off = self._write_serial_header(fh, info[etype], off)
+                write_s_to_fh('</UnstructuredGrid>\n'
+                            '<AppendedData encoding="raw">\n_')
+                # Data
+                for etype in info:
+                    self._write_data(fh, etype, vpts_global[etype])
 
-            write_s_to_fh('\n</AppendedData>\n</VTKFile>')
+                write_s_to_fh('\n</AppendedData>\n</VTKFile>')
+
+        # Wait for the root rank to finish writing
+        comm.barrier()
 
     def _write_darray(self, array, vtuf, dtype):
         array = array.astype(dtype)
@@ -471,9 +550,9 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
     def _process_name(self, name):
         return re.sub(r'\W+', '_', name)
 
-    def _write_serial_header(self, vtuf, mk, off):
-        names, types, comps, sizes = self._get_array_attrs(mk)
-        npts, ncells = self._get_npts_ncells(mk)
+    def _write_serial_header(self, vtuf, info, off):
+        names, types, comps, sizes = info['vtu_attr']
+        npts, ncells = info['mesh_attr']
 
         write_s = lambda s: vtuf.write(s.encode())
 
@@ -500,11 +579,10 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Return the current offset
         return off
 
-
-    def _write_data(self, vtuf, mk):
+    def _write_data(self, vtuf, mk, vpts):
         fpdtype = self.fpdtype 
-        vpts = np.array(self.fwhfnodes[mk]).astype(fpdtype) # eidx,nnodes,dim
-        neles = self._get_npts_ncells(mk)[1]
+        vpts = vpts.astype(fpdtype)
+        neles = vpts.shape[0]
         nfopts = self._petype_focount_map[mk]
         fopts = np.arange(nfopts)
 
@@ -530,5 +608,3 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._write_darray(vtu_con, vtuf, np.int32) 
         self._write_darray(vtu_off, vtuf, np.int32)
         self._write_darray(vtu_typ, vtuf, np.uint8)
-
-    
