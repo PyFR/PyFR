@@ -44,7 +44,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         params.set_args(b, out)
 
         class MulKernel(Kernel):
-            def run(self, queue):
-                fun.exec_async(queue.stream, params)
+            def run(self, stream):
+                fun.exec_async(stream, params)
 
         return MulKernel(mats=[b, out])

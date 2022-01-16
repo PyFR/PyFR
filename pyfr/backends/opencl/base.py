@@ -63,7 +63,6 @@ class OpenCLBackend(BaseBackend):
         self.const_matrix_cls = types.OpenCLConstMatrix
         self.matrix_cls = types.OpenCLMatrix
         self.matrix_slice_cls = types.OpenCLMatrixSlice
-        self.queue_cls = types.OpenCLQueue
         self.view_cls = types.OpenCLView
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
         self.xchg_view_cls = types.OpenCLXchgView
@@ -85,6 +84,25 @@ class OpenCLBackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    def run(self, kernels, mpireqs=None):
+        queue = self.cl.qdflt
+
+        # Start any MPI requests
+        if mpireqs:
+            self._startall(mpireqs)
+
+        # Submit the kernels to the command queue
+        for k in kernels:
+            k.run(queue)
+
+        # If we started any MPI requests, wait for them
+        if mpireqs:
+            queue.flush()
+            self._waitall(mpireqs)
+
+        # Wait for the kernels to finish
+        queue.finish()
 
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer

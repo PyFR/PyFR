@@ -113,7 +113,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
                             out.blocksz)
 
         class MulKernel(Kernel):
-            def run(self, queue):
+            def run(self):
                 batch_gemm()
 
         return MulKernel(mats=[b, out], misc=[self])

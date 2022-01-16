@@ -68,7 +68,6 @@ class CUDABackend(BaseBackend):
         self.const_matrix_cls = types.CUDAConstMatrix
         self.matrix_cls = types.CUDAMatrix
         self.matrix_slice_cls = types.CUDAMatrixSlice
-        self.queue_cls = types.CUDAQueue
         self.view_cls = types.CUDAView
         self.xchg_matrix_cls = types.CUDAXchgMatrix
         self.xchg_view_cls = types.CUDAXchgView
@@ -85,6 +84,27 @@ class CUDABackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+        # Create a stream to run kernels on
+        self._stream = self.cuda.create_stream()
+
+    def run(self, kernels, mpireqs=None):
+        stream = self._stream
+
+        # Start any MPI requests
+        if mpireqs:
+            self._startall(mpireqs)
+
+        # Submit the kernels to the CUDA stream
+        for k in kernels:
+            k.run(stream)
+
+        # If we started any MPI requests, wait for them
+        if mpireqs:
+            self._waitall(mpireqs)
+
+        # Wait for the kernels to finish
+        stream.synchronize()
 
     def _malloc_impl(self, nbytes):
         # Allocate

@@ -70,21 +70,3 @@ class OpenMPOrderedMetaKernel(base.MetaKernel):
 
 class OpenMPUnorderedMetaKernel(base.MetaKernel):
     pass
-
-
-class OpenMPQueue(base.Queue):
-    def run(self, mpireqs=[]):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
-        # Run our kernels
-        for item, args, kwargs in self._items:
-            item.run(self, *args, **kwargs)
-
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self._waitall(mpireqs)
-
-        # Clear the queue
-        self._items.clear()

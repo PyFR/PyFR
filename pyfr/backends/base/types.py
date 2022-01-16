@@ -282,30 +282,3 @@ class XchgView:
 
     def sendreq(self, pid, tag):
         return self.xchgmat.sendreq(pid, tag)
-
-
-class Queue:
-    def __init__(self, backend):
-        from mpi4py import MPI
-
-        self.backend = backend
-
-        # MPI wrappers
-        self._startall = MPI.Prequest.Startall
-        self._waitall = MPI.Prequest.Waitall
-
-        # Items waiting to be executed
-        self._items = []
-
-    def enqueue(self, items, *args, **kwargs):
-        self._items.extend((item, args, kwargs) for item in items)
-
-    def enqueue_and_run(self, items, *args, **kwargs):
-        if self._items:
-            self.run()
-
-        self.enqueue(items, *args, **kwargs)
-        self.run()
-
-    def __bool__(self):
-        return bool(self._items)

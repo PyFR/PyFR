@@ -93,28 +93,3 @@ class CUDAOrderedMetaKernel(base.MetaKernel):
 
 class CUDAUnorderedMetaKernel(base.MetaKernel):
     pass
-
-
-class CUDAQueue(base.Queue):
-    def __init__(self, backend):
-        super().__init__(backend)
-
-        # CUDA stream
-        self.stream = backend.cuda.create_stream()
-
-    def run(self, mpireqs=[]):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
-        # Submit the kernels to the CUDA stream
-        for item, args, kwargs in self._items:
-            item.run(self, *args, **kwargs)
-
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self._waitall(mpireqs)
-
-        # Wait for the kernels to finish and clear the queue
-        self.stream.synchronize()
-        self._items.clear()

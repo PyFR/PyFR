@@ -29,14 +29,14 @@ class HIPPackingKernels(HIPKernelProvider):
         # If MPI is HIP aware then we just need to pack the buffer
         if self.backend.mpitype == 'hip-aware':
             class PackXchgViewKernel(Kernel):
-                def run(self, queue):
-                    kern.exec_async(queue.stream, params)
+                def run(self, stream):
+                    kern.exec_async(stream, params)
         # Otherwise, we need to both pack the buffer and copy it back
         else:
             class PackXchgViewKernel(Kernel):
-                def run(self, queue):
-                    kern.exec_async(queue.stream, params)
-                    hip.memcpy(m.hdata, m.data, m.nbytes, queue.stream)
+                def run(self, stream):
+                    kern.exec_async(stream, params)
+                    hip.memcpy(m.hdata, m.data, m.nbytes, stream)
 
         return PackXchgViewKernel(mats=[mv])
 
@@ -47,7 +47,7 @@ class HIPPackingKernels(HIPKernelProvider):
             return NullKernel()
         else:
             class UnpackXchgMatrixKernel(Kernel):
-                def run(self, queue):
-                    hip.memcpy(mv.data, mv.hdata, mv.nbytes, queue.stream)
+                def run(self, stream):
+                    hip.memcpy(mv.data, mv.hdata, mv.nbytes, stream)
 
             return UnpackXchgMatrixKernel()

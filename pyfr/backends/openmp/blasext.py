@@ -24,12 +24,14 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
 
-        # Set the constant arguments
+        # Set the static arguments
         kern.set_args(nrow, nblocks, *arr)
 
         class AxnpbyKernel(Kernel):
-            def run(self, queue, *consts):
+            def bind(self, *consts):
                 kern.set_args(*consts, start=2 + nv)
+
+            def run(self):
                 kern()
 
         return AxnpbyKernel(mats=arr)
@@ -50,7 +52,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         kern.set_args(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
 
         class CopyKernel(Kernel):
-            def run(self, queue):
+            def run(self):
                 kern()
 
         return CopyKernel(mats=[dst, src])
@@ -95,8 +97,10 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
             def retval(self):
                 return reduced
 
-            def run(self, queue, *facs):
+            def bind(self, *facs):
                 rkern.set_args(*facs, start=facoff)
+
+            def run(self):
                 rkern()
 
         return ReductionKernel(mats=regs)

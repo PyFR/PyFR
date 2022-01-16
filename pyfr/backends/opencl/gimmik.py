@@ -37,6 +37,6 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
 
         class MulKernel(Kernel):
             def run(self, queue):
-                fun.exec_async(queue.cmd_q, (b.ncol,), None)
+                fun.exec_async(queue, (b.ncol,), None)
 
         return MulKernel(mats=[b, out])

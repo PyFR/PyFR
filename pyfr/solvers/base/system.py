@@ -59,9 +59,6 @@ class BaseSystem:
         bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
 
-        # Queue
-        self._queue = backend.queue()
-
         # Prepare the kernels and any associated MPI requests
         self._gen_kernels(nregs, eles, int_inters, mpi_inters, bc_inters)
         self._gen_mpireqs(mpi_inters)
@@ -215,6 +212,21 @@ class BaseSystem:
                 (fo is not None and fo == foutbank)):
                 kernels[kn] = k
 
+        # Obtain the bind method for kernels which take runtime arguments
+        binders = [k.bind for k in it.chain(*kernels.values())
+                   if hasattr(k, 'bind')]
+
+        return kernels, binders
+
+    def _prepare_kernels(self, t, uinbank, foutbank):
+        kernels, binders = self._get_kernels(uinbank, foutbank)
+
+        for b in self._bc_inters:
+            b.prepare(t)
+
+        for b in binders:
+            b(t=t)
+
         return kernels
 
     def rhs(self, t, uinbank, foutbank):
@@ -227,7 +239,7 @@ class BaseSystem:
     def filt(self, uinoutbank):
         kkey = ('eles/filter_soln', uinoutbank, None)
 
-        self._queue.enqueue_and_run(self._kernels[kkey])
+        self.backend.run(self._kernels[kkey])
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

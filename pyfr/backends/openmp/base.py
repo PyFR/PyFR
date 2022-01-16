@@ -34,7 +34,6 @@ class OpenMPBackend(BaseBackend):
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_slice_cls = types.OpenMPMatrixSlice
-        self.queue_cls = types.OpenMPQueue
         self.view_cls = types.OpenMPView
         self.xchg_matrix_cls = types.OpenMPXchgMatrix
         self.xchg_view_cls = types.OpenMPXchgView
@@ -50,6 +49,19 @@ class OpenMPBackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    def run(self, kernels, mpireqs=None):
+        # Start any MPI requests
+        if mpireqs:
+            self._startall(mpireqs)
+
+        # Run our kernels
+        for k in kernels:
+            k()
+
+        # If we started any MPI requests, wait for them
+        if mpireqs:
+            self._waitall(mpireqs)
 
     def _malloc_impl(self, nbytes):
         data = np.zeros(nbytes + self.alignb, dtype=np.uint8)

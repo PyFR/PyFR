@@ -126,13 +126,18 @@ class StdPIController(BaseStdController):
     def _errest(self, rcurr, rprev, rerr):
         comm, rank, root = get_comm_rank_root()
 
-        errest = self._get_reduction_kerns(rcurr, rprev, rerr, method='errest',
+        # Get a set of kernels to estimate the integration error
+        ekerns = self._get_reduction_kerns(rcurr, rprev, rerr, method='errest',
                                            norm=self._norm)
 
-        # Obtain an estimate for the squared error
-        self._queue.enqueue_and_run(errest, self._atol, self._rtol)
+        # Bind the dynamic arguments
+        for kern in ekerns:
+            kern.bind(self._atol, self._rtol)
 
-        # L2 norm
+        # Run the kernels
+        self.backend.run(ekerns)
+
+        # Pseudo L2 norm
         if self._norm == 'l2':
             # Reduce locally (element types + field variables)
             err = np.array([sum(v for e in errest for v in e.retval)])
@@ -142,7 +147,7 @@ class StdPIController(BaseStdController):
 
             # Normalise
             err = math.sqrt(float(err) / self._gndofs)
-        # L^∞ norm
+        # Uniform norm
         else:
             # Reduce locally (element types + field variables)
             err = np.array([max(v for e in errest for v in e.retval)])

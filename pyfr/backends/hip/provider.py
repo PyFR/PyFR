@@ -47,10 +47,12 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
                 params.set_arg(i, k)
 
         class PointwiseKernel(Kernel):
-            def run(self, queue, **kwargs):
-                for i, k in rtargs:
-                    params.set_arg(i, kwargs[k])
+            if rtargs:
+                def bind(self, **kwargs):
+                    for i, k in rtargs:
+                        params.set_arg(i, kwargs[k])
 
-                fun.exec_async(queue.stream, params)
+            def run(self, stream):
+                fun.exec_async(stream, params)
 
         return PointwiseKernel(*argmv)

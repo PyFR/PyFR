@@ -64,10 +64,12 @@ class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
                 fun.set_arg(i, k)
 
         class PointwiseKernel(Kernel):
-            def run(self, queue, **kwargs):
-                for i, k in rtargs:
-                    fun.set_arg(i, kwargs[k])
+            if rtargs:
+                def bind(self, **kwargs):
+                    for i, k in rtargs:
+                        fun.set_arg(i, kwargs[k])
 
+            def run(self):
                 fun()
 
         return PointwiseKernel(*argmv)

@@ -33,9 +33,11 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         params.set_args(nrow, ncolb, ldim, *arr)
 
         class AxnpbyKernel(Kernel):
-            def run(self, queue, *consts):
+            def bind(self, *consts):
                 params.set_args(*consts, start=3 + nv)
-                kern.exec_async(queue.stream, params)
+
+            def run(self, stream):
+                kern.exec_async(stream, params)
 
         return AxnpbyKernel(mats=arr)
 
@@ -46,8 +48,8 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         class CopyKernel(Kernel):
-            def run(self, queue):
-                cuda.memcpy(dst, src, dst.nbytes, queue.stream)
+            def run(self, stream):
+                cuda.memcpy(dst, src, dst.nbytes, stream)
 
         return CopyKernel()
 
@@ -107,10 +109,12 @@ class CUDABlasExtKernels(CUDAKernelProvider):
             def retval(self):
                 return reducer(reduced_host, axis=1)
 
-            def run(self, queue, *facs):
+            def bind(self, *facs):
                 params.set_args(*facs, start=facoff)
-                rkern.exec_async(queue.stream, params)
+
+            def run(self, stream):
+                rkern.exec_async(stream, params)
                 cuda.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
-                            queue.stream)
+                            stream)
 
         return ReductionKernel(mats=regs)

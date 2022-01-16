@@ -89,29 +89,3 @@ class OpenCLOrderedMetaKernel(base.MetaKernel):
 
 class OpenCLUnorderedMetaKernel(base.MetaKernel):
     pass
-
-
-class OpenCLQueue(base.Queue):
-    def __init__(self, backend):
-        super().__init__(backend)
-
-        # OpenCL command queue
-        self.cmd_q = backend.cl.queue()
-
-    def run(self, mpireqs=[]):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
-        # Submit the kernels to the command queue
-        for item, args, kwargs in self._items:
-            item.run(self, *args, **kwargs)
-
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self.cmd_q.flush()
-            self._waitall(mpireqs)
-
-        # Wait for the kernels to finish and clear the queue
-        self.cmd_q.finish()
-        self._items.clear()

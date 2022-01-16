@@ -55,7 +55,6 @@ class HIPBackend(BaseBackend):
         self.const_matrix_cls = types.HIPConstMatrix
         self.matrix_cls = types.HIPMatrix
         self.matrix_slice_cls = types.HIPMatrixSlice
-        self.queue_cls = types.HIPQueue
         self.view_cls = types.HIPView
         self.xchg_matrix_cls = types.HIPXchgMatrix
         self.xchg_view_cls = types.HIPXchgView
@@ -72,6 +71,27 @@ class HIPBackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+        # Create a stream to run kernels on
+        self._stream = self.hip.create_stream()
+
+    def run(self, kernels, mpireqs=None):
+        stream = self._stream
+
+        # Start any MPI requests
+        if mpireqs:
+            self._startall(mpireqs)
+
+        # Submit the kernels to the HIP stream
+        for k in kernels:
+            k.run(stream)
+
+        # If we started any MPI requests, wait for them
+        if mpireqs:
+            self._waitall(mpireqs)
+
+        # Wait for the kernels to finish
+        stream.synchronize()
 
     def _malloc_impl(self, nbytes):
         # Allocate

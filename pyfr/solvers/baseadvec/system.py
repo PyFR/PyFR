@@ -5,30 +5,28 @@ from pyfr.solvers.base import BaseSystem
 
 class BaseAdvectionSystem(BaseSystem):
     def rhs(self, t, uinbank, foutbank):
-        q = self._queue
-        kernels = self._get_kernels(uinbank, foutbank)
+        run = self.backend.run
+        kernels = self._prepare_kernels(t, uinbank, foutbank)
         mpireqs = self._mpireqs
 
-        for b in self._bc_inters:
-            b.prepare(t)
+        k = []
+        k += kernels['eles/disu']
+        k += kernels['mpiint/scal_fpts_pack']
+        run(k)
 
-        q.enqueue(kernels['eles/disu'])
-        q.enqueue(kernels['mpiint/scal_fpts_pack'])
-        q.run()
+        k = []
+        k += kernels['eles/copy_soln']
+        k += kernels['eles/qptsu']
+        k += kernels['eles/tdisf_curved']
+        k += kernels['eles/tdisf_linear']
+        k += kernels['eles/tdivtpcorf']
+        k += kernels['iint/comm_flux']
+        k += kernels['bcint/comm_flux']
+        run(k, mpireqs['scal_fpts_send_recv'])
 
-        if 'eles/copy_soln' in kernels:
-            q.enqueue(kernels['eles/copy_soln'])
-        if 'eles/qptsu' in kernels:
-            q.enqueue(kernels['eles/qptsu'])
-        q.enqueue(kernels['eles/tdisf_curved'])
-        q.enqueue(kernels['eles/tdisf_linear'])
-        q.enqueue(kernels['eles/tdivtpcorf'])
-        q.enqueue(kernels['iint/comm_flux'])
-        q.enqueue(kernels['bcint/comm_flux'], t=t)
-        q.run(mpireqs['scal_fpts_send_recv'])
-
-        q.enqueue(kernels['mpiint/scal_fpts_unpack'])
-        q.enqueue(kernels['mpiint/comm_flux'])
-        q.enqueue(kernels['eles/tdivtconf'])
-        q.enqueue(kernels['eles/negdivconf'], t=t)
-        q.run()
+        k = []
+        k += kernels['mpiint/scal_fpts_unpack']
+        k += kernels['mpiint/comm_flux']
+        k += kernels['eles/tdivtconf']
+        k += kernels['eles/negdivconf']
+        run(k)

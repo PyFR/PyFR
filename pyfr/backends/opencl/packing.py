@@ -24,10 +24,10 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         class PackXchgViewKernel(Kernel):
             def run(self, queue):
                 # Pack
-                kern.exec_async(queue.cmd_q, (v.n,), None)
+                kern.exec_async(queue, (v.n,), None)
 
                 # Copy the packed buffer to the host
-                cl.memcpy_async(queue.cmd_q, m.hdata, m.data, m.nbytes)
+                cl.memcpy_async(queue, m.hdata, m.data, m.nbytes)
 
         return PackXchgViewKernel(mats=[mv])
 
@@ -36,6 +36,6 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
 
         class UnpackXchgMatrixKernel(Kernel):
             def run(self, queue):
-                cl.memcpy_async(queue.cmd_q, mv.data, mv.hdata, mv.nbytes)
+                cl.memcpy_async(queue, mv.data, mv.hdata, mv.nbytes)
 
         return UnpackXchgMatrixKernel(mats=[mv])

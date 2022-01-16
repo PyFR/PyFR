@@ -60,7 +60,7 @@ class OpenCLCLBlastKernels:
 
         class MulKernel(Kernel):
             def run(self, queue):
-                qptr = c_void_p(int(queue.cmd_q))
+                qptr = c_void_p(int(queue))
                 clblastgemm(w.LayoutRowMajor, w.TransposeNo, w.TransposeNo,
                             m, n, k, alpha, a, 0, a.leaddim, b, 0, b.leaddim,
                             beta, out, 0, out.leaddim, qptr, None)

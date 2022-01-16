@@ -26,9 +26,11 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         kern.set_args(nrow, ncolb, ldim, *arr)
 
         class AxnpbyKernel(Kernel):
-            def run(self, queue, *consts):
+            def bind(self, *consts):
                 kern.set_args(*consts, start=3 + nv)
-                kern.exec_async(queue.cmd_q, (ncolb, nrow), None)
+
+            def run(self, queue):
+                kern.exec_async(queue, (ncolb, nrow), None)
 
         return AxnpbyKernel(mats=arr)
 
@@ -40,7 +42,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         class CopyKernel(Kernel):
             def run(self, queue):
-                cl.memcpy_async(queue.cmd_q, dst, src, dst.nbytes)
+                cl.memcpy_async(queue, dst, src, dst.nbytes)
 
         return CopyKernel()
 
@@ -95,10 +97,12 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
             def retval(self):
                 return reducer(reduced_host, axis=1)
 
-            def run(self, queue, *facs):
+            def bind(self, *facs):
                 rkern.set_args(*facs, start=facoff)
-                rkern.exec_async(queue.cmd_q, gs, ls)
-                cl.memcpy_async(queue.cmd_q, reduced_host, reduced_dev,
+
+            def run(self, queue):
+                rkern.exec_async(queue, gs, ls)
+                cl.memcpy_async(queue, reduced_host, reduced_dev,
                                 reduced_dev.nbytes)
 
         return ReductionKernel(mats=regs)

@@ -17,7 +17,7 @@ class Kernel:
     def retval(self):
         return None
 
-    def run(self, queue, *args, **kwargs):
+    def run(self, *args):
         pass
 
 
@@ -31,9 +31,9 @@ class MetaKernel(Kernel):
 
         self._kernels = list(kernels)
 
-    def run(self, queue, *args, **kwargs):
+    def run(self, *args):
         for k in self._kernels:
-            k.run(queue, *args, **kwargs)
+            k.run(*args)
 
 
 class BaseKernelProvider:

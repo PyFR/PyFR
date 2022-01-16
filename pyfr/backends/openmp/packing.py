@@ -18,7 +18,7 @@ class OpenMPPackingKernels(OpenMPKernelProvider):
         kern.set_args(v.n, v.basedata, v.mapping, v.rstrides or 0, m)
 
         class PackXchgViewKernel(Kernel):
-            def run(self, queue):
+            def run(self):
                 kern()
 
         return PackXchgViewKernel(mats=[mv])

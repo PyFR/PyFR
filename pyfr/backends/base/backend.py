@@ -63,6 +63,12 @@ class BaseBackend:
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
 
+        from mpi4py import MPI
+
+        # MPI wrappers
+        self._startall = MPI.Prequest.Startall
+        self._waitall = MPI.Prequest.Waitall
+
     @cached_property
     def lookup(self):
         pkg = f'pyfr.backends.{self.name}.kernels'
@@ -182,6 +188,3 @@ class BaseBackend:
     @recordkern
     def unordered_meta_kernel(self, kerns):
         return self.unordered_meta_kernel_cls(kerns)
-
-    def queue(self):
-        return self.queue_cls(self)

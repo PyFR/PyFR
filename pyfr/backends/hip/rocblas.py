@@ -89,8 +89,8 @@ class HIPRocBLASKernels:
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(Kernel):
-            def run(self, queue):
-                w.rocblas_set_stream(h, queue.stream)
+            def run(self, stream):
+                w.rocblas_set_stream(h, stream)
                 rocblas_gemm(h, opA, opB, m, n, k,
                              alpha_ct, A, A.leaddim, B, B.leaddim,
                              beta_ct, C, C.leaddim)

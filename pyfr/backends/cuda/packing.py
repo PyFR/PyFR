@@ -29,14 +29,14 @@ class CUDAPackingKernels(CUDAKernelProvider):
         # If MPI is CUDA aware then we just need to pack the buffer
         if self.backend.mpitype == 'cuda-aware':
             class PackXchgViewKernel(Kernel):
-                def run(self, queue):
-                    kern.exec_async(queue.stream, params)
+                def run(self, stream):
+                    kern.exec_async(stream, params)
         # Otherwise, we need to both pack the buffer and copy it back
         else:
             class PackXchgViewKernel(Kernel):
-                def run(self, queue):
-                    kern.exec_async(queue.stream, params)
-                    cuda.memcpy(m.hdata, m.data, m.nbytes, queue.stream)
+                def run(self, stream):
+                    kern.exec_async(stream, params)
+                    cuda.memcpy(m.hdata, m.data, m.nbytes, stream)
 
         return PackXchgViewKernel(mats=[mv])
 
@@ -47,7 +47,7 @@ class CUDAPackingKernels(CUDAKernelProvider):
             return NullKernel()
         else:
             class UnpackXchgMatrixKernel(Kernel):
-                def run(self, queue):
-                    cuda.memcpy(mv.data, mv.hdata, mv.nbytes, queue.stream)
+                def run(self, stream):
+                    cuda.memcpy(mv.data, mv.hdata, mv.nbytes, stream)
 
             return UnpackXchgMatrixKernel()

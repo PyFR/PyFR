@@ -93,28 +93,3 @@ class HIPOrderedMetaKernel(base.MetaKernel):
 
 class HIPUnorderedMetaKernel(base.MetaKernel):
     pass
-
-
-class HIPQueue(base.Queue):
-    def __init__(self, backend):
-        super().__init__(backend)
-
-        # HIP stream
-        self.stream = backend.hip.create_stream()
-
-    def run(self, mpireqs=[]):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
-        # Submit the kernels to the HIP stream
-        for item, args, kwargs in self._items:
-            item.run(self, *args, **kwargs)
-
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self._waitall(mpireqs)
-
-        # Wait for the kernels to finish and clear the queue
-        self.stream.synchronize()
-        self._items.clear()

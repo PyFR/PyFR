@@ -92,8 +92,8 @@ class CUDACUBLASKernels:
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         class MulKernel(Kernel):
-            def run(iself, queue):
-                lib.cublasSetStream(self, queue.stream)
+            def run(iself, stream):
+                lib.cublasSetStream(self, stream)
                 cublasgemm(self, lib.OP_N, lib.OP_N, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
