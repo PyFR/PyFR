@@ -60,7 +60,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         kernels = self._get_kernels(uinbank, None)
         mpireqs = self._mpireqs
 
-        self._prepare_rhs(t, uinbank, None)
+        for b in self._bc_inters:
+            b.prepare(t)
 
         q.enqueue(kernels['eles/disu'])
         q.enqueue(kernels['mpiint/scal_fpts_pack'])
