@@ -245,6 +245,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.fwhelespts = {}               # fwh 3D elements to nodes set
         self.fwhfset = defaultdict(list)    # fwh face pairs set
         self.vtufnodes = defaultdict(list)    # fwh face to nodes set
+        self.fwhranks = []                    # active ranks for fwh
 
         comm, rank, root = get_comm_rank_root()
         prank = intg.rallocs.prank
@@ -258,6 +259,19 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.collect_intinters(prank,mesh,pts,eset)
         self.collect_mpiinters(comm,intg.rallocs,mesh,pts,eset)
         self.collect_bndinters(prank,mesh,pts,eset)
+
+        # determine active ranks for fwh
+        self.isfwhactive = False
+        if self.fwhfset:
+            self.isfwhactive = True
+        rank_is_active_list = comm.gather(self.isfwhactive,root=root)
+        
+        if rank==root:
+            for i, flag in enumerate(rank_is_active_list):
+                if flag:
+                    self.fwhranks.append(i)
+
+        self.fwhranks=comm.bcast(self.fwhranks,root=root)
         
         # Prepare face VTU nodes:
         self.prepare_vtufnodes()
@@ -349,134 +363,6 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 nelnodes = self.fwhelespts[etype,eidx].shape[0]
                 nidx = self._petype_fnmap[etype,nelnodes][pftype][fidx]
                 self.vtufnodes[pftype].append(self.fwhelespts[etype,eidx][nidx,:])
-
-    def _get_pftype_from_fpairs(self,ifaceL,ifaceR):
-        pftype0 = self._fnum_to_pftype(ifaceL[0],ifaceL[2])
-        pftype1 = self._fnum_to_pftype(ifaceR[0],ifaceR[2])
-        if pftype0 != pftype1:
-            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
-        else:
-           return pftype0
-
-    def _fnum_to_pftype(self,inetype,fnum):
-        return self._fnum_pftype_map[inetype][fnum][1]
-
-    def _get_npts_ncells(self,mk): 
-        ncells = np.asarray(self.vtufnodes[mk]).shape[0]
-        npts = ncells * self._petype_focount_map[mk]
-        return npts, ncells
-
-    def _get_array_attrs(self,mk=None):
-        fpdtype = self.fpdtype 
-        vdtype = 'Float32' if fpdtype == np.float32 else 'Float64'
-        dsize = np.dtype(fpdtype).itemsize 
-
-        names = ['', 'connectivity', 'offsets', 'types']
-        types = [vdtype, 'Int32', 'Int32', 'UInt8']
-        comps = ['3', '', '', '']
-
-        if mk:
-            npts, ncells = self._get_npts_ncells(mk)
-            nb = npts*dsize
-            sizes = [3*nb, 4*npts, 4*ncells, ncells]
-
-            return names, types, comps, sizes
-        else:
-            return names, types, comps
-
-    def write_vtk_out(self,fname,dsettoplogy):
-
-        dsetname = {'unstructured': "UNSTRUCTURED_GRID", 'polydata': "POLYDATA"}
-
-        write_s_to_fh = lambda s: fh.write(s)
-        
-        with open(fname, 'w', encoding="ascii") as fh:
-            write_s_to_fh(f'# vtk DataFile Version {self.vtkfile_version}\n'
-                          'FWH Surface\n'
-                          'ASCII\n'
-                          f'DATASET {dsetname[dsettoplogy]}\n')
-
-            self._write_vtk_points(fh)
-            self._write_vtk_cells(fh,dsettoplogy)
-
-    def _write_vtk_points(self,vtkf):
-        ndims=3
-        fpdtype = self.fpdtype 
-        vdtype = 'Float32' if fpdtype == np.float32 else 'Float64'
-
-        write_s = lambda s: vtkf.write(s)
-        npts_tot=ncells_tot=0
-
-        for etype,v in self.vtufnodes.items():
-            npts, ncells = self._get_npts_ncells(etype)
-            npts_tot += npts
-            ncells_tot += ncells
-        write_s(f'POINTS {npts_tot} {vdtype}\n')
-
-        for etype,v in self.vtufnodes.items():
-            npts, ncells = self._get_npts_ncells(etype)
-            vpts = np.array(self.vtufnodes[etype]).astype(fpdtype) # eidx,nnodes,dim
-            # Append dummy z dimension for points in 2D
-            if self.ndims == 2:
-                vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
-            vpts = vpts.reshape(-1, ndims)
-            np.savetxt(vtkf,vpts,fmt='%1.16f %1.16f %1.16f')
-
-    def _write_vtk_cells(self,vtkf,dsettoplogy):
-
-        ncells = {}
-        npts = {}
-        cellsname = {'unstructured': "CELLS", 'polydata': "POLYGONS"}
-        cname = cellsname[dsettoplogy]
-
-        write_s = lambda s: vtkf.write(s)
-
-        keys = list(self.vtufnodes)
-
-        ncells_tot = nsize = 0
-        for etype in keys:
-            npts[etype],ncells[etype] = self._get_npts_ncells(etype)
-            ncells_tot += ncells[etype]
-
-            nfopts = self._petype_focount_map[etype]
-            nsize += (nfopts+1) * ncells[etype]
-
-        write_s(f'{cname} {ncells_tot} {nsize}\n')
-
-        # Writing cell connectivity
-        npts_tot = 0
-        for etype in keys:
-            nfopts = self._petype_focount_map[etype]
-            nodes = np.arange(nfopts)
-
-            # Prepare VTU cell arrays
-            vtk_con = np.tile(nodes, (ncells[etype], 1))
-            vtk_con += (np.arange(ncells[etype])*nfopts)[:, None]
-            vtk_con += npts_tot
-            vtk_con = np.insert(vtk_con,0,nfopts,axis=1)
-            
-            np.savetxt(vtkf,vtk_con,fmt='%d')
-
-            npts_tot += npts[etype]
-        
-        # Writing Cell Types:
-        if cname == cellsname['unstructured']:
-            write_s(f'CELL_TYPES {ncells_tot}\n')
-            for etype in keys:
-                # Prepare VTU cell types array
-                vtk_types = np.ones(ncells[etype]) * self.vtk_types[etype]
-                np.savetxt(vtkf,vtk_types,fmt='%d')
-    
-    def prepare_vtufnodes_info(self, fnodes):
-        info = defaultdict(dict)
-        for k, v in fnodes.items():
-            names, types, comps, sizes = self._get_array_attrs(k)
-            npts, ncells = self._get_npts_ncells(k)
-            info[k]['vtu_attr'] = [names, types, comps, sizes]
-            info[k]['mesh_attr'] = [npts, ncells]
-            info[k]['shape'] = np.asarray(v).shape 
-            info[k]['dtype'] = np.asarray(v).dtype.str
-        return info
 
     def write_vtu_out(self,fname):
 
@@ -608,3 +494,49 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._write_darray(vtu_con, vtuf, np.int32) 
         self._write_darray(vtu_off, vtuf, np.int32)
         self._write_darray(vtu_typ, vtuf, np.uint8)
+
+
+    def _get_pftype_from_fpairs(self,ifaceL,ifaceR):
+        pftype0 = self._fnum_to_pftype(ifaceL[0],ifaceL[2])
+        pftype1 = self._fnum_to_pftype(ifaceR[0],ifaceR[2])
+        if pftype0 != pftype1:
+            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
+        else:
+           return pftype0
+
+    def _fnum_to_pftype(self,inetype,fnum):
+        return self._fnum_pftype_map[inetype][fnum][1]
+
+    def _get_npts_ncells(self,mk): 
+        ncells = np.asarray(self.vtufnodes[mk]).shape[0]
+        npts = ncells * self._petype_focount_map[mk]
+        return npts, ncells
+
+    def _get_array_attrs(self,mk=None):
+        fpdtype = self.fpdtype 
+        vdtype = 'Float32' if fpdtype == np.float32 else 'Float64'
+        dsize = np.dtype(fpdtype).itemsize 
+
+        names = ['', 'connectivity', 'offsets', 'types']
+        types = [vdtype, 'Int32', 'Int32', 'UInt8']
+        comps = ['3', '', '', '']
+
+        if mk:
+            npts, ncells = self._get_npts_ncells(mk)
+            nb = npts*dsize
+            sizes = [3*nb, 4*npts, 4*ncells, ncells]
+
+            return names, types, comps, sizes
+        else:
+            return names, types, comps
+
+    def prepare_vtufnodes_info(self, fnodes):
+        info = defaultdict(dict)
+        for k, v in fnodes.items():
+            names, types, comps, sizes = self._get_array_attrs(k)
+            npts, ncells = self._get_npts_ncells(k)
+            info[k]['vtu_attr'] = [names, types, comps, sizes]
+            info[k]['mesh_attr'] = [npts, ncells]
+            info[k]['shape'] = np.asarray(v).shape 
+            info[k]['dtype'] = np.asarray(v).dtype.str
+        return info
