@@ -10,94 +10,9 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
-class AcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
-    name = 'acoustics'
-    systems = ['*']
-    formulations = ['dual', 'std']
 
-    def __init__(self, intg, cfgsect, suffix=None):
-        super().__init__(intg, cfgsect, suffix)
-
-        # Base output directory and file name
-        basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
-        basename = self.cfg.get(self.cfgsect, 'basename')
-
-        # Construct the solution writer
-        self._writer = NativeWriter(intg, basedir, basename, 'soln')
-
-        # Output time step and last output time
-        self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
-        self.tout_last = intg.tcurr
-
-        # Output field names
-        self.fields = intg.system.elementscls.convarmap[self.ndims]
-
-        # Output data type
-        self.fpdtype = intg.backend.fpdtype
-
-        # Register our output times with the integrator
-        intg.call_plugin_dt(self.dt_out)
-
-        # If we're not restarting then make sure we write out the initial
-        # solution when we are called for the first time
-        if not intg.isrestart:
-            self.tout_last -= self.dt_out
-
-    def __call__(self, intg):
-        if intg.tcurr - self.tout_last < self.dt_out - self.tol:
-            return
-
-        comm, rank, root = get_comm_rank_root()
-
-        # If we are the root rank then prepare the metadata
-        if rank == root:
-            stats = Inifile()
-            stats.set('data', 'fields', ','.join(self.fields))
-            stats.set('data', 'prefix', 'soln')
-            intg.collect_stats(stats)
-
-            metadata = dict(intg.cfgmeta,
-                            stats=stats.tostr(),
-                            mesh_uuid=intg.mesh_uuid)
-        else:
-            metadata = None
-
-        # Fetch data from other plugins and add it to metadata with ad-hoc keys
-        for csh in intg.completed_step_handlers:
-            try:
-                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
-                pdata = csh.serialise(intg)
-            except AttributeError:
-                pdata = {}
-
-            if rank == root:
-                metadata.update({f'{prefix}/{k}': v for k, v in pdata.items()})
-
-        # Fetch and (if necessary) subset the solution
-        data = dict(self._ele_region_data)
-        for idx, etype, rgn in self._ele_regions:
-            data[etype] = intg.soln[idx][..., rgn].astype(self.fpdtype)
-
-        # Write out the file
-        solnfname = self._writer.write(data, intg.tcurr, metadata)
-
-        # If a post-action has been registered then invoke it
-        self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
-                                soln=solnfname, t=intg.tcurr)
-
-        # Update the last output time
-        self.tout_last = intg.tcurr
-
-
-class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
-
-    DEBUG = 0
-    name = 'fwhsurfwriter'
-    systems = ['*']
-    formulations = ['dual', 'std']
-
-    # reverse map from face index to face type
-    _fnum_pftype_map = {
+# reverse map from face index to face type
+fnum_pftype_map = {
             'tri' : [(0, 'line'), (1, 'line'), (2, 'line')], 
             'quad': [(0, 'line'), (1, 'line'), (2, 'line'), (3, 'line')], 
             'tet' : [(0, 'tri'), (1, 'tri'), (2, 'tri'), (3, 'tri')], 
@@ -105,6 +20,24 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             'pri' : [(0, 'tri'), (1, 'tri'), (2, 'quad'), (3, 'quad'), (4, 'quad')], 
             'pyr' : [(0, 'quad'), (1, 'tri'), (2, 'tri'), (3, 'tri'), (4, 'tri')]
     }
+
+def fnum_to_pftype(inetype,fnum):
+    return fnum_pftype_map[inetype][fnum][1]
+
+def get_pftype_from_fpairs(ifaceL,ifaceR):
+        pftype0 = fnum_to_pftype(ifaceL[0],ifaceL[2])
+        pftype1 = fnum_to_pftype(ifaceR[0],ifaceR[2])
+        if pftype0 != pftype1:
+            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
+        else:
+           return pftype0
+            
+class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
+
+    DEBUG = 0
+    name = 'fwhacoustics'
+    systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
+    formulations = ['dual', 'std']
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
@@ -116,23 +49,24 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._prepare_region_data_eset(intg,self.fwheset)
         self._vtuwriter = VTUSurfWriter(intg,self.fwheset,self.fwhfset)
 
-
         # Base output directory and file name
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
 
         # Construct the solution writer
         self._writer = NativeWriter(intg, basedir, basename, 'soln')
+        
+        # Output field names
+        self.fields = intg.system.elementscls.convarmap[self.ndims]
+        # Output data type
+        self.fpdtype = intg.backend.fpdtype
+
+        # write the fwh surface geometry file
+        self._write_fwh_surface_geo(intg)
 
         # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
         self.tout_last = intg.tcurr
-
-        # Output field names
-        self.fields = intg.system.elementscls.convarmap[self.ndims]
-
-        # Output data type
-        self.fpdtype = intg.backend.fpdtype
 
         # Register our output times with the integrator
         intg.call_plugin_dt(self.dt_out)
@@ -143,7 +77,20 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             self.tout_last -= self.dt_out
 
     def __call__(self, intg):
+        # If a post-action has been registered then invoke it
+        # self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
+        #                         soln=self.fwhmeshfname, t=intg.tcurr)
 
+        # Update the last output time
+        self.tout_last = intg.tcurr
+
+        # Need to print fwh surface geometric data only once
+        intg.completed_step_handlers.remove(self)
+
+        exit(0)
+
+
+    def _write_fwh_surface_geo(self,intg):
         comm, rank, root = get_comm_rank_root()
 
         # If we are the root rank then prepare the metadata
@@ -159,73 +106,33 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         else:
             metadata = None
 
-        # Fetch data from other plugins and add it to metadata with ad-hoc keys
-        for csh in intg.completed_step_handlers:
-            try:
-                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
-                pdata = csh.serialise(intg)
-            except AttributeError:
-                pdata = {}
-
-            if rank == root:
-                metadata.update({f'{prefix}/{k}': v for k, v in pdata.items()})
-
         # Fetch and (if necessary) subset the solution
         data = dict(self._ele_region_data)
         for idx, etype, rgn in self._ele_regions:
             data[etype] = intg.soln[idx][..., rgn].astype(self.fpdtype)
 
         # Write out the file
-        solnfname = self._writer.write(data, intg.tcurr, metadata)
+        self.fwhmeshfname = self._writer.write(data, intg.tcurr, metadata)
         # Write VTU file:
-        mfname = os.path.splitext(solnfname)[0]
-        self._vtuwriter._write(mfname)
+        vtumfname = os.path.splitext(self.fwhmeshfname)[0]
+        self._vtuwriter._write(vtumfname)
 
-        exit(0)
-
-        # If a post-action has been registered then invoke it
-        self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
-                                soln=solnfname, t=intg.tcurr)
-
-        # Update the last output time
-        self.tout_last = intg.tcurr
-
-        # Need to print fwh surface geometric data only once
-        intg.completed_step_handlers.remove(self)
 
     def prepare_surfmesh(self,intg,eset):
-        pts = {}
         self.fwheset = defaultdict(list)  # fwh surface 3D elements ids set
         self.fwhfset = defaultdict(list)  # fwh face pairs set
-        self.fwhranks = []                # active ranks for fwh
 
-        comm, rank, root = get_comm_rank_root()
-        prank = intg.rallocs.prank
         mesh = intg.system.mesh
-        
-        # Collect elements pts from the mesh
-        for etype in eset:
-            pts[etype] = np.swapaxes(mesh[f'spt_{etype}_p{prank}'],0,1)
-
         # Collect fwh interfaces and their info
-        self.collect_intinters(prank,mesh,eset)
-        self.collect_mpiinters(comm,intg.rallocs,mesh,eset)
-        self.collect_bndinters(prank,mesh,eset)
+        self.collect_intinters(intg.rallocs,mesh,eset)
+        self.collect_mpiinters(intg.rallocs,mesh,eset)
+        self.collect_bndinters(intg.rallocs,mesh,eset)
 
-        # determine active ranks for fwh
-        self.isfwhactive = False
-        if self.fwhfset:
-            self.isfwhactive = True
-        rank_is_active_list = comm.gather(self.isfwhactive,root=root)
-        
-        if rank==root:
-            for i, flag in enumerate(rank_is_active_list):
-                if flag:
-                    self.fwhranks.append(i)
+        # Determine fwh active ranks list
+        self.build_fwh_activerank_list()
 
-        self.fwhranks=comm.bcast(self.fwhranks,root=root)
-
-    def collect_intinters(self,prank,mesh,eset):
+    def collect_intinters(self,rallocs,mesh,eset):
+        prank = rallocs.prank
         flhs, frhs = mesh[f'con_p{prank}'].astype('U4,i4,i1,i2').tolist()
         for ifaceL,ifaceR in zip(flhs,frhs):    
             etype, eidx = ifaceR[0:2]
@@ -234,7 +141,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             flagL = (eidx in eset[etype]) if etype in eset else False
             # interior faces
             if (not (flagL & flagR)) & (flagL | flagR):
-                pftype = self._get_pftype_from_fpairs(ifaceL,ifaceR)
+                pftype = get_pftype_from_fpairs(ifaceL,ifaceR)
                 if flagL:
                     self.fwhfset[pftype].append([ifaceL,ifaceR])
                 else:
@@ -243,7 +150,7 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 self.fwheset[etype].append(eidx)
             # periodic faces:
             elif (flagL & flagR) & (ifaceL[3] != 0 ): 
-                pftype = self._get_pftype_from_fpairs(ifaceL,ifaceR)  
+                pftype = get_pftype_from_fpairs(ifaceL,ifaceR)  
                 etype, eidx = ifaceL[0:2]
                 self.fwhfset[pftype].append([ifaceL,ifaceR])
                 self.fwheset[etype].append(eidx)
@@ -251,7 +158,8 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 self.fwheset[etype].append(eidx)
                 self.fwhfset[pftype].append([ifaceR,ifaceL])
 
-    def collect_mpiinters(self,comm,rallocs,mesh,eset):
+    def collect_mpiinters(self,rallocs,mesh,eset):
+        comm, rank, root = get_comm_rank_root()
         prank = rallocs.prank
         # send flags
         for rhs_prank in rallocs.prankconn[prank]:
@@ -276,11 +184,12 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 etype, eidx, fidx = ifaceL[0:3]
                 flagL = (eidx in eset[etype]) if etype in eset else False
                 if (not (flagL & flagR[ii])) & flagL :
-                    pftype = self._fnum_to_pftype(etype,fidx)
+                    pftype = fnum_to_pftype(etype,fidx)
                     self.fwhfset[pftype].append([ifaceL,ifaceR])
                     self.fwheset[etype].append(eidx)
 
-    def collect_bndinters(self,prank,mesh,eset):
+    def collect_bndinters(self,rallocs,mesh,eset):
+        prank = rallocs.prank
         for f in mesh:
             if (m := re.match(f'bcon_(.+?)_p{prank}$', f)):
                 bname = m.group(1)
@@ -290,20 +199,25 @@ class FwhSurfWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     etype, eidx, fidx = ifaceL[0:3]
                     flagL = (eidx in eset[etype]) if etype in eset else False
                     if flagL:
-                        pftype = self._fnum_to_pftype(etype,fidx)
+                        pftype = fnum_to_pftype(etype,fidx)
                         self.fwhfset[pftype].append([ifaceL,ifaceR])
                         self.fwheset[etype].append(eidx)
 
-    def _get_pftype_from_fpairs(self,ifaceL,ifaceR):
-        pftype0 = self._fnum_to_pftype(ifaceL[0],ifaceL[2])
-        pftype1 = self._fnum_to_pftype(ifaceR[0],ifaceR[2])
-        if pftype0 != pftype1:
-            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
-        else:
-           return pftype0
+    def build_fwh_activerank_list(self):
+        self.fwhranks = []
+        comm, rank, root = get_comm_rank_root()
+        # determine active ranks for fwh
+        self.fwh_activerank = False
+        if self.fwhfset:
+            self.fwh_activerank = True
+        rank_is_active_list = comm.gather(self.fwh_activerank,root=root)
+        
+        if rank==root:
+            for i, flag in enumerate(rank_is_active_list):
+                if flag:
+                    self.fwhranks.append(i)
 
-    def _fnum_to_pftype(self,inetype,fnum):
-        return self._fnum_pftype_map[inetype][fnum][1]
+        self.fwhranks=comm.bcast(self.fwhranks,root=root)
 
 class VTUSurfWriter(object):
 

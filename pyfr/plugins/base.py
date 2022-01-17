@@ -118,7 +118,7 @@ class RegionMixin(object):
         # All elements inside a box
         elif '(' in region or '[' in region:
             box = self.cfg.getliteral(self.cfgsect, 'region')
-            if self.name == "fwhsurfwriter":
+            if self.name == "fwhacoustics":
                 self._prepare_region_data_drum(intg, box)
             else:
                 self._prepare_region_data_box(intg, *box)
