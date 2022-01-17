@@ -10,27 +10,6 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
-
-# reverse map from face index to face type
-fnum_pftype_map = {
-            'tri' : [(0, 'line'), (1, 'line'), (2, 'line')], 
-            'quad': [(0, 'line'), (1, 'line'), (2, 'line'), (3, 'line')], 
-            'tet' : [(0, 'tri'), (1, 'tri'), (2, 'tri'), (3, 'tri')], 
-            'hex' : [(0, 'quad'), (1, 'quad'), (2, 'quad'), (3, 'quad'), (4, 'quad'), (5, 'quad')], 
-            'pri' : [(0, 'tri'), (1, 'tri'), (2, 'quad'), (3, 'quad'), (4, 'quad')], 
-            'pyr' : [(0, 'quad'), (1, 'tri'), (2, 'tri'), (3, 'tri'), (4, 'tri')]
-    }
-
-def fnum_to_pftype(inetype,fnum):
-    return fnum_pftype_map[inetype][fnum][1]
-
-def get_pftype_from_fpairs(ifaceL,ifaceR):
-        pftype0 = fnum_to_pftype(ifaceL[0],ifaceL[2])
-        pftype1 = fnum_to_pftype(ifaceR[0],ifaceR[2])
-        if pftype0 != pftype1:
-            raise KeyError(f'pftypeL: {pftype0} is not equal to pftypeR: {pftype1}')
-        else:
-           return pftype0
             
 class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
@@ -143,22 +122,21 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
             flagL = (eidx in eset[etype]) if etype in eset else False
             # interior faces
             if (not (flagL & flagR)) & (flagL | flagR):
-                pftype = get_pftype_from_fpairs(ifaceL,ifaceR)
                 if flagL:
-                    self.fwhfset[pftype].append([ifaceL,ifaceR])
+                    fidx = ifaceL[2]
+                    self.fwhfset[etype,fidx].append([ifaceL,ifaceR])
                 else:
-                    etype, eidx = ifaceR[0:2]
-                    self.fwhfset[pftype].append([ifaceR,ifaceL])
+                    etype, eidx, fidx = ifaceR[0:3]
+                    self.fwhfset[etype,fidx].append([ifaceR,ifaceL])
                 self.fwheset[etype].append(eidx)
             # periodic faces:
-            elif (flagL & flagR) & (ifaceL[3] != 0 ): 
-                pftype = get_pftype_from_fpairs(ifaceL,ifaceR)  
-                etype, eidx = ifaceL[0:2]
-                self.fwhfset[pftype].append([ifaceL,ifaceR])
+            elif (flagL & flagR) & (ifaceL[3] != 0 ):   
+                etype, eidx, fidx = ifaceL[0:3]
+                self.fwhfset[etype,fidx].append([ifaceL,ifaceR])
                 self.fwheset[etype].append(eidx)
-                etype, eidx = ifaceR[0:2]
+                etype, eidx, fidx = ifaceR[0:3]
                 self.fwheset[etype].append(eidx)
-                self.fwhfset[pftype].append([ifaceR,ifaceL])
+                self.fwhfset[etype,fidx].append([ifaceR,ifaceL])
 
     def collect_mpiinters(self,rallocs,mesh,eset):
         comm, rank, root = get_comm_rank_root()
@@ -186,8 +164,7 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 etype, eidx, fidx = ifaceL[0:3]
                 flagL = (eidx in eset[etype]) if etype in eset else False
                 if (not (flagL & flagR[ii])) & flagL :
-                    pftype = fnum_to_pftype(etype,fidx)
-                    self.fwhfset[pftype].append([ifaceL,ifaceR])
+                    self.fwhfset[etype,fidx].append([ifaceL,ifaceR])
                     self.fwheset[etype].append(eidx)
 
     def collect_bndinters(self,rallocs,mesh,eset):
@@ -201,8 +178,7 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
                     etype, eidx, fidx = ifaceL[0:3]
                     flagL = (eidx in eset[etype]) if etype in eset else False
                     if flagL:
-                        pftype = fnum_to_pftype(etype,fidx)
-                        self.fwhfset[pftype].append([ifaceL,ifaceR])
+                        self.fwhfset[etype,fidx].append([ifaceL,ifaceR])
                         self.fwheset[etype].append(eidx)
 
     def build_fwh_activerank_list(self):
@@ -219,6 +195,7 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         self.fwhranks=comm.bcast(self.fwhranks,root=root)
 
+           
 class VTUSurfWriter(object):
 
     vtkfile_version = '2.1'
@@ -258,6 +235,15 @@ class VTUSurfWriter(object):
         ('pyr',  30 ):  {'quad': [[12, 15, 3, 0]], 'tri': [[0, 3, 29], [3, 15, 29], [15, 12, 29], [0, 29, 12]]},
         ('pyr',  55 ):  {'quad': [[20, 24, 4, 0]], 'tri': [[0, 4, 54], [4, 24, 54], [24, 20, 54], [0, 54, 20]]},
     }
+    # reverse map from face index to face type
+    fnum_pftype_map = {
+                'tri' : { 0: 'line', 1: 'line', 2: 'line'}, 
+                'quad': { 0: 'line', 1: 'line', 2: 'line', 3: 'line'}, 
+                'tet' : { 0: 'tri', 1: 'tri', 2: 'tri', 3: 'tri'}, 
+                'hex' : { 0: 'quad', 1: 'quad', 2: 'quad', 3: 'quad', 4: 'quad', 5: 'quad'},
+                'pri' : { 0: 'tri', 1: 'tri', 2: 'quad', 3: 'quad', 4: 'quad'}, 
+                'pyr' : { 0: 'quad', 1: 'tri', 2: 'tri', 3: 'tri', 4: 'tri'} 
+        }
     # offset to get local fidx/fnum inside each facetype map
     _fnum_offset = {'tri' : {'line': 0},
                     'quad': {'line': 0},
@@ -291,10 +277,11 @@ class VTUSurfWriter(object):
         for etype in self.etypes:
             pts[etype] = np.swapaxes(self.mesh[f'spt_{etype}_p{self.rallocs.prank}'],0,1) 
 
-        for pftype, fpairs in self.fset.items():
+        for (etype,fidx), fpairs in self.fset.items():
+            pftype = self.fnum_pftype_map[etype][fidx]
             flhs = np.moveaxis(fpairs,0,1)[0]
             for ifaceL in flhs:
-                etype,eidx,fidx = ifaceL[0:3]
+                eidx = ifaceL[1]
                 eidx = np.int(eidx)
                 fidx = np.int(fidx) + self._fnum_offset[etype][pftype] 
                 nelemnodes = pts[etype][eidx].shape[0]
