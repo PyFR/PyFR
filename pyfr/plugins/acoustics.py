@@ -34,7 +34,6 @@ def get_pftype_from_fpairs(ifaceL,ifaceR):
             
 class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
-    DEBUG = 0
     name = 'fwhacoustics'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
@@ -43,24 +42,21 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
         super().__init__(intg, cfgsect, suffix)
 
         self.DEBUG = self.cfg.getint(cfgsect,'debug',0)
-        
-        # prepare fwh surface mesh data
-        self.prepare_surfmesh(intg,self.region_eset)
-        self._prepare_region_data_eset(intg,self.fwheset)
-        self._vtuwriter = VTUSurfWriter(intg,self.fwheset,self.fwhfset)
-
         # Base output directory and file name
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
-
-        # Construct the solution writer
-        self._writer = NativeWriter(intg, basedir, basename, 'soln')
         
         # Output field names
         self.fields = intg.system.elementscls.convarmap[self.ndims]
         # Output data type
         self.fpdtype = intg.backend.fpdtype
 
+        # Construct the fwh mesh writer
+        self._writer = NativeWriter(intg, basedir, basename, 'soln')
+
+        # prepare fwh surface mesh data
+        self.prepare_surfmesh(intg,self.region_eset)
+        self._prepare_region_data_eset(intg,self.fwheset)
         # write the fwh surface geometry file
         self._write_fwh_surface_geo(intg)
 
@@ -75,6 +71,9 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # solution when we are called for the first time
         if not intg.isrestart:
             self.tout_last -= self.dt_out
+
+        # Construct FWH Surf Data:
+        
 
     def __call__(self, intg):
         # If a post-action has been registered then invoke it
@@ -113,9 +112,12 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Write out the file
         self.fwhmeshfname = self._writer.write(data, intg.tcurr, metadata)
+
+        # Construct the VTU writer
+        vtuwriter = VTUSurfWriter(intg,self.fwheset,self.fwhfset)
         # Write VTU file:
         vtumfname = os.path.splitext(self.fwhmeshfname)[0]
-        self._vtuwriter._write(vtumfname)
+        vtuwriter._write(vtumfname)
 
 
     def prepare_surfmesh(self,intg,eset):
@@ -207,9 +209,7 @@ class FwhAcousticsPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.fwhranks = []
         comm, rank, root = get_comm_rank_root()
         # determine active ranks for fwh
-        self.fwh_activerank = False
-        if self.fwhfset:
-            self.fwh_activerank = True
+        self.fwh_activerank = True if self.fwhfset else False
         rank_is_active_list = comm.gather(self.fwh_activerank,root=root)
         
         if rank==root:
@@ -336,16 +336,16 @@ class VTUSurfWriter(object):
 
             # update info and receive/stack nodes from other ranks
             for mrank, minfo in enumerate(ginfo):
-                for etype, vals in minfo.items():
+                for etype, vinfo in minfo.items():
                     if etype in info:
-                        info[etype]['vtu_attr'][3] = [sum(x) for x in zip(info[etype]['vtu_attr'][3], vals['vtu_attr'][3])]
-                        info[etype]['mesh_attr'] = [sum(x) for x in zip(info[etype]['mesh_attr'],vals['mesh_attr'])]
+                        info[etype]['vtu_attr'][3] = [sum(x) for x in zip(info[etype]['vtu_attr'][3], vinfo['vtu_attr'][3])]
+                        info[etype]['mesh_attr'] = [sum(x) for x in zip(info[etype]['mesh_attr'],vinfo['mesh_attr'])]
                         shapes = [x for x in info[etype]['shape']]
-                        shapes[0] += vals['shape'][0]
+                        shapes[0] += vinfo['shape'][0]
                         info[etype]['shape'] = tuple(shapes)
                     else:
-                        info[etype] = vals
-                    varr = np.empty(vals['shape'], dtype=vals['dtype'])
+                        info[etype] = vinfo
+                    varr = np.empty(vinfo['shape'], dtype=vinfo['dtype'])
                     comm.Recv(varr, mrank)
                     vpts_global[etype] = np.vstack((vpts_global[etype],varr)) if etype in vpts_global else varr
 
