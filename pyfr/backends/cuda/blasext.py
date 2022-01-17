@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
-from pyfr.backends.base import Kernel
+from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
+                                         get_grid_for_block)
 
 
 class CUDABlasExtKernels(CUDAKernelProvider):
@@ -32,7 +32,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         params = kern.make_params(grid, block)
         params.set_args(nrow, ncolb, ldim, *arr)
 
-        class AxnpbyKernel(Kernel):
+        class AxnpbyKernel(CUDAKernel):
             def bind(self, *consts):
                 params.set_args(*consts, start=3 + nv)
 
@@ -47,11 +47,14 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
-        class CopyKernel(Kernel):
+        class CopyKernel(CUDAKernel):
+            def add_to_graph(self, graph, deps):
+                return graph.graph.add_memcpy(dst, src, dst.nbytes, deps)
+
             def run(self, stream):
                 cuda.memcpy(dst, src, dst.nbytes, stream)
 
-        return CopyKernel()
+        return CopyKernel(mats=[dst, src])
 
     def reduction(self, *rs, method, norm, dt_mat=None):
         if any(r.traits != rs[0].traits for r in rs[1:]):
@@ -104,7 +107,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum
 
-        class ReductionKernel(Kernel):
+        class ReductionKernel(CUDAKernel):
             @property
             def retval(self):
                 return reducer(reduced_host, axis=1)

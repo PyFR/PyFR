@@ -29,10 +29,10 @@ class MetaKernel(Kernel):
     def __init__(self, kernels):
         super().__init__()
 
-        self._kernels = list(kernels)
+        self.kernels = list(kernels)
 
     def run(self, *args):
-        for k in self._kernels:
+        for k in self.kernels:
             k.run(*args)
 
 

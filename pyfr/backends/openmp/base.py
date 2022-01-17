@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from ctypes import c_int, c_void_p
+from functools import cached_property
+
 import numpy as np
 
 from pyfr.backends.base import BaseBackend
@@ -29,16 +32,17 @@ class OpenMPBackend(BaseBackend):
         from pyfr.backends.openmp import (blasext, packing, provider, types,
                                           xsmm)
 
-        # Register our data types
+        # Register our data types and meta kernels
         self.base_matrix_cls = types.OpenMPMatrixBase
         self.const_matrix_cls = types.OpenMPConstMatrix
+        self.graph_cls = types.OpenMPGraph
         self.matrix_cls = types.OpenMPMatrix
         self.matrix_slice_cls = types.OpenMPMatrixSlice
         self.view_cls = types.OpenMPView
         self.xchg_matrix_cls = types.OpenMPXchgMatrix
         self.xchg_view_cls = types.OpenMPXchgView
-        self.ordered_meta_kernel_cls = types.OpenMPOrderedMetaKernel
-        self.unordered_meta_kernel_cls = types.OpenMPUnorderedMetaKernel
+        self.ordered_meta_kernel_cls = provider.OpenMPOrderedMetaKernel
+        self.unordered_meta_kernel_cls = provider.OpenMPUnorderedMetaKernel
 
         # Instantiate mandatory kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
@@ -50,18 +54,27 @@ class OpenMPBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
-    def run(self, kernels, mpireqs=None):
+    def run_kernels(self, kernels, mpireqs=None):
         # Start any MPI requests
         if mpireqs:
             self._startall(mpireqs)
 
         # Run our kernels
         for k in kernels:
-            k()
+            k.run()
 
         # If we started any MPI requests, wait for them
         if mpireqs:
             self._waitall(mpireqs)
+
+    def run_graph(self, graph, mpireqs=None):
+        self.run_kernels([graph], mpireqs)
+
+    @cached_property
+    def krunner(self):
+        ksrc = self.lookup.get_template('run-kernels').render()
+        klib = self.compiler.build(ksrc)
+        return klib.function('run_kernels', None, [c_int, c_void_p, c_void_p])
 
     def _malloc_impl(self, nbytes):
         data = np.zeros(nbytes + self.alignb, dtype=np.uint8)

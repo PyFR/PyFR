@@ -48,10 +48,6 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         self.backend.cl.memcpy(self.data, buf, self.nbytes)
 
 
-class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
-    pass
-
-
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
     @cached_property
     def data(self):
@@ -62,12 +58,10 @@ class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
             return self.basedata
 
 
-class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):
-    pass
-
-
-class OpenCLView(base.View):
-    pass
+class OpenCLMatrix(OpenCLMatrixBase, base.Matrix): pass
+class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix): pass
+class OpenCLView(base.View): pass
+class OpenCLXchgView(base.XchgView): pass
 
 
 class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
@@ -79,13 +73,32 @@ class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
         self.hdata = backend.cl.pagelocked_empty(shape, dtype)
 
 
-class OpenCLXchgView(base.XchgView):
-    pass
+class OpenCLGraph(base.Graph):
+    def commit(self):
+        super().commit()
 
+        # Identify kernels that other kernels depend on
+        kdeps = set(d for deps in self.kdeps.values() for d in deps)
 
-class OpenCLOrderedMetaKernel(base.MetaKernel):
-    pass
+        # Map from kernels to event table locations
+        evtidxs = {}
 
+        # Kernel list complete with dependency information
+        self.klist = klist = []
 
-class OpenCLUnorderedMetaKernel(base.MetaKernel):
-    pass
+        for i, k in enumerate(self.knodes):
+            evtidxs[k] = i
+
+            # Resolve the event indices of kernels we depend on
+            wait_evts = [evtidxs[dep] for dep in self.kdeps[k]] or None
+
+            klist.append((k, wait_evts, k in kdeps))
+
+    def run(self, queue):
+        events = [None]*len(self.klist)
+
+        for i, (k, wait_for, ret_evt) in enumerate(self.klist):
+            if wait_for is not None:
+                wait_for = [events[j] for j in wait_for]
+
+            events[i] = k.run(queue, wait_for, ret_evt)

@@ -4,7 +4,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.backends.base import Kernel
+from pyfr.backends.cuda.provider import CUDAKernel
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -58,19 +58,22 @@ class CUBLASWrappers(LibWrapper):
 
 class CUDACUBLASKernels:
     def __init__(self, backend):
+        self.backend = backend
+        self.handle = c_void_p()
+
         # Load and wrap CUBLAS
         self.lib = CUBLASWrappers()
 
         # Init
-        self._as_parameter_ = handle = c_void_p()
-        self.lib.cublasCreate(handle)
+        self.lib.cublasCreate(self.handle)
 
     def __del__(self):
-        if self._as_parameter_:
-            self.lib.cublasDestroy(self)
+        if self.handle:
+            self.lib.cublasDestroy(self.handle)
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
-        lib = self.lib
+        cuda = self.backend.cuda
+        w, h = self.lib, self.handle
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -85,17 +88,28 @@ class CUDACUBLASKernels:
 
         # α and β factors for C = α*(A*op(B)) + β*C
         if a.dtype == np.float64:
-            cublasgemm = lib.cublasDgemm
+            cublasgemm = w.cublasDgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
         else:
-            cublasgemm = lib.cublasSgemm
+            cublasgemm = w.cublasSgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        class MulKernel(Kernel):
-            def run(iself, stream):
-                lib.cublasSetStream(self, stream)
-                cublasgemm(self, lib.OP_N, lib.OP_N, m, n, k,
+        class MulKernel(CUDAKernel):
+            def add_to_graph(self, graph, deps):
+                stream = cuda.create_stream()
+
+                # Capture the execution of cuBLAS to obtain a graph
+                stream.begin_capture()
+                self.run(stream)
+                gnode = stream.end_capture()
+
+                # Embed this graph in our main graph
+                return graph.graph.add_graph(gnode, deps)
+
+            def run(self, stream):
+                w.cublasSetStream(h, stream)
+                cublasgemm(h, w.OP_N, w.OP_N, m, n, k,
                            alpha_ct, A, A.leaddim, B, B.leaddim,
                            beta_ct, C, C.leaddim)
 
-        return MulKernel()
+        return MulKernel(mats=[a, b, out])

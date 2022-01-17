@@ -4,7 +4,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.backends.base import Kernel
+from pyfr.backends.hip.provider import HIPKernel
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -64,6 +64,7 @@ class HIPRocBLASKernels:
             pass
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
+        hip = self.backend.hip
         h, w = self._handle, self._wrappers
 
         # Ensure the matrices are compatible
@@ -88,11 +89,22 @@ class HIPRocBLASKernels:
             rocblas_gemm = w.rocblas_sgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        class MulKernel(Kernel):
+        class MulKernel(HIPKernel):
+            def add_to_graph(self, graph, deps):
+                stream = hip.create_stream()
+
+                # Capture the execution of rocBLAS to obtain a graph
+                stream.begin_capture()
+                self.run(stream)
+                gnode = stream.end_capture()
+
+                # Embed this graph in our main graph
+                return graph.graph.add_graph(gnode, deps)
+
             def run(self, stream):
                 w.rocblas_set_stream(h, stream)
                 rocblas_gemm(h, opA, opB, m, n, k,
                              alpha_ct, A, A.leaddim, B, B.leaddim,
                              beta_ct, C, C.leaddim)
 
-        return MulKernel()
+        return MulKernel(mats=[a, b, out])

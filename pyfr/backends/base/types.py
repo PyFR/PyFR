@@ -282,3 +282,39 @@ class XchgView:
 
     def sendreq(self, pid, tag):
         return self.xchgmat.sendreq(pid, tag)
+
+
+class Graph(object):
+    def __init__(self, backend):
+        self.backend = backend
+        self.committed = False
+
+        # Kernels and their dependencies
+        self.knodes = {}
+        self.kdeps = {}
+
+    def add(self, kern, deps=[]):
+        if self.committed:
+            raise RuntimeError('Can not add nodes to a commited graph')
+
+        if kern in self.knodes:
+            raise RuntimeError('Can only add a kernel to a graph once')
+
+        # Resolve the dependency list
+        rdeps = [self.knodes[d] for d in deps]
+
+        # Ask the kernel to add itself
+        self.knodes[kern] = kern.add_to_graph(self, rdeps)
+
+        # Note our dependencies
+        self.kdeps[kern] = deps
+
+    def add_all(self, kerns, deps=[]):
+        for k in kerns:
+            self.add(k, deps)
+
+    def commit(self):
+        self.committed = True
+
+    def run(self, *args):
+        pass

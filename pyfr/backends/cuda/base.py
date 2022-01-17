@@ -63,16 +63,17 @@ class CUDABackend(BaseBackend):
         from pyfr.backends.cuda import (blasext, cublas, gimmik, packing,
                                         provider, types)
 
-        # Register our data types
+        # Register our data types and meta kernels
         self.base_matrix_cls = types.CUDAMatrixBase
         self.const_matrix_cls = types.CUDAConstMatrix
+        self.graph_cls = types.CUDAGraph
         self.matrix_cls = types.CUDAMatrix
         self.matrix_slice_cls = types.CUDAMatrixSlice
         self.view_cls = types.CUDAView
         self.xchg_matrix_cls = types.CUDAXchgMatrix
         self.xchg_view_cls = types.CUDAXchgView
-        self.ordered_meta_kernel_cls = types.CUDAOrderedMetaKernel
-        self.unordered_meta_kernel_cls = types.CUDAUnorderedMetaKernel
+        self.ordered_meta_kernel_cls = provider.CUDAOrderedMetaKernel
+        self.unordered_meta_kernel_cls = provider.CUDAUnorderedMetaKernel
 
         # Instantiate the base kernel providers
         kprovs = [provider.CUDAPointwiseKernelProvider,
@@ -88,7 +89,7 @@ class CUDABackend(BaseBackend):
         # Create a stream to run kernels on
         self._stream = self.cuda.create_stream()
 
-    def run(self, kernels, mpireqs=None):
+    def run_kernels(self, kernels, mpireqs=None):
         stream = self._stream
 
         # Start any MPI requests
@@ -105,6 +106,9 @@ class CUDABackend(BaseBackend):
 
         # Wait for the kernels to finish
         stream.synchronize()
+
+    def run_graph(self, graph, mpireqs=None):
+        self.run_kernels([graph], mpireqs)
 
     def _malloc_impl(self, nbytes):
         # Allocate

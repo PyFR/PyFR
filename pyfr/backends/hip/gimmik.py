@@ -3,8 +3,9 @@
 from gimmik import generate_mm
 import numpy as np
 
-from pyfr.backends.base import Kernel, NotSuitableError
-from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
+from pyfr.backends.base import NotSuitableError
+from pyfr.backends.hip.provider import (HIPKernel, HIPKernelProvider,
+                                        get_grid_for_block)
 
 
 class HIPGiMMiKKernels(HIPKernelProvider):
@@ -43,7 +44,10 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         params = fun.make_params(grid, block)
         params.set_args(b, out)
 
-        class MulKernel(Kernel):
+        class MulKernel(HIPKernel):
+            def add_to_graph(self, graph, deps):
+                return graph.graph.add_kernel(params, deps)
+
             def run(self, stream):
                 fun.exec_async(stream, params)
 

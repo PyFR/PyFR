@@ -43,22 +43,16 @@ class HIPMatrixBase(_HIPMatrixCommon, base.MatrixBase):
         self.backend.hip.memcpy(self.data, buf, self.nbytes)
 
 
-class HIPMatrix(HIPMatrixBase, base.Matrix):
-    pass
-
-
 class HIPMatrixSlice(_HIPMatrixCommon, base.MatrixSlice):
     @cached_property
     def data(self):
         return int(self.basedata) + self.offset
 
 
-class HIPConstMatrix(HIPMatrixBase, base.ConstMatrix):
-    pass
-
-
-class HIPView(base.View):
-    pass
+class HIPMatrix(HIPMatrixBase, base.Matrix): pass
+class HIPConstMatrix(HIPMatrixBase, base.ConstMatrix): pass
+class HIPView(base.View): pass
+class HIPXchgView(base.XchgView): pass
 
 
 class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
@@ -83,13 +77,21 @@ class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
             self.hdata = backend.hip.pagelocked_empty(shape, dtype)
 
 
-class HIPXchgView(base.XchgView):
-    pass
+class HIPGraph(base.Graph):
+    def __init__(self, backend):
+        super().__init__(backend)
 
+        self.graph = backend.hip.create_graph()
+        self.stale_kparams = {}
 
-class HIPOrderedMetaKernel(base.MetaKernel):
-    pass
+    def commit(self):
+        super().commit()
 
+        self.exc_graph = self.graph.instantiate()
 
-class HIPUnorderedMetaKernel(base.MetaKernel):
-    pass
+    def run(self, stream):
+        for node, params in self.stale_kparams.items():
+            self.exc_graph.set_kernel_node_params(node, params)
+
+        self.exc_graph.launch(stream)
+        self.stale_kparams.clear()

@@ -193,7 +193,7 @@ class BaseCommon:
         for k in axnpby:
             k.bind(*consts)
 
-        self.backend.run(axnpby)
+        self.backend.run_kernels(axnpby)
 
     def _add(self, *args, subdims=None):
         self._addv(args[::2], args[1::2], subdims=subdims)

@@ -179,7 +179,7 @@ class StdRKVdH2RStepper(BaseStdStepper):
         return 4 if self.stepper_has_errest else 2
 
     def step(self, t, dt):
-        run, rhs = self.backend.run, self.system.rhs
+        run_kernels, rhs = self.backend.run_kernels, self.system.rhs
 
         r1 = self._idxcurr
         r2, *rs = set(self._regidx) - {r1}
@@ -197,7 +197,7 @@ class StdRKVdH2RStepper(BaseStdStepper):
                 k.bind(dt=dt)
 
             # Execute
-            run(kerns)
+            run_kernels(kerns)
 
             # Swap
             r1, r2 = r2, r1

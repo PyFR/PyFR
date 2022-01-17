@@ -135,7 +135,7 @@ class StdPIController(BaseStdController):
             kern.bind(self._atol, self._rtol)
 
         # Run the kernels
-        self.backend.run(ekerns)
+        self.backend.run_kernels(ekerns)
 
         # Pseudo L2 norm
         if self._norm == 'l2':

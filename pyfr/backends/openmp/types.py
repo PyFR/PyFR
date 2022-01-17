@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from ctypes import addressof, c_void_p, cast
 from functools import cached_property
 
 import pyfr.backends.base as base
@@ -48,25 +49,31 @@ class OpenMPMatrixSlice(base.MatrixSlice):
         return self.data.ctypes.data
 
 
-class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    pass
+class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix): pass
+class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix): pass
+class OpenMPXchgView(base.XchgView): pass
+class OpenMPView(base.View): pass
 
 
-class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix):
-    pass
+class OpenMPGraph(base.Graph):
+    def __init__(self, backend):
+        super().__init__(backend)
 
+        self.klist = []
 
-class OpenMPXchgView(base.XchgView):
-    pass
+    def commit(self):
+        super().commit()
 
+        self._nkerns = n = len(self.klist)
 
-class OpenMPView(base.View):
-    pass
+        # Obtain pointers to our kernel functions
+        self._kfuns = [cast(k.fun, c_void_p) for k in self.klist]
+        self._kfuns = (c_void_p * n)(*self._kfuns)
 
+        # Obtain pointers to their corresponding arguments
+        self._kargs = [addressof(k.kargs) for k in self.klist]
+        self._kargs = (c_void_p * n)(*self._kargs)
 
-class OpenMPOrderedMetaKernel(base.MetaKernel):
-    pass
+    def run(self):
+        self.backend.krunner(self._nkerns, self._kfuns, self._kargs)
 
-
-class OpenMPUnorderedMetaKernel(base.MetaKernel):
-    pass

@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 
+from weakref import WeakKeyDictionary
+
 from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, Kernel)
+                                BasePointwiseKernelProvider, Kernel,
+                                MetaKernel)
 from pyfr.backends.hip.compiler import SourceModule
 from pyfr.backends.hip.generator import HIPKernelGenerator
 from pyfr.util import memoize
@@ -9,6 +12,29 @@ from pyfr.util import memoize
 
 def get_grid_for_block(block, nrow, ncol=1):
     return (-(-nrow // block[0]), -(-ncol // block[1]), 1)
+
+
+class HIPKernel(Kernel):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if hasattr(self, 'bind') and hasattr(self, 'add_to_graph'):
+            self.gnodes = WeakKeyDictionary()
+
+
+class HIPOrderedMetaKernel(MetaKernel):
+    def add_to_graph(self, graph, dnodes):
+        for k in self.kernels:
+            dnodes = [k.add_to_graph(graph, dnodes)]
+
+        return dnodes[0]
+
+
+class HIPUnorderedMetaKernel(MetaKernel):
+    def add_to_graph(self, graph, dnodes):
+        nodes = [k.add_to_graph(graph, dnodes) for k in self.kernels]
+
+        return graph.graph.add_empty(nodes)
 
 
 class HIPKernelProvider(BaseKernelProvider):
@@ -46,11 +72,25 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
             else:
                 params.set_arg(i, k)
 
-        class PointwiseKernel(Kernel):
+        class PointwiseKernel(HIPKernel):
             if rtargs:
                 def bind(self, **kwargs):
                     for i, k in rtargs:
                         params.set_arg(i, kwargs[k])
+
+                    # Notify any graphs we're in about our new parameters
+                    for graph, gnode in self.gnodes.items():
+                        graph.stale_kparams[gnode] = params
+
+            def add_to_graph(self, graph, deps):
+                gnode = graph.graph.add_kernel(params, deps)
+
+                # If our parameters can change then we need to keep a
+                # (weak) reference to the graph so we can notify it
+                if rtargs:
+                    self.gnodes[graph] = gnode
+
+                return gnode
 
             def run(self, stream):
                 fun.exec_async(stream, params)

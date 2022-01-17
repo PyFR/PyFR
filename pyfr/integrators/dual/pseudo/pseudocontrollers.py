@@ -36,7 +36,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
             kern.bind(dt_fac)
 
         # Run the kernels
-        self.backend.run(rkerns)
+        self.backend.run_kernels(rkerns)
 
         # Pseudo L2 norm
         if self._pseudo_norm == 'l2':
@@ -139,7 +139,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.backend.commit()
 
     def localerrest(self, errbank):
-        self.backend.run(self.pintgkernels['localerrest', errbank])
+        self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
 
     def pseudo_advance(self, tcurr):
         self.tcurr = tcurr

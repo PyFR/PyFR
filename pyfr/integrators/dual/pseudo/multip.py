@@ -216,11 +216,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Restrict the physical source term
         l1src = self.pintgs[l1]._source_regidx
         l2dst = self.pintgs[l2]._source_regidx
-        self.backend.run(self.mgproject(l1, l1src, l2, l2dst))
+        self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
-            self.backend.run(self.dtauproject(l1, l2))
+            self.backend.run_kernels(self.dtauproject(l1, l2))
 
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1
@@ -237,7 +237,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         mg0, mg1 = self._mg_regidx
 
         # Restrict Q and d
-        self.backend.run(
+        self.backend.run_kernels(
             self.mgproject(l1, l1idxcurr, l2, l2idxcurr) +
             self.mgproject(l1, rtemp, l2, mg1)
         )
@@ -265,7 +265,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.pintg._add(-1, self._mg_regidx[1], 1, l1idxcurr)
 
         # Prolongate the correction and store to rtemp
-        self.backend.run(self.mgproject(l1, self._mg_regidx[1], l2, rtemp))
+        self.backend.run_kernels(self.mgproject(l1, self._mg_regidx[1], l2, rtemp))
 
         # Add the correction to the end quantity at l2
         # Q^m+1  = Q^s + Delta

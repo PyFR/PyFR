@@ -166,34 +166,42 @@ class BaseSystem:
 
     def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
+        self._ketypes = ketypes = {}
 
         provnames = ['eles', 'iint', 'mpiint', 'bcint']
         provlists = [eles, iint, mpiint, bcint]
 
-        for pn, plst in zip(provnames, provlists):
-            for kn, kgetter in it.chain(*[p.kernels.items() for p in plst]):
-                # Skip private kernels
-                if kn.startswith('_'):
-                    continue
+        for pn, provs in zip(provnames, provlists):
+            for p in provs:
+                for kn, kgetter in p.kernels.items():
+                    # Skip private kernels
+                    if kn.startswith('_'):
+                        continue
 
-                # See if the kernel depends on uin/fout
-                kparams = inspect.signature(kgetter).parameters
-                if 'uin' in kparams or 'fout' in kparams:
-                    for i in range(nregs):
-                        kern = kgetter(i)
+                    # See if the kernel depends on uin/fout
+                    kparams = inspect.signature(kgetter).parameters
+                    if 'uin' in kparams or 'fout' in kparams:
+                        for i in range(nregs):
+                            kern = kgetter(i)
+                            if isinstance(kern, NullKernel):
+                                continue
+
+                            if 'uin' in kparams:
+                                kernels[f'{pn}/{kn}', i, None].append(kern)
+                            else:
+                                kernels[f'{pn}/{kn}', None, i].append(kern)
+
+                            if pn == 'eles':
+                                ketypes[kern] = p.basis.name
+                    else:
+                        kern = kgetter()
                         if isinstance(kern, NullKernel):
                             continue
 
-                        if 'uin' in kparams:
-                            kernels[f'{pn}/{kn}', i, None].append(kern)
-                        else:
-                            kernels[f'{pn}/{kn}', None, i].append(kern)
-                else:
-                    kern = kgetter()
-                    if isinstance(kern, NullKernel):
-                        continue
+                        kernels[f'{pn}/{kn}', None, None].append(kern)
 
-                    kernels[f'{pn}/{kn}', None, None].append(kern)
+                        if pn == 'eles':
+                            ketypes[kern] = p.basis.name
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
@@ -218,8 +226,18 @@ class BaseSystem:
 
         return kernels, binders
 
+    def _ele_deps(self, kdict, kern, *dnames):
+        deps = []
+
+        for name in dnames:
+            for k in kdict[f'eles/{name}']:
+                if self._ketypes[kern] == self._ketypes[k]:
+                    deps.append(k)
+
+        return deps
+
     def _prepare_kernels(self, t, uinbank, foutbank):
-        kernels, binders = self._get_kernels(uinbank, foutbank)
+        _, binders = self._get_kernels(uinbank, foutbank)
 
         for b in self._bc_inters:
             b.prepare(t)
@@ -227,19 +245,29 @@ class BaseSystem:
         for b in binders:
             b(t=t)
 
-        return kernels
-
-    def rhs(self, t, uinbank, foutbank):
+    def _rhs_graphs(self, uinbank, foutbank):
         pass
 
-    def compute_grads(self, t, uinbank):
+    def rhs(self, t, uinbank, foutbank):
+        self._prepare_kernels(t, uinbank, foutbank)
+
+        for graph, mpireqs in self._rhs_graphs(uinbank, foutbank):
+            self.backend.run_graph(graph, mpireqs)
+
+    def _compute_grads_graph(self, t, uinbank):
         raise NotImplementedError(f'Solver "{self.name}" does not compute '
                                   'corrected gradients of the solution')
+
+    def compute_grads(self, t, uinbank):
+        self._prepare_kernels(t, uinbank, None)
+
+        for graph, mpireqs in self._compute_grads_graph(uinbank):
+            self.backend.run_graph(graph, mpireqs)
 
     def filt(self, uinoutbank):
         kkey = ('eles/filter_soln', uinoutbank, None)
 
-        self.backend.run(self._kernels[kkey])
+        self.backend.run_kernels(self._kernels[kkey])
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

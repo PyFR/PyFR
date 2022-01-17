@@ -43,22 +43,16 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         self.backend.cuda.memcpy(self.data, buf, self.nbytes)
 
 
-class CUDAMatrix(CUDAMatrixBase, base.Matrix):
-    pass
-
-
 class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
     @cached_property
     def data(self):
         return int(self.basedata) + self.offset
 
 
-class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
-    pass
-
-
-class CUDAView(base.View):
-    pass
+class CUDAMatrix(CUDAMatrixBase, base.Matrix): pass
+class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix): pass
+class CUDAView(base.View): pass
+class CUDAXchgView(base.XchgView): pass
 
 
 class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
@@ -83,13 +77,21 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
             self.hdata = backend.cuda.pagelocked_empty(shape, dtype)
 
 
-class CUDAXchgView(base.XchgView):
-    pass
+class CUDAGraph(base.Graph):
+    def __init__(self, backend):
+        super().__init__(backend)
 
+        self.graph = backend.cuda.create_graph()
+        self.stale_kparams = {}
 
-class CUDAOrderedMetaKernel(base.MetaKernel):
-    pass
+    def commit(self):
+        super().commit()
 
+        self.exc_graph = self.graph.instantiate()
 
-class CUDAUnorderedMetaKernel(base.MetaKernel):
-    pass
+    def run(self, stream):
+        for node, params in self.stale_kparams.items():
+            self.exc_graph.set_kernel_node_params(node, params)
+
+        self.exc_graph.launch(stream)
+        self.stale_kparams.clear()

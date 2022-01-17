@@ -240,7 +240,7 @@ class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
     def step(self, t):
         self.npseudosteps += 1
 
-        run, rhs = self.backend.run, self._rhs_with_dts
+        run_kernels, rhs = self.backend.run_kernels, self._rhs_with_dts
 
         rold = self._idxcurr
         r1, r2, *rerr = set(self._pseudo_stepper_regidx) - {rold}
@@ -254,7 +254,7 @@ class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
             kerns = self._get_rkvdh2pseudo_kerns(i, r1, r2, rold, *rerr)
 
             # Execute
-            run(kerns)
+            run_kernels(kerns)
 
             # Swap
             r1, r2 = r2, r1

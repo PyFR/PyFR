@@ -50,16 +50,17 @@ class HIPBackend(BaseBackend):
         from pyfr.backends.hip import (blasext, gimmik, packing, provider,
                                        rocblas, types)
 
-        # Register our data types
+        # Register our data types and meta kernels
         self.base_matrix_cls = types.HIPMatrixBase
         self.const_matrix_cls = types.HIPConstMatrix
+        self.graph_cls = types.HIPGraph
         self.matrix_cls = types.HIPMatrix
         self.matrix_slice_cls = types.HIPMatrixSlice
         self.view_cls = types.HIPView
         self.xchg_matrix_cls = types.HIPXchgMatrix
         self.xchg_view_cls = types.HIPXchgView
-        self.ordered_meta_kernel_cls = types.HIPOrderedMetaKernel
-        self.unordered_meta_kernel_cls = types.HIPUnorderedMetaKernel
+        self.ordered_meta_kernel_cls = provider.HIPOrderedMetaKernel
+        self.unordered_meta_kernel_cls = provider.HIPUnorderedMetaKernel
 
         # Instantiate the base kernel providers
         kprovs = [provider.HIPPointwiseKernelProvider,
@@ -75,7 +76,7 @@ class HIPBackend(BaseBackend):
         # Create a stream to run kernels on
         self._stream = self.hip.create_stream()
 
-    def run(self, kernels, mpireqs=None):
+    def run_kernels(self, kernels, mpireqs=None):
         stream = self._stream
 
         # Start any MPI requests
@@ -92,6 +93,9 @@ class HIPBackend(BaseBackend):
 
         # Wait for the kernels to finish
         stream.synchronize()
+
+    def run_graph(self, graph, mpireqs=None):
+        self.run_kernels([graph], mpireqs)
 
     def _malloc_impl(self, nbytes):
         # Allocate
