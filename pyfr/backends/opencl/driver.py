@@ -357,6 +357,7 @@ class OpenCLKernel(_OpenCLBase):
 
         if wait_for is None:
             nwait = 0
+            wait_forp = None
         else:
             nwait = len(wait_for)
             wait_forp = self._wait_forp
@@ -378,7 +379,7 @@ class OpenCLKernel(_OpenCLBase):
             lsptr = None
 
         self.lib.clEnqueueNDRangeKernel(
-            queue, self, ndim, None, gsptr, lsptr, nwait, wait_for, evt_ptr
+            queue, self, ndim, None, gsptr, lsptr, nwait, wait_forp, evt_ptr
         )
 
         return OpenCLEvent(self.lib, evt_ptr) if ret_evt else None
