@@ -34,7 +34,6 @@ class BaseDualIntegrator(BaseIntegrator):
 
     @property
     def soln(self):
-        # If we do not have the solution cached then fetch it
         if not self._curr_soln:
             self._curr_soln = self.system.ele_scal_upts(
                 self.pseudointegrator._idxcurr
@@ -44,10 +43,11 @@ class BaseDualIntegrator(BaseIntegrator):
 
     @property
     def grad_soln(self):
-        # If we do not have the solution gradients cached then compute and fetch them
+        system = self.system
+
         if not self._curr_grad_soln:
-            self.system.compute_grads(self.tcurr, self.pseudointegrator._idxcurr)
-            self._curr_grad_soln = self.system.eles_vect_upts.get()
+            system.compute_grads(self.tcurr, self.pseudointegrator._idxcurr)
+            self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
 
         return self._curr_grad_soln
 
