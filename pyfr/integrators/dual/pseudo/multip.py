@@ -14,7 +14,7 @@ from pyfr.util import memoize, subclass_where
 
 class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg,
-                 stp_nregs, stg_nregs, dt):
+                 stepper_nregs, stage_nregs, dt):
         self.backend = backend
 
         sect = 'solver-time-integrator'
@@ -83,8 +83,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             class lpsint(*bases):
                 name = 'MultiPPseudoIntegrator' + str(l)
                 aux_nregs = 2 if l != self._order else 0
-                stepper_nregs = stp_nregs if l == self._order else 0
-                stage_nregs = stg_nregs if l == self._order else 0
 
                 @property
                 def _aux_regidx(iself):
@@ -107,7 +105,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                                    1, fout)
 
                     # Registers
-                    vals = iself.stepper_coeffs[:2] + [1]
+                    vals = [iself.stepper_coeffs[-1], -1/iself._dt, 1]
                     regs = [fout, iself._idxcurr, iself._source_regidx]
 
                     # Physical stepper source addition -∇·f - dQ/dt
@@ -116,6 +114,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                     # Multigrid r addition
                     if mg_add and iself._aux_regidx:
                         iself._add(1, fout, -1, iself._aux_regidx[0])
+
+            stp_nregs = stepper_nregs if l == self._order else 0
+            stg_nregs = stage_nregs if l == self._order else 0
 
             self.pintgs[l] = lpsint(
                 backend, systemcls, rallocs, mesh, initsoln, mcfg,
