@@ -56,7 +56,10 @@ class OpenCLWrappers(LibWrapper):
     DEVICE_TYPE_ALL = 0xffffffff
     DEVICE_TYPE_CPU = 0x2
     DEVICE_TYPE_GPU = 0x4
+    MAP_READ = 0x1
+    MAP_WRITE = 0x2
     MEM_READ_WRITE = 0x1
+    MEM_ALLOC_HOST_PTR = 0x10
     PLATFORM_NAME = 0x0902
     PROGRAM_BUILD_LOG = 0x1183
     QUEUE_OUT_OF_ORDER = 0x1
@@ -99,6 +102,11 @@ class OpenCLWrappers(LibWrapper):
          c_size_t, c_size_t, c_uint, POINTER(c_void_p), POINTER(c_void_p)),
         (c_int, 'clEnqueueFillBuffer', c_void_p, c_void_p, c_void_p, c_size_t,
          c_size_t, c_size_t, c_uint, POINTER(c_void_p), POINTER(c_void_p)),
+        (c_void_p, 'clEnqueueMapBuffer', c_void_p, c_void_p, c_uint, c_uint64,
+         c_size_t, c_size_t, c_uint, POINTER(c_void_p), POINTER(c_void_p),
+         POINTER(c_int)),
+        (c_int, 'clEnqueueUnmapMemObject', c_void_p, c_void_p, c_void_p,
+         c_uint, POINTER(c_void_p), POINTER(c_void_p)),
         (c_void_p, 'clCreateProgramWithSource', c_void_p, c_uint,
          POINTER(c_char_p), POINTER(c_size_t), POINTER(c_int)),
         (c_int, 'clReleaseProgram', c_void_p),
@@ -266,6 +274,30 @@ class OpenCLSubBuffer(_OpenCLBase):
         super().__init__(lib, ptr)
 
 
+class OpenCLHostAlloc(_OpenCLBase):
+    _destroyfn = 'clReleaseMemObject'
+
+    def __init__(self, lib, ctx, queue, nbytes):
+        self.qdflt = queue
+        self.nbytes = nbytes
+
+        flags = lib.MEM_READ_WRITE | lib.MEM_ALLOC_HOST_PTR
+        ptr = lib.clCreateBuffer(ctx, flags, nbytes, None)
+
+        super().__init__(lib, ptr)
+
+        flags = lib.MAP_READ | lib.MAP_WRITE
+        self.host_ptr = lib.clEnqueueMapBuffer(queue, ptr, True, flags, 0,
+                                               nbytes, 0, None, None)
+
+    def __del__(self):
+        if hasattr(self, 'host_ptr'):
+            self.lib.clEnqueueUnmapMemObject(self.qdflt, self, self.host_ptr,
+                                             0, None, None)
+
+        super().__del__()
+
+
 class OpenCLEvent(_OpenCLBase):
     _destroyfn = 'clReleaseEvent'
 
@@ -415,6 +447,19 @@ class OpenCL(object):
 
     def mem_alloc(self, nbytes):
         return OpenCLBuffer(self.lib, self.ctx, nbytes)
+
+    def pagelocked_empty(self, shape, dtype):
+        nbytes = np.prod(shape)*np.dtype(dtype).itemsize
+
+        alloc = OpenCLHostAlloc(self.lib, self.ctx, self.qdflt, nbytes)
+        alloc.__array_interface__ = {
+            'version': 3,
+            'typestr': np.dtype(dtype).str,
+            'data': (alloc.host_ptr, False),
+            'shape': tuple(shape)
+        }
+
+        return np.array(alloc, copy=False)
 
     def zero(self, dst, off, nbytes):
         z = c_char(0)
