@@ -32,7 +32,7 @@ class LibWrapper(object):
             try:
                 raise self._statuses[status]
             except KeyError:
-                raise self._statuses['*']
+                raise self._statuses['*'] from None
 
 
 def get_libc_function(fn):

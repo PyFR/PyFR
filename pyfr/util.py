@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from contextlib import contextmanager
-from ctypes import c_int, c_ssize_t, c_void_p
+from ctypes import c_void_p
 import functools as ft
 import hashlib
 import itertools as it
@@ -12,46 +12,35 @@ import shutil
 from pyfr.ctypesutil import get_libc_function
 
 
-class memoize(object):
-    def __init__(self, func):
-        self.func = func
-
-    def __get__(self, instance, owner):
-        return self.func if instance is None else ft.partial(self, instance)
-
-    def __call__(self, *args, **kwargs):
-        instance = args[0]
-
+def memoize(meth):
+    @ft.wraps(meth)
+    def newmeth(self, *args, **kwargs):
         try:
-            cache = instance._memoize_cache
+            cache = self._memoize_cache_
         except AttributeError:
-            cache = instance._memoize_cache = {}
+            cache = self._memoize_cache_ = {}
 
-        key = (self.func, pickle.dumps(args[1:]), pickle.dumps(kwargs))
+        if kwargs:
+            key = (meth, args, tuple(kwargs.items()))
+        else:
+            key = (meth, args)
 
         try:
-            res = cache[key]
+            return cache[key]
         except KeyError:
-            res = cache[key] = self.func(*args, **kwargs)
+            pass
+        except TypeError:
+            key = (meth, pickle.dumps((args, kwargs)))
 
+            try:
+                return cache[key]
+            except KeyError:
+                pass
+
+        res = cache[key] = meth(self, *args, **kwargs)
         return res
 
-
-class proxylist(list):
-    def __getattr__(self, attr):
-        return proxylist(getattr(x, attr) for x in self)
-
-    def __setattr__(self, attr, val):
-        for x in self:
-            setattr(x, attr, val)
-
-    def __delattr__(self, attr):
-        for x in self:
-            delattr(x, attr)
-
-    def __call__(self, *args, **kwargs):
-        return proxylist(x(*args, **kwargs) for x in self)
-
+    return newmeth
 
 class silence(object):
     def __init__(self, stdout=os.devnull, stderr=os.devnull):
@@ -129,30 +118,6 @@ def chdir(dirname):
         yield
     finally:
         os.chdir(cdir)
-
-
-def make_pybuf(buf, nbytes, flags):
-    from ctypes import pythonapi, py_object
-
-    _make_pybuf = pythonapi.PyMemoryView_FromMemory
-    _make_pybuf.argtypes = [c_void_p, c_ssize_t, c_int]
-    _make_pybuf.restype = py_object
-
-    return _make_pybuf(buf, nbytes, flags)
-
-
-class lazyprop(object):
-    def __init__(self, fn):
-        self.fn = fn
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return None
-
-        value = self.fn(instance)
-        setattr(instance, self.fn.__name__, value)
-
-        return value
 
 
 def subclasses(cls, just_leaf=False):

@@ -3,6 +3,7 @@
 import numpy as np
 
 from pyfr.backends.base import BaseBackend
+from pyfr.backends.openmp.compiler import OpenMPCompiler
 
 
 class OpenMPBackend(BaseBackend):
@@ -22,6 +23,9 @@ class OpenMPBackend(BaseBackend):
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz*cfg.getint('backend-openmp', 'n-soa', 1)
 
+        # C source compiler
+        self.compiler = OpenMPCompiler(cfg)
+
         from pyfr.backends.openmp import (blasext, gimmik, packing,
                                           provider, types, xsmm)
 
@@ -29,7 +33,6 @@ class OpenMPBackend(BaseBackend):
         self.base_matrix_cls = types.OpenMPMatrixBase
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.matrix_cls = types.OpenMPMatrix
-        self.matrix_bank_cls = types.OpenMPMatrixBank
         self.matrix_slice_cls = types.OpenMPMatrixSlice
         self.queue_cls = types.OpenMPQueue
         self.view_cls = types.OpenMPView

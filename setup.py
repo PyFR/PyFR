@@ -105,19 +105,14 @@ data_files = [
 
 # Hard dependencies
 install_requires = [
-    'appdirs >= 1.4.0',
     'gimmik ~= 2.2',
     'h5py >= 2.10',
     'mako >= 1.0.0',
-    'mpi4py >= 3.0',
+    'mpi4py >= 3.1.0',
     'numpy >= 1.20',
+    'platformdirs >= 2.2.0',
     'pytools >= 2016.2.1'
 ]
-
-# Soft dependencies
-extras_require = {
-    'opencl': ['pyopencl >= 2015.2.4']
-}
 
 # Scripts
 console_scripts = [
@@ -156,6 +151,5 @@ setup(name='pyfr',
       entry_points={'console_scripts': console_scripts},
       python_requires='>=3.8',
       install_requires=install_requires,
-      extras_require=extras_require,
       classifiers=classifiers
 )

@@ -4,39 +4,31 @@ from pyfr.solvers.base import BaseSystem
 
 
 class BaseAdvectionSystem(BaseSystem):
-    _nqueues = 2
-
     def rhs(self, t, uinbank, foutbank):
-        runall = self.backend.runall
-        q1, q2 = self._queues
-        kernels = self._kernels
+        q = self._queue
+        kernels = self._get_kernels(uinbank, foutbank)
+        mpireqs = self._mpireqs
 
-        self._bc_inters.prepare(t)
+        for b in self._bc_inters:
+            b.prepare(t)
 
-        self.eles_scal_upts_inb.active = uinbank
-        self.eles_scal_upts_outb.active = foutbank
+        q.enqueue(kernels['eles/disu'])
+        q.enqueue(kernels['mpiint/scal_fpts_pack'])
+        q.run()
 
-        q1.enqueue(kernels['eles', 'disu'])
-        q1.enqueue(kernels['mpiint', 'scal_fpts_pack'])
-        runall([q1])
+        if 'eles/copy_soln' in kernels:
+            q.enqueue(kernels['eles/copy_soln'])
+        if 'eles/qptsu' in kernels:
+            q.enqueue(kernels['eles/qptsu'])
+        q.enqueue(kernels['eles/tdisf_curved'])
+        q.enqueue(kernels['eles/tdisf_linear'])
+        q.enqueue(kernels['eles/tdivtpcorf'])
+        q.enqueue(kernels['iint/comm_flux'])
+        q.enqueue(kernels['bcint/comm_flux'], t=t)
+        q.run(mpireqs['scal_fpts_send_recv'])
 
-        if ('eles', 'copy_soln') in kernels:
-            q1.enqueue(kernels['eles', 'copy_soln'])
-        if ('eles', 'qptsu') in kernels:
-            q1.enqueue(kernels['eles', 'qptsu'])
-        q1.enqueue(kernels['eles', 'tdisf_curved'])
-        q1.enqueue(kernels['eles', 'tdisf_linear'])
-        q1.enqueue(kernels['eles', 'tdivtpcorf'])
-        q1.enqueue(kernels['iint', 'comm_flux'])
-        q1.enqueue(kernels['bcint', 'comm_flux'], t=t)
-
-        q2.enqueue(kernels['mpiint', 'scal_fpts_send'])
-        q2.enqueue(kernels['mpiint', 'scal_fpts_recv'])
-        q2.enqueue(kernels['mpiint', 'scal_fpts_unpack'])
-
-        runall([q1, q2])
-
-        q1.enqueue(kernels['mpiint', 'comm_flux'])
-        q1.enqueue(kernels['eles', 'tdivtconf'])
-        q1.enqueue(kernels['eles', 'negdivconf'], t=t)
-        runall([q1])
+        q.enqueue(kernels['mpiint/scal_fpts_unpack'])
+        q.enqueue(kernels['mpiint/comm_flux'])
+        q.enqueue(kernels['eles/tdivtconf'])
+        q.enqueue(kernels['eles/negdivconf'], t=t)
+        q.run()

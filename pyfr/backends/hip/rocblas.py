@@ -4,7 +4,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -64,7 +64,7 @@ class HIPRocBLASKernels(object):
             pass
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
-        w = self._wrappers
+        h, w = self._handle, self._wrappers
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -88,10 +88,10 @@ class HIPRocBLASKernels(object):
             rocblas_gemm = w.rocblas_sgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        class MulKernel(ComputeKernel):
-            def run(iself, queue):
-                w.rocblas_set_stream(self._handle, queue.stream_comp)
-                rocblas_gemm(self._handle, opA, opB, m, n, k,
+        class MulKernel(Kernel):
+            def run(self, queue):
+                w.rocblas_set_stream(h, queue.stream)
+                rocblas_gemm(h, opA, opB, m, n, k,
                              alpha_ct, A, A.leaddim, B, B.leaddim,
                              beta_ct, C, C.leaddim)
 

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from functools import cached_property
+
 import numpy as np
 
 import pyfr.backends.base as base
-from pyfr.util import make_pybuf
 
 
 class _CUDAMatrixCommon(object):
-    @property
+    @cached_property
     def _as_parameter_(self):
         return self.data
 
@@ -47,13 +48,9 @@ class CUDAMatrix(CUDAMatrixBase, base.Matrix):
 
 
 class CUDAMatrixSlice(_CUDAMatrixCommon, base.MatrixSlice):
-    def _init_data(self, mat):
-        return (int(mat.basedata) + mat.offset +
-                (self.ra*self.leaddim + self.ca)*self.itemsize)
-
-
-class CUDAMatrixBank(base.MatrixBank):
-    pass
+    @cached_property
+    def data(self):
+        return int(self.basedata) + self.offset
 
 
 class CUDAConstMatrix(CUDAMatrixBase, base.ConstMatrix):
@@ -69,10 +66,17 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
         # Call the standard matrix constructor
         super().__init__(backend, ioshape, initval, extent, aliases, tags)
 
-        # If MPI is CUDA-aware then construct a buffer out of our CUDA
-        # device allocation and pass this directly to MPI
+        # If MPI is CUDA-aware then simply annotate our device buffer
         if backend.mpitype == 'cuda-aware':
-            self.hdata = make_pybuf(self.data, self.nbytes, 0x200)
+            class HostData(object):
+                __array_interface__ = {
+                    'version': 3,
+                    'typestr': np.dtype(self.dtype).str,
+                    'data': (self.data, False),
+                    'shape': (self.nrow, self.ncol)
+                }
+
+            self.hdata = np.array(HostData(), copy=False)
         # Otherwise, allocate a buffer on the host for MPI to send/recv from
         else:
             shape, dtype = (self.nrow, self.ncol), self.dtype
@@ -87,38 +91,22 @@ class CUDAQueue(base.Queue):
     def __init__(self, backend):
         super().__init__(backend)
 
-        # CUDA streams
-        self.stream_comp = backend.cuda.create_stream()
-        self.stream_copy = backend.cuda.create_stream()
+        # CUDA stream
+        self.stream = backend.cuda.create_stream()
 
-    def _wait(self):
-        if self._last_ktype == 'compute':
-            self.stream_comp.synchronize()
-            self.stream_copy.synchronize()
-        elif self._last_ktype == 'mpi':
-            from mpi4py import MPI
+    def run(self, mpireqs=[]):
+        # Start any MPI requests
+        if mpireqs:
+            self._startall(mpireqs)
 
-            MPI.Prequest.Waitall(self.mpi_reqs)
-            self.mpi_reqs = []
+        # Submit the kernels to the CUDA stream
+        for item, args, kwargs in self._items:
+            item.run(self, *args, **kwargs)
 
-        self._last_ktype = None
+        # If we started any MPI requests, wait for them
+        if mpireqs:
+            self._waitall(mpireqs)
 
-    def _at_sequence_point(self, item):
-        return self._last_ktype != item.ktype
-
-    @staticmethod
-    def runall(queues):
-        # First run any items which will not result in an implicit wait
-        for q in queues:
-            q._exec_nowait()
-
-        # So long as there are items remaining in the queues
-        while any(queues):
-            # Execute a (potentially) blocking item from each queue
-            for q in filter(None, queues):
-                q._exec_next()
-                q._exec_nowait()
-
-        # Wait for all tasks to complete
-        for q in queues:
-            q._wait()
+        # Wait for the kernels to finish and clear the queue
+        self.stream.synchronize()
+        self._items.clear()

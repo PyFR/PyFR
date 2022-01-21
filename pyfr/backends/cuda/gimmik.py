@@ -3,7 +3,7 @@
 from gimmik import generate_mm
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, NotSuitableError
+from pyfr.backends.base import Kernel, NotSuitableError
 from pyfr.backends.cuda.provider import (CUDAKernelProvider,
                                          get_grid_for_block)
 
@@ -43,9 +43,9 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         block = (128, 1, 1)
         grid = get_grid_for_block(block, b.ncol)
 
-        class MulKernel(ComputeKernel):
+        class MulKernel(Kernel):
             def run(self, queue):
-                fun.exec_async(grid, block, queue.stream_comp, b.ncol, b,
-                               b.leaddim, out, out.leaddim)
+                fun.exec_async(grid, block, queue.stream, b.ncol, b, b.leaddim,
+                               out, out.leaddim)
 
         return MulKernel()

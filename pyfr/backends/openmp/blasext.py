@@ -3,7 +3,7 @@
 import numpy as np
 
 from pyfr.backends.openmp.provider import OpenMPKernelProvider
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 
 
 class OpenMPBlasExtKernels(OpenMPKernelProvider):
@@ -24,11 +24,15 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
 
-        class AxnpbyKernel(ComputeKernel):
-            def run(self, queue, *consts):
-                kern(nrow, nblocks, *arr, *consts)
+        # Set the constant arguments
+        kern.set_args(nrow, nblocks, *arr)
 
-        return AxnpbyKernel()
+        class AxnpbyKernel(Kernel):
+            def run(self, queue, *consts):
+                kern.set_args(*consts, start=2 + nv)
+                kern()
+
+        return AxnpbyKernel(mats=arr)
 
     def copy(self, dst, src):
         if dst.traits != src.traits:
@@ -42,14 +46,14 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         nblocks = src.nblocks
 
         # Build the kernel
-        kern = self._build_kernel('par_memcpy', ksrc,
-                                  [np.intp, np.int32]*2 + [np.int32]*2)
+        kern = self._build_kernel('par_memcpy', ksrc, 'PiPiii')
+        kern.set_args(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
 
-        class CopyKernel(ComputeKernel):
+        class CopyKernel(Kernel):
             def run(self, queue):
-                kern(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
+                kern()
 
-        return CopyKernel()
+        return CopyKernel(mats=[dst, src])
 
     def reduction(self, *rs, method, norm, dt_mat=None):
         if any(r.traits != rs[0].traits for r in rs[1:]):
@@ -81,13 +85,18 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build
         rkern = self._build_kernel('reduction', src, argt)
+        rkern.set_args(nrow, nblocks, reduced.ctypes.data, *regs)
 
-        class ReductionKernel(ComputeKernel):
+        # Runtime argument offset
+        facoff = argt.index(dtype)
+
+        class ReductionKernel(Kernel):
             @property
             def retval(self):
                 return reduced
 
             def run(self, queue, *facs):
-                rkern(nrow, nblocks, reduced.ctypes.data, *regs, *facs)
+                rkern.set_args(*facs, start=facoff)
+                rkern()
 
-        return ReductionKernel()
+        return ReductionKernel(mats=regs)

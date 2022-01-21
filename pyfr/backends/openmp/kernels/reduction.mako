@@ -2,17 +2,31 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-void
-reduction(int nrow, int nblocks, fpdtype_t *restrict reduced,
-          fpdtype_t *restrict rcurr, fpdtype_t *restrict rold,
-% if method == 'errest':
-          fpdtype_t *restrict rerr, fpdtype_t atol, fpdtype_t rtol)
-% elif method == 'resid' and dt_type == 'matrix':
-          fpdtype_t *restrict dt_mat, fpdtype_t dt_fac)
-% elif method == 'resid':
-          fpdtype_t dt_fac)
-% endif
+struct kargs
 {
+    int nrow, nblocks;
+    fpdtype_t *reduced, *rcurr, *rold;
+% if method == 'errest':
+    fpdtype_t *rerr, atol, rtol;
+% elif method == 'resid' and dt_type == 'matrix':
+    fpdtype_t *dt_mat, dt_fac;
+% elif method == 'resid':
+    fpdtype_t dt_fac;
+% endif
+};
+
+void reduction(const struct kargs *restrict args)
+{
+    int nrow = args->nrow, nblocks = args->nblocks;
+    fpdtype_t *reduced = args->reduced, *rcurr = args->rcurr, *rold = args->rold;
+% if method == 'errest':
+    fpdtype_t *rerr = args->rerr, atol = args->atol, rtol = args->rtol;
+% elif method == 'resid' and dt_type == 'matrix':
+    fpdtype_t *dt_mat = args->dt_mat, dt_fac = args->dt_fac;
+% elif method == 'resid':
+    fpdtype_t dt_fac = args->dt_fac;
+% endif
+
     #define X_IDX_AOSOA(v, nv) ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
 
     // Initalise the reduction variables

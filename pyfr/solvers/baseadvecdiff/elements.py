@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base.kernels import ComputeMetaKernel
+from pyfr.backends.base.kernels import MetaKernel
 from pyfr.polys import get_polybasis
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
@@ -35,8 +35,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         self.kernels['_copy_fpts'] = lambda: kernel(
             'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
         )
-        self.kernels['tgradpcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M4 - M6*M0'), self.scal_upts_inb,
+        self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
+            'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
             out=self._vect_upts
         )
         self.kernels['tgradcoru_upts'] = lambda: kernel(
@@ -79,7 +79,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                            vfpts.slice(i*nfpts, (i + 1)*nfpts))
                     for i in range(self.ndims)]
 
-            return ComputeMetaKernel(muls)
+            return MetaKernel(muls)
 
         self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
@@ -94,7 +94,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                         vqpts.slice(i*nqpts, (i + 1)*nqpts))
                         for i in range(self.ndims)]
 
-                return ComputeMetaKernel(muls)
+                return MetaKernel(muls)
 
             self.kernels['gradcoru_qpts'] = gradcoru_qpts
 
@@ -135,9 +135,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                            extent=nonce + 'artvisc', tags=tags)
 
             # Apply the sensor to estimate the required artificial viscosity
-            self.kernels['shocksensor'] = lambda: self._be.kernel(
+            self.kernels['shocksensor'] = lambda uin: self._be.kernel(
                 'shocksensor', tplargs=tplargs_artvisc, dims=[self.neles],
-                u=self.scal_upts_inb, artvisc=self.artvisc
+                u=self.scal_upts[uin], artvisc=self.artvisc
             )
         elif shock_capturing == 'none':
             self.artvisc = None

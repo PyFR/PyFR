@@ -51,7 +51,6 @@ class CUDAWrappers(LibWrapper):
     # Constants
     COMPUTE_CAPABILITY_MAJOR = 75
     COMPUTE_CAPABILITY_MINOR = 76
-    EVENT_DISABLE_TIMING = 2
     FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     FUNC_CACHE_PREFER_NONE = 0
@@ -79,10 +78,6 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuStreamCreate', POINTER(c_void_p), c_uint),
         (c_int, 'cuStreamDestroy_v2', c_void_p),
         (c_int, 'cuStreamSynchronize', c_void_p),
-        (c_int, 'cuStreamWaitEvent', c_void_p, c_void_p, c_uint),
-        (c_int, 'cuEventCreate', POINTER(c_void_p), c_uint),
-        (c_int, 'cuEventDestroy_v2', c_void_p),
-        (c_int, 'cuEventRecord', c_void_p, c_void_p),
         (c_int, 'cuModuleLoadDataEx', POINTER(c_void_p), c_char_p, c_uint,
          POINTER(c_int), POINTER(c_void_p)),
         (c_int, 'cuModuleUnload', c_void_p),
@@ -150,22 +145,6 @@ class CUDAStream(_CUDABase):
     def synchronize(self):
         self.cuda.lib.cuStreamSynchronize(self)
 
-    def wait_for_event(self, event):
-        self.cuda.lib.cuStreamWaitEvent(self, event, 0)
-
-
-class CUDAEvent(_CUDABase):
-    _destroyfn = 'cuEventDestroy'
-
-    def __init__(self, cuda):
-        ptr = c_void_p()
-        cuda.lib.cuEventCreate(ptr, cuda.lib.EVENT_DISABLE_TIMING)
-
-        super().__init__(cuda, ptr)
-
-    def record(self, stream):
-        self.cuda.lib.cuEventRecord(self, stream)
-
 
 class CUDAModule(_CUDABase):
     _destroyfn = 'cuModuleUnload'
@@ -187,15 +166,9 @@ class CUDAFunction(_CUDABase):
 
         super().__init__(cuda, ptr)
 
-        # Save a reference to our underlying module
+        # Save a reference to our underlying module and argument types
         self.module = module
-
-        # For each argument type instantiate the corresponding ctypes type
-        self._args = args = [atype() for atype in argtypes]
-
-        # Obtain pointers to these arguments
-        self._arg_ptrs = [cast(pointer(arg), c_void_p) for arg in args]
-        self._arg_ptrs = (c_void_p * len(args))(*self._arg_ptrs)
+        self.argtypes = list(argtypes)
 
     def set_cache_pref(self, *, prefer_l1=None, prefer_shared=None):
         pref = self.cuda._get_cache_pref(prefer_l1, prefer_shared)
@@ -209,12 +182,23 @@ class CUDAFunction(_CUDABase):
             attr = self.cuda.lib.FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT
             self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
 
-    def exec_async(self, grid, block, stream, *args, dynm_shared=0):
-        for src, dst in zip(args, self._args):
+    def exec_async(self, grid, block, stream, *args, sharedb=0):
+        try:
+            kargs = self._kargs
+        except AttributeError:
+            # For each argument instantiate the corresponding ctypes type
+            self._kargs = kargs = [atype() for atype in self.argtypes]
+
+            # Obtain pointers to these arguments
+            karg_ptrs = [cast(pointer(arg), c_void_p) for arg in kargs]
+            self._karg_ptrs = (c_void_p * len(kargs))(*karg_ptrs)
+
+        # Set the arguments
+        for src, dst in zip(args, kargs):
             dst.value = getattr(src, '_as_parameter_', src)
 
-        self.cuda.lib.cuLaunchKernel(self, *grid, *block, dynm_shared, stream,
-                                     self._arg_ptrs, None)
+        self.cuda.lib.cuLaunchKernel(self, *grid, *block, sharedb, stream,
+                                     self._karg_ptrs, None)
 
 
 class CUDA(object):
@@ -283,23 +267,17 @@ class CUDA(object):
 
         return np.array(alloc, copy=False)
 
-    def memcpy(self, dst, src, nbytes):
+    def memcpy(self, dst, src, nbytes, stream=None):
         if isinstance(dst, (np.ndarray, np.generic)):
             dst = dst.ctypes.data
 
         if isinstance(src, (np.ndarray, np.generic)):
             src = src.ctypes.data
 
-        self.lib.cuMemcpy(dst, src, nbytes)
-
-    def memcpy_async(self, dst, src, nbytes, stream):
-        if isinstance(dst, (np.ndarray, np.generic)):
-            dst = dst.ctypes.data
-
-        if isinstance(src, (np.ndarray, np.generic)):
-            src = src.ctypes.data
-
-        self.lib.cuMemcpyAsync(dst, src, nbytes, stream)
+        if stream is None:
+            self.lib.cuMemcpy(dst, src, nbytes)
+        else:
+            self.lib.cuMemcpyAsync(dst, src, nbytes, stream)
 
     def memset(self, dst, val, nbytes):
         self.lib.cuMemsetD8(dst, val, nbytes)
@@ -309,6 +287,3 @@ class CUDA(object):
 
     def create_stream(self):
         return CUDAStream(self)
-
-    def create_event(self):
-        return CUDAEvent(self)

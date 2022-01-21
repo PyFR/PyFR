@@ -213,6 +213,9 @@ def _process_common(args, mesh, soln, cfg):
 
         enable_prefork()
 
+    # Work around issues with UCX-derived MPI libraries
+    os.environ['UCX_MEMTYPE_CACHE'] = 'n'
+
     # Import but do not initialise MPI
     from mpi4py import MPI
 
@@ -241,9 +244,6 @@ def _process_common(args, mesh, soln, cfg):
 
     # Execute!
     solver.run()
-
-    # Finalise MPI
-    MPI.Finalize()
 
 
 def process_run(args):

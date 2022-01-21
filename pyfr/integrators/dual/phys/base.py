@@ -4,7 +4,6 @@ import math
 
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.integrators.dual.pseudo import get_pseudo_integrator
-from pyfr.util import proxylist
 
 
 class BaseDualIntegrator(BaseIntegrator):
@@ -20,7 +19,7 @@ class BaseDualIntegrator(BaseIntegrator):
         )
 
         # Event handlers for advance_to
-        self.completed_step_handlers = proxylist(self._get_plugins(initsoln))
+        self.completed_step_handlers = self._get_plugins(initsoln)
 
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
