@@ -38,6 +38,9 @@ class BaseAdvectionMPIInters(BaseInters):
         self._rhsrank = rhsrank
         self._rallocs = rallocs
 
+        # Name our interface so we can match kernels to MPI requests
+        self.name = 'p{rhsrank}'
+
         const_mat = self._const_mat
 
         # Generate the left hand view matrix and its dual

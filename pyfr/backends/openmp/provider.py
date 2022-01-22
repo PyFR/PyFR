@@ -20,6 +20,8 @@ class OpenMPKernel(Kernel):
     def add_to_graph(self, graph, dnodes):
         graph.klist.append(self.kernel)
 
+        return len(graph.klist)
+
     def run(self):
         self.kernel()
 
@@ -28,6 +30,8 @@ class _OpenCLMetaKernelCommon(MetaKernel):
     def add_to_graph(self, graph, dnodes):
         for k in self.kernels:
             k.add_to_graph(graph, dnodes)
+
+        return len(graph.klist)
 
 
 class OpenMPOrderedMetaKernel(_OpenCLMetaKernelCommon): pass

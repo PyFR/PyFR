@@ -50,12 +50,6 @@ class BaseBackend:
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
 
-        from mpi4py import MPI
-
-        # MPI wrappers
-        self._startall = MPI.Prequest.Startall
-        self._waitall = MPI.Prequest.Waitall
-
     @cached_property
     def lookup(self):
         pkg = f'pyfr.backends.{self.name}.kernels'

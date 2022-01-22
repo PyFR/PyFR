@@ -89,26 +89,16 @@ class CUDABackend(BaseBackend):
         # Create a stream to run kernels on
         self._stream = self.cuda.create_stream()
 
-    def run_kernels(self, kernels, mpireqs=None):
-        stream = self._stream
-
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
+    def run_kernels(self, kernels):
         # Submit the kernels to the CUDA stream
         for k in kernels:
-            k.run(stream)
-
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self._waitall(mpireqs)
+            k.run(self._stream)
 
         # Wait for the kernels to finish
-        stream.synchronize()
+        self._stream.synchronize()
 
-    def run_graph(self, graph, mpireqs=None):
-        self.run_kernels([graph], mpireqs)
+    def run_graph(self, graph):
+        graph.run(self._stream)
 
     def _malloc_impl(self, nbytes):
         # Allocate

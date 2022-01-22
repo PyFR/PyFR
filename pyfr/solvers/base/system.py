@@ -166,7 +166,15 @@ class BaseSystem:
 
     def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
-        self._ketypes = ketypes = {}
+
+        # Helper function to tag the element type/MPI interface
+        # associated with a kernel; used for dependency analysis
+        self._ktags = {}
+        def tag_kern(pname, prov, kern):
+            if pname == 'eles':
+                self._ktags[kern] = f'e-{prov.basis.name}'
+            elif pname == 'mpiint':
+                self._ktags[kern] = f'i-{prov.name}'
 
         provnames = ['eles', 'iint', 'mpiint', 'bcint']
         provlists = [eles, iint, mpiint, bcint]
@@ -191,8 +199,7 @@ class BaseSystem:
                             else:
                                 kernels[f'{pn}/{kn}', None, i].append(kern)
 
-                            if pn == 'eles':
-                                ketypes[kern] = p.basis.name
+                            tag_kern(pn, p, kern)
                     else:
                         kern = kgetter()
                         if isinstance(kern, NullKernel):
@@ -200,14 +207,13 @@ class BaseSystem:
 
                         kernels[f'{pn}/{kn}', None, None].append(kern)
 
-                        if pn == 'eles':
-                            ketypes[kern] = p.basis.name
+                        tag_kern(pn, p, kern)
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
 
         for mn, mgetter in it.chain(*[m.mpireqs.items() for m in mpiint]):
-            mpireqs[mn[:-4] + 'send_recv'].append(mgetter())
+            mpireqs[mn].append(mgetter())
 
     @memoize
     def _get_kernels(self, uinbank, foutbank):
@@ -226,12 +232,12 @@ class BaseSystem:
 
         return kernels, binders
 
-    def _ele_deps(self, kdict, kern, *dnames):
+    def _kdeps(self, kdict, kern, *dnames):
         deps = []
 
         for name in dnames:
-            for k in kdict[f'eles/{name}']:
-                if self._ketypes[kern] == self._ketypes[k]:
+            for k in kdict[name]:
+                if self._ktags[kern] == self._ktags[k]:
                     deps.append(k)
 
         return deps
@@ -251,8 +257,8 @@ class BaseSystem:
     def rhs(self, t, uinbank, foutbank):
         self._prepare_kernels(t, uinbank, foutbank)
 
-        for graph, mpireqs in self._rhs_graphs(uinbank, foutbank):
-            self.backend.run_graph(graph, mpireqs)
+        for graph in self._rhs_graphs(uinbank, foutbank):
+            self.backend.run_graph(graph)
 
     def _compute_grads_graph(self, t, uinbank):
         raise NotImplementedError(f'Solver "{self.name}" does not compute '
@@ -261,8 +267,8 @@ class BaseSystem:
     def compute_grads(self, t, uinbank):
         self._prepare_kernels(t, uinbank, None)
 
-        for graph, mpireqs in self._compute_grads_graph(uinbank):
-            self.backend.run_graph(graph, mpireqs)
+        for graph in self._compute_grads_graph(uinbank):
+            self.backend.run_graph(graph)
 
     def filt(self, uinoutbank):
         kkey = ('eles/filter_soln', uinoutbank, None)

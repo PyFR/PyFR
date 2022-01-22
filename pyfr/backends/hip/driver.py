@@ -175,6 +175,9 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipStreamBeginCapture', c_void_p, c_uint),
         (c_int, 'hipStreamEndCapture', c_void_p, POINTER(c_void_p)),
         (c_int, 'hipStreamSynchronize', c_void_p),
+        (c_int, 'hipEventCreate', POINTER(c_void_p)),
+        (c_int, 'hipEventDestroy', c_void_p),
+        (c_int, 'hipEventSynchronize', c_void_p),
         (c_int, 'hipModuleLoadData', POINTER(c_void_p), c_char_p),
         (c_int, 'hipModuleUnload', c_void_p),
         (c_int, 'hipModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
@@ -185,6 +188,8 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipGraphDestroy', c_void_p),
         (c_int, 'hipGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t),
+        (c_int, 'hipGraphAddEventRecordNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'hipGraphAddKernelNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(HIPKernelNodeParams)),
         (c_int, 'hipGraphAddMemcpyNode1D', POINTER(c_void_p), c_void_p,
@@ -262,6 +267,19 @@ class HIPStream(_HIPBase):
         self.hip.lib.hipStreamSynchronize(self)
 
 
+class HIPEvent(_HIPBase):
+    _destroyfn = 'hipEventDestroy'
+
+    def __init__(self, hip):
+        ptr = c_void_p()
+        hip.lib.hipEventCreate(ptr)
+
+        super().__init__(hip, ptr)
+
+    def wait(self):
+        self.hip.lib.hipEventSynchronize(self)
+
+
 class HIPModule(_HIPBase):
     _destroyfn = 'hipModuleUnload'
 
@@ -315,6 +333,13 @@ class HIPGraph(_HIPBase):
     def add_empty(self, deps=None):
         ptr = c_void_p()
         self.hip.lib.hipGraphAddEmptyNode(ptr, self, *self._make_deps(deps))
+
+        return ptr.value
+
+    def add_event_record(self, event, deps=None):
+        ptr = c_void_p()
+        self.hip.lib.hipGraphAddEventRecordNode(ptr, self,
+                                                *self._make_deps(deps), event)
 
         return ptr.value
 
@@ -432,6 +457,9 @@ class HIP:
 
     def create_stream(self):
         return HIPStream(self)
+
+    def create_event(self):
+        return HIPEvent(self)
 
     def create_graph(self):
         return HIPGraph(self)

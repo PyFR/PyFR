@@ -118,6 +118,7 @@ class CUDAWrappers(LibWrapper):
     # Constants
     COMPUTE_CAPABILITY_MAJOR = 75
     COMPUTE_CAPABILITY_MINOR = 76
+    EVENT_DISABLE_TIMING = 2
     FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     FUNC_CACHE_PREFER_NONE = 0
@@ -148,6 +149,9 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuStreamBeginCapture', c_void_p, c_uint),
         (c_int, 'cuStreamEndCapture', c_void_p, POINTER(c_void_p)),
         (c_int, 'cuStreamSynchronize', c_void_p),
+        (c_int, 'cuEventCreate', POINTER(c_void_p), c_uint),
+        (c_int, 'cuEventDestroy_v2', c_void_p),
+        (c_int, 'cuEventSynchronize', c_void_p),
         (c_int, 'cuModuleLoadDataEx', POINTER(c_void_p), c_char_p, c_uint,
          POINTER(c_int), POINTER(c_void_p)),
         (c_int, 'cuModuleUnload', c_void_p),
@@ -160,6 +164,8 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuGraphDestroy', c_void_p),
         (c_int, 'cuGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t),
+        (c_int, 'cuGraphAddEventRecordNode', POINTER(c_void_p), c_void_p,
+          POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'cuGraphAddKernelNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphAddChildGraphNode', POINTER(c_void_p), c_void_p,
@@ -241,6 +247,19 @@ class CUDAStream(_CUDABase):
         self.cuda.lib.cuStreamSynchronize(self)
 
 
+class CUDAEvent(_CUDABase):
+    _destroyfn = 'cuEventDestroy'
+
+    def __init__(self, cuda):
+        ptr = c_void_p()
+        cuda.lib.cuEventCreate(ptr, cuda.lib.EVENT_DISABLE_TIMING)
+
+        super().__init__(cuda, ptr)
+
+    def synchronize(self):
+        self.cuda.lib.cuEventSynchronize(self)
+
+
 class CUDAModule(_CUDABase):
     _destroyfn = 'cuModuleUnload'
 
@@ -306,6 +325,13 @@ class CUDAGraph(_CUDABase):
     def add_empty(self, deps=None):
         ptr = c_void_p()
         self.cuda.lib.cuGraphAddEmptyNode(ptr, self, *self._make_deps(deps))
+
+        return ptr.value
+
+    def add_event_record(self, event, deps=None):
+        ptr = c_void_p()
+        self.cuda.lib.cuGraphAddEventRecordNode(ptr, self,
+                                                *self._make_deps(deps), event)
 
         return ptr.value
 
@@ -458,6 +484,9 @@ class CUDA:
 
     def create_stream(self):
         return CUDAStream(self)
+
+    def create_event(self):
+        return CUDAEvent(self)
 
     def create_graph(self):
         return CUDAGraph(self)

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+from collections import defaultdict
+
 from ctypes import addressof, c_void_p, cast
 from functools import cached_property
 
@@ -60,20 +62,48 @@ class OpenMPGraph(base.Graph):
         super().__init__(backend)
 
         self.klist = []
+        self.mpi_idxs = defaultdict(list)
+
+    def add_mpi_req(self, req, deps=[]):
+        super().add_mpi_req(req, deps)
+
+        if deps:
+            ix = max(self.knodes[d] for d in deps)
+
+            self.mpi_idxs[ix].append(req)
 
     def commit(self):
         super().commit()
 
-        self._nkerns = n = len(self.klist)
+        n = len(self.klist)
 
-        # Obtain pointers to our kernel functions
-        self._kfuns = [cast(k.fun, c_void_p) for k in self.klist]
-        self._kfuns = (c_void_p * n)(*self._kfuns)
+        # Obtain pointers to our kernel functions and their arguments
+        self._kfunargs = (c_void_p * (2*n))()
+        self._kfunargs[0::2] = [cast(k.fun, c_void_p) for k in self.klist]
+        self._kfunargs[1::2] = [addressof(k.kargs) for k in self.klist]
 
-        # Obtain pointers to their corresponding arguments
-        self._kargs = [addressof(k.kargs) for k in self.klist]
-        self._kargs = (c_void_p * n)(*self._kargs)
+        # Group kernels in runs separated by MPI requests
+        self._runlist, i = [], 0
+
+        for j in sorted(self.mpi_idxs):
+            self._runlist.append((i, j - i, self.mpi_idxs[j]))
+            i = j
+
+        if i != n - 1:
+            self._runlist.append((i, n - i, []))
 
     def run(self):
-        self.backend.krunner(self._nkerns, self._kfuns, self._kargs)
+        from mpi4py import MPI
 
+        # Start all dependency-free MPI requests
+        if self.mpi_root_reqs:
+            MPI.Prequest.Startall(self.mpi_root_reqs)
+
+        for i, n, reqs in self._runlist:
+            self.backend.krunner(i, n, self._kfunargs)
+
+            for req in reqs:
+                req.Start()
+
+        # Wait for all of the MPI requests to finish
+        MPI.Prequest.Waitall(self.mpi_reqs)

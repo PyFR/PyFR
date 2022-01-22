@@ -87,6 +87,7 @@ class OpenCLWrappers(LibWrapper):
         (c_int, 'clFinish', c_void_p),
         (c_int, 'clFlush', c_void_p),
         (c_int, 'clReleaseEvent', c_void_p),
+        (c_int, 'clWaitForEvents', c_uint, c_void_p),
         (c_void_p, 'clCreateBuffer', c_void_p, c_uint64, c_size_t, c_void_p,
          POINTER(c_int)),
         (c_void_p, 'clCreateSubBuffer', c_void_p, c_uint64, c_uint, c_void_p,
@@ -165,6 +166,24 @@ class _OpenCLBase:
 
     def __int__(self):
         return self._as_parameter_
+
+
+class _OpenCLWaitFor:
+    def _make_wait_for(self, events):
+        if events:
+            nwait = len(events)
+            events = [int(e) for e in events]
+
+            try:
+                wait_for = self._wait_for_ptrs
+                wait_for[:nwait] = events
+            except (AttributeError, ValueError):
+                self._wait_for_ptrs = wait_for = (c_void_p * nwait)()
+                wait_for[:] = events
+
+            return nwait, wait_for
+        else:
+            return 0, None
 
 
 class OpenCLPlatform(_OpenCLBase):
@@ -378,7 +397,7 @@ class OpenCLProgram(_OpenCLBase):
         return OpenCLKernel(self.lib, self, name, argspec)
 
 
-class OpenCLKernel(_OpenCLBase):
+class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):
     _destroyfn = 'clReleaseKernel'
 
     typemap = [c_double, c_float, c_int32, c_int64, c_ulong]
@@ -391,9 +410,6 @@ class OpenCLKernel(_OpenCLBase):
 
         # For each argument type fetch the corresponding ctypes instance
         self._args = [self.typemap[atype] for atype in argtypes]
-
-        # Wait-for array with an initial capacity of two events
-        self._wait_forp = (c_void_p * 2)()
 
     def set_arg(self, i, v):
         arg, sz = self._args[i]
@@ -412,27 +428,16 @@ class OpenCLKernel(_OpenCLBase):
 
     def exec_async(self, queue, wait_for=None, ret_evt=False):
         evt_ptr = c_void_p() if ret_evt else None
-
-        if wait_for is None:
-            nwait = 0
-            wait_forp = None
-        else:
-            nwait = len(wait_for)
-            wait_forp = self._wait_forp
-
-            if len(wait_forp) < nwait:
-                self._wait_forp = wait_forp = (c_void_p * nwait)()
-
-            wait_forp[:nwait] = [int(w) for w in wait_for]
+        wait_for = self._make_wait_for(wait_for)
 
         self.lib.clEnqueueNDRangeKernel(queue, self, self._wd, None, self._gs,
-                                        self._ls, nwait, wait_forp, evt_ptr)
+                                        self._ls, *wait_for, evt_ptr)
 
         if ret_evt:
             return OpenCLEvent(self.lib, evt_ptr)
 
 
-class OpenCL:
+class OpenCL(_OpenCLWaitFor):
     def __init__(self):
         self.ctx = None
         self.lib = OpenCLWrappers()
@@ -461,9 +466,6 @@ class OpenCL:
         # Allocate a default queue
         self.qdflt = self.queue()
 
-        # Wait-for array with an initial capacity of two events
-        self._wait_forp = (c_void_p * 2)()
-
     def mem_alloc(self, nbytes):
         return OpenCLBuffer(self.lib, self.ctx, nbytes)
 
@@ -489,35 +491,24 @@ class OpenCL:
     def memcpy_async(self, queue, dst, src, nbytes, wait_for=None,
                      ret_evt=False):
         evt_ptr = c_void_p() if ret_evt else None
-
-        if wait_for is None:
-            nwait = 0
-            wait_forp = None
-        else:
-            nwait = len(wait_for)
-            wait_forp = self._wait_forp
-
-            if len(wait_forp) < nwait:
-                self._wait_forp = wait_forp = (c_void_p * nwait)()
-
-            wait_forp[:nwait] = [int(w) for w in wait_for]
+        wait_for = self._make_wait_for(wait_for)
 
         # Device to host
         if isinstance(dst, (np.ndarray, np.generic)):
             dst = dst.ctypes.data
 
             self.lib.clEnqueueReadBuffer(queue, src, False, 0, nbytes,
-                                         dst, nwait, wait_forp, evt_ptr)
+                                         dst, nwait, *wait_for, evt_ptr)
         # Host to device
         elif isinstance(src, (np.ndarray, np.generic)):
             src = src.ctypes.data
 
             self.lib.clEnqueueWriteBuffer(queue, dst, False, 0, nbytes,
-                                          src, nwait, wait_forp, evt_ptr)
+                                          src, nwait, *wait_for, evt_ptr)
         # Device to device
         else:
             self.lib.clEnqueueCopyBuffer(queue, src, dst, 0, 0, nbytes,
-                                         nwait, wait_forp, evt_ptr)
+                                         nwait, *wait_for, evt_ptr)
 
         if ret_evt:
             return OpenCLEvent(self.lib, evt_ptr)
@@ -531,6 +522,9 @@ class OpenCL:
 
     def event(self, evt):
         return OpenCLEvent(self.lib, evt)
+
+    def wait_for_events(self, events):
+        self.lib.clWaitForEvents(*self._make_wait_for(events))
 
     def queue(self, out_of_order=False):
         return OpenCLQueue(self.lib, self.ctx, self.dev, out_of_order)

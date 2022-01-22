@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 <%inherit file='base'/>
 
-void run_kernels(int n, void (**kerns)(void *), void **kargs)
+struct kfunargs
 {
-	for (int i = 0; i < n; i++)
-		kerns[i](kargs[i]);
+    void (*fun)(void *);
+    void *args;
+};
+
+void run_kernels(int off, int n, const struct kfunargs *kfa)
+{
+    for (int i = off; i < off + n; i++)
+        kfa[i].fun(kfa[i].args);
 }

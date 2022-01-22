@@ -292,6 +292,11 @@ class Graph(object):
         # Kernels and their dependencies
         self.knodes = {}
         self.kdeps = {}
+        self.depk = set()
+
+        # MPI requests along with their associated dependencies
+        self.mpi_reqs = []
+        self.mpi_req_deps = []
 
     def add(self, kern, deps=[]):
         if self.committed:
@@ -308,13 +313,35 @@ class Graph(object):
 
         # Note our dependencies
         self.kdeps[kern] = deps
+        self.depk.update(deps)
 
     def add_all(self, kerns, deps=[]):
         for k in kerns:
             self.add(k, deps)
 
+    def add_mpi_req(self, req, deps=[]):
+        if self.committed:
+            raise RuntimeError('Can not add nodes to a committed graph')
+
+        if req in self.mpi_reqs:
+            raise RuntimeError('Can only add a request to a graph once')
+
+        # Add the request
+        self.mpi_reqs.append(req)
+        self.mpi_req_deps.append(deps)
+
+        # Note any dependencies
+        self.depk.update(deps)
+
+    def add_mpi_reqs(self, reqs, deps=[]):
+        for r in reqs:
+            self.add_mpi_req(r, deps)
+
     def commit(self):
+        mreqs, mdeps = self.mpi_reqs, self.mpi_req_deps
+
         self.committed = True
+        self.mpi_root_reqs = [r for r, d in zip(mreqs, mdeps) if not d]
 
     def run(self, *args):
         pass

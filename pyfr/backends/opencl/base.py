@@ -90,42 +90,16 @@ class OpenCLBackend(BaseBackend):
         self.in_order_queue = self.cl.queue(out_of_order=False)
         self.out_of_order_queue = self.cl.queue(out_of_order=True)
 
-    def run_kernels(self, kernels, mpireqs=None):
-        queue = self.in_order_queue
-
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
+    def run_kernels(self, kernels):
         # Submit the kernels to the command queue
         for k in kernels:
-            k.run(queue)
-
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            queue.flush()
-            self._waitall(mpireqs)
+            k.run(self.in_order_queue)
 
         # Wait for the kernels to finish
-        queue.finish()
+        self.in_order_queue.finish()
 
-    def run_graph(self, graph, mpireqs=None):
-        queue = self.out_of_order_queue
-
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
-        # Execute the kernels in the graph
-        graph.run(queue)
-
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            queue.flush()
-            self._waitall(mpireqs)
-
-        # Wait for the kernels to finish
-        queue.finish()
+    def run_graph(self, graph):
+        graph.run(self.out_of_order_queue)
 
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer

@@ -77,9 +77,6 @@ class OpenCLGraph(base.Graph):
     def commit(self):
         super().commit()
 
-        # Identify kernels that other kernels depend on
-        kdeps = set(d for deps in self.kdeps.values() for d in deps)
-
         # Map from kernels to event table locations
         evtidxs = {}
 
@@ -92,13 +89,39 @@ class OpenCLGraph(base.Graph):
             # Resolve the event indices of kernels we depend on
             wait_evts = [evtidxs[dep] for dep in self.kdeps[k]] or None
 
-            klist.append((k, wait_evts, k in kdeps))
+            klist.append((k, wait_evts, k in self.depk))
+
+        # Dependent MPI request list
+        self.mreqlist = mreqlist = []
+
+        for req, deps in zip(self.mpi_reqs, self.mpi_req_deps):
+            if deps:
+                mreqlist.append((req, [evtidxs[dep] for dep in deps]))
 
     def run(self, queue):
-        events = [None]*len(self.klist)
+        from mpi4py import MPI
 
+        events = [None]*len(self.klist)
+        wait_for_events = self.backend.cl.wait_for_events
+
+        # Submit the kernels to the queue
         for i, (k, wait_for, ret_evt) in enumerate(self.klist):
             if wait_for is not None:
                 wait_for = [events[j] for j in wait_for]
 
             events[i] = k.run(queue, wait_for, ret_evt)
+
+        # Start all dependency-free MPI requests
+        if self.mpi_root_reqs:
+            MPI.Prequest.Startall(self.mpi_root_reqs)
+
+        # Start any remaining requests once their dependencies are satisfied
+        for req, wait_for in self.mreqlist:
+            wait_for_events([events[j] for j in wait_for])
+            req.Start()
+
+        # Wait for all of the MPI requests to finish
+        MPI.Prequest.Waitall(self.mpi_reqs)
+
+        # Wait for all of the kernels to finish
+        queue.finish()

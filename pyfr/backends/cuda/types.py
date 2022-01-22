@@ -83,6 +83,16 @@ class CUDAGraph(base.Graph):
 
         self.graph = backend.cuda.create_graph()
         self.stale_kparams = {}
+        self.mpi_events = []
+
+    def add_mpi_req(self, req, deps=[]):
+        super().add_mpi_req(req, deps)
+
+        if deps:
+            event = self.backend.cuda.create_event()
+            self.graph.add_event_record(event, [self.knodes[d] for d in deps])
+
+            self.mpi_events.append((event, req))
 
     def commit(self):
         super().commit()
@@ -90,8 +100,27 @@ class CUDAGraph(base.Graph):
         self.exc_graph = self.graph.instantiate()
 
     def run(self, stream):
+        from mpi4py import MPI
+
+        # Ensure our kernel parameters are up to date
         for node, params in self.stale_kparams.items():
             self.exc_graph.set_kernel_node_params(node, params)
 
         self.exc_graph.launch(stream)
         self.stale_kparams.clear()
+
+        # Start all dependency-free MPI requests
+        if self.mpi_root_reqs:
+            MPI.Prequest.Startall(self.mpi_root_reqs)
+
+        # Start any remaining requests once their dependencies are satisfied
+        for event, req in self.mpi_events:
+            event.synchronize()
+            req.Start()
+
+        # Wait for all of the MPI requests to finish
+        if self.mpi_reqs:
+            MPI.Prequest.Waitall(self.mpi_reqs)
+
+        # Wait for all of the kernels to finish
+        stream.synchronize()

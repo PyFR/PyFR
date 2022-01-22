@@ -54,27 +54,18 @@ class OpenMPBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
-    def run_kernels(self, kernels, mpireqs=None):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
-
-        # Run our kernels
+    def run_kernels(self, kernels):
         for k in kernels:
             k.run()
 
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self._waitall(mpireqs)
-
-    def run_graph(self, graph, mpireqs=None):
-        self.run_kernels([graph], mpireqs)
+    def run_graph(self, graph):
+        graph.run()
 
     @cached_property
     def krunner(self):
         ksrc = self.lookup.get_template('run-kernels').render()
         klib = self.compiler.build(ksrc)
-        return klib.function('run_kernels', None, [c_int, c_void_p, c_void_p])
+        return klib.function('run_kernels', None, [c_int, c_int, c_void_p])
 
     def _malloc_impl(self, nbytes):
         data = np.zeros(nbytes + self.alignb, dtype=np.uint8)
