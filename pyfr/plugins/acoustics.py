@@ -13,9 +13,19 @@ from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
 
-class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
+# reverse map from face index to face type
+fnum_pftype_map = {
+        'tri' : { 0: 'line', 1: 'line', 2: 'line'}, 
+        'quad': { 0: 'line', 1: 'line', 2: 'line', 3: 'line'}, 
+        'tet' : { 0: 'tri', 1: 'tri', 2: 'tri', 3: 'tri'}, 
+        'hex' : { 0: 'quad', 1: 'quad', 2: 'quad', 3: 'quad', 4: 'quad', 5: 'quad'},
+        'pri' : { 0: 'tri', 1: 'tri', 2: 'quad', 3: 'quad', 4: 'quad'}, 
+        'pyr' : { 0: 'quad', 1: 'tri', 2: 'tri', 3: 'tri', 4: 'tri'} 
+}
 
-    name = 'fwhacoustics'
+class FwhSolverPlugin(PostactionMixin, BasePlugin):
+
+    name = 'fwhsolver'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
 
@@ -27,13 +37,18 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
         
+        # read fft parameters inputs
+        self.fft_param = self.get_fwh_fft_param('fwhsolver-fft')
+        # read observers data inputs
+        self.nobserv, self.observ_locs = self.get_fwh_observers_param('fwhsolver-observers')
+        
         # Output field names
         self.fields = intg.system.elementscls.convarmap[self.ndims]
         # Output data type
         self.fpdtype = intg.backend.fpdtype
 
         # Check if the system is incompressible
-        self._ac = intg.system.name.startswith('ac')
+        self._artificial_compress = intg.system.name.startswith('ac')
 
         # Region of interest
         box = self.cfg.getliteral(self.cfgsect, 'region')
@@ -42,13 +57,13 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
         self.prepare_surfmesh(intg,region_eset)
 
         # Determine fwh active ranks lists
-        self.fwh_comm, self.fwh_edgecomm = self.build_fwh_subranks_lists()        
+        self.fwh_comm, self.fwh_edgecomm = self.build_fwh_subranks_lists(intg)        
 
         # Construct the fwh mesh writer
         self._writer = NativeWriter(intg, basedir, basename, 'soln')
 
         # write the fwh surface geometry file
-        self._write_fwh_surface_geo(intg,self._eidxs)
+        self._write_fwh_surface_geo(intg,self._inside_eset,self._eidxs)
 
         # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
@@ -68,7 +83,73 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
         mesh, elemap = intg.system.mesh, intg.system.ele_map
 
         # Extract FWH Surf Geometric Data:
-        self._m0, self._qwts, self._norms, self._xfpts = self.get_fwh_surfdata(elemap, self._eidxs)
+        self._finfo = self.get_fwhsurf_finfo(elemap, self._eidxs)  #fpts, qpts_dA, norm_pnorms, m0
+        # self._int_finfo = self.get_fwhsurf_finfo(elemap, self._int_eidxs)
+        # self._mpi_finfo = self.get_fwhsurf_finfo(elemap, self._mpi_eidxs)
+        # self._bnd_finfo = self.get_fwhsurf_finfo(elemap, self._int_eidxs)
+        self.nqpts = np.asarray(self._finfo[0]).shape[0]
+
+        # Prepare fft param data
+
+        # Allocate/Prepare solution data arrays:
+        self._fwh_usoln = self.allocate_usoln_darray(self.nqpts, self.fft_param['Nt_sub'],5)
+
+    def get_fwh_fft_param(self,cfgsect):
+        fftparam = {}
+        fftparam['Nt_sub'] = self.cfg.getint(cfgsect,'Nt',0)
+        fftparam['Lt_sub'] = self.cfg.getfloat(cfgsect,'Lt',0.)
+        fftparam['dt_sub'] = self.cfg.getfloat(cfgsect,'dt',0.)
+        fftparam['shift'] = self.cfg.getfloat(cfgsect,'time-shift',0.5)
+        fftparam['window'] = self.cfg.get(cfgsect,'window','hann')
+        return fftparam
+    
+    def get_fwh_observers_param(self,cfgsect):
+        nobserv = self.cfg.getint(cfgsect,'n',1)
+        ob_xyz = np.array(self.cfg.getliteral(cfgsect, 'xyz'))
+        return nobserv, ob_xyz
+
+    def allocate_usoln_darray(self, nqpts, ntsub, nvars):
+        usoln = np.empty((ntsub,5,nqpts))
+        return usoln
+
+    def update_usoln_from_curriter(self, intg, m0_dict, eidxs, usoln):
+
+        # MPI info
+        comm, rank, root = get_comm_rank_root()
+
+        # Solution matrices indexed by element type
+        solns = dict(zip(intg.system.ele_types, intg.soln))
+        ndims, nvars = self.ndims, self.nvars
+
+        fIo = 0
+        for (etype, fidx), m0 in m0_dict.items(): 
+            # Get the interpolation operator
+            #srtids_, _, _, m0, _ = self._finfo[etype,fidx]
+            nfpts, nupts = m0.shape
+
+            # Extract the relevant elements from the solution
+            uupts = solns[etype][...,eidxs[etype,fidx]]
+
+            # Interpolate to the face
+            ufpts = m0 @ uupts.reshape(nupts, -1)
+            ufpts = ufpts.reshape(nfpts, nvars, -1)
+            ufpts = ufpts.swapaxes(0, 1) # nvars, nfpts, nfaces
+            #ufpts = np.swapaxes(ufpts.reshape(nvars,-1)[...,srtids_],1,2)  # additional sorting
+
+            # get primitive vars
+            pri_ufpts = self.elementscls.con_to_pri(ufpts, self.cfg)
+            fIsize = pri_ufpts.shape[1] * pri_ufpts.shape[2]
+            fImax = fIo + fIsize
+            if self._artificial_compress:
+                usoln[4,fIo:fImax] = pp = pri_ufpts[0].reshape(-1)  #p
+                usoln[0,fIo:fImax] = pp/self.cfg.getfloat('constants', 'ac-zeta') #rho
+            else:
+                usoln[4,fIo:fImax] = pri_ufpts[-1].reshape(-1)
+                usoln[0,fIo:fImax] = pri_ufpts[0].reshape(-1)
+            usoln[1,fIo:fImax] = pri_ufpts[1].reshape(-1)
+            usoln[2,fIo:fImax] = pri_ufpts[2].reshape(-1)
+            usoln[3,fIo:fImax] = pri_ufpts[1].reshape(-1) if ndims == 3 else 0. * pri_ufpts[1].reshape(-1)
+            fIo = fImax
 
 
     def __call__(self, intg):
@@ -79,37 +160,11 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # Solution matrices indexed by element type
-        solns = dict(zip(intg.system.ele_types, intg.soln))
-        ndims, nvars = self.ndims, self.nvars
-
-        for etype, fidx in self._m0:
-            # Get the interpolation operator
-            m0 = self._m0[etype, fidx]
-            nfpts, nupts = m0.shape
-
-            # Extract the relevant elements from the solution
-            uupts = solns[etype][..., self._eidxs[etype, fidx]]
-
-            #print(f'nfpts: {nfpts} , nupts: {nupts}')
-            #print(f'uupts[{etype},{fidx}].shape = {uupts.shape}')
-
-            # Interpolate to the face
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nvars, -1)
-            ufpts = ufpts.swapaxes(0, 1)
-
-            #print(f'ufpts[{etype},{fidx}].shape = {ufpts.shape}')
-
-            # Compute the pressure
-            pidx = 0 if self._ac else -1
-            p = self.elementscls.con_to_pri(ufpts, self.cfg)[pidx]
-
-            #print(f'p[{etype},{fidx}].shape = {p.shape}')
-
-        # If a post-action has been registered then invoke it
-        # self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
-        #                         soln=self.fwhmeshfname, t=intg.tcurr)
+        # check if fwh_sample_iter == current_iter
+        self.fft_param['fwhiter'] = -1
+        if self.fft_param['fwhiter'] == -1:
+            usol_iter = 1
+            self.update_usoln_from_curriter(intg, self._finfo[-1], self._eidxs, self._fwh_usoln[usol_iter])
         
         # Update the last output time
         self.tout_last = intg.tcurr
@@ -117,7 +172,7 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
         # Need to print fwh surface geometric data only once
         intg.completed_step_handlers.remove(self)
 
-        #exit(0)
+        exit(0)
 
     def extract_drum_region_eset(self, intg, drum):
         elespts = {}
@@ -169,7 +224,7 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
 
         return eset
 
-    def _write_fwh_surface_geo(self,intg,eset):
+    def _write_fwh_surface_geo(self,intg,eset,inters_eidxs):
         comm, rank, root = get_comm_rank_root()
 
         # If we are the root rank then prepare the metadata
@@ -187,7 +242,7 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
 
         # Fetch and (if necessary) subset the solution
         ele_regions, ele_region_data = [], {}
-        for (etype,fidx), eidxs in sorted(eset.items()):
+        for etype, eidxs in sorted(eset.items()):
             doff = intg.system.ele_types.index(etype)
             darr = np.unique(eidxs).astype(np.int32)
 
@@ -202,21 +257,27 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
         self.fwhmeshfname = self._writer.write(data, intg.tcurr, metadata)
 
         # Construct the VTU writer
-        vtuwriter = VTUSurfWriter(intg,self._eidxs)
+        vtuwriter = VTUSurfWriter(intg,inters_eidxs)
         # Write VTU file:
         vtumfname = os.path.splitext(self.fwhmeshfname)[0]
         vtuwriter._write(vtumfname)
 
     def prepare_surfmesh(self,intg,eset):
-        self._eidxs= defaultdict(list)  # fwh face pairs set
-        self._intinters = defaultdict(list)
-        self._mpiinters = defaultdict(list)
-        self._rhsmpiinters = defaultdict(list)
-        self._bndinters = defaultdict(list)
-        self.nintinters = {}
-        self.nmpiinters = {}
-        self.nbndinters = {}
-        self.ntotinters = {}
+        self._inside_eset = defaultdict(list)
+        self._eidxs= defaultdict(list)  
+        self._int_eidxs = defaultdict(list)
+        self._mpi_eidxs = defaultdict(list)  
+        self._mpi_sbuf_eidxs = defaultdict(list)
+        self._bnd_eidxs = defaultdict(list) 
+        self._intinters = []
+        self._mpiinters = []
+        self._bndinters = []
+        self._inters = []
+        self._ninters = {}
+        self._nintinters = {}
+        self._nmpiinters = {}
+        self._nbndinters = {}
+        self.ftype_index = {}
         # fwhranks own all fwh edges and hence are the ones that perform acoustic solve
         # fwhedgeranks are ranks who touches an fwh edge but not necessarily
         # owns an edge in general.
@@ -227,28 +288,31 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
 
         mesh = intg.system.mesh
         # Collect fwh interfaces and their info
-        self.collect_intinters(intg.rallocs,mesh,eset)
+        self.collect_intinters(intg.rallocs,mesh,eset,intg.system.ele_map)
         self.collect_mpiinters(intg.rallocs,mesh,eset)
         self.collect_bndinters(intg.rallocs,mesh,eset)
 
-        for (etype,fidx) in self._eidxs:
-            if (etype,fidx) in self.nintinters:
-                self.ntotinters[etype,fidx] = self.nintinters[etype,fidx] 
-            if (etype,fidx) in self.nmpiinters:
-                if (etype,fidx) in self.ntotinters:
-                    self.ntotinters[etype,fidx] += self.nmpiinters[etype,fidx]
+        for index, (etype,fidx) in enumerate(self._eidxs):
+            self.ftype_index[etype,fidx] = index
+            if (etype,fidx) in self._nintinters:
+                self._ninters[etype,fidx] = self._nintinters[etype,fidx] 
+            if (etype,fidx) in self._nmpiinters:
+                if (etype,fidx) in self._ninters:
+                    self._ninters[etype,fidx] += self._nmpiinters[etype,fidx]
                 else:
-                    self.ntotinters[etype,fidx] = self.nmpiinters[etype,fidx]
-            if (etype,fidx) in self.nbndinters:
-                if (etype,fidx) in self.ntotinters:
-                    self.ntotinters[etype,fidx] += self.nbndinters[etype,fidx] 
+                    self._ninters[etype,fidx] = self._nmpiinters[etype,fidx]
+            if (etype,fidx) in self._nbndinters:
+                if (etype,fidx) in self._ninters:
+                    self._ninters[etype,fidx] += self._nbndinters[etype,fidx] 
                 else:
-                    self.ntotinters[etype,fidx] = self.nbndinters[etype,fidx]
+                    self._ninters[etype,fidx] = self._nbndinters[etype,fidx]
 
         eidxs = self._eidxs
         self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
+        self._inters = np.array(self._inters)
+        self.Numallinters = self._inters.shape[0]
 
-    def collect_intinters(self,rallocs,mesh,eset):
+    def collect_intinters(self,rallocs,mesh,eset,elemap):
         prank = rallocs.prank
         flhs, frhs = mesh[f'con_p{prank}'].astype('U4,i4,i1,i2').tolist()
         for ifaceL,ifaceR in zip(flhs,frhs):    
@@ -260,25 +324,39 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
             if (not (flagL & flagR)) & (flagL | flagR):
                 if flagL:
                     fidx = ifaceL[2]
-                    self._intinters[etype,fidx].append(ifaceR[0:3])
-                    self._eidxs[etype,fidx].append(eidx)
+                    self._intinters.append([ifaceL[0:3],ifaceR[0:3]])
+                    self._int_eidxs[etype,fidx].append(eidx)
+
                 else:
                     etype, eidx, fidx = ifaceR[0:3]
-                    self._intinters[etype,fidx].append(ifaceL[0:3])
-                    self._eidxs[etype,fidx].append(eidx)
+                    self._intinters.append([ifaceR[0:3],ifaceL[0:3]])
+                    self._int_eidxs[etype,fidx].append(eidx)
+                self._eidxs[etype,fidx].append(eidx)
+                self._inters.append([etype,fidx,eidx])
+                if eidx not in  self._inside_eset[etype]:
+                    self._inside_eset[etype].append(eidx)
             # periodic faces:
             elif (flagL & flagR) & (ifaceL[3] != 0 ):   
                 etype, eidx, fidx = ifaceL[0:3]
-                self._intinters[etype,fidx].append(ifaceR[0:3])
+                self._int_eidxs[etype,fidx].append(eidx)
                 self._eidxs[etype,fidx].append(eidx)
+                self._intinters.append([ifaceL[0:3],ifaceR[0:3]])
+                self._inters.append([etype,fidx,eidx])
+                if eidx not in  self._inside_eset[etype]:
+                    self._inside_eset[etype].append(eidx)
                 #add both right and left faces for vtu writing
                 etype, eidx, fidx = ifaceR[0:3]
-                self._intinters[etype,fidx].append(ifaceL[0:3])
-                self._eidxs[etype,fidx].append(eidx) 
+                self._int_eidxs[etype,fidx].append(eidx)
+                self._eidxs[etype,fidx].append(eidx)
+                self._intinters.append([ifaceR[0:3],ifaceL[0:3]])
+                self._inters.append([etype,fidx,eidx]) 
+                if eidx not in  self._inside_eset[etype]:
+                    self._inside_eset[etype].append(eidx)
 
-        for (etype,fidx) in self._intinters:
-            self.nintinters[etype,fidx] = len(self._intinters[etype,fidx])
-
+        for (etype,fidx) in self._int_eidxs:
+            self._nintinters[etype,fidx] = len(self._int_eidxs[etype,fidx])
+            #self._int_eidxs[etype,fidx] = np.moveaxis(np.array(self._int_eidxs[etype,fidx]),0,1)
+            
     def collect_mpiinters(self,rallocs,mesh,eset):
         comm, rank, root = get_comm_rank_root()
         prank = rallocs.prank
@@ -291,10 +369,11 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
                 etype, eidx, fidx = ifaceL[0:3]
                 flagL[findex] = (eidx in eset[etype]) if etype in eset else False
             rhs_mrank = rallocs.pmrankmap[rhs_prank]
-            self._rhsmpiinters[etype,fidx].append((findex,rhs_mrank))
             comm.Send(flagL,rhs_mrank,tag=52)
 
         # receive flags and collect mpi interfaces
+        self.mpi_scountmap = {}
+        self.mpi_rcountmap = {}
         for rhs_prank in rallocs.prankconn[prank]:
             conkey = f'con_p{prank}p{rhs_prank}'
             mpiint = mesh[conkey].astype('U4,i4,i1,i2').tolist()
@@ -302,22 +381,45 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
             rhs_mrank = rallocs.pmrankmap[rhs_prank] 
             comm.Recv(flagR,rhs_mrank,tag=52)
 
+            sc = 0
+            rc = 0
             for findex, ifaceL in enumerate(mpiint):
                 etype, eidx, fidx = ifaceL[0:3]
                 flagL = (eidx in eset[etype]) if etype in eset else False
                 # add info if it is an fwh edge
                 if flagL and not flagR[findex] :
-                    self._mpiinters[etype,fidx].append((findex,rhs_mrank))
                     self._eidxs[etype,fidx].append(eidx)
-                    
-                if (not (flagL & flagR[findex])) & (flagL | flagR[findex]):
-                    if rhs_mrank not in self.fwh_edgranks_list:
-                        self.fwh_edgranks_list.append(rhs_mrank)
-                    if rank not in self.fwh_edgranks_list:
-                        self.fwh_edgranks_list.append(rank)
+                    self._mpi_eidxs[etype,fidx].append(eidx)
+                    self._inters.append([etype,fidx,eidx])
+                    if eidx not in  self._inside_eset[etype]:
+                        self._inside_eset[etype].append(eidx)
+                    rc += 1
+                elif flagR[findex] and not flagL:
+                    sc += 1
 
-        for (etype,fidx) in self._mpiinters:
-            self.nmpiinters[etype,fidx] = len(self._mpiinters[etype,fidx])
+                #periodic and mpi interface
+                elif (flagL and flagR[findex]) and ifaceL[-1] !=0 :
+                    self._eidxs[etype,fidx].append(eidx)
+                    self._mpi_eidxs[etype,fidx].append(eidx)
+                    self._inters.append([etype,fidx,eidx])
+                    if eidx not in  self._inside_eset[etype]:
+                        self._inside_eset[etype].append(eidx)
+                    rc += 1
+                    sc += 1
+
+            if rc or sc: # this means there is a fwh mpi interface
+                if rhs_mrank not in self.fwh_edgranks_list:
+                    self.fwh_edgranks_list.append(rhs_mrank)
+                if rank not in self.fwh_edgranks_list:
+                    self.fwh_edgranks_list.append(rank)
+            self.mpi_scountmap[rhs_mrank] = sc
+            self.mpi_rcountmap[rhs_mrank] = rc
+        #do not send to yourself:
+        self.mpi_scountmap[rank] = 0
+        self.mpi_rcountmap[rank] = 0
+
+        for (etype,fidx) in self._mpi_eidxs:
+            self._nmpiinters[etype,fidx] = len(self._mpi_eidxs[etype,fidx])
 
     def collect_bndinters(self,rallocs,mesh,eset):
         prank = rallocs.prank
@@ -330,15 +432,43 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
                     flagL = (eidx in eset[etype]) if etype in eset else False
                     if flagL:
                         self._bndinters[etype,fidx].append((eidx,findex,bname))
+                        self._bnd_eidxs[etype,fidx].append(eidx)
                         self._eidxs[etype,fidx].append(eidx)
+                        self._inters.append([etype,fidx,eidx])
+                        if eidx not in  self._inside_eset[etype]:
+                            self._inside_eset[etype].append(eidx)
 
-        for (etype,fidx) in self._bndinters:
-            self.nbndinters[etype,fidx] = len(self._bndinters[etype,fidx])
+        for (etype,fidx) in self._bnd_eidxs:
+            self._nbndinters[etype,fidx] = len(self._bnd_eidxs[etype,fidx])
 
-    def build_fwh_subranks_lists(self):
+    def build_fwh_subranks_lists(self,intg):
         self.fwhranks_list = []
         comm, rank, root = get_comm_rank_root()
-
+        
+        # rallocs = intg.rallocs
+        # prank = rallocs.prank
+        # if comm.size > 1:
+        #     pp= []
+        #     mm = [] 
+        #     for rhs_prank in rallocs.prankconn[prank]:
+        #         pp.append(rhs_prank)
+        #         mm.append(rallocs.pmrankmap[rhs_prank])
+        #     mranks_, pranks_ = (list(t) for t in zip(*sorted(zip(mm, pp))))
+    
+        #     if self._mpi_eidxs:
+        #         rallocs = intg.rallocs
+        #         prank = rallocs.prank
+        #         print(f'\n=================================\nmrank {rank} --> prank {prank} \n=================================')
+        #         print(f'FwhEdgeRanks: {self.fwh_edgranks_list}', flush=True)
+        #         mranks = []
+        #         for rhs_prank in rallocs.prankconn[prank]:
+        #             mranks.append(rallocs.pmrankmap[rhs_prank])
+        #         print(f'rhs mranks {mranks} --> pranks {rallocs.prankconn[prank]}')
+        #         print(f'rhs mranks {mranks_} --> pranks {pranks_}  --- sorted')
+            
+        #         for (etype,fidx) in self._mpi_eidxs:
+        #             print(f'  nmpiinters[{etype},{fidx}]: {self._nmpiinters[etype,fidx]}')
+        # sys.stdout.flush()
         # Determine active ranks for fwh computations
         self.active_fwhrank = True if self._eidxs else False
         rank_is_active_list = comm.allgather(self.active_fwhrank)
@@ -374,40 +504,95 @@ class FwhAcousticsPlugin(PostactionMixin, BasePlugin):
         if fwh_edgecomm is not MPI.COMM_NULL:
             self.fwhedgrank = fwh_edgecomm.rank
 
-        if rank==root:
-            print(f'FwhCompRanks: {self.fwhranks_list}', flush=True)
-            print(f'FwhEdgeRanks: {self.fwh_edgranks_list}', flush=True)
+        self.mpiedge_scount = [0] * len(self.fwh_edgranks_list)
+        self.mpiedge_rcount = [0] * len(self.fwh_edgranks_list)
+        
+        for ir, rk in enumerate(self.fwh_edgranks_list):
+            if rk in self.mpi_scountmap:
+                self.mpiedge_scount[ir] = self.mpi_scountmap[rk]
+                self.mpiedge_rcount[ir] = self.mpi_rcountmap[rk]
+        
+        # comm.barrier()
+        # if self.active_fwhrank and self.active_fwhedgrank:
+        #     print(f'ranks ({rank},{prank},f{self.fwhrank},e{self.fwhedgrank}), scount {self.mpiedge_scount}, rcount {self.mpiedge_rcount}', flush=True)
+        # elif self.active_fwhedgrank:
+        #     print(f'ranks ({rank},{prank},e{self.fwhedgrank}), scount {self.mpiedge_scount}, rcount {self.mpiedge_rcount}', flush=True)
+        # comm.barrier()
+        # sys.stdout.flush()
+        
+        if rank == root:
+            #print(f'\nnum of fwh surface ranks {len(self.fwhranks_list)}')
+            print(f'\n{len(self.fwhranks_list)} fwh surface ranks: {self.fwhranks_list}')
+            #print(f'\nnum of fwh mpi/edge  ranks {len(self.fwh_edgranks_list)}')
+            print(f'{len(self.fwh_edgranks_list)} fwh mpi/edge ranks: {self.fwh_edgranks_list}\n')
+        sys.stdout.flush()
 
         return fwh_comm, fwh_edgecomm
 
-    def get_fwh_surfdata(self, elemap, eidxs):
-        # Interpolation matrices and quadrature weights
+
+    def get_fwhsurf_finfo(self, elemap, eidxs):
+        
         m0 = {}
-        qwts = defaultdict(list)
-        norms = defaultdict(list)
-        fpts = defaultdict(list)
+        srtd_ids = defaultdict(list)
+        
+        ndims = self.ndims
+        nqpts = 0
+        nfaces = 0
 
         for (etype,fidx), eidlist in eidxs.items():
             eles = elemap[etype]
             
             if (etype, fidx) not in m0:
                 facefpts = eles.basis.facefpts[fidx]
-                m0[etype, fidx] = eles.basis.m0[facefpts]
-                qwts[etype, fidx] = eles.basis.fpts_wts[facefpts]
+                m0[etype,fidx] = eles.basis.m0[facefpts]
+                qwts = eles.basis.fpts_wts[facefpts]
+                nfpts_pertype, _ = m0[etype,fidx].shape
+
+            nfaces_pertype = len(eidlist)
+            mpn = np.empty((nfaces_pertype,nfpts_pertype))
+            npn = np.empty((nfaces_pertype,nfpts_pertype,ndims))
+            fplocs = np.empty((nfaces_pertype,nfpts_pertype,ndims))
             
-            for eidx in eidlist:
-                fpts[etype, fidx].append(eles.plocfpts[facefpts, eidx])
-                
+            for ie, eidx in enumerate(eidlist):
+                # get sorted fpts ids
+                fpts_idx = eles._srtd_face_fpts[fidx][eidx]
+                sids = np.argsort(fpts_idx)
+                srtd_ids[etype,fidx].append(sids)
+
+                # save flux pts coordinates:
+                #fpts[etype, fidx].append(eles.get_ploc_for_inter(eidx,fidx)) # sorted
+                fplocs[ie] = eles.plocfpts[facefpts, eidx] # unsorted
+
                 # Unit physical normals and their magnitudes (including |J|)
-                npn = eles.get_norm_pnorms(eidx, fidx)
-                mpn = eles.get_mag_pnorms(eidx, fidx)
-                norms[etype, fidx].append(mpn[:, None]*npn)
+                mpn[ie] = eles.get_mag_pnorms(eidx, fidx)
+                npn[ie] = eles.get_norm_pnorms(eidx, fidx)
+            
+            qdA = np.einsum('i,ji->ji',qwts,mpn)
+            
+            dA = qdA.reshape(-1) if nqpts == 0  else np.hstack((dA,qdA.reshape(-1)))
+            fpts_plocs = fplocs.reshape(-1,ndims)  if nqpts == 0 else np.vstack((fpts_plocs,fplocs.reshape(-1,ndims) ))
+            norm_pnorms = npn.reshape(-1,ndims) if nqpts == 0  else np.vstack((norm_pnorms,npn.reshape(-1,ndims) ))
 
+            nqpts += (nfpts_pertype * nfaces_pertype)
+            nfaces += nfaces_pertype
 
-        norms_arr = {k: np.array(v) for k, v in norms.items()}
-        xfpts = {k: np.array(v) for k, v in fpts.items()}
+        surfinfo = [fpts_plocs,norm_pnorms,dA,m0] if m0 else [[],[],[],{}]
+        
+        #debugging
+        comm, rank, root = get_comm_rank_root()
+        shape0 = comm.reduce(np.asarray(surfinfo[0]).shape[0],root=0) 
+        shape1 = comm.reduce(np.asarray(surfinfo[1]).shape[0],root=0) 
+        shape2 = comm.reduce(np.asarray(surfinfo[2]).shape[0],root=0) 
+        if rank == root:
+            print(f'surfinfo.shapes: fpts {shape0} , norms {shape1}, qdA {shape2}')
+        nfaces_tot = comm.reduce(nfaces,root=0)
+        nqpts_tot = comm.reduce(nqpts,root=0)
+        if rank == root:
+            print(f'nfaces : {nfaces_tot}')
+            print(f'nqpts  : {nqpts_tot}')
+        sys.stdout.flush() 
 
-        return m0, qwts, norms_arr, xfpts      
+        return surfinfo    
 
 
 
@@ -450,15 +635,6 @@ class VTUSurfWriter(object):
         ('pyr',  30 ):  {'quad': [[12, 15, 3, 0]], 'tri': [[0, 3, 29], [3, 15, 29], [15, 12, 29], [0, 29, 12]]},
         ('pyr',  55 ):  {'quad': [[20, 24, 4, 0]], 'tri': [[0, 4, 54], [4, 24, 54], [24, 20, 54], [0, 54, 20]]},
     }
-    # reverse map from face index to face type
-    fnum_pftype_map = {
-            'tri' : { 0: 'line', 1: 'line', 2: 'line'}, 
-            'quad': { 0: 'line', 1: 'line', 2: 'line', 3: 'line'}, 
-            'tet' : { 0: 'tri', 1: 'tri', 2: 'tri', 3: 'tri'}, 
-            'hex' : { 0: 'quad', 1: 'quad', 2: 'quad', 3: 'quad', 4: 'quad', 5: 'quad'},
-            'pri' : { 0: 'tri', 1: 'tri', 2: 'quad', 3: 'quad', 4: 'quad'}, 
-            'pyr' : { 0: 'quad', 1: 'tri', 2: 'tri', 3: 'tri', 4: 'tri'} 
-    }
     # offset to get local fidx/fnum inside each facetype map
     _fnum_offset = {'tri' : {'line': 0},
                     'quad': {'line': 0},
@@ -489,7 +665,7 @@ class VTUSurfWriter(object):
     def prepare_vtufnodes(self): 
         for (etype,fidx), eidxlist in self._eidxs.items():
             pts = np.swapaxes(self.mesh[f'spt_{etype}_p{self.rallocs.prank}'],0,1)
-            pftype = self.fnum_pftype_map[etype][fidx]
+            pftype = fnum_pftype_map[etype][fidx]
             fidx = np.int(fidx) + self._fnum_offset[etype][pftype]
             for eidx in eidxlist:
                 #eidx = np.int(eidx)
@@ -589,7 +765,6 @@ class VTUSurfWriter(object):
 
         # Wait for the root rank to finish writing
         comm.barrier()
-        exit(0)
 
     def _write_darray(self, array, vtuf, dtype):
         array = array.astype(dtype)
