@@ -61,17 +61,18 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         self._artificial_compress = intg.system.name.startswith('ac')
 
         # read flow data
-        constvars = self.cfg.items_as('constants', float)
+        self.constvars = self.cfg.items_as('constants', float)
         pvmap = intg.system.elementscls.privarmap[self.ndims]
-        self.Uinf = {}
+        self.Uinf = defaultdict(list)
         for pvvar in pvmap:
-            self.Uinf[pvvar] = npeval(self.cfg.getexpr(cfgsect, pvvar), constvars)
+            if pvvar in ['u','v','w']:
+                self.Uinf['u'].append(npeval(self.cfg.getexpr(cfgsect, pvvar), self.constvars))
+            else:
+                self.Uinf[pvvar] = npeval(self.cfg.getexpr(cfgsect, pvvar), self.constvars)
         if self._artificial_compress:
-            self.Uinf['rho'] = self.Uinf['p']/constvars['ac-zeta']
-        self.Uinf['cinf'] = np.sqrt(self.Uinf['p']/self.Uinf['rho'])
-        self.Uinf['Minf'] = [self.Uinf['u']/self.Uinf['cinf'], self.Uinf['v']/self.Uinf['cinf']]
-        if self.ndims == 3:
-            self.Uinf['Minf'].append(self.Uinf['w']/self.Uinf['cinf'])
+            self.Uinf['rho'] = self.Uinf['p']/self.constvars['ac-zeta']
+        self.Uinf['c'] = np.sqrt(self.Uinf['p']/self.Uinf['rho'])
+        self.Uinf['Mach'] = self.Uinf['u']/self.Uinf['c']
 
         # Region of interest
         box = self.cfg.getliteral(self.cfgsect, 'region')
@@ -104,12 +105,12 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         self.nqpts = np.asarray(self._finfo[0]).shape[0]
 
         # Allocate/Prepare solution data arrays:
-        nvars = len(list(self.Uinf))
+        nvars = 5 if self.ndims == 3 else 4
         self._fwh_usoln = self.allocate_usoln_darray(self.nqpts, self.fft_param.Nt_sub,nvars)
 
         # init the fwhsolver
         if self.active_fwhrank:
-            self.fwhsolver = FwhSolver(self.observ_locs,self.Uinf,self.fft_param,self._finfo,self._fwh_usoln)
+            self.fwhsolver = FwhSolver(self.observ_locs,self.Uinf,self.fft_param,self._finfo[0:3],self._fwh_usoln)
 
     def allocate_usoln_darray(self, nqpts, ntsub, nvars):
         usoln = np.empty((ntsub,nvars,nqpts))
@@ -144,14 +145,15 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             fIsize = pri_ufpts.shape[1] * pri_ufpts.shape[2]
             fImax = fIo + fIsize
             if self._artificial_compress:
-                usoln[4,fIo:fImax] = pp = pri_ufpts[0].reshape(-1)  #p
-                usoln[0,fIo:fImax] = pp/self.cfg.getfloat('constants', 'ac-zeta') #rho
+                usoln[-1,fIo:fImax] = pp = pri_ufpts[0].reshape(-1)  #p
+                usoln[0,fIo:fImax] = pp/self.constvars['ac-zeta'] #rho
             else:
-                usoln[4,fIo:fImax] = pri_ufpts[-1].reshape(-1)
+                usoln[-1,fIo:fImax] = pri_ufpts[-1].reshape(-1)
                 usoln[0,fIo:fImax] = pri_ufpts[0].reshape(-1)
             usoln[1,fIo:fImax] = pri_ufpts[1].reshape(-1)
             usoln[2,fIo:fImax] = pri_ufpts[2].reshape(-1)
-            usoln[3,fIo:fImax] = pri_ufpts[1].reshape(-1) if ndims == 3 else 0. * pri_ufpts[1].reshape(-1)
+            if ndims == 3:
+                usoln[3,fIo:fImax] = pri_ufpts[3].reshape(-1) 
             fIo = fImax
 
 
@@ -700,7 +702,8 @@ class FwhSolver(object):
         self.Uinf = Uinf
         self.fft_param = fft_param
         self.surfdata = surfdata
-        self.nvars = len(list(self.Uinf))
+        self.xyz_src, self.qnorms, self.qdA = self.surfdata
+        self.nvars = usoln.shape[1]
         self.nqpts = np.asarray(self.surfdata[0]).shape[0]
         self.usoln = usoln
         self.update_step = 0
@@ -708,11 +711,11 @@ class FwhSolver(object):
         self.ndims = len(observers[0]) 
 
         # compute distance vars for fwh
-        self.R, self.Rs, self.nR, self.nRs = self.compute_distance_vars(self.obsvlocs,self.surfdata[0],self.Uinf['Minf'])
+        self.magR, self.magRs, self.R_nvec, self.Rs_nvec = self.compute_distance_vars(self.obsvlocs,self.xyz_src,self.Uinf['Mach'])
         # compute frequency parameters
         self.freq  = np.fft.rfftfreq(self.fft_param.Nt_sub,self.fft_param.dt_sub)
         self.omega = 2*np.pi*self.freq
-        self.kwv = self.omega/self.Uinf['cinf']
+        self.kwv = self.omega/self.Uinf['c']
         self.nfreq = np.size(self.freq)
         # Init fwh fluxes
         self.fluxes = np.zeros((self.nqpts,self.nfreq,self.ndims+1))
@@ -723,32 +726,108 @@ class FwhSolver(object):
         self.preal = np.zeros((self.nobserv,self.nfreq))
         self.pimag = np.zeros((self.nobserv,self.nfreq))
 
+        self.solidsurf = False
+
+        self.compute_fwh_solution(self.usoln)
+
     def compute_distance_vars(self,xyz_ob,xyz_src,Minf):
         nobserv = xyz_ob.shape[0]
         ndims = xyz_ob[0].shape[0]
         magMinf = np.sqrt(sum(m*m for m in Minf)) # |M|
-        gamma_ = 1. / np.sqrt(1.0 - magMinf*magMinf) # inverse of Prandtl Glauert parameter
-        dr = np.array([ob - xyz_src for ob in xyz_ob]).reshape(-1,ndims)    # x_observer - x_source
-        r = np.sqrt(sum((dr*dr).T)) # distance |dr| 
-        ndr = np.array([idr/ir for idr,ir in zip(r,dr)])
-        Mir = sum((Minf*ndr).T) # Minfty.r_hat
-        gm2 = gamma_*gamma_
-        Rs = (r/gamma_) * np.sqrt(1.+ gm2*Mir*Mir)   # |R*|
-        R = gm2 * (Rs - r*Mir)               # |R|
-        MiMinf = np.einsum('i,j->ji',Minf,Mir)
-        rrs = r/(gm2*Rs)
-        mr = ndr + MiMinf*gm2
+        # inverse of Prandtl Glauert parameter
+        gm_ = 1. / np.sqrt(1.0 - magMinf*magMinf) 
+        gm2_ = gm_*gm_
+        # dr = x_observer - x_source
+        dr = np.array([ob - xyz_src for ob in xyz_ob]).reshape(-1,ndims)    
+        magdr = np.sqrt(sum((dr*dr).T)) # distance |dr|
+        ndr = np.array([idr/ir for idr,ir in zip(magdr,dr)])  # normalized unit dr
+        Minf_ndr = sum((Minf*ndr).T) # Minfty.r_hat
+        Rs = (magdr/gm_) * np.sqrt(1.+ gm2_*Minf_ndr*Minf_ndr)   # |R*|
+        R = gm2_ * (Rs - magdr*Minf_ndr)               # |R|
+        Minf2_ndr = np.einsum('i,j->ji',Minf,Minf_ndr)
+        rrs = magdr/(gm2_*Rs)
+        mr = ndr + Minf2_ndr*gm2_
         nRs = np.einsum('i,ij->ij',rrs,mr) # normalized unit R*
-        nR = gm2 * (nRs-Minf)    # normalized unit R
+        nR = gm2_ * (nRs-Minf)    # normalized unit R
         nR = nR.reshape(nobserv,-1,ndims)
         nRs = nRs.reshape(nobserv,-1,ndims)
         R = R.reshape(nobserv,-1)
         Rs = Rs.reshape(nobserv,-1)
         return R,Rs,nR,nRs
 
+    def compute_fwh_solution(self,usoln):
+        Q, F = self.compute_surface_fluxes(usoln)
+        return self.compute_pessure_infreqdomain(Q,F)
+
+    def compute_surface_fluxes(self, usoln):
+        # define local vars
+        qnorms = self.qnorms
+        cinf = self.Uinf['c']
+        pinf = self.Uinf['p']
+        rhoinf = self.Uinf['rho']
+        uinf = np.array(self.Uinf['u'])
+        uinf = np.array([-1.,10.,20.])
+        # compute soln vars
+        u = np.swapaxes(usoln[:,1:self.ndims+1,:],1,2)-uinf # u' perturbed vel
+        p = usoln[:,-1,:] - pinf # p' fluctuation pressure
+        rho_tot = rhoinf + p/(cinf*cinf) # density, another formulation will just use rho in usoln[:,0,:]
+        # compute normal velocities
+        un  = np.einsum('ij,kij->ki',qnorms,u) # normal flow velocity
+        Uin = sum((uinf*qnorms).T)  # normal Uinfty
+        vn = un + Uin if self.solidsurf else 0.
+        dvn = vn - Uin  # relative surface velocity
+        dUn = un - dvn  # relative normal flow velocity
+        # compute temporal fluxes
+        Q = rho_tot*dUn + rhoinf*dvn
+        rdun = rho_tot*dUn
+        umuinf = u-uinf
+        rhouinf = rhoinf*uinf
+        F = np.einsum('ij,ijk->ijk',rdun,umuinf)
+        F += np.einsum('i,j...->j...i',rhouinf,dvn)
+        F += np.einsum('ij,jk->ijk',p,qnorms)
+
+        return Q,F
+    
+    
+    def compute_pessure_infreqdomain(self,Q,F):
+        Rv_ = self.R_nvec
+        Rsv_ = self.Rs_nvec
+        magR = self.magR
+        magRs = self.magRs
+        wwind =self.fft_param.wwind
+        qdA = self.qdA
+        
+        # fluxes windowing
+        Q -= np.mean(Q,0)
+        Q = np.einsum('i,ij->ij',wwind,Q)
+        F -= np.mean(F,0)
+        F = np.einsum('i,ijk->ijk',wwind,F)
+
+        # perform fft of Q, F fluxes
+        Qfft = np.empty((self.nfreq,self.nqpts),dtype=np.complex64)
+        Ffft = np.empty((self.nfreq,self.nqpts,self.ndims),dtype=np.complex64)
+        for iq in range(0,self.nqpts):
+            Qfft[:,iq] = self._rfft(Q[:,iq])
+            for jd in range(0,self.ndims):
+                Ffft[:,iq,jd]  = self._rfft(F[:,iq,jd])
+
+        #compute pfft, i=nob,j=nfreq,k=nqpts, p shape i,j,k 
+        kwvR = np.einsum('ik,j->jik',magR,self.kwv)
+        exp_term0 = np.exp(-1j*kwvR)        # exp(-ikR)
+        exp_term1 = exp_term0/magRs          # exp(-ikR)/R*
+        exp_term2 = exp_term0/(magRs*magRs) # exp(-ikR)/(R*xR*)
+        pfft  = 1j * np.einsum('j,jik,jk->ijk',self.omega, exp_term1, Qfft)       # p1_term
+        pfft += 1j * np.einsum('j,jik,ikm,jkm->ijk',self.kwv,exp_term1,Rv_,Ffft)   # p2_term0
+        pfft += np.einsum('jik,ikm,jkm->ijk',exp_term2,Rsv_,Ffft) #+p2_term1 
+
+        # surface integration
+        factor = self.fft_param.windscale/(4.*np.pi)
+        pfft *= qdA*factor
+
+        return pfft
 
     #-Compute FFT for real input data using python_numpy functions
-    def _rfft(udata_):
+    def _rfft(self,udata_):
         dsize = np.size(udata_)
         # freqsize: size of half the spectra with positive frequencies
         freqsize = int(dsize/2) if dsize%2 == 0 else int(dsize-1)/2
