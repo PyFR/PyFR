@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 
-from asyncio.constants import SENDFILE_FALLBACK_READBUFFER_SIZE
 import os, sys
 import re
-from unittest import case
 import numpy as np
 from collections import defaultdict
 from mpi4py import MPI
-from warnings import warn
+from functools import cached_property
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
@@ -16,15 +14,71 @@ from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
 
-# reverse map from face index to face type
-fnum_pftype_map = {
-        'tri' : { 0: 'line', 1: 'line', 2: 'line'}, 
-        'quad': { 0: 'line', 1: 'line', 2: 'line', 3: 'line'}, 
-        'tet' : { 0: 'tri', 1: 'tri', 2: 'tri', 3: 'tri'}, 
-        'hex' : { 0: 'quad', 1: 'quad', 2: 'quad', 3: 'quad', 4: 'quad', 5: 'quad'},
-        'pri' : { 0: 'tri', 1: 'tri', 2: 'quad', 3: 'quad', 4: 'quad'}, 
-        'pyr' : { 0: 'quad', 1: 'tri', 2: 'tri', 3: 'tri', 4: 'tri'} 
-}
+def open_csv(fname, header=None, mode='w'):
+    # Open for mode
+    outf = open(fname, mode)
+    # Output a header if required
+    if os.path.getsize(fname) == 0 and header:
+        print(header, file=outf)
+    return outf
+
+def write_fftdata(fname, *indata, header='', mode='a'):
+    #open the file
+    outf = open_csv(fname, ''.join(header), mode)
+    #prepare the data array
+    data = np.array(indata)
+    dshape = data.shape
+    #do write
+    for i in range(dshape[1]):
+        print(*data[:,i].ravel(), sep=' ', file=outf)
+    outf.flush()
+    return
+
+#-FFT utilities
+def rfft(udata_):
+    dsize = np.size(udata_)
+    # freqsize: size of half the spectra with positive frequencies
+    freqsize = int(dsize/2) if dsize%2 == 0 else int(dsize-1)/2
+    ufft = np.fft.rfft(udata_)/freqsize 
+    return ufft
+
+def compute_spl(pref,amp,df=None):
+    sqrt2 = 1./np.sqrt(2.) 
+    lgsqrt2 = 20.*np.log10(sqrt2)
+    factor = sqrt2/pref if not df else sqrt2/(pref*np.sqrt(df))
+    spl = 20.*np.log10(factor*amp) 
+    spl[0] -= lgsqrt2
+    spl[-1] -= lgsqrt2
+    #overall sound pressure level
+    ospl_sum = sum(pow(10.,spl/10.)) if not df else df*sum(pow(10.,spl/10.))
+    oaspl = 10.* np.log10(ospl_sum) 
+    return spl, oaspl
+
+def compute_psd(amp,df):
+    psd = 0.5 * amp * amp / df
+    psd[0] *= 2.
+    psd[-1] *= 2.
+    return psd
+
+def welch_accum(pfft,pmagsum,presum,pimgsum,scale_mode='density'):
+    mag = np.abs(pfft)*np.abs(pfft) if scale_mode == 'density' else np.abs(pfft)
+    pmagsum += mag
+    presum  += np.real(pfft)
+    pimgsum += np.imag(pfft)
+    return pmagsum,presum,pimgsum
+
+def welch_average(aver_count,pmagsum,presum,pimgsum,scale_mode='density'):
+    mag = np.sqrt(pmagsum/aver_count) if scale_mode=='density' else pmagsum/aver_count
+    phase = np.arctan2(pimgsum,presum)
+    pfft = mag * np.exp(1j * phase)
+    return pfft
+
+def get_num_nearest_pow_of_two(N):
+    exponent = int(np.log2(N))
+    diff0 = np.abs(N-pow(2,exponent))
+    diff1 = np.abs(N-pow(2,exponent+1))
+    return pow(2,exponent) if diff0 < diff1 else pow(2,exponent+1)
+
 
 class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
@@ -32,25 +86,36 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
 
+    # refernce pressure for spl computation
+    pref = 2.e-5
+
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
         self.DEBUG = self.cfg.getint(cfgsect,'debug',0)
         # Base output directory and file name
-        basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
-        basename = self.cfg.get(self.cfgsect, 'basename')
+        self.basedir = basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
+        self.basename = self.cfg.get(self.cfgsect, 'basename')
         
         # read time and fft parameters
         self.tstart = self.cfg.getfloat(cfgsect,'tstart',intg.tstart)
-        self.fft_param = FFTParam(self.tol,self.cfg,self.cfgsect,intg._dt,self.tstart,intg.tend)
-        self.samplsteps = self.fft_param.dt_sub/intg._dt
-        self._started = False
-        self.tout_last = self.tstart #intg.tcurr
-        self.dt_out = self.fft_param.dt_sub
+        dt_sub = self.cfg.getfloat(cfgsect,'dt',intg._dt)
+        # read the window length, default is up to simulation tend
+        ltsub_def = intg.tend - self.tstart
+        ltsub = self.cfg.getfloat(cfgsect,'Lt',ltsub_def)        
+        shift = self.cfg.getfloat(cfgsect,'time-shift',0.5)
+        window_func = self.cfg.get(cfgsect,'window','hanning')
+        psd_scale_mode = self.cfg.get(cfgsect,'psd-scaling-mode','density')
 
+        fftcls = FFTParam(intg._dt,dt_sub,ltsub,shift,window_func,psd_scale_mode)
+        self._started = False
+        self.steps_count = 0
+        self.tout_last = self.tstart #intg.tcurr
+        self.dt_out = fftcls.dt_sub
+        self.samplesteps = fftcls.samplesteps
         # read observers inputs
-        self.nobserv = self.cfg.getint(self.cfgsect,'num-observer',1)
-        self.observ_locs = np.array(self.cfg.getliteral(self.cfgsect, 'loc-observer'))
+        self.observ_locs = np.array(self.cfg.getliteral(self.cfgsect, 'observer-locs'))
+        self.nobserv = self.observ_locs.shape[0]
         
         # Output field names
         self.fields = intg.system.elementscls.convarmap[self.ndims]
@@ -63,16 +128,16 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         # read flow data
         self.constvars = self.cfg.items_as('constants', float)
         pvmap = intg.system.elementscls.privarmap[self.ndims]
-        self.Uinf = defaultdict(list)
+        self.uinf = defaultdict(list)
         for pvvar in pvmap:
             if pvvar in ['u','v','w']:
-                self.Uinf['u'].append(npeval(self.cfg.getexpr(cfgsect, pvvar), self.constvars))
+                self.uinf['u'].append(npeval(self.cfg.getexpr(cfgsect, pvvar), self.constvars))
             else:
-                self.Uinf[pvvar] = npeval(self.cfg.getexpr(cfgsect, pvvar), self.constvars)
+                self.uinf[pvvar] = npeval(self.cfg.getexpr(cfgsect, pvvar), self.constvars)
         if self._artificial_compress:
-            self.Uinf['rho'] = self.Uinf['p']/self.constvars['ac-zeta']
-        self.Uinf['c'] = np.sqrt(self.Uinf['p']/self.Uinf['rho'])
-        self.Uinf['Mach'] = self.Uinf['u']/self.Uinf['c']
+            self.uinf['rho'] = self.uinf['p']/self.constvars['ac-zeta']
+        self.uinf['c'] = np.sqrt(self.uinf['p']/self.uinf['rho'])
+        self.uinf['Mach'] = self.uinf['u']/self.uinf['c']
 
         # Region of interest
         box = self.cfg.getliteral(self.cfgsect, 'region')
@@ -84,7 +149,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         self.fwh_comm, self.fwh_edgecomm = self.build_fwh_subranks_lists(intg)        
 
         # Construct the fwh mesh writer
-        self._writer = NativeWriter(intg, basedir, basename, 'soln')
+        self._writer = NativeWriter(intg, basedir, self.basename, 'soln')
 
         # write the fwh surface geometry file
         self._write_fwh_surface_geo(intg,self._inside_eset,self._eidxs)
@@ -98,74 +163,60 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         mesh, elemap = intg.system.mesh, intg.system.ele_map
 
         # Extract FWH Surf Geometric Data:
-        self._finfo = self.get_fwhsurf_finfo(elemap, self._eidxs)  #fpts, qpts_dA, norm_pnorms, m0
-        # self._int_finfo = self.get_fwhsurf_finfo(elemap, self._int_eidxs)
-        # self._mpi_finfo = self.get_fwhsurf_finfo(elemap, self._mpi_eidxs)
-        # self._bnd_finfo = self.get_fwhsurf_finfo(elemap, self._int_eidxs)
-        self.nqpts = np.asarray(self._finfo[0]).shape[0]
+        self._qpts_info, self._m0 = self.get_fwhsurf_finfo(elemap, self._eidxs)  #fpts, qpts_dA, norm_pnorms
+        self._int_qpts, self._int_m0 = self.get_nqpts_m0(elemap, self._int_eidxs)
+        self._mpi_qpts, self._mpi_m0 = self.get_nqpts_m0(elemap, self._mpi_eidxs)
+        self._bnd_qpts, self._bnd_m0 = self.get_nqpts_m0(elemap, self._int_eidxs)
+        self.nqpts = np.asarray(self._qpts_info[0]).shape[0]
+        self.fwhnvars = len(self.uinf['u'])+2
 
         # Allocate/Prepare solution data arrays:
-        nvars = 5 if self.ndims == 3 else 4
-        self._fwh_usoln = self.allocate_usoln_darray(self.nqpts, self.fft_param.Nt_sub,nvars)
+        # nvars = 5 if self.ndims == 3 else 4
+        # self._fwh_usoln = self.allocate_usoln_darray(self.nqpts, fftcls.ntsub ,nvars)
 
-        # init the fwhsolver
+        #Debug, using analytical sources
+        test = self.cfg.get(self.cfgsect, 'analytic-src', None)
+        self.pacoustsrc = None
+        xyzshift = 0
         if self.active_fwhrank:
-            self.fwhsolver = FwhSolver(self.observ_locs,self.Uinf,self.fft_param,self._finfo[0:3],self._fwh_usoln)
+            if test == 'monopole':
+                #shift the x,y,z coordinates so that the source is inside the body
+                xyz_min = np.array([np.min(cr) for cr in self._qpts_info[0].T])
+                xyz_max = np.array([np.max(cr) for cr in self._qpts_info[0].T])
+                self.fwh_comm.Allreduce(get_mpi('in_place'),[xyz_min, MPI.DOUBLE],op=get_mpi('min'))
+                self.fwh_comm.Allreduce(get_mpi('in_place'),[xyz_max, MPI.DOUBLE],op=get_mpi('max'))
+                xyzshift = 0.5 *(xyz_min+xyz_max)
+                #init the point src parameters
+                srclocs = self.cfg.getliteral(self.cfgsect, 'src-locs',[0.,0.,0.])
+                srclocs += xyzshift
+                srcuinf = np.array([self.uinf['rho'],self.uinf['u'][0],self.uinf['u'][1],self.uinf['u'][2],self.uinf['p']])
+                srcamp = self.cfg.getfloat(self.cfgsect,'src-amp',1.)
+                srcfreq = self.cfg.getfloat(self.cfgsect,'src-freq',5.)
+                tperiod = 1./srcfreq
+                nperiods = fftcls.ntsub * fftcls.dt_sub / tperiod
+                gamma = self.constvars['gamma']
+                self.pacoustsrc = MonopoleSrc('smonopole',srclocs,srcuinf,srcamp,srcfreq,fftcls.ntsub,nperiods,gamma)
 
-    def allocate_usoln_darray(self, nqpts, ntsub, nvars):
-        usoln = np.empty((ntsub,nvars,nqpts))
-        return usoln
+            # init the fwhsolver
+            if np.any(xyzshift):
+                self.observ_locs += xyzshift
+            if self.active_fwhrank:
+                self.fwhsolver = FwhSolver(self.observ_locs,self._qpts_info,self.uinf,fftcls)
 
-    def update_usoln_from_curriter(self, intg, m0_dict, eidxs, usoln):
-
-        # MPI info
-        comm, rank, root = get_comm_rank_root()
-
-        # Solution matrices indexed by element type
-        solns = dict(zip(intg.system.ele_types, intg.soln))
-        ndims, nvars = self.ndims, self.nvars
-
-        fIo = 0
-        for (etype, fidx), m0 in m0_dict.items(): 
-            # Get the interpolation operator
-            #srtids_, _, _, m0, _ = self._finfo[etype,fidx]
-            nfpts, nupts = m0.shape
-
-            # Extract the relevant elements from the solution
-            uupts = solns[etype][...,eidxs[etype,fidx]]
-
-            # Interpolate to the face
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nvars, -1)
-            ufpts = ufpts.swapaxes(0, 1) # nvars, nfpts, nfaces
-            #ufpts = np.swapaxes(ufpts.reshape(nvars,-1)[...,srtids_],1,2)  # additional sorting
-
-            # get primitive vars
-            pri_ufpts = self.elementscls.con_to_pri(ufpts, self.cfg)
-            fIsize = pri_ufpts.shape[1] * pri_ufpts.shape[2]
-            fImax = fIo + fIsize
-            if self._artificial_compress:
-                usoln[-1,fIo:fImax] = pp = pri_ufpts[0].reshape(-1)  #p
-                usoln[0,fIo:fImax] = pp/self.constvars['ac-zeta'] #rho
-            else:
-                usoln[-1,fIo:fImax] = pri_ufpts[-1].reshape(-1)
-                usoln[0,fIo:fImax] = pri_ufpts[0].reshape(-1)
-            usoln[1,fIo:fImax] = pri_ufpts[1].reshape(-1)
-            usoln[2,fIo:fImax] = pri_ufpts[2].reshape(-1)
-            if ndims == 3:
-                usoln[3,fIo:fImax] = pri_ufpts[3].reshape(-1) 
-            fIo = fImax
-
+            self.writemode = 'w' if not intg.isrestart else 'a'
 
     def __call__(self, intg):
+
+        # if not an active rank return
+        if not self.active_fwhrank:
+            return
         # If we are not supposed to start fwh yet then return
         if intg.tcurr < self.tstart:
             return
         # Return if no usoln sampling is due
-        dosample = intg.nacptsteps % self.samplsteps == 0
+        dosample = intg.nacptsteps % self.samplesteps == 0
         if not dosample:
             return
-
         self._started = intg.tcurr >= (self.tstart - self.tol)
 
         # MPI info
@@ -173,16 +224,70 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         
         # sample solution if it is due
         if dosample:
-            usol_iter = 1
-            self.update_usoln_from_curriter(intg, self._finfo[-1], self._eidxs, self._fwh_usoln[usol_iter])
+            ushape = (self.fwhnvars,self.nqpts)
+            windowtime = intg.tcurr - self.tstart - self.fwhsolver.naver * self.fwhsolver.fftcls.shift * self.fwhsolver.fftcls.ltsub
+            srctime = intg.tcurr - self.tstart
+            if self.pacoustsrc:
+                self.fwhsolver.usoln_onestep = self.pacoustsrc.update_usoln_onestep(self._qpts_info[0], srctime, ushape) 
+            else:
+                self.fwhsolver.usoln_onestep = self.update_usoln_from_currstep(intg, self._m0, self._eidxs, ushape)
+            self.steps_count = self.fwhsolver.nsteps
+            
+            #Debug
+            if self.fwhrank == 0:
+                print(f'FWH sampled, wstep {self.fwhsolver.nsteps}, wtime {np.round(windowtime,5)}, ctime {np.round(srctime,5)}',flush=True)
         
-        # Update the last output time
-        self.tout_last = intg.tcurr
+        # compute fwh solution if due
+        docompute = self.fwhsolver.nsteps == self.fwhsolver.ntsub 
+        if docompute:
+            self.fwhsolver.compute_fwh_solution()
+            self.steps_count = self.fwhsolver.nsteps
+            self.nwindows = self.fwhsolver.naver-1 
+            pfft = self.fwhsolver.pfft
+            if self.fwhrank != 0:
+                self.fwh_comm.Reduce(pfft, None, op=get_mpi('sum'), root=0)
+            else:
+                self.fwh_comm.Reduce(get_mpi('in_place'), pfft, op=get_mpi('sum'), root=0)
+            
+            # Debug
+            if self.fwhrank == 0:
+                print(f'FWH computed ........, Naver {self.nwindows}')
+
+            #compute spectrums
+            if self.fwhrank == 0:
+                amp = np.abs(pfft)
+                df = self.fwhsolver.freq[1]
+                # computing power spectrum outputs
+                psd = compute_psd(amp,df)
+                spl, oaspl = compute_spl(self.pref,amp)
+                # Writing fft outputs
+                bname = os.path.join(self.basedir,f'{self.basename}'+'_ob{ob}.csv')
+                for ob in range(self.nobserv):
+                    naverarr = np.tile(str(self.nwindows),len(pfft[ob]))
+                    wdata = np.array([self.fwhsolver.freq,np.abs(pfft[ob,:]),np.angle(pfft[ob,:]),psd[ob,:],spl[ob,:],naverarr]).T
+                    fname = bname.format(ob=ob)
+                    header = ','.join(['#Frequency (Hz)', ' Magnitude (Pa)', ' Phase (rad)'])
+                    header += ', PSD (Pa^2/Hz)' if self.fwhsolver.fftcls.psd_scale_mode == 'density' else [' POWER-SPECTRUM (Pa^2/Hz)']
+                    header += f', SPL (dB), Nwindow'
+                    write_fftdata(fname,wdata,header=header,mode=self.writemode)
+
+                #Debug, exact source solution
+                if self.pacoustsrc:
+                    freq_ex, pfft_ex = self.pacoustsrc.exact_solution(self.observ_locs)
+                    bname = os.path.join(self.basedir,f'{self.basename}'+'_exact-ob{ob}.csv')
+                    for ob in range(self.nobserv):
+                        fname = bname.format(ob=ob)
+                        header = ','.join(['#Frequency (Hz)', ' Magnitude (Pa)', ' Phase (rad)'])
+                        write_fftdata(fname,freq_ex,np.abs(pfft_ex[ob,:]),np.angle(pfft_ex[ob,:]),header=header,mode=self.writemode)
+                print(f'FWH written ............. ')
+                self.writemode ='a'
+
+            # Update the last output time
+            self.tout_last = intg.tcurr
 
         # Need to print fwh surface geometric data only once
-        intg.completed_step_handlers.remove(self)
-
-        exit(0)
+        #intg.completed_step_handlers.remove(self)
+        #exit(0)
 
     def extract_drum_region_eset(self, intg, drum):
         elespts = {}
@@ -269,7 +374,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         vtuwriter = VTUSurfWriter(intg,inters_eidxs)
         # Write VTU file:
         vtumfname = os.path.splitext(self.fwhmeshfname)[0]
-        vtuwriter._write(vtumfname)
+        vtuwriter.write(vtumfname)
 
     def prepare_surfmesh(self,intg,eset):
         self._inside_eset = defaultdict(list)
@@ -539,11 +644,23 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         return fwh_comm, fwh_edgecomm
 
 
+    def get_nqpts_m0(self, elemap, eidxs):
+        m0 = {}
+        nqpts = 0
+        for (etype,fidx), eidlist in eidxs.items():
+            eles = elemap[etype]
+            if (etype, fidx) not in m0:
+                facefpts = eles.basis.facefpts[fidx]
+                m0[etype,fidx] = eles.basis.m0[facefpts]
+                nfpts_pertype, _ = m0[etype,fidx].shape
+            nfaces_pertype = len(eidlist)
+            nqpts += (nfpts_pertype * nfaces_pertype)
+        return nqpts, m0
+
     def get_fwhsurf_finfo(self, elemap, eidxs):
-        
+
         m0 = {}
         srtd_ids = defaultdict(list)
-        
         ndims = self.ndims
         nqpts = 0
         nfaces = 0
@@ -585,13 +702,13 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             nqpts += (nfpts_pertype * nfaces_pertype)
             nfaces += nfaces_pertype
 
-        surfinfo = [fpts_plocs,norm_pnorms,dA,m0] if m0 else [[],[],[],{}]
+        qinfo = [fpts_plocs,norm_pnorms,dA] if m0 else [[],[],[]]
         
         #debugging
         comm, rank, root = get_comm_rank_root()
-        shape0 = comm.reduce(np.asarray(surfinfo[0]).shape[0],root=0) 
-        shape1 = comm.reduce(np.asarray(surfinfo[1]).shape[0],root=0) 
-        shape2 = comm.reduce(np.asarray(surfinfo[2]).shape[0],root=0) 
+        shape0 = comm.reduce(np.asarray(qinfo[0]).shape[0],root=0) 
+        shape1 = comm.reduce(np.asarray(qinfo[1]).shape[0],root=0) 
+        shape2 = comm.reduce(np.asarray(qinfo[2]).shape[0],root=0) 
         if rank == root:
             print(f'surfinfo.shapes: fpts {shape0} , norms {shape1}, qdA {shape2}')
         nfaces_tot = comm.reduce(nfaces,root=0)
@@ -601,73 +718,116 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             print(f'nqpts  : {nqpts_tot}')
         sys.stdout.flush() 
 
-        return surfinfo    
+        return qinfo,m0    
+
+    def update_usoln_from_currstep(self, intg, m0_dict, eidxs, ushape):
+
+        # MPI info
+        comm, rank, root = get_comm_rank_root()
+
+        # fwh soln array for one time step:
+        usoln = np.empty((ushape))
+        # Solution matrices indexed by element type
+        solns = dict(zip(intg.system.ele_types, intg.soln))
+        ndims, nvars = self.ndims, self.nvars
+
+        fIo = 0
+        for (etype, fidx), m0 in m0_dict.items(): 
+            # Get the interpolation operator
+            nfpts, nupts = m0.shape
+
+            # Extract the relevant elements from the solution
+            uupts = solns[etype][...,eidxs[etype,fidx]]
+
+            # Interpolate to the face
+            ufpts = m0 @ uupts.reshape(nupts, -1)
+            ufpts = ufpts.reshape(nfpts, nvars, -1)
+            ufpts = ufpts.swapaxes(0, 1) # nvars, nfpts, nfaces
+            #ufpts = np.swapaxes(ufpts.reshape(nvars,-1)[...,srtids_],1,2)  # additional sorting
+
+            # get primitive vars
+            pri_ufpts = self.elementscls.con_to_pri(ufpts, self.cfg)
+            fIsize = pri_ufpts.shape[1] * pri_ufpts.shape[2]
+            fImax = fIo + fIsize
+            if self._artificial_compress:
+                usoln[-1,fIo:fImax] = pp = pri_ufpts[0].reshape(-1)  #p
+                usoln[0,fIo:fImax] = pp/self.constvars['ac-zeta'] #rho
+            else:
+                usoln[-1,fIo:fImax] = pri_ufpts[-1].reshape(-1)
+                usoln[0,fIo:fImax] = pri_ufpts[0].reshape(-1)
+            usoln[1,fIo:fImax] = pri_ufpts[1].reshape(-1)
+            usoln[2,fIo:fImax] = pri_ufpts[2].reshape(-1)
+            if ndims == 3:
+                usoln[3,fIo:fImax] = pri_ufpts[3].reshape(-1) 
+            fIo = fImax
+        
+        return usoln
+        
 
 class FFTParam(object):
+    #if more windows are needed, they can be customally added. A larger list is available in scipy
     windows = {
-        'hanning': (lambda s: np.hanning(s + 1),{'variance': np.sqrt(8./3.), 'peak': 2.}),
-        'hamming': (lambda s: np.hamming(s + 1),{'variance': 50.*np.sqrt(3974.)/1987., 'peak': 50./27.})
+        'None'    : (lambda s: np.ones(s),      {'density': 1., 'spectrum': 1.}),  # rectangle window
+        'hanning' : (lambda s: np.hanning(s),   {'density': np.sqrt(8./3.), 'spectrum': 2.}),
+        'hamming' : (lambda s: np.hamming(s),   {'density': 50.*np.sqrt(3974.)/1987., 'spectrum': 50./27.}),
+        'blackman': (lambda s: np.blackman(s),  {'density': 50.*np.sqrt(3046.)/1523., 'spectrum': 50./21.}),
+        'bartlett': (lambda s: np.bartlett(s),  {'density': np.sqrt(3.), 'spectrum': 2.}),
         }
 
-    def __init__(self,tol,cfg,cfgsect,dt_sim,fwh_tstart,sim_tend):
-        self.cfg = cfg
-        self.tol = tol
+    def __init__(self,dt_sim,dt_sub,ltsub,shift,window_func,psd_scale_mode):
         self.dt_sim = dt_sim
-        
-        self.dt_sub = self.cfg.getfloat(cfgsect,'dt',self.dt_sim)
-        # read the window length, default is up to simulation tend
-        Lt_sub_def = sim_tend - fwh_tstart
-        self.Lt_sub = self.cfg.getfloat(cfgsect,'Lt',Lt_sub_def)        
-        if (self.Lt_sub + self.tol) <= self.dt_sim:
-            raise ValueError(f'fft param, Lt_sub window length {self.Lt_sub} is too short or less than simulation time step {self.dt_sim}')
-        
-        self.shift = self.cfg.getfloat(cfgsect,'time-shift',0.5)
+        self.dt_sub = dt_sub
+        self.ltsub =  ltsub       
+        self.shift = shift
+        self.window_func = window_func
+        self.psd_scale_mode = psd_scale_mode
+        self.tol = 1e-12
+
+        if (self.ltsub + self.tol) <= self.dt_sim:
+            raise ValueError(f'fft param, ltsub window length {self.ltsub} is too short or less than simulation time step {self.dt_sim}')
         if self.shift > 1.:
             raise  ValueError(f'window overlap/shift {self.shift} cannot exceed one, please adjust it as necessary')
-
-        self.window_func = self.cfg.get(cfgsect,'window','hanning')
-        self.powscalmode = self.cfg.get(cfgsect,'psd-scaling-mode','variance')
-        if not self.window_func in self.windows:
-            raise ValueError(f'Specified {self.window_func} window function is not impelemented, conside either \'hanning\' or \'hamming\'')
 
         self.prepare_fft_param()
 
     def prepare_fft_param(self):
-        Lt_sub = self.Lt_sub
+        ltsub = self.ltsub
         dt_sub = self.dt_sub
-        Nt_sub = Lt_sub/dt_sub 
+        ntsub = ltsub/dt_sub 
         shift = self.shift
         window = self.window_func
-        scaling_mode = self.powscalmode
+        scaling_mode = self.psd_scale_mode
         dt_sim = self.dt_sim
 
         # Adjust inputs
         #(1) dt_sub
         self.dt_sub = dt_sub = int(np.rint(dt_sub/dt_sim))*dt_sim  if dt_sub > dt_sim else dt_sim
-        #(2) compute Nt_sub as a power of 2 number
-        N = int(np.rint(Lt_sub/dt_sub))
-        self.Nt_sub = Nt_sub = self.get_num_nearest_pow_of_two(N)
-        #self.Nt_sub = Nt_sub = N
+        #(2) compute ntsub as a power of 2 number
+        N = int(np.rint(ltsub/dt_sub))
+        self.ntsub = ntsub = get_num_nearest_pow_of_two(N)
+        #self.ntsub = ntsub = N
         #(3): adjust the window length
-        self.Lt_sub = Lt_sub = Nt_sub * dt_sub
+        self.ltsub = ltsub = ntsub * dt_sub
 
         #(4) Adjusting shift parameters for window averaging and overlapping
         # partial (0.01 < shift < 1) or complete overlap (shift = 1)
         if shift > 0.01:
             self.aver_count = 0
             self.averaging = True
-            self.Nt_shifted = int(np.rint(Nt_sub*shift)) if shift < (1.-self.tol) else Nt_sub
+            self.Nt_shifted = int(np.rint(ntsub*shift))
         # no averaging or shifting, shift < 0.01 
         else:
-            self.aver_count = -1
+            self.aver_count = 0
             self.averaging= False
-            self.Nt_shifted = 0    
+            self.Nt_shifted = ntsub    
         self.Fsampl = 1./self.dt_sim
         self.fsampl_sub = 1./self.dt_sub
-        self.Navg = 0
+        self.steps_count = 0
+        self.samplesteps = self.dt_sub/self.dt_sim
         
         #(5) window function params
-        self.wwind = self.windows[window][0](Nt_sub)[:-1]
+        #since we are using windows for spectral analysis we do not use the last data entry
+        self.wwind = self.windows[window][0](ntsub+1)[:-1]
         self.windscale = self.windows[window][1][scaling_mode]
 
         if get_comm_rank_root()[1] == 0:
@@ -675,62 +835,57 @@ class FFTParam(object):
             print(f'       Adjusted FFT parameters ')
             print(f'--------------------------------------')
             print(f'sample freq : {self.fsampl_sub} Hz')
-            print(f'delta freq  : {1./self.Lt_sub} Hz')
+            print(f'delta freq  : {1./self.ltsub} Hz')
             print(f'dt window   : {self.dt_sub} sec')
-            print(f'Lt window   : {self.Lt_sub} sec')
-            print(f'Nt window   : {self.Nt_sub}')
+            print(f'Lt window   : {self.ltsub} sec')
+            print(f'Nt window   : {self.ntsub}')
             print(f'Nt shifted  : {self.Nt_shifted}')
             if self.averaging:
                 print(f'PSD Averaging is \'activated\'')
             else:
                 print(f'PSD Averaging is \'not activated\'')
             print(f'window function is \'{self.window_func}\'')
-            print(f'psd scaling mode is \'{self.powscalmode}-preserving\'\n')
-
-
-    def get_num_nearest_pow_of_two(self,N):
-        exponent = int(np.log2(N))
-        diff0 = np.abs(N-pow(2,exponent))
-        diff1 = np.abs(N-pow(2,exponent+1))
-        return pow(2,exponent) if diff0 < diff1 else pow(2,exponent+1)
+            print(f'psd scaling mode is \'{self.psd_scale_mode}\'\n')
 
 
 class FwhSolver(object):
-    def __init__(self,observers,Uinf,fft_param,surfdata,usoln):
+    #reference pressure for spl computation
+    pref = 2e-5
+
+    def __init__(self,observers,surfdata,Uinf,fftcls,surftype='permeable'):
         self.nobserv = len(observers) # number of observers
         self.obsvlocs = observers
-        self.Uinf = Uinf
-        self.fft_param = fft_param
+        self.uinf = Uinf
+        self.fftcls = fftcls
         self.surfdata = surfdata
         self.xyz_src, self.qnorms, self.qdA = self.surfdata
-        self.nvars = usoln.shape[1]
+        self.nvars = len(self.uinf['u'])+2
         self.nqpts = np.asarray(self.surfdata[0]).shape[0]
-        self.usoln = usoln
-        self.update_step = 0
-        self.naverg = -1
         self.ndims = len(observers[0]) 
 
         # compute distance vars for fwh
-        self.magR, self.magRs, self.R_nvec, self.Rs_nvec = self.compute_distance_vars(self.obsvlocs,self.xyz_src,self.Uinf['Mach'])
+        self.magR, self.magRs, self.R_nvec, self.Rs_nvec = self._compute_distance_vars(self.xyz_src,self.obsvlocs,self.uinf['Mach'])
         # compute frequency parameters
-        self.freq  = np.fft.rfftfreq(self.fft_param.Nt_sub,self.fft_param.dt_sub)
-        self.omega = 2*np.pi*self.freq
-        self.kwv = self.omega/self.Uinf['c']
-        self.nfreq = np.size(self.freq)
-        # Init fwh fluxes
-        self.fluxes = np.zeros((self.nqpts,self.nfreq,self.ndims+1))
+        self._freq  = np.fft.rfftfreq(self.fftcls.ntsub,self.fftcls.dt_sub)
+        self.omega = 2*np.pi*self._freq
+        self.kwv = self.omega/self.uinf['c']
+        self.nfreq = np.size(self._freq)
+
         # Init fwh outputs 
-        self.pfft = np.zeros((self.nobserv,self.nfreq))
-        self.pmag = np.zeros((self.nobserv,self.nfreq))
-        self.pphase = np.zeros((self.nobserv,self.nfreq))
-        self.preal = np.zeros((self.nobserv,self.nfreq))
-        self.pimag = np.zeros((self.nobserv,self.nfreq))
+        self._pfft = np.zeros((self.nobserv,self.nfreq),dtype=np.complex128)
+        self._pmagsum = np.zeros((self.nobserv,self.nfreq))
+        self._presum = np.zeros((self.nobserv,self.nfreq))
+        self._pimgsum = np.zeros((self.nobserv,self.nfreq))
 
-        self.solidsurf = False
+        self.solidsurf = True if surftype == 'solid' else False
 
-        self.compute_fwh_solution(self.usoln)
+        self.__usoln = self._allocate_usoln_darray(self.ntsub, self.nvars, self.nqpts)
 
-    def compute_distance_vars(self,xyz_ob,xyz_src,Minf):
+    def _allocate_usoln_darray(self, ntsub, nvars, nqpts):
+        return np.empty((ntsub,nvars,nqpts))
+
+    @staticmethod
+    def _compute_distance_vars(xyz_src,xyz_ob,Minf):
         nobserv = xyz_ob.shape[0]
         ndims = xyz_ob[0].shape[0]
         magMinf = np.sqrt(sum(m*m for m in Minf)) # |M|
@@ -740,7 +895,7 @@ class FwhSolver(object):
         # dr = x_observer - x_source
         dr = np.array([ob - xyz_src for ob in xyz_ob]).reshape(-1,ndims)    
         magdr = np.sqrt(sum((dr*dr).T)) # distance |dr|
-        ndr = np.array([idr/ir for idr,ir in zip(magdr,dr)])  # normalized unit dr
+        ndr = np.array([idr/ir for idr,ir in zip(dr,magdr)])  # normalized unit dr
         Minf_ndr = sum((Minf*ndr).T) # Minfty.r_hat
         Rs = (magdr/gm_) * np.sqrt(1.+ gm2_*Minf_ndr*Minf_ndr)   # |R*|
         R = gm2_ * (Rs - magdr*Minf_ndr)               # |R|
@@ -749,24 +904,39 @@ class FwhSolver(object):
         mr = ndr + Minf2_ndr*gm2_
         nRs = np.einsum('i,ij->ij',rrs,mr) # normalized unit R*
         nR = gm2_ * (nRs-Minf)    # normalized unit R
-        nR = nR.reshape(nobserv,-1,ndims)
-        nRs = nRs.reshape(nobserv,-1,ndims)
-        R = R.reshape(nobserv,-1)
-        Rs = Rs.reshape(nobserv,-1)
+        if not (R.shape[0] == nobserv):
+            nR = nR.reshape(nobserv,-1,ndims)
+            nRs = nRs.reshape(nobserv,-1,ndims)
+            R = R.reshape(nobserv,-1)
+            Rs = Rs.reshape(nobserv,-1)
+ 
         return R,Rs,nR,nRs
 
-    def compute_fwh_solution(self,usoln):
-        Q, F = self.compute_surface_fluxes(usoln)
-        return self.compute_pessure_infreqdomain(Q,F)
+    def compute_fwh_solution(self):
+        psd_scale_mode = self.fftcls.psd_scale_mode
+        pmagsum, presum, pimgsum = self._pmagsum, self._presum, self._pimgsum
+        #compute fluxes in time domain
+        Q, F = self._compute_surface_fluxes(self.__usoln)
+        #compute fwh pressure solution in frequency domain
+        self._pfft = pfft = self._compute_observer_pessure(Q,F)
+        # use welch method if averaging
+        if self.fftcls.averaging:
+            pmagsum, presum, pimgsum = welch_accum(pfft,pmagsum,presum,pimgsum)
+            if self.fftcls.aver_count > 0:
+                self._pfft = welch_average(self.naver,pmagsum,presum,pimgsum)
+            self._pmagsum, self._presum, self._pimgsum = pmagsum, presum, pimgsum
+            #update the averaging counter
+            self.fftcls.aver_count += 1
+        #update the step counter
+        self.fftcls.steps_count = self.fftcls.ntsub - self.fftcls.Nt_shifted
 
-    def compute_surface_fluxes(self, usoln):
+    def _compute_surface_fluxes(self, usoln):
         # define local vars
         qnorms = self.qnorms
-        cinf = self.Uinf['c']
-        pinf = self.Uinf['p']
-        rhoinf = self.Uinf['rho']
-        uinf = np.array(self.Uinf['u'])
-        uinf = np.array([-1.,10.,20.])
+        cinf = self.uinf['c']
+        pinf = self.uinf['p']
+        rhoinf = self.uinf['rho']
+        uinf = np.array(self.uinf['u'])
         # compute soln vars
         u = np.swapaxes(usoln[:,1:self.ndims+1,:],1,2)-uinf # u' perturbed vel
         p = usoln[:,-1,:] - pinf # p' fluctuation pressure
@@ -787,57 +957,181 @@ class FwhSolver(object):
         F += np.einsum('ij,jk->ijk',p,qnorms)
 
         return Q,F
-    
-    
-    def compute_pessure_infreqdomain(self,Q,F):
+        
+    def _compute_observer_pessure(self,Q,F):
         Rv_ = self.R_nvec
         Rsv_ = self.Rs_nvec
         magR = self.magR
         magRs = self.magRs
-        wwind =self.fft_param.wwind
+        wwind =self.fftcls.wwind
         qdA = self.qdA
         
-        # fluxes windowing
-        Q -= np.mean(Q,0)
-        Q = np.einsum('i,ij->ij',wwind,Q)
-        F -= np.mean(F,0)
-        F = np.einsum('i,ijk->ijk',wwind,F)
+        # fluxes signal windowing
+        if self.fftcls.window_func != 'none':
+            Q -= np.mean(Q,0)
+            Q = np.einsum('i,ij->ij',wwind,Q)
+            F -= np.mean(F,0)
+            F = np.einsum('i,ijk->ijk',wwind,F)
 
         # perform fft of Q, F fluxes
         Qfft = np.empty((self.nfreq,self.nqpts),dtype=np.complex64)
         Ffft = np.empty((self.nfreq,self.nqpts,self.ndims),dtype=np.complex64)
         for iq in range(0,self.nqpts):
-            Qfft[:,iq] = self._rfft(Q[:,iq])
+            Qfft[:,iq] = rfft(Q[:,iq])
             for jd in range(0,self.ndims):
-                Ffft[:,iq,jd]  = self._rfft(F[:,iq,jd])
+                Ffft[:,iq,jd]  = rfft(F[:,iq,jd])
 
         #compute pfft, i=nob,j=nfreq,k=nqpts, p shape i,j,k 
         kwvR = np.einsum('ik,j->jik',magR,self.kwv)
         exp_term0 = np.exp(-1j*kwvR)        # exp(-ikR)
         exp_term1 = exp_term0/magRs          # exp(-ikR)/R*
         exp_term2 = exp_term0/(magRs*magRs) # exp(-ikR)/(R*xR*)
-        pfft  = 1j * np.einsum('j,jik,jk->ijk',self.omega, exp_term1, Qfft)       # p1_term
+        pfft  = 1j * np.einsum('j,jik,jk->ijk',self.omega, exp_term1, Qfft)        # p1_term
         pfft += 1j * np.einsum('j,jik,ikm,jkm->ijk',self.kwv,exp_term1,Rv_,Ffft)   # p2_term0
-        pfft += np.einsum('jik,ikm,jkm->ijk',exp_term2,Rsv_,Ffft) #+p2_term1 
+        pfft += np.einsum('jik,ikm,jkm->ijk',exp_term2,Rsv_,Ffft)                  # p2_term1 
 
         # surface integration
-        factor = self.fft_param.windscale/(4.*np.pi)
-        pfft *= qdA*factor
+        pfft = self._surface_integrate(qdA,pfft)
+        pfft *= self.fftcls.windscale/(4.*np.pi)
 
         return pfft
 
-    #-Compute FFT for real input data using python_numpy functions
-    def _rfft(self,udata_):
-        dsize = np.size(udata_)
-        # freqsize: size of half the spectra with positive frequencies
-        freqsize = int(dsize/2) if dsize%2 == 0 else int(dsize-1)/2
-        ufft = np.fft.rfft(udata_)/freqsize 
-        return ufft
+    def _surface_integrate(self,qdA,p):
+        #i=nobservers, j=nfreq or ntime, k=nqpts
+        return np.einsum('ijk,k->ij',p,qdA)
+
+    def check_compute(self):
+        return (self.nsteps >= self.ntsub)
+
+    @property
+    def nsteps(self):
+        return self.fftcls.steps_count
+    @property
+    def naver(self):
+        return self.fftcls.aver_count
+    @cached_property
+    def ntsub(self):
+        return self.fftcls.ntsub
+    @cached_property
+    def averaging(self):
+        return self.fftcls.averaging
+    @cached_property
+    def window_func(self):
+        return self.fftcls.window_func
+    @cached_property
+    def freq(self):
+        return self._freq
+    @property
+    def pfft(self):
+        return self._pfft
+
+    @property
+    def pmagsum(self):
+        return self._pmagsum
+    @pmagsum.setter
+    def pmagsum(self,val):
+        self._pmagsum = val
+
+    @property
+    def presum(self):
+        return self._presum
+    @presum.setter
+    def presum(self,val):
+        self._presum = val
+
+    @property
+    def pimgsum(self):
+        return self._pimgsum
+    @pimgsum.setter
+    def pimgsum(self,val):
+        self._pimgsum = val
+
+    @property
+    def usoln_onestep(self):
+         return self.__usoln[self.fftcls.steps_count]
+
+    @usoln_onestep.setter
+    def usoln_onestep(self,val):
+        self.__usoln[self.fftcls.steps_count] = val
+        self.fftcls.steps_count += 1
 
     def __call__(self, *args, **kwds):
         pass
 
-    
+
+class PointAcousticSrc(object):
+    def __init__(self,name,srclocs,flowinfo,*srcdata):
+        self.name = name
+        self.srclocs = srclocs
+        self.ndims = len(srclocs)
+        self.nvars = len(flowinfo)
+        self.rhoinf, self.uinf, self.pinf = flowinfo[0], flowinfo[1:self.ndims+1], flowinfo[-1]
+
+    def exact_solution(self,*args):
+        pass
+    def update_usoln_onestep(self,*args):
+        pass
+
+class MonopoleSrc(PointAcousticSrc):
+    def __init__(self,name,srclocs,flowinfo,ampl,srcfreq,ntime,nperiods,gamma):
+        super().__init__(name,srclocs,flowinfo,ampl,srcfreq,ntime,nperiods,gamma)
+        self.gamma = gamma
+        self.ampl = ampl
+        self.srcfreq = srcfreq
+        self.nperiods = nperiods
+        self.nt = ntime
+        self.omega = 2.*np.pi*self.srcfreq
+        self.tperiod = 2.*np.pi/self.omega
+        self.dt = self.nperiods*self.tperiod/self.nt
+        self.freq = np.fft.rfftfreq(self.nt,self.dt)
+        self.nfreq = len(self.freq)
+
+        co = np.sqrt(self.gamma*self.pinf/self.rhoinf) 
+        print(f'src locs {self.srclocs}')
+        print(f'co {co}, rho_o {self.rhoinf}, po {self.pinf}')
+        print(f'Minf {self.uinf/co}')
+        sys.stdout.flush()
+        
+    def exact_solution(self,xyz_ob):
+        nobserv = xyz_ob.shape[0]
+        ptime = np.empty((self.nt,nobserv))
+        pfft = np.empty((nobserv,self.nfreq),dtype=np.complex128)
+        for i in range(self.nt):
+            ptime[i] = self.update_usoln_onestep(xyz_ob,i*self.dt,nobserv,'p') - self.pinf
+        ptime = np.moveaxis(ptime,0,1)
+        for i in range(nobserv):
+            pfft[i] = rfft(ptime[i])
+        return self.freq,pfft
+
+    def update_usoln_onestep(self,xyz_ob,tcurr,ushape,uout='usoln'):
+        usoln = np.empty(ushape)
+        co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
+        Mo = self.uinf/co
+        kwv = self.omega/co
+        magR, magRs, R_nvec, Rs_nvec = FwhSolver._compute_distance_vars(self.srclocs,xyz_ob,Mo)
+        # phy_potential of the source and its derivatives
+        phy = (self.ampl/(4.*np.pi*magRs))*np.exp(1j*(self.omega*tcurr-kwv*magR)) 
+        invRs = 1./magRs
+        kk = 1j*kwv*R_nvec + np.einsum('i,ij->ij',invRs,Rs_nvec)
+        dphy = - np.einsum('i,ij->ji',phy,kk) 
+        mdotdphy = sum((Mo*dphy.T).T)
+
+        # computing the flow quantities
+        # pressure
+        p = np.real(-self.rhoinf * (1j*self.omega*phy + co * mdotdphy)) 
+        if not (uout == 'usoln'):
+            return p + self.pinf
+        
+        usoln[-1] = p + self.pinf
+        usoln[0] = p/(co*co) + self.rhoinf  #rho
+        usoln[1:self.ndims+1] = usrc = np.array([ui + uo for ui, uo in zip(np.real(dphy),self.uinf)])  #u
+        
+        return usoln
+
+
+class DipoleSrc(PointAcousticSrc):
+    def __init__(self,name,srclocs,flowinfo,*srcdata):
+        super().__init__(name,srclocs,flowinfo,*srcdata)
 
 class VTUSurfWriter(object):
 
@@ -885,6 +1179,15 @@ class VTUSurfWriter(object):
                     'hex' : {'quad': 0},
                     'pri' : {'quad': -2, 'tri': 0}, 
                     'pyr' : {'quad': 0, 'tri': -1}}
+    # reverse map from face index to face type
+    fnum_pftype_map = {
+            'tri' : { 0: 'line', 1: 'line', 2: 'line'}, 
+            'quad': { 0: 'line', 1: 'line', 2: 'line', 3: 'line'}, 
+            'tet' : { 0: 'tri', 1: 'tri', 2: 'tri', 3: 'tri'}, 
+            'hex' : { 0: 'quad', 1: 'quad', 2: 'quad', 3: 'quad', 4: 'quad', 5: 'quad'},
+            'pri' : { 0: 'tri', 1: 'tri', 2: 'quad', 3: 'quad', 4: 'quad'}, 
+            'pyr' : { 0: 'quad', 1: 'tri', 2: 'tri', 3: 'tri', 4: 'tri'} 
+    }
 
     _vtufnodes = defaultdict(list) # fwh face to vtu nodes set
 
@@ -899,16 +1202,16 @@ class VTUSurfWriter(object):
         self._vtk_vars = fieldvars.extend(('Partition', 'r')) if fieldvars else [('Partition', 'r')]
         self._vtk_fields = fielddata if fielddata else []
 
-        self.prepare_vtufnodes()
+        self._prepare_vtufnodes()
 
-    def _write(self,fname):
+    def write(self,fname):
         fname = f'{fname}.vtu'
-        self.write_vtu_out(fname)
+        self._write_vtu_out(fname)
 
-    def prepare_vtufnodes(self): 
+    def _prepare_vtufnodes(self): 
         for (etype,fidx), eidxlist in self._eidxs.items():
             pts = np.swapaxes(self.mesh[f'spt_{etype}_p{self.rallocs.prank}'],0,1)
-            pftype = fnum_pftype_map[etype][fidx]
+            pftype = self.fnum_pftype_map[etype][fidx]
             fidx = np.int(fidx) + self._fnum_offset[etype][pftype]
             for eidx in eidxlist:
                 #eidx = np.int(eidx)
@@ -916,7 +1219,7 @@ class VTUSurfWriter(object):
                 nidx = self._petype_fnmap[etype,nelemnodes][pftype][fidx]
                 self._vtufnodes[pftype].append(pts[eidx][nidx,:])
 
-    def prepare_vtufnodes_info(self):
+    def _prepare_vtufnodes_info(self):
         self.partsdata = {}
         comm, rank, root = get_comm_rank_root()
         info = defaultdict(dict)
@@ -933,11 +1236,11 @@ class VTUSurfWriter(object):
             info[k]['parts_dtype'] = self.partsdata[k].dtype.str
         return info
 
-    def write_vtu_out(self,fname):
+    def _write_vtu_out(self,fname):
 
         comm, rank, root = get_comm_rank_root()
         # prepare nodes info for each rank
-        info = self.prepare_vtufnodes_info()
+        info = self._prepare_vtufnodes_info()
 
         # Communicate and prepare data for writing
         if rank != root:
