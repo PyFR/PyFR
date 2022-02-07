@@ -47,7 +47,7 @@ class Arg(object):
 
         # Validation
         if self.attrs.startswith('broadcast') and self.intent != 'in':
-             raise ValueError('Broadcast arguments must be of intent in')
+            raise ValueError('Broadcast arguments must be of intent in')
         if self.isbroadcastr and self.ncdim != 1:
             raise ValueError('Row broadcasts must have one dimension')
         if self.isbroadcastc and self.ncdim == 1:

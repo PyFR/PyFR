@@ -34,8 +34,9 @@ class BaseInters(object):
         # Kernel constants
         self.c = cfg.items_as('constants', float)
 
-        # Kernels we provide
+        # Kernels and MPI requests we provide
         self.kernels = {}
+        self.mpireqs = {}
 
         # Global kernel arguments
         self._external_args = {}

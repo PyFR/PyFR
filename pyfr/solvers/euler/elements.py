@@ -67,30 +67,32 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
             'jac_exprs': self.basis.jac_exprs
         }
 
-        # Common arguments
-        if 'flux' in self.antialias:
-            u = lambda s: self._slice_mat(self._scal_qpts, s)
-            f = lambda s: self._slice_mat(self._vect_qpts, s)
-            pts, npts = 'qpts', self.nqpts
-        else:
-            u = lambda s: self._slice_mat(self.scal_upts_inb, s)
-            f = lambda s: self._slice_mat(self._vect_upts, s)
-            pts, npts = 'upts', self.nupts
+        # Helpers
+        c, l = 'curved', 'linear'
+        r, s = self._mesh_regions, self._slice_mat
 
-        # Mesh regions
-        regions = self._mesh_regions
-
-        if 'curved' in regions:
+        if c in r and 'flux' not in self.antialias:
+            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
+                'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
+                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
+                smats=self.smat_at('upts', c)
+            )
+        elif c in r:
             self.kernels['tdisf_curved'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[npts, regions['curved']],
-                u=u('curved'), f=f('curved'),
-                smats=self.smat_at(pts, 'curved')
+                'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
+                u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
+                smats=self.smat_at('qpts', c)
             )
 
-        if 'linear' in regions:
-            upts = getattr(self, pts)
+        if l in r and 'flux' not in self.antialias:
+            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
+                'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
+                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
+                verts=self.ploc_at('linspts', l), upts=self.upts
+            )
+        elif l in r:
             self.kernels['tdisf_linear'] = lambda: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[npts, regions['linear']],
-                u=u('linear'), f=f('linear'),
-                verts=self.ploc_at('linspts', 'linear'), upts=upts
+                'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
+                u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
+                verts=self.ploc_at('linspts', l), upts=self.qpts
             )

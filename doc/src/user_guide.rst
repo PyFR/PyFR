@@ -376,7 +376,7 @@ Parameterises the time-integration scheme used by the solver with
 
         - ``scheme`` --- time-integration scheme
 
-           ``backward-euler`` | ``bdf2`` | ``bdf3``
+           ``backward-euler`` | ``bdf2`` | ``bdf3`` | ``sdirk33`` | ``sdirk43``
 
         - ``pseudo-scheme`` --- pseudo time-integration scheme
 
@@ -1351,12 +1351,8 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^
 
 Periodically samples specific points in the volume and writes them out
-to a CSV file.  The plugin actually samples the solution point
-closest to each sample point, hence a slight discrepancy in the output
-sampling locations is to be expected.  A nearest-neighbour search is
-used to locate the closest solution point to the sample point.  The
-location process automatically takes advantage of
-`scipy.spatial.cKDTree <http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.cKDTree.html>`_
+to a CSV file.  The point location process automatically takes
+advantage of `scipy.spatial.cKDTree <http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.cKDTree.html>`_
 where available.  Parameterised with
 
 1. ``nsteps`` --- sample every ``nsteps``:

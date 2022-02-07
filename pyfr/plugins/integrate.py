@@ -149,8 +149,8 @@ class IntegratePlugin(BasePlugin):
             psolns = self.elementscls.con_to_pri(soln, self.cfg)
 
             # Prepare the substitutions dictionary
-            subs = dict(zip(pnames, psolns))
-            subs.update(zip('xyz', plocs), t=intg.tcurr)
+            subs = dict(zip(pnames, psolns), t=intg.tcurr)
+            subs |= dict(zip('xyz', plocs))
 
             # Prepare any required gradients
             if self._gradpinfo:

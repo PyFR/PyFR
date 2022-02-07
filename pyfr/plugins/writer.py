@@ -67,7 +67,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 pdata = {}
 
             if rank == root:
-                metadata.update({f'{prefix}/{k}': v for k, v in pdata.items()})
+                metadata |= {f'{prefix}/{k}': v for k, v in pdata.items()}
 
         # Fetch and (if necessary) subset the solution
         data = dict(self._ele_region_data)

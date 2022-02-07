@@ -3,7 +3,7 @@
 from gimmik import generate_mm
 import numpy as np
 
-from pyfr.backends.base import ComputeKernel, NotSuitableError
+from pyfr.backends.base import Kernel, NotSuitableError
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
 
 
@@ -33,17 +33,16 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         grid = get_grid_for_block(block, b.ncol)
 
         # Generate
-        src = generate_mm(a.get(), dtype=a.dtype, platform='cuda',
+        src = generate_mm(a.get(), dtype=a.dtype, platform='hip',
                           alpha=alpha, beta=beta)
-        src = src.replace('void', f'__launch_bounds__({block[0]}) void')
 
         # Build
         fun = self._build_kernel('gimmik_mm', src,
                                  [np.int32, np.intp]*2 + [np.int32])
 
-        class MulKernel(ComputeKernel):
+        class MulKernel(Kernel):
             def run(self, queue):
-                fun.exec_async(grid, block, queue.stream_comp, b.ncol, b,
-                               b.leaddim, out, out.leaddim)
+                fun.exec_async(grid, block, queue.stream, b.ncol, b, b.leaddim,
+                               out, out.leaddim)
 
         return MulKernel()

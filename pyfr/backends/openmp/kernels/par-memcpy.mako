@@ -4,12 +4,18 @@
 
 #include <string.h>
 
-void
-par_memcpy(char *dst, int dbbytes, const char *src, int sbbytes, int bnbytes,
-           int nblocks)
+struct kargs
+{
+    char *dst;
+    int dbbytes;
+    const char *src;
+    int sbbytes, bnbytes, nblocks;
+};
+
+void par_memcpy(const struct kargs *restrict args)
 {
     #pragma omp parallel for
-    for (int ib = 0; ib < nblocks; ib++)
-        memcpy(dst + ((size_t) dbbytes)*ib, src + ((size_t) sbbytes)*ib,
-               bnbytes);
+    for (int ib = 0; ib < args->nblocks; ib++)
+        memcpy(args->dst + ((size_t) args->dbbytes)*ib,
+               args->src + ((size_t) args->sbbytes)*ib, args->bnbytes);
 }

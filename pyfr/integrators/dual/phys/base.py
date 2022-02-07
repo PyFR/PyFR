@@ -4,7 +4,6 @@ import math
 
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.integrators.dual.pseudo import get_pseudo_integrator
-from pyfr.util import proxylist
 
 
 class BaseDualIntegrator(BaseIntegrator):
@@ -15,12 +14,12 @@ class BaseDualIntegrator(BaseIntegrator):
 
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
-            backend, systemcls, rallocs, mesh,
-            initsoln, cfg, self.stepper_coeffs, self._dt
+            backend, systemcls, rallocs, mesh, initsoln, cfg,
+            self.stepper_nregs, self.stage_nregs, self._dt
         )
 
         # Event handlers for advance_to
-        self.completed_step_handlers = proxylist(self._get_plugins(initsoln))
+        self.completed_step_handlers = self._get_plugins(initsoln)
 
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
@@ -35,7 +34,6 @@ class BaseDualIntegrator(BaseIntegrator):
 
     @property
     def soln(self):
-        # If we do not have the solution cached then fetch it
         if not self._curr_soln:
             self._curr_soln = self.system.ele_scal_upts(
                 self.pseudointegrator._idxcurr
@@ -45,10 +43,11 @@ class BaseDualIntegrator(BaseIntegrator):
 
     @property
     def grad_soln(self):
-        # If we do not have the solution gradients cached then compute and fetch them
+        system = self.system
+
         if not self._curr_grad_soln:
-            self.system.compute_grads(self.tcurr, self.pseudointegrator._idxcurr)
-            self._curr_grad_soln = self.system.eles_vect_upts.get()
+            system.compute_grads(self.tcurr, self.pseudointegrator._idxcurr)
+            self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
 
         return self._curr_grad_soln
 

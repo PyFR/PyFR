@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from collections import defaultdict
-from functools import wraps
+from functools import cached_property, wraps
 from itertools import count
 import math
 from weakref import WeakKeyDictionary, WeakValueDictionary
@@ -10,7 +10,6 @@ import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
 from pyfr.template import DottedTemplateLookup
-from pyfr.util import lazyprop
 
 
 def recordmat(fn):
@@ -51,7 +50,7 @@ class BaseBackend(object):
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
 
-    @lazyprop
+    @cached_property
     def lookup(self):
         pkg = f'pyfr.backends.{self.name}.kernels'
         dfltargs = dict(fpdtype=self.fpdtype, soasz=self.soasz,
@@ -133,9 +132,6 @@ class BaseBackend(object):
     def matrix_slice(self, mat, ra, rb, ca, cb):
         return self.matrix_slice_cls(self, mat, ra, rb, ca, cb)
 
-    def matrix_bank(self, mats, initbank=0, tags=set()):
-        return self.matrix_bank_cls(self, mats, initbank, tags)
-
     @recordmat
     def xchg_matrix(self, ioshape, initval=None, extent=None, aliases=None,
                     tags=set()):
@@ -168,6 +164,3 @@ class BaseBackend(object):
 
     def queue(self):
         return self.queue_cls(self)
-
-    def runall(self, sequence):
-        self.queue_cls.runall(sequence)

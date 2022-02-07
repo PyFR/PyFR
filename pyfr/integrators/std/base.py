@@ -2,7 +2,6 @@
 
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.integrators.base import BaseCommon
-from pyfr.util import proxylist
 
 
 class BaseStdIntegrator(BaseCommon, BaseIntegrator):
@@ -35,14 +34,13 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self._gndofs = self._get_gndofs()
 
         # Event handlers for advance_to
-        self.completed_step_handlers = proxylist(self._get_plugins(initsoln))
+        self.completed_step_handlers = self._get_plugins(initsoln)
 
         # Delete the memory-intensive elements map from the system
         del self.system.ele_map
 
     @property
     def soln(self):
-        # If we do not have the solution cached then fetch it
         if not self._curr_soln:
             self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
 
@@ -50,10 +48,11 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
 
     @property
     def grad_soln(self):
-        # If we do not have the solution gradients cached then compute and fetch them
+        system = self.system
+
         if not self._curr_grad_soln:
-            self.system.compute_grads(self.tcurr, self._idxcurr)
-            self._curr_grad_soln = self.system.eles_vect_upts.get()
+            system.compute_grads(self.tcurr, self._idxcurr)
+            self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
 
         return self._curr_grad_soln
 

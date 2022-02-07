@@ -3,7 +3,7 @@
 import numpy as np
 
 from pyfr.backends.hip.provider import HIPKernelProvider, get_grid_for_block
-from pyfr.backends.base import ComputeKernel
+from pyfr.backends.base import Kernel
 
 
 class HIPBlasExtKernels(HIPKernelProvider):
@@ -28,10 +28,10 @@ class HIPBlasExtKernels(HIPKernelProvider):
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
 
-        class AxnpbyKernel(ComputeKernel):
+        class AxnpbyKernel(Kernel):
             def run(self, queue, *consts):
-                kern.exec_async(grid, block, queue.stream_comp, nrow, ncolb,
-                                ldim, *arr, *consts)
+                kern.exec_async(grid, block, queue.stream, nrow, ncolb, ldim,
+                                *arr, *consts)
 
         return AxnpbyKernel()
 
@@ -41,9 +41,9 @@ class HIPBlasExtKernels(HIPKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
-        class CopyKernel(ComputeKernel):
+        class CopyKernel(Kernel):
             def run(self, queue):
-                hip.memcpy_async(dst, src, dst.nbytes, queue.stream_comp)
+                hip.memcpy(dst, src, dst.nbytes, queue.stream)
 
         return CopyKernel()
 
@@ -91,15 +91,15 @@ class HIPBlasExtKernels(HIPKernelProvider):
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum
 
-        class ReductionKernel(ComputeKernel):
+        class ReductionKernel(Kernel):
             @property
             def retval(self):
                 return reducer(reduced_host, axis=1)
 
             def run(self, queue, *facs):
-                rkern.exec_async(grid, block, queue.stream_comp,
+                rkern.exec_async(grid, block, queue.stream,
                                  nrow, ncolb, ldim, reduced_dev, *regs, *facs)
-                hip.memcpy_async(reduced_host, reduced_dev,
-                                 reduced_dev.nbytes, queue.stream_comp)
+                hip.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
+                           queue.stream)
 
         return ReductionKernel()

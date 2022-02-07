@@ -7,7 +7,7 @@ import numpy as np
 
 
 class BaseTabulatedQuadRule(object):
-    def __init__(self, rule):
+    def __init__(self, rule, flags=None):
         pts = []
         wts = []
 
@@ -37,9 +37,10 @@ class BaseTabulatedQuadRule(object):
         if self.ndim == 1:
             pts = [p[0] for p in pts]
 
-        # Cast
+        # Cast and assign
         self.pts = np.array(pts)
         self.wts = np.array(wts)
+        self.flags = frozenset(flags or '')
 
 
 class BaseStoredQuadRule(BaseTabulatedQuadRule):
@@ -51,7 +52,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
 
         for path in rpaths:
             m = re.match(r'([a-zA-Z0-9\-~+]+)-n(\d+)'
-                         r'(?:-d(\d+))?(?:-([spu]+))?\.txt$', path)
+                         r'(?:-d(\d+))?(?:-([pstu]+))?\.txt$', path)
             if m:
                 yield (path, m.group(1), int(m.group(2)),
                        int(m.group(3) or -1), set(m.group(4) or ''))
@@ -71,7 +72,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
                 if (not best or
                     (npts and rqdeg > best[2]) or
                     (qdeg and rnpts < best[1])):
-                    best = (rpath, rnpts, rqdeg)
+                    best = (rpath, rnpts, rqdeg, rflags)
 
         # Raise if no suitable rules were found
         if not best:
@@ -79,7 +80,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
 
         # Load the rule
         rule = resource_string(__name__, f'{self.shape}/{best[0]}')
-        super().__init__(rule.decode())
+        super().__init__(rule.decode(), rflags)
 
 
 def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from functools import cached_property
+
 import pyfr.backends.base as base
-from pyfr.util import lazyprop
 
 
 class OpenMPMatrixBase(base.MatrixBase):
@@ -32,33 +33,19 @@ class OpenMPMatrixBase(base.MatrixBase):
 
 
 class OpenMPMatrix(OpenMPMatrixBase, base.Matrix):
-    @lazyprop
+    @cached_property
     def hdata(self):
         return self.data
 
 
 class OpenMPMatrixSlice(base.MatrixSlice):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    @cached_property
+    def data(self):
+        return self.parent.data[self.ba:self.bb, self.ra:self.rb, :]
 
-        self._as_parameter_map = {}
-
-    def _init_data(self, mat):
-        return mat.data[self.ba:self.bb, self.ra:self.rb, :]
-
-    @property
+    @cached_property
     def _as_parameter_(self):
-        try:
-            return self._as_parameter_map[self.parent.mid]
-        except KeyError:
-            param = self.data.ctypes.data
-            self._as_parameter_map[self.parent.mid] = param
-
-            return param
-
-
-class OpenMPMatrixBank(base.MatrixBank):
-    pass
+        return self.data.ctypes.data
 
 
 class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
@@ -78,44 +65,18 @@ class OpenMPView(base.View):
 
 
 class OpenMPQueue(base.Queue):
-    def _exec_nonblock(self):
-        while self._items:
-            kern = self._items[0][0]
+    def run(self, mpireqs=[]):
+        # Start any MPI requests
+        if mpireqs:
+            self._startall(mpireqs)
 
-            # See if kern will block
-            if self._at_sequence_point(kern) or kern.ktype == 'compute':
-                break
+        # Run our kernels
+        for item, args, kwargs in self._items:
+            item.run(self, *args, **kwargs)
 
-            self._exec_item(*self._items.popleft())
+        # If we started any MPI requests, wait for them
+        if mpireqs:
+            self._waitall(mpireqs)
 
-    def _wait(self):
-        if self._last_ktype == 'mpi':
-            from mpi4py import MPI
-
-            MPI.Prequest.Waitall(self.mpi_reqs)
-            self.mpi_reqs = []
-
-        self._last_ktype = None
-
-    def _at_sequence_point(self, item):
-        return self._last_ktype == 'mpi' and item.ktype != 'mpi'
-
-    @staticmethod
-    def runall(queues):
-        # Fire off any non-blocking kernels
-        for q in queues:
-            q._exec_nonblock()
-
-        while any(queues):
-            # Execute a (potentially) blocking item from each queue
-            for q in filter(None, queues):
-                q._exec_nowait()
-
-            # Now consider kernels which will wait
-            for q in filter(None, queues):
-                q._exec_next()
-                q._exec_nonblock()
-
-        # Wait for all tasks to complete
-        for q in queues:
-            q._wait()
+        # Clear the queue
+        self._items.clear()
