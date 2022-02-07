@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import Structure, byref
+from ctypes import Structure, byref, c_void_p
 
 from pyfr.backends.base import (BaseKernelProvider,
                                 BasePointwiseKernelProvider, Kernel)
@@ -43,7 +43,8 @@ class OpenMPKernelProvider(BaseKernelProvider):
                             [npdtype_to_ctypestype(arg) for arg in argtypes])
 
     def _build_kernel(self, name, src, argtypes):
-        fun = self._build_function(name, [np.intp])
+        lib = self._build_library(src)
+        fun = lib.function(name, None, [c_void_p])
 
         return OpenMPKernelFunction(fun, self._get_arg_cls(tuple(argtypes)))
 
