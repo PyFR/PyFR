@@ -44,7 +44,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
             self._add(0, self._stage_regidx[self.currstg], 1, fout)
 
         # Registers and coefficients
-        vals = self.stepper_coeffs[:2] + [1]
+        vals = [self.stepper_coeffs[-1], -1/self._dt, 1]
         regs = [fout, self._idxcurr, self._source_regidx]
 
         # Physical stepper source addition -∇·f - dQ/dt
