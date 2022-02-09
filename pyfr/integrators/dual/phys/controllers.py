@@ -15,8 +15,8 @@ class BaseDualController(BaseDualIntegrator):
             for csh in self.completed_step_handlers:
                 csh(self)
 
-    def _accept_step(self, idxcurr):
-        self.tcurr += self._dt
+    def _accept_step(self, dt, idxcurr):
+        self.tcurr += dt
         self.nacptsteps += 1
         self.nacptchain += 1
 
@@ -49,8 +49,11 @@ class DualNoneController(BaseDualController):
             raise ValueError('Advance time is in the past')
 
         while self.tcurr < t:
+            # Decide on the time step
+            dt = max(min(t - self.tcurr, self._dt), self.dtmin)
+
             # Take the physical step
-            self.step(self.tcurr, self._dt)
+            self.step(self.tcurr, dt)
 
             # We are not adaptive, so accept every step
-            self._accept_step(self.pseudointegrator._idxcurr)
+            self._accept_step(dt, self.pseudointegrator._idxcurr)
