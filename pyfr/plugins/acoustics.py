@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from curses import meta
 import os, sys
 import re
 import numpy as np
@@ -9,9 +10,11 @@ from functools import cached_property
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.nputil import npeval
+from pyfr.nputil import fuzzysort, npeval
 from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
+
+import time
 
 
 def open_csv(fname, header=None, mode='w'):
@@ -52,6 +55,35 @@ def compute_psd(amp,df):
     psd[-1] *= 2.
     return psd
 
+def Gatherv_data_arr(comm, rank, root, data_arr):
+    recvbuf = None
+    displ = None
+    count = None
+    sbufsize = data_arr.size 
+    sendbuf = data_arr.reshape(-1)
+    count = comm.gather(sbufsize,root=root)
+
+    if rank == root:
+        count = np.array(count, dtype='i')
+        recvbuf = np.empty(sum(count),dtype=float)
+        displ = np.array([sum(count[:p]) for p in range(len(count))])
+
+    comm.Gatherv(sendbuf, [recvbuf, count, displ, MPI.DOUBLE], root=root)
+
+    return recvbuf
+
+def Allgatherv_data_arr(comm, data_arr):
+    sbufsize = data_arr.size 
+    sendbuf = data_arr.reshape(-1)
+    count = comm.allgather(sbufsize)
+    count = np.array(count, dtype='i')
+    recvbuf = np.empty(sum(count),dtype=float)
+    displ = np.array([sum(count[:p]) for p in range(len(count))])
+
+    comm.Allgatherv(sendbuf, [recvbuf, count, displ, MPI.DOUBLE])
+
+    return recvbuf
+
 TimeParam = namedtuple('TimeParam',['dtsim','dtsub','ltsub','shift','window','psd_scale_mode'])
 
 
@@ -68,8 +100,8 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         super().__init__(intg, cfgsect, suffix)
 
         # for restart
-        restdata = defaultdict(list)
-        restdata = kwargs
+        metadata = defaultdict(list)
+        metadata = kwargs
 
         self.DEBUG = self.cfg.getint(cfgsect,'debug',0)
         # Base output directory and file name
@@ -134,7 +166,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         mesh, elemap = intg.system.mesh, intg.system.ele_map
 
         # Extract FWH Surf Geometric Data:
-        self._qpts_info, self._m0 = self.get_fwhsurf_finfo(elemap, self._eidxs)  #fpts, qpts_dA, norm_pnorms
+        self._qpts_info, self._m0, self._centroids = self.get_fwhsurf_finfo(elemap, self._eidxs)  #fpts, qpts_dA, norm_pnorms
         self._int_qpts, self._int_m0 = self.get_nqpts_m0(elemap, self._int_eidxs)
         self._mpi_qpts, self._mpi_m0 = self.get_nqpts_m0(elemap, self._mpi_eidxs)
         self._bnd_qpts, self._bnd_m0 = self.get_nqpts_m0(elemap, self._int_eidxs)
@@ -144,10 +176,11 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         #Debug, using analytical sources
         analytictest = self.cfg.get(self.cfgsect, 'analytic-src', None)
         self.pacoustsrc = None
-        self._started = False
-        self.tdiff_restart = 0.
 
+        self._started = False
+        self._last_prepared = 0.
         # init the fwhsolver and analytical sources if any
+        
         if self.active_fwhrank:
             #Debug for analytical sources
             if analytictest == 'monopole':
@@ -163,10 +196,11 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             # init the fwhsolver
             self.fwhsolver = FwhFreqDomainSolver(timeparam,self.observers,self._qpts_info,self.uinf)
             # init from restart
-            restore = self.fwhsolver.init_from_restart(restdata) if intg.isrestart else False
-            self._last_prepared = restdata['tlast'] if restore else 0.
-            # Allocate/Init solution data arrays:
-            initsoln = restdata['soln'] if 'soln' in restdata else []
+            initsoln = None
+            restore = False
+            if intg.isrestart:
+                restore, initsoln = self.deserialise_per_rank(intg, metadata)
+            # Allocate/Init usolution data arrays
             self.usoln = self.fwhsolver.allocate_init_usoln_darray(restore, initsoln)
             #init step and average params
             self.samplesteps = self.fwhsolver.samplesteps
@@ -184,13 +218,18 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 nperiods = self.fwhsolver.ntsub * self.fwhsolver.dtsub / tperiod
                 gamma = self.constvars['gamma']
                 self.pacoustsrc = MonopoleSrc('smonopole',srclocs,srcuinf,srcamp,srcfreq,self.fwhsolver.ntsub,nperiods,gamma)
+                if self.fwhrank == 0:
+                    co = np.sqrt(gamma*srcuinf[-1]/srcuinf[0]) 
+                    print(f'src locs {srclocs}')
+                    print(f'co {co}, rho_o {srcuinf[0]}, po {srcuinf[-1]}')
+                    print(f'Minf {srcuinf[1:4]/co}')
+                    sys.stdout.flush()
             
             self.dt_out = self.fwhsolver.dtsub # make sue to change this calling way for non-uniform fft
             # Register our output times with the integrator
-            intg.call_plugin_dt(self.dt_out)
+            #intg.call_plugin_dt(self.dt_out)
 
             self.fwhwritemode = 'w' if not intg.isrestart else 'a'
-
 
     def __call__(self, intg):
         # if not an active rank return
@@ -202,26 +241,128 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             return
 
         self._prepare_data(intg)
-
+        
 
     def serialise(self, intg):
-        self._prepare_data(intg)
-        #gather info from all other fwh ranks to fwh root
+        #bail out if did not reach tstart
+        if not self._started:
+            return {}
+
+        metadata = {}
         
-        restdata = {
-            'tlast'    : self._last_prepared,
-            'stepcnt'  : self.fwhsolver.stepcnt,
-            'avgcnt'   : self.fwhsolver.avgcnt,
-            'ltsub'    : self.fwhsolver.ltsub,
-            'ntsub'    : self.fwhsolver.ntsub,
-            'nfreq'    : self.fwhsolver.nfreq,
-            'observers': self.observers,
-            'soln'     : self.usoln[:self.fwhsolver.stepcnt],
-            'pmagsum'  : self.fwhsolver.pmagsum,
-            'presum'   : self.fwhsolver.presum,
-            'pimgsum'  : self.fwhsolver.pimgsum
-        }
-        return restdata
+        if self.active_fwhrank:
+            #solve fwh if needed
+            self._prepare_data(intg)
+            
+            root = 0
+            #gather soln from all other fwh ranks to fwh root
+            sendbuf = self.usoln[:self.fwhsolver.stepcnt].reshape(-1,self.nqpts).T
+            gusoln = Gatherv_data_arr(self.fwh_comm, self.fwhrank, root, sendbuf)
+            #gather fpts-plocs from all other fwh ranks to fwh root          
+            gfptsplocs = Gatherv_data_arr(self.fwh_comm, self.fwhrank, root, self._qpts_info[0])
+
+            metadata = {
+                'tlast'    : self._last_prepared,
+                'stepcnt'  : self.fwhsolver.stepcnt,
+                'avgcnt'   : self.fwhsolver.avgcnt,
+                'ltsub'    : self.fwhsolver.ltsub,
+                'ntsub'    : self.fwhsolver.ntsub,
+                'nfreq'    : self.fwhsolver.nfreq,
+                'observers': self.observers,
+                'soln'     : gusoln,
+                'fptsplocs': gfptsplocs,
+                'pmagsum'  : self.fwhsolver.pmagsum,
+                'presum'   : self.fwhsolver.presum,
+                'pimgsum'  : self.fwhsolver.pimgsum
+            }
+        
+        return metadata
+
+    def deserialise_root(self, intg, metadata=None):
+        usoln = None
+        #init fwh solver class
+        restore = self.fwhsolver.init_from_restart(metadata)
+
+        root = 0
+        if restore:
+            self._started = True
+            #read metadata
+            self._last_prepared = metadata['tlast'] 
+            gsoln = metadata['soln']
+            gfplocs = metadata['fptsplocs']
+            #gather the current global fpts-plocs
+            curr_gfplocs = Gatherv_data_arr(self.fwh_comm, self.fwhrank, root, self._qpts_info[0])
+
+            if self.fwhrank == 0:
+                nqpts_tot = int(gsoln.shape[0]/(self.fwhsolver.stepcnt*self.fwhnvars))
+                idx = range(nqpts_tot)
+                #sorting ids of the current fplocs
+                srtdidx = fuzzysort(curr_gfplocs.reshape(-1,self.ndims).T, idx)
+                #permutation of curr fplocs
+                perms = np.argsort(srtdidx)
+                #sorting ids of the read global fplocs
+                srtdidx = fuzzysort(gfplocs.reshape(-1,self.ndims).T, idx)
+                #permuting the global solution array to the current ordering
+                gsoln = gsoln.reshape(nqpts_tot,-1)[srtdidx][perms].reshape(-1)
+
+            #scatter gsoln from fwh-root to all other fwh ranks
+            sendbuf = None
+            displ = None
+            count = None
+            nsteps = self.fwhsolver.stepcnt 
+            rbufsize = nsteps * self.fwhnvars * self.nqpts
+            recvbuf = np.empty(rbufsize,dtype=float)
+            count = self.fwh_comm.gather(rbufsize,root=0)
+            if self.fwhrank == 0:
+                sendbuf = gsoln
+                count = np.array(count, dtype='i')
+                displ = np.array([sum(count[:p]) for p in range(len(count))])
+
+            self.fwh_comm.Scatterv([sendbuf, count, displ, MPI.DOUBLE], recvbuf, root=root)
+            usoln = recvbuf.reshape(self.nqpts,-1).T.reshape(nsteps,self.fwhnvars,self.nqpts)
+
+        else:
+            self.tstart = intg.tcurr
+
+        return restore, usoln
+
+    
+    def deserialise_per_rank(self, intg, metadata=None):
+        usoln = None
+        restore = self.fwhsolver.init_from_restart(metadata)
+
+        if restore:
+            nsteps = self.fwhsolver.stepcnt
+            self._started = True
+            #read metadata
+            self._last_prepared = metadata['tlast'] 
+            gsoln = metadata['soln']
+            gfplocs = metadata['fptsplocs']
+            #gather the current global fpts-plocs
+            curr_gfplocs = Allgatherv_data_arr(self.fwh_comm, self._qpts_info[0])
+
+            nqpts_tot = int(gsoln.shape[0]/(nsteps*self.fwhnvars))
+            idx = range(nqpts_tot)
+            #sorting ids of the current fplocs
+            srtdidx = fuzzysort(curr_gfplocs.reshape(-1,self.ndims).T, idx)
+            #permutation of curr fplocs
+            perms   = np.argsort(srtdidx)
+            #sorting ids of the read global fplocs
+            srtdidx = fuzzysort(gfplocs.reshape(-1,self.ndims).T, idx)
+            #permuting the global solution array to the current ordering
+            gsoln   = gsoln.reshape(nqpts_tot,-1)[srtdidx][perms]
+
+            #pick relevant rank usoln from the global gsoln array             
+            count   = self.fwh_comm.allgather(self.nqpts)
+            count   = np.array(count, dtype='i')
+            iqstart = sum(count[:self.fwhrank]) 
+            iqend   = iqstart + count[self.fwhrank]
+            usoln   = gsoln[iqstart: iqend].T.reshape(-1, self.fwhnvars, self.nqpts)
+
+        else:
+            self.tstart = intg.tcurr
+
+        return restore, usoln
 
 
     def _prepare_data(self,intg):
@@ -240,11 +381,10 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         else:
             self.usoln[self.fwhsolver.stepcnt] = self.update_usoln_onestep(intg, self._m0, self._eidxs, self.usoln[self.fwhsolver.stepcnt])
         self.fwhsolver.sampled()
-        self.stepcnt = self.fwhsolver.stepcnt
         
         #Debug
         if self.fwhrank == 0:
-            print(f'FWH sampled, wstep {self.stepcnt-1}, wtime {np.round(windowtime,5)}, ctime {np.round(srctime,5)}',flush=True)
+            print(f'FWH sampled, wstep {self.fwhsolver.stepcnt-1}, wtime {np.round(windowtime,5)}, srctime {np.round(srctime,5)}, currtime {np.round(intg.tcurr,5)}', flush=True)
         
         # compute fwh solution if due
         docompute = self.fwhsolver.check_compute() 
@@ -252,6 +392,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             self.fwhsolver.compute_fwh_solution(self.usoln)
             self.stepcnt = self.fwhsolver.stepcnt
             self.nwindows = self.fwhsolver.avgcnt-1 
+            self.avgcnt = self.nwindows+1
             pfft = self.fwhsolver.pfft
             if self.fwhrank != 0:
                 self.fwh_comm.Reduce(pfft, None, op=get_mpi('sum'), root=0)
@@ -291,7 +432,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 self.fwhwritemode ='a'
     
         self._last_prepared = intg.tcurr
-        self._started = intg.tcurr >= (self.tstart - self.tol)
+        self._started = True
 
 
     def extract_drum_region_eset(self, intg, drum):
@@ -639,11 +780,16 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         # comm.barrier()
         # sys.stdout.flush()
         
-        if rank == root:
-            #print(f'\nnum of fwh surface ranks {len(self.fwhranks_list)}')
-            print(f'\n{len(self.fwhranks_list)} fwh surface ranks: {self.fwhranks_list}')
-            #print(f'\nnum of fwh mpi/edge  ranks {len(self.fwh_edgranks_list)}')
-            print(f'{len(self.fwh_edgranks_list)} fwh mpi/edge ranks: {self.fwh_edgranks_list}\n')
+        if self.active_fwhrank:
+            prank = intg.rallocs.prank
+            fwhpranks_list = fwh_comm.gather(prank,root=0)
+
+            if self.fwhrank == 0:
+                #print(f'\nnum of fwh surface ranks {len(self.fwhranks_list)}')
+                print(f'\n{len(self.fwhranks_list)} fwh surface mranks: {self.fwhranks_list}')
+                print(f'{len(self.fwhranks_list)} fwh surface pranks: {fwhpranks_list}\n')
+                #print(f'\nnum of fwh mpi/edge  ranks {len(self.fwh_edgranks_list)}')
+                print(f'{len(self.fwh_edgranks_list)} fwh mpi/edge ranks: {self.fwh_edgranks_list}\n')
         sys.stdout.flush()
 
         return fwh_comm, fwh_edgecomm
@@ -669,6 +815,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         ndims = self.ndims
         nqpts = 0
         nfaces = 0
+        centroids = []
 
         for (etype,fidx), eidlist in eidxs.items():
             eles = elemap[etype]
@@ -699,10 +846,16 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 npn[ie] = eles.get_norm_pnorms(eidx, fidx)
             
             qdA = np.einsum('i,ji->ji',qwts,mpn)
+
+            # compute face centroids
+            rcpsumdA = 1./np.sum(qdA,1)
+            cent = np.einsum('i,ij,ijk->ik', rcpsumdA, qdA, fplocs)
+            #xcent = np.array([[c]*nfpts_pertype for c in cent])
             
             dA = qdA.reshape(-1) if nqpts == 0  else np.hstack((dA,qdA.reshape(-1)))
             fpts_plocs = fplocs.reshape(-1,ndims)  if nqpts == 0 else np.vstack((fpts_plocs,fplocs.reshape(-1,ndims) ))
             norm_pnorms = npn.reshape(-1,ndims) if nqpts == 0  else np.vstack((norm_pnorms,npn.reshape(-1,ndims) ))
+            centroids = cent if nqpts == 0 else np.vstack((centroids, cent))
 
             nqpts += (nfpts_pertype * nfaces_pertype)
             nfaces += nfaces_pertype
@@ -723,7 +876,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             print(f'nqpts  : {nqpts_tot}')
         sys.stdout.flush() 
 
-        return qinfo,m0    
+        return qinfo, m0, centroids    
 
     def update_usoln_onestep(self, intg, m0_dict, eidxs, usoln):
         # Solution matrices indexed by element type
@@ -934,19 +1087,24 @@ class FwhFreqDomainSolver(FwhSolverBase):
         self.pimgsum = np.zeros((self.nobserv,self.nfreq))
     
     def init_from_restart(self,initdata):
+        restore = True
         if np.any(initdata['observers'] != self.xyz_obv):
             print(f'observers locations has changed in the config file, restart cannot be done')
-            return False
+            obb = initdata['observers']
+            print(f'written observers {obb}')
+            print(f'config  observers {self.xyz_obv}')
+            restore = False
         elif initdata['ntsub'] != self.ntsub:
             print(f'ntsub (window steps) has changed in the config file, restart cannot be done') 
-            return False
+            restore = False
         self.stepcnt = initdata['stepcnt']
         self.avgcnt = initdata['avgcnt']
         self.ntsub = initdata['ntsub']
         self.pmagsum = initdata['pmagsum']
         self.presum = initdata['presum']
         self.pimgsum = initdata['pimgsum']
-        return True
+
+        return restore
 
 
     @staticmethod
@@ -1082,12 +1240,6 @@ class MonopoleSrc(PointAcousticSrc):
         self.dt = self.nperiods*self.tperiod/self.nt
         self.freq = np.fft.rfftfreq(self.nt,self.dt)
         self.nfreq = len(self.freq)
-
-        co = np.sqrt(self.gamma*self.pinf/self.rhoinf) 
-        print(f'src locs {self.srclocs}')
-        print(f'co {co}, rho_o {self.rhoinf}, po {self.pinf}')
-        print(f'Minf {self.uinf/co}')
-        sys.stdout.flush()
         
     def exact_solution(self,xyz_ob):
         nobserv = xyz_ob.shape[0]
