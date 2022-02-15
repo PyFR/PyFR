@@ -58,9 +58,9 @@ def Gatherv_data_arr(comm, rank, root, data_arr):
     count = None
     sbufsize = 0
     sendbuf = np.empty(0)
-    if np.any(data_arr):
-        sbufsize = data_arr.size
-        sendbuf = data_arr.reshape(-1)
+    # if np.any(data_arr):
+    sbufsize = data_arr.size
+    sendbuf = data_arr.reshape(-1)
     count = comm.gather(sbufsize,root=root)
 
     if rank == root:
@@ -385,42 +385,42 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             gatherroot = fwhroot
             gcomm = self.fwh_comm
             grank = self.fwhrank
-            
-        #gather soln from all other fwh ranks to world root
-        sendbuf = self.usoln[:self.fwhsolver.stepcnt].reshape(-1,self.nqpts).T if self.active_fwhrank else np.empty(0)
-        gusoln = Gatherv_data_arr(gcomm, grank, gatherroot, sendbuf)
-        #gather flux points plocs from all other fwh ranks to world root
-        sendbuf = self._qpts_info[0] if self.active_fwhrank else np.empty(0)
-        gfptsplocs = Gatherv_data_arr(gcomm, grank, gatherroot, sendbuf)
-        #gather pfft welch averaging data from all other fwh ranks to world root
-        sendbuf = np.array([self.fwhsolver.pmagsum, self.fwhsolver.presum, self.fwhsolver.pimgsum]) if self.active_fwhrank else np.empty(0)
-        gpfftdata = Gatherv_data_arr(gcomm, grank, gatherroot, sendbuf)
-        #compute gpfftdata permutations:
+        
+        #compute and gather min fpts-plocs from all other fwh ranks to world root
+        #this is to be used for permutation of pfft data
+        sendbuf = np.empty(0)
         if self.active_fwhrank:
             idx = range(self.nqpts)
             srtdidx = fuzzysort(self._qpts_info[0].T,idx)
-            fplocs_min = self._qpts_info[0][srtdidx][0].tolist()
-        gfplocs_min = gcomm.gather(fplocs_min, gatherroot)
+            sendbuf = self._qpts_info[0][srtdidx][0]
+        gfplocs_min = Gatherv_data_arr(gcomm, grank, gatherroot, sendbuf)
+        #gather pfft of welch averaging data from all other fwh ranks to world root
+        sendbuf = np.array([self.fwhsolver.pmagsum, self.fwhsolver.presum, self.fwhsolver.pimgsum]) if self.active_fwhrank else np.empty(0)
+        gpfftdata = Gatherv_data_arr(gcomm, grank, gatherroot, sendbuf)
+
+        #gather soln from all other fwh ranks to world root
+        sendbuf = self.usoln[:self.fwhsolver.stepcnt].reshape(-1, self.nqpts).T if self.active_fwhrank else np.empty(0)
+        gusoln = Gatherv_data_arr(gcomm, grank, gatherroot, sendbuf)
+
+        #gather flux points plocs from all other fwh ranks to world root
+        sendbuf = self._qpts_info[0] if self.active_fwhrank else np.empty(0)
+        gfptsplocs = Gatherv_data_arr(gcomm, grank, gatherroot, sendbuf)
+        
         #prepare timedata to be sent to wrldroot if needed
         tdata = np.empty(0)
-        pfftdata = np.empty(0)
         if rank == fwhroot:
             tdata = np.array([self._last_prepared, self.fwhsolver.ltsub, 
                               self.fwhsolver.ntsub, self.fwhsolver.stepcnt, 
                               self.fwhsolver.avgcnt, self.fwhsolver.nfreq])
-            pfftdata = np.array([self.fwhsolver.pmagsum, self.fwhsolver.presum, self.fwhsolver.pimgsum])
         
         if fwhroot != wrldroot:
             #fwh root
             if rank == fwhroot:
                 comm.Send(tdata, dest=wrldroot, tag=54)
-                comm.Send(pfftdata, dest=wrldroot, tag=55)
             #world root
             if rank == wrldroot:
                 tdata = np.empty(6)
                 comm.Recv(tdata, source=fwhroot, tag=54)
-                pfftdata = np.empty((3, self.nobserv, int(tdata[-1])))
-                comm.Recv(pfftdata, source=fwhroot, tag=55)
 
         if rank == wrldroot:
             metadata = {
@@ -435,9 +435,6 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 'fptsplocs': gfptsplocs,
                 'fptsplocs-min': gfplocs_min,
                 'pfftdata' : gpfftdata
-                # 'pmagsum'  : pfftdata[0],
-                # 'presum'   : pfftdata[1],
-                # 'pimgsum'  : pfftdata[2]
             }
 
         sys.stdout.flush()
@@ -468,29 +465,33 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             #
             idx = range(self.nqpts)
             srtdidx = fuzzysort(self._qpts_info[0].T, idx)
-            fplocs_min = self._qpts_info[0][srtdidx][0]
-            curr_fplocs_min = np.array(self.fwh_comm.gather(fplocs_min, root))
+            sendbuf = self._qpts_info[0][srtdidx][0] 
+            recvbuf = None
+            if self.fwhrank == root:
+                recvbuf = np.empty([self.fwh_comm.size, self.ndims])
+            self.fwh_comm.Gather(sendbuf, recvbuf, root=root)
+            #curr_fplocs_min = Gatherv_data_arr(self.fwh_comm, self.fwhrank, sendbuf)
+            curr_fplocs_min = recvbuf
+
+            #scattering pfftdata
             sendbuf = None
-            displ = None
-            count = None
             if self.fwhrank == 0:
+                # sorting and computing permutations for current gfplocs_min
                 idx = range(self.fwh_comm.size)
                 srtdidx = fuzzysort(curr_fplocs_min.T, idx)
                 perms = np.argsort(srtdidx)
-                #
+                #computing the correct sorting of pfftdata
                 gpfftdata = metadata['pfftdata'].reshape(self.fwh_comm.size, -1)
                 gfplocs_min = metadata['fptsplocs-min']
                 idx = range(self.fwh_comm.size)
                 srtdidx = fuzzysort(gfplocs_min.reshape(-1,self.ndims).T, idx)
                 #
-                sendbuf = gpfftdata[srtdidx][perms].reshape(-1)
+                sendbuf = gpfftdata[srtdidx][perms].astype(float)
+
             rbufsize = int(metadata['pfftdata'].size/self.fwh_comm.size)
-            recvbuf = np.empty(rbufsize)
-            count = self.fwh_comm.gather(rbufsize,root=0)
-            if self.fwhrank==0:
-                count = np.array(count, dtype='i')
-                displ = np.array([sum(count[:p]) for p in range(len(count))])
-            self.fwh_comm.Scatterv([sendbuf, count, displ, MPI.DOUBLE], recvbuf, root=root) 
+            recvbuf = np.empty(rbufsize, dtype=float)
+            self.fwh_comm.Scatter(sendbuf, recvbuf, root=root) 
+
             recvbuf = recvbuf.reshape(3, -1)
             metadata |= dict(pmagsum=recvbuf[0], presum=recvbuf[1], pimgsum=recvbuf[2])
 
@@ -1371,10 +1372,10 @@ class FwhFreqDomainSolver(FwhSolverBase):
     
     def init_from_restart(self, initdata):
         self.stepcnt = initdata['stepcnt']
-        self.avgcnt = initdata['avgcnt']
-        self.ntsub = initdata['ntsub']
+        self.avgcnt  = initdata['avgcnt']
+        self.ntsub   = initdata['ntsub']
         self.pmagsum = initdata['pmagsum'].reshape(self.nobserv, -1)
-        self.presum = initdata['presum'].reshape(self.nobserv, -1)
+        self.presum  = initdata['presum'].reshape(self.nobserv, -1)
         self.pimgsum = initdata['pimgsum'].reshape(self.nobserv, -1)
 
         return
