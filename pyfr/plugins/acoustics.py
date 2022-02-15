@@ -159,7 +159,8 @@ def Ialltoallv_data_arr(incomm, rhsranks, snddata, ncol, sndcnts, rcvcnts, sndpe
     return req, rhs_rcvsoln
 
 
-TimeParam = namedtuple('TimeParam',['dtsim','dtsub','ltsub','shift','window','psd_scale_mode'])
+TimeParam = namedtuple('TimeParam', ['dtsim', 'dtsub', 'ltsub', 'shift',
+                                     'window', 'psd_scale_mode'])
 
 
 class FwhSolverPlugin(PostactionMixin, BasePlugin):
@@ -239,57 +240,85 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         # Underlying elements class
         self.elementscls = intg.system.elementscls
         # Get the mesh and elements
-        mesh, elemap = intg.system.mesh, intg.system.ele_map
+        elemap = intg.system.ele_map
 
-        # Extract FWH Surf Geometric Data:
-        self._qpts_info, self._m0, _   = self.get_fwhsurf_finfo(elemap, self._eidxs)  #fpts, qpts_dA, norm_pnorms
-        self._intqinfo, self._intm0, _ = self.get_fwhsurf_finfo(elemap, self._int_eidxs)
-        self._rhsqinfo, self._rhsm0, _ = self.get_fwhsurf_finfo(elemap, self._rhs_eidxs)
-        self._rcvqinfo, self._rcvm0, _ = self.get_fwhsurf_finfo(elemap, self._mpi_rcveidxs)
-        self._sndqinfo, self._sndm0, _ = self.get_fwhsurf_finfo(elemap, self._mpi_sndeidxs)
-        self._bndqinfo, self._bndm0, _ = self.get_fwhsurf_finfo(elemap, self._bnd_eidxs)
-        self._mpi_sndcnts, self._mpi_rcvcnts, self._mpi_sndperms, self._mpi_rcvperms = self._prepare_mpiinters_sndrcv_info(elemap)
+        # Extract FWH Surf Geometric Data
+        #fpts, qpts_dA, norm_pnorms
+        #self._qpts_info, self._m0 = self.get_fwhsurf_finfo(elemap, self._eidxs)  
+        intqinfo, self._intm0 = self.get_fwhsurf_finfo(elemap, self._int_eidxs)
+        rhsqinfo, self._rhsm0 = self.get_fwhsurf_finfo(elemap, self._rhs_eidxs)
+        rcvqinfo, self._mpi_rm0 = self.get_fwhsurf_finfo(elemap, 
+                                                        self._mpi_reidxs)
+        sndqinfo, self._mpi_sm0 = self.get_fwhsurf_finfo(elemap, 
+                                                        self._mpi_seidxs)
+        bndqinfo, self._bndm0 = self.get_fwhsurf_finfo(elemap, 
+                                                        self._bnd_eidxs)
+        scnts, rcnts, sndperms = self._prepare_mpiinters_sndrcv_info(elemap)
+        self._mpi_scnts  = scnts
+        self._mpi_rcnts  = rcnts
+        self._mpi_sprms = sndperms
 
-        self.nintqpts =  np.asarray(self._intqinfo[0]).shape[0]
-        self.nrhsqpts = np.asarray(self._rhsqinfo[0]).shape[0]
-        self.nrcvqpts = np.asarray(self._rcvqinfo[0]).shape[0]
-        self.nsndqpts = np.asarray(self._sndqinfo[0]).shape[0]
-        self.nbndqpts = np.asarray(self._bndqinfo[0]).shape[0]
-        self.nqpts = np.asarray(self._qpts_info[0]).shape[0]
+        self._intfplocs = intqinfo[0]
+        self._rhsfplocs = rhsqinfo[0]
+        self._mpi_rfplocs = rcvqinfo[0]
+        self._mpi_sfplocs = sndqinfo[0]
+        self._bndfplocs = bndqinfo[0]
+        self.nintqpts = self._intfplocs.shape[0]
+        self.nrhsqpts = self._rhsfplocs.shape[0]
+        self.nrcvqpts = self._mpi_rfplocs.shape[0]
+        self.nsndqpts = self._mpi_sfplocs.shape[0]
+        self.nbndqpts = self._bndfplocs.shape[0]
         
         qinfo = [np.empty(0), np.empty(0), np.empty(0)]
         if self.nintqpts > 0:
-            qinfo[0] = self._intqinfo[0]
-            qinfo[1] = self._intqinfo[1]
-            qinfo[2] = self._intqinfo[2]
+            qinfo[0] = intqinfo[0]
+            qinfo[1] = intqinfo[1]
+            qinfo[2] = intqinfo[2]
         if self.nrcvqpts > 0:
-            qinfo[0] = np.vstack((qinfo[0],self._rcvqinfo[0])) if np.any(qinfo[0]) else self._rcvqinfo[0]
-            qinfo[1] = np.vstack((qinfo[1],self._rcvqinfo[1])) if np.any(qinfo[1]) else self._rcvqinfo[1]
-            qinfo[2] = np.hstack((qinfo[2],self._rcvqinfo[2])) if np.any(qinfo[2]) else self._rcvqinfo[2]
+            if np.any(qinfo[0]):
+                qinfo[0] = np.vstack((qinfo[0], rcvqinfo[0])) 
+                qinfo[1] = np.vstack((qinfo[1], rcvqinfo[1])) 
+                qinfo[2] = np.hstack((qinfo[2], rcvqinfo[2])) 
+            else:
+                qinfo[0] = rcvqinfo[0]
+                qinfo[1] = rcvqinfo[1]
+                qinfo[2] = rcvqinfo[2]
         if self.nbndqpts > 0:
-            qinfo[0] = np.vstack((qinfo[0],self._bndqinfo[0])) if np.any(qinfo[0]) else self._bndqinfo[0]
-            qinfo[1] = np.vstack((qinfo[1],self._bndqinfo[1])) if np.any(qinfo[1]) else self._bndqinfo[1]
-            qinfo[2] = np.hstack((qinfo[2],self._bndqinfo[2])) if np.any(qinfo[2]) else self._bndqinfo[2] 
+            if np.any(qinfo[0]):
+                qinfo[0] = np.vstack((qinfo[0], bndqinfo[0])) 
+                qinfo[1] = np.vstack((qinfo[1], bndqinfo[1])) 
+                qinfo[2] = np.hstack((qinfo[2], bndqinfo[2])) 
+            else:
+                qinfo[0] = bndqinfo[0]
+                qinfo[1] = bndqinfo[1]
+                qinfo[2] = bndqinfo[2]  
         self._qpts_info = qinfo
+        self.nqpts = self._qpts_info[0].shape[0]
 
-        self._mpi_rhs_fptsplocs = np.empty(0)
-        if self.active_fwhedgrank:
-            self._mpi_rhs_fptsplocs = Alltoallv_data_arr(self.fwh_edgecomm, self.fwh_edgranks_list, self._sndqinfo[0], self.ndims,
-                                                         self._mpi_sndcnts, self._mpi_rcvcnts, self._mpi_sndperms)
         #prepare local srtdidxs and perms
-        self._intperm, self._intrhs_srtdidx = np.empty(0), np.empty(0)
-        self._rcvperm, self._mpirhs_srtdidx = np.empty(0), np.empty(0)
+        self._rhsperm = np.empty(0)
+        self._rcvperm = np.empty(0)
         self._min_fplocs = np.empty(0)
         if self.active_fwhrank:
             idx = range(self.nqpts)
             srtdidx = fuzzysort(self._qpts_info[0].T,idx)
             #min fpts plocs
             self._min_fplocs = self._qpts_info[0][srtdidx][0]
-            self._intperm, self._intrhs_srtdidx = self._prepare_srtdidx_perms_inter_averaging(self._intqinfo[0], self._rhsqinfo[0])
-        if self.nrcvqpts:
-            self._rcvperm, self._mpirhs_srtdidx = self._prepare_srtdidx_perms_inter_averaging(self._rcvqinfo[0], self._mpi_rhs_fptsplocs)
+            self._rhsperm = self._prepare_srtdidx_perms_inter_averaging(
+                self._intfplocs, self._rhsfplocs)
 
-        self.gfplocs_min, self.gfptsplocs = self._serialise_global_fpts_plocs(self._min_fplocs, self._qpts_info[0])
+        self.gfplocs_min, self.gfptsplocs = self._serialise_global_fpts_plocs(
+                                        self._min_fplocs, self._qpts_info[0])
+
+        mpi_rhs_fplocs = np.empty(0)
+        if self.active_fwhedgrank:
+            mpi_rhs_fplocs = Alltoallv_data_arr(self.fwh_edgecomm, 
+                            self.fwh_edgranks_list, self._mpi_sfplocs, 
+                            self.ndims, self._mpi_scnts, self._mpi_rcnts,
+                            self._mpi_sprms)
+            if self.nrcvqpts:
+                self._rcvperm = self._prepare_srtdidx_perms_inter_averaging(
+                    self._mpi_rfplocs, mpi_rhs_fplocs)
 
         #Debug, using analytical sources
         analytictest = self.cfg.get(self.cfgsect, 'analytic-src', None)
@@ -667,33 +696,33 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             #mpi interfaces with outside elements (rhs)
             if self.nsndqpts:
                 if self.pacoustsrc:
-                    self.pacoustsrc.update_usoln_onestep(self._sndqinfo[0], srctime, sndusoln)
+                    self.pacoustsrc.update_usoln_onestep(self._mpi_sfplocs, srctime, sndusoln)
                 else:
-                    self.update_usoln_onestep(intg, self._sndm0, self._mpi_sndeidxs, sndusoln)
+                    self.update_usoln_onestep(intg, self._mpi_sm0, self._mpi_seidxs, sndusoln)
             #send/recv in an alltoall for averaging over mpi interfaces
             allreq, rhs_rcvsoln = Ialltoallv_data_arr(self.fwh_edgecomm, self.fwh_edgranks_list, 
-                                                   sndusoln.T, self.fwhnvars, self._mpi_sndcnts, 
-                                                   self._mpi_rcvcnts, self._mpi_sndperms)
+                                                   sndusoln.T, self.fwhnvars, self._mpi_scnts, 
+                                                   self._mpi_rcnts, self._mpi_sprms)
             rhs_rcvsoln = rhs_rcvsoln.T
 
             #mpi interfaces with inside elements (lhs)
             if self.nrcvqpts:
                 if self.pacoustsrc:
-                    self.pacoustsrc.update_usoln_onestep(self._rcvqinfo[0], srctime, rcvusoln)
+                    self.pacoustsrc.update_usoln_onestep(self._mpi_rfplocs, srctime, rcvusoln)
                 else:
-                    self.update_usoln_onestep(intg, self._rcvm0, self._mpi_rcveidxs, rcvusoln)
+                    self.update_usoln_onestep(intg, self._mpi_rm0, self._mpi_reidxs, rcvusoln)
 
         if self.pacoustsrc:
             #self.usoln[step] = self.pacoustsrc.update_usoln_onestep(self._qpts_info[0], srctime, self.usoln[step])
             #interior interfaces with inside elements (lhs)
             if self.nintqpts:
-                self.pacoustsrc.update_usoln_onestep(self._intqinfo[0], srctime, intusoln)
+                self.pacoustsrc.update_usoln_onestep(self._intfplocs, srctime, intusoln)
             #interior interfaces with outside elements (rhs)
             if self.nrhsqpts:
-                self.pacoustsrc.update_usoln_onestep(self._rhsqinfo[0], srctime, rhsusoln)
+                self.pacoustsrc.update_usoln_onestep(self._rhsfplocs, srctime, rhsusoln)
             #boundary interfaces with inside elements 
             if self.nbndqpts:
-                self.pacoustsrc.update_usoln_onestep(self._rcvqinfo[0], srctime, bndusoln)
+                self.pacoustsrc.update_usoln_onestep(self._mpi_rfplocs, srctime, bndusoln)
         else:
             #self.usoln[step] = self.update_usoln_onestep(intg, self._m0, self._eidxs, self.usoln[step])
             if self.nintqpts:
@@ -707,15 +736,12 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         
         #averaging of solution over interfaces
         if self.nintqpts:
-            self._intperm, self._intrhs_srtdidx
-            self._usoln_interface_averageing2(self._intperm, self._intrhs_srtdidx, intusoln, rhsusoln)
-            #self._usoln_interface_averageing(self._intqinfo[0], self._rhsqinfo[0], intusoln, rhsusoln)
+            self._usoln_interface_averageing(self._rhsperm, rhsusoln, intusoln)
 
         if self.active_fwhedgrank:  
             allreq.wait()
             if self.nrcvqpts:
-                self._usoln_interface_averageing2(self._rcvperm, self._mpirhs_srtdidx, rcvusoln, rhs_rcvsoln)
-                #self._usoln_interface_averageing(self._rcvqinfo[0], self._mpi_rhs_fptsplocs, rcvusoln, rhs_rcvsoln)
+                self._usoln_interface_averageing(self._rcvperm, rhs_rcvsoln, rcvusoln)
         #if self.nbndqpts:
             #self.bndusoln[step] = #apply boundary condition
             
@@ -785,20 +811,11 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         perm = np.argsort(srtdidx)
         idx = range(rfplocs.shape[0])
         srtdidx = fuzzysort(rfplocs.T,idx)
-        return perm, srtdidx
+        convperm = np.array(srtdidx)[perm]
+        return convperm
 
-    def _usoln_interface_averageing2(self, perm, srtdidx, lsoln, rsoln):
-        lsoln += rsoln.T[srtdidx][perm].T
-        lsoln *= 0.5
-        return lsoln
-
-    def _usoln_interface_averageing(self, lfplocs, rfplocs, lsoln, rsoln):
-        idx = range(lfplocs.shape[0])
-        srtdidx = fuzzysort(lfplocs.T,idx)
-        perm = np.argsort(srtdidx)
-        idx = range(rfplocs.shape[0])
-        srtdidx = fuzzysort(rfplocs.T,idx)
-        lsoln += rsoln.T[srtdidx][perm].T
+    def _usoln_interface_averageing(self, rhsperm, rsoln, lsoln):
+        lsoln += rsoln.T[rhsperm].T
         lsoln *= 0.5
         return lsoln
 
@@ -894,8 +911,8 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         self._eidxs        = defaultdict(list)  
         self._int_eidxs    = defaultdict(list)
         self._rhs_eidxs = defaultdict(list)
-        self._mpi_rcveidxs = defaultdict(list)  
-        self._mpi_sndeidxs = defaultdict(list)
+        self._mpi_reidxs = defaultdict(list)  
+        self._mpi_seidxs = defaultdict(list)
         self._bnd_eidxs    = defaultdict(list) 
         # fwhranks own all fwh edges and hence are the ones that perform acoustic solve
         # fwhedgeranks are ranks who touches an fwh edge but not necessarily
@@ -913,15 +930,19 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
         eidxs = self._eidxs
         self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
-        mpiseidxs = self._mpi_sndeidxs
-        self._mpi_sndeidxs = {k: np.array(v) for k, v in mpiseidxs.items()}
-        mpireidxs = self._mpi_rcveidxs
-        self._mpi_rcveidxs = {k: np.array(v) for k, v in mpireidxs.items()}
+        inteidxs = self._int_eidxs
+        self._int_eidxs = {k: np.array(v) for k, v in inteidxs.items()}
+        rhseidxs = self._rhs_eidxs
+        self._rhs_eidxs = {k: np.array(v) for k, v in rhseidxs.items()}
+        mpiseidxs = self._mpi_seidxs
+        self._mpi_seidxs = {k: np.array(v) for k, v in mpiseidxs.items()}
+        mpireidxs = self._mpi_reidxs
+        self._mpi_reidxs = {k: np.array(v) for k, v in mpireidxs.items()}
         bndeidxs = self._bnd_eidxs
-        self._bnd_eidxs = {k: np.array(v) for k, v in bndeidxs.items()}
+        self._bnd_eidxs = {k: np.array(v) for k, v in bndeidxs.items()} 
 
 
-    def collect_intinters(self,rallocs,mesh,eset):
+    def collect_intinters(self, rallocs, mesh, eset):
         prank = rallocs.prank
         flhs, frhs = mesh[f'con_p{prank}'].astype('U4,i4,i1,i2').tolist()
         for ifaceL,ifaceR in zip(flhs,frhs):    
@@ -933,28 +954,28 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             if (not (flagL & flagR)) & (flagL | flagR):
                 if flagL:
                     fidx = ifaceL[2]
-                    self._int_eidxs[etype,fidx].append(eidx)
+                    self._int_eidxs[etype, fidx].append(eidx)
                     self._rhs_eidxs[ifaceR[0],ifaceR[2]].append(ifaceR[1])
                 else:
                     etype, eidx, fidx = ifaceR[0:3]
-                    self._int_eidxs[etype,fidx].append(eidx)
+                    self._int_eidxs[etype, fidx].append(eidx)
                     self._rhs_eidxs[ifaceL[0],ifaceL[2]].append(ifaceL[1])
 
-                self._eidxs[etype,fidx].append(eidx)
+                self._eidxs[etype, fidx].append(eidx)
                 if eidx not in  self._inside_eset[etype]:
                     self._inside_eset[etype].append(eidx)
 
             # periodic faces:
             elif (flagL & flagR) & (ifaceL[3] != 0 ):   
                 etype, eidx, fidx = ifaceL[0:3]
-                self._int_eidxs[etype,fidx].append(eidx)
-                self._eidxs[etype,fidx].append(eidx)
+                self._int_eidxs[etype, fidx].append(eidx)
+                self._eidxs[etype, fidx].append(eidx)
                 if eidx not in  self._inside_eset[etype]:
                     self._inside_eset[etype].append(eidx)
                 #add both right and left faces for vtu writing
                 etype, eidx, fidx = ifaceR[0:3]
-                self._int_eidxs[etype,fidx].append(eidx)
-                self._eidxs[etype,fidx].append(eidx)
+                self._int_eidxs[etype, fidx].append(eidx)
+                self._eidxs[etype, fidx].append(eidx)
                 if eidx not in  self._inside_eset[etype]:
                     self._inside_eset[etype].append(eidx)
                 self._rhs_eidxs[ifaceL[0],ifaceL[2]].append(ifaceL[1])
@@ -996,28 +1017,28 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 flagL = (eidx in eset[etype]) if etype in eset else False
                 # add info if it is an fwh edge, i.e., having either flagL or flagR or both(periodic case) to be True
                 if flagL and not flagR[findex] :
-                    self._eidxs[etype,fidx].append(eidx)
+                    self._eidxs[etype, fidx].append(eidx)
                     if eidx not in  self._inside_eset[etype]:
                         self._inside_eset[etype].append(eidx)
-                    self._mpi_rcveidxs[etype,fidx].append(eidx)
-                    self._mpi_rcvrank_map[etype,fidx].append(rhs_mrank)
+                    self._mpi_reidxs[etype, fidx].append(eidx)
+                    self._mpi_rcvrank_map[etype, fidx].append(rhs_mrank)
                     rcnt += 1
                 #an interface to be sent to rhs owning rank
                 elif flagR[findex] and not flagL:
-                    self._mpi_sndeidxs[etype,fidx].append(eidx)
-                    self._mpi_sndrank_map[etype,fidx].append(rhs_mrank)
+                    self._mpi_seidxs[etype, fidx].append(eidx)
+                    self._mpi_sndrank_map[etype, fidx].append(rhs_mrank)
                     scnt += 1
 
                 #periodic mpi interfaces
                 elif (flagL and flagR[findex]) and ifaceL[-1] !=0 :
-                    self._eidxs[etype,fidx].append(eidx)
+                    self._eidxs[etype, fidx].append(eidx)
                     if eidx not in  self._inside_eset[etype]:
                         self._inside_eset[etype].append(eidx)
                     
-                    self._mpi_rcveidxs[etype,fidx].append(eidx)
-                    self._mpi_sndeidxs[etype,fidx].append(eidx)
-                    self._mpi_rcvrank_map[etype,fidx].append(rhs_mrank)
-                    self._mpi_sndrank_map[etype,fidx].append(rhs_mrank)
+                    self._mpi_reidxs[etype, fidx].append(eidx)
+                    self._mpi_seidxs[etype, fidx].append(eidx)
+                    self._mpi_rcvrank_map[etype, fidx].append(rhs_mrank)
+                    self._mpi_sndrank_map[etype, fidx].append(rhs_mrank)
                     rcnt += 1
                     scnt += 1
 
@@ -1033,33 +1054,36 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         sndperms = defaultdict(list)
         rcvperms = defaultdict(list)
         iq = 0
-        for (etype,fidx), eidlist in self._mpi_rcveidxs.items():
-            nfpts_perface = elemap[etype].basis.nfacefpts[fidx]
+        for (etype, fidx), eidlist in self._mpi_reidxs.items():
+            nfacefpts = elemap[etype].basis.nfacefpts[fidx]
             for id, eid in enumerate(eidlist):
-                lrk = np.tile(self._mpi_rcvrank_map[etype,fidx][id], nfpts_perface).tolist()
+                rcvranks = self._mpi_rcvrank_map[etype, fidx][id]
+                lrk = np.tile(rcvranks, nfacefpts).tolist()
                 for rk in lrk:
                     rcvperms[rk].append(iq)
                     iq += 1 
         iq = 0
-        for (etype,fidx), eidlist in self._mpi_sndeidxs.items():
-            nfpts_perface = elemap[etype].basis.nfacefpts[fidx]
+        for (etype, fidx), eidlist in self._mpi_seidxs.items():
+            nfacefpts = elemap[etype].basis.nfacefpts[fidx]
             for id, eid in enumerate(eidlist):
-                lrk = np.tile(self._mpi_sndrank_map[etype,fidx][id], nfpts_perface).tolist()
+                sndranks = self._mpi_sndrank_map[etype, fidx][id]
+                lrk = np.tile(sndranks, nfacefpts).tolist()
                 for rk in lrk:
                     sndperms[rk].append(iq)
                     iq += 1
 
         #prepare send/recv counts for mpi edge interfaces
-        sndcnts = [0] * len(self.fwh_edgranks_list)
-        rcvcnts = [0] * len(self.fwh_edgranks_list)
+        nedgranks = len(self.fwh_edgranks_list)
+        sndcnts = [0]*nedgranks
+        rcvcnts = [0]*nedgranks
         for ir, rk in enumerate(self.fwh_edgranks_list):
             sndcnts[ir] = len(sndperms[rk]) if rk in sndperms else 0
             rcvcnts[ir] = len(rcvperms[rk]) if rk in rcvperms else 0
 
-        return sndcnts, rcvcnts, sndperms, rcvperms
+        return sndcnts, rcvcnts, sndperms
 
 
-    def collect_bndinters(self,rallocs,mesh,eset):
+    def collect_bndinters(self, rallocs, mesh, eset):
         prank = rallocs.prank
         for f in mesh:
             if (m := re.match(f'bcon_(.+?)_p{prank}$', f)):
@@ -1069,8 +1093,8 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                     etype, eidx, fidx = ifaceL[0:3]
                     flagL = (eidx in eset[etype]) if etype in eset else False
                     if flagL:
-                        self._bnd_eidxs[etype,fidx].append(eidx)
-                        self._eidxs[etype,fidx].append(eidx)
+                        self._bnd_eidxs[etype, fidx].append(eidx)
+                        self._eidxs[etype, fidx].append(eidx)
                         if eidx not in  self._inside_eset[etype]:
                             self._inside_eset[etype].append(eidx)
 
@@ -1078,29 +1102,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
     def build_fwh_subranks_lists(self,intg):
         self.fwhranks_list = []
         comm, rank, root = get_comm_rank_root()
-        
-        # rallocs = intg.rallocs
-        # prank = rallocs.prank
-        # if comm.size > 1:
-        #     pp= []
-        #     mm = [] 
-        #     for rhs_prank in rallocs.prankconn[prank]:
-        #         pp.append(rhs_prank)
-        #         mm.append(rallocs.pmrankmap[rhs_prank])
-        #     mranks_, pranks_ = (list(t) for t in zip(*sorted(zip(mm, pp))))
-    
-        #     if self._mpi_rcveidxs:
-        #         print(f'\n=================================\nmrank {rank} --> prank {prank} \n=================================')
-        #         print(f'FwhEdgeRanks: {self.fwh_edgranks_list}', flush=True)
-        #         mranks = []
-        #         for rhs_prank in rallocs.prankconn[prank]:
-        #             mranks.append(rallocs.pmrankmap[rhs_prank])
-        #         print(f'rhs mranks {mranks} --> pranks {rallocs.prankconn[prank]}')
-        #         print(f'rhs mranks {mranks_} --> pranks {pranks_}  --- sorted')
-            
-        #         for (etype,fidx) in self._mpi_rcveidxs:
-        #             print(f'  nmpiinters[{etype},{fidx}]: {self._nmpiinters[etype,fidx]}')
-        # sys.stdout.flush()
+
         # Determine active ranks for fwh computations
         self.active_fwhrank = True if self._eidxs else False
         rank_is_active_list = comm.allgather(self.active_fwhrank)
@@ -1110,14 +1112,17 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
         # Determine fwh mpi edge/interface sharing ranks
         count = comm.allgather(len(self.fwh_edgranks_list))
-        recvbuf = np.zeros(sum(count),dtype='i')
+        recvbuf = np.zeros(sum(count), dtype='i')
         displ = [sum(count[:p]) for p in range(len(count))]
         displ = np.array(displ)
         self.fwh_edgranks_list = np.array(self.fwh_edgranks_list, dtype='i')
 
-        comm.Allgatherv(self.fwh_edgranks_list,[recvbuf, count, displ, MPI.INT])
+        comm.Allgatherv(self.fwh_edgranks_list, 
+                        [recvbuf, count, displ, MPI.INT])
         self.fwh_edgranks_list = list(set(np.sort(recvbuf)))
-        self.active_fwhedgrank = True if rank in self.fwh_edgranks_list else False
+        self.active_fwhedgrank = False
+        if rank in self.fwh_edgranks_list:
+            self.active_fwhedgrank = True 
         
         # Constructing sub-communicators and sub-groups
         fwh_group = comm.group.Incl(self.fwhranks_list)
@@ -1135,18 +1140,10 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             self.fwhrank = fwh_comm.rank
         if fwh_edgecomm is not MPI.COMM_NULL:
             self.fwhedgrank = fwh_edgecomm.rank
-
         
-        if self.active_fwhrank:
-            #prank = intg.rallocs.prank
-            #fwhpranks_list = fwh_comm.gather(prank, root=0)
-
-            if self.fwhrank == 0:
-                #print(f'\nnum of fwh surface ranks {len(self.fwhranks_list)}')
-                print(f'\n{len(self.fwhranks_list)} fwh surface mranks: {self.fwhranks_list}')
-                #print(f'{len(self.fwhranks_list)} fwh surface pranks: {fwhpranks_list}\n')
-                #print(f'\nnum of fwh mpi/edge  ranks {len(self.fwh_edgranks_list)}')
-                print(f'{len(self.fwh_edgranks_list)} fwh mpi/edge ranks: {self.fwh_edgranks_list}\n')
+        if self.active_fwhrank and self.fwhrank == 0:
+            print(f'\n{len(self.fwhranks_list)} fwh surface mranks: {self.fwhranks_list}')
+            print(f'{len(self.fwh_edgranks_list)} fwh mpi/edge ranks: {self.fwh_edgranks_list}\n')
         sys.stdout.flush()
 
         return fwh_comm, fwh_edgecomm
@@ -1155,49 +1152,41 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
     def get_nqpts_m0(self, elemap, eidxs):
         m0 = {}
         nqpts = 0
-        for (etype,fidx), eidlist in eidxs.items():
+        for (etype, fidx), eidlist in eidxs.items():
             eles = elemap[etype]
             if (etype, fidx) not in m0:
                 facefpts = eles.basis.facefpts[fidx]
-                m0[etype,fidx] = eles.basis.m0[facefpts]
-                nfpts_pertype, _ = m0[etype,fidx].shape
-            nfaces_pertype = len(eidlist)
-            nqpts += (nfpts_pertype * nfaces_pertype)
+                m0[etype, fidx]  = eles.basis.m0[facefpts]
+                nfacefpts = eles.basis.nfacefpts[fidx]
+            nfaces_ = len(eidlist)
+            nqpts += (nfacefpts * nfaces_)
         return nqpts, m0
 
     def get_fwhsurf_finfo(self, elemap, eidxs):
 
         m0 = {}
-        srtd_ids = defaultdict(list)
         ndims = self.ndims
         nqpts = 0
         nfaces = 0
         centroids = []
 
-        for (etype,fidx), eidlist in eidxs.items():
+        for (etype, fidx), eidlist in eidxs.items():
             eles = elemap[etype]
             
             if (etype, fidx) not in m0:
                 facefpts = eles.basis.facefpts[fidx]
-                m0[etype,fidx] = eles.basis.m0[facefpts]
+                m0[etype, fidx] = eles.basis.m0[facefpts]
                 qwts = eles.basis.fpts_wts[facefpts]
-                nfpts_pertype, _ = m0[etype,fidx].shape
+                nfacefpts = eles.basis.nfacefpts[fidx]
 
-            nfaces_pertype = len(eidlist)
-            mpn = np.empty((nfaces_pertype,nfpts_pertype))
-            npn = np.empty((nfaces_pertype,nfpts_pertype,ndims))
-            fplocs = np.empty((nfaces_pertype,nfpts_pertype,ndims))
+            nfaces_ = len(eidlist)
+            mpn = np.empty((nfaces_, nfacefpts))
+            npn = np.empty((nfaces_, nfacefpts, ndims))
+            fplocs = np.empty((nfaces_, nfacefpts, ndims))
             
             for ie, eidx in enumerate(eidlist):
-                # get sorted fpts ids
-                fpts_idx = eles._srtd_face_fpts[fidx][eidx]
-                sids = np.argsort(fpts_idx)
-                srtd_ids[etype,fidx].append(sids)
-
                 # save flux pts coordinates:
-                #fpts[etype, fidx].append(eles.get_ploc_for_inter(eidx,fidx)) # sorted
-                fplocs[ie] = eles.plocfpts[facefpts, eidx] # unsorted
-
+                fplocs[ie] = eles.plocfpts[facefpts, eidx] 
                 # Unit physical normals and their magnitudes (including |J|)
                 mpn[ie] = eles.get_mag_pnorms(eidx, fidx)
                 npn[ie] = eles.get_norm_pnorms(eidx, fidx)
@@ -1205,19 +1194,25 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             qdA = np.einsum('i,ji->ji',qwts,mpn)
 
             # compute face centroids
-            rcpsumdA = 1./np.sum(qdA,1)
-            cent = np.einsum('i,ij,ijk->ik', rcpsumdA, qdA, fplocs)
-            #xcent = np.array([[c]*nfpts_pertype for c in cent])
+            rcpsumdA = 1./np.sum(qdA, 1)
+            fcent = np.einsum('i,ij,ijk->ik', rcpsumdA, qdA, fplocs)
             
-            dA = qdA.reshape(-1) if nqpts == 0  else np.hstack((dA,qdA.reshape(-1)))
-            fpts_plocs = fplocs.reshape(-1,ndims)  if nqpts == 0 else np.vstack((fpts_plocs,fplocs.reshape(-1,ndims) ))
-            norm_pnorms = npn.reshape(-1,ndims) if nqpts == 0  else np.vstack((norm_pnorms,npn.reshape(-1,ndims) ))
-            centroids = cent if nqpts == 0 else np.vstack((centroids, cent))
+            if nqpts == 0:
+                dA = qdA.reshape(-1) 
+                fpts_plocs  = fplocs.reshape(-1, ndims)  
+                norm_pnorms = npn.reshape(-1, ndims) 
+                centroids   = fcent 
+            else:
+                dA = np.hstack((dA, qdA.reshape(-1)))
+                fpts_plocs  = np.vstack((fpts_plocs, fplocs.reshape(-1, ndims)))
+                norm_pnorms = np.vstack((norm_pnorms, npn.reshape(-1, ndims)))
+                centroids   = np.vstack((centroids, fcent))
 
-            nqpts += (nfpts_pertype * nfaces_pertype)
-            nfaces += nfaces_pertype
+            nqpts  += (nfacefpts*nfaces_)
+            nfaces += nfaces_
 
-        qinfo = [fpts_plocs,norm_pnorms,dA] if m0 else [[],[],[]]
+        qinfo = [fpts_plocs, norm_pnorms, dA] if m0 else [np.empty(0), 
+                                            np.empty(0), np.empty(0)]
         
         #debugging
         comm, rank, root = get_comm_rank_root()
@@ -1233,7 +1228,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             print(f'nqpts  : {nqpts_tot}')
         sys.stdout.flush() 
 
-        return qinfo, m0, centroids    
+        return qinfo, m0   
 
     def update_usoln_onestep(self, intg, m0_dict, eidxs, usoln):
         # Solution matrices indexed by element type
@@ -1246,13 +1241,12 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             nfpts, nupts = m0.shape
 
             # Extract the relevant elements from the solution
-            uupts = solns[etype][...,eidxs[etype,fidx]]
+            uupts = solns[etype][...,eidxs[etype, fidx]]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
             ufpts = ufpts.reshape(nfpts, nvars, -1)
             ufpts = ufpts.swapaxes(0, 1) # nvars, nfpts, nfaces
-            #ufpts = np.swapaxes(ufpts.reshape(nvars,-1)[...,srtids_],1,2)  # additional sorting
 
             # get primitive vars
             pri_ufpts = self.elementscls.con_to_pri(ufpts, self.cfg)
@@ -1274,15 +1268,20 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         
 
 
-
 class FwhSolverBase(object):
-    #if more windows are needed, they can be customally added. A larger list is available in scipy
+    #if more windows are needed, they can be customally added. 
+    # A larger list of windows is available in scipy
     windows = {
-        'None': (lambda s: np.ones(s), {'density': 1., 'spectrum': 1.}),  # rectangle window
-        'hanning'  : (lambda s: np.hanning(s),   {'density': np.sqrt(8./3.), 'spectrum': 2.}),
-        'hamming'  : (lambda s: np.hamming(s),   {'density': 50.*np.sqrt(3974.)/1987., 'spectrum': 50./27.}),
-        'blackman' : (lambda s: np.blackman(s),  {'density': 50.*np.sqrt(3046.)/1523., 'spectrum': 50./21.}),
-        'bartlett' : (lambda s: np.bartlett(s),  {'density': np.sqrt(3.), 'spectrum': 2.}),
+        # rectangle window
+        'None': (lambda s: np.ones(s), {'density': 1., 'spectrum': 1.}),
+        'hanning': (lambda s: np.hanning(s),   
+                    {'density': np.sqrt(8./3.), 'spectrum': 2.}),
+        'hamming': (lambda s: np.hamming(s),   
+                   {'density': 50.*np.sqrt(3974.)/1987., 'spectrum': 50./27.}),
+        'blackman': (lambda s: np.blackman(s),  
+                   {'density': 50.*np.sqrt(3046.)/1523., 'spectrum': 50./21.}),
+        'bartlett': (lambda s: np.bartlett(s),  
+                    {'density': np.sqrt(3.), 'spectrum': 2.}),
         }
     tol = 1e-12
     pref = 2e-5
@@ -1402,19 +1401,19 @@ class FwhSolverBase(object):
         return ufft
 
     @staticmethod
-    def welch_accum(pfft,pmagsum,presum,pimgsum,scale_mode='density'):
-        mag = np.abs(pfft)*np.abs(pfft) if scale_mode == 'density' else np.abs(pfft)
-        pmagsum += mag
-        presum  += np.real(pfft)
-        pimgsum += np.imag(pfft)
-        return pmagsum,presum,pimgsum
+    def welch_accum(ufft, magsum, realsum, imgsum, mode='density'):
+        mag = np.abs(ufft)*np.abs(ufft) if mode == 'density' else np.abs(ufft)
+        magsum   += mag
+        realsum  += np.real(ufft)
+        imgsum   += np.imag(ufft)
+        return magsum, realsum, imgsum
 
     @staticmethod
-    def welch_average(nwindows,pmagsum,presum,pimgsum,scale_mode='density'):
-        mag = np.sqrt(pmagsum/nwindows) if scale_mode=='density' else pmagsum/nwindows
-        phase = np.arctan2(pimgsum,presum)
-        pfft = mag * np.exp(1j * phase)
-        return pfft
+    def compute_welch_average(nwindows, umag, ureal, uimg, mode='density'):
+        mag = np.sqrt(umag / nwindows) if mode=='density' else umag/nwindows
+        phase = np.arctan2( uimg, ureal)
+        ufft = mag * np.exp(1j * phase)
+        return ufft
 
     @staticmethod
     def get_num_nearest_pow_of_two(N):
@@ -1434,23 +1433,29 @@ class FwhSolverBase(object):
 
 class FwhFreqDomainSolver(FwhSolverBase):
 
-    def __init__(self, timeparm, observers, surfdata, Uinf, surftype='permeable'):
+    def __init__(self, timeparm, observers, surfdata, Uinf, 
+                 surftype='permeable'):
         super().__init__(timeparm, observers, surfdata, Uinf, surftype)
         
         # compute distance vars for fwh
+        mR, mRs, nR, nRs = np.empty(0), np.empty(0), np.empty(0), np.empty(0)
         if np.any(self.xyz_src):
-            self.magR, self.magRs, self.nRvec, self.nRsvec = self._compute_distance_vars(self.xyz_src,self.xyz_obv,self.uinf['Mach'])
+            Mi = self.uinf['Mach']
+            srclocs = self.xyz_src
+            oblocs = self.xyz_obv
+            mR, mRs, nR, nRs = self.compute_distance_vars(srclocs, oblocs, Mi)
+        self.magR, self.magRs, self.nRvec, self.nRsvec = mR, mRs, nR, nRs
         # compute frequency parameters
-        self.freq  = np.fft.rfftfreq(self.ntsub,self.dtsub)
+        self.freq  = np.fft.rfftfreq(self.ntsub, self.dtsub)
         self.omega = 2*np.pi*self.freq
-        self.kwv = self.omega/self.uinf['c']
+        self.kwv = self.omega / self.uinf['c']
         self.nfreq = np.size(self.freq)
 
         # Init fwh outputs 
-        self.pfft = np.zeros((self.nobserv,self.nfreq),dtype=np.complex128)
-        self.pmagsum = np.zeros((self.nobserv,self.nfreq))
-        self.presum = np.zeros((self.nobserv,self.nfreq))
-        self.pimgsum = np.zeros((self.nobserv,self.nfreq))
+        self.pfft = np.empty((self.nobserv, self.nfreq), dtype=np.complex128)
+        self.pmagsum = np.zeros((self.nobserv, self.nfreq))
+        self.presum = np.zeros((self.nobserv, self.nfreq))
+        self.pimgsum = np.zeros((self.nobserv, self.nfreq))
     
     def init_from_restart(self, initdata):
         self.stepcnt = initdata['stepcnt']
@@ -1464,30 +1469,31 @@ class FwhFreqDomainSolver(FwhSolverBase):
 
 
     @staticmethod
-    def _compute_distance_vars(xyz_src,xyz_ob,Minf):
+    def compute_distance_vars(xyz_src, xyz_ob, Minf):
         nobserv = xyz_ob.shape[0]
         ndims = xyz_ob[0].shape[0]
         magMinf = np.sqrt(sum(m*m for m in Minf)) # |M|
         # inverse of Prandtl Glauert parameter
-        gm_ = 1. / np.sqrt(1.0 - magMinf*magMinf) 
+        gm_ = 1./np.sqrt(1.0 - magMinf*magMinf) 
         gm2_ = gm_*gm_
         # dr = x_observer - x_source
-        dr = np.array([ob - xyz_src for ob in xyz_ob]).reshape(-1,ndims)    
+        dr = np.array([ob - xyz_src for ob in xyz_ob]).reshape(-1, ndims)    
         magdr = np.sqrt(sum((dr*dr).T)) # distance |dr|
-        ndr = np.array([idr/ir for idr,ir in zip(dr,magdr)])  # normalized unit dr
+        # normalized unit dr
+        ndr = np.array([idr/ir for idr,ir in zip(dr,magdr)]) 
         Minf_ndr = sum((Minf*ndr).T) # Minfty.r_hat
-        Rs = (magdr/gm_) * np.sqrt(1.+ gm2_*Minf_ndr*Minf_ndr)   # |R*|
-        R = gm2_ * (Rs - magdr*Minf_ndr)               # |R|
-        Minf2_ndr = np.einsum('i,j->ji',Minf,Minf_ndr)
+        Rs = (magdr/gm_)*np.sqrt(1. + gm2_*Minf_ndr*Minf_ndr)   # |R*|
+        R = gm2_*(Rs - magdr*Minf_ndr)               # |R|
+        Minf2_ndr = np.einsum('i,j->ji', Minf, Minf_ndr)
         rrs = magdr/(gm2_*Rs)
         mr = ndr + Minf2_ndr*gm2_
-        nRs = np.einsum('i,ij->ij',rrs,mr) # normalized unit R*
+        nRs = np.einsum('i,ij->ij', rrs, mr) # normalized unit R*
         nR = gm2_ * (nRs-Minf)    # normalized unit R
         if not (R.shape[0] == nobserv):
-            nR = nR.reshape(nobserv,-1,ndims)
-            nRs = nRs.reshape(nobserv,-1,ndims)
-            R = R.reshape(nobserv,-1)
-            Rs = Rs.reshape(nobserv,-1)
+            nR = nR.reshape(nobserv,-1, ndims)
+            nRs = nRs.reshape(nobserv,-1, ndims)
+            R = R.reshape(nobserv, -1)
+            Rs = Rs.reshape(nobserv, -1)
  
         return R,Rs,nR,nRs
 
@@ -1498,15 +1504,18 @@ class FwhFreqDomainSolver(FwhSolverBase):
         self.pfft = self._compute_observer_pfft(Q,F)
         # use welch method if averaging
         if self.averaging:
-            self.pmagsum, self.presum, self.pimgsum = self.welch_accum(self.pfft, self.pmagsum, self.presum, self.pimgsum, self.psd_scale_mode)
+            self.welch_accum(self.pfft, self.pmagsum, self.presum, 
+                            self.pimgsum, self.psd_scale_mode)
             if self.avgcnt > 1:
-                self.pfft = self.welch_average(self.avgcnt, self.pmagsum, self.presum, self.pimgsum, self.psd_scale_mode)
+                self.pfft = self.compute_welch_average(self.avgcnt, 
+                self.pmagsum, self.presum, self.pimgsum, self.psd_scale_mode)
             #update the averaging counter
             self.avgcnt += 1
         #update the step counter
         self.stepcnt = self.ntsub - self.ntoverlap
 
     def _compute_surface_fluxes(self, usoln):
+        ndims =  self.ndims
         # define local vars
         qnorms = self.qnorms
         cinf = self.uinf['c']
@@ -1514,57 +1523,69 @@ class FwhFreqDomainSolver(FwhSolverBase):
         rhoinf = self.uinf['rho']
         uinf = np.array(self.uinf['u'])
         # compute soln vars
-        u = np.swapaxes(usoln[:,1:self.ndims+1,:],1,2)-uinf # u' perturbed vel
-        p = usoln[:,-1,:] - pinf # p' fluctuation pressure
-        rho_tot = rhoinf + p/(cinf*cinf) # density, another formulation will just use rho in usoln[:,0,:]
+        u = np.swapaxes(usoln[:, 1: ndims+1,:], 1, 2) - uinf #u' perturbed vel
+        p = usoln[:, -1, :] - pinf # p' fluctuation pressure
+        # density, another formulation will just use rho in usoln[:,0,:]
+        rho_tot = rhoinf + p/(cinf*cinf) 
         # compute normal velocities
-        un  = np.einsum('ij,kij->ki',qnorms,u) # normal flow velocity
+        un  = np.einsum('ij,kij->ki', qnorms, u) # normal flow velocity
         Uin = sum((uinf*qnorms).T)  # normal Uinfty
         vn = un + Uin if self.solidsurf else 0.
         dvn = vn - Uin  # relative surface velocity
         dUn = un - dvn  # relative normal flow velocity
         # compute temporal fluxes
         rdun = rho_tot*dUn
-        umuinf = u-uinf
+        umuinf = u - uinf
         rhouinf = rhoinf*uinf
         Q = rdun + rhoinf*dvn
-        F = np.einsum('ij,ijk->ijk',rdun,umuinf)
-        F -= np.einsum('i,j...->j...i',rhouinf,dvn)
-        F += np.einsum('ij,jk->ijk',p,qnorms)
+        F = np.einsum('ij,ijk->ijk', rdun, umuinf)
+        F -= np.einsum('i,j...->j...i', rhouinf, dvn)
+        F += np.einsum('ij,jk->ijk', p, qnorms)
 
         return Q,F
         
-    def _compute_observer_pfft(self,Q,F):        
+    def _compute_observer_pfft(self, Q, F):
+        omega = self.omega        
+        kwv = self.kwv
+        mR = self.magR
+        mRs = self.magRs
+        nR = self.nRvec
+        nRs = self.nRsvec
         # fluxes signal windowing
         if self.window:
-            Q -= np.mean(Q,0)
-            F -= np.mean(F,0)
-            Q = np.einsum('i,ij->ij',self.wwind,Q)
-            F = np.einsum('i,ijk->ijk',self.wwind,F)
+            Q -= np.mean(Q, 0)
+            F -= np.mean(F, 0)
+            Q = np.einsum('i,ij->ij', self.wwind, Q)
+            F = np.einsum('i,ijk->ijk', self.wwind, F)
 
         # perform fft of Q, F fluxes
-        Qfft = np.empty((self.nfreq,self.nqpts),dtype=np.complex64)
-        Ffft = np.empty((self.nfreq,self.nqpts,self.ndims),dtype=np.complex64)
-        for iq in range(0,self.nqpts):
-            Qfft[:,iq] = self.rfft(Q[:,iq])
-            for jd in range(0,self.ndims):
-                Ffft[:,iq,jd]  = self.rfft(F[:,iq,jd])
+        Qfft = np.empty((self.nfreq, self.nqpts), dtype=np.complex64)
+        Ffft = np.empty((self.nfreq, self.nqpts, self.ndims), dtype=np.complex64)
+        for iq in range(0, self.nqpts):
+            Qfft[:, iq] = self.rfft(Q[:, iq])
+            for jd in range(0, self.ndims):
+                Ffft[:, iq, jd]  = self.rfft(F[:, iq, jd])
 
-        #compute pfft, i=nob,j=nfreq,k=nqpts, p shape i,j,k 
-        kwvR = np.einsum('ik,j->jik',self.magR,self.kwv)
+        #compute pfft, i=nob, j=nfreq, k=nqpts, p shape i,j,k 
+        kwvR = np.einsum('ik,j->jik', mR, kwv)
         exp_term0 = np.exp(-1j*kwvR)        # exp(-ikR)
-        exp_term1 = exp_term0/self.magRs          # exp(-ikR)/R*
-        exp_term2 = exp_term0/(self.magRs*self.magRs) # exp(-ikR)/(R*xR*)
-        pfft  = 1j * np.einsum('j,jik,jk->ijk',self.omega, exp_term1, Qfft)        # p1_term
-        pfft += 1j * np.einsum('j,jik,ikm,jkm->ijk',self.kwv,exp_term1,self.nRvec,Ffft)   # p2_term0
-        pfft += np.einsum('jik,ikm,jkm->ijk',exp_term2,self.nRsvec,Ffft)                  # p2_term1 
+        exp_term1 = exp_term0/mRs          # exp(-ikR)/R*
+        exp_term2 = exp_term0/(mRs*mRs) # exp(-ikR)/(R* x R*)
+        # p1_term
+        pfft  = 1j * np.einsum('j,jik,jk->ijk', omega, exp_term1, Qfft)
+        # p2_term0 
+        pfft += 1j * np.einsum('j,jik,ikm,jkm->ijk', kwv, exp_term1, nR, Ffft)   
+        # p2_term1 
+        pfft += np.einsum('jik,ikm,jkm->ijk', exp_term2, nRs, Ffft) 
 
         # surface integration
-        pfft = self._surface_integrate(self.qdA,pfft) / (4.*np.pi)
+        pfft = self._surface_integrate(self.qdA, pfft)
+        pfft /= (4.*np.pi)
         if self.window:
             pfft *= self.windscale
 
         return pfft
+
 
     def __call__(self, *args, **kwds):
         pass
@@ -1576,7 +1597,9 @@ class PointAcousticSrc(object):
         self.srclocs = srclocs
         self.ndims = len(srclocs)
         self.nvars = len(flowinfo)
-        self.rhoinf, self.uinf, self.pinf = flowinfo[0], flowinfo[1:self.ndims+1], flowinfo[-1]
+        self.rhoinf = flowinfo[0]
+        self.uinf = flowinfo[1:self.ndims+1]
+        self.pinf = flowinfo[-1]
 
     def exact_solution(self,*args):
         pass
@@ -1584,8 +1607,10 @@ class PointAcousticSrc(object):
         pass
 
 class MonopoleSrc(PointAcousticSrc):
-    def __init__(self,name,srclocs,flowinfo,ampl,srcfreq,ntime,nperiods,gamma):
-        super().__init__(name,srclocs,flowinfo,ampl,srcfreq,ntime,nperiods,gamma)
+    def __init__(self, name, srclocs, flowinfo, ampl, srcfreq, ntime, nperiods,
+                 gamma):
+        super().__init__(name, srclocs, flowinfo, ampl, srcfreq, ntime,
+                         nperiods, gamma)
         self.gamma = gamma
         self.ampl = ampl
         self.srcfreq = srcfreq
@@ -1603,8 +1628,10 @@ class MonopoleSrc(PointAcousticSrc):
         pfft = np.empty((nobserv,self.nfreq),dtype=np.complex128)
         tt =[]
         for i in range(self.nt):
-            tt.append(i*self.dt)
-            ptime[i] = self.update_usoln_onestep(xyz_ob,i*self.dt,ptime[i],False) - self.pinf
+            ti = i*self.dt
+            tt.append(ti)
+            ptime[i] = self.update_usoln_onestep(xyz_ob, ti, ptime[i], False) 
+            - self.pinf
         ptime = np.moveaxis(ptime,0,1)
         for i in range(nobserv):
             pfft[i] = FwhFreqDomainSolver.rfft(ptime[i])
@@ -1614,11 +1641,14 @@ class MonopoleSrc(PointAcousticSrc):
         co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
         Mo = self.uinf/co
         kwv = self.omega/co
-        magR, magRs, R_nvec, Rs_nvec = FwhFreqDomainSolver._compute_distance_vars(self.srclocs,xyz_ob,Mo)
+        xyz_src = self.srclocs
+        mR, mRs, nR, nRs = FwhFreqDomainSolver.compute_distance_vars(xyz_src,
+         xyz_ob, Mo)
         # phy_potential of the source and its derivatives
-        phy = (self.ampl/(4.*np.pi*magRs))*np.exp(1j*(self.omega*tcurr-kwv*magR)) 
-        invRs = 1./magRs
-        kk = 1j*kwv*R_nvec + np.einsum('i,ij->ij',invRs,Rs_nvec)
+        amp_4piRs = self.ampl / (4.*np.pi*mRs)
+        phy = amp_4piRs * np.exp(1j * (self.omega*tcurr-kwv*mR)) 
+        invRs = 1./mRs
+        kk = 1j*kwv*nR + np.einsum('i,ij->ij',invRs,nRs)
         dphy = - np.einsum('i,ij->ji',phy,kk) 
         mdotdphy = sum((Mo*dphy.T).T)
 
@@ -1629,7 +1659,8 @@ class MonopoleSrc(PointAcousticSrc):
         
         usoln[-1] = p + self.pinf
         usoln[0] = p/(co*co) + self.rhoinf  #rho
-        usoln[1:self.ndims+1] = np.array([ui + uo for ui, uo in zip(np.real(dphy),self.uinf)])  #u
+        usoln[1:self.ndims+1] = np.array([ui + uo 
+                                for ui, uo in zip(np.real(dphy),self.uinf)]) #u
         
         return usoln
 
@@ -1648,7 +1679,9 @@ class VTUSurfWriter(object):
     # map of first order face nodes
     # To generate this fnmap, we use vtk_nodemaps and then apply gmsh_fnmap 
     # to extract the correct first order face node ordering.
-    # Some fnmap face points may need to be flipped to maintain a c.c.w or c.c. 
+    # Some fnmap face points may need to be flipped to maintain 
+    # a c.c.w or c.c. 
+
     # face node counting
     _petype_fnmap = {
         ('tri',  3 ):  {'line': [[0, 1], [1, 2], [2, 0]]},
@@ -1661,20 +1694,47 @@ class VTUSurfWriter(object):
         ('quad',  25 ):  {'line': [[0, 4], [4, 24], [24, 20], [20, 0]]},
         ('tet',  4 ):  {'tri': [[1, 0, 3], [3, 0, 2], [2, 1, 3], [0, 1, 2]]},
         ('tet',  10 ):  {'tri': [[2, 0, 9], [9, 0, 5], [5, 2, 9], [0, 2, 5]]},
-        ('tet',  20 ):  {'tri': [[3, 0, 19], [19, 0, 9], [9, 3, 19], [0, 3, 9]]},
-        ('tet',  35 ):  {'tri': [[4, 0, 34], [34, 0, 14], [14, 4, 34], [0, 4, 14]]},
-        ('hex',  8 ):  {'quad': [[0, 1, 3, 2], [0, 1, 5, 4], [1, 3, 7, 5], [3, 2, 6, 7], [0, 2, 6, 4], [4, 5, 7, 6]]},
-        ('hex',  27 ):  {'quad': [[0, 2, 8, 6], [0, 2, 20, 18], [2, 8, 26, 20], [8, 6, 24, 26], [0, 6, 24, 18], [18, 20, 26, 24]]},
-        ('hex',  64 ):  {'quad': [[0, 3, 15, 12], [0, 3, 51, 48], [3, 15, 63, 51], [15, 12, 60, 63], [0, 12, 60, 48], [48, 51, 63, 60]]},
-        ('hex',  125 ):  {'quad': [[0, 4, 24, 20], [0, 4, 104, 100], [4, 24, 124, 104], [24, 20, 120, 124], [0, 20, 120, 100], [100, 104, 124, 120]]},
-        ('pri',  6 ):  {'quad': [[0, 1, 4, 3], [1, 2, 5, 4], [0, 3, 5, 2]], 'tri': [[0, 2, 1], [3, 4, 5]]},
-        ('pri',  18 ):  {'quad': [[0, 2, 14, 12], [2, 5, 17, 14], [0, 12, 17, 5]], 'tri': [[0, 5, 2], [12, 14, 17]]},
-        ('pri',  40 ):  {'quad': [[0, 3, 33, 30], [3, 9, 39, 33], [0, 30, 39, 9]], 'tri': [[0, 9, 3], [30, 33, 39]]},
-        ('pri',  75 ):  {'quad': [[0, 4, 64, 60], [4, 14, 74, 64], [0, 60, 74, 14]], 'tri': [[0, 14, 4], [60, 64, 74]]},
-        ('pyr',  5 ):  {'quad': [[2, 3, 1, 0]], 'tri': [[0, 1, 4], [1, 3, 4], [3, 2, 4], [0, 4, 2]]},
-        ('pyr',  14 ):  {'quad': [[6, 8, 2, 0]], 'tri': [[0, 2, 13], [2, 8, 13], [8, 6, 13], [0, 13, 6]]},
-        ('pyr',  30 ):  {'quad': [[12, 15, 3, 0]], 'tri': [[0, 3, 29], [3, 15, 29], [15, 12, 29], [0, 29, 12]]},
-        ('pyr',  55 ):  {'quad': [[20, 24, 4, 0]], 'tri': [[0, 4, 54], [4, 24, 54], [24, 20, 54], [0, 54, 20]]},
+        ('tet',  20 ):  
+            {'tri': [[3, 0, 19], [19, 0, 9], [9, 3, 19], [0, 3, 9]]},
+        ('tet',  35 ): 
+            {'tri': [[4, 0, 34], [34, 0, 14], [14, 4, 34], [0, 4, 14]]},
+        ('hex',  8 ):  
+            {'quad': [[0, 1, 3, 2], [0, 1, 5, 4], [1, 3, 7, 5], [3, 2, 6, 7],
+                     [0, 2, 6, 4], [4, 5, 7, 6]]},
+        ('hex',  27 ):  
+            {'quad': [[0, 2, 8, 6], [0, 2, 20, 18], [2, 8, 26, 20], 
+                     [8, 6, 24, 26], [0, 6, 24, 18], [18, 20, 26, 24]]},
+        ('hex',  64 ):  
+            {'quad': [[0, 3, 15, 12], [0, 3, 51, 48], [3, 15, 63, 51], 
+                     [15, 12, 60, 63], [0, 12, 60, 48], [48, 51, 63, 60]]},
+        ('hex',  125 ):  
+            {'quad': [[0, 4, 24, 20], [0, 4, 104, 100], [4, 24, 124, 104],
+                     [24, 20, 120, 124], [0, 20, 120, 100], 
+                     [100, 104, 124, 120]]},
+        ('pri',  6 ):  
+            {'quad': [[0, 1, 4, 3], [1, 2, 5, 4], [0, 3, 5, 2]], 
+             'tri': [[0, 2, 1], [3, 4, 5]]},
+        ('pri',  18 ): 
+            {'quad': [[0, 2, 14, 12], [2, 5, 17, 14], [0, 12, 17, 5]], 
+             'tri': [[0, 5, 2], [12, 14, 17]]},
+        ('pri',  40 ):  
+            {'quad': [[0, 3, 33, 30], [3, 9, 39, 33], [0, 30, 39, 9]],
+             'tri': [[0, 9, 3], [30, 33, 39]]},
+        ('pri',  75 ):  
+            {'quad': [[0, 4, 64, 60], [4, 14, 74, 64], [0, 60, 74, 14]],
+             'tri': [[0, 14, 4], [60, 64, 74]]},
+        ('pyr',  5 ):  
+            {'quad': [[2, 3, 1, 0]], 'tri': [[0, 1, 4], [1, 3, 4], [3, 2, 4],
+                     [0, 4, 2]]},
+        ('pyr',  14 ):  
+            {'quad': [[6, 8, 2, 0]], 'tri': [[0, 2, 13], [2, 8, 13], 
+                     [8, 6, 13], [0, 13, 6]]},
+        ('pyr',  30 ): 
+            {'quad': [[12, 15, 3, 0]], 'tri': [[0, 3, 29], [3, 15, 29], 
+                     [15, 12, 29], [0, 29, 12]]},
+        ('pyr',  55 ):  
+            {'quad': [[20, 24, 4, 0]], 'tri': [[0, 4, 54], [4, 24, 54], 
+                     [24, 20, 54], [0, 54, 20]]},
     }
     # offset to get local fidx/fnum inside each facetype map
     _fnum_offset = {'tri' : {'line': 0},
@@ -1713,7 +1773,7 @@ class VTUSurfWriter(object):
         self._write_vtu_out(fname)
 
     def _prepare_vtufnodes(self): 
-        for (etype,fidx), eidxlist in self._eidxs.items():
+        for (etype, fidx), eidxlist in self._eidxs.items():
             pts = np.swapaxes(self.mesh[f'spt_{etype}_p{self.rallocs.prank}'],0,1)
             pftype = self.fnum_pftype_map[etype][fidx]
             fidx = np.int(fidx) + self._fnum_offset[etype][pftype]
