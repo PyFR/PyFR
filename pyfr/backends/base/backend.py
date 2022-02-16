@@ -141,12 +141,11 @@ class BaseBackend(object):
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol*view.n), tags=tags)
 
-    def view(self, matmap, rmap, cmap, rstridemap=None, vshape=tuple(),
-             tags=set()):
+    def view(self, matmap, rmap, cmap, rstridemap=None, vshape=(), tags=set()):
         return self.view_cls(self, matmap, rmap, cmap, rstridemap, vshape,
                              tags)
 
-    def xchg_view(self, matmap, rmap, cmap, rstridemap=None, vshape=tuple(),
+    def xchg_view(self, matmap, rmap, cmap, rstridemap=None, vshape=(),
                   tags=set()):
         return self.xchg_view_cls(self, matmap, rmap, cmap, rstridemap,
                                   vshape, tags)
