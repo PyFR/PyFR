@@ -56,8 +56,8 @@ def Gatherv_data_arr(comm, rank, root, data_arr):
     recvbuf = None
     displ = None
     count = None
-    sbufsize = 0
-    sendbuf = np.empty(0)
+    # sbufsize = 0
+    # sendbuf = np.empty(0)
     # if np.any(data_arr):
     sbufsize = data_arr.size
     sendbuf = data_arr.reshape(-1)
@@ -69,20 +69,6 @@ def Gatherv_data_arr(comm, rank, root, data_arr):
         displ = np.array([sum(count[:p]) for p in range(len(count))])
 
     comm.Gatherv(sendbuf, [recvbuf, count, displ, MPI.DOUBLE], root=root)
-
-    return recvbuf
-
-def Gather_data_arr(comm, rank, root, data_arr):
-    recvbuf = None
-    count = None
-    sbufsize = data_arr.size
-    sendbuf = data_arr.reshape(-1)
-    count = comm.gather(sbufsize,root=root)
-    if rank == root:
-        count = np.array(count, dtype='i')
-        recvbuf = np.empty(sum(count),dtype=float)
-
-    comm.Gather(sendbuf, recvbuf, root=root)
 
     return recvbuf
 
@@ -405,14 +391,9 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
 
     def serialise(self, intg):
-
         #bail out if did not reach tstart
         if not self._started:
             return {}
-            
-        #prepare mpi communication
-        comm, rank, wrldroot = get_comm_rank_root()
-        fwhroot = self.fwhranks_list[0]
 
         if self.active_fwhrank or self.active_fwhedgrank:
             #solve fwh if needed
@@ -420,25 +401,36 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
         metadata = {}
 
-        #prepare global soln and pfft data arrays for gathering
-        sendpffft = np.empty(0)
+        #prepare mpi communication
+        comm, rank, wrldroot = get_comm_rank_root()
+        fwhroot = self.fwhranks_list[0]
+        if fwhroot != wrldroot:
+            gatherroot = wrldroot
+            gcomm = comm
+            grank = rank
+        else:
+            gatherroot = fwhroot
+            gcomm = self.fwh_comm
+            grank = self.fwhrank
+        
         sendsoln = np.empty(0)
-        if self.active_fwhrank:
-            sendpffft = np.array([self.fwhsolver.pmagsum, self.fwhsolver.presum, self.fwhsolver.pimgsum], dtype='f') 
-            sendsoln = self.usoln[:self.fwhsolver.stepcnt].reshape(-1, self.nqpts).T 
-
+        sendpfft = np.empty(0)
+        if self.active_fwhrank :
+            sendsoln= np.array([self.fwhsolver.pmagsum, self.fwhsolver.presum, self.fwhsolver.pimgsum])
+            sendpfft = self.usoln[:self.fwhsolver.stepcnt].reshape(-1, self.nqpts).T
+        #gather pfft of welch averaging data from all other fwh ranks to world root
+        gpfftdata = Gatherv_data_arr(gcomm, grank, gatherroot, sendsoln)
+        #gather soln from all other fwh ranks to world root
+        gusoln = Gatherv_data_arr(gcomm, grank, gatherroot, sendpfft)
+        
         #prepare timedata to be sent to wrldroot if needed
         tdata = np.empty(0)
         if rank == fwhroot:
             tdata = np.array([self._last_prepared, self.fwhsolver.ltsub, 
-                              self.fwhsolver.ntsub, self.fwhsolver.stepcnt, 
-                              self.fwhsolver.avgcnt, self.fwhsolver.nfreq])
+                                self.fwhsolver.ntsub, self.fwhsolver.stepcnt, 
+                                self.fwhsolver.avgcnt, self.fwhsolver.nfreq])
         
         if fwhroot != wrldroot:
-            #gather soln and pfftdata from all other fwh ranks to world root
-            gpfftdata = Gatherv_data_arr(comm, rank, wrldroot, sendpffft)
-            gusoln = Gatherv_data_arr(comm, rank, wrldroot, sendsoln)
-
             #fwh root
             if rank == fwhroot:
                 comm.Send(tdata, dest=wrldroot, tag=54)
@@ -446,12 +438,6 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             if rank == wrldroot:
                 tdata = np.empty(6)
                 comm.Recv(tdata, source=fwhroot, tag=54)
-
-        elif (fwhroot == wrldroot) and self.active_fwhrank:
-            #gather soln and pfftdata from all other fwh ranks to fwh root
-            gpfftdata = Gatherv_data_arr(self.fwh_comm, self.fwhrank, 0, sendpffft)
-            gusoln = Gatherv_data_arr(self.fwh_comm, self.fwhrank, 0, sendsoln)
-
 
         if rank == wrldroot:
             metadata = {
