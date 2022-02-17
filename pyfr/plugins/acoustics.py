@@ -396,12 +396,12 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         sendsoln = np.empty(0)
         sendpfft = np.empty(0)
         if self.active_fwhrank :
-            sendsoln= np.array([self.fwhsolver.pmagsum, self.fwhsolver.presum, self.fwhsolver.pimgsum])
-            sendpfft = self.usoln[:self.fwhsolver.stepcnt].reshape(-1, self.nqpts).T
+            sendpfft= np.array([self.fwhsolver.pmagsum, self.fwhsolver.presum, self.fwhsolver.pimgsum])
+            sendsoln = self.usoln[:self.fwhsolver.stepcnt].reshape(-1, self.nqpts).T
         #gather pfft of welch averaging data from all other fwh ranks to world root
-        gpfftdata = Gatherv_data_arr(gcomm, grank, gatherroot, sendsoln)
+        gpfftdata = Gatherv_data_arr(gcomm, grank, gatherroot, sendpfft)
         #gather soln from all other fwh ranks to world root
-        gusoln = Gatherv_data_arr(gcomm, grank, gatherroot, sendpfft)
+        gusoln = Gatherv_data_arr(gcomm, grank, gatherroot, sendsoln)
         
         #prepare timedata to be sent to wrldroot if needed
         tdata = np.empty(0)
