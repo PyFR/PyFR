@@ -42,16 +42,10 @@ class OpenMPBackend(BaseBackend):
         # Instantiate mandatory kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
-                    packing.OpenMPPackingKernels]
+                    packing.OpenMPPackingKernels,
+                    xsmm.OpenMPXSMMKernels,
+                    gimmik.OpenMPGiMMiKKernels]
         self._providers = [k(self) for k in kprovcls]
-
-        # Instantiate optional kernel provider classes
-        try:
-            self._providers.append(xsmm.OpenMPXSMMKernels(self))
-        except OSError:
-            pass
-
-        self._providers.append(gimmik.OpenMPGiMMiKKernels(self))
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
