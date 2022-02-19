@@ -197,11 +197,6 @@ Parameterises the OpenMP backend with
 
     *int*
 
-4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
-
-    *int*
-
 Example::
 
     [backend-openmp]

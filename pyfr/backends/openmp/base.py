@@ -26,8 +26,8 @@ class OpenMPBackend(BaseBackend):
         # C source compiler
         self.compiler = OpenMPCompiler(cfg)
 
-        from pyfr.backends.openmp import (blasext, gimmik, packing,
-                                          provider, types, xsmm)
+        from pyfr.backends.openmp import (blasext, packing, provider, types,
+                                          xsmm)
 
         # Register our data types
         self.base_matrix_cls = types.OpenMPMatrixBase
@@ -43,8 +43,7 @@ class OpenMPBackend(BaseBackend):
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
                     packing.OpenMPPackingKernels,
-                    xsmm.OpenMPXSMMKernels,
-                    gimmik.OpenMPGiMMiKKernels]
+                    xsmm.OpenMPXSMMKernels]
         self._providers = [k(self) for k in kprovcls]
 
         # Pointwise kernels
