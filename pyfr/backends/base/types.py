@@ -284,7 +284,7 @@ class XchgView:
         return self.xchgmat.sendreq(pid, tag)
 
 
-class Graph(object):
+class Graph:
     def __init__(self, backend):
         self.backend = backend
         self.committed = False
@@ -300,7 +300,7 @@ class Graph(object):
 
     def add(self, kern, deps=[]):
         if self.committed:
-            raise RuntimeError('Can not add nodes to a commited graph')
+            raise RuntimeError('Can not add nodes to a committed graph')
 
         if kern in self.knodes:
             raise RuntimeError('Can only add a kernel to a graph once')
@@ -324,7 +324,7 @@ class Graph(object):
             raise RuntimeError('Can not add nodes to a committed graph')
 
         if req in self.mpi_reqs:
-            raise RuntimeError('Can only add a request to a graph once')
+            raise ValueError('Can only add an MPI request to a graph once')
 
         # Add the request
         self.mpi_reqs.append(req)

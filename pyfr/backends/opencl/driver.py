@@ -323,7 +323,7 @@ class OpenCLEvent(_OpenCLBase):
     _destroyfn = 'clReleaseEvent'
 
 
-class OpenCLQueue(_OpenCLBase):
+class OpenCLQueue(_OpenCLWaitFor, _OpenCLBase):
     _destroyfn = 'clReleaseCommandQueue'
 
     def __init__(self, lib, ctx, dev, out_of_order):
@@ -341,25 +341,16 @@ class OpenCLQueue(_OpenCLBase):
 
     def marker(self, wait_for=None):
         evt_ptr = c_void_p()
+        wait_for = self._make_wait_for(wait_for)
 
-        if wait_for is None:
-            nwait = 0
-        else:
-            nwait = len(wait_for)
-            wait_for = (c_void_p * nwait)(*[int(w) for w in wait_for])
-
-        self.lib.clEnqueueMarkerWithWaitList(self, nwait, wait_for, evt_ptr)
+        self.lib.clEnqueueMarkerWithWaitList(self, *wait_for, evt_ptr)
 
         return OpenCLEvent(self.lib, evt_ptr)
 
     def barrier(self, wait_for=None):
-        if wait_for is None:
-            nwait = 0
-        else:
-            nwait = len(wait_for)
-            wait_for = (c_void_p * nwait)(*[int(w) for w in wait_for])
+        wait_for = self._make_wait_for(wait_for)
 
-        self.lib.clEnqueueBarrierWithWaitList(self, nwait, wait_for, None)
+        self.lib.clEnqueueBarrierWithWaitList(self, *wait_for, None)
 
     def finish(self):
         self.lib.clFinish(self)
@@ -498,17 +489,17 @@ class OpenCL(_OpenCLWaitFor):
             dst = dst.ctypes.data
 
             self.lib.clEnqueueReadBuffer(queue, src, False, 0, nbytes,
-                                         dst, nwait, *wait_for, evt_ptr)
+                                         dst, *wait_for, evt_ptr)
         # Host to device
         elif isinstance(src, (np.ndarray, np.generic)):
             src = src.ctypes.data
 
             self.lib.clEnqueueWriteBuffer(queue, dst, False, 0, nbytes,
-                                          src, nwait, *wait_for, evt_ptr)
+                                          src, *wait_for, evt_ptr)
         # Device to device
         else:
             self.lib.clEnqueueCopyBuffer(queue, src, dst, 0, 0, nbytes,
-                                         nwait, *wait_for, evt_ptr)
+                                         *wait_for, evt_ptr)
 
         if ret_evt:
             return OpenCLEvent(self.lib, evt_ptr)

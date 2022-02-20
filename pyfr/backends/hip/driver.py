@@ -276,7 +276,7 @@ class HIPEvent(_HIPBase):
 
         super().__init__(hip, ptr)
 
-    def wait(self):
+    def synchronize(self):
         self.hip.lib.hipEventSynchronize(self)
 
 

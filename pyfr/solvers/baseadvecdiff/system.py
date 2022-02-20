@@ -27,10 +27,11 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1.add_all(k['eles/copy_soln'])
 
         # Compute the common solution at our internal/boundary interfaces
-        g1.add_all(k['iint/copy_fpts'], deps=k['eles/disu'])
-        g1.add_all(k['iint/con_u'],
-                   deps=k['iint/copy_fpts'] + k['mpiint/scal_fpts_pack'])
-        g1.add_all(k['bcint/con_u'], deps=k['iint/copy_fpts'])
+        for l in k['eles/copy_fpts']:
+            g1.add(l, deps=deps(l, 'eles/disu'))
+        kdeps = k['eles/copy_fpts'] or k['eles/disu']
+        g1.add_all(k['iint/con_u'], deps=kdeps + k['mpiint/scal_fpts_pack'])
+        g1.add_all(k['bcint/con_u'], deps=kdeps)
 
         # Run the shock sensor (if enabled)
         g1.add_all(k['eles/shocksensor'])
@@ -135,9 +136,11 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g1.add_mpi_req(send, deps=[pack])
 
         # Compute the common solution at our internal/boundary interfaces
-        g1.add_all(k['iint/copy_fpts'], deps=k['eles/disu'])
-        g1.add_all(k['iint/con_u'], deps=k['iint/copy_fpts'])
-        g1.add_all(k['bcint/con_u'], deps=k['iint/copy_fpts'])
+        for l in k['eles/copy_fpts']:
+            g1.add(l, deps=deps(l, 'eles/disu'))
+        kdeps = k['eles/copy_fpts'] or k['eles/disu']
+        g1.add_all(k['iint/con_u'], deps=kdeps)
+        g1.add_all(k['bcint/con_u'], deps=kdeps)
 
         # Compute the transformed gradient of the partially corrected solution
         g1.add_all(k['eles/tgradpcoru_upts'])

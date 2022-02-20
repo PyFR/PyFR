@@ -13,7 +13,7 @@ class OpenCLKernel(Kernel):
         pass
 
 
-class _OpenCLMetaKernelCommon(object):
+class _OpenCLMetaKernelCommon:
     def add_to_graph(self, graph, deps):
         pass
 
