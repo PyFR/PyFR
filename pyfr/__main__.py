@@ -78,7 +78,7 @@ def main():
                                 'elements are divided; output is linear '
                                 'between nodes, so increased resolution '
                                 'may be required')
-    output_options.add_argument('-k', '--order', type=int, dest="order",
+    output_options.add_argument('-k', '--order', type=int, dest='order',
                                 help='sets the order of high order elements')
     ap_export.add_argument('-g', '--gradients', action='store_true',
                            help='compute gradients')
