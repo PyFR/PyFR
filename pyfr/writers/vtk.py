@@ -515,6 +515,9 @@ class VTKWriter(BaseWriter):
                               f'version="{self.vtkfile_version}">\n'
                               '<UnstructuredGrid>\n')
 
+                if self.tcurr is not None and not parallel:
+                    self._write_time_value(write_s_to_fh)
+
                 # Running byte-offset for appended data
                 off = 0
 
@@ -538,6 +541,9 @@ class VTKWriter(BaseWriter):
                               'type="PUnstructuredGrid" '
                               f'version="{self.vtkfile_version}">\n'
                               '<PUnstructuredGrid>\n')
+
+                if self.tcurr is not None:
+                    self._write_time_value(write_s_to_fh)
 
                 # Header
                 self._write_parallel_header(fh)
@@ -564,9 +570,6 @@ class VTKWriter(BaseWriter):
 
         write_s = lambda s: vtuf.write(s.encode())
 
-        if self.tcurr is not None:
-            self._write_time_value(write_s)
-
         write_s(f'<Piece NumberOfPoints="{npts}" NumberOfCells="{ncells}">\n'
                 '<Points>\n')
 
@@ -587,7 +590,7 @@ class VTKWriter(BaseWriter):
                 write_s('</CellData>\n<PointData>\n')
 
         # Close
-        write_s('</PointData>\n</Piece>')
+        write_s('</PointData>\n</Piece>\n')
 
         # Return the current offset
         return off
@@ -596,9 +599,6 @@ class VTKWriter(BaseWriter):
         names, types, comps = self._get_array_attrs()
 
         write_s = lambda s: vtuf.write(s.encode())
-
-        if self.tcurr is not None:
-            self._write_time_value(write_s)
 
         write_s('<PPoints>\n')
 
