@@ -393,28 +393,6 @@ class VTKWriter(BaseWriter):
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
             self.tcurr = None
 
-        # See if we are computing gradients
-        if args.gradients:
-            self._pre_proc_fields_ref = self._pre_proc_fields
-            self._pre_proc_fields = self._pre_proc_fields_grad
-            self._post_proc_fields = self._post_proc_fields_grad
-
-            # Update list of solution fields
-            self._soln_fields.extend(
-                f'{f}-{d}'
-                for f in list(self._soln_fields) for d in range(self.ndims)
-            )
-
-            # Update the list of VTK variables to solution fields
-            nf = lambda f: [f'{f}-{d}' for d in range(self.ndims)]
-            for var, fields in list(self._vtk_vars):
-                if len(fields) == 1:
-                    self._vtk_vars.append((f'grad {var}', nf(fields[0])))
-                else:
-                    self._vtk_vars.extend(
-                        (f'grad {var} {f}', nf(f)) for f in fields
-                    )
-
     def _pre_proc_fields_soln(self, name, mesh, soln):
         # Convert from conservative to primitive variables
         return np.array(self.elementscls.con_to_pri(soln, self.cfg))
@@ -438,47 +416,6 @@ class VTKWriter(BaseWriter):
 
     def _post_proc_fields_scal(self, vsoln):
         return [vsoln[self._soln_fields.index(v)] for v, _ in self._vtk_vars]
-
-    def _pre_proc_fields_grad(self, name, mesh, soln):
-        # Call the reference pre-processor
-        soln = self._pre_proc_fields_ref(name, mesh, soln)
-
-        # Dimensions
-        nvars, nupts = soln.shape[:2]
-
-        # Get the shape class
-        basiscls = subclass_where(BaseShape, name=name)
-
-        # Construct an instance of the relevant elements class
-        eles = self.elementscls(basiscls, mesh, self.cfg)
-
-        # Get the smats and |J|^-1 to untransform the gradient
-        smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-        rcpdjac = eles.rcpdjac_at_np('upts')
-
-        # Gradient operator
-        gradop = eles.basis.m4.astype(self.dtype)
-
-        # Evaluate the transformed gradient of the solution
-        gradsoln = gradop @ soln.swapaxes(0, 1).reshape(nupts, -1)
-        gradsoln = gradsoln.reshape(self.ndims, nupts, nvars, -1)
-
-        # Untransform
-        gradsoln = np.einsum('ijkl,jkml->mikl', smat*rcpdjac, gradsoln,
-                             dtype=self.dtype, casting='same_kind')
-        gradsoln = gradsoln.reshape(nvars*self.ndims, nupts, -1)
-
-        return np.vstack([soln, gradsoln])
-
-    def _post_proc_fields_grad(self, vsoln):
-        # Prepare the fields
-        fields = []
-        for vname, vfields in self._vtk_vars:
-            ix = [self._soln_fields.index(vf) for vf in vfields]
-
-            fields.append(vsoln[ix])
-
-        return fields
 
     def _get_npts_ncells_nnodes_lin(self, sk):
         etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
