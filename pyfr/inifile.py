@@ -8,7 +8,7 @@ import re
 
 
 def _ensure_float(m):
-    m = m.group(0)
+    m = m[0]
     return m if any(c in m for c in '.eE') else m + '.'
 
 
@@ -82,7 +82,7 @@ class Inifile(object):
         # Substitute variables
         if subs:
             expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
-                          lambda m: subs[m.group(1)], expr)
+                          lambda m: subs[m[1]], expr)
 
         # Convert integers not inside [] to floats
         expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?![^[]*\])',

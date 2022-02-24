@@ -80,7 +80,7 @@ class BaseSystem(object):
         for f in mesh:
             if (m := re.match(f'spt_(.+?)_p{rallocs.prank}$', f)):
                 # Element type
-                t = m.group(1)
+                t = m[1]
 
                 elemap[t] = self.elementscls(basismap[t], mesh[f], self.cfg)
 
@@ -153,11 +153,8 @@ class BaseSystem(object):
         bc_inters = []
         for f in mesh:
             if (m := re.match(f'bcon_(.+?)_p{rallocs.prank}$', f)):
-                # Get the region name
-                rgn = m.group(1)
-
                 # Determine the config file section
-                cfgsect = f'soln-bcs-{rgn}'
+                cfgsect = f'soln-bcs-{m[1]}'
 
                 # Get the interface
                 interarr = mesh[f].astype('U4,i4,i1,i2').tolist()

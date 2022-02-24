@@ -69,7 +69,7 @@ class BaseIntegrator(object):
 
         for s in self.cfg.sections():
             if (m := re.match('soln-plugin-(.+?)(?:-(.+))?$', s)):
-                cfgsect, name, suffix = m.group(0), m.group(1), m.group(2)
+                cfgsect, name, suffix = m[0], m[1], m[2]
 
                 data = {}
                 if initsoln is not None:

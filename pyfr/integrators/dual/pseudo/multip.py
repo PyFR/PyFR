@@ -77,7 +77,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 for s in cfg.sections():
                     if (m := re.match(f'solver-(.*)-mg-p{l}$', s)):
-                        mcfg.rename_section(s, f'solver-{m.group(1)}')
+                        mcfg.rename_section(s, f'solver-{m[1]}')
 
             # A class that bypasses pseudo-controller methods within a cycle
             class lpsint(*bases):

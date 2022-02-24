@@ -54,8 +54,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
             m = re.match(r'([a-zA-Z0-9\-~+]+)-n(\d+)'
                          r'(?:-d(\d+))?(?:-([pstu]+))?\.txt$', path)
             if m:
-                yield (path, m.group(1), int(m.group(2)),
-                       int(m.group(3) or -1), set(m.group(4) or ''))
+                yield (path, m[1], int(m[2]), int(m[3] or -1), set(m[4] or ''))
 
     def __init__(self, name=None, npts=None, qdeg=None, flags=None):
         if not npts and not qdeg:

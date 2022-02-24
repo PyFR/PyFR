@@ -23,16 +23,16 @@ def register_tabulated_pseudo_steppers():
     for path in resource_listdir('pyfr.integrators', 'schemes'):
         m = re.match(r'([a-zA-Z0-9\-~+]+)-s(\d+)-p(\d+)'
                      r'(?:-sp(\d+))?(?:-([e]+))?\.txt', path)
-        name = m.group(1)
+        name = m[1]
 
         attrs = {'pseudo_stepper_name': name, 'path': path}
-        attrs['pseudo_stepper_nregs'] = int(m.group(2))
-        attrs['pseudo_stepper_order'] = int(m.group(3))
-        attrs['pseudo_stepper_has_lerrest'] = bool(m.group(5))
+        attrs['pseudo_stepper_nregs'] = int(m[2])
+        attrs['pseudo_stepper_order'] = int(m[3])
+        attrs['pseudo_stepper_has_lerrest'] = bool(m[5])
 
-        if m.group(4):
-            attrs['pseudo_stepper_porder'] = int(m.group(4))
-            name += m.group(4)
+        if m[4]:
+            attrs['pseudo_stepper_porder'] = int(m[4])
+            name += m[4]
 
         schemes.append(type(name, (DualDenseRKPseudoStepper,), attrs))
 
@@ -68,7 +68,7 @@ def get_pseudo_integrator(backend, systemcls, rallocs, mesh,
 
         # Determine the integrator name
         name = '_'.join(['dual', cn, pn, 'pseudointegrator'])
-        name = re.sub('(?:^|_|-)([a-z])', lambda m: m.group(1).upper(), name)
+        name = re.sub('(?:^|_|-)([a-z])', lambda m: m[1].upper(), name)
 
         pseudointegrator = type(name, (cc, pc), dict(name=name))
 
