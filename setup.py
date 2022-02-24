@@ -98,11 +98,6 @@ package_data = {
     'pyfr.tests': ['*.npz']
 }
 
-# Additional data
-data_files = [
-    ('', ['pyfr/__main__.py'])
-]
-
 # Hard dependencies
 install_requires = [
     'gimmik ~= 2.2',
@@ -147,9 +142,7 @@ setup(name='pyfr',
       keywords='Math',
       packages=['pyfr'] + modules + tests,
       package_data=package_data,
-      data_files=data_files,
       entry_points={'console_scripts': console_scripts},
-      python_requires='>=3.8',
+      python_requires='>=3.9',
       install_requires=install_requires,
-      classifiers=classifiers
-)
+      classifiers=classifiers)
