@@ -687,7 +687,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 if self.pacoustsrc:
                     self.pacoustsrc.update_usoln_onestep(self._mpisnd_fplocs, srctime, mpi_sndusoln)
                 else:
-                    self.update_usoln_onestep(intg, self._mpisnd_m0, self._mpi_snd_eidxs, mpi_sndusoln)
+                    self._update_usoln_onestep(intg, self._mpisnd_m0, self._mpi_snd_eidxs, mpi_sndusoln)
             #send/recv in an alltoall for averaging over mpi interfaces
             mpi_rhsusoln, allreq = Alltoallv_data_arr(self.fwh_edgcomm, self.fwh_edgwrldranks, 
                                                    mpi_sndusoln.T, self.fwhnvars, self._mpi_sndcnts, 
@@ -1565,7 +1565,6 @@ class FwhFreqDomainSolver(FwhSolverBase):
             pfft *= self.windscale
 
         return pfft
-
 
     def __call__(self, *args, **kwds):
         pass
