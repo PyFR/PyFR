@@ -176,6 +176,8 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 self.uinf[pvvar] = npeval(self.cfg.getexpr(cfgsect, pvvar), self.constvars)
         if self._artificial_compress:
             self.uinf['rho'] = self.uinf['p']/self.constvars['ac-zeta']
+        else:
+            self.uinf['rho'] /= self.constvars['gamma']
         self.uinf['c'] = np.sqrt(self.uinf['p']/self.uinf['rho'])
         self.uinf['Mach'] = self.uinf['u']/self.uinf['c']
         self.fwhnvars = len(self.uinf['u'])+2
@@ -337,7 +339,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             gamma = self.constvars['gamma']
             self.pacoustsrc = MonopoleSrc('smonopole',srclocs,srcuinf,srcamp,srcfreq,self.fwhsolver.ntsub,nperiods,gamma)
             if self.active_fwhrank and self.fwhrank == 0:
-                co = np.sqrt(gamma*srcuinf[-1]/srcuinf[0]) 
+                co = np.sqrt(srcuinf[-1]/srcuinf[0]) 
                 print(f'src locs {srclocs}')
                 print(f'co {co}, rho_o {srcuinf[0]}, po {srcuinf[-1]}')
                 print(f'Minf {srcuinf[1:4]/co}')
@@ -352,7 +354,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
     def __call__(self, intg):
         #bail out if did not reach tstart
-        if intg.tcurr < self.tstart:
+        if intg.tcurr < (self.tstart - self.tol*self.fwhsolver.dtsub):
             return
 
         #register globally that we are in the window length
@@ -1318,7 +1320,7 @@ class FwhSolverBase(object):
             self.averaging= False
             self.ntoverlap = ntsub    
         self.stepcnt = 0
-        self.samplesteps = self.dtsub/self.dtsim
+        self.samplesteps = int(self.dtsub/self.dtsim)
         
         #(5) window function params
         #since we are using windows for spectral analysis we do not use the last data entry
@@ -1329,6 +1331,7 @@ class FwhSolverBase(object):
         print(f'\n--------------------------------------')
         print(f'       Adjusted FFT parameters ')
         print(f'--------------------------------------')
+        print(f'sample steps: {self.samplesteps}')
         print(f'sample freq : {1./self.dtsub} Hz')
         print(f'delta freq  : {1./self.ltsub} Hz')
         print(f'dt window   : {self.dtsub} sec')
@@ -1617,7 +1620,7 @@ class MonopoleSrc(PointAcousticSrc):
         return self.freq,pfft
 
     def update_usoln_onestep(self,xyz_ob,tcurr,usoln,uout=True):
-        co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
+        co = np.sqrt(self.pinf/self.rhoinf)
         Mo = self.uinf/co
         kwv = self.omega/co
         xyz_src = self.srclocs
