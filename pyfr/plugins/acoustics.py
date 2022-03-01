@@ -354,19 +354,14 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
     def __call__(self, intg):
         #bail out if did not reach tstart
-        if intg.tcurr < (self.tstart - self.tol*self.fwhsolver.dtsub):
+        if intg.tcurr < self.tstart - self.tol:
             return
 
-        #register globally that we are in the window length
+        #register globally that we have started the fwh computations
         self._started = True
         
         # if not an active rank return
         if (not self.active_fwhrank) and (not self.active_fwhedgrank):
-            return
-        
-        # If we are not supposed to start fwh yet then return or sampling is not due
-        dosample = self.fwhsolver.check_sample(intg.nacptsteps) #intg.nacptsteps % self.samplesteps == 0 
-        if not dosample:
             return
 
         self._prepare_data(intg)
@@ -669,10 +664,18 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         # Already done for this step
         if self._last_prepared >= intg.tcurr:
             return
+
+        # If sampling is not due, return
+        dosample = intg.nacptsteps % self.samplesteps == 0 
+        if not dosample:
+            return
         
-        # sample solution if it is due
-        windowtime = intg.tcurr - self.tstart - (self.fwhsolver.avgcnt-1) * self.fwhsolver.shift * self.fwhsolver.ltsub
-        srctime = intg.tcurr - self.tstart
+        #current time according to fwh
+        tcurrfwh = np.abs(intg.tcurr - self.tstart)
+        #total time for completed windows
+        ttotwind = (self.avgcnt - 1)*self.fwhsolver.shift*self.fwhsolver.ltsub
+        #local time within one window
+        self.tlocwind = np.abs(tcurrfwh - ttotwind) 
         step = self.fwhsolver.stepcnt
         intqf = self.nintqpts
         mpiq0, mpiqf = intqf, intqf + self.nmpiqpts
@@ -687,7 +690,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             #mpi interfaces with outside elements (rhs)
             if self.nmpisndqpts:
                 if self.pacoustsrc:
-                    self.pacoustsrc.update_usoln_onestep(self._mpisnd_fplocs, srctime, mpi_sndusoln)
+                    self.pacoustsrc.update_usoln_onestep(self._mpisnd_fplocs, tcurrfwh, mpi_sndusoln)
                 else:
                     self._update_usoln_onestep(intg, self._mpisnd_m0, self._mpi_snd_eidxs, mpi_sndusoln)
             #send/recv in an alltoall for averaging over mpi interfaces
@@ -699,7 +702,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             #mpi interfaces with inside elements (lhs)
             if self.nmpiqpts:
                 if self.pacoustsrc:
-                    self.pacoustsrc.update_usoln_onestep(self._mpi_fplocs, srctime, mpiusoln)
+                    self.pacoustsrc.update_usoln_onestep(self._mpi_fplocs, tcurrfwh, mpiusoln)
                 else:
                     self._update_usoln_onestep(intg, self._mpi_m0, self._mpi_eidxs, mpiusoln)
 
@@ -707,12 +710,12 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             #interior interfaces qpts
             if self.nintqpts:
                 #inside elements (lhs)
-                self.pacoustsrc.update_usoln_onestep(self._int_fplocs, srctime, intusoln)
+                self.pacoustsrc.update_usoln_onestep(self._int_fplocs, tcurrfwh, intusoln)
                 #outside elements (rhs)
-                self.pacoustsrc.update_usoln_onestep(self._intrhs_fplocs, srctime, int_rhsusoln)
+                self.pacoustsrc.update_usoln_onestep(self._intrhs_fplocs, tcurrfwh, int_rhsusoln)
             #boundary interfaces
             if self.nbndqpts:
-                self.pacoustsrc.update_usoln_onestep(self._bnd_fplocs, srctime, bndusoln)
+                self.pacoustsrc.update_usoln_onestep(self._bnd_fplocs, tcurrfwh, bndusoln)
         else:
             #interior interfaces qpts
             if self.nintqpts:
@@ -738,10 +741,10 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         
         #Debug
         if self.active_fwhrank and self.fwhrank == 0:
-            print(f'FWH sampled, wstep {self.fwhsolver.stepcnt-1}, wtime {np.round(windowtime,5)}, srctime {np.round(srctime,5)}, currtime {np.round(intg.tcurr,5)}', flush=True)
+            print(f'FWH sampled, wstep {self.fwhsolver.stepcnt-1}, wtime {np.round(self.tlocwind,5)}, tcurrfwh {np.round(tcurrfwh,5)}, currtime {np.round(intg.tcurr,5)}', flush=True)
             
         # compute fwh solution if due
-        docompute = self.fwhsolver.check_compute() 
+        docompute = self.fwhsolver.ltsub - self.fwhsolver.dtsub - self.tlocwind <= self.tol 
         if docompute:
             if self.active_fwhrank:
                 self.fwhsolver.compute_fwh_solution(self.usoln)
