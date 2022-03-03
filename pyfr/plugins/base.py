@@ -29,7 +29,7 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     return outf
 
 
-class BasePlugin(object):
+class BasePlugin:
     name = None
     systems = None
     formulations = None
@@ -63,7 +63,7 @@ class BasePlugin(object):
         return {}
 
 
-class PostactionMixin(object):
+class PostactionMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -105,7 +105,7 @@ class PostactionMixin(object):
                 self.postactaid = prefork.call_async(cmdline)
 
 
-class RegionMixin(object):
+class RegionMixin:
     def __init__(self, intg, *args, **kwargs):
         super().__init__(intg, *args, **kwargs)
 

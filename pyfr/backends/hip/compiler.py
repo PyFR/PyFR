@@ -46,7 +46,7 @@ class HIPRTCWrappers(LibWrapper):
     ]
 
 
-class HIPRTC(object):
+class HIPRTC:
     def __init__(self):
         self.lib = HIPRTCWrappers()
 
@@ -92,7 +92,7 @@ class HIPRTC(object):
         return code.raw
 
 
-class SourceModule(object):
+class SourceModule:
     def __init__(self, backend, src):
         # Prepare the source code
         src = f'extern "C"\n{{\n{src}\n}}'

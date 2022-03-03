@@ -7,7 +7,7 @@ import numpy as np
 import pyfr.backends.base as base
 
 
-class _HIPMatrixCommon(object):
+class _HIPMatrixCommon:
     @cached_property
     def _as_parameter_(self):
         return self.data
@@ -68,7 +68,7 @@ class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
 
         # If MPI is HIP-aware then simply annotate our device buffer
         if backend.mpitype == 'hip-aware':
-            class HostData(object):
+            class HostData:
                 __array_interface__ = {
                     'version': 3,
                     'typestr': np.dtype(self.dtype).str,

@@ -11,7 +11,7 @@ def _get_inter_objs(interside, getter, elemap):
     return [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
 
 
-class BaseInters(object):
+class BaseInters:
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
         self.elemap = elemap

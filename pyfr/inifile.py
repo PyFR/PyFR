@@ -15,7 +15,7 @@ def _ensure_float(m):
 _sentinel = object()
 
 
-class Inifile(object):
+class Inifile:
     def __init__(self, inistr=None):
         self._cp = cp = ConfigParser(inline_comment_prefixes=[';'])
 

@@ -706,7 +706,7 @@ class VTKWriter(BaseWriter):
             self._write_darray(arr.T, vtuf, self.dtype)
 
 
-class BaseShapeSubDiv(object):
+class BaseShapeSubDiv:
     vtk_types = dict(tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
     vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
 

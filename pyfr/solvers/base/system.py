@@ -13,7 +13,7 @@ from pyfr.shapes import BaseShape
 from pyfr.util import memoize, subclasses
 
 
-class BaseSystem(object):
+class BaseSystem:
     elementscls = None
     intinterscls = None
     mpiinterscls = None

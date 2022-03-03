@@ -14,7 +14,7 @@ def get_rank_allocation(mesh, cfg):
     return subclass_where(BaseRankAllocator, name=name)(mesh, cfg)
 
 
-class BaseRankAllocator(object):
+class BaseRankAllocator:
     name = None
 
     def __init__(self, mesh, cfg):

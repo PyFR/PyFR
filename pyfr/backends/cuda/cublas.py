@@ -56,7 +56,7 @@ class CUBLASWrappers(LibWrapper):
         return name[:-3]
 
 
-class CUDACUBLASKernels(object):
+class CUDACUBLASKernels:
     def __init__(self, backend):
         # Load and wrap CUBLAS
         self.lib = CUBLASWrappers()

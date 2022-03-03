@@ -10,7 +10,7 @@ from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import memoize
 
 
-class BaseElements(object):
+class BaseElements:
     privarmap = None
     convarmap = None
 

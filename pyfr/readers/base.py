@@ -12,7 +12,7 @@ from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
 
-class BaseReader(object):
+class BaseReader:
     def __init__(self):
         pass
 
@@ -28,7 +28,7 @@ class BaseReader(object):
         return mesh
 
 
-class NodalMeshAssembler(object):
+class NodalMeshAssembler:
     # Dimensionality of each element type
     _petype_ndim = {'tri': 2, 'quad': 2,
                     'tet': 3, 'hex': 3, 'pri': 3, 'pyr': 3}

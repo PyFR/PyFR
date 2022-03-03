@@ -19,7 +19,7 @@ def write_pyfrms(path, data):
             f[p].attrs[q] = data[p, q]
 
 
-class NativeWriter(object):
+class NativeWriter:
     def __init__(self, intg, basedir, basename, prefix, *, extn='.pyfrs'):
         # Base output directory and file name
         self.basedir = basedir

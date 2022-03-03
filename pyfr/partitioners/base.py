@@ -13,7 +13,7 @@ from pyfr.inifile import Inifile
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
-class BasePartitioner(object):
+class BasePartitioner:
     def __init__(self, partwts, elewts, nsubeles=64, opts={}):
         self.partwts = partwts
         self.elewts = elewts

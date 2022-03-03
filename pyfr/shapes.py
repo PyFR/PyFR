@@ -22,7 +22,7 @@ def _proj_l2(qrule, basis):
     return basis.vdm.T @ (qrule.wts*basis.ortho_basis_at(qrule.pts))
 
 
-class BaseShape(object):
+class BaseShape:
     name = None
     ndims = -1
 
@@ -317,7 +317,7 @@ class BaseShape(object):
         return len(self.mpts)
 
 
-class TensorProdShape(object):
+class TensorProdShape:
     @classmethod
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)

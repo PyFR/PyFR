@@ -39,7 +39,7 @@ class CLBlastWrappers(LibWrapper):
     ]
 
 
-class OpenCLCLBlastKernels(object):
+class OpenCLCLBlastKernels:
     def __init__(self, backend):
         # Load and wrap CLBlast
         self._wrappers = CLBlastWrappers()

@@ -147,7 +147,7 @@ class OpenCLWrappers(LibWrapper):
         return newfn
 
 
-class _OpenCLBase(object):
+class _OpenCLBase:
     _destroyfn = None
 
     def __init__(self, lib, ptr):
@@ -417,7 +417,7 @@ class OpenCLKernel(_OpenCLBase):
         return OpenCLEvent(self.lib, evt_ptr) if ret_evt else None
 
 
-class OpenCL(object):
+class OpenCL:
     def __init__(self):
         self.ctx = None
         self.lib = OpenCLWrappers()

@@ -7,7 +7,7 @@ import types
 from pyfr.util import memoize
 
 
-class Kernel(object):
+class Kernel:
     def __init__(self, mats=[], views=[], misc=[]):
         self.mats = mats
         self.views = views
@@ -34,7 +34,7 @@ class MetaKernel(Kernel):
             k.run(queue, *args, **kwargs)
 
 
-class BaseKernelProvider(object):
+class BaseKernelProvider:
     def __init__(self, backend):
         self.backend = backend
 

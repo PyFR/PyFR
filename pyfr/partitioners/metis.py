@@ -16,7 +16,7 @@ class METISErrorInput(METISError): pass
 class METISErrorMemory(METISError): pass
 
 
-class METISWrappers(object):
+class METISWrappers:
     # Possible return codes
     _statuses = {
         -2: METISErrorInput,

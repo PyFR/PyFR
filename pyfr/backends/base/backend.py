@@ -23,7 +23,7 @@ def recordmat(fn):
     return newfn
 
 
-class BaseBackend(object):
+class BaseBackend:
     name = None
 
     def __init__(self, cfg):

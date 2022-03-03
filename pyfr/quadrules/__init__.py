@@ -6,7 +6,7 @@ import re
 import numpy as np
 
 
-class BaseTabulatedQuadRule(object):
+class BaseTabulatedQuadRule:
     def __init__(self, rule, flags=None):
         pts = []
         wts = []

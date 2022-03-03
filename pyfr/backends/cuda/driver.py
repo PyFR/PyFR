@@ -92,7 +92,7 @@ class CUDAWrappers(LibWrapper):
         return name[:-3] if name.endswith('_v2') else name
 
 
-class _CUDABase(object):
+class _CUDABase:
     _destroyfn = None
 
     def __init__(self, cuda, ptr):
@@ -201,7 +201,7 @@ class CUDAFunction(_CUDABase):
                                      self._karg_ptrs, None)
 
 
-class CUDA(object):
+class CUDA:
     def __init__(self):
         self.lib = CUDAWrappers()
         self.ctx = c_void_p()

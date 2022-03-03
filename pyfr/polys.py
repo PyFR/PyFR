@@ -44,7 +44,7 @@ def get_polybasis(name, order, pts=[]):
     return subclass_where(BasePolyBasis, name=name)(order, pts)
 
 
-class BasePolyBasis(object):
+class BasePolyBasis:
     name = None
 
     def __init__(self, order, pts):

@@ -5,7 +5,7 @@ from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where
 
 
-class BaseWriter(object):
+class BaseWriter:
     def __init__(self, args):
         from pyfr.solvers.base import BaseSystem
 

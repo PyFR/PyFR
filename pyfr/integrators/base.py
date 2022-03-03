@@ -14,7 +14,7 @@ from pyfr.plugins import get_plugin
 from pyfr.util import memoize
 
 
-class BaseIntegrator(object):
+class BaseIntegrator:
     def __init__(self, backend, rallocs, mesh, initsoln, cfg):
         self.backend = backend
         self.rallocs = rallocs
@@ -159,7 +159,7 @@ class BaseIntegrator(object):
             sys.exit(1)
 
 
-class BaseCommon(object):
+class BaseCommon:
     def _get_gndofs(self):
         comm, rank, root = get_comm_rank_root()
 
