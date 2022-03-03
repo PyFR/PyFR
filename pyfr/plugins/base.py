@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 
+from ast import literal_eval
 from collections import defaultdict
 import os
+import re
 import shlex
 
 import numpy as np
 from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root
+from pyfr.regions import get_region
 
 
 def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
@@ -115,10 +118,13 @@ class RegionMixin:
         # All elements
         if region == '*':
             self._prepare_region_data_all(intg)
-        # All elements inside a box
-        elif '(' in region or '[' in region:
-            box = self.cfg.getliteral(self.cfgsect, 'region')
-            self._prepare_region_data_box(intg, *box)
+        # All elements inside a paramaterised shape
+        elif '(' in region:
+            m = re.match(r'(\w+)\((.*)\)$', region)
+            shape = get_region(m[1], *literal_eval(m[2]))
+
+            eset = shape.interior_eles(intg.system.mesh, intg.rallocs)
+            self._prepare_region_data_eset(intg, eset)
         # All elements on a boundary
         else:
             self._prepare_region_data_bcs(intg, region)
@@ -127,23 +133,6 @@ class RegionMixin:
         self._ele_regions = [(i, etype, slice(None))
                              for i, etype in enumerate(intg.system.ele_types)]
         self._ele_region_data = {}
-
-    def _prepare_region_data_box(self, intg, x0, x1):
-        eset = {}
-
-        for etype in intg.system.ele_types:
-            pts = intg.system.mesh[f'spt_{etype}_p{intg.rallocs.prank}']
-            pts = np.moveaxis(pts, 2, 0)
-
-            # Determine which points are inside the box
-            inside = np.ones(pts.shape[1:], dtype=np.bool)
-            for l, p, u in zip(x0, pts, x1):
-                inside &= (l <= p) & (p <= u)
-
-            if np.sum(inside):
-                eset[etype] = np.any(inside, axis=0).nonzero()[0]
-
-        self._prepare_region_data_eset(intg, eset)
 
     def _prepare_region_data_bcs(self, intg, bcname):
         comm, rank, root = get_comm_rank_root()
