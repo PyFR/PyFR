@@ -47,7 +47,7 @@ class NVRTCWrappers(LibWrapper):
     ]
 
 
-class NVRTC(object):
+class NVRTC:
     def __init__(self):
         self.lib = NVRTCWrappers()
 
@@ -93,7 +93,7 @@ class NVRTC(object):
         return ptx.raw
 
 
-class SourceModule(object):
+class SourceModule:
     def __init__(self, backend, src):
         # Prepare the source code
         src = f'extern "C"\n{{\n{src}\n}}'

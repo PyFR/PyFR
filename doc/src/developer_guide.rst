@@ -150,27 +150,27 @@ advances a `System`_ by a single time-step. There are eight types of
         :private-members:
 
 .. toggle-header::
-    :header: *DualBDF2Stepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF2Stepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *DualBDF3Stepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBDF3Stepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
     :header: *DualBackwardEulerStepper* **Click to show**
 
     .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBackwardEulerStepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *SDIRK33Stepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.phys.steppers.SDIRK33Stepper
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
+.. toggle-header::
+    :header: *SDIRK43Stepper* **Click to show**
+
+    .. autoclass:: pyfr.integrators.dual.phys.steppers.SDIRK43Stepper
         :members:
         :undoc-members:
         :inherited-members:

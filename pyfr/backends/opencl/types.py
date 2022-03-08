@@ -7,7 +7,7 @@ import numpy as np
 import pyfr.backends.base as base
 
 
-class _OpenCLMatrixCommon(object):
+class _OpenCLMatrixCommon:
     @cached_property
     def _as_parameter_(self):
         return int(self.data)

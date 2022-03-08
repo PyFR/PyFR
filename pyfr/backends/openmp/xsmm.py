@@ -105,7 +105,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         execptr = cast(self._execfn, c_void_p).value
 
         # Render our parallel wrapper kernel
-        src = self.backend.lookup.get_template('batch-gemm').render(lib='xsmm')
+        src = self.backend.lookup.get_template('batch-gemm').render()
 
         # Build
         batch_gemm = self._build_kernel('batch_gemm', src, 'PPiPiPi')

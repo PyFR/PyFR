@@ -162,7 +162,7 @@ OpenMP Backend
 The OpenMP backend targets multi-core CPUs. The backend requires:
 
 1. GCC >= 4.9 or another C compiler with OpenMP support
-2. Optionally `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
+2. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
    14b6cea61376653b2712e3eefa72b13c5e76e421 compiled as a shared
    library (STATIC=0) with BLAS=0 and CODE_BUF_MAXSIZE=262144
 

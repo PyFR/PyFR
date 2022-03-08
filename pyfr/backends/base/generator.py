@@ -7,7 +7,7 @@ import numpy as np
 from pyfr.util import match_paired_paren
 
 
-class Arg(object):
+class Arg:
     def __init__(self, name, spec, body):
         self.name = name
 
@@ -56,7 +56,7 @@ class Arg(object):
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
 
-class BaseKernelGenerator(object):
+class BaseKernelGenerator:
     def __init__(self, name, ndim, args, body, fpdtype):
         self.name = name
         self.ndim = ndim

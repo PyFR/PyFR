@@ -26,8 +26,8 @@ class OpenMPBackend(BaseBackend):
         # C source compiler
         self.compiler = OpenMPCompiler(cfg)
 
-        from pyfr.backends.openmp import (blasext, gimmik, packing,
-                                          provider, types, xsmm)
+        from pyfr.backends.openmp import (blasext, packing, provider, types,
+                                          xsmm)
 
         # Register our data types
         self.base_matrix_cls = types.OpenMPMatrixBase
@@ -42,16 +42,9 @@ class OpenMPBackend(BaseBackend):
         # Instantiate mandatory kernel provider classes
         kprovcls = [provider.OpenMPPointwiseKernelProvider,
                     blasext.OpenMPBlasExtKernels,
-                    packing.OpenMPPackingKernels]
+                    packing.OpenMPPackingKernels,
+                    xsmm.OpenMPXSMMKernels]
         self._providers = [k(self) for k in kprovcls]
-
-        # Instantiate optional kernel provider classes
-        try:
-            self._providers.append(xsmm.OpenMPXSMMKernels(self))
-        except OSError:
-            pass
-
-        self._providers.append(gimmik.OpenMPGiMMiKKernels(self))
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
