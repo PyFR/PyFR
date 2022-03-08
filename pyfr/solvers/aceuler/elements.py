@@ -3,7 +3,7 @@
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
-class BaseACFluidElements(object):
+class BaseACFluidElements:
     formulations = ['dual']
 
     privarmap = {2: ['p', 'u', 'v'],

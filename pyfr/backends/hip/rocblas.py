@@ -47,7 +47,7 @@ class RocBLASWrappers(LibWrapper):
     ]
 
 
-class HIPRocBLASKernels(object):
+class HIPRocBLASKernels:
     def __init__(self, backend):
         # Load and wrap rocBLAS
         self._wrappers = RocBLASWrappers()

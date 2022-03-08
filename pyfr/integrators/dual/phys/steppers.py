@@ -6,46 +6,7 @@ from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
 class BaseDualStepper(BaseDualIntegrator):
-
-    def step(self, t, dt):
-        pass
-
-    def _finalize_step(self):
-        pass
-
-
-class BaseBDFStepper(BaseDualStepper):
-    nstages = 1
-    stage_nregs = 0
-
-    def step(self, t, dt):
-        self.pseudointegrator.init_stage(0, self.stepper_coeffs(dt))
-        self.pseudointegrator.pseudo_advance(t + dt)
-
-        self._finalize_step()
-
-    @property
-    def stepper_nregs(self):
-        return len(self.stepper_static_coeffs) - 1
-
-    def _finalize_step(self):
-        self.pseudointegrator.discard_oldest_source()
-        self.pseudointegrator.store_current_soln()
-
-    def stepper_coeffs(self, dt):
-        return [1] + [sc/dt for sc in self.stepper_static_coeffs]
-
-
-class DualBDF2Stepper(BaseBDFStepper):
-    stepper_name = 'bdf2'
-    stepper_order = 2
-    stepper_static_coeffs = [-1.5, 2.0, -0.5]
-
-
-class DualBDF3Stepper(BaseBDFStepper):
-    stepper_name = 'bdf3'
-    stepper_order = 3
-    stepper_static_coeffs = [-11.0/6.0, 3.0, -1.5, 1.0/3.0]
+    pass
 
 
 class BaseDIRKStepper(BaseDualStepper):
@@ -64,17 +25,11 @@ class BaseDIRKStepper(BaseDualStepper):
         return self.nstages
 
     def step(self, t, dt):
-        scoeffs = [self.stepper_coeffs(s, dt)
-                   for s in range(self.nstages)]
-
-        for s, (sc, tc) in enumerate(zip(scoeffs, self.c)):
-            self.pseudointegrator.init_stage(s, sc)
+        for s, (sc, tc) in enumerate(zip(self.a, self.c)):
+            self.pseudointegrator.init_stage(s, sc, dt)
             self.pseudointegrator.pseudo_advance(t + dt*tc)
 
         self._finalize_step()
-
-    def stepper_coeffs(self, s, dt):
-        return [self.a[s][s], -1/dt, 1/dt] + self.a[s][:s]
 
     def _finalize_step(self):
         if not self.fsal:

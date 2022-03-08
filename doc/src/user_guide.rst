@@ -197,11 +197,6 @@ Parameterises the OpenMP backend with
 
     *int*
 
-4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
-
-    *int*
-
 Example::
 
     [backend-openmp]
@@ -376,7 +371,7 @@ Parameterises the time-integration scheme used by the solver with
 
         - ``scheme`` --- time-integration scheme
 
-           ``backward-euler`` | ``bdf2`` | ``bdf3`` | ``sdirk33`` | ``sdirk43``
+           ``backward-euler`` | ``sdirk33`` | ``sdirk43``
 
         - ``pseudo-scheme`` --- pseudo time-integration scheme
 

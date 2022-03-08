@@ -5,7 +5,7 @@ from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where
 
 
-class BaseWriter(object):
+class BaseWriter:
     def __init__(self, args):
         from pyfr.solvers.base import BaseSystem
 
@@ -17,8 +17,8 @@ class BaseWriter(object):
 
         # Check solution and mesh are compatible
         if self.mesh['mesh_uuid'] != self.soln['mesh_uuid']:
-            raise RuntimeError('Solution "%s" was not computed on mesh "%s"' %
-                               (args.solnf, args.meshf))
+            raise RuntimeError(f'Solution "{args.solnf}" was not computed on '
+                               f'mesh "{args.meshf}"')
 
         # Load the configuration and stats files
         self.cfg = Inifile(self.soln['config'])

@@ -16,7 +16,7 @@ from pyfr.ctypesutil import platform_libname
 from pyfr.util import digest, mv, rm
 
 
-class OpenMPCompiler(object):
+class OpenMPCompiler:
     _dir_seq = it.count()
 
     def __init__(self, cfg):
@@ -133,7 +133,7 @@ class OpenMPCompiler(object):
                 return CDLL(clpath)
 
 
-class OpenMPCompilerModule(object):
+class OpenMPCompilerModule:
     def __init__(self, mod):
         self.mod = mod
 

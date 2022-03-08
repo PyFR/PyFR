@@ -41,9 +41,11 @@ class BaseDualPseudoIntegrator(BaseCommon):
         # Amount of temp storage required by physical stepper
         self.stepper_nregs = stepper_nregs
 
+        source_nregs = 1
+
         # Determine the amount of temp storage required in total
         self.nregs = (self.pseudo_stepper_nregs + self.stepper_nregs +
-                      self.stage_nregs + 1 + self.aux_nregs)
+                      self.stage_nregs + source_nregs + self.aux_nregs)
 
         # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
@@ -100,24 +102,17 @@ class BaseDualPseudoIntegrator(BaseCommon):
         psnregs = self.pseudo_stepper_nregs
         return self._regidx[psnregs:psnregs + self.stepper_nregs]
 
-    def init_stage(self, currstg, stepper_coeffs):
+    def init_stage(self, currstg, stepper_coeffs, dt):
         self.currstg = currstg
         self.stepper_coeffs = stepper_coeffs
+        self._dt = dt
 
-        svals = [0] + self.stepper_coeffs[2:]
+        svals = [0, 1/self._dt] + self.stepper_coeffs[:-1]
         sregs = ([self._source_regidx] + self._stepper_regidx
                  + self._stage_regidx[:self.currstg])
 
         # Accumulate physical stepper sources into a single register
         self._addv(svals, sregs, subdims=self._subdims)
-
-    def discard_oldest_source(self):
-        psnregs = self.pseudo_stepper_nregs
-        snregs = self.stepper_nregs
-
-        # Rotate the source registers to the right by one
-        self._regidx[psnregs:psnregs + snregs] = (self._stepper_regidx[-1:]
-                                                  + self._stepper_regidx[:-1])
 
     def store_current_soln(self):
         # Copy the current soln into the first source register

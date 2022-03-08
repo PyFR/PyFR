@@ -67,7 +67,7 @@ def _locals(body):
     decls = it.chain.from_iterable(d.split(',') for d in decls)
 
     # Extract the variable names
-    lvars = [re.match(r'\s*(\w+)', v).group(1) for v in decls]
+    lvars = [re.match(r'\s*(\w+)', v)[1] for v in decls]
 
     # Prune invalid names
     return [lv for lv in lvars if lv != 'if']

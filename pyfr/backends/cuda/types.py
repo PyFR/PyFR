@@ -7,7 +7,7 @@ import numpy as np
 import pyfr.backends.base as base
 
 
-class _CUDAMatrixCommon(object):
+class _CUDAMatrixCommon:
     @cached_property
     def _as_parameter_(self):
         return self.data
@@ -68,7 +68,7 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
 
         # If MPI is CUDA-aware then simply annotate our device buffer
         if backend.mpitype == 'cuda-aware':
-            class HostData(object):
+            class HostData:
                 __array_interface__ = {
                     'version': 3,
                     'typestr': np.dtype(self.dtype).str,

@@ -19,7 +19,7 @@ def write_pyfrms(path, data):
             f[p].attrs[q] = data[p, q]
 
 
-class NativeWriter(object):
+class NativeWriter:
     def __init__(self, intg, basedir, basename, prefix, *, extn='.pyfrs'):
         # Base output directory and file name
         self.basedir = basedir
@@ -74,7 +74,7 @@ class NativeWriter(object):
 
             for f in os.listdir(self.basedir):
                 if (m := re.match(bn, f)):
-                    nout = max(nout, int(m.group(1)) + 1)
+                    nout = max(nout, int(m[1]) + 1)
 
         return nout
 

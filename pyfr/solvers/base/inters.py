@@ -11,7 +11,7 @@ def _get_inter_objs(interside, getter, elemap):
     return [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
 
 
-class BaseInters(object):
+class BaseInters:
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
         self.elemap = elemap
@@ -79,7 +79,7 @@ class BaseInters(object):
     def _vect_view(self, inter, meth):
         return self._view(inter, meth, (self.ndims, self.nvars))
 
-    def _xchg_view(self, inter, meth, vshape=tuple()):
+    def _xchg_view(self, inter, meth, vshape=()):
         vm = _get_inter_objs(inter, meth, self.elemap)
         vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
         return self._be.xchg_view(*vm, vshape=vshape)

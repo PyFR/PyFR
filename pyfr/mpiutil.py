@@ -13,7 +13,7 @@ def register_finalize_handler():
     mpi4py.rc.finalize = False
 
     # Intercept any uncaught exceptions
-    class ExceptHook(object):
+    class ExceptHook:
         def __init__(self):
             self.exception = None
 
