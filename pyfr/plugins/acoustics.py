@@ -1504,7 +1504,7 @@ class FwhSolverBase(object):
     #-FFT utilities
     @staticmethod
     def rfft(udata_):
-        dsize = np.size(udata_)
+        dsize = udata_.shape[-1] #np.size(udata_)
         # freqsize: size of half the spectra with positive frequencies
         freqsize = int(dsize/2) if dsize%2 == 0 else int(dsize-1)/2
         ufft = np.fft.rfft(udata_)/freqsize 
@@ -1673,10 +1673,11 @@ class FwhFreqDomainSolver(FwhSolverBase):
         Qfft = np.empty((self.nfreq, self.nqpts), dtype=np.complex64)
         Ffft = np.empty((self.nfreq, self.nqpts, self.ndims), 
                                                 dtype=np.complex64)
-        for iq in range(0, self.nqpts):
-            Qfft[:, iq] = self.rfft(Q[:, iq])
-            for jd in range(0, self.ndims):
-                Ffft[:, iq, jd]  = self.rfft(F[:, iq, jd])
+        #F shape, nt, nqpts, ndim
+        F = np.swapaxes(F, 0, 2).reshape(-1, self.ntsub)
+        Qfft = self.rfft(Q.T).T
+        ft0 = self.rfft(F).reshape(self.ndims, self.nqpts, -1)
+        Ffft = np.swapaxes(ft0, 0, 2)
 
         #compute pfft, i=nob, j=nfreq, k=nqpts, p shape i,j,k 
         kwvR = np.einsum('ik,j->jik', mR, kwv)
@@ -1771,8 +1772,8 @@ class MonopoleSrc(PointAcousticSrc):
         
         usoln[-1] = p + self.pinf
         usoln[0] = p/(co*co) + self.rhoinf  #rho
-        usoln[1:self.ndims+1] = np.array([ui + uo 
-                                for ui, uo in zip(np.real(dphy),self.uinf)]) #u
+        usoln[1:self.ndims+1] = np.array([ui + uo for ui, uo in
+                                     zip(np.real(dphy), self.uinf)]) #u
         
         return usoln
 
