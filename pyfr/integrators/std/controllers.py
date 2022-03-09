@@ -73,7 +73,7 @@ class StdNoneController(BaseStdController):
         if t < self.tcurr:
             raise ValueError('Advance time is in the past')
 
-        while self.tcurr < t:
+        while t - self.tcurr >= self.dtmin:
             # Decide on the time step
             dt = max(min(t - self.tcurr, self._dt), self.dtmin)
 
@@ -168,7 +168,7 @@ class StdPIController(BaseStdController):
         expa = self._alpha / sord
         expb = self._beta / sord
 
-        while self.tcurr < t:
+        while t - self.tcurr >= self.dtmin:
             # Decide on the time step
             dt = max(min(t - self.tcurr, self._dt, self.dtmax), self.dtmin)
 
