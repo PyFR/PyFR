@@ -139,7 +139,11 @@ class FwhSolverPlugin(BasePlugin):
 
         self.ttol = intg.dtmin
 
-        self.DEBUG = self.cfg.getint(cfgsect,'debug', 0)
+        # Underlying elements class
+        self.elementscls = intg.system.elementscls
+        # Get the mesh and elements
+        elemap = intg.system.ele_map
+
         # Base output directory and file name
         self.basedir = basedir = self.cfg.getpath(self.cfgsect,
                                         'basedir', '.', abs=True)
@@ -213,20 +217,11 @@ class FwhSolverPlugin(BasePlugin):
             surftype = 'solid'
         self._prepare_surfmesh(intg, region_eset, surftype)
 
-        # Determine fwh active ranks lists
-        self.fwh_comm, self.fwh_edgcomm = self._build_fwh_mpi_comms(
-                self._eidxs, self._mpi_eidxs, self._mpi_snd_eidxs)   
-
         # Construct the fwh mesh writer
         self._writer = NativeWriter(intg, basedir, self.basename, 'soln')
         
         # write the fwh surface geometry file
         self._write_fwh_surface_geo(intg, self._surf_eset, self._eidxs)
-
-        # Underlying elements class
-        self.elementscls = intg.system.elementscls
-        # Get the mesh and elements
-        elemap = intg.system.ele_map
 
         # Extract FWH Surf Geometric Data
         #fpts, qpts_dA, norm_pnorms
@@ -239,11 +234,6 @@ class FwhSolverPlugin(BasePlugin):
                                                         self._mpi_snd_eidxs)
         bndqinfo, self._bnd_m0 = self._get_surfqinfo(elemap, 
                                                         self._bnd_eidxs)
-        scnts, rcnts, sndqidxs = self._prepare_mpiinters_sndrcv_info(elemap)
-        self._mpi_sndcnts  = scnts
-        self._mpi_rcvcnts  = rcnts
-        self._mpi_snd_qidxs = sndqidxs
-
         self._int_fplocs = intqinfo[0]
         self._intrhs_fplocs = rhsqinfo[0]
         self._mpi_fplocs = rcvqinfo[0]
@@ -281,16 +271,28 @@ class FwhSolverPlugin(BasePlugin):
         self._qpts_info = qinfo
         self.nqpts = self._qpts_info[0].shape[0]
 
+        # Determine fwh active ranks lists
+        self.fwh_comm, self.fwh_edgcomm = self._build_fwh_mpi_comms(
+                self._eidxs, self._mpi_eidxs, self._mpi_snd_eidxs)  
+
+        #prepare sndrcv info
+        scnts, rcnts, sndqidxs, _ = self._prepare_mpiqpts_sndrcv_info(
+                        self._mpi_rcvrankmap, self._mpi_sndrankmap, elemap)
+        self._mpi_sndcnts  = scnts
+        self._mpi_rcvcnts  = rcnts
+        self._mpi_snd_qidxs = sndqidxs
+
         #prepare local srtdidxs and perms
         self._int_perm = np.empty(0)
         self._mpi_perm = np.empty(0)
-        self._min_fplocs = np.empty(0)
+        self._min_fplocs = np.empty(0) 
+
         if self.active_fwhrank:
             idx = range(self.nqpts)
             srtdidx = fuzzysort(self._qpts_info[0].T,idx)
             #min fpts plocs
             self._min_fplocs = self._qpts_info[0][srtdidx][0]
-            self._int_perm = self._compute_leftright_fptsperms(
+            self._int_perm = self._prepare_leftright_fptsperms(
                 self._int_fplocs, self._intrhs_fplocs)
 
         self.gfplocs_min, self.gfplocs = self._serialise_global_fplocs(
@@ -303,7 +305,7 @@ class FwhSolverPlugin(BasePlugin):
                             self.ndims, self._mpi_sndcnts, self._mpi_rcvcnts,
                             self._mpi_snd_qidxs)
             if self.nmpiqpts:
-                self._mpi_perm = self._compute_leftright_fptsperms(
+                self._mpi_perm = self._prepare_leftright_fptsperms(
                     self._mpi_fplocs, mpi_rhs_fplocs)
 
         #Debug, using analytical sources
@@ -925,18 +927,14 @@ class FwhSolverPlugin(BasePlugin):
     def _extract_drum_region_eset(self, intg, drum):
         elespts = {}
         eset = {}
-        
-        drum = np.asarray(drum)
-        nstations = drum.shape[0]-1
-
+        drum = np.array(drum)
         mesh = intg.system.mesh
         for etype in intg.system.ele_types:
             elespts[etype] = mesh[f'spt_{etype}_p{intg.rallocs.prank}']
 
         slope = []
-        for i in range(0, nstations):
-            slope.append((drum[i+1, 1] 
-                            - drum[i, 1])/(drum[i+1, 0] - drum[i, 0]))
+        for drmi, drmj in zip(drum[:-1], drum[1:]):
+            slope.append((drmj[1] - drmi[1])/(drmj[0] - drmi[0]))
         
         #Debug: shift the z origin to have a symmetric drum around the origin
         pz_max = -1e20
@@ -945,7 +943,7 @@ class FwhSolverPlugin(BasePlugin):
         if self.ndims==3:
             for etype in intg.system.ele_types:
                 pts = np.moveaxis(elespts[etype], 2, 0)
-                for px,py,pz in zip(pts[0],pts[1],pts[2]):
+                for px, py, pz in zip(pts[0], pts[1], pts[2]):
                     pz_max = np.max([pz_max, np.max(pz)])
                     pz_min = np.min([pz_min, np.min(pz)])
 
@@ -968,9 +966,9 @@ class FwhSolverPlugin(BasePlugin):
             for px, py, pz in zippts:
                 pz -= pz_shift
                 rmesh = np.sqrt(py*py + pz*pz)
-                for i in range(0, nstations):
-                    xcond = (drum[i, 0] <= px) & (px <= drum[i+1, 0])
-                    rdrum = (drum[i, 1] + (px - drum[i, 0])*slope[i])
+                for drmi, drmj, slp in zip(drum[:-1], drum[1:], slope): 
+                    xcond = (drmi[0] <= px) & (px <= drmj[0])
+                    rdrum = (drmi[1] + (px - drmi[0])*slp)
                     inside += xcond & (rmesh < rdrum)
 
             if np.sum(inside):
@@ -1047,13 +1045,16 @@ class FwhSolverPlugin(BasePlugin):
         self._mpi_eidxs = defaultdict(list)  
         self._mpi_snd_eidxs = defaultdict(list)
         self._bnd_eidxs    = defaultdict(list) 
+        self._mpi_rcvrankmap = defaultdict(list)
+        self._mpi_sndrankmap = defaultdict(list)
+
         mesh = intg.system.mesh
         # Collect fwh interfaces and their info
         if surftype == 'permeable':
             self._collect_intinters(intg.rallocs, mesh, eset)
             self._collect_mpiinters(intg.rallocs, mesh, eset)
-        self._collect_bndinters(intg.rallocs, mesh, eset, surftype)
-
+        self._collect_bndinters(intg.rallocs, mesh, eset, surftype) 
+        
         self._eidxs = {k: np.array(v) for k, v in self._eidxs.items()}
         self._int_eidxs = {k: np.array(v) for k, v in self._int_eidxs.items()}
         self._int_rhs_eidxs = {
@@ -1119,9 +1120,6 @@ class FwhSolverPlugin(BasePlugin):
             comm.Send(flagL, rhs_mrank, tag=52)
 
         # receive flags and collect mpi interfaces
-        self._mpi_rcvrankmap = defaultdict(list)
-        self._mpi_sndrankmap = defaultdict(list)
-
         #loop over the mpi interface ranks
         for rhs_prank in rallocs.prankconn[prank]:
             conkey = f'con_p{prank}p{rhs_prank}'
@@ -1132,7 +1130,6 @@ class FwhSolverPlugin(BasePlugin):
 
             #loop over the rank connectivity
             for findex, ifaceL in enumerate(mpiint):
-
                 etype, eidx, fidx = ifaceL[:-1]
                 flagL = (eidx in eset[etype]) if etype in eset else False
                 # add info if it is an fwh edge, i.e., 
@@ -1160,27 +1157,30 @@ class FwhSolverPlugin(BasePlugin):
                     self._mpi_snd_eidxs[etype, fidx].append(eidx)
                     self._mpi_rcvrankmap[etype, fidx].append(rhs_mrank)
                     self._mpi_sndrankmap[etype, fidx].append(rhs_mrank)
-        
+
     def _collect_bndinters(self, rallocs, mesh, eset, surftype='permeable'):
         prank = rallocs.prank
+        bndkeys = []
+
         for f in mesh:
             if (m := re.match(f'bcon_(.+?)_p{prank}$', f)):
                 bcname = m.group(1)
-                bccond = (surftype == 'solid') or (surftype == 'permeable' 
-                                                    and not (bcname == 'wall'))
-                if bccond:
-                    bclhs = mesh[f].astype('U4,i4,i1,i2').tolist()
-                    for ifaceL in bclhs:
-                        etype, eidx, fidx = ifaceL[:-1]
-                        flagL = (eidx in 
-                                    eset[etype]) if etype in eset else False
-                        if flagL:
-                            self._bnd_eidxs[etype, fidx].append(eidx)
-                            self._eidxs[etype, fidx].append(eidx)
-                            if eidx not in  self._surf_eset[etype]:
-                                self._surf_eset[etype].append(eidx)
+                if (surftype == 'solid') or (surftype == 'permeable' 
+                                                and not (bcname == 'wall')):
+                    bndkeys.append(f)
 
-    def _build_fwh_mpi_comms(self, eidxs, mpieidxs, mpi_sndeidxs):
+        for f in bndkeys:
+            bclhs = mesh[f].astype('U4,i4,i1,i2').tolist()
+            for ifaceL in bclhs:
+                etype, eidx, fidx = ifaceL[:-1]
+                flagL = (eidx in eset[etype]) if etype in eset else False
+                if flagL:
+                    self._bnd_eidxs[etype, fidx].append(eidx)
+                    self._eidxs[etype, fidx].append(eidx)
+                    if eidx not in  self._surf_eset[etype]:
+                        self._surf_eset[etype].append(eidx)
+
+    def _build_fwh_mpi_comms(self, eidxs, mpi_eidxs, mpisnd_eidxs):
         # fwhranks own all fwh edges and hence are 
         # the ones that perform acoustic solve
         # fwhedgeranks are ranks who touches an fwh edge 
@@ -1201,7 +1201,7 @@ class FwhSolverPlugin(BasePlugin):
                 self.fwh_wrldranks.append(i)
 
         # Determine fwh mpi edge/interface sharing ranks
-        self.active_fwhedgrank = True if mpieidxs or mpi_sndeidxs else False
+        self.active_fwhedgrank = True if mpi_eidxs or mpisnd_eidxs else False
         rank_is_active_list = comm.allgather(self.active_fwhedgrank)
         for i, flag in enumerate(rank_is_active_list):
             if flag:
@@ -1237,12 +1237,10 @@ class FwhSolverPlugin(BasePlugin):
 
         return fwh_comm, fwh_edgecomm
 
-    def _prepare_mpiinters_sndrcv_info(self, elemap):
+    def _prepare_mpiqpts_sndrcv_info(self, rcvrankmap, sndrankmap, elemap):
         #prepare send/recv qpts idxs
-        rcvqidxs = self._fill_mpisndrcv_idxs(self._mpi_eidxs, elemap,
-                                                self._mpi_rcvrankmap)
-        sndqidxs = self._fill_mpisndrcv_idxs(self._mpi_snd_eidxs, elemap,
-                                                self._mpi_sndrankmap)
+        rcvqidxs = self._prepare_mpisndrcv_qidxs(elemap, rcvrankmap)
+        sndqidxs = self._prepare_mpisndrcv_qidxs(elemap, sndrankmap)
 
         #prepare send/recv counts for mpi edge interfaces
         nedgranks = len(self.fwh_edgwrldranks)
@@ -1252,17 +1250,16 @@ class FwhSolverPlugin(BasePlugin):
             sndcnts[ir] = sndqidxs[rk].shape[0] if rk in sndqidxs else 0
             rcvcnts[ir] = rcvqidxs[rk].shape[0] if rk in rcvqidxs else 0
 
-        return sndcnts, rcvcnts, sndqidxs
+        return sndcnts, rcvcnts, sndqidxs, rcvqidxs
 
-    def _fill_mpisndrcv_idxs(self, idxsmap, elemap, rankmap):
+    def _prepare_mpisndrcv_qidxs(self, elemap, rankmap):
         #prepare send/recv qpts idxs
         qindxs= defaultdict(list)
         iq = 0
-        for (etype, fidx), eidlist in idxsmap.items():
+        for (etype, fidx), ranklist in rankmap.items():
             nfacefpts = elemap[etype].basis.nfacefpts[fidx]
             qidface = np.arange(0, nfacefpts)
-            for id, _ in enumerate(eidlist):
-                irank = rankmap[etype, fidx][id]
+            for irank in ranklist:
                 qid = qidface + iq
                 qindxs[irank].append(qid)
                 iq += nfacefpts
@@ -1336,15 +1333,15 @@ class FwhSolverPlugin(BasePlugin):
 
         return qinfo, m0   
 
-    def _compute_leftright_fptsperms(self, lfplocs, rfplocs):
+    def _prepare_leftright_fptsperms(self, lfplocs, rfplocs):
         idx = range(lfplocs.shape[0])
         srtdidx = fuzzysort(lfplocs.T, idx) if idx else []
         perm = np.argsort(srtdidx)
         idx = range(rfplocs.shape[0])
         srtdidx = fuzzysort(rfplocs.T, idx) if idx else []
         #conversion permutations
-        convperm = np.array(srtdidx)[perm]
-        return convperm
+        lrperm = np.array(srtdidx)[perm]
+        return lrperm
 
     #update the flow solution for one time-step
     def _update_usoln(self, intg, m0_dict, eidxs, usoln, fplocs=None):
@@ -1755,6 +1752,7 @@ class MonopoleSrc(PointAcousticSrc):
         nobserv = xyz_ob.shape[0]
         ptime = np.empty((self.nt, nobserv))
         pfft = np.empty((nobserv, self.nfreq), dtype=np.complex64)
+
         tarr = np.arange(0, self.nt)*self.dt
         for i, ti in enumerate(tarr):
             ptime[i] = self._comput_exact_psoln(xyz_ob, ti, ptime[i])
