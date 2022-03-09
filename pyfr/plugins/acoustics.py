@@ -3,14 +3,14 @@
 from collections import defaultdict, namedtuple
 from mpi4py import MPI
 import numpy as np
-import os, sys
+import os
 import re
-import time
+import sys
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.nputil import CubicSplineFit, fuzzysort, LinearFit, npeval
-from pyfr.plugins.base import BasePlugin, PostactionMixin
+from pyfr.plugins.base import BasePlugin
 from pyfr.writers.native import NativeWriter
 
 
@@ -121,7 +121,7 @@ TimeParam = namedtuple('TimeParam', ['dtsim', 'dtsub', 'ltsub', 'shift',
                         'samplstps', 'window', 'psd_scale_mode'])
 
 
-class FwhSolverPlugin(PostactionMixin, BasePlugin):
+class FwhSolverPlugin(BasePlugin):
 
     name = 'fwhsolver'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
@@ -158,7 +158,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         timeparam = TimeParam(intg._dt, self.dtsub, self.ltsub, shift,
                             self._samplstps, window_func, psd_scale_mode)
 
-        #soln interp for adaptive time
+        #soln interp for variable time-steps
         intrptype = self.cfg.get(cfgsect, 'usoln-interp-func', 'spl, periodic')
         intrptype = intrptype.split('spl,')[-1].strip()
         if intrptype == 'linear':
@@ -208,6 +208,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
             region_eset = self._extract_drum_region_eset(intg, box)
             surftype = 'permeable'
         else:
+            region = [rg.strip() for rg in region.split(',')]
             region_eset = self._extract_bound_region_eset(intg, region)
             surftype = 'solid'
         self._prepare_surfmesh(intg, region_eset, surftype)
@@ -218,9 +219,9 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
 
         # Construct the fwh mesh writer
         self._writer = NativeWriter(intg, basedir, self.basename, 'soln')
-
+        
         # write the fwh surface geometry file
-        self._write_fwh_surface_geo(intg, self._inside_eset, self._eidxs)
+        self._write_fwh_surface_geo(intg, self._surf_eset, self._eidxs)
 
         # Underlying elements class
         self.elementscls = intg.system.elementscls
@@ -984,18 +985,19 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         mesh = intg.system.mesh
         eset = defaultdict(list)
 
-        # Boundary of interest
-        bc = f'bcon_{bcname}_p{intg.rallocs.prank}'
+        # Boundaries of interest
+        for bcn in bcname:
+            bc = f'bcon_{bcn}_p{intg.rallocs.prank}'
 
-        # Ensure the boundary exists
-        bcranks = comm.gather(bc in mesh, root=root)
-        if rank == root and not any(bcranks):
-            raise ValueError(f'Boundary {bcname} does not exist')
+            # Ensure the boundary exists
+            bcranks = comm.gather(bc in mesh, root=root)
+            if rank == root and not any(bcranks):
+                raise ValueError(f'Boundary {bcname} does not exist')
 
-        if bc in mesh:
-            # Determine which of our elements are on the boundary
-            for etype, eidx in mesh[bc][['f0', 'f1']].astype('U4,i4'):
-                eset[etype].append(eidx)
+            if bc in mesh:
+                # Determine which of our elements are on the boundary
+                for etype, eidx in mesh[bc][['f0', 'f1']].astype('U4,i4'):
+                    eset[etype].append(eidx)
         return eset
 
     def _write_fwh_surface_geo(self, intg, eset, inters_eidxs):
@@ -1038,7 +1040,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         #end debug
 
     def _prepare_surfmesh(self, intg, eset, surftype='permeable'):
-        self._inside_eset  = defaultdict(list)
+        self._surf_eset  = defaultdict(list)
         self._eidxs        = defaultdict(list)  
         self._int_eidxs    = defaultdict(list)
         self._int_rhs_eidxs = defaultdict(list)
@@ -1050,7 +1052,7 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
         if surftype == 'permeable':
             self._collect_intinters(intg.rallocs, mesh, eset)
             self._collect_mpiinters(intg.rallocs, mesh, eset)
-        self._collect_bndinters(intg.rallocs, mesh, eset)
+        self._collect_bndinters(intg.rallocs, mesh, eset, surftype)
 
         self._eidxs = {k: np.array(v) for k, v in self._eidxs.items()}
         self._int_eidxs = {k: np.array(v) for k, v in self._int_eidxs.items()}
@@ -1082,22 +1084,22 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                     self._int_rhs_eidxs[ifaceL[0],ifaceL[2]].append(ifaceL[1])
 
                 self._eidxs[etype, fidx].append(eidx)
-                if eidx not in  self._inside_eset[etype]:
-                    self._inside_eset[etype].append(eidx)
+                if eidx not in  self._surf_eset[etype]:
+                    self._surf_eset[etype].append(eidx)
 
             # periodic faces:
             elif (flagL & flagR) & (ifaceL[3] != 0 ):   
                 etype, eidx, fidx = ifaceL[0:3]
                 self._int_eidxs[etype, fidx].append(eidx)
                 self._eidxs[etype, fidx].append(eidx)
-                if eidx not in  self._inside_eset[etype]:
-                    self._inside_eset[etype].append(eidx)
+                if eidx not in  self._surf_eset[etype]:
+                    self._surf_eset[etype].append(eidx)
                 #add both right and left faces for vtu writing
                 etype, eidx, fidx = ifaceR[0:3]
                 self._int_eidxs[etype, fidx].append(eidx)
                 self._eidxs[etype, fidx].append(eidx)
-                if eidx not in  self._inside_eset[etype]:
-                    self._inside_eset[etype].append(eidx)
+                if eidx not in  self._surf_eset[etype]:
+                    self._surf_eset[etype].append(eidx)
                 self._int_rhs_eidxs[ifaceL[0],ifaceL[2]].append(ifaceL[1])
                 self._int_rhs_eidxs[ifaceR[0],ifaceR[2]].append(ifaceR[1])
 
@@ -1138,8 +1140,8 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 # both(periodic case) to be True
                 if flagL and not flagR[findex] :
                     self._eidxs[etype, fidx].append(eidx)
-                    if eidx not in  self._inside_eset[etype]:
-                        self._inside_eset[etype].append(eidx)
+                    if eidx not in  self._surf_eset[etype]:
+                        self._surf_eset[etype].append(eidx)
                     self._mpi_eidxs[etype, fidx].append(eidx)
                     self._mpi_rcvrankmap[etype, fidx].append(rhs_mrank)
 
@@ -1151,28 +1153,32 @@ class FwhSolverPlugin(PostactionMixin, BasePlugin):
                 #periodic mpi interfaces
                 elif (flagL and flagR[findex]) and ifaceL[-1] !=0 :
                     self._eidxs[etype, fidx].append(eidx)
-                    if eidx not in  self._inside_eset[etype]:
-                        self._inside_eset[etype].append(eidx)
+                    if eidx not in  self._surf_eset[etype]:
+                        self._surf_eset[etype].append(eidx)
                     
                     self._mpi_eidxs[etype, fidx].append(eidx)
                     self._mpi_snd_eidxs[etype, fidx].append(eidx)
                     self._mpi_rcvrankmap[etype, fidx].append(rhs_mrank)
                     self._mpi_sndrankmap[etype, fidx].append(rhs_mrank)
         
-    def _collect_bndinters(self, rallocs, mesh, eset):
+    def _collect_bndinters(self, rallocs, mesh, eset, surftype='permeable'):
         prank = rallocs.prank
         for f in mesh:
             if (m := re.match(f'bcon_(.+?)_p{prank}$', f)):
-                bname = m.group(1)
-                bclhs = mesh[f].astype('U4,i4,i1,i2').tolist()
-                for ifaceL in bclhs:
-                    etype, eidx, fidx = ifaceL[0:3]
-                    flagL = (eidx in eset[etype]) if etype in eset else False
-                    if flagL:
-                        self._bnd_eidxs[etype, fidx].append(eidx)
-                        self._eidxs[etype, fidx].append(eidx)
-                        if eidx not in  self._inside_eset[etype]:
-                            self._inside_eset[etype].append(eidx)
+                bcname = m.group(1)
+                bccond = (surftype == 'solid') or (surftype == 'permeable' 
+                                                    and not (bcname == 'wall'))
+                if bccond:
+                    bclhs = mesh[f].astype('U4,i4,i1,i2').tolist()
+                    for ifaceL in bclhs:
+                        etype, eidx, fidx = ifaceL[:-1]
+                        flagL = (eidx in 
+                                    eset[etype]) if etype in eset else False
+                        if flagL:
+                            self._bnd_eidxs[etype, fidx].append(eidx)
+                            self._eidxs[etype, fidx].append(eidx)
+                            if eidx not in  self._surf_eset[etype]:
+                                self._surf_eset[etype].append(eidx)
 
     def _build_fwh_mpi_comms(self, eidxs, mpieidxs, mpi_sndeidxs):
         # fwhranks own all fwh edges and hence are 
