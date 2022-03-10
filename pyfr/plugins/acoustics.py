@@ -183,7 +183,7 @@ class FwhSolverPlugin(BasePlugin):
 
         # Check if the system is incompressible
         self._artificial_compress = intg.system.name.startswith('ac')
-
+        
         # read flow data
         self.constvars = self.cfg.items_as('constants', float)
         pvmap = intg.system.elementscls.privarmap[self.ndims]
@@ -195,11 +195,13 @@ class FwhSolverPlugin(BasePlugin):
             else:
                 self.uinf[pvvar] = npeval(self.cfg.getexpr(cfgsect, pvvar),
                                                             self.constvars)
+        gmma = self.constvars['gamma']
+        #incompressible case needs further investigation
         if self._artificial_compress:
+            self.uinf['c'] = np.sqrt(self.constvars['ac-zeta']*gmma)
             self.uinf['rho'] = self.uinf['p']/self.constvars['ac-zeta']
         else:
-            self.uinf['rho'] /= self.constvars['gamma']
-        self.uinf['c'] = np.sqrt(self.uinf['p']/self.uinf['rho'])
+            self.uinf['c'] = np.sqrt(gmma*self.uinf['p']/self.uinf['rho'])
         self.uinf['Mach'] = self.uinf['u']/self.uinf['c']
         self.fwhnvars = len(self.uinf['u'])+2
         
@@ -327,6 +329,10 @@ class FwhSolverPlugin(BasePlugin):
                                                     op=get_mpi('max'))
             xyzshift = 0.5 *( xyz_min + xyz_max )
             self.xyz_obsrv += xyzshift
+
+            self.constvars['gamma'] = gmma = 1.
+            self.uinf['c'] = np.sqrt(gmma*self.uinf['p']/self.uinf['rho'])
+            self.uinf['Mach'] = self.uinf['u']/self.uinf['c']
         #end Debug analytical sources
 
         # init the fwhsolver
@@ -348,7 +354,7 @@ class FwhSolverPlugin(BasePlugin):
         self._started = False
         self._last_prepared = 0.
         # init from restart
-        if intg.isrestart:
+        if intg.isrestart and self.tstart < intg.tcurr:
             self._deserialise_root(intg, metadata)
         self.fwhwritemode = 'w' if not intg.isrestart else 'a'
 
@@ -372,7 +378,7 @@ class FwhSolverPlugin(BasePlugin):
             srcfreq = self.cfg.getfloat(self.cfgsect,'src-freq',5.)
             tperiod = 1./srcfreq
             nperiods = self.fwhsolver.ntsub * self.fwhsolver.dtsub / tperiod
-            gamma = self.constvars['gamma']
+            self.constvars['gamma'] = gamma = 1.
             self._pntacsrc = MonopoleSrc('smonopole', srclocs, srcuinf, srcamp,
                                         srcfreq, self.ntsub, nperiods, gamma)
             if self.active_fwhrank and self.fwhrank == 0:
@@ -1457,11 +1463,11 @@ class FwhSolverBase(object):
         self.dtsub = dtsub 
         #= int(np.rint(dtsub/dtsim))*dtsim  if dtsub > dtsim else dtsim
         #(2) compute ntsub as a power of 2 number
-        N = int(np.rint(ltsub/dtsub))
-        self.ntsub = ntsub = self.get_num_nearest_pow_of_two(N)
+        #N = int(np.rint(ltsub/dtsub))
+        self.ntsub = ntsub = int(ntsub) #= self.get_num_nearest_pow_of_two(N)
         #self.ntsub = ntsub = N
         #(3): adjust the window length
-        self.ltsub = ltsub = ntsub * dtsub
+        self.ltsub = ltsub = ntsub*dtsub
 
         #(4) Adjusting shift parameters for window averaging and overlapping
         # partial (0.01 < shift < 1) or complete overlap (shift = 1)
@@ -1769,7 +1775,7 @@ class MonopoleSrc(PointAcousticSrc):
         return psoln
 
     def update_usoln(self, xyz_ob, tcurr, usoln):
-        co = np.sqrt(self.pinf/self.rhoinf)
+        co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
         phy, dphy, mdotdphy = self._comput_vel_potentials(xyz_ob, tcurr)
         # computing the flow quantities
         p = - np.real(self.rhoinf*(1j*self.omega*phy + co*mdotdphy))
