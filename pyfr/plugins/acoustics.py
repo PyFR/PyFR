@@ -498,11 +498,11 @@ class FwhSolverPlugin(BasePlugin):
             print(f'\tsaved   {metadata["observers"]}')
             print(f'\tconfig  {self.fwhsolver.xyz_obv}\n')
             restore = False
-        elif metadata['ntsub'] != self.fwhsolver.ntsub:
-            print(f'\nFWH ntsub (window nsteps) has changed in '
+        elif metadata['dtsub'] != self.fwhsolver.dtsub:
+            print(f'\nFWH dtsub (window dt) has changed in '
                         'the config file, restore cannot be done')
-            print(f'\tsaved   {metadata["ntsub"]}')
-            print(f'\tconfig  {self.fwhsolver.ntsub}\n') 
+            print(f'\tsaved   {metadata["dtsub"]}')
+            print(f'\tconfig  {self.fwhsolver.dtsub}\n') 
             restore = False
         elif metadata['ltsub'] != self.fwhsolver.ltsub:
             print(f'\nFWH ltsub (window length) has changed in '
@@ -633,11 +633,11 @@ class FwhSolverPlugin(BasePlugin):
             print(f'\tsaved   {metadata["observers"]}')
             print(f'\tconfig  {self.fwhsolver.xyz_obv}\n')
             restore = False
-        elif metadata['ntsub'] != self.fwhsolver.ntsub:
-            print(f'\nFWH ntsub (window nsteps) has changed in '
+        elif metadata['dtsub'] != self.fwhsolver.dtsub:
+            print(f'\nFWH dtsub (window dt) has changed in '
                         'the config file, restore cannot be done')
-            print(f'\tsaved   {metadata["ntsub"]}')
-            print(f'\tconfig  {self.fwhsolver.ntsub}\n') 
+            print(f'\tsaved   {metadata["dtsub"]}')
+            print(f'\tconfig  {self.fwhsolver.dtsub}\n') 
             restore = False
         elif metadata['ltsub'] != self.fwhsolver.ltsub:
             print(f'\nFWH ltsub (window length) has changed in '
@@ -1369,21 +1369,22 @@ class FwhSolverPlugin(BasePlugin):
                 ufpts = m0 @ uupts.reshape(nupts, -1)
                 ufpts = ufpts.reshape(nfpts, nvars, -1)
                 ufpts = ufpts.swapaxes(0, 1) # nvars, nfpts, nfaces
+                nfaces_pertype = ufpts.shape[-1]
 
                 # get primitive vars
                 pri_ufpts = self.elementscls.con_to_pri(ufpts, self.cfg)
-                fIsize = pri_ufpts.shape[1] * pri_ufpts.shape[2]
+                fIsize = nfpts*nfaces_pertype
                 fImax = fIo + fIsize
                 if self._artificial_compress:
-                    usoln[-1,fIo:fImax] = pp = pri_ufpts[0].reshape(-1)  #p
-                    usoln[0,fIo:fImax] = pp/self.constvars['ac-zeta'] #rho
+                    usoln[-1, fIo :fImax] = pp = pri_ufpts[0].reshape(-1)  #p
+                    usoln[0, fIo :fImax] = pp/self.constvars['ac-zeta'] #rho
                 else:
-                    usoln[-1,fIo:fImax] = pri_ufpts[-1].reshape(-1)
-                    usoln[0,fIo:fImax] = pri_ufpts[0].reshape(-1)
-                usoln[1,fIo:fImax] = pri_ufpts[1].reshape(-1)
-                usoln[2,fIo:fImax] = pri_ufpts[2].reshape(-1)
+                    usoln[-1, fIo :fImax] = pri_ufpts[-1].reshape(-1)
+                    usoln[0, fIo :fImax] = pri_ufpts[0].reshape(-1)
+                usoln[1, fIo :fImax] = pri_ufpts[1].reshape(-1)
+                usoln[2, fIo :fImax] = pri_ufpts[2].reshape(-1)
                 if ndims == 3:
-                    usoln[3,fIo:fImax] = pri_ufpts[3].reshape(-1) 
+                    usoln[3, fIo :fImax] = pri_ufpts[3].reshape(-1) 
                 fIo = fImax
 
     def _inters_avgsoln(self, rhsperm, rsoln, lsoln):
@@ -1491,20 +1492,19 @@ class FwhSolverBase(object):
         print(f'\n--------------------------------------')
         print(f'       Adjusted FFT parameters ')
         print(f'--------------------------------------')
-        print(f'sample steps: {self._samplstps}')
-        print(f'sample freq : {1./self.dtsub} Hz')
-        print(f'delta freq  : {1./self.ltsub} Hz')
-        print(f'dt window   : {self.dtsub} sec')
-        print(f'Lt window   : {self.ltsub} sec')
-        print(f'Nt window   : {self.ntsub}')
-        print(f'Nt shifted  : {self.ntoverlap}')
+        print(f'sample  steps: {self._samplstps}')
+        print(f'sample  freq : {1./self.dtsub} Hz')
+        print(f'minimum freq : {1./self.ltsub} Hz')
+        print(f'dt window    : {self.dtsub} sec')
+        print(f'Lt window    : {self.ltsub} sec')
+        print(f'Nt window    : {self.ntsub}')
+        print(f'Nt shifted   : {self.ntoverlap}')
         if self.averaging:
             print(f'PSD Averaging is \'activated\'')
-            print(f'Naver  : {self.avgcnt}')
+            #print(f'Naver  : {self.avgcnt}')
         else:
             print(f'PSD Averaging is \'not activated\'')
         print(f'window function is \'{self.window}\'')
-        print(f'wwind {self.wwind}, wscale {self.windscale}')
         print(f'psd scaling mode is \'{self.psd_scale_mode}\'\n')
         return
     #end debugging

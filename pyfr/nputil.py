@@ -221,6 +221,7 @@ class LinearFit(CurveFit):
     def intrp(self, x_intrp, xs, ys):
         return self._interp(x_intrp, xs, ys.T).T
 
+
 class CubicSplineFit(CurveFit):
     def __init__(self, xs=None, ys=None, bctype='not-a-knot'):
         super().__init__(xs=None, ys=None, bctype='not-a-knot')
