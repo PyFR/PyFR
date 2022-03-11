@@ -329,10 +329,6 @@ class FwhSolverPlugin(BasePlugin):
                                                     op=get_mpi('max'))
             xyzshift = 0.5 *( xyz_min + xyz_max )
             self.xyz_obsrv += xyzshift
-
-            self.constvars['gamma'] = gmma = 1.
-            self.uinf['c'] = np.sqrt(gmma*self.uinf['p']/self.uinf['rho'])
-            self.uinf['Mach'] = self.uinf['u']/self.uinf['c']
         #end Debug analytical sources
 
         # init the fwhsolver
@@ -378,11 +374,11 @@ class FwhSolverPlugin(BasePlugin):
             srcfreq = self.cfg.getfloat(self.cfgsect,'src-freq',5.)
             tperiod = 1./srcfreq
             nperiods = self.fwhsolver.ntsub * self.fwhsolver.dtsub / tperiod
-            self.constvars['gamma'] = gamma = 1.
+            gamma = self.constvars['gamma']
             self._pntacsrc = MonopoleSrc('smonopole', srclocs, srcuinf, srcamp,
                                         srcfreq, self.ntsub, nperiods, gamma)
             if self.active_fwhrank and self.fwhrank == 0:
-                co = np.sqrt(srcuinf[-1]/srcuinf[0]) 
+                co = np.sqrt(gamma*srcuinf[-1]/srcuinf[0]) 
                 print(f'src locs {srclocs}')
                 print(f'co {co}, rho_o {srcuinf[0]}, po {srcuinf[-1]}')
                 print(f'Minf {srcuinf[1:4]/co}')
@@ -1744,6 +1740,7 @@ class MonopoleSrc(PointAcousticSrc):
         super().__init__(name, srclocs, flowinfo, ampl, srcfreq, ntime,
                          nperiods, gamma)
         self.gamma = gamma
+        self.co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
         self.ampl = ampl
         self.srcfreq = srcfreq
         self.nperiods = nperiods
@@ -1769,13 +1766,12 @@ class MonopoleSrc(PointAcousticSrc):
         return self.freq, pfft
 
     def _comput_exact_psoln(self, xyz_ob, tcurr, psoln):
-        co = np.sqrt(self.pinf/self.rhoinf)
         phy, _, mdotdphy = self._comput_vel_potentials(xyz_ob, tcurr)
-        psoln = - np.real(self.rhoinf*(1j*self.omega*phy + co*mdotdphy))
+        psoln = - np.real(self.rhoinf*(1j*self.omega*phy + self.co*mdotdphy))
         return psoln
 
     def update_usoln(self, xyz_ob, tcurr, usoln):
-        co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
+        co = self.co
         phy, dphy, mdotdphy = self._comput_vel_potentials(xyz_ob, tcurr)
         # computing the flow quantities
         p = - np.real(self.rhoinf*(1j*self.omega*phy + co*mdotdphy))
@@ -1785,9 +1781,8 @@ class MonopoleSrc(PointAcousticSrc):
                                     zip(np.real(dphy), self.uinf)]) #u
 
     def _comput_vel_potentials(self, xyz_ob, tcurr):
-        co = np.sqrt(self.pinf/self.rhoinf)
-        Mo = self.uinf/co
-        kwv = self.omega/co
+        Mo = self.uinf/self.co
+        kwv = self.omega/self.co
         xyz_src = self.srclocs
         mR, mRs, nR, nRs = FwhFreqDomainSolver.compute_distance_vars(xyz_src,
                                                                     xyz_ob, Mo)

@@ -6,6 +6,7 @@ import itertools as it
 import re
 
 import numpy as np
+from pyfr.util import memoize
 
 
 def block_diag(arrs):
@@ -128,89 +129,83 @@ def npdtype_to_ctypestype(dtype):
     return _ctypestype_map[np.dtype(dtype).type]
 
 
+#Get indices for interval segments of interpolation
+def get_interval_idxs(t, xarr):
+    if np.asarray(xarr).size > 1:
+        idxs = np.array([np.max(np.nonzero(xx >= t[:-1] - 1e-12)[0]) 
+                                                        for xx in xarr])
+    else:
+        idxs = np.max(np.nonzero(xarr >= t[:-1] - 1e-12)[0])
+    return idxs
+
+#Modified Gauss Elimination/Thompson algorithm for tridiag systems
+#All changes are done in place and the algorithm 
+#is applied to the lhs and rhs together
+def trislv(a, b, c, d):
+    #forward elimination
+    d[0] /= b[0]
+    for i, (ai, bi, bj, ci, dj) in enumerate(
+                zip(a, b[1: ], b[: -1], c, d[: -1]), start=1):
+        #lhs coeffs
+        c[i-1] = cdivb = ci/bj
+        b[i] = bi1 = bi - ai*cdivb
+        #rhs     
+        d[i] -= ai*dj
+        d[i] /= bi1
+
+    #backward substitution
+    dd = d[::-1]
+    for i, (ci, dj) in enumerate(zip(c[::-1], d[:0:-1]), start=1):
+        dd[i] -= ci*dj
+
+
+#tridiagonal solver for cyclic/periodic systems 
+#Using Sherman-Morrison formula and Thompson algorithm
+# A = A + u ⊗ v
+# u, v are vectors
+def trislvcyc(a, b, c, d, alpha, beta):
+    u = np.zeros(d.shape[0], dtype=d.dtype)
+    #Solve the two systems, Ax = d, Bz = u in place, i.e., d->x, u->z
+    gam = -b[0] 
+    b[0] *= 2
+    b[-1] -= alpha*beta/gam
+    u[0] = gam
+    u[-1] = alpha
+    #solve the two systems in one loop
+    #forward elimination
+    d[0] /= b[0]
+    u[0] /= b[0]
+    for i, (ai, bi, bj, ci, dj, uj) in enumerate(
+                zip(a, b[1: ], b[: -1], c, d[: -1], u[: -1]), start=1):
+        #lhs coeffs
+        c[i-1] = cdivb = ci/bj
+        b[i]  = bi1 = bi - ai*cdivb  
+        # first rhs
+        d[i] -= ai*dj
+        d[i] /= bi1
+        # second rhs
+        u[i] -= ai*uj
+        u[i] /= bi1
+
+    #backward substitution
+    dd = d[::-1]
+    uu = u[::-1]
+    for i, (ci, dj, uj) in enumerate(
+            zip(c[::-1], d[:0:-1], u[:0:-1]), start=1):
+        dd[i] -= ci*dj
+        uu[i] -= ci*uj
+
+    #compute the final solution
+    fact = (d[0] + alpha*d[-1]/gam)/(1.0 + u[0] + alpha*u[-1]/gam)
+    d -= fact*u[:, None]
+
+    
 class CurveFit:
     def __init__(self, *args, **kwargs):
         pass
 
     def intrp(self, *args):
         pass
-
-    #Get indices for spline segments of interpolation
-    @staticmethod
-    def _get_interval_idxs(t, xarr):
-        if np.asarray(xarr).size > 1:
-            idxs = np.array([np.max(np.nonzero(xx >= t[:-1] - 1e-12)[0]) 
-                                                            for xx in xarr])
-        else:
-            idxs = np.max(np.nonzero(xarr >= t[:-1] - 1e-12)[0])
-        return idxs
-
-    #Modified Gauss Elimination/Thompson algorithm for tridiag systems
-    #All changes are done in place and the algorithm 
-    #is applied to the lhs and rhs together
-    @staticmethod
-    def trislv(a, b, c, d):
-        #forward elimination
-        d[0] /= b[0]
-        for i, (ai, bi, bj, ci, dj) in enumerate(
-                    zip(a, b[1: ], b[: -1], c, d[: -1]), start=1):
-            #lhs coeffs
-            c[i-1] = cdivb = ci/bj
-            b[i] = bi1 = bi - ai*cdivb
-            #rhs     
-            d[i] -= ai*dj
-            d[i] /= bi1
-
-        #backward substitution
-        dd = d[::-1]
-        for i, (ci, dj) in enumerate(zip(c[::-1], d[:0:-1]), start=1):
-            dd[i] -= ci*dj
-
-
-    #tridiagonal solver wrapper for cyclic/periodic 
-    #Using Sherman-Morrison formula
-    # A = A + u O v, O: is tensor product
-    # u, v are vectors
-    @staticmethod
-    def trislvcyc(a, b, c, d, alpha, beta):
-        u = np.zeros(d.shape[0], dtype=d.dtype)
-        #Solve the two systems, Ax = d, Bz = u in place, i.e., d->x, u->z
-        gam = -b[0] 
-        b[0] *= 2
-        b[-1] -= alpha*beta/gam
-        u[0] = gam
-        u[-1] = alpha
-        #solve the two systems in one call
-        CurveFit._trislvcyc(a, b, c, u, d)
-        #compute the final solution
-        fact = (d[0] + alpha*d[-1]/gam)/(1.0 + u[0] + alpha*u[-1]/gam)
-        d -= fact*u[:, None]
-
-    @staticmethod
-    def _trislvcyc(a, b, c, d, u):
-        #forward elimination
-        d[0] /= b[0]
-        u[0] /= b[0]
-        for i, (ai, bi, bj, ci, dj, uj) in enumerate(
-                    zip(a, b[1: ], b[: -1], c, d[: -1], u[: -1]), start=1):
-            #lhs coeffs
-            c[i-1] = cdivb = ci/bj
-            b[i]  = bi1 = bi - ai*cdivb  
-            # first rhs
-            d[i] -= ai*dj
-            d[i] /= bi1
-            # second rhs
-            u[i] -= ai*uj
-            u[i] /= bi1
-
-        #backward substitution
-        dd = d[::-1]
-        uu = u[::-1]
-        for i, (ci, dj, uj) in enumerate(
-                zip(c[::-1], d[:0:-1], u[:0:-1]), start=1):
-            dd[i] -= ci*dj
-            uu[i] -= ci*uj
-
 
 class LinearFit(CurveFit):
     def __init__(self, *args, **kwargs):
@@ -241,7 +236,7 @@ class CubicSplineFit(CurveFit):
     def _construct(self, xs, ys,  bctype='not-a-knot'):
         self._xs = xs
         self._ys = ys
-        a, b, c, d = self._matrix_coeffs(xs, ys)
+        a, b, c, d = self._spl_matrix_coeffs()
         if bctype == 'periodic':
             self._periodic(a, b, c, d)
         elif bctype == 'not-a-knot':
@@ -256,9 +251,11 @@ class CubicSplineFit(CurveFit):
     @property
     def spl(self):
         return tuple((self._xs, self._ys, self._zs))
-        
-    def _matrix_coeffs(self, t, y):
-        n = np.asarray(t).size
+
+    @memoize   
+    def _spl_matrix_coeffs(self):
+        t, y = self._xs, self._ys
+        n = np.asarray(t).shape[0]
         b = np.zeros(n, dtype=t.dtype)
         d = np.zeros(y.shape, dtype=y.dtype)
         dx = np.diff(t)
@@ -289,7 +286,7 @@ class CubicSplineFit(CurveFit):
         b[-2] += beta1*(a[-1] + a[-2])
         a[-2] -= a[-1]*beta1
 
-        self.trislv(a[1: -1], b[1: -1], c[1: -1], d[1: -1])
+        trislv(a[1: -1], b[1: -1], c[1: -1], d[1: -1])
         d[0]  = -beta0*d[2]  + (1 + beta0)*d[1] 
         d[-1] = -beta1*d[-3] + (1 + beta1)*d[-2]
 
@@ -298,14 +295,14 @@ class CubicSplineFit(CurveFit):
         #write equation for i=0 and note that i-1=n-2
         d[0] = 6*(d[0] - d[-1])
         b[0] = 2*(a[0] + a[-1])
-        self.trislvcyc(a[: -1], b[: -1], c[: -1], d[: -1], a[-1], a[-1])
+        trislvcyc(a[: -1], b[: -1], c[: -1], d[: -1], a[-1], a[-1])
         d[-1] = d[0]
 
     #Evaluate yy at xx point using the cubic spline representation
     def _spleval(self, xarr, indexs=None):
         t, y, z = self.spl
         if np.any(indexs == None):
-            idxs = self._get_interval_idxs(t, xarr) 
+            idxs = get_interval_idxs(t, xarr) 
         else:
             idxs = indexs
         t = t[:, None]
