@@ -34,6 +34,13 @@ def write_fftdata(fname, *indata, header='', mode='a'):
     outf.flush()
     return
 
+def realfft(udata_):
+        dsize = udata_.shape[-1]
+        # freqsize: size of half the spectra with positive frequencies
+        freqsize = int(dsize/2) if dsize%2 == 0 else int(dsize-1)/2
+        ufft = np.fft.rfft(udata_)/freqsize 
+        return ufft
+
 def compute_spl(pref, amp, df=None):
     sqrt2 = 1./np.sqrt(2.) 
     lgsqrt2 = 20.*np.log10(sqrt2)
@@ -842,7 +849,6 @@ class FwhSolverPlugin(BasePlugin):
                 #copy soln to fwhusoln array
                 self._fwhusoln[shiftstep: ] = intrpsoln.reshape(-1, 
                                                 self.nvars, self.nqpts)
-
                 #compute the fwh noise solution
                 self.fwhsolver.compute_fwh_solution(self._fwhusoln)
                 nwindows = self.fwhsolver.avgcnt - 1 
@@ -1428,10 +1434,10 @@ class FwhSolverBase(object):
         self.ndims = len(observers[0])
         self.solidsurf = True if surftype == 'solid' else False
         
-        if (timeparam.ltsub + self.tol) <= timeparam.dtsim:
+        if timeparam.ltsub + self.tol <= timeparam.dtsub:
             raise ValueError(f'ltsub window length {timeparam.ltsub}'
-                        f' is too short or less than simulation time step'
-                        f' {timeparam.dtsim}')
+                        f' is too short or less than window time step'
+                        f' {timeparam.dtsub}')
         if timeparam.shift > 1.:
             raise  ValueError(f'window overlap/shift {timeparam.shift} cannot '
                                 'exceed one, please adjust it as necessary')
@@ -1442,28 +1448,21 @@ class FwhSolverBase(object):
 
         self._prepare_fft_param(timeparam)
 
-    def _prepare_fft_param(self,timeparam):
-        ltsub = timeparam.ltsub
-        dtsub = timeparam.dtsub 
+    def _prepare_fft_param(self, timeparam):
+        self.ltsub = ltsub = timeparam.ltsub
+        self.dtsub = dtsub = timeparam.dtsub 
         self.shift = shift = timeparam.shift
         if timeparam.window in list(self.windows)[1:]:
             self.window = window = timeparam.window
         else:
             self.window = window = None
         self.psd_scale_mode = scaling_mode = timeparam.psd_scale_mode
-        self.dtsim = dtsim = timeparam.dtsim
+        self.dtsim = timeparam.dtsim
         
         # Adjust inputs
-        ntsub = ltsub/dtsub
-        #(1) dtsub
-        self.dtsub = dtsub 
-        #= int(np.rint(dtsub/dtsim))*dtsim  if dtsub > dtsim else dtsim
-        #(2) compute ntsub as a power of 2 number
-        #N = int(np.rint(ltsub/dtsub))
-        self.ntsub = ntsub = int(ntsub) #= self.get_num_nearest_pow_of_two(N)
-        #self.ntsub = ntsub = N
-        #(3): adjust the window length
-        self.ltsub = ltsub = ntsub*dtsub
+        self.ntsub = ntsub = int(ltsub/dtsub)
+        #adjust the window length
+        self.ltsub = ntsub*dtsub
 
         #(4) Adjusting shift parameters for window averaging and overlapping
         # partial (0.01 < shift < 1) or complete overlap (shift = 1)
@@ -1518,40 +1517,22 @@ class FwhSolverBase(object):
             self.avgcnt += 1
 
     #-FFT utilities
-    @staticmethod
-    def rfft(udata_):
-        dsize = udata_.shape[-1]
-        # freqsize: size of half the spectra with positive frequencies
-        freqsize = int(dsize/2) if dsize%2 == 0 else int(dsize-1)/2
-        ufft = np.fft.rfft(udata_)/freqsize 
-        return ufft
+    def _welch_accum(self, pmagsum, presum, pimgsum):
+        mode = self.psd_scale_mode
+        pfft = self.pfft
+        mag = np.abs(pfft)*np.abs(pfft) if mode == 'density' else np.abs(pfft)
+        pmagsum += mag
+        presum  += np.real(pfft)
+        pimgsum += np.imag(pfft)
 
-    @staticmethod
-    def welch_accum(ufft, magsum, realsum, imgsum, mode='density'):
-        mag = np.abs(ufft)*np.abs(ufft) if mode == 'density' else np.abs(ufft)
-        magsum += mag
-        realsum += np.real(ufft)
-        imgsum  += np.imag(ufft)
-        return magsum, realsum, imgsum
-
-    @staticmethod
-    def compute_welch_average(nwindows, umag, ureal, uimg, mode='density'):
-        mag = np.sqrt(umag / nwindows) if mode=='density' else umag/nwindows
-        phase = np.arctan2( uimg, ureal)
-        ufft = mag * np.exp(1j * phase)
-        return ufft
-
-    @staticmethod
-    def get_num_nearest_pow_of_two(N):
-        exponent = int(np.log2(N))
-        diff0 = np.abs(N-pow(2,exponent))
-        diff1 = np.abs(N-pow(2,exponent+1))
-        return pow(2,exponent) if diff0 < diff1 else pow(2,exponent+1)
-
-    @staticmethod
-    def _surface_integrate(qdA,p):
-        #i=nobservers, j=nfreq or ntime, k=nqpts
-        return np.einsum('ijk,k->ij', p, qdA)
+    def _welch_average(self):
+        mode = self.psd_scale_mode
+        nwindows = self.avgcnt
+        pmag, preal, pimg = self.pmagsum, self.presum, self.pimgsum
+        mag = np.sqrt(pmag/nwindows) if mode=='density' else pmag/nwindows
+        phase = np.arctan2(pimg, preal)
+        pfft = mag*np.exp(1j*phase)
+        return pfft
 
     def compute_fwh_solution(self, *args, **kwds):
         pass
@@ -1594,7 +1575,6 @@ class FwhFreqDomainSolver(FwhSolverBase):
 
         return
 
-
     @staticmethod
     def compute_distance_vars(xyz_src, xyz_ob, Minf):
         nobserv = xyz_ob.shape[0]
@@ -1631,11 +1611,9 @@ class FwhFreqDomainSolver(FwhSolverBase):
         self.pfft = self._compute_observer_pfft(Q, F)
         # use welch method if averaging
         if self.averaging:
-            self.welch_accum(self.pfft, self.pmagsum, self.presum, 
-                            self.pimgsum, self.psd_scale_mode)
+            self._welch_accum(self.pmagsum, self.presum, self.pimgsum)
             if self.avgcnt > 1:
-                self.pfft = self.compute_welch_average(self.avgcnt, 
-                self.pmagsum, self.presum, self.pimgsum, self.psd_scale_mode)
+                self.pfft = self._welch_average()
             #update the averaging counter
             self.avgcnt += 1
         #update the step counter
@@ -1691,11 +1669,10 @@ class FwhFreqDomainSolver(FwhSolverBase):
         Qfft = np.empty((self.nfreq, self.nqpts), dtype=np.complex64)
         Ffft = np.empty((self.nfreq, self.nqpts, self.ndims), 
                                                 dtype=np.complex64)
-        #F shape, nt, nqpts, ndim
-        F = np.swapaxes(F, 0, 2).reshape(-1, self.ntsub)
-        Qfft = self.rfft(Q.T).T
-        ft0 = self.rfft(F).reshape(self.ndims, self.nqpts, -1)
-        Ffft = np.swapaxes(ft0, 0, 2)
+        F = np.swapaxes(F, 0, 2).reshape(-1, self.ntsub) #shape:nt,nqpts,ndim
+        Qfft = realfft(Q.T).T
+        Ffft = realfft(F).reshape(self.ndims, self.nqpts, -1)
+        Ffft = np.swapaxes(Ffft, 0, 2)
 
         #compute pfft, i=nob, j=nfreq, k=nqpts, p shape i,j,k 
         kwvR = np.einsum('ik,j->jik', mR, kwv)
@@ -1703,19 +1680,20 @@ class FwhFreqDomainSolver(FwhSolverBase):
         exp_term1 = exp_term0/mRs          # exp(-ikR)/R*
         exp_term2 = exp_term0/(mRs*mRs) # exp(-ikR)/(R* x R*)
         # p1_term
-        pfft  = 1j * np.einsum('j,jik,jk->ijk', omega, exp_term1, Qfft)
+        pfreq  = 1j*np.einsum('j,jik,jk->ijk', omega, exp_term1, Qfft)
         # p2_term0 
-        pfft += 1j * np.einsum('j,jik,ikm,jkm->ijk',
+        pfreq += 1j*np.einsum('j,jik,ikm,jkm->ijk',
                                         kwv, exp_term1, nR, Ffft)   
         # p2_term1 
-        pfft += np.einsum('jik,ikm,jkm->ijk', exp_term2, nRs, Ffft) 
+        pfreq += np.einsum('jik,ikm,jkm->ijk', exp_term2, nRs, Ffft) 
 
-        # surface integration
-        pfft = self._surface_integrate(self.qdA, pfft)
+        #surface integration
+        #i=nobservers, j=nfreq or ntime, k=nqpts
+        pfft =  np.einsum('ijk,k->ij', pfreq, self.qdA)
         pfft /= (4.*np.pi)
         if self.window:
             pfft *= self.windscale
-
+        
         return pfft
 
 
@@ -1761,7 +1739,7 @@ class MonopoleSrc(PointAcousticSrc):
             ptime[i] = self._comput_exact_psoln(xyz_ob, ti, ptime[i])
 
         ptime = np.moveaxis(ptime, 0, 1)
-        pfft = FwhFreqDomainSolver.rfft(ptime)
+        pfft = realfft(ptime)
 
         return self.freq, pfft
 

@@ -251,8 +251,7 @@ class CubicSplineFit(CurveFit):
     @property
     def spl(self):
         return tuple((self._xs, self._ys, self._zs))
-
-    @memoize   
+  
     def _spl_matrix_coeffs(self):
         t, y = self._xs, self._ys
         n = np.asarray(t).shape[0]
@@ -273,7 +272,7 @@ class CubicSplineFit(CurveFit):
         d[0] = slope[0]
         d[-1] = slope[-1]
 
-        return a, b, c, d
+        return [a, b, c, d]
 
     def _notaknot(self, a, b, c, d):
         #d3S0(x[1]) = d3S1(x[1])
