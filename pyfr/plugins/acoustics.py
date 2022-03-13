@@ -9,7 +9,7 @@ import sys
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, get_mpi
-from pyfr.nputil import CubicSplineFit, fuzzysort, LinearFit, npeval
+from pyfr.nputil import CubicSplineFit, fuzzysort, linintrp, npeval
 from pyfr.plugins.base import BasePlugin
 from pyfr.writers.native import NativeWriter
 
@@ -164,7 +164,7 @@ class FwhSolverPlugin(BasePlugin):
         intrptype = self.cfg.get(cfgsect, 'usoln-interp-func', 'spl, periodic')
         intrptype = intrptype.split('spl,')[-1].strip()
         if intrptype == 'linear':
-            self._curvfit = LinearFit()
+            self._curvfit = lambda xintrp, xs, ys: linintrp(xintrp, xs, ys) #LinearFit()
         else:
             self._curvfit = CubicSplineFit(bctype=intrptype)
         self._intrptype = intrptype
@@ -836,7 +836,7 @@ class FwhSolverPlugin(BasePlugin):
                     shiftstep =  self.fwhsolver.ntsub - self.fwhsolver.ntoverlap
                 twindintrp = self._fwhtwind[shiftstep: ]
                 #interpolate to fixed dtsub
-                intrpsoln = self._curvfit.intrp(twindintrp, tcurrwind, usolnarr)
+                intrpsoln = self._curvfit(twindintrp, tcurrwind, usolnarr)
                 #copy soln to fwhusoln array
                 self._fwhusoln[shiftstep: ] = intrpsoln.reshape(-1, 
                                                 self.nvars, self.nqpts)

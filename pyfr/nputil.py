@@ -142,7 +142,8 @@ def get_interval_idxs(t, xarr):
 #Modified Gauss Elimination/Thompson algorithm for tridiag systems
 #All changes are done in place and the algorithm 
 #is applied to the lhs and rhs together
-def trislv(a, b, c, d):
+def trislv(abc, d):
+    a, b, c = abc
     #forward elimination
     d[0] /= b[0]
     for i, (ai, bi, bj, ci, dj) in enumerate(
@@ -164,61 +165,36 @@ def trislv(a, b, c, d):
 #Using Sherman-Morrison formula and Thompson algorithm
 # A = A + u ⊗ v
 # u, v are vectors
-def trislvcyc(a, b, c, d, alpha, beta):
-    u = np.zeros(d.shape[0], dtype=d.dtype)
-    #Solve the two systems, Ax = d, Bz = u in place, i.e., d->x, u->z
-    gam = -b[0] 
-    b[0] *= 2
-    b[-1] -= alpha*beta/gam
-    u[0] = gam
-    u[-1] = alpha
-    #solve the two systems in one loop
-    #forward elimination
-    d[0] /= b[0]
-    u[0] /= b[0]
-    for i, (ai, bi, bj, ci, dj, uj) in enumerate(
-                zip(a, b[1: ], b[: -1], c, d[: -1], u[: -1]), start=1):
-        #lhs coeffs
-        c[i-1] = cdivb = ci/bj
-        b[i]  = bi1 = bi - ai*cdivb  
-        # first rhs
-        d[i] -= ai*dj
-        d[i] /= bi1
-        # second rhs
-        u[i] -= ai*uj
-        u[i] /= bi1
+def trislvcyc(abc, d, alpha, beta):
+    b = abc[1]
+    ud = np.hstack([d, np.zeros((len(d), 1))])
+    b[-1] -= alpha*beta/b[0]
+    ud[[0, -1], -1] = -b[0], alpha
 
-    #backward substitution
-    dd = d[::-1]
-    uu = u[::-1]
-    for i, (ci, dj, uj) in enumerate(
-            zip(c[::-1], d[:0:-1], u[:0:-1]), start=1):
-        dd[i] -= ci*dj
-        uu[i] -= ci*uj
+    #solve the cyclic tri system
+    trislv(abc, ud)
+    d[:] = ud[:, :-1]
+    u = ud[:, -1]
 
     #compute the final solution
-    fact = (d[0] + alpha*d[-1]/gam)/(1.0 + u[0] + alpha*u[-1]/gam)
+    fact = (d[0] - alpha*d[-1]/b[0])/(1.0 + u[0] - alpha*u[-1]/b[0])
     d -= fact*u[:, None]
 
 
-class LinearFit:
-    def __init__(self):
-        pass
-    
-    def intrp(self, x_intrp, xs, ys):
-        y_interp = np.zeros((ys.shape[1], x_intrp.shape[0]))
-        for i, yss in enumerate(ys.T):
-            y_interp[i] = np.interp(x_intrp, xs, yss)
+def linintrp(x_intrp, xs, ys):
+    y_interp = np.zeros((ys.shape[1], x_intrp.shape[0]))
+    for i, yss in enumerate(ys.T):
+        y_interp[i] = np.interp(x_intrp, xs, yss)
 
-        return y_interp.T 
+    return y_interp.T 
 
 
 class CubicSplineFit:
     def __init__(self, xs=None, ys=None, bctype='not-a-knot'):
         
         self.splineslv =  {
-            'periodic': lambda a, b, c, d: self._periodic(a, b, c, d), 
-            'not-a-knot': lambda a, b, c, d: self._notaknot(a, b, c, d)
+            'periodic': lambda abc, d: self._periodic(abc, d), 
+            'not-a-knot': lambda abc, d: self._notaknot(abc, d)
             }
 
         self._bctype = bctype
@@ -236,12 +212,12 @@ class CubicSplineFit:
     def _construct(self, xs, ys,  bctype='not-a-knot'):
         self._xs = xs
         self._ys = ys
-        a, b, c, d = self._spl_matrix_coeffs()
+        abc, d = self._spl_matrix_coeffs()
 
-        self.splineslv[bctype](a, b, c, d)
+        self.splineslv[bctype](abc, d)
         self._zs = d
 
-    def intrp(self, x_intrp, xs=None, ys=None):
+    def __call__(self, x_intrp, xs=None, ys=None):
         if np.any(xs):
             self.update(xs, ys, self._bctype)
         return self._spleval(x_intrp)
@@ -252,9 +228,8 @@ class CubicSplineFit:
   
     def _spl_matrix_coeffs(self):
         t, y = self._xs, self._ys
-        n = np.asarray(t).shape[0]
-        b = np.zeros(n, dtype=t.dtype)
-        d = np.zeros(y.shape, dtype=y.dtype)
+        b = np.zeros_like(t)
+        d = np.zeros_like(y)
         dx = np.diff(t)
         if len(y.shape) > 1:
             dxs = dx[:, None]
@@ -270,11 +245,12 @@ class CubicSplineFit:
         d[0] = slope[0]
         d[-1] = slope[-1]
 
-        return a, b, c, d
+        return [a, b, c], d
 
-    def _notaknot(self, a, b, c, d):
+    def _notaknot(self, abc, d):
         #d3S0(x[1]) = d3S1(x[1])
         #d3S_n-3(x[-2]) = d3S_n-2(x[-2])
+        a, b, c = abc
         beta0  = a[0]/a[1]
         beta1  = a[-1]/a[-2]
 
@@ -283,16 +259,19 @@ class CubicSplineFit:
         b[-2] += beta1*(a[-1] + a[-2])
         a[-2] -= a[-1]*beta1
 
-        trislv(a[1: -1], b[1: -1], c[1: -1], d[1: -1])
+        abc_m = [a[1: -1], b[1: -1], c[1: -1]]
+        trislv(abc_m, d[1: -1])
         d[0]  = -beta0*d[2]  + (1 + beta0)*d[1] 
         d[-1] = -beta1*d[-3] + (1 + beta1)*d[-2]
 
-    def _periodic(self, a, b, c, d):
+    def _periodic(self, abc, d):
         #z0 = z1
         #write equation for i=0 and note that i-1=n-2
+        a, b, c = abc
         d[0] = 6*(d[0] - d[-1])
         b[0] = 2*(a[0] + a[-1])
-        trislvcyc(a[: -1], b[: -1], c[: -1], d[: -1], a[-1], a[-1])
+        abc_m = [a[: -1], b[: -1], c[: -1]]
+        trislvcyc(abc_m, d[: -1], a[-1], a[-1])
         d[-1] = d[0]
 
     #Evaluate yy at xx point using the cubic spline representation
