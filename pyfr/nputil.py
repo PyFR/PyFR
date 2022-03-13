@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import ctypes as ct
+import enum
 import functools as ft
 import itertools as it
 import re
@@ -199,27 +200,26 @@ def trislvcyc(a, b, c, d, alpha, beta):
     fact = (d[0] + alpha*d[-1]/gam)/(1.0 + u[0] + alpha*u[-1]/gam)
     d -= fact*u[:, None]
 
+
+class LinearFit:
+    def __init__(self):
+        pass
     
-class CurveFit:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def intrp(self, *args):
-        pass
-
-class LinearFit(CurveFit):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self._interp = np.vectorize(np.interp, signature='(r),(n),(m)->(r)')
-
     def intrp(self, x_intrp, xs, ys):
-        return self._interp(x_intrp, xs, ys.T).T
+        y_interp = np.zeros((ys.shape[1], x_intrp.shape[0]))
+        for i, yss in enumerate(ys.T):
+            y_interp[i] = np.interp(x_intrp, xs, yss)
+
+        return y_interp.T 
 
 
-class CubicSplineFit(CurveFit):
+class CubicSplineFit:
     def __init__(self, xs=None, ys=None, bctype='not-a-knot'):
-        super().__init__(xs=None, ys=None, bctype='not-a-knot')
+        
+        self.splineslv =  {
+            'periodic': lambda a, b, c, d: self._periodic(a, b, c, d), 
+            'not-a-knot': lambda a, b, c, d: self._notaknot(a, b, c, d)
+            }
 
         self._bctype = bctype
         if np.any(xs):
@@ -237,10 +237,8 @@ class CubicSplineFit(CurveFit):
         self._xs = xs
         self._ys = ys
         a, b, c, d = self._spl_matrix_coeffs()
-        if bctype == 'periodic':
-            self._periodic(a, b, c, d)
-        elif bctype == 'not-a-knot':
-            self._notaknot(a, b, c, d)
+
+        self.splineslv[bctype](a, b, c, d)
         self._zs = d
 
     def intrp(self, x_intrp, xs=None, ys=None):
@@ -250,7 +248,7 @@ class CubicSplineFit(CurveFit):
 
     @property
     def spl(self):
-        return tuple((self._xs, self._ys, self._zs))
+        return (self._xs, self._ys, self._zs)
   
     def _spl_matrix_coeffs(self):
         t, y = self._xs, self._ys
@@ -272,7 +270,7 @@ class CubicSplineFit(CurveFit):
         d[0] = slope[0]
         d[-1] = slope[-1]
 
-        return [a, b, c, d]
+        return a, b, c, d
 
     def _notaknot(self, a, b, c, d):
         #d3S0(x[1]) = d3S1(x[1])

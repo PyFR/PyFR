@@ -27,36 +27,27 @@ def write_fftdata(fname, *indata, header='', mode='a'):
     outf = open_csv(fname, ''.join(header), mode)
     #prepare the data array
     data = np.array(indata)
-    dshape = data.shape
     #do write
-    for i in range(dshape[1]):
-        print(*data[:, i].ravel(), sep=' ', file=outf)
+    for d in data.T:
+        print(*d.ravel(), sep=' ', file=outf)
     outf.flush()
-    return
 
-def realfft(udata_):
-        dsize = udata_.shape[-1]
-        # freqsize: size of half the spectra with positive frequencies
-        freqsize = int(dsize/2) if dsize%2 == 0 else int(dsize-1)/2
-        ufft = np.fft.rfft(udata_)/freqsize 
-        return ufft
-
-def compute_spl(pref, amp, df=None):
-    sqrt2 = 1./np.sqrt(2.) 
-    lgsqrt2 = 20.*np.log10(sqrt2)
-    factor = sqrt2/pref if not df else sqrt2/(pref*np.sqrt(df))
-    spl = 20.*np.log10(factor*amp) 
+def compute_spl(pref, amp, df=1):
+    sqrt2 = 2**-0.5 
+    lgsqrt2 = 20*np.log10(sqrt2)
+    factor = sqrt2/(pref*np.sqrt(df))
+    spl = 20*np.log10(factor*amp) 
     spl[0] -= lgsqrt2
     spl[-1] -= lgsqrt2
     #overall sound pressure level
-    ospl_sum = sum(pow(10., spl/10.)) if not df else df*sum(pow(10., spl/10.))
-    oaspl = 10.* np.log10(ospl_sum) 
+    ospl_sum = df*np.sum(10**spl/10, axis=1)
+    oaspl = 10*np.log10(ospl_sum) 
     return spl, oaspl
 
 def compute_psd(amp, df):
     psd = 0.5*amp*amp/df
-    psd[0] *= 2.
-    psd[-1] *= 2.
+    psd[0] *= 2
+    psd[-1] *= 2
     return psd
 
 def Gatherv_data_arr(comm, rank, root, data_arr):
@@ -382,7 +373,7 @@ class FwhSolverPlugin(BasePlugin):
             tperiod = 1./srcfreq
             nperiods = self.fwhsolver.ntsub * self.fwhsolver.dtsub / tperiod
             gamma = self.constvars['gamma']
-            self._pntacsrc = MonopoleSrc('smonopole', srclocs, srcuinf, srcamp,
+            self._pntacsrc = MonopoleSrc(srclocs, srcuinf, srcamp,
                                         srcfreq, self.ntsub, nperiods, gamma)
             if self.active_fwhrank and self.fwhrank == 0:
                 co = np.sqrt(gamma*srcuinf[-1]/srcuinf[0]) 
@@ -886,7 +877,7 @@ class FwhSolverPlugin(BasePlugin):
                         freq = self.fwhsolver.freq
                         pmag, pang = np.abs(pfft[ob,:]), np.angle(pfft[ob,:])
                         wdata = np.array([freq, pmag, pang, 
-                                            psd[ob,:], spl[ob,:], nwindarr]).T
+                                            psd[ob,:], spl[ob,:], nwindarr])
                         fname = bname.format(ob=ob)
                         header = ','.join(['#Frequency (Hz)', 
                                         ' Magnitude (Pa)', ' Phase (rad)'])
@@ -906,7 +897,7 @@ class FwhSolverPlugin(BasePlugin):
                         bname = os.path.join(self.basedir, bb)
                         for ob in range(self.nobsrv):
                             wdata = np.array([freq_ex, np.abs(pfft_ex[ob,:]),
-                                        np.angle(pfft_ex[ob,:]),nwindarr]).T
+                                        np.angle(pfft_ex[ob,:]),nwindarr])
                             fname = bname.format(ob=ob)
                             header = ','.join(['#Frequency (Hz)',
                                 ' Magnitude (Pa)', ' Phase (rad)', ' Nwindow'])
@@ -1666,12 +1657,11 @@ class FwhFreqDomainSolver(FwhSolverBase):
             F = np.einsum('i,ijk->ijk', self.wwind, F)
 
         # perform fft of Q, F fluxes
-        Qfft = np.empty((self.nfreq, self.nqpts), dtype=np.complex64)
-        Ffft = np.empty((self.nfreq, self.nqpts, self.ndims), 
-                                                dtype=np.complex64)
+        # freqsize: size of half the spectra with positive frequencies
+        freqsize = self.ntsub//2
+        Qfft = np.fft.rfft(Q.T).T/freqsize
         F = np.swapaxes(F, 0, 2).reshape(-1, self.ntsub) #shape:nt,nqpts,ndim
-        Qfft = realfft(Q.T).T
-        Ffft = realfft(F).reshape(self.ndims, self.nqpts, -1)
+        Ffft = np.fft.rfft(F).reshape(self.ndims, self.nqpts, -1)/freqsize
         Ffft = np.swapaxes(Ffft, 0, 2)
 
         #compute pfft, i=nob, j=nfreq, k=nqpts, p shape i,j,k 
@@ -1698,35 +1688,35 @@ class FwhFreqDomainSolver(FwhSolverBase):
 
 
 class PointAcousticSrc(object):
-    def __init__(self, name, srclocs, flowinfo, *srcdata):
-        self.name = name
+    def __init__(self, srclocs, flowinfo):
         self.srclocs = srclocs
         self.ndims = len(srclocs)
         self.nvars = len(flowinfo)
         self.rhoinf = flowinfo[0]
-        self.uinf = flowinfo[1:self.ndims+1]
+        self.uinf = flowinfo[1 :self.ndims+1]
         self.pinf = flowinfo[-1]
 
     def acoustic_psoln(self, *args):
         pass
+
     def update_usoln(self, *args):
         pass
 
 class MonopoleSrc(PointAcousticSrc):
-    def __init__(self, name, srclocs, flowinfo, ampl, srcfreq, ntime, nperiods,
+    name = 'Monopole'
+    def __init__(self, srclocs, flowinfo, ampl, srcfreq, ntime, nperiods,
                  gamma):
-        super().__init__(name, srclocs, flowinfo, ampl, srcfreq, ntime,
-                         nperiods, gamma)
+        super().__init__(srclocs, flowinfo) 
         self.gamma = gamma
-        self.co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
         self.ampl = ampl
         self.srcfreq = srcfreq
         self.nperiods = nperiods
         self.nt = ntime
+        self.co = np.sqrt(self.gamma*self.pinf/self.rhoinf)
         self.omega = 2.*np.pi*self.srcfreq
         self.tperiod = 2.*np.pi/self.omega
         self.dt = self.nperiods*self.tperiod/self.nt
-        self.freq = np.fft.rfftfreq(self.nt,self.dt)
+        self.freq = np.fft.rfftfreq(self.nt, self.dt)
         self.nfreq = len(self.freq)
         
     def acoustic_psoln(self, xyz_ob):
@@ -1736,14 +1726,15 @@ class MonopoleSrc(PointAcousticSrc):
 
         tarr = np.arange(0, self.nt)*self.dt
         for i, ti in enumerate(tarr):
-            ptime[i] = self._comput_exact_psoln(xyz_ob, ti, ptime[i])
+            ptime[i] = self._comput_exact_psoln(xyz_ob, ti)
 
         ptime = np.moveaxis(ptime, 0, 1)
-        pfft = realfft(ptime)
+        freqscale = self.nt//2
+        pfft = np.fft.rfft(ptime)/freqscale
 
         return self.freq, pfft
 
-    def _comput_exact_psoln(self, xyz_ob, tcurr, psoln):
+    def _comput_exact_psoln(self, xyz_ob, tcurr):
         phy, _, mdotdphy = self._comput_vel_potentials(xyz_ob, tcurr)
         psoln = - np.real(self.rhoinf*(1j*self.omega*phy + self.co*mdotdphy))
         return psoln
@@ -1773,10 +1764,12 @@ class MonopoleSrc(PointAcousticSrc):
         mdotdphy = sum((Mo*dphy.T).T)
         return phy, dphy, mdotdphy
 
-class DipoleSrc(PointAcousticSrc):
-    def __init__(self, name, srclocs, flowinfo, *srcdata):
-        super().__init__(name, srclocs, flowinfo, *srcdata)
 
+class DipoleSrc(PointAcousticSrc):
+    def __init__(self, srclocs, flowinfo, *args):
+        super().__init__(srclocs, flowinfo)
+
+#Debugging purposes
 class VTUSurfWriter(object):
 
     vtkfile_version = '2.1'
