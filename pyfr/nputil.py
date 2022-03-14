@@ -134,10 +134,11 @@ def npdtype_to_ctypestype(dtype):
 def get_interval_idxs(t, xarr):
     if np.asarray(xarr).size > 1:
         idxs = np.array([np.max(np.nonzero(xx >= t[:-1] - 1e-12)[0]) 
-                                                        for xx in xarr])
+                                                    for xx in xarr])
     else:
         idxs = np.max(np.nonzero(xarr >= t[:-1] - 1e-12)[0])
     return idxs
+
 
 #Modified Gauss Elimination/Thompson algorithm for tridiag systems
 #All changes are done in place and the algorithm 
@@ -159,7 +160,6 @@ def trislv(abc, d):
     dd = d[::-1]
     for i, (ci, dj) in enumerate(zip(c[::-1], d[:0:-1]), start=1):
         dd[i] -= ci*dj
-
 
 #tridiagonal solver for cyclic/periodic systems 
 #Using Sherman-Morrison formula and Thompson algorithm
@@ -275,12 +275,9 @@ class CubicSplineFit:
         d[-1] = d[0]
 
     #Evaluate yy at xx point using the cubic spline representation
-    def _spleval(self, xarr, indexs=None):
+    def _spleval(self, xarr):
         t, y, z = self.spl
-        if np.any(indexs == None):
-            idxs = get_interval_idxs(t, xarr) 
-        else:
-            idxs = indexs
+        idxs = get_interval_idxs(t, xarr) 
         t = t[:, None]
         ht = t[idxs+1] - t[idxs]
         hxt = xarr[:, None] - t[idxs]
