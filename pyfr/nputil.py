@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import ctypes as ct
-import enum
 import functools as ft
 import itertools as it
 import re
 
 import numpy as np
-from pyfr.util import memoize
 
 
 def block_diag(arrs):
@@ -130,16 +128,6 @@ def npdtype_to_ctypestype(dtype):
     return _ctypestype_map[np.dtype(dtype).type]
 
 
-#Get indices for interval segments of interpolation
-def get_interval_idxs(t, xarr):
-    if np.asarray(xarr).size > 1:
-        idxs = np.array([np.max(np.nonzero(xx >= t[:-1] - 1e-12)[0]) 
-                                                    for xx in xarr])
-    else:
-        idxs = np.max(np.nonzero(xarr >= t[:-1] - 1e-12)[0])
-    return idxs
-
-
 #Modified Gauss Elimination/Thompson algorithm for tridiag systems
 #All changes are done in place and the algorithm 
 #is applied to the lhs and rhs together
@@ -169,27 +157,29 @@ def trislvcyc(abc, d, alpha, beta):
     b = abc[1]
     ud = np.hstack([d, np.zeros((len(d), 1))])
     b[-1] -= alpha*beta/b[0]
-    ud[[0, -1], -1] = -b[0], alpha
+    ud[0, -1] = -b[0]
+    ud[-1, -1] = alpha
 
     #solve the cyclic tri system
     trislv(abc, ud)
     d[:] = ud[:, :-1]
-    u = ud[:, -1]
+    u = np.reshape(ud[:, -1], (-1,) + (1,)*(ud.ndim - 1))
 
     #compute the final solution
     fact = (d[0] - alpha*d[-1]/b[0])/(1.0 + u[0] - alpha*u[-1]/b[0])
-    d -= fact*u[:, None]
+    d -= fact*u
 
 
-def linintrp(x_intrp, xs, ys):
-    y_interp = np.zeros((ys.shape[1], x_intrp.shape[0]))
-    for i, yss in enumerate(ys.T):
-        y_interp[i] = np.interp(x_intrp, xs, yss)
+def interpv(x, xp, yp):
+    idx = np.interp(x, xp, np.arange(len(xp)))
+    lidx = np.floor(idx).astype(int)
+    ridx = np.minimum(lidx + 1, len(xp) - 1)
 
-    return y_interp.T 
+    t = np.reshape(lidx + 1 - idx, (-1,) + (1,)*(yp.ndim - 1))
+    return t*yp[lidx] + (1 - t)*yp[ridx]
 
 
-class CubicSplineFit:
+class CubicSpline:
     def __init__(self, xs=None, ys=None, bctype='not-a-knot'):
         
         self.splineslv =  {
@@ -228,14 +218,11 @@ class CubicSplineFit:
   
     def _spl_matrix_coeffs(self):
         t, y = self._xs, self._ys
+        t = t.reshape((-1,) + (1,)*(y.ndim - 1))
         b = np.zeros_like(t)
         d = np.zeros_like(y)
-        dx = np.diff(t)
-        if len(y.shape) > 1:
-            dxs = dx[:, None]
-            slope = np.diff(y, axis=0)/dxs  
-        else:
-            slope = np.diff(y)/dx
+        dx = np.diff(t, axis=0)
+        slope = np.diff(y, axis=0)/dx
 
         #preparing the core part of the matrix
         b[1: -1] = 2*(dx[: -1] + dx[1: ])  #diag
@@ -274,14 +261,14 @@ class CubicSplineFit:
         trislvcyc(abc_m, d[: -1], a[-1], a[-1])
         d[-1] = d[0]
 
-    #Evaluate yy at xx point using the cubic spline representation
-    def _spleval(self, xarr):
+    #Evaluate yi at xi point using the cubic spline representation
+    def _spleval(self, xi):
         t, y, z = self.spl
-        idxs = get_interval_idxs(t, xarr) 
-        t = t[:, None]
-        ht = t[idxs+1] - t[idxs]
-        hxt = xarr[:, None] - t[idxs]
-        yarr = hxt*(0.5*z[idxs] + hxt*(z[idxs+1] - z[idxs])/(6*ht))
-        yarr += -ht*(z[idxs+1] + 2*z[idxs])/6 + (y[idxs+1] - y[idxs])/ht
-        yarr = y[idxs] + hxt*yarr
-        return yarr
+        idxs = np.interp(xi, t, np.arange(len(t)))
+        idxs = np.floor(idxs).astype(int)
+        ndshape = (-1,) + (1,)*(y.ndim - 1)
+        ht = np.reshape(t[idxs+1] - t[idxs], ndshape)
+        hxt = np.reshape(xi - t[idxs], ndshape)
+        yi = hxt*(0.5*z[idxs] + hxt*(z[idxs+1] - z[idxs])/(6*ht))
+        yi += -ht*(z[idxs+1] + 2*z[idxs])/6 + (y[idxs+1] - y[idxs])/ht
+        return y[idxs] + hxt*yi
