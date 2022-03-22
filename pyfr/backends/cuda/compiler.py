@@ -81,28 +81,27 @@ class NVRTC:
 
                 raise RuntimeError(log.value.decode())
 
-            CUBIN=True
-            if CUBIN:
+            codesz = c_size_t()
+            if len([f for f in flags if 'sm_' in f]) > 0:
                 # Fetch the program size
-                cubinsz = c_size_t()
-                self.lib.nvrtcGetCUBINSize(prog, cubinsz)
+                self.lib.nvrtcGetCUBINSize(prog, codesz)
 
                 # Fetch the program itself
-                cubin = create_string_buffer(cubinsz.value)
-                self.lib.nvrtcGetCUBIN(prog, cubin)
+                cucode = create_string_buffer(codesz.value)
+                self.lib.nvrtcGetCUBIN(prog, cucode)
             else:
                 # Fetch the program size
-                ptxsz = c_size_t()
-                self.lib.nvrtcGetPTXSize(prog, ptxsz)
+                codesz = c_size_t()
+                self.lib.nvrtcGetPTXSize(prog, codesz)
 
                 # Fetch the program itself
-                ptx = create_string_buffer(ptxsz.value)
-                self.lib.nvrtcGetPTX(prog, ptx)
+                cucode = create_string_buffer(codesz.value)
+                self.lib.nvrtcGetPTX(prog, cucode)
         finally:
             # Destroy the program
             self.lib.nvrtcDestroyProgram(prog)
 
-        return ptx.raw
+        return cucode.raw
 
 
 class SourceModule:
@@ -115,7 +114,6 @@ class SourceModule:
 
         # Compiler flags
         flags = [
-                #f'--gpu-architecture=compute_{cmajor}{cminor}',
             f'--gpu-architecture=sm_{cmajor}{cminor}',
             '--ftz=true',
             '--fmad=true'
@@ -123,11 +121,11 @@ class SourceModule:
 
         flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
 
-        # Compile to PTX
-        ptx = backend.nvrtc.compile('kernel', src, flags)
+        # Compile to CUDA code (either PTX or CUBIN, depending on arch flag)
+        cucode = backend.nvrtc.compile('kernel', src, flags)
 
         # Load it as a module
-        self.mod = backend.cuda.load_module(ptx)
+        self.mod = backend.cuda.load_module(cucode)
 
     def get_function(self, name, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
