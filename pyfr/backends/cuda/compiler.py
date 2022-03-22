@@ -43,7 +43,9 @@ class NVRTCWrappers(LibWrapper):
         (c_int, 'nvrtcGetPTXSize', c_void_p, POINTER(c_size_t)),
         (c_int, 'nvrtcGetPTX', c_void_p, c_char_p),
         (c_int, 'nvrtcGetProgramLogSize', c_void_p, POINTER(c_size_t)),
-        (c_int, 'nvrtcGetProgramLog', c_void_p, c_char_p)
+        (c_int, 'nvrtcGetProgramLog', c_void_p, c_char_p),
+        (c_int, 'nvrtcGetCUBINSize', c_void_p, POINTER(c_size_t)),
+        (c_int, 'nvrtcGetCUBIN', c_void_p, c_char_p)
     ]
 
 
@@ -79,13 +81,23 @@ class NVRTC:
 
                 raise RuntimeError(log.value.decode())
 
-            # Fetch the program size
-            ptxsz = c_size_t()
-            self.lib.nvrtcGetPTXSize(prog, ptxsz)
+            CUBIN=True
+            if CUBIN:
+                # Fetch the program size
+                cubinsz = c_size_t()
+                self.lib.nvrtcGetCUBINSize(prog, cubinsz)
 
-            # Fetch the program itself
-            ptx = create_string_buffer(ptxsz.value)
-            self.lib.nvrtcGetPTX(prog, ptx)
+                # Fetch the program itself
+                cubin = create_string_buffer(cubinsz.value)
+                self.lib.nvrtcGetCUBIN(prog, cubin)
+            else:
+                # Fetch the program size
+                ptxsz = c_size_t()
+                self.lib.nvrtcGetPTXSize(prog, ptxsz)
+
+                # Fetch the program itself
+                ptx = create_string_buffer(ptxsz.value)
+                self.lib.nvrtcGetPTX(prog, ptx)
         finally:
             # Destroy the program
             self.lib.nvrtcDestroyProgram(prog)
@@ -103,7 +115,8 @@ class SourceModule:
 
         # Compiler flags
         flags = [
-            f'--gpu-architecture=compute_{cmajor}{cminor}',
+                #f'--gpu-architecture=compute_{cmajor}{cminor}',
+            f'--gpu-architecture=sm_{cmajor}{cminor}',
             '--ftz=true',
             '--fmad=true'
         ]
