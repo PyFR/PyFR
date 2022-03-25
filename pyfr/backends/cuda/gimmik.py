@@ -30,14 +30,12 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
         # Generate
-        src = generate_mm(arr, dtype=a.dtype, platform='cuda',
-                          alpha=alpha, beta=beta)
+        src = generate_mm(arr, a.dtype, 'cuda', alpha=alpha, beta=beta,
+                          n=b.ncol, ldb=b.leaddim, ldc=out.leaddim)
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src,
-                                 [np.int32, np.intp]*2 + [np.int32])
+        fun = self._build_kernel('gimmik_mm', src, [np.intp, np.intp])
         fun.set_cache_pref(prefer_l1=True)
-
 
         # Determine the grid/block
         block = (128, 1, 1)
@@ -45,7 +43,6 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         class MulKernel(Kernel):
             def run(self, queue):
-                fun.exec_async(grid, block, queue.stream, b.ncol, b, b.leaddim,
-                               out, out.leaddim)
+                fun.exec_async(grid, block, queue.stream, b, out)
 
         return MulKernel()
