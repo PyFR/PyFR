@@ -8,21 +8,25 @@
               rold='out fpdtype_t[${str(nvars)}]'
               rerr='inout fpdtype_t[${str(nvars)}]'
               dt='scalar fpdtype_t'>
-% for j in range(nvars):
-% if errest:
-% if stage == 0:
-    rerr[${j}] = dt*${e[stage]}*r2[${j}];
-    rold[${j}] = r1[${j}];
-% else:
-    rerr[${j}] += dt*${e[stage]}*r2[${j}];
+    fpdtype_t tmpr1[] = ${pyfr.array('r1[{j}]', j=nvars)};
+    fpdtype_t tmpr2[] = ${pyfr.array('r2[{j}]', j=nvars)};
+% if errest and stage > 0:
+    fpdtype_t tmprerr[] = ${pyfr.array('rerr[{j}]', j=nvars)};
 % endif
+
+% for j in range(nvars):
+% if errest and stage == 0:
+    rerr[${j}] = dt*${e[stage]}*tmpr2[${j}];
+    rold[${j}] = tmpr1[${j}];
+% elif errest:
+    rerr[${j}] = tmprerr[${j}] + dt*${e[stage]}*tmpr2[${j}];
 % endif
 
 % if stage < nstages - 1:
-    r1[${j}] += dt*${a[stage]}*r2[${j}];
-    r2[${j}] = dt*${b[stage] - a[stage]}*r2[${j}] + r1[${j}];
+    r1[${j}] = tmpr1[${j}] + dt*${a[stage]}*tmpr2[${j}];
+    r2[${j}] = tmpr1[${j}] + dt*${b[stage]}*tmpr2[${j}];
 % else:
-    r1[${j}] += dt*${b[stage]}*r2[${j}];
+    r1[${j}] = tmpr1[${j}] + dt*${b[stage]}*tmpr2[${j}];
 % endif
 % endfor
 </%pyfr:kernel>
