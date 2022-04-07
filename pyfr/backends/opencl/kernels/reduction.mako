@@ -43,7 +43,7 @@ reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
         sdata[tid] = acc;
     }
 
-    barrier(CLK_LOCAL_MEM_FENCE);
+    work_group_barrier(CLK_LOCAL_MEM_FENCE);
 
     // Unrolled reduction within full blocks
     if (bid != gdim - 1)
@@ -57,7 +57,7 @@ reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
             sdata[tid] += sdata[tid + ${n}];
         % endif
         }
-        barrier(CLK_LOCAL_MEM_FENCE);
+        work_group_barrier(CLK_LOCAL_MEM_FENCE);
     % endfor
     }
     // Last block reduced with a variable sized loop
@@ -73,7 +73,7 @@ reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
                 sdata[tid] += sdata[tid + s];
             % endif
             }
-            barrier(CLK_LOCAL_MEM_FENCE);
+            work_group_barrier(CLK_LOCAL_MEM_FENCE);
         }
     }
 
