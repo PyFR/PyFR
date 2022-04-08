@@ -13,11 +13,7 @@
     ${pyfr.expand('calc_smats_detj', 'verts', 'upts', 'smats', 'djac')};
 
     fpdtype_t rcpdjac = 1 / djac;
-    fpdtype_t tmpgradu[${ndims}][${nvars}];
-
-% for i, j in pyfr.ndrange(ndims, nvars):
-    tmpgradu[${i}][${j}] = gradu[${i}][${j}];
-% endfor
+    fpdtype_t tmpgradu[][${nvars}] = ${pyfr.array('gradu[{i}][{j}]', i=ndims, j=nvars)};
 
 % for i, j in pyfr.ndrange(ndims, nvars):
     gradu[${i}][${j}] = rcpdjac*(${' + '.join(f'smats[{k}][{i}]*tmpgradu[{k}][{j}]'
