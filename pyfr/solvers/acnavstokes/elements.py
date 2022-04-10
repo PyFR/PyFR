@@ -13,6 +13,10 @@ class ACNavierStokesElements(BaseACFluidElements,
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
+        # Can elide interior flux calculations at p = 0
+        if self.basis.order == 0:
+            return
+
         # Register our flux kernels
         kprefix = 'pyfr.solvers.acnavstokes.kernels'
         self._be.pointwise.register(f'{kprefix}.tflux')
