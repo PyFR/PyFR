@@ -72,9 +72,14 @@ class OpenCLBackend(BaseBackend):
         kprovs = [provider.OpenCLPointwiseKernelProvider,
                   blasext.OpenCLBlasExtKernels,
                   packing.OpenCLPackingKernels,
-                  gimmik.OpenCLGiMMiKKernels,
-                  clblast.OpenCLCLBlastKernels]
+                  gimmik.OpenCLGiMMiKKernels]
         self._providers = [k(self) for k in kprovs]
+
+        # Load CLBlast if available
+        try:
+            self._providers.append(clblast.OpenCLCLBlastKernels(self))
+        except OSError:
+            pass
 
         # Pointwise kernels
         self.pointwise = self._providers[0]

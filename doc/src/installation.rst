@@ -145,7 +145,7 @@ The OpenCL backend targets a range of accelerators including GPUs from
 AMD, Intel, and NVIDIA. The backend requires:
 
 1. OpenCL
-2. `CLBlast <https://github.com/CNugteren/CLBlast>`_
+2. Optionally `CLBlast <https://github.com/CNugteren/CLBlast>`_
 
 Note that when running on NVIDIA GPUs the OpenCL backend terminate with
 a segmentation fault after the simulation has finished.  This is due
