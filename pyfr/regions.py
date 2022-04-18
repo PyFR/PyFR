@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from ast import literal_eval
 from collections import defaultdict
+import re
 
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.shapes import BaseShape
-from pyfr.util import subclasses, subclass_where
+from pyfr.util import match_paired_paren, subclasses, subclass_where
 
 
 def get_region(name, *args):
@@ -162,3 +164,33 @@ class SphereRegion(BaseRegion):
 
     def __init__(self, x0, r):
         super().__init__(x0, r, r, r)
+
+
+class ConstructiveRegion(BaseRegion):
+    def __init__(self, expr):
+        regions = []
+
+        # Factor out the individual region expressions
+        expr = re.sub(
+            r'(\w+)\((' + match_paired_paren('()') + r')\)',
+            lambda m: regions.append(m.groups()) or f'r{len(regions) - 1}',
+            expr
+        )
+
+        # Parse and construct these individual regions
+        self.regions = [get_region(name, *literal_eval(args))
+                        for name, args in regions]
+
+        # Rewrite in terms of boolean operators
+        self.expr = expr.replace('+', '|').replace('-', '&~')
+
+        # Validate
+        if not re.match(r'[r0-9|&~() ]+$', self.expr):
+            raise ValueError('Invalid region expression')
+
+    def pts_in_region(self, pts):
+        # Query each of our constituent regions
+        rvars = {f'r{i}': r.pts_in_region(pts)
+                 for i, r in enumerate(self.regions)}
+
+        return eval(self.expr, {'__builtins__': None}, rvars)

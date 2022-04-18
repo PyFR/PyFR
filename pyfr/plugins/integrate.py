@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from ast import literal_eval
 import re
 
 import numpy as np
@@ -10,7 +9,7 @@ from pyfr.mpiutil import get_comm_rank_root, get_mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
-from pyfr.regions import get_region
+from pyfr.regions import ConstructiveRegion
 
 
 class IntegratePlugin(BasePlugin):
@@ -103,11 +102,10 @@ class IntegratePlugin(BasePlugin):
             return lambda pts: (slice(None), ([], []))
         # Elements inside of a paramaterised shape
         else:
-            m = re.match(r'(\w+)\((.*)\)$', region)
-            shape = get_region(m[1], *literal_eval(m[2]))
+            crgn = ConstructiveRegion(region)
 
             def esetmask(pts):
-                inside = shape.pts_in_region(np.moveaxis(pts, 0, 2))
+                inside = crgn.pts_in_region(np.moveaxis(pts, 0, 2))
 
                 if np.all(inside):
                     return slice(None), ([], [])

@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 
-from ast import literal_eval
 from collections import defaultdict
 import os
-import re
 import shlex
 
 import numpy as np
 from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.regions import get_region
+from pyfr.regions import ConstructiveRegion
 
 
 def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
@@ -118,12 +116,11 @@ class RegionMixin:
         # All elements
         if region == '*':
             self._prepare_region_data_all(intg)
-        # All elements inside a paramaterised shape
+        # All elements inside a paramaterised region
         elif '(' in region:
-            m = re.match(r'(\w+)\((.*)\)$', region)
-            shape = get_region(m[1], *literal_eval(m[2]))
+            crgn = ConstructiveRegion(region)
+            eset = crgn.interior_eles(intg.system.mesh, intg.rallocs)
 
-            eset = shape.interior_eles(intg.system.mesh, intg.rallocs)
             self._prepare_region_data_eset(intg, eset)
         # All elements on a boundary
         else:
