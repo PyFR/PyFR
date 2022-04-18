@@ -116,7 +116,7 @@ class RegionMixin:
         # All elements
         if region == '*':
             self._prepare_region_data_all(intg)
-        # All elements inside some region region
+        # All elements inside some region
         else:
             # Geometric region
             if '(' in region:

@@ -11,26 +11,9 @@ from pyfr.shapes import BaseShape
 from pyfr.util import match_paired_paren, subclasses, subclass_where
 
 
-def get_region(name, *args):
-    return subclass_where(BaseRegion, name=name)(*args)
-
-
 class BaseRegion:
-    name = None
-
     def interior_eles(self, mesh, rallocs):
-        eset = {}
-
-        for shape in subclasses(BaseShape, just_leaf=True):
-            f = f'spt_{shape.name}_p{rallocs.prank}'
-            if f not in mesh:
-                continue
-
-            inside = self.pts_in_region(mesh[f])
-            if np.any(inside):
-                eset[shape.name] = np.any(inside, axis=0).nonzero()[0].tolist()
-
-        return eset
+        pass
 
     def surface_faces(self, mesh, rallocs, exclbcs=[]):
         from mpi4py import MPI
@@ -88,84 +71,6 @@ class BaseRegion:
         return {k: sorted(v) for k, v in nsfaces.items()}
 
 
-class BoxRegion(BaseRegion):
-    name = 'box'
-
-    def __init__(self, x0, x1):
-        self.x0 = x0
-        self.x1 = x1
-
-    def pts_in_region(self, pts):
-        pts = np.moveaxis(pts, -1, 0)
-
-        inside = np.ones(pts.shape[1:], dtype=np.bool)
-        for l, p, u in zip(self.x0, pts, self.x1):
-            inside &= (l <= p) & (p <= u)
-
-        return inside
-
-
-class ConicalFrustumRegion(BaseRegion):
-    name = 'conical_frustum'
-
-    def __init__(self, x0, x1, r0, r1):
-        self.x0 = x0 = np.array(x0)
-        self.x1 = x1 = np.array(x1)
-        self.r0 = r0
-        self.r1 = r1
-
-        # Heading of the centre line
-        self.h = (x1 - x0) / np.linalg.norm(x1 - x0)
-        self.h_mag = np.linalg.norm(x1 - x0)
-
-    def pts_in_region(self, pts):
-        r0, r1 = self.r0, self.r1
-
-        # Project the points onto the centre line
-        dotp = (pts - self.x0) @ self.h
-
-        # Compute the distances between the points and their projections
-        d = np.linalg.norm(self.x0 + dotp[..., None]*self.h - pts, axis=-1)
-
-        # Interpolate the radii along the centre line
-        r = np.interp(dotp, [0, self.h_mag], [r0, r1], left=-1, right=-1)
-
-        # With this determine which points are inside our conical frustum
-        return d <= r
-
-
-class ConeRegion(ConicalFrustumRegion):
-    name = 'cone'
-
-    def __init__(self, x0, x1, r):
-        super().__init__(x0, x1, r, 0)
-
-
-class CylinderRegion(ConicalFrustumRegion):
-    name = 'cylinder'
-
-    def __init__(self, x0, x1, r):
-        super().__init__(x0, x1, r, r)
-
-
-class EllipsoidRegion(BaseRegion):
-    name = 'ellipsoid'
-
-    def __init__(self, x0, a, b, c):
-        self.x0 = np.array(x0)
-        self.abc = np.array([a, b, c])
-
-    def pts_in_region(self, pts):
-        return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1
-
-
-class SphereRegion(BaseRegion):
-    name = 'sphere'
-
-    def __init__(self, x0, r):
-        super().__init__(x0, r, r, r)
-
-
 class BoundaryRegion(BaseRegion):
     def __init__(self, bcname, nlayers=1):
         self.bcname = bcname
@@ -212,7 +117,7 @@ class BoundaryRegion(BaseRegion):
                     sb = np.array([c in neset and neset[c] == i for c in pc])
                     rb = np.empty_like(sb)
 
-                    # Send/recv this information
+                    # Start the send/recv requests
                     reqs.append(comm.Isend(sb, rallocs.pmrankmap[p]))
                     reqs.append(comm.Irecv(rb, rallocs.pmrankmap[p]))
 
@@ -230,7 +135,7 @@ class BoundaryRegion(BaseRegion):
                 # Wait for the exchanges to finish
                 MPI.Request.Waitall(reqs)
 
-                # Grow our element set through external connectivity
+                # Grow our element set by considering adjacent partitions
                 for pc, sb, rb in bufs:
                     for l, b in zip(pc, rb):
                         if b and l not in neset:
@@ -240,20 +145,121 @@ class BoundaryRegion(BaseRegion):
         return {k: sorted(v) for k, v in eset.items()}
 
 
-class ConstructiveRegion(BaseRegion):
+class BaseGeometricRegion(BaseRegion):
+    name = None
+
+    def interior_eles(self, mesh, rallocs):
+        eset = {}
+
+        for shape in subclasses(BaseShape, just_leaf=True):
+            f = f'spt_{shape.name}_p{rallocs.prank}'
+            if f not in mesh:
+                continue
+
+            inside = self.pts_in_region(mesh[f])
+            if np.any(inside):
+                eset[shape.name] = np.any(inside, axis=0).nonzero()[0].tolist()
+
+        return eset
+
+    def pts_in_region(self, pts):
+        pass
+
+
+class BoxRegion(BaseGeometricRegion):
+    name = 'box'
+
+    def __init__(self, x0, x1):
+        self.x0 = x0
+        self.x1 = x1
+
+    def pts_in_region(self, pts):
+        pts = np.moveaxis(pts, -1, 0)
+
+        inside = np.ones(pts.shape[1:], dtype=np.bool)
+        for l, p, u in zip(self.x0, pts, self.x1):
+            inside &= (l <= p) & (p <= u)
+
+        return inside
+
+
+class ConicalFrustumRegion(BaseGeometricRegion):
+    name = 'conical_frustum'
+
+    def __init__(self, x0, x1, r0, r1):
+        self.x0 = x0 = np.array(x0)
+        self.x1 = x1 = np.array(x1)
+        self.r0 = r0
+        self.r1 = r1
+
+        # Heading of the centre line
+        self.h = (x1 - x0) / np.linalg.norm(x1 - x0)
+        self.h_mag = np.linalg.norm(x1 - x0)
+
+    def pts_in_region(self, pts):
+        r0, r1 = self.r0, self.r1
+
+        # Project the points onto the centre line
+        dotp = (pts - self.x0) @ self.h
+
+        # Compute the distances between the points and their projections
+        d = np.linalg.norm(self.x0 + dotp[..., None]*self.h - pts, axis=-1)
+
+        # Interpolate the radii along the centre line
+        r = np.interp(dotp, [0, self.h_mag], [r0, r1], left=-1, right=-1)
+
+        # With this determine which points are inside our conical frustum
+        return d <= r
+
+
+class ConeRegion(ConicalFrustumRegion):
+    name = 'cone'
+
+    def __init__(self, x0, x1, r):
+        super().__init__(x0, x1, r, 0)
+
+
+class CylinderRegion(ConicalFrustumRegion):
+    name = 'cylinder'
+
+    def __init__(self, x0, x1, r):
+        super().__init__(x0, x1, r, r)
+
+
+class EllipsoidRegion(BaseGeometricRegion):
+    name = 'ellipsoid'
+
+    def __init__(self, x0, a, b, c):
+        self.x0 = np.array(x0)
+        self.abc = np.array([a, b, c])
+
+    def pts_in_region(self, pts):
+        return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1
+
+
+class SphereRegion(EllipsoidRegion):
+    name = 'sphere'
+
+    def __init__(self, x0, r):
+        super().__init__(x0, r, r, r)
+
+
+class ConstructiveRegion(BaseGeometricRegion):
     def __init__(self, expr):
-        regions = []
+        rexprs = []
 
         # Factor out the individual region expressions
         expr = re.sub(
             r'(\w+)\((' + match_paired_paren('()') + r')\)',
-            lambda m: regions.append(m.groups()) or f'r{len(regions) - 1}',
+            lambda m: rexprs.append(m.groups()) or f'r{len(rexprs) - 1}',
             expr
         )
 
-        # Parse and construct these individual regions
-        self.regions = [get_region(name, *literal_eval(args))
-                        for name, args in regions]
+        # Parse these region expressions
+        self.regions = regions = []
+        for name, args in rexprs:
+            cls = subclass_where(BaseGeometricRegion, name=name)
+            regions.append(cls(*literal_eval(args)))
 
         # Rewrite in terms of boolean operators
         self.expr = expr.replace('+', '|').replace('-', '&~')
