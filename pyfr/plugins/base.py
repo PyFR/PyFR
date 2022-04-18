@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 
-from collections import defaultdict
 import os
+import re
 import shlex
 
 import numpy as np
 from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.regions import ConstructiveRegion
+from pyfr.regions import BoundaryRegion, ConstructiveRegion
 
 
 def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
@@ -116,42 +116,23 @@ class RegionMixin:
         # All elements
         if region == '*':
             self._prepare_region_data_all(intg)
-        # All elements inside a paramaterised region
-        elif '(' in region:
-            crgn = ConstructiveRegion(region)
-            eset = crgn.interior_eles(intg.system.mesh, intg.rallocs)
-
-            self._prepare_region_data_eset(intg, eset)
-        # All elements on a boundary
+        # All elements inside some region region
         else:
-            self._prepare_region_data_bcs(intg, region)
+            # Geometric region
+            if '(' in region:
+                rgn = ConstructiveRegion(region)
+            # Boundary region
+            else:
+                m = re.match(r'(\w+)(?:\s+\+(\d+))?$', region)
+                rgn = BoundaryRegion(m[1], nlayers=int(m[2] or 1))
+
+            eset = rgn.interior_eles(intg.system.mesh, intg.rallocs)
+            self._prepare_region_data_eset(intg, eset)
 
     def _prepare_region_data_all(self, intg):
         self._ele_regions = [(i, etype, slice(None))
                              for i, etype in enumerate(intg.system.ele_types)]
         self._ele_region_data = {}
-
-    def _prepare_region_data_bcs(self, intg, bcname):
-        comm, rank, root = get_comm_rank_root()
-
-        # Get the mesh and prepare the element set dict
-        mesh = intg.system.mesh
-        eset = defaultdict(list)
-
-        # Boundary of interest
-        bc = f'bcon_{bcname}_p{intg.rallocs.prank}'
-
-        # Ensure the boundary exists
-        bcranks = comm.gather(bc in mesh, root=root)
-        if rank == root and not any(bcranks):
-            raise ValueError(f'Boundary {bcname} does not exist')
-
-        if bc in mesh:
-            # Determine which of our elements are on the boundary
-            for etype, eidx in mesh[bc][['f0', 'f1']].astype('U4,i4'):
-                eset[etype].append(eidx)
-
-        self._prepare_region_data_eset(intg, eset)
 
     def _prepare_region_data_eset(self, intg, eset):
         elemap = intg.system.ele_map

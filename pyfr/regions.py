@@ -166,6 +166,80 @@ class SphereRegion(BaseRegion):
         super().__init__(x0, r, r, r)
 
 
+class BoundaryRegion(BaseRegion):
+    def __init__(self, bcname, nlayers=1):
+        self.bcname = bcname
+        self.nlayers = nlayers
+
+    def interior_eles(self, mesh, rallocs):
+        from mpi4py import MPI
+
+        bc = f'bcon_{self.bcname}_p{rallocs.prank}'
+        eset = defaultdict(list)
+        comm, rank, root = get_comm_rank_root()
+
+        # Ensure the boundary exists
+        bcranks = comm.gather(bc in mesh, root=root)
+        if rank == root and not any(bcranks):
+            raise ValueError(f'Boundary {self.bcname} does not exist')
+
+        # Determine which of our elements are directly on the boundary
+        if bc in mesh:
+            for etype, eidx in mesh[bc][['f0', 'f1']].astype('U4,i4'):
+                eset[etype].append(eidx)
+
+        # Handle the case where multiple layers have been requested
+        if self.nlayers > 1:
+            # Load our internal connectivity array
+            con = mesh[f'con_p{rallocs.prank}'].T
+            con = con[['f0', 'f1']].astype('U4,i4').tolist()
+
+            # Load our partition boundary connectivity arrays
+            pcon = {}
+            for p in rallocs.prankconn[rallocs.prank]:
+                pcon[p] = mesh[f'con_p{rallocs.prank}p{p}']
+                pcon[p] = pcon[p][['f0', 'f1']].astype('U4,i4').tolist()
+
+            # Tag all elements in the set as belonging to the first layer
+            neset = {(k, j): 0 for k, v in eset.items() for j in v}
+
+            # Iteratively grow out the element set
+            for i in range(self.nlayers - 1):
+                reqs, bufs = [], []
+
+                # Exchange information about recent updates to our set
+                for p, pc in pcon.items():
+                    sb = np.array([c in neset and neset[c] == i for c in pc])
+                    rb = np.empty_like(sb)
+
+                    # Send/recv this information
+                    reqs.append(comm.Isend(sb, rallocs.pmrankmap[p]))
+                    reqs.append(comm.Irecv(rb, rallocs.pmrankmap[p]))
+
+                    bufs.append((pc, sb, rb))
+
+                # Grow our element set by considering internal connectivity
+                for l, r in con:
+                    if l in neset and r not in neset and neset[l] == i:
+                        neset[r] = i + 1
+                        eset[r[0]].append(r[1])
+                    elif r in neset and l not in neset and neset[r] == i:
+                        neset[l] = i + 1
+                        eset[l[0]].append(l[1])
+
+                # Wait for the exchanges to finish
+                MPI.Request.Waitall(reqs)
+
+                # Grow our element set through external connectivity
+                for pc, sb, rb in bufs:
+                    for l, b in zip(pc, rb):
+                        if b and l not in neset:
+                            neset[l] = i + 1
+                            eset[l[0]].append(l[1])
+
+        return {k: sorted(v) for k, v in eset.items()}
+
+
 class ConstructiveRegion(BaseRegion):
     def __init__(self, expr):
         regions = []
