@@ -49,7 +49,7 @@ class BasePartitioner:
                     rnum[en].update(((i, j), (0, off + j)) for j in range(n))
 
         def offset_con(con, pr):
-            con = con.copy().astype('U4,i4,i1,i2')
+            con = con.copy()
 
             for en, pn in pinf.items():
                 if pn[pr] > 0:
@@ -76,18 +76,15 @@ class BasePartitioner:
                 name, l = bc[1], int(bc[2])
                 bccon[name].append(offset_con(mesh[f], l))
 
-        # Output data type
-        dtype = 'U4,i4,i1,i2'
-
         # Concatenate these arrays to from the new mesh
-        newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
+        newmesh = {'con_p0': np.hstack(intcon)}
 
         for en in spts:
             newmesh[f'spt_{en}_p0'] = np.hstack(spts[en])
             newmesh[f'spt_{en}_p0', 'linear'] = np.hstack(linf[en])
 
         for k, v in bccon.items():
-            newmesh[f'bcon_{k}_p0'] = np.hstack(v).astype(dtype)
+            newmesh[f'bcon_{k}_p0'] = np.hstack(v)
 
         return newmesh, rnum
 
