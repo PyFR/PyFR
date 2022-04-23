@@ -1203,9 +1203,10 @@ Parameterised with
     ``blocking`` | ``non-blocking``
 
 4. ``region`` --- region to be written, specified as either the
-   entire domain using ``*``, one of the geometric shapes specified in
-   :ref:`regions`, or a sub-region of elements that have faces on a
-   specific domain boundary via the name of the domain boundary:
+   entire domain using ``*``, a combination of the geometric shapes
+   specified in :ref:`regions`, or a sub-region of elements that have
+   faces on a specific domain boundary via the name of the domain
+   boundary:
 
     ``*`` | ``shape(args, ...)`` | *string*
 
@@ -1419,9 +1420,10 @@ Time average quantities. Parameterised with
     ``single`` | ``double``
 
 8. ``region`` --- region to be written, specified as either the
-   entire domain using ``*``, a one of the geometric shapes specified in
-   :ref:`regions`, or a sub-region of elements that have faces on a
-   specific domain boundary via the name of the domain boundary:
+   entire domain using ``*``, a combination of the geometric shapes
+   specified in :ref:`regions`, or a sub-region of elements that have
+   faces on a specific domain boundary via the name of the domain
+   boundary:
 
     ``*`` | ``shape(args, ...)`` | *string*
 
@@ -1485,8 +1487,8 @@ Integrate quantities over the compuational domain. Parameterised with:
 5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
 
 6. ``region`` --- region to integrate, specified as either the
-   entire domain using ``*`` or one of the geometric shapes specified in
-   :ref:`regions`:
+   entire domain using ``*`` or a combination of the geometric shapes
+   specified in :ref:`regions`:
 
     ``*`` | ``shape(args, ...)``
 
@@ -1547,6 +1549,11 @@ Cartesian ellipsoid ``ellipsoid(x0, a, b, c)``
 Sphere ``sphere(x0, r)``
   A sphere centred at *x0* with a radius of *r*. Equivalent to
   ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
+
+Region expressions can also be added and subtracted together
+arbitrarily.  For example
+``box((-10, -10, -10), (10, 10, 10)) - sphere(0, 0, 0, 3)`` will
+result in a cube-shaped region with a sphere cut out of the middle.
 
 Additional Information
 ----------------------

@@ -1,34 +1,19 @@
 # -*- coding: utf-8 -*-
 
+from ast import literal_eval
 from collections import defaultdict
+import re
 
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.shapes import BaseShape
-from pyfr.util import subclasses, subclass_where
-
-
-def get_region(name, *args):
-    return subclass_where(BaseRegion, name=name)(*args)
+from pyfr.util import match_paired_paren, subclasses, subclass_where
 
 
 class BaseRegion:
-    name = None
-
     def interior_eles(self, mesh, rallocs):
-        eset = {}
-
-        for shape in subclasses(BaseShape, just_leaf=True):
-            f = f'spt_{shape.name}_p{rallocs.prank}'
-            if f not in mesh:
-                continue
-
-            inside = self.pts_in_region(mesh[f])
-            if np.any(inside):
-                eset[shape.name] = np.any(inside, axis=0).nonzero()[0].tolist()
-
-        return eset
+        pass
 
     def surface_faces(self, mesh, rallocs, exclbcs=[]):
         from mpi4py import MPI
@@ -86,7 +71,100 @@ class BaseRegion:
         return {k: sorted(v) for k, v in nsfaces.items()}
 
 
-class BoxRegion(BaseRegion):
+class BoundaryRegion(BaseRegion):
+    def __init__(self, bcname, nlayers=1):
+        self.bcname = bcname
+        self.nlayers = nlayers
+
+    def interior_eles(self, mesh, rallocs):
+        from mpi4py import MPI
+
+        bc = f'bcon_{self.bcname}_p{rallocs.prank}'
+        eset = defaultdict(list)
+        comm, rank, root = get_comm_rank_root()
+
+        # Ensure the boundary exists
+        bcranks = comm.gather(bc in mesh, root=root)
+        if rank == root and not any(bcranks):
+            raise ValueError(f'Boundary {self.bcname} does not exist')
+
+        # Determine which of our elements are directly on the boundary
+        if bc in mesh:
+            for etype, eidx in mesh[bc][['f0', 'f1']].astype('U4,i4'):
+                eset[etype].append(eidx)
+
+        # Handle the case where multiple layers have been requested
+        if self.nlayers > 1:
+            # Load our internal connectivity array
+            con = mesh[f'con_p{rallocs.prank}'].T
+            con = con[['f0', 'f1']].astype('U4,i4').tolist()
+
+            # Load our partition boundary connectivity arrays
+            pcon = {}
+            for p in rallocs.prankconn[rallocs.prank]:
+                pc = mesh[f'con_p{rallocs.prank}p{p}']
+                pc = pc[['f0', 'f1']].astype('U4,i4').tolist()
+                pcon[p] = (pc, *np.empty((2, len(pc)), dtype=bool))
+
+            # Tag all elements in the set as belonging to the first layer
+            neset = {(k, j): 0 for k, v in eset.items() for j in v}
+
+            # Iteratively grow out the element set
+            for i in range(self.nlayers - 1):
+                reqs = []
+
+                # Exchange information about recent updates to our set
+                for p, (pc, sb, rb) in pcon.items():
+                    sb[:] = [neset.get(c, -1) == i for c in pc]
+
+                    # Start the send/recv requests
+                    reqs.append(comm.Isend(sb, rallocs.pmrankmap[p]))
+                    reqs.append(comm.Irecv(rb, rallocs.pmrankmap[p]))
+
+                # Grow our element set by considering internal connectivity
+                for l, r in con:
+                    if neset.get(l, -1) == i and r not in neset:
+                        neset[r] = i + 1
+                        eset[r[0]].append(r[1])
+                    elif neset.get(r, -1) == i and l not in neset:
+                        neset[l] = i + 1
+                        eset[l[0]].append(l[1])
+
+                # Wait for the exchanges to finish
+                MPI.Request.Waitall(reqs)
+
+                # Grow our element set by considering adjacent partitions
+                for pc, sb, rb in pcon.values():
+                    for l, b in zip(pc, rb):
+                        if b and l not in neset:
+                            neset[l] = i + 1
+                            eset[l[0]].append(l[1])
+
+        return {k: sorted(v) for k, v in eset.items()}
+
+
+class BaseGeometricRegion(BaseRegion):
+    name = None
+
+    def interior_eles(self, mesh, rallocs):
+        eset = {}
+
+        for shape in subclasses(BaseShape, just_leaf=True):
+            f = f'spt_{shape.name}_p{rallocs.prank}'
+            if f not in mesh:
+                continue
+
+            inside = self.pts_in_region(mesh[f])
+            if np.any(inside):
+                eset[shape.name] = np.any(inside, axis=0).nonzero()[0].tolist()
+
+        return eset
+
+    def pts_in_region(self, pts):
+        pass
+
+
+class BoxRegion(BaseGeometricRegion):
     name = 'box'
 
     def __init__(self, x0, x1):
@@ -103,7 +181,7 @@ class BoxRegion(BaseRegion):
         return inside
 
 
-class ConicalFrustumRegion(BaseRegion):
+class ConicalFrustumRegion(BaseGeometricRegion):
     name = 'conical_frustum'
 
     def __init__(self, x0, x1, r0, r1):
@@ -146,7 +224,7 @@ class CylinderRegion(ConicalFrustumRegion):
         super().__init__(x0, x1, r, r)
 
 
-class EllipsoidRegion(BaseRegion):
+class EllipsoidRegion(BaseGeometricRegion):
     name = 'ellipsoid'
 
     def __init__(self, x0, a, b, c):
@@ -157,8 +235,40 @@ class EllipsoidRegion(BaseRegion):
         return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1
 
 
-class SphereRegion(BaseRegion):
+class SphereRegion(EllipsoidRegion):
     name = 'sphere'
 
     def __init__(self, x0, r):
         super().__init__(x0, r, r, r)
+
+
+class ConstructiveRegion(BaseGeometricRegion):
+    def __init__(self, expr):
+        rexprs = []
+
+        # Factor out the individual region expressions
+        expr = re.sub(
+            r'(\w+)\((' + match_paired_paren('()') + r')\)',
+            lambda m: rexprs.append(m.groups()) or f'r{len(rexprs) - 1}',
+            expr
+        )
+
+        # Parse these region expressions
+        self.regions = regions = []
+        for name, args in rexprs:
+            cls = subclass_where(BaseGeometricRegion, name=name)
+            regions.append(cls(*literal_eval(args)))
+
+        # Rewrite in terms of boolean operators
+        self.expr = expr.replace('+', '|').replace('-', '&~')
+
+        # Validate
+        if not re.match(r'[r0-9|&~() ]+$', self.expr):
+            raise ValueError('Invalid region expression')
+
+    def pts_in_region(self, pts):
+        # Query each of our constituent regions
+        rvars = {f'r{i}': r.pts_in_region(pts)
+                 for i, r in enumerate(self.regions)}
+
+        return eval(self.expr, {'__builtins__': None}, rvars)
