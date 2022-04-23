@@ -58,7 +58,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 'gradcoru', tplargs=tplargs,
                 dims=[self.nupts, regions['curved']],
                 gradu=slicem(self._vect_upts, 'curved'),
-                smats=self.smat_at('upts', 'curved'),
+                smats=self.curved_smat_at('upts'),
                 rcpdjac=self.rcpdjac_at('upts', 'curved')
             )
 
