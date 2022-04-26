@@ -1552,7 +1552,7 @@ Sphere ``sphere(x0, r)``
 
 Region expressions can also be added and subtracted together
 arbitrarily.  For example
-``box((-10, -10, -10), (10, 10, 10)) - sphere(0, 0, 0, 3)`` will
+``box((-10, -10, -10), (10, 10, 10)) - sphere((0, 0, 0), 3)`` will
 result in a cube-shaped region with a sphere cut out of the middle.
 
 Additional Information
