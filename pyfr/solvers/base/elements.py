@@ -246,10 +246,10 @@ class BaseElements:
         smats = np.array([m0 @ smat for smat in smats_mpts])
         return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
-    @sliceat
     @memoize
-    def smat_at(self, name):
-        return self._be.const_matrix(self.smat_at_np(name), tags={'align'})
+    def curved_smat_at(self, name):
+        smat = self.smat_at_np(name)[..., :self._linoff]
+        return self._be.const_matrix(smat, tags={'align'})
 
     @memoize
     def rcpdjac_at_np(self, name):
