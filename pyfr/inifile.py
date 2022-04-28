@@ -82,7 +82,7 @@ class Inifile:
         # Substitute variables
         if subs:
             expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
-                          lambda m: subs[m[1]], expr)
+                          lambda m: str(subs[m[1]]), expr)
 
         # Convert integers not inside [] to floats
         expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?![^[]*\])',
