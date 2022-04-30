@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
 from pyfr.backends.base import (BaseKernelProvider,
                                 BasePointwiseKernelProvider, Kernel)
 from pyfr.backends.opencl.generator import OpenCLKernelGenerator

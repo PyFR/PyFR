@@ -217,8 +217,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
 
-        l1sys, l2sys = self.pintgs[l1].system, self.pintgs[l2].system
-
         # Restrict the physical source term
         l1src = self.pintgs[l1]._source_regidx
         l2dst = self.pintgs[l2]._source_regidx
@@ -261,8 +259,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def prolongate(self, l1, l2):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
-
-        l1sys, l2sys = self.pintgs[l1].system, self.pintgs[l2].system
 
         # Prevsoln is used as temporal storage at l2
         rtemp = 0 if l2idxcurr == 1 else 1
