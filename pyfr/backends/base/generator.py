@@ -18,7 +18,7 @@ class Arg:
             ((?:\[\d+\]){0,2})$                              # Dimensions
         '''
         dimsptn = r'(?<=\[)\d+(?=\])'
-        usedptn = fr'(?:[^A-Za-z]|^){name}[^A-Za-z0-9]'
+        usedptn = fr'(?:[^A-Za-z_]|^){name}[^A-Za-z0-9]'
 
         # Parse our specification
         m = re.match(specptn, spec, re.X)
