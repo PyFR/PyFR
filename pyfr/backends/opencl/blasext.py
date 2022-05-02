@@ -42,8 +42,8 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         class CopyKernel(OpenCLKernel):
             def run(self, queue, wait_for=None, ret_evt=False):
-                return cl.memcpy_async(queue, dst, src, dst.nbytes, wait_for,
-                                       ret_evt)
+                return cl.memcpy(queue, dst, src, dst.nbytes, blocking=False,
+                                 wait_for=wait_for, ret_evt=ret_evt)
 
         return CopyKernel(mats=[dst, src])
 
@@ -104,7 +104,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
             def run(self, queue, wait_for=None, ret_evt=False):
                 revt = rkern.exec_async(queue, wait_for, True)
-                return cl.memcpy_async(queue, reduced_host, reduced_dev,
-                                       reduced_dev.nbytes, [revt], ret_evt)
+                return cl.memcpy(queue, reduced_host, reduced_dev,
+                                 reduced_dev.nbytes, False, [revt], ret_evt)
 
         return ReductionKernel(mats=regs)

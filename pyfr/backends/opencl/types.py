@@ -36,7 +36,9 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
-        self.backend.cl.memcpy(buf, self.data, self.nbytes)
+        self.backend.queue.barrier()
+        self.backend.cl.memcpy(self.backend.queue, buf, self.data, self.nbytes,
+                               blocking=True)
 
         # Unpack
         return self._unpack(buf[None, :, :])
@@ -45,7 +47,9 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         buf = self._pack(ary)
 
         # Copy
-        self.backend.cl.memcpy(self.data, buf, self.nbytes)
+        self.backend.queue.barrier()
+        self.backend.cl.memcpy(self.backend.queue, self.data, buf, self.nbytes,
+                               blocking=True)
 
 
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
@@ -111,9 +115,11 @@ class OpenCLGraph(base.Graph):
 
             events[i] = k.run(queue, wait_for, ret_evt)
 
+        # Flush the queue to ensure the kernels have started
+        queue.flush()
+
         # Start all dependency-free MPI requests
-        if self.mpi_root_reqs:
-            MPI.Prequest.Startall(self.mpi_root_reqs)
+        MPI.Prequest.Startall(self.mpi_root_reqs)
 
         # Start any remaining requests once their dependencies are satisfied
         for req, wait_for in self.mreqlist:
@@ -122,6 +128,3 @@ class OpenCLGraph(base.Graph):
 
         # Wait for all of the MPI requests to finish
         MPI.Prequest.Waitall(self.mpi_reqs)
-
-        # Wait for all of the kernels to finish
-        queue.finish()

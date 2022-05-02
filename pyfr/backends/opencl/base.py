@@ -87,19 +87,26 @@ class OpenCLBackend(BaseBackend):
         self.pointwise = self._providers[0]
 
         # Queues (in and out of order)
-        self.in_order_queue = self.cl.queue(out_of_order=False)
-        self.out_of_order_queue = self.cl.queue(out_of_order=True)
+        self.queue = self.cl.queue(out_of_order=True)
 
-    def run_kernels(self, kernels):
+    def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the command queue
         for k in kernels:
-            k.run(self.in_order_queue)
+            self.queue.barrier()
+            k.run(self.queue)
 
-        # Wait for the kernels to finish
-        self.in_order_queue.finish()
+        if wait:
+            self.queue.finish()
+        else:
+            self.queue.flush()
 
-    def run_graph(self, graph):
-        graph.run(self.out_of_order_queue)
+    def run_graph(self, graph, wait=False):
+        self.queue.barrier()
+
+        graph.run(self.queue)
+
+        if wait:
+            self.queue.finish()
 
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer

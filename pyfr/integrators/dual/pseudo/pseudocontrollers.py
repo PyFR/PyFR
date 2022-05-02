@@ -36,7 +36,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
             kern.bind(dt_fac)
 
         # Run the kernels
-        self.backend.run_kernels(rkerns)
+        self.backend.run_kernels(rkerns, wait=True)
 
         # Pseudo L2 norm
         if self._pseudo_norm == 'l2':

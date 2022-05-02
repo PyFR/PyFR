@@ -54,11 +54,11 @@ class OpenMPBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
-    def run_kernels(self, kernels):
+    def run_kernels(self, kernels, wait=False):
         for k in kernels:
             k.run()
 
-    def run_graph(self, graph):
+    def run_graph(self, graph, wait=False):
         graph.run()
 
     @cached_property

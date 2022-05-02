@@ -110,8 +110,7 @@ class CUDAGraph(base.Graph):
         self.stale_kparams.clear()
 
         # Start all dependency-free MPI requests
-        if self.mpi_root_reqs:
-            MPI.Prequest.Startall(self.mpi_root_reqs)
+        MPI.Prequest.Startall(self.mpi_root_reqs)
 
         # Start any remaining requests once their dependencies are satisfied
         for event, req in self.mpi_events:
@@ -119,8 +118,4 @@ class CUDAGraph(base.Graph):
             req.Start()
 
         # Wait for all of the MPI requests to finish
-        if self.mpi_reqs:
-            MPI.Prequest.Waitall(self.mpi_reqs)
-
-        # Wait for all of the kernels to finish
-        stream.synchronize()
+        MPI.Prequest.Waitall(self.mpi_reqs)

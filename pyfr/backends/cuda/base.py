@@ -89,16 +89,19 @@ class CUDABackend(BaseBackend):
         # Create a stream to run kernels on
         self._stream = self.cuda.create_stream()
 
-    def run_kernels(self, kernels):
+    def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the CUDA stream
         for k in kernels:
             k.run(self._stream)
 
-        # Wait for the kernels to finish
-        self._stream.synchronize()
+        if wait:
+            self._stream.synchronize()
 
-    def run_graph(self, graph):
+    def run_graph(self, graph, wait=False):
         graph.run(self._stream)
+
+        if wait:
+            self._stream.synchronize()
 
     def _malloc_impl(self, nbytes):
         # Allocate

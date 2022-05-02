@@ -479,8 +479,8 @@ class OpenCL(_OpenCLWaitFor):
                                      nbytes, 0, None, None)
         self.qdflt.finish()
 
-    def memcpy_async(self, queue, dst, src, nbytes, wait_for=None,
-                     ret_evt=False):
+    def memcpy(self, queue, dst, src, nbytes, blocking=False, wait_for=None,
+               ret_evt=False):
         evt_ptr = c_void_p() if ret_evt else None
         wait_for = self._make_wait_for(wait_for)
 
@@ -488,13 +488,13 @@ class OpenCL(_OpenCLWaitFor):
         if isinstance(dst, (np.ndarray, np.generic)):
             dst = dst.ctypes.data
 
-            self.lib.clEnqueueReadBuffer(queue, src, False, 0, nbytes,
+            self.lib.clEnqueueReadBuffer(queue, src, blocking, 0, nbytes,
                                          dst, *wait_for, evt_ptr)
         # Host to device
         elif isinstance(src, (np.ndarray, np.generic)):
             src = src.ctypes.data
 
-            self.lib.clEnqueueWriteBuffer(queue, dst, False, 0, nbytes,
+            self.lib.clEnqueueWriteBuffer(queue, dst, blocking, 0, nbytes,
                                           src, *wait_for, evt_ptr)
         # Device to device
         else:
@@ -503,10 +503,6 @@ class OpenCL(_OpenCLWaitFor):
 
         if ret_evt:
             return OpenCLEvent(self.lib, evt_ptr)
-
-    def memcpy(self, dst, src, nbytes):
-        self.memcpy_async(self.qdflt, dst, src, nbytes)
-        self.qdflt.finish()
 
     def program(self, src, flags=None):
         return OpenCLProgram(self.lib, self.ctx, self.dev, src, flags or [])
