@@ -33,16 +33,14 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         grid = get_grid_for_block(block, b.ncol)
 
         # Generate
-        src = generate_mm(a.get(), dtype=a.dtype, platform='hip',
-                          alpha=alpha, beta=beta)
+        src = generate_mm(arr, a.dtype, 'hip', alpha=alpha, beta=beta,
+                          n=b.ncol, ldb=b.leaddim, ldc=out.leaddim)
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src,
-                                 [np.int32, np.intp]*2 + [np.int32])
+        fun = self._build_kernel('gimmik_mm', src, [np.intp, np.intp])
 
         class MulKernel(Kernel):
             def run(self, queue):
-                fun.exec_async(grid, block, queue.stream, b.ncol, b, b.leaddim,
-                               out, out.leaddim)
+                fun.exec_async(grid, block, queue.stream, b, out)
 
         return MulKernel()

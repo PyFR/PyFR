@@ -13,7 +13,7 @@ from pyfr.inifile import Inifile
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
-class BasePartitioner(object):
+class BasePartitioner:
     def __init__(self, partwts, elewts, nsubeles=64, opts={}):
         self.partwts = partwts
         self.elewts = elewts
@@ -62,9 +62,9 @@ class BasePartitioner(object):
 
         for f in mesh:
             if (mi := re.match(r'con_p(\d+)$', f)):
-                intcon.append(offset_con(mesh[f], int(mi.group(1))))
+                intcon.append(offset_con(mesh[f], int(mi[1])))
             elif (mm := re.match(r'con_p(\d+)p(\d+)$', f)):
-                l, r = int(mm.group(1)), int(mm.group(2))
+                l, r = int(mm[1]), int(mm[2])
                 lcon = offset_con(mesh[f], l)
 
                 if (r, l) in mpicon:
@@ -73,7 +73,7 @@ class BasePartitioner(object):
                 else:
                     mpicon[l, r] = lcon
             elif (bc := re.match(r'bcon_(.+?)_p(\d+)$', f)):
-                name, l = bc.group(1), int(bc.group(2))
+                name, l = bc[1], int(bc[2])
                 bccon[name].append(offset_con(mesh[f], l))
 
         # Output data type
@@ -248,7 +248,7 @@ class BasePartitioner(object):
                     lpart, leidxl = eleglmap[lpetype, leidxg]
                     conl = (lpetype, leidxl, lfidx, lflags)
 
-                    bcon_px[m.group(1), lpart].append(conl)
+                    bcon_px[m[1], lpart].append(conl)
 
         # Output data type
         dtype = 'S4,i4,i1,i2'

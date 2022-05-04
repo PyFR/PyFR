@@ -42,7 +42,7 @@ def memoize(meth):
 
     return newmeth
 
-class silence(object):
+class silence:
     def __init__(self, stdout=os.devnull, stderr=os.devnull):
         self.outfiles = (stdout, stderr)
         self.combine = (stdout == stderr)

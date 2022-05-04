@@ -28,13 +28,12 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             raise NotSuitableError('Matrix too dense for GiMMiK')
 
         # Generate
-        src = generate_mm(a.get(), dtype=a.dtype, platform='opencl',
-                          alpha=alpha, beta=beta)
+        src = generate_mm(a.get(), a.dtype, 'opencl', alpha=alpha, beta=beta,
+                          n=b.ncol, ldb=b.leaddim, ldc=out.leaddim)
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src,
-                                 [np.int32] + [np.intp, np.int32]*2)
-        fun.set_args(b.ncol, b, b.leaddim, out, out.leaddim)
+        fun = self._build_kernel('gimmik_mm', src, [np.intp, np.intp])
+        fun.set_args(b, out)
 
         class MulKernel(Kernel):
             def run(self, queue):

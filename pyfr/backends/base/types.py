@@ -3,7 +3,7 @@
 import numpy as np
 
 
-class MatrixBase(object):
+class MatrixBase:
     _base_tags = set()
 
     def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
@@ -138,7 +138,7 @@ class Matrix(MatrixBase):
         pass
 
 
-class MatrixSlice(object):
+class MatrixSlice:
     def __init__(self, backend, mat, ra, rb, ca, cb):
         self.backend = backend
         self.parent = mat
@@ -205,7 +205,7 @@ class XchgMatrix(Matrix):
         return MPI.COMM_WORLD.Send_init(self.hdata, pid, tag)
 
 
-class View(object):
+class View:
     def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
@@ -264,7 +264,7 @@ class View(object):
             )
 
 
-class XchgView(object):
+class XchgView:
     def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         # Create a normal view
         self.view = backend.view(matmap, rmap, cmap, rstridemap, vshape, tags)
@@ -284,7 +284,7 @@ class XchgView(object):
         return self.xchgmat.sendreq(pid, tag)
 
 
-class Queue(object):
+class Queue:
     def __init__(self, backend):
         from mpi4py import MPI
 

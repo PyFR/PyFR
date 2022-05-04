@@ -21,7 +21,7 @@ class CUDABackend(BaseBackend):
         self.nvrtc = NVRTC()
 
         # Get the desired CUDA device
-        devid = cfg.get('backend-cuda', 'device-id', 'round-robin')
+        devid = cfg.get('backend-cuda', 'device-id', 'local-rank')
         if not re.match(r'(round-robin|local-rank|\d+)$', devid):
             raise ValueError('Invalid device-id')
 

@@ -9,7 +9,7 @@ from pyfr.nputil import npdtype_to_ctypestype
 from pyfr.util import memoize
 
 
-class OpenMPKernelFunction(object):
+class OpenMPKernelFunction:
     def __init__(self, fun, argcls):
         self.fun = fun
         self.kargs = argcls()

@@ -144,7 +144,7 @@ class HIPWrappers(LibWrapper):
     ]
 
 
-class _HIPBase(object):
+class _HIPBase:
     _destroyfn = None
 
     def __init__(self, hip, ptr):
@@ -237,7 +237,7 @@ class HIPFunction(_HIPBase):
                                            self._arg_ptrs, 0)
 
 
-class HIP(object):
+class HIP:
     def __init__(self):
         self.lib = HIPWrappers()
 

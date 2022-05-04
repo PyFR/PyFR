@@ -7,7 +7,7 @@ import numpy as np
 import pyfr.backends.base as base
 
 
-class _OpenCLMatrixCommon(object):
+class _OpenCLMatrixCommon:
     @cached_property
     def _as_parameter_(self):
         return int(self.data)
@@ -75,7 +75,8 @@ class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
         super().__init__(backend, ioshape, initval, extent, aliases, tags)
 
         # Allocate an empty buffer on the host for MPI to send/recv from
-        self.hdata = np.empty((self.nrow, self.ncol), self.dtype)
+        shape, dtype = (self.nrow, self.ncol), self.dtype
+        self.hdata = backend.cl.pagelocked_empty(shape, dtype)
 
 
 class OpenCLXchgView(base.XchgView):

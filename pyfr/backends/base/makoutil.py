@@ -5,6 +5,7 @@ import itertools as it
 import re
 
 from mako.runtime import supports_caller, capture
+import numpy as np
 
 import pyfr.nputil as nputil
 import pyfr.util as util
@@ -32,13 +33,29 @@ def dot(context, a_, b_=None, **kwargs):
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
 
 
-def array(context, ex_, **kwargs):
-    ix, ni = next(iter(kwargs.items()))
+def array(context, expr_, vals_={}, /, **kwargs):
+    ix = next(iter(kwargs))
+    ni = kwargs.pop(ix)
+    items = []
 
     # Allow for flexible range arguments
-    ni = ni if isinstance(ni, Iterable) else [ni]
+    for i in range(*(ni if isinstance(ni, Iterable) else [ni])):
+        if kwargs:
+            items.append(array(context, expr_, vals_ | {ix: i}, **kwargs))
+        else:
+            items.append(expr_.format_map(vals_ | {ix: i}))
 
-    return '{ ' + ', '.join(ex_.format(**{ix: i}) for i in range(*ni)) + ' }'
+    return '{ ' + ', '.join(items) + ' }'
+
+
+def polyfit(context, f, a, b, n, var, nqpts=500):
+    x = np.linspace(a, b, nqpts)
+    y = f(x)
+
+    coeffs = np.polynomial.polynomial.polyfit(x, y, n)
+    pfexpr = f' + {var}*('.join(str(c) for c in coeffs) + ')'*n
+
+    return f'({pfexpr})'
 
 
 def _strip_parens(s):
@@ -67,7 +84,7 @@ def _locals(body):
     decls = it.chain.from_iterable(d.split(',') for d in decls)
 
     # Extract the variable names
-    lvars = [re.match(r'\s*(\w+)', v).group(1) for v in decls]
+    lvars = [re.match(r'\s*(\w+)', v)[1] for v in decls]
 
     # Prune invalid names
     return [lv for lv in lvars if lv != 'if']

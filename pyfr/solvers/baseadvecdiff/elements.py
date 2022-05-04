@@ -35,13 +35,14 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         self.kernels['_copy_fpts'] = lambda: kernel(
             'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
         )
-        self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
-            'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
-            out=self._vect_upts
-        )
+        if self.basis.order > 0:
+            self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
+                'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
+                out=self._vect_upts
+            )
         self.kernels['tgradcoru_upts'] = lambda: kernel(
             'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
-            out=self._vect_upts, beta=1.0
+            out=self._vect_upts, beta=float(self.basis.order > 0)
         )
 
         # Template arguments for the physical gradient kernel
@@ -57,7 +58,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 'gradcoru', tplargs=tplargs,
                 dims=[self.nupts, regions['curved']],
                 gradu=slicem(self._vect_upts, 'curved'),
-                smats=self.smat_at('upts', 'curved'),
+                smats=self.curved_smat_at('upts'),
                 rcpdjac=self.rcpdjac_at('upts', 'curved')
             )
 
@@ -83,7 +84,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
-        if 'flux' in self.antialias:
+        if 'flux' in self.antialias and self.basis.order > 0:
             def gradcoru_qpts():
                 nupts, nqpts = self.nupts, self.nqpts
                 vupts, vqpts = self._vect_upts, self._vect_qpts
