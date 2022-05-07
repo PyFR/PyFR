@@ -247,11 +247,15 @@ class ConstructiveRegion(BaseGeometricRegion):
         rexprs = []
 
         # Factor out the individual region expressions
-        expr = re.sub(
+        self.expr = re.sub(
             r'(\w+)\((' + match_paired_paren('()') + r')\)',
             lambda m: rexprs.append(m.groups()) or f'r{len(rexprs) - 1}',
             expr
         )
+
+        # Validate
+        if not re.match(r'[r0-9() +-]+$', self.expr):
+            raise ValueError('Invalid region expression')
 
         # Parse these region expressions
         self.regions = regions = []
@@ -259,16 +263,20 @@ class ConstructiveRegion(BaseGeometricRegion):
             cls = subclass_where(BaseGeometricRegion, name=name)
             regions.append(cls(*literal_eval(args)))
 
-        # Rewrite in terms of boolean operators
-        self.expr = expr.replace('+', '|').replace('-', '&~')
-
-        # Validate
-        if not re.match(r'[r0-9|&~() ]+$', self.expr):
-            raise ValueError('Invalid region expression')
-
     def pts_in_region(self, pts):
+        # Helper to translate + and - to their boolean algebra equivalents
+        class RegionVar:
+            def __init__(self, r):
+                self.r = r
+
+            def __add__(self, rhs):
+                return RegionVar(self.r | rhs.r)
+
+            def __sub__(self, rhs):
+                return RegionVar(self.r & ~rhs.r)
+
         # Query each of our constituent regions
-        rvars = {f'r{i}': r.pts_in_region(pts)
+        rvars = {f'r{i}': RegionVar(r.pts_in_region(pts))
                  for i, r in enumerate(self.regions)}
 
-        return eval(self.expr, {'__builtins__': None}, rvars)
+        return eval(self.expr, {'__builtins__': None}, rvars).r
