@@ -58,7 +58,7 @@ class BasePartitioner:
             return con
 
         # Connectivity
-        intcon, mpicon, bccon = [], {}, defaultdict(list)
+        intcon, mpicon, bccon, pccon = [], {}, defaultdict(list), defaultdict(list)
 
         for f in mesh:
             if (mi := re.match(r'con_p(\d+)$', f)):
@@ -75,6 +75,9 @@ class BasePartitioner:
             elif (bc := re.match(r'bcon_(.+?)_p(\d+)$', f)):
                 name, l = bc[1], int(bc[2])
                 bccon[name].append(offset_con(mesh[f], l))
+            elif (pc := re.match(r'pcon_(.+?)_p(\d+)$', f)):
+                name, l = pc[1], int(pc[2])
+                pccon[name].append(offset_con(mesh[f], l))
 
         # Output data type
         dtype = 'U4,i4,i1,i2'
@@ -86,8 +89,9 @@ class BasePartitioner:
             newmesh[f'spt_{en}_p0'] = np.hstack(spts[en])
             newmesh[f'spt_{en}_p0', 'linear'] = np.hstack(linf[en])
 
-        for k, v in bccon.items():
-            newmesh[f'bcon_{k}_p0'] = np.hstack(v).astype(dtype)
+        for pfx, con in [('bcon', bccon), ('pcon', pccon)]:
+                for k, v in con.items():
+                    newmesh[f'{pfx}_{k}_p0'] = np.hstack(v).astype(dtype)
 
         return newmesh, rnum
 
@@ -214,7 +218,7 @@ class BasePartitioner:
     def _partition_con(self, mesh, vetimap, vparts):
         con_px = defaultdict(list)
         con_pxpy = defaultdict(list)
-        bcon_px = defaultdict(list)
+        bpcon_px= {'bcon': defaultdict(list), 'pcon': defaultdict(list)}
 
         # Global-to-local element index map
         eleglmap = {}
@@ -243,12 +247,12 @@ class BasePartitioner:
 
         # Generate boundary conditions
         for f in filter(lambda f: isinstance(f, str), mesh):
-            if (m := re.match('bcon_(.+?)_p0$', f)):
+            if (m := re.match('([bp]con)_(.+?)_p0$', f)):
                 for lpetype, leidxg, lfidx, lflags in mesh[f].tolist():
                     lpart, leidxl = eleglmap[lpetype, leidxg]
                     conl = (lpetype, leidxl, lfidx, lflags)
 
-                    bcon_px[m[1], lpart].append(conl)
+                    bpcon_px[m[1]][m[2], lpart].append(conl)
 
         # Output data type
         dtype = 'S4,i4,i1,i2'
@@ -262,8 +266,9 @@ class BasePartitioner:
         for (px, py), v in con_pxpy.items():
             con[f'con_p{px}p{py}'] = np.array(v, dtype=dtype)
 
-        for (etype, px), v in bcon_px.items():
-            con[f'bcon_{etype}_p{px}'] = np.array(v, dtype=dtype)
+        for pfx, bpcon in bpcon_px.items():
+            for (etype, px), v in bpcon.items():
+                con[f'{pfx}_{etype}_p{px}'] = np.array(v, dtype=dtype)
 
         return con, eleglmap
 

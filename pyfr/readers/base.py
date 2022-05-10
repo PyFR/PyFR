@@ -136,7 +136,7 @@ class NodalMeshAssembler:
     def _pair_periodic_fluid_faces(self, bpart, resid):
         pfaces = defaultdict(list)
 
-        for k, (lpent, rpent) in self._pfacespents.items():
+        for lpent, rpent in self._pfacespents.values():
             for pftype in bpart[lpent]:
                 lfnodes = bpart[lpent][pftype]
                 rfnodes = bpart[rpent][pftype]
@@ -148,12 +148,8 @@ class NodalMeshAssembler:
                 rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
 
                 for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
-                    # Add periodic face flags
-                    flg = int(k) + 1
-
-                    # Left = +, right = -
-                    lf = resid.pop(tuple(sorted(lfn)))[:-1] + (flg,)
-                    rf = resid.pop(tuple(sorted(rfn)))[:-1] + (-flg,)
+                    lf = resid.pop(tuple(sorted(lfn)))
+                    rf = resid.pop(tuple(sorted(rfn)))
 
                     pfaces[pftype].append([lf, rf])
 
@@ -184,7 +180,25 @@ class NodalMeshAssembler:
         # Pair the fluid-fluid faces
         fpairs, resid = self._pair_fluid_faces(ffaces)
 
-        # Tag and pair periodic boundary faces
+        # Tag periodic boundaries
+        pbc, pcon = {}, defaultdict(list)
+
+        for k, (l, r) in self._pfacespents.items():
+            pbc[f'periodic_{k}_l'] = bpart[l] 
+            pbc[f'periodic_{k}_r'] = bpart[r] 
+
+        for lpent, pftype in pbc.items():
+            for lfnodes in pftype.values():
+                lfpts = np.array([[self._nodepts[n] for n in fn] 
+                                                    for fn in lfnodes])
+
+                lfidx = fuzzysort(lfpts.mean(axis=1).T, range(len(lfnodes)))
+
+                for lfn in lfnodes[lfidx]:
+                    lf = resid[tuple(sorted(lfn))]
+                    pcon[lpent].append(lf)
+
+        # Identify periodic boundary face pairs
         pfpairs = self._pair_periodic_fluid_faces(bpart, resid)
 
         # Identify the fixed boundary faces
@@ -210,6 +224,9 @@ class NodalMeshAssembler:
 
         for k, v in bcon.items():
             ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i4,i1,i2')
+
+        for k, v in pcon.items():
+            ret[f'pcon_{k}_p0'] = np.array(v, dtype='S4,i4,i1,i1')
 
         return ret
 
