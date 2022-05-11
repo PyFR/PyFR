@@ -17,9 +17,7 @@ reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
     int i = get_global_id(0), tid = get_local_id(0);
     int gdim = get_num_groups(0), bid = get_group_id(0);
     int ncola = get_num_groups(1), k = get_group_id(1);
-    int lastblksize = ncolb % ${sharesz};
 
-    __local fpdtype_t sdata[${sharesz}];
     fpdtype_t r, acc = 0;
 
     if (i < ncolb)
@@ -39,45 +37,16 @@ reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
             acc += r*r;
         % endif
         }
-
-        sdata[tid] = acc;
     }
 
-    work_group_barrier(CLK_LOCAL_MEM_FENCE);
-
-    // Unrolled reduction within full blocks
-    if (bid != gdim - 1)
-    {
-    % for n in pyfr.ilog2range(sharesz):
-        if (tid < ${n})
-        {
-        % if norm == 'uniform':
-            sdata[tid] = max(sdata[tid], sdata[tid + ${n}]);
-        % else:
-            sdata[tid] += sdata[tid + ${n}];
-        % endif
-        }
-        work_group_barrier(CLK_LOCAL_MEM_FENCE);
-    % endfor
-    }
-    // Last block reduced with a variable sized loop
-    else
-    {
-        for (int s = 1; s < lastblksize; s *= 2)
-        {
-            if (tid % (2*s) == 0 && tid + s < lastblksize)
-            {
-            % if norm == 'uniform':
-                sdata[tid] = max(sdata[tid], sdata[tid + s]);
-            % else:
-                sdata[tid] += sdata[tid + s];
-            % endif
-            }
-            work_group_barrier(CLK_LOCAL_MEM_FENCE);
-        }
-    }
+    // Perform the reduction inside of our work group
+% if norm == 'uniform':
+    acc = work_group_reduce_max(acc);
+% else:
+    acc = work_group_reduce_add(acc);
+% endif
 
     // Copy to global memory
     if (tid == 0)
-        reduced[k*gdim + bid] = sdata[0];
+        reduced[k*gdim + bid] = acc;
 }
