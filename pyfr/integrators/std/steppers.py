@@ -24,10 +24,17 @@ class StdEulerStepper(BaseStdStepper):
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
+        preproc, postproc = self.system.preproc, self.system.postproc
         ut, f = self._regidx
+
+        # Perform any necessary pre-processing
+        preproc(t, ut)
 
         rhs(t, ut, f)
         add(1.0, ut, dt, f)
+
+        # Perform any necessary post-processing
+        postproc(ut)
 
         return ut
 
@@ -44,6 +51,7 @@ class StdTVDRK3Stepper(BaseStdStepper):
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
+        preproc, postproc = self.system.preproc, self.system.postproc
 
         # Get the bank indices for each register (n, n+1, rhs)
         r0, r1, r2 = self._regidx
@@ -52,18 +60,24 @@ class StdTVDRK3Stepper(BaseStdStepper):
         if r0 != self._idxcurr:
             r0, r1 = r1, r0
 
+        # Perform any necessary pre-processing
+        preproc(t, r0)
+
         # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
         rhs(t, r0, r2)
         add(0.0, r1, 1.0, r0, dt, r2)
+        postproc(r1)
 
         # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
         rhs(t + dt, r1, r2)
         add(0.25, r1, 0.75, r0, 0.25*dt, r2)
+        postproc(r1)
 
         # Third stage; r2 = -∇·f(r1);
         #              r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
         rhs(t + 0.5*dt, r1, r2)
         add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
+        postproc(r1)
 
         # Return the index of the bank containing u(t + dt)
         return r1
@@ -81,6 +95,7 @@ class StdRK4Stepper(BaseStdStepper):
 
     def step(self, t, dt):
         add, rhs = self._add, self.system.rhs
+        preproc, postproc = self.system.preproc, self.system.postproc
 
         # Get the bank indices for each register
         r0, r1, r2 = self._regidx
@@ -89,35 +104,44 @@ class StdRK4Stepper(BaseStdStepper):
         if r0 != self._idxcurr:
             r0, r1 = r1, r0
 
+        # Perform any necessary pre-processing
+        preproc(t, r0)
+
         # First stage; r1 = -∇·f(r0)
         rhs(t, r0, r1)
 
         # Second stage; r2 = r0 + dt/2*r1; r2 = -∇·f(r2)
         add(0.0, r2, 1.0, r0, dt/2.0, r1)
+        postproc(r2)
         rhs(t + dt/2.0, r2, r2)
 
         # As no subsequent stages depend on the first stage we can
         # reuse its register to start accumulating the solution with
         # r1 = r0 + dt/6*r1 + dt/3*r2
         add(dt/6.0, r1, 1.0, r0, dt/3.0, r2)
+        postproc(r1)
 
         # Third stage; here we reuse the r2 register
         # r2 = r0 + dt/2*r2
         # r2 = -∇·f(r2)
         add(dt/2.0, r2, 1.0, r0)
+        postproc(r2)
         rhs(t + dt/2.0, r2, r2)
 
         # Accumulate; r1 = r1 + dt/3*r2
         add(1.0, r1, dt/3.0, r2)
+        postproc(r1)
 
         # Fourth stage; again we reuse r2
         # r2 = r0 + dt*r2
         # r2 = -∇·f(r2)
         add(dt, r2, 1.0, r0)
+        postproc(r2)
         rhs(t + dt, r2, r2)
 
         # Final accumulation r1 = r1 + dt/6*r2 = u(t + dt)
         add(1.0, r1, dt/6.0, r2)
+        postproc(r1)
 
         # Return the index of the bank containing u(t + dt)
         return r1

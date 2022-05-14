@@ -10,6 +10,7 @@ class EulerIntInters(BaseAdvectionIntInters):
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcflux')
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.intcent')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
@@ -20,6 +21,12 @@ class EulerIntInters(BaseAdvectionIntInters):
             ul=self._scal_lhs, ur=self._scal_rhs,
             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
         )
+        
+        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            self.kernels['comm_entropy'] = lambda: self._be.kernel(
+                'intcent', tplargs=tplargs, dims=[self.ninterfpts],
+                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
+            )
 
 
 class EulerMPIInters(BaseAdvectionMPIInters):
@@ -27,6 +34,7 @@ class EulerMPIInters(BaseAdvectionMPIInters):
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicflux')
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicent')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
@@ -38,12 +46,19 @@ class EulerMPIInters(BaseAdvectionMPIInters):
             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
         )
 
+        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            self.kernels['comm_entropy'] = lambda: self._be.kernel(
+                'mpicent', tplargs=tplargs, dims=[self.ninterfpts],
+                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
+            )
+
 
 class EulerBaseBCInters(BaseAdvectionBCInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.bccflux')
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
@@ -55,6 +70,13 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
             magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs,
             **self._external_vals
         )
+        
+        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            self.kernels['comm_entropy'] = lambda: self._be.kernel(
+                'bccent', tplargs=tplargs, dims=[self.ninterfpts],
+                entmin_lhs=self._entmin_lhs, ul=self._scal_lhs, 
+                nl=self._norm_pnorm_lhs, **self._external_vals
+            )
 
 
 class EulerSupInflowBCInters(EulerBaseBCInters):

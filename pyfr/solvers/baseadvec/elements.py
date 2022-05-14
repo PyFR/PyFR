@@ -3,7 +3,6 @@
 from pyfr.backends.base import MetaKernel
 from pyfr.solvers.base import BaseElements
 
-
 class BaseAdvectionElements(BaseElements):
     @property
     def _scratch_bufs(self):
@@ -23,9 +22,8 @@ class BaseAdvectionElements(BaseElements):
         kernels = self.kernels
 
         # Register pointwise kernels with the backend
-        self._be.pointwise.register(
-            'pyfr.solvers.baseadvec.kernels.negdivconf'
-        )
+        self._be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
+        self._be.pointwise.register('pyfr.solvers.baseadvec.kernels.entropymin')
 
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
@@ -100,3 +98,51 @@ class BaseAdvectionElements(BaseElements):
                 return MetaKernel([mul, copy])
 
             kernels['filter_soln'] = filter_soln
+
+        
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if shock_capturing == 'entropy-filter':
+            nonce = args[2]
+            tags = {'align'}
+
+            self.entmin     = self._be.matrix((1, self.neles),
+                                           extent=nonce + 'entmin', tags=tags)
+            self.entmin_int = self._be.matrix((self.nfpts, self.neles),
+                                           extent=nonce + 'entminint', tags=tags)
+   
+            eftplargs = {'nfpts' : self.nfpts}
+            self.kernels['min_entropy'] = lambda: self._be.kernel(
+                'entropymin', tplargs=eftplargs, dims=[self.neles],
+                entmin=self.entmin, entmin_int=self.entmin_int
+            )
+
+            # Setup nodal/modal operator matrices
+            self.vdm = self._be.matrix((self.nupts, self.nupts),
+                                           extent=nonce + 'vdm', initval=self.basis.ubasis.vdm.T)
+            self.invvdm = self._be.matrix((self.nupts, self.nupts),
+                                           extent=nonce + 'invvdm', initval=self.basis.ubasis.invvdm.T)
+            
+            # Setup interpolation matrices if applying constraints on fpts/qpts
+            con_fpts = self.cfg.getbool('solver-entropy-filter', 'constrain-fpts', False)
+            con_qpts = self.cfg.getbool('solver-entropy-filter', 'constrain-qpts', False)
+
+            if con_qpts and not self.nqpts:
+                raise ValueError('Flux anti-aliasing must be enabled to enforce entropy filter constraints on qpts')
+
+            self.intfpts = self._be.matrix((self.nfpts, self.nupts),
+                                           extent=nonce + 'intfpts', initval=self.basis.m0) if con_fpts else None
+            self.intqpts = self._be.matrix((self.nqpts, self.nupts),
+                                           extent=nonce + 'intqpts', initval=self.basis.m7) if con_qpts else None
+
+        elif shock_capturing == 'none':
+            self.entmin = None
+            self.entmin_int = None
+
+
+    def get_entmin_int_fpts_for_inter(self, eidx, fidx):
+        nfp = self.nfacefpts[fidx]
+
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        cmap = (eidx,)*nfp
+
+        return (self.entmin_int.mid,)*nfp, rmap, cmap

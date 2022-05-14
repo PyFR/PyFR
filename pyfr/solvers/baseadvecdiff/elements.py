@@ -140,6 +140,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 'shocksensor', tplargs=tplargs_artvisc, dims=[self.neles],
                 u=self.scal_upts[uin], artvisc=self.artvisc
             )
+        elif shock_capturing == 'entropy-filter':
+            raise ValueError('Entropy filtering not supported for Navier-Stokes.')
         elif shock_capturing == 'none':
             self.artvisc = None
         else:

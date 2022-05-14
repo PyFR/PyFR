@@ -75,8 +75,8 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    #define X_IDX_AOSOA(v, nv)\
                        ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
                    #define BLK_IDX ib*BLK_SZ
-                   #define BCAST_BLK(i, ld)\
-                       ((i) % (ld) + ((i) / (ld))*(ld)*_ny)
+                   #define BCAST_BLK(r, c, ld)\
+                       ((c) % (ld) + ((c) / (ld))*(ld)*r)
                    #pragma omp parallel for
                    for (int ib = 0; ib < nci; ib++)
                    {{
