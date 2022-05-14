@@ -80,7 +80,14 @@ class OpenMPKernelProvider(BaseKernelProvider):
 
 class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
                                     BasePointwiseKernelProvider):
-    kernel_generator_cls = OpenMPKernelGenerator
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Pass the OpenMP schedule to the generator
+        class KernelGenerator(OpenMPKernelGenerator):
+            schedule = self.backend.schedule
+
+        self.kernel_generator_cls = KernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst, argmv):
         rtargs = []
