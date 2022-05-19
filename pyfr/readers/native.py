@@ -54,6 +54,9 @@ class NativeReader(Mapping):
 
         return keys
 
+    def attrs(self, aname):
+        return self._file[aname].attrs
+
     @memoize
     def array_info(self, prefix):
         # Entries in the file which start with the prefix
