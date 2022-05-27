@@ -64,7 +64,6 @@ class HIPRocBLASKernels:
             pass
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
-        hip = self.backend.hip
         h, w = self._handle, self._wrappers
 
         # Ensure the matrices are compatible
@@ -91,15 +90,7 @@ class HIPRocBLASKernels:
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
-                stream = hip.create_stream()
-
-                # Capture the execution of rocBLAS to obtain a graph
-                stream.begin_capture()
-                self.run(stream)
-                gnode = stream.end_capture()
-
-                # Embed this graph in our main graph
-                return graph.graph.add_graph(gnode, deps)
+                pass
 
             def run(self, stream):
                 w.rocblas_set_stream(h, stream)

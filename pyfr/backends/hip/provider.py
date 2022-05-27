@@ -24,17 +24,12 @@ class HIPKernel(Kernel):
 
 class HIPOrderedMetaKernel(MetaKernel):
     def add_to_graph(self, graph, dnodes):
-        for k in self.kernels:
-            dnodes = [k.add_to_graph(graph, dnodes)]
-
-        return dnodes[0]
+        pass
 
 
 class HIPUnorderedMetaKernel(MetaKernel):
     def add_to_graph(self, graph, dnodes):
-        nodes = [k.add_to_graph(graph, dnodes) for k in self.kernels]
-
-        return graph.graph.add_empty(nodes)
+        pass
 
 
 class HIPKernelProvider(BaseKernelProvider):
@@ -78,19 +73,8 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
                     for i, k in rtargs:
                         params.set_arg(i, kwargs[k])
 
-                    # Notify any graphs we're in about our new parameters
-                    for graph, gnode in self.gnodes.items():
-                        graph.stale_kparams[gnode] = params
-
             def add_to_graph(self, graph, deps):
-                gnode = graph.graph.add_kernel(params, deps)
-
-                # If our parameters can change then we need to keep a
-                # (weak) reference to the graph so we can notify it
-                if rtargs:
-                    self.gnodes[graph] = gnode
-
-                return gnode
+                pass
 
             def run(self, stream):
                 fun.exec_async(stream, params)

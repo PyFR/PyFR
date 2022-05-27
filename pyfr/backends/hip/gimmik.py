@@ -46,7 +46,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
-                return graph.graph.add_kernel(params, deps)
+                pass
 
             def run(self, stream):
                 fun.exec_async(stream, params)

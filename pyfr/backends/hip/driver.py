@@ -176,6 +176,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipStreamEndCapture', c_void_p, POINTER(c_void_p)),
         (c_int, 'hipStreamSynchronize', c_void_p),
         (c_int, 'hipEventCreate', POINTER(c_void_p)),
+        (c_int, 'hipEventRecord', c_void_p, c_void_p),
         (c_int, 'hipEventDestroy', c_void_p),
         (c_int, 'hipEventSynchronize', c_void_p),
         (c_int, 'hipModuleLoadData', POINTER(c_void_p), c_char_p),
@@ -275,6 +276,9 @@ class HIPEvent(_HIPBase):
         hip.lib.hipEventCreate(ptr)
 
         super().__init__(hip, ptr)
+
+    def record(self, stream):
+        self.hip.lib.hipEventRecord(self, stream)
 
     def synchronize(self):
         self.hip.lib.hipEventSynchronize(self)
