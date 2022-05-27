@@ -1,10 +1,39 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, Kernel)
+                                BasePointwiseKernelProvider, Kernel,
+                                MetaKernel)
 from pyfr.backends.opencl.generator import OpenCLKernelGenerator
 from pyfr.nputil import npdtype_to_ctypestype
 from pyfr.util import memoize
+
+
+class OpenCLKernel(Kernel):
+    def add_to_graph(self, graph, deps):
+        pass
+
+
+class _OpenCLMetaKernelCommon:
+    def add_to_graph(self, graph, deps):
+        pass
+
+
+class OpenCLOrderedMetaKernel(_OpenCLMetaKernelCommon, MetaKernel):
+    def run(self, queue, wait_for=None, ret_evt=False):
+        for k in self.kernels[:-1]:
+            wait_for = [k.run(queue, wait_for, True)]
+
+        return self.kernels[-1].run(queue, wait_for, ret_evt)
+
+
+class OpenCLUnorderedMetaKernel(_OpenCLMetaKernelCommon, MetaKernel):
+    def run(self, queue, wait_for=None, ret_evt=False):
+        if ret_evt:
+            kevts = [k.run(queue, wait_for, True) for k in self.kernels]
+            return queue.marker(kevts)
+        else:
+            for k in self.kernels:
+                k.run(queue, wait_for, False)
 
 
 class OpenCLKernelProvider(BaseKernelProvider):
@@ -35,6 +64,8 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
             ls = (64, 4)
             gs = (dims[1] - dims[1] % -ls[0], ls[1])
 
+        fun.set_dims(gs, ls)
+
         # Process the arguments
         for i, k in enumerate(arglst):
             if isinstance(k, str):
@@ -42,11 +73,13 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
             else:
                 fun.set_arg(i, k)
 
-        class PointwiseKernel(Kernel):
-            def run(self, queue, **kwargs):
-                for i, k in rtargs:
-                    fun.set_arg(i, kwargs[k])
+        class PointwiseKernel(OpenCLKernel):
+            if rtargs:
+                def bind(self, **kwargs):
+                    for i, k in rtargs:
+                        fun.set_arg(i, kwargs[k])
 
-                fun.exec_async(queue.cmd_q, gs, ls)
+            def run(self, queue, wait_for=None, ret_evt=False):
+                return fun.exec_async(queue, wait_for, ret_evt)
 
         return PointwiseKernel(*argmv)

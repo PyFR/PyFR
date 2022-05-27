@@ -55,9 +55,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
 
-        # Get a queue for the pseudointegrator
-        self._queue = backend.queue()
-
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
 

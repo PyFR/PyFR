@@ -27,25 +27,29 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def _resid(self, rcurr, rold, dt_fac):
         comm, rank, root = get_comm_rank_root()
 
-        # Get a reduction kern to compute the square of the maximum residual
-        resid = self._get_reduction_kerns(rcurr, rold, method='resid',
-                                          norm=self._pseudo_norm)
+        # Get a set of kernels to compute the residual
+        rkerns = self._get_reduction_kerns(rcurr, rold, method='resid',
+                                           norm=self._pseudo_norm)
 
-        # Run the kernel
-        self._queue.enqueue_and_run(resid, dt_fac)
+        # Bind the dynmaic arguments
+        for kern in rkerns:
+            kern.bind(dt_fac)
 
-        # L2 norm
+        # Run the kernels
+        self.backend.run_kernels(rkerns, wait=True)
+
+        # Pseudo L2 norm
         if self._pseudo_norm == 'l2':
             # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([sum(ev) for ev in zip(*[r.retval for r in resid])])
+            res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
             comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('sum'))
 
             # Normalise and return
             return tuple(np.sqrt(res / self._gndofs))
-        # L^∞ norm
+        # Uniform norm
         else:
             # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([max(ev) for ev in zip(*[r.retval for r in resid])])
+            res = np.array([max(e) for e in zip(*[r.retval for r in rkerns])])
             comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('max'))
 
             # Normalise and return
@@ -135,7 +139,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.backend.commit()
 
     def localerrest(self, errbank):
-        self._queue.enqueue_and_run(self.pintgkernels['localerrest', errbank])
+        self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
 
     def pseudo_advance(self, tcurr):
         self.tcurr = tcurr

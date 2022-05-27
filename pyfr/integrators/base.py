@@ -49,9 +49,6 @@ class BaseIntegrator:
         # Extract the UUID of the mesh (to be saved with solutions)
         self.mesh_uuid = mesh['mesh_uuid']
 
-        # Get a queue for subclasses to use
-        self._queue = backend.queue()
-
         # Solution cache
         self._curr_soln = None
 
@@ -192,8 +189,11 @@ class BaseCommon:
         # Get a suitable set of axnpby kernels
         axnpby = self._get_axnpby_kerns(*regidxs, subdims=subdims)
 
-        # Bind and run the axnpby kernels
-        self._queue.enqueue_and_run(axnpby, *consts)
+        # Bind the arguments
+        for k in axnpby:
+            k.bind(*consts)
+
+        self.backend.run_kernels(axnpby)
 
     def _add(self, *args, subdims=None):
         self._addv(args[::2], args[1::2], subdims=subdims)

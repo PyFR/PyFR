@@ -179,7 +179,7 @@ class StdRKVdH2RStepper(BaseStdStepper):
         return 4 if self.stepper_has_errest else 2
 
     def step(self, t, dt):
-        q, rhs = self._queue, self.system.rhs
+        run_kernels, rhs = self.backend.run_kernels, self.system.rhs
 
         r1 = self._idxcurr
         r2, *rs = set(self._regidx) - {r1}
@@ -192,8 +192,12 @@ class StdRKVdH2RStepper(BaseStdStepper):
             # Fetch the appropriate RK accumulation kernels
             kerns = self._get_rkvdh2_kerns(i, r1, r2, *rs)
 
+            # Bind the arguments
+            for k in kerns:
+                k.bind(dt=dt)
+
             # Execute
-            q.enqueue_and_run(kerns, dt=dt)
+            run_kernels(kerns)
 
             # Swap
             r1, r2 = r2, r1
