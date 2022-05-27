@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_int,
-                    c_size_t, c_uint, c_ulonglong, c_void_p)
+from ctypes import (POINTER, Structure, addressof, byref, c_char, c_char_p,
+                    c_float, c_int, c_size_t, c_uint, c_ulonglong, c_void_p)
 
 import numpy as np
 
@@ -118,7 +118,11 @@ class CUDAWrappers(LibWrapper):
     # Constants
     COMPUTE_CAPABILITY_MAJOR = 75
     COMPUTE_CAPABILITY_MINOR = 76
+    EVENT_DEFAULT = 0
     EVENT_DISABLE_TIMING = 2
+    FUNC_ATTR_SHARED_SIZE_BYTES = 1
+    FUNC_ATTR_LOCAL_SIZE_BYTES = 3
+    FUNC_ATTR_NUM_REGS = 4
     FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     FUNC_CACHE_PREFER_NONE = 0
@@ -151,13 +155,16 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuStreamSynchronize', c_void_p),
         (c_int, 'cuEventCreate', POINTER(c_void_p), c_uint),
         (c_int, 'cuEventDestroy_v2', c_void_p),
+        (c_int, 'cuEventRecord', c_void_p, c_void_p),
         (c_int, 'cuEventSynchronize', c_void_p),
+        (c_int, 'cuEventElapsedTime', POINTER(c_float), c_void_p, c_void_p),
         (c_int, 'cuModuleLoadDataEx', POINTER(c_void_p), c_char_p, c_uint,
          POINTER(c_int), POINTER(c_void_p)),
         (c_int, 'cuModuleUnload', c_void_p),
         (c_int, 'cuModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
+        (c_int, 'cuFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
         (c_int, 'cuFuncSetAttribute', c_void_p, c_int, c_int),
         (c_int, 'cuFuncSetCacheConfig', c_void_p, c_int),
         (c_int, 'cuGraphCreate', POINTER(c_void_p), c_uint),
@@ -250,14 +257,28 @@ class CUDAStream(_CUDABase):
 class CUDAEvent(_CUDABase):
     _destroyfn = 'cuEventDestroy'
 
-    def __init__(self, cuda):
+    def __init__(self, cuda, timing=False):
+        if timing:
+            flags = cuda.lib.EVENT_DEFAULT
+        else:
+            flags = cuda.lib.EVENT_DISABLE_TIMING
+
         ptr = c_void_p()
-        cuda.lib.cuEventCreate(ptr, cuda.lib.EVENT_DISABLE_TIMING)
+        cuda.lib.cuEventCreate(ptr, flags)
 
         super().__init__(cuda, ptr)
 
+    def record(self, stream):
+        self.cuda.lib.cuEventRecord(self, stream)
+
     def synchronize(self):
         self.cuda.lib.cuEventSynchronize(self)
+
+    def elapsed_time(self, start):
+        dt = c_float()
+        self.cuda.lib.cuEventElapsedTime(dt, start, self)
+
+        return dt.value / 1e3
 
 
 class CUDAModule(_CUDABase):
@@ -280,21 +301,36 @@ class CUDAFunction(_CUDABase):
 
         super().__init__(cuda, ptr)
 
+        # Query the register and local memory required by the function
+        self.nreg = self._get_attr('num_regs')
+        self.shared_mem = self._get_attr('shared_size_bytes')
+        self.local_mem = self._get_attr('local_size_bytes')
+
         # Save a reference to our underlying module and argument types
         self.module = module
         self.argtypes = list(argtypes)
+
+    def _get_attr(self, attr):
+        attr = getattr(self.cuda.lib, f'FUNC_ATTR_{attr.upper()}')
+
+        v = c_int()
+        self.cuda.lib.cuFuncGetAttribute(byref(v), attr, self)
+
+        return v.value
+
+    def _set_attr(self, attr, val):
+        attr = getattr(self.cuda.lib, f'FUNC_ATTR_{attr.upper()}')
+        self.cuda.lib.cuFuncSetAttribute(self, attr, val)
 
     def set_cache_pref(self, *, prefer_l1=None, prefer_shared=None):
         pref = self.cuda._get_cache_pref(prefer_l1, prefer_shared)
         self.cuda.lib.cuFuncSetCacheConfig(self, pref)
 
     def set_shared_size(self, *, dynm_shared=0, carveout=None):
-        attr = self.cuda.lib.FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES
-        self.cuda.lib.cuFuncSetAttribute(self, attr, dynm_shared)
+        self._set_attr('max_dynamic_shared_size_bytes', dynm_shared)
 
         if carveout is not None:
-            attr = self.cuda.lib.FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT
-            self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
+            self._set_attr('preferred_shared_memory_carveout', carveout)
 
     def make_params(self, grid, block, sharedb=0):
         return CUDAKernelNodeParams(self, grid, block, sharedb)
@@ -485,8 +521,8 @@ class CUDA:
     def create_stream(self):
         return CUDAStream(self)
 
-    def create_event(self):
-        return CUDAEvent(self)
+    def create_event(self, timing=False):
+        return CUDAEvent(self, timing)
 
     def create_graph(self):
         return CUDAGraph(self)

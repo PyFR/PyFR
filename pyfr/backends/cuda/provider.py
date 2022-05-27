@@ -50,6 +50,9 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
     def _instantiate_kernel(self, dims, fun, arglst, argmv):
         rtargs = []
 
+        # Declare a preference for L1 cache over shared memory
+        fun.set_cache_pref(prefer_l1=True)
+
         # Determine the block size
         if len(dims) == 1:
             block = (64, 1, 1)
