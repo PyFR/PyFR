@@ -6,7 +6,7 @@ import re
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
 from pyfr.util import match_paired_paren, subclasses, subclass_where
 
@@ -16,8 +16,6 @@ class BaseRegion:
         pass
 
     def surface_faces(self, mesh, rallocs, exclbcs=[]):
-        from mpi4py import MPI
-
         sfaces = set()
 
         # Begin by assuming all faces of all elements are on the surface
@@ -56,7 +54,7 @@ class BaseRegion:
             bufs.append((con, sb, rb))
 
         # Wait for the exchanges to finish
-        MPI.Request.Waitall(reqs)
+        mpi.Request.Waitall(reqs)
 
         # Use this data to eliminate any shared faces
         for con, sb, rb in bufs:
@@ -77,8 +75,6 @@ class BoundaryRegion(BaseRegion):
         self.nlayers = nlayers
 
     def interior_eles(self, mesh, rallocs):
-        from mpi4py import MPI
-
         bc = f'bcon_{self.bcname}_p{rallocs.prank}'
         eset = defaultdict(list)
         comm, rank, root = get_comm_rank_root()
@@ -131,7 +127,7 @@ class BoundaryRegion(BaseRegion):
                         eset[l[0]].append(l[1])
 
                 # Wait for the exchanges to finish
-                MPI.Request.Waitall(reqs)
+                mpi.Request.Waitall(reqs)
 
                 # Grow our element set by considering adjacent partitions
                 for pc, sb, rb in pcon.values():

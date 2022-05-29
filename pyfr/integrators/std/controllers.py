@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 from pyfr.integrators.std.base import BaseStdIntegrator
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 
 
 class BaseStdController(BaseStdIntegrator):
@@ -143,7 +143,7 @@ class StdPIController(BaseStdController):
             err = np.array([sum(v for k in ekerns for v in k.retval)])
 
             # Reduce globally (MPI ranks)
-            comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('sum'))
+            comm.Allreduce(mpi.IN_PLACE, err, op=mpi.SUM)
 
             # Normalise
             err = math.sqrt(float(err) / self._gndofs)
@@ -153,7 +153,7 @@ class StdPIController(BaseStdController):
             err = np.array([max(v for k in ekerns for v in k.retval)])
 
             # Reduce globally (MPI ranks)
-            comm.Allreduce(get_mpi('in_place'), err, op=get_mpi('max'))
+            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.MAX)
 
             # Normalise
             err = math.sqrt(float(err))

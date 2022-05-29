@@ -9,7 +9,7 @@ import time
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins import get_plugin
 from pyfr.util import memoize
 
@@ -150,7 +150,7 @@ class BaseIntegrator:
 
     def _check_abort(self):
         comm, rank, root = get_comm_rank_root()
-        if comm.allreduce(self.abort, op=get_mpi('lor')):
+        if comm.allreduce(self.abort, op=mpi.LOR):
             # Ensure that the callbacks registered in atexit
             # are called only once if stopping the computation
             sys.exit(1)
@@ -164,7 +164,7 @@ class BaseCommon:
         ndofs = sum(self.system.ele_ndofs)
 
         # Sum to get the global number over all partitions
-        return comm.allreduce(ndofs, op=get_mpi('sum'))
+        return comm.allreduce(ndofs, op=mpi.SUM)
 
     @memoize
     def _get_axnpby_kerns(self, *rs, subdims=None):

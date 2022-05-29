@@ -103,8 +103,6 @@ class OpenCLGraph(base.Graph):
                 mreqlist.append((req, [evtidxs[dep] for dep in deps]))
 
     def run(self, queue):
-        from mpi4py import MPI
-
         events = [None]*len(self.klist)
         wait_for_events = self.backend.cl.wait_for_events
 
@@ -119,7 +117,7 @@ class OpenCLGraph(base.Graph):
         queue.flush()
 
         # Start all dependency-free MPI requests
-        MPI.Prequest.Startall(self.mpi_root_reqs)
+        self._startall(self.mpi_root_reqs)
 
         # Start any remaining requests once their dependencies are satisfied
         for req, wait_for in self.mreqlist:
@@ -127,4 +125,4 @@ class OpenCLGraph(base.Graph):
             req.Start()
 
         # Wait for all of the MPI requests to finish
-        MPI.Prequest.Waitall(self.mpi_reqs)
+        self._waitall(self.mpi_reqs)

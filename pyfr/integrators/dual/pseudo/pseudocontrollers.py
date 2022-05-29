@@ -3,7 +3,7 @@
 import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 
 
 class BaseDualPseudoController(BaseDualPseudoIntegrator):
@@ -42,7 +42,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         if self._pseudo_norm == 'l2':
             # Reduce locally (element types) and globally (MPI ranks)
             res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
-            comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('sum'))
+            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
 
             # Normalise and return
             return tuple(np.sqrt(res / self._gndofs))
@@ -50,7 +50,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         else:
             # Reduce locally (element types) and globally (MPI ranks)
             res = np.array([max(e) for e in zip(*[r.retval for r in rkerns])])
-            comm.Allreduce(get_mpi('in_place'), res, op=get_mpi('max'))
+            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.MAX)
 
             # Normalise and return
             return tuple(np.sqrt(res))
@@ -151,4 +151,3 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             if self.convmon(i, self.minniters):
                 break
-
