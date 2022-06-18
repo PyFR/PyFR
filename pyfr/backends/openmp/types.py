@@ -93,15 +93,13 @@ class OpenMPGraph(base.Graph):
             self._runlist.append((i, n - i, []))
 
     def run(self):
-        from mpi4py import MPI
-
         # Start all dependency-free MPI requests
-        MPI.Prequest.Startall(self.mpi_root_reqs)
+        self._startall(self.mpi_root_reqs)
 
         for i, n, reqs in self._runlist:
             self.backend.krunner(i, n, self._kfunargs)
 
-            MPI.Prequest.Startall(reqs)
+            self._startall(reqs)
 
         # Wait for all of the MPI requests to finish
-        MPI.Prequest.Waitall(self.mpi_reqs)
+        self._waitall(self.mpi_reqs)

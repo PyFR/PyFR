@@ -2,6 +2,8 @@
 
 import numpy as np
 
+from pyfr.mpiutil import get_comm_rank_root, mpi
+
 
 class MatrixBase:
     _base_tags = set()
@@ -195,14 +197,14 @@ class ConstMatrix(MatrixBase):
 
 class XchgMatrix(Matrix):
     def recvreq(self, pid, tag):
-        from mpi4py import MPI
+        comm, rank, root = get_comm_rank_root()
 
-        return MPI.COMM_WORLD.Recv_init(self.hdata, pid, tag)
+        return comm.Recv_init(self.hdata, pid, tag)
 
     def sendreq(self, pid, tag):
-        from mpi4py import MPI
+        comm, rank, root = get_comm_rank_root()
 
-        return MPI.COMM_WORLD.Send_init(self.hdata, pid, tag)
+        return comm.Send_init(self.hdata, pid, tag)
 
 
 class View:
@@ -293,6 +295,10 @@ class Graph:
         self.knodes = {}
         self.kdeps = {}
         self.depk = set()
+
+        # MPI wrappers
+        self._startall = mpi.Prequest.Startall
+        self._waitall = mpi.Prequest.Waitall
 
         # MPI requests along with their associated dependencies
         self.mpi_reqs = []

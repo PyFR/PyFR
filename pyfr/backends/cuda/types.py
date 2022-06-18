@@ -100,8 +100,6 @@ class CUDAGraph(base.Graph):
         self.exc_graph = self.graph.instantiate()
 
     def run(self, stream):
-        from mpi4py import MPI
-
         # Ensure our kernel parameters are up to date
         for node, params in self.stale_kparams.items():
             self.exc_graph.set_kernel_node_params(node, params)
@@ -110,7 +108,7 @@ class CUDAGraph(base.Graph):
         self.stale_kparams.clear()
 
         # Start all dependency-free MPI requests
-        MPI.Prequest.Startall(self.mpi_root_reqs)
+        self._startall(self.mpi_root_reqs)
 
         # Start any remaining requests once their dependencies are satisfied
         for event, req in self.mpi_events:
@@ -118,4 +116,4 @@ class CUDAGraph(base.Graph):
             req.Start()
 
         # Wait for all of the MPI requests to finish
-        MPI.Prequest.Waitall(self.mpi_reqs)
+        self._waitall(self.mpi_reqs)

@@ -106,8 +106,6 @@ class HIPGraph(base.Graph):
             self.klist.append((k, event))
 
     def run(self, stream):
-        from mpi4py import MPI
-
         # Submit the kernels to the stream
         for k, event in self.klist:
             k.run(stream)
@@ -116,12 +114,12 @@ class HIPGraph(base.Graph):
                 event.record(stream)
 
         # Start all dependency-free MPI requests
-        MPI.Prequest.Startall(self.mpi_root_reqs)
+        self._startall(self.mpi_root_reqs)
 
         # Start any remaining requests once their dependencies are satisfied
         for event, reqs in self.mpi_events.values():
             event.synchronize()
-            MPI.Prequest.Startall(reqs)
+            self._startall(reqs)
 
         # Wait for all of the MPI requests to finish
-        MPI.Prequest.Waitall(self.mpi_reqs)
+        self._waitall(self.mpi_reqs)

@@ -5,7 +5,7 @@ import re
 import numpy as np
 
 from pyfr.inifile import NoOptionError
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
@@ -191,10 +191,9 @@ class IntegratePlugin(BasePlugin):
 
             # Reduce and output if we're the root rank
             if rank != root:
-                comm.Reduce(iintex, None, op=get_mpi('sum'), root=root)
+                comm.Reduce(iintex, None, op=mpi.SUM, root=root)
             else:
-                comm.Reduce(get_mpi('in_place'), iintex, op=get_mpi('sum'),
-                            root=root)
+                comm.Reduce(mpi.IN_PLACE, iintex, op=mpi.SUM, root=root)
 
                 # Write
                 print(intg.tcurr, *iintex, sep=',', file=self.outf)
