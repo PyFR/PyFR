@@ -6,11 +6,13 @@
               err='in fpdtype_t[${str(nvars)}]'
               errprev='inout fpdtype_t[${str(nvars)}]'
               dtau_upts='inout fpdtype_t[${str(nvars)}]'>
-    fpdtype_t ferr, ufac, vfac;
+    fpdtype_t ferr, gerr, ufac, vfac;
 
 % for i in range(nvars):
     ferr = fabs(${1/atol}*err[${i}]);
-    ufac = pow(ferr, ${-expa}) * pow(errprev[${i}], ${expb});
+    gerr = errprev[${i}];
+    ufac = ${pyfr.polyfit(lambda x: x**-expa, 1e-6, 10, 8, 'ferr')}
+         * ${pyfr.polyfit(lambda x: x**expb, 1e-6, 10, 8, 'gerr')};
     vfac = min(${maxf}, max(${minf}, ${saff}*ufac));
 
     // Compute the size of the next step

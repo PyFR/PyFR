@@ -5,10 +5,11 @@ import re
 import numpy as np
 
 from pyfr.inifile import NoOptionError
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
+from pyfr.regions import ConstructiveRegion
 
 
 class IntegratePlugin(BasePlugin):
@@ -34,10 +35,10 @@ class IntegratePlugin(BasePlugin):
                       if k.startswith('int-')]
 
         # Integration region pre-processing
-        rinfo = self._prepare_region_info(intg)
+        esetmask = self._prepare_esetmask(intg)
 
         # Gradient pre-processing
-        self._init_gradients(intg, rinfo)
+        self._init_gradients(intg)
 
         # Save a reference to the physical solution point locations
         self.plocs = system.ele_ploc_upts
@@ -55,7 +56,7 @@ class IntegratePlugin(BasePlugin):
 
         # Prepare the per element-type info list
         self.eleinfo = eleinfo = []
-        for (ename, eles), (eset, emask) in zip(system.ele_map.items(), rinfo):
+        for ename, eles in system.ele_map.items():
             # Obtain quadrature info
             rname = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
 
@@ -79,7 +80,13 @@ class IntegratePlugin(BasePlugin):
                 m0 = None
 
             # Locations of each quadrature point
-            ploc = eles.ploc_at_np(r.pts).swapaxes(0, 1)[..., eset]
+            ploc = eles.ploc_at_np(r.pts).swapaxes(0, 1)
+
+            # Obtain the region mask
+            eset, emask = esetmask(ploc)
+
+            # Use this to subset the quadrature points
+            ploc = ploc[..., eset]
 
             # Jacobian determinants at each quadrature point
             rcpdjacs = eles.rcpdjac_at_np(r.pts)[:, eset]
@@ -87,26 +94,21 @@ class IntegratePlugin(BasePlugin):
             # Save
             eleinfo.append((ploc, r.wts[:, None] / rcpdjacs, m0, eset, emask))
 
-    def _prepare_region_info(self, intg):
+    def _prepare_esetmask(self, intg):
+        region = self.cfg.get(self.cfgsect, 'region', '*')
+
         # All elements
-        if self.cfg.get(self.cfgsect, 'region', '*') == '*':
-            return [(slice(None), ([], []))]*len(intg.system.ele_types)
-        # Elements inside of a box
+        if region == '*':
+            return lambda pts: (slice(None), ([], []))
+        # Elements inside of a paramaterised shape
         else:
-            x0, x1 = self.cfg.getliteral(self.cfgsect, 'region')
+            crgn = ConstructiveRegion(region)
 
-            rinfo = []
-            for etype in intg.system.ele_types:
-                pts = intg.system.mesh[f'spt_{etype}_p{intg.rallocs.prank}']
-                pts = np.moveaxis(pts, 2, 0)
-
-                # Determine which points are inside the box
-                inside = np.ones(pts.shape[1:], dtype=np.bool)
-                for l, p, u in zip(x0, pts, x1):
-                    inside &= (l <= p) & (p <= u)
+            def esetmask(pts):
+                inside = crgn.pts_in_region(np.moveaxis(pts, 0, 2))
 
                 if np.all(inside):
-                    rinfo.append((slice(None), ([], [])))
+                    return slice(None), ([], [])
                 else:
                     # Determine which elements have some points inside the box
                     eset = np.any(inside, axis=0).nonzero()[0]
@@ -114,11 +116,11 @@ class IntegratePlugin(BasePlugin):
                     # Mask any points outside of the box
                     emask = (~inside[:, eset]).nonzero()
 
-                    rinfo.append((eset, emask))
+                    return eset, emask
 
-            return rinfo
+            return esetmask
 
-    def _init_gradients(self, intg, rinfo):
+    def _init_gradients(self, intg):
         # Determine what gradients, if any, are required
         gradpnames = set()
         for ex in self.exprs:
@@ -189,10 +191,9 @@ class IntegratePlugin(BasePlugin):
 
             # Reduce and output if we're the root rank
             if rank != root:
-                comm.Reduce(iintex, None, op=get_mpi('sum'), root=root)
+                comm.Reduce(iintex, None, op=mpi.SUM, root=root)
             else:
-                comm.Reduce(get_mpi('in_place'), iintex, op=get_mpi('sum'),
-                            root=root)
+                comm.Reduce(mpi.IN_PLACE, iintex, op=mpi.SUM, root=root)
 
                 # Write
                 print(intg.tcurr, *iintex, sep=',', file=self.outf)

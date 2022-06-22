@@ -107,7 +107,7 @@ Dependencies
 PyFR |release| has a hard dependency on Python 3.9+ and the following
 Python packages:
 
-1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 2.2
+1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 2.3
 2. `h5py <https://www.h5py.org/>`_ >= 2.10
 3. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
 4. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
@@ -145,7 +145,7 @@ The OpenCL backend targets a range of accelerators including GPUs from
 AMD, Intel, and NVIDIA. The backend requires:
 
 1. OpenCL
-2. `CLBlast <https://github.com/CNugteren/CLBlast>`_
+2. Optionally `CLBlast <https://github.com/CNugteren/CLBlast>`_
 
 Note that when running on NVIDIA GPUs the OpenCL backend terminate with
 a segmentation fault after the simulation has finished.  This is due

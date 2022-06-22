@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.base import BasePlugin, init_csv
 
 
@@ -217,9 +217,9 @@ class FluidForcePlugin(BasePlugin):
 
         # Reduce and output if we're the root rank
         if rank != root:
-            comm.Reduce(fm, None, op=get_mpi('sum'), root=root)
+            comm.Reduce(fm, None, op=mpi.SUM, root=root)
         else:
-            comm.Reduce(get_mpi('in_place'), fm, op=get_mpi('sum'), root=root)
+            comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
 
             # Write
             print(intg.tcurr, *fm.ravel(), sep=',', file=self.outf)

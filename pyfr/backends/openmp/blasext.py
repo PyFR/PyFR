@@ -2,8 +2,7 @@
 
 import numpy as np
 
-from pyfr.backends.openmp.provider import OpenMPKernelProvider
-from pyfr.backends.base import Kernel
+from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 
 
 class OpenMPBlasExtKernels(OpenMPKernelProvider):
@@ -24,15 +23,14 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
 
-        # Set the constant arguments
+        # Set the static arguments
         kern.set_args(nrow, nblocks, *arr)
 
-        class AxnpbyKernel(Kernel):
-            def run(self, queue, *consts):
-                kern.set_args(*consts, start=2 + nv)
-                kern()
+        class AxnpbyKernel(OpenMPKernel):
+            def bind(self, *consts):
+                self.kernel.set_args(*consts, start=2 + nv)
 
-        return AxnpbyKernel(mats=arr)
+        return AxnpbyKernel(mats=arr, kernel=kern)
 
     def copy(self, dst, src):
         if dst.traits != src.traits:
@@ -49,11 +47,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         kern = self._build_kernel('par_memcpy', ksrc, 'PiPiii')
         kern.set_args(dst, dbbytes, src, sbbytes, bnbytes, nblocks)
 
-        class CopyKernel(Kernel):
-            def run(self, queue):
-                kern()
-
-        return CopyKernel(mats=[dst, src])
+        return OpenMPKernel(mats=[dst, src], kernel=kern)
 
     def reduction(self, *rs, method, norm, dt_mat=None):
         if any(r.traits != rs[0].traits for r in rs[1:]):
@@ -90,13 +84,12 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         # Runtime argument offset
         facoff = argt.index(dtype)
 
-        class ReductionKernel(Kernel):
+        class ReductionKernel(OpenMPKernel):
             @property
             def retval(self):
                 return reduced
 
-            def run(self, queue, *facs):
-                rkern.set_args(*facs, start=facoff)
-                rkern()
+            def bind(self, *facs):
+                self.kernel.set_args(*facs, start=facoff)
 
-        return ReductionKernel(mats=regs)
+        return ReductionKernel(mats=regs, kernel=rkern)

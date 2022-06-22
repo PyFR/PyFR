@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from collections import defaultdict
 from functools import cached_property
 
 import numpy as np
@@ -43,22 +44,16 @@ class HIPMatrixBase(_HIPMatrixCommon, base.MatrixBase):
         self.backend.hip.memcpy(self.data, buf, self.nbytes)
 
 
-class HIPMatrix(HIPMatrixBase, base.Matrix):
-    pass
-
-
 class HIPMatrixSlice(_HIPMatrixCommon, base.MatrixSlice):
     @cached_property
     def data(self):
         return int(self.basedata) + self.offset
 
 
-class HIPConstMatrix(HIPMatrixBase, base.ConstMatrix):
-    pass
-
-
-class HIPView(base.View):
-    pass
+class HIPMatrix(HIPMatrixBase, base.Matrix): pass
+class HIPConstMatrix(HIPMatrixBase, base.ConstMatrix): pass
+class HIPView(base.View): pass
+class HIPXchgView(base.XchgView): pass
 
 
 class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
@@ -83,30 +78,48 @@ class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
             self.hdata = backend.hip.pagelocked_empty(shape, dtype)
 
 
-class HIPXchgView(base.XchgView):
-    pass
+class HIPGraph(base.Graph):
+    def commit(self):
+        super().commit()
 
+        # Schedule the MPI requests in the stream
+        mpi_events = defaultdict(list)
+        for req, deps in zip(self.mpi_reqs, self.mpi_req_deps):
+            ix = -1
+            for d in deps:
+                for i, k in enumerate(self.knodes):
+                    if k == d:
+                        ix = max(ix, i)
+                        break
 
-class HIPQueue(base.Queue):
-    def __init__(self, backend):
-        super().__init__(backend)
+            if ix != -1:
+                mpi_events[ix].append(req)
 
-        # HIP stream
-        self.stream = backend.hip.create_stream()
+        self.mpi_events = {ix: (self.backend.hip.create_event(), reqs)
+                           for ix, reqs in mpi_events.items()}
 
-    def run(self, mpireqs=[]):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
+        # Schedule the kernels
+        self.klist = []
+        for i, k in enumerate(self.knodes):
+            event = self.mpi_events.get(i, (None, None))[0]
 
-        # Submit the kernels to the HIP stream
-        for item, args, kwargs in self._items:
-            item.run(self, *args, **kwargs)
+            self.klist.append((k, event))
 
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self._waitall(mpireqs)
+    def run(self, stream):
+        # Submit the kernels to the stream
+        for k, event in self.klist:
+            k.run(stream)
 
-        # Wait for the kernels to finish and clear the queue
-        self.stream.synchronize()
-        self._items.clear()
+            if event:
+                event.record(stream)
+
+        # Start all dependency-free MPI requests
+        self._startall(self.mpi_root_reqs)
+
+        # Start any remaining requests once their dependencies are satisfied
+        for event, reqs in self.mpi_events.values():
+            event.synchronize()
+            self._startall(reqs)
+
+        # Wait for all of the MPI requests to finish
+        self._waitall(self.mpi_reqs)

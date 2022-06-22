@@ -54,6 +54,10 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
+        # Can elide interior flux calculations at p = 0
+        if self.basis.order == 0:
+            return
+
         # Register our flux kernels
         self._be.pointwise.register('pyfr.solvers.euler.kernels.tflux')
         self._be.pointwise.register('pyfr.solvers.euler.kernels.tfluxlin')
@@ -75,13 +79,13 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
             self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
                 u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
-                smats=self.smat_at('upts', c)
+                smats=self.curved_smat_at('upts')
             )
         elif c in r:
             self.kernels['tdisf_curved'] = lambda: self._be.kernel(
                 'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
                 u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
-                smats=self.smat_at('qpts', c)
+                smats=self.curved_smat_at('qpts')
             )
 
         if l in r and 'flux' not in self.antialias:

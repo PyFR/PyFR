@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, cast, c_char, c_char_p, c_int, c_size_t, c_uint,
-                    c_void_p, pointer)
+from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_int,
+                    c_size_t, c_uint, c_ulonglong, c_void_p)
 
 import numpy as np
 
@@ -24,6 +24,73 @@ class CUDAIllegalAddress(CUDAError): pass
 class CUDALaunchOutOfResources(CUDAError): pass
 class CUDALaunchFailed(CUDAError): pass
 class CUDASystemDriverMismatch(CUDAError): pass
+
+
+class CUDAKernelNodeParams(Structure):
+    _fields_ = [
+        ('func', c_void_p),
+        ('grid', c_uint * 3),
+        ('block', c_uint * 3),
+        ('shared_mem_bytes', c_uint),
+        ('kernel_params', POINTER(c_void_p)),
+        ('extra', POINTER(c_void_p))
+    ]
+
+    def __init__(self, func, grid, block, sharedb):
+        super().__init__()
+
+        # Save a reference to our underlying function
+        self._func = func
+
+        # For each argument type instantiate the corresponding ctypes type
+        self._args = args = [atype() for atype in func.argtypes]
+
+        # Obtain pointers to these arguments
+        self._arg_ptrs = (c_void_p * len(args))(*map(addressof, args))
+
+        # Fill out the structure
+        self.func = int(func)
+        self.grid[:] = grid
+        self.block[:] = block
+        self.shared_mem_bytes = sharedb
+        self.kernel_params = self._arg_ptrs
+
+    def set_arg(self, i, v):
+        self._args[i].value = getattr(v, '_as_parameter_', v)
+
+    def set_args(self, *kargs, start=0):
+        for i, v in enumerate(kargs, start=start):
+            self.set_arg(i, v)
+
+
+class CUDAMemcpy3D(Structure):
+    _fields_ = [
+        ('src_x_in_bytes', c_size_t),
+        ('src_y', c_size_t),
+        ('src_z', c_size_t),
+        ('src_lod', c_size_t),
+        ('src_memory_type', c_int),
+        ('src_host', c_void_p),
+        ('src_device', c_void_p),
+        ('src_array', c_void_p),
+        ('_reserved_0', c_void_p),
+        ('src_pitch', c_size_t),
+        ('src_height', c_size_t),
+        ('dst_x_in_bytes', c_size_t),
+        ('dst_y', c_size_t),
+        ('dst_z', c_size_t),
+        ('dst_lod', c_size_t),
+        ('dst_memory_type', c_int),
+        ('dst_host', c_void_p),
+        ('dst_device', c_void_p),
+        ('dst_array', c_void_p),
+        ('_reserved_1', c_void_p),
+        ('dst_pitch', c_size_t),
+        ('dst_height', c_size_t),
+        ('width_in_bytes', c_size_t),
+        ('height', c_size_t),
+        ('depth', c_size_t)
+    ]
 
 
 class CUDAWrappers(LibWrapper):
@@ -51,12 +118,14 @@ class CUDAWrappers(LibWrapper):
     # Constants
     COMPUTE_CAPABILITY_MAJOR = 75
     COMPUTE_CAPABILITY_MINOR = 76
+    EVENT_DISABLE_TIMING = 2
     FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
     FUNC_CACHE_PREFER_NONE = 0
     FUNC_CACHE_PREFER_SHARED = 1
     FUNC_CACHE_PREFER_L1 = 2
     FUNC_CACHE_PREFER_EQUAL = 3
+    MEMORYTYPE_UNIFIED = 4
 
     # Functions
     _functions = [
@@ -77,7 +146,12 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuMemsetD8_v2', c_void_p, c_char, c_size_t),
         (c_int, 'cuStreamCreate', POINTER(c_void_p), c_uint),
         (c_int, 'cuStreamDestroy_v2', c_void_p),
+        (c_int, 'cuStreamBeginCapture', c_void_p, c_uint),
+        (c_int, 'cuStreamEndCapture', c_void_p, POINTER(c_void_p)),
         (c_int, 'cuStreamSynchronize', c_void_p),
+        (c_int, 'cuEventCreate', POINTER(c_void_p), c_uint),
+        (c_int, 'cuEventDestroy_v2', c_void_p),
+        (c_int, 'cuEventSynchronize', c_void_p),
         (c_int, 'cuModuleLoadDataEx', POINTER(c_void_p), c_char_p, c_uint,
          POINTER(c_int), POINTER(c_void_p)),
         (c_int, 'cuModuleUnload', c_void_p),
@@ -85,7 +159,25 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuLaunchKernel', c_void_p, c_uint, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
         (c_int, 'cuFuncSetAttribute', c_void_p, c_int, c_int),
-        (c_int, 'cuFuncSetCacheConfig', c_void_p, c_int)
+        (c_int, 'cuFuncSetCacheConfig', c_void_p, c_int),
+        (c_int, 'cuGraphCreate', POINTER(c_void_p), c_uint),
+        (c_int, 'cuGraphDestroy', c_void_p),
+        (c_int, 'cuGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t),
+        (c_int, 'cuGraphAddEventRecordNode', POINTER(c_void_p), c_void_p,
+          POINTER(c_void_p), c_size_t, c_void_p),
+        (c_int, 'cuGraphAddKernelNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, POINTER(CUDAKernelNodeParams)),
+        (c_int, 'cuGraphAddChildGraphNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, c_void_p),
+        (c_int, 'cuGraphAddMemcpyNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, POINTER(CUDAMemcpy3D), c_void_p),
+        (c_int, 'cuGraphInstantiateWithFlags', POINTER(c_void_p), c_void_p,
+         c_ulonglong),
+        (c_int, 'cuGraphExecKernelNodeSetParams', c_void_p, c_void_p,
+         POINTER(CUDAKernelNodeParams)),
+        (c_int, 'cuGraphExecDestroy', c_void_p),
+        (c_int, 'cuGraphLaunch', c_void_p, c_void_p)
     ]
 
     def _transname(self, name):
@@ -142,8 +234,30 @@ class CUDAStream(_CUDABase):
 
         super().__init__(cuda, ptr)
 
+    def begin_capture(self):
+        self.cuda.lib.cuStreamBeginCapture(self, 0)
+
+    def end_capture(self):
+        graph = c_void_p()
+        self.cuda.lib.cuStreamEndCapture(self, graph)
+
+        return CUDAGraph(self.cuda, graph)
+
     def synchronize(self):
         self.cuda.lib.cuStreamSynchronize(self)
+
+
+class CUDAEvent(_CUDABase):
+    _destroyfn = 'cuEventDestroy'
+
+    def __init__(self, cuda):
+        ptr = c_void_p()
+        cuda.lib.cuEventCreate(ptr, cuda.lib.EVENT_DISABLE_TIMING)
+
+        super().__init__(cuda, ptr)
+
+    def synchronize(self):
+        self.cuda.lib.cuEventSynchronize(self)
 
 
 class CUDAModule(_CUDABase):
@@ -182,23 +296,106 @@ class CUDAFunction(_CUDABase):
             attr = self.cuda.lib.FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT
             self.cuda.lib.cuFuncSetAttribute(self, attr, carveout)
 
-    def exec_async(self, grid, block, stream, *args, sharedb=0):
-        try:
-            kargs = self._kargs
-        except AttributeError:
-            # For each argument instantiate the corresponding ctypes type
-            self._kargs = kargs = [atype() for atype in self.argtypes]
+    def make_params(self, grid, block, sharedb=0):
+        return CUDAKernelNodeParams(self, grid, block, sharedb)
 
-            # Obtain pointers to these arguments
-            karg_ptrs = [cast(pointer(arg), c_void_p) for arg in kargs]
-            self._karg_ptrs = (c_void_p * len(kargs))(*karg_ptrs)
+    def exec_async(self, stream, params):
+        self.cuda.lib.cuLaunchKernel(self, *params.grid, *params.block,
+                                     params.shared_mem_bytes, stream,
+                                     params.kernel_params, None)
 
-        # Set the arguments
-        for src, dst in zip(args, kargs):
-            dst.value = getattr(src, '_as_parameter_', src)
 
-        self.cuda.lib.cuLaunchKernel(self, *grid, *block, sharedb, stream,
-                                     self._karg_ptrs, None)
+class CUDAGraph(_CUDABase):
+    _destroyfn = 'cuGraphDestroy'
+
+    def __init__(self, cuda, ptr=None):
+        if ptr is None:
+            ptr = c_void_p()
+            cuda.lib.cuGraphCreate(ptr, 0)
+
+        super().__init__(cuda, ptr)
+
+    @staticmethod
+    def _make_deps(deps):
+        if deps:
+            return (c_void_p * len(deps))(*deps), len(deps)
+        else:
+            return None, 0
+
+    def add_empty(self, deps=None):
+        ptr = c_void_p()
+        self.cuda.lib.cuGraphAddEmptyNode(ptr, self, *self._make_deps(deps))
+
+        return ptr.value
+
+    def add_event_record(self, event, deps=None):
+        ptr = c_void_p()
+        self.cuda.lib.cuGraphAddEventRecordNode(ptr, self,
+                                                *self._make_deps(deps), event)
+
+        return ptr.value
+
+    def add_kernel(self, kparams, deps=None):
+        ptr = c_void_p()
+        self.cuda.lib.cuGraphAddKernelNode(ptr, self, *self._make_deps(deps),
+                                           kparams)
+
+        return ptr.value
+
+    def add_memcpy(self, dst, src, nbytes, deps=None):
+        if isinstance(dst, (np.ndarray, np.generic)):
+            dst = dst.ctypes.data
+        else:
+            dst = getattr(dst, '_as_parameter_', dst)
+
+        if isinstance(src, (np.ndarray, np.generic)):
+            src = src.ctypes.data
+        else:
+            src = getattr(src, '_as_parameter_', src)
+
+        params = CUDAMemcpy3D()
+        params.src_memory_type = self.cuda.lib.MEMORYTYPE_UNIFIED
+        params.src_device = int(src)
+        params.dst_memory_type = self.cuda.lib.MEMORYTYPE_UNIFIED
+        params.dst_device = int(dst)
+        params.width_in_bytes = nbytes
+        params.height = 1
+        params.depth = 1
+
+        ptr = c_void_p()
+        self.cuda.lib.cuGraphAddMemcpyNode(ptr, self, *self._make_deps(deps),
+                                           params, self.cuda.ctx)
+
+        return ptr.value
+
+    def add_graph(self, graph, deps=None):
+        ptr = c_void_p()
+        self.cuda.lib.cuGraphAddChildGraphNode(ptr, self,
+                                               *self._make_deps(deps), graph)
+
+        return ptr.value
+
+    def instantiate(self):
+        return CUDAExecGraph(self.cuda, self)
+
+
+class CUDAExecGraph(_CUDABase):
+    _destroyfn = 'cuGraphExecDestroy'
+
+    def __init__(self, cuda, graph):
+        ptr = c_void_p()
+        cuda.lib.cuGraphInstantiateWithFlags(ptr, graph, 0)
+
+        super().__init__(cuda, ptr)
+
+        # Save a reference to the graph
+        self.graph = graph
+
+    def set_kernel_node_params(self, node, kparams):
+        self.cuda.lib.cuGraphExecKernelNodeSetParams(self, node, kparams)
+
+    def launch(self, stream):
+        self.cuda.lib.cuGraphLaunch(self, stream)
 
 
 class CUDA:
@@ -287,3 +484,9 @@ class CUDA:
 
     def create_stream(self):
         return CUDAStream(self)
+
+    def create_event(self):
+        return CUDAEvent(self)
+
+    def create_graph(self):
+        return CUDAGraph(self)

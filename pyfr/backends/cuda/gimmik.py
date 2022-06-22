@@ -3,8 +3,8 @@
 from gimmik import generate_mm
 import numpy as np
 
-from pyfr.backends.base import Kernel, NotSuitableError
-from pyfr.backends.cuda.provider import (CUDAKernelProvider,
+from pyfr.backends.base import NotSuitableError
+from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
                                          get_grid_for_block)
 
 
@@ -30,22 +30,26 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             raise NotSuitableError('Matrix is inappropriate for GiMMiK')
 
         # Generate
-        src = generate_mm(arr, dtype=a.dtype, platform='cuda',
-                          alpha=alpha, beta=beta)
+        src = generate_mm(arr, a.dtype, 'cuda', alpha=alpha, beta=beta,
+                          n=b.ncol, ldb=b.leaddim, ldc=out.leaddim)
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src,
-                                 [np.int32, np.intp]*2 + [np.int32])
+        fun = self._build_kernel('gimmik_mm', src, 'PP')
         fun.set_cache_pref(prefer_l1=True)
-
 
         # Determine the grid/block
         block = (128, 1, 1)
         grid = get_grid_for_block(block, b.ncol)
 
-        class MulKernel(Kernel):
-            def run(self, queue):
-                fun.exec_async(grid, block, queue.stream, b.ncol, b, b.leaddim,
-                               out, out.leaddim)
+        # Set the parameters
+        params = fun.make_params(grid, block)
+        params.set_args(b, out)
 
-        return MulKernel()
+        class MulKernel(CUDAKernel):
+            def add_to_graph(self, graph, deps):
+                return graph.graph.add_kernel(params, deps)
+
+            def run(self, stream):
+                fun.exec_async(stream, params)
+
+        return MulKernel(mats=[b, out])

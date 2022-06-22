@@ -3,8 +3,8 @@
 from gimmik import generate_mm
 import numpy as np
 
-from pyfr.backends.base import Kernel, NotSuitableError
-from pyfr.backends.opencl.provider import OpenCLKernelProvider
+from pyfr.backends.base import NotSuitableError
+from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 
 
 class OpenCLGiMMiKKernels(OpenCLKernelProvider):
@@ -28,16 +28,16 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             raise NotSuitableError('Matrix too dense for GiMMiK')
 
         # Generate
-        src = generate_mm(a.get(), dtype=a.dtype, platform='opencl',
-                          alpha=alpha, beta=beta)
+        src = generate_mm(a.get(), a.dtype, 'opencl', alpha=alpha, beta=beta,
+                          n=b.ncol, ldb=b.leaddim, ldc=out.leaddim)
 
         # Build
-        fun = self._build_kernel('gimmik_mm', src,
-                                 [np.int32] + [np.intp, np.int32]*2)
-        fun.set_args(b.ncol, b, b.leaddim, out, out.leaddim)
+        fun = self._build_kernel('gimmik_mm', src, 'PP')
+        fun.set_dims((b.ncol,))
+        fun.set_args(b, out)
 
-        class MulKernel(Kernel):
-            def run(self, queue):
-                fun.exec_async(queue.cmd_q, (b.ncol,), None)
+        class MulKernel(OpenCLKernel):
+            def run(self, queue, wait_for=None, ret_evt=False):
+                return fun.exec_async(queue, wait_for, ret_evt)
 
         return MulKernel(mats=[b, out])

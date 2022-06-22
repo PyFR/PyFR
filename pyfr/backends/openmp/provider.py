@@ -3,10 +3,39 @@
 from ctypes import Structure, byref, c_void_p
 
 from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, Kernel)
+                                BasePointwiseKernelProvider, Kernel,
+                                MetaKernel)
 from pyfr.backends.openmp.generator import OpenMPKernelGenerator
 from pyfr.nputil import npdtype_to_ctypestype
 from pyfr.util import memoize
+
+
+class OpenMPKernel(Kernel):
+    def __init__(self, mats=[], views=[], misc=[], kernel=None):
+        super().__init__(mats, views, misc)
+
+        if kernel:
+            self.kernel = kernel
+
+    def add_to_graph(self, graph, dnodes):
+        graph.klist.append(self.kernel)
+
+        return len(graph.klist)
+
+    def run(self):
+        self.kernel()
+
+
+class _OpenCLMetaKernelCommon(MetaKernel):
+    def add_to_graph(self, graph, dnodes):
+        for k in self.kernels:
+            k.add_to_graph(graph, dnodes)
+
+        return len(graph.klist)
+
+
+class OpenMPOrderedMetaKernel(_OpenCLMetaKernelCommon): pass
+class OpenMPUnorderedMetaKernel(_OpenCLMetaKernelCommon): pass
 
 
 class OpenMPKernelFunction:
@@ -63,11 +92,10 @@ class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
             else:
                 fun.set_arg(i, k)
 
-        class PointwiseKernel(Kernel):
-            def run(self, queue, **kwargs):
-                for i, k in rtargs:
-                    fun.set_arg(i, kwargs[k])
+        class PointwiseKernel(OpenMPKernel):
+            if rtargs:
+                def bind(self, **kwargs):
+                    for i, k in rtargs:
+                        self.kernel.set_arg(i, kwargs[k])
 
-                fun()
-
-        return PointwiseKernel(*argmv)
+        return PointwiseKernel(*argmv, kernel=fun)

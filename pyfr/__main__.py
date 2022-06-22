@@ -8,6 +8,7 @@ import os
 import mpi4py.rc
 mpi4py.rc.initialize = False
 
+from pyfr._version import __version__
 from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler
@@ -28,6 +29,8 @@ def main():
 
     # Common options
     ap.add_argument('--verbose', '-v', action='count')
+    ap.add_argument('--version', '-V', action='version',
+                    version=f'%(prog)s {__version__}')
 
     # Import command
     ap_import = sp.add_parser('import', help='import --help')

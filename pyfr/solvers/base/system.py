@@ -59,9 +59,6 @@ class BaseSystem:
         bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
 
-        # Queue
-        self._queue = backend.queue()
-
         # Prepare the kernels and any associated MPI requests
         self._gen_kernels(nregs, eles, int_inters, mpi_inters, bc_inters)
         self._gen_mpireqs(mpi_inters)
@@ -170,39 +167,53 @@ class BaseSystem:
     def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
 
+        # Helper function to tag the element type/MPI interface
+        # associated with a kernel; used for dependency analysis
+        self._ktags = {}
+        def tag_kern(pname, prov, kern):
+            if pname == 'eles':
+                self._ktags[kern] = f'e-{prov.basis.name}'
+            elif pname == 'mpiint':
+                self._ktags[kern] = f'i-{prov.name}'
+
         provnames = ['eles', 'iint', 'mpiint', 'bcint']
         provlists = [eles, iint, mpiint, bcint]
 
-        for pn, plst in zip(provnames, provlists):
-            for kn, kgetter in it.chain(*[p.kernels.items() for p in plst]):
-                # Skip private kernels
-                if kn.startswith('_'):
-                    continue
+        for pn, provs in zip(provnames, provlists):
+            for p in provs:
+                for kn, kgetter in p.kernels.items():
+                    # Skip private kernels
+                    if kn.startswith('_'):
+                        continue
 
-                # See if the kernel depends on uin/fout
-                kparams = inspect.signature(kgetter).parameters
-                if 'uin' in kparams or 'fout' in kparams:
-                    for i in range(nregs):
-                        kern = kgetter(i)
+                    # See if the kernel depends on uin/fout
+                    kparams = inspect.signature(kgetter).parameters
+                    if 'uin' in kparams or 'fout' in kparams:
+                        for i in range(nregs):
+                            kern = kgetter(i)
+                            if isinstance(kern, NullKernel):
+                                continue
+
+                            if 'uin' in kparams:
+                                kernels[f'{pn}/{kn}', i, None].append(kern)
+                            else:
+                                kernels[f'{pn}/{kn}', None, i].append(kern)
+
+                            tag_kern(pn, p, kern)
+                    else:
+                        kern = kgetter()
                         if isinstance(kern, NullKernel):
                             continue
 
-                        if 'uin' in kparams:
-                            kernels[f'{pn}/{kn}', i, None].append(kern)
-                        else:
-                            kernels[f'{pn}/{kn}', None, i].append(kern)
-                else:
-                    kern = kgetter()
-                    if isinstance(kern, NullKernel):
-                        continue
+                        kernels[f'{pn}/{kn}', None, None].append(kern)
 
-                    kernels[f'{pn}/{kn}', None, None].append(kern)
+                        tag_kern(pn, p, kern)
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
 
         for mn, mgetter in it.chain(*[m.mpireqs.items() for m in mpiint]):
-            mpireqs[mn[:-4] + 'send_recv'].append(mgetter())
+            mpireqs[mn].append(mgetter())
 
     @memoize
     def _get_kernels(self, uinbank, foutbank):
@@ -215,19 +226,54 @@ class BaseSystem:
                 (fo is not None and fo == foutbank)):
                 kernels[kn] = k
 
-        return kernels
+        # Obtain the bind method for kernels which take runtime arguments
+        binders = [k.bind for k in it.chain(*kernels.values())
+                   if hasattr(k, 'bind')]
 
-    def rhs(self, t, uinbank, foutbank):
+        return kernels, binders
+
+    def _kdeps(self, kdict, kern, *dnames):
+        deps = []
+
+        for name in dnames:
+            for k in kdict[name]:
+                if self._ktags[kern] == self._ktags[k]:
+                    deps.append(k)
+
+        return deps
+
+    def _prepare_kernels(self, t, uinbank, foutbank):
+        _, binders = self._get_kernels(uinbank, foutbank)
+
+        for b in self._bc_inters:
+            b.prepare(t)
+
+        for b in binders:
+            b(t=t)
+
+    def _rhs_graphs(self, uinbank, foutbank):
         pass
 
-    def compute_grads(self, t, uinbank):
+    def rhs(self, t, uinbank, foutbank):
+        self._prepare_kernels(t, uinbank, foutbank)
+
+        for graph in self._rhs_graphs(uinbank, foutbank):
+            self.backend.run_graph(graph)
+
+    def _compute_grads_graph(self, t, uinbank):
         raise NotImplementedError(f'Solver "{self.name}" does not compute '
                                   'corrected gradients of the solution')
+
+    def compute_grads(self, t, uinbank):
+        self._prepare_kernels(t, uinbank, None)
+
+        for graph in self._compute_grads_graph(uinbank):
+            self.backend.run_graph(graph)
 
     def filt(self, uinoutbank):
         kkey = ('eles/filter_soln', uinoutbank, None)
 
-        self._queue.enqueue_and_run(self._kernels[kkey])
+        self.backend.run_kernels(self._kernels[kkey])
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

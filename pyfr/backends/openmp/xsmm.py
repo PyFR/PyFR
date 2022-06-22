@@ -4,8 +4,8 @@ from ctypes import cast, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.backends.base import Kernel, NotSuitableError
-from pyfr.backends.openmp.provider import OpenMPKernelProvider
+from pyfr.backends.base import NotSuitableError
+from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -112,8 +112,4 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         batch_gemm.set_args(execptr, blkptr, b.nblocks, b, b.blocksz, out,
                             out.blocksz)
 
-        class MulKernel(Kernel):
-            def run(self, queue):
-                batch_gemm()
-
-        return MulKernel(mats=[b, out], misc=[self])
+        return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)

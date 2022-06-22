@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import MetaKernel
 from pyfr.solvers.base import BaseElements
 
 
@@ -47,19 +46,19 @@ class BaseAdvectionElements(BaseElements):
             out=self._scal_fpts
         )
 
-        if fluxaa:
+        if fluxaa and self.basis.order > 0:
             kernels['qptsu'] = lambda uin: self._be.kernel(
                 'mul', self.opmat('M7'), self.scal_upts[uin],
                 out=self._scal_qpts
             )
 
         # First flux correction kernel
-        if fluxaa:
+        if fluxaa and self.basis.order > 0:
             kernels['tdivtpcorf'] = lambda fout: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
                 out=self.scal_upts[fout]
             )
-        else:
+        elif self.basis.order > 0:
             kernels['tdivtpcorf'] = lambda fout: self._be.kernel(
                 'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
                 out=self.scal_upts[fout]
@@ -68,7 +67,7 @@ class BaseAdvectionElements(BaseElements):
         # Second flux correction kernel
         kernels['tdivtconf'] = lambda fout: self._be.kernel(
             'mul', self.opmat('M3'), self._scal_fpts,
-            out=self.scal_upts[fout], beta=1.0
+            out=self.scal_upts[fout], beta=float(self.basis.order > 0)
         )
 
         # Transformed to physical divergence kernel + source term
@@ -97,6 +96,6 @@ class BaseAdvectionElements(BaseElements):
                     'copy', self.scal_upts[uin], self._scal_upts_temp
                 )
 
-                return MetaKernel([mul, copy])
+                return self._be.ordered_meta_kernel([mul, copy])
 
             kernels['filter_soln'] = filter_soln
