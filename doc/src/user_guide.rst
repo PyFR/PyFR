@@ -101,6 +101,14 @@ Parameterises the backend with
 
     ``linear`` | ``random``
 
+3. ``collect-wait-times`` --- If to track MPI request wait times or not:
+
+    ``True`` | ``False``
+
+4. ``collect-wait-times-len`` --- Size of the wait time history buffer:
+
+     *int*
+
 Example::
 
     [backend]

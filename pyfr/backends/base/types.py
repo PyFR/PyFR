@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from collections import deque
+import time
+
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
@@ -298,7 +301,21 @@ class Graph:
 
         # MPI wrappers
         self._startall = mpi.Prequest.Startall
-        self._waitall = mpi.Prequest.Waitall
+
+        if backend.cfg.getbool('backend', 'collect-wait-times', False):
+            n = backend.cfg.getint('backend', 'collect-wait-times-len', 10000)
+            self._wait_times = wait_times = deque(maxlen=n)
+
+            # Wrap the wait all function with a timing variant
+            def waitall(reqs):
+                if reqs:
+                    t = time.perf_counter_ns()
+                    mpi.Prequest.Waitall(reqs)
+                    wait_times.append((time.perf_counter_ns() - t) / 1e9)
+
+            self._waitall = waitall
+        else:
+            self._waitall = mpi.Prequest.Waitall
 
         # MPI requests along with their associated dependencies
         self.mpi_reqs = []
@@ -351,3 +368,6 @@ class Graph:
 
     def run(self, *args):
         pass
+
+    def get_wait_times(self):
+        return list(self._wait_times)

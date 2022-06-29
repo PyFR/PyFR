@@ -45,13 +45,13 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         comm, rank, root = get_comm_rank_root()
 
+        stats = Inifile()
+        stats.set('data', 'fields', ','.join(self.fields))
+        stats.set('data', 'prefix', 'soln')
+        intg.collect_stats(stats)
+
         # If we are the root rank then prepare the metadata
         if rank == root:
-            stats = Inifile()
-            stats.set('data', 'fields', ','.join(self.fields))
-            stats.set('data', 'prefix', 'soln')
-            intg.collect_stats(stats)
-
             metadata = dict(intg.cfgmeta,
                             stats=stats.tostr(),
                             mesh_uuid=intg.mesh_uuid)
