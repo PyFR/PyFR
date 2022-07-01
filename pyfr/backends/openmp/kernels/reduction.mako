@@ -33,9 +33,9 @@ void reduction(const struct kargs *restrict args)
     fpdtype_t ${','.join(f'red{i} = 0.0' for i in range(ncola))};
 
 % if norm == 'uniform':
-    #pragma omp parallel for reduction(max : ${','.join(f'red{i}' for i in range(ncola))})
+    #pragma omp parallel for ${schedule} reduction(max : ${','.join(f'red{i}' for i in range(ncola))})
 % else:
-    #pragma omp parallel for reduction(+ : ${','.join(f'red{i}' for i in range(ncola))})
+    #pragma omp parallel for ${schedule} reduction(+ : ${','.join(f'red{i}' for i in range(ncola))})
 % endif
     for (int ib = 0; ib < nblocks; ib++)
     {
