@@ -193,6 +193,8 @@ class HIPWrappers(LibWrapper):
          POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'hipGraphAddKernelNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(HIPKernelNodeParams)),
+        (c_int, 'hipGraphAddChildGraphNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'hipGraphAddMemcpyNode1D', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, c_void_p, c_void_p, c_size_t, c_int),
         (c_int, 'hipGraphInstantiate', POINTER(c_void_p), c_void_p, c_void_p,
