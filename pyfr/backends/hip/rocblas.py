@@ -1,5 +1,6 @@
 from ctypes import (POINTER, byref, c_int, c_double, c_float, c_uint32,
                     c_void_p)
+import os
 
 import numpy as np
 
@@ -57,6 +58,11 @@ class HIPRocBLASKernels(HIPKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
 
+        self._cstream = backend.hip.create_stream()
+
+        # Ensure memory can be allocated in captured streams
+        os.environ['ROCBLAS_STREAM_ORDER_ALLOC'] = '1'
+
         # Load and wrap rocBLAS
         self._wrappers = RocBLASWrappers()
 
@@ -76,12 +82,14 @@ class HIPRocBLASKernels(HIPKernelProvider):
     def __del__(self):
         try:
             if self._handle:
+                self._wrappers.rocblas_set_stream(self._handle, self._cstream)
                 self._wrappers.rocblas_destroy_handle(self._handle)
         except AttributeError:
             pass
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         h, w = self._handle, self._wrappers
+        cstream = self._cstream
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -156,7 +164,13 @@ class HIPRocBLASKernels(HIPKernelProvider):
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
-                pass
+                # Capture the execution of rocBLAS to obtain a graph
+                cstream.begin_capture()
+                self.run(cstream)
+                gnode = cstream.end_capture()
+
+                # Embed this graph in our main graph
+                return graph.graph.add_graph(gnode, deps)
 
             def run(self, stream):
                 gemm(stream)

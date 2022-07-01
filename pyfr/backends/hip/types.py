@@ -79,49 +79,44 @@ class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
 
 
 class HIPGraph(base.Graph):
-    needs_pdeps = False
+    needs_pdeps = True
+
+    def __init__(self, backend):
+        super().__init__(backend)
+
+        self.graph = backend.hip.create_graph()
+        self.stale_kparams = {}
+        self.mpi_events = []
+
+    def add_mpi_req(self, req, deps=[]):
+        super().add_mpi_req(req, deps)
+
+        if deps:
+            event = self.backend.hip.create_event()
+            self.graph.add_event_record(event, [self.knodes[d] for d in deps])
+
+            self.mpi_events.append((event, req))
 
     def commit(self):
         super().commit()
 
-        # Schedule the MPI requests in the stream
-        mpi_events = defaultdict(list)
-        for req, deps in zip(self.mpi_reqs, self.mpi_req_deps):
-            ix = -1
-            for d in deps:
-                for i, k in enumerate(self.knodes):
-                    if k == d:
-                        ix = max(ix, i)
-                        break
-
-            if ix != -1:
-                mpi_events[ix].append(req)
-
-        self.mpi_events = {ix: (self.backend.hip.create_event(), reqs)
-                           for ix, reqs in mpi_events.items()}
-
-        # Schedule the kernels
-        self.klist = []
-        for i, k in enumerate(self.knodes):
-            event = self.mpi_events.get(i, (None, None))[0]
-
-            self.klist.append((k, event))
+        self.exc_graph = self.graph.instantiate()
 
     def run(self, stream):
-        # Submit the kernels to the stream
-        for k, event in self.klist:
-            k.run(stream)
+        # Ensure our kernel parameters are up to date
+        for node, params in self.stale_kparams.items():
+            self.exc_graph.set_kernel_node_params(node, params)
 
-            if event:
-                event.record(stream)
+        self.exc_graph.launch(stream)
+        self.stale_kparams.clear()
 
         # Start all dependency-free MPI requests
         self._startall(self.mpi_root_reqs)
 
         # Start any remaining requests once their dependencies are satisfied
-        for event, reqs in self.mpi_events.values():
+        for event, req in self.mpi_events:
             event.synchronize()
-            self._startall(reqs)
+            req.Start()
 
         # Wait for all of the MPI requests to finish
         self._waitall(self.mpi_reqs)

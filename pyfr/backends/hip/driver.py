@@ -137,6 +137,19 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipGraphLaunch', c_void_p, c_void_p)
     ]
 
+    def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+            version = c_int()
+            self.hipRuntimeGetVersion(version)
+
+            major, rem = divmod(version.value, 10000000)
+            minor, patch = divmod(rem, 100000)
+
+            if (major, minor, patch) < (6, 4, 1):
+                raise RuntimeError(f'HIP version {major}.{minor}.{patch} '
+                                   '< 6.4.1')
+
     def _transname(self, name):
         return name.removesuffix('R0600')
 
