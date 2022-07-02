@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import POINTER, c_int, c_double, c_void_p
+from ctypes import POINTER, c_int, c_int32, c_int64, c_double, c_void_p
 
 import numpy as np
 
@@ -30,17 +30,45 @@ class SCOTCHWrappers(LibWrapper):
         (c_int, 'SCOTCH_archInit', POINTER(SCOTCH_Arch)),
         (c_int, 'SCOTCH_graphInit', POINTER(SCOTCH_Graph)),
         (c_int, 'SCOTCH_stratInit', POINTER(SCOTCH_Strat)),
-        (c_int, 'SCOTCH_archCmpltw', POINTER(SCOTCH_Arch), c_int, c_void_p),
-        (c_int, 'SCOTCH_graphBuild', POINTER(SCOTCH_Graph), c_int, c_int,
-         c_void_p, c_void_p, c_void_p, c_void_p, c_int, c_void_p, c_void_p),
         (c_int, 'SCOTCH_graphMap', POINTER(SCOTCH_Graph), POINTER(SCOTCH_Arch),
          POINTER(SCOTCH_Strat), c_void_p),
-        (c_int, 'SCOTCH_stratGraphMapBuild', POINTER(SCOTCH_Strat), c_int,
-         c_int, c_double),
         (None, 'SCOTCH_archExit', POINTER(SCOTCH_Arch)),
         (None, 'SCOTCH_graphExit', POINTER(SCOTCH_Graph)),
         (None, 'SCOTCH_stratExit', POINTER(SCOTCH_Strat))
     ]
+
+    def __init__(self):
+        super().__init__()
+
+        # Ascertain the integer size
+        if self._lib.SCOTCH_numSizeof() == 4:
+            self.scotch_int = scotch_int = c_int32
+            self.scotch_int_np = np.int32
+        else:
+            self.scotch_int = scotch_int = c_int64
+            self.scotch_int_np = np.int64
+
+        # SCOTCH_archCmpltw
+        self.SCOTCH_archCmpltw = self._lib.SCOTCH_archCmpltw
+        self.SCOTCH_archCmpltw.argtypes = [
+            POINTER(self.SCOTCH_Arch), scotch_int, c_void_p
+        ]
+        self.SCOTCH_archCmpltw.errcheck = self._errcheck
+
+        # SCOTCH_graphBuild
+        self.SCOTCH_graphBuild = self._lib.SCOTCH_graphBuild
+        self.SCOTCH_graphBuild.argtypes = [
+            POINTER(self.SCOTCH_Graph), scotch_int, scotch_int, c_void_p,
+            c_void_p, c_void_p, c_void_p, scotch_int, c_void_p, c_void_p
+        ]
+        self.SCOTCH_graphBuild.errcheck = self._errcheck
+
+        # SCOTCH_stratGraphMapBuild
+        self.SCOTCH_stratGraphMapBuild = self._lib.SCOTCH_stratGraphMapBuild
+        self.SCOTCH_stratGraphMapBuild.argtypes = [
+            POINTER(self.SCOTCH_Strat), scotch_int, scotch_int, c_double
+        ]
+        self.SCOTCH_stratGraphMapBuild.errcheck = self._errcheck
 
 
 class SCOTCHPartitioner(BasePartitioner):
@@ -67,14 +95,14 @@ class SCOTCHPartitioner(BasePartitioner):
         w = self._wrappers
 
         # Type conversion
-        vtab = np.asanyarray(graph.vtab, dtype=np.int32)
-        etab = np.asanyarray(graph.etab, dtype=np.int32)
-        vwts = np.asanyarray(graph.vwts, dtype=np.int32)
-        ewts = np.asanyarray(graph.ewts, dtype=np.int32)
-        partwts = np.asanyarray(partwts, dtype=np.int32)
+        vtab = np.asanyarray(graph.vtab, dtype=w.scotch_int)
+        etab = np.asanyarray(graph.etab, dtype=w.scotch_int)
+        vwts = np.asanyarray(graph.vwts, dtype=w.scotch_int)
+        ewts = np.asanyarray(graph.ewts, dtype=w.scotch_int)
+        partwts = np.asanyarray(partwts, dtype=w.scotch_int)
 
         # Output partition array
-        parts = np.empty(len(vtab) - 1, dtype=np.int32)
+        parts = np.empty(len(vtab) - 1, dtype=w.scotch_int)
 
         # Allocate
         arch = w.SCOTCH_Arch()

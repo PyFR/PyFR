@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base import MetaKernel
 from pyfr.solvers.base import BaseElements
 
 class BaseAdvectionElements(BaseElements):
@@ -95,7 +94,7 @@ class BaseAdvectionElements(BaseElements):
                     'copy', self.scal_upts[uin], self._scal_upts_temp
                 )
 
-                return MetaKernel([mul, copy])
+                return self._be.ordered_meta_kernel([mul, copy])
 
             kernels['filter_soln'] = filter_soln
 

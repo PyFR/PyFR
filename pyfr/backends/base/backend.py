@@ -161,5 +161,11 @@ class BaseBackend:
         else:
             raise KeyError(f'Kernel "{name}" has no providers')
 
-    def queue(self):
-        return self.queue_cls(self)
+    def ordered_meta_kernel(self, kerns):
+        return self.ordered_meta_kernel_cls(kerns)
+
+    def unordered_meta_kernel(self, kerns):
+        return self.unordered_meta_kernel_cls(kerns)
+
+    def graph(self):
+        return self.graph_cls(self)

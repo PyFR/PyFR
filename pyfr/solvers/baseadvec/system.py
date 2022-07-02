@@ -1,69 +1,115 @@
 # -*- coding: utf-8 -*-
 
 from pyfr.solvers.base import BaseSystem
+from pyfr.util import memoize
 
 
 class BaseAdvectionSystem(BaseSystem):
-    def rhs(self, t, uinbank, foutbank):
-        q = self._queue
-        kernels = self._get_kernels(uinbank, foutbank)
-        mpireqs = self._mpireqs
+    @memoize
+    def _rhs_graphs(self, uinbank, foutbank):
+        m = self._mpireqs
+        k, _ = self._get_kernels(uinbank, foutbank)
 
-        for b in self._bc_inters:
-            b.prepare(t)
+        def deps(dk, *names): return self._kdeps(k, dk, *names)
 
-        q.enqueue(kernels['eles/disu'])
-        q.enqueue(kernels['mpiint/scal_fpts_pack'])
-        q.run()
+        g1 = self.backend.graph()
+        g1.add_mpi_reqs(m['scal_fpts_recv'])
 
-        if 'eles/copy_soln' in kernels:
-            q.enqueue(kernels['eles/copy_soln'])
-        if 'eles/qptsu' in kernels:
-            q.enqueue(kernels['eles/qptsu'])
-        q.enqueue(kernels['eles/tdisf_curved'])
-        q.enqueue(kernels['eles/tdisf_linear'])
-        q.enqueue(kernels['eles/tdivtpcorf'])
-        q.enqueue(kernels['iint/comm_flux'])
-        q.enqueue(kernels['bcint/comm_flux'], t=t)
-        q.run(mpireqs['scal_fpts_send_recv'])
+        # Interpolate the solution to the flux points
+        g1.add_all(k['eles/disu'])
 
-        q.enqueue(kernels['mpiint/scal_fpts_unpack'])
-        q.enqueue(kernels['mpiint/comm_flux'])
-        q.enqueue(kernels['eles/tdivtconf'])
-        q.enqueue(kernels['eles/negdivconf'], t=t)
-        q.run()
+        # Pack and send these interpolated solutions to our neighbours
+        g1.add_all(k['mpiint/scal_fpts_pack'], deps=k['eles/disu'])
+        for send, pack in zip(m['scal_fpts_send'], k['mpiint/scal_fpts_pack']):
+            g1.add_mpi_req(send, deps=[pack])
 
-    def preproc(self, t, uinbank):
-        q = self._queue
-        kernels = self._get_kernels(uinbank, None)
-        mpireqs = self._mpireqs
+        # Compute the common normal flux at our internal/boundary interfaces
+        g1.add_all(k['iint/comm_flux'],
+                   deps=k['eles/disu'] + k['mpiint/scal_fpts_pack'])
+        g1.add_all(k['bcint/comm_flux'], deps=k['eles/disu'])
 
-        for b in self._bc_inters:
-            b.prepare(t)
+        # Make a copy of the solution (if used by source terms)
+        g1.add_all(k['eles/copy_soln'])
+
+        # Interpolate the solution to the quadrature points
+        g1.add_all(k['eles/qptsu'])
+
+        # Compute the transformed flux
+        for l in k['eles/tdisf_curved'] + k['eles/tdisf_linear']:
+            g1.add(l, deps=deps(l, 'eles/qptsu'))
+
+        # Compute the transformed divergence of the partially corrected flux
+        for l in k['eles/tdivtpcorf']:
+            ldeps = deps(l, 'eles/tdisf_curved', 'eles/tdisf_linear',
+                         'eles/copy_soln', 'eles/disu')
+            g1.add(l, deps=ldeps + k['mpiint/scal_fpts_pack'])
+        g1.commit()
+
+        g2 = self.backend.graph()
+
+        # Compute the common normal flux at our MPI interfaces
+        g2.add_all(k['mpiint/scal_fpts_unpack'])
+        for l in k['mpiint/comm_flux']:
+            g2.add(l, deps=deps(l, 'mpiint/scal_fpts_unpack'))
+
+        # Compute the transformed divergence of the corrected flux
+        g2.add_all(k['eles/tdivtconf'], deps=k['mpiint/comm_flux'])
+
+        # Obtain the physical divergence of the corrected flux
+        for l in k['eles/negdivconf']:
+            g2.add(l, deps=deps(l, 'eles/tdivtconf'))
+        g2.commit()
+
+        return g1, g2
+
+    @memoize
+    def _preproc_graphs(self, uinbank):
+        m = self._mpireqs
+        k, _ = self._get_kernels(uinbank, None)
+
+        def deps(dk, *names): return self._kdeps(k, dk, *names)
         
         # If entropy filtering, compute entropy bounds
-        if 'eles/local_entropy' in kernels:
-            q.enqueue(kernels['eles/local_entropy'])
-            q.enqueue(kernels['mpiint/ent_fpts_pack'])
-            q.run()
+        if 'eles/local_entropy' in k:
+            g1 = self.backend.graph()
+            g1.add_mpi_reqs(m['ent_fpts_recv'])
 
-            q.enqueue(kernels['iint/comm_entropy'])
-            q.enqueue(kernels['bcint/comm_entropy'], t=t)
-            q.run(mpireqs['ent_fpts_send_recv'])
+            # Compute local minimum entropy within element
+            g1.add_all(k['eles/local_entropy'])
 
-            q.enqueue(kernels['mpiint/ent_fpts_unpack'])
-            q.enqueue(kernels['mpiint/comm_entropy'])
-            q.run()
+            # Pack and send the entropy values to neighbors
+            g1.add_all(k['mpiint/ent_fpts_pack'], deps=k['eles/local_entropy'])
+            for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
+                g1.add_mpi_req(send, deps=[pack])
 
-            q.enqueue(kernels['eles/min_entropy'])
-            q.run()
+            # Compute common entropy minima at internal/boundary interfaces
+            g1.add_all(k['iint/comm_entropy'],
+                    deps=k['eles/local_entropy'] + k['mpiint/ent_fpts_pack'])
+            g1.add_all(k['bcint/comm_entropy'], deps=k['eles/local_entropy'])
+            g1.commit()
 
-    def postproc(self, uinbank):
-        q = self._queue
-        kernels = self._get_kernels(uinbank, None)
+            g2 = self.backend.graph()
+            
+            # Compute common entropy minima at our MPI interfaces
+            g2.add_all(k['mpiint/comm_entropy'])
+            for l in k['mpiint/comm_entropy']:
+                g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
 
-        if 'eles/filter_solution' in kernels:
-            q.enqueue(kernels['eles/filter_solution'])
-            q.run()
+            # Compute minimum entropy constraint within elements
+            g2.add_all(k['eles/min_entropy'], deps=k['mpiint/comm_entropy'])
+            g2.commit()
+        
+            return g1, g2
 
+    @memoize
+    def _postproc_graphs(self, uinbank):
+        k, _ = self._get_kernels(uinbank, None)
 
+        if 'eles/filter_solution' in k:
+            g1 = self.backend.graph()
+
+            # Apply entropy filter
+            g1.add_all(k['eles/filter_solution'])
+            g1.commit()
+
+            return g1,

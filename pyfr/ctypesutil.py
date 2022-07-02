@@ -12,7 +12,7 @@ class LibWrapper:
     _functions = None
 
     def __init__(self):
-        lib = load_library(self._libname)
+        self._lib = lib = load_library(self._libname)
 
         for fret, fname, *fargs in self._functions:
             fn = getattr(lib, fname)

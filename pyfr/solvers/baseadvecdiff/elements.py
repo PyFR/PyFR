@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base.kernels import MetaKernel
 from pyfr.polys import get_polybasis
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
@@ -32,9 +31,11 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Mesh regions
         regions = self._mesh_regions
 
-        self.kernels['_copy_fpts'] = lambda: kernel(
-            'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
-        )
+        if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
+            self.kernels['copy_fpts'] = lambda: kernel(
+                'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
+            )
+
         if self.basis.order > 0:
             self.kernels['tgradpcoru_upts'] = lambda uin: kernel(
                 'mul', self.opmat('M4 - M6*M0'), self.scal_upts[uin],
@@ -80,7 +81,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                            vfpts.slice(i*nfpts, (i + 1)*nfpts))
                     for i in range(self.ndims)]
 
-            return MetaKernel(muls)
+            return self._be.unordered_meta_kernel(muls)
 
         self.kernels['gradcoru_fpts'] = gradcoru_fpts
 
@@ -95,7 +96,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                                         vqpts.slice(i*nqpts, (i + 1)*nqpts))
                         for i in range(self.ndims)]
 
-                return MetaKernel(muls)
+                return self._be.unordered_meta_kernel(muls)
 
             self.kernels['gradcoru_qpts'] = gradcoru_qpts
 
