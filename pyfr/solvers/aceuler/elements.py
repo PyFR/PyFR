@@ -30,6 +30,11 @@ class BaseACFluidElements:
     def con_to_pri(convs, cfg):
         return convs
 
+    @staticmethod
+    def validate_formulation(form, intg, cfg):
+        if form not in BaseACFluidElements.formulations:
+            raise ValueError('System not compatible with time stepping formulation.')
+
 
 class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):

@@ -280,6 +280,12 @@ Parameterises the solver with
 
     where
 
+    ``euler`` requires
+
+        - ``shock-capturing`` --- shock capturing scheme:
+
+          ``none`` | ``entropy-filter``
+
     ``navier-stokes`` requires
 
         - ``viscosity-correction`` --- viscosity correction:
@@ -288,7 +294,7 @@ Parameterises the solver with
 
         - ``shock-capturing`` --- shock capturing scheme:
 
-          ``none`` | ``artificial-viscosity``
+          ``none`` | ``artificial-viscosity`` | ``entropy-filter``
 
 2. ``order`` --- order of polynomial solution basis:
 
@@ -305,7 +311,7 @@ Example::
     order = 3
     anti-alias = flux
     viscosity-correction = none
-    shock-capturing = artificial-viscosity
+    shock-capturing = entropy-filter
 
 [solver-time-integrator]
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -397,13 +403,13 @@ Parameterises the time-integration scheme used by the solver with
 
            *float*
 
+        - ``controller`` --- time-step controller
+
+           ``none``
+
         - ``pseudo-dt`` --- pseudo time-step
 
            *float*
-
-        - ``controller`` --- pseudo time-step controller
-
-           ``none``
 
         - ``pseudo-niters-max`` --- minimum number of iterations
 
@@ -584,6 +590,40 @@ Example::
     rhov = z*rho
     rhow = 1.0
     E = 1.0/(1.0+x)
+
+[solver-entropy-filter]
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Parameterises entropy filter for shock capturing with
+
+1. ``d-min`` --- minimum allowable density:
+
+    *float*
+
+2. ``p-min`` --- minimum allowable pressure:
+
+    *float*
+
+3. ``e-tol`` --- entropy tolerance:
+
+    *float*
+
+4. ``constrain-fpts`` --- apply constraints on flux points:
+
+    *bool*
+
+5. ``constrain-qpts`` --- apply constraints on quadrature points:
+
+    *bool*
+
+Example::
+
+    [solver-entropy-filter]
+    d-min = 1e-6
+    p-min = 1e-6
+    e-tol = 1e-4
+    constraint-fpts = False
+    constraint-qpts = False
 
 [solver-artificial-viscosity]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.solvers.baseadvec import BaseAdvectionElements
 import numpy as np
+
+from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 class BaseFluidElements:
     formulations = ['std', 'dual']
@@ -49,6 +50,78 @@ class BaseFluidElements:
 
         return [rho] + vs + [p]
 
+    @staticmethod
+    def validate_formulation(form, intg, cfg):
+        if form not in BaseFluidElements.formulations:
+            raise ValueError('System not compatible with time stepping formulation.')
+
+        shock_capturing = cfg.get('solver', 'shock-capturing', 'none')
+        if form == 'dual' and shock_capturing == 'entropy-filter':
+            raise ValueError('Entropy filtering not compatible with dual time stepping.')
+
+        if intg.stepper_has_variable_dt and shock_capturing == 'entropy-filter':
+            raise ValueError('Entropy filtering not compatible with adaptive time stepping.')
+
+
+    def set_backend(self, *args, **kwargs):
+        super().set_backend(*args, **kwargs)
+
+        # Can elide shock-capturing at p = 0
+        if self.basis.order == 0:
+            return
+
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.entropylocal')
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.entropyfilter')
+
+        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            # Modified entropy filtering method (10.1016/j.jcp.2022.111501)
+            # using physical entropy without operator splitting (for Navier-Stokes)
+
+            # Template arguments
+            eftplargs = {
+                'ndims': self.ndims,
+                'nupts': self.nupts,
+                'nfpts': self.nfpts,
+                'nvars': self.nvars,
+                'c': self.cfg.items_as('constants', float)
+            }
+
+            # Minimum density/pressure constraints
+            eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6)
+            eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter', 'p-min', 1e-6)
+            # Entropy tolerance
+            eftplargs['e_tol'] = self.cfg.getfloat('solver-entropy-filter', 'e-tol', 1e-4)
+            # Maximum filter strength (based on machine precision)
+            eps = np.finfo(self._be.fpdtype).eps
+            eftplargs['zeta_max'] = -float(np.log(eps))
+
+            # See if applying constraints to fpts/qpts
+            con_fpts = self.cfg.getbool('solver-entropy-filter', 'constrain-fpts', False)
+            con_qpts = self.cfg.getbool('solver-entropy-filter', 'constrain-qpts', False)
+            nqpts = self.nqpts or 1
+
+            eftplargs['con_fpts'] = con_fpts
+            eftplargs['con_qpts'] = con_qpts
+            eftplargs['nqpts'] = nqpts
+
+            # Precompute basis orders for filter
+            eftplargs['ubdegs2'] = [max(dd)**2 for dd in self.basis.ubasis.degrees]
+
+            # Compute local entropy bounds
+            self.kernels['local_entropy'] = lambda uin: self._be.kernel(
+                'entropylocal', tplargs=eftplargs, dims=[self.neles],
+                u=self.scal_upts[uin], entmin=self.entmin,
+                entmin_int=self.entmin_int
+            )
+
+            # Apply entropy filter
+            self.kernels['filter_solution'] = lambda uin: self._be.kernel(
+                'entropyfilter', tplargs=eftplargs, dims=[self.neles],
+                u=self.scal_upts[uin], entmin=self.entmin,
+                vdm=self.vdm, invvdm=self.invvdm,
+                intfpts=self.intfpts, intqpts=self.intqpts
+            )
+
 
 class EulerElements(BaseFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):
@@ -61,14 +134,10 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         # Register our flux kernels
         self._be.pointwise.register('pyfr.solvers.euler.kernels.tflux')
         self._be.pointwise.register('pyfr.solvers.euler.kernels.tfluxlin')
-        self._be.pointwise.register('pyfr.solvers.euler.kernels.entropylocal')
-        self._be.pointwise.register('pyfr.solvers.euler.kernels.entropyfilter')
 
         # Template parameters for the flux kernels
         tplargs = {
             'ndims': self.ndims,
-            'nupts': self.nupts,
-            'nfpts': self.nfpts,
             'nvars': self.nvars,
             'nverts': len(self.basis.linspts),
             'c': self.cfg.items_as('constants', float),
@@ -103,50 +172,4 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
                 'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
                 u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
                 verts=self.ploc_at('linspts', l), upts=self.qpts
-            )
-
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
-            # Minimum density/pressure constraints
-            d_min = float(self.cfg.get('solver-entropy-filter', 'd_min', 1e-6))
-            p_min = float(self.cfg.get('solver-entropy-filter', 'p_min', 1e-6))
-            # Absolute entropy tolerance
-            e_atol = float(self.cfg.get('solver-entropy-filter', 'e_atol', 1e-6))
-            # Relative entropy tolerance (with respect to maximum variation in entropy within element)
-            e_rtol = float(self.cfg.get('solver-entropy-filter', 'e_rtol', 1e-3))
-            # Number of iterations to compute filter strength
-            niters = int(self.cfg.get('solver-entropy-filter', 'niters', 10))
-            # Maximum filter strength
-            precision = self.cfg.get('backend', 'precision')
-            zeta_max = -np.log(1e-7) if precision == 'single' else -np.log(1e-16)
-
-            # See if applying constraints to fpts/qpts
-            con_fpts = self.cfg.getbool('solver-entropy-filter', 'constrain-fpts', False)
-            con_qpts = self.cfg.getbool('solver-entropy-filter', 'constrain-qpts', False)
-            nqpts = self.nqpts if self.nqpts else 1
-
-            # Precompute basis orders for filter
-            ubdegs2 = [max(dd)**2 for dd in self.basis.ubasis.degrees]
-
-            eftplargs = {
-                'ndims': self.ndims, 'nupts': self.nupts, 'nfpts': self.nfpts,
-                'nqpts': nqpts, 'nvars': self.nvars,
-                'c': self.cfg.items_as('constants', float),
-                'd_min': d_min, 'p_min': p_min, 'e_atol': e_atol,
-                'e_rtol': e_rtol, 'niters': niters, 'zeta_max': zeta_max,
-                'con_fpts': con_fpts, 'con_qpts': con_qpts, 'ubdegs2': ubdegs2,
-            }
-
-            # Compute local entropy bounds
-            self.kernels['local_entropy'] = lambda uin: self._be.kernel(
-                'entropylocal', tplargs=eftplargs, dims=[self.neles],
-                u=self.scal_upts[uin], entmin=self.entmin, 
-                entmin_int=self.entmin_int
-            )
-
-            # Apply entropy filter
-            self.kernels['filter_solution'] = lambda uin: self._be.kernel(
-                'entropyfilter', tplargs=eftplargs, dims=[self.neles],
-                u=self.scal_upts[uin], entmin=self.entmin,
-                vdm=self.vdm, invvdm=self.invvdm,
-                intfpts=self.intfpts, intqpts=self.intqpts
             )

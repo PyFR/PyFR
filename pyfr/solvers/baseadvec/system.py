@@ -68,7 +68,7 @@ class BaseAdvectionSystem(BaseSystem):
         k, _ = self._get_kernels(uinbank, None)
 
         def deps(dk, *names): return self._kdeps(k, dk, *names)
-        
+
         # If entropy filtering, compute entropy bounds
         if 'eles/local_entropy' in k:
             g1 = self.backend.graph()
@@ -83,33 +83,35 @@ class BaseAdvectionSystem(BaseSystem):
                 g1.add_mpi_req(send, deps=[pack])
 
             # Compute common entropy minima at internal/boundary interfaces
-            g1.add_all(k['iint/comm_entropy'],
-                    deps=k['eles/local_entropy'] + k['mpiint/ent_fpts_pack'])
+            g1.add_all(k['iint/comm_entropy'], deps=k['eles/local_entropy'])
             g1.add_all(k['bcint/comm_entropy'], deps=k['eles/local_entropy'])
-            g1.commit()
 
-            g2 = self.backend.graph()
-            
-            # Compute common entropy minima at our MPI interfaces
-            g2.add_all(k['mpiint/comm_entropy'])
-            for l in k['mpiint/comm_entropy']:
-                g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
+            # Avoid single-node graphs if running MPI
+            if 'mpiint/comm_entropy' in k:
+                g1.commit()
 
-            # Compute minimum entropy constraint within elements
-            g2.add_all(k['eles/min_entropy'], deps=k['mpiint/comm_entropy'])
-            g2.commit()
-        
-            return g1, g2
+                g2 = self.backend.graph()
+                # Compute common entropy minima at our MPI interfaces
+                g2.add_all(k['mpiint/ent_fpts_unpack'])
+                for l in k['mpiint/comm_entropy']:
+                    g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
 
-    @memoize
-    def _postproc_graphs(self, uinbank):
+                # Compute minimum entropy constraint within elements
+                g2.add_all(k['eles/min_entropy'], deps=k['mpiint/comm_entropy'] )
+                g2.commit()
+
+                return g1, g2
+            else:
+                g1.add_all(k['eles/min_entropy'], deps=k['iint/comm_entropy'] +
+                                                       k['bcint/comm_entropy'])
+                g1.commit()
+
+                return g1,
+
+        return []
+
+    def postproc(self, uinbank):
         k, _ = self._get_kernels(uinbank, None)
 
         if 'eles/filter_solution' in k:
-            g1 = self.backend.graph()
-
-            # Apply entropy filter
-            g1.add_all(k['eles/filter_solution'])
-            g1.commit()
-
-            return g1,
+            self.backend.run_kernels(k['eles/filter_solution'])

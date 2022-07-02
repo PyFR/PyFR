@@ -89,11 +89,12 @@ class BaseAdvectionMPIInters(BaseInters):
                 'unpack', self._entmin_rhs
             )
 
+            ent_fpts_tag = next(self._mpi_tag_counter)
             self.mpireqs['ent_fpts_send'] = lambda: self._entmin_lhs.sendreq(
-                self._rhsrank, self.MPI_TAG
+                self._rhsrank, ent_fpts_tag
             )
             self.mpireqs['ent_fpts_recv'] = lambda: self._entmin_rhs.recvreq(
-                self._rhsrank, self.MPI_TAG
+                self._rhsrank, ent_fpts_tag
             )
         else:
             self._entmin_lhs = self._entmin_rhs = None

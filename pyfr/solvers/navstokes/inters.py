@@ -5,6 +5,8 @@ import numpy as np
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
+from pyfr.solvers.euler.inters import (FluidIntIntersMixin,
+                                       FluidMPIIntersMixin)
 
 
 class TplargsMixin:
@@ -12,14 +14,14 @@ class TplargsMixin:
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        visc_corr = self.cfg.get('solver', 'viscosity-correction')
+        visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                              rsolver=rsolver, visc_corr=visc_corr,
                              shock_capturing=shock_capturing, c=self.c)
 
 
-class NavierStokesIntInters(TplargsMixin, BaseAdvectionDiffusionIntInters):
+class NavierStokesIntInters(TplargsMixin, FluidIntIntersMixin, BaseAdvectionDiffusionIntInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super().__init__(be, lhs, rhs, elemap, cfg)
 
@@ -40,7 +42,7 @@ class NavierStokesIntInters(TplargsMixin, BaseAdvectionDiffusionIntInters):
         )
 
 
-class NavierStokesMPIInters(TplargsMixin, BaseAdvectionDiffusionMPIInters):
+class NavierStokesMPIInters(TplargsMixin, FluidMPIIntersMixin, BaseAdvectionDiffusionMPIInters):
     def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
         super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
 
@@ -72,6 +74,7 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
 
         be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
         be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
+        be.pointwise.register('pyfr.solvers.navstokes.kernels.bccent')
 
         self.kernels['con_u'] = lambda: be.kernel(
             'bcconu', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -86,6 +89,14 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
             nl=self._norm_pnorm_lhs, artviscl=self._artvisc_lhs,
             **self._external_vals
         )
+
+        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            self.kernels['comm_entropy'] = lambda: self._be.kernel(
+                'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
+                extrns=self._external_args, entmin_lhs=self._entmin_lhs,
+                ul=self._scal_lhs, nl=self._norm_pnorm_lhs,
+                **self._external_vals
+            )
 
 
 class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):

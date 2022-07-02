@@ -2,7 +2,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.euler.kernels.bcs.${bctype}'/>
+<%include file='pyfr.solvers.navstokes.kernels.bcs.${bctype}'/>
 <%include file='pyfr.solvers.euler.kernels.entropy'/>
 
 <%pyfr:kernel name='bccent' ndim='1'

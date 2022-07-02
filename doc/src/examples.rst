@@ -148,7 +148,54 @@ flow simulation on a mixed unstructured mesh:
 .. figure:: ../fig/inc_cylinder_2d/inc_cylinder_2d.png
    :width: 450px
    :figwidth: 450px
-   :alt: couette flow
+   :alt: cylinder
    :align: center
 
    Colour map of velocity magnitude distribution at 75 time units.
+
+Compressible Supersonic Navier--Stokes Equations
+================================================
+
+2D Viscous Shock Tube
+---------------------
+
+Proceed with the following steps to run a serial 2D viscous shock Tube
+simulation on a structured mesh:
+
+1. Create a working directory called ``viscous_shock_tube_2d/``
+
+2. Copy the configuration file
+   ``PyFR/examples/viscous_shock_tube_2d/viscous_shock_tube_2d.ini`` into
+   ``viscous_shock_tube_2d/``
+
+3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
+   ``PyFR/examples/viscous_shock_tube_2d/viscous_shock_tube_2d.msh.gz`` into
+   ``viscous_shock_tube_2d/``
+
+4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file into a PyFR mesh file called ``viscous_shock_tube_2d.pyfrm``::
+
+        zcat viscous_shock_tube_2d.msh.gz | pyfr import -tgmsh - viscous_shock_tube_2d.pyfrm
+
+5. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``viscous_shock_tube_2d-*.pyfrs``::
+
+        pyfr run -b cuda -p viscous_shock_tube_2d.pyfrm viscous_shock_tube_2d.ini
+
+6. Run pyfr on the solution file ``viscous_shock_tube_2d-1.00.pyfrs``
+   converting it into an unstructured VTK file called
+   ``viscous_shock_tube_2d-1.00.vtu``::
+
+        pyfr export viscous_shock_tube_2d.pyfrm viscous_shock_tube_2d-1.00.pyfrs viscous_shock_tube_2d-1.00.vtu
+
+7. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/viscous_shock_tube_2d/viscous_shock_tube_2d.png
+   :width: 450px
+   :figwidth: 450px
+   :alt: shock tube
+   :align: center
+
+   Colour map of density gradient magnitude at 1 time unit.

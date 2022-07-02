@@ -14,17 +14,15 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         if self.controller_needs_errest and not self.stepper_has_errest:
             raise TypeError('Incompatible stepper/controller combination')
 
-        # Ensure the system is compatible with our formulation
-        if 'std' not in systemcls.elementscls.formulations:
-            raise RuntimeError(f'System {systemcls.name} does not support '
-                               f'time stepping formulation std')
-
         # Determine the amount of temp storage required by this method
         self.nregs = self.stepper_nregs
 
         # Construct the relevant system
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
+
+        # Ensure the system is compatible with our formulation
+        systemcls.elementscls.validate_formulation(self.formulation, self, cfg)
 
         # Register index list and current index
         self._regidx = list(range(self.nregs))
