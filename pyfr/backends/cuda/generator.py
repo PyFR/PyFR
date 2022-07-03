@@ -27,7 +27,7 @@ class CUDAKernelGenerator(BaseKernelGenerator):
                    #define X_IDX (_x)
                    #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
                    #define BLK_IDX 0
-                   #define BCAST_BLK(i, ld) i
+                   #define BCAST_BLK(r, c, ld)  c
                    {self._limits}
                    {{
                        {self.body}
