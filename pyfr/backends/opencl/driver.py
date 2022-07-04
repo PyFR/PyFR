@@ -49,6 +49,7 @@ class OpenCLWrappers(LibWrapper):
     BUFFER_CREATE_TYPE_REGION = 0x1220
     DEVICE_AFFINITY_DOMAIN_NEXT_PARTITIONABLE = 0x20
     DEVICE_EXTENSIONS = 0x1030
+    DEVICE_LOCAL_MEM_SIZE = 0x1023
     DEVICE_MEM_BASE_ADDR_ALIGN = 0x1019
     DEVICE_NAME = 0x102b
     DEVICE_PARTITION_BY_AFFINITY_DOMAIN = 0x1088
@@ -62,7 +63,10 @@ class OpenCLWrappers(LibWrapper):
     MEM_ALLOC_HOST_PTR = 0x10
     PLATFORM_NAME = 0x0902
     PROGRAM_BUILD_LOG = 0x1183
+    PROFILING_COMMAND_START = 0x1282
+    PROFILING_COMMAND_END = 0x1283
     QUEUE_OUT_OF_ORDER = 0x1
+    QUEUE_PROFILING = 0x2
     QUEUE_PROPERTIES = 0x1093
 
     # Functions
@@ -118,11 +122,15 @@ class OpenCLWrappers(LibWrapper):
         (c_int, 'clGetProgramBuildInfo', c_void_p, c_void_p, c_uint, c_size_t,
          c_void_p, POINTER(c_size_t)),
         (c_void_p, 'clCreateKernel', c_void_p, c_char_p, POINTER(c_int)),
+        (c_void_p, 'clCloneKernel', c_void_p, c_int),
         (c_int, 'clReleaseKernel', c_void_p),
         (c_int, 'clEnqueueNDRangeKernel', c_void_p, c_void_p, c_uint,
          POINTER(c_size_t), POINTER(c_size_t), POINTER(c_size_t), c_uint,
          POINTER(c_void_p), POINTER(c_void_p)),
-        (c_int, 'clSetKernelArg', c_void_p, c_uint, c_size_t, c_void_p)
+        (c_int, 'clSetKernelArg', c_void_p, c_uint, c_size_t, c_void_p),
+
+        (c_int, 'clGetEventProfilingInfo', c_void_p, c_uint, c_size_t,
+         c_void_p, POINTER(c_size_t))
     ]
 
     def __init__(self):
@@ -225,7 +233,8 @@ class OpenCLDevice(_OpenCLBase):
         super().__init__(lib, ptr)
 
         self.name = self._query_str('name')
-        self.mem_align = self._query_uint('mem_base_addr_align') // 8
+        self.local_mem_size = self._query_int(c_ulong, 'local_mem_size')
+        self.mem_align = self._query_int(c_uint, 'mem_base_addr_align') // 8
 
         self.extensions = set(self._query_str('extensions').split())
         self.has_fp64 = 'cl_khr_fp64' in self.extensions
@@ -247,10 +256,10 @@ class OpenCLDevice(_OpenCLBase):
 
         return [OpenCLDevice(lib, d) for d in devices]
 
-    def _query_uint(self, param):
+    def _query_int(self, int_t, param):
         param = getattr(self.lib, f'DEVICE_{param.upper()}')
 
-        v = c_uint()
+        v = int_t()
         self.lib.clGetDeviceInfo(self, param, sizeof(v), byref(v), None)
 
         return v.value
@@ -322,16 +331,34 @@ class OpenCLHostAlloc(_OpenCLBase):
 class OpenCLEvent(_OpenCLBase):
     _destroyfn = 'clReleaseEvent'
 
+    def _profile_param(self, param):
+        t = c_ulong()
+        self.lib.clGetEventProfilingInfo(self, param, sizeof(t), byref(t),
+                                         None)
+
+        return t.value / 1e9
+
+    @property
+    def start_time(self):
+        return self._profile_param(self.lib.PROFILING_COMMAND_START)
+
+    @property
+    def end_time(self):
+        return self._profile_param(self.lib.PROFILING_COMMAND_END)
+
 
 class OpenCLQueue(_OpenCLWaitFor, _OpenCLBase):
     _destroyfn = 'clReleaseCommandQueue'
 
-    def __init__(self, lib, ctx, dev, out_of_order):
+    def __init__(self, lib, ctx, dev, out_of_order, profiling):
         self.out_of_order = out_of_order
+        self.profiling = profiling
 
-        if out_of_order:
-            props = (c_uint64 * 3)(lib.QUEUE_PROPERTIES,
-                                   lib.QUEUE_OUT_OF_ORDER, 0)
+        if out_of_order or profiling:
+            flags = lib.QUEUE_OUT_OF_ORDER if out_of_order else 0
+            flags |= lib.QUEUE_PROFILING if profiling else 0
+
+            props = (c_uint64 * 3)(lib.QUEUE_PROPERTIES, flags, 0)
         else:
             props = None
 
@@ -384,8 +411,9 @@ class OpenCLProgram(_OpenCLBase):
 
             raise OpenCLBuildProgramFailure(buf.value.decode()) from None
 
-    def get_kernel(self, name, argspec):
-        return OpenCLKernel(self.lib, self, name, argspec)
+    def get_kernel(self, name, argtypes):
+        ptr = self.lib.clCreateKernel(self, name.encode())
+        return OpenCLKernel(self.lib, ptr, argtypes)
 
 
 class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):
@@ -394,16 +422,20 @@ class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):
     typemap = [c_double, c_float, c_int32, c_int64, c_ulong]
     typemap = {k: (k(), sizeof(k)) for k in typemap}
 
-    def __init__(self, lib, program, name, argtypes):
-        ptr = lib.clCreateKernel(program, name.encode())
-
+    def __init__(self, lib, ptr, argtypes):
         super().__init__(lib, ptr)
 
+        self.argtypes = argtypes
+
         # For each argument type fetch the corresponding ctypes instance
-        self._args = [self.typemap[atype] for atype in argtypes]
+        self._argsz = [self.typemap[atype] for atype in argtypes]
+
+    def clone(self):
+        ptr = self.lib.clCloneKernel(self)
+        return OpenCLKernel(self.lib, ptr, self.argtypes)
 
     def set_arg(self, i, v):
-        arg, sz = self._args[i]
+        arg, sz = self._argsz[i]
         arg.value = getattr(v, '_as_parameter_', v)
 
         self.lib.clSetKernelArg(self, i, sz, byref(arg))
@@ -513,5 +545,6 @@ class OpenCL(_OpenCLWaitFor):
     def wait_for_events(self, events):
         self.lib.clWaitForEvents(*self._make_wait_for(events))
 
-    def queue(self, out_of_order=False):
-        return OpenCLQueue(self.lib, self.ctx, self.dev, out_of_order)
+    def queue(self, out_of_order=False, profiling=False):
+        return OpenCLQueue(self.lib, self.ctx, self.dev, out_of_order,
+                           profiling)
