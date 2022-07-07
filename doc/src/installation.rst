@@ -107,7 +107,7 @@ Dependencies
 PyFR |release| has a hard dependency on Python 3.9+ and the following
 Python packages:
 
-1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 2.3
+1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.0
 2. `h5py <https://www.h5py.org/>`_ >= 2.10
 3. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
 4. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
@@ -163,7 +163,7 @@ The OpenMP backend targets multi-core CPUs. The backend requires:
 
 1. GCC >= 4.9 or another C compiler with OpenMP support
 2. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
-   14b6cea61376653b2712e3eefa72b13c5e76e421 compiled as a shared
+   0db15a0da13e3d9b9e3d57b992ecb3384d2e15ea compiled as a shared
    library (STATIC=0) with BLAS=0.
 
 In order for PyFR to find libxsmm it must be located in a directory
