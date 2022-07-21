@@ -134,6 +134,16 @@ class BaseIntegrator:
         stats.set('solver-time-integrator', 'nacptsteps', self.nacptsteps)
         stats.set('solver-time-integrator', 'nrjctsteps', self.nrjctsteps)
 
+        # MPI wait times
+        if self.cfg.getbool('backend', 'collect-wait-times', False):
+            comm, rank, root = get_comm_rank_root()
+
+            wait_times = comm.allgather(self.system.rhs_wait_times())
+            for i, ms in enumerate(zip(*wait_times)):
+                for j, k in enumerate(['mean', 'stdev', 'median']):
+                    stats.set('backend-wait-times', f'rhs-graph-{i}-{k}',
+                              ','.join(f'{v[j]:.3g}' for v in ms))
+
     @property
     def cfgmeta(self):
         cfg = self.cfg.tostr()

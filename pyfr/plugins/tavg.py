@@ -200,15 +200,15 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
                     data[etype] = d.astype(self.fpdtype)
 
+                stats = Inifile()
+                stats.set('data', 'prefix', 'tavg')
+                stats.set('data', 'fields', ','.join(self.outfields))
+                stats.set('tavg', 'tstart', tstart)
+                stats.set('tavg', 'tend', intg.tcurr)
+                intg.collect_stats(stats)
+
                 # If we are the root rank then prepare the metadata
                 if rank == root:
-                    stats = Inifile()
-                    stats.set('data', 'prefix', 'tavg')
-                    stats.set('data', 'fields', ','.join(self.outfields))
-                    stats.set('tavg', 'tstart', tstart)
-                    stats.set('tavg', 'tend', intg.tcurr)
-                    intg.collect_stats(stats)
-
                     metadata = dict(intg.cfgmeta,
                                     stats=stats.tostr(),
                                     mesh_uuid=intg.mesh_uuid)

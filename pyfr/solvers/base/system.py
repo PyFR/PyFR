@@ -4,6 +4,7 @@ from collections import defaultdict
 import inspect
 import itertools as it
 import re
+import statistics
 
 import numpy as np
 
@@ -68,6 +69,9 @@ class BaseSystem:
         self._bc_inters = bc_inters
         for b in bc_inters:
             del b.elemap
+
+        # Observed input/output bank numbers
+        self._rhs_uin_fout = set()
 
     def _load_eles(self, rallocs, mesh, initsoln, nregs, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
@@ -255,10 +259,29 @@ class BaseSystem:
         pass
 
     def rhs(self, t, uinbank, foutbank):
+        self._rhs_uin_fout.add((uinbank, foutbank))
         self._prepare_kernels(t, uinbank, foutbank)
 
         for graph in self._rhs_graphs(uinbank, foutbank):
             self.backend.run_graph(graph)
+
+    def rhs_wait_times(self):
+        # Group together timings for graphs which are semantically equivalent
+        times = defaultdict(list)
+        for u, f in self._rhs_uin_fout:
+            for i, g in enumerate(self._rhs_graphs(u, f)):
+                times[i].extend(g.get_wait_times())
+
+        # Compute the mean and standard deviation
+        stats = []
+        for t in times.values():
+            mean = statistics.mean(t) if t else 0
+            stdev = statistics.stdev(t, mean) if len(t) >= 2 else 0
+            median = statistics.median(t) if t else 0
+
+            stats.append((mean, stdev, median))
+
+        return stats
 
     def _compute_grads_graph(self, t, uinbank):
         raise NotImplementedError(f'Solver "{self.name}" does not compute '

@@ -12,10 +12,10 @@ class Arg:
         self.name = name
 
         specptn = r'''
-            (?:(in|inout|out)\s+)?                           # Intent
-            (?:(broadcast(?:-row|-col)|mpi|scalar|view)\s+)? # Attrs
-            ([A-Za-z_]\w*)                                   # Data type
-            ((?:\[\d+\]){0,2})$                              # Dimensions
+            (?:(in|inout|out)\s+)?                            # Intent
+            (?:(broadcast(?:-row|-col)?|mpi|scalar|view)\s+)? # Attrs
+            ([A-Za-z_]\w*)                                    # Data type
+            ((?:\[\d+\]){0,2})$                               # Dimensions
         '''
         dimsptn = r'(?<=\[)\d+(?=\])'
         usedptn = fr'(?:[^A-Za-z_]|^){name}[^A-Za-z0-9]'
@@ -37,6 +37,7 @@ class Arg:
         self.ncdim = len(self.cdims)
 
         # Attributes
+        self.isbroadcast = self.attrs == 'broadcast'
         self.isbroadcastr = self.attrs == 'broadcast-row'
         self.isbroadcastc = self.attrs == 'broadcast-col'
         self.ismpi = self.attrs == 'mpi'
@@ -48,6 +49,8 @@ class Arg:
         # Validation
         if self.attrs.startswith('broadcast') and self.intent != 'in':
             raise ValueError('Broadcast arguments must be of intent in')
+        if self.isbroadcast and self.ncdim != 2:
+            raise ValueError('Broadcasts must have two dimensions')
         if self.isbroadcastr and self.ncdim != 1:
             raise ValueError('Row broadcasts must have one dimension')
         if self.isbroadcastc and self.ncdim == 1:
@@ -136,6 +139,11 @@ class BaseKernelGenerator:
         #   name => name_v[X_IDX + BLK_IDX]
         if arg.ncdim == 0:
             ix = 'X_IDX + BLK_IDX'
+        # 2D broadcast vector
+        #   name[\1][\2] => name_v[ldim*(\1) + (\2)]
+        elif arg.isbroadcast and arg.ncdim == 2:
+            lx = self.ldim_size(arg.name)
+            ix = fr'{lx}*\1 + BCAST_BLK({arg.cdims[0]}, \2, {lx})'
         # Tightly packed MPI Vector:
         #   name[\1] => name_v[nx*(\1) + X_IDX + BLK_IDX]
         elif arg.ncdim == 1 and arg.ismpi:
@@ -160,9 +168,14 @@ class BaseKernelGenerator:
         return f'{arg.name}_v[{ix}]'
 
     def _deref_arg_array_2d(self, arg):
+        # 2D broadcast vector
+        #   name[\1][\2] => name_v[ldim*(\1) + (\2)]
+        if arg.isbroadcast and arg.ncdim == 2:
+            lx = self.ldim_size(arg.name)
+            ix = fr'{lx}*\1 + BCAST_BLK({arg.cdims[0]}, \2, {lx})'
         # Column broadcast matrix with zero dimension:
         #   name => name_v[X_IDX + BLK_IDX]
-        if arg.ncdim == 0 and arg.isbroadcastc:
+        elif arg.ncdim == 0 and arg.isbroadcastc:
             ix = 'X_IDX + BLK_IDX'
         # Matrix:
         #   name => name_v[ldim*_y + X_IDX + BLK_IDX*ny]
@@ -173,7 +186,7 @@ class BaseKernelGenerator:
         #   name[\1] => name_v[ldim*_y + \1]
         elif arg.isbroadcastr:
             lx = self.ldim_size(arg.name)
-            ix = fr'{lx}*_y + BCAST_BLK(\1, {lx})'
+            ix = fr'{lx}*_y + BCAST_BLK(_ny, \1, {lx})'
         # Stacked matrix:
         #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv) + BLK_IDX*nv*ny]
         elif arg.ncdim == 1:

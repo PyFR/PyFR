@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import cast, c_int, c_double, c_float, c_void_p
+from ctypes import byref, cast, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
@@ -16,14 +16,10 @@ class XSMMWrappers(LibWrapper):
     _functions = [
         (None, 'libxsmm_init'),
         (None, 'libxsmm_finalize'),
-        (c_void_p, 'libxsmm_dfsspmdm_create', c_int, c_int, c_int, c_int,
-         c_int, c_int, c_double, c_double, c_int, c_void_p),
-        (c_void_p, 'libxsmm_sfsspmdm_create', c_int, c_int, c_int, c_int,
-         c_int, c_int, c_float, c_float, c_int, c_void_p),
-        (None, 'libxsmm_dfsspmdm_execute', c_void_p, c_void_p, c_void_p),
-        (None, 'libxsmm_sfsspmdm_execute', c_void_p, c_void_p, c_void_p),
-        (None, 'libxsmm_dfsspmdm_destroy', c_void_p),
-        (None, 'libxsmm_sfsspmdm_destroy', c_void_p)
+        (c_void_p, 'libxsmm_fsspmdm_create', c_int, c_int, c_int, c_int, c_int,
+         c_int, c_int, c_void_p, c_void_p, c_int, c_void_p),
+        (None, 'libxsmm_fsspmdm_execute', c_void_p, c_void_p, c_void_p),
+        (None, 'libxsmm_fsspmdm_destroy', c_void_p)
     ]
 
 
@@ -35,26 +31,18 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         self._kerns = {}
 
         # Load and wrap libxsmm
-        self._wrappers = XSMMWrappers()
+        self._wrappers = w = XSMMWrappers()
 
-        if backend.fpdtype == np.float64:
-            self._nmod = 8
-            self._createfn = self._wrappers.libxsmm_dfsspmdm_create
-            self._execfn = self._wrappers.libxsmm_dfsspmdm_execute
-            self._destroyfn = self._wrappers.libxsmm_dfsspmdm_destroy
-        else:
-            self._nmod = 16
-            self._createfn = self._wrappers.libxsmm_sfsspmdm_create
-            self._execfn = self._wrappers.libxsmm_sfsspmdm_execute
-            self._destroyfn = self._wrappers.libxsmm_sfsspmdm_destroy
+        self._exec_ptr = cast(w.libxsmm_fsspmdm_execute, c_void_p).value
+        self._nmod = 8 if backend.fpdtype == np.float64 else 16
 
         # Init
-        self._wrappers.libxsmm_init()
+        w.libxsmm_init()
 
     def __del__(self):
         if hasattr(self, '_wrappers'):
             for blkptr in self._kerns.values():
-                self._destroyfn(blkptr)
+                self._wrappers.libxsmm_fsspmdm_destroy(blkptr)
 
             self._wrappers.libxsmm_finalize()
 
@@ -92,24 +80,30 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
             a_np = np.ascontiguousarray(a.get())
             m, k = a_np.shape
 
+            if self.backend.fpdtype == np.float64:
+                xsmm_dtype = 0
+                alpha, beta = c_double(alpha), c_double(beta)
+            else:
+                xsmm_dtype = 1
+                alpha, beta = c_float(alpha), c_float(beta)
+
             # JIT and register an block leaddim size kernel for this matrix
-            blkptr = self._createfn(m, b.leaddim, k, k, ldb, ldc, alpha,
-                                    beta, c_is_nt, a_np.ctypes.data)
+            blkptr = self._wrappers.libxsmm_fsspmdm_create(
+                xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(alpha),
+                byref(beta), c_is_nt, a_np.ctypes.data
+            )
             if not blkptr:
                 raise NotSuitableError('libxssm unable to JIT a kernel')
 
             # Update the cache
             self._kerns[ckey] = blkptr
 
-        # Obtain a pointer to the execute function
-        execptr = cast(self._execfn, c_void_p).value
-
         # Render our parallel wrapper kernel
         src = self.backend.lookup.get_template('batch-gemm').render()
 
         # Build
         batch_gemm = self._build_kernel('batch_gemm', src, 'PPiPiPi')
-        batch_gemm.set_args(execptr, blkptr, b.nblocks, b, b.blocksz, out,
-                            out.blocksz)
+        batch_gemm.set_args(self._exec_ptr, blkptr, b.nblocks, b, b.blocksz,
+                            out, out.blocksz)
 
         return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)

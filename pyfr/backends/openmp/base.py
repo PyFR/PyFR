@@ -2,6 +2,7 @@
 
 from ctypes import c_int, c_void_p
 from functools import cached_property
+import re
 
 import numpy as np
 
@@ -18,13 +19,19 @@ class OpenMPBackend(BaseBackend):
 
         # Take the default alignment requirement to be 64-bytes
         self.alignb = cfg.getint('backend-openmp', 'alignb', 64)
-
         if self.alignb < 32 or (self.alignb & (self.alignb - 1)):
             raise ValueError('Alignment must be a power of 2 and >= 32')
 
         # Compute the SoA and AoSoA size
         self.soasz = self.alignb // np.dtype(self.fpdtype).itemsize
         self.csubsz = self.soasz*cfg.getint('backend-openmp', 'n-soa', 1)
+
+        # OpenMP schedule
+        sched = cfg.get('backend-openmp', 'schedule', 'static')
+        if not re.match(r'(static|(dynamic|guided)(\s*,\s*\d+)?)$', sched):
+            raise ValueError('Invalid OpenMP schedule')
+
+        self.schedule = f'schedule({sched})'
 
         # C source compiler
         self.compiler = OpenMPCompiler(cfg)
@@ -60,6 +67,13 @@ class OpenMPBackend(BaseBackend):
 
     def run_graph(self, graph, wait=False):
         graph.run()
+
+    @cached_property
+    def lookup(self):
+        lookup = super().lookup
+        lookup.dfltargs['schedule'] = self.schedule
+
+        return lookup
 
     @cached_property
     def krunner(self):
