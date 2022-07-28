@@ -10,7 +10,7 @@ from pyfr.nputil import npeval, fuzzysort
 from pyfr.util import memoize
 
 
-class BaseElements(object):
+class BaseElements:
     privarmap = None
     convarmap = None
 
@@ -153,7 +153,7 @@ class BaseElements(object):
         # Variable and function substitutions
         subs = self.cfg.items('constants')
         subs |= dict(x='ploc[0]', y='ploc[1]', z='ploc[2]')
-        subs |= dict(abs='fabs', pi=str(math.pi))
+        subs |= dict(abs='fabs', pi=math.pi)
         subs |= {v: f'u[{i}]' for i, v in enumerate(convars)}
 
         return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)
@@ -246,10 +246,10 @@ class BaseElements(object):
         smats = np.array([m0 @ smat for smat in smats_mpts])
         return smats.reshape(self.ndims, -1, self.ndims, self.neles)
 
-    @sliceat
     @memoize
-    def smat_at(self, name):
-        return self._be.const_matrix(self.smat_at_np(name), tags={'align'})
+    def curved_smat_at(self, name):
+        smat = self.smat_at_np(name)[..., :self._linoff]
+        return self._be.const_matrix(smat, tags={'align'})
 
     @memoize
     def rcpdjac_at_np(self, name):

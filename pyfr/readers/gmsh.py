@@ -269,7 +269,7 @@ class GmshReader(BaseReader):
             if not m:
                 raise ValueError('Malformed physical entity')
 
-            pent, name = int(m.group(2)), m.group(3).lower()
+            pent, name = int(m[2]), m[3].lower()
 
             # Ensure we have not seen this name before
             if name in seen:
@@ -284,7 +284,7 @@ class GmshReader(BaseReader):
                 if not p:
                     raise ValueError('Invalid periodic boundary condition')
 
-                self._pfacespents[p.group(1)].append(pent)
+                self._pfacespents[p[1]].append(pent)
             # Other boundary faces
             else:
                 self._bfacespents[name] = pent

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, Structure, cast, c_char, c_char_p, c_int,
-                    c_size_t, c_uint, c_void_p, pointer)
+from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_float,
+                    c_int, c_size_t, c_uint, c_void_p)
 
 import numpy as np
 
@@ -99,6 +99,43 @@ class HIPDevProps(Structure):
     ]
 
 
+class HIPKernelNodeParams(Structure):
+    _fields_ = [
+        ('block', c_uint * 3),
+        ('extra', POINTER(c_void_p)),
+        ('func', c_void_p),
+        ('grid', c_uint * 3),
+        ('kernel_params', POINTER(c_void_p)),
+        ('shared_mem_bytes', c_uint)
+    ]
+
+    def __init__(self, func, grid, block, sharedb):
+        super().__init__()
+
+        # Save a reference to our underlying function
+        self._func = func
+
+        # For each argument type instantiate the corresponding ctypes type
+        self._args = args = [atype() for atype in func.argtypes]
+
+        # Obtain pointers to these arguments
+        self._arg_ptrs = (c_void_p * len(args))(*map(addressof, args))
+
+        # Fill out the structure
+        self.func = int(func)
+        self.grid[:] = grid
+        self.block[:] = block
+        self.shared_mem_bytes = sharedb
+        self.kernel_params = self._arg_ptrs
+
+    def set_arg(self, i, v):
+        self._args[i].value = getattr(v, '_as_parameter_', v)
+
+    def set_args(self, *kargs, start=0):
+        for i, v in enumerate(kargs, start=start):
+            self.set_arg(i, v)
+
+
 class HIPWrappers(LibWrapper):
     _libname = 'amdhip64'
 
@@ -135,16 +172,42 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipMemset', c_void_p, c_int, c_size_t),
         (c_int, 'hipStreamCreate', POINTER(c_void_p)),
         (c_int, 'hipStreamDestroy', c_void_p),
+        (c_int, 'hipStreamBeginCapture', c_void_p, c_uint),
+        (c_int, 'hipStreamEndCapture', c_void_p, POINTER(c_void_p)),
         (c_int, 'hipStreamSynchronize', c_void_p),
+        (c_int, 'hipEventCreate', POINTER(c_void_p)),
+        (c_int, 'hipEventRecord', c_void_p, c_void_p),
+        (c_int, 'hipEventDestroy', c_void_p),
+        (c_int, 'hipEventSynchronize', c_void_p),
+        (c_int, 'hipEventElapsedTime', POINTER(c_float), c_void_p, c_void_p),
         (c_int, 'hipModuleLoadData', POINTER(c_void_p), c_char_p),
         (c_int, 'hipModuleUnload', c_void_p),
         (c_int, 'hipModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
         (c_int, 'hipModuleLaunchKernel', c_void_p, c_uint, c_uint, c_uint,
-         c_uint, c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p)
+         c_uint, c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p),
+         c_void_p),
+        (c_int, 'hipGraphCreate', POINTER(c_void_p), c_uint),
+        (c_int, 'hipGraphDestroy', c_void_p),
+        (c_int, 'hipGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t),
+        (c_int, 'hipGraphAddEventRecordNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, c_void_p),
+        (c_int, 'hipGraphAddKernelNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, POINTER(HIPKernelNodeParams)),
+        (c_int, 'hipGraphAddChildGraphNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, c_void_p),
+        (c_int, 'hipGraphAddMemcpyNode1D', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, c_void_p, c_void_p, c_size_t, c_int),
+        (c_int, 'hipGraphInstantiate', POINTER(c_void_p), c_void_p, c_void_p,
+         c_char_p, c_size_t),
+        (c_int, 'hipGraphExecKernelNodeSetParams', c_void_p, c_void_p,
+         POINTER(HIPKernelNodeParams)),
+        (c_int, 'hipGraphExecDestroy', c_void_p),
+        (c_int, 'hipGraphLaunch', c_void_p, c_void_p)
     ]
 
 
-class _HIPBase(object):
+class _HIPBase:
     _destroyfn = None
 
     def __init__(self, hip, ptr):
@@ -195,8 +258,39 @@ class HIPStream(_HIPBase):
 
         super().__init__(hip, ptr)
 
+    def begin_capture(self):
+        self.hip.lib.hipStreamBeginCapture(self, 0)
+
+    def end_capture(self):
+        graph = c_void_p()
+        self.hip.lib.hipStreamEndCapture(self, graph)
+
+        return HIPGraph(self.hip, graph)
+
     def synchronize(self):
         self.hip.lib.hipStreamSynchronize(self)
+
+
+class HIPEvent(_HIPBase):
+    _destroyfn = 'hipEventDestroy'
+
+    def __init__(self, hip):
+        ptr = c_void_p()
+        hip.lib.hipEventCreate(ptr)
+
+        super().__init__(hip, ptr)
+
+    def record(self, stream):
+        self.hip.lib.hipEventRecord(self, stream)
+
+    def synchronize(self):
+        self.hip.lib.hipEventSynchronize(self)
+
+    def elapsed_time(self, start):
+        dt = c_float()
+        self.hip.lib.hipEventElapsedTime(dt, start, self)
+
+        return dt.value / 1e3
 
 
 class HIPModule(_HIPBase):
@@ -219,25 +313,102 @@ class HIPFunction(_HIPBase):
 
         super().__init__(hip, ptr)
 
-        # Save a reference to our underlying module
+        # Save a reference to our underlying module and argument types
         self.module = module
+        self.argtypes = list(argtypes)
 
-        # For each argument type instantiate the corresponding ctypes type
-        self._args = args = [atype() for atype in argtypes]
+    def make_params(self, grid, block, sharedb=0):
+        return HIPKernelNodeParams(self, grid, block, sharedb)
 
-        # Obtain pointers to these arguments
-        self._arg_ptrs = [cast(pointer(arg), c_void_p) for arg in args]
-        self._arg_ptrs = (c_void_p * len(args))(*self._arg_ptrs)
-
-    def exec_async(self, grid, block, stream, *args):
-        for src, dst in zip(args, self._args):
-            dst.value = getattr(src, '_as_parameter_', src)
-
-        self.hip.lib.hipModuleLaunchKernel(self, *grid, *block, 0, stream,
-                                           self._arg_ptrs, 0)
+    def exec_async(self, stream, params):
+        self.hip.lib.hipModuleLaunchKernel(self, *params.grid, *params.block,
+                                           params.shared_mem_bytes, stream,
+                                           params.kernel_params, None)
 
 
-class HIP(object):
+class HIPGraph(_HIPBase):
+    _destroyfn = 'hipGraphDestroy'
+
+    def __init__(self, hip, ptr=None):
+        if ptr is None:
+            ptr = c_void_p()
+            hip.lib.hipGraphCreate(ptr, 0)
+
+        super().__init__(hip, ptr)
+
+    @staticmethod
+    def _make_deps(deps):
+        if deps:
+            return (c_void_p * len(deps))(*deps), len(deps)
+        else:
+            return None, 0
+
+    def add_empty(self, deps=None):
+        ptr = c_void_p()
+        self.hip.lib.hipGraphAddEmptyNode(ptr, self, *self._make_deps(deps))
+
+        return ptr.value
+
+    def add_event_record(self, event, deps=None):
+        ptr = c_void_p()
+        self.hip.lib.hipGraphAddEventRecordNode(ptr, self,
+                                                *self._make_deps(deps), event)
+
+        return ptr.value
+
+    def add_kernel(self, kparams, deps=None):
+        ptr = c_void_p()
+        self.hip.lib.hipGraphAddKernelNode(ptr, self, *self._make_deps(deps),
+                                           kparams)
+
+        return ptr.value
+
+    def add_memcpy(self, dst, src, nbytes, deps=None):
+        kind = self.hip.lib.MEMCPY_DEFAULT
+
+        if isinstance(dst, (np.ndarray, np.generic)):
+            dst = dst.ctypes.data
+
+        if isinstance(src, (np.ndarray, np.generic)):
+            src = src.ctypes.data
+
+        ptr = c_void_p()
+        self.hip.lib.hipGraphAddMemcpyNode1D(ptr, self, *self._make_deps(deps),
+                                             dst, src, nbytes, kind)
+
+        return ptr.value
+
+    def add_graph(self, graph, deps=None):
+        ptr = c_void_p()
+        self.hip.lib.hipGraphAddChildGraphNode(ptr, self,
+                                               *self._make_deps(deps), graph)
+
+        return ptr.value
+
+    def instantiate(self):
+        return HIPExecGraph(self.hip, self)
+
+
+class HIPExecGraph(_HIPBase):
+    _destroyfn = 'hipGraphExecDestroy'
+
+    def __init__(self, hip, graph):
+        ptr = c_void_p()
+        hip.lib.hipGraphInstantiate(ptr, graph, None, None, 0)
+
+        super().__init__(hip, ptr)
+
+        # Save a reference to the graph
+        self.graph = graph
+
+    def set_kernel_node_params(self, node, kparams):
+        self.hip.lib.hipGraphExecKernelNodeSetParams(self, node, kparams)
+
+    def launch(self, stream):
+        self.hip.lib.hipGraphLaunch(self, stream)
+
+
+class HIP:
     def __init__(self):
         self.lib = HIPWrappers()
 
@@ -299,3 +470,9 @@ class HIP(object):
 
     def create_stream(self):
         return HIPStream(self)
+
+    def create_event(self):
+        return HIPEvent(self)
+
+    def create_graph(self):
+        return HIPGraph(self)

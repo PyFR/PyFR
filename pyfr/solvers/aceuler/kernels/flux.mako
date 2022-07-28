@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%pyfr:macro name='inviscid_flux' params='s, f'>
-    // Velocity in the indices 1 to ndims+1 of the conservative variable array
+   // Velocity in the indices 1 to ndims+1 of the conservative variable array
    fpdtype_t v[] = ${pyfr.array('s[{i}]', i=(1, ndims + 1))};
 
     // Pressure in the conservative variable array index 0

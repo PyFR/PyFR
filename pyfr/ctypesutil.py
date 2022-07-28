@@ -6,13 +6,13 @@ import os
 import sys
 
 
-class LibWrapper(object):
+class LibWrapper:
     _libname = None
     _statuses = None
     _functions = None
 
     def __init__(self):
-        lib = load_library(self._libname)
+        self._lib = lib = load_library(self._libname)
 
         for fret, fname, *fargs in self._functions:
             fn = getattr(lib, fname)

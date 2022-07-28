@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
 
+from collections import deque
+import time
+
 import numpy as np
 
+from pyfr.mpiutil import get_comm_rank_root, mpi
 
-class MatrixBase(object):
+
+class MatrixBase:
     _base_tags = set()
 
     def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
@@ -138,7 +143,7 @@ class Matrix(MatrixBase):
         pass
 
 
-class MatrixSlice(object):
+class MatrixSlice:
     def __init__(self, backend, mat, ra, rb, ca, cb):
         self.backend = backend
         self.parent = mat
@@ -195,17 +200,17 @@ class ConstMatrix(MatrixBase):
 
 class XchgMatrix(Matrix):
     def recvreq(self, pid, tag):
-        from mpi4py import MPI
+        comm, rank, root = get_comm_rank_root()
 
-        return MPI.COMM_WORLD.Recv_init(self.hdata, pid, tag)
+        return comm.Recv_init(self.hdata, pid, tag)
 
     def sendreq(self, pid, tag):
-        from mpi4py import MPI
+        comm, rank, root = get_comm_rank_root()
 
-        return MPI.COMM_WORLD.Send_init(self.hdata, pid, tag)
+        return comm.Send_init(self.hdata, pid, tag)
 
 
-class View(object):
+class View:
     def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
@@ -264,7 +269,7 @@ class View(object):
             )
 
 
-class XchgView(object):
+class XchgView:
     def __init__(self, backend, matmap, rmap, cmap, rstridemap, vshape, tags):
         # Create a normal view
         self.view = backend.view(matmap, rmap, cmap, rstridemap, vshape, tags)
@@ -284,28 +289,85 @@ class XchgView(object):
         return self.xchgmat.sendreq(pid, tag)
 
 
-class Queue(object):
+class Graph:
     def __init__(self, backend):
-        from mpi4py import MPI
-
         self.backend = backend
+        self.committed = False
+
+        # Kernels and their dependencies
+        self.knodes = {}
+        self.kdeps = {}
+        self.depk = set()
 
         # MPI wrappers
-        self._startall = MPI.Prequest.Startall
-        self._waitall = MPI.Prequest.Waitall
+        self._startall = mpi.Prequest.Startall
 
-        # Items waiting to be executed
-        self._items = []
+        if backend.cfg.getbool('backend', 'collect-wait-times', False):
+            n = backend.cfg.getint('backend', 'collect-wait-times-len', 10000)
+            self._wait_times = wait_times = deque(maxlen=n)
 
-    def enqueue(self, items, *args, **kwargs):
-        self._items.extend((item, args, kwargs) for item in items)
+            # Wrap the wait all function with a timing variant
+            def waitall(reqs):
+                if reqs:
+                    t = time.perf_counter_ns()
+                    mpi.Prequest.Waitall(reqs)
+                    wait_times.append((time.perf_counter_ns() - t) / 1e9)
 
-    def enqueue_and_run(self, items, *args, **kwargs):
-        if self._items:
-            self.run()
+            self._waitall = waitall
+        else:
+            self._waitall = mpi.Prequest.Waitall
 
-        self.enqueue(items, *args, **kwargs)
-        self.run()
+        # MPI requests along with their associated dependencies
+        self.mpi_reqs = []
+        self.mpi_req_deps = []
 
-    def __bool__(self):
-        return bool(self._items)
+    def add(self, kern, deps=[]):
+        if self.committed:
+            raise RuntimeError('Can not add nodes to a committed graph')
+
+        if kern in self.knodes:
+            raise RuntimeError('Can only add a kernel to a graph once')
+
+        # Resolve the dependency list
+        rdeps = [self.knodes[d] for d in deps]
+
+        # Ask the kernel to add itself
+        self.knodes[kern] = kern.add_to_graph(self, rdeps)
+
+        # Note our dependencies
+        self.kdeps[kern] = deps
+        self.depk.update(deps)
+
+    def add_all(self, kerns, deps=[]):
+        for k in kerns:
+            self.add(k, deps)
+
+    def add_mpi_req(self, req, deps=[]):
+        if self.committed:
+            raise RuntimeError('Can not add nodes to a committed graph')
+
+        if req in self.mpi_reqs:
+            raise ValueError('Can only add an MPI request to a graph once')
+
+        # Add the request
+        self.mpi_reqs.append(req)
+        self.mpi_req_deps.append(deps)
+
+        # Note any dependencies
+        self.depk.update(deps)
+
+    def add_mpi_reqs(self, reqs, deps=[]):
+        for r in reqs:
+            self.add_mpi_req(r, deps)
+
+    def commit(self):
+        mreqs, mdeps = self.mpi_reqs, self.mpi_req_deps
+
+        self.committed = True
+        self.mpi_root_reqs = [r for r, d in zip(mreqs, mdeps) if not d]
+
+    def run(self, *args):
+        pass
+
+    def get_wait_times(self):
+        return list(self._wait_times)

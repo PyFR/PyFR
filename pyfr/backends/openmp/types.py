@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from collections import defaultdict
+
+from ctypes import addressof, c_void_p, cast
 from functools import cached_property
 
 import pyfr.backends.base as base
@@ -48,35 +51,55 @@ class OpenMPMatrixSlice(base.MatrixSlice):
         return self.data.ctypes.data
 
 
-class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix):
-    pass
+class OpenMPConstMatrix(OpenMPMatrixBase, base.ConstMatrix): pass
+class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix): pass
+class OpenMPXchgView(base.XchgView): pass
+class OpenMPView(base.View): pass
 
 
-class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix):
-    pass
+class OpenMPGraph(base.Graph):
+    def __init__(self, backend):
+        super().__init__(backend)
 
+        self.klist = []
+        self.mpi_idxs = defaultdict(list)
 
-class OpenMPXchgView(base.XchgView):
-    pass
+    def add_mpi_req(self, req, deps=[]):
+        super().add_mpi_req(req, deps)
 
+        if deps:
+            ix = max(self.knodes[d] for d in deps)
 
-class OpenMPView(base.View):
-    pass
+            self.mpi_idxs[ix].append(req)
 
+    def commit(self):
+        super().commit()
 
-class OpenMPQueue(base.Queue):
-    def run(self, mpireqs=[]):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
+        n = len(self.klist)
 
-        # Run our kernels
-        for item, args, kwargs in self._items:
-            item.run(self, *args, **kwargs)
+        # Obtain pointers to our kernel functions and their arguments
+        self._kfunargs = (c_void_p * (2*n))()
+        self._kfunargs[0::2] = [cast(k.fun, c_void_p) for k in self.klist]
+        self._kfunargs[1::2] = [addressof(k.kargs) for k in self.klist]
 
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self._waitall(mpireqs)
+        # Group kernels in runs separated by MPI requests
+        self._runlist, i = [], 0
 
-        # Clear the queue
-        self._items.clear()
+        for j in sorted(self.mpi_idxs):
+            self._runlist.append((i, j - i, self.mpi_idxs[j]))
+            i = j
+
+        if i != n - 1:
+            self._runlist.append((i, n - i, []))
+
+    def run(self):
+        # Start all dependency-free MPI requests
+        self._startall(self.mpi_root_reqs)
+
+        for i, n, reqs in self._runlist:
+            self.backend.krunner(i, n, self._kfunargs)
+
+            self._startall(reqs)
+
+        # Wait for all of the MPI requests to finish
+        self._waitall(self.mpi_reqs)

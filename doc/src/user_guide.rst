@@ -101,6 +101,14 @@ Parameterises the backend with
 
     ``linear`` | ``random``
 
+3. ``collect-wait-times`` --- If to track MPI request wait times or not:
+
+    ``True`` | ``False``
+
+4. ``collect-wait-times-len`` --- Size of the wait time history buffer:
+
+     *int*
+
 Example::
 
     [backend]
@@ -1203,11 +1211,12 @@ Parameterised with
     ``blocking`` | ``non-blocking``
 
 4. ``region`` --- region to be written, specified as either the
-   entire domain using ``*``, a cuboidal sub-region via diametrically
-   opposite vertices, or a sub-region of elements that have faces on a
-   specific domain boundary via the name of the domain boundary
+   entire domain using ``*``, a combination of the geometric shapes
+   specified in :ref:`regions`, or a sub-region of elements that have
+   faces on a specific domain boundary via the name of the domain
+   boundary:
 
-    ``*`` | ``[(x, y, [z]), (x, y, [z])]`` | *string*
+    ``*`` | ``shape(args, ...)`` | *string*
 
 Example::
 
@@ -1217,7 +1226,7 @@ Example::
     basename = files-{t:.2f}
     post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
     post-action-mode = blocking
-    region = [(-5, -5, -5), (5, 5, 5)]
+    region = box((-5, -5, -5), (5, 5, 5))
 
 [soln-plugin-fluidforce-*name*]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1346,9 +1355,9 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^
 
 Periodically samples specific points in the volume and writes them out
-to a CSV file.  The point location process automatically takes
+to a CSV file. The point location process automatically takes
 advantage of `scipy.spatial.cKDTree <http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.cKDTree.html>`_
-where available.  Parameterised with
+where available. Parameterised with
 
 1. ``nsteps`` --- sample every ``nsteps``:
 
@@ -1418,12 +1427,13 @@ Time average quantities. Parameterised with
 
     ``single`` | ``double``
 
-8. ``region`` --- region to be averaged, specified as either the
-   entire domain using ``*``, a cuboidal sub-region via diametrically
-   opposite vertices, or a sub-region of elements that have faces on a
-   specific domain boundary via the name of the domain boundary
+8. ``region`` --- region to be written, specified as either the
+   entire domain using ``*``, a combination of the geometric shapes
+   specified in :ref:`regions`, or a sub-region of elements that have
+   faces on a specific domain boundary via the name of the domain
+   boundary:
 
-    ``*`` | ``[(x, y, [z]), (x, y, [z])]`` | *string*
+    ``*`` | ``shape(args, ...)`` | *string*
 
 9. ``avg``-*name* --- expression to time average, written as a function of
    the primitive variables and gradients thereof; multiple expressions,
@@ -1484,7 +1494,13 @@ Integrate quantities over the compuational domain. Parameterised with:
 
 5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
 
-6. ``int``-*name* --- expression to integrate, written as a function of
+6. ``region`` --- region to integrate, specified as either the
+   entire domain using ``*`` or a combination of the geometric shapes
+   specified in :ref:`regions`:
+
+    ``*`` | ``shape(args, ...)``
+
+7. ``int``-*name* --- expression to integrate, written as a function of
    the primitive variables and gradients thereof, the physical coordinates
    [x, y, [z]] and/or the physical time [t]; multiple expressions,
    each with their own *name*, may be specified:
@@ -1504,6 +1520,48 @@ Example::
 
     int-E = rho*(u*u + v*v + w*w)
     int-enst = rho*(%(vor1)s*%(vor1)s + %(vor2)s*%(vor2)s + %(vor3)s*%(vor3)s)
+
+.. _regions:
+
+Regions
+-------
+
+Certain plugins are capable of performing operations on a subset of the
+elements inside the domain. One means of constructing these element
+subsets is through parameterised regions. Note that an element is
+considered part of a region if *any* of its nodes are found to be
+contained within the region. Supported regions:
+
+Rectangular cuboid ``box(x0, x1)``
+  A rectangular cuboid defined by two diametrically opposed vertices.
+  Valid in both 2D and 3D.
+
+Conical frustum ``conical_frustum(x0, x1, r0, r1)``
+  A conical frustum whose end caps are at *x0* and *x1* with radii
+  *r0* and *r1*, respectively. Only valid in 3D.
+
+Cone ``cone(x0, x1, r)``
+  A cone of radius *r* whose centre-line is defined by *x0* and *x1*.
+  Equivalent to ``conical_frustum(x0, x1, r, 0)``. Only valid in 3D.
+
+Cylinder ``cylinder(x0, x1, r)``
+  A circular cylinder of radius *r* whose centre-line is defined by
+  *x0* and *x1*. Equivalent to ``conical_frustum(x0, x1, r, r)``.
+  Only valid in 3D.
+
+Cartesian ellipsoid ``ellipsoid(x0, a, b, c)``
+  An ellipsoid centred at *x0* with Cartesian coordinate axes whose
+  extents in the *x*, *y*, and *z* directions are given by *a*, *b*,
+  and *c*, respectively. Only valid in 3D.
+
+Sphere ``sphere(x0, r)``
+  A sphere centred at *x0* with a radius of *r*. Equivalent to
+  ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
+
+Region expressions can also be added and subtracted together
+arbitrarily.  For example
+``box((-10, -10, -10), (10, 10, 10)) - sphere((0, 0, 0), 3)`` will
+result in a cube-shaped region with a sphere cut out of the middle.
 
 Additional Information
 ----------------------
@@ -1537,5 +1595,5 @@ supported:
 
 8. ``abs`` --- absolute value
 
-9. ``min, max`` --- two variable minimum and maximum functions, arguments can be
-arrays
+9. ``min, max`` --- two variable minimum and maximum functions,
+   arguments can be arrays

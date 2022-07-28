@@ -2,13 +2,12 @@
 
 import numpy as np
 
-from pyfr.backends.base.kernels import MetaKernel
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
 
 
-class TplargsMixin(object):
+class TplargsMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -26,11 +25,6 @@ class NavierStokesIntInters(TplargsMixin, BaseAdvectionDiffusionIntInters):
 
         be.pointwise.register('pyfr.solvers.navstokes.kernels.intconu')
         be.pointwise.register('pyfr.solvers.navstokes.kernels.intcflux')
-
-        if abs(self.c['ldg-beta']) == 0.5:
-            self.kernels['copy_fpts'] = lambda: MetaKernel(
-                [ele.kernels['_copy_fpts']() for ele in elemap.values()]
-            )
 
         self.kernels['con_u'] = lambda: be.kernel(
             'intconu', tplargs=self._tplargs, dims=[self.ninterfpts],

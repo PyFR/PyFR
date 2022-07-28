@@ -54,6 +54,9 @@ class NativeReader(Mapping):
 
         return keys
 
+    def attrs(self, aname):
+        return self._file[aname].attrs
+
     @memoize
     def array_info(self, prefix):
         # Entries in the file which start with the prefix
@@ -63,7 +66,7 @@ class NativeReader(Mapping):
         ftypes = sorted({n.split('_')[1] for n in names})
 
         # Highest partition number in the file
-        fmaxpn = max(int(re.search(r'\d+$', n).group(0)) for n in names)
+        fmaxpn = max(int(re.search(r'\d+$', n)[0]) for n in names)
 
         # Extract array information
         info = {}
@@ -83,7 +86,7 @@ class NativeReader(Mapping):
         ai = self.array_info(prefix)
 
         # Number of partitions in the mesh
-        npr = max(int(re.search(r'\d+$', k).group(0)) for k in ai) + 1
+        npr = max(int(re.search(r'\d+$', k)[0]) for k in ai) + 1
 
         # Element types in the mesh
         etypes = {v[0] for v in ai.values()}
@@ -92,6 +95,6 @@ class NativeReader(Mapping):
         nep = {et: [0]*npr for et in etypes}
 
         for k, v in ai.items():
-            nep[v[0]][int(re.search(r'\d+$', k).group(0))] = v[1][1]
+            nep[v[0]][int(re.search(r'\d+$', k)[0])] = v[1][1]
 
         return nep

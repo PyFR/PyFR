@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
-from pyfr.backends.base import Kernel, NullKernel
-from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
+from pyfr.backends.base import NullKernel
+from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
+                                         get_grid_for_block)
 
 
 class CUDAPackingKernels(CUDAKernelProvider):
@@ -17,35 +16,39 @@ class CUDAPackingKernels(CUDAKernelProvider):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
+        kern = self._build_kernel('pack_view', src, 'iiiPPPP')
 
         # Compute the grid and thread-block size
         block = (128, 1, 1)
         grid = get_grid_for_block(block, v.n)
 
+        # Set the arguments
+        params = kern.make_params(grid, block)
+        params.set_args(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
+                        v.rstrides or 0, m)
+
         # If MPI is CUDA aware then we just need to pack the buffer
         if self.backend.mpitype == 'cuda-aware':
-            class PackXchgViewKernel(Kernel):
-                def run(self, queue):
-                    # Pack
-                    kern.exec_async(
-                        grid, block, queue.stream, v.n, v.nvrow, v.nvcol,
-                        v.basedata, v.mapping, v.rstrides or 0, m
-                    )
+            class PackXchgViewKernel(CUDAKernel):
+                def add_to_graph(self, graph, deps):
+                    return graph.graph.add_kernel(params, deps)
+
+                def run(self, stream):
+                    kern.exec_async(stream, params)
         # Otherwise, we need to both pack the buffer and copy it back
         else:
-            class PackXchgViewKernel(Kernel):
-                def run(self, queue):
-                    # Pack
-                    kern.exec_async(
-                        grid, block, queue.stream, v.n, v.nvrow, v.nvcol,
-                        v.basedata, v.mapping, v.rstrides or 0, m
+            class PackXchgViewKernel(CUDAKernel):
+                def add_to_graph(self, graph, deps):
+                    gpack = graph.graph.add_kernel(params, deps)
+                    return graph.graph.add_memcpy(
+                        m.hdata, m.data, m.nbytes, [gpack]
                     )
 
-                    # Copy the packed buffer to the host
-                    cuda.memcpy(m.hdata, m.data, m.nbytes, queue.stream)
+                def run(self, stream):
+                    kern.exec_async(stream, params)
+                    cuda.memcpy(m.hdata, m.data, m.nbytes, stream)
 
-        return PackXchgViewKernel()
+        return PackXchgViewKernel(mats=[mv])
 
     def unpack(self, mv):
         cuda = self.backend.cuda
@@ -53,8 +56,12 @@ class CUDAPackingKernels(CUDAKernelProvider):
         if self.backend.mpitype == 'cuda-aware':
             return NullKernel()
         else:
-            class UnpackXchgMatrixKernel(Kernel):
-                def run(self, queue):
-                    cuda.memcpy(mv.data, mv.hdata, mv.nbytes, queue.stream)
+            class UnpackXchgMatrixKernel(CUDAKernel):
+                def add_to_graph(self, graph, deps):
+                    return graph.graph.add_memcpy(mv.data, mv.hdata, mv.nbytes,
+                                                  deps)
 
-            return UnpackXchgMatrixKernel()
+                def run(self, stream):
+                    cuda.memcpy(mv.data, mv.hdata, mv.nbytes, stream)
+
+            return UnpackXchgMatrixKernel(mats=[mv])

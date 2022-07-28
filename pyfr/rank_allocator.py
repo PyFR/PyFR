@@ -14,7 +14,7 @@ def get_rank_allocation(mesh, cfg):
     return subclass_where(BaseRankAllocator, name=name)(mesh, cfg)
 
 
-class BaseRankAllocator(object):
+class BaseRankAllocator:
     name = None
 
     def __init__(self, mesh, cfg):
@@ -56,7 +56,7 @@ class BaseRankAllocator(object):
         conn = defaultdict(list)
         for f in mesh:
             if (m := re.match(r'con_p(\d+)p(\d+)$', f)):
-                lhs, rhs = int(m.group(1)), int(m.group(2))
+                lhs, rhs = int(m[1]), int(m[2])
                 conn[lhs].append(rhs)
 
                 if f'con_p{rhs}p{lhs}' not in mesh:

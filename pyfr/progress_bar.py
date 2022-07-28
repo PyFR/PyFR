@@ -19,7 +19,7 @@ def format_hms(delta):
         return '--:--:--'
 
 
-class ProgressBar(object):
+class ProgressBar:
     _dispfmt = '{:7.1%} [{}{}>{}] {:.{dps}f}/{:.{dps}f} ela: {} rem: {}'
 
     # Minimum time in seconds between updates
