@@ -81,17 +81,16 @@ class NVRTC:
 
                 raise RuntimeError(log.value.decode())
 
+            #Fetch compiled size assuming prog is cubin
+            # The driver will return 0 if prog isn't cubin
             codesz = c_size_t()
-            if len([f for f in flags if 'sm_' in f]) > 0:
-                # Fetch the program size
-                self.lib.nvrtcGetCUBINSize(prog, codesz)
-
+            self.lib.nvrtcGetCUBINSize(prog, codesz)
+            if codesz > 0:
                 # Fetch the program itself
                 cucode = create_string_buffer(codesz.value)
                 self.lib.nvrtcGetCUBIN(prog, cucode)
             else:
-                # Fetch the program size
-                codesz = c_size_t()
+                #assume prog is PTX
                 self.lib.nvrtcGetPTXSize(prog, codesz)
 
                 # Fetch the program itself
