@@ -284,9 +284,9 @@ class CUDAEvent(_CUDABase):
 class CUDAModule(_CUDABase):
     _destroyfn = 'cuModuleUnload'
 
-    def __init__(self, cuda, ptx):
+    def __init__(self, cuda, cucode):
         ptr = c_void_p()
-        cuda.lib.cuModuleLoadDataEx(ptr, ptx, 0, None, None)
+        cuda.lib.cuModuleLoadDataEx(ptr, cucode, 0, None, None)
 
         super().__init__(cuda, ptr)
 
@@ -515,8 +515,8 @@ class CUDA:
     def memset(self, dst, val, nbytes):
         self.lib.cuMemsetD8(dst, val, nbytes)
 
-    def load_module(self, ptx):
-        return CUDAModule(self, ptx)
+    def load_module(self, cucode):
+        return CUDAModule(self, cucode)
 
     def create_stream(self):
         return CUDAStream(self)
