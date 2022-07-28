@@ -85,7 +85,7 @@ class NVRTC:
             # The driver will return 0 if prog isn't cubin
             codesz = c_size_t()
             self.lib.nvrtcGetCUBINSize(prog, codesz)
-            if codesz > 0:
+            if codesz.value > 0:
                 # Fetch the program itself
                 cucode = create_string_buffer(codesz.value)
                 self.lib.nvrtcGetCUBIN(prog, cucode)
