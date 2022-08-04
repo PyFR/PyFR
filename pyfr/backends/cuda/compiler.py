@@ -81,19 +81,18 @@ class NVRTC:
 
                 raise RuntimeError(log.value.decode())
 
-            #Fetch compiled size assuming prog is cubin
-            # The driver will return 0 if prog isn't cubin
+            # Query the CUBIN code size
             codesz = c_size_t()
             self.lib.nvrtcGetCUBINSize(prog, codesz)
+
+            # If that worked, fetch the CUBIN itself
             if codesz.value > 0:
-                # Fetch the program itself
                 cucode = create_string_buffer(codesz.value)
                 self.lib.nvrtcGetCUBIN(prog, cucode)
+            # Else, assume the compiled code is PTX
             else:
-                #assume prog is PTX
                 self.lib.nvrtcGetPTXSize(prog, codesz)
 
-                # Fetch the program itself
                 cucode = create_string_buffer(codesz.value)
                 self.lib.nvrtcGetPTX(prog, cucode)
         finally:
@@ -120,7 +119,7 @@ class SourceModule:
 
         flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
 
-        # Compile to CUDA code (either PTX or CUBIN, depending on arch flag)
+        # Compile to CUDA code (either PTX or CUBIN depending on arch flag)
         cucode = backend.nvrtc.compile('kernel', src, flags)
 
         # Load it as a module
