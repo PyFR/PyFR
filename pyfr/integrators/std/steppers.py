@@ -17,7 +17,6 @@ class StdEulerStepper(BaseStdStepper):
     stepper_has_errest = False
     stepper_nregs = 2
     stepper_order = 1
-    stepper_has_variable_dt = False
 
     @property
     def _stepper_nfevals(self):
@@ -45,7 +44,6 @@ class StdTVDRK3Stepper(BaseStdStepper):
     stepper_has_errest = False
     stepper_nregs = 3
     stepper_order = 3
-    stepper_has_variable_dt = False
 
     @property
     def _stepper_nfevals(self):
@@ -92,7 +90,6 @@ class StdRK4Stepper(BaseStdStepper):
     stepper_has_errest = False
     stepper_nregs = 3
     stepper_order = 4
-    stepper_has_variable_dt = False
 
     @property
     def _stepper_nfevals(self):
@@ -239,7 +236,6 @@ class StdRKVdH2RStepper(BaseStdStepper):
 class StdRK34Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk34'
     stepper_order = 3
-    stepper_has_variable_dt = True
 
     a = [
         11847461282814 / 36547543011857,
@@ -265,7 +261,6 @@ class StdRK34Stepper(StdRKVdH2RStepper):
 class StdRK45Stepper(StdRKVdH2RStepper):
     stepper_name = 'rk45'
     stepper_order = 4
-    stepper_has_variable_dt = True
 
     a = [
         970286171893 / 4311952581923,

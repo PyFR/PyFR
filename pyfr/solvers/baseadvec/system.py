@@ -83,7 +83,8 @@ class BaseAdvectionSystem(BaseSystem):
                 g1.add_mpi_req(send, deps=[pack])
 
             # Compute common entropy minima at internal/boundary interfaces
-            g1.add_all(k['iint/comm_entropy'], deps=k['eles/local_entropy'])
+            g1.add_all(k['iint/comm_entropy'],
+                       deps=k['eles/local_entropy'] + k['mpiint/ent_fpts_pack'])
             g1.add_all(k['bcint/comm_entropy'], deps=k['eles/local_entropy'])
 
             # Avoid single-node graphs if running MPI

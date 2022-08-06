@@ -4,8 +4,6 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseACFluidElements:
-    formulations = ['dual']
-
     privarmap = {2: ['p', 'u', 'v'],
                  3: ['p', 'u', 'v', 'w']}
 
@@ -31,8 +29,8 @@ class BaseACFluidElements:
         return convs
 
     @staticmethod
-    def validate_formulation(form, intg, cfg):
-        if form not in BaseACFluidElements.formulations:
+    def validate_formulation(form, controller, cfg):
+        if form != 'dual':
             raise ValueError('System not compatible with time stepping formulation.')
 
 

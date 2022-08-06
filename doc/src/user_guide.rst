@@ -621,7 +621,7 @@ Example::
     [solver-entropy-filter]
     d-min = 1e-6
     p-min = 1e-6
-    e-tol = 1e-4
+    e-tol = 1e-6
     constraint-fpts = False
     constraint-qpts = False
 

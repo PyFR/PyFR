@@ -153,6 +153,53 @@ flow simulation on a mixed unstructured mesh:
 
    Colour map of velocity magnitude distribution at 75 time units.
 
+Compressible Supersonic Euler Equations
+=======================================
+
+2D Double Mach Reflection
+-------------------------
+
+Proceed with the following steps to run a serial 2D double Mach reflection
+simulation on a structured mesh:
+
+1. Create a working directory called ``double_mach_reflection_2d/``
+
+2. Copy the configuration file
+   ``PyFR/examples/double_mach_reflection_2d/double_mach_reflection_2d.ini`` into
+   ``double_mach_reflection_2d/``
+
+3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
+   ``PyFR/examples/double_mach_reflection_2d/double_mach_reflection_2d.msh.gz`` into
+   ``double_mach_reflection_2d/``
+
+4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file into a PyFR mesh file called ``double_mach_reflection_2d.pyfrm``::
+
+        zcat double_mach_reflection_2d.msh.gz | pyfr import -tgmsh - double_mach_reflection_2d.pyfrm
+
+5. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``double_mach_reflection_2d-*.pyfrs``::
+
+        pyfr run -b cuda -p double_mach_reflection_2d.pyfrm double_mach_reflection_2d.ini
+
+6. Run pyfr on the solution file ``double_mach_reflection_2d-0.20.pyfrs``
+   converting it into an unstructured VTK file called
+   ``double_mach_reflection_2d-0.20.vtu``::
+
+        pyfr export double_mach_reflection_2d.pyfrm double_mach_reflection_2d-0.20.pyfrs double_mach_reflection_2d-0.20.vtu
+
+7. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/double_mach_reflection_2d/double_mach_reflection_2d.png
+   :width: 450px
+   :figwidth: 450px
+   :alt: double mach
+   :align: center
+
+   Colour map of density distribution at 0.2 time units.
+
 Compressible Supersonic Navier--Stokes Equations
 ================================================
 
@@ -198,4 +245,4 @@ simulation on a structured mesh:
    :alt: shock tube
    :align: center
 
-   Colour map of density gradient magnitude at 1 time unit.
+   Colour map of density gradient magnitude distribution at 1 time unit.

@@ -4,9 +4,6 @@
 <%include file='pyfr.solvers.euler.kernels.entropy'/>
 
 <% inf = 1e20 %>
-<% ill_tol = 1e-6 %>
-<% zeta_tol = 1e-3 %>
-<% niters = 20 %>
 
 <%pyfr:macro name='get_minima' params='u, dmin, pmin, emin'>
     fpdtype_t d, p, e;
@@ -54,27 +51,15 @@
     % endif
 </%pyfr:macro>
 
-<%pyfr:macro name='apply_filter' params='umodes, vdm, uf, zeta'>
-    // Precompute filter factors
-    fpdtype_t ffac[${nupts}];
-    % for i in range(nupts):
-    ffac[${i}] = exp(-zeta*${ubdegs2[i]});
-    % endfor
-
+<%pyfr:macro name='apply_filter' params='umodes, vdm, uf, f'>
     // Compute filtered solution
     for (int uidx = 0; uidx < ${nupts}; uidx++)
     {
-        % for j in range(nvars):
-        uf[uidx][${j}] = 0.0;
-        % endfor
-
-        for (int midx = 0; midx < ${nupts}; midx++)
+        for (int vidx = 0; vidx < ${nvars}; vidx++)
         {
-            for (int vidx = 0; vidx < ${nvars}; vidx++)
-            {
-                tmp = ffac[midx]*umodes[midx][vidx]; // Filtered mode
-                uf[uidx][vidx] += vdm[uidx][midx]*tmp;
-            }
+            // Use exp(-zeta*ubdegs2) = f**ubdegs2
+            uf[uidx][vidx] = ${' + '.join('vdm[uidx][{k}]*umodes[{k}][vidx]*pow(f, {ubd2})'.format(k=k, ubd2=ubdegs2[k])
+                                           for k in range(nupts))};
         }
     }
 </%pyfr:macro>
@@ -92,35 +77,33 @@
     ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
 
     // Filter if out of bounds
-    if ((dmin < ${d_min}) || (pmin < ${p_min}) || (emin < entmin - ${e_tol}))
+    if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
         // Compute modal basis
-        fpdtype_t umodes[${nupts}][${nvars}] = {{0}};
+        fpdtype_t umodes[${nupts}][${nvars}];
 
         for (int uidx = 0; uidx < ${nupts}; uidx++)
         {
             for (int vidx = 0; vidx < ${nvars}; vidx++)
             {
-                for (int midx = 0; midx < ${nupts}; midx++)
-                {
-                    umodes[uidx][vidx] += invvdm[uidx][midx]*u[midx][vidx];
-                }
+                umodes[uidx][vidx] = ${' + '.join('invvdm[uidx][{k}]*u[{k}][vidx]'.format(k=k)
+                                                  for k in range(nupts))};
             }
         }
 
-        // Setup filter
-        fpdtype_t zeta_low = 0.0;
-        fpdtype_t zeta_high = ${zeta_max};
-        fpdtype_t tmp, zeta, z1, z2, z3;
+        // Setup filter (solve for f = exp(-zeta))
+        fpdtype_t f_low = 0.0;
+        fpdtype_t f_high = 1.0;
+        fpdtype_t f, f1, f2, f3;
         fpdtype_t dmin_low, pmin_low, emin_low;
         fpdtype_t dmin_high, pmin_high, emin_high;
 
         fpdtype_t uf[${nupts}][${nvars}] = {{0}};
 
         // Get bracketed guesses for regula falsi method;
-        dmin_low = dmin; pmin_low = pmin; emin_low = emin; // Unfiltered minima were precomputed
-        ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'uf', 'zeta_high')};
-        ${pyfr.expand('get_minima', 'uf', 'dmin_high', 'pmin_high', 'emin_high')};
+        dmin_high = dmin; pmin_high = pmin; emin_high = emin; // Unfiltered minima were precomputed
+        ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'uf', 'f_low')};
+        ${pyfr.expand('get_minima', 'uf', 'dmin_low', 'pmin_low', 'emin_low')};
 
         // Regularize constraints to be around zero
         dmin_low -= ${d_min}; dmin_high -= ${d_min};
@@ -131,44 +114,44 @@
         for (int iter = 0; iter < ${niters}; iter++)
         {
             // Compute new guess for each constraint (catch if root is not bracketed)
-            z1 = (dmin_low > 0.0) ? zeta_low : (0.5*zeta_low*dmin_high - zeta_high*dmin_low)/(0.5*dmin_high - dmin_low + ${ill_tol});
-            z2 = (pmin_low > 0.0) ? zeta_low : (0.5*zeta_low*pmin_high - zeta_high*pmin_low)/(0.5*pmin_high - pmin_low + ${ill_tol});
-            z3 = (emin_low > 0.0) ? zeta_low : (0.5*zeta_low*emin_high - zeta_high*emin_low)/(0.5*emin_high - emin_low + ${ill_tol});
+            f1 = (dmin_high > 0.0) ? f_high : (0.5*f_low*dmin_high - f_high*dmin_low)/(0.5*dmin_high - dmin_low + ${ill_tol});
+            f2 = (pmin_high > 0.0) ? f_high : (0.5*f_low*pmin_high - f_high*pmin_low)/(0.5*pmin_high - pmin_low + ${ill_tol});
+            f3 = (emin_high > 0.0) ? f_high : (0.5*f_low*emin_high - f_high*emin_low)/(0.5*emin_high - emin_low + ${ill_tol});
 
-            // Compute guess as maxima of individual constraints
-            zeta = fmax(z1, fmax(z2, z3));
+            // Compute guess as minima of individual constraints
+            f = fmin(f1, fmin(f2, f3));
 
             // In case of bracketing failure (due to roundoff errors), revert to bisection
-            zeta = ((zeta > zeta_high) || (zeta < zeta_low)) ? 0.5*(zeta_low + zeta_high) : zeta;
+            f = ((f > f_high) || (f < f_low)) ? 0.5*(f_low + f_high) : f;
 
-            ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'uf', 'zeta')};
+            ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'uf', 'f')};
             ${pyfr.expand('get_minima', 'uf', 'dmin', 'pmin', 'emin')};
 
             // Compute new bracket and constraint values
-            if ((dmin < ${d_min}) || (pmin < ${p_min}) || (emin < entmin - ${e_tol}))
+            if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
             {
-                zeta_low = zeta;
-                dmin_low = dmin - ${d_min};
-                pmin_low = pmin - ${p_min};
-                emin_low = emin - (entmin - ${e_tol});
-            }
-            else
-            {
-                zeta_high = zeta;
+                f_high = f;
                 dmin_high = dmin - ${d_min};
                 pmin_high = pmin - ${p_min};
                 emin_high = emin - (entmin - ${e_tol});
             }
+            else
+            {
+                f_low = f;
+                dmin_low = dmin - ${d_min};
+                pmin_low = pmin - ${p_min};
+                emin_low = emin - (entmin - ${e_tol});
+            }
 
             // Stopping criteria
-            if (zeta_high - zeta_low < ${zeta_tol})
+            if (f_high - f_low < ${f_tol})
             {
                 break;
             }
         }
 
         // Apply filtered solution with bounds-preserving filter strength
-        if (zeta == zeta_high)
+        if (f == f_low)
         {
             // Bounds-preserving filtered solution computed in last iteration
             % for i,j in pyfr.ndrange(nupts, nvars):
@@ -177,7 +160,7 @@
         }
         else
         {
-            ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'u', 'zeta_high')};
+            ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'u', 'f_low')};
         }
     }
     

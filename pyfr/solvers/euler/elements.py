@@ -1,12 +1,8 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 class BaseFluidElements:
-    formulations = ['std', 'dual']
-
     privarmap = {2: ['rho', 'u', 'v', 'p'],
                  3: ['rho', 'u', 'v', 'w', 'p']}
 
@@ -51,15 +47,12 @@ class BaseFluidElements:
         return [rho] + vs + [p]
 
     @staticmethod
-    def validate_formulation(form, intg, cfg):
-        if form not in BaseFluidElements.formulations:
-            raise ValueError('System not compatible with time stepping formulation.')
-
+    def validate_formulation(form, controller, cfg):
         shock_capturing = cfg.get('solver', 'shock-capturing', 'none')
         if form == 'dual' and shock_capturing == 'entropy-filter':
             raise ValueError('Entropy filtering not compatible with dual time stepping.')
 
-        if intg.stepper_has_variable_dt and shock_capturing == 'entropy-filter':
+        if controller.controller_has_variable_dt and shock_capturing == 'entropy-filter':
             raise ValueError('Entropy filtering not compatible with adaptive time stepping.')
 
 
@@ -89,11 +82,14 @@ class BaseFluidElements:
             # Minimum density/pressure constraints
             eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6)
             eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter', 'p-min', 1e-6)
+
             # Entropy tolerance
-            eftplargs['e_tol'] = self.cfg.getfloat('solver-entropy-filter', 'e-tol', 1e-4)
-            # Maximum filter strength (based on machine precision)
-            eps = np.finfo(self._be.fpdtype).eps
-            eftplargs['zeta_max'] = -float(np.log(eps))
+            eftplargs['e_tol'] = self.cfg.getfloat('solver-entropy-filter', 'e-tol', 1e-6)
+
+            # Hidden kernel parameters
+            eftplargs['f_tol']   = self.cfg.getfloat('solver-entropy-filter', 'f-tol', 1e-4)
+            eftplargs['ill_tol'] = self.cfg.getfloat('solver-entropy-filter', 'ill-tol', 1e-6)
+            eftplargs['niters']  = self.cfg.getfloat('solver-entropy-filter', 'niters', 20)
 
             # See if applying constraints to fpts/qpts
             con_fpts = self.cfg.getbool('solver-entropy-filter', 'constrain-fpts', False)
@@ -105,7 +101,7 @@ class BaseFluidElements:
             eftplargs['nqpts'] = nqpts
 
             # Precompute basis orders for filter
-            eftplargs['ubdegs2'] = [max(dd)**2 for dd in self.basis.ubasis.degrees]
+            eftplargs['ubdegs2'] = [float(max(dd)**2) for dd in self.basis.ubasis.degrees]
 
             # Compute local entropy bounds
             self.kernels['local_entropy'] = lambda uin: self._be.kernel(

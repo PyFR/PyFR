@@ -21,9 +21,6 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
 
-        # Ensure the system is compatible with our formulation
-        systemcls.elementscls.validate_formulation(self.formulation, self, cfg)
-
         # Register index list and current index
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
