@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_int,
-                    c_size_t, c_uint, c_void_p)
+from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_float,
+                    c_int, c_size_t, c_uint, c_void_p)
 
 import numpy as np
 
@@ -179,6 +179,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipEventRecord', c_void_p, c_void_p),
         (c_int, 'hipEventDestroy', c_void_p),
         (c_int, 'hipEventSynchronize', c_void_p),
+        (c_int, 'hipEventElapsedTime', POINTER(c_float), c_void_p, c_void_p),
         (c_int, 'hipModuleLoadData', POINTER(c_void_p), c_char_p),
         (c_int, 'hipModuleUnload', c_void_p),
         (c_int, 'hipModuleGetFunction', POINTER(c_void_p), c_void_p, c_char_p),
@@ -284,6 +285,12 @@ class HIPEvent(_HIPBase):
 
     def synchronize(self):
         self.hip.lib.hipEventSynchronize(self)
+
+    def elapsed_time(self, start):
+        dt = c_float()
+        self.hip.lib.hipEventElapsedTime(dt, start, self)
+
+        return dt.value / 1e3
 
 
 class HIPModule(_HIPBase):
