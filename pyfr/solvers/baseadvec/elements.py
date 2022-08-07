@@ -105,8 +105,7 @@ class BaseAdvectionElements(BaseElements):
         if shock_capturing == 'entropy-filter':
             tags = {'align'}
 
-            self.entmin = self._be.matrix((1, self.neles), 
-                                           tags=tags, extent='entmin')
+            self.entmin = self._be.matrix((1, self.neles), tags=tags)
             self.entmin_int = self._be.matrix((self.nfpts, self.neles), 
                                                tags=tags, extent='entmin_int')
    
@@ -117,17 +116,15 @@ class BaseAdvectionElements(BaseElements):
             )
 
             # Setup nodal/modal operator matrices
-            self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T,
-                                             extent='vdm')
-            self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T,
-                                                extent='invvdm')
+            self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
+            self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
             
             # Setup interpolation matrices if applying constraints on fpts/qpts
             con_fpts = self.cfg.getbool('solver-entropy-filter', 'constrain-fpts', False)
             con_qpts = self.cfg.getbool('solver-entropy-filter', 'constrain-qpts', False)
 
-            self.intfpts = cmat(self.basis.m0, extent='intfpts') if con_fpts else None
-            self.intqpts = cmat(self.basis.m7, extent='intqpts') if con_qpts else None
+            self.intfpts = cmat(self.basis.m0) if con_fpts else None
+            self.intqpts = cmat(self.basis.m7) if con_qpts else None
         else:
             self.entmin = None
             self.entmin_int = None
