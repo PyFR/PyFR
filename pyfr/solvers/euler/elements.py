@@ -101,7 +101,8 @@ class BaseFluidElements:
             eftplargs['nqpts'] = nqpts
 
             # Precompute basis orders for filter
-            eftplargs['ubdegs2'] = [float(max(dd)**2) for dd in self.basis.ubasis.degrees]
+            eftplargs['ubdegs'] = [int(max(dd)) for dd in self.basis.ubasis.degrees]
+            eftplargs['order'] = self.basis.order
 
             # Compute local entropy bounds
             self.kernels['local_entropy'] = lambda uin: self._be.kernel(

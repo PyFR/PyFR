@@ -52,14 +52,30 @@
 </%pyfr:macro>
 
 <%pyfr:macro name='apply_filter' params='umodes, vdm, uf, f'>
+    // Precompute filter factors per basis degree
+    fpdtype_t ffac[${order + 1}];
+    fpdtype_t v = ffac[0] = 1.0;
+
+    // Utilize exp(-zeta*p**2) = pow(f, p**2)
+    % for d in range(1, order + 1):
+    v *= f;
+    ffac[${d}] = v*v;
+    % endfor
+
     // Compute filtered solution
     for (int uidx = 0; uidx < ${nupts}; uidx++)
     {
         for (int vidx = 0; vidx < ${nvars}; vidx++)
         {
-            // Use exp(-zeta*ubdegs2) = f**ubdegs2
-            uf[uidx][vidx] = ${' + '.join('vdm[uidx][{k}]*umodes[{k}][vidx]*pow(f, {ubd2})'.format(k=k, ubd2=ubdegs2[k])
-                                           for k in range(nupts))};
+            fpdtype_t tmp = 0.0;
+
+            // Group terms by basis order
+            % for d in range(order + 1):
+            tmp += ffac[${d}]*(${' + '.join(f'vdm[uidx][{k}]*umodes[{k}][vidx]'
+                                              for k, dd in enumerate(ubdegs) if dd == d)});
+            % endfor
+
+            uf[uidx][vidx] = tmp;
         }
     }
 </%pyfr:macro>
@@ -86,8 +102,8 @@
         {
             for (int vidx = 0; vidx < ${nvars}; vidx++)
             {
-                umodes[uidx][vidx] = ${' + '.join('invvdm[uidx][{k}]*u[{k}][vidx]'.format(k=k)
-                                                  for k in range(nupts))};
+                umodes[uidx][vidx] = ${' + '.join(f'invvdm[uidx][{k}]*u[{k}][vidx]'
+                                                   for k in range(nupts))};
             }
         }
 
