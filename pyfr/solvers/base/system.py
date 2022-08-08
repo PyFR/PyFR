@@ -73,6 +73,9 @@ class BaseSystem:
         # Observed input/output bank numbers
         self._rhs_uin_fout = set()
 
+        # Track if RHS has been called
+        self.rhs_has_been_called = False
+
     def _load_eles(self, rallocs, mesh, initsoln, nregs, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
@@ -262,15 +265,10 @@ class BaseSystem:
         self._rhs_uin_fout.add((uinbank, foutbank))
         self._prepare_kernels(t, uinbank, foutbank)
 
-        for graph in self._rhs_graphs(uinbank, foutbank):
+        for graph in self._rhs_graphs(uinbank, foutbank, self.rhs_has_been_called):
             self.backend.run_graph(graph)
 
-    def _preproc_graphs(self, uinbank):
-        pass
-
-    def preproc(self, uinbank):
-        for graph in self._preproc_graphs(uinbank):
-            self.backend.run_graph(graph)
+        self.rhs_has_been_called = True
 
     def postproc(self, uinbank):
         pass

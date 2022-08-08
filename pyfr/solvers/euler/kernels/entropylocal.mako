@@ -6,13 +6,11 @@
 <% inf = 1e20 %>
 <%pyfr:kernel name='entropylocal' ndim='1'
               u='in fpdtype_t[${str(nupts)}][${str(nvars)}]'
-              entmin='out fpdtype_t'
               entmin_int='out fpdtype_t[${str(nfpts)}]'>
     // Compute minimum entropy across element
     fpdtype_t ui[${nvars}], d, p, e;
 
-    entmin = ${inf};
-
+    fpdtype_t entmin = ${inf};
     for (int i = 0; i < ${nupts}; i++)
     {
         % for j in range(nvars):

@@ -24,7 +24,6 @@ class BaseAdvectionElements(BaseElements):
 
         # Register pointwise kernels with the backend
         self._be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
-        self._be.pointwise.register('pyfr.solvers.baseadvec.kernels.entropymin')
 
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
@@ -105,16 +104,9 @@ class BaseAdvectionElements(BaseElements):
         if shock_capturing == 'entropy-filter':
             tags = {'align'}
 
-            self.entmin = self._be.matrix((1, self.neles), tags=tags)
             self.entmin_int = self._be.matrix((self.nfpts, self.neles), 
                                                tags=tags, extent='entmin_int')
    
-            eftplargs = {'nfpts' : self.nfpts}
-            self.kernels['min_entropy'] = lambda: self._be.kernel(
-                'entropymin', tplargs=eftplargs, dims=[self.neles],
-                entmin=self.entmin, entmin_int=self.entmin_int
-            )
-
             # Setup nodal/modal operator matrices
             self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
             self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)

@@ -6,7 +6,7 @@ from pyfr.util import memoize
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
     @memoize
-    def _rhs_graphs(self, uinbank, foutbank):
+    def _rhs_graphs(self, uinbank, foutbank, rhs_has_been_called=False):
         m = self._mpireqs
         k, _ = self._get_kernels(uinbank, foutbank)
 
@@ -17,6 +17,24 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         # Interpolate the solution to the flux points
         g1.add_all(k['eles/disu'])
+
+        # If entropy filtering, compute entropy bounds
+        if 'eles/local_entropy' in k:
+            g1.add_mpi_reqs(m['ent_fpts_recv'])
+
+            # Compute local minimum entropy within element if not already computed
+            locent = k['eles/local_entropy'] if not rhs_has_been_called else []
+            g1.add_all(locent)
+
+            # Pack and send the entropy values to neighbors
+            g1.add_all(k['mpiint/ent_fpts_pack'], deps=locent)
+            for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
+                g1.add_mpi_req(send, deps=[pack])
+
+            # Compute common entropy minima at internal/boundary interfaces
+            g1.add_all(k['iint/comm_entropy'],
+                       deps=locent + k['mpiint/ent_fpts_pack'])
+            g1.add_all(k['bcint/comm_entropy'], deps=locent + k['eles/disu'])
 
         # Pack and send these interpolated solutions to our neighbours
         g1.add_all(k['mpiint/scal_fpts_pack'], deps=k['eles/disu'])
@@ -49,6 +67,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g2.add_all(k['mpiint/scal_fpts_unpack'])
         for l in k['mpiint/con_u']:
             g2.add(l, deps=deps(l, 'mpiint/scal_fpts_unpack'))
+
+        # Compute common entropy minima at MPI interfaces
+        if 'eles/local_entropy' in k:
+            g2.add_all(k['mpiint/ent_fpts_unpack'])
+            for l in k['mpiint/comm_entropy']:
+                g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
 
         # Compute the transformed gradient of the corrected solution
         g2.add_all(k['eles/tgradcoru_upts'], deps=k['mpiint/con_u'])

@@ -82,12 +82,19 @@
 
 <%pyfr:kernel name='entropyfilter' ndim='1'
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
-              entmin='in fpdtype_t'
+              entmin_int='inout fpdtype_t[${str(nfpts)}]'
               vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
               invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
               intfpts='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'
               intqpts='in broadcast fpdtype_t[${str(nqpts)}][${str(nupts)}]'>
     fpdtype_t dmin, pmin, emin;
+
+    // Compute minimum entropy from current and adjacent elements
+    fpdtype_t entmin = ${inf};
+    for (int fidx = 0; fidx < ${nfpts}; fidx++)
+    {
+        entmin = fmin(entmin, entmin_int[fidx]);
+    }
 
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
@@ -177,7 +184,17 @@
         else
         {
             ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'u', 'f_low')};
+            ${pyfr.expand('get_minima', 'u', 'pmin', 'pmin', 'emin')};
         }
+
+        // Calculate minimum entropy from filtered solution
+        emin = emin_low + entmin - ${e_tol};
     }
-    
+
+    // Set new minimum entropy within element for next stage
+    for (int fidx = 0; fidx < ${nfpts}; fidx++)
+    {
+        entmin_int[fidx] = emin;
+    }
+
 </%pyfr:kernel>
