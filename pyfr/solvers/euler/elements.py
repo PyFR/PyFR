@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+import numpy as np
+
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 class BaseFluidElements:
@@ -79,6 +81,12 @@ class BaseFluidElements:
                 'c': self.cfg.items_as('constants', float)
             }
 
+            # Check to see if running collocated solution/flux points (or a convex combination thereof)
+            m0 = self.basis.m0
+            if np.min(m0) < -1e-8 or np.max(np.abs(np.sum(m0, axis=1) - 1.0)) > 1e-8:
+                raise ValueError('Entropy filter requires flux points to be a subset of '\
+                                 'solution points or a convex combination thereof.')
+
             # Minimum density/pressure constraints
             eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6)
             eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter', 'p-min', 1e-6)
@@ -90,15 +98,6 @@ class BaseFluidElements:
             eftplargs['f_tol']   = self.cfg.getfloat('solver-entropy-filter', 'f-tol', 1e-4)
             eftplargs['ill_tol'] = self.cfg.getfloat('solver-entropy-filter', 'ill-tol', 1e-6)
             eftplargs['niters']  = self.cfg.getfloat('solver-entropy-filter', 'niters', 20)
-
-            # See if applying constraints to fpts/qpts
-            con_fpts = self.cfg.getbool('solver-entropy-filter', 'constrain-fpts', False)
-            con_qpts = self.cfg.getbool('solver-entropy-filter', 'constrain-qpts', False)
-            nqpts = self.nqpts or 1
-
-            eftplargs['con_fpts'] = con_fpts
-            eftplargs['con_qpts'] = con_qpts
-            eftplargs['nqpts'] = nqpts
 
             # Precompute basis orders for filter
             eftplargs['ubdegs'] = [int(max(dd)) for dd in self.basis.ubasis.degrees]
@@ -114,8 +113,7 @@ class BaseFluidElements:
             self.kernels['filter_solution'] = lambda uin: self._be.kernel(
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
-                vdm=self.vdm, invvdm=self.invvdm,
-                intfpts=self.intfpts, intqpts=self.intqpts
+                vdm=self.vdm, invvdm=self.invvdm
             )
 
 

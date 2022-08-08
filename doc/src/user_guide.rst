@@ -608,22 +608,12 @@ Parameterises entropy filter for shock capturing with
 
     *float*
 
-4. ``constrain-fpts`` --- apply constraints on flux points:
-
-    *bool*
-
-5. ``constrain-qpts`` --- apply constraints on quadrature points:
-
-    *bool*
-
 Example::
 
     [solver-entropy-filter]
     d-min = 1e-6
     p-min = 1e-6
     e-tol = 1e-6
-    constraint-fpts = False
-    constraint-qpts = False
 
 [solver-artificial-viscosity]
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

@@ -20,35 +20,6 @@
         ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
         dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
     }
-
-    // If enforcing constraints on fpts/qpts, compute minima on fpts/qpts
-    % if con_fpts:
-    for (int i = 0; i < ${nfpts}; i++)
-    {
-        for (int j = 0; j < ${nvars}; j++)
-        {
-            ui[j] = ${pyfr.dot('intfpts[i][{k}]*u[{k}][j]', k=nupts)};
-        }
-
-        ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
-        // Enforce only positivity constraints
-        dmin = fmin(dmin, d); pmin = fmin(pmin, p);
-    }
-    % endif
-
-    % if con_qpts:
-    for (int i = 0; i < ${nqpts}; i++)
-    {
-        for (int j = 0; j < ${nvars}; j++)
-        {
-            ui[j] = ${pyfr.dot('intqpts[i][{k}]*u[{k}][j]', k=nupts)};
-        }
-
-        ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
-        // Enforce only positivity constraints
-        dmin = fmin(dmin, d); pmin = fmin(pmin, p);
-    }
-    % endif
 </%pyfr:macro>
 
 <%pyfr:macro name='apply_filter' params='umodes, vdm, uf, f'>
@@ -84,9 +55,7 @@
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfpts)}]'
               vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
-              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
-              intfpts='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'
-              intqpts='in broadcast fpdtype_t[${str(nqpts)}][${str(nupts)}]'>
+              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'>
     fpdtype_t dmin, pmin, emin;
 
     // Compute minimum entropy from current and adjacent elements
@@ -184,7 +153,6 @@
         else
         {
             ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'u', 'f_low')};
-            ${pyfr.expand('get_minima', 'u', 'pmin', 'pmin', 'emin')};
         }
 
         // Calculate minimum entropy from filtered solution
