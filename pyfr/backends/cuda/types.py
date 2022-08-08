@@ -104,6 +104,7 @@ class CUDAGraph(base.Graph):
         for node, params in self.stale_kparams.items():
             self.exc_graph.set_kernel_node_params(node, params)
 
+        stream.synchronize()
         self.exc_graph.launch(stream)
         self.stale_kparams.clear()
 

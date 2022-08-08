@@ -57,7 +57,7 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
         if len(dims) == 1:
             block = (64, 1, 1)
         else:
-            block = (64, 4, 1)
+            block = (32, 8, 1)
 
         # Use this to compute the grid size
         grid = get_grid_for_block(block, dims[-1])
