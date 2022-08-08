@@ -26,7 +26,8 @@ class StdEulerStepper(BaseStdStepper):
         add, rhs, postproc = self._add, self.system.rhs, self.system.postproc
         ut, f = self._regidx
 
-        rhs(t, ut, f)
+        rhs(t, ut, f, rhs_has_been_called=self.rhs_has_been_called)
+        self.rhs_has_been_called = True
         add(1.0, ut, dt, f)
 
         # Perform any necessary post-processing
@@ -56,18 +57,19 @@ class StdTVDRK3Stepper(BaseStdStepper):
             r0, r1 = r1, r0
 
         # First stage; r2 = -∇·f(r0); r1 = r0 + dt*r2
-        rhs(t, r0, r2)
+        rhs(t, r0, r2, rhs_has_been_called=self.rhs_has_been_called)
+        self.rhs_has_been_called = True
         add(0.0, r1, 1.0, r0, dt, r2)
         postproc(r1)
 
         # Second stage; r2 = -∇·f(r1); r1 = 0.75*r0 + 0.25*r1 + 0.25*dt*r2
-        rhs(t + dt, r1, r2)
+        rhs(t + dt, r1, r2, rhs_has_been_called=self.rhs_has_been_called)
         add(0.25, r1, 0.75, r0, 0.25*dt, r2)
         postproc(r1)
 
         # Third stage; r2 = -∇·f(r1);
         #              r1 = 1.0/3.0*r0 + 2.0/3.0*r1 + 2.0/3.0*dt*r2
-        rhs(t + 0.5*dt, r1, r2)
+        rhs(t + 0.5*dt, r1, r2, rhs_has_been_called=self.rhs_has_been_called)
         add(2.0/3.0, r1, 1.0/3.0, r0, 2.0/3.0*dt, r2)
         postproc(r1)
 
@@ -96,12 +98,13 @@ class StdRK4Stepper(BaseStdStepper):
             r0, r1 = r1, r0
 
         # First stage; r1 = -∇·f(r0)
-        rhs(t, r0, r1)
+        rhs(t, r0, r1, rhs_has_been_called=self.rhs_has_been_called)
+        self.rhs_has_been_called = True
 
         # Second stage; r2 = r0 + dt/2*r1; r2 = -∇·f(r2)
         add(0.0, r2, 1.0, r0, dt/2.0, r1)
         postproc(r2)
-        rhs(t + dt/2.0, r2, r2)
+        rhs(t + dt/2.0, r2, r2, rhs_has_been_called=self.rhs_has_been_called)
 
         # As no subsequent stages depend on the first stage we can
         # reuse its register to start accumulating the solution with
@@ -113,7 +116,7 @@ class StdRK4Stepper(BaseStdStepper):
         # r2 = -∇·f(r2)
         add(dt/2.0, r2, 1.0, r0)
         postproc(r2)
-        rhs(t + dt/2.0, r2, r2)
+        rhs(t + dt/2.0, r2, r2, rhs_has_been_called=self.rhs_has_been_called)
 
         # Accumulate; r1 = r1 + dt/3*r2
         add(1.0, r1, dt/3.0, r2)
@@ -123,7 +126,7 @@ class StdRK4Stepper(BaseStdStepper):
         # r2 = -∇·f(r2)
         add(dt, r2, 1.0, r0)
         postproc(r2)
-        rhs(t + dt, r2, r2)
+        rhs(t + dt, r2, r2, rhs_has_been_called=self.rhs_has_been_called)
 
         # Final accumulation r1 = r1 + dt/6*r2 = u(t + dt)
         add(1.0, r1, dt/6.0, r2)
@@ -189,7 +192,7 @@ class StdRKVdH2RStepper(BaseStdStepper):
         return 4 if self.stepper_has_errest else 2
 
     def step(self, t, dt):
-        run_kernels, rhs = self.backend.run_kernels, self.system.rhs
+        run_kernels, rhs, postproc = self.backend.run_kernels, self.system.rhs, self.system.postproc
 
         r1 = self._idxcurr
         r2, *rs = set(self._regidx) - {r1}
@@ -197,7 +200,8 @@ class StdRKVdH2RStepper(BaseStdStepper):
         # Evaluate the stages in the scheme
         for i, ci in enumerate(self.c):
             # Compute -∇·f
-            rhs(t + ci*dt, r2 if i > 0 else r1, r2)
+            rhs(t + ci*dt, r2 if i > 0 else r1, r2, rhs_has_been_called=self.rhs_has_been_called)
+            self.rhs_has_been_called = True
 
             # Fetch the appropriate RK accumulation kernels
             kerns = self._get_rkvdh2_kerns(i, r1, r2, *rs)
@@ -208,6 +212,9 @@ class StdRKVdH2RStepper(BaseStdStepper):
 
             # Execute
             run_kernels(kerns)
+
+            # Perform any necessary post-processing
+            postproc(r1)
 
             # Swap
             r1, r2 = r2, r1

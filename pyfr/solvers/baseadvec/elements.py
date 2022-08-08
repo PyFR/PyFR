@@ -99,7 +99,6 @@ class BaseAdvectionElements(BaseElements):
 
             kernels['filter_soln'] = filter_soln
 
-        
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
         if shock_capturing == 'entropy-filter':
             tags = {'align'}

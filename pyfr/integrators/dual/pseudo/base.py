@@ -35,9 +35,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
             raise TypeError('Incompatible pseudo-stepper/pseudo-controller '
                             'combination')
 
-        # Ensure the system is compatible with our formulation
-        systemcls.elementscls.validate_formulation(self.formulation, self, cfg)
-
         # Amount of stage storage required by DIRK stepper
         self.stage_nregs = stage_nregs
 

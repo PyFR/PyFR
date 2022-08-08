@@ -23,9 +23,5 @@
     }
 
     // Set interface entropy values to minimum
-    for (int i = 0; i < ${nfpts}; i++)
-    {
-        entmin_int[i] = entmin;
-    }
-
+    for (int i = 0; i < ${nfpts}; i++) entmin_int[i] = entmin;
 </%pyfr:kernel>

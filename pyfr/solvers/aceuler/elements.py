@@ -29,8 +29,8 @@ class BaseACFluidElements:
         return convs
 
     @staticmethod
-    def validate_formulation(form, controller, cfg):
-        if form != 'dual':
+    def validate_formulation(controller):
+        if controller.formulation != 'dual':
             raise ValueError('System not compatible with time stepping formulation.')
 
 

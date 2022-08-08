@@ -18,28 +18,27 @@ class BaseAdvectionSystem(BaseSystem):
         # Interpolate the solution to the flux points
         g1.add_all(k['eles/disu'])
 
-        # If entropy filtering, compute entropy bounds
-        if 'eles/local_entropy' in k:
-            g1.add_mpi_reqs(m['ent_fpts_recv'])
-
-            # Compute local minimum entropy within element if not already computed
-            locent = k['eles/local_entropy'] if not rhs_has_been_called else []
-            g1.add_all(locent)
-
-            # Pack and send the entropy values to neighbors
-            g1.add_all(k['mpiint/ent_fpts_pack'], deps=locent)
-            for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
-                g1.add_mpi_req(send, deps=[pack])
-
-            # Compute common entropy minima at internal/boundary interfaces
-            g1.add_all(k['iint/comm_entropy'],
-                       deps=locent + k['mpiint/ent_fpts_pack'])
-            g1.add_all(k['bcint/comm_entropy'], deps=locent + k['eles/disu'])
-
         # Pack and send these interpolated solutions to our neighbours
         g1.add_all(k['mpiint/scal_fpts_pack'], deps=k['eles/disu'])
         for send, pack in zip(m['scal_fpts_send'], k['mpiint/scal_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
+
+        # If entropy filtering, compute entropy bounds
+        g1.add_mpi_reqs(m['ent_fpts_recv'])
+
+        # Compute local minimum entropy within element if not already computed
+        locent = k['eles/local_entropy'] if not rhs_has_been_called else []
+        g1.add_all(locent)
+
+        # Pack and send the entropy values to neighbors
+        g1.add_all(k['mpiint/ent_fpts_pack'], deps=locent)
+        for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
+            g1.add_mpi_req(send, deps=[pack])
+
+        # Compute common entropy minima at internal/boundary interfaces
+        g1.add_all(k['iint/comm_entropy'],
+                    deps=locent + k['mpiint/ent_fpts_pack'])
+        g1.add_all(k['bcint/comm_entropy'], deps=locent + k['eles/disu'])
 
         # Compute the common normal flux at our internal/boundary interfaces
         g1.add_all(k['iint/comm_flux'],
@@ -71,10 +70,9 @@ class BaseAdvectionSystem(BaseSystem):
             g2.add(l, deps=deps(l, 'mpiint/scal_fpts_unpack'))
 
         # Compute common entropy minima at MPI interfaces
-        if 'eles/local_entropy' in k:
-            g2.add_all(k['mpiint/ent_fpts_unpack'])
-            for l in k['mpiint/comm_entropy']:
-                g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
+        g2.add_all(k['mpiint/ent_fpts_unpack'])
+        for l in k['mpiint/comm_entropy']:
+            g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
 
         # Compute the transformed divergence of the corrected flux
         g2.add_all(k['eles/tdivtconf'], deps=k['mpiint/comm_flux'])
@@ -89,5 +87,4 @@ class BaseAdvectionSystem(BaseSystem):
     def postproc(self, uinbank):
         k, _ = self._get_kernels(uinbank, None)
 
-        if 'eles/filter_solution' in k:
-            self.backend.run_kernels(k['eles/filter_solution'])
+        self.backend.run_kernels(k['eles/filter_solution'])

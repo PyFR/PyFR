@@ -13,7 +13,7 @@ class BaseStdController(BaseStdIntegrator):
         super().__init__(*args, **kwargs)
 
         # Ensure the system is compatible with our formulation/controller
-        self.system.elementscls.validate_formulation(self.formulation, self, self.cfg)
+        self.system.elementscls.validate_formulation(self)
 
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')

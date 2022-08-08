@@ -60,10 +60,7 @@
 
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${inf};
-    for (int fidx = 0; fidx < ${nfpts}; fidx++)
-    {
-        entmin = fmin(entmin, entmin_int[fidx]);
-    }
+    for (int fidx = 0; fidx < ${nfpts}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
 
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
@@ -78,8 +75,7 @@
         {
             for (int vidx = 0; vidx < ${nvars}; vidx++)
             {
-                umodes[uidx][vidx] = ${' + '.join(f'invvdm[uidx][{k}]*u[{k}][vidx]'
-                                                   for k in range(nupts))};
+                umodes[uidx][vidx] = ${pyfr.dot('invvdm[uidx][{k}]', 'u[{k}][vidx]', k=nupts)};
             }
         }
 
@@ -103,7 +99,7 @@
         emin_low -= entmin - ${e_tol}; emin_high -= entmin - ${e_tol};
 
         // Iterate filter strength with Illinois algorithm
-        for (int iter = 0; iter < ${niters}; iter++)
+        for (int iter = 0; iter < ${niters} && f_high - f_low > ${f_tol}; iter++)
         {
             // Compute new guess for each constraint (catch if root is not bracketed)
             f1 = (dmin_high > 0.0) ? f_high : (0.5*f_low*dmin_high - f_high*dmin_low)/(0.5*dmin_high - dmin_low + ${ill_tol});
@@ -134,12 +130,6 @@
                 pmin_low = pmin - ${p_min};
                 emin_low = emin - (entmin - ${e_tol});
             }
-
-            // Stopping criteria
-            if (f_high - f_low < ${f_tol})
-            {
-                break;
-            }
         }
 
         // Apply filtered solution with bounds-preserving filter strength
@@ -160,9 +150,5 @@
     }
 
     // Set new minimum entropy within element for next stage
-    for (int fidx = 0; fidx < ${nfpts}; fidx++)
-    {
-        entmin_int[fidx] = emin;
-    }
-
+    for (int fidx = 0; fidx < ${nfpts}; fidx++) entmin_int[fidx] = emin;
 </%pyfr:kernel>

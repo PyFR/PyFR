@@ -49,9 +49,9 @@ class BaseFluidElements:
         return [rho] + vs + [p]
 
     @staticmethod
-    def validate_formulation(form, controller, cfg):
-        shock_capturing = cfg.get('solver', 'shock-capturing', 'none')
-        if form == 'dual' and shock_capturing == 'entropy-filter':
+    def validate_formulation(controller):
+        shock_capturing = controller.cfg.get('solver', 'shock-capturing', 'none')
+        if controller.formulation == 'dual' and shock_capturing == 'entropy-filter':
             raise ValueError('Entropy filtering not compatible with dual time stepping.')
 
         if controller.controller_has_variable_dt and shock_capturing == 'entropy-filter':
@@ -65,12 +65,12 @@ class BaseFluidElements:
         if self.basis.order == 0:
             return
 
-        self._be.pointwise.register('pyfr.solvers.euler.kernels.entropylocal')
-        self._be.pointwise.register('pyfr.solvers.euler.kernels.entropyfilter')
-
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             # Modified entropy filtering method (10.1016/j.jcp.2022.111501)
             # using physical entropy without operator splitting (for Navier-Stokes)
+
+            self._be.pointwise.register('pyfr.solvers.euler.kernels.entropylocal')
+            self._be.pointwise.register('pyfr.solvers.euler.kernels.entropyfilter')
 
             # Template arguments
             eftplargs = {
@@ -84,7 +84,7 @@ class BaseFluidElements:
             # Check to see if running collocated solution/flux points (or a convex combination thereof)
             m0 = self.basis.m0
             if np.min(m0) < -1e-8 or np.max(np.abs(np.sum(m0, axis=1) - 1.0)) > 1e-8:
-                raise ValueError('Entropy filter requires flux points to be a subset of '\
+                raise ValueError('Entropy filter requires flux points to be a subset of '
                                  'solution points or a convex combination thereof.')
 
             # Minimum density/pressure constraints
