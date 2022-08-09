@@ -107,12 +107,11 @@ class FluidForcePlugin(BasePlugin):
                     # Product to give J^-T at the solution points
                     rcpjact[etype] = smat*rcpdjac
 
-                # Unit physical normals and their magnitudes (including |J|)
-                npn = eles.get_norm_pnorms(eidx, fidx)
-                mpn = eles.get_mag_pnorms(eidx, fidx)
+                # Phyiscal normals
+                pnorms = eles.get_pnorms(eidx, fidx)
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn)
+                norms[etype, fidx].append(pnorms)
 
                 # Get the flux points position of the given face and element
                 # indices relative to the moment origin
