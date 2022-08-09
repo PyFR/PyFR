@@ -193,9 +193,9 @@ class MatrixSlice:
 class ConstMatrix(MatrixBase):
     _base_tags = {'const'}
 
-    def __init__(self, backend, initval, extent, tags):
-        super().__init__(backend, backend.fpdtype, initval.shape, initval,
-                         extent, None, tags)
+    def __init__(self, backend, dtype, initval, tags):
+        super().__init__(backend, dtype, initval.shape, initval,
+                         None, None, tags)
 
 
 class XchgMatrix(Matrix):
@@ -257,16 +257,13 @@ class View:
         coldisp = (cmapmod // k)*k*self.nvcol + cmapmod % k
 
         mapping = (offset + blkdisp + rowdisp + coldisp)[None, :]
-        self.mapping = backend.base_matrix_cls(
-            backend, np.int32, (1, self.n), mapping, None, None, tags
-        )
+        self.mapping = backend.const_matrix(mapping, dtype=np.int32, tags=tags)
 
         # Row strides
         if self.nvrow > 1:
             rstrides = (rstridemap*leaddim)[None, :]
-            self.rstrides = backend.base_matrix_cls(
-                backend, np.int32, (1, self.n), rstrides, None, None, tags
-            )
+            self.rstrides = backend.const_matrix(rstrides, dtype=np.int32,
+                                                 tags=tags)
 
 
 class XchgView:

@@ -64,7 +64,6 @@ class CUDABackend(BaseBackend):
                                         provider, types)
 
         # Register our data types and meta kernels
-        self.base_matrix_cls = types.CUDAMatrixBase
         self.const_matrix_cls = types.CUDAConstMatrix
         self.graph_cls = types.CUDAGraph
         self.matrix_cls = types.CUDAMatrix
