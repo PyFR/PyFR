@@ -9,15 +9,6 @@ systems on mixed unstructured grids containing various element types. It is
 also designed to target a range of hardware platforms via use of an in-built
 domain specific language derived from the Mako templating engine.
 
-## Examples
-
-Examples of using PyFR are available in the `examples` directory. Currently
-available examples are:
-
-- 2D Couette flow
-- 2D Euler vortex
-- 2D incompressible cylinder flow
-
 ## Contributing
 
 To contribute to PyFR please follow the steps listed below:

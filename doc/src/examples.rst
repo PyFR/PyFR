@@ -4,10 +4,11 @@
 Examples
 ********
 
-PyFR includes several test cases to showcase the functionality of the
-solver.  It is important to note, however, that these examples are all
-relatively small 2D simulations and, as such, are *not* suitable for
-scalability or performance studies.
+Test cases are available in the
+`PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>` 
+repository. It is important to note, however, that these examples 
+are all relatively small 2D simulations and, as such, are *not* 
+suitable for scalability or performance studies.
 
 Euler Equations
 ===============
@@ -21,11 +22,11 @@ simulation on a structured mesh:
 1. Create a working directory called ``euler_vortex_2d/``
 
 2. Copy the configuration file
-   ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.ini`` into
+   ``PyFR-Test-Cases/euler_vortex_2d/euler_vortex_2d.ini`` into
    ``euler_vortex_2d/``
 
 3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ file
-   ``PyFR/examples/euler_vortex_2d/euler_vortex_2d.msh`` into
+   ``PyFR-Test-Cases/euler_vortex_2d/euler_vortex_2d.msh`` into
    ``euler_vortex_2d/``
 
 4. Run pyfr to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
@@ -71,11 +72,11 @@ simulation on a mixed unstructured mesh:
 1. Create a working directory called ``couette_flow_2d/``
 
 2. Copy the configuration file
-   ``PyFR/examples/couette_flow_2d/couette_flow_2d.ini`` into
+   ``PyFR-Test-Cases/couette_flow_2d/couette_flow_2d.ini`` into
    ``couette_flow_2d/``
 
 3. Copy the `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
-   ``PyFR/examples/couette_flow_2d/couette_flow_2d.msh`` into
+   ``PyFR-Test-Cases/couette_flow_2d/couette_flow_2d.msh`` into
    ``couette_flow_2d/``
 
 4. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
@@ -118,11 +119,11 @@ flow simulation on a mixed unstructured mesh:
 1. Create a working directory called ``inc_cylinder_2d/``
 
 2. Copy the configuration file
-   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.ini`` into
+   ``PyFR-Test-Cases/inc_cylinder_2d/inc_cylinder_2d.ini`` into
    ``inc_cylinder_2d/``
 
 3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
-   ``PyFR/examples/inc_cylinder_2d/inc_cylinder_2d.msh.gz`` into
+   ``PyFR-Test-Cases/inc_cylinder_2d/inc_cylinder_2d.msh.gz`` into
    ``inc_cylinder_2d/``
 
 4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
