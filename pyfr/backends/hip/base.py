@@ -51,7 +51,6 @@ class HIPBackend(BaseBackend):
                                        rocblas, types)
 
         # Register our data types and meta kernels
-        self.base_matrix_cls = types.HIPMatrixBase
         self.const_matrix_cls = types.HIPConstMatrix
         self.graph_cls = types.HIPGraph
         self.matrix_cls = types.HIPMatrix

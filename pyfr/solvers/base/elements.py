@@ -299,7 +299,8 @@ class BaseElements:
     def qpts(self):
         return self._be.const_matrix(self.basis.qpts)
 
-    def _gen_pnorm_fpts(self):
+    @cached_property
+    def _pnorm_fpts(self):
         smats = self.smat_at_np('fpts').transpose(1, 3, 0, 2)
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
@@ -309,25 +310,12 @@ class BaseElements:
 
         # Compute the magnitudes of these flux point normals
         mag_pnorm_fpts = np.einsum('...i,...i', pnorm_fpts, pnorm_fpts)
-        mag_pnorm_fpts = np.sqrt(mag_pnorm_fpts)
 
         # Check that none of these magnitudes are zero
-        if np.any(mag_pnorm_fpts < 1e-10):
+        if np.any(np.sqrt(mag_pnorm_fpts) < 1e-10):
             raise RuntimeError('Zero face normals detected')
 
-        # Normalize the physical normals at the flux points
-        self._norm_pnorm_fpts = pnorm_fpts / mag_pnorm_fpts[..., None]
-        self._mag_pnorm_fpts = mag_pnorm_fpts
-
-    @cached_property
-    def _norm_pnorm_fpts(self):
-        self._gen_pnorm_fpts()
-        return self._norm_pnorm_fpts
-
-    @cached_property
-    def _mag_pnorm_fpts(self):
-        self._gen_pnorm_fpts()
-        return self._mag_pnorm_fpts
+        return pnorm_fpts
 
     @cached_property
     def _smats_djacs_mpts(self):
@@ -389,21 +377,13 @@ class BaseElements:
 
         return smats.reshape(ndims, nmpts, -1), djacs
 
-    def get_mag_pnorms(self, eidx, fidx):
+    def get_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
-        return self._mag_pnorm_fpts[fpts_idx, eidx]
+        return self._pnorm_fpts[fpts_idx, eidx]
 
-    def get_mag_pnorms_for_inter(self, eidx, fidx):
+    def get_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._mag_pnorm_fpts[fpts_idx, eidx]
-
-    def get_norm_pnorms_for_inter(self, eidx, fidx):
-        fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._norm_pnorm_fpts[fpts_idx, eidx]
-
-    def get_norm_pnorms(self, eidx, fidx):
-        fpts_idx = self.basis.facefpts[fidx]
-        return self._norm_pnorm_fpts[fpts_idx, eidx]
+        return self._pnorm_fpts[fpts_idx, eidx]
 
     def get_scal_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]

@@ -11,8 +11,6 @@ class BaseAdvectionIntInters(BaseInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
 
-        const_mat = self._const_mat
-
         # Compute the `optimal' permutation for our interface
         self._gen_perm(lhs, rhs)
 
@@ -28,8 +26,7 @@ class BaseAdvectionIntInters(BaseInters):
             self._entmin_lhs = self._entmin_rhs = None
 
         # Generate the constant matrices
-        self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
-        self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
+        self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
 
     def _gen_perm(self, lhs, rhs):
         # Arbitrarily, take the permutation which results in an optimal
@@ -58,8 +55,7 @@ class BaseAdvectionMPIInters(BaseInters):
         self._scal_lhs = self._scal_xchg_view(lhs, 'get_scal_fpts_for_inter')
         self._scal_rhs = be.xchg_matrix_for_view(self._scal_lhs)
 
-        self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
-        self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
+        self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
 
         # Kernels
         self.kernels['scal_fpts_pack'] = lambda: be.kernel(
@@ -107,8 +103,6 @@ class BaseAdvectionBCInters(BaseInters):
         super().__init__(be, lhs, elemap, cfg)
         self.cfgsect = cfgsect
 
-        const_mat = self._const_mat
-
         # For BC interfaces, which only have an LHS state, we take the
         # permutation which results in an optimal memory access pattern
         # iterating over this state.
@@ -116,8 +110,7 @@ class BaseAdvectionBCInters(BaseInters):
 
         # LHS view and constant matrices
         self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
-        self._mag_pnorm_lhs = const_mat(lhs, 'get_mag_pnorms_for_inter')
-        self._norm_pnorm_lhs = const_mat(lhs, 'get_norm_pnorms_for_inter')
+        self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
 
         # Make the simulation time available inside kernels
         self._set_external('t', 'scalar fpdtype_t')
