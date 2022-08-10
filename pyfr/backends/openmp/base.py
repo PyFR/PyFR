@@ -40,7 +40,6 @@ class OpenMPBackend(BaseBackend):
                                           xsmm)
 
         # Register our data types and meta kernels
-        self.base_matrix_cls = types.OpenMPMatrixBase
         self.const_matrix_cls = types.OpenMPConstMatrix
         self.graph_cls = types.OpenMPGraph
         self.matrix_cls = types.OpenMPMatrix

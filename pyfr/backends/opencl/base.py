@@ -59,7 +59,6 @@ class OpenCLBackend(BaseBackend):
                                           provider, types)
 
         # Register our data types and meta kernels
-        self.base_matrix_cls = types.OpenCLMatrixBase
         self.const_matrix_cls = types.OpenCLConstMatrix
         self.graph_cls = types.OpenCLGraph
         self.matrix_cls = types.OpenCLMatrix
