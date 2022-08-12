@@ -9,6 +9,11 @@ systems on mixed unstructured grids containing various element types. It is
 also designed to target a range of hardware platforms via use of an in-built
 domain specific language derived from the Mako templating engine.
 
+## Examples
+
+Test cases are available in the
+`PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>` repository.
+
 ## Contributing
 
 To contribute to PyFR please follow the steps listed below:
