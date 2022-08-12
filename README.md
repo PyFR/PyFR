@@ -12,7 +12,7 @@ domain specific language derived from the Mako templating engine.
 ## Examples
 
 Test cases are available in the
-`PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>` repository.
+[PyFR-Test-Cases](https://github.com/PyFR/PyFR-Test-Cases) repository.
 
 ## Contributing
 
