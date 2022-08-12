@@ -11,12 +11,8 @@ domain specific language derived from the Mako templating engine.
 
 ## Examples
 
-Examples of using PyFR are available in the `examples` directory. Currently
-available examples are:
-
-- 2D Couette flow
-- 2D Euler vortex
-- 2D incompressible cylinder flow
+Test cases are available in the
+`PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>` repository.
 
 ## Contributing
 
