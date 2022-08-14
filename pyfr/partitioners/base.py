@@ -157,10 +157,12 @@ class BasePartitioner:
                                 if rr == pr:
                                     pmerge[ll] = pmerge[l]
                             pmerge[pr] = pmerge[l]
-                        elif l in pmerge and r != pmerge[l]:
-                            pmerge[r] = pmerge[l]
-                        elif r in pmerge and l != pmerge[r]:
-                            pmerge[l] = pmerge[r]
+                        elif l in pmerge:
+                            if r != pmerge[l]:
+                                pmerge[r] = pmerge[l]
+                        elif r in pmerge:
+                            if l != pmerge[r]:
+                                pmerge[l] = pmerge[r]
                         else:
                             pmerge[l] = r
 
