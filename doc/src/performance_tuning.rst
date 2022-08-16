@@ -131,6 +131,22 @@ additional information about the relative performance of tetrahedra and
 prisms, a safe choice is to assume the prisms are appreciably *more*
 expensive than the tetrahedra.
 
+Scaling
+=======
+
+The general recommendation when running PyFR in parallel is to aim for
+a parallel efficiency of :math:`\epsilon \simeq 0.8` with the parallel
+efficiency being defined as:
+
+.. math::
+
+  \epsilon = \frac{1}{N}\frac{T_1}{T_N},
+
+where :math:`N` is the number of ranks, :math:`T_1` is the simulation
+time with one rank, and :math:`T_N` is the simulation time with
+:math:`N` ranks.  This represents a reasonable trade-off between the
+overall time-to-solution and efficient resource utilisation.
+
 Parallel I/O
 ============
 
