@@ -74,7 +74,6 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
 
         be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
         be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
-        be.pointwise.register('pyfr.solvers.navstokes.kernels.bccent')
 
         self.kernels['con_u'] = lambda: be.kernel(
             'bcconu', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -90,11 +89,12 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
         )
 
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
+
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
                 extrns=self._external_args, entmin_lhs=self._entmin_lhs,
-                ul=self._scal_lhs, nl=self._norm_pnorm_lhs,
-                **self._external_vals
+                nl=self._pnorm_lhs, ul=self._scal_lhs, **self._external_vals
             )
 
 

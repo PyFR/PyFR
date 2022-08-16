@@ -103,7 +103,9 @@ class BaseAdvectionElements(BaseElements):
         if shock_capturing == 'entropy-filter':
             tags = {'align'}
 
-            self.entmin_int = self._be.matrix((self.nfpts, self.neles), 
+            # Allocate one minimum entropy value per interface
+            self.nfaces = len(self.nfacefpts)
+            self.entmin_int = self._be.matrix((self.nfaces, self.neles),
                                                tags=tags, extent='entmin_int')
    
             # Setup nodal/modal operator matrices
@@ -113,9 +115,8 @@ class BaseAdvectionElements(BaseElements):
             self.entmin_int = None
 
     def get_entmin_int_fpts_for_inter(self, eidx, fidx):
+        return (self.entmin_int.mid,), (fidx,), (eidx,)
+
+    def get_entmin_bc_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
-
-        rmap = self._srtd_face_fpts[fidx][eidx]
-        cmap = (eidx,)*nfp
-
-        return (self.entmin_int.mid,)*nfp, rmap, cmap
+        return (self.entmin_int.mid,)*nfp, (fidx,)*nfp, (eidx,)*nfp

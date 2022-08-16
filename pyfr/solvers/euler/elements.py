@@ -78,6 +78,7 @@ class BaseFluidElements:
                 'nupts': self.nupts,
                 'nfpts': self.nfpts,
                 'nvars': self.nvars,
+                'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float)
             }
 

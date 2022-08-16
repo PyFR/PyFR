@@ -53,14 +53,14 @@
 
 <%pyfr:kernel name='entropyfilter' ndim='1'
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
-              entmin_int='inout fpdtype_t[${str(nfpts)}]'
+              entmin_int='inout fpdtype_t[${str(nfaces)}]'
               vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
               invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'>
     fpdtype_t dmin, pmin, emin;
 
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${inf};
-    for (int fidx = 0; fidx < ${nfpts}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
+    for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
 
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
@@ -88,7 +88,7 @@
 
         fpdtype_t uf[${nupts}][${nvars}] = {{0}};
 
-        // Get bracketed guesses for regula falsi method;
+        // Get bracketed guesses
         dmin_high = dmin; pmin_high = pmin; emin_high = emin; // Unfiltered minima were precomputed
         ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'uf', 'f_low')};
         ${pyfr.expand('get_minima', 'uf', 'dmin_low', 'pmin_low', 'emin_low')};
@@ -150,5 +150,5 @@
     }
 
     // Set new minimum entropy within element for next stage
-    for (int fidx = 0; fidx < ${nfpts}; fidx++) entmin_int[fidx] = emin;
+    for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin_int[fidx] = emin;
 </%pyfr:kernel>
