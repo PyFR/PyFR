@@ -42,8 +42,7 @@ class BaseAdvectionElements(BaseElements):
 
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
-            'mul', self.opmat('M0'), self.scal_upts[uin],
-            out=self._scal_fpts
+            'mul', self.opmat('M0'), self.scal_upts[uin], out=self._scal_fpts
         )
 
         if fluxaa and self.basis.order > 0:

@@ -78,7 +78,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             # Exploit the block-diagonal form of the operator
             muls = [kernel('mul', self.opmat('M0'),
                            vupts.slice(i*nupts, (i + 1)*nupts),
-                           vfpts.slice(i*nfpts, (i + 1)*nfpts))
+                           out=vfpts.slice(i*nfpts, (i + 1)*nfpts))
                     for i in range(self.ndims)]
 
             return self._be.unordered_meta_kernel(muls)
@@ -93,7 +93,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 # Exploit the block-diagonal form of the operator
                 muls = [self._be.kernel('mul', self.opmat('M7'),
                                         vupts.slice(i*nupts, (i + 1)*nupts),
-                                        vqpts.slice(i*nqpts, (i + 1)*nqpts))
+                                        out=vqpts.slice(i*nqpts, (i + 1)*nqpts))
                         for i in range(self.ndims)]
 
                 return self._be.unordered_meta_kernel(muls)

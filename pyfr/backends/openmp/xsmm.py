@@ -41,18 +41,26 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
     def __del__(self):
         if hasattr(self, '_wrappers'):
-            for blkptr in self._kerns.values():
-                self._wrappers.libxsmm_fsspmdm_destroy(blkptr)
+            funcs = [ptr for blkptr in self._kerns.values() for ptr in blkptr]
+            for f in funcs:
+                self._wrappers.libxsmm_fsspmdm_destroy(f)
 
             self._wrappers.libxsmm_finalize()
 
-    def mul(self, a, b, out, alpha=1.0, beta=0.0):
+    def mul(self, *mats, out, alpha=1.0, beta=0.0):
+        *a_facs, b = mats
+
+        # Ensure factors of A are compatible
+        for al, ar in zip(a_facs[:-1], a_facs[1:]):
+            if not al.nrow == ar.ncol:
+                raise ValueError('Factors of a matrix are not compatible')
+
         # Ensure the matrices are compatible
-        if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
+        if a_facs[0].nrow != out.nrow or a_facs[-1].ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
 
         # Check that A is constant
-        if 'const' not in a.tags:
+        if any('const' not in a.tags for a in a_facs):
             raise NotSuitableError('libxsmm requires a constant a matrix')
 
         # Check n is suitable
@@ -66,44 +74,60 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Dimensions
         ldb, ldc = b.leaddim, out.leaddim
 
-        # Cache key
-        ckey = (a.mid, alpha, beta, b.nblocks, ldb, ldc)
+        nfac = len(a_facs)
 
-        # Check the JIT kernel cache
-        try:
-            blkptr = self._kerns[ckey]
-        except KeyError:
-            c_is_nt = (beta == 0 and
-                       out.nbytes >= 32*1024**2 and
-                       self.backend.alignb >= 64)
+        blkptr = []
+        for i, fac in enumerate(a_facs[::-1]):
+            last = i == nfac - 1
 
-            a_np = np.ascontiguousarray(a.get())
-            m, k = a_np.shape
-
-            if self.backend.fpdtype == np.float64:
-                xsmm_dtype = 0
-                alpha, beta = c_double(alpha), c_double(beta)
+            if last:
+                _alpha, _beta = alpha, beta
+                c_is_nt = (beta == 0 and
+                           out.nbytes >= 32*1024**2 and
+                           self.backend.alignb >= 64)
             else:
-                xsmm_dtype = 1
-                alpha, beta = c_float(alpha), c_float(beta)
+                _alpha, _beta, c_is_nt = 1.0, 0.0, 0
 
-            # JIT and register an block leaddim size kernel for this matrix
-            blkptr = self._wrappers.libxsmm_fsspmdm_create(
-                xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(alpha),
-                byref(beta), c_is_nt, a_np.ctypes.data
-            )
-            if not blkptr:
-                raise NotSuitableError('libxssm unable to JIT a kernel')
+            ckey = (fac.mid, _alpha, _beta, c_is_nt, b.nblocks, ldb, ldc)
 
-            # Update the cache
-            self._kerns[ckey] = blkptr
+            # Check the JIT kernel cache
+            try:
+                blkptr.append(self._kerns[ckey])
+            except KeyError:
+                if self.backend.fpdtype == np.float64:
+                    xsmm_dtype = 0
+                    _alpha, _beta = c_double(_alpha), c_double(_beta)
+                else:
+                    xsmm_dtype = 1
+                    _alpha, _beta = c_float(_alpha), c_float(_beta)
+
+                mat = np.ascontiguousarray(fac.get())
+                m, k = mat.shape
+
+                # JIT and register a kernel for the current factor and sum the
+                # result over out and use non-temporal stores only at last step
+                blkptr.append(ptr := self._wrappers.libxsmm_fsspmdm_create(
+                    xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(_alpha),
+                    byref(_beta), c_is_nt, mat.ctypes.data
+                ))
+
+                if not ptr:
+                    raise NotSuitableError('libxssm unable to JIT a kernel')
+
+                # Update the cache
+                self._kerns[ckey] = ptr
+
+        # Determine size for the buffer array
+        blocksz = max(a.nrow for a in a_facs)*out.leaddim
 
         # Render our parallel wrapper kernel
-        src = self.backend.lookup.get_template('batch-gemm').render()
+        src = self.backend.lookup.get_template('batch-gemm').render(
+            nfac=nfac, blocksz=blocksz
+        )
 
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src, 'PPiPiPi')
-        batch_gemm.set_args(self._exec_ptr, blkptr, b.nblocks, b, b.blocksz,
-                            out, out.blocksz)
+        batch_gemm = self._build_kernel('batch_gemm', src, 'PiPiPi'+'P'*nfac)
+        batch_gemm.set_args(self._exec_ptr, b.nblocks, b, b.blocksz,
+                            out, out.blocksz, *blkptr)
 
         return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)
