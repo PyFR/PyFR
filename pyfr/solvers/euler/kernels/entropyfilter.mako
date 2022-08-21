@@ -22,7 +22,7 @@
     }
 </%pyfr:macro>
 
-<%pyfr:macro name='apply_filter' params='umodes, vdm, uf, f'>
+<%pyfr:macro name='apply_filter_full' params='umodes, vdm, uf, f'>
     // Precompute filter factors per basis degree
     fpdtype_t ffac[${order + 1}];
     fpdtype_t v = ffac[0] = 1.0;
@@ -51,6 +51,28 @@
     }
 </%pyfr:macro>
 
+<%pyfr:macro name='apply_filter_single' params='up, f, d, p, e'>
+    // Start accumulation
+    fpdtype_t ui[${nvars}];
+    % for vidx in range(nvars):
+    ui[${vidx}] = up[0][${vidx}];
+    % endfor
+
+    // Apply filter to local value
+    fpdtype_t v = 1.0;
+    for (int pidx = 1; pidx < ${order+1}; pidx++)
+    {
+        // Utilize exp(-zeta*p**2) = pow(f, p**2)
+        v *= f;
+
+        % for vidx in range(nvars):
+        ui[${vidx}] += v*v*up[pidx][${vidx}];
+        % endfor
+    }
+
+    ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e' )};
+</%pyfr:macro>
+
 <%pyfr:kernel name='entropyfilter' ndim='1'
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
@@ -70,7 +92,6 @@
     {
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
-
         for (int uidx = 0; uidx < ${nupts}; uidx++)
         {
             for (int vidx = 0; vidx < ${nvars}; vidx++)
@@ -80,73 +101,89 @@
         }
 
         // Setup filter (solve for f = exp(-zeta))
-        fpdtype_t f_low = 0.0;
-        fpdtype_t f_high = 1.0;
-        fpdtype_t f, f1, f2, f3;
-        fpdtype_t dmin_low, pmin_low, emin_low;
-        fpdtype_t dmin_high, pmin_high, emin_high;
+        fpdtype_t f = 1.0;
+        fpdtype_t f_low, f_high, fnew;
+        fpdtype_t f1, f2, f3;
+
+        fpdtype_t d, p, e;
+        fpdtype_t d_low, p_low, e_low;
+        fpdtype_t d_high, p_high, e_high;
 
         fpdtype_t uf[${nupts}][${nvars}] = {{0}};
 
-        // Get bracketed guesses
-        dmin_high = dmin; pmin_high = pmin; emin_high = emin; // Unfiltered minima were precomputed
-        ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'uf', 'f_low')};
-        ${pyfr.expand('get_minima', 'uf', 'dmin_low', 'pmin_low', 'emin_low')};
-
-        // Regularize constraints to be around zero
-        dmin_low -= ${d_min}; dmin_high -= ${d_min};
-        pmin_low -= ${p_min}; pmin_high -= ${p_min};
-        emin_low -= entmin - ${e_tol}; emin_high -= entmin - ${e_tol};
-
-        // Iterate filter strength with Illinois algorithm
-        for (int iter = 0; iter < ${niters} && f_high - f_low > ${f_tol}; iter++)
+        // Compute f on a rolling basis per solution point
+        fpdtype_t up[${order+1}][${nvars}];
+        for (int uidx = 0; uidx < ${nupts}; uidx++)
         {
-            // Compute new guess for each constraint (catch if root is not bracketed)
-            f1 = (dmin_high > 0.0) ? f_high : (0.5*f_low*dmin_high - f_high*dmin_low)/(0.5*dmin_high - dmin_low + ${ill_tol});
-            f2 = (pmin_high > 0.0) ? f_high : (0.5*f_low*pmin_high - f_high*pmin_low)/(0.5*pmin_high - pmin_low + ${ill_tol});
-            f3 = (emin_high > 0.0) ? f_high : (0.5*f_low*emin_high - f_high*emin_low)/(0.5*emin_high - emin_low + ${ill_tol});
-
-            // Compute guess as minima of individual constraints
-            f = fmin(f1, fmin(f2, f3));
-
-            // In case of bracketing failure (due to roundoff errors), revert to bisection
-            f = ((f > f_high) || (f < f_low)) ? 0.5*(f_low + f_high) : f;
-
-            ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'uf', 'f')};
-            ${pyfr.expand('get_minima', 'uf', 'dmin', 'pmin', 'emin')};
-
-            // Compute new bracket and constraint values
-            if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
-            {
-                f_high = f;
-                dmin_high = dmin - ${d_min};
-                pmin_high = pmin - ${p_min};
-                emin_high = emin - (entmin - ${e_tol});
-            }
-            else
-            {
-                f_low = f;
-                dmin_low = dmin - ${d_min};
-                pmin_low = pmin - ${p_min};
-                emin_low = emin - (entmin - ${e_tol});
-            }
-        }
-
-        // Apply filtered solution with bounds-preserving filter strength
-        if (f == f_low)
-        {
-            // Bounds-preserving filtered solution computed in last iteration
-            % for i,j in pyfr.ndrange(nupts, nvars):
-            u[${i}][${j}] = uf[${i}][${j}];
+            // Group nodal contributions by common filter factor
+            % for pidx, vidx in pyfr.ndrange(order+1, nvars):
+            up[${pidx}][${vidx}] = (${' + '.join(f'vdm[uidx][{k}]*umodes[{k}][{vidx}]'
+                                                   for k, dd in enumerate(ubdegs) if dd == pidx)});
             % endfor
+
+            // Compute constraints with current minimum f value
+            ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'p', 'e')};
+
+            // Update f if constraints aren't satisfied
+            if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
+            {
+                // Set root-finding interval
+                f_high = f;
+                f_low = 0.0;
+
+                // Compute brackets
+                d_high = d; p_high = p; e_high = e;
+                ${pyfr.expand('apply_filter_single', 'up', 'f_low', 'd_low', 'p_low', 'e_low')};
+
+                // Regularize constraints to be around zero
+                d_low -= ${d_min}; d_high -= ${d_min};
+                p_low -= ${p_min}; p_high -= ${p_min};
+                e_low -= entmin - ${e_tol}; e_high -= entmin - ${e_tol};
+
+                // Iterate filter strength with Illinois algorithm
+                for (int iter = 0; iter < ${niters} && f_high - f_low > ${f_tol}; iter++)
+                {
+                    // Compute new guess for each constraint (catch if root is not bracketed)
+                    f1 = (d_high > 0.0) ? f_high : (0.5*f_low*d_high - f_high*d_low)/(0.5*d_high - d_low + ${ill_tol});
+                    f2 = (p_high > 0.0) ? f_high : (0.5*f_low*p_high - f_high*p_low)/(0.5*p_high - p_low + ${ill_tol});
+                    f3 = (e_high > 0.0) ? f_high : (0.5*f_low*e_high - f_high*e_low)/(0.5*e_high - e_low + ${ill_tol});
+
+                    // Compute guess as minima of individual constraints
+                    fnew = fmin(f1, fmin(f2, f3));
+
+                    // In case of bracketing failure (due to roundoff errors), revert to bisection
+                    fnew = ((fnew > f_high) || (fnew < f_low)) ? 0.5*(f_low + f_high) : fnew;
+
+                    // Compute filtered state
+                    ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'p', 'e')};
+
+                    // Update brackets
+                    if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
+                    {
+                        f_high = fnew;
+                        d_high = d - ${d_min};
+                        p_high = p - ${p_min};
+                        e_high = e - (entmin - ${e_tol});
+                    }
+                    else
+                    {
+                        f_low = fnew;
+                        d_low = d - ${d_min};
+                        p_low = p - ${p_min};
+                        e_low = e - (entmin - ${e_tol});
+                    }
+                }
+
+                // Set current minimum f as the bounds-preserving value
+                f = f_low;
+            }
         }
-        else
-        {
-            ${pyfr.expand('apply_filter', 'umodes', 'vdm', 'u', 'f_low')};
-        }
+
+        // Filter full solution with bounds-preserving f value
+        ${pyfr.expand('apply_filter_full', 'umodes', 'vdm', 'u', 'f')};
 
         // Calculate minimum entropy from filtered solution
-        emin = emin_low + entmin - ${e_tol};
+        ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
     }
 
     // Set new minimum entropy within element for next stage

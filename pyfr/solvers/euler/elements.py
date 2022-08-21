@@ -79,7 +79,8 @@ class BaseFluidElements:
                 'nfpts': self.nfpts,
                 'nvars': self.nvars,
                 'nfaces': self.nfaces,
-                'c': self.cfg.items_as('constants', float)
+                'c': self.cfg.items_as('constants', float),
+                'order': self.basis.order
             }
 
             # Check to see if running collocated solution/flux points (or a convex combination thereof)
