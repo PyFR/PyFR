@@ -14,14 +14,6 @@ acceptably and generating the desired results.
 OpenMP Backend
 ==============
 
-libxsmm
--------
-
-If libxsmm is not available then PyFR will make use of GiMMiK for all
-matrix-matrix multiplications.  Although functional, the performance is
-typically sub-par compared with that of libxsmm.  As such libxsmm is
-*highly* recommended.
-
 AVX-512
 -------
 
@@ -68,6 +60,24 @@ this functionality can be enabled through the ``mpi-type`` key as::
 
         [backend-cuda]
         mpi-type = cuda-aware
+
+.. _perf hip backend:
+
+HIP Backend
+===========
+
+HIP-aware MPI
+-------------
+
+PyFR is capable of taking advantage of HIP-aware MPI.  This enables
+HIP device pointers to be directly to passed MPI routines.  Under the
+right circumstances this can result in improved performance for
+simulations which are near the strong scaling limit.  Assuming
+mpi4py has been built against an MPI distribution which is HIP-aware
+this functionality can be enabled through the ``mpi-type`` key as::
+
+        [backend-hip]
+        mpi-type = hip-aware
 
 Partitioning
 ============
@@ -120,6 +130,22 @@ if a domain is 90% tetrahedra and 10% prisms then, absent any
 additional information about the relative performance of tetrahedra and
 prisms, a safe choice is to assume the prisms are appreciably *more*
 expensive than the tetrahedra.
+
+Scaling
+=======
+
+The general recommendation when running PyFR in parallel is to aim for
+a parallel efficiency of :math:`\epsilon \simeq 0.8` with the parallel
+efficiency being defined as:
+
+.. math::
+
+  \epsilon = \frac{1}{N}\frac{T_1}{T_N},
+
+where :math:`N` is the number of ranks, :math:`T_1` is the simulation
+time with one rank, and :math:`T_N` is the simulation time with
+:math:`N` ranks.  This represents a reasonable trade-off between the
+overall time-to-solution and efficient resource utilisation.
 
 Parallel I/O
 ============

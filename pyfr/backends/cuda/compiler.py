@@ -43,7 +43,9 @@ class NVRTCWrappers(LibWrapper):
         (c_int, 'nvrtcGetPTXSize', c_void_p, POINTER(c_size_t)),
         (c_int, 'nvrtcGetPTX', c_void_p, c_char_p),
         (c_int, 'nvrtcGetProgramLogSize', c_void_p, POINTER(c_size_t)),
-        (c_int, 'nvrtcGetProgramLog', c_void_p, c_char_p)
+        (c_int, 'nvrtcGetProgramLog', c_void_p, c_char_p),
+        (c_int, 'nvrtcGetCUBINSize', c_void_p, POINTER(c_size_t)),
+        (c_int, 'nvrtcGetCUBIN', c_void_p, c_char_p)
     ]
 
 
@@ -79,18 +81,25 @@ class NVRTC:
 
                 raise RuntimeError(log.value.decode())
 
-            # Fetch the program size
-            ptxsz = c_size_t()
-            self.lib.nvrtcGetPTXSize(prog, ptxsz)
+            # Query the CUBIN code size
+            codesz = c_size_t()
+            self.lib.nvrtcGetCUBINSize(prog, codesz)
 
-            # Fetch the program itself
-            ptx = create_string_buffer(ptxsz.value)
-            self.lib.nvrtcGetPTX(prog, ptx)
+            # If that worked, fetch the CUBIN itself
+            if codesz.value > 0:
+                cucode = create_string_buffer(codesz.value)
+                self.lib.nvrtcGetCUBIN(prog, cucode)
+            # Else, assume the compiled code is PTX
+            else:
+                self.lib.nvrtcGetPTXSize(prog, codesz)
+
+                cucode = create_string_buffer(codesz.value)
+                self.lib.nvrtcGetPTX(prog, cucode)
         finally:
             # Destroy the program
             self.lib.nvrtcDestroyProgram(prog)
 
-        return ptx.raw
+        return cucode.raw
 
 
 class SourceModule:
@@ -103,18 +112,18 @@ class SourceModule:
 
         # Compiler flags
         flags = [
-            f'--gpu-architecture=compute_{cmajor}{cminor}',
+            f'--gpu-architecture=sm_{cmajor}{cminor}',
             '--ftz=true',
             '--fmad=true'
         ]
 
         flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
 
-        # Compile to PTX
-        ptx = backend.nvrtc.compile('kernel', src, flags)
+        # Compile to CUDA code (either PTX or CUBIN depending on arch flag)
+        cucode = backend.nvrtc.compile('kernel', src, flags)
 
         # Load it as a module
-        self.mod = backend.cuda.load_module(ptx)
+        self.mod = backend.cuda.load_module(cucode)
 
     def get_function(self, name, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]

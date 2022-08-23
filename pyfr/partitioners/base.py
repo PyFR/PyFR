@@ -129,11 +129,11 @@ class BasePartitioner:
         vetimap = lhs[vtab[:-1]].tolist()
         etivmap = {k: v for v, k in enumerate(vetimap)}
 
-        # Prepare the edges
+        # Prepare the edges and their weights
         etab = np.array([etivmap[r] for r in rhs.tolist()])
         ewts = np.ones_like(etab)
 
-        # Prepare the list of vertex and edge weights
+        # Prepare the vertex weights
         vwts = np.array([exwts.get(ti, self.elewts[ti[0]]) for ti in vetimap])
 
         return Graph(vtab, etab, vwts, ewts), vetimap
@@ -157,10 +157,12 @@ class BasePartitioner:
                                 if rr == pr:
                                     pmerge[ll] = pmerge[l]
                             pmerge[pr] = pmerge[l]
-                        elif l in pmerge and r != pmerge[l]:
-                            pmerge[r] = pmerge[l]
-                        elif r in pmerge and l != pmerge[r]:
-                            pmerge[l] = pmerge[r]
+                        elif l in pmerge:
+                            if r != pmerge[l]:
+                                pmerge[r] = pmerge[l]
+                        elif r in pmerge:
+                            if l != pmerge[r]:
+                                pmerge[l] = pmerge[r]
                         else:
                             pmerge[l] = r
 

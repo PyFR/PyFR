@@ -15,11 +15,13 @@
               gradur='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               artviscl='in view fpdtype_t'
               artviscr='in view fpdtype_t'
-              nl='in fpdtype_t[${str(ndims)}]'
-              magnl='in fpdtype_t'>
+              nl='in fpdtype_t[${str(ndims)}]'>
+    fpdtype_t mag_nl = sqrt(${pyfr.dot('nl[{i}]', i=ndims)});
+    fpdtype_t norm_nl[] = ${pyfr.array('(1 / mag_nl)*nl[{i}]', i=ndims)};
+
     // Perform the Riemann solve
     fpdtype_t ficomm[${nvars}], fvcomm;
-    ${pyfr.expand('rsolve', 'ul', 'ur', 'nl', 'ficomm')};
+    ${pyfr.expand('rsolve', 'ul', 'ur', 'norm_nl', 'ficomm')};
 
 % if beta != -0.5:
     fpdtype_t fvl[${ndims}][${nvars}] = {{0}};
@@ -35,24 +37,20 @@
 
 % for i in range(nvars):
 % if beta == -0.5:
-    fvcomm = ${' + '.join('nl[{j}]*fvr[{j}][{i}]'.format(i=i, j=j)
-                          for j in range(ndims))};
+    fvcomm = ${' + '.join(f'norm_nl[{j}]*fvr[{j}][{i}]' for j in range(ndims))};
 % elif beta == 0.5:
-    fvcomm = ${' + '.join('nl[{j}]*fvl[{j}][{i}]'.format(i=i, j=j)
-                          for j in range(ndims))};
+    fvcomm = ${' + '.join(f'norm_nl[{j}]*fvl[{j}][{i}]' for j in range(ndims))};
 % else:
-    fvcomm = ${0.5 + beta}*(${' + '.join('nl[{j}]*fvl[{j}][{i}]'
-                                         .format(i=i, j=j)
+    fvcomm = ${0.5 + beta}*(${' + '.join(f'norm_nl[{j}]*fvl[{j}][{i}]'
                                          for j in range(ndims))})
-           + ${0.5 - beta}*(${' + '.join('nl[{j}]*fvr[{j}][{i}]'
-                                         .format(i=i, j=j)
+           + ${0.5 - beta}*(${' + '.join(f'norm_nl[{j}]*fvr[{j}][{i}]'
                                          for j in range(ndims))});
 % endif
 % if tau != 0.0:
     fvcomm += ${tau}*(ul[${i}] - ur[${i}]);
 % endif
 
-    ul[${i}] =  magnl*(ficomm[${i}] + fvcomm);
-    ur[${i}] = -magnl*(ficomm[${i}] + fvcomm);
+    ul[${i}] =  mag_nl*(ficomm[${i}] + fvcomm);
+    ur[${i}] = -mag_nl*(ficomm[${i}] + fvcomm);
 % endfor
 </%pyfr:kernel>

@@ -12,7 +12,7 @@ class TplargsMixin:
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        visc_corr = self.cfg.get('solver', 'viscosity-correction')
+        visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                              rsolver=rsolver, visc_corr=visc_corr,
@@ -36,7 +36,7 @@ class NavierStokesIntInters(TplargsMixin, BaseAdvectionDiffusionIntInters):
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
-            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+            nl=self._pnorm_lhs
         )
 
 
@@ -56,7 +56,7 @@ class NavierStokesMPIInters(TplargsMixin, BaseAdvectionDiffusionMPIInters):
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
-            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+            nl=self._pnorm_lhs
         )
 
 
@@ -76,15 +76,14 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
         self.kernels['con_u'] = lambda: be.kernel(
             'bcconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ulin=self._scal_lhs,
-            ulout=self._vect_lhs, nlin=self._norm_pnorm_lhs,
+            ulout=self._vect_lhs, nlin=self._pnorm_lhs,
             **self._external_vals
         )
         self.kernels['comm_flux'] = lambda: be.kernel(
             'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ul=self._scal_lhs,
-            gradul=self._vect_lhs, magnl=self._mag_pnorm_lhs,
-            nl=self._norm_pnorm_lhs, artviscl=self._artvisc_lhs,
-            **self._external_vals
+            gradul=self._vect_lhs, nl=self._pnorm_lhs,
+            artviscl=self._artvisc_lhs, **self._external_vals
         )
 
 
