@@ -159,9 +159,10 @@ functionality or correctness of PyFR.
 OpenMP Backend
 ^^^^^^^^^^^^^^
 
-The OpenMP backend targets multi-core CPUs. The backend requires:
+The OpenMP backend targets multi-core x86-64 and ARM CPUs. The backend
+requires:
 
-1. GCC >= 4.9 or another C compiler with OpenMP support
+1. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
 2. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
    0db15a0da13e3d9b9e3d57b992ecb3384d2e15ea compiled as a shared
    library (STATIC=0) with BLAS=0.
