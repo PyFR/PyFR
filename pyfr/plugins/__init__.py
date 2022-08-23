@@ -1,3 +1,4 @@
+from pyfr.plugins.ascent import AscentPlugin
 from pyfr.plugins.base import BasePlugin
 from pyfr.plugins.dtstats import DtStatsPlugin
 from pyfr.plugins.fluidforce import FluidForcePlugin
