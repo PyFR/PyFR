@@ -16,11 +16,10 @@ class BaseAdvectionElements(BaseElements):
 
         return bufs
 
-    def set_backend(self, *args, **kwargs):
-        super().set_backend(*args, **kwargs)
+    def set_backend(self, backend, nscalupts, nonce, linoff):
+        super().set_backend(backend, nscalupts, nonce, linoff)
 
         kernels = self.kernels
-        cmat = self._be.const_matrix
 
         # Register pointwise kernels with the backend
         self._be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
@@ -106,7 +105,7 @@ class BaseAdvectionElements(BaseElements):
             # Allocate one minimum entropy value per interface
             self.nfaces = len(self.nfacefpts)
             self.entmin_int = self._be.matrix((self.nfaces, self.neles),
-                                               tags=tags, extent='entmin_int')
+                                               tags=tags, extent=nonce + 'entmin_int')
    
             # Setup nodal/modal operator matrices
             self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
