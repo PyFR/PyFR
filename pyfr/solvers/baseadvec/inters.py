@@ -20,8 +20,10 @@ class BaseAdvectionIntInters(BaseInters):
 
         # Generate the additional view matrices for entropy filtering
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
-            self._entmin_lhs = self._view(lhs, 'get_entmin_int_fpts_for_inter', with_perm=False)
-            self._entmin_rhs = self._view(rhs, 'get_entmin_int_fpts_for_inter', with_perm=False)
+            self._entmin_lhs = self._view(lhs, 'get_entmin_int_fpts_for_inter',
+                                          with_perm=False)
+            self._entmin_rhs = self._view(rhs, 'get_entmin_int_fpts_for_inter',
+                                          with_perm=False)
         else:
             self._entmin_lhs = self._entmin_rhs = None
 
@@ -75,7 +77,8 @@ class BaseAdvectionMPIInters(BaseInters):
         )
 
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
-            self._entmin_lhs = self._xchg_view(lhs, 'get_entmin_int_fpts_for_inter', with_perm=False)
+            self._entmin_lhs = self._xchg_view(lhs, 'get_entmin_int_fpts_for_inter',
+                                               with_perm=False)
             self._entmin_rhs = be.xchg_matrix_for_view(self._entmin_lhs)
 
             self.kernels['ent_fpts_pack'] = lambda: be.kernel(
@@ -116,7 +119,8 @@ class BaseAdvectionBCInters(BaseInters):
         self._set_external('t', 'scalar fpdtype_t')
 
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
-            self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter', with_perm=False)
+            self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter',
+                                          with_perm=False)
         else:
             self._entmin_lhs = None
 

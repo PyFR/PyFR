@@ -57,7 +57,6 @@ class BaseFluidElements:
         if controller.controller_has_variable_dt and shock_capturing == 'entropy-filter':
             raise ValueError('Entropy filtering not compatible with adaptive time stepping.')
 
-
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
