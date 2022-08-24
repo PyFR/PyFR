@@ -6,7 +6,7 @@ from pyfr.util import memoize
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
     @memoize
-    def _rhs_graphs(self, uinbank, foutbank, rhs_has_been_called=False):
+    def _rhs_graphs(self, uinbank, foutbank, rhs_has_been_called=False, post_processed=True):
         m = self._mpireqs
         k, _ = self._get_kernels(uinbank, foutbank)
 
@@ -15,8 +15,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1 = self.backend.graph()
         g1.add_mpi_reqs(m['scal_fpts_recv'])
 
+        # If solution has not been post-processed in the last step, perform post-processing
+        filtsol = k['eles/filter_solution'] if not post_processed else []
+        g1.add_all(filtsol)
+
         # Interpolate the solution to the flux points
-        g1.add_all(k['eles/disu'])
+        g1.add_all(k['eles/disu'], deps=filtsol)
 
         # Pack and send these interpolated solutions to our neighbours
         g1.add_all(k['mpiint/scal_fpts_pack'], deps=k['eles/disu'])
@@ -31,17 +35,18 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1.add_all(locent)
 
         # Pack and send the entropy values to neighbors
-        g1.add_all(k['mpiint/ent_fpts_pack'], deps=locent)
+        g1.add_all(k['mpiint/ent_fpts_pack'], deps=locent + filtsol)
         for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
 
         # Compute common entropy minima at internal/boundary interfaces
         g1.add_all(k['iint/comm_entropy'],
-                    deps=locent + k['mpiint/ent_fpts_pack'])
-        g1.add_all(k['bcint/comm_entropy'], deps=locent + k['eles/disu'])
+                   deps=locent + filtsol + k['mpiint/ent_fpts_pack'])
+        g1.add_all(k['bcint/comm_entropy'],
+                   deps=locent + filtsol + k['eles/disu'])
 
         # Make a copy of the solution (if used by source terms)
-        g1.add_all(k['eles/copy_soln'])
+        g1.add_all(k['eles/copy_soln'], deps=filtsol)
 
         # Compute the common solution at our internal/boundary interfaces
         for l in k['eles/copy_fpts']:
@@ -55,7 +60,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1.add_all(k['mpiint/artvisc_fpts_pack'], deps=k['eles/shocksensor'])
 
         # Compute the transformed gradient of the partially corrected solution
-        g1.add_all(k['eles/tgradpcoru_upts'], deps=k['mpiint/scal_fpts_pack'])
+        g1.add_all(k['eles/tgradpcoru_upts'], deps=k['mpiint/scal_fpts_pack'] + filtsol)
         g1.commit()
 
         g2 = self.backend.graph()

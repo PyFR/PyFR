@@ -258,11 +258,11 @@ class BaseSystem:
     def _rhs_graphs(self, uinbank, foutbank, rhs_has_been_called):
         pass
 
-    def rhs(self, t, uinbank, foutbank, rhs_has_been_called=False):
+    def rhs(self, t, uinbank, foutbank, rhs_has_been_called=False, post_processed=True):
         self._rhs_uin_fout.add((uinbank, foutbank))
         self._prepare_kernels(t, uinbank, foutbank)
 
-        for graph in self._rhs_graphs(uinbank, foutbank, rhs_has_been_called):
+        for graph in self._rhs_graphs(uinbank, foutbank, rhs_has_been_called, post_processed):
             self.backend.run_graph(graph)
 
     def postproc(self, uinbank):
