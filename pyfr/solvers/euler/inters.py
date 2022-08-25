@@ -47,8 +47,8 @@ class EulerIntInters(FluidIntIntersMixin, BaseAdvectionIntInters):
 
 
 class EulerMPIInters(FluidMPIIntersMixin, BaseAdvectionMPIInters):
-    def __init__(self, be, lhs, rhs, elemap, cfg):
-        super().__init__(be, be, lhs, rhs, elemap, cfg)
+    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
+        super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicflux')
 
