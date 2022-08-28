@@ -33,6 +33,18 @@ PyFR does not typically derive any benefit from SMT.  As such the
 number of OpenMP threads should be chosen to be equal to the number of
 physical cores.
 
+Loop Scheduling
+---------------
+
+By default PyFR employs static scheduling for loops, with work being
+split evenly across cores.  For systems with a single type of core this
+is usually the right choice.  However, on heterogeneous systems it
+typically results in load imbalance.  Here, it can be beneficial to
+experiment with the *guided* and *dynamic* loop schedules as::
+
+        [backend-openmp]
+        schedule = dynamic, 5
+
 MPI processes vs. OpenMP threads
 --------------------------------
 
