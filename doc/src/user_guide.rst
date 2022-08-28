@@ -205,6 +205,12 @@ Parameterises the OpenMP backend with
 
     *int*
 
+4. ``schedule`` --- OpenMP loop scheduling scheme:
+
+    ``static`` | ``dynamic`` | ``dynamic, n`` | ``guided`` | ``guided, n``
+
+    where *n* is a positive integer.
+
 Example::
 
     [backend-openmp]
