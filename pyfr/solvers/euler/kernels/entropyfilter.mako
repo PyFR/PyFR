@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-<%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.entropy'/>
 
