@@ -4,7 +4,7 @@ import re
 
 import numpy as np
 
-from pyfr.util import match_paired_paren
+from pyfr.util import match_paired_paren, ndrange
 
 
 class Arg:
@@ -33,8 +33,9 @@ class Arg:
         self.attrs = g[1] or ''
         self.reduceop = g[2]
         self.dtype = g[3]
+        self.cdimstr = g[4]
 
-        # Dimensions
+        # Dimension
         self.cdims = [int(d) for d in re.findall(dimsptn, g[4])]
         self.ncdim = len(self.cdims)
 
@@ -240,15 +241,22 @@ class BaseKernelGenerator:
         # Dereference vector arguments
         for va in self.vectargs:
             darg = self._deref_arg(va)
+            subp = ptns[va.ncdim].format(va.name)
 
             # Regular
             if not va.isreduce:
-                body = re.sub(ptns[va.ncdim].format(va.name), darg, body)
+                body = re.sub(subp, darg, body)
             # Reduction
             else:
-                pre = f'fpdtype_t {va.name};\n'
-                post = f'atomic_min_pos(&{darg}, {va.name});\n'
+                body = f'fpdtype_t {va.name}{va.cdimstr};\n{body}'
 
-                body = pre + body + post
+                if va.ncdim == 0:
+                    body += f'atomic_{va.reduceop}(&{darg}, {va.name});\n'
+                else:
+                    for ij in ndrange(*va.cdims):
+                        lval = va.name + ''.join(f'[{i}]' for i in ij)
+                        gval = re.sub(subp, darg, lval)
+
+                        body += f'atomic_{va.reduceop}(&{gval}, {lval});\n'
 
         return body
