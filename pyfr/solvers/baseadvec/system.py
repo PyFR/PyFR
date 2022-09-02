@@ -48,7 +48,7 @@ class BaseAdvectionSystem(BaseSystem):
         # Compute the common normal flux at our internal/boundary interfaces
         g1.add_all(k['iint/comm_flux'],
                    deps=k['eles/disu'] + k['mpiint/scal_fpts_pack'])
-        g1.add_all(k['bcint/comm_flux'], deps=k['eles/disu'])
+        g1.add_all(k['bcint/comm_flux'], deps=k['eles/disu'] + k['bcint/comm_entropy'])
 
         # Make a copy of the solution (if used by source terms)
         g1.add_all(k['eles/copy_soln'], deps=filtsol)

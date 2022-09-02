@@ -120,7 +120,7 @@ class BaseAdvectionBCInters(BaseInters):
 
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter',
-                                          with_perm=False)
+                                          with_perm=True)
         else:
             self._entmin_lhs = None
 
