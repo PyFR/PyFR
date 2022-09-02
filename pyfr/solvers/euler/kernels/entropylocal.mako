@@ -22,5 +22,7 @@
     }
 
     // Set interface entropy values to minimum
-    for (int i = 0; i < ${nfaces}; i++) entmin_int[i] = entmin;
+    % for i in range(nfaces):
+    entmin_int[${i}] = entmin;
+    % endfor
 </%pyfr:kernel>

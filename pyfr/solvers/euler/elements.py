@@ -61,10 +61,7 @@ class BaseFluidElements:
         super().set_backend(*args, **kwargs)
 
         # Can elide shock-capturing at p = 0
-        if self.basis.order == 0:
-            return
-
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter' and self.basis.order != 0:
             # Modified entropy filtering method (10.1016/j.jcp.2022.111501)
             # using physical entropy without operator splitting (for Navier-Stokes)
 

@@ -186,5 +186,7 @@
     }
 
     // Set new minimum entropy within element for next stage
-    for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin_int[fidx] = emin;
+    % for fidx in range(nfaces):
+    entmin_int[${fidx}] = entmin;
+    % endfor
 </%pyfr:kernel>
