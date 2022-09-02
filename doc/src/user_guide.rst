@@ -403,13 +403,13 @@ Parameterises the time-integration scheme used by the solver with
 
            *float*
 
+        - ``controller`` --- time-step controller
+
+           ``none``
+
         - ``pseudo-dt`` --- pseudo time-step
 
            *float*
-
-        - ``controller`` --- pseudo time-step controller
-
-           ``none``
 
         - ``pseudo-niters-max`` --- minimum number of iterations
 
