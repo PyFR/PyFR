@@ -21,7 +21,9 @@ class TplargsMixin:
                              shock_capturing=shock_capturing, c=self.c)
 
 
-class NavierStokesIntInters(TplargsMixin, FluidIntIntersMixin, BaseAdvectionDiffusionIntInters):
+class NavierStokesIntInters(TplargsMixin,
+                            FluidIntIntersMixin,
+                            BaseAdvectionDiffusionIntInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super().__init__(be, lhs, rhs, elemap, cfg)
 
@@ -42,7 +44,9 @@ class NavierStokesIntInters(TplargsMixin, FluidIntIntersMixin, BaseAdvectionDiff
         )
 
 
-class NavierStokesMPIInters(TplargsMixin, FluidMPIIntersMixin, BaseAdvectionDiffusionMPIInters):
+class NavierStokesMPIInters(TplargsMixin,
+                            FluidMPIIntersMixin,
+                            BaseAdvectionDiffusionMPIInters):
     def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
         super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
 

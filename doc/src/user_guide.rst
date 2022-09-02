@@ -592,7 +592,7 @@ Example::
     E = 1.0/(1.0+x)
 
 [solver-entropy-filter]
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Parameterises entropy filter for shock capturing with
 

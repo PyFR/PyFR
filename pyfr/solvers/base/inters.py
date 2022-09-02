@@ -70,10 +70,8 @@ class BaseInters:
 
     def _view(self, inter, meth, vshape=(), with_perm=True):
         vm = _get_inter_objs(inter, meth, self.elemap)
-        if with_perm:
-            vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
-        else:
-            vm = [np.concatenate(m)for m in zip(*vm)]
+        perm = self._perm if with_perm else Ellipsis
+        vm = [np.concatenate(m)[perm] for m in zip(*vm)]
         return self._be.view(*vm, vshape=vshape)
 
     def _scal_view(self, inter, meth):
@@ -84,10 +82,8 @@ class BaseInters:
 
     def _xchg_view(self, inter, meth, vshape=(), with_perm=True):
         vm = _get_inter_objs(inter, meth, self.elemap)
-        if with_perm:
-            vm = [np.concatenate(m)[self._perm] for m in zip(*vm)]
-        else:
-            vm = [np.concatenate(m) for m in zip(*vm)]
+        perm = self._perm if with_perm else Ellipsis
+        vm = [np.concatenate(m)[perm] for m in zip(*vm)]
         return self._be.xchg_view(*vm, vshape=vshape)
 
     def _scal_xchg_view(self, inter, meth):

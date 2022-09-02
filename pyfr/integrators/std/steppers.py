@@ -210,7 +210,6 @@ class StdRKVdH2RStepper(BaseStdStepper):
             # Execute
             run_kernels(kerns)
 
-
             # Swap
             r1, r2 = r2, r1
 

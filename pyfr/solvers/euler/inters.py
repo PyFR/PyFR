@@ -5,8 +5,8 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionBCInters)
 
 class FluidIntIntersMixin:
-    def __init__(self, be, lhs, rhs, elemap, cfg):
-        super().__init__(be, lhs, rhs, elemap, cfg)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.intcent')
 
@@ -18,8 +18,8 @@ class FluidIntIntersMixin:
 
 
 class FluidMPIIntersMixin:
-    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
-        super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicent')
 
