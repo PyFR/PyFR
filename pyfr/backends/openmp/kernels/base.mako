@@ -14,4 +14,7 @@
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 
+// Atomic helpers
+#define atomic_min_pos(addr, val) _Pragma("omp atomic compare") if ((val) < *(addr)) { *(addr) = (val); }
+
 ${next.body()}
