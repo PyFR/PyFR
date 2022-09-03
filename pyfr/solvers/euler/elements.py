@@ -65,13 +65,11 @@ class BaseFluidElements:
 
         # Can elide shock-capturing at p = 0
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
-        if shock_capturing == 'entropy-filter' and self.basis.order != 0:
-            '''
-            10.1016/j.jcp.2022.111501
-            Modified entropy filtering method using specific physical
-            entropy (without operator splitting for Navier-Stokes)
-            '''
 
+        # Modified entropy filtering method using specific physical
+        # entropy (without operator splitting for Navier-Stokes)
+        # doi:10.1016/j.jcp.2022.111501
+        if shock_capturing == 'entropy-filter' and self.basis.order != 0:
             self._be.pointwise.register(
                 'pyfr.solvers.euler.kernels.entropylocal'
             )

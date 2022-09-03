@@ -61,9 +61,6 @@ class BaseIntegrator:
         # Abort computation
         self.abort = False
 
-        # Track if RHS has been called
-        self.rhs_has_been_called = False
-
     def _get_plugins(self, initsoln):
         plugins = []
 

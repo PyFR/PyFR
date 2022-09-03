@@ -25,6 +25,9 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
 
+        # Pre-process solution if necessary
+        self.system.preproc(self.system.ele_scal_upts(self._idxcurr))
+
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
 
@@ -37,6 +40,7 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
     @property
     def soln(self):
         if not self._curr_soln:
+            self.system.postproc(self.system.ele_scal_upts(self._idxcurr))
             self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
 
         return self._curr_soln
@@ -54,3 +58,10 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
     @property
     def controller_needs_errest(self):
         pass
+
+    @property
+    def entmin(self):
+        return self.system.get_ele_entmin_int()
+
+    def set_entmin(self, entmin):
+        self.system.set_ele_entmin_int(entmin)

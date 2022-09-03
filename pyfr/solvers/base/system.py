@@ -50,6 +50,9 @@ class BaseSystem:
         if hasattr(eles[0], '_vect_upts'):
             self.eles_vect_upts = [e._vect_upts for e in eles]
 
+        if hasattr(eles[0], 'entmin_int'):
+            self.eles_entmin_int = [e.entmin_int for e in eles]
+
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
         self.nvars = eles[0].nvars
@@ -255,16 +258,21 @@ class BaseSystem:
         for b in binders:
             b(t=t)
 
-    def _rhs_graphs(self, uinbank, foutbank, rhs_has_been_called):
+    def _rhs_graphs(self, uinbank, foutbank):
         pass
 
-    def rhs(self, t, uinbank, foutbank, rhs_has_been_called=False,
-            post_processed=True):
+    def rhs(self, t, uinbank, foutbank):
         self._rhs_uin_fout.add((uinbank, foutbank))
         self._prepare_kernels(t, uinbank, foutbank)
 
-        for graph in self._rhs_graphs(uinbank, foutbank, rhs_has_been_called,
-                                      post_processed):
+        for graph in self._rhs_graphs(uinbank, foutbank):
+            self.backend.run_graph(graph)
+
+    def _preproc_graphs(self, uinbank):
+        pass
+
+    def preproc(self, uinbank):
+        for graph in self._preproc_graphs(uinbank):
             self.backend.run_graph(graph)
 
     def postproc(self, uinbank):
@@ -305,3 +313,10 @@ class BaseSystem:
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
+
+    def get_ele_entmin_int(self):
+        return [e.get() for e in self.eles_entmin_int]
+
+    def set_ele_entmin_int(self, entmin_int):
+        for (e, em) in zip(self.eles_entmin_int, entmin_int):
+            e.set(em)
