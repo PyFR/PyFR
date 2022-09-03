@@ -108,8 +108,6 @@
         fpdtype_t d_low, p_low, e_low;
         fpdtype_t d_high, p_high, e_high;
 
-        fpdtype_t uf[${nupts}][${nvars}] = {{0}};
-
         // Compute f on a rolling basis per solution point
         fpdtype_t up[${order+1}][${nvars}];
         for (int uidx = 0; uidx < ${nupts}; uidx++)
