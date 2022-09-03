@@ -68,10 +68,10 @@ class BaseInters:
 
         return np.argsort(mm[0])
 
-    def _view(self, inter, meth, vshape=(), with_perm=True):
+    def _view(self, inter, meth, vshape=()):
         vm = _get_inter_objs(inter, meth, self.elemap)
-        perm = self._perm if with_perm else Ellipsis
-        vm = [np.concatenate(m)[perm] for m in zip(*vm)]
+        vm = [np.concatenate(m) for m in zip(*vm)]
+        vm = [v if len(v) == len(inter) else v[self._perm] for v in vm]
         return self._be.view(*vm, vshape=vshape)
 
     def _scal_view(self, inter, meth):
@@ -80,10 +80,10 @@ class BaseInters:
     def _vect_view(self, inter, meth):
         return self._view(inter, meth, (self.ndims, self.nvars))
 
-    def _xchg_view(self, inter, meth, vshape=(), with_perm=True):
+    def _xchg_view(self, inter, meth, vshape=()):
         vm = _get_inter_objs(inter, meth, self.elemap)
-        perm = self._perm if with_perm else Ellipsis
-        vm = [np.concatenate(m)[perm] for m in zip(*vm)]
+        vm = [np.concatenate(m) for m in zip(*vm)]
+        vm = [v if len(v) == len(inter) else v[self._perm] for v in vm]
         return self._be.xchg_view(*vm, vshape=vshape)
 
     def _scal_xchg_view(self, inter, meth):
