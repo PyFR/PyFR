@@ -172,7 +172,7 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t),
         (c_int, 'cuGraphAddEventRecordNode', POINTER(c_void_p), c_void_p,
-          POINTER(c_void_p), c_size_t, c_void_p),
+         POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'cuGraphAddKernelNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(CUDAKernelNodeParams)),
         (c_int, 'cuGraphAddChildGraphNode', POINTER(c_void_p), c_void_p,

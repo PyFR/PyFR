@@ -41,7 +41,7 @@
     l1 = (l1 < ${eps}) ? ${1/(2*eps)}*(l1*l1 + ${eps**2}) : l1;
     l3 = (l3 < ${eps}) ? ${1/(2*eps)}*(l3*l3 + ${eps**2}) : l3;
 
-    // Get the jumps 
+    // Get the jumps
 % for i in range(ndims):
     dv[${i}] = vr[${i}] - vl[${i}];
 % endfor
@@ -66,8 +66,8 @@
 
     // Output
 % for i in range(nvars):
-    nf[${i}] = 0.5*(${' + '.join('n[{j}]*(fl[{j}][{i}] + fr[{j}][{i}])'
-                                 .format(i=i, j=j) for j in range(ndims))}
+    nf[${i}] = 0.5*(${' + '.join(f'n[{j}]*(fl[{j}][{i}] + fr[{j}][{i}])'
+                                 for j in range(ndims))}
              - (l1*v1[${i}] + l2*v2[${i}] + l3*v3[${i}]));
 % endfor
 </%pyfr:macro>

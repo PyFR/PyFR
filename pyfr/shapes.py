@@ -495,7 +495,6 @@ class PriShape(BaseShape):
                      for j in range(3)]]
     jac_exprs = _jac_exprs_xy + _jac_exprs_z
 
-
     @classmethod
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)

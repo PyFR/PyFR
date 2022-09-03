@@ -67,4 +67,3 @@ class ResidualPlugin(BasePlugin):
 
         # Prep work if an output is due next step
         self._prep_next_output(intg)
-

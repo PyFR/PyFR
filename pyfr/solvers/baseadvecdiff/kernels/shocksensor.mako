@@ -11,8 +11,7 @@
     fpdtype_t totEn = 0.0, pnEn = 1e-15, tmp;
 
 % for ivdm, bmode in zip(invvdm, ind_modes):
-    tmp = ${' + '.join('{jx}*u[{j}][{svar}]'.format(j=j, jx=jx, svar=svar)
-                       for j, jx in enumerate(ivdm) if jx != 0)};
+    tmp = ${' + '.join(f'{jx}*u[{j}][{svar}]' for j, jx in enumerate(ivdm) if jx != 0)};
 
     totEn += tmp*tmp;
 % if bmode:

@@ -153,7 +153,7 @@ class StdPIController(BaseStdController):
             err = np.array([max(v for k in ekerns for v in k.retval)])
 
             # Reduce globally (MPI ranks)
-            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.MAX)
+            comm.Allreduce(mpi.IN_PLACE, err, op=mpi.MAX)
 
             # Normalise
             err = math.sqrt(float(err))

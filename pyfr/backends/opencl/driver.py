@@ -254,7 +254,7 @@ class OpenCLDevice(_OpenCLBase):
         subdevices = (c_void_p * nsubdevices.value)
         lib.clCreateSubDevices(self, params, nsubdevices, subdevices, None)
 
-        return [OpenCLDevice(lib, d) for d in devices]
+        return [OpenCLDevice(lib, d) for d in subdevices]
 
     def _query_int(self, int_t, param):
         param = getattr(self.lib, f'DEVICE_{param.upper()}')
