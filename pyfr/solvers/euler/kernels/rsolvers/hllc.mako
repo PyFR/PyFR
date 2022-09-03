@@ -40,15 +40,13 @@
     rcp_lstar = 1 / (sl - s_star);
     rcp_rstar = 1 / (sr - s_star);
 % for i in range(nvars):
-    nf_fl = ${' + '.join('n[{j}]*fl[{j}][{i}]'.format(i=i, j=j)
-                         for j in range(ndims))};
-    nf_fr = ${' + '.join('n[{j}]*fr[{j}][{i}]'.format(i=i, j=j)
-                         for j in range(ndims))};
+    nf_fl = ${' + '.join(f'n[{j}]*fl[{j}][{i}]' for j in range(ndims))};
+    nf_fr = ${' + '.join(f'n[{j}]*fr[{j}][{i}]' for j in range(ndims))};
 % if i == 0:
     nf_flstar = s_star*(sl*ul[${i}] - nf_fl) * rcp_lstar;
     nf_frstar = s_star*(sr*ur[${i}] - nf_fr) * rcp_rstar;
 % else:
-    d_star = ${'s_star' if i == nvars - 1 else 'n[{0}]'.format(i - 1)};
+    d_star = ${'s_star' if i == nvars - 1 else f'n[{i - 1}]'};
     nf_flstar = (s_star*(sl*ul[${i}] - nf_fl) +
                  sl*(pl + ul[0]*(sl - nvl)*(s_star - nvl))*d_star) *
                 rcp_lstar;
