@@ -22,7 +22,9 @@ class BaseAdvectionElements(BaseElements):
         kernels = self.kernels
 
         # Register pointwise kernels with the backend
-        self._be.pointwise.register('pyfr.solvers.baseadvec.kernels.negdivconf')
+        self._be.pointwise.register(
+            'pyfr.solvers.baseadvec.kernels.negdivconf'
+        )
 
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
@@ -104,8 +106,9 @@ class BaseAdvectionElements(BaseElements):
 
             # Allocate one minimum entropy value per interface
             self.nfaces = len(self.nfacefpts)
+            ext = nonce + 'entmin_int'
             self.entmin_int = self._be.matrix((self.nfaces, self.neles),
-                                               tags=tags, extent=nonce + 'entmin_int')
+                                               tags=tags, extent=ext)
    
             # Setup nodal/modal operator matrices
             self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)

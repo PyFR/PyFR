@@ -75,7 +75,9 @@ class BaseAdvectionMPIInters(BaseInters):
         )
 
         if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
-            self._entmin_lhs = self._xchg_view(lhs, 'get_entmin_int_fpts_for_inter')
+            self._entmin_lhs = self._xchg_view(
+                lhs, 'get_entmin_int_fpts_for_inter'
+            )
             self._entmin_rhs = be.xchg_matrix_for_view(self._entmin_lhs)
 
             self.kernels['ent_fpts_pack'] = lambda: be.kernel(

@@ -49,24 +49,35 @@ class BaseFluidElements:
         return [rho] + vs + [p]
 
     @staticmethod
-    def validate_formulation(controller):
-        shock_capturing = controller.cfg.get('solver', 'shock-capturing', 'none')
-        if controller.formulation == 'dual' and shock_capturing == 'entropy-filter':
-            raise ValueError('Entropy filtering not compatible with dual time stepping.')
+    def validate_formulation(ctrl):
+        shock_capturing = ctrl.cfg.get('solver', 'shock-capturing', 'none')
+        if ctrl.formulation == 'dual' and shock_capturing == 'entropy-filter':
+            raise ValueError('Entropy filtering not compatible with '
+                             'dual time stepping.')
 
-        if controller.controller_has_variable_dt and shock_capturing == 'entropy-filter':
-            raise ValueError('Entropy filtering not compatible with adaptive time stepping.')
+        ctrlvardt = ctrl.controller_has_variable_dt
+        if ctrlvardt and shock_capturing == 'entropy-filter':
+            raise ValueError('Entropy filtering not compatible with '
+                             'adaptive time stepping.')
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
 
         # Can elide shock-capturing at p = 0
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter' and self.basis.order != 0:
-            # Modified entropy filtering method (10.1016/j.jcp.2022.111501)
-            # using physical entropy without operator splitting (for Navier-Stokes)
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+        if shock_capturing == 'entropy-filter' and self.basis.order != 0:
+            '''
+            10.1016/j.jcp.2022.111501
+            Modified entropy filtering method using specific physical
+            entropy (without operator splitting for Navier-Stokes)
+            '''
 
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.entropylocal')
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.entropyfilter')
+            self._be.pointwise.register(
+                'pyfr.solvers.euler.kernels.entropylocal'
+            )
+            self._be.pointwise.register(
+                'pyfr.solvers.euler.kernels.entropyfilter'
+            )
 
             # Template arguments
             eftplargs = {
@@ -79,26 +90,35 @@ class BaseFluidElements:
                 'order': self.basis.order
             }
 
-            # Check to see if running collocated solution/flux points (or a convex combination thereof)
+            # Check to see if running collocated solution/flux points
             m0 = self.basis.m0
-            if np.min(m0) < -1e-8 or np.max(np.abs(np.sum(m0, axis=1) - 1.0)) > 1e-8:
-                raise ValueError('Entropy filter requires flux points to be a subset of '
-                                 'solution points or a convex combination thereof.')
+            mrowsum = np.max(np.abs(np.sum(m0, axis=1) - 1.0))
+            if np.min(m0) < -1e-8 or mrowsum > 1e-8:
+                raise ValueError('Entropy filter requires flux points to be a '
+                                 'subset of solution points or a convex '
+                                 'combination thereof.')
 
             # Minimum density/pressure constraints
-            eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter', 'd-min', 1e-6)
-            eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter', 'p-min', 1e-6)
+            eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'd-min', 1e-6)
+            eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'p-min', 1e-6)
 
             # Entropy tolerance
-            eftplargs['e_tol'] = self.cfg.getfloat('solver-entropy-filter', 'e-tol', 1e-6)
+            eftplargs['e_tol'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'e-tol', 1e-6)
 
             # Hidden kernel parameters
-            eftplargs['f_tol']   = self.cfg.getfloat('solver-entropy-filter', 'f-tol', 1e-4)
-            eftplargs['ill_tol'] = self.cfg.getfloat('solver-entropy-filter', 'ill-tol', 1e-6)
-            eftplargs['niters']  = self.cfg.getfloat('solver-entropy-filter', 'niters', 20)
+            eftplargs['f_tol']   = self.cfg.getfloat('solver-entropy-filter',
+                                                     'f-tol', 1e-4)
+            eftplargs['ill_tol'] = self.cfg.getfloat('solver-entropy-filter',
+                                                     'ill-tol', 1e-6)
+            eftplargs['niters']  = self.cfg.getfloat('solver-entropy-filter',
+                                                     'niters', 20)
 
             # Precompute basis orders for filter
-            eftplargs['ubdegs'] = [int(max(dd)) for dd in self.basis.ubasis.degrees]
+            ubdegs = self.basis.ubasis.degrees
+            eftplargs['ubdegs'] = [int(max(dd)) for dd in ubdegs]
             eftplargs['order'] = self.basis.order
 
             # Compute local entropy bounds

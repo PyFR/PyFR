@@ -6,7 +6,8 @@ from pyfr.util import memoize
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
     @memoize
-    def _rhs_graphs(self, uinbank, foutbank, rhs_has_been_called=False, post_processed=True):
+    def _rhs_graphs(self, uinbank, foutbank,
+                    rhs_has_been_called=False, post_processed=True):
         m = self._mpireqs
         k, _ = self._get_kernels(uinbank, foutbank)
 
@@ -15,7 +16,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1 = self.backend.graph()
         g1.add_mpi_reqs(m['scal_fpts_recv'])
 
-        # If solution has not been post-processed in the last step, perform post-processing
+        # Perform post-processing if solution has not been post-processed
         filtsol = k['eles/filter_solution'] if not post_processed else []
         g1.add_all(filtsol)
 
@@ -60,7 +61,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1.add_all(k['mpiint/artvisc_fpts_pack'], deps=k['eles/shocksensor'])
 
         # Compute the transformed gradient of the partially corrected solution
-        g1.add_all(k['eles/tgradpcoru_upts'], deps=k['mpiint/scal_fpts_pack'] + filtsol)
+        g1.add_all(k['eles/tgradpcoru_upts'],
+                   deps=k['mpiint/scal_fpts_pack'] + filtsol)
         g1.commit()
 
         g2 = self.backend.graph()

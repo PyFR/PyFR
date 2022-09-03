@@ -6,7 +6,8 @@ from pyfr.util import memoize
 
 class BaseAdvectionSystem(BaseSystem):
     @memoize
-    def _rhs_graphs(self, uinbank, foutbank, rhs_has_been_called=False, post_processed=True):
+    def _rhs_graphs(self, uinbank, foutbank,
+                    rhs_has_been_called=False, post_processed=True):
         m = self._mpireqs
         k, _ = self._get_kernels(uinbank, foutbank)
 
@@ -15,7 +16,7 @@ class BaseAdvectionSystem(BaseSystem):
         g1 = self.backend.graph()
         g1.add_mpi_reqs(m['scal_fpts_recv'])
 
-        # If solution has not been post-processed in the last step, perform post-processing
+        # Perform post-processing if solution has not been post-processed
         filtsol = k['eles/filter_solution'] if not post_processed else []
         g1.add_all(filtsol)
 
@@ -48,7 +49,8 @@ class BaseAdvectionSystem(BaseSystem):
         # Compute the common normal flux at our internal/boundary interfaces
         g1.add_all(k['iint/comm_flux'],
                    deps=k['eles/disu'] + k['mpiint/scal_fpts_pack'])
-        g1.add_all(k['bcint/comm_flux'], deps=k['eles/disu'] + k['bcint/comm_entropy'])
+        g1.add_all(k['bcint/comm_flux'],
+                   deps=k['eles/disu'] + k['bcint/comm_entropy'])
 
         # Make a copy of the solution (if used by source terms)
         g1.add_all(k['eles/copy_soln'], deps=filtsol)

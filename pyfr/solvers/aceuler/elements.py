@@ -31,7 +31,8 @@ class BaseACFluidElements:
     @staticmethod
     def validate_formulation(controller):
         if controller.formulation != 'dual':
-            raise ValueError('System not compatible with time stepping formulation.')
+            raise ValueError('System not compatible with time stepping '
+                             'formulation.')
 
 
 class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
