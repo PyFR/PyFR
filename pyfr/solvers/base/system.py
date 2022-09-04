@@ -307,7 +307,7 @@ class BaseSystem:
             self.backend.run_graph(graph)
 
     def filt(self, uinoutbank):
-        kkey = ('eles/filter_soln', uinoutbank, None)
+        kkey = ('eles/modal_filter', uinoutbank, None)
 
         self.backend.run_kernels(self._kernels[kkey])
 

@@ -87,7 +87,7 @@ class BaseAdvectionElements(BaseElements):
 
         # In-place solution filter
         if self.cfg.getint('soln-filter', 'nsteps', '0'):
-            def filter_soln(uin):
+            def modal_filter(uin):
                 mul = self._be.kernel(
                     'mul', self.opmat('M10'), self.scal_upts[uin],
                     out=self._scal_upts_temp
@@ -98,7 +98,7 @@ class BaseAdvectionElements(BaseElements):
 
                 return self._be.ordered_meta_kernel([mul, copy])
 
-            kernels['filter_soln'] = filter_soln
+            kernels['modal_filter'] = modal_filter
 
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
         if shock_capturing == 'entropy-filter':
