@@ -79,7 +79,8 @@ The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
 their associated parameters are described below. Note that both ``;`` and
-``#`` may be used as comment characters.
+``#`` may be used as comment characters.  Additionally, all parameter
+values support environment variable expansion.
 
 Backends
 --------
@@ -122,7 +123,7 @@ Parameterises the CUDA backend with
 
 1. ``device-id`` --- method for selecting which device(s) to run on:
 
-     *int* | ``round-robin`` | ``local-rank``
+     *int* | ``round-robin`` | ``local-rank`` | ``uuid``
 
 2. ``mpi-type`` --- type of MPI library that is being used:
 
@@ -145,7 +146,7 @@ Parameterises the HIP backend with
 
 1. ``device-id`` --- method for selecting which device(s) to run on:
 
-     *int* | ``local-rank``
+     *int* | ``local-rank`` | ``uuid``
 
 2. ``mpi-type`` --- type of MPI library that is being used:
 
@@ -172,7 +173,7 @@ Parameterises the OpenCL backend with
 
 3. ``device-id`` --- for selecting which device(s) to run on:
 
-    *int* | *string* | ``local-rank``
+    *int* | *string* | ``local-rank`` | ``uuid``
 
 4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
    non-zero entires in a constant matrix:

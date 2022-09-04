@@ -22,18 +22,28 @@ class HIPBackend(BaseBackend):
 
         # Get the desired HIP device
         devid = cfg.get('backend-hip', 'device-id', 'local-rank')
-        if not re.match(r'(local-rank|\d+)$', devid):
+
+        uuid = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+        if not re.match(rf'(local-rank|\d+|{uuid})$', devid):
             raise ValueError('Invalid device-id')
 
-        # Handle the local-rank case
         if devid == 'local-rank':
-            devid = str(get_local_rank())
+            devid = get_local_rank()
+        elif '-' in devid:
+            for i in range(self.hip.device_count()):
+                if str(self.hip.device_uuid(i)) == devid:
+                    devid = i
+                    break
+            else:
+                raise RuntimeError(f'Unable to find HIP device {devid}')
+        else:
+            devid = int(devid)
 
         # Set the device
-        self.hip.set_device(int(devid))
+        self.hip.set_device(devid)
 
         # Get its properties
-        self.props = self.hip.device_properties(int(devid))
+        self.props = self.hip.device_properties(devid)
 
         # Take the required alignment to be 128 bytes
         self.alignb = 128

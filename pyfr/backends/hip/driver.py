@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, Structure, addressof, c_char, c_char_p, c_float,
-                    c_int, c_size_t, c_uint, c_void_p)
+from ctypes import (POINTER, Structure, addressof, create_string_buffer,
+                    c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
+                    c_void_p)
+from uuid import UUID
 
 import numpy as np
 
@@ -160,8 +162,10 @@ class HIPWrappers(LibWrapper):
 
     # Functions
     _functions = [
+        (c_int, 'hipGetDeviceCount', POINTER(c_int)),
         (c_int, 'hipGetDeviceProperties', POINTER(HIPDevProps), c_int),
         (c_int, 'hipSetDevice', c_int),
+        (c_int, 'hipDeviceGetUuid', 16*c_char, c_int),
         (c_int, 'hipMalloc', POINTER(c_void_p), c_size_t),
         (c_int, 'hipFree', c_void_p),
         (c_int, 'hipHostMalloc', POINTER(c_void_p), c_size_t, c_uint),
@@ -412,8 +416,11 @@ class HIP:
     def __init__(self):
         self.lib = HIPWrappers()
 
-    def set_device(self, devid):
-        self.lib.hipSetDevice(devid)
+    def device_count(self):
+        count = c_int()
+        self.lib.hipGetDeviceCount(count)
+
+        return count.value
 
     def device_properties(self, devid):
         props = HIPDevProps()
@@ -431,6 +438,15 @@ class HIP:
                 dprops[name[2:]] = getattr(props, name).decode()
 
         return dprops
+
+    def device_uuid(self, devid):
+        buf = create_string_buffer(16)
+        self.lib.hipDeviceGetUuid(buf, devid)
+
+        return UUID(bytes=buf.raw)
+
+    def set_device(self, devid):
+        self.lib.hipSetDevice(devid)
 
     def mem_alloc(self, nbytes):
         return HIPDevAlloc(self, nbytes)

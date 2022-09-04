@@ -126,7 +126,7 @@ CUDA Backend
 The CUDA backend targets NVIDIA GPUs with a compute capability of 3.0
 or greater. The backend requires:
 
-1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 8.0
+1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 11.4
 
 HIP Backend
 ^^^^^^^^^^^
@@ -134,7 +134,7 @@ HIP Backend
 The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
-1. `ROCm <https://rocmdocs.amd.com/en/latest/>`_ >= 4.5.0
+1. `ROCm <https://docs.amd.com/>`_ >= 5.2.0
 2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >=
    2.41.0
 

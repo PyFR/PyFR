@@ -1,6 +1,7 @@
 from ctypes import (POINTER, byref, create_string_buffer, c_char, c_char_p,
                     c_double, c_float, c_int, c_int32, c_int64, c_size_t,
                     c_uint, c_uint64, c_ulong, c_void_p, sizeof)
+from uuid import UUID
 
 import numpy as np
 
@@ -57,6 +58,7 @@ class OpenCLWrappers(LibWrapper):
     DEVICE_TYPE_ALL = 0xffffffff
     DEVICE_TYPE_CPU = 0x2
     DEVICE_TYPE_GPU = 0x4
+    DEVICE_UUID = 0x106a
     MAP_READ = 0x1
     MAP_WRITE = 0x2
     MEM_READ_WRITE = 0x1
@@ -233,11 +235,16 @@ class OpenCLDevice(_OpenCLBase):
         super().__init__(lib, ptr)
 
         self.name = self._query_str('name')
-        self.local_mem_size = self._query_int(c_ulong, 'local_mem_size')
-        self.mem_align = self._query_int(c_uint, 'mem_base_addr_align') // 8
+        self.local_mem_size = self._query_type(c_ulong, 'local_mem_size')
+        self.mem_align = self._query_type(c_uint, 'mem_base_addr_align') // 8
 
         self.extensions = set(self._query_str('extensions').split())
         self.has_fp64 = 'cl_khr_fp64' in self.extensions
+
+        if 'cl_khr_device_uuid' in self.extensions:
+            self.uuid = UUID(bytes=self._query_type(c_char*16, 'uuid'))
+        else:
+            self.uuid = None
 
     def subdevices(self):
         lib = self.lib
@@ -256,10 +263,10 @@ class OpenCLDevice(_OpenCLBase):
 
         return [OpenCLDevice(lib, d) for d in subdevices]
 
-    def _query_int(self, int_t, param):
+    def _query_type(self, type_t, param):
         param = getattr(self.lib, f'DEVICE_{param.upper()}')
 
-        v = int_t()
+        v = type_t()
         self.lib.clGetDeviceInfo(self, param, sizeof(v), byref(v), None)
 
         return v.value
