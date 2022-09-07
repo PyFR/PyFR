@@ -191,7 +191,7 @@ class CUDAWrappers(LibWrapper):
     ]
 
     def _transname(self, name):
-        return name[:-3] if name.endswith('_v2') else name
+        return name.removesuffix('_v2')
 
 
 class _CUDABase:
