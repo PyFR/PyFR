@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from ctypes import (POINTER, byref, create_string_buffer, c_char, c_char_p,
                     c_double, c_float, c_int, c_int32, c_int64, c_size_t,
                     c_uint, c_uint64, c_ulong, c_void_p, sizeof)
@@ -92,6 +94,8 @@ class OpenCLWrappers(LibWrapper):
         (c_int, 'clReleaseCommandQueue', c_void_p),
         (c_int, 'clFinish', c_void_p),
         (c_int, 'clFlush', c_void_p),
+        (c_int, 'clGetEventProfilingInfo', c_void_p, c_uint, c_size_t,
+         c_void_p, POINTER(c_size_t)),
         (c_int, 'clReleaseEvent', c_void_p),
         (c_int, 'clWaitForEvents', c_uint, c_void_p),
         (c_void_p, 'clCreateBuffer', c_void_p, c_uint64, c_size_t, c_void_p,
@@ -129,10 +133,7 @@ class OpenCLWrappers(LibWrapper):
         (c_int, 'clEnqueueNDRangeKernel', c_void_p, c_void_p, c_uint,
          POINTER(c_size_t), POINTER(c_size_t), POINTER(c_size_t), c_uint,
          POINTER(c_void_p), POINTER(c_void_p)),
-        (c_int, 'clSetKernelArg', c_void_p, c_uint, c_size_t, c_void_p),
-
-        (c_int, 'clGetEventProfilingInfo', c_void_p, c_uint, c_size_t,
-         c_void_p, POINTER(c_size_t))
+        (c_int, 'clSetKernelArg', c_void_p, c_uint, c_size_t, c_void_p)
     ]
 
     def __init__(self):
