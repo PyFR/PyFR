@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from ctypes import (POINTER, Structure, addressof, byref, c_char, c_char_p,
-                    c_float, c_int, c_size_t, c_uint, c_ulonglong, c_void_p)
+from ctypes import (POINTER, Structure, addressof, byref, create_string_buffer,
+                    c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
+                    c_ulonglong, c_void_p)
+from uuid import UUID
 
 import numpy as np
 
@@ -135,8 +137,9 @@ class CUDAWrappers(LibWrapper):
     _functions = [
         (c_int, 'cuInit', c_int),
         (c_int, 'cuDeviceGet', POINTER(c_int), c_int),
-        (c_int, 'cuDeviceGetCount',  POINTER(c_int)),
+        (c_int, 'cuDeviceGetCount', POINTER(c_int)),
         (c_int, 'cuDeviceGetAttribute', POINTER(c_int), c_int, c_int),
+        (c_int, 'cuDeviceGetUuid_v2', 16*c_char, c_int),
         (c_int, 'cuDevicePrimaryCtxRetain', POINTER(c_void_p), c_int),
         (c_int, 'cuDevicePrimaryCtxRelease', c_int),
         (c_int, 'cuCtxSetCurrent', c_void_p),
@@ -460,6 +463,15 @@ class CUDA:
         self.lib.cuDeviceGetCount(count)
 
         return count.value
+
+    def device_uuid(self, devid):
+        dev = c_int()
+        self.lib.cuDeviceGet(dev, devid)
+
+        buf = create_string_buffer(16)
+        self.lib.cuDeviceGetUuid(buf, dev)
+
+        return UUID(bytes=buf.raw)
 
     def set_device(self, devid):
         if self.ctx:
