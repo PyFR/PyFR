@@ -269,7 +269,7 @@ class OpenCLDevice(_OpenCLBase):
         v = type_t()
         self.lib.clGetDeviceInfo(self, param, sizeof(v), byref(v), None)
 
-        return v.value
+        return v.raw if hasattr(v, 'raw') else v.value
 
     def _query_str(self, param):
         param = getattr(self.lib, f'DEVICE_{param.upper()}')
