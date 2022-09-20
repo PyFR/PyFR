@@ -208,7 +208,7 @@ class BaseElements:
         # Allocate the storage required by the time integrator
         self.scal_upts = [backend.matrix(self.scal_upts.shape,
                                          self.scal_upts, tags={'align'})
-                           for i in range(nscalupts)]
+                          for i in range(nscalupts)]
 
         # Find/allocate space for a solution-sized scalar
         tags = self.scal_upts[0].tags
