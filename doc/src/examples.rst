@@ -145,34 +145,28 @@ Compressible Supersonic Euler Equations
 Proceed with the following steps to run a serial 2D double Mach reflection
 simulation on a structured mesh:
 
-1. Create a working directory called ``2d-double-mach-reflection/``
+1. Navigate to the ``PyFR-Test-Cases/2d-double-mach-reflection`` directory::
 
-2. Copy the configuration file
-   ``PyFR/examples/2d-double-mach-reflection/2d-double-mach-reflection.ini`` into
-   ``2d-double-mach-reflection/``
+        cd PyFR-Test-Cases/2d-double-mach-reflection
 
-3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
-   ``PyFR/examples/2d-double-mach-reflection/2d-double-mach-reflection.msh.gz`` into
-   ``2d-double-mach-reflection/``
-
-4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``2d-double-mach-reflection.pyfrm``::
 
         zcat 2d-double-mach-reflection.msh.gz | pyfr import -tgmsh - 2d-double-mach-reflection.pyfrm
 
-5. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
+3. Run pyfr to solve the compressible Euler equations on the mesh,
    generating a series of PyFR solution files called
    ``2d-double-mach-reflection-*.pyfrs``::
 
         pyfr run -b cuda -p 2d-double-mach-reflection.pyfrm 2d-double-mach-reflection.ini
 
-6. Run pyfr on the solution file ``2d-double-mach-reflection-0.20.pyfrs``
+4. Run pyfr on the solution file ``2d-double-mach-reflection-0.20.pyfrs``
    converting it into an unstructured VTK file called
    ``2d-double-mach-reflection-0.20.vtu``::
 
         pyfr export 2d-double-mach-reflection.pyfrm 2d-double-mach-reflection-0.20.pyfrs 2d-double-mach-reflection-0.20.vtu
 
-7. Visualise the unstructured VTK file in `Paraview
+5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
 
 .. figure:: ../fig/2d-double-mach-reflection/2d-double-mach-reflection.png
@@ -192,34 +186,28 @@ Compressible Supersonic Navier--Stokes Equations
 Proceed with the following steps to run a serial 2D viscous shock Tube
 simulation on a structured mesh:
 
-1. Create a working directory called ``2d-viscous-shock-tube/``
+1. Navigate to the ``PyFR-Test-Cases/2d-viscous-shock-tube`` directory::
 
-2. Copy the configuration file
-   ``PyFR/examples/2d-viscous-shock-tube/2d-viscous-shock-tube.ini`` into
-   ``2d-viscous-shock-tube/``
+        cd PyFR-Test-Cases/2d-viscous-shock-tube
 
-3. Copy the compressed `Gmsh <http:http://geuz.org/gmsh/>`_ mesh file
-   ``PyFR/examples/2d-viscous-shock-tube/2d-viscous-shock-tube.msh.gz`` into
-   ``2d-viscous-shock-tube/``
-
-4. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``2d-viscous-shock-tube.pyfrm``::
 
         zcat 2d-viscous-shock-tube.msh.gz | pyfr import -tgmsh - 2d-viscous-shock-tube.pyfrm
 
-5. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
+3. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
    ``2d-viscous-shock-tube-*.pyfrs``::
 
         pyfr run -b cuda -p 2d-viscous-shock-tube.pyfrm 2d-viscous-shock-tube.ini
 
-6. Run pyfr on the solution file ``2d-viscous-shock-tube-1.00.pyfrs``
+4. Run pyfr on the solution file ``2d-viscous-shock-tube-1.00.pyfrs``
    converting it into an unstructured VTK file called
    ``2d-viscous-shock-tube-1.00.vtu``::
 
         pyfr export 2d-viscous-shock-tube.pyfrm 2d-viscous-shock-tube-1.00.pyfrs 2d-viscous-shock-tube-1.00.vtu
 
-7. Visualise the unstructured VTK file in `Paraview
+5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
 
 .. figure:: ../fig/2d-viscous-shock-tube/2d-viscous-shock-tube.png

@@ -112,15 +112,18 @@ class BaseAdvectionSystem(BaseSystem):
                    deps=k['eles/local_entropy'] + k['eles/disu'])
         g1.commit()
 
-        g2 = self.backend.graph()
+        if 'mpiint/comm_entropy' in k:
+            # Compute common entropy minima at MPI interfaces
+            g2 = self.backend.graph()
 
-        # Compute common entropy minima at MPI interfaces
-        g2.add_all(k['mpiint/ent_fpts_unpack'])
-        for l in k['mpiint/comm_entropy']:
-            g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
-        g2.commit()
+            g2.add_all(k['mpiint/ent_fpts_unpack'])
+            for l in k['mpiint/comm_entropy']:
+                g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
+            g2.commit()
 
-        return g1, g2
+            return g1, g2
+        else:
+            return g1,
 
     def postproc(self, uinbank):
         k, _ = self._get_kernels(uinbank, None)
