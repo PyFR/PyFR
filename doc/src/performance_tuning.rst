@@ -172,8 +172,7 @@ spends waiting for MPI requests to complete.  Hence, ranks which spend
 comparatively less time waiting than their peers are likely to be
 overloaded, whereas those which spend comparatively more time waiting
 are likely to be underloaded.  This information can then be used to
-either explicitly re-weight the partitions and/or the per-element
-weights.
+explicitly re-weight the partitions and/or the per-element weights.
 
 Scaling
 =======
