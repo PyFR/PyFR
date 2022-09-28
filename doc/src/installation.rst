@@ -12,75 +12,75 @@ PyFR |release| can be installed using
 `virtualenv <https://pypi.python.org/pypi/virtualenv>`_, as shown in the
 quick-start guides below.
 
-Alternatively, PyFR |release| can be installed from
-`source <https://github.com/PyFR/PyFR/tree/master>`_, see
-:ref:`compile-from-source`.
-
 macOS
 -----
 
-We recommend using the package manager `homebrew <https://brew.sh/>`_.
-Open the terminal and install the dependencies with the following
-commands::
+It is assumed that the Xcode Command Line Tools and
+`Homebrew <https://brew.sh/>`_ are already installed. Follow the steps
+below to setup the OpenMP backend on macOS:
 
-    brew install python3 open-mpi metis
-    pip3 install virtualenv
+1. Install MPI::
 
-For visualisation of results, either install ParaView from the command
-line::
+        brew install mpi4py
 
-    brew cask install paraview
+2. Install METIS and set the library path::
 
-or download the app from the ParaView
-`website <https://www.paraview.org/>`_. Then create a virtual
-environment and activate it::
+        brew install metis
+        export PYFR_METIS_LIBRARY_PATH=/opt/homebrew/lib/libmetis.dylib
 
-    virtualenv --python=python3 ENV3
-    source ENV3/bin/activate
+3. Download and install libxsmm and set the library path::
 
-Finally, install PyFR with `pip <https://pypi.python.org/pypi/pip>`_
-in the virtual environment::
+        git clone git@github.com:libxsmm/libxsmm.git
+        cd libxsmm
+        make -j4 STATIC=0 BLAS=0
+        export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
 
-    pip install pyfr
+4. Make a venv and activate it::
 
-This concludes the installation. In order to run PyFR with the OpenMP
-backend (see :ref:`running-pyfr`), use the following settings in the
-:ref:`configuration-file`::
+        python3.10 -m venv pyfr-venv
+        source pyfr-venv/bin/activate
 
-    [backend-openmp]
-    cc = gcc-8
+5. Install PyFR::
+
+        pip install pyfr
+
+6. Add the following to your :ref:`configuration-file`::
+
+        [backend-openmp]
+        cc = gcc-12
 
 Note the version of the compiler which must support the ``openmp``
-flag. This has been tested on macOS 11.6 for ARM and Intel CPUs.
+flag. This has been tested on macOS 12.5 with an Apple M1 Max.
 
 Ubuntu
 ------
 
-Open the terminal and install the dependencies with the following
-commands::
+Follow the steps below to setup the OpenMP backend on Ubuntu:
 
-    sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
-    sudo apt install metis libmetis-dev
-    pip3 install virtualenv
+1. Install Python and MPI::
 
-For visualisation of results, either install ParaView from the command
-line::
+        sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
+        pip3 install virtualenv
 
-    sudo apt install paraview
+2. Install METIS::
 
-or download the app from the ParaView
-`website <https://www.paraview.org/>`_.  Then create a virtual
-environment and activate it::
+        sudo apt install metis libmetis-dev
 
-    python3 -m virtualenv pyfr-venv
-    source pyfr-venv/bin/activate
+3. Download and install libxsmm and set the library path::
 
-Finally, install PyFR with
-`pip <https://pypi.python.org/pypi/pip>`_ in the virtual environment::
+        git clone git@github.com:libxsmm/libxsmm.git
+        cd libxsmm
+        make -j4 STATIC=0 BLAS=0
+        export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
 
-    pip install pyfr
+4. Make a virtualenv and activate it::
 
-This concludes the installation.
+        python3 -m virtualenv pyfr-venv
+        source pyfr-venv/bin/activate
+
+5. Install PyFR::
+
+        pip install pyfr
 
 This has been tested on Ubuntu 20.04.
 
