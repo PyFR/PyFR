@@ -79,7 +79,8 @@ The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
 their associated parameters are described below. Note that both ``;`` and
-``#`` may be used as comment characters.
+``#`` may be used as comment characters.  Additionally, all parameter
+values support environment variable expansion.
 
 Backends
 --------
@@ -101,6 +102,14 @@ Parameterises the backend with
 
     ``linear`` | ``random``
 
+3. ``collect-wait-times`` --- If to track MPI request wait times or not:
+
+    ``True`` | ``False``
+
+4. ``collect-wait-times-len`` --- Size of the wait time history buffer:
+
+     *int*
+
 Example::
 
     [backend]
@@ -114,7 +123,7 @@ Parameterises the CUDA backend with
 
 1. ``device-id`` --- method for selecting which device(s) to run on:
 
-     *int* | ``round-robin`` | ``local-rank``
+     *int* | ``round-robin`` | ``local-rank`` | ``uuid``
 
 2. ``mpi-type`` --- type of MPI library that is being used:
 
@@ -137,7 +146,7 @@ Parameterises the HIP backend with
 
 1. ``device-id`` --- method for selecting which device(s) to run on:
 
-     *int* | ``local-rank``
+     *int* | ``local-rank`` | ``uuid``
 
 2. ``mpi-type`` --- type of MPI library that is being used:
 
@@ -164,7 +173,7 @@ Parameterises the OpenCL backend with
 
 3. ``device-id`` --- for selecting which device(s) to run on:
 
-    *int* | *string* | ``local-rank``
+    *int* | *string* | ``local-rank`` | ``uuid``
 
 4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
    non-zero entires in a constant matrix:
@@ -196,6 +205,12 @@ Parameterises the OpenMP backend with
    two and at least 32:
 
     *int*
+
+4. ``schedule`` --- OpenMP loop scheduling scheme:
+
+    ``static`` | ``dynamic`` | ``dynamic, n`` | ``guided`` | ``guided, n``
+
+    where *n* is a positive integer.
 
 Example::
 
@@ -389,13 +404,13 @@ Parameterises the time-integration scheme used by the solver with
 
            *float*
 
+        - ``controller`` --- time-step controller
+
+           ``none``
+
         - ``pseudo-dt`` --- pseudo time-step
 
            *float*
-
-        - ``controller`` --- pseudo time-step controller
-
-           ``none``
 
         - ``pseudo-niters-max`` --- minimum number of iterations
 

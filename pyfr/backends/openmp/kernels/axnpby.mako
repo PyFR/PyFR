@@ -26,7 +26,7 @@ void axnpby(const struct kargs *restrict args)
     }
 % else:
     #define X_IDX_AOSOA(v, nv) ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-    #pragma omp parallel for
+    #pragma omp parallel for ${schedule}
     for (int ib = 0; ib < nblocks; ib++)
     {
         for (int _y = 0; _y < nrow; _y++)

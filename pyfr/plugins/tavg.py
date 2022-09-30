@@ -105,6 +105,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
+        # Compute the gradients
+        if self._gradpinfo:
+            grad_soln = intg.grad_soln
+
         # Iterate over each element type in the simulation
         for idx, etype, rgn in self._ele_regions:
             soln = intg.soln[idx][..., rgn].swapaxes(0, 1)
@@ -117,11 +121,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
             # Prepare any required gradients
             if self._gradpinfo:
-                # Compute the gradients
-                grad_soln = np.rollaxis(intg.grad_soln[idx], 2)[..., rgn]
+                grads = np.rollaxis(grad_soln[idx], 2)[..., rgn]
 
                 # Transform from conservative to primitive gradients
-                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
+                pgrads = self.elementscls.grad_con_to_pri(soln, grads,
                                                           self.cfg)
 
                 # Add them to the substitutions dictionary
@@ -200,15 +203,15 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
                     data[etype] = d.astype(self.fpdtype)
 
+                stats = Inifile()
+                stats.set('data', 'prefix', 'tavg')
+                stats.set('data', 'fields', ','.join(self.outfields))
+                stats.set('tavg', 'tstart', tstart)
+                stats.set('tavg', 'tend', intg.tcurr)
+                intg.collect_stats(stats)
+
                 # If we are the root rank then prepare the metadata
                 if rank == root:
-                    stats = Inifile()
-                    stats.set('data', 'prefix', 'tavg')
-                    stats.set('data', 'fields', ','.join(self.outfields))
-                    stats.set('tavg', 'tstart', tstart)
-                    stats.set('tavg', 'tend', intg.tcurr)
-                    intg.collect_stats(stats)
-
                     metadata = dict(intg.cfgmeta,
                                     stats=stats.tostr(),
                                     mesh_uuid=intg.mesh_uuid)

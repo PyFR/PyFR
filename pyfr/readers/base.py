@@ -134,7 +134,7 @@ class NodalMeshAssembler:
         return pairs, resid
 
     def _pair_periodic_fluid_faces(self, bpart, resid):
-        pfaces = defaultdict(list)
+        pfaces, pmap = defaultdict(list), {}
 
         for k, (lpent, rpent) in self._pfacespents.items():
             for pftype in bpart[lpent]:
@@ -148,16 +148,13 @@ class NodalMeshAssembler:
                 rfidx = fuzzysort(rfpts.mean(axis=1).T, range(len(rfnodes)))
 
                 for lfn, rfn in zip(lfnodes[lfidx], rfnodes[rfidx]):
-                    # Add periodic face flags
-                    flg = int(k) + 1
-
-                    # Left = +, right = -
-                    lf = resid.pop(tuple(sorted(lfn)))[:-1] + (flg,)
-                    rf = resid.pop(tuple(sorted(rfn)))[:-1] + (-flg,)
+                    lf = resid.pop(tuple(sorted(lfn)))
+                    rf = resid.pop(tuple(sorted(rfn)))
 
                     pfaces[pftype].append([lf, rf])
+                    pmap[lf, rf] = k
 
-        return pfaces
+        return pfaces, pmap
 
     def _ident_boundary_faces(self, bpart, resid):
         bfaces = defaultdict(list)
@@ -185,7 +182,7 @@ class NodalMeshAssembler:
         fpairs, resid = self._pair_fluid_faces(ffaces)
 
         # Tag and pair periodic boundary faces
-        pfpairs = self._pair_periodic_fluid_faces(bpart, resid)
+        pfpairs, pmap = self._pair_periodic_fluid_faces(bpart, resid)
 
         # Identify the fixed boundary faces
         bf = self._ident_boundary_faces(bpart, resid)
@@ -200,6 +197,12 @@ class NodalMeshAssembler:
         # Generate the internal connectivity array
         con = list(pairs)
 
+        # Extract the names of periodic interfaces
+        con_pnames = defaultdict(list)
+        for i, (l, r) in enumerate(con):
+            if (l, r) in pmap:
+                con_pnames[pmap[l, r]].append(i)
+
         # Generate boundary condition connectivity arrays
         bcon = {}
         for pbcrgn, pent in self._bfacespents.items():
@@ -207,6 +210,9 @@ class NodalMeshAssembler:
 
         # Output
         ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i2').T}
+
+        for k, v in con_pnames.items():
+            ret['con_p0', f'periodic_{k}'] = np.array(v, dtype=np.int32)
 
         for k, v in bcon.items():
             ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i4,i1,i2')

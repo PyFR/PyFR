@@ -2,8 +2,7 @@
 
 import numpy as np
 
-from pyfr.backends.base import Kernel
-from pyfr.backends.opencl.provider import OpenCLKernelProvider
+from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 
 
 class OpenCLPackingKernels(OpenCLKernelProvider):
@@ -18,24 +17,24 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
 
         # Build
         kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
+        kern.set_dims((v.n,))
         kern.set_args(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
                       v.rstrides or 0, m)
 
-        class PackXchgViewKernel(Kernel):
-            def run(self, queue):
-                # Pack
-                kern.exec_async(queue.cmd_q, (v.n,), None)
-
-                # Copy the packed buffer to the host
-                cl.memcpy_async(queue.cmd_q, m.hdata, m.data, m.nbytes)
+        class PackXchgViewKernel(OpenCLKernel):
+            def run(self, queue, wait_for=None, ret_evt=False):
+                pevt = kern.exec_async(queue, wait_for, True)
+                return cl.memcpy_async(queue, m.hdata, m.data, m.nbytes,
+                                       [pevt], ret_evt)
 
         return PackXchgViewKernel(mats=[mv])
 
     def unpack(self, mv):
         cl = self.backend.cl
 
-        class UnpackXchgMatrixKernel(Kernel):
-            def run(self, queue):
-                cl.memcpy_async(queue.cmd_q, mv.data, mv.hdata, mv.nbytes)
+        class UnpackXchgMatrixKernel(OpenCLKernel):
+            def run(self, queue, wait_for=None, ret_evt=False):
+                return cl.memcpy_async(queue, mv.data, mv.hdata, mv.nbytes,
+                                       wait_for, ret_evt)
 
         return UnpackXchgMatrixKernel(mats=[mv])

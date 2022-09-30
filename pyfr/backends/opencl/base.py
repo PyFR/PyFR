@@ -36,7 +36,8 @@ class OpenCLBackend(BaseBackend):
 
         # Determine the OpenCL device to use
         for i, device in enumerate(platform.get_devices(devtype)):
-            if devid == str(i) or devid == device.name.lower():
+            if (devid == str(i) or devid == device.name.lower() or
+                devid == str(device.uuid or '')):
                 break
         else:
             raise ValueError('No suitable OpenCL device found')
@@ -58,15 +59,16 @@ class OpenCLBackend(BaseBackend):
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
                                           provider, types)
 
-        # Register our data types
-        self.base_matrix_cls = types.OpenCLMatrixBase
+        # Register our data types and meta kernels
         self.const_matrix_cls = types.OpenCLConstMatrix
+        self.graph_cls = types.OpenCLGraph
         self.matrix_cls = types.OpenCLMatrix
         self.matrix_slice_cls = types.OpenCLMatrixSlice
-        self.queue_cls = types.OpenCLQueue
         self.view_cls = types.OpenCLView
         self.xchg_matrix_cls = types.OpenCLXchgMatrix
         self.xchg_view_cls = types.OpenCLXchgView
+        self.ordered_meta_kernel_cls = provider.OpenCLOrderedMetaKernel
+        self.unordered_meta_kernel_cls = provider.OpenCLUnorderedMetaKernel
 
         # Instantiate the base kernel providers
         kprovs = [provider.OpenCLPointwiseKernelProvider,
@@ -83,6 +85,28 @@ class OpenCLBackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+        # Queues (in and out of order)
+        self.queue = self.cl.queue(out_of_order=True)
+
+    def run_kernels(self, kernels, wait=False):
+        # Submit the kernels to the command queue
+        for k in kernels:
+            self.queue.barrier()
+            k.run(self.queue)
+
+        if wait:
+            self.queue.finish()
+        else:
+            self.queue.flush()
+
+    def run_graph(self, graph, wait=False):
+        self.queue.barrier()
+
+        graph.run(self.queue)
+
+        if wait:
+            self.queue.finish()
 
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer

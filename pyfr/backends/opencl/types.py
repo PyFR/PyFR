@@ -36,7 +36,9 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
 
         # Copy
-        self.backend.cl.memcpy(buf, self.data, self.nbytes)
+        self.backend.queue.barrier()
+        self.backend.cl.memcpy(self.backend.queue, buf, self.data, self.nbytes,
+                               blocking=True)
 
         # Unpack
         return self._unpack(buf[None, :, :])
@@ -45,11 +47,9 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         buf = self._pack(ary)
 
         # Copy
-        self.backend.cl.memcpy(self.data, buf, self.nbytes)
-
-
-class OpenCLMatrix(OpenCLMatrixBase, base.Matrix):
-    pass
+        self.backend.queue.barrier()
+        self.backend.cl.memcpy(self.backend.queue, self.data, buf, self.nbytes,
+                               blocking=True)
 
 
 class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
@@ -62,12 +62,10 @@ class OpenCLMatrixSlice(_OpenCLMatrixCommon, base.MatrixSlice):
             return self.basedata
 
 
-class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix):
-    pass
-
-
-class OpenCLView(base.View):
-    pass
+class OpenCLMatrix(OpenCLMatrixBase, base.Matrix): pass
+class OpenCLConstMatrix(OpenCLMatrixBase, base.ConstMatrix): pass
+class OpenCLView(base.View): pass
+class OpenCLXchgView(base.XchgView): pass
 
 
 class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
@@ -79,31 +77,52 @@ class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
         self.hdata = backend.cl.pagelocked_empty(shape, dtype)
 
 
-class OpenCLXchgView(base.XchgView):
-    pass
+class OpenCLGraph(base.Graph):
+    def commit(self):
+        super().commit()
 
+        # Map from kernels to event table locations
+        evtidxs = {}
 
-class OpenCLQueue(base.Queue):
-    def __init__(self, backend):
-        super().__init__(backend)
+        # Kernel list complete with dependency information
+        self.klist = klist = []
 
-        # OpenCL command queue
-        self.cmd_q = backend.cl.queue()
+        for i, k in enumerate(self.knodes):
+            evtidxs[k] = i
 
-    def run(self, mpireqs=[]):
-        # Start any MPI requests
-        if mpireqs:
-            self._startall(mpireqs)
+            # Resolve the event indices of kernels we depend on
+            wait_evts = [evtidxs[dep] for dep in self.kdeps[k]] or None
 
-        # Submit the kernels to the command queue
-        for item, args, kwargs in self._items:
-            item.run(self, *args, **kwargs)
+            klist.append((k, wait_evts, k in self.depk))
 
-        # If we started any MPI requests, wait for them
-        if mpireqs:
-            self.cmd_q.flush()
-            self._waitall(mpireqs)
+        # Dependent MPI request list
+        self.mreqlist = mreqlist = []
 
-        # Wait for the kernels to finish and clear the queue
-        self.cmd_q.finish()
-        self._items.clear()
+        for req, deps in zip(self.mpi_reqs, self.mpi_req_deps):
+            if deps:
+                mreqlist.append((req, [evtidxs[dep] for dep in deps]))
+
+    def run(self, queue):
+        events = [None]*len(self.klist)
+        wait_for_events = self.backend.cl.wait_for_events
+
+        # Submit the kernels to the queue
+        for i, (k, wait_for, ret_evt) in enumerate(self.klist):
+            if wait_for is not None:
+                wait_for = [events[j] for j in wait_for]
+
+            events[i] = k.run(queue, wait_for, ret_evt)
+
+        # Flush the queue to ensure the kernels have started
+        queue.flush()
+
+        # Start all dependency-free MPI requests
+        self._startall(self.mpi_root_reqs)
+
+        # Start any remaining requests once their dependencies are satisfied
+        for req, wait_for in self.mreqlist:
+            wait_for_events([events[j] for j in wait_for])
+            req.Start()
+
+        # Wait for all of the MPI requests to finish
+        self._waitall(self.mpi_reqs)

@@ -4,7 +4,7 @@ from collections import defaultdict
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.base import BasePlugin, init_csv
 
 
@@ -107,12 +107,11 @@ class FluidForcePlugin(BasePlugin):
                     # Product to give J^-T at the solution points
                     rcpjact[etype] = smat*rcpdjac
 
-                # Unit physical normals and their magnitudes (including |J|)
-                npn = eles.get_norm_pnorms(eidx, fidx)
-                mpn = eles.get_mag_pnorms(eidx, fidx)
+                # Phyiscal normals
+                pnorms = eles.get_pnorms(eidx, fidx)
 
                 eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(mpn[:, None]*npn)
+                norms[etype, fidx].append(pnorms)
 
                 # Get the flux points position of the given face and element
                 # indices relative to the moment origin
@@ -217,9 +216,9 @@ class FluidForcePlugin(BasePlugin):
 
         # Reduce and output if we're the root rank
         if rank != root:
-            comm.Reduce(fm, None, op=get_mpi('sum'), root=root)
+            comm.Reduce(fm, None, op=mpi.SUM, root=root)
         else:
-            comm.Reduce(get_mpi('in_place'), fm, op=get_mpi('sum'), root=root)
+            comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
 
             # Write
             print(intg.tcurr, *fm.ravel(), sep=',', file=self.outf)

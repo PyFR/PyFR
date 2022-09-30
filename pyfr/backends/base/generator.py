@@ -4,7 +4,7 @@ import re
 
 import numpy as np
 
-from pyfr.util import match_paired_paren
+from pyfr.util import match_paired_paren, ndrange
 
 
 class Arg:
@@ -12,13 +12,14 @@ class Arg:
         self.name = name
 
         specptn = r'''
-            (?:(in|inout|out)\s+)?                           # Intent
-            (?:(broadcast(?:-row|-col)|mpi|scalar|view)\s+)? # Attrs
-            ([A-Za-z_]\w*)                                   # Data type
-            ((?:\[\d+\]){0,2})$                              # Dimensions
+            (?:(in|inout|out)\s+)?                            # Intent
+            (?:(broadcast(?:-row|-col)?|mpi|scalar|view)\s+)? # Attrs
+            (?:reduce\((min_pos)\)\s+)?                       # Reduction
+            ([A-Za-z_]\w*)                                    # Data type
+            ((?:\[\d+\]){0,2})$                               # Dimensions
         '''
         dimsptn = r'(?<=\[)\d+(?=\])'
-        usedptn = fr'(?:[^A-Za-z]|^){name}[^A-Za-z0-9]'
+        usedptn = fr'(?:[^A-Za-z_]|^){name}[^A-Za-z0-9]'
 
         # Parse our specification
         m = re.match(specptn, spec, re.X)
@@ -30,28 +31,40 @@ class Arg:
         # Properties
         self.intent = g[0] or 'in'
         self.attrs = g[1] or ''
-        self.dtype = g[2]
+        self.reduceop = g[2]
+        self.dtype = g[3]
+        self.cdimstr = g[4]
 
-        # Dimensions
-        self.cdims = [int(d) for d in re.findall(dimsptn, g[3])]
+        # Dimension
+        self.cdims = [int(d) for d in re.findall(dimsptn, g[4])]
         self.ncdim = len(self.cdims)
 
         # Attributes
+        self.isbroadcast = self.attrs == 'broadcast'
         self.isbroadcastr = self.attrs == 'broadcast-row'
         self.isbroadcastc = self.attrs == 'broadcast-col'
         self.ismpi = self.attrs == 'mpi'
-        self.isused = bool(re.search(usedptn, body))
         self.isview = self.attrs == 'view'
         self.isscalar = self.attrs == 'scalar'
         self.isvector = not self.isscalar
+        self.isreduce = bool(self.reduceop)
+        self.isused = bool(re.search(usedptn, body))
 
         # Validation
         if self.attrs.startswith('broadcast') and self.intent != 'in':
             raise ValueError('Broadcast arguments must be of intent in')
+        if self.isbroadcast and self.ncdim != 2:
+            raise ValueError('Broadcasts must have two dimensions')
         if self.isbroadcastr and self.ncdim != 1:
             raise ValueError('Row broadcasts must have one dimension')
         if self.isbroadcastc and self.ncdim == 1:
             raise ValueError('Column broadcasts must have zero or two dims')
+        if self.isreduce and self.intent != 'out':
+            raise ValueError('Reduction arguments must be of intent out')
+        if self.isreduce and self.dtype != 'fpdtype_t':
+            raise ValueError('Reduction arguments must be of type fpdtype_t')
+        if self.isreduce and self.isscalar:
+            raise ValueError('Scalar arguments can not be reduced')
         if self.isscalar and self.dtype != 'fpdtype_t':
             raise ValueError('Scalar arguments must be of type fpdtype_t')
 
@@ -122,6 +135,14 @@ class BaseKernelGenerator:
     def render(self):
         pass
 
+    def _deref_arg(self, arg):
+        if arg.isview:
+            return self._deref_arg_view(arg)
+        elif self.ndim == 1:
+            return self._deref_arg_array_1d(arg)
+        else:
+            return self._deref_arg_array_2d(arg)
+
     def _deref_arg_view(self, arg):
         ptns = [
             '{0}_v[{0}_vix[{1}]]',
@@ -136,6 +157,11 @@ class BaseKernelGenerator:
         #   name => name_v[X_IDX + BLK_IDX]
         if arg.ncdim == 0:
             ix = 'X_IDX + BLK_IDX'
+        # 2D broadcast vector
+        #   name[\1][\2] => name_v[ldim*(\1) + (\2)]
+        elif arg.isbroadcast and arg.ncdim == 2:
+            lx = self.ldim_size(arg.name)
+            ix = fr'{lx}*\1 + BCAST_BLK({arg.cdims[0]}, \2, {lx})'
         # Tightly packed MPI Vector:
         #   name[\1] => name_v[nx*(\1) + X_IDX + BLK_IDX]
         elif arg.ncdim == 1 and arg.ismpi:
@@ -160,9 +186,14 @@ class BaseKernelGenerator:
         return f'{arg.name}_v[{ix}]'
 
     def _deref_arg_array_2d(self, arg):
+        # 2D broadcast vector
+        #   name[\1][\2] => name_v[ldim*(\1) + (\2)]
+        if arg.isbroadcast and arg.ncdim == 2:
+            lx = self.ldim_size(arg.name)
+            ix = fr'{lx}*\1 + BCAST_BLK({arg.cdims[0]}, \2, {lx})'
         # Column broadcast matrix with zero dimension:
         #   name => name_v[X_IDX + BLK_IDX]
-        if arg.ncdim == 0 and arg.isbroadcastc:
+        elif arg.ncdim == 0 and arg.isbroadcastc:
             ix = 'X_IDX + BLK_IDX'
         # Matrix:
         #   name => name_v[ldim*_y + X_IDX + BLK_IDX*ny]
@@ -173,7 +204,7 @@ class BaseKernelGenerator:
         #   name[\1] => name_v[ldim*_y + \1]
         elif arg.isbroadcastr:
             lx = self.ldim_size(arg.name)
-            ix = fr'{lx}*_y + BCAST_BLK(\1, {lx})'
+            ix = fr'{lx}*_y + BCAST_BLK(_ny, \1, {lx})'
         # Stacked matrix:
         #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv) + BLK_IDX*nv*ny]
         elif arg.ncdim == 1:
@@ -209,15 +240,23 @@ class BaseKernelGenerator:
 
         # Dereference vector arguments
         for va in self.vectargs:
-            if va.isview:
-                darg = self._deref_arg_view(va)
-            else:
-                if self.ndim == 1:
-                    darg = self._deref_arg_array_1d(va)
-                else:
-                    darg = self._deref_arg_array_2d(va)
+            darg = self._deref_arg(va)
+            subp = ptns[va.ncdim].format(va.name)
 
-            # Substitute
-            body = re.sub(ptns[va.ncdim].format(va.name), darg, body)
+            # Regular
+            if not va.isreduce:
+                body = re.sub(subp, darg, body)
+            # Reduction
+            else:
+                body = f'fpdtype_t {va.name}{va.cdimstr};\n{body}'
+
+                if va.ncdim == 0:
+                    body += f'atomic_{va.reduceop}(&{darg}, {va.name});\n'
+                else:
+                    for ij in ndrange(*va.cdims):
+                        lval = va.name + ''.join(f'[{i}]' for i in ij)
+                        gval = re.sub(subp, darg, lval)
+
+                        body += f'atomic_{va.reduceop}(&{gval}, {lval});\n'
 
         return body

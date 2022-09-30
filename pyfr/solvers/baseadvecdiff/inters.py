@@ -59,19 +59,22 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         else:
             self.c['ldg-beta'] *= 1.0 if rhsprank > lhsprank else -1.0
 
+        # Allocate a tag
+        vect_fpts_tag = next(self._mpi_tag_counter)
+
         # If we need to send our gradients to the RHS
         if self.c['ldg-beta'] != -0.5:
             self.kernels['vect_fpts_pack'] = lambda: be.kernel(
                 'pack', self._vect_lhs
             )
             self.mpireqs['vect_fpts_send'] = lambda: self._vect_lhs.sendreq(
-                self._rhsrank, self.MPI_TAG
+                self._rhsrank, vect_fpts_tag
             )
 
         # If we need to recv gradients from the RHS
         if self.c['ldg-beta'] != 0.5:
             self.mpireqs['vect_fpts_recv'] = lambda: self._vect_rhs.recvreq(
-                self._rhsrank, self.MPI_TAG
+                self._rhsrank, vect_fpts_tag
             )
             self.kernels['vect_fpts_unpack'] = lambda: be.kernel(
                 'unpack', self._vect_rhs
@@ -83,6 +86,9 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
                                                 'get_artvisc_fpts_for_inter')
             self._artvisc_rhs = be.xchg_matrix_for_view(self._artvisc_lhs)
 
+            # Allocate a tag
+            artvisc_fpts_tag = next(self._mpi_tag_counter)
+
             # If we need to send our artificial viscosity to the RHS
             if self.c['ldg-beta'] != -0.5:
                 av_lhs = self._artvisc_lhs
@@ -90,14 +96,14 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
                     'pack', av_lhs
                 )
                 self.mpireqs['artvisc_fpts_send'] = lambda: av_lhs.sendreq(
-                    self._rhsrank, self.MPI_TAG
+                    self._rhsrank, artvisc_fpts_tag
                 )
 
             # If we need to recv artificial viscosity from the RHS
             if self.c['ldg-beta'] != 0.5:
                 av_rhs = self._artvisc_rhs
                 self.mpireqs['artvisc_fpts_recv'] = lambda: av_rhs.recvreq(
-                    self._rhsrank, self.MPI_TAG
+                    self._rhsrank, artvisc_fpts_tag
                 )
                 self.kernels['artvisc_fpts_unpack'] = lambda: be.kernel(
                     'unpack', av_rhs

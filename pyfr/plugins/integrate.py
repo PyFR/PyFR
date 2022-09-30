@@ -5,7 +5,7 @@ import re
 import numpy as np
 
 from pyfr.inifile import NoOptionError
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
@@ -136,6 +136,10 @@ class IntegratePlugin(BasePlugin):
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
+        # Compute the gradients
+        if self._gradpinfo:
+            grad_soln = intg.grad_soln
+
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
             plocs, wts, m0, eset, emask = eleinfo
@@ -156,15 +160,14 @@ class IntegratePlugin(BasePlugin):
 
             # Prepare any required gradients
             if self._gradpinfo:
-                # Compute the gradients
-                grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
+                grads = np.rollaxis(grad_soln[i], 2)[..., eset]
 
                 # Interpolate the gradients to the quadrature points
                 if m0 is not None:
-                    grad_soln = m0 @ grad_soln
+                    grads = m0 @ grads
 
                 # Transform from conservative to primitive gradients
-                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
+                pgrads = self.elementscls.grad_con_to_pri(soln, grads,
                                                           self.cfg)
 
                 # Add them to the substitutions dictionary
@@ -191,10 +194,9 @@ class IntegratePlugin(BasePlugin):
 
             # Reduce and output if we're the root rank
             if rank != root:
-                comm.Reduce(iintex, None, op=get_mpi('sum'), root=root)
+                comm.Reduce(iintex, None, op=mpi.SUM, root=root)
             else:
-                comm.Reduce(get_mpi('in_place'), iintex, op=get_mpi('sum'),
-                            root=root)
+                comm.Reduce(mpi.IN_PLACE, iintex, op=mpi.SUM, root=root)
 
                 # Write
                 print(intg.tcurr, *iintex, sep=',', file=self.outf)

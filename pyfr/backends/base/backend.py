@@ -16,8 +16,10 @@ def recordmat(fn):
     @wraps(fn)
     def newfn(self, *args, **kwargs):
         m = fn(self, *args, **kwargs)
-        m.mid = next(self._mat_counter)
-        self.mats[m.mid] = m
+
+        if not hasattr(m, 'mid'):
+            m.mid = next(self._mat_counter)
+            self.mats[m.mid] = m
 
         return m
     return newfn
@@ -120,8 +122,17 @@ class BaseBackend:
         pass
 
     @recordmat
-    def const_matrix(self, initval, extent=None, tags=set()):
-        return self.const_matrix_cls(self, initval, extent, tags)
+    def const_matrix(self, initval, dtype=None, tags=set()):
+        dtype = dtype or self.fpdtype
+
+        # See if we have previously allocated an identical matrix
+        for m in self.mats.values():
+            if (isinstance(m, self.const_matrix_cls) and
+                m.dtype == dtype and m.ioshape == initval.shape and
+                tags.issubset(m.tags) and (m.get() == initval).all()):
+                return m
+
+        return self.const_matrix_cls(self, dtype, initval, tags)
 
     @recordmat
     def matrix(self, ioshape, initval=None, extent=None, aliases=None,
@@ -161,5 +172,11 @@ class BaseBackend:
         else:
             raise KeyError(f'Kernel "{name}" has no providers')
 
-    def queue(self):
-        return self.queue_cls(self)
+    def ordered_meta_kernel(self, kerns):
+        return self.ordered_meta_kernel_cls(kerns)
+
+    def unordered_meta_kernel(self, kerns):
+        return self.unordered_meta_kernel_cls(kerns)
+
+    def graph(self):
+        return self.graph_cls(self)

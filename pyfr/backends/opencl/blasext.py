@@ -2,8 +2,7 @@
 
 import numpy as np
 
-from pyfr.backends.opencl.provider import OpenCLKernelProvider
-from pyfr.backends.base import Kernel
+from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 
 
 class OpenCLBlasExtKernels(OpenCLKernelProvider):
@@ -23,12 +22,15 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
                                   [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
+        kern.set_dims((ncolb, nrow))
         kern.set_args(nrow, ncolb, ldim, *arr)
 
-        class AxnpbyKernel(Kernel):
-            def run(self, queue, *consts):
+        class AxnpbyKernel(OpenCLKernel):
+            def bind(self, *consts):
                 kern.set_args(*consts, start=3 + nv)
-                kern.exec_async(queue.cmd_q, (ncolb, nrow), None)
+
+            def run(self, queue, wait_for=None, ret_evt=False):
+                return kern.exec_async(queue, wait_for, ret_evt)
 
         return AxnpbyKernel(mats=arr)
 
@@ -38,11 +40,12 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
-        class CopyKernel(Kernel):
-            def run(self, queue):
-                cl.memcpy_async(queue.cmd_q, dst, src, dst.nbytes)
+        class CopyKernel(OpenCLKernel):
+            def run(self, queue, wait_for=None, ret_evt=False):
+                return cl.memcpy(queue, dst, src, dst.nbytes, blocking=False,
+                                 wait_for=wait_for, ret_evt=ret_evt)
 
-        return CopyKernel()
+        return CopyKernel(mats=[dst, src])
 
     def reduction(self, *rs, method, norm, dt_mat=None):
         if any(r.traits != rs[0].traits for r in rs[1:]):
@@ -62,7 +65,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         # Corresponding device memory allocation
         reduced_dev = cl.mem_alloc(reduced_host.nbytes)
 
-        tplargs = dict(norm=norm, sharesz=ls[0], method=method)
+        tplargs = dict(norm=norm, method=method)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
@@ -82,6 +85,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
+        rkern.set_dims(gs, ls)
         rkern.set_args(nrow, ncolb, ldim, reduced_dev, *regs)
 
         # Norm type
@@ -90,15 +94,17 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         # Runtime argument offset
         facoff = argt.index(dtype)
 
-        class ReductionKernel(Kernel):
+        class ReductionKernel(OpenCLKernel):
             @property
             def retval(self):
                 return reducer(reduced_host, axis=1)
 
-            def run(self, queue, *facs):
+            def bind(self, *facs):
                 rkern.set_args(*facs, start=facoff)
-                rkern.exec_async(queue.cmd_q, gs, ls)
-                cl.memcpy_async(queue.cmd_q, reduced_host, reduced_dev,
-                                reduced_dev.nbytes)
+
+            def run(self, queue, wait_for=None, ret_evt=False):
+                revt = rkern.exec_async(queue, wait_for, True)
+                return cl.memcpy(queue, reduced_host, reduced_dev,
+                                 reduced_dev.nbytes, False, [revt], ret_evt)
 
         return ReductionKernel(mats=regs)

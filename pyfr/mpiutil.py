@@ -71,7 +71,11 @@ def get_local_rank():
         return MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED).rank
 
 
-def get_mpi(attr):
-    from mpi4py import MPI
+class _MPI:
+    def __getattr__(self, attr):
+        from mpi4py import MPI
 
-    return getattr(MPI, attr.upper())
+        return getattr(MPI, attr)
+
+
+mpi = _MPI()

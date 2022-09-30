@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root, get_mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.base import BasePlugin, init_csv
 
 
@@ -50,10 +50,9 @@ class ResidualPlugin(BasePlugin):
 
             # Reduce and, if we are the root rank, output
             if rank != root:
-                comm.Reduce(resid, None, op=get_mpi('sum'), root=root)
+                comm.Reduce(resid, None, op=mpi.SUM, root=root)
             else:
-                comm.Reduce(get_mpi('in_place'), resid, op=get_mpi('sum'),
-                            root=root)
+                comm.Reduce(mpi.IN_PLACE, resid, op=mpi.SUM, root=root)
 
                 # Normalise
                 resid = np.sqrt(resid) / (intg.tcurr - self._tprev)
@@ -68,4 +67,3 @@ class ResidualPlugin(BasePlugin):
 
         # Prep work if an output is due next step
         self._prep_next_output(intg)
-

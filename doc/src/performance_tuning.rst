@@ -14,14 +14,6 @@ acceptably and generating the desired results.
 OpenMP Backend
 ==============
 
-libxsmm
--------
-
-If libxsmm is not available then PyFR will make use of GiMMiK for all
-matrix-matrix multiplications.  Although functional, the performance is
-typically sub-par compared with that of libxsmm.  As such libxsmm is
-*highly* recommended.
-
 AVX-512
 -------
 
@@ -40,6 +32,18 @@ Cores vs. threads
 PyFR does not typically derive any benefit from SMT.  As such the
 number of OpenMP threads should be chosen to be equal to the number of
 physical cores.
+
+Loop Scheduling
+---------------
+
+By default PyFR employs static scheduling for loops, with work being
+split evenly across cores.  For systems with a single type of core this
+is usually the right choice.  However, on heterogeneous systems it
+typically results in load imbalance.  Here, it can be beneficial to
+experiment with the *guided* and *dynamic* loop schedules as::
+
+        [backend-openmp]
+        schedule = dynamic, 5
 
 MPI processes vs. OpenMP threads
 --------------------------------
@@ -68,6 +72,24 @@ this functionality can be enabled through the ``mpi-type`` key as::
 
         [backend-cuda]
         mpi-type = cuda-aware
+
+.. _perf hip backend:
+
+HIP Backend
+===========
+
+HIP-aware MPI
+-------------
+
+PyFR is capable of taking advantage of HIP-aware MPI.  This enables
+HIP device pointers to be directly to passed MPI routines.  Under the
+right circumstances this can result in improved performance for
+simulations which are near the strong scaling limit.  Assuming
+mpi4py has been built against an MPI distribution which is HIP-aware
+this functionality can be enabled through the ``mpi-type`` key as::
+
+        [backend-hip]
+        mpi-type = hip-aware
 
 Partitioning
 ============
@@ -121,6 +143,53 @@ additional information about the relative performance of tetrahedra and
 prisms, a safe choice is to assume the prisms are appreciably *more*
 expensive than the tetrahedra.
 
+Detecting load imbalances
+-------------------------
+
+PyFR includes code for monitoring the amount of time each rank spends
+waiting for MPI transfers to complete.  This can be used, among other
+things, to detect load imbalances.  Such imbalances are typically
+observed on mixed-element grids with an incorrect weighting factor.
+Wait time tracking can be enabled as::
+
+        [backend]
+        collect-wait-times = true
+
+with the resulting statistics being recorded in the
+``[backend-wait-times]`` section of the ``/stats`` object which is
+included in all PyFR solution files.  This can be extracted as::
+
+        h5dump -d /stats -b --output=stats.ini soln.pyfrs
+
+Note that the number of graphs depends on the system, and not all
+graphs initiate MPI requests.  The average amount of time each rank
+spends waiting for MPI requests per right hand side evaluation can be
+obtained by vertically summing all of the ``-median`` fields together.
+
+There exists an inverse relationship between the amount of
+computational work a rank has to perform and the amount of time it
+spends waiting for MPI requests to complete.  Hence, ranks which spend
+comparatively less time waiting than their peers are likely to be
+overloaded, whereas those which spend comparatively more time waiting
+are likely to be underloaded.  This information can then be used to
+explicitly re-weight the partitions and/or the per-element weights.
+
+Scaling
+=======
+
+The general recommendation when running PyFR in parallel is to aim for
+a parallel efficiency of :math:`\epsilon \simeq 0.8` with the parallel
+efficiency being defined as:
+
+.. math::
+
+  \epsilon = \frac{1}{N}\frac{T_1}{T_N},
+
+where :math:`N` is the number of ranks, :math:`T_1` is the simulation
+time with one rank, and :math:`T_N` is the simulation time with
+:math:`N` ranks.  This represents a reasonable trade-off between the
+overall time-to-solution and efficient resource utilisation.
+
 Parallel I/O
 ============
 
@@ -137,7 +206,20 @@ prerequisites must be satisfied:
 
 After completing this process it is highly recommended to verify
 everything is working by trying the
-`h5py parallel hdf5 example <https://docs.h5py.org/en/stable/mpi.html#using-parallel-hdf5-from-h5py>`_.
+`h5py parallel HDF5 example <https://docs.h5py.org/en/stable/mpi.html#using-parallel-hdf5-from-h5py>`_.
+
+Plugins
+=======
+
+A common source of performance issues is running plugins too
+frequently.  Given the time steps taken by PyFR are typically much
+smaller than those associated with the underlying physics there is
+seldom any benefit to running integration and/or time average
+accumulation plugins more frequently than once every 50 steps.
+Further, when running with adaptive time stepping there is no need
+to run the NaN check plugin.  For simulations with fixed time steps,
+it is not recommended to run the NaN check plugin more frequently than
+once every 10 steps.
 
 Start-up Time
 =============
@@ -147,7 +229,7 @@ Python is compiled from source with profile guided optimisations (PGO)
 which can be enabled by passing ``--enable-optimizations`` to the
 ``configure`` script.
 
-It is also important that NumPy be configured to use an optimized
+It is also important that NumPy be configured to use an optimised
 BLAS/LAPACK distribution.  Further details can be found in the
 `NumPy building from source <https://numpy.org/devdocs/user/building.html>`_
 guide.

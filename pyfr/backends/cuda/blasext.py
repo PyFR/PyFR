@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from pyfr.backends.cuda.provider import CUDAKernelProvider, get_grid_for_block
-from pyfr.backends.base import Kernel
+from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
+                                         get_grid_for_block)
 
 
 class CUDABlasExtKernels(CUDAKernelProvider):
@@ -28,12 +28,18 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         block = (128, 1, 1)
         grid = get_grid_for_block(block, ncolb, nrow)
 
-        class AxnpbyKernel(Kernel):
-            def run(self, queue, *consts):
-                kern.exec_async(grid, block, queue.stream, nrow, ncolb, ldim,
-                                *arr, *consts)
+        # Set the parameters
+        params = kern.make_params(grid, block)
+        params.set_args(nrow, ncolb, ldim, *arr)
 
-        return AxnpbyKernel()
+        class AxnpbyKernel(CUDAKernel):
+            def bind(self, *consts):
+                params.set_args(*consts, start=3 + nv)
+
+            def run(self, stream):
+                kern.exec_async(stream, params)
+
+        return AxnpbyKernel(mats=arr)
 
     def copy(self, dst, src):
         cuda = self.backend.cuda
@@ -41,11 +47,14 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         if dst.traits != src.traits:
             raise ValueError('Incompatible matrix types')
 
-        class CopyKernel(Kernel):
-            def run(self, queue):
-                cuda.memcpy(dst, src, dst.nbytes, queue.stream)
+        class CopyKernel(CUDAKernel):
+            def add_to_graph(self, graph, deps):
+                return graph.graph.add_memcpy(dst, src, dst.nbytes, deps)
 
-        return CopyKernel()
+            def run(self, stream):
+                cuda.memcpy(dst, src, dst.nbytes, stream)
+
+        return CopyKernel(mats=[dst, src])
 
     def reduction(self, *rs, method, norm, dt_mat=None):
         if any(r.traits != rs[0].traits for r in rs[1:]):
@@ -88,18 +97,27 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
 
+        # Set the parameters
+        params = rkern.make_params(grid, block)
+        params.set_args(nrow, ncolb, ldim, reduced_dev, *regs)
+
+        # Runtime argument offset
+        facoff = argt.index(dtype)
+
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum
 
-        class ReductionKernel(Kernel):
+        class ReductionKernel(CUDAKernel):
             @property
             def retval(self):
                 return reducer(reduced_host, axis=1)
 
-            def run(self, queue, *facs):
-                rkern.exec_async(grid, block, queue.stream,
-                                 nrow, ncolb, ldim, reduced_dev, *regs, *facs)
-                cuda.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
-                            queue.stream)
+            def bind(self, *facs):
+                params.set_args(*facs, start=facoff)
 
-        return ReductionKernel()
+            def run(self, stream):
+                rkern.exec_async(stream, params)
+                cuda.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
+                            stream)
+
+        return ReductionKernel(mats=regs)

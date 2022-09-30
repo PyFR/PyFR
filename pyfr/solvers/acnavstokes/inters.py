@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-from pyfr.backends.base.kernels import MetaKernel
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
@@ -19,11 +18,6 @@ class ACNavierStokesIntInters(BaseAdvectionDiffusionIntInters):
         self._be.pointwise.register(f'{kprefix}.intconu')
         self._be.pointwise.register(f'{kprefix}.intcflux')
 
-        if abs(self.c['ldg-beta']) == 0.5:
-            self.kernels['copy_fpts'] = lambda: MetaKernel(
-            [ele.kernels['_copy_fpts']() for ele in elemap.values()]
-        )
-
         self.kernels['con_u'] = lambda: self._be.kernel(
             'intconu', tplargs=tplargs, dims=[self.ninterfpts],
             ulin=self._scal_lhs, urin=self._scal_rhs,
@@ -33,7 +27,7 @@ class ACNavierStokesIntInters(BaseAdvectionDiffusionIntInters):
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
-            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+            nl=self._pnorm_lhs
         )
 
 
@@ -58,7 +52,7 @@ class ACNavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
             'mpicflux', tplargs=tplargs, dims=[self.ninterfpts],
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
-            magnl=self._mag_pnorm_lhs, nl=self._norm_pnorm_lhs
+            nl=self._pnorm_lhs
         )
 
 
@@ -80,15 +74,12 @@ class ACNavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ulin=self._scal_lhs,
-            ulout=self._vect_lhs, nlin=self._norm_pnorm_lhs,
-            **self._external_vals
+            ulout=self._vect_lhs, nlin=self._pnorm_lhs, **self._external_vals
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ul=self._scal_lhs,
-            gradul=self._vect_lhs, magnl=self._mag_pnorm_lhs,
-            nl=self._norm_pnorm_lhs,
-            **self._external_vals
+            gradul=self._vect_lhs, nl=self._pnorm_lhs, **self._external_vals
         )
 
 
@@ -101,6 +92,7 @@ class ACNavierStokesNoSlpWallBCInters(ACNavierStokesBaseBCInters):
 
         self.c |= self._exp_opts('uvw'[:self.ndims], lhs,
                                  default={'u': 0, 'v': 0, 'w': 0})
+
 
 class ACNavierStokesSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'slp-wall'
