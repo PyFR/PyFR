@@ -19,7 +19,7 @@ class HIPRTCInternalError(HIPRTCError): pass
 
 
 class HIPRTCWrappers(LibWrapper):
-    _libname = 'amdhip64'
+    _libname = 'hiprtc'
 
     # Error codes
     _statuses = {
