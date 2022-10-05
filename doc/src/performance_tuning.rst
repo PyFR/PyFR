@@ -55,6 +55,16 @@ two MPI ranks, with each process being bound to a single socket.  The
 specifics of how to accomplish this depend on both the job scheduler
 and MPI distribution.
 
+Asynchronous MPI progression
+----------------------------
+
+The parallel scalability of the OpenMP backend depends *heavily* on
+MPI having support for asynchronous progression; that is to say the
+ability for non-blocking send and receive requests to complete
+*without* the need for the host application to make explicit calls into
+MPI routines.  A lack of support for asynchronous progression prevents
+PyFR from being able to overlap computation with communication.
+
 .. _perf cuda backend:
 
 CUDA Backend
