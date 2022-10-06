@@ -53,18 +53,15 @@ def load_library(name):
     # Otherwise synthesise the library name and start searching
     lname = platform_libname(name)
 
-    # Start with system search path
-    try:
-        return ctypes.CDLL(lname)
-    # …and if this fails then run our own search
-    except OSError:
-        for sd in platform_libdirs():
-            try:
-                return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)))
-            except OSError:
-                pass
-        else:
-            raise OSError(f'Unable to load {name}')
+    # Check our search paths
+    for sd in platform_libdirs():
+        try:
+            return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)))
+        except OSError:
+            pass
+
+    # …and if this fails then defer to the system search path
+    return ctypes.CDLL(lname)
 
 
 def platform_libname(name):
@@ -80,7 +77,7 @@ def platform_libdirs():
     path = os.environ.get('PYFR_LIBRARY_PATH', '')
     dirs = [d for d in path.split(':') if d]
 
-    # On Mac OS X append the default path used by MacPorts
+    # On macOS append the default path used by MacPorts
     if sys.platform == 'darwin':
         return dirs + ['/opt/local/lib']
     # Otherwise just return
