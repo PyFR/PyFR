@@ -10,9 +10,10 @@ class LibWrapper:
     _libname = None
     _statuses = None
     _functions = None
+    _mode = ctypes.DEFAULT_MODE
 
     def __init__(self):
-        self._lib = lib = load_library(self._libname)
+        self._lib = lib = load_library(self._libname, self._mode)
 
         for fret, fname, *fargs in self._functions:
             fn = getattr(lib, fname)
@@ -44,24 +45,28 @@ def get_libc_function(fn):
     return getattr(libc, fn)
 
 
-def load_library(name):
+def load_library(name, mode=ctypes.DEFAULT_MODE):
     # If an explicit override has been given then use it
     lpath = os.environ.get(f'PYFR_{name.upper()}_LIBRARY_PATH')
     if lpath:
-        return ctypes.CDLL(lpath)
+        return ctypes.CDLL(lpath, mode=mode)
 
     # Otherwise synthesise the library name and start searching
     lname = platform_libname(name)
 
-    # Check our search paths
-    for sd in platform_libdirs():
-        try:
-            return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)))
-        except OSError:
-            pass
-
-    # …and if this fails then defer to the system search path
-    return ctypes.CDLL(lname)
+    # Start with system search path
+    try:
+        return ctypes.CDLL(lname, mode=mode)
+    # …and if this fails then run our own search
+    except OSError:
+        for sd in platform_libdirs():
+            try:
+                return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)),
+                                   mode=mode)
+            except OSError:
+                pass
+        else:
+            raise OSError(f'Unable to load {name}')
 
 
 def platform_libname(name):
@@ -77,9 +82,9 @@ def platform_libdirs():
     path = os.environ.get('PYFR_LIBRARY_PATH', '')
     dirs = [d for d in path.split(':') if d]
 
-    # On macOS append the default path used by MacPorts
+    # On Mac OS X append the default path used by MacPorts and Homebrew
     if sys.platform == 'darwin':
-        return dirs + ['/opt/local/lib']
+        return dirs + ['/opt/local/lib', '/opt/homebrew/lib']
     # Otherwise just return
     else:
         return dirs
