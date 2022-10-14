@@ -393,11 +393,11 @@ class VTKWriter(BaseWriter):
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
             self.tcurr = None
 
-    def _pre_proc_fields_soln(self, name, mesh, soln):
+    def _pre_proc_fields_soln(self, soln):
         # Convert from conservative to primitive variables
         return np.array(self.elementscls.con_to_pri(soln, self.cfg))
 
-    def _pre_proc_fields_scal(self, name, mesh, soln):
+    def _pre_proc_fields_scal(self, soln):
         return soln
 
     def _post_proc_fields_soln(self, vsoln):
@@ -655,7 +655,7 @@ class VTKWriter(BaseWriter):
         vpts = vpts.reshape(nsvpts, -1, self.ndims)
 
         # Pre-process the solution
-        soln = self._pre_proc_fields(name, mesh, soln).swapaxes(0, 1)
+        soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
         # Interpolate the solution to the vis points
         vsoln = soln_vtu_op @ soln.reshape(len(soln), -1)

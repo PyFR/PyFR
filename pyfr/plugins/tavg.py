@@ -47,7 +47,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._writer = NativeWriter(intg, basedir, basename, 'tavg')
 
         # Gradient pre-processing
-        self._init_gradients(intg)
+        self._init_gradients()
 
         # Time averaging parameters
         self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
@@ -67,19 +67,17 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.outfields, self.fexprs = [], []
 
         # Iterate over accumulation expressions first
-        for k in cfg.items(cfgsect):
-            if k.startswith('avg-'):
-                self.anames.append(k[4:])
-                self.aexprs.append(cfg.getexpr(cfgsect, k, subs=c))
-                self.outfields.append(k)
+        for k in cfg.items(cfgsect, prefix='avg-'):
+            self.anames.append(k.removeprefix('avg-'))
+            self.aexprs.append(cfg.getexpr(cfgsect, k, subs=c))
+            self.outfields.append(k)
 
         # Followed by any functional expressions
-        for k in cfg.items(cfgsect):
-            if k.startswith('fun-avg-'):
-                self.fexprs.append(cfg.getexpr(cfgsect, k, subs=c))
-                self.outfields.append(k)
+        for k in cfg.items(cfgsect, prefix='fun-avg-'):
+            self.fexprs.append(cfg.getexpr(cfgsect, k, subs=c))
+            self.outfields.append(k)
 
-    def _init_gradients(self, intg):
+    def _init_gradients(self):
         # Determine what gradients, if any, are required
         gradpnames = set()
         for ex in self.aexprs:

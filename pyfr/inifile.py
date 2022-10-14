@@ -107,17 +107,18 @@ class Inifile:
     def getliteral(self, section, option, default=_sentinel):
         return literal_eval(self.get(section, option, default))
 
-    def items(self, section):
-        return dict(self._cp.items(section))
+    def items(self, section, prefix=''):
+        return self.items_as(section, lambda v: v, prefix=prefix)
 
-    def items_as(self, section, type):
+    def items_as(self, section, type, prefix=''):
         iv = {}
 
         for k, v in self._cp.items(section):
-            try:
-                iv[k] = type(v)
-            except ValueError:
-                pass
+            if k.startswith(prefix):
+                try:
+                    iv[k] = type(v)
+                except ValueError:
+                    pass
 
         return iv
 
