@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.inifile import Inifile
 from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from math import prod
 
 from pyfr.backends.base.generator import BaseKernelGenerator

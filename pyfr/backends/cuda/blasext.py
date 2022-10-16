@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,

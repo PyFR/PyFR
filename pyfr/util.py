@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from contextlib import contextmanager
 from ctypes import c_void_p
 import functools as ft

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections import deque
 import itertools as it
 import re

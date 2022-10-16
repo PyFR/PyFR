@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ast import literal_eval
 from collections import defaultdict
 import re

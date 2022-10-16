@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-#
 # PyFR documentation build configuration file, created by
 # sphinx-quickstart on Sat Oct  6 23:44:12 2012.
 #

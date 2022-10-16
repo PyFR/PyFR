@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import Structure, byref, c_void_p
 
 from pyfr.backends.base import (BaseKernelProvider,

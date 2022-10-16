@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import math
 
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator

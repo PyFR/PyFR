@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 from argparse import ArgumentParser, FileType
 import itertools as it
 import os

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.base import BaseSystem
 from pyfr.util import memoize
 

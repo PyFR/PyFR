@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.aceuler.elements import ACEulerElements
 from pyfr.solvers.aceuler.inters import (ACEulerIntInters, ACEulerMPIInters,
                                          ACEulerBaseBCInters)

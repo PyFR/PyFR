@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import (POINTER, byref, create_string_buffer, c_char, c_char_p,
                     c_double, c_float, c_int, c_int32, c_int64, c_size_t,
                     c_uint, c_uint64, c_ulong, c_void_p, sizeof)

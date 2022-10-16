@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.integrators.base import BaseCommon
 

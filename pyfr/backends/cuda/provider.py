@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from weakref import WeakKeyDictionary
 
 from pyfr.backends.base import (BaseKernelProvider,

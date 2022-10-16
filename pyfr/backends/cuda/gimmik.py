@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from gimmik import CUDAMatMul
 import numpy as np
 

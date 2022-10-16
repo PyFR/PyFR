@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ast import literal_eval
 from configparser import ConfigParser, NoSectionError, NoOptionError
 import io

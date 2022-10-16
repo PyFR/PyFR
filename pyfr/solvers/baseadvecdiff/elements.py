@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.polys import get_polybasis
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 

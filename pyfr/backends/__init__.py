@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.backends.base import BaseBackend
 from pyfr.backends.cuda import CUDABackend
 from pyfr.backends.hip import HIPBackend

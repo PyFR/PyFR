@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.writers.base import BaseWriter
 from pyfr.writers.native import write_pyfrms
 from pyfr.writers.vtk import VTKWriter

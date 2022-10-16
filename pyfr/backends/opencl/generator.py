@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.backends.base.generator import BaseKernelGenerator
 
 

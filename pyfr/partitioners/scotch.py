@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import POINTER, c_int, c_int32, c_int64, c_double, c_void_p
 
 import numpy as np

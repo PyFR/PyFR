@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.integrators.std.base import BaseStdIntegrator
 from pyfr.util import memoize
 

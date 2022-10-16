@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pkg_resources import resource_string
 
 import numpy as np

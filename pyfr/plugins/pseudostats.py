@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin, init_csv
 
