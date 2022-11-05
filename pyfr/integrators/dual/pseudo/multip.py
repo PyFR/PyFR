@@ -1,6 +1,7 @@
 from collections import defaultdict
 import itertools as it
 import re
+from time import perf_counter
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -17,6 +18,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         sect = 'solver-time-integrator'
         mgsect = 'solver-dual-time-integrator-multip'
+
+        self._compute_time = 0.
 
         # Get the solver order and set the initial multigrid level
         self._order = self.level = order = cfg.getint('solver', 'order')
@@ -291,6 +294,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         self.tcurr = tcurr
 
+        ctime_start = perf_counter()    
         for i in range(self._maxniters):
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
@@ -311,6 +315,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Convergence monitoring
             if self.mg_convmon(self.pintg, i, self._minniters):
                 break
+        self._compute_time += (perf_counter() - ctime_start)
 
     def collect_stats(self, stats):
         # Collect the stats for each level
@@ -323,5 +328,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             stats.set('solver-time-integrator', f'npseudosteps-p{l}',
                       self.pintgs[l].npseudosteps)
 
+        stats.set('solver-time-integrator', 'compute-time', self._compute_time)
         # Total number of p-multigrid cycles
         stats.set('solver-time-integrator', 'npmgcycles', self.npmgcycles)
