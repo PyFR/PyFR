@@ -56,16 +56,13 @@ class DualNoneController(BaseDualController):
             # Take a variable implicit time-step
             dt2 = max(min(t - self.tcurr, self._dt), self.dtmin)
 
-            dt         = round(dt2       , decimals=n, warn=False)
-            self.tcurr = round(self.tcurr, decimals=n, warn=False)
+            dt         = round(dt2       , decimals=n)
+            self.tcurr = round(self.tcurr, decimals=n)
 
             self.pseudointegrator.dt = dt
 
             # Take the physical step
             self.step(self.tcurr, dt)
-
-            # round the step in the precision of dt
-            print(f'{self.tcurr = },\t global dt: {self._dt},\t rounding: {n}\t rounded dt: {dt},\t Semih dt: {dt2}')
 
             # We are not adaptive, so accept every step
             self._accept_step(dt, self.pseudointegrator._idxcurr)
