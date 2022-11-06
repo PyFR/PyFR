@@ -23,3 +23,4 @@ doc/build/
 
 # Hidden files
 .*
+variable-implicit-dt.code-workspace

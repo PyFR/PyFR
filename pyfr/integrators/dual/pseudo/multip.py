@@ -1,6 +1,7 @@
 from collections import defaultdict
 import itertools as it
 import re
+import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -17,6 +18,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         sect = 'solver-time-integrator'
         mgsect = 'solver-dual-time-integrator-multip'
+
+        self.__dt = dt
 
         # Get the solver order and set the initial multigrid level
         self._order = self.level = order = cfg.getint('solver', 'order')
@@ -41,8 +44,19 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.npmgcycles = 0
 
         # Multigrid pseudo-time steps
-        dtau = cfg.getfloat(sect, 'pseudo-dt')
-        self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+
+        try:    
+            self._dt_over_dtau = cfg.getfloat(sect, 'dt-over-dtau')
+            self._dtau = dt / self._dt_over_dtau
+        except: 
+            self._dtau = cfg.getfloat(sect, 'pseudo-dt')
+            self._dt_over_dtau = dt / self._dtau
+        
+        try:    
+            self.dtaufs = cfg.getliteral(mgsect, 'pseudo-dt-facts')
+        except: 
+            dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+            self.dtaufs = [dtauf for _ in self.levels]
 
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self._minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
@@ -71,7 +85,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 mcfg = Inifile(cfg.tostr())
                 mcfg.set('solver', 'order', l)
-                mcfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(order - l))
+                mcfg.set(sect, 'pseudo-dt', self._dtau*np.prod(self.dtaufs[:order-l]))
+                #mcfg.set(sect, 'dt-over-dtau', self._dt_over_dtau/self.dtauf**(order - l))
 
                 for s in cfg.sections():
                     if (m := re.match(f'solver-(.*)-mg-p{l}$', s)):
@@ -197,13 +212,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return projk
 
     @memoize
-    def dtauproject(self, l1, l2):
+    def dtauproject(self, l1, l2, dtaufs):
         projk = []
         for i, a in enumerate(self.projmats[l1, l2]):
             b = self.pintgs[l1].dtau_upts[i]
             c = self.pintgs[l2].dtau_upts[i]
             projk.append(self.backend.kernel('mul', a, b, out=c,
-                                             alpha=self.dtauf))
+                                             alpha=dtaufs[l2]))
 
         return projk
 
@@ -218,7 +233,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
-            self.backend.run_kernels(self.dtauproject(l1, l2))
+            self.backend.run_kernels(self.dtauproject(l1, l2, self.dtaufs))
 
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1
@@ -279,6 +294,46 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                                  ' self.level == self._order')
 
         return self.pintg._aux_regidx
+
+    @property
+    def dt_over_dtau(self):
+        return self._dt_over_dtau
+
+    @dt_over_dtau.setter
+    def dt_over_dtau(self, y):
+        self._dt_over_dtau = y
+        self._dtau = self.__dt/y
+        self.change_dtau_at_all_levels(self._dtau)
+
+    @property
+    def dtau(self):
+        return self._dtau
+
+    @dtau.setter
+    def dtau(self, y):
+        self._dtau = y
+        self._dt_over_dtau = self.__dt/y
+        self.change_dtau_at_all_levels(self._dtau)
+
+    @property
+    def dt(self):
+        return self.__dt
+
+    @dt.setter
+    def dt(self, y):
+        for l in self.levels:
+            self.pintgs[l]._dt = y
+
+        self._dtau = self.pintg._dt/self._dt_over_dtau
+        self.change_dtau_at_all_levels(self._dtau)
+
+    def change_dt_at_all_levels(self, y):
+        for l in self.levels:
+            self.pintgs[l]._dt = y
+
+    def change_dtau_at_all_levels(self, y):
+        for l in self.levels:
+            self.pintgs[l].dtau_mats = y*np.prod(self.dtaufs[:self._order-l])
 
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts

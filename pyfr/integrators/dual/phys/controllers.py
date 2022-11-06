@@ -1,3 +1,5 @@
+from sigfig import round
+
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
@@ -13,8 +15,8 @@ class BaseDualController(BaseDualIntegrator):
             for csh in self.completed_step_handlers:
                 csh(self)
 
-    def _accept_step(self, idxcurr):
-        self.tcurr += self._dt
+    def _accept_step(self, dt, idxcurr):
+        self.tcurr += dt
         self.nacptsteps += 1
         self.nacptchain += 1
 
@@ -47,8 +49,23 @@ class DualNoneController(BaseDualController):
             raise ValueError('Advance time is in the past')
 
         while self.tcurr < t:
+
+            #self._dt = 0.02
+
+            n = len(str(self._dt).split(".")[1])
+            # Take a variable implicit time-step
+            dt2 = max(min(t - self.tcurr, self._dt), self.dtmin)
+
+            dt         = round(dt2       , decimals=n, warn=False)
+            self.tcurr = round(self.tcurr, decimals=n, warn=False)
+
+            self.pseudointegrator.dt = dt
+
             # Take the physical step
-            self.step(self.tcurr, self._dt)
+            self.step(self.tcurr, dt)
+
+            # round the step in the precision of dt
+            print(f'{self.tcurr = },\t global dt: {self._dt},\t rounding: {n}\t rounded dt: {dt},\t Semih dt: {dt2}')
 
             # We are not adaptive, so accept every step
-            self._accept_step(self.pseudointegrator._idxcurr)
+            self._accept_step(dt, self.pseudointegrator._idxcurr)

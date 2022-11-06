@@ -19,7 +19,13 @@ class BaseDualPseudoIntegrator(BaseCommon):
         sect = 'solver-time-integrator'
 
         self._dtaumin = 1.0e-12
-        self._dtau = cfg.getfloat(sect, 'pseudo-dt')
+        try:    
+            self._dt_over_dtau = cfg.getfloat(sect, 'dt-over-dtau')
+            self._dtau = dt / self._dt_over_dtau
+        except: 
+            self._dtau = cfg.getfloat(sect, 'pseudo-dt')
+            self._dt_over_dtau = dt / self._dtau
+        
 
         self.maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self.minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
