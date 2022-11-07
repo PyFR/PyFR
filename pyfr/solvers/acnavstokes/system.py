@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.acnavstokes.elements import ACNavierStokesElements
 from pyfr.solvers.acnavstokes.inters import (ACNavierStokesBaseBCInters,
                                              ACNavierStokesIntInters,

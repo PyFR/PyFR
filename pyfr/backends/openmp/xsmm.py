@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import byref, cast, c_int, c_double, c_float, c_void_p
 
 import numpy as np

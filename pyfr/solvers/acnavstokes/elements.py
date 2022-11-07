@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.aceuler.elements import BaseACFluidElements
 from pyfr.solvers.baseadvecdiff import BaseAdvectionDiffusionElements
 

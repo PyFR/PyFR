@@ -24,8 +24,7 @@
     ${pyfr.expand('rsolve', 'ul', 'ur', 'nl', 'ficomm')};
 
 % for i in range(nvars):
-    fvcomm = ${' + '.join('nl[{j}]*fvr[{j}][{i}]'.format(i=i, j=j)
-                          for j in range(ndims))};
+    fvcomm = ${' + '.join(f'nl[{j}]*fvr[{j}][{i}]' for j in range(ndims))};
 % if tau != 0.0:
     fvcomm += ${tau}*(ul[${i}] - ur[${i}]);
 % endif

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import itertools as it
 import math
 
@@ -52,8 +50,6 @@ class BaseAdvectionMPIInters(BaseInters):
 
         # MPI request tag counter
         self._mpi_tag_counter = it.count(self.BASE_MPI_TAG)
-
-        const_mat = self._const_mat
 
         # Generate the left hand view matrix and its dual
         self._scal_lhs = self._scal_xchg_view(lhs, 'get_scal_fpts_for_inter')

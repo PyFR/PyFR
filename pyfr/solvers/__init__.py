@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.integrators import get_integrator
 from pyfr.solvers.aceuler import ACEulerSystem
 from pyfr.solvers.acnavstokes import ACNavierStokesSystem

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 <%inherit file='base'/>
 
 __global__ void

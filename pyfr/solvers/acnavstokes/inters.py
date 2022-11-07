@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
@@ -92,6 +90,7 @@ class ACNavierStokesNoSlpWallBCInters(ACNavierStokesBaseBCInters):
 
         self.c |= self._exp_opts('uvw'[:self.ndims], lhs,
                                  default={'u': 0, 'v': 0, 'w': 0})
+
 
 class ACNavierStokesSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'slp-wall'

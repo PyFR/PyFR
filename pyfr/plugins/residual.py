@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
@@ -67,4 +65,3 @@ class ResidualPlugin(BasePlugin):
 
         # Prep work if an output is due next step
         self._prep_next_output(intg)
-

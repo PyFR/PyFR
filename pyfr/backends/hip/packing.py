@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.backends.base import NullKernel
 from pyfr.backends.hip.provider import (HIPKernel, HIPKernelProvider,
                                         get_grid_for_block)

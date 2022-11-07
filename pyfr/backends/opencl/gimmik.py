@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from gimmik import OpenCLMatMul
 import numpy as np
 

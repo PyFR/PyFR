@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import itertools as it
 from functools import cached_property
 from math import exp
@@ -494,7 +492,6 @@ class PriShape(BaseShape):
                      f' (x[1] + 1)*V[2][{j}] + (x[1] +    1)*V[5][{j}])/4'
                      for j in range(3)]]
     jac_exprs = _jac_exprs_xy + _jac_exprs_z
-
 
     @classmethod
     def std_ele(cls, sptord):
