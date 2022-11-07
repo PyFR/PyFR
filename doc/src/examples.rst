@@ -169,7 +169,7 @@ simulation on a structured mesh:
 5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
 
-.. figure:: ../fig/2d-double-mach-reflection/2d-double-mach-reflection.png
+.. figure:: ../fig/2d-double-mach-reflection/2d-double-mach-reflection.jpg
    :width: 450px
    :figwidth: 450px
    :alt: double mach
@@ -210,7 +210,7 @@ simulation on a structured mesh:
 5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
 
-.. figure:: ../fig/2d-viscous-shock-tube/2d-viscous-shock-tube.png
+.. figure:: ../fig/2d-viscous-shock-tube/2d-viscous-shock-tube.jpg
    :width: 450px
    :figwidth: 450px
    :alt: shock tube
