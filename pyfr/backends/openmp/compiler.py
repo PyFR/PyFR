@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import CDLL
 from functools import cached_property
 import itertools as it

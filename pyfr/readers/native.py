@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections.abc import Mapping
 from functools import cached_property
 import os

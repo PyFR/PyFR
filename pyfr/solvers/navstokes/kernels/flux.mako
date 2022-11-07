@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 % if ndims == 2:

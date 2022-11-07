@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import ctypes as ct
 import functools as ft
 import itertools as it

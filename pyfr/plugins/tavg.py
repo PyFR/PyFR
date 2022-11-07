@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 import numpy as np
@@ -47,7 +45,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._writer = NativeWriter(intg, basedir, basename, 'tavg')
 
         # Gradient pre-processing
-        self._init_gradients(intg)
+        self._init_gradients()
 
         # Time averaging parameters
         self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
@@ -67,19 +65,17 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.outfields, self.fexprs = [], []
 
         # Iterate over accumulation expressions first
-        for k in cfg.items(cfgsect):
-            if k.startswith('avg-'):
-                self.anames.append(k[4:])
-                self.aexprs.append(cfg.getexpr(cfgsect, k, subs=c))
-                self.outfields.append(k)
+        for k in cfg.items(cfgsect, prefix='avg-'):
+            self.anames.append(k.removeprefix('avg-'))
+            self.aexprs.append(cfg.getexpr(cfgsect, k, subs=c))
+            self.outfields.append(k)
 
         # Followed by any functional expressions
-        for k in cfg.items(cfgsect):
-            if k.startswith('fun-avg-'):
-                self.fexprs.append(cfg.getexpr(cfgsect, k, subs=c))
-                self.outfields.append(k)
+        for k in cfg.items(cfgsect, prefix='fun-avg-'):
+            self.fexprs.append(cfg.getexpr(cfgsect, k, subs=c))
+            self.outfields.append(k)
 
-    def _init_gradients(self, intg):
+    def _init_gradients(self):
         # Determine what gradients, if any, are required
         gradpnames = set()
         for ex in self.aexprs:
@@ -105,6 +101,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
 
+        # Compute the gradients
+        if self._gradpinfo:
+            grad_soln = intg.grad_soln
+
         # Iterate over each element type in the simulation
         for idx, etype, rgn in self._ele_regions:
             soln = intg.soln[idx][..., rgn].swapaxes(0, 1)
@@ -117,11 +117,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
             # Prepare any required gradients
             if self._gradpinfo:
-                # Compute the gradients
-                grad_soln = np.rollaxis(intg.grad_soln[idx], 2)[..., rgn]
+                grads = np.rollaxis(grad_soln[idx], 2)[..., rgn]
 
                 # Transform from conservative to primitive gradients
-                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
+                pgrads = self.elementscls.grad_con_to_pri(soln, grads,
                                                           self.cfg)
 
                 # Add them to the substitutions dictionary

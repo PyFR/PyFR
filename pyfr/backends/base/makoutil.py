@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections.abc import Iterable
 import itertools as it
 import re

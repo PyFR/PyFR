@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import re
 
 import numpy as np
@@ -31,14 +29,13 @@ class IntegratePlugin(BasePlugin):
         # Expressions to integrate
         c = self.cfg.items_as('constants', float)
         self.exprs = [self.cfg.getexpr(cfgsect, k, subs=c)
-                      for k in self.cfg.items(cfgsect)
-                      if k.startswith('int-')]
+                      for k in self.cfg.items(cfgsect, prefix='int-')]
 
         # Integration region pre-processing
         esetmask = self._prepare_esetmask(intg)
 
         # Gradient pre-processing
-        self._init_gradients(intg)
+        self._init_gradients()
 
         # Save a reference to the physical solution point locations
         self.plocs = system.ele_ploc_upts
@@ -48,8 +45,7 @@ class IntegratePlugin(BasePlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            header = ['t'] + [k for k in self.cfg.items(cfgsect)
-                              if k.startswith('int-')]
+            header = ['t', *self.cfg.items(cfgsect, prefix='int-')]
 
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
@@ -120,7 +116,7 @@ class IntegratePlugin(BasePlugin):
 
             return esetmask
 
-    def _init_gradients(self, intg):
+    def _init_gradients(self):
         # Determine what gradients, if any, are required
         gradpnames = set()
         for ex in self.exprs:
@@ -135,6 +131,10 @@ class IntegratePlugin(BasePlugin):
 
         # Get the primitive variable names
         pnames = self.elementscls.privarmap[self.ndims]
+
+        # Compute the gradients
+        if self._gradpinfo:
+            grad_soln = intg.grad_soln
 
         # Iterate over each element type in the simulation
         for i, (soln, eleinfo) in enumerate(zip(intg.soln, self.eleinfo)):
@@ -156,15 +156,14 @@ class IntegratePlugin(BasePlugin):
 
             # Prepare any required gradients
             if self._gradpinfo:
-                # Compute the gradients
-                grad_soln = np.rollaxis(intg.grad_soln[i], 2)[..., eset]
+                grads = np.rollaxis(grad_soln[i], 2)[..., eset]
 
                 # Interpolate the gradients to the quadrature points
                 if m0 is not None:
-                    grad_soln = m0 @ grad_soln
+                    grads = m0 @ grads
 
                 # Transform from conservative to primitive gradients
-                pgrads = self.elementscls.grad_con_to_pri(soln, grad_soln,
+                pgrads = self.elementscls.grad_con_to_pri(soln, grads,
                                                           self.cfg)
 
                 # Add them to the substitutions dictionary

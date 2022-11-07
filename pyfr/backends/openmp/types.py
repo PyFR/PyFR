@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
 
 from ctypes import addressof, c_void_p, cast

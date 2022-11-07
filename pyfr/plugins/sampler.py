@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi

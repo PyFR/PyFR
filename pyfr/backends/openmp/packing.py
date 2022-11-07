@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-
-from pyfr.backends.base import Kernel, NullKernel
+from pyfr.backends.base import NullKernel
 from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 
 

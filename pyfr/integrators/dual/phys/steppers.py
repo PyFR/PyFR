@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import math
 
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
@@ -52,13 +50,13 @@ class SDIRK33Stepper(BaseDIRKStepper):
     nstages = 3
     fsal = True
 
-    _at = math.atan(0.5**1.5)/3
-    _a_lam = (3**0.5*math.sin(_at) - math.cos(_at))/2**0.5 + 1
+    _at = math.atan(0.5**1.5) / 3
+    _al = (3**0.5*math.sin(_at) - math.cos(_at)) / 2**0.5 + 1
 
     a = [
-        [_a_lam],
-        [0.5*(1 - _a_lam), _a_lam],
-        [(4 - 1.5*_a_lam)*_a_lam - 0.25, (1.5*_a_lam - 5)*_a_lam + 1.25, _a_lam]
+        [_al],
+        [0.5*(1 - _al), _al],
+        [(4 - 1.5*_al)*_al - 0.25, (1.5*_al - 5)*_al + 1.25, _al]
     ]
 
 

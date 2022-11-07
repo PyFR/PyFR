@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
 import itertools as it
 import re
@@ -265,7 +263,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.pintg._add(-1, self._mg_regidx[1], 1, l1idxcurr)
 
         # Prolongate the correction and store to rtemp
-        self.backend.run_kernels(self.mgproject(l1, self._mg_regidx[1], l2, rtemp))
+        self.backend.run_kernels(
+            self.mgproject(l1, self._mg_regidx[1], l2, rtemp)
+        )
 
         # Add the correction to the end quantity at l2
         # Q^m+1  = Q^s + Delta

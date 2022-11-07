@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%pyfr:macro name='artificial_viscosity_add' params='grad_uin, fout, artvisc'>

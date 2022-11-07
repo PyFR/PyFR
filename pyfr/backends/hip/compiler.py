@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import (POINTER, create_string_buffer, c_char_p, c_int, c_size_t,
                     c_void_p)
 
@@ -19,7 +17,7 @@ class HIPRTCInternalError(HIPRTCError): pass
 
 
 class HIPRTCWrappers(LibWrapper):
-    _libname = 'amdhip64'
+    _libname = 'hiprtc'
 
     # Error codes
     _statuses = {

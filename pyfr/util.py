@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from contextlib import contextmanager
 from ctypes import c_void_p
 import functools as ft
@@ -7,6 +5,7 @@ import hashlib
 import itertools as it
 import os
 import pickle
+import re
 import shutil
 
 from pyfr.ctypesutil import get_libc_function
@@ -41,6 +40,7 @@ def memoize(meth):
         return res
 
     return newmeth
+
 
 class silence:
     def __init__(self, stdout=os.devnull, stderr=os.devnull):
@@ -167,3 +167,22 @@ def match_paired_paren(delim, n=5):
     rgt = rf'\{close}{ocset}*?)*?'
 
     return lft*n + mid + rgt*n
+
+
+def file_path_gen(basedir, basename, restore=False):
+    ns = 0
+
+    # See if the basename appears to depend on {n}
+    if restore and re.search('{n[^}]*}', basename):
+        # Quote and substitute
+        bn = re.escape(basename)
+        bn = re.sub(r'\\{n[^}]*\\}', r'(\\s*\\d+\\s*)', bn)
+        bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
+        for f in os.listdir(basedir):
+            if (m := re.match(bn, f)):
+                ns = max(ns, int(m[1]) + 1)
+
+    t = yield
+
+    for n in it.count(ns): 
+        t = yield os.path.join(basedir, basename.format(t=t, n=n))

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)

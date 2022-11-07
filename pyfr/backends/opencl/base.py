@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.backends.base import BaseBackend
@@ -36,7 +34,8 @@ class OpenCLBackend(BaseBackend):
 
         # Determine the OpenCL device to use
         for i, device in enumerate(platform.get_devices(devtype)):
-            if devid == str(i) or devid == device.name.lower():
+            if (devid == str(i) or devid == device.name.lower() or
+                devid == str(device.uuid or '')):
                 break
         else:
             raise ValueError('No suitable OpenCL device found')

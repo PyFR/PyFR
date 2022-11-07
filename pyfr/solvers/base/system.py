@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
 import inspect
 import itertools as it
@@ -114,13 +112,8 @@ class BaseSystem:
 
         # Allocate these elements on the backend
         for etype, ele in elemap.items():
-            k = f'spt_{etype}_p{rallocs.prank}'
-
-            try:
-                curved = ~mesh[k, 'linear']
-                linoff = np.max(*np.nonzero(curved), initial=-1) + 1
-            except KeyError:
-                linoff = ele.neles
+            curved = ~mesh[f'spt_{etype}_p{rallocs.prank}', 'linear']
+            linoff = np.max(*np.nonzero(curved), initial=-1) + 1
 
             ele.set_backend(self.backend, nregs, nonce, linoff)
 

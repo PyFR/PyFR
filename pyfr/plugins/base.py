@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import os
 import re
 import shlex
@@ -135,8 +133,6 @@ class RegionMixin:
         self._ele_region_data = {}
 
     def _prepare_region_data_eset(self, intg, eset):
-        elemap = intg.system.ele_map
-
         self._ele_regions, self._ele_region_data = [], {}
         for etype, eidxs in sorted(eset.items()):
             doff = intg.system.ele_types.index(etype)

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import c_int, c_void_p
 from functools import cached_property
 import re
