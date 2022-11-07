@@ -318,5 +318,5 @@ class BaseSystem:
         return [e.get() for e in self.eles_entmin_int]
 
     def set_ele_entmin_int(self, entmin_int):
-        for (e, em) in zip(self.eles_entmin_int, entmin_int):
+        for e, em in zip(self.eles_entmin_int, entmin_int):
             e.set(em)
