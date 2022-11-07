@@ -321,19 +321,32 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     @dt.setter
     def dt(self, y):
+
+        self.__dt = y
         for l in self.levels:
             self.pintgs[l]._dt = y
 
+        self._dtau_old = self._dtau
         self._dtau = self.pintg._dt/self._dt_over_dtau
-        self.change_dtau_at_all_levels(self._dtau)
+        multiplier = self._dtau/self._dtau_old
+
+        #self.change_dtau_at_all_levels(self._dtau)     # This fixes all dt in a level to one value. 
+                                                        # This may be useful later. 
+        self.shift_dtau_at_all_levels(multiplier)
 
     def change_dt_at_all_levels(self, y):
         for l in self.levels:
             self.pintgs[l]._dt = y
 
+    def shift_dtau_at_all_levels(self, multiplier):
+        for l in self.levels:
+            self.pintgs[l].dtau_mats_multiplied(multiplier)
+            #print(self.pintgs[l].dtau_stats)
+
     def change_dtau_at_all_levels(self, y):
         for l in self.levels:
             self.pintgs[l].dtau_mats = y*np.prod(self.dtaufs[:self._order-l])
+            #print(self.pintgs[l].dtau_stats)
 
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
