@@ -48,6 +48,10 @@ class BaseElements:
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
 
+    @staticmethod
+    def validate_formulation(form, intg, cfg):
+        pass
+
     def pri_to_con(pris, cfg):
         pass
 
