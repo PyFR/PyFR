@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": "../PyFR2"
+        },
+        {
+            "path": "../PyFR-Test-Cases/2d-inc-cylinder"
+        },
+        {
+            "path": "../../OneDrive/pyfr-simulations/toys/lvl-2/16_boxes_vortex"
+        }
+    ]
+}
