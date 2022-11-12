@@ -1,9 +1,8 @@
+import numpy as np
+
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
-
 class BaseFluidElements:
-    formulations = ['std', 'dual']
-
     privarmap = {2: ['rho', 'u', 'v', 'p'],
                  3: ['rho', 'u', 'v', 'w', 'p']}
 
@@ -46,6 +45,90 @@ class BaseFluidElements:
         p = (gamma - 1)*(E - 0.5*rho*sum(v*v for v in vs))
 
         return [rho] + vs + [p]
+
+    @staticmethod
+    def validate_formulation(ctrl):
+        shock_capturing = ctrl.cfg.get('solver', 'shock-capturing', 'none')
+        if ctrl.formulation == 'dual' and shock_capturing == 'entropy-filter':
+            raise ValueError('Entropy filtering not compatible with '
+                             'dual time stepping.')
+
+        ctrlvardt = ctrl.controller_has_variable_dt
+        if ctrlvardt and shock_capturing == 'entropy-filter':
+            raise ValueError('Entropy filtering not compatible with '
+                             'adaptive time stepping.')
+
+    def set_backend(self, *args, **kwargs):
+        super().set_backend(*args, **kwargs)
+
+        # Can elide shock-capturing at p = 0
+        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
+
+        # Modified entropy filtering method using specific physical
+        # entropy (without operator splitting for Navier-Stokes)
+        # doi:10.1016/j.jcp.2022.111501
+        if shock_capturing == 'entropy-filter' and self.basis.order != 0:
+            self._be.pointwise.register(
+                'pyfr.solvers.euler.kernels.entropylocal'
+            )
+            self._be.pointwise.register(
+                'pyfr.solvers.euler.kernels.entropyfilter'
+            )
+
+            # Template arguments
+            eftplargs = {
+                'ndims': self.ndims,
+                'nupts': self.nupts,
+                'nfpts': self.nfpts,
+                'nvars': self.nvars,
+                'nfaces': self.nfaces,
+                'c': self.cfg.items_as('constants', float),
+                'order': self.basis.order
+            }
+
+            # Check to see if running collocated solution/flux points
+            m0 = self.basis.m0
+            mrowsum = np.max(np.abs(np.sum(m0, axis=1) - 1.0))
+            if np.min(m0) < -1e-8 or mrowsum > 1e-8:
+                raise ValueError('Entropy filter requires flux points to be a '
+                                 'subset of solution points or a convex '
+                                 'combination thereof.')
+
+            # Minimum density/pressure constraints
+            eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'd-min', 1e-6)
+            eftplargs['p_min'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'p-min', 1e-6)
+
+            # Entropy tolerance
+            eftplargs['e_tol'] = self.cfg.getfloat('solver-entropy-filter',
+                                                   'e-tol', 1e-6)
+
+            # Hidden kernel parameters
+            eftplargs['f_tol']   = self.cfg.getfloat('solver-entropy-filter',
+                                                     'f-tol', 1e-4)
+            eftplargs['ill_tol'] = self.cfg.getfloat('solver-entropy-filter',
+                                                     'ill-tol', 1e-6)
+            eftplargs['niters']  = self.cfg.getfloat('solver-entropy-filter',
+                                                     'niters', 20)
+
+            # Precompute basis orders for filter
+            ubdegs = self.basis.ubasis.degrees
+            eftplargs['ubdegs'] = [int(max(dd)) for dd in ubdegs]
+            eftplargs['order'] = self.basis.order
+
+            # Compute local entropy bounds
+            self.kernels['local_entropy'] = lambda uin: self._be.kernel(
+                'entropylocal', tplargs=eftplargs, dims=[self.neles],
+                u=self.scal_upts[uin], entmin_int=self.entmin_int
+            )
+
+            # Apply entropy filter
+            self.kernels['entropy_filter'] = lambda uin: self._be.kernel(
+                'entropyfilter', tplargs=eftplargs, dims=[self.neles],
+                u=self.scal_upts[uin], entmin_int=self.entmin_int,
+                vdm=self.vdm, invvdm=self.invvdm
+            )
 
 
 class EulerElements(BaseFluidElements, BaseAdvectionElements):
