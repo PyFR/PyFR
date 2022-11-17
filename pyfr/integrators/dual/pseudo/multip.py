@@ -1,6 +1,8 @@
 from collections import defaultdict
 import itertools as it
 import re
+from time import perf_counter
+from functools import wraps
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -133,6 +135,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Delete remaining elements maps from multigrid systems
         for l in self.levels[1:]:
             del self.pintgs[l].system.ele_map
+
+        self._compute_time = 0.
 
     @property
     def _idxcurr(self):
@@ -298,7 +302,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 # Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
+                start = perf_counter()
                 self.pintg.pseudo_advance(tcurr)
+                self._compute_time += perf_counter() - start
 
                 if m is not None and l > m:
                     self.restrict(l, m)
@@ -322,6 +328,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Total number of pseudo-steps
             stats.set('solver-time-integrator', f'npseudosteps-p{l}',
                       self.pintgs[l].npseudosteps)
+
+        # compute-time calculated only around p-multigrid cycles
+        stats.set('solver-time-integrator', 'compute-time',self._compute_time)
 
         # Total number of p-multigrid cycles
         stats.set('solver-time-integrator', 'npmgcycles', self.npmgcycles)
