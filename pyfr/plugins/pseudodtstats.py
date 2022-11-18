@@ -73,9 +73,9 @@ class PseudodtStatsPlugin(BasePlugin):
 
             if iternr == 1:           # We can store the last step's data
                 if 'solver-dual-time-integrator-multip' in intg.cfg.sections():
-                    stats = self.pseudo_dt_statistics(intg.pseudointegrator.pintgs[self.level].pseudo_dt_mats)
+                    stats = self.pseudodt_statistics(intg.pseudointegrator.pintgs[self.level].pseudodt_mats)
                 else:
-                    stats = self.pseudo_dt_statistics(intg.pseudointegrator.pseudo_dt_mats)
+                    stats = self.pseudodt_statistics(intg.pseudointegrator.pseudodt_mats)
 
                 if self.last_appendable != None:
                     if self.last_tprev != self.tprev:
@@ -102,9 +102,9 @@ class PseudodtStatsPlugin(BasePlugin):
         # Reset the stats
         self.stats = []
 
-    def pseudo_dt_statistics(self, pseudo_dt_mats):
+    def pseudodt_statistics(self, pseudodt_mats):
         '''
-            self.pseudo_dt_mats is a list of matrices, one for each element type.
+            self.pseudodt_mats is a list of matrices, one for each element type.
             Each matrix is a 3D array of shape (nupts, nvars, neles)
         '''
 
@@ -113,8 +113,8 @@ class PseudodtStatsPlugin(BasePlugin):
 
                 # each element type, each soln point in element, each variable in (p, u, v, w)
                 # Stats obtained over all elements
-                self.psdt_stats['max'][var][e_type]['each'] = pseudo_dt_mats[i][:, j, :].max(1)
-                self.psdt_stats['min'][var][e_type]['each'] = pseudo_dt_mats[i][:, j, :].min(1)
+                self.psdt_stats['max'][var][e_type]['each'] = pseudodt_mats[i][:, j, :].max(1)
+                self.psdt_stats['min'][var][e_type]['each'] = pseudodt_mats[i][:, j, :].min(1)
 
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements and element soln points
