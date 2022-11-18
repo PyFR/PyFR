@@ -68,7 +68,7 @@ class PseudodtWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         data = dict(self._ele_region_data)
         for idx, etype, rgn in self._ele_regions:
-            vals = intg.pseudointegrator.pintg.pseudodt_mats[idx]
+            vals = intg.pseudointegrator.pintg.Δτ_mats[idx]
             data[etype] = vals[..., rgn].astype(self.fpdtype)
 
         solnfname = self._writer.write(data, intg.tcurr, metadata)

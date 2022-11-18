@@ -37,9 +37,13 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         if not intg.isrestart:
             self.tout_last -= self.dt_out
 
+        self.suffix = suffix
+
     def __call__(self, intg):
         if intg.tcurr - self.tout_last < self.dt_out - self.tol:
             return
+
+        print(f'write solution for {self.suffix = }')
 
         comm, rank, root = get_comm_rank_root()
 

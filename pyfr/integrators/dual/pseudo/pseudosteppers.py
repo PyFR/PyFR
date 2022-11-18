@@ -226,8 +226,18 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
         return self.pseudo_controller_needs_lerrest and self.bhat
 
     @property
-    def pseudodt_mats(self):
-        return [dtau_mat.get() for dtau_mat in self.dtau_upts]
+    def Δτ_mats(self):
+        return [Δτ_mat.get() for Δτ_mat in self.dtau_upts]
+
+    @Δτ_mats.setter
+    def Δτ_mats(self, y:float):
+        [Δτ_mat.set(y*np.ones_like(saved_Δτ_mat)) for Δτ_mat, saved_Δτ_mat in zip(self.dtau_upts, self.saved_Δτ_upts)]
+
+    def save_Δτ(self):
+        self.saved_Δτ_upts = self.Δτ_mats
+
+    def rewind_Δτ(self):
+        [Δτ_mat.set(saved_Δτ_mat) for Δτ_mat, saved_Δτ_mat in zip(self.dtau_upts, self.saved_Δτ_upts)]
 
 class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
     @property

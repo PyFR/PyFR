@@ -31,7 +31,7 @@ class PseudodtStatsPlugin(BasePlugin):
 
         # Maximum of 3 Levels of abstraction for the stats of pseudo-dt field
         self.Δτ_stats = {'max': {'all':0}|{p:{'all':0}|{e:{'all':0} for e in self.e_types} for p in self.fvars}, 
-                           'min': {'all':0}|{p:{'all':0}|{e:{'all':0} for e in self.e_types} for p in self.fvars}}
+                         'min': {'all':0}|{p:{'all':0}|{e:{'all':0} for e in self.e_types} for p in self.fvars}}
 
         self.abstraction = self.cfg.getint(self.cfgsect, 'abstraction', 1)
         if 'solver-dual-time-integrator-multip' in intg.cfg.sections():
@@ -67,9 +67,9 @@ class PseudodtStatsPlugin(BasePlugin):
 
             if iternr == 1:           # We can store the last step's data
                 if 'solver-dual-time-integrator-multip' in intg.cfg.sections():
-                    Δτ_mats = intg.pseudointegrator.pintgs[self.level].pseudodt_mats
+                    Δτ_mats = intg.pseudointegrator.pintgs[self.level].Δτ_mats
                 else:
-                    Δτ_mats = intg.pseudointegrator.pseudodt_mats
+                    Δτ_mats = intg.pseudointegrator.Δτ_mats
 
                 stats = self.Δτ_statistics(Δτ_mats)
 
@@ -100,7 +100,7 @@ class PseudodtStatsPlugin(BasePlugin):
 
     def Δτ_statistics(self, Δτ_mats):
         '''
-            self.pseudodt_mats is a list of matrices, one for each element type.
+            self.Δτ_mats is a list of matrices, one for each element type.
             Each matrix is a 3D array of shape (nupts, nvars, neles)
         '''
 

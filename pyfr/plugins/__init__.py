@@ -7,11 +7,12 @@ from pyfr.plugins.pseudostats import PseudoStatsPlugin
 from pyfr.plugins.residual import ResidualPlugin
 from pyfr.plugins.sampler import SamplerPlugin
 from pyfr.plugins.tavg import TavgPlugin
-from pyfr.plugins.writer import WriterPlugin
 from pyfr.util import subclass_where
 
 from pyfr.plugins.pseudodtstats import PseudodtStatsPlugin
 from pyfr.plugins.pseudodtwriter import PseudodtWriterPlugin
+from pyfr.plugins.rewind import RewindPlugin # Order of plugin execution controlled here
+from pyfr.plugins.writer import WriterPlugin # We need rewinding before writer plugin
 
 def get_plugin(name, *args, **kwargs):
     return subclass_where(BasePlugin, name=name)(*args, **kwargs)
