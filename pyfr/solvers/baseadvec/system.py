@@ -33,7 +33,7 @@ class BaseAdvectionSystem(BaseSystem):
 
         # Compute common entropy minima at internal/boundary interfaces
         g1.add_all(k['iint/comm_entropy'],
-                   deps=k['eles/filter_solution'] + k['mpiint/ent_fpts_pack'])
+                   deps=k['eles/entropy_filter'] + k['mpiint/ent_fpts_pack'])
         g1.add_all(k['bcint/comm_entropy'],
                    deps=k['eles/disu'])
 
