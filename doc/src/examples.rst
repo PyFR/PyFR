@@ -24,24 +24,24 @@ simulation on a structured mesh:
         cd PyFR-Test-Cases/2d-euler-vortex
 
 2. Run pyfr to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``2d-euler-vortex.pyfrm``::
+   mesh file into a PyFR mesh file called ``euler-vortex.pyfrm``::
 
-        pyfr import 2d-euler-vortex.msh 2d-euler-vortex.pyfrm
+        pyfr import euler-vortex.msh euler-vortex.pyfrm
 
 3. Run pyfr to partition the PyFR mesh file into two pieces::
 
-        pyfr partition 2 2d-euler-vortex.pyfrm .
+        pyfr partition 2 euler-vortex.pyfrm .
 
 4. Run pyfr to solve the Euler equations on the mesh, generating a
-   series of PyFR solution files called ``2d-euler-vortex*.pyfrs``::
+   series of PyFR solution files called ``euler-vortex*.pyfrs``::
 
-        mpiexec -n 2 pyfr run -b cuda -p 2d-euler-vortex.pyfrm 2d-euler-vortex.ini
+        mpiexec -n 2 pyfr run -b cuda -p euler-vortex.pyfrm euler-vortex.ini
 
-5. Run pyfr on the solution file ``2d-euler-vortex-100.0.pyfrs``
+5. Run pyfr on the solution file ``euler-vortex-100.0.pyfrs``
    converting it into an unstructured VTK file called
-   ``2d-euler-vortex-100.0.vtu``::
+   ``euler-vortex-100.0.vtu``::
 
-        pyfr export 2d-euler-vortex.pyfrm 2d-euler-vortex-100.0.pyfrs 2d-euler-vortex-100.0.vtu
+        pyfr export euler-vortex.pyfrm euler-vortex-100.0.pyfrs euler-vortex-100.0.vtu
 
 6. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -68,21 +68,21 @@ simulation on a mixed unstructured mesh:
         cd PyFR-Test-Cases/2d-couette-flow
 
 2. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``2d-couette-flow.pyfrm``::
+   mesh file into a PyFR mesh file called ``couette-flow.pyfrm``::
 
-        pyfr import 2d-couette-flow.msh 2d-couette-flow.pyfrm
+        pyfr import couette-flow.msh couette-flow.pyfrm
 
 3. Run pyfr to solve the Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
-   ``2d-couette-flow-*.pyfrs``::
+   ``couette-flow-*.pyfrs``::
 
-        pyfr run -b cuda -p 2d-couette-flow.pyfrm 2d-couette-flow.ini
+        pyfr run -b cuda -p couette-flow.pyfrm couette-flow.ini
 
-4. Run pyfr on the solution file ``2d-couette-flow-040.pyfrs``
+4. Run pyfr on the solution file ``couette-flow-040.pyfrs``
    converting it into an unstructured VTK file called
-   ``2d-couette-flow-040.vtu``::
+   ``couette-flow-040.vtu``::
 
-        pyfr export 2d-couette-flow.pyfrm 2d-couette-flow-040.pyfrs 2d-couette-flow-040.vtu
+        pyfr export couette-flow.pyfrm couette-flow-040.pyfrs couette-flow-040.vtu
 
 5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -109,21 +109,21 @@ flow simulation on a mixed unstructured mesh:
         cd PyFR-Test-Cases/2d-inc-cylinder
         
 2. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``2d-inc-cylinder.pyfrm``::
+   mesh file into a PyFR mesh file called ``inc-cylinder.pyfrm``::
 
-        pyfr import 2d-inc-cylinder.msh 2d-inc-cylinder.pyfrm
+        pyfr import inc-cylinder.msh inc-cylinder.pyfrm
 
 3. Run pyfr to solve the incompressible Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
-   ``2d-inc-cylinder-*.pyfrs``::
+   ``inc-cylinder-*.pyfrs``::
 
-        pyfr run -b cuda -p 2d-inc-cylinder.pyfrm 2d-inc-cylinder.ini
+        pyfr run -b cuda -p inc-cylinder.pyfrm inc-cylinder.ini
 
-4. Run pyfr on the solution file ``2d-inc-cylinder-75.00.pyfrs``
+4. Run pyfr on the solution file ``inc-cylinder-75.00.pyfrs``
    converting it into an unstructured VTK file called
-   ``2d-inc-cylinder-75.00.vtu``::
+   ``inc-cylinder-75.00.vtu``::
 
-        pyfr export 2d-inc-cylinder.pyfrm 2d-inc-cylinder-75.00.pyfrs 2d-inc-cylinder-75.00.vtu
+        pyfr export inc-cylinder.pyfrm inc-cylinder-75.00.pyfrs inc-cylinder-75.00.vtu
 
 5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -150,21 +150,21 @@ simulation on a structured mesh:
         cd PyFR-Test-Cases/2d-double-mach-reflection
 
 2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``2d-double-mach-reflection.pyfrm``::
+   mesh file into a PyFR mesh file called ``double-mach-reflection.pyfrm``::
 
-        zcat 2d-double-mach-reflection.msh.gz | pyfr import -tgmsh - 2d-double-mach-reflection.pyfrm
+        zcat double-mach-reflection.msh.gz | pyfr import -tgmsh - double-mach-reflection.pyfrm
 
 3. Run pyfr to solve the compressible Euler equations on the mesh,
    generating a series of PyFR solution files called
-   ``2d-double-mach-reflection-*.pyfrs``::
+   ``double-mach-reflection-*.pyfrs``::
 
-        pyfr run -b cuda -p 2d-double-mach-reflection.pyfrm 2d-double-mach-reflection.ini
+        pyfr run -b cuda -p double-mach-reflection.pyfrm double-mach-reflection.ini
 
-4. Run pyfr on the solution file ``2d-double-mach-reflection-0.20.pyfrs``
+4. Run pyfr on the solution file ``double-mach-reflection-0.20.pyfrs``
    converting it into an unstructured VTK file called
-   ``2d-double-mach-reflection-0.20.vtu``::
+   ``double-mach-reflection-0.20.vtu``::
 
-        pyfr export 2d-double-mach-reflection.pyfrm 2d-double-mach-reflection-0.20.pyfrs 2d-double-mach-reflection-0.20.vtu
+        pyfr export double-mach-reflection.pyfrm double-mach-reflection-0.20.pyfrs double-mach-reflection-0.20.vtu
 
 5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -191,21 +191,21 @@ simulation on a structured mesh:
         cd PyFR-Test-Cases/2d-viscous-shock-tube
 
 2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``2d-viscous-shock-tube.pyfrm``::
+   mesh file into a PyFR mesh file called ``viscous-shock-tube.pyfrm``::
 
-        zcat 2d-viscous-shock-tube.msh.gz | pyfr import -tgmsh - 2d-viscous-shock-tube.pyfrm
+        zcat viscous-shock-tube.msh.gz | pyfr import -tgmsh - viscous-shock-tube.pyfrm
 
 3. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
-   ``2d-viscous-shock-tube-*.pyfrs``::
+   ``viscous-shock-tube-*.pyfrs``::
 
-        pyfr run -b cuda -p 2d-viscous-shock-tube.pyfrm 2d-viscous-shock-tube.ini
+        pyfr run -b cuda -p viscous-shock-tube.pyfrm viscous-shock-tube.ini
 
-4. Run pyfr on the solution file ``2d-viscous-shock-tube-1.00.pyfrs``
+4. Run pyfr on the solution file ``viscous-shock-tube-1.00.pyfrs``
    converting it into an unstructured VTK file called
-   ``2d-viscous-shock-tube-1.00.vtu``::
+   ``viscous-shock-tube-1.00.vtu``::
 
-        pyfr export 2d-viscous-shock-tube.pyfrm 2d-viscous-shock-tube-1.00.pyfrs 2d-viscous-shock-tube-1.00.vtu
+        pyfr export viscous-shock-tube.pyfrm viscous-shock-tube-1.00.pyfrs viscous-shock-tube-1.00.vtu
 
 5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
