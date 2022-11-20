@@ -56,6 +56,10 @@ class BaseIntegrator:
         # Record the starting wall clock time
         self._wstart = time.time()
 
+        # Rewind computation
+        self.save   = None
+        self.rewind = None
+
         # Abort computation
         self.abort = False
 
@@ -163,6 +167,30 @@ class BaseIntegrator:
             # are called only once if stopping the computation
             sys.exit(1)
 
+
+    def save_soln(self):
+        if self.save is True:
+            self._saved_soln = self.soln
+        else:
+            raise Exception('save is not set to true.')
+
+    @property
+    def saved_soln(self):
+        return self._saved_soln
+
+    @saved_soln.setter
+    def saved_soln(self, y):
+        self._saved_soln = y
+
+    def rewind_soln(self):
+        if self.saved_soln and self.rewind is True:
+            if self.cfg.get('solver-time-integrator', 'formulation') == 'dual':
+                self.system.ele_scal_upts_set(self.pseudointegrator._stepper_regidx, self.saved_soln)
+            else:
+                self.system.ele_scal_upts_set(self._idxcurr, self.saved_soln)
+                raise Exception('Rewind is only implemented for dual scheme.')
+        else:
+            raise Exception('No saved solution to load, or rewind is not set to True.')
 
 class BaseCommon:
     def _get_gndofs(self):

@@ -11,7 +11,6 @@ class BaseDualIntegrator(BaseIntegrator):
         super().__init__(backend, rallocs, mesh, initsoln, cfg)
 
         self._saved_soln = None
-        self.rewind = None
 
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
@@ -41,26 +40,6 @@ class BaseDualIntegrator(BaseIntegrator):
             )
 
         return self._curr_soln
-
-    def save_soln(self):
-        if self.rewind is False:
-            self._saved_soln = self.soln
-        else:
-            raise Exception('Rewind is not set to False.')
-
-    @property
-    def saved_soln(self):
-        return self._saved_soln
-
-    @saved_soln.setter
-    def saved_soln(self, y):
-        self._saved_soln = y
-
-    def rewind_soln(self):
-        if self.saved_soln and self.rewind is True:
-            self.system.ele_scal_upts_set(self.pseudointegrator._stepper_regidx, self.saved_soln)
-        else:
-            raise Exception('No saved solution to load, or rewind is not set to True.')
 
     @property
     def grad_soln(self):

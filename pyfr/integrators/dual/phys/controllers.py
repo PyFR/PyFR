@@ -32,6 +32,12 @@ class BaseDualController(BaseDualIntegrator):
         for csh in self.completed_step_handlers:
             csh(self)
 
+        if self.rewind:
+            self.rewind = False
+
+        if self.save:
+            self.save = False
+
         # Abort if plugins request it
         self._check_abort()
 
