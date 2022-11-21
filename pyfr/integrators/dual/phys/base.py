@@ -11,6 +11,7 @@ class BaseDualIntegrator(BaseIntegrator):
         super().__init__(backend, rallocs, mesh, initsoln, cfg)
 
         self._saved_soln = None
+        self.Δτ_stats = None
 
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(

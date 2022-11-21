@@ -15,5 +15,8 @@ from pyfr.plugins.writer         import WriterPlugin # We need writer plugin aft
 from pyfr.plugins.tavg           import TavgPlugin   # We need  tavg  plugin after rewinding
 from pyfr.plugins.pseudodtwriter import PseudodtWriterPlugin
 
+from pyfr.plugins.optimisationstats import OptimisationStatsPlugin
+
+
 def get_plugin(name, *args, **kwargs):
     return subclass_where(BasePlugin, name=name)(*args, **kwargs)
