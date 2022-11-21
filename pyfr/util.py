@@ -96,6 +96,25 @@ class silence:
         os.close(self.saved_fds[1])
 
 
+def merge_intervals(ivals, tol=1e-5):
+    ivals = sorted(ivals, reverse=True)
+    mivals = [ivals.pop()]
+
+    while ivals:
+        lstart, lend = mivals[-1]
+        cstart, cend = ivals.pop()
+
+        if cstart < lend:
+            raise ValueError('Overlapping range')
+
+        if abs(cstart - lend) < tol:
+            mivals[-1] = (lstart, cend)
+        else:
+            mivals.append((cstart, cend))
+
+    return mivals
+
+
 @contextmanager
 def setenv(**kwargs):
     _env = os.environ.copy()

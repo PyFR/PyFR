@@ -1,3 +1,4 @@
+import functools as ft
 import re
 import shlex
 
@@ -6,6 +7,15 @@ from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.regions import BoundaryRegion, ConstructiveRegion
+
+
+def cli_external(meth):
+    @ft.wraps(meth)
+    def newmeth(cls, args):
+        obj = cls(args)
+        return meth(obj)
+
+    return classmethod(newmeth)
 
 
 def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
