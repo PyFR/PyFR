@@ -10,13 +10,16 @@ from pyfr.util import subclass_where
 
 from pyfr.plugins.pseudodtstats import PseudodtStatsPlugin
 
-from pyfr.plugins.rewind         import RewindPlugin # Order of plugin execution controlled here
-from pyfr.plugins.writer         import WriterPlugin # We need writer plugin after rewinding
-from pyfr.plugins.tavg           import TavgPlugin   # We need  tavg  plugin after rewinding
+ # Order of plugin execution controlled here for writing pyfrs
+from pyfr.plugins.rewind         import RewindPlugin
+from pyfr.plugins.writer         import WriterPlugin
+from pyfr.plugins.tavg           import TavgPlugin
 from pyfr.plugins.pseudodtwriter import PseudodtWriterPlugin
 
-from pyfr.plugins.optimisationstats import OptimisationStatsPlugin
-
+ # Order of plugin execution NOT controlled here for writing csv
+from pyfr.plugins.optimisationstats    import OptimisationStatsPlugin
+from pyfr.plugins.bayesianoptimisation import BayesianOptimisationPlugin
+from pyfr.plugins.modifyconfiguration  import ModifyConfigPlugin
 
 def get_plugin(name, *args, **kwargs):
     return subclass_where(BasePlugin, name=name)(*args, **kwargs)

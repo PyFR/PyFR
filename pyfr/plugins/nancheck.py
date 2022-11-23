@@ -16,4 +16,9 @@ class NaNCheckPlugin(BasePlugin):
     def __call__(self, intg):
         if intg.nacptsteps % self.nsteps == 0:
             if any(np.isnan(np.sum(s)) for s in intg.soln):
-                raise RuntimeError(f'NaNs detected at t = {intg.tcurr}')
+
+                if   intg.rewind == True:  print("Expected to rewind now.")
+                elif intg.rewind == False: print("Rewind is supposed to be set to true. Something is wrong.")
+
+                if intg.rewind == None:
+                    raise RuntimeError(f'NaNs detected at t = {intg.tcurr}')

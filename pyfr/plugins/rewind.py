@@ -12,6 +12,7 @@ class RewindPlugin(BasePlugin):
         self.__rewind_step = self.cfg.getfloat(self.cfgsect, 'rewind-step', 300)
 
         if intg.cfg.get('solver-time-integrator', 'pseudo-controller') == 'local-pi':
+            self.Δτᵢ = intg.cfg.get('solver-time-integrator', 'pseudo-dt')
             self.rewind_Δτ = True
         else:
             self.rewind_Δτ = False
@@ -27,7 +28,7 @@ class RewindPlugin(BasePlugin):
 
         self.saved_nacptsteps = intg.nacptsteps
         
-        self.rewind_clock = 0
+        #self.rewind_clock = 0
         
         # Save matrices for first time
         if self.rewind_Δτ and self.rewind_multip_Δτ:
@@ -39,15 +40,16 @@ class RewindPlugin(BasePlugin):
 
     def __call__(self, intg):
 
-        self.rewind_clock += 1
+        #self.rewind_clock += 1
 
-        if self.rewind_clock % self.__save_step == 0:           # To be removed
-            intg.save = True                              
+        #if self.rewind_clock % self.__save_step == 0:           # To be removed
+        #    intg.save = True                              
 
-        if self.rewind_clock % self.__rewind_step == 0:           # To be removed
-            intg.rewind = True                              
+        #if self.rewind_clock % self.__rewind_step == 0:           # To be removed
+        #    intg.rewind = True                              
 
         if intg.rewind == True:
+            print("Rewind is set to true. Rewinding now.")
             intg.rewind_soln()
             intg.tcurr      = self.saved_tcurr
             self.nrjctsteps = intg.nacptsteps - self.saved_nacptsteps
@@ -55,8 +57,12 @@ class RewindPlugin(BasePlugin):
 
             if self.rewind_Δτ and self.rewind_multip_Δτ:
                 intg.pseudointegrator.pintg.rewind_Δτ()
+                intg.pseudointegrator.pintg.Δτ_mat = self.Δτᵢ 
             else:
                 intg.pseudointegrator.rewind_Δτ()
+                intg.pseudointegrator.Δτ_mat = self.Δτᵢ 
+
+            print("Rewind complete.")
 
         if intg.save == True:
             intg.save_soln()

@@ -186,6 +186,9 @@ class BaseIntegrator:
         if self.saved_soln and self.rewind is True:
             if self.cfg.get('solver-time-integrator', 'formulation') == 'dual':
                 self.system.ele_scal_upts_set(self.pseudointegrator._stepper_regidx, self.saved_soln)
+                self.system.ele_scal_upts_set(self.pseudointegrator._stage_regidx, self.saved_soln)
+                self.system.ele_scal_upts_set([self.pseudointegrator._source_regidx], self.saved_soln)
+                self.system.ele_scal_upts_set(self.pseudointegrator._pseudo_stepper_regidx, self.saved_soln)
             else:
                 self.system.ele_scal_upts_set(self._idxcurr, self.saved_soln)
                 raise Exception('Rewind is only implemented for dual scheme.')

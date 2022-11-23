@@ -4,6 +4,8 @@ import re
 from time import perf_counter
 from functools import wraps
 
+import numpy as np
+
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.integrators.dual.pseudo.pseudocontrollers import (
@@ -17,6 +19,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                  stepper_nregs, stage_nregs, dt):
         self.backend = backend
 
+        self.seed = 0
         sect = 'solver-time-integrator'
         mgsect = 'solver-dual-time-integrator-multip'
 
@@ -284,9 +287,16 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx
 
+    @staticmethod
+    def weighted_round(I, seed):
+        np.random.seed(seed)
+        I_0 = int(np.floor(I))
+        P_0 = I-I_0
+        return np.random.choice([I_0  , I_0+1], p=np.array([1.-P_0, P_0 ]))
+
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
-        cycle, csteps = self.cycle, self.csteps
+        cycle, csteps_f = self.cycle, self.csteps
 
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:
@@ -296,6 +306,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
+            csteps = tuple(self.weighted_round(cstep_float, seed=self.seed) for cstep_float in csteps_f)
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 

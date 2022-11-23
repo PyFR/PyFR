@@ -33,9 +33,11 @@ class BaseDualController(BaseDualIntegrator):
             csh(self)
 
         if self.rewind:
+            #print("Rewind was set to true. Setting it to false now.")
             self.rewind = False
 
         if self.save:
+            #print("Save was set to true. Setting it to false now.")
             self.save = False
 
         # Abort if plugins request it
@@ -43,7 +45,6 @@ class BaseDualController(BaseDualIntegrator):
 
         # Clear the pseudo step info
         self.pseudointegrator.pseudostepinfo = []
-
 
 class DualNoneController(BaseDualController):
     controller_name = 'none'

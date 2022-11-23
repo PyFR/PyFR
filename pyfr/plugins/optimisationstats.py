@@ -7,8 +7,6 @@ import pandas as pd
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BasePlugin
 
-dtyp = np.float64
-
 class OptimisationStatsPlugin(BasePlugin):
     name = 'optimisation_stats'
     systems = ['*']
@@ -23,20 +21,15 @@ class OptimisationStatsPlugin(BasePlugin):
         self.tend   = self.cfg.getfloat('solver-time-integrator', 'tend', 0.0)     # Start collecting stats
         
 
-        self.skip_first_n   = self.cfg.getint(cfgsect,   'skip_first_n', 1)     # Skip first n iterations
-        self.capture_last_n = self.cfg.getint(cfgsect, 'capture_last_n', 3)     # Capture last n iterations
-
+        self.skip_first_n   = self.cfg.getint(cfgsect,   'skip-first-n', 10)     # Skip first n iterations
+        self.capture_last_n = self.cfg.getint(cfgsect, 'capture-last-n', 30)     # Capture last n iterations
 
         self.outf  = self.cfg.get(cfgsect, 'out-file-expanded' , 'pre-opt_exp.csv')
         self.outf2 = self.cfg.get(cfgsect, 'out-file-condensed', 'pre-opt_con.csv')
 
-
         if self.rank == self.root:
 
-            self.opt_time      = 0.
-            self.bounds_length = 0.
-
-            self.maxniters = self.cfg.getint('solver-time-integrator', 'pseudo-niters-max')
+            self.maxniters  = self.cfg.getint('solver-time-integrator', 'pseudo-niters-max')
             self.Δτ_controller = self.cfg.get('solver-time-integrator', 'pseudo-controller')
 
             self.Δτ_init = self.cfg.getfloat('solver-time-integrator', 'pseudo-dt')
@@ -47,7 +40,7 @@ class OptimisationStatsPlugin(BasePlugin):
             self.pd_stats =  pd.DataFrame()
 
             self.ctime_p, self.wtime_p = 0, 0
-            self.reset_stats()
+            self.pd_stats = pd.DataFrame()
 
         intg.reset_opt_stats = False
 
@@ -70,20 +63,12 @@ class OptimisationStatsPlugin(BasePlugin):
                     self.pd_stats.to_csv(self.outf, header=True, index=False, mode='w')
                     self.pd_stats.tail(1).to_csv(self.outf2, header=True, index=False, mode='w')
 
-                self.reset_stats()
+                self.pd_stats = pd.DataFrame()
+
                 intg.reset_opt_stats = False
 
             self.collect_stats(intg)
             self.check_status(intg)
-
-            if self.tend < intg.tcurr:
-                self.print_stats()
-
-    def print_stats(self):
-        print(self.pd_stats)
-
-    def reset_stats(self):
-        self.pd_stats = pd.DataFrame()
 
     def collect_stats(self, intg) -> None:
         Δt = intg._dt  # intg.tcurr - self.ttime_p                # Physical time step
@@ -122,10 +107,17 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # if .pyfrs file was not given at start, the simulation is probably not supposed to be optimised.
 
+        print("check_status", intg.tcurr, self.tend)
+
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
             self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 21
-            # Invalidate part of the data in the dataframe
+            intg.reset_opt_stats = True
+            intg.rewind = True
+
+            intg.opt_cost_mean *= 3
+            intg.opt_cost_std  *= 3 
+
             return
 
         if self.pd_stats.count(0)[0]<=3:
@@ -134,7 +126,12 @@ class OptimisationStatsPlugin(BasePlugin):
 
         if self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages:
             self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 22
-            # Invalidate part of the data in the dataframe
+            intg.reset_opt_stats = True
+            intg.rewind = True
+
+            intg.opt_cost_mean = self.pd_stats['cost'].tail(self.capture_last_n).mean()
+            intg.opt_cost_std  = self.pd_stats['cost'].tail(self.capture_last_n).std()
+
             return
 
         # Simulation data should be calculated after we are sure that time-step will not change more than this
@@ -149,6 +146,11 @@ class OptimisationStatsPlugin(BasePlugin):
             if self.pd_stats.count(0)[0]> (self.skip_first_n + self.capture_last_n):
                 self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 1
                 intg.reset_opt_stats = True
+                intg.save = True
+
+                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.capture_last_n).mean()
+                intg.opt_cost_std  = self.pd_stats['cost'].tail(self.capture_last_n).std()
+
                 return
 
         self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 0
