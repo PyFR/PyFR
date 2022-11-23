@@ -1429,7 +1429,7 @@ Example::
 [soln-plugin-tavg]
 ^^^^^^^^^^^^^^^^^^
 
-Time average quantities. Parameterised with
+Time average quantities and their standard-deviations. Parameterised with
 
 1. ``nsteps`` --- accumulate the average every ``nsteps`` time steps:
 
@@ -1451,20 +1451,30 @@ Time average quantities. Parameterised with
     outputs averages over all ``dt-out`` periods thus far completed within a
     given invocation of PyFR. The default is ``windowed``.
 
-5. ``basedir`` --- relative path to directory where outputs will be
+5. ``std-mode`` --- standard-deviation output mode:
+
+    ``summary`` | ``all``
+
+    Standard-deviations of the time-averaged expressions and functional
+    expressions. ``summary`` appends the maximum and average values of the 
+    standard-deviations taken over space to the stats record of ``.pyfrs``
+    file. ``all`` outputs the actual value of standard-deviation at all
+    solution points to the ``.pyfrs`` file, default is ``summary``.
+
+6. ``basedir`` --- relative path to directory where outputs will be
    written:
 
     *string*
 
-6. ``basename`` --- pattern of output names:
+7. ``basename`` --- pattern of output names:
 
     *string*
 
-7. ``precision`` --- output file number precision:
+8. ``precision`` --- output file number precision:
 
     ``single`` | ``double``
 
-8. ``region`` --- region to be written, specified as either the
+9. ``region`` --- region to be written, specified as either the
    entire domain using ``*``, a combination of the geometric shapes
    specified in :ref:`regions`, or a sub-region of elements that have
    faces on a specific domain boundary via the name of the domain
@@ -1472,13 +1482,13 @@ Time average quantities. Parameterised with
 
     ``*`` | ``shape(args, ...)`` | *string*
 
-9. ``avg``-*name* --- expression to time average, written as a function of
+10. ``avg``-*name* --- expression to time average, written as a function of
    the primitive variables and gradients thereof; multiple expressions,
    each with their own *name*, may be specified:
 
     *string*
 
-10. ``fun-avg``-*name* --- expression to compute at file output time,
+11. ``fun-avg``-*name* --- expression to compute at file output time,
     written as a function of any ordinary average terms; multiple
     expressions, each with their own *name*, may be specified:
 
@@ -1493,6 +1503,7 @@ Example::
     nsteps = 10
     dt-out = 2.0
     mode = windowed
+    std-mode = all
     basedir = .
     basename = files-{t:06.2f}
 
