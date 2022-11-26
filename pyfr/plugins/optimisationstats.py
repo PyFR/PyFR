@@ -17,18 +17,19 @@ class OptimisationStatsPlugin(BasePlugin):
         self.comm, self.rank, self.root = get_comm_rank_root()
         super().__init__(intg, cfgsect, suffix)
         
-        self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)     # Start collecting stats
+        self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)                    # Start collecting stats
         self.tend   = self.cfg.getfloat('solver-time-integrator', 'tend', 0.0)     # Start collecting stats
         
 
         self.skip_first_n   = self.cfg.getint(cfgsect,   'skip-first-n', 10)     # Skip first n iterations
         self.capture_last_n = self.cfg.getint(cfgsect, 'capture-last-n', 30)     # Capture last n iterations
 
-        self.outf  = self.cfg.get(cfgsect, 'out-file-expanded' , 'pre-opt_exp.csv')
-        self.outf2 = self.cfg.get(cfgsect, 'out-file-condensed', 'pre-opt_con.csv')
+        self.outf  = self.cfg.get(cfgsect, 'file-expanded' , 'pre-opt_exp.csv')
+        self.outf2 = self.cfg.get(cfgsect, 'file-condensed', 'pre-opt_con.csv')
 
         if self.rank == self.root:
 
+            self.minniters  = self.cfg.getint('solver-time-integrator', 'pseudo-niters-min')
             self.maxniters  = self.cfg.getint('solver-time-integrator', 'pseudo-niters-max')
             self.Δτ_controller = self.cfg.get('solver-time-integrator', 'pseudo-controller')
 
@@ -43,6 +44,11 @@ class OptimisationStatsPlugin(BasePlugin):
             self.pd_stats = pd.DataFrame()
 
         intg.reset_opt_stats = False
+
+        if suffix not in ['offline', 'online', 'onfline']:
+            raise ValueError('Invalid suffix')
+    
+        self.suffix = suffix
 
     def __call__(self, intg):
 
@@ -105,18 +111,14 @@ class OptimisationStatsPlugin(BasePlugin):
 
     def check_status(self, intg):
 
-        # if .pyfrs file was not given at start, the simulation is probably not supposed to be optimised.
-
-        print("check_status", intg.tcurr, self.tend)
-
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
             self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 21
             intg.reset_opt_stats = True
             intg.rewind = True
 
-            intg.opt_cost_mean *= 3
-            intg.opt_cost_std  *= 3 
+            intg.opt_cost_mean = np.NaN
+            intg.opt_cost_std  = np.NaN 
 
             return
 
@@ -124,29 +126,48 @@ class OptimisationStatsPlugin(BasePlugin):
             self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 0
             return
 
-        if self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages:
-            self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 22
-            intg.reset_opt_stats = True
-            intg.rewind = True
+        if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
 
-            intg.opt_cost_mean = self.pd_stats['cost'].tail(self.capture_last_n).mean()
-            intg.opt_cost_std  = self.pd_stats['cost'].tail(self.capture_last_n).std()
+            if (self.maxniters != self.minniters):
+                self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 22
+                intg.reset_opt_stats = True
+                intg.rewind = True
+
+                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.capture_last_n).mean()
+                intg.opt_cost_std  = self.pd_stats['cost'].tail(self.capture_last_n).std()
+
+#            elif self.pseudo_resid_v>2e-4:
+#                pass 
+
+
+
 
             return
 
         # Simulation data should be calculated after we are sure that time-step will not change more than this
-        if self.Δτ_controller == 'local-pi' and \
-            -1e-6<self.pd_stats['max-Δτ'][self.pd_stats.index[-1]] - self.pd_stats['min-Δτ'][self.pd_stats.index[-1]]<1e-6:
-                self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 11       # Bad initial guess for Δτ
-                return
+        if (self.Δτ_controller == 'local-pi' and
+            -1e-6<self.pd_stats['max-Δτ'][self.pd_stats.index[-1]] - self.pd_stats['min-Δτ'][self.pd_stats.index[-1]]<1e-6):
+            self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 11       # Bad initial guess for Δτ
+
+            if self.suffix == 'onfline':
+                intg.reset_opt_stats = True
+                intg.rewind = True
+
+            return
         
-        if self.Δτ_controller == 'none' or \
-            (self.Δτ_controller == 'local-pi' and -1e-6<self.Δτ_max - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]]<1e-6):
+        if (self.Δτ_controller == 'none' or
+            (self.Δτ_controller == 'local-pi' and -1e-6<self.Δτ_max - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]]<1e-6)):
 
             if self.pd_stats.count(0)[0]> (self.skip_first_n + self.capture_last_n):
                 self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 1
+
                 intg.reset_opt_stats = True
-                intg.save = True
+                if self.suffix == 'online':
+                    intg.save = True
+                elif self.suffix == 'onfline':
+                    intg.rewind = True
+                else:
+                    raise ValueError('Not yet implemented.')
 
                 intg.opt_cost_mean = self.pd_stats['cost'].tail(self.capture_last_n).mean()
                 intg.opt_cost_std  = self.pd_stats['cost'].tail(self.capture_last_n).std()

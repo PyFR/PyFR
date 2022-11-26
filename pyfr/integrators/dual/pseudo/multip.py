@@ -19,10 +19,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                  stepper_nregs, stage_nregs, dt):
         self.backend = backend
 
-        self.seed = 0
         sect = 'solver-time-integrator'
         mgsect = 'solver-dual-time-integrator-multip'
 
+        np.random.seed(cfg.getint(mgsect, 'seed', 0))
+        
         # Get the solver order and set the initial multigrid level
         self._order = self.level = order = cfg.getint('solver', 'order')
 
@@ -287,12 +288,15 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx
 
-    @staticmethod
-    def weighted_round(I, seed):
-        np.random.seed(seed)
-        I_0 = int(np.floor(I))
-        P_0 = I-I_0
-        return np.random.choice([I_0  , I_0+1], p=np.array([1.-P_0, P_0 ]))
+    def weighted(self, I):
+        return np.random.choice([int(np.floor(I))     , int(np.ceil(I))   ], 
+                     p=np.array([1.-I+int(np.floor(I)), I-int(np.floor(I))]))
+
+    #def weighted_round(self, I):
+    #    I_0 = int(np.floor(I))
+    #    I_1 = int(np.ceil(I))
+    #    P_0 = I-I_0
+    #    return np.random.choice([I_0  , I_1], p=np.array([1.-P_0, P_0 ]))
 
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
@@ -300,17 +304,18 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:
-            self.pintgs[l].currstg = self.currstg
+            self.pintgs[l].currstg        = self.currstg
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
-            csteps = tuple(self.weighted_round(cstep_float, seed=self.seed) for cstep_float in csteps_f)
+            csteps = tuple(self.weighted(cstep_f) for cstep_f in csteps_f)
+            # average csteps is working or not
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 
-                # Set the number of smoothing steps at each level
+                # TODO: Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
                 start = perf_counter()

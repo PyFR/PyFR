@@ -122,7 +122,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.accex  = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
         self.vaccex = [np.zeros_like(a) for a in self.accex]
 
-        if intg.save == True:
+        if intg.save:
             self.rprevex = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
             self.raccex  = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
             self.rvaccex = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
@@ -210,7 +210,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
         # Weights for online variance and average
         Wmp1mpn = intg.tcurr - self.prevt           # Time from last sample
-        W1mpn   = intg.tcurr - self.tstart_acc      # Time from accumilation start
+        W1mpn   = intg.tcurr - self.tstart_acc      # Time from accumilation
         Wp = 2 * (W1mpn - Wmp1mpn) * W1mpn          # 
 
         # Iterate over element type
@@ -225,22 +225,24 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 v +=  (Wmp1mpn / Wp * (a - W1mpn * ppc)**2)
 
     def rewind(self, intg):
-        if intg.rewind == True:
-            for v, a, p, rv, ra, rp in zip(self.vaccex, self.accex, self.prevex, self.rvaccex, self.raccex, self.rprevex):
+
+        ex       = self.vaccex,  self.accex,  self.prevex   
+        saved_ex = self.rvaccex, self.raccex, self.rprevex  # For rewinding
+
+        if intg.rewind:
+            for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
                 v.fill(0);  v += rv
                 a.fill(0);  a += ra
                 p.fill(0);  p += rp
 
-        elif intg.save == True:
-            for v, a, p, rv, ra, rp in zip(self.vaccex, self.accex, self.prevex, self.rvaccex, self.raccex, self.rprevex):
+        elif intg.save:
+            for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
                 rv.fill(0); rv += v
                 ra.fill(0); ra += a
                 rp.fill(0); rp += p
 
-        elif intg.save == False and intg.rewind == False:
+        elif (not intg.save) and (not intg.rewind):
             pass # print('Do neither save nor rewind this step.')        
-        elif intg.save == intg.rewind == None:
-            pass # print('Rewinding is not enabled.')        
         else:
             raise ValueError("Something is wrong with the rewind and save flags.")
 

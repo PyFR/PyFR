@@ -183,7 +183,7 @@ class BaseIntegrator:
         self._saved_soln = y
 
     def rewind_soln(self):
-        if self.saved_soln and self.rewind is True:
+        if self.saved_soln and self.rewind:
             if self.cfg.get('solver-time-integrator', 'formulation') == 'dual':
                 self.system.ele_scal_upts_set(self.pseudointegrator._stepper_regidx, self.saved_soln)
                 self.system.ele_scal_upts_set(self.pseudointegrator._stage_regidx, self.saved_soln)

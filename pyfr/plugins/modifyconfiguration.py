@@ -21,8 +21,10 @@ class ModifyConfigPlugin(BasePlugin):
         super().__init__(intg, cfgsect, suffix)
 
         if self.suffix == 'onfline':
-            print("Offline optimisation shall be performed without exiting from simulation.")
-    
+            print("Offline optimisation modification done at runtime.")
+        elif self.suffix == 'online':
+            print("Online optimisation modification.")
+                
     def __call__(self, intg):
 
         if intg.candidate is None:
@@ -31,16 +33,18 @@ class ModifyConfigPlugin(BasePlugin):
         if intg.candidate == {}:
             return
 
-        if self.suffix == 'onfline':
-            print("Offline optimisation shall be performed without exiting from simulation.")
+        if self.suffix in ['onfline', 'online']:
+            if intg.candidate.get('csteps'):
+                intg.pseudointegrator.csteps = intg.candidate.get('csteps')
+            intg.candidate = {}
+            # TODO: Add the config modifications into pyfrs file in the right names.
 
-        print("csteps was before: ", intg.pseudointegrator.csteps)
-        if intg.candidate.get('csteps'):
-            intg.pseudointegrator.csteps = intg.candidate.get('csteps')
-        print("csteps  is    now: ", intg.pseudointegrator.csteps)
-        intg.candidate = {}
-
-
+        elif self.suffix == 'offline':
+            # TODO: Create a new config file, say config-1.ini
+            # Add the new config file to the list of config files.
+            raise ValueError(f"Not implemented yet.")
+        else:
+            raise ValueError(f"Required: 'onfline', 'online' or 'offline'. Given suffix: {self.suffix}")
 
 
         
