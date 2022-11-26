@@ -95,12 +95,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             print(f"{((0.9*self.pd_opt['test-m'].min()) > t1['best-m'].tail(1).min())} or {self.start_PM} or {intg.rewind}")
 
-            if self.pd_opt.count(0)[0]%2:
-                t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
-                p = 'best-tested'
-            else:
-                t1['next-candidate'], t1['next-m'], t1['next-s'] = self.pd_opt[0, 'test-candidate'], self.pd_opt[0, 'test-m'], self.pd_opt[0, 'test-s']
-                p = 'PM'
+            t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
+            p = 'PM'
 
         elif tX.shape[0] < 20:
             t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model(next_type='KG')

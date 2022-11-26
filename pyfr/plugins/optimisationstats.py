@@ -19,20 +19,27 @@ class OptimisationStatsPlugin(BasePlugin):
         
         self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)                    # Start collecting stats
         self.tend   = self.cfg.getfloat('solver-time-integrator', 'tend', 0.0)     # Start collecting stats
-        
 
         self.skip_first_n   = self.cfg.getint(cfgsect,   'skip-first-n', 10)     # Skip first n iterations
-        self.capture_last_n = self.cfg.getint(cfgsect, 'capture-last-n', 30)     # Capture last n iterations
+        self.lastₙ = self.cfg.getint(cfgsect, 'capture-last-n', 30)     # Capture last n iterations
 
         self.outf  = self.cfg.get(cfgsect, 'file-expanded' , 'pre-opt_exp.csv')
         self.outf2 = self.cfg.get(cfgsect, 'file-condensed', 'pre-opt_con.csv')
 
         if self.rank == self.root:
 
-            self.minniters  = self.cfg.getint('solver-time-integrator', 'pseudo-niters-min')
-            self.maxniters  = self.cfg.getint('solver-time-integrator', 'pseudo-niters-max')
-            self.Δτ_controller = self.cfg.get('solver-time-integrator', 'pseudo-controller')
+            self.fvars   = intg.system.elementscls.convarmap[self.ndims]
 
+            if self.cfg.hasopt('solver-dual-time-integrator-multip', 'cycle'):
+                self.maxniters = intg.pseudointegrator.pintg.maxniters
+                self.minniters = intg.pseudointegrator.pintg.minniters
+                self.residtols = intg.pseudointegrator.pintg._pseudo_residtol
+            else:
+                self.maxniters = intg.pseudointegrator.maxniters
+                self.minniters = intg.pseudointegrator.minniters
+                self.residtols = intg.pseudointegrator._pseudo_residtol
+
+            self.Δτ_controller = self.cfg.get('solver-time-integrator', 'pseudo-controller')
             self.Δτ_init = self.cfg.getfloat('solver-time-integrator', 'pseudo-dt')
 
             if self.Δτ_controller == 'local-pi':
@@ -91,8 +98,10 @@ class OptimisationStatsPlugin(BasePlugin):
         t1 = pd.DataFrame({'physical-time': [intg.tcurr - intg._dt], 
                                 'compute-Δt'   : [Δc], 
                                 'wall-Δt'      : [Δw],
-                                'cost'         : [self.ΔcΔt]}
-                            )
+                                'cost'         : [self.ΔcΔt],
+                                'log-residual' : [self.ΔcΔt],
+                          }
+                         ) 
 
         # Here, if intg data from plugin exists, we take data from there 
         if self.Δτ_controller == 'local-pi' and intg.Δτ_stats:
@@ -126,23 +135,26 @@ class OptimisationStatsPlugin(BasePlugin):
             self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 0
             return
 
-        if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
+        tol_crossed = np.any([intg.Δτ_stats['res'][var]['all'] > tol for var, tol in zip(self.fvars, self.residtols)])
 
+        if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
             if (self.maxniters != self.minniters):
                 self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 22
                 intg.reset_opt_stats = True
                 intg.rewind = True
 
-                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.capture_last_n).mean()
-                intg.opt_cost_std  = self.pd_stats['cost'].tail(self.capture_last_n).std()
+                intg.opt_cost_mean = np.NaN
+                intg.opt_cost_std  = np.NaN
+                return
 
-#            elif self.pseudo_resid_v>2e-4:
-#                pass 
+            elif tol_crossed:
+                self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 23
+                intg.reset_opt_stats = True
+                intg.rewind = True
 
-
-
-
-            return
+                intg.opt_cost_mean = np.NaN
+                intg.opt_cost_std  = np.NaN
+                return
 
         # Simulation data should be calculated after we are sure that time-step will not change more than this
         if (self.Δτ_controller == 'local-pi' and
@@ -156,9 +168,10 @@ class OptimisationStatsPlugin(BasePlugin):
             return
         
         if (self.Δτ_controller == 'none' or
-            (self.Δτ_controller == 'local-pi' and -1e-6<self.Δτ_max - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]]<1e-6)):
+           (self.Δτ_controller == 'local-pi' and 
+            abs(self.Δτ_max - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)):
 
-            if self.pd_stats.count(0)[0]> (self.skip_first_n + self.capture_last_n):
+            if self.pd_stats.count(0)[0]> (self.skip_first_n + self.lastₙ):
                 self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 1
 
                 intg.reset_opt_stats = True
@@ -169,8 +182,8 @@ class OptimisationStatsPlugin(BasePlugin):
                 else:
                     raise ValueError('Not yet implemented.')
 
-                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.capture_last_n).mean()
-                intg.opt_cost_std  = self.pd_stats['cost'].tail(self.capture_last_n).std()
+                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.lastₙ).mean()
+                intg.opt_cost_std  = self.pd_stats['cost'].tail(self.lastₙ).std()
 
                 return
 

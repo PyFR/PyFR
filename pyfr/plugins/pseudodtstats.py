@@ -24,13 +24,10 @@ class PseudodtStatsPlugin(BasePlugin):
 
         # Maximum of 3 Levels of abstraction for the stats of pseudo-dt field
         intg.Δτ_stats = { 'n' : {'all':0},
-
-                         'res': {'all':0}|{p:{'all':0}|{e:{'all':0} for e in self.e_types} for p in self.fvars}, 
-
+                         'res': {'all':0}|{p:{'all':0}                                     for p in self.fvars}, 
                          'min': {'all':0}|{p:{'all':0}|{e:{'all':0} for e in self.e_types} for p in self.fvars}, 
                          'max': {'all':0}|{p:{'all':0}|{e:{'all':0} for e in self.e_types} for p in self.fvars},
-                         
-                         }
+                        }
 
         self.abstraction = self.cfg.getint(self.cfgsect, 'abstraction', 1)
         if 'solver-dual-time-integrator-multip' in intg.cfg.sections():
@@ -146,45 +143,44 @@ class PseudodtStatsPlugin(BasePlugin):
             Use a list of numpy arrays, one for each element type.
             Each array is of shape(nvars,)
         '''
+        resid = resid or (0,)*intg.system.nvars
 
-        return
+        # each variable in (p, u, v, w)
+        for j, var in enumerate(self.fvars):
+            intg.Δτ_stats['res'][var]['all'] = resid[j]
+        intg.Δτ_stats['res']['all'] = sum([intg.Δτ_stats['res'][var]['all'] for var in self.fvars])
 
+    def residual_statistics_next_gen(self, intg, resid):
+        '''
+            Use a list of numpy arrays, one for each element type.
+            Each array is of shape(nvars,)
+        '''
 
         for j, var in enumerate(self.fvars):
             for i, e_type in enumerate(self.e_types):
 
-                # each element type, each soln point in element, each variable in (p, u, v, w)
+                # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements
-                intg.Δτ_stats['min'][var][e_type]['each'] = Δτ_mats[i][:, j, :].min(1)
-                intg.Δτ_stats['max'][var][e_type]['each'] = Δτ_mats[i][:, j, :].max(1)
+                intg.Δτ_stats['res'][var][e_type]['each'] = resid[i][j]
 
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements and element soln points
 
-                tₘₐₓ = np.array(intg.Δτ_stats['min'][var][e_type]['each'].min())
-                tₘᵢₙ = np.array(intg.Δτ_stats['max'][var][e_type]['each'].max())
+                res = np.array(intg.Δτ_stats['res'][var][e_type]['each'].max())
 
                 if self.rank != self.root:
-                    self.comm.Reduce(tₘₐₓ       , None , op=mpi.MIN, root=self.root)
+                    self.comm.Reduce(res, None , op=mpi.SUM, root=self.root)
                 else:
-                    self.comm.Reduce(mpi.IN_PLACE, tₘₐₓ, op=mpi.MIN, root=self.root)
+                    self.comm.Reduce(mpi.IN_PLACE, res, op=mpi.SUM, root=self.root)
 
-                if self.rank != self.root:
-                    self.comm.Reduce(tₘᵢₙ       , None , op=mpi.MAX, root=self.root)
-                else:
-                    self.comm.Reduce(mpi.IN_PLACE, tₘᵢₙ, op=mpi.MAX, root=self.root)
-
-                intg.Δτ_stats['min'][var][e_type]['all'] = tₘₐₓ
-                intg.Δτ_stats['max'][var][e_type]['all'] = tₘᵢₙ
+                intg.Δτ_stats['res'][var][e_type]['all'] = res
 
             # each variable in (p, u, v, w)
             # Stats obtained over all element types, elements and element soln points
-            intg.Δτ_stats['min'][var]['all'] = min([intg.Δτ_stats['min'][var][e_type]['all'] for e_type in self.e_types])
-            intg.Δτ_stats['max'][var]['all'] = max([intg.Δτ_stats['max'][var][e_type]['all'] for e_type in self.e_types])
+            intg.Δτ_stats['res'][var]['all'] = max([intg.Δτ_stats['res'][var][e_type]['all'] for e_type in self.e_types])
 
         # Stats obtained over all element types, elements, variable in (p, u, v, w) and element soln points
-        intg.Δτ_stats['min']['all'] = min([intg.Δτ_stats['min'][var]['all'] for var in self.fvars])
-        intg.Δτ_stats['max']['all'] = max([intg.Δτ_stats['max'][var]['all'] for var in self.fvars])
+        intg.Δτ_stats['res']['all'] = max([intg.Δτ_stats['res'][var]['all'] for var in self.fvars])
 
     def Δτ_stats_as_list(self, Δτ_stats):
         Δτ_stats_list = []
