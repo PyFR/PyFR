@@ -170,7 +170,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
     def _eval_fun_var(self, dev, accex):
         dfexpr, exprs = [], []
-        dh, an = self.delta_h, self.anames
 
         # Iterate over each element type our averaging region
         for av in accex:
@@ -180,14 +179,15 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             fx = self._eval_fun_exprs(av)
             exprs.append(fx)
 
-            for i in range(len(an)):
-                # Calculate step size
-                h = dh * np.maximum(abs(av[i]), dh, where=abs(av[i])>dh, out=np.ones_like(av[i]))
+            for avi in av:
+                # Calculate step size for finite difference
+                h = self.delta_h*np.abs(avi)
+                h[np.where(h == 0)] = self.delta_h
 
                 # Calculate derivatives for functional averages
-                av[i] += h
+                avi += h
                 df.append((self._eval_fun_exprs(av) - fx) / h)
-                av[i] -= h
+                avi -= h
 
             # Stack derivatives
             dfexpr.append(np.array(df))
@@ -314,22 +314,20 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 stats.set('tavg', 'tstart', self.tstart_acc)
                 stats.set('tavg', 'tend', intg.tcurr)
 
-                # Write summarised stats
-                if rank == root:
-                    # Write standard deviations
-                    for an, vm, vs in zip(self.anames, std_max_a, std_sum_a):
-                        stats.set('tavg', f'max-std-{an}', vm)
-                        stats.set('tavg', f'avg-std-{an}', vs / self.tpts)
-
-                    # Followed by functional standard deviations
-                    for fn, fm, fs in zip(self.fnames, std_max_f, std_sum_f):
-                        stats.set('tavg', f'fun-max-std-{fn}', fm)
-                        stats.set('tavg', f'fun-avg-std-{fn}', fs / self.tpts)
-
                 intg.collect_stats(stats)
 
                 # If we are the root rank then prepare the metadata
                 if rank == root:
+                    # Write standard deviation stats
+                    for an, vm, vs in zip(self.anames, std_max_a, std_sum_a):
+                        stats.set('tavg', f'std-max-{an}', vm)
+                        stats.set('tavg', f'std-avg-{an}', vs / self.tpts)
+
+                    # Followed by functional standard deviation stats
+                    for fn, fm, fs in zip(self.fnames, std_max_f, std_sum_f):
+                        stats.set('tavg', f'fun-std-max-{fn}', fm)
+                        stats.set('tavg', f'fun-std-avg-{fn}', fs / self.tpts)
+
                     metadata = dict(intg.cfgmeta,
                                     stats=stats.tostr(),
                                     mesh_uuid=intg.mesh_uuid)
