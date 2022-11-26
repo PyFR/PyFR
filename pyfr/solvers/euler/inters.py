@@ -2,6 +2,7 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
 
+
 class FluidIntIntersMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

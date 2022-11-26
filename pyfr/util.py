@@ -184,5 +184,5 @@ def file_path_gen(basedir, basename, restore=False):
 
     t = yield
 
-    for n in it.count(ns): 
+    for n in it.count(ns):
         t = yield os.path.join(basedir, basename.format(t=t, n=n))
