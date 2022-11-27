@@ -20,7 +20,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         bounds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
         self.outf  = self.cfg.get(cfgsect, 'file' , 'bayesopt.csv')
 
-        self.torch_kwargs = {'dtype' : torch.float32, 'device': torch.device("cpu")}    # Stress test with gpu too, compare timings
+        self.torch_kwargs = {'dtype' : torch.float64, 'device': torch.device("cpu")}    # Stress test with gpu too, compare timings
 
         self._bounds = self.torch.tensor(bounds_init, **self.torch_kwargs)
 
@@ -65,8 +65,8 @@ class BayesianOptimisationPlugin(BasePlugin):
         tY  = np.array(list(self.pd_opt['test-m'        ])+[list(t1['test-m'        ])[0]]).reshape(-1,1)
         tYv = np.array(list(self.pd_opt['test-s'        ])+[list(t1['test-s'        ])[0]])**2
 
-        tY[ np.isnan(tY )] = np.nanmax(tY)
-        tYv[np.isnan(tYv)] = np.nanmax(tYv)
+        tY[ np.isnan(tY )] = 2*np.nanmax(tY)
+        tYv[np.isnan(tYv)] = 2*np.nanmax(tYv)
 
         tYv = tYv.reshape(-1,1)
         self.add_to_model(tX, tY, tYv)
@@ -84,26 +84,31 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         if self.pd_opt.empty:
             t1['base-time'] = self.ct_first = intg.pseudointegrator._compute_time
-            self.start_PM = False
+            past_size = 0
+            start_EI = True
             last_opt_time = 0
         else:
+            past_size = self.pd_opt['bounds-size'].tail(5).min()
             t1['base-time'] = (1+self.pd_opt.count(0)[0]-self.rewind_counts)*self.ct_first
-            self.start_PM = list(self.pd_opt['cumm-time'].iloc[[-1]] < self.pd_opt['base-time'].iloc[[-1]])[0]
+            start_EI = list(self.pd_opt['cumm-time'].iloc[[-1]] > self.pd_opt['base-time'].iloc[[-1]])[0]
             last_opt_time = self.pd_opt.iloc[-1, self.pd_opt.columns.get_loc('cumm-opt-time')]
 
-        if ((0.9*self.pd_opt['test-m'].min()) > t1['best-m'].tail(1).min()) or self.start_PM or intg.rewind:
+        t1['bounds-size'] = self.bounds_size
 
-            print(f"{((0.9*self.pd_opt['test-m'].min()) > t1['best-m'].tail(1).min())} or {self.start_PM} or {intg.rewind}")
-
+        if ((0.9*self.pd_opt['test-m'].min()) > t1['best-m'].tail(1).min()) or intg.rewind:
             t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
             p = 'PM'
 
-        elif tX.shape[0] < 20:
+        elif (tX.shape[0]<10): # or (past_size != self.bounds_size):
             t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model(next_type='KG')
             p = 'KG'
-        else:
+
+        elif (tX.shape[0]<50): # or start_EI:
             t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model(next_type='EI')
             p = 'EI'
+        else:
+            t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
+            p = 'PM-end'
 
         intg.candidate |= {'csteps':self._postprocess_ccsteps(list(t1['next-candidate'])[0])}
 
@@ -147,7 +152,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.bounds = tX
         #print(self.bounds)
 
-        self.normalise = Normalize(d=4, bounds=self._bounds)
+        self.normalise = Normalize(d=4, bounds=self.bounds)
         self.standardise = Standardize(m=1)
 
         self.norm_X       = self.normalise.transform(  self.torch.tensor(tX , **self.torch_kwargs))
@@ -182,6 +187,10 @@ class BayesianOptimisationPlugin(BasePlugin):
         self._bounds[1, self._bounds[1, :] < hr[1, :]] = hr[1, self._bounds[1, :] < hr[1, :]]
         self._bounds[0, self._bounds[0, :] < 0] = 0
 
+    @property
+    def bounds_size(self):
+        return np.prod((self._bounds[1, :] - self._bounds[0, :]).detach().cpu().numpy() )
+        
     def _preprocess_csteps(self, csteps):
         '''
             Processing shall be done ONLY for:
