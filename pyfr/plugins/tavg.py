@@ -272,7 +272,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             self.prevex = currex
 
             # Rewind the simulation if necessary
-            self.rewind(intg)
+            if intg.rewind or intg.save:
+                self.rewind(intg)
 
             if dowrite:
                 comm, rank, root = get_comm_rank_root()
