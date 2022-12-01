@@ -2,15 +2,17 @@ from time import perf_counter
 import numpy as np
 import pandas as pd
 
+
 from pyfr.plugins.base import BasePlugin
+
 
 class BayesianOptimisationPlugin(BasePlugin):
     name = 'bayesian_optimisation'
     systems = ['*']
     formulations = ['dual']
-    
+
     def __init__(self, intg, cfgsect, suffix):
-        
+
         super().__init__(intg, cfgsect, suffix)
 
         import torch
@@ -18,17 +20,18 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.seed = self.cfg.getint(cfgsect, 'seed', 0)
 
         bounds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
-        self.outf  = self.cfg.get(cfgsect, 'file' , 'bayesopt.csv')
+        self.outf = self.cfg.get(cfgsect, 'file', 'bayesopt.csv')
 
-        self.torch_kwargs = {'dtype' : torch.float64, 'device': torch.device("cpu")}    # Stress test with gpu too, compare timings
+        self.torch_kwargs = {'dtype': torch.float64,
+                             'device': torch.device("cpu")}    # Stress test with gpu too, compare timings
 
         self._bounds = self.torch.tensor(bounds_init, **self.torch_kwargs)
 
-        self.pd_opt =  pd.DataFrame(columns = ['test-candidate', 'test-m', 'test-s',
-#                                               'check-m', 'check-s',
-                                               'next-candidate', 'next-m', 'next-s',
-                                               'best-candidate', 'best-m', 'best-s',
-                                               ])
+        self.pd_opt = pd.DataFrame(columns=['test-candidate', 'test-m', 'test-s',
+                                            #'check-m', 'check-s',
+                                            'next-candidate', 'next-m', 'next-s',
+                                            'best-candidate', 'best-m', 'best-s',
+                                           ])
 
         self.rewind_counts = 0
 
@@ -48,7 +51,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         opt_time_start = perf_counter()
 
-        #if np.isnan(intg.opt_cost_mean) or np.isnan(intg.opt_cost_std):
+        # if np.isnan(intg.opt_cost_mean) or np.isnan(intg.opt_cost_std):
 #
         #    if not (np.isnan(intg.opt_cost_mean) and np.isnan(intg.opt_cost_std)):
         #        raise ValueError("Either both or none of opt_cost_mean and opt_cost_std should be NaN")
@@ -56,9 +59,12 @@ class BayesianOptimisationPlugin(BasePlugin):
         #    intg.opt_cost_mean = 1.1*self.pd_opt['test-m'].max()
         #    intg.opt_cost_std  = 1.1*self.pd_opt['test-s'].max()           
 #
-        t1 =  pd.DataFrame({'test-candidate': [self._preprocess_csteps(intg.pseudointegrator.csteps)] , 
-                            'test-m'        : [intg.opt_cost_mean], 
-                            'test-s'        : [intg.opt_cost_std ]})
+        t1 =  pd.DataFrame({
+            'tcurr'         : [intg.tcurr],
+            'test-candidate': [self._preprocess_csteps(intg.pseudointegrator.csteps)] , 
+            'test-m'        : [intg.opt_cost_mean], 
+            'test-s'        : [intg.opt_cost_std ],
+            })
 
         # Process all optimisables
         tX  = np.array(list(self.pd_opt['test-candidate'])+[list(t1['test-candidate'])[0]])
@@ -131,6 +137,15 @@ class BayesianOptimisationPlugin(BasePlugin):
             print(self.pd_opt)
             print("Optimisation type: ", p)
             self.pd_opt.to_csv(self.outf, index=False)
+            (self.pd_opt.plot(
+                x = "tcurr", y = ['test-m','best-m'], 
+                kind = 'line',
+                title = 'Online optimisation', 
+                xlabel = 'Current time', ylabel = 'Cost function',
+                )
+                .get_figure()
+                .savefig('plots/opt.png')
+            )
 
     def store_test_from_model(self, t1):
         test = self.torch.tensor([list(t1['test-candidate'])[0]], **self.torch_kwargs)
