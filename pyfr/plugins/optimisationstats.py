@@ -4,7 +4,7 @@ from time import time
 import numpy as np
 import pandas as pd
 
-from pyfr.mpiutil import get_comm_rank_root
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.base import BasePlugin
 
 class OptimisationStatsPlugin(BasePlugin):
@@ -23,10 +23,19 @@ class OptimisationStatsPlugin(BasePlugin):
         self.skip_first_n   = self.cfg.getint(cfgsect,   'skip-first-n', 10)     # Skip first n iterations
         self.lastₙ = self.cfg.getint(cfgsect, 'capture-last-n', 30)     # Capture last n iterations
 
-        self.outf  = self.cfg.get(cfgsect, 'file-expanded' , 'pre-opt_exp.csv')
-        self.outf2 = self.cfg.get(cfgsect, 'file-condensed', 'pre-opt_con.csv')
+        self.Δτ_init       = self.cfg.getfloat('solver-time-integrator', 'pseudo-dt')
+        self.Δτ_controller = self.cfg.get(     'solver-time-integrator', 'pseudo-controller')
+        if self.Δτ_controller == 'local-pi':
+            self.Δτ_max = self.Δτ_init *  self.cfg.getfloat('solver-time-integrator', 'pseudo-dt-max-mult')
+
+        intg.opt_cost_mean = None
+        intg.opt_cost_std  = None 
+        intg.reset_opt_stats = False
 
         if self.rank == self.root:
+
+            self.outf  = self.cfg.get(cfgsect, 'file-expanded' , 'pre-opt_exp.csv')
+            self.outf2 = self.cfg.get(cfgsect, 'file-condensed', 'pre-opt_con.csv')
 
             self.fvars   = intg.system.elementscls.convarmap[self.ndims]
 
@@ -39,18 +48,11 @@ class OptimisationStatsPlugin(BasePlugin):
                 self.minniters = intg.pseudointegrator.minniters
                 self.residtols = intg.pseudointegrator._pseudo_residtol
 
-            self.Δτ_controller = self.cfg.get('solver-time-integrator', 'pseudo-controller')
-            self.Δτ_init = self.cfg.getfloat('solver-time-integrator', 'pseudo-dt')
-
-            if self.Δτ_controller == 'local-pi':
-                self.Δτ_max = self.Δτ_init *  self.cfg.getfloat('solver-time-integrator', 'pseudo-dt-max-mult')
-
             self.pd_stats =  pd.DataFrame()
 
             self.ctime_p, self.wtime_p = 0, 0
             self.pd_stats = pd.DataFrame()
 
-        intg.reset_opt_stats = False
 
         if suffix not in ['offline', 'online', 'onfline']:
             raise ValueError('Invalid suffix')
@@ -82,6 +84,10 @@ class OptimisationStatsPlugin(BasePlugin):
 
             self.collect_stats(intg)
             self.check_status(intg)
+            print(self.pd_stats['invalid'])
+
+        self.bcast_stats(intg)
+
 
     def collect_stats(self, intg) -> None:
         Δt = intg._dt  # intg.tcurr - self.ttime_p                # Physical time step
@@ -135,7 +141,6 @@ class OptimisationStatsPlugin(BasePlugin):
             self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 0
             return
 
-        tol_crossed = np.any([intg.Δτ_stats['res'][var]['all'] > tol for var, tol in zip(self.fvars, self.residtols)])
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
             if (self.maxniters != self.minniters):
@@ -147,7 +152,8 @@ class OptimisationStatsPlugin(BasePlugin):
                 intg.opt_cost_std  = np.NaN
                 return
 
-            elif tol_crossed:
+        if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
+            if np.any([intg.Δτ_stats['res'][var]['all'] > tol for var, tol in zip(self.fvars, self.residtols)]):
                 self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 23
                 intg.reset_opt_stats = True
                 intg.rewind = True
@@ -189,3 +195,8 @@ class OptimisationStatsPlugin(BasePlugin):
 
         self.pd_stats.at[self.pd_stats.index[-1], 'invalid'] = 0
         return
+
+    def bcast_stats(self, intg):
+        intg.rewind          = self.comm.bcast(intg.rewind         , root=0)
+        intg.save            = self.comm.bcast(intg.save           , root=0)
+        intg.reset_opt_stats = self.comm.bcast(intg.reset_opt_stats, root=0)

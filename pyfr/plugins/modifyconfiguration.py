@@ -1,4 +1,5 @@
 from pyfr.plugins.base import BasePlugin
+from pyfr.mpiutil import get_comm_rank_root
 
 class ModifyConfigPlugin(BasePlugin):
     name = 'modify_configuration'
@@ -20,6 +21,8 @@ class ModifyConfigPlugin(BasePlugin):
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
 
+        self.comm, self.rank, self.root = get_comm_rank_root()
+
         if self.suffix == 'onfline':
             print("Offline optimisation modification done at runtime.")
         elif self.suffix == 'online':
@@ -36,7 +39,13 @@ class ModifyConfigPlugin(BasePlugin):
         if self.suffix in ['onfline', 'online']:
             if intg.candidate.get('csteps'):
                 intg.pseudointegrator.csteps = intg.candidate.get('csteps')
+
+            print(f"rank {self.rank} csteps: {intg.pseudointegrator.csteps} candidate: {intg.candidate}")
+
             intg.candidate = {}
+
+            print(f"rank {self.rank} csteps: {intg.pseudointegrator.csteps} candidate: {intg.candidate}")
+
             # TODO: Add the config modifications into pyfrs file in the right names.
 
         elif self.suffix == 'offline':
@@ -47,4 +56,4 @@ class ModifyConfigPlugin(BasePlugin):
             raise ValueError(f"Required: 'onfline', 'online' or 'offline'. Given suffix: {self.suffix}")
 
 
-        
+    

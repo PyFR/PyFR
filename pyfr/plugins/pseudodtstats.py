@@ -30,8 +30,13 @@ class PseudodtStatsPlugin(BasePlugin):
                         }
 
         self.abstraction = self.cfg.getint(self.cfgsect, 'abstraction', 1)
+
+        if self.abstraction > 2:
+            raise ValueError('Abstraction level greater than 2 has not been implemented yet')
+
         if 'solver-dual-time-integrator-multip' in intg.cfg.sections():
-            self.level = self.cfg.getint(self.cfgsect, 'level', intg.cfg.getint('solver','order'))
+            self.level = self.cfg.getint(self.cfgsect, 
+                'level', intg.cfg.getint('solver','order'))
 
         csv_header =  'pseudo-steps, tcurr'
         for k, v in intg.Δτ_stats.items():
@@ -113,26 +118,27 @@ class PseudodtStatsPlugin(BasePlugin):
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements and element soln points
 
-                tₘₐₓ = np.array(intg.Δτ_stats['min'][var][e_type]['each'].min())
-                tₘᵢₙ = np.array(intg.Δτ_stats['max'][var][e_type]['each'].max())
-
-                if self.rank != self.root:
-                    self.comm.Reduce(tₘₐₓ       , None , op=mpi.MIN, root=self.root)
-                else:
-                    self.comm.Reduce(mpi.IN_PLACE, tₘₐₓ, op=mpi.MIN, root=self.root)
-
-                if self.rank != self.root:
-                    self.comm.Reduce(tₘᵢₙ       , None , op=mpi.MAX, root=self.root)
-                else:
-                    self.comm.Reduce(mpi.IN_PLACE, tₘᵢₙ, op=mpi.MAX, root=self.root)
-
-                intg.Δτ_stats['min'][var][e_type]['all'] = tₘₐₓ
-                intg.Δτ_stats['max'][var][e_type]['all'] = tₘᵢₙ
+                intg.Δτ_stats['min'][var][e_type]['all'] = intg.Δτ_stats['min'][var][e_type]['each'].min()
+                intg.Δτ_stats['max'][var][e_type]['all'] = intg.Δτ_stats['max'][var][e_type]['each'].max()
 
             # each variable in (p, u, v, w)
             # Stats obtained over all element types, elements and element soln points
             intg.Δτ_stats['min'][var]['all'] = min([intg.Δτ_stats['min'][var][e_type]['all'] for e_type in self.e_types])
             intg.Δτ_stats['max'][var]['all'] = max([intg.Δτ_stats['max'][var][e_type]['all'] for e_type in self.e_types])
+
+            tₘₐₓ = np.array(intg.Δτ_stats['min'][var]['all'])
+            if self.rank != self.root:
+                self.comm.Reduce(tₘₐₓ       , None , op=mpi.MIN, root=self.root)
+            else:
+                self.comm.Reduce(mpi.IN_PLACE, tₘₐₓ, op=mpi.MIN, root=self.root)
+            intg.Δτ_stats['min'][var][e_type]['all'] = tₘₐₓ
+
+            tₘᵢₙ = np.array(intg.Δτ_stats['max'][var]['all'])
+            if self.rank != self.root:
+                self.comm.Reduce(tₘᵢₙ       , None , op=mpi.MAX, root=self.root)
+            else:
+                self.comm.Reduce(mpi.IN_PLACE, tₘᵢₙ, op=mpi.MAX, root=self.root)
+            intg.Δτ_stats['max'][var][e_type]['all'] = tₘᵢₙ
 
         # Stats obtained over all element types, elements, variable in (p, u, v, w) and element soln points
         intg.Δτ_stats['min']['all'] = min([intg.Δτ_stats['min'][var]['all'] for var in self.fvars])

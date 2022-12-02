@@ -4,7 +4,7 @@ import pandas as pd
 
 
 from pyfr.plugins.base import BasePlugin
-
+from pyfr.mpiutil import get_comm_rank_root
 
 class BayesianOptimisationPlugin(BasePlugin):
     name = 'bayesian_optimisation'
@@ -15,137 +15,166 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         super().__init__(intg, cfgsect, suffix)
 
-        import torch
-        self.torch = torch
-        self.seed = self.cfg.getint(cfgsect, 'seed', 0)
+        self.comm, self.rank, self.root = get_comm_rank_root()
 
-        bounds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
-        self.outf = self.cfg.get(cfgsect, 'file', 'bayesopt.csv')
+        if self.rank == self.root:
 
-        self.torch_kwargs = {'dtype': torch.float64,
-                             'device': torch.device("cpu")}    # Stress test with gpu too, compare timings
+            import torch
+            self.torch = torch
 
-        self._bounds = self.torch.tensor(bounds_init, **self.torch_kwargs)
+            self.torch_kwargs = {'dtype': torch.float64,
+                                'device': torch.device("cpu")}    # Stress test with gpu too, compare timings
 
-        self.pd_opt = pd.DataFrame(columns=['test-candidate', 'test-m', 'test-s',
-                                            #'check-m', 'check-s',
-                                            'next-candidate', 'next-m', 'next-s',
-                                            'best-candidate', 'best-m', 'best-s',
-                                           ])
+            bounds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
+            self.seed = self.cfg.getint(cfgsect, 'seed', 0)
+            self._bounds = self.torch.tensor(bounds_init, **self.torch_kwargs)
 
-        self.rewind_counts = 0
+            self.cost_plot = self.cfg.get(cfgsect, 'file-cost-plot', 'bayesian-optimisation-cost-plot.png')
+            self.cumm_plot = self.cfg.get(cfgsect, 'file-cumm-plot', 'bayesian-optimisation-cumm-plot.png')
+            self.outf      = self.cfg.get(cfgsect, 'file-history'  , 'bayesopt.csv')
 
-#        arrays = [
-#                    ["test",      "test", "test", "next",      "next", "next", "best",      "best", "best", ],
-#                    ["candidate", "mean", "std" , "candidate", "mean", "std" , "candidate", "mean", "std" , ],
-#                    ]
-#        index = pd.MultiIndex.from_arrays(arrays, names=["candidate-type", "values"])
-#        print(index)
+            self.pd_opt = pd.DataFrame(columns=['test-candidate', 'test-m', 'test-s',
+                                                #'check-m', 'check-s',
+                                                'next-candidate', 'next-m', 'next-s',
+                                                'best-candidate', 'best-m', 'best-s',
+                                            ])
+            self.rewind_counts = 0
+
+    #        arrays = [
+    #                    ["test",      "test", "test", "next",      "next", "next", "best",      "best", "best", ],
+    #                    ["candidate", "mean", "std" , "candidate", "mean", "std" , "candidate", "mean", "std" , ],
+    #                    ]
+    #        index = pd.MultiIndex.from_arrays(arrays, names=["candidate-type", "values"])
+    #        print(index)
 
         intg.candidate = {}     # This will be used by the next plugin in line
 
     def __call__(self, intg):
 
+        print(f"Rank {self.rank} has intg.reset_opt_stats = {intg.reset_opt_stats}")
+
         if not intg.reset_opt_stats:
+            print("BayesianOptimisationPlugin: Not resetting stats, rank:", self.rank)
             return
 
-        opt_time_start = perf_counter()
+        if self.rank == self.root:
+            opt_time_start = perf_counter()
 
-        # if np.isnan(intg.opt_cost_mean) or np.isnan(intg.opt_cost_std):
-#
-        #    if not (np.isnan(intg.opt_cost_mean) and np.isnan(intg.opt_cost_std)):
-        #        raise ValueError("Either both or none of opt_cost_mean and opt_cost_std should be NaN")
-#
-        #    intg.opt_cost_mean = 1.1*self.pd_opt['test-m'].max()
-        #    intg.opt_cost_std  = 1.1*self.pd_opt['test-s'].max()           
-#
-        t1 =  pd.DataFrame({
-            'tcurr'         : [intg.tcurr],
-            'test-candidate': [self._preprocess_csteps(intg.pseudointegrator.csteps)] , 
-            'test-m'        : [intg.opt_cost_mean], 
-            'test-s'        : [intg.opt_cost_std ],
-            })
+            # if np.isnan(intg.opt_cost_mean) or np.isnan(intg.opt_cost_std):
+    #
+            #    if not (np.isnan(intg.opt_cost_mean) and np.isnan(intg.opt_cost_std)):
+            #        raise ValueError("Either both or none of opt_cost_mean and opt_cost_std should be NaN")
+    #
+            #    intg.opt_cost_mean = 1.1*self.pd_opt['test-m'].max()
+            #    intg.opt_cost_std  = 1.1*self.pd_opt['test-s'].max()           
+    #
+            t1 =  pd.DataFrame({
+                'tcurr'         : [intg.tcurr],
+                'test-candidate': [self._preprocess_csteps(intg.pseudointegrator.csteps)] , 
+                'test-m'        : [intg.opt_cost_mean], 
+                'test-s'        : [intg.opt_cost_std ],
+                })
 
-        # Process all optimisables
-        tX  = np.array(list(self.pd_opt['test-candidate'])+[list(t1['test-candidate'])[0]])
-        tY  = np.array(list(self.pd_opt['test-m'        ])+[list(t1['test-m'        ])[0]]).reshape(-1,1)
-        tYv = np.array(list(self.pd_opt['test-s'        ])+[list(t1['test-s'        ])[0]])**2
+            # Process all optimisables
+            tX  = np.array(list(self.pd_opt['test-candidate'])+[list(t1['test-candidate'])[0]])
+            tY  = np.array(list(self.pd_opt['test-m'        ])+[list(t1['test-m'        ])[0]]).reshape(-1,1)
+            tYv = np.array(list(self.pd_opt['test-s'        ])+[list(t1['test-s'        ])[0]])**2
 
-        tY[ np.isnan(tY )] = 2*np.nanmax(tY)
-        tYv[np.isnan(tYv)] = 2*np.nanmax(tYv)
+            tY[ np.isnan(tY )] = 2*np.nanmax(tY)
+            tYv[np.isnan(tYv)] = 2*np.nanmax(tYv)
 
-        tYv = tYv.reshape(-1,1)
-        self.add_to_model(tX, tY, tYv)
+            tYv = tYv.reshape(-1,1)
+            self.add_to_model(tX, tY, tYv)
 
-#         t1 = self.store_test_from_model(t1)
-        #t1 = self.store_validation_from_model(t1, 0, (0, 0, 0, 0))
-        #t1 = self.store_validation_from_model(t1, 1, (1, 1, 1, 1))
-        #t1 = self.store_validation_from_model(t1, 5, (5, 5, 5, 5))
-        
-#        t1['best-candidate'], t1['best-m'], t1['best-s'] = self.best_from_model()
-        t1['best-candidate'], t1['best-m'], t1['best-s'] = self.best_from_model()
+    #         t1 = self.store_test_from_model(t1)
+            #t1 = self.store_validation_from_model(t1, 0, (0, 0, 0, 0))
+            #t1 = self.store_validation_from_model(t1, 1, (1, 1, 1, 1))
+            #t1 = self.store_validation_from_model(t1, 5, (5, 5, 5, 5))
+            
+    #        t1['best-candidate'], t1['best-m'], t1['best-s'] = self.best_from_model()
+            t1['best-candidate'], t1['best-m'], t1['best-s'] = self.best_from_model()
 
-        if intg.rewind:
-            self.rewind_counts += 1
+            if intg.rewind:
+                self.rewind_counts += 1
 
-        if self.pd_opt.empty:
-            t1['base-time'] = self.ct_first = intg.pseudointegrator._compute_time
-            past_size = 0
-            start_EI = True
-            last_opt_time = 0
-        else:
-            past_size = self.pd_opt['bounds-size'].tail(5).min()
-            t1['base-time'] = (1+self.pd_opt.count(0)[0]-self.rewind_counts)*self.ct_first
-            start_EI = list(self.pd_opt['cumm-time'].iloc[[-1]] > self.pd_opt['base-time'].iloc[[-1]])[0]
-            last_opt_time = self.pd_opt.iloc[-1, self.pd_opt.columns.get_loc('cumm-opt-time')]
+            if self.pd_opt.empty:
+                t1['base-time'] = self.ct_first = intg.pseudointegrator._compute_time
+                past_size = 0
+                start_EI = True
+                last_opt_time = 0
+            else:
+                past_size = self.pd_opt['bounds-size'].tail(5).min()
+                t1['base-time'] = (1+self.pd_opt.count(0)[0]-self.rewind_counts)*self.ct_first
+                start_EI = list(self.pd_opt['cumm-time'].iloc[[-1]] > self.pd_opt['base-time'].iloc[[-1]])[0]
+                last_opt_time = self.pd_opt.iloc[-1, self.pd_opt.columns.get_loc('cumm-opt-time')]
 
-        t1['bounds-size'] = self.bounds_size
+            t1['bounds-size'] = self.bounds_size
 
-        if ((0.9*self.pd_opt['test-m'].min()) > t1['best-m'].tail(1).min()) or intg.rewind:
-            t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
-            p = 'PM'
+            if ((0.9*self.pd_opt['test-m'].min()) > t1['best-m'].tail(1).min()) or intg.rewind:
+                t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
+                p = 'PM'
 
-        elif (tX.shape[0]<10): # or (past_size != self.bounds_size):
-            t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model(next_type='KG')
-            p = 'KG'
+            elif (tX.shape[0]<10): # or (past_size != self.bounds_size):
+                t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model(next_type='KG')
+                p = 'KG'
 
-        elif (tX.shape[0]<50): # or start_EI:
-            t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model(next_type='EI')
-            p = 'EI'
-        else:
-            t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
-            p = 'PM-end'
+            elif (tX.shape[0]<50): # or start_EI:
+                t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model(next_type='EI')
+                p = 'EI'
+            else:
+                t1['next-candidate'], t1['next-m'], t1['next-s'] = t1['best-candidate'], t1['best-m'], t1['best-s']
+                p = 'PM-end'
 
-        intg.candidate |= {'csteps':self._postprocess_ccsteps(list(t1['next-candidate'])[0])}
+            intg.candidate |= {'csteps':self._postprocess_ccsteps(list(t1['next-candidate'])[0])}
 
-        t1[     'opt-time'] = perf_counter() - opt_time_start
-        t1['cumm-opt-time'] = perf_counter() - opt_time_start + last_opt_time
+            t1[     'opt-time'] = perf_counter() - opt_time_start
+            t1['cumm-opt-time'] = perf_counter() - opt_time_start + last_opt_time
 
-        t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
+            t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
 
-        t1['cumm-time'] = (intg.pseudointegrator._compute_time
-                           + perf_counter() - opt_time_start + last_opt_time)
+            t1['cumm-time'] = (intg.pseudointegrator._compute_time
+                            + perf_counter() - opt_time_start + last_opt_time)
 
-        self.pd_opt = pd.concat([self.pd_opt, t1], ignore_index=True)
+            self.pd_opt = pd.concat([self.pd_opt, t1], ignore_index=True)
 
-        with pd.option_context('display.max_rows'         , None, 
-                               'display.max_columns'      , None,
-                               'display.precision'        , 3,
-                               'display.expand_frame_repr', False,
-                               'display.max_colwidth'     , 100):
-#            print(self.pd_opt[['test-m','best-m','cumm-time','base-time']])
-            print(self.pd_opt)
-            print("Optimisation type: ", p)
-            self.pd_opt.to_csv(self.outf, index=False)
-            (self.pd_opt.plot(
-                x = "tcurr", y = ['test-m','best-m'], 
-                kind = 'line',
-                title = 'Online optimisation', 
-                xlabel = 'Current time', ylabel = 'Cost function',
+            with pd.option_context('display.max_rows'      , None, 
+                                'display.max_columns'      , None,
+                                'display.precision'        , 3,
+                                'display.expand_frame_repr', False,
+                                'display.max_colwidth'     , 100):
+    #            print(self.pd_opt[['test-m','best-m','cumm-time','base-time']])
+                print(self.pd_opt)
+                print("Optimisation type: ", p)
+                
+                self.pd_opt.to_csv(self.outf, index=False)
+
+                (self.pd_opt.plot(
+                    x      = "tcurr", 
+                    y      = ['test-m','best-m'], 
+                    kind   = 'line',
+                    title  = 'Online optimisation: Cost function', 
+                    xlabel = 'Current time', 
+                    ylabel = 'Cost function',
+                    )
+                    .get_figure()
+                    .savefig(self.cost_plot)
                 )
-                .get_figure()
-                .savefig('plots/opt.png')
-            )
+
+                (self.pd_opt.plot(
+                    x      = "tcurr", 
+                    y      = ['base-time','cumm-time'], 
+                    kind   = 'line',
+                    title  = 'Online optimisation: Cummilative cost', 
+                    xlabel = 'Current time', 
+                    ylabel = 'Cummilative Cost',
+                    )
+                    .get_figure()
+                    .savefig(self.cumm_plot)
+                )
+
+        print(f"Before candidate : {intg.candidate} at rank :{self.rank}")
+        intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
+        print(f"After candidate : {intg.candidate} at rank :{self.rank}")
 
     def store_test_from_model(self, t1):
         test = self.torch.tensor([list(t1['test-candidate'])[0]], **self.torch_kwargs)
