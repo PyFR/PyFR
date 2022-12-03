@@ -311,8 +311,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 stats = Inifile()
                 stats.set('data', 'prefix', 'tavg')
                 stats.set('data', 'fields', ','.join(self.outfields))
-                stats.set('tavg', 'tstart', self.tstart_acc)
-                stats.set('tavg', 'tend', intg.tcurr)
+                stats.set('tavg', 'cfg-section', self.cfgsect)
+                stats.set('tavg', 'range',
+                          f'[({self.tstart_acc}, {intg.tcurr})]')
 
                 intg.collect_stats(stats)
 
