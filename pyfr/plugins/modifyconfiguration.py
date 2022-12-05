@@ -23,37 +23,54 @@ class ModifyConfigPlugin(BasePlugin):
 
         self.comm, self.rank, self.root = get_comm_rank_root()
 
-        if self.suffix == 'onfline':
-            print("Offline optimisation modification done at runtime.")
-        elif self.suffix == 'online':
+        if intg.opt_type == 'onfline':
+            print("Offline optimisation modification is performed at runtime.")
+        elif intg.opt_type == 'online':
             print("Online optimisation modification.")
-                
+
+        intg.candidate = {}
+
     def __call__(self, intg):
 
-        if intg.candidate is None:
-            raise ValueError("Please run the Bayesian Optimisation plugin first.")
+        if intg.reset_opt_stats:
 
-        if intg.candidate == {}:
-            return
+            match intg.opt_type, intg.bad_sim:
+                case 'online', False:
+                    intg.save = True
+                case _, True:            
+                    intg.rewind = True
+                case 'onfline', _:
+                    intg.rewind = True
+                case None, _:
+                    print("No optimisation type specified.")
+                case _, _:
+                    raise ValueError('Not yet implemented.')
 
-        if self.suffix in ['onfline', 'online']:
-            if intg.candidate.get('csteps'):
-                intg.pseudointegrator.csteps = intg.candidate.get('csteps')
+            if intg.candidate == {}:
+                print("Optimisation is not running.")
+                return
 
-            print(f"rank {self.rank} csteps: {intg.pseudointegrator.csteps} candidate: {intg.candidate}")
+            if intg.opt_type in ['onfline', 'online']:
+                if intg.candidate.get('csteps'):
+                    intg.pseudointegrator.csteps = intg.candidate.get('csteps')
+                intg.candidate = {}
 
-            intg.candidate = {}
+            elif intg.opt_type == 'offline':
+                # TODO: Create a new config file, say config-1.ini
+                # Add the new config file to the list of config files.
+                raise ValueError(f"Not implemented yet.")
+            else:
+                raise ValueError(f"Required: 'onfline', 'online' or 'offline'.",
+                                 f"Given suffix: {intg.opt_type}")
 
-            print(f"rank {self.rank} csteps: {intg.pseudointegrator.csteps} candidate: {intg.candidate}")
+        # TODO: Add the config modifications into pyfrs file in the right names.
 
-            # TODO: Add the config modifications into pyfrs file in the right names.
-
-        elif self.suffix == 'offline':
-            # TODO: Create a new config file, say config-1.ini
-            # Add the new config file to the list of config files.
-            raise ValueError(f"Not implemented yet.")
+    def modify_maximum_pseudo_iterations(self, intg):
+        if self.cfg.hasopt('solver-dual-time-integrator-multip', 'cycle'):
+            self.maxniters = intg.pseudointegrator.pintg.maxniters
         else:
-            raise ValueError(f"Required: 'onfline', 'online' or 'offline'. Given suffix: {self.suffix}")
+            self.maxniters = intg.pseudointegrator.maxniters
 
-
-    
+    def add_config_to_prevcfgs(self, intg):
+        if intg.opt_type in ['onfline', 'online']:
+            intg.prev_cfgs['opt-cfg'] = intg.cfg.tostr()

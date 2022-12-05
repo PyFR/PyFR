@@ -17,7 +17,7 @@ class NaNCheckPlugin(BasePlugin):
         if intg.nacptsteps % self.nsteps == 0:
             if any(np.isnan(np.sum(s)) for s in intg.soln):
 
-                if intg.rewind:  
-                    print("Expected to rewind now.")
-                elif not intg.rewind: 
+                if intg.bad_sim and intg.reset_opt_stats:  
+                    print("NaNs detected. Simulation expected to rewind now.")
+                else: 
                     raise RuntimeError(f'NaNs detected at t = {intg.tcurr}')

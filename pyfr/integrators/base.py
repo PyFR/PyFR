@@ -57,8 +57,11 @@ class BaseIntegrator:
         self._wstart = time.time()
 
         # Rewind computation
-        self.save   = None
+        self.save = None
         self.rewind = None
+        self.opt_type = None
+        self.reset_opt_stats = None
+        self.bad_sim = None
 
         # Abort computation
         self.abort = False
@@ -145,7 +148,6 @@ class BaseIntegrator:
                 for j, k in enumerate(['mean', 'stdev', 'median']):
                     stats.set('backend-wait-times', f'rhs-graph-{i}-{k}',
                               ','.join(f'{v[j]:.3g}' for v in ms))
-
     @property
     def cfgmeta(self):
         cfg = self.cfg.tostr()
@@ -166,7 +168,6 @@ class BaseIntegrator:
             # Ensure that the callbacks registered in atexit
             # are called only once if stopping the computation
             sys.exit(1)
-
 
     def save_soln(self):
         if self.save is True:

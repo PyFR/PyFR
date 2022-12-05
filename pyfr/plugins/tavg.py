@@ -226,25 +226,27 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
     def rewind(self, intg):
 
-        ex       = self.vaccex,  self.accex,  self.prevex   
-        saved_ex = self.rvaccex, self.raccex, self.rprevex  # For rewinding
+        if intg.reset_opt_stats:
 
-        if intg.rewind:
-            for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
-                v.fill(0);  v += rv
-                a.fill(0);  a += ra
-                p.fill(0);  p += rp
+            if (intg.opt_type == 'online'):
 
-        elif intg.save:
-            for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
-                rv.fill(0); rv += v
-                ra.fill(0); ra += a
-                rp.fill(0); rp += p
+                ex       = self.vaccex,  self.accex,  self.prevex   
+                saved_ex = self.rvaccex, self.raccex, self.rprevex
 
-        elif (not intg.save) and (not intg.rewind):
-            pass # print('Do neither save nor rewind this step.')        
-        else:
-            raise ValueError("Something is wrong with the rewind and save flags.")
+                if intg.bad_sim:
+                    for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
+                        v.fill(0);  v += rv
+                        a.fill(0);  a += ra
+                        p.fill(0);  p += rp
+
+                else:
+                    for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
+                        rv.fill(0); rv += v
+                        ra.fill(0); ra += a
+                        rp.fill(0); rp += p
+            else:
+                raise ValueError("Remove tavg plugin. ",
+                                 "Only online averaging is supported.")
 
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return
@@ -272,8 +274,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             self.prevex = currex
 
             # Rewind the simulation if necessary
-            if intg.rewind or intg.save:
-                self.rewind(intg)
+            self.rewind(intg)
 
             if dowrite:
                 comm, rank, root = get_comm_rank_root()
