@@ -13,7 +13,6 @@ class PseudodtStatsPlugin(BasePlugin):
     def __init__(self, intg, cfgsect:str, prefix):
         super().__init__(intg, cfgsect, prefix)
 
-        self.flushsteps = self.cfg.getint(self.cfgsect, 'flushsteps', 500)
 
         self.stats = []
 
@@ -29,7 +28,7 @@ class PseudodtStatsPlugin(BasePlugin):
                          'max': {'all':0}|{p:{'all':0}|{e:{'all':0} for e in self.e_types} for p in self.fvars},
                         }
 
-        self.abstraction = self.cfg.getint(self.cfgsect, 'abstraction', 1)
+        self.abstraction = self.cfg.getint(self.cfgsect, 'abstraction', 0)
 
         if self.abstraction > 2:
             raise ValueError('Abstraction level greater than 2 has not been implemented yet')
@@ -53,7 +52,8 @@ class PseudodtStatsPlugin(BasePlugin):
         self.comm, self.rank, self.root = get_comm_rank_root()
 
         # The root rank needs to open the output file
-        if self.rank == self.root:
+        if (self.rank == self.root) and (self.abstraction != 0):
+            self.flushsteps = self.cfg.getint(self.cfgsect, 'flushsteps', 500)
             self.outf = init_csv(self.cfg, cfgsect, csv_header)
         else:
             self.outf = None

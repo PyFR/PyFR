@@ -67,11 +67,16 @@ class OptimisationStatsPlugin(BasePlugin):
             # If optimiser has used the data
             if intg.reset_opt_stats == True:
 
-                self.pd_condensed_stats = pd.concat([self.pd_condensed_stats, self.pd_stats.tail(1)], 
-                                                    ignore_index = True)
-                self.pd_condensed_stats.to_csv(self.outf2, index=False)
 
-                if self.outf == None:
+                if self.outf2 is not None:
+
+                    self.pd_condensed_stats = pd.concat([self.pd_condensed_stats, self.pd_stats.tail(1)], 
+                                                        ignore_index = True)
+                    self.pd_condensed_stats.to_csv(self.outf2, index = False)
+
+                    self.print_condensed_stats()
+
+                if self.outf != None:
                     self.print_expanded_stats()
 
                 # Clean slate
@@ -81,6 +86,12 @@ class OptimisationStatsPlugin(BasePlugin):
             self.collect_stats(intg)
             self.check_status(intg)
         self.bcast_status(intg)
+
+    def print_condensed_stats(self):
+        self.pd_condensed_stats = pd.concat([self.pd_condensed_stats, 
+                                             self.pd_stats.tail(1)], 
+                                             ignore_index = True)
+        self.pd_condensed_stats.to_csv(self.outf2, index = False)
 
     def print_expanded_stats(self):
         if os.path.exists(self.outf):

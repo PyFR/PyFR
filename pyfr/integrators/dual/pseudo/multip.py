@@ -142,6 +142,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         self._compute_time = 0.
 
+        # Create a generator function to accumilate stats
+        #self.print_cstep_avg = self.expanding_average
+
     @property
     def _idxcurr(self):
         return self.pintg._idxcurr
@@ -289,15 +292,30 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return self.pintg._aux_regidx
 
     def weighted(self, I):
-        return np.random.choice([int(np.floor(I))     , int(np.ceil(I))   ], 
+        return np.random.choice([int(np.floor(I)), int(np.ceil(I))], 
                      p=np.array([1.-I+int(np.floor(I)), I-int(np.floor(I))]))
 
-    #def weighted_round(self, I):
-    #    I_0 = int(np.floor(I))
-    #    I_1 = int(np.ceil(I))
-    #    P_0 = I-I_0
-    #    return np.random.choice([I_0  , I_1], p=np.array([1.-P_0, P_0 ]))
+    @property
+    def expanding_average(self):
+        """A generator function that print expanding average of csteps
 
+        Args:
+            csteps (list[float]): 
+
+        Returns:
+            list[float]: _description_
+        """
+
+        self._n = 0
+        self._xis = [0,]*(self._order*2+1)
+        
+        def _expanding(xs):
+            self._xis = [(x +xi*self._n)/(self._n+1) for x, xi in zip(xs, self._xis)]        
+            self._n+=1
+            print(self._xis)
+        
+        return _expanding
+    
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
         cycle, csteps_f = self.cycle, self.csteps
@@ -311,7 +329,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         for i in range(self._maxniters):
             csteps = tuple(self.weighted(cstep_f) for cstep_f in csteps_f)
-            # average csteps is working or not
+            #self.print_cstep_avg(csteps)
+
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 
