@@ -342,7 +342,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             s = float(self.pd_opt[
                 self.pd_opt['test-m'].reset_index(drop=True) == self.pd_opt['test-m'].min()
-                ]['test-m']
+                ]['test-s']
                 .reset_index(drop=True))
 
             cumm_ax.axhline(y = ref/m, 
