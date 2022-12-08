@@ -39,7 +39,12 @@ class ModifyConfigPlugin(BasePlugin):
                 case _, True:            
                     intg.rewind = True
                 case 'onfline', _:
-                    intg.rewind = True
+                    if intg.offline_optimisation_complete == True:
+                        print("Offline optimisation is complete.")
+                        intg.rewind = False
+                    else:                        
+                        intg.rewind = True
+
                 case None, _:
                     print("No optimisation type specified.")
                 case _, _:

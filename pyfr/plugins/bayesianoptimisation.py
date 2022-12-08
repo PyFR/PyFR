@@ -39,6 +39,8 @@ class BayesianOptimisationPlugin(BasePlugin):
             case 'onfline':
                 intg.opt_type = suffix
                 self.noptiters_max = self.cfg.getint(cfgsect, 'iterations', 100)
+                intg.offline_optimisation_complete = False
+
                 self.index_name = 'iteration'
             case 'offline':
                 raise NotImplementedError(f'{suffix} not implemented.')
@@ -108,6 +110,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         if not intg.reset_opt_stats:
             return
 
+        if len(self.pd_opt.index) > self.noptiters_max:
+            intg.offline_optimisation_complete = True
+
         if self.rank == self.root:
             opt_time_start = perf_counter()
 
@@ -116,7 +121,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                     raise ValueError("Initial configuration must be working.")
 #                tcurr = self.pd_opt.loc[self.pd_opt.index[-1], ['tcurr']]
                 tcurr = self.pd_opt.iloc[-1, self.pd_opt.columns.get_loc('tcurr')]
-
             else:
                 tcurr = intg.tcurr
 
@@ -207,13 +211,12 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             self.pd_opt['dup_number'] = self.pd_opt.groupby(['test-candidate']).cumcount()+1
 
-            if intg.opt_type == 'online':
-                with pd.option_context( 'display.max_rows'         , None, 
-                                        'display.max_columns'      , None,
-                                        'display.precision'        , 3,
-                                        'display.expand_frame_repr', False,
-                                        'display.max_colwidth'     , 100):
-                    print(self.pd_opt)
+            with pd.option_context( 'display.max_rows'         , None, 
+                                    'display.max_columns'      , None,
+                                    'display.precision'        , 3,
+                                    'display.expand_frame_repr', False,
+                                    'display.max_colwidth'     , 100):
+                print(self.pd_opt)
 
             print("Optimisation type: ", t1['type'])
             self.pd_opt.to_csv(self.outf, index=False)
