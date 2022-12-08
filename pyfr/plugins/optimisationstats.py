@@ -37,9 +37,16 @@ class OptimisationStatsPlugin(BasePlugin):
 
         if self.rank == self.root:
 
-            self.outf  = self.cfg.get(cfgsect, 'file-expanded', None)
-            self.outf2 = self.cfg.get(cfgsect, 'file-condensed', 'o-stat_c.csv')
+            if self.cfg.hasopt(cfgsect, 'file-expanded'):
+                self.outf  = self.cfg.get(cfgsect, 'file-expanded')
+            else:
+                self.outf = None
 
+            if self.cfg.hasopt(cfgsect, 'file-condensed'):  
+                self.outf2 = self.cfg.get(cfgsect, 'file-condensed')
+            else:
+                self.outf2 = None
+    
             self.fvars   = intg.system.elementscls.convarmap[self.ndims]
 
             if self.cfg.hasopt('solver-dual-time-integrator-multip', 'cycle'):
@@ -67,16 +74,9 @@ class OptimisationStatsPlugin(BasePlugin):
             # If optimiser has used the data
             if intg.reset_opt_stats == True:
 
-
                 if self.outf2 is not None:
-
-                    self.pd_condensed_stats = pd.concat([self.pd_condensed_stats, self.pd_stats.tail(1)], 
-                                                        ignore_index = True)
-                    self.pd_condensed_stats.to_csv(self.outf2, index = False)
-
                     self.print_condensed_stats()
-
-                if self.outf != None:
+                if self.outf is not None:
                     self.print_expanded_stats()
 
                 # Clean slate
@@ -99,18 +99,15 @@ class OptimisationStatsPlugin(BasePlugin):
         else:
             self.pd_stats.to_csv(self.outf, header=True, index=False, mode='w')
 
-
     def collect_stats(self, intg):
-        Δt = intg._dt  # intg.tcurr - self.ttime_p                # Physical time step
+        Δt = intg._dt               # Physical time step
         Δc = intg.pseudointegrator._compute_time - self.ctime_p  # Compute time per physical time-step
         # Wall-time per physical time-step
         Δw = (time() - intg._wstart) - self.wtime_p
         self.ΔcΔt, ΔwΔt = Δc/Δt, Δw/Δt
 
-        self.wtime_p = time() - intg._wstart                # previous   Wall   time
-        self.ctime_p = intg.pseudointegrator._compute_time  # previous Compute  time
-
-        #temp = pd.DataFrame([[intg.tcurr, Δc, Δw]], columns=['physical-time', 'compute-Δt', 'wall-Δt'])
+        self.wtime_p = time() - intg._wstart                # prev   wall  time
+        self.ctime_p = intg.pseudointegrator._compute_time  # prev compute time
 
         t1 = pd.DataFrame({ 'physical-time': [intg.tcurr - intg._dt], 
                             'compute-Δt'   : [Δc], 
@@ -155,20 +152,22 @@ class OptimisationStatsPlugin(BasePlugin):
                 return
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
-            if np.any([intg.Δτ_stats['res'][var]['all'] > tol for var, tol in zip(self.fvars, self.residtols)]):
+            if np.any([intg.Δτ_stats['res'][v]['all'] > t for v, t in zip(self.fvars, self.residtols)]):
                 intg.reset_opt_stats = intg.bad_sim = True
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
                 return
 
         # Simulation data should be calculated after we are sure that time-step will not change more than this
         if (self.Δτ_controller == 'local-pi' and
-            -1e-6<self.pd_stats['max-Δτ'][self.pd_stats.index[-1]] - self.pd_stats['min-Δτ'][self.pd_stats.index[-1]]<1e-6):
+            abs(self.pd_stats['max-Δτ'][self.pd_stats.index[-1]]
+              - self.pd_stats['min-Δτ'][self.pd_stats.index[-1]])<1e-6):
             intg.reset_opt_stats = intg.bad_sim = True
             intg.opt_cost_mean = intg.opt_cost_std = np.NaN
         
         if (((self.Δτ_controller == 'none'
              or (self.Δτ_controller == 'local-pi'
-            and abs(self.Δτ_max - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
+            and abs(self.Δτ_max
+                  - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
             and self.pd_stats.count(0)[0]> (self.skip_first_n + self.lastₙ)):
 
                 intg.reset_opt_stats = True
