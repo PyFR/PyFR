@@ -33,7 +33,6 @@ class ModifyConfigPlugin(BasePlugin):
     def __call__(self, intg):
 
         if intg.reset_opt_stats:
-            print("Resetting optimisation stats.")
             match intg.opt_type, intg.bad_sim:
                 case 'online', False:
                     intg.save = True

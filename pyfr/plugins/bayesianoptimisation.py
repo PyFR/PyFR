@@ -180,11 +180,13 @@ class BayesianOptimisationPlugin(BasePlugin):
                 t1['next-candidate'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
                                                  == self.pd_opt['test-m'].min()]['test-candidate']).reset_index(drop=True)
 
-                t1['next-m'] = self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
-                                        == self.pd_opt['test-m'].min()]['test-m'].reset_index(drop=True)
+                t1['next-m'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
+                                == self.pd_opt['test-m'].min()]['test-m']
+                                .reset_index(drop=True))
 
-                t1['next-s'] = self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
-                                        == self.pd_opt['test-m'].min()]['test-s'].reset_index(drop=True)
+                t1['next-s'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
+                                == self.pd_opt['test-m'].min()]['test-s'].
+                                reset_index(drop=True))
                 t1['type'] = 'stop'
 
             t1['opt-time'] = perf_counter() - opt_time_start
@@ -202,6 +204,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             # Add all the data collected into the main dataframe
             self.pd_opt = pd.concat([self.pd_opt, t1], ignore_index=True)
+
+            self.pd_opt['dup_number'] = self.pd_opt.groupby(['test-candidate']).cumcount()+1
 
             if intg.opt_type == 'online':
                 with pd.option_context( 'display.max_rows'         , None, 
@@ -486,7 +490,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             test_case (list[Float]): _description_
         """
 
-
             #t1 = self.store_validation_from_model(t1, 1, (1, 1, 1, 1))
 
         test = self.torch.tensor([test_case], **self.torch_kwargs)
@@ -652,9 +655,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         Y_lower, Y_upper = self.model.posterior(X_best).mvn.confidence_region()
 
         Y_mean = self.model.posterior(X_best).mvn.mean
-        Y_m    = self.trans.untransform(Y_mean)[0].squeeze().detach().cpu().numpy()
-        Y_l    = self.trans.untransform(Y_lower)[0].squeeze().detach().cpu().numpy()
-        Y_u    = self.trans.untransform(Y_upper)[0].squeeze().detach().cpu().numpy()
+        Y_m = self.trans.untransform(Y_mean)[0].squeeze().detach().cpu().numpy()
+        Y_l = self.trans.untransform(Y_lower)[0].squeeze().detach().cpu().numpy()
+        Y_u = self.trans.untransform(Y_upper)[0].squeeze().detach().cpu().numpy()
         Y_std = (Y_u - Y_l)/4
 
         return [tuple(X_b.squeeze().detach().cpu().numpy())], Y_m, Y_std
