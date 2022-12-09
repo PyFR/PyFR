@@ -115,8 +115,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         if not intg.reset_opt_stats:
             return
 
-        if len(self.pd_opt.index) > self.noptiters_max:
+        if (self.rank == self.root) and (len(self.pd_opt.index) > self.noptiters_max):
             intg.offline_optimisation_complete = True
+        intg.offline_optimisation_complete = self.comm.bcast(intg.offline_optimisation_complete, root = self.root)
 
         if self.rank == self.root:
             opt_time_start = perf_counter()
