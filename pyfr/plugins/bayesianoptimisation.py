@@ -16,14 +16,19 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         super().__init__(intg, cfgsect, suffix)
 
-        self.skipₙ = self.cfg.getint(cfgsect,   'skip-first-n', 10)     
-        self.lastₙ = self.cfg.getint(cfgsect, 'capture-last-n', 30)
+
+        cfg_opt_stats = 'soln-plugin-optimisation_stats'
+        skip_n = self.cfg.getint(cfg_opt_stats, 'skip-first-n', 10)     
+        last_n = self.cfg.getint(cfg_opt_stats, 'capture-last-n', 30)
+
         self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 2)
 
         self.comm, self.rank, self.root = get_comm_rank_root()
 
+        # Read the initial candidate and the validation candidate
+        #   This is a list of tuple of 4 floats
         self.init_cand = self.cfg.getliteral(cfgsect, 'initial-candidate', [])
-        self.validation_cand = self.cfg.getliteral(cfgsect, 'model-validation-candidate', [])
+        self.validation_cand = self.cfg.getliteral(cfgsect, 'model-validate', [])
 
         if self.cfg.getpath(cfgsect, 'base-sim-location', None):
             # Read the base simulation data and prepare it for plotting
@@ -34,7 +39,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             case 'online':                
                 intg.opt_type = suffix
                 self.noptiters_max = ((intg.tend - intg.tcurr)/intg._dt
-                                    //(self.skipₙ + self.lastₙ))
+                                    //(skip_n + last_n))
                 self.index_name = 'tcurr'
             case 'onfline':
                 intg.opt_type = suffix
@@ -81,9 +86,9 @@ class BayesianOptimisationPlugin(BasePlugin):
             bounds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
             self._bnds = self.torch.tensor(bounds_init, **self.torch_kwargs)
 
-            self.cost_plot = self.cfg.get(cfgsect, 'cost-plot', 'cost-plot.png')
-            self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', 'cumm-plot.png')
-            self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', 'speedup-plot.png')
+            self.cost_plot = self.cfg.get(cfgsect, 'cost-plot', 'cost.png')
+            self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', 'cumm-cost.png')
+            self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', 'speedup.png')
             self.outf = self.cfg.get(cfgsect, 'history'  , 'bayesopt.csv')
 
             self.pd_opt = pd.DataFrame(columns=[
@@ -171,7 +176,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                     t1['type'] = 'EI explore'
 
                 elif self.validation_cand != []:
-                    t1[f'next-candidate'], t1[f'next-m'], t1[f'next-s'] = self.substitute_candidate_in_model(self.torch.tensor([*list(self.validation_cand.pop())], **self.torch_kwargs))
+                    val_cand_tensor  = self.torch.tensor([*list(self.validation_cand.pop())], **self.torch_kwargs)
+                    t1['next-candidate'], t1['next-m'], t1['next-s'] = self.substitute_candidate_in_model(val_cand_tensor)
                     t1['type'] = 'test-all-validation-candidates'
 
                 else:
@@ -181,16 +187,19 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             # Finally, use the best tested working candidate in the end
             else:
-                t1['next-candidate'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
-                                                 == self.pd_opt['test-m'].min()]['test-candidate']).reset_index(drop=True)
 
-                t1['next-m'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
-                                == self.pd_opt['test-m'].min()]['test-m']
-                                .reset_index(drop=True))
+                t1['next-candidate'], t1['next-m'], t1['next-s'] = self.best_tested_from_dataframe()
 
-                t1['next-s'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
-                                == self.pd_opt['test-m'].min()]['test-s'].
-                                reset_index(drop=True))
+#                t1['next-candidate'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
+#                                                 == self.pd_opt['test-m'].min()]['test-candidate']).reset_index(drop=True)
+
+#                t1['next-m'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
+#                                == self.pd_opt['test-m'].min()]['test-m']
+#                                .reset_index(drop=True))
+
+#                t1['next-s'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
+#                                == self.pd_opt['test-m'].min()]['test-s'].
+#                                reset_index(drop=True))
                 t1['type'] = 'stop'
 
             t1['opt-time'] = perf_counter() - opt_time_start
@@ -247,6 +256,23 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         return tX, tY, tYv
 
+    def best_tested_from_dataframe(self):
+        """ 
+            Return the best tested candidate and coresponding stats (mean, std)
+        """
+        grouped_pd_opt = self.pd_opt.groupby('test-candidate')
+
+        candidate = (grouped_pd_opt.mean(numeric_only = True)['test-m']
+                                   .idxmin())
+
+        mean      = (grouped_pd_opt.mean(numeric_only = True)['test-m']
+                                   .min())
+        std = (grouped_pd_opt.std(numeric_only = True)
+                             .fillna(grouped_pd_opt.last())
+                             .at[candidate,'test-s'])
+
+        return [candidate], mean, std
+
     def plot_normalised_cost(self, intg):
         """Plot cost function statistics.
                 onfline: wrt number of iterations.
@@ -268,7 +294,6 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         cost_ax.axhline(y = 1, color = 'grey', linestyle = ':')
         
-
 #            cost_ax.plot(self.pd_opt[self.index_name], 
 #                        self.pd_opt['best-m']/base, 
 #                        linestyle = ':', color = 'green',
@@ -289,23 +314,41 @@ class BayesianOptimisationPlugin(BasePlugin):
                      label = 'Tested candidate mean cost', 
                     )
 
-        tested_best = self.pd_opt['test-m'].expanding().min().reset_index(drop=True)
-        cummin_loc = list(self.pd_opt['test-m'].expanding().apply(lambda x: x.idxmin()).astype(int))
-
-        tested_best_std = self.pd_opt.loc[cummin_loc]['test-s'].reset_index(drop=True)
+        tested_best = (self.pd_opt['test-m']
+                       .expanding().min()
+                       .reset_index(drop=True))
 
         cost_ax.plot(self.pd_opt[self.index_name], 
                      tested_best/base,
                      linestyle = ':', color = 'blue',
                      label = 'Best tested cost', 
                     )
+        # 
+        cummin_loc = list(self.pd_opt['test-m']
+                          .expanding().apply(lambda x: x.idxmin()).astype(int))
 
+        tested_best_std = (self.pd_opt.loc[cummin_loc]['test-s']
+                           .reset_index(drop=True))
         cost_ax.fill_between(
                 self.pd_opt[self.index_name], 
                 (tested_best-2*tested_best_std)/base, 
                 (tested_best+2*tested_best_std)/base, 
-                color = 'blue', alpha = 0.1, 
+                color = 'blue', alpha = 0.04, 
                 label = 'Tested best candidate''s confidence in cost',
+                    )
+
+        cost_ax.plot(self.pd_opt[self.index_name], 
+                     self.pd_opt['next-m']/base,
+                     linestyle = ':', color = 'green',
+                     label = 'Best next cost', 
+                    )
+
+        cost_ax.fill_between(
+                self.pd_opt[self.index_name], 
+                (self.pd_opt['next-m']-2*self.pd_opt['next-s'])/base, 
+                (self.pd_opt['next-m']+2*self.pd_opt['next-s'])/base, 
+                color = 'green', alpha = 0.1, 
+                label = 'next candidate''s confidence in cost',
                     )
 
         self.add_limits_to_plot(cost_ax)
@@ -316,7 +359,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             cost_ax.set_xlim(left = 0, right = self.noptiters_max)
         elif intg.opt_type == 'online':
             cost_ax.set_xlim(left = intg.tstart, right = intg.tend)
-
 
         cost_ax.legend(loc='upper right')
         cost_ax.get_figure().savefig(self.cost_plot)        
@@ -334,8 +376,11 @@ class BayesianOptimisationPlugin(BasePlugin):
         cumm_ax.set_xlabel(self.index_name)
         cumm_ax.set_ylabel('Overall speedup wrt base simulation')
 
-        base = (self.pd_opt.at[0, 'cumm-compute-time']
-            *(self.pd_opt.index - self.pd_opt['test-m'].isna().expanding().sum() + 1))
+        proj = 1 + self.pd_opt.index - (self.pd_opt['test-m']
+                                        .isna()
+                                        .expanding().sum())
+
+        base = (self.pd_opt.at[0, 'cumm-compute-time']*proj)
 
         cumm_ax.axhline(y = 1, color = 'grey', linestyle = ':',)
 
@@ -362,8 +407,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                             )
         else:        
 
-            m1 = self.pd_opt.at[self.pd_opt.last_valid_index(), 'test-m']
-            s1 = self.pd_opt.at[self.pd_opt.last_valid_index(), 'test-s']
+            m1 = self.pd_opt.at[self.pd_opt.last_valid_index(), 'next-m']
+            s1 = self.pd_opt.at[self.pd_opt.last_valid_index(), 'next-s']
 
             cumm_ax.axhline(y = ref/m1, 
                             linestyle = ':', color = 'green', 
@@ -478,11 +523,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                 label = 'Optimisation turned off', 
                 )
 
-    def store_test_from_model(self, t1):
-        test = self.torch.tensor([list(t1['test-candidate'])[0]], **self.torch_kwargs)
-        _, t1['check-m'], t1['check-s'] = self.substitute_candidate_in_model(test)
-        return t1
-
     def store_validation_from_model(self, t1, i, test_case):
         """ Sample a validation point from the model
             Store the results into the dataframe
@@ -593,7 +633,22 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         return self.substitute_candidate_in_model(X_b)
 
-    def next_from_model(self, type = 'EI', *, raw_samples=1024, num_restarts=10,):
+    def next_from_model(self, type = 'EI', *, 
+                        raw_samples=1024, num_restarts=10,):
+        """ Using model, optimise acquisition function and return next candidate
+
+        Args:
+            type (str): Acquisition function acronym. Defaults to 'EI'.
+            raw_samples (int, optional): _description_. Defaults to 1024.
+            num_restarts (int, optional): _description_. Defaults to 10.
+
+        Raises:
+            ValueError: _description_
+
+        Returns:
+            tuple[list[float], float, float]: Candidate, its expected mean and vairance
+        """
+
 
         if type == 'KG':
 

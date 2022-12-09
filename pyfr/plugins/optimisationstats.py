@@ -21,14 +21,14 @@ class OptimisationStatsPlugin(BasePlugin):
         
         # Start and stop collecting stats
         self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
-        self.tend   = self.cfg.getfloat(tsect, 'tend', 0.0)
+        self.tend = self.cfg.getfloat(tsect, 'tend', 0.0)
 
         # Skip first few iterations, and capture the rest few iterations
-        self.skip_first_n = self.cfg.getint(cfgsect,   'skip-first-n', 10)     
-        self.lastₙ = self.cfg.getint(cfgsect, 'capture-last-n', 30)
+        self.skip_first_n = self.cfg.getint(cfgsect, 'skip-first-n', 10)     
+        self.last_n = self.cfg.getint(cfgsect, 'capture-last-n', 30)
 
-        self.Δτ_init       = self.cfg.getfloat(tsect, 'pseudo-dt')
-        self.Δτ_controller = self.cfg.get(     tsect, 'pseudo-controller')
+        self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
+        self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
         if self.Δτ_controller == 'local-pi':
             self.Δτ_max = self.Δτ_init * self.cfg.getfloat(tsect, 'pseudo-dt-max-mult')
 
@@ -38,7 +38,7 @@ class OptimisationStatsPlugin(BasePlugin):
         if self.rank == self.root:
 
             if self.cfg.hasopt(cfgsect, 'file-expanded'):
-                self.outf  = self.cfg.get(cfgsect, 'file-expanded')
+                self.outf = self.cfg.get(cfgsect, 'file-expanded')
             else:
                 self.outf = None
 
@@ -47,7 +47,7 @@ class OptimisationStatsPlugin(BasePlugin):
             else:
                 self.outf2 = None
     
-            self.fvars   = intg.system.elementscls.convarmap[self.ndims]
+            self.fvars = intg.system.elementscls.convarmap[self.ndims]
 
             if self.cfg.hasopt('solver-dual-time-integrator-multip', 'cycle'):
                 self.maxniters = intg.pseudointegrator.pintg.maxniters
@@ -119,7 +119,7 @@ class OptimisationStatsPlugin(BasePlugin):
         if self.Δτ_controller == 'local-pi' and intg.Δτ_stats:
             t1['max-Δτ'] = intg.Δτ_stats['max']['all']
             t1['min-Δτ'] = intg.Δτ_stats['min']['all']
-            t1['n']      = intg.Δτ_stats[ 'n' ]['all']
+            t1['n'] = intg.Δτ_stats[ 'n' ]['all']
         elif self.Δτ_controller == 'none':
             t1['Δτ'] = self.Δτ_init
 
@@ -127,10 +127,10 @@ class OptimisationStatsPlugin(BasePlugin):
 
         self.pd_stats = self.pd_stats.assign(
             **{'cost-m': self.pd_stats['cost']
-                            .rolling(self.lastₙ, min_periods=1)
+                            .rolling(self.last_n, min_periods=1)
                             .mean(),
                'cost-s': self.pd_stats['cost']
-                            .rolling(self.lastₙ, min_periods=1)
+                            .rolling(self.last_n, min_periods=1)
                             .std(),
                 })
 
@@ -139,7 +139,7 @@ class OptimisationStatsPlugin(BasePlugin):
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
             intg.reset_opt_stats = intg.bad_sim = True
-            intg.opt_cost_mean = intg.opt_cost_std  = np.NaN 
+            intg.opt_cost_mean = intg.opt_cost_std = np.NaN 
             return
 
         if self.pd_stats.count(0)[0]<=3:
@@ -151,7 +151,6 @@ class OptimisationStatsPlugin(BasePlugin):
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
                 return
 
-        if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
             if np.any([intg.Δτ_stats['res'][v]['all'] > t for v, t in zip(self.fvars, self.residtols)]):
                 intg.reset_opt_stats = intg.bad_sim = True
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
@@ -163,21 +162,22 @@ class OptimisationStatsPlugin(BasePlugin):
               - self.pd_stats['min-Δτ'][self.pd_stats.index[-1]])<1e-6):
             intg.reset_opt_stats = intg.bad_sim = True
             intg.opt_cost_mean = intg.opt_cost_std = np.NaN
+            raise ValueError('Δτ is constant in a local-pi controller')
         
         if (((self.Δτ_controller == 'none'
              or (self.Δτ_controller == 'local-pi'
             and abs(self.Δτ_max
                   - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
-            and self.pd_stats.count(0)[0]> (self.skip_first_n + self.lastₙ)):
+            and self.pd_stats.count(0)[0]> (self.skip_first_n + self.last_n)):
 
                 intg.reset_opt_stats = True
                 intg.bad_sim = False
 
-                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.lastₙ).mean()
-                intg.opt_cost_std  = self.pd_stats['cost'].tail(self.lastₙ).std()
+                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.last_n).mean()
+                intg.opt_cost_std = self.pd_stats['cost'].tail(self.last_n).std()
         return
 
     def bcast_status(self, intg):
         intg.reset_opt_stats = self.comm.bcast(intg.reset_opt_stats, root=0)
-        intg.bad_sim         = self.comm.bcast(intg.bad_sim,         root=0)
+        intg.bad_sim = self.comm.bcast(intg.bad_sim, root=0)
         
