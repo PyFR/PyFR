@@ -16,10 +16,9 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         super().__init__(intg, cfgsect, suffix)
 
-
-        cfg_opt_stats = 'soln-plugin-optimisation_stats'
-        skip_n = self.cfg.getint(cfg_opt_stats, 'skip-first-n', 10)     
-        last_n = self.cfg.getint(cfg_opt_stats, 'capture-last-n', 30)
+        cfgostat = 'soln-plugin-optimisation_stats'
+        skip_n = self.cfg.getint(cfgostat, 'skip-first-n', 10)     
+        last_n = self.cfg.getint(cfgostat, 'capture-last-n', 30)
 
         self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 2)
 
@@ -28,7 +27,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         # Read the initial candidate and the validation candidate
         #   This is a list of tuple of 4 floats
         self.init_cand = self.cfg.getliteral(cfgsect, 'initial-candidate', [])
-        self.validation_cand = self.cfg.getliteral(cfgsect, 'model-validate', [])
+        self.validate_cand = self.cfg.getliteral(cfgsect, 'model-validate', [])
 
         if self.cfg.getpath(cfgsect, 'base-sim-location', None):
             # Read the base simulation data and prepare it for plotting
@@ -38,7 +37,12 @@ class BayesianOptimisationPlugin(BasePlugin):
         match suffix:
             case 'online':                
                 intg.opt_type = suffix
-                self.noptiters_max = ((intg.tend - intg.tcurr)/intg._dt
+
+                self._toptstart = self.cfg.getfloat(cfgostat, 'tstart', intg.tstart)     
+                self._toptend = self.cfg.getfloat(cfgostat, 'tend', intg.tend)     
+                self._tend = intg.tend     
+
+                self.noptiters_max = ((self._toptend - intg.tcurr)/intg._dt
                                     //(skip_n + last_n))
                 self.index_name = 'tcurr'
             case 'onfline':
@@ -66,11 +70,11 @@ class BayesianOptimisationPlugin(BasePlugin):
             print(  f"KG limit: {self.KG_limit}, ",
                     f"EI limit: {self.EI_limit}, ",
                     f"PM limit: {self.PM_limit}",
+                    f"stop limit: {self.noptiters_max}",
                 )
 
             import torch
             self.torch = torch
-
 
             seed = self.cfg.getint(cfgsect, 'seed', 0)
 
@@ -83,8 +87,10 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.torch_kwargs = {'dtype': torch.float64,
                                 'device': torch.device(be)}
 
-            bounds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
-            self._bnds = self.torch.tensor(bounds_init, **self.torch_kwargs)
+            bnds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
+            hard_bnds = list(zip(*self.cfg.getliteral(cfgsect, 'hard-bounds')))
+            self._bnds = self.torch.tensor(bnds_init, **self.torch_kwargs)
+            self._hbnds = self.torch.tensor(hard_bnds, **self.torch_kwargs)
 
             self.cost_plot = self.cfg.get(cfgsect, 'cost-plot', 'cost.png')
             self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', 'cumm-cost.png')
@@ -115,9 +121,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         if not intg.reset_opt_stats:
             return
 
-        if (self.rank == self.root) and (len(self.pd_opt.index) > self.noptiters_max):
-            intg.offline_optimisation_complete = True
-        intg.offline_optimisation_complete = self.comm.bcast(intg.offline_optimisation_complete, root = self.root)
+        self.check_offline_optimisation_status(intg)
 
         if self.rank == self.root:
             opt_time_start = perf_counter()
@@ -142,15 +146,19 @@ class BayesianOptimisationPlugin(BasePlugin):
                 t1['next-s'] = [np.nan]
                 t1['type'] = 'initial-testing'
 
-            elif ((len(self.pd_opt.index))<self.PM_limit) or intg.bad_sim:
+            elif (len(self.pd_opt.index)<(self.PM_limit+len(self.validate_cand))
+                  or intg.bad_sim):
 
                 self.add_to_model(*self.process_raw(t1))
                 t1['best-candidate'], t1['best-m'], t1['best-s'] = self.best_from_model()
                 t1['bounds-size'] = self.bounds_size
 
-                if self.validation_cand != []:
-                    for i, c in enumerate(self.validation_cand):
-                        t1[f'check-candidate-{i}'], t1[f'check-m-{i}'], t1[f'check-s-{i}'] = self.substitute_candidate_in_model(self.torch.tensor([*list(c)], **self.torch_kwargs))
+                if self.validate_cand != []:
+                    for i, c in enumerate(self.validate_cand):
+                        tensored_c = self.torch.tensor([*list(c)], **self.torch_kwargs)
+                        (t1[f'check-candidate-{i}'], 
+                         t1[f'check-m-{i}'], 
+                         t1[f'check-s-{i}']) = self.substitute_in_model(tensored_c)
 
                 # Check if optimisation is performing alright
                 if intg.bad_sim:
@@ -176,15 +184,18 @@ class BayesianOptimisationPlugin(BasePlugin):
                     t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model('EI')
                     t1['type'] = 'EI explore'
 
-                elif self.validation_cand != []:
-                    val_cand_tensor  = self.torch.tensor([*list(self.validation_cand.pop())], **self.torch_kwargs)
-                    t1['next-candidate'], t1['next-m'], t1['next-s'] = self.substitute_candidate_in_model(val_cand_tensor)
-                    t1['type'] = 'test-all-validation-candidates'
-
-                else:
+                elif (len(self.pd_opt.index))<self.PM_limit:
                     t1['next-candidate'] = t1['best-candidate']
                     t1['next-m'], t1['next-s'] = t1['best-m'], t1['best-s']
                     t1['type'] = 'PM exploit'
+
+                elif self.validate_cand != []:
+                    val_cand_tensor  = self.torch.tensor([*list(self.validate_cand.pop())], **self.torch_kwargs)
+                    t1['next-candidate'], t1['next-m'], t1['next-s'] = self.substitute_in_model(val_cand_tensor)
+                    t1['type'] = 'test-all-validation-candidates'
+
+                else:
+                    raise ValueError("No more candidates to test.")
 
             # Finally, use the best tested working candidate in the end
             else:
@@ -219,7 +230,9 @@ class BayesianOptimisationPlugin(BasePlugin):
             # Add all the data collected into the main dataframe
             self.pd_opt = pd.concat([self.pd_opt, t1], ignore_index=True)
 
-            self.pd_opt['dup_number'] = self.pd_opt.groupby(['test-candidate']).cumcount()+1
+            self.pd_opt['repetition'] = (self.pd_opt
+                                         .groupby(['test-candidate'])
+                                         .cumcount()+1)
 
             with pd.option_context( 'display.max_rows'         , None, 
                                     'display.max_columns'      , None,
@@ -228,7 +241,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                                     'display.max_colwidth'     , 100):
                 print(self.pd_opt)
 
-            print("Optimisation type: ", t1['type'])
             self.pd_opt.to_csv(self.outf, index=False)
 
             if intg.opt_type == 'online':
@@ -239,6 +251,17 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             intg.candidate |= {'csteps':self._postprocess_ccsteps(list(t1['next-candidate'])[0])}
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
+
+
+    def check_offline_optimisation_status(self, intg):
+        if (self.rank == self.root) and (len(self.pd_opt.index) > self.noptiters_max):
+            intg.offline_optimisation_complete = True
+        else:
+            intg.offline_optimisation_complete = False
+
+        intg.offline_optimisation_complete = self.comm.bcast(
+                                           intg.offline_optimisation_complete, 
+                                           root = self.root)
 
     def process_raw(self, t1):
 
@@ -359,7 +382,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         if intg.opt_type == 'onfline':
             cost_ax.set_xlim(left = 0, right = self.noptiters_max)
         elif intg.opt_type == 'online':
-            cost_ax.set_xlim(left = intg.tstart, right = intg.tend)
+            cost_ax.set_xlim(left = self._toptstart, right = self._tend)
 
         cost_ax.legend(loc='upper right')
         cost_ax.get_figure().savefig(self.cost_plot)        
@@ -389,12 +412,14 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         if (len(self.pd_opt.index))<self.PM_limit:
             m = float(self.pd_opt[
-                self.pd_opt['test-m'].reset_index(drop=True) == self.pd_opt['test-m'].min()
+                self.pd_opt['test-m'].reset_index(drop=True)
+                == self.pd_opt['test-m'].min()
                 ]['test-m']
                 .reset_index(drop=True))
 
             s = float(self.pd_opt[
-                self.pd_opt['test-m'].reset_index(drop=True) == self.pd_opt['test-m'].min()
+                self.pd_opt['test-m'].reset_index(drop=True) 
+                == self.pd_opt['test-m'].min()
                 ]['test-s']
                 .reset_index(drop=True))
 
@@ -439,7 +464,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         if intg.opt_type == 'onfline':
             cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
         elif intg.opt_type == 'online':
-            cumm_ax.set_xlim(left = intg.tstart, right = intg.tend)
+            cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
 
         cumm_ax.legend(loc='lower right')
         cumm_ax.get_figure().savefig(self.speedup_plot)
@@ -462,7 +487,8 @@ class BayesianOptimisationPlugin(BasePlugin):
         cumm_ax.set_ylabel('cummilative costs (in seconds)')
 
 
-        proj = self.pd_opt.index - self.pd_opt['test-m'].isna().expanding().sum() + 1
+        proj = self.pd_opt.index - (self.pd_opt['test-m']
+                                    .isna().expanding().sum() + 1)
         
         cumm_ax.plot(self.pd_opt[self.index_name], 
                      self.pd_opt.at[0, 'cumm-compute-time']*proj,
@@ -495,7 +521,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         if intg.opt_type == 'onfline':
             cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
         elif intg.opt_type == 'online':
-            cumm_ax.set_xlim(left = intg.tstart, right = intg.tend)
+            cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
 
         cumm_ax.legend(loc='lower right')
         cumm_ax.get_figure().savefig(self.cumm_plot)
@@ -537,7 +563,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             #t1 = self.store_validation_from_model(t1, 1, (1, 1, 1, 1))
 
         test = self.torch.tensor([test_case], **self.torch_kwargs)
-        _, t1[f'test-{i}-m'], t1[f'test-{i}-s'], = self.substitute_candidate_in_model(test)
+        _, t1[f'test-{i}-m'], t1[f'test-{i}-s'], = self.substitute_in_model(test)
         return t1
 
     def add_to_model(self, tX, tY, tYv):
@@ -597,13 +623,20 @@ class BayesianOptimisationPlugin(BasePlugin):
                                **self.torch_kwargs)
 
         # Increase bounds to include happening region
-        self._bnds[0, self._bnds[0, :] > hr[0, :]] = hr[0, self._bnds[0, :] > hr[0, :]]
-        self._bnds[1, self._bnds[1, :] < hr[1, :]] = hr[1, self._bnds[1, :] < hr[1, :]]
+        l_bnds_inc_loc = self._bnds[0, :] > hr[0, :]
+        u_bnds_inc_loc = self._bnds[1, :] < hr[1, :]
+        
+        self._bnds[0, l_bnds_inc_loc] = hr[0, l_bnds_inc_loc]
+        self._bnds[1, u_bnds_inc_loc] = hr[1, u_bnds_inc_loc]
         self._bnds[0, self._bnds[0, :] < 0] = 0
+
+        # Restrict the bounds to hardbounds region
+        self._bnds[0, :] = np.maximum(self._bnds[0, :], self._hbnds[0, :])
+        self._bnds[1, :] = np.minimum(self._bnds[1, :], self._hbnds[1, :])
 
     @property
     def bounds_size(self):
-        return np.prod((self._bnds[1, :] - self._bnds[0, :]).detach().cpu().numpy())
+        return np.prod((self._bnds[1,:]-self._bnds[0,:]).detach().cpu().numpy())
         
     def _preprocess_csteps(self, csteps):
         '''
@@ -617,8 +650,8 @@ class BayesianOptimisationPlugin(BasePlugin):
         return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1]
 
     def _postprocess_ccsteps(self, ccsteps):
-        return (1, *((ccsteps[0],)*self.depth), ccsteps[1], 
-                   *((ccsteps[2],)*self.depth), ccsteps[3])
+        return (*((ccsteps[0],)*(self.depth+1)), ccsteps[1], 
+                *((ccsteps[2],)*self.depth    ), ccsteps[3])
 
     def best_from_model(self, *, raw_samples=1024, num_restarts=10):
 
@@ -632,10 +665,10 @@ class BayesianOptimisationPlugin(BasePlugin):
         X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
         X_b    = self.normalise.untransform(X_cand)
 
-        return self.substitute_candidate_in_model(X_b)
+        return self.substitute_in_model(X_b)
 
     def next_from_model(self, type = 'EI', *, 
-                        raw_samples=1024, num_restarts=10,):
+                        samples=1024, restarts=10,):
         """ Using model, optimise acquisition function and return next candidate
 
         Args:
@@ -647,9 +680,10 @@ class BayesianOptimisationPlugin(BasePlugin):
             ValueError: _description_
 
         Returns:
-            tuple[list[float], float, float]: Candidate, its expected mean and vairance
+            tuple[list[float], float, float]: Candidate, expected mean and var
         """
 
+        negw = self.torch.tensor([-1.0], **self.torch_kwargs)
 
         if type == 'KG':
 
@@ -658,10 +692,10 @@ class BayesianOptimisationPlugin(BasePlugin):
             
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
-                posterior_transform = ScalarizedPosteriorTransform(weights=self.torch.tensor([-1.0], **self.torch_kwargs)),
+                posterior_transform = ScalarizedPosteriorTransform(weights=negw),
                 num_fantasies       = 128,
                 )
-            X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
+            X_cand = self.optimise(_acquisition_function, samples, restarts)
             X_b = self.normalise.untransform(X_cand)
 
         elif type == 'EI':
@@ -671,15 +705,15 @@ class BayesianOptimisationPlugin(BasePlugin):
             
             _acquisition_function = qNoisyExpectedImprovement(
                 self.model, self.norm_X,
-                posterior_transform = ScalarizedPosteriorTransform(weights=self.torch.tensor([-1.0], **self.torch_kwargs)),
+                posterior_transform = ScalarizedPosteriorTransform(weights=negw),
                 prune_baseline = True,
                 )
-            X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
+            X_cand = self.optimise(_acquisition_function, samples, restarts)
             X_b = self.normalise.untransform(X_cand)
         else:
             raise ValueError(f'next_type {type} not recognised')
 
-        return self.substitute_candidate_in_model(X_b)
+        return self.substitute_in_model(X_b)
 
     def optimise(self, _acquisition_function, raw_samples=4096, num_restarts=100):
         """ Returns a transformed attached candidate which minimises the acquisition function
@@ -697,8 +731,9 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         return X_cand
 
-    def substitute_candidate_in_model(self, X_b):
-        """Accept an untransformed candidate into model. Get an untransformed output.
+    def substitute_in_model(self, X_b):
+        """ Accept an untransformed candidate into model. 
+            Get an untransformed output.
 
         Args:
             X_b: Untransformed attached tensor of shape (1,4)
@@ -710,13 +745,12 @@ class BayesianOptimisationPlugin(BasePlugin):
         """
 
         X_best = self.normalise.transform(X_b)
+        Y_low, Y_upp = self.model.posterior(X_best).mvn.confidence_region()
+        Y_avg = self.model.posterior(X_best).mvn.mean
 
-        Y_lower, Y_upper = self.model.posterior(X_best).mvn.confidence_region()
-
-        Y_mean = self.model.posterior(X_best).mvn.mean
-        Y_m = self.trans.untransform(Y_mean)[0].squeeze().detach().cpu().numpy()
-        Y_l = self.trans.untransform(Y_lower)[0].squeeze().detach().cpu().numpy()
-        Y_u = self.trans.untransform(Y_upper)[0].squeeze().detach().cpu().numpy()
+        Y_m = self.trans.untransform(Y_avg)[0].squeeze().detach().cpu().numpy()
+        Y_l = self.trans.untransform(Y_low)[0].squeeze().detach().cpu().numpy()
+        Y_u = self.trans.untransform(Y_upp)[0].squeeze().detach().cpu().numpy()
         Y_std = (Y_u - Y_l)/4
 
         return [tuple(X_b.squeeze().detach().cpu().numpy())], Y_m, Y_std

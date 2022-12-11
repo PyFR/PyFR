@@ -20,8 +20,8 @@ class OptimisationStatsPlugin(BasePlugin):
         tsect = 'solver-time-integrator'
         
         # Start and stop collecting stats
-        self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
-        self.tend = self.cfg.getfloat(tsect, 'tend', 0.0)
+        self.opt_tstart = self.cfg.getfloat(cfgsect, 'tstart', intg.tstart)
+        self.opt_tend = self.cfg.getfloat(cfgsect, 'tend', intg.tend)
 
         # Skip first few iterations, and capture the rest few iterations
         self.skip_first_n = self.cfg.getint(cfgsect, 'skip-first-n', 10)     
@@ -65,7 +65,11 @@ class OptimisationStatsPlugin(BasePlugin):
     def __call__(self, intg):
 
         # Collect stats after tstart
-        if self.tstart > intg.tcurr:
+        if intg.tcurr < self.opt_tstart:
+            intg.pseudointegrator._compute_time = 0
+            return
+
+        if intg.tcurr > self.opt_tend:
             return
 
         # Collect stats from the integrator
@@ -100,8 +104,10 @@ class OptimisationStatsPlugin(BasePlugin):
             self.pd_stats.to_csv(self.outf, header=True, index=False, mode='w')
 
     def collect_stats(self, intg):
-        Δt = intg._dt               # Physical time step
-        Δc = intg.pseudointegrator._compute_time - self.ctime_p  # Compute time per physical time-step
+        # Physical time step
+        Δt = intg._dt               
+        # Compute time per physical time-step
+        Δc = intg.pseudointegrator._compute_time - self.ctime_p  
         # Wall-time per physical time-step
         Δw = (time() - intg._wstart) - self.wtime_p
         self.ΔcΔt, ΔwΔt = Δc/Δt, Δw/Δt
@@ -125,14 +131,14 @@ class OptimisationStatsPlugin(BasePlugin):
 
         self.pd_stats = pd.concat([self.pd_stats, t1], ignore_index=True)
 
-        self.pd_stats = self.pd_stats.assign(
-            **{'cost-m': self.pd_stats['cost']
-                            .rolling(self.last_n, min_periods=1)
-                            .mean(),
-               'cost-s': self.pd_stats['cost']
-                            .rolling(self.last_n, min_periods=1)
-                            .std(),
-                })
+        #self.pd_stats = self.pd_stats.assign(
+        #    **{'cost-m': self.pd_stats['cost']
+        #                    .rolling(self.last_n, min_periods=1)
+        #                    .mean(),
+        #       'cost-s': self.pd_stats['cost']
+        #                    .rolling(self.last_n, min_periods=1)
+        #                    .std(),
+        #        })
 
     def check_status(self, intg):
 
@@ -151,19 +157,21 @@ class OptimisationStatsPlugin(BasePlugin):
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
                 return
 
-            if np.any([intg.Δτ_stats['res'][v]['all'] > t for v, t in zip(self.fvars, self.residtols)]):
+            if np.any([intg.Δτ_stats['res'][v]['all'] > t 
+                       for v, t in zip(self.fvars, self.residtols)]):
                 intg.reset_opt_stats = intg.bad_sim = True
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
                 return
 
-        # Simulation data should be calculated after we are sure that time-step will not change more than this
+        # Simulation data should be calculated after 
+        #     we are sure enough that time-step will not change more than this
         if (self.Δτ_controller == 'local-pi' and
             abs(self.pd_stats['max-Δτ'][self.pd_stats.index[-1]]
               - self.pd_stats['min-Δτ'][self.pd_stats.index[-1]])<1e-6):
             intg.reset_opt_stats = intg.bad_sim = True
             intg.opt_cost_mean = intg.opt_cost_std = np.NaN
             raise ValueError('Δτ is constant in a local-pi controller')
-        
+       
         if (((self.Δτ_controller == 'none'
              or (self.Δτ_controller == 'local-pi'
             and abs(self.Δτ_max

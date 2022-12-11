@@ -293,7 +293,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     def weighted(self, I):
         return np.random.choice([int(np.floor(I)), int(np.ceil(I))], 
-                     p=np.array([1.-I+int(np.floor(I)), I-int(np.floor(I))]))
+                     p = np.array([1.-I+int(np.floor(I)), I-int(np.floor(I))]))
 
     @property
     def expanding_average(self):
@@ -310,7 +310,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self._xis = [0,]*(self._order*2+1)
         
         def _expanding(xs):
-            self._xis = [(x +xi*self._n)/(self._n+1) for x, xi in zip(xs, self._xis)]        
+            self._xis = [(x +xi*self._n)/(self._n+1) 
+                         for x, xi in zip(xs, self._xis)]        
             self._n+=1
             print(self._xis)
         
