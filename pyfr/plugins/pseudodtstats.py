@@ -175,8 +175,15 @@ class PseudodtStatsPlugin(BasePlugin):
         # each variable in (p, u, v, w)
         for j, var in enumerate(self.fvars):
             intg.Δτ_stats['res'][var]['all'] = resid[j]
-        intg.Δτ_stats['res']['all'] = sum([intg.Δτ_stats['res'][var]['all'] 
+
+        if self.cfg.get('solver-time-integrator','pseudo-resid-norm')=='uniform':
+            intg.Δτ_stats['res']['all'] = max([intg.Δτ_stats['res'][var]['all'] 
                                            for var in self.fvars])
+        elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l2':
+            intg.Δτ_stats['res']['all'] = sum([intg.Δτ_stats['res'][var]['all'] 
+                                           for var in self.fvars])
+        else:
+            raise ValueError('Unknown time integrator ')
 
     def residual_statistics_next_gen(self, intg, resid):
         '''

@@ -20,7 +20,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         skip_n = self.cfg.getint(cfgostat, 'skip-first-n', 10)     
         last_n = self.cfg.getint(cfgostat, 'capture-last-n', 30)
 
-        self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 2)
+        self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 1)
 
         self.comm, self.rank, self.root = get_comm_rank_root()
 
@@ -234,12 +234,12 @@ class BayesianOptimisationPlugin(BasePlugin):
                                          .groupby(['test-candidate'])
                                          .cumcount()+1)
 
-            with pd.option_context( 'display.max_rows'         , None, 
-                                    'display.max_columns'      , None,
-                                    'display.precision'        , 3,
-                                    'display.expand_frame_repr', False,
-                                    'display.max_colwidth'     , 100):
-                print(self.pd_opt)
+            #with pd.option_context( 'display.max_rows'         , None, 
+            #                        'display.max_columns'      , None,
+            #                        'display.precision'        , 3,
+            #                        'display.expand_frame_repr', False,
+            #                        'display.max_colwidth'     , 100):
+            #    print(self.pd_opt)
 
             self.pd_opt.to_csv(self.outf, index=False)
 
@@ -367,8 +367,10 @@ class BayesianOptimisationPlugin(BasePlugin):
                      label = 'Best next cost', 
                     )
 
+        next_index_add = intg._dt if intg.opt_type == 'online' else 1
+
         cost_ax.fill_between(
-                self.pd_opt[self.index_name], 
+                self.pd_opt[self.index_name] + next_index_add, 
                 (self.pd_opt['next-m']-2*self.pd_opt['next-s'])/base, 
                 (self.pd_opt['next-m']+2*self.pd_opt['next-s'])/base, 
                 color = 'green', alpha = 0.1, 
@@ -378,11 +380,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.add_limits_to_plot(cost_ax)
 
         # Set lower limit for y axis to 0
-        cost_ax.set_ylim(bottom = 0, top = 1.5)
-        if intg.opt_type == 'onfline':
-            cost_ax.set_xlim(left = 0, right = self.noptiters_max)
-        elif intg.opt_type == 'online':
-            cost_ax.set_xlim(left = self._toptstart, right = self._tend)
+        cost_ax.set_ylim(bottom = 0)
+        if intg.opt_type == 'onfline':  cost_ax.set_xlim(left = 0)
+        elif intg.opt_type == 'online': cost_ax.set_xlim(left = self._toptstart)
 
         cost_ax.legend(loc='upper right')
         cost_ax.get_figure().savefig(self.cost_plot)        
