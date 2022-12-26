@@ -244,9 +244,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                         rv.fill(0); rv += v
                         ra.fill(0); ra += a
                         rp.fill(0); rp += p
+            elif intg.opt_type == None:
+                pass
             else:
-                raise ValueError("Remove tavg plugin. ",
-                                 "Only online averaging is supported.")
+                raise ValueError("Remove tavg plugin.")
 
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return

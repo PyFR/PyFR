@@ -381,8 +381,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         # Set lower limit for y axis to 0
         cost_ax.set_ylim(bottom = 0)
-        if intg.opt_type == 'onfline':  cost_ax.set_xlim(left = 0)
-        elif intg.opt_type == 'online': cost_ax.set_xlim(left = self._toptstart)
+        #if intg.opt_type == 'onfline':  cost_ax.set_xlim(left = 0)
+        #elif intg.opt_type == 'online': cost_ax.set_xlim(left = self._toptstart)
 
         cost_ax.legend(loc='upper right')
         cost_ax.get_figure().savefig(self.cost_plot)        
@@ -461,10 +461,10 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.add_limits_to_plot(cumm_ax)
 
         cumm_ax.set_ylim(bottom = 0)
-        if intg.opt_type == 'onfline':
-            cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
-        elif intg.opt_type == 'online':
-            cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
+        #if intg.opt_type == 'onfline':
+        #    cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
+        #elif intg.opt_type == 'online':
+        #    cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
 
         cumm_ax.legend(loc='lower right')
         cumm_ax.get_figure().savefig(self.speedup_plot)
@@ -518,10 +518,10 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.add_limits_to_plot(cumm_ax)
 
         cumm_ax.set_ylim(bottom = 0)
-        if intg.opt_type == 'onfline':
-            cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
-        elif intg.opt_type == 'online':
-            cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
+        #if intg.opt_type == 'onfline':
+        #    cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
+        #elif intg.opt_type == 'online':
+        #    cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
 
         cumm_ax.legend(loc='lower right')
         cumm_ax.get_figure().savefig(self.cumm_plot)
