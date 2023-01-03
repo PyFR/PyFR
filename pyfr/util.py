@@ -170,19 +170,24 @@ def match_paired_paren(delim, n=5):
 
 
 def file_path_gen(basedir, basename, restore=False):
-    ns = 0
+    def _file_path_gen():
+        ns = 0
 
-    # See if the basename appears to depend on {n}
-    if restore and re.search('{n[^}]*}', basename):
-        # Quote and substitute
-        bn = re.escape(basename)
-        bn = re.sub(r'\\{n[^}]*\\}', r'(\\s*\\d+\\s*)', bn)
-        bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
-        for f in os.listdir(basedir):
-            if (m := re.match(bn, f)):
-                ns = max(ns, int(m[1]) + 1)
+        # See if the basename appears to depend on {n}
+        if restore and re.search('{n[^}]*}', basename):
+            # Quote and substitute
+            bn = re.escape(basename)
+            bn = re.sub(r'\\{n[^}]*\\}', r'(\\s*\\d+\\s*)', bn)
+            bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
+            for f in os.listdir(basedir):
+                if (m := re.match(bn, f)):
+                    ns = max(ns, int(m[1]) + 1)
 
-    t = yield
+        t = yield
 
-    for n in it.count(ns): 
-        t = yield os.path.join(basedir, basename.format(t=t, n=n))
+        for n in it.count(ns):
+            t = yield os.path.join(basedir, basename.format(t=t, n=n))
+    gen = _file_path_gen()
+
+    next(gen)
+    return gen
