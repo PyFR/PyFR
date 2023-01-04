@@ -1447,24 +1447,39 @@ Time average quantities. Parameterised with
 
     ``continuous`` | ``windowed``
 
-    Windowed outputs averages over each ``dt- out`` period. Whereas, continuous
-    outputs averages over all ``dt-out`` periods thus far completed within a
-    given invocation of PyFR. The default is ``windowed``.
+    In continuous mode each output file contains average data from
+    ``tstart`` until the current time. In windowed mode each output
+    file only contains average data for the most recent ``dt-out`` time
+    units. The default is ``windowed``.
 
-5. ``basedir`` --- relative path to directory where outputs will be
+5. ``std-mode`` --- standard deviation reporting mode:
+
+    ``summary`` | ``all``
+
+    If to output full standard deviation fields or just summary
+    statistics.  In lieu of a complete field, summary instead reports
+    the maximum and average standard deviation for each field. The
+    default is ``summary`` with ``all`` doubling the size of the
+    resulting files.
+
+6. ``basedir`` --- relative path to directory where outputs will be
    written:
 
     *string*
 
-6. ``basename`` --- pattern of output names:
+7. ``basename`` --- pattern of output names:
 
     *string*
 
-7. ``precision`` --- output file number precision:
+8. ``precision`` --- output file number precision:
 
     ``single`` | ``double``
 
-8. ``region`` --- region to be written, specified as either the
+    The default is ``single``. Note that this only impacts the output,
+    with statistic accumulation *always* being performed in double
+    precision.
+
+9. ``region`` --- region to be written, specified as either the
    entire domain using ``*``, a combination of the geometric shapes
    specified in :ref:`regions`, or a sub-region of elements that have
    faces on a specific domain boundary via the name of the domain
@@ -1472,20 +1487,17 @@ Time average quantities. Parameterised with
 
     ``*`` | ``shape(args, ...)`` | *string*
 
-9. ``avg``-*name* --- expression to time average, written as a function of
-   the primitive variables and gradients thereof; multiple expressions,
-   each with their own *name*, may be specified:
+10. ``avg``-*name* --- expression to time average, written as a
+    function of the primitive variables and gradients thereof;
+    multiple expressions, each with their own *name*, may be specified:
 
     *string*
 
-10. ``fun-avg``-*name* --- expression to compute at file output time,
+11. ``fun-avg``-*name* --- expression to compute at file output time,
     written as a function of any ordinary average terms; multiple
     expressions, each with their own *name*, may be specified:
 
     *string*
-
-    As ``fun-avg`` terms are evaluated at write time, these are only indirectly
-    effected by the averaging mode.
 
 Example::
 

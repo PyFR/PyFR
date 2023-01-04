@@ -170,6 +170,7 @@ class BaseSystem:
         # Helper function to tag the element type/MPI interface
         # associated with a kernel; used for dependency analysis
         self._ktags = {}
+
         def tag_kern(pname, prov, kern):
             if pname == 'eles':
                 self._ktags[kern] = f'e-{prov.basis.name}'
