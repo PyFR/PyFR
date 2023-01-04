@@ -32,7 +32,6 @@ class NativeWriter:
 
         # Output counter (incremented each time write() is called)
         self.fgen = file_path_gen(basedir, basename, intg.isrestart)
-        next(self.fgen)
 
         # MPI info
         comm, rank, root = get_comm_rank_root()
