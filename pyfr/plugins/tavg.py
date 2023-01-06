@@ -287,9 +287,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 if self.std_mode == 'all':
                     tavg.append(dev)
 
-                # Add in functional expression deviations
-                if self.fexprs:
-                    tavg.append(fdev)
+                    # Add in functional expression deviations
+                    if self.fexprs:
+                        tavg.append(fdev)
 
                 # Reduce our standard deviations across ranks
                 if rank != root:
