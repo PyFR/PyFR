@@ -39,8 +39,7 @@ class ConduitWrappers(LibWrapper):
          c_longlong),
         (c_void_p, 'conduit_node_set_path_int64_ptr', c_void_p, c_char_p,
          c_void_p, c_longlong),
-        (c_void_p, 'conduit_node_set_path_node', c_void_p, c_char_p, c_void_p),
-        (c_void_p, 'conduit_node_print', c_void_p),
+        (c_void_p, 'conduit_node_set_path_node', c_void_p, c_char_p, c_void_p)
     ]
 
     def _errcheck(self, status, fn, args):
@@ -83,10 +82,6 @@ class ConduitNode:
             case _:
                 ValueError('ConduitNode: __setitem__ type not supported')
 
-    def __str__(self):
-        self.lib.conduit_node_print(self)
-        return '\n'
-
     def append(self):
         ptr = self.lib.conduit_node_append(self)
         return ConduitNode(self.lib, ptr, child=True)
@@ -101,7 +96,7 @@ class AscentWrappers(LibWrapper):
         (c_void_p, 'ascent_create', c_void_p),
         (None, 'ascent_execute', c_void_p, c_void_p),
         (None, 'ascent_open', c_void_p, c_void_p),
-        (None, 'ascent_publish', c_void_p, c_void_p),
+        (None, 'ascent_publish', c_void_p, c_void_p)
     ]
 
 
@@ -130,10 +125,9 @@ class AscentPlugin(RegionMixin, BasePlugin):
         self.elementscls = intg.system.elementscls
 
         # Set order for division
-        order = self.cfg.getint('solver', 'order')
-        divisor = defaultdict(lambda: self.cfg.getint(cfgsect,
-                              'division', order))
-        divisor['pyr'] = 0
+        sorder = self.cfg.getint('solver', 'order')
+        dorder = self.cfg.getint(cfgsect, 'division', sorder)
+        divisors = defaultdict(lambda: dorder, pyr=0)
 
         # Load conduit library
         self.conduit = ConduitWrappers()
@@ -163,7 +157,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
         self._ele_regions_lin = []
         for ele in self._ele_regions:
             # Build the conduit blueprint mesh for the regions
-            self._build_blueprint(intg, ele, divisor)
+            self._build_blueprint(intg, ele, divisors)
 
         # Initalise ascent and the open an instance
         self._init_ascent(comm)
@@ -172,7 +166,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
         if getattr(self, 'ascent_ptr', None):
             self.lib.ascent_close(self.ascent_ptr)
 
-    def _build_blueprint(self, intg, ele, divisor):
+    def _build_blueprint(self, intg, ele, divisors):
         idx, ename, rgn = ele
         mesh_n = self.mesh_n
         d_str = f'domain_{intg.rallocs.prank}_{ename}'
@@ -181,7 +175,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
         shapecls = subclass_where(BaseShape, name=ename)
         shape = shapecls(eles.nspts, self.cfg)
 
-        svpts = shape.std_ele(divisor[ename])
+        svpts = shape.std_ele(divisors[ename])
         nsvpts = len(svpts)
 
         soln_op = shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
@@ -198,7 +192,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
             mesh_n[f'{d_str}/coordsets/coords/values/{l}'] = x
 
         subdvcls = subclass_where(BaseShapeSubDiv, name=ename)
-        sconn = subdvcls.subnodes(divisor[ename])
+        sconn = subdvcls.subnodes(divisors[ename])
         subdvcon = np.hstack([sconn + j*nsvpts for j in range(xd.shape[1])])
         mesh_n[f'{d_str}/topologies/mesh/elements/connectivity'] = subdvcon
 
