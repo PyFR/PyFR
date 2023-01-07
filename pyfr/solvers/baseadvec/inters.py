@@ -97,7 +97,7 @@ class BaseAdvectionMPIInters(BaseInters):
         else:
             self._entmin_lhs = self._entmin_rhs = None
 
-            
+
 class BaseAdvectionBCInters(BaseInters):
     type = None
 

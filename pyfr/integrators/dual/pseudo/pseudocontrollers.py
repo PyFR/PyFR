@@ -7,7 +7,7 @@ from pyfr.mpiutil import get_comm_rank_root, mpi
 class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-    
+
         # Ensure the system is compatible with our formulation
         self.system.elementscls.validate_formulation(self)
 

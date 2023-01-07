@@ -107,7 +107,7 @@ class BaseAdvectionElements(BaseElements):
             ext = nonce + 'entmin_int'
             self.entmin_int = self._be.matrix((self.nfaces, self.neles),
                                               tags=tags, extent=ext)
-   
+
             # Setup nodal/modal operator matrices
             self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
             self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)

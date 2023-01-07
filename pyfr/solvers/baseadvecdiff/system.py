@@ -11,7 +11,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         def deps(dk, *names): return self._kdeps(k, dk, *names)
 
         g1 = self.backend.graph()
-        g1.add_mpi_reqs(m['scal_fpts_recv'])
+        g1.add_mpi_reqs(m['scal_fpts_recv'] + m['ent_fpts_recv'])
 
         # Perform post-processing of the previous solution stage
         g1.add_all(k['eles/entropy_filter'])
@@ -25,14 +25,13 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g1.add_mpi_req(send, deps=[pack])
 
         # If entropy filtering, pack and send the entropy values to neighbors
-        g1.add_mpi_reqs(m['ent_fpts_recv'])
         g1.add_all(k['mpiint/ent_fpts_pack'], deps=k['eles/entropy_filter'])
         for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
 
         # Compute common entropy minima at internal/boundary interfaces
         g1.add_all(k['iint/comm_entropy'],
-                   deps=k['eles/filter_solution'] + k['mpiint/ent_fpts_pack'])
+                   deps=k['eles/entropy_filter'] + k['mpiint/ent_fpts_pack'])
         g1.add_all(k['bcint/comm_entropy'],
                    deps=k['eles/disu'])
 

@@ -104,7 +104,7 @@ Python dependencies.
 Dependencies
 ------------
 
-PyFR |release| has a hard dependency on Python 3.9+ and the following
+PyFR |release| has a hard dependency on Python 3.10+ and the following
 Python packages:
 
 1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.0
@@ -147,11 +147,11 @@ AMD, Intel, and NVIDIA. The backend requires:
 1. OpenCL >= 2.1
 2. Optionally `CLBlast <https://github.com/CNugteren/CLBlast>`_
 
-Note that when running on NVIDIA GPUs the OpenCL backend terminate with
-a segmentation fault after the simulation has finished.  This is due
-to a long-standing bug in how the NVIDIA OpenCL implementation handles
-sub-buffers.  As it occurs during the termination phase—after all data
-has been written out to disk—the issue does *not* impact the
+Note that when running on NVIDIA GPUs the OpenCL backend may terminate
+with a segmentation fault after the simulation has finished.  This is
+due to a long-standing bug in how the NVIDIA OpenCL implementation
+handles sub-buffers.  As it occurs during the termination phase—after
+all data has been written out to disk—the issue does *not* impact the
 functionality or correctness of PyFR.
 
 .. _install openmp backend:
