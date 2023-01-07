@@ -10,6 +10,9 @@ class BaseDualIntegrator(BaseIntegrator):
     def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
         super().__init__(backend, rallocs, mesh, initsoln, cfg)
 
+        self._saved_soln = None
+        self.Δτ_stats = None
+
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
             backend, systemcls, rallocs, mesh, initsoln, cfg,

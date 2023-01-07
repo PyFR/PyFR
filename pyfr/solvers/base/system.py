@@ -308,6 +308,10 @@ class BaseSystem:
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
 
+    def ele_scal_upts_set(self, idxs, soln):
+        for idx in idxs:
+            [eb[idx].set(es) for es, eb in zip(soln, self.ele_banks)]
+            
     def get_ele_entmin_int(self):
         return [e.get() for e in self.eles_entmin_int]
 

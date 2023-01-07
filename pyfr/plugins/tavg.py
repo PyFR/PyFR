@@ -1,5 +1,5 @@
+import itertools as it
 import re
-
 import numpy as np
 
 from pyfr.inifile import Inifile
@@ -26,6 +26,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.mode = self.cfg.get(cfgsect, 'mode', 'windowed')
         if self.mode not in {'continuous', 'windowed'}:
             raise ValueError('Invalid averaging mode')
+        
+        # Std deviation mode
+        self.std_mode = self.cfg.get(cfgsect, 'std-mode', 'summary')
+        if self.std_mode not in {'summary', 'all'}:
+            raise ValueError('Invalid standard deviation mode')
 
         # Std deviation mode
         self.std_mode = self.cfg.get(cfgsect, 'std-mode', 'summary')
@@ -123,6 +128,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
         self.vaccex = [np.zeros_like(a) for a in self.accex]
 
+        if intg.save:
+            self.rprevex = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
+            self.raccex  = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
+            self.rvaccex = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
+
     def _eval_acc_exprs(self, intg):
         exprs = []
 
@@ -218,6 +228,27 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             if self.tstart_acc != self.prevt:
                 v += (Wmp1mpn / Wp)*(a - W1mpn*ppc)**2
 
+    def rewind(self, intg):
+        if intg.reset_opt_stats:
+            if (intg.opt_type == 'online'):
+                ex       = self.vaccex,  self.accex,  self.prevex   
+                saved_ex = self.rvaccex, self.raccex, self.rprevex
+
+                if intg.bad_sim:
+                    for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
+                        v.fill(0);  v += rv
+                        a.fill(0);  a += ra
+                        p.fill(0);  p += rp
+                else:
+                    for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
+                        rv.fill(0); rv += v
+                        ra.fill(0); ra += a
+                        rp.fill(0); rp += p
+            elif intg.opt_type == None:
+                pass
+            else:
+                raise ValueError("Remove tavg plugin.")
+
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return
         if intg.tcurr < self.tstart:
@@ -242,6 +273,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             # Save the time and solution
             self.prevt = intg.tcurr
             self.prevex = currex
+
+            # Rewind the simulation if necessary
+            self.rewind(intg)
 
             if dowrite:
                 comm, rank, root = get_comm_rank_root()
@@ -308,6 +342,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
                     data[etype] = d.swapaxes(0, 1).astype(self.fpdtype)
 
+                for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
+                    data[etype] = d.swapaxes(0, 1).astype(self.fpdtype)
+                
                 stats = Inifile()
                 stats.set('data', 'prefix', 'tavg')
                 stats.set('data', 'fields', ','.join(self.outfields))
