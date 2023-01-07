@@ -139,7 +139,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 'shocksensor', tplargs=tplargs_artvisc, dims=[self.neles],
                 u=self.scal_upts[uin], artvisc=self.artvisc
             )
-        elif shock_capturing == 'none':
+        elif shock_capturing in {'entropy-filter', 'none'}:
             self.artvisc = None
         else:
             raise ValueError('Invalid shock capturing scheme')

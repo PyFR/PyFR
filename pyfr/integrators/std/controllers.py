@@ -10,6 +10,9 @@ class BaseStdController(BaseStdIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Ensure the system is compatible with our formulation/controller
+        self.system.elementscls.validate_formulation(self)
+
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
@@ -62,6 +65,7 @@ class BaseStdController(BaseStdIntegrator):
 
 class StdNoneController(BaseStdController):
     controller_name = 'none'
+    controller_has_variable_dt = False
 
     @property
     def controller_needs_errest(self):
@@ -84,6 +88,7 @@ class StdNoneController(BaseStdController):
 
 class StdPIController(BaseStdController):
     controller_name = 'pi'
+    controller_has_variable_dt = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

@@ -2,8 +2,6 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseACFluidElements:
-    formulations = ['dual']
-
     privarmap = {2: ['p', 'u', 'v'],
                  3: ['p', 'u', 'v', 'w']}
 
@@ -27,6 +25,12 @@ class BaseACFluidElements:
     @staticmethod
     def con_to_pri(convs, cfg):
         return convs
+
+    @staticmethod
+    def validate_formulation(controller):
+        if controller.formulation != 'dual':
+            raise ValueError('System not compatible with time stepping '
+                             'formulation.')
 
 
 class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
