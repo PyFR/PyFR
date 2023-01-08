@@ -57,6 +57,10 @@ class ModifyConfigPlugin(BasePlugin):
             if intg.opt_type in ['onfline', 'online']:
                 if intg.candidate.get('csteps'):
                     intg.pseudointegrator.csteps = intg.candidate.get('csteps')
+
+                if intg.candidate.get('pseudo-dtau-max'):
+                    intg.pseudointegrator.pintg.Δτᴹ = intg.candidate.get('pseudo-dtau-max')
+
                 intg.candidate = {}
 
             elif intg.opt_type == 'offline':

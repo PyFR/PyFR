@@ -250,6 +250,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.plot_normalised_cost(intg)
 
             intg.candidate |= {'csteps':self._postprocess_ccsteps(list(t1['next-candidate'])[0])}
+            intg.candidate |= {'pseudo-dtau-max':0.012345}
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
 

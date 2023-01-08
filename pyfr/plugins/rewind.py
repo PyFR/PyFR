@@ -35,14 +35,6 @@ class RewindPlugin(BasePlugin):
 
     def __call__(self, intg):
 
-        #self.rewind_clock += 1
-
-        #if self.rewind_clock % self.__save_step == 0:           # To be removed
-        #    intg.save = True                              
-
-        #if self.rewind_clock % self.__rewind_step == 0:           # To be removed
-        #    intg.rewind = True                              
-
         if intg.rewind:
             intg.rewind_soln()
             intg.tcurr      = self.saved_tcurr
@@ -51,10 +43,8 @@ class RewindPlugin(BasePlugin):
 
             if self.rewind_Δτ and self.rewind_multip_Δτ:
                 intg.pseudointegrator.pintg.rewind_Δτ()
-#                intg.pseudointegrator.pintg.Δτ_mat = self.Δτᵢ # THIS LINE IS SURELY NOT WORKING
             else:
                 intg.pseudointegrator.rewind_Δτ()
-#                intg.pseudointegrator.Δτ_mat = self.Δτᵢ       # THIS LINE IS SURELY NOT WORKING
             print("Rewind complete.")
 
         if intg.save:

@@ -122,6 +122,8 @@ class DualPIPseudoController(BaseDualPseudoController):
             'pyfr.integrators.dual.pseudo.kernels.localerrest'
         )
 
+        self.ele_scal_upts_locs = []
+        
         for ele, shape, dtaumat in zip(self.system.ele_map.values(),
                                        self.system.ele_shapes, self.dtau_upts):
             # Allocate storage for previous error
@@ -130,26 +132,31 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             # Append the error kernels to the list
             for i, err in enumerate(ele.scal_upts):
+                self.ele_scal_upts_locs.append(i)
                 self.pintgkernels['localerrest', i].append(
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,
                         dims=[ele.nupts, ele.neles], err=err,
                         errprev=err_prev, dtau_upts=dtaumat,
-                        dtau_max = self._Δτᴹ,
                     )
                 )
+
+            for i in self.ele_scal_upts_locs:
+                for k in self.pintgkernels['localerrest', i]:
+                    k.bind(dtau_max = self._Δτᴹ)
 
         self.backend.commit()
 
     @property
-    def Δτ_max(self):
+    def Δτᴹ(self):
         return self._Δτᴹ
 
-    def modify_Δτᴹ(self, Δτᴹ):
-        for ele in self.system.ele_map.values():
-            for i, err in enumerate(ele.scal_upts):
-                for k in self.pintgkernels['localerrest', i]:
-                    k.bind(dtau_max = Δτᴹ)
+    @Δτᴹ.setter
+    def Δτᴹ(self, y):
+        self._Δτᴹ = y
+        for i in self.ele_scal_upts_locs:
+            for k in self.pintgkernels['localerrest', i]:
+                k.bind(dtau_max = y)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
