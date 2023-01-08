@@ -73,6 +73,10 @@ def main():
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
                            help='output file type; this is usually inferred '
                            'from the extension of outf')
+    ap_export.add_argument('-f', '--field', dest='fields', action='append',
+                           metavar='FIELD', required=False, help='what fields '
+                           'should be output; may be repeated, by default all '
+                           'fields are output')
     output_options = ap_export.add_mutually_exclusive_group(required=False)
     output_options.add_argument('-d', '--divisor', type=int,
                                 help='sets the level to which high order '

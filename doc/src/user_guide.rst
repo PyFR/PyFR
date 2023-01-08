@@ -47,25 +47,31 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
 
-5. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an unstructured
-   VTK ``.vtu`` or ``.pvtu`` file. If a ``-k`` flag is provided with an integer
-   argument then ``.pyfrs`` elements are converted to high-order VTK cells
-   which are exported, where the order of the VTK cells is equal to the value
-   of the integer argument.
-   Example::
+5. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an
+   unstructured VTK ``.vtu`` or ``.pvtu`` file. If a ``-k`` flag is
+   provided with an integer argument then ``.pyfrs`` elements are
+   converted to high-order VTK cells which are exported, where the
+   order of the VTK cells is equal to the value of the integer
+   argument. Example::
 
         pyfr export -k 4 mesh.pyfrm solution.pyfrs solution.vtu
 
-   If a ``-d`` flag is provided with an integer argument then ``.pyfrs``
-   elements are subdivided into linear VTK cells which are exported, where the
-   number of sub-divisions is equal to the value of the integer argument.
-   Example::
+   If a ``-d`` flag is provided with an integer argument then
+   ``.pyfrs`` elements are subdivided into linear VTK cells which are
+   exported, where the number of sub-divisions is equal to the value of
+   the integer argument. Example::
 
         pyfr export -d 4 mesh.pyfrm solution.pyfrs solution.vtu
 
-   If no flags are provided then ``.pyfrs`` elements are converted to high-order
-   VTK cells which are exported, where the order of the cells is equal to the
-   order of the solution data in the ``.pyfrs`` file.
+   If no flags are provided then ``.pyfrs`` elements are converted to
+   high-order VTK cells which are exported, where the order of the
+   cells is equal to the order of the solution data in the ``.pyfrs``
+   file.
+
+   By default all of the fields in the ``.pyfrs`` file will be
+   exported. If only a specific field is desired this can be specified
+   with the ``-f`` flag; for example ``-f density -f velocity`` will
+   only export the *density* and *velocity* fields.
 
 Running in Parallel
 -------------------
