@@ -42,6 +42,11 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr restart mesh.pyfrm solution.pyfrs
 
+   It is also possible to restart with a different configuration file.
+   Example::
+
+        pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
+
 5. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an unstructured
    VTK ``.vtu`` or ``.pvtu`` file. If a ``-k`` flag is provided with an integer
    argument then ``.pyfrs`` elements are converted to high-order VTK cells
