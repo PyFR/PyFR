@@ -18,7 +18,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         cfgostat = 'soln-plugin-optimisation_stats'
         skip_n = self.cfg.getint(cfgostat, 'skip-first-n', 10)     
-        last_n = self.cfg.getint(cfgostat, 'capture-last-n', 30)
+        last_n = self.cfg.getint(cfgostat, 'capture-last-n', 40)
 
         self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 1)
 
@@ -137,7 +137,9 @@ class BayesianOptimisationPlugin(BasePlugin):
             t1 =  pd.DataFrame({
                 'test-candidate': [self._preprocess_candidate(
                                     intg.pseudointegrator.csteps, 
-                                    intg.pseudointegrator.pintg.Δτᴹ)] , 
+                                    intg.pseudointegrator.pintg.Δτᴹ,
+                                    intg.pseudointegrator.dtauf,
+                                    )], # Try to create a dictionary of functions
                 'test-m': [intg.opt_cost_mean], 
                 'test-s': [intg.opt_cost_std],
                 })
@@ -594,7 +596,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             stan = Standardize(m=1),    # Then standardise
             )
 
-        self.norm_X = self.normalise.transform(  
+        self.norm_X = self.normalise.transform(
             self.torch.tensor(tX , **self.torch_kwargs))
         stan_Y, stan_Yvar = self.trans.forward(
             self.torch.tensor(tY , **self.torch_kwargs),
@@ -635,14 +637,14 @@ class BayesianOptimisationPlugin(BasePlugin):
         self._bnds[0, self._bnds[0, :] < 0] = 0
 
         # Restrict the bounds to hardbounds region
-        self._bnds[0, :] = np.maximum(self._bnds[0, :], self._hbnds[0, :])
-        self._bnds[1, :] = np.minimum(self._bnds[1, :], self._hbnds[1, :])
+        self._bnds[0, :] = self.torch.maximum(self._bnds[0, :], self._hbnds[0, :])
+        self._bnds[1, :] = self.torch.minimum(self._bnds[1, :], self._hbnds[1, :])
 
     @property
     def bounds_size(self):
         return np.prod((self._bnds[1,:]-self._bnds[0,:]).detach().cpu().numpy())
         
-    def _preprocess_candidate(self, csteps, pseudo_dtau_max):
+    def _preprocess_candidate(self, *args):
         '''
             Processing shall be done ONLY for:
                 V-cycles
@@ -651,15 +653,30 @@ class BayesianOptimisationPlugin(BasePlugin):
                 Prolongation iterations same
                 pseudo_dtau_max_f
         '''
+
+        csteps = args[0]
         self.depth = (len(csteps)-1)//2 -1
 
-        return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], pseudo_dtau_max
+        if len(args) == 1:
+            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1]
+        elif len(args) == 2:
+            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], args[1]
+        elif len(args) == 3:
+            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], args[1], args[2]
 
     def _postprocess_ccandidate(self, ccandidate):
-        
-        return {'csteps': self._postprocess_ccsteps(ccandidate[:-1]),
-                'pseudo-dtau-max': ccandidate[-1]
-                }
+
+        if len(ccandidate) == 6:
+            return {'csteps': self._postprocess_ccsteps(ccandidate[:-2]),
+                    'dtau-max': ccandidate[-2], 
+                    'dtau-fact': ccandidate[-1], }
+
+        if len(ccandidate) == 5:
+            return {'csteps': self._postprocess_ccsteps(ccandidate[:-1]),
+                    'dtau-max': ccandidate[-1],}
+
+        if len(ccandidate) == 4:
+            return {'csteps': self._postprocess_ccsteps(ccandidate[:-2]),}
 
     def _postprocess_ccsteps(self, ccsteps):
         return (*((ccsteps[0],)*(self.depth+1)), ccsteps[1], 

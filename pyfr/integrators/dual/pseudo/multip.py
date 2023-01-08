@@ -49,6 +49,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
         self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+        self.dtaufs = [self.dtauf for _ in self.levels]
 
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self._minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
@@ -77,7 +78,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 mcfg = Inifile(cfg.tostr())
                 mcfg.set('solver', 'order', l)
-                mcfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(order - l))
+                mcfg.set(sect, 'pseudo-dt', dtau*np.prod(self.dtaufs[:order-l]))
 
                 for s in cfg.sections():
                     if (m := re.match(f'solver-(.*)-mg-p{l}$', s)):
@@ -185,6 +186,14 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def pintg(self):
         return self.pintgs[self.level]
 
+    @property
+    def dtauf(self):
+        return self.dtaufs[0]
+
+    @dtauf.setter
+    def dtauf(self, y):
+        self.dtaufs = [y for _ in self.levels]
+
     def _init_proj_mats(self):
         self.projmats = defaultdict(list)
         cmat = lambda m: self.backend.const_matrix(m, tags={'align'})
@@ -208,13 +217,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return projk
 
     @memoize
-    def dtauproject(self, l1, l2):
+    def dtauproject(self, l1, l2, dtaufs):
         projk = []
         for i, a in enumerate(self.projmats[l1, l2]):
             b = self.pintgs[l1].dtau_upts[i]
             c = self.pintgs[l2].dtau_upts[i]
             projk.append(self.backend.kernel('mul', a, b, out=c,
-                                             alpha=self.dtauf))
+                                             alpha=dtaufs[l2]))
 
         return projk
 
@@ -229,7 +238,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
-            self.backend.run_kernels(self.dtauproject(l1, l2))
+            self.backend.run_kernels(self.dtauproject(l1, l2, self.dtaufs))
 
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1
