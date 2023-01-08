@@ -64,6 +64,9 @@ class ModifyConfigPlugin(BasePlugin):
                 if intg.candidate.get('dtau-fact'):
                     intg.pseudointegrator.dtauf = intg.candidate.get('dtau-fact')
 
+                if intg.candidate.get('dtau-facts'):
+                    intg.pseudointegrator.dtaufs = intg.candidate.get('dtau-facts')
+
                 intg.candidate = {}
 
             elif intg.opt_type == 'offline':
