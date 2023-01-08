@@ -103,20 +103,19 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['maxf'] = self.cfg.getfloat(sect, 'max-fact', 1.01)
         tplargs['minf'] = self.cfg.getfloat(sect, 'min-fact', 0.98)
         tplargs['saff'] = self.cfg.getfloat(sect, 'safety-fact', 0.8)
-        tplargs['dtau_maxf'] = self.cfg.getfloat(sect, 
-                                                 'pseudo-dt-max-mult', 3.0)
-        dtau_minf = self.cfg.getfloat(sect, 
-                                      'pseudo-dt-min-mult', 3.0)
+        dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
+        dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 10.0)
+        
+        self._Δτᴹ = self._dtau * dtau_maxf
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
-        if tplargs['dtau_maxf'] < 1:
+        if dtau_maxf < 1:
             raise ValueError('Invalid pseudo-dt-max-mult')
 
         # Limits for the local pseudo-time-step size
         tplargs['dtau_min'] = self._dtau/ dtau_minf
-        tplargs['dtau_max'] = tplargs['dtau_maxf'] * self._dtau
 
         # Register a kernel to compute local error
         self.backend.pointwise.register(
@@ -135,11 +134,22 @@ class DualPIPseudoController(BaseDualPseudoController):
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,
                         dims=[ele.nupts, ele.neles], err=err,
-                        errprev=err_prev, dtau_upts=dtaumat
+                        errprev=err_prev, dtau_upts=dtaumat,
+                        dtau_max = self._Δτᴹ,
                     )
                 )
 
         self.backend.commit()
+
+    @property
+    def Δτ_max(self):
+        return self._Δτᴹ
+
+    def modify_Δτᴹ(self, Δτᴹ):
+        for ele in self.system.ele_map.values():
+            for i, err in enumerate(ele.scal_upts):
+                for k in self.pintgkernels['localerrest', i]:
+                    k.bind(dtau_max = Δτᴹ)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
