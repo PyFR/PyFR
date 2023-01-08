@@ -659,10 +659,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         if len(args) == 1:
             return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1]
-        elif len(args) == 2:
-            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], args[1]
-        elif len(args) == 3:
-            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], args[1], args[2]
+        else:
+            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], *args[1:]
 
     def _postprocess_ccandidate(self, ccandidate):
 

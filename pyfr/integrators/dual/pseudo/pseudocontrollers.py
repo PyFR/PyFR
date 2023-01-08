@@ -106,7 +106,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
         dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 10.0)
         
-        self._Δτᴹ = self._dtau * dtau_maxf
+        self._Δτᵁ = self._dtau * dtau_maxf
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
@@ -143,17 +143,17 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             for i in self.ele_scal_upts_locs:
                 for k in self.pintgkernels['localerrest', i]:
-                    k.bind(dtau_max = self._Δτᴹ)
+                    k.bind(dtau_max = self._Δτᵁ)
 
         self.backend.commit()
 
     @property
     def Δτᴹ(self):
-        return self._Δτᴹ
+        return self._Δτᵁ
 
     @Δτᴹ.setter
     def Δτᴹ(self, y):
-        self._Δτᴹ = y
+        self._Δτᵁ = y
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
                 k.bind(dtau_max = y)
