@@ -135,7 +135,9 @@ class BayesianOptimisationPlugin(BasePlugin):
                 tcurr = intg.tcurr
 
             t1 =  pd.DataFrame({
-                'test-candidate': [self._preprocess_csteps(intg.pseudointegrator.csteps)] , 
+                'test-candidate': [self._preprocess_candidate(
+                                    intg.pseudointegrator.csteps, 
+                                    intg.pseudointegrator.pintg.Δτᴹ)] , 
                 'test-m': [intg.opt_cost_mean], 
                 'test-s': [intg.opt_cost_std],
                 })
@@ -249,10 +251,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             self.plot_normalised_cost(intg)
 
-            intg.candidate |= {'csteps':self._postprocess_ccsteps(list(t1['next-candidate'])[0])}
-            intg.candidate |= {'pseudo-dtau-max':0.012345}
+            intg.candidate = self._postprocess_ccandidate(list(t1['next-candidate'])[0])
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
-
 
     def check_offline_optimisation_status(self, intg):
         if (self.rank == self.root) and (len(self.pd_opt.index) > self.noptiters_max):
@@ -581,9 +581,12 @@ class BayesianOptimisationPlugin(BasePlugin):
         from botorch.fit               import fit_gpytorch_model as fit_model
         from botorch.models.transforms import Standardize, Log, Normalize, ChainedOutcomeTransform
 
-        self.bounds = tX
+        self.bounds = tX # Set bounds on the basis of 
+                            # training data 
+                            # given soft-bounds
+                            # given hard-bounds
 
-        self.normalise = Normalize(d=4, bounds=self.bounds)
+        self.normalise = Normalize(d=tX.shape[1], bounds=self.bounds)
         self.standardise = Standardize(m=1)
 
         self.trans = ChainedOutcomeTransform(
@@ -639,16 +642,24 @@ class BayesianOptimisationPlugin(BasePlugin):
     def bounds_size(self):
         return np.prod((self._bnds[1,:]-self._bnds[0,:]).detach().cpu().numpy())
         
-    def _preprocess_csteps(self, csteps):
+    def _preprocess_candidate(self, csteps, pseudo_dtau_max):
         '''
             Processing shall be done ONLY for:
                 V-cycles
                 Starting smoothing iteration 1
                 Restriction iterations same
                 Prolongation iterations same
+                pseudo_dtau_max_f
         '''
         self.depth = (len(csteps)-1)//2 -1
-        return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1]
+
+        return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], pseudo_dtau_max
+
+    def _postprocess_ccandidate(self, ccandidate):
+        
+        return {'csteps': self._postprocess_ccsteps(ccandidate[:-1]),
+                'pseudo-dtau-max': ccandidate[-1]
+                }
 
     def _postprocess_ccsteps(self, ccsteps):
         return (*((ccsteps[0],)*(self.depth+1)), ccsteps[1], 

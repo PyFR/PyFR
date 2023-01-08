@@ -29,8 +29,6 @@ class OptimisationStatsPlugin(BasePlugin):
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
         self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
-        if self.Δτ_controller == 'local-pi':
-            self.Δτ_max = self.Δτ_init * self.cfg.getfloat(tsect, 'pseudo-dt-max-mult')
 
         intg.reset_opt_stats = intg.bad_sim = False
         intg.opt_cost_mean = intg.opt_cost_std = None 
@@ -174,7 +172,7 @@ class OptimisationStatsPlugin(BasePlugin):
        
         if (((self.Δτ_controller == 'none'
              or (self.Δτ_controller == 'local-pi'
-            and abs(self.Δτ_max
+            and abs(intg.pseudointegrator.pintg.Δτᴹ
                   - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
             and self.pd_stats.count(0)[0]> (self.skip_first_n + self.last_n)):
 
