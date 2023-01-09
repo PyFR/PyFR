@@ -20,6 +20,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         skip_n = self.cfg.getint(cfgostat, 'skip-first-n', 10)     
         last_n = self.cfg.getint(cfgostat, 'capture-last-n', 40)
 
+        self.optimisables = self.cfg.getliteral(cfgsect, 'optimisables')
         self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 1)
 
         self.comm, self.rank, self.root = get_comm_rank_root()
@@ -136,10 +137,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             t1 =  pd.DataFrame({
                 'test-candidate': [self._preprocess_candidate(
-                                    intg.pseudointegrator.csteps, 
-                                    intg.pseudointegrator.pintg.Δτᴹ,
-                                    intg.pseudointegrator.dtauf,
-                                    )], # Try to create a dictionary of functions
+                                    *self.candidate_from_intg(intg))],
                 'test-m': [intg.opt_cost_mean], 
                 'test-s': [intg.opt_cost_std],
                 })
@@ -644,37 +642,44 @@ class BayesianOptimisationPlugin(BasePlugin):
     def bounds_size(self):
         return np.prod((self._bnds[1,:]-self._bnds[0,:]).detach().cpu().numpy())
         
+    def candidate_from_intg(self, intg):
+        unprocessed = []
+        for optimisable in self.optimisables:
+            match optimisable:
+                case 'csteps':
+                    unprocessed.append(intg.pseudointegrator.csteps)
+                case 'pseudo-dt-max':
+                    unprocessed.append(intg.pseudointegrator.pintg.Δτᴹ)
+                case 'pseudo-dt-fact':
+                    unprocessed.append(intg.pseudointegrator.dtauf)
+                case _:
+                    raise ValueError(f"Unrecognised optimisable: {optimisable}")
+        return unprocessed
+
     def _preprocess_candidate(self, *args):
         '''
-            Processing shall be done ONLY for:
-                V-cycles
-                Starting smoothing iteration 1
-                Restriction iterations same
-                Prolongation iterations same
-                pseudo_dtau_max_f
+            Processing must start with V-cycle
         '''
 
         csteps = args[0]
         self.depth = (len(csteps)-1)//2 -1
-
-        if len(args) == 1:
-            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1]
-        else:
-            return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], *args[1:]
+        return csteps[1], csteps[self.depth+1], csteps[-2], csteps[-1], *args[1:]
 
     def _postprocess_ccandidate(self, ccandidate):
+        post_processed = {}
 
-        if len(ccandidate) == 6:
-            return {'csteps': self._postprocess_ccsteps(ccandidate[:-2]),
-                    'dtau-max': ccandidate[-2], 
-                    'dtau-fact': ccandidate[-1], }
+        for optimisable in self.optimisables:
+            match optimisable:
+                case 'csteps':
+                    post_processed['csteps'] = self._postprocess_ccsteps(ccandidate[:4])
+                case 'pseudo-dt-max':
+                    post_processed['pseudo-dt-max'] = ccandidate[4]
+                case 'pseudo-dt-fact':
+                    post_processed['pseudo-dt-fact'] = ccandidate[5]
+                case _:
+                    raise ValueError(f"Unrecognised optimisable {optimisable}")
 
-        if len(ccandidate) == 5:
-            return {'csteps': self._postprocess_ccsteps(ccandidate[:-1]),
-                    'dtau-max': ccandidate[-1],}
-
-        if len(ccandidate) == 4:
-            return {'csteps': self._postprocess_ccsteps(ccandidate[:-2]),}
+        return post_processed
 
     def _postprocess_ccsteps(self, ccsteps):
         return (*((ccsteps[0],)*(self.depth+1)), ccsteps[1], 

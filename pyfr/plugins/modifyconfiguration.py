@@ -58,14 +58,14 @@ class ModifyConfigPlugin(BasePlugin):
                 if intg.candidate.get('csteps'):
                     intg.pseudointegrator.csteps = intg.candidate.get('csteps')
 
-                if intg.candidate.get('dtau-max'):
-                    intg.pseudointegrator.pintg.Δτᴹ = intg.candidate.get('dtau-max')
+                if intg.candidate.get('pseudo-dt-max'):
+                    intg.pseudointegrator.pintg.Δτᴹ = intg.candidate.get('pseudo-dt-max')
 
-                if intg.candidate.get('dtau-fact'):
-                    intg.pseudointegrator.dtauf = intg.candidate.get('dtau-fact')
+                if intg.candidate.get('pseudo-dt-fact'):
+                    intg.pseudointegrator.dtauf = intg.candidate.get('pseudo-dt-fact')
 
-                if intg.candidate.get('dtau-facts'):
-                    intg.pseudointegrator.dtaufs = intg.candidate.get('dtau-facts')
+                if intg.candidate.get('pseudo-dt-facts'):
+                    intg.pseudointegrator.dtaufs = intg.candidate.get('pseudo-dt-facts')
 
                 intg.candidate = {}
 
