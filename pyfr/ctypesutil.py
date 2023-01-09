@@ -8,6 +8,7 @@ class LibWrapper:
     _libname = None
     _statuses = None
     _functions = None
+    _errtype = ctypes.c_int
     _mode = ctypes.DEFAULT_MODE
 
     def __init__(self):
@@ -18,7 +19,7 @@ class LibWrapper:
             fn.restype = fret
             fn.argtypes = fargs
 
-            if fret == ctypes.c_int:
+            if fret == self._errtype:
                 fn.errcheck = self._errcheck
 
             setattr(self, self._transname(fname), fn)

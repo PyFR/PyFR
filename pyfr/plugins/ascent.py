@@ -1,5 +1,5 @@
 from collections import defaultdict
-from ctypes import c_char_p, c_double, c_longlong, c_void_p, RTLD_GLOBAL
+from ctypes import c_char_p, c_double, c_int, c_int64, c_void_p, RTLD_GLOBAL
 import re
 
 import numpy as np
@@ -19,32 +19,41 @@ class ConduitError(Exception): pass
 
 class ConduitWrappers(LibWrapper):
     _libname = 'conduit'
+    _errtype = c_void_p
     _mode = RTLD_GLOBAL
 
     # Functions
     _functions = [
+        (c_int, 'conduit_datatype_sizeof_index_t'),
         (c_void_p, 'conduit_node_append', c_void_p),
         (c_void_p, 'conduit_node_create', c_void_p),
         (None, 'conduit_node_destroy', c_void_p),
-        (c_void_p, 'conduit_node_fetch', c_void_p, c_char_p),
-        (c_void_p, 'conduit_node_set_path_char8_str', c_void_p, c_char_p,
+        (None, 'conduit_node_set_path_char8_str', c_void_p, c_char_p,
          c_char_p),
-        (c_void_p, 'conduit_node_set_path_float32_ptr', c_void_p, c_char_p,
-         c_void_p, c_longlong),
-        (c_void_p, 'conduit_node_set_path_float64', c_void_p, c_char_p,
+        (None, 'conduit_node_set_path_float32_ptr', c_void_p, c_char_p,
+         c_void_p, c_int64),
+        (None, 'conduit_node_set_path_float64', c_void_p, c_char_p,
          c_double),
-        (c_void_p, 'conduit_node_set_path_float64_ptr', c_void_p, c_char_p,
-         c_void_p, c_longlong),
-        (c_void_p, 'conduit_node_set_path_int64', c_void_p, c_char_p,
-         c_longlong),
-        (c_void_p, 'conduit_node_set_path_int64_ptr', c_void_p, c_char_p,
-         c_void_p, c_longlong),
-        (c_void_p, 'conduit_node_set_path_node', c_void_p, c_char_p, c_void_p)
+        (None, 'conduit_node_set_path_float64_ptr', c_void_p, c_char_p,
+         c_void_p, c_int64),
+        (None, 'conduit_node_set_path_int64', c_void_p, c_char_p, c_int64),
+        (None, 'conduit_node_set_path_int64_ptr', c_void_p, c_char_p,
+         c_void_p, c_int64),
+        (None, 'conduit_node_set_path_node', c_void_p, c_char_p, c_void_p)
     ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.conduit_datatype_sizeof_index_t() != 8:
+            raise RuntimeError('Conduit must be compiled with 64-bit index '
+                               'types')
 
     def _errcheck(self, status, fn, args):
         if not status:
             raise ConduitError
+
+        return status
 
 
 class ConduitNode:
