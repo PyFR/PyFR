@@ -12,11 +12,15 @@ Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
 class BasePartitioner:
-    def __init__(self, partwts, elewts, nsubeles=64, opts={}):
+    def __init__(self, partwts, elewts=None, nsubeles=64, opts={}):
         self.partwts = partwts
         self.elewts = elewts
         self.nparts = len(partwts)
         self.nsubeles = nsubeles
+
+        if elewts is None and not self.has_multiple_constraints:
+            raise ValueError(f'Partitioner {self.name} does not support '
+                             'balanced partitioning')
 
         # Parse the options list
         self.opts = {}
@@ -99,6 +103,19 @@ class BasePartitioner:
 
         return newmesh, rnum
 
+    def _get_elewts(self, mesh):
+        # If we have an element weighting table then use it
+        if self.elewts is not None:
+            return self.elewts
+        # Else, use multiple constraints for a balanced partitioning
+        else:
+            etypes = []
+            for f in mesh:
+                if isinstance(f, str) and f.startswith('spt'):
+                    etypes.append(f.split('_')[1])
+
+            return dict(zip(etypes, np.eye(len(etypes), dtype=int)))
+
     def _combine_soln_parts(self, soln, prefix):
         newsoln = defaultdict(list)
 
@@ -107,7 +124,7 @@ class BasePartitioner:
 
         return {k: np.dstack(v) for k, v in newsoln.items()}
 
-    def _construct_graph(self, con, exwts={}):
+    def _construct_graph(self, con, elewts, exwts={}):
         # Edges of the dual graph
         con = con[['f0', 'f1']]
         con = np.hstack([con, con[::-1]])
@@ -132,14 +149,15 @@ class BasePartitioner:
         ewts = np.ones_like(etab)
 
         # Prepare the vertex weights
-        vwts = np.array([exwts.get(ti, self.elewts[ti[0]]) for ti in vetimap])
+        vwts = np.array([exwts.get(ti, elewts[ti[0]]) for ti in vetimap])
+        vwts = vwts.reshape(len(vwts), -1)
 
         return Graph(vtab, etab, vwts, ewts), vetimap
 
     def _partition_graph(self, graph, partwts):
         pass
 
-    def _group_periodic_eles(self, mesh):
+    def _group_periodic_eles(self, mesh, elewts):
         con = mesh['con_p0'][['f0', 'f1']]
         pmerge, pnames = {}, {}
 
@@ -176,9 +194,9 @@ class BasePartitioner:
                     con[1, i] = pmerge[r]
 
         # Tally up the weights for the merged elements
-        exwts = {(t, i): self.elewts[t] for t, i in set(pmerge.values())}
+        exwts = {(t, i): elewts[t] for t, i in set(pmerge.values())}
         for (lt, li), r in pmerge.items():
-            exwts[r] += self.elewts[lt]
+            exwts[r] += elewts[lt]
 
         return con, exwts, pmerge, pnames
 
@@ -200,6 +218,7 @@ class BasePartitioner:
 
     def _renumber_verts(self, mesh, vetimap, vparts):
         pscon = [[] for i in range(self.nparts)]
+        elewts = defaultdict(lambda: 1)
         vpartmap, bndeti = dict(zip(vetimap, vparts)), set()
 
         # Construct per-partition connectivity arrays and tag elements
@@ -219,7 +238,7 @@ class BasePartitioner:
         for part, scon in enumerate(pscon):
             # Construct a graph for this partition
             scon = np.array(scon, dtype='U4,i4').T
-            sgraph, svetimap = self._construct_graph(scon)
+            sgraph, svetimap = self._construct_graph(scon, elewts)
 
             # Determine the number of sub-partitions
             nsp = len(svetimap) // self.nsubeles + 1
@@ -350,11 +369,14 @@ class BasePartitioner:
         # Combine any pre-existing partitions
         mesh, rnum = self._combine_mesh_parts(mesh)
 
+        # Obtain the element weighting table
+        elewts = self._get_elewts(mesh)
+
         # Merge periodic elements
-        con, exwts, pmerge, pnames = self._group_periodic_eles(mesh)
+        con, exwts, pmerge, pnames = self._group_periodic_eles(mesh, elewts)
 
         # Obtain the dual graph for this mesh
-        graph, vetimap = self._construct_graph(con, exwts=exwts)
+        graph, vetimap = self._construct_graph(con, elewts, exwts=exwts)
 
         # Partition the graph
         if self.nparts > 1:

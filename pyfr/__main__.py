@@ -58,7 +58,7 @@ def main():
                               help='output renumbering file')
     ap_partition.add_argument('-e', dest='elewts', action='append',
                               default=[], metavar='shape:weight',
-                              help='element weighting factor')
+                              help='element weighting factor or "balanced"')
     ap_partition.add_argument('--popt', dest='popts', action='append',
                               default=[], metavar='key:value',
                               help='partitioner-specific option')
@@ -145,7 +145,9 @@ def process_partition(args):
         pwts = [1]*int(args.np)
 
     # Element weights
-    if args.elewts:
+    if args.elewts == ['balanced']:
+        ewts = None
+    elif args.elewts:
         ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
     else:
         ewts = {'quad': 6, 'tri': 3, 'tet': 3, 'hex': 18, 'pri': 10, 'pyr': 6}
