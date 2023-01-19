@@ -139,4 +139,4 @@ class RegionMixin:
             darr = np.unique(eidxs).astype(np.int32)
 
             self._ele_regions.append((doff, etype, darr))
-            self._ele_region_data[f'{etype}_idxs'] = darr
+            self._ele_region_data[f'idxs_{etype}'] = darr

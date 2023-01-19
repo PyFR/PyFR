@@ -636,9 +636,9 @@ class VTKWriter(BaseWriter):
 
         # Handle the case of partial solution files
         if soln.shape[2] != mesh.shape[1]:
-            skpre, skpost = sk.rsplit('_', 1)
+            skpre, skele, skpart = sk.rsplit('_', 2)
 
-            mesh = mesh[:, self.soln[f'{skpre}_idxs_{skpost}'], :]
+            mesh = mesh[:, self.soln[f'{skpre}_idxs_{skele}_{skpart}'], :]
 
         # Dimensions
         nspts, neles = mesh.shape[:2]
