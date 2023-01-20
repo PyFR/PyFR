@@ -15,6 +15,12 @@ class FluidIntIntersMixin:
                 entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
             )
 
+            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p_min',
+                                           1e-6)
+        else:
+            self.p_min = self.cfg.getfloat('solver-interfaces', 'p_min',
+                                           5*self._be.fpdtype_eps)
+
 
 class FluidMPIIntersMixin:
     def __init__(self, *args, **kwargs):
@@ -37,7 +43,7 @@ class EulerIntInters(FluidIntIntersMixin, BaseAdvectionIntInters):
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self.c)
+                       c=self.c, p_min=self.p_min)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
@@ -53,7 +59,7 @@ class EulerMPIInters(FluidMPIIntersMixin, BaseAdvectionMPIInters):
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self.c)
+                       c=self.c, p_min=self.p_min)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs, dims=[self.ninterfpts],
@@ -69,7 +75,8 @@ class EulerBaseBCInters(BaseAdvectionBCInters):
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
-                       c=self.c, bctype=self.type, ninters=self.ninters)
+                       c=self.c, p_min=self.p_min, bctype=self.type,
+                       ninters=self.ninters)
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
