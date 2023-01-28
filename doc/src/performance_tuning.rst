@@ -127,11 +127,27 @@ considering mixed grids this relationship begins to break down since the
 computational cost of one element type can be appreciably more than that
 of another.
 
-Thus in order to obtain a good decomposition it is necessary to assign
-a weight to each type of element in the domain.  Element types which
-are more computationally intensive should be assigned a larger weight
-than those that are less intensive.  Unfortunately, the relative cost
-of different element types depends on a variety of factors, including:
+There are two main solutions to this problem.  The first is to require
+that each partition contain the same number of elements of each type.
+For example, if partitioning a mesh with 500 quadrilaterals and
+1,500 triangles into two parts, then a sensible goal is to aim for
+each domain to have 250 quadrilaterals and 750 triangles.  Irrespective
+of what the relative performance differential between the element types
+is, both partitions will have near identical amounts of work.  In PyFR
+this is known as the *balanced* approach and can be requested via::
+
+    pyfr partition -e balanced ...
+
+This approach typically works well when the number of partitions is
+small.  However, for larger partition counts it can become difficult to
+achieve such a balance whilst simultaneously minimising communication
+volume.  Thus, in order to obtain a good decomposition a secondary
+approach is required in which each type of element in the domain is
+assigned a *weight*.  Element types which are more computationally
+intensive are assigned a larger weight than those that are less
+intensive.  Through this mechanism the total cost of each partition can
+remain balanced.  Unfortunately, the relative cost of different element
+types depends on a variety of factors, including:
 
  - The polynomial order.
  - If anti-aliasing is enabled in the simulation, and if so, to what
