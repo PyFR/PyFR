@@ -124,7 +124,6 @@ class AscentPlugin(RegionMixin, BasePlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        comm, rank, root = get_comm_rank_root()
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # Get datatype
@@ -169,7 +168,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
             self._build_blueprint(intg, ele, divisors)
 
         # Initalise ascent and the open an instance
-        self._init_ascent(comm)
+        self._init_ascent()
 
     def __del__(self):
         if getattr(self, 'ascent_ptr', None):
@@ -188,7 +187,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
         nsvpts = len(svpts)
 
         soln_op = shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
-        self._ele_regions_lin.append((idx, ename, rgn, soln_op))
+        self._ele_regions_lin.append((d_str, idx, rgn, soln_op))
 
         mesh_n[f'{d_str}/state/domain_id'] = intg.rallocs.prank
         mesh_n[f'{d_str}/coordsets/coords/type'] = 'explicit'
@@ -219,10 +218,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
             grad_soln = intg.grad_soln
 
         # Iterate over each element type in our region
-        for idx, ename, rgn, soln_op in self._ele_regions_lin:
-            # Domain partition name
-            d_str = f'domain_{intg.rallocs.prank}_{ename}'
-
+        for d_str, idx, rgn, soln_op in self._ele_regions_lin:
             # Subset and transpose the solution
             soln = intg.soln[idx][..., rgn].swapaxes(0, 1)
 
@@ -259,7 +255,9 @@ class AscentPlugin(RegionMixin, BasePlugin):
                 else:
                     self.mesh_n[f'{d_str}/{path}'] = fun.T
 
-    def _init_ascent(self, comm):
+    def _init_ascent(self):
+        comm, rank, root = get_comm_rank_root()
+
         self.lib = lib = AscentWrappers()
         self.ascent_ptr = lib.ascent_create(None)
 
@@ -369,7 +367,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
 
     def __call__(self, intg):
         if intg.nacptsteps % self.nsteps == 0:
-            comm, rank, _ = get_comm_rank_root()
+            comm, rank, root = get_comm_rank_root()
 
             # Set file names
             for path, gen in self._image_paths:
