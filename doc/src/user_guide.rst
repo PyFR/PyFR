@@ -1528,7 +1528,6 @@ Example::
     fun-avg-upup = uu - u*u
     fun-avg-vpvp = vv - v*v
     fun-avg-upvp = uv - u*v
-    fun-avg-urms = sqrt(uu - u*u + vv - v*v)
 
 .. _integrate-plugin:
 
