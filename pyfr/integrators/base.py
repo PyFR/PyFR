@@ -56,6 +56,13 @@ class BaseIntegrator:
         # Record the starting wall clock time
         self._wstart = time.time()
 
+        # Rewind computation
+        self.save = None
+        self.rewind = None
+        self.opt_type = None
+        self.reset_opt_stats = None
+        self.bad_sim = None
+
         # Abort computation
         self.abort = False
 
@@ -141,7 +148,6 @@ class BaseIntegrator:
                 for j, k in enumerate(['mean', 'stdev', 'median']):
                     stats.set('backend-wait-times', f'rhs-graph-{i}-{k}',
                               ','.join(f'{v[j]:.3g}' for v in ms))
-
     @property
     def cfgmeta(self):
         cfg = self.cfg.tostr()
@@ -163,6 +169,32 @@ class BaseIntegrator:
             # are called only once if stopping the computation
             sys.exit(1)
 
+    def save_soln(self):
+        if self.save is True:
+            self._saved_soln = self.soln
+        else:
+            raise Exception('save is not set to true.')
+
+    @property
+    def saved_soln(self):
+        return self._saved_soln
+
+    @saved_soln.setter
+    def saved_soln(self, y):
+        self._saved_soln = y
+
+    def rewind_soln(self):
+        if self.saved_soln and self.rewind:
+            if self.cfg.get('solver-time-integrator', 'formulation') == 'dual':
+                self.system.ele_scal_upts_set(self.pseudointegrator._stepper_regidx, self.saved_soln)
+                self.system.ele_scal_upts_set(self.pseudointegrator._stage_regidx, self.saved_soln)
+                self.system.ele_scal_upts_set([self.pseudointegrator._source_regidx], self.saved_soln)
+                self.system.ele_scal_upts_set(self.pseudointegrator._pseudo_stepper_regidx, self.saved_soln)
+            else:
+                self.system.ele_scal_upts_set(self._idxcurr, self.saved_soln)
+                raise Exception('Rewind is only implemented for dual scheme.')
+        else:
+            raise Exception('No saved solution to load, or rewind is not set to True.')
 
 class BaseCommon:
     def _get_gndofs(self):
