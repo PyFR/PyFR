@@ -30,7 +30,7 @@ below to setup the OpenMP backend on macOS:
 
 3. Download and install libxsmm and set the library path::
 
-        git clone git@github.com:libxsmm/libxsmm.git
+        git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
@@ -68,7 +68,7 @@ Follow the steps below to setup the OpenMP backend on Ubuntu:
 
 3. Download and install libxsmm and set the library path::
 
-        git clone git@github.com:libxsmm/libxsmm.git
+        git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
