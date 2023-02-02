@@ -58,7 +58,7 @@ def main():
                               help='output renumbering file')
     ap_partition.add_argument('-e', dest='elewts', action='append',
                               default=[], metavar='shape:weight',
-                              help='element weighting factor')
+                              help='element weighting factor or "balanced"')
     ap_partition.add_argument('--popt', dest='popts', action='append',
                               default=[], metavar='key:value',
                               help='partitioner-specific option')
@@ -73,6 +73,10 @@ def main():
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
                            help='output file type; this is usually inferred '
                            'from the extension of outf')
+    ap_export.add_argument('-f', '--field', dest='fields', action='append',
+                           metavar='FIELD', required=False, help='what fields '
+                           'should be output; may be repeated, by default all '
+                           'fields are output')
     output_options = ap_export.add_mutually_exclusive_group(required=False)
     output_options.add_argument('-d', '--divisor', type=int,
                                 help='sets the level to which high order '
@@ -145,7 +149,9 @@ def process_partition(args):
         pwts = [1]*int(args.np)
 
     # Element weights
-    if args.elewts:
+    if args.elewts == ['balanced']:
+        ewts = None
+    elif args.elewts:
         ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
     else:
         ewts = {'quad': 6, 'tri': 3, 'tet': 3, 'hex': 18, 'pri': 10, 'pyr': 6}

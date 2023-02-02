@@ -391,6 +391,14 @@ class VTKWriter(BaseWriter):
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
             self.tcurr = None
 
+        # Handle field subsetting
+        if args.fields:
+            self._vtk_vars = [(f, v) for f, v in self._vtk_vars
+                              if f in args.fields]
+
+            if len(self._vtk_vars) != len(args.fields):
+                raise RuntimeError('Invalid field specification')
+
     def _pre_proc_fields_soln(self, soln):
         # Convert from conservative to primitive variables
         return np.array(self.elementscls.con_to_pri(soln, self.cfg))
@@ -399,13 +407,11 @@ class VTKWriter(BaseWriter):
         return soln
 
     def _post_proc_fields_soln(self, vsoln):
-        # Primitive and visualisation variable maps
         privarmap = self.elementscls.privarmap[self.ndims]
-        visvarmap = self.elementscls.visvarmap[self.ndims]
 
         # Prepare the fields
         fields = []
-        for fnames, vnames in visvarmap:
+        for fnames, vnames in self._vtk_vars:
             ix = [privarmap.index(vn) for vn in vnames]
 
             fields.append(vsoln[ix])

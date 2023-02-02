@@ -115,6 +115,7 @@ class METISWrappers:
 
 class METISPartitioner(BasePartitioner):
     name = 'metis'
+    has_multiple_constraints = True
 
     # Integer options
     int_opts = {'niter', 'ncuts', 'seed', 'nseps', 'ufactor'}
@@ -145,10 +146,13 @@ class METISPartitioner(BasePartitioner):
         etab = np.asanyarray(graph.etab, dtype=w.metis_int_np)
         vwts = np.asanyarray(graph.vwts, dtype=w.metis_int_np)
         ewts = np.asanyarray(graph.ewts, dtype=w.metis_int_np)
-        partwts = np.array(partwts, dtype=w.metis_flt_np)
 
-        # Normalise the weights
+        # Prepare the partition weights
+        partwts = np.array(partwts, dtype=w.metis_flt_np)
         partwts /= np.sum(partwts)
+
+        # Account for multiple partitioning constraints
+        partwts = np.repeat(partwts[:, None], vwts.shape[1], axis=1)
 
         # Allocate the partition array
         parts = np.empty(len(vtab) - 1, dtype=w.metis_int_np)
@@ -168,7 +172,7 @@ class METISPartitioner(BasePartitioner):
             part_graph_fn = w.METIS_PartGraphKway
 
         # Integer parameters
-        nvert, nconst = w.metis_int(len(vtab) - 1), w.metis_int(1)
+        nvert, nconst = w.metis_int(len(vtab) - 1), w.metis_int(vwts.shape[1])
         npart, objval = w.metis_int(len(partwts)), w.metis_int()
 
         # Partition

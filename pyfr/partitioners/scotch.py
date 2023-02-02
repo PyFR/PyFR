@@ -71,6 +71,7 @@ class SCOTCHWrappers(LibWrapper):
 
 class SCOTCHPartitioner(BasePartitioner):
     name = 'scotch'
+    has_multiple_constraints = False
 
     # Interger options
     int_opts = {'ufactor'}

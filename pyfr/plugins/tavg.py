@@ -228,6 +228,104 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             if self.tstart_acc != self.prevt:
                 v += (Wmp1mpn / Wp)*(a - W1mpn*ppc)**2
 
+    def _prepare_meta(self, intg, std_max, std_sum):
+        comm, rank, root = get_comm_rank_root()
+
+        stats = Inifile()
+        stats.set('data', 'prefix', 'tavg')
+        stats.set('data', 'fields', ','.join(self.outfields))
+        stats.set('tavg', 'cfg-section', self.cfgsect)
+        stats.set('tavg', 'range', f'[({self.tstart_acc}, {intg.tcurr})]')
+
+        intg.collect_stats(stats)
+
+        # Reduce our standard deviations across ranks
+        if rank != root:
+            comm.Reduce(std_max, None, op=mpi.MAX, root=root)
+            comm.Reduce(std_sum, None, op=mpi.SUM, root=root)
+
+            return None
+        else:
+            std_max, std_sum = std_max.copy(), std_sum.copy()
+            std_max_it, std_sum_it = iter(std_max), iter(std_sum)
+
+            comm.Reduce(mpi.IN_PLACE, std_max, op=mpi.MAX, root=root)
+            comm.Reduce(mpi.IN_PLACE, std_sum, op=mpi.SUM, root=root)
+
+            # Write standard deviation stats
+            for an, vm, vs in zip(self.anames, std_max_it, std_sum_it):
+                stats.set('tavg', f'max-std-{an}', vm)
+                stats.set('tavg', f'avg-std-{an}', vs / self.tpts)
+
+            # Followed by functional standard deviation stats
+            for fn, fm, fs in zip(self.fnames, std_max_it, std_sum_it):
+                stats.set('tavg', f'max-std-fun-{fn}', fm)
+                stats.set('tavg', f'avg-std-fun-{fn}', fs / self.tpts)
+
+            return dict(intg.cfgmeta, stats=stats.tostr(),
+                        mesh_uuid=intg.mesh_uuid)
+
+    def _write_avg(self, intg):
+        accex, vaccex = self.accex, self.vaccex
+        nacc, nfun = len(self.anames), len(self.fnames)
+        tavg = []
+
+        # Maximum and sum of standard deviations
+        std_max, std_sum = np.zeros((2, nacc + nfun))
+        std_max_a, std_sum_a = std_max[:nacc], std_sum[:nacc]
+        std_max_f, std_sum_f = std_max[nacc:], std_sum[nacc:]
+
+        wts = 2*(intg.tcurr - self.tstart_acc)
+
+        # Normalise the accumulated expressions
+        tavg.append([a / wts for a in accex])
+
+        # Calculate their standard deviations
+        dev = [np.sqrt(np.abs(v / wts)) for v in vaccex]
+
+        # Reduce these deviations across each element type
+        for dx in dev:
+            np.maximum(np.amax(dx, axis=(1, 2)), std_max_a,
+                        out=std_max_a)
+            std_sum_a += dx.sum(axis=(1, 2))
+
+        # Handle any functional expressions
+        if self.fexprs:
+            # Evaluate functional expressions and standard deviations
+            funex, fdev = self._eval_fun_var(dev, tavg[-1])
+
+            # Add in functional expressions
+            tavg.append(funex)
+
+            # Reduce these deviations across each element type
+            for fx in fdev:
+                np.maximum(np.amax(fx, axis=(1, 2)), std_max_f,
+                            out=std_max_f)
+                std_sum_f += fx.sum(axis=(1, 2))
+
+        # Add in standard deviations
+        if self.std_mode == 'all':
+            tavg.append(dev)
+
+            # Add in functional expression deviations
+            if self.fexprs:
+                tavg.append(fdev)
+
+        # Form the output records to be written to disk
+        data = dict(self._ele_region_data)
+
+        # Stack together expressions by element type
+        tavg = [np.vstack(list(avgs)) for avgs in zip(*tavg)]
+
+        for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
+            data[etype] = d.swapaxes(0, 1).astype(self.fpdtype)
+
+        # Prepare the metadata
+        metadata = self._prepare_meta(intg, std_max, std_sum)
+
+        # Write to disk and return the file name
+        return self._writer.write(data, intg.tcurr, metadata)
+
     def rewind(self, intg):
         if intg.reset_opt_stats:
             if (intg.opt_type == 'online'):
@@ -278,6 +376,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             self.rewind(intg)
 
             if dowrite:
+                # Write the file out to disk
+                solnfname = self._write_avg(intg)
                 comm, rank, root = get_comm_rank_root()
 
                 accex, vaccex = self.accex, self.vaccex
@@ -376,7 +476,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                 solnfname = self._writer.write(data, intg.tcurr, metadata)
 
                 # If a post-action has been registered then invoke it
-                self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
+                self._invoke_postaction(intg, mesh=intg.system.mesh.fname,
                                         soln=solnfname, t=intg.tcurr)
 
                 # Reset the accumulators

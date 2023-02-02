@@ -21,7 +21,7 @@ def npdtype_to_ctype(context, dtype):
     return nputil.npdtype_to_ctype(dtype)
 
 
-def dot(context, a_, b_=None, **kwargs):
+def dot(context, a_, b_=None, /, **kwargs):
     ix, nd = next(iter(kwargs.items()))
     ab = '({})*({})'.format(a_, b_ or a_)
 
@@ -114,14 +114,21 @@ def macro(context, name, params, externs=''):
     return ''
 
 
-def expand(context, name, *params):
+def expand(context, name, /, *args, **kwargs):
     # Get the macro parameter list and the body
     mparams, mexterns, body = context['_macros'][name]
 
-    # Validate the parameters
-    if len(mparams) != len(params):
-        raise ValueError('Inconsistent macro parameter list in {0} {1}, {2}'
-                         .format(name, list(mparams), list(params)))
+    # Parse the parameter list
+    params = dict(zip(mparams, args))
+    for k, v in kwargs.items():
+        if k in params:
+            raise ValueError(f'Duplicate macro parameter {k} in {name}')
+
+        params[k] = v
+
+    # Ensure all parameters have been passed
+    if sorted(mparams) != sorted(params):
+        raise ValueError(f'Inconsistent macro parameter list in {name}')
 
     # Ensure all (used) external parameters have been passed to the kernel
     for extrn in mexterns:
@@ -130,8 +137,8 @@ def expand(context, name, *params):
             raise ValueError(f'Missing external {extrn} in {name}')
 
     # Rename local parameters
-    for name, subst in zip(mparams, params):
-        body = re.sub(rf'\b{name}\b', subst, body)
+    for lname, subst in params.items():
+        body = re.sub(rf'\b{lname}\b', str(subst), body)
 
     return f'{{\n{body}\n}}'
 
