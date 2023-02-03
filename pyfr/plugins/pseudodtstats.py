@@ -182,6 +182,12 @@ class PseudodtStatsPlugin(BasePlugin):
         elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l2':
             intg.Δτ_stats['res']['all'] = sum([intg.Δτ_stats['res'][var]['all'] 
                                            for var in self.fvars])
+        elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l4':
+            intg.Δτ_stats['res']['all'] = sum([intg.Δτ_stats['res'][var]['all'] 
+                                           for var in self.fvars])
+        elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l8':
+            intg.Δτ_stats['res']['all'] = sum([intg.Δτ_stats['res'][var]['all'] 
+                                           for var in self.fvars])
         else:
             raise ValueError('Unknown time integrator ')
 
