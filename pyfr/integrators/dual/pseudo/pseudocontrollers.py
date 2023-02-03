@@ -47,6 +47,22 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
             # Normalise and return
             return tuple(np.sqrt(res / self._gndofs))
+        # Pseudo L4 norm
+        elif self._pseudo_norm == 'l4':
+            # Reduce locally (element types) and globally (MPI ranks)
+            res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
+            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
+
+            # Normalise and return
+            return tuple( np.sqrt(np.sqrt(res / self._gndofs)))
+        # Pseudo L4 norm
+        elif self._pseudo_norm == 'l8':
+            # Reduce locally (element types) and globally (MPI ranks)
+            res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
+            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
+
+            # Normalise and return
+            return tuple( np.sqrt(np.sqrt(np.sqrt(res / self._gndofs))))
         # Uniform norm
         else:
             # Reduce locally (element types) and globally (MPI ranks)
@@ -86,7 +102,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')
-        if self._norm not in {'l2', 'uniform'}:
+        if self._norm not in {'l2', 'l4', 'l8', 'uniform'}:
             raise ValueError('Invalid error norm')
 
         tplargs = {'nvars': self.system.nvars}
