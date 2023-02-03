@@ -21,7 +21,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         last_n = self.cfg.getint(cfgostat, 'capture-last-n', 40)
 
         self.optimisables = self.cfg.getliteral(cfgsect, 'optimisables')
-        self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 1)
+        self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 2)
 
         self.comm, self.rank, self.root = get_comm_rank_root()
 
@@ -84,9 +84,16 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             # Stress test with gpu too, compare timings
             be = self.cfg.get(cfgsect, 'botorch-backend', 'cpu')
+            pr = self.cfg.get(cfgsect, 'botorch-precision', 'double')
 
-            self.torch_kwargs = {'dtype': torch.float64,
-                                'device': torch.device(be)}
+            if pr == 'double':
+                self.torch_kwargs = {'dtype': torch.float64,
+                                    'device': torch.device(be)}
+            elif pr == 'single':
+                self.torch_kwargs = {'dtype': torch.float32,
+                                    'device': torch.device(be)}
+            else:
+                raise ValueError('Not a valid dtype')                                    
 
             bnds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
             hard_bnds = list(zip(*self.cfg.getliteral(cfgsect, 'hard-bounds')))
