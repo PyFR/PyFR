@@ -69,7 +69,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
                 residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol'))
 
         self._pseudo_norm = cfg.get(sect, 'pseudo-resid-norm', 'l2')
-        if self._pseudo_norm not in {'l2', 'uniform'}:
+        if self._pseudo_norm not in {'l2', 'l4', 'l8', 'uniform'}:
             raise ValueError('Invalid pseudo-residual norm')
 
         # Pointwise kernels for the pseudo-integrator
