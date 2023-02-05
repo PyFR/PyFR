@@ -184,7 +184,7 @@ Compressible Supersonic Navier--Stokes Equations
 2D Viscous Shock Tube
 ---------------------
 
-Proceed with the following steps to run a serial 2D viscous shock Tube
+Proceed with the following steps to run a serial 2D viscous shock tube
 simulation on a structured mesh:
 
 1. Navigate to the ``PyFR-Test-Cases/2d-viscous-shock-tube`` directory::
@@ -218,4 +218,4 @@ simulation on a structured mesh:
    :alt: shock tube
    :align: center
 
-   Colour map of density gradient magnitude distribution at 1 time unit.
+   Colour map of density distribution at 1 time unit.
