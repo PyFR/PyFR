@@ -1,5 +1,3 @@
-import math
-
 from pyfr.integrators.base import BaseIntegrator
 from pyfr.integrators.dual.pseudo import get_pseudo_integrator
 
@@ -48,14 +46,6 @@ class BaseDualIntegrator(BaseIntegrator):
             self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
 
         return self._curr_grad_soln
-
-    def call_plugin_dt(self, dt):
-        rem = math.fmod(dt, self._dt)
-        tol = 5.0*self.dtmin
-        if rem > tol and (self._dt - rem) > tol:
-            raise ValueError('Plugin call times must be multiples of dt')
-
-        super().call_plugin_dt(dt)
 
     def collect_stats(self, stats):
         super().collect_stats(stats)

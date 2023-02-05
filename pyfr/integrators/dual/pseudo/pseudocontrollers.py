@@ -59,6 +59,13 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def _update_pseudostepinfo(self, niters, resid):
         self.pseudostepinfo.append((self.ntotiters, niters, resid))
 
+    @property
+    def dt(self):
+        return self._dt
+
+    @dt.setter
+    def dt(self, y):
+        self._dt = y
 
 class DualNonePseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'none'
