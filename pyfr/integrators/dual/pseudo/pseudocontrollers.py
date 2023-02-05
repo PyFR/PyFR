@@ -65,6 +65,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
     @dt.setter
     def dt(self, y):
+        self.dtau_mats_multiplied(y/self._dt)
         self._dt = y
 
 class DualNonePseudoController(BaseDualPseudoController):
