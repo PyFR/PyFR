@@ -48,11 +48,16 @@ class DualNoneController(BaseDualController):
 
         while self.tcurr < t:
 
-            # TODO: In the next commit, set dt value here
-            dt = self._dt
-            
-            # Change dt in pseudo-integrator (and multi-p levels)
-            self.pseudointegrator.dt = dt
+            if self.tcurr + 2*self._dt < t < self.tcurr + 3*self._dt:
+                dt = 0.5*(t - self.tcurr)
+            elif self.tcurr + self._dt < t < self.tcurr + self._dt:
+                dt = t - self.tcurr
+            else:
+                dt = self._dt
+
+            if self.pseudointegrator.dt != dt:
+                # Change dt in pseudo-integrator (and multi-p levels)
+                self.pseudointegrator.dt = dt
 
             # Take the physical step
             self.step(self.tcurr, dt)
