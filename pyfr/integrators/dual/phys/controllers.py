@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
@@ -14,7 +16,7 @@ class BaseDualController(BaseDualIntegrator):
                 csh(self)
 
     def _accept_step(self, dt, idxcurr):
-        self.tcurr += self._dt
+        self.tcurr += dt
         self.nacptsteps += 1
         self.nacptchain += 1
 
@@ -50,13 +52,18 @@ class DualNoneController(BaseDualController):
 
             if self.tcurr + 2*self._dt < t < self.tcurr + 3*self._dt:
                 dt = 0.5*(t - self.tcurr)
-            elif self.tcurr + self._dt < t < self.tcurr + self._dt:
+            elif self.tcurr + self._dt < t < self.tcurr + 2*self._dt:
                 dt = t - self.tcurr
             else:
-                dt = self._dt
+                # dt = self._dt
+                # TEST CASE: Random dt around what is set in the config file
+                dt = self._dt #*  np.random.rand()
+                #dt = self._dt + 0.1*self._dt*(2*np.random.rand() - 1)
 
             if self.pseudointegrator.dt != dt:
                 # Change dt in pseudo-integrator (and multi-p levels)
+                
+                print("Changing dt from {} to {}".format(self.pseudointegrator.dt, dt))
                 self.pseudointegrator.dt = dt
 
             # Take the physical step
