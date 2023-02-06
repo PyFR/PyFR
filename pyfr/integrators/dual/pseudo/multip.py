@@ -289,6 +289,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         for l in self.levels:
             self.pintgs[l].dtau_mats_multiplied(y/self.pintg._dt)
 
+        if self.cfg.get('solver-time-integrator', 'pseudo-controller') == 'local-pi':        
+            self.pintg.dtau_limits_multiplied(y/self.pintg._dt)
+
         for l in self.levels:
             self.pintgs[l]._dt = y
 
