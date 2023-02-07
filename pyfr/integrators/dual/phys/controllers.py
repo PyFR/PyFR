@@ -15,6 +15,8 @@ class BaseDualController(BaseDualIntegrator):
             for csh in self.completed_step_handlers:
                 csh(self)
 
+        np.random.seed(0)   
+
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt
         self.nacptsteps += 1
@@ -55,15 +57,11 @@ class DualNoneController(BaseDualController):
             elif self.tcurr + self._dt < t < self.tcurr + 2*self._dt:
                 dt = t - self.tcurr
             else:
-                # dt = self._dt
-                # TEST CASE: Random dt around what is set in the config file
-                dt = self._dt #*  np.random.rand()
-                #dt = self._dt + 0.1*self._dt*(2*np.random.rand() - 1)
+                dt = self._dt
 
             if self.pseudointegrator.dt != dt:
                 # Change dt in pseudo-integrator (and multi-p levels)
                 
-                print("Changing dt from {} to {}".format(self.pseudointegrator.dt, dt))
                 self.pseudointegrator.dt = dt
 
             # Take the physical step
