@@ -50,9 +50,9 @@ class DualNoneController(BaseDualController):
 
         while self.tcurr < t:
 
-            if self.tcurr + 2*self._dt < t < self.tcurr + 3*self._dt:
+            if self.tcurr + self._dt < t < self.tcurr + 2*self._dt:
                 dt = 0.5*(t - self.tcurr)
-            elif self.tcurr + self._dt < t < self.tcurr + 2*self._dt:
+            elif self.tcurr < t < self.tcurr + self._dt:
                 dt = t - self.tcurr
             else:
                 dt = self._dt
