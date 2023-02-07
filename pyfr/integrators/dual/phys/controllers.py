@@ -15,8 +15,6 @@ class BaseDualController(BaseDualIntegrator):
             for csh in self.completed_step_handlers:
                 csh(self)
 
-        np.random.seed(0)   
-
     def _accept_step(self, dt, idxcurr):
         self.tcurr += dt
         self.nacptsteps += 1
