@@ -159,17 +159,17 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             for i in self.ele_scal_upts_locs:
                 for k in self.pintgkernels['localerrest', i]:
-                    k.bind(dtau_max = self._Δτᵁ)
+                    k.bind(dtau_max = self._dtau_max)
 
         self.backend.commit()
 
     @property
     def Δτᴹ(self):
-        return self._Δτᵁ
+        return self._dtau_max
 
     @Δτᴹ.setter
     def Δτᴹ(self, y):
-        self._Δτᵁ = y
+        self._dtau_max = y
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
                 k.bind(dtau_max = y)
