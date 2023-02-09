@@ -122,7 +122,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
         dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 10.0)
         
-        self._Δτᵁ = self._dtau * dtau_maxf
+        self._dtau_max = self._dtau * dtau_maxf
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
