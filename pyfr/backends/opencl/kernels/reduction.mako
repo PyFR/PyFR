@@ -32,10 +32,6 @@ reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
 
         % if norm == 'uniform':
             acc = max(r*r, acc);
-        % elif norm == 'l8':
-            acc += r*r*r*r*r*r*r*r;
-        % elif norm == 'l4':
-            acc += r*r*r*r;
         % else:
             acc += r*r;
         % endif

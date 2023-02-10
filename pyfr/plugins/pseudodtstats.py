@@ -89,7 +89,7 @@ class PseudodtStatsPlugin(BasePlugin):
             self.dtau_stats['n']['all'] = npiter-self.prev_npiter
 
             self.Δτ_statistics(intg, Δτ_mats)
-            self.residual_statistics(intg, resid)
+            #self.residual_statistics(intg, resid)
             self.last_appendable = (npiter, intg.tcurr, 
                                     *self.Δτ_stats_as_list(self.dtau_stats))
 
@@ -178,12 +178,6 @@ class PseudodtStatsPlugin(BasePlugin):
             self.dtau_stats['res']['all'] = max([self.dtau_stats['res'][var]['all'] 
                                            for var in self.fvars])
         elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l2':
-            self.dtau_stats['res']['all'] = sum([self.dtau_stats['res'][var]['all'] 
-                                           for var in self.fvars])
-        elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l4':
-            self.dtau_stats['res']['all'] = sum([self.dtau_stats['res'][var]['all'] 
-                                           for var in self.fvars])
-        elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l8':
             self.dtau_stats['res']['all'] = sum([self.dtau_stats['res'][var]['all'] 
                                            for var in self.fvars])
         else:

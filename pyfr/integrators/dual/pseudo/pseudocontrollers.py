@@ -27,25 +27,21 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
     def _resid_multiple(self, rcurr, rold, dt_fac):
 
-        if self._pseudo_norm in ('l2', 'l4', 'l8', 'uniform'):
+        if self._pseudo_norm in ('l2', 'uniform'):
             resid = self._resid(rcurr, rold, dt_fac, self._pseudo_norm)                
             return resid, all(r <= t for r, t in zip(resid, self._pseudo_residtol))
 
         elif self._pseudo_norm == 'all':
 
             resid_l2 = self._resid(rcurr, rold, dt_fac, 'l2')
-            resid_l4 = self._resid(rcurr, rold, dt_fac, 'l4')
-            resid_l8 = self._resid(rcurr, rold, dt_fac, 'l8')
             resid_li = self._resid(rcurr, rold, dt_fac, 'uniform')
 
             if_converged_l2 = all(r <= t for r, t in zip(resid_l2, self._pseudo_residtol_l2))
-            if_converged_l4 = all(r <= t for r, t in zip(resid_l4, self._pseudo_residtol_l4))
-            if_converged_l8 = all(r <= t for r, t in zip(resid_l8, self._pseudo_residtol_l8))
             if_converged_li = all(r <= t for r, t in zip(resid_li, self._pseudo_residtol_li))
 
-            if_converged = if_converged_l2 and if_converged_l4 and if_converged_l8 and if_converged_li
+            if_converged = if_converged_l2 and if_converged_li
 
-            return (*resid_l2, *resid_l4, *resid_l8, *resid_li), if_converged
+            return (*resid_l2, *resid_li), if_converged
 
         else:
             raise ValueError('Invalid pseudo-norm entered.')
@@ -73,21 +69,6 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
             # Normalise and return
             return tuple(np.sqrt(res / self._gndofs))
         # Pseudo L4 norm
-        elif pseudo_norm == 'l4':
-            # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
-            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
-
-            # Normalise and return
-            return tuple( np.sqrt(np.sqrt(res / self._gndofs)))
-        # Pseudo L4 norm
-        elif pseudo_norm == 'l8':
-            # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
-            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
-
-            # Normalise and return
-            return tuple( np.sqrt(np.sqrt(np.sqrt(res / self._gndofs))))
         # Uniform norm
         else:
             # Reduce locally (element types) and globally (MPI ranks)
@@ -127,7 +108,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')
-        if self._norm not in {'l2', 'l4', 'l8', 'uniform'}:
+        if self._norm not in {'l2', 'uniform'}:
             raise ValueError('Invalid error norm')
 
         tplargs = {'nvars': self.system.nvars}
@@ -150,11 +131,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['dtau_maxf'] = self.cfg.getfloat(sect, 'pseudo-dt-max-mult',
                                                  3.0)
 
-        tplargs['dtau_minf_p'] = self.cfg.getfloat(sect, 'pseudo-dt-min-mult-p',
-                                                 tplargs['dtau_minf'])
-        tplargs['dtau_maxf_p'] = self.cfg.getfloat(sect, 'pseudo-dt-max-mult-p',
-                                                 tplargs['dtau_maxf'])
-
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
@@ -164,9 +140,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         # Limits for the local pseudo-time-step size
         tplargs['dtau_min'] = tplargs['dtau_minf'] * self._dtau
         tplargs['dtau_max'] = tplargs['dtau_maxf'] * self._dtau
-
-        tplargs['dtau_min_p'] = tplargs['dtau_minf'] * self._dtau 
-        tplargs['dtau_max_p'] = tplargs['dtau_maxf'] * self._dtau 
 
         # Register a kernel to compute local error
         self.backend.pointwise.register(

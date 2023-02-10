@@ -19,7 +19,7 @@ class PseudoStatsPlugin(BasePlugin):
         if self.cfg.get('solver-time-integrator','pseudo-resid-norm') != 'all':
             fvars = ','.join(intg.system.elementscls.convarmap[self.ndims])
         else:
-            fvars = ','.join([ ('-').join(f) for f in list(product(['l2','l4','l8','li',], intg.system.elementscls.convarmap[self.ndims]))]) 
+            fvars = ','.join([ ('-').join(f) for f in list(product(['l2','li',], intg.system.elementscls.convarmap[self.ndims]))]) 
 
         # MPI info
         comm, rank, root = get_comm_rank_root()
