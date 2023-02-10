@@ -152,7 +152,8 @@ simulation on a structured mesh:
 2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``double-mach-reflection.pyfrm``::
 
-        zcat double-mach-reflection.msh.gz | pyfr import -tgmsh - double-mach-reflection.pyfrm
+        unxz double-mach-reflection.msh.xz
+        pyfr import double-mach-reflection.msh double-mach-reflection.pyfrm
 
 3. Run pyfr to solve the compressible Euler equations on the mesh,
    generating a series of PyFR solution files called
@@ -183,7 +184,7 @@ Compressible Supersonic Navier--Stokes Equations
 2D Viscous Shock Tube
 ---------------------
 
-Proceed with the following steps to run a serial 2D viscous shock Tube
+Proceed with the following steps to run a serial 2D viscous shock tube
 simulation on a structured mesh:
 
 1. Navigate to the ``PyFR-Test-Cases/2d-viscous-shock-tube`` directory::
@@ -193,7 +194,8 @@ simulation on a structured mesh:
 2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
    mesh file into a PyFR mesh file called ``viscous-shock-tube.pyfrm``::
 
-        zcat viscous-shock-tube.msh.gz | pyfr import -tgmsh - viscous-shock-tube.pyfrm
+        unxz viscous-shock-tube.msh.xz
+        pyfr import viscous-shock-tube.msh viscous-shock-tube.pyfrm
 
 3. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
@@ -216,4 +218,4 @@ simulation on a structured mesh:
    :alt: shock tube
    :align: center
 
-   Colour map of density gradient magnitude distribution at 1 time unit.
+   Colour map of density distribution at 1 time unit.

@@ -1,4 +1,3 @@
-import os
 import re
 import shlex
 
@@ -21,7 +20,7 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     outf = open(fname, 'a')
 
     # Output a header if required
-    if os.path.getsize(fname) == 0 and cfg.getbool(cfgsect, headerkey, True):
+    if outf.tell() == 0 and cfg.getbool(cfgsect, headerkey, True):
         print(header, file=outf)
 
     # Return the file
@@ -91,7 +90,7 @@ class PostactionMixin:
                 prefork.wait(self.postactaid)
 
             # Prepare the command line
-            cmdline = shlex.split(self.postact.format(**kwargs))
+            cmdline = shlex.split(self.postact.format_map(kwargs))
 
             # Invoke
             if self.postactmode == 'blocking':
