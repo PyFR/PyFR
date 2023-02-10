@@ -202,11 +202,11 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
         self.backend.pointwise.register(
             'pyfr.integrators.dual.pseudo.kernels.rkvdh2pseudo'
         )
-    
+
     @property
     def dtau_mats(self):
         return [dtau_mat.get() for dtau_mat in self.dtau_upts]
-    
+
     @memoize
     def _get_rkvdh2pseudo_kerns(self, stage, r1, r2, rold, rerr=None):
         kerns = []
