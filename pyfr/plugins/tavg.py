@@ -1,5 +1,5 @@
+import itertools as it
 import re
-
 import numpy as np
 
 from pyfr.inifile import Inifile
@@ -26,6 +26,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.mode = self.cfg.get(cfgsect, 'mode', 'windowed')
         if self.mode not in {'continuous', 'windowed'}:
             raise ValueError('Invalid averaging mode')
+        
+        # Std deviation mode
+        self.std_mode = self.cfg.get(cfgsect, 'std-mode', 'summary')
+        if self.std_mode not in {'summary', 'all'}:
+            raise ValueError('Invalid standard deviation mode')
 
         # Std deviation mode
         self.std_mode = self.cfg.get(cfgsect, 'std-mode', 'summary')
@@ -122,6 +127,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self.prevex = self._eval_acc_exprs(intg)
         self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
         self.vaccex = [np.zeros_like(a) for a in self.accex]
+
+        if intg.save:
+            self.rprevex = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
+            self.raccex  = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
+            self.rvaccex = [np.zeros_like(a, dtype=np.float64) for a in self.prevex]
 
     def _eval_acc_exprs(self, intg):
         exprs = []
@@ -316,6 +326,27 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         # Write to disk and return the file name
         return self._writer.write(data, intg.tcurr, metadata)
 
+    def rewind(self, intg):
+        if intg.reset_opt_stats:
+            if (intg.opt_type == 'online'):
+                ex       = self.vaccex,  self.accex,  self.prevex   
+                saved_ex = self.rvaccex, self.raccex, self.rprevex
+
+                if intg.bad_sim:
+                    for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
+                        v.fill(0);  v += rv
+                        a.fill(0);  a += ra
+                        p.fill(0);  p += rp
+                else:
+                    for v, a, p, rv, ra, rp in zip(*ex, *saved_ex):
+                        rv.fill(0); rv += v
+                        ra.fill(0); ra += a
+                        rp.fill(0); rp += p
+            elif intg.opt_type == None:
+                pass
+            else:
+                raise ValueError("Remove tavg plugin.")
+
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return
         if intg.tcurr < self.tstart:
@@ -341,9 +372,108 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
             self.prevt = intg.tcurr
             self.prevex = currex
 
+            # Rewind the simulation if necessary
+            self.rewind(intg)
+
             if dowrite:
                 # Write the file out to disk
                 solnfname = self._write_avg(intg)
+                comm, rank, root = get_comm_rank_root()
+
+                accex, vaccex = self.accex, self.vaccex
+                nacc, nfun = len(self.anames), len(self.fnames)
+                tavg = []
+
+                # Maximum and sum of standard deviations
+                std_max, std_sum = np.zeros((2, nacc + nfun))
+                std_max_a, std_sum_a = std_max[:nacc], std_sum[:nacc]
+                std_max_f, std_sum_f = std_max[nacc:], std_sum[nacc:]
+
+                wts = 2*(intg.tcurr - self.tstart_acc)
+
+                # Normalise the accumulated expressions
+                tavg.append([a / wts for a in accex])
+
+                # Calculate their standard deviations
+                dev = [np.sqrt(np.abs(v / wts)) for v in vaccex]
+
+                # Reduce these deviations across each element type
+                for dx in dev:
+                    np.maximum(np.amax(dx, axis=(1, 2)), std_max_a,
+                               out=std_max_a)
+                    std_sum_a += dx.sum(axis=(1, 2))
+
+                # Handle any functional expressions
+                if self.fexprs:
+                    # Evaluate functional expressions and standard deviations
+                    funex, fdev = self._eval_fun_var(dev, tavg[-1])
+
+                    # Add in functional expressions
+                    tavg.append(funex)
+
+                    # Reduce these deviations across each element type
+                    for fx in fdev:
+                        np.maximum(np.amax(fx, axis=(1, 2)), std_max_f,
+                                   out=std_max_f)
+                        std_sum_f += fx.sum(axis=(1, 2))
+
+                # Add in standard deviations
+                if self.std_mode == 'all':
+                    tavg.append(dev)
+
+                    # Add in functional expression deviations
+                    if self.fexprs:
+                        tavg.append(fdev)
+
+                # Reduce our standard deviations across ranks
+                if rank != root:
+                    comm.Reduce(std_max, None, op=mpi.MAX, root=root)
+                    comm.Reduce(std_sum, None, op=mpi.SUM, root=root)
+                else:
+                    comm.Reduce(mpi.IN_PLACE, std_max, op=mpi.MAX, root=root)
+                    comm.Reduce(mpi.IN_PLACE, std_sum, op=mpi.SUM, root=root)
+
+                # Form the output records to be written to disk
+                data = dict(self._ele_region_data)
+
+                # Stack together expressions by element type
+                tavg = [np.vstack(list(avgs)) for avgs in zip(*tavg)]
+
+                for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
+                    data[etype] = d.swapaxes(0, 1).astype(self.fpdtype)
+
+                for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
+                    data[etype] = d.swapaxes(0, 1).astype(self.fpdtype)
+                
+                stats = Inifile()
+                stats.set('data', 'prefix', 'tavg')
+                stats.set('data', 'fields', ','.join(self.outfields))
+                stats.set('tavg', 'cfg-section', self.cfgsect)
+                stats.set('tavg', 'range',
+                          f'[({self.tstart_acc}, {intg.tcurr})]')
+
+                intg.collect_stats(stats)
+
+                # If we are the root rank then prepare the metadata
+                if rank == root:
+                    # Write standard deviation stats
+                    for an, vm, vs in zip(self.anames, std_max_a, std_sum_a):
+                        stats.set('tavg', f'std-max-{an}', vm)
+                        stats.set('tavg', f'std-avg-{an}', vs / self.tpts)
+
+                    # Followed by functional standard deviation stats
+                    for fn, fm, fs in zip(self.fnames, std_max_f, std_sum_f):
+                        stats.set('tavg', f'fun-std-max-{fn}', fm)
+                        stats.set('tavg', f'fun-std-avg-{fn}', fs / self.tpts)
+
+                    metadata = dict(intg.cfgmeta,
+                                    stats=stats.tostr(),
+                                    mesh_uuid=intg.mesh_uuid)
+                else:
+                    metadata = None
+
+                # Write to disk
+                solnfname = self._writer.write(data, intg.tcurr, metadata)
 
                 # If a post-action has been registered then invoke it
                 self._invoke_postaction(intg, mesh=intg.system.mesh.fname,

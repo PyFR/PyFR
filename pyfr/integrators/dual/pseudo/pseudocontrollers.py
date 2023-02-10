@@ -68,7 +68,6 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
             # Normalise and return
             return tuple(np.sqrt(res / self._gndofs))
-        # Pseudo L4 norm
         # Uniform norm
         else:
             # Reduce locally (element types) and globally (MPI ranks)
@@ -108,7 +107,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')
-        if self._norm not in {'l2', 'uniform'}:
+        if self._norm not in {'l2', 'l4', 'l8', 'uniform'}:
             raise ValueError('Invalid error norm')
 
         tplargs = {'nvars': self.system.nvars}
@@ -126,26 +125,26 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['minf'] = self.cfg.getfloat(sect, 'min-fact', 0.98)
         tplargs['saff'] = self.cfg.getfloat(sect, 'safety-fact', 0.8)
 
-        tplargs['dtau_minf'] = self.cfg.getfloat(sect, 'pseudo-dt-min-mult',
-                                                 1)
-        tplargs['dtau_maxf'] = self.cfg.getfloat(sect, 'pseudo-dt-max-mult',
-                                                 3.0)
-
+        dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
+        dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 10.0)
+        
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
-        if not tplargs['dtau_minf'] < 1 < tplargs['dtau_maxf']:
+        if not dtau_minf < 1 < dtau_maxf:
             raise ValueError('Invalid pseudo-dt-min-mult, pseudo-dt-max-mult')
 
         # Limits for the local pseudo-time-step size
-        tplargs['dtau_min'] = tplargs['dtau_minf'] * self._dtau
-        tplargs['dtau_max'] = tplargs['dtau_maxf'] * self._dtau
+        self._dtau_max = self._dtau * dtau_maxf
+        tplargs['dtau_min'] = dtau_minf * self._dtau
 
         # Register a kernel to compute local error
         self.backend.pointwise.register(
             'pyfr.integrators.dual.pseudo.kernels.localerrest'
         )
 
+        self.ele_scal_upts_locs = []
+        
         for ele, shape, dtaumat in zip(self.system.ele_map.values(),
                                        self.system.ele_shapes, self.dtau_upts):
             # Allocate storage for previous error
@@ -154,15 +153,31 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             # Append the error kernels to the list
             for i, err in enumerate(ele.scal_upts):
+                self.ele_scal_upts_locs.append(i)
                 self.pintgkernels['localerrest', i].append(
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,
                         dims=[ele.nupts, ele.neles], err=err,
-                        errprev=err_prev, dtau_upts=dtaumat
+                        errprev=err_prev, dtau_upts=dtaumat,
                     )
                 )
 
+            for i in self.ele_scal_upts_locs:
+                for k in self.pintgkernels['localerrest', i]:
+                    k.bind(dtau_max = self._dtau_max)
+
         self.backend.commit()
+
+    @property
+    def Δτᴹ(self):
+        return self._dtau_max
+
+    @Δτᴹ.setter
+    def Δτᴹ(self, y):
+        self._dtau_max = y
+        for i in self.ele_scal_upts_locs:
+            for k in self.pintgkernels['localerrest', i]:
+                k.bind(dtau_max = y)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])

@@ -1,6 +1,10 @@
 from collections import defaultdict
 import itertools as it
 import re
+from time import perf_counter
+from functools import wraps
+
+import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -18,6 +22,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         sect = 'solver-time-integrator'
         mgsect = 'solver-dual-time-integrator-multip'
 
+        np.random.seed(cfg.getint(mgsect, 'seed', 0))
+        
         # Get the solver order and set the initial multigrid level
         self._order = self.level = order = cfg.getint('solver', 'order')
 
@@ -42,7 +48,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
-        self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+        self._Δτf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+        self._Δτfs = cfg.getliteral(mgsect, 'pseudo-dt-facts', 
+                                     [self._Δτf for _ in self.levels]) 
 
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self._minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
@@ -71,7 +79,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 mcfg = Inifile(cfg.tostr())
                 mcfg.set('solver', 'order', l)
-                mcfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(order - l))
+                mcfg.set(sect, 'pseudo-dt', dtau*np.prod(self.dtaufs[:order-l]))
 
                 for s in cfg.sections():
                     if (m := re.match(f'solver-(.*)-mg-p{l}$', s)):
@@ -134,6 +142,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         for l in self.levels[1:]:
             del self.pintgs[l].system.ele_map
 
+        self._compute_time = 0.
+
+        # Create a generator function to accumilate stats
+        #self.print_cstep_avg = self.expanding_average
+
     @property
     def _idxcurr(self):
         return self.pintg._idxcurr
@@ -174,6 +187,22 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def pintg(self):
         return self.pintgs[self.level]
 
+    @property
+    def dtauf(self):
+        return self._Δτfs[0]
+
+    @dtauf.setter
+    def dtauf(self, y):
+        self._Δτfs = [y for _ in self.levels]
+
+    @property
+    def dtaufs(self):
+        return self._Δτfs
+
+    @dtaufs.setter
+    def dtaufs(self, y):
+        self._Δτfs = y
+
     def _init_proj_mats(self):
         self.projmats = defaultdict(list)
         cmat = lambda m: self.backend.const_matrix(m, tags={'align'})
@@ -197,13 +226,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return projk
 
     @memoize
-    def dtauproject(self, l1, l2):
+    def dtauproject(self, l1, l2, dtaufs):
         projk = []
         for i, a in enumerate(self.projmats[l1, l2]):
             b = self.pintgs[l1].dtau_upts[i]
             c = self.pintgs[l2].dtau_upts[i]
             projk.append(self.backend.kernel('mul', a, b, out=c,
-                                             alpha=self.dtauf))
+                                             alpha=dtaufs[l2]))
 
         return projk
 
@@ -218,7 +247,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
-            self.backend.run_kernels(self.dtauproject(l1, l2))
+            self.backend.run_kernels(self.dtauproject(l1, l2, self.dtaufs))
 
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1
@@ -280,25 +309,57 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx
 
+    def weighted(self, I):
+        return np.random.choice([int(np.floor(I)), int(np.ceil(I))], 
+                     p = np.array([1.-I+int(np.floor(I)), I-int(np.floor(I))]))
+
+    @property
+    def expanding_average(self):
+        """A generator function that print expanding average of csteps
+
+        Args:
+            csteps (list[float]): 
+
+        Returns:
+            list[float]: _description_
+        """
+
+        self._n = 0
+        self._xis = [0,]*(self._order*2+1)
+        
+        def _expanding(xs):
+            self._xis = [(x +xi*self._n)/(self._n+1) 
+                         for x, xi in zip(xs, self._xis)]        
+            self._n+=1
+            print(self._xis)
+        
+        return _expanding
+    
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
-        cycle, csteps = self.cycle, self.csteps
+        cycle, csteps_f = self.cycle, self.csteps
 
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:
-            self.pintgs[l].currstg = self.currstg
+            self.pintgs[l].currstg        = self.currstg
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr
 
+        ctime_start = perf_counter()    
         for i in range(self._maxniters):
+            csteps = tuple(self.weighted(cstep_f) for cstep_f in csteps_f)
+            #self.print_cstep_avg(csteps)
+
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 
-                # Set the number of smoothing steps at each level
+                # TODO: Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
+                start = perf_counter()
                 self.pintg.pseudo_advance(tcurr)
+                self._compute_time += perf_counter() - start
 
                 if m is not None and l > m:
                     self.restrict(l, m)
@@ -311,6 +372,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Convergence monitoring
             if self.mg_convmon(self.pintg, i, self._minniters):
                 break
+        self._compute_time += (perf_counter() - ctime_start)
 
     def collect_stats(self, stats):
         # Collect the stats for each level
@@ -322,6 +384,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Total number of pseudo-steps
             stats.set('solver-time-integrator', f'npseudosteps-p{l}',
                       self.pintgs[l].npseudosteps)
+
+        # compute-time calculated only around p-multigrid cycles
+        stats.set('solver-time-integrator', 'compute-time',self._compute_time)
 
         # Total number of p-multigrid cycles
         stats.set('solver-time-integrator', 'npmgcycles', self.npmgcycles)

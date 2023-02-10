@@ -104,7 +104,7 @@ class StdPIController(BaseStdController):
 
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')
-        if self._norm not in {'l2', 'uniform'}:
+        if self._norm not in {'l2', 'l4', 'l8', 'uniform'}:
             raise ValueError('Invalid error norm')
 
         # PI control values

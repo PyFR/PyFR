@@ -20,6 +20,7 @@ class PseudodtStatsPlugin(BasePlugin):
         self.e_types = intg.system.ele_types
 
         # Maximum of 3 Levels of abstraction for the stats of pseudo-dt field
+
         self.dtau_stats = { 'n' : {'all':0},
                          'res': {'all':0}|{p:{'all':0}                                     
                                            for p in self.fvars}, 
@@ -43,6 +44,7 @@ class PseudodtStatsPlugin(BasePlugin):
                 'level', intg.cfg.getint('solver','order'))
 
         csv_header =  'pseudo-steps, tcurr'
+
         for k, v in self.dtau_stats.items():
             if k != 'all':
                 csv_header += f',{k}'
@@ -126,6 +128,7 @@ class PseudodtStatsPlugin(BasePlugin):
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements and element soln points
 
+
                 self.dtau_stats['min'][var][e_type]['all'] = (
                                 self.dtau_stats['min'][var][e_type]['each'].min())
                 self.dtau_stats['max'][var][e_type]['all'] = (
@@ -141,26 +144,33 @@ class PseudodtStatsPlugin(BasePlugin):
                                                     for e_type in self.e_types])
 
             tₘₐₓ = np.array(self.dtau_stats['min'][var]['all'])
+
             if self.rank != self.root:
                 self.comm.Reduce(tₘₐₓ       , None , op=mpi.MIN, root=self.root)
             else:
                 self.comm.Reduce(mpi.IN_PLACE, tₘₐₓ, op=mpi.MIN, root=self.root)
+
             self.dtau_stats['min'][var][e_type]['all'] = tₘₐₓ
 
             tₘᵢₙ = np.array(self.dtau_stats['max'][var]['all'])
+
             if self.rank != self.root:
                 self.comm.Reduce(tₘᵢₙ       , None , op=mpi.MAX, root=self.root)
             else:
                 self.comm.Reduce(mpi.IN_PLACE, tₘᵢₙ, op=mpi.MAX, root=self.root)
+
             self.dtau_stats['max'][var][e_type]['all'] = tₘᵢₙ
+
 
         # Stats obtained over 
         #   all element types, elements, variable 
         #   in (p, u, v, w) 
         #   and element soln points
+
         self.dtau_stats['min']['all'] = min([self.dtau_stats['min'][var]['all'] 
                                            for var in self.fvars])
         self.dtau_stats['max']['all'] = max([self.dtau_stats['max'][var]['all'] 
+
                                            for var in self.fvars])
 
     def residual_statistics(self, intg, resid):
@@ -172,6 +182,7 @@ class PseudodtStatsPlugin(BasePlugin):
 
         # each variable in (p, u, v, w)
         for j, var in enumerate(self.fvars):
+
             self.dtau_stats['res'][var]['all'] = resid[j]
 
         if self.cfg.get('solver-time-integrator','pseudo-resid-norm')=='uniform':
@@ -179,6 +190,7 @@ class PseudodtStatsPlugin(BasePlugin):
                                            for var in self.fvars])
         elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l2':
             self.dtau_stats['res']['all'] = sum([self.dtau_stats['res'][var]['all'] 
+
                                            for var in self.fvars])
         else:
             raise ValueError('Unknown time integrator ')
@@ -196,10 +208,12 @@ class PseudodtStatsPlugin(BasePlugin):
                 # Stats obtained over all elements
                 self.dtau_stats['res'][var][e_type]['each'] = resid[i][j]
 
+
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements and element soln points
 
                 res = np.array(self.dtau_stats['res'][var][e_type]['each'].max())
+
 
                 if self.rank != self.root:
                     self.comm.Reduce(res, None , op=mpi.SUM, 

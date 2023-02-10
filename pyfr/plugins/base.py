@@ -26,7 +26,6 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     # Return the file
     return outf
 
-
 class BasePlugin:
     name = None
     systems = None
