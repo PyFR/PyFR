@@ -17,20 +17,41 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def convmon(self, i, minniters, dt_fac=1):
         if i >= minniters - 1:
             # Compute the normalised residual
-            resid = self._resid(self._idxcurr, self._idxprev, dt_fac)
+            resid, if_converged = self._resid_multiple(self._idxcurr, self._idxprev, dt_fac)
 
             self._update_pseudostepinfo(i + 1, resid)
-            return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
+            return if_converged
         else:
             self._update_pseudostepinfo(i + 1, None)
             return False
 
-    def _resid(self, rcurr, rold, dt_fac):
+    def _resid_multiple(self, rcurr, rold, dt_fac):
+
+        if self._pseudo_norm in ('l2', 'uniform'):
+            resid = self._resid(rcurr, rold, dt_fac, self._pseudo_norm)                
+            return resid, all(r <= t for r, t in zip(resid, self._pseudo_residtol))
+
+        elif self._pseudo_norm == 'all':
+
+            resid_l2 = self._resid(rcurr, rold, dt_fac, 'l2')
+            resid_li = self._resid(rcurr, rold, dt_fac, 'uniform')
+
+            if_converged_l2 = all(r <= t for r, t in zip(resid_l2, self._pseudo_residtol_l2))
+            if_converged_li = all(r <= t for r, t in zip(resid_li, self._pseudo_residtol_li))
+
+            if_converged = if_converged_l2 and if_converged_li
+
+            return (*resid_l2, *resid_li), if_converged
+
+        else:
+            raise ValueError('Invalid pseudo-norm entered.')
+
+    def _resid(self, rcurr, rold, dt_fac, pseudo_norm):
         comm, rank, root = get_comm_rank_root()
 
         # Get a set of kernels to compute the residual
         rkerns = self._get_reduction_kerns(rcurr, rold, method='resid',
-                                           norm=self._pseudo_norm)
+                                           norm=pseudo_norm)
 
         # Bind the dynmaic arguments
         for kern in rkerns:
@@ -40,29 +61,13 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         self.backend.run_kernels(rkerns, wait=True)
 
         # Pseudo L2 norm
-        if self._pseudo_norm == 'l2':
+        if pseudo_norm == 'l2':
             # Reduce locally (element types) and globally (MPI ranks)
             res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
             comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
 
             # Normalise and return
             return tuple(np.sqrt(res / self._gndofs))
-        # Pseudo L4 norm
-        elif self._pseudo_norm == 'l4':
-            # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
-            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
-
-            # Normalise and return
-            return tuple( np.sqrt(np.sqrt(res / self._gndofs)))
-        # Pseudo L4 norm
-        elif self._pseudo_norm == 'l8':
-            # Reduce locally (element types) and globally (MPI ranks)
-            res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
-            comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
-
-            # Normalise and return
-            return tuple( np.sqrt(np.sqrt(np.sqrt(res / self._gndofs))))
         # Uniform norm
         else:
             # Reduce locally (element types) and globally (MPI ranks)
@@ -119,19 +124,19 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['maxf'] = self.cfg.getfloat(sect, 'max-fact', 1.01)
         tplargs['minf'] = self.cfg.getfloat(sect, 'min-fact', 0.98)
         tplargs['saff'] = self.cfg.getfloat(sect, 'safety-fact', 0.8)
+
         dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
         dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 10.0)
         
-        self._dtau_max = self._dtau * dtau_maxf
-
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
-        if dtau_maxf < 1:
-            raise ValueError('Invalid pseudo-dt-max-mult')
+        if not dtau_minf < 1 < dtau_maxf:
+            raise ValueError('Invalid pseudo-dt-min-mult, pseudo-dt-max-mult')
 
         # Limits for the local pseudo-time-step size
-        tplargs['dtau_min'] = self._dtau/ dtau_minf
+        self._dtau_max = self._dtau * dtau_maxf
+        tplargs['dtau_min'] = dtau_minf * self._dtau
 
         # Register a kernel to compute local error
         self.backend.pointwise.register(

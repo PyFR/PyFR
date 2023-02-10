@@ -61,16 +61,32 @@ class BaseDualPseudoIntegrator(BaseCommon):
                          for v in elementscls.dualcoeffs[self.system.ndims]]
 
         # Convergence tolerances
-        self._pseudo_residtol = residtol = []
-        for v in elementscls.convarmap[self.system.ndims]:
-            try:
-                residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol-' + v))
-            except NoOptionError:
-                residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol'))
-
         self._pseudo_norm = cfg.get(sect, 'pseudo-resid-norm', 'l2')
-        if self._pseudo_norm not in {'l2', 'l4', 'l8', 'uniform'}:
+        if self._pseudo_norm not in {'l2', 'uniform', 'all'}:
             raise ValueError('Invalid pseudo-residual norm')
+
+        if self._pseudo_norm == 'all':
+            self._pseudo_residtol_l2 = residtol_l2 = []
+            self._pseudo_residtol_li = residtol_li = []
+
+            for v in elementscls.convarmap[self.system.ndims]:
+                try:
+                    residtol_l2.append(cfg.getfloat(sect, 'pseudo-resid-l2-tol-' + v))
+                except NoOptionError:
+                    residtol_l2.append(cfg.getfloat(sect, 'pseudo-resid-l2-tol'))
+
+                try:
+                    residtol_li.append(cfg.getfloat(sect, 'pseudo-resid-li-tol-' + v))
+                except NoOptionError:
+                    residtol_li.append(cfg.getfloat(sect, 'pseudo-resid-li-tol'))
+
+        else:
+            self._pseudo_residtol = residtol = []
+            for v in elementscls.convarmap[self.system.ndims]:
+                try:
+                    residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol-' + v))
+                except NoOptionError:
+                    residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol'))
 
         # Pointwise kernels for the pseudo-integrator
         self.pintgkernels = defaultdict(list)
