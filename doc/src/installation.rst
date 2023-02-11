@@ -179,7 +179,7 @@ To partition meshes for running in parallel it is also necessary to
 have one of the following partitioners installed:
 
 1. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
-2. `SCOTCH <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 6.0
+2. `SCOTCH <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 7.0
 
 In order for PyFR to find these libraries they must be located in a
 directory which is on the library search path.  Alternatively, the

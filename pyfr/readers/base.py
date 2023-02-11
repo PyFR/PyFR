@@ -1,13 +1,13 @@
 from collections import defaultdict
 from itertools import chain
-import uuid
+from uuid import UUID
 
 import numpy as np
 
 from pyfr.nputil import fuzzysort
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
-from pyfr.util import subclass_where
+from pyfr.util import digest, subclass_where
 
 
 class BaseReader:
@@ -21,7 +21,7 @@ class BaseReader:
         mesh = self._to_raw_pyfrm(lintol)
 
         # Add metadata
-        mesh['mesh_uuid'] = np.array(str(uuid.uuid4()), dtype='S')
+        mesh['mesh_uuid'] = np.array(str(UUID(digest(mesh)[:32])), dtype='S')
 
         return mesh
 

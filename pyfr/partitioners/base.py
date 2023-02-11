@@ -1,11 +1,12 @@
 from collections import Counter, defaultdict, namedtuple
 import itertools as it
 import re
-import uuid
+from uuid import UUID
 
 import numpy as np
 
 from pyfr.inifile import Inifile
+from pyfr.util import digest
 
 
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
@@ -232,7 +233,8 @@ class BasePartitioner:
                 bndeti |= {l, r}
 
         # Start by assigning the lowest numbers to these boundary elements
-        nvetimap, nvparts = list(bndeti), [vpartmap[eti] for eti in bndeti]
+        nvetimap = sorted(bndeti)
+        nvparts = [vpartmap[eti] for eti in nvetimap]
 
         # Use sub-partitioning to assign interior element numbers
         for part, scon in enumerate(pscon):
@@ -406,7 +408,7 @@ class BasePartitioner:
                 emap[k] = eleglmap[etype, eidx]
 
         # Generate a new UUID for the mesh
-        newmesh['mesh_uuid'] = newuuid = str(uuid.uuid4())
+        newmesh['mesh_uuid'] = newuuid = str(UUID(digest(curruuid, rnum)[:32]))
 
         # Build the solution converter
         def partition_soln(soln):
