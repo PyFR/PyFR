@@ -21,7 +21,7 @@ class PseudodtStatsPlugin(BasePlugin):
 
         # Maximum of 3 Levels of abstraction for the stats of pseudo-dt field
 
-        self.dtau_stats = { 'n' : {'all':0},
+        intg.dtau_stats = { 'n' : {'all':0},
                          'res': {'all':0}|{p:{'all':0}                                     
                                            for p in self.fvars}, 
  
@@ -45,7 +45,7 @@ class PseudodtStatsPlugin(BasePlugin):
 
         csv_header =  'pseudo-steps, tcurr'
 
-        for k, v in self.dtau_stats.items():
+        for k, v in intg.dtau_stats.items():
             if k != 'all':
                 csv_header += f',{k}'
                 for vk, vv in v.items():
@@ -88,12 +88,12 @@ class PseudodtStatsPlugin(BasePlugin):
 
                 self.stored_tₚ = self.tₚ
 
-            self.dtau_stats['n']['all'] = npiter-self.prev_npiter
+            intg.dtau_stats['n']['all'] = npiter-self.prev_npiter
 
             self.Δτ_statistics(intg, Δτ_mats)
             #self.residual_statistics(intg, resid)
             self.last_appendable = (npiter, intg.tcurr, 
-                                    *self.Δτ_stats_as_list(self.dtau_stats))
+                                    *self.Δτ_stats_as_list(intg.dtau_stats))
 
         self.tₚ = intg.tcurr
 
@@ -120,46 +120,46 @@ class PseudodtStatsPlugin(BasePlugin):
 
                 # each element type, each soln point in element, each variable in (p, u, v, w)
                 # Stats obtained over all elements
-                self.dtau_stats['min'][var][e_type]['each'] = (
+                intg.dtau_stats['min'][var][e_type]['each'] = (
                                                     Δτ_mats[i][:, j, :].min(1))
-                self.dtau_stats['max'][var][e_type]['each'] = (
+                intg.dtau_stats['max'][var][e_type]['each'] = (
                                                     Δτ_mats[i][:, j, :].max(1))
 
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements and element soln points
 
 
-                self.dtau_stats['min'][var][e_type]['all'] = (
-                                self.dtau_stats['min'][var][e_type]['each'].min())
-                self.dtau_stats['max'][var][e_type]['all'] = (
-                                self.dtau_stats['max'][var][e_type]['each'].max())
+                intg.dtau_stats['min'][var][e_type]['all'] = (
+                                intg.dtau_stats['min'][var][e_type]['each'].min())
+                intg.dtau_stats['max'][var][e_type]['all'] = (
+                                intg.dtau_stats['max'][var][e_type]['each'].max())
 
             # each variable in (p, u, v, w)
             # Stats obtained over all element types, elements and element soln points
-            self.dtau_stats['min'][var]['all'] = min(
-                [self.dtau_stats['min'][var][e_type]['all'] 
+            intg.dtau_stats['min'][var]['all'] = min(
+                [intg.dtau_stats['min'][var][e_type]['all'] 
                                                     for e_type in self.e_types])
-            self.dtau_stats['max'][var]['all'] = max(
-                [self.dtau_stats['max'][var][e_type]['all'] 
+            intg.dtau_stats['max'][var]['all'] = max(
+                [intg.dtau_stats['max'][var][e_type]['all'] 
                                                     for e_type in self.e_types])
 
-            tₘₐₓ = np.array(self.dtau_stats['min'][var]['all'])
+            tₘₐₓ = np.array(intg.dtau_stats['min'][var]['all'])
 
             if self.rank != self.root:
                 self.comm.Reduce(tₘₐₓ       , None , op=mpi.MIN, root=self.root)
             else:
                 self.comm.Reduce(mpi.IN_PLACE, tₘₐₓ, op=mpi.MIN, root=self.root)
 
-            self.dtau_stats['min'][var][e_type]['all'] = tₘₐₓ
+            intg.dtau_stats['min'][var][e_type]['all'] = tₘₐₓ
 
-            tₘᵢₙ = np.array(self.dtau_stats['max'][var]['all'])
+            tₘᵢₙ = np.array(intg.dtau_stats['max'][var]['all'])
 
             if self.rank != self.root:
                 self.comm.Reduce(tₘᵢₙ       , None , op=mpi.MAX, root=self.root)
             else:
                 self.comm.Reduce(mpi.IN_PLACE, tₘᵢₙ, op=mpi.MAX, root=self.root)
 
-            self.dtau_stats['max'][var][e_type]['all'] = tₘᵢₙ
+            intg.dtau_stats['max'][var][e_type]['all'] = tₘᵢₙ
 
 
         # Stats obtained over 
@@ -167,9 +167,9 @@ class PseudodtStatsPlugin(BasePlugin):
         #   in (p, u, v, w) 
         #   and element soln points
 
-        self.dtau_stats['min']['all'] = min([self.dtau_stats['min'][var]['all'] 
+        intg.dtau_stats['min']['all'] = min([intg.dtau_stats['min'][var]['all'] 
                                            for var in self.fvars])
-        self.dtau_stats['max']['all'] = max([self.dtau_stats['max'][var]['all'] 
+        intg.dtau_stats['max']['all'] = max([intg.dtau_stats['max'][var]['all'] 
 
                                            for var in self.fvars])
 
@@ -183,13 +183,13 @@ class PseudodtStatsPlugin(BasePlugin):
         # each variable in (p, u, v, w)
         for j, var in enumerate(self.fvars):
 
-            self.dtau_stats['res'][var]['all'] = resid[j]
+            intg.dtau_stats['res'][var]['all'] = resid[j]
 
         if self.cfg.get('solver-time-integrator','pseudo-resid-norm')=='uniform':
-            self.dtau_stats['res']['all'] = max([self.dtau_stats['res'][var]['all'] 
+            intg.dtau_stats['res']['all'] = max([intg.dtau_stats['res'][var]['all'] 
                                            for var in self.fvars])
         elif self.cfg.get('solver-time-integrator', 'pseudo-resid-norm')=='l2':
-            self.dtau_stats['res']['all'] = sum([self.dtau_stats['res'][var]['all'] 
+            intg.dtau_stats['res']['all'] = sum([intg.dtau_stats['res'][var]['all'] 
 
                                            for var in self.fvars])
         else:
@@ -206,13 +206,13 @@ class PseudodtStatsPlugin(BasePlugin):
 
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements
-                self.dtau_stats['res'][var][e_type]['each'] = resid[i][j]
+                intg.dtau_stats['res'][var][e_type]['each'] = resid[i][j]
 
 
                 # each element type, each variable in (p, u, v, w)
                 # Stats obtained over all elements and element soln points
 
-                res = np.array(self.dtau_stats['res'][var][e_type]['each'].max())
+                res = np.array(intg.dtau_stats['res'][var][e_type]['each'].max())
 
 
                 if self.rank != self.root:
@@ -222,18 +222,18 @@ class PseudodtStatsPlugin(BasePlugin):
                     self.comm.Reduce(mpi.IN_PLACE, res, op=mpi.SUM, 
                                      root = self.root)
 
-                self.dtau_stats['res'][var][e_type]['all'] = res
+                intg.dtau_stats['res'][var][e_type]['all'] = res
 
             # each variable in (p, u, v, w)
             # Stats obtained over all element types, elements and element soln points
-            self.dtau_stats['res'][var]['all'] = max([self.dtau_stats['res'][var][e_type]['all'] 
+            intg.dtau_stats['res'][var]['all'] = max([intg.dtau_stats['res'][var][e_type]['all'] 
                                                     for e_type in self.e_types])
 
         # Stats obtained 
         #   over all element types, elements, variable 
         #   in (p, u, v, w) 
         #   and element soln points
-        self.dtau_stats['res']['all'] = max([self.dtau_stats['res'][var]['all'] 
+        intg.dtau_stats['res']['all'] = max([intg.dtau_stats['res'][var]['all'] 
                                            for var in self.fvars])
 
     def Δτ_stats_as_list(self, Δτ_stats):

@@ -50,11 +50,11 @@ class OptimisationStatsPlugin(BasePlugin):
             if self.cfg.hasopt('solver-dual-time-integrator-multip', 'cycle'):
                 self.maxniters = intg.pseudointegrator.pintg.maxniters
                 self.minniters = intg.pseudointegrator.pintg.minniters
-                self.residtols = intg.pseudointegrator.pintg._pseudo_residtol
+                self.residtols = intg.pseudointegrator.pintg._pseudo_residtol_l2
             else:
                 self.maxniters = intg.pseudointegrator.maxniters
                 self.minniters = intg.pseudointegrator.minniters
-                self.residtols = intg.pseudointegrator._pseudo_residtol
+                self.residtols = intg.pseudointegrator._pseudo_residtol_l2
 
             self.ctime_p, self.wtime_p = 0, 0
             self.pd_stats = pd.DataFrame()
@@ -120,10 +120,10 @@ class OptimisationStatsPlugin(BasePlugin):
                           }) 
 
         # Here, if intg data from plugin exists, we take data from there 
-        if self.Δτ_controller == 'local-pi' and intg.Δτ_stats:
-            t1['max-Δτ'] = intg.Δτ_stats['max']['all']
-            t1['min-Δτ'] = intg.Δτ_stats['min']['all']
-            t1['n'] = intg.Δτ_stats[ 'n' ]['all']
+        if self.Δτ_controller == 'local-pi' and intg.dtau_stats:
+            t1['max-Δτ'] = intg.dtau_stats['max']['all']
+            t1['min-Δτ'] = intg.dtau_stats['min']['all']
+            t1['n'] = intg.dtau_stats[ 'n' ]['all']
         elif self.Δτ_controller == 'none':
             t1['Δτ'] = self.Δτ_init
 
@@ -155,7 +155,7 @@ class OptimisationStatsPlugin(BasePlugin):
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
                 return
 
-            if np.any([intg.Δτ_stats['res'][v]['all'] > t 
+            if np.any([intg.dtau_stats['res'][v]['all'] > t 
                        for v, t in zip(self.fvars, self.residtols)]):
                 intg.reset_opt_stats = intg.bad_sim = True
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
