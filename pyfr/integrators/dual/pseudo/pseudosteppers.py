@@ -277,6 +277,23 @@ class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
         # Return
         return (r2, rold, *rerr)
 
+class DualRK12PseudoStepper(DualRKVdH2RPseudoStepper):
+    pseudo_stepper_name = 'rk12'
+    pseudo_stepper_order = 1
+
+    a = [
+        1/1,
+    ]
+
+    b = [
+        1/2,
+        1/2,
+    ]
+
+    bhat = [
+        1/1,
+        0/1,
+    ]
 
 class DualRK34PseudoStepper(DualRKVdH2RPseudoStepper):
     pseudo_stepper_name = 'rk34'
