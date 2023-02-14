@@ -11,7 +11,7 @@ class RewindPlugin(BasePlugin):
         self.rewind_dtau = self.cfg.get('solver-time-integrator', 
                                       'pseudo-controller') == 'local-pi'
 
-        if_rewind = self.cfg.getbool(self.cfgsect, 'if-rewind', False)
+        self.if_rewind = self.cfg.getbool(self.cfgsect, 'if-rewind', False)
 
         if self.rewind_dtau:
             self.Δτᵢ = self.cfg.get('solver-time-integrator', 'pseudo-dt')
@@ -50,7 +50,7 @@ class RewindPlugin(BasePlugin):
             #else:
             #    intg.pseudointegrator.rewind_dtau()
             
-            if not if_rewind:
+            if not self.if_rewind:
                 intg.pseudointegrator.reset_dtau()
                 print("Reset complete.")
 
@@ -63,7 +63,7 @@ class RewindPlugin(BasePlugin):
             self.saved_tcurr      = intg.tcurr
             self.saved_nacptsteps = intg.nacptsteps
 
-            if not if_rewind:
+            if not self.if_rewind:
                 intg.pseudointegrator.reset_dtau()
                 print("Reset complete.")
             else:
