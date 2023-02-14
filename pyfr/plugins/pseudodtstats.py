@@ -22,8 +22,8 @@ class PseudodtStatsPlugin(BasePlugin):
         # Maximum of 3 Levels of abstraction for the stats of pseudo-dt field
 
         intg.dtau_stats = { 'n' : {'all':0},
-                         'res': {'all':0}|{p:{'all':0}                                     
-                                           for p in self.fvars}, 
+                         #'res': {'all':0}|{p:{'all':0}                                     
+                         #                  for p in self.fvars}, 
  
                          'min': {'all':0}|{p:{'all':0}|{e:{'all':0} 
                                                         for e in self.e_types} 
