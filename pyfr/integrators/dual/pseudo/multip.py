@@ -49,7 +49,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
         self._Δτf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
-        self._Δτfs = cfg.getliteral(mgsect, 'pseudo-dt-facts', 
+        self._dtaufs = cfg.getliteral(mgsect, 'pseudo-dt-facts', 
                                      [self._Δτf for _ in self.levels]) 
 
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
@@ -183,25 +183,34 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def _subdims(self):
         return self.pintg._subdims
 
+    def save_dtau(self):
+        return self.pintg.save_dtau()
+
+    def rewind_dtau(self):
+        return self.pintg.rewind_dtau()
+
+    def reset_dtau(self):
+        return self.pintg.reset_dtau()
+
     @property
     def pintg(self):
         return self.pintgs[self.level]
 
     @property
     def dtauf(self):
-        return self._Δτfs[0]
+        return self._dtaufs[0]
 
     @dtauf.setter
     def dtauf(self, y):
-        self._Δτfs = [y for _ in self.levels]
+        self._dtaufs = [y for _ in self.levels]
 
     @property
     def dtaufs(self):
-        return self._Δτfs
+        return self._dtaufs
 
     @dtaufs.setter
     def dtaufs(self, y):
-        self._Δτfs = y
+        self._dtaufs = y
 
     def _init_proj_mats(self):
         self.projmats = defaultdict(list)

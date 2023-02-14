@@ -33,11 +33,9 @@ class BaseDualController(BaseDualIntegrator):
             csh(self)
 
         if self.rewind:
-            #print("Rewind was set to true. Setting it to false now.")
             self.rewind = False
 
         if self.save:
-            #print("Save was set to true. Setting it to false now.")
             self.save = False
 
         # Abort if plugins request it

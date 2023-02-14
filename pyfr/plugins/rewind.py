@@ -8,10 +8,13 @@ class RewindPlugin(BasePlugin):
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
 
-        self.rewind_Δτ = intg.cfg.get('solver-time-integrator', 
+        self.rewind_dtau = self.cfg.get('solver-time-integrator', 
                                       'pseudo-controller') == 'local-pi'
-        if self.rewind_Δτ:
-            self.Δτᵢ = intg.cfg.get('solver-time-integrator', 'pseudo-dt')
+
+        if_rewind = self.cfg.getbool(self.cfgsect, 'if-rewind', False)
+
+        if self.rewind_dtau:
+            self.Δτᵢ = self.cfg.get('solver-time-integrator', 'pseudo-dt')
 
         self.rewind_multip_Δτ = intg.cfg.hasopt('solver-dual-time-integrator-multip', 'cycle')
 
@@ -28,10 +31,11 @@ class RewindPlugin(BasePlugin):
         intg.save_soln()
         self.saved_tcurr      = intg.tcurr
         self.saved_nacptsteps = intg.nacptsteps
-        if self.rewind_Δτ and self.rewind_multip_Δτ:
-            intg.pseudointegrator.pintg.save_Δτ()
-        else:
-            intg.pseudointegrator.save_Δτ()
+        #if self.rewind_dtau and self.rewind_multip_Δτ:
+        #    intg.pseudointegrator.pintg.save_dtau()
+        #else:
+        #    intg.pseudointegrator.save_dtau()
+        intg.pseudointegrator.save_dtau()
 
     def __call__(self, intg):
 
@@ -41,17 +45,32 @@ class RewindPlugin(BasePlugin):
             self.nrjctsteps = intg.nacptsteps - self.saved_nacptsteps
             intg.nacptsteps = self.saved_nacptsteps
 
-            if self.rewind_Δτ and self.rewind_multip_Δτ:
-                intg.pseudointegrator.pintg.rewind_Δτ()
+            #if self.rewind_dtau and self.rewind_multip_Δτ:
+            #    intg.pseudointegrator.pintg.rewind_dtau()
+            #else:
+            #    intg.pseudointegrator.rewind_dtau()
+            
+            if not if_rewind:
+                intg.pseudointegrator.reset_dtau()
+                print("Reset complete.")
+
             else:
-                intg.pseudointegrator.rewind_Δτ()
-            print("Rewind complete.")
+                intg.pseudointegrator.rewind_dtau()
+                print("Rewind complete.")
 
         if intg.save:
             intg.save_soln()
             self.saved_tcurr      = intg.tcurr
             self.saved_nacptsteps = intg.nacptsteps
-            if self.rewind_Δτ and self.rewind_multip_Δτ:
-                intg.pseudointegrator.pintg.save_Δτ()
+
+            if not if_rewind:
+                intg.pseudointegrator.reset_dtau()
+                print("Reset complete.")
             else:
-                intg.pseudointegrator.save_Δτ()
+                intg.pseudointegrator.save_dtau()
+                print("Save complete.")
+                
+            #if self.rewind_dtau and self.rewind_multip_Δτ:
+            #    intg.pseudointegrator.pintg.save_dtau()
+            #else:
+            #    intg.pseudointegrator.save_dtau()
