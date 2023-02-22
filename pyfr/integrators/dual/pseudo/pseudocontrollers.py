@@ -65,10 +65,8 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
     @dt.setter
     def dt(self, y):
-        self.dtau_mats_multiplied(y/self._dt)
-
         if self.cfg.get('solver-time-integrator', 'pseudo-controller') == 'local-pi':        
-            self.dtau_limits_multiplied(y/self._dt)
+            self.dtau_multiplied(y/self._dt)
         self._dt = y
 
 class DualNonePseudoController(BaseDualPseudoController):
@@ -120,6 +118,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         self._dtau_min = dtau_minf * self._dtau
         self._dtau_max = dtau_maxf * self._dtau
+        self.alpha = 1.0
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
@@ -155,13 +154,13 @@ class DualPIPseudoController(BaseDualPseudoController):
             for i in self.ele_scal_upts_locs:
                 for k in self.pintgkernels['localerrest', i]:
                     k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
-                           alpha = 1.0)
+                           alpha = self.alpha)
 
         self.backend.commit()
 
-    def dtau_limits_multiplied(self, y):
+    def dtau_multiplied(self, y):
 
-        self.alpha = 1.0 # = y
+        self.alpha = y
         self._dtau_min *= y
         self._dtau_max *= y
 
@@ -170,7 +169,7 @@ class DualPIPseudoController(BaseDualPseudoController):
                 k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
                        alpha = self.alpha)
 
-    def multiplier_reset(self):
+    def dtau_multiplier_reset(self):
         self.alpha = 1.0
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
@@ -188,8 +187,8 @@ class DualPIPseudoController(BaseDualPseudoController):
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
             self.localerrest(self._idxerr)
 
-            if i == 0:
-                self.multiplier_reset()
+            if i == 0 and self.alpha != 1.0:
+                self.dtau_multiplier_reset()
 
             if self.convmon(i, self.minniters):
                 break
