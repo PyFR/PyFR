@@ -6,7 +6,8 @@
               errprev='inout fpdtype_t[${str(nvars)}]'
               dtau_upts='inout fpdtype_t[${str(nvars)}]'
               dtau_min='scalar fpdtype_t'
-              dtau_max='scalar fpdtype_t'>
+              dtau_max='scalar fpdtype_t'
+              alpha='scalar fpdtype_t'>
     fpdtype_t ferr, gerr, ufac, vfac;
 
 % for i in range(nvars):
@@ -14,7 +15,7 @@
     gerr = errprev[${i}];
     ufac = ${pyfr.polyfit(lambda x: x**-expa, 1e-6, 10, 8, 'ferr')}
          * ${pyfr.polyfit(lambda x: x**expb, 1e-6, 10, 8, 'gerr')};
-    vfac = min(${maxf}, max(${minf}, ${saff}*ufac));
+    vfac = alpha*min(${maxf}, max(${minf}, ${saff}*ufac));
 
     // Compute the size of the next step
     dtau_upts[${i}] = min(max(vfac*dtau_upts[${i}], dtau_min), dtau_max);

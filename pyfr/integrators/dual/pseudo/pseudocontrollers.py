@@ -154,18 +154,28 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             for i in self.ele_scal_upts_locs:
                 for k in self.pintgkernels['localerrest', i]:
-                    k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max)
+                    k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
+                           alpha = 1.0)
 
         self.backend.commit()
 
     def dtau_limits_multiplied(self, y):
 
+        self.alpha = 1.0 # = y
         self._dtau_min *= y
         self._dtau_max *= y
 
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
-                k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max)
+                k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
+                       alpha = self.alpha)
+
+    def multiplier_reset(self):
+        self.alpha = 1.0
+        for i in self.ele_scal_upts_locs:
+            for k in self.pintgkernels['localerrest', i]:
+                k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
+                       alpha = self.alpha)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
@@ -177,6 +187,9 @@ class DualPIPseudoController(BaseDualPseudoController):
             # Take the step
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
             self.localerrest(self._idxerr)
+
+            if i == 0:
+                self.multiplier_reset()
 
             if self.convmon(i, self.minniters):
                 break
