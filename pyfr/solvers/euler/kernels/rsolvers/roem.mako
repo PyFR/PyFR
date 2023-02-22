@@ -65,9 +65,9 @@
     fpdtype_t g = f/(1.0 + abs_ma);
 
     // Difference of U, du
-%for i in range(nvars - 1):
+% for i in range(nvars - 1):
     du[${i}] = ur[${i}] - ul[${i}];
-%endfor
+% endfor
     du[${nvars - 1}] = ur[0]*hr - ul[0]*hl;
 
     // BdQ
