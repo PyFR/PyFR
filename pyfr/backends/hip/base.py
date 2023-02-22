@@ -46,8 +46,8 @@ class HIPBackend(BaseBackend):
         # Take the required alignment to be 128 bytes
         self.alignb = 128
 
-        # Take the SoA size to be 32 elements
-        self.soasz = 32
+        # Take the SoA size to be 64 elements
+        self.soasz = 64
         self.csubsz = self.soasz
 
         # Get the MPI runtime type
