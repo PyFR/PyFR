@@ -157,9 +157,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
             if np.any([intg.dtau_stats['res'][v]['all'] > t 
                        for v, t in zip(self.fvars, self.residtols)]):
-                intg.reset_opt_stats = intg.bad_sim = True
-                intg.opt_cost_mean = intg.opt_cost_std = np.NaN
-                return
+                raise Exception('This is an outdated error.')
 
         # Simulation data should be calculated after 
         #     we are sure enough that time-step will not change more than this
