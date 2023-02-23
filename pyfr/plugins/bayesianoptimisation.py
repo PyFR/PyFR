@@ -12,7 +12,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     systems = ['*']
     formulations = ['dual']
 
-    def __init__(self, intg, cfgsect, suffix):
+    def __init__(self, intg, cfgsect, suffix, **data):
 
         super().__init__(intg, cfgsect, suffix)
 
@@ -105,22 +105,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', 'speedup.png')
             self.outf = self.cfg.get(cfgsect, 'history'  , 'bayesopt.csv')
 
-            self.pd_opt = pd.DataFrame(columns=[
-                'test-candidate', 'test-m', 'test-s',
-                'next-candidate', 'next-m', 'next-s',
-                'best-candidate', 'best-m', 'best-s',
-                'type', 'bounds-size',   
-                ])
-    #        arrays = [
-    #                    ["test",      "test", "test", 
-    #                     "next",      "next", "next", 
-    #                     "best",      "best", "best", ],
-    #                    ["candidate", "mean", "std" , 
-    #                     "candidate", "mean", "std" , 
-    #                     "candidate", "mean", "std" , ],
-    #                    ]
-    #        index = pd.MultiIndex.from_arrays(arrays, names=["candidate-type", "values"])
-    #        print(index)
+            self.deserialise(data)
 
         intg.candidate = {}     # This will be used by the next plugin in line
 
@@ -153,7 +138,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 t1['next-candidate'] = [self.init_cand.pop(0)]
                 t1['next-m'] = [np.nan]
                 t1['next-s'] = [np.nan]
-                t1['type'] = 'initial-testing'
+                #t1['type'] = 'initial-testing'
 
             elif (len(self.pd_opt.index)<(self.PM_limit+len(self.validate_cand))
                   or intg.bad_sim):
@@ -173,35 +158,36 @@ class BayesianOptimisationPlugin(BasePlugin):
                 if intg.bad_sim:
                     t1['next-candidate'] = t1['best-candidate']
                     t1['next-m'], t1['next-s'] = t1['best-m'], t1['best-s']
-                    t1['type'] = 'PM fallback'
+                    #t1['type'] = 'PM fallback'
 
                 elif (0.9*self.pd_opt['test-m'].min()) > t1['best-m'].tail(1).min():
                     t1['next-candidate'] = t1['best-candidate']
                     t1['next-m'], t1['next-s'] = t1['best-m'], t1['best-s']
-                    t1['type'] = 'PM best-check'
+                    #t1['type'] = 'PM best-check'
+
                 elif 0 > (t1['best-m'] - 2*t1['best-s']).tail(1).min():
                     t1['next-candidate'] = t1['best-candidate']
                     t1['next-m'], t1['next-s'] = t1['best-m'], t1['best-s']
-                    t1['type'] = 'PM model-check'
+                    #t1['type'] = 'PM model-check'
 
                 # Continue if no issues with the model or the best candidate
                 elif (len(self.pd_opt.index))<self.KG_limit:
                     t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model('KG')
-                    t1['type'] = 'KG explore'
+                    #t1['type'] = 'KG explore'
 
                 elif (len(self.pd_opt.index))<self.EI_limit:
                     t1['next-candidate'], t1['next-m'], t1['next-s'] = self.next_from_model('EI')
-                    t1['type'] = 'EI explore'
+                    #t1['type'] = 'EI explore'
 
                 elif (len(self.pd_opt.index))<self.PM_limit:
                     t1['next-candidate'] = t1['best-candidate']
                     t1['next-m'], t1['next-s'] = t1['best-m'], t1['best-s']
-                    t1['type'] = 'PM exploit'
+                    #t1['type'] = 'PM exploit'
 
                 elif self.validate_cand != []:
                     val_cand_tensor  = self.torch.tensor([*list(self.validate_cand.pop())], **self.torch_kwargs)
                     t1['next-candidate'], t1['next-m'], t1['next-s'] = self.substitute_in_model(val_cand_tensor)
-                    t1['type'] = 'test-all-validation-candidates'
+                    #t1['type'] = 'test-all-validation-candidates'
 
                 else:
                     raise ValueError("No more candidates to test.")
@@ -221,7 +207,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 #                t1['next-s'] = (self.pd_opt[self.pd_opt['test-m'].reset_index(drop=True) 
 #                                == self.pd_opt['test-m'].min()]['test-s'].
 #                                reset_index(drop=True))
-                t1['type'] = 'stop'
+                 #t1['type'] = 'stop'
 
             t1['opt-time'] = perf_counter() - opt_time_start
 
@@ -243,13 +229,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                                          .groupby(['test-candidate'])
                                          .cumcount()+1)
 
-            #with pd.option_context( 'display.max_rows'         , None, 
-            #                        'display.max_columns'      , None,
-            #                        'display.precision'        , 3,
-            #                        'display.expand_frame_repr', False,
-            #                        'display.max_colwidth'     , 100):
-            #    print(self.pd_opt)
-
             self.pd_opt.to_csv(self.outf, index=False)
 
             if intg.opt_type == 'online':
@@ -260,6 +239,35 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             intg.candidate = self._postprocess_ccandidate(list(t1['next-candidate'])[0])
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
+
+    def serialise(self, intg):
+
+        print(f'{self.pd_opt.to_numpy() = }')
+        print(f'{self.pd_opt.columns.to_numpy() = }')
+
+        if self.rank == self.root:
+            return {'pd_opt':self.pd_opt.to_numpy(),
+                    'pd_opt_columns':self.pd_opt.columns.to_numpy(),
+                    }
+
+    def deserialise(self, data):
+        self.pd_opt = pd.DataFrame(columns=[
+            'test-candidate', 'test-m', 'test-s',
+            'next-candidate', 'next-m', 'next-s',
+            'best-candidate', 'best-m', 'best-s',
+            'type', 'bounds-size',   
+            ])
+        return
+
+        if not bool(data):
+            self.pd_opt = pd.DataFrame(columns=[
+                'test-candidate', 'test-m', 'test-s',
+                'next-candidate', 'next-m', 'next-s',
+                'best-candidate', 'best-m', 'best-s',
+                'type', 'bounds-size',   
+                ])
+        else:
+            self.pd_opt = pd.DataFrame(data['pd_opt'], columns=data['pd_opt_columns'])
 
     def check_offline_optimisation_status(self, intg):
         if (self.rank == self.root) and (len(self.pd_opt.index) > self.noptiters_max):

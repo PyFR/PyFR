@@ -129,15 +129,6 @@ class OptimisationStatsPlugin(BasePlugin):
 
         self.pd_stats = pd.concat([self.pd_stats, t1], ignore_index=True)
 
-        #self.pd_stats = self.pd_stats.assign(
-        #    **{'cost-m': self.pd_stats['cost']
-        #                    .rolling(self.last_n, min_periods=1)
-        #                    .mean(),
-        #       'cost-s': self.pd_stats['cost']
-        #                    .rolling(self.last_n, min_periods=1)
-        #                    .std(),
-        #        })
-
     def check_status(self, intg):
 
         # Stop because simulation is totally bad
@@ -158,15 +149,6 @@ class OptimisationStatsPlugin(BasePlugin):
             if np.any([intg.dtau_stats['res'][v]['all'] > t 
                        for v, t in zip(self.fvars, self.residtols)]):
                 raise Exception('This is an outdated error.')
-
-        # Simulation data should be calculated after 
-        #     we are sure enough that time-step will not change more than this
-        # if (self.Δτ_controller == 'local-pi' and
-        #     abs(self.pd_stats['max-Δτ'][self.pd_stats.index[-1]]
-        #       - self.pd_stats['min-Δτ'][self.pd_stats.index[-1]])<1e-6):
-        #     intg.reset_opt_stats = intg.bad_sim = True
-        #     intg.opt_cost_mean = intg.opt_cost_std = np.NaN
-        #     raise ValueError('Δτ is constant in a local-pi controller')
        
         if (((self.Δτ_controller == 'none'
              or (self.Δτ_controller == 'local-pi'
