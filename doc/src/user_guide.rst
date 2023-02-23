@@ -26,12 +26,16 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr import mesh.msh mesh.pyfrm
 
-2. ``pyfr partition`` --- partition an existing mesh and
+2. ``pyfr partition`` --- partition or repartition an existing mesh and
    associated solution files.
 
    Example::
 
-       pyfr partition 2 mesh.pyfrm solution.pyfrs .
+       pyfr partition 2 mesh.pyfrm solution.pyfrs outdir/
+
+   Here, the newly partitioned mesh and solution are placed into the
+   directory `outdir`.  Multiple solutions can be provided.
+   Time-average files can also be partitioned, too.
 
 3. ``pyfr run`` --- start a new PyFR simulation. Example::
 
