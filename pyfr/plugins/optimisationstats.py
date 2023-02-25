@@ -145,10 +145,6 @@ class OptimisationStatsPlugin(BasePlugin):
                 intg.reset_opt_stats = intg.bad_sim = True
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
                 return
-
-            if np.any([intg.dtau_stats['res'][v]['all'] > t 
-                       for v, t in zip(self.fvars, self.residtols)]):
-                raise Exception('This is an outdated error.')
        
         if (((self.Δτ_controller == 'none'
              or (self.Δτ_controller == 'local-pi'
