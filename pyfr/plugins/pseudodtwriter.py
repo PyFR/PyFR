@@ -55,17 +55,6 @@ class PseudodtWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
         else:
             metadata = None
 
-        # Fetch data from other plugins and add it to metadata with ad-hoc keys
-        for csh in intg.completed_step_handlers:
-            try:
-                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
-                pdata = csh.serialise(intg)
-            except AttributeError:
-                pdata = {}
-
-            if rank == root:
-                metadata |= {f'{prefix}/{k}': v for k, v in pdata.items()}
-
         data = dict(self._ele_region_data)
         for idx, etype, rgn in self._ele_regions:
 

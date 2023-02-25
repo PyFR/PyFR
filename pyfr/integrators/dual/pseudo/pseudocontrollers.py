@@ -126,12 +126,12 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['saff'] = self.cfg.getfloat(sect, 'safety-fact', 0.8)
 
         dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
-        dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 10.0)
+        dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 1.0)
         
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
-        if not dtau_minf < 1 < dtau_maxf:
+        if not dtau_minf <= 1 < dtau_maxf:
             raise ValueError('Invalid pseudo-dt-min-mult, pseudo-dt-max-mult')
 
         # Limits for the local pseudo-time-step size

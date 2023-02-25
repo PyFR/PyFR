@@ -6,18 +6,6 @@ class ModifyConfigPlugin(BasePlugin):
     systems = ['*']
     formulations = ['dual']
     
-    """
-        Based on the suffix, optimisation will be applied
-        1. If suffix is 'offline'
-            config-1.ini will be externally created as a copy of current file.
-        2. else:
-            2. If suffix is 'online'
-                config-1.ini will be created within pyfrs file.
-            3. If suffix is 'onfline'
-                config-1.ini will be created within pyfrs file.
-
-    """
-    
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
 
@@ -33,41 +21,43 @@ class ModifyConfigPlugin(BasePlugin):
     def __call__(self, intg):
 
         if intg.reset_opt_stats:
-            match intg.opt_type, intg.bad_sim:
-                case 'online', False:
-                    intg.save = True
-                case _, True:            
+            if intg.opt_type == 'online' and not intg.bad_sim:
+                intg.save = True
+            elif intg.bad_sim:
+                intg.rewind = True
+            elif intg.opt_type == 'onfline':
+                if intg.offline_optimisation_complete:
+                    print("Offline optimisation is complete.")
+                    intg.rewind = False
+                else:
                     intg.rewind = True
-                case 'onfline', _:
-                    if intg.offline_optimisation_complete == True:
-                        print("Offline optimisation is complete.")
-                        intg.rewind = False
-                    else:                        
-                        intg.rewind = True
-
-                case None, _:
-                    print("No optimisation type specified.")
-                case _, _:
-                    raise ValueError('Not yet implemented.')
+            elif intg.opt_type is None:
+                print("No optimisation type specified.")
+            else:
+                raise ValueError('Not yet implemented.')
 
             if intg.candidate == {}:
                 print("Optimisation is not running.")
                 return
 
             if intg.opt_type in ['onfline', 'online']:
-                if intg.candidate.get('csteps'):
-                    intg.pseudointegrator.csteps = intg.candidate.get('csteps')
 
-                if intg.candidate.get('pseudo-dt-max'):
-                    intg.pseudointegrator.pintg.Δτᴹ = intg.candidate.get('pseudo-dt-max')
+                csteps = [0 for s in intg.candidate if s.startswith("cstep:") and s[6:].isdigit()]
 
-                if intg.candidate.get('pseudo-dt-fact'):
-                    intg.pseudointegrator.dtauf = intg.candidate.get('pseudo-dt-fact')
+                for key, value in intg.candidate.items():
+                    if key.startswith("cstep:") and key[6:].isdigit():
+                        csteps[int(key[6:])] = value
+                    elif key.startswith("pseudo-dt-max"):
+                        intg.pseudointegrator.pintg.Δτᴹ = value
+                    elif key.startswith("pseudo-dt-fact"):
+                        intg.pseudointegrator.dtauf = value
+                    else:
+                        raise ValueError(f"Unknown key: {key}")
 
-                if intg.candidate.get('pseudo-dt-facts'):
-                    intg.pseudointegrator.dtaufs = intg.candidate.get('pseudo-dt-facts')
-
-                intg.candidate = {}
+                if intg.candidate.get('cstep:1'):
+                    intg.pseudointegrator.csteps = self._postprocess_ccsteps4(intg.depth, csteps)
+        
+                intg.candidate.clear()
 
             elif intg.opt_type == 'offline':
                 # TODO: Create a new config file, say config-1.ini
@@ -79,12 +69,10 @@ class ModifyConfigPlugin(BasePlugin):
 
         # TODO: Add the config modifications into pyfrs file in the right names.
 
-    def modify_maximum_pseudo_iterations(self, intg):
-        if self.cfg.hasopt('solver-dual-time-integrator-multip', 'cycle'):
-            self.maxniters = intg.pseudointegrator.pintg.maxniters
-        else:
-            self.maxniters = intg.pseudointegrator.maxniters
-
     def add_config_to_prevcfgs(self, intg):
         if intg.opt_type in ['onfline', 'online']:
             intg.prev_cfgs['opt-cfg'] = intg.cfg.tostr()
+
+    def _postprocess_ccsteps4(self, depth, ccsteps):
+        return  (ccsteps[0],) * (depth + 1) + (ccsteps[1],) + \
+                (ccsteps[2],) *  depth      + (ccsteps[3],)
