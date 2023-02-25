@@ -248,6 +248,9 @@ class BayesianOptimisationPlugin(BasePlugin):
                     }
 
     def deserialise(self, intg, data):
+
+        intg.candidate = {}
+
         if self.rank == self.root:
 
             if bool(data):
@@ -258,12 +261,10 @@ class BayesianOptimisationPlugin(BasePlugin):
                 next_cols = list(filter(lambda x: x.startswith('n-') and x[2:].isdigit(), self.pd_opt.columns))
                 next_candidate = self.pd_opt[next_cols].tail(1).to_numpy(dtype=np.float64)[0]
                 intg.candidate = self._postprocess_ccandidate(next_candidate)
-
             else:
                 self.pd_opt = pd.DataFrame(columns=self.columns)
-                intg.candidate = {}
-
-        if len(intg.candidate)>0:
+            
+        if (self.rank == self.root) and len(intg.candidate)>0:
             intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
     def check_offline_optimisation_status(self, intg):
