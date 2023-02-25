@@ -3,9 +3,9 @@
 
 __global__ void
 axnpby(int nrow, int ncolb, int ldim, fpdtype_t* __restrict__ x0,
-       ${', '.join('const fpdtype_t* __restrict__ x' + str(i)
+       ${', '.join(f'const fpdtype_t* __restrict__ x{i}'
                    for i in range(1, nv))},
-       ${', '.join('fpdtype_t a' + str(i) for i in range(nv))})
+       ${', '.join(f'fpdtype_t a{i}' for i in range(nv))})
 {
     int i = blockIdx.y*blockDim.y + threadIdx.y;
     int j = blockIdx.x*blockDim.x + threadIdx.x;
