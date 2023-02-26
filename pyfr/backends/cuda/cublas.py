@@ -2,7 +2,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_void_p
 
 import numpy as np
 
-from pyfr.backends.cuda.provider import CUDAKernel
+from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -54,9 +54,10 @@ class CUBLASWrappers(LibWrapper):
         return name[:-3]
 
 
-class CUDACUBLASKernels:
+class CUDACUBLASKernels(CUDAKernelProvider):
     def __init__(self, backend):
-        self.backend = backend
+        super().__init__(backend)
+
         self.handle = c_void_p()
 
         # Load and wrap CUBLAS
@@ -64,6 +65,9 @@ class CUDACUBLASKernels:
 
         # Init
         self.lib.cublasCreate(self.handle)
+
+        # Timing data cache
+        self._mul_timing = {}
 
     def __del__(self):
         if self.handle:
@@ -92,22 +96,41 @@ class CUDACUBLASKernels:
             cublasgemm = w.cublasSgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
+        # Convenience wrapper
+        def gemm(stream):
+            w.cublasSetStream(h, stream)
+            cublasgemm(h, w.OP_N, w.OP_N, m, n, k, alpha_ct, A, A.leaddim,
+                       B, B.leaddim, beta_ct, C, C.leaddim)
+
+        # Cache key
+        ckey = (A.dtype, alpha, beta, m, n, k, A.leaddim, B.leaddim, C.leaddim)
+
+        # Obtain the performance of the kernel
+        try:
+            dt = self._mul_timing[ckey]
+        except KeyError:
+            # Save a copy of the contents of the output matrix
+            out_np = getattr(out, 'parent', out).get()
+
+            # Benchmark the kernel and update the cache
+            self._mul_timing[ckey] = dt = self._benchmark(gemm)
+
+            # Restore the output matrix
+            getattr(out, 'parent', out).set(out_np)
+
         class MulKernel(CUDAKernel):
             def add_to_graph(self, graph, deps):
                 stream = cuda.create_stream()
 
                 # Capture the execution of cuBLAS to obtain a graph
                 stream.begin_capture()
-                self.run(stream)
+                gemm(stream)
                 gnode = stream.end_capture()
 
                 # Embed this graph in our main graph
                 return graph.graph.add_graph(gnode, deps)
 
             def run(self, stream):
-                w.cublasSetStream(h, stream)
-                cublasgemm(h, w.OP_N, w.OP_N, m, n, k,
-                           alpha_ct, A, A.leaddim, B, B.leaddim,
-                           beta_ct, C, C.leaddim)
+                gemm(stream)
 
-        return MulKernel(mats=[a, b, out])
+        return MulKernel(mats=[a, b, out], dt=dt)

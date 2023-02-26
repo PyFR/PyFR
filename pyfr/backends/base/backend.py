@@ -160,15 +160,31 @@ class BaseBackend:
                                   vshape, tags)
 
     def kernel(self, name, *args, **kwargs):
+        best_kern = None
+
+        # Loop through each kernel provider instance
         for prov in self._providers:
-            kern = getattr(prov, name, None)
-            if kern:
+            # See if it can potentially provide the requested kernel
+            kern_meth = getattr(prov, name, None)
+            if kern_meth:
                 try:
-                    return kern(*args, **kwargs)
+                    # Ask the provider for the kernel
+                    kern = kern_meth(*args, **kwargs)
                 except NotSuitableError:
-                    pass
-        else:
+                    continue
+
+                # Evaluate this kernel compared to the best seen so far
+                if best_kern is None or kern.dt < best_kern.dt:
+                    best_kern = kern
+
+                    # If there is no benchmark data then short circut
+                    if np.isnan(best_kern.dt):
+                        return best_kern
+
+        if best_kern is None:
             raise KeyError(f'Kernel "{name}" has no providers')
+
+        return best_kern
 
     def ordered_meta_kernel(self, kerns):
         return self.ordered_meta_kernel_cls(kerns)

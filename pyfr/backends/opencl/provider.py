@@ -35,6 +35,21 @@ class OpenCLUnorderedMetaKernel(_OpenCLMetaKernelCommon, MetaKernel):
 
 
 class OpenCLKernelProvider(BaseKernelProvider):
+    def _benchmark(self, kfunc, nbench=4, nwarmup=1):
+        queue = self.backend.cl.queue(profiling=True)
+
+        for i in range(nbench + nwarmup):
+            if i == nwarmup:
+                start_evt = end_evt = kfunc(queue)
+            elif i == nbench + nwarmup - 1:
+                end_evt = kfunc(queue)
+            else:
+                kfunc(queue)
+
+        queue.finish()
+
+        return (end_evt.end_time - start_evt.start_time) / nbench
+
     @memoize
     def _build_program(self, src):
         flags = ['-cl-fast-relaxed-math', '-cl-std=CL2.0']
