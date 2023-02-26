@@ -54,7 +54,7 @@ class ModifyConfigPlugin(BasePlugin):
                     else:
                         raise ValueError(f"Unknown key: {key}")
 
-                if intg.candidate.get('cstep:1'):
+                if any(c.startswith('cstep:') for c in intg.candidate):
                     intg.pseudointegrator.csteps = self._postprocess_ccsteps4(intg.depth, csteps)
         
                 intg.candidate.clear()

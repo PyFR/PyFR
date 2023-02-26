@@ -208,6 +208,10 @@ class BayesianOptimisationPlugin(BasePlugin):
                 next_candidate, t1['n-m'], t1['n-s'] = self.best_tested_from_dataframe()
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
+                
+                # If offline optimisation, then abort the simulation at this point. 
+                intg.abort = True
+                    
             t1['opt-time'] = perf_counter() - opt_time_start
 
             match intg.opt_type:
@@ -238,7 +242,12 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.plot_normalised_cost(intg)
 
             next_cols = list(filter(lambda x: x.startswith('n-'), self.pd_opt.columns))
+
+            print(f"{t1[next_cols] = }") 
+
             intg.candidate = self._postprocess_ccandidate(list(t1[next_cols].values)[0])
+
+        print(f"{intg.candidate = }") 
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
     def serialise(self, intg):
