@@ -47,7 +47,6 @@ class DualNoneController(BaseDualController):
             raise ValueError('Advance time is in the past')
 
         while self.tcurr < t:
-
             if self.tcurr + self._dt < t < self.tcurr + 2*self._dt:
                 dt = 0.5*(t - self.tcurr)
             elif self.tcurr < t < self.tcurr + self._dt:
@@ -57,7 +56,6 @@ class DualNoneController(BaseDualController):
 
             if self.pseudointegrator.dt != dt:
                 # Change dt in pseudo-integrator (and multi-p levels)
-                
                 self.pseudointegrator.dt = dt
 
             # Take the physical step
