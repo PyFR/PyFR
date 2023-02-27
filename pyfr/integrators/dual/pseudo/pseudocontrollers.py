@@ -168,13 +168,6 @@ class DualPIPseudoController(BaseDualPseudoController):
                 k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
                        dtau_fieldf = self.dtau_fieldf)
 
-    def dtau_multiplier_reset(self):
-        self.dtau_fieldf = 1.0
-        for i in self.ele_scal_upts_locs:
-            for k in self.pintgkernels['localerrest', i]:
-                k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
-                       dtau_fieldf = 1.0)
-
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
 
@@ -187,7 +180,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             self.localerrest(self._idxerr)
 
             if i == 0 and self.dtau_fieldf != 1.0:
-                self.dtau_multiplier_reset()
+                self.dtau_multiplied(1.0)
 
             if self.convmon(i, self.minniters):
                 break
