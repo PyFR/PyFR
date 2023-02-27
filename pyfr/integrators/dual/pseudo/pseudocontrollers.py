@@ -118,7 +118,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         self._dtau_min = dtau_minf * self._dtau
         self._dtau_max = dtau_maxf * self._dtau
-        self.alpha = 1.0
+        self.dtau_fieldf = 1.0
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
@@ -154,26 +154,26 @@ class DualPIPseudoController(BaseDualPseudoController):
             for i in self.ele_scal_upts_locs:
                 for k in self.pintgkernels['localerrest', i]:
                     k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
-                           alpha = self.alpha)
+                           dtau_fieldf = self.dtau_fieldf)
 
         self.backend.commit()
 
     def dtau_multiplied(self, y):
-        self.alpha = y
+        self.dtau_fieldf = y
         self._dtau_min *= y
         self._dtau_max *= y
 
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
                 k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
-                       alpha = self.alpha)
+                       dtau_fieldf = self.dtau_fieldf)
 
     def dtau_multiplier_reset(self):
-        self.alpha = 1.0
+        self.dtau_fieldf = 1.0
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
                 k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
-                       alpha = 1.0)
+                       dtau_fieldf = 1.0)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
@@ -186,7 +186,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
             self.localerrest(self._idxerr)
 
-            if i == 0 and self.alpha != 1.0:
+            if i == 0 and self.dtau_fieldf != 1.0:
                 self.dtau_multiplier_reset()
 
             if self.convmon(i, self.minniters):
