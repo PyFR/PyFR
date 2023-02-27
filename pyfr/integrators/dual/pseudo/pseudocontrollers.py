@@ -159,7 +159,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.backend.commit()
 
     def dtau_multiplied(self, y):
-
         self.alpha = y
         self._dtau_min *= y
         self._dtau_max *= y
