@@ -1,5 +1,3 @@
-import numpy as np
-
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
