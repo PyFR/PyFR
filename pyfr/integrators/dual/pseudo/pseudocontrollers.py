@@ -173,7 +173,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
                 k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
-                       alpha = self.alpha)
+                       alpha = 1.0)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
