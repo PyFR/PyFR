@@ -150,11 +150,7 @@ class DualPIPseudoController(BaseDualPseudoController):
                         errprev=err_prev, dtau_upts=dtaumat
                     )
                 )
-
-            for i in self.ele_scal_upts_locs:
-                for k in self.pintgkernels['localerrest', i]:
-                    k.bind(dtau_min = self._dtau_min, dtau_max = self._dtau_max,
-                           dtau_fieldf = self.dtau_fieldf)
+            self.dtau_multiplied(1.0)
 
         self.backend.commit()
 
