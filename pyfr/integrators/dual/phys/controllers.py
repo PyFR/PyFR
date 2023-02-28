@@ -8,12 +8,11 @@ class BaseDualController(BaseDualIntegrator):
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
-        dt_min_mult = self.cfg.getfloat('solver-time-integrator', 'dt-min-mult', 0.9)
+        self.i = self.cfg.getint('solver-time-integrator', 'dt-switch', 10)
 
-        if not 0.5<=dt_min_mult<1.0:
-            raise ValueError('dt-min-mult must be in the range [0.5, 1.0)')
+        if self.i>1:
+            raise ValueError('dt-switch must be greater than 1')
 
-        self.i = 1//(1.0-dt_min_mult)
         self._if_near = False
         self._dt_near = self._dt
 
