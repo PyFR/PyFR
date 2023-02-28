@@ -8,6 +8,15 @@ class BaseDualController(BaseDualIntegrator):
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
+        dt_min_mult = self.cfg.getfloat('solver-time-integrator', 'dt-min-mult', 0.9)
+
+        if not 0.5<=dt_min_mult<1.0:
+            raise ValueError('dt-min-mult must be in the range [0.5, 1.0)')
+
+        self.i = 1//(1.0-dt_min_mult)
+        self._if_near = False
+        self._dt_near = self._dt
+
         # Fire off any event handlers if not restarting
         if not self.isrestart:
             for csh in self.completed_step_handlers:
@@ -47,12 +56,16 @@ class DualNoneController(BaseDualController):
             raise ValueError('Advance time is in the past')
 
         while self.tcurr < t:
-            if self.tcurr + self._dt < t < self.tcurr + 2*self._dt:
-                dt = 0.5*(t - self.tcurr)
-            elif self.tcurr < t < self.tcurr + self._dt:
+            if self.tcurr + self._dt <= t < self.tcurr + self.i*self._dt:
+                if not self._if_near:
+                    self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self._dt + 1.0)
+                    self._if_near = True
+                dt = self._dt_near
+            elif self.tcurr < t <= self.tcurr + self._dt:
                 dt = t - self.tcurr
             else:
                 dt = self._dt
+                self._if_near = False
 
             if self.pseudointegrator.dt != dt:
                 # Change dt in pseudo-integrator (and multi-p levels)
