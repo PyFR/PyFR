@@ -122,7 +122,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         )
 
         # Storage for kernels that require dtau-min and dtau-max at runtime
-        self.ele_scal_upts_locs = []
         
         for ele, shape, dtaumat in zip(self.system.ele_map.values(),
                                        self.system.ele_shapes, self.dtau_upts):
@@ -132,7 +131,6 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             # Append the error kernels to the list
             for i, err in enumerate(ele.scal_upts):
-                self.ele_scal_upts_locs.append(i)
                 self.pintgkernels['localerrest', i].append(
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,
@@ -149,10 +147,11 @@ class DualPIPseudoController(BaseDualPseudoController):
         self._dtau_min *= y
         self._dtau_max *= y
 
-        for i in self.ele_scal_upts_locs:
-            for k in self.pintgkernels['localerrest', i]:
-                k.bind(dtau_min=self._dtau_min, dtau_max=self._dtau_max,
-                       dtau_fieldf=self.dtau_fieldf)
+        for key in self.pintgkernels:
+            if key[0] == 'localerrest':
+                for k in self.pintgkernels[key]:
+                    k.bind(dtau_min=self._dtau_min, dtau_max=self._dtau_max,
+                           dtau_fieldf=self.dtau_fieldf)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
