@@ -21,6 +21,10 @@ class BaseDualIntegrator(BaseIntegrator):
         del self.system.ele_map
 
     @property
+    def dt(self):
+        return self.pseudointegrator.dt
+
+    @property
     def system(self):
         return self.pseudointegrator.system
 

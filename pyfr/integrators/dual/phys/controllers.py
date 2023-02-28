@@ -21,8 +21,8 @@ class BaseDualController(BaseDualIntegrator):
             for csh in self.completed_step_handlers:
                 csh(self)
 
-    def _accept_step(self, dt, idxcurr):
-        self.tcurr += dt
+    def _accept_step(self, idxcurr):
+        self.tcurr += self.dt
         self.nacptsteps += 1
         self.nacptchain += 1
 
@@ -71,7 +71,7 @@ class DualNoneController(BaseDualController):
                 self.pseudointegrator.dt = dt
 
             # Take the physical step
-            self.step(self.tcurr, dt)
+            self.step(self.tcurr)
 
             # We are not adaptive, so accept every step
-            self._accept_step(dt, self.pseudointegrator._idxcurr)
+            self._accept_step(self.pseudointegrator._idxcurr)
