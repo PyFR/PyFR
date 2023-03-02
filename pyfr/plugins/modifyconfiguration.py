@@ -18,6 +18,8 @@ class ModifyConfigPlugin(BasePlugin):
 
         intg.candidate = {}
 
+        self.depth = self.cfg.getint('solver', 'order', 0)
+
     def __call__(self, intg):
 
         if intg.reset_opt_stats:
@@ -55,7 +57,8 @@ class ModifyConfigPlugin(BasePlugin):
                         raise ValueError(f"Unknown key: {key}")
 
                 if any(c.startswith('cstep:') for c in intg.candidate):
-                    intg.pseudointegrator.csteps = self._postprocess_ccsteps4(intg.depth, csteps)
+                    print("Next candidate:", self._postprocess_ccsteps4(csteps), "on rank", self.rank)
+                    intg.pseudointegrator.csteps = self._postprocess_ccsteps4(csteps)
         
                 intg.candidate.clear()
 
@@ -67,12 +70,10 @@ class ModifyConfigPlugin(BasePlugin):
                 raise ValueError(f"Required: 'onfline', 'online' or 'offline'.",
                                  f"Given suffix: {intg.opt_type}")
 
-        # TODO: Add the config modifications into pyfrs file in the right names.
-
     def add_config_to_prevcfgs(self, intg):
         if intg.opt_type in ['onfline', 'online']:
             intg.prev_cfgs['opt-cfg'] = intg.cfg.tostr()
 
-    def _postprocess_ccsteps4(self, depth, ccsteps):
-        return  (ccsteps[0],) * (depth + 1) + (ccsteps[1],) + \
-                (ccsteps[2],) *  depth      + (ccsteps[3],)
+    def _postprocess_ccsteps4(self, ccsteps):
+        return  (ccsteps[0],) * self.depth + (ccsteps[1],) + \
+                (ccsteps[2],) * (self.depth-1) + (ccsteps[3],)

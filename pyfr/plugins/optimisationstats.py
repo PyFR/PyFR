@@ -137,7 +137,7 @@ class OptimisationStatsPlugin(BasePlugin):
             intg.opt_cost_mean = intg.opt_cost_std = np.NaN 
             return
 
-        if self.pd_stats.count(0)[0]<=3:
+        if self.pd_stats.count(0)[0]<5:
             return
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 

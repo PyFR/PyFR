@@ -107,7 +107,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.torch.random.manual_seed(seed) # GPU-based generators
 
             # Stress test with gpu too, compare timings
-            be = self.cfg.get(cfgsect, 'botorch-backend', 'cpu')
+            self.be = self.cfg.get(cfgsect, 'botorch-backend', 'cpu')
             pr = self.cfg.get(cfgsect, 'botorch-precision', 'double')
 
             if pr == 'double':
@@ -117,7 +117,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             else:
                 raise ValueError('Invalid dtype')
 
-            self.torch_kwargs = {'dtype': dtyp, 'device': torch.device(be)}
+            self.torch_kwargs = {'dtype': dtyp, 'device': torch.device(self.be)}
 
             bnds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
             hard_bnds = list(zip(*self.cfg.getliteral(cfgsect, 'hard-bounds')))
@@ -168,7 +168,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # Check if optimisation is performing alright
                 if (intg.bad_sim or
                     (0.9*self.pd_opt['t-m'].min()) > t1['b-m'].tail(1).min() or
-                    0 > (t1['b-m'] - 2*t1['b-s']).tail(1).min()):
+                    0 > (t1['b-m'] - 2*t1['b-s']).tail(1).min() or
+                    self.pd_opt.empty):
 
                     for i, val in enumerate(best_candidate):
                         t1[f'n-{i}'] = val
@@ -178,8 +179,10 @@ class BayesianOptimisationPlugin(BasePlugin):
                         print("Bad simulation, using best candidate.")
                     elif (0.9*self.pd_opt['t-m'].min()) > t1['b-m'].tail(1).min():
                         print("Best candidate wall-time is lesser than 0.9 times the previous best.")
-                    else:
+                    elif 0 > (t1['b-m'] - 2*t1['b-s']).tail(1).min():
                         print("Best candidate is worse than 2 sigma of the previous best.")
+                    else:
+                        print("No previous optimisation data. Using best candidate which is random enough.")
 
                 # Continue (if no issues) with the model or the best candidate
 
@@ -210,7 +213,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                     t1[f'n-{i}'] = val
                 
                 # If offline optimisation, then abort the simulation at this point. 
-                intg.abort = True
+                if intg.opt_type == 'onfline':
+                    intg.abort = True
                     
             t1['opt-time'] = perf_counter() - opt_time_start
 
@@ -236,7 +240,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.pd_opt.to_csv(self.outf, index=False)
 
             if intg.opt_type == 'online':
-                self.plot_normalised_cummulative_cost(intg)
+                self.plot_normalised_cummulative_cost()
                 self.plot_overall_speedup(intg)
 
             self.plot_normalised_cost(intg)
@@ -259,6 +263,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     def deserialise(self, intg, data):
 
         intg.candidate = {}
+        self.depth = self.cfg.getint('solver', 'order', 0)
 
         if self.rank == self.root:
 
@@ -492,7 +497,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         cumm_ax.get_figure().savefig(self.speedup_plot)
         plt.close(cumm_fig)
 
-    def plot_normalised_cummulative_cost(self, intg):
+    def plot_normalised_cummulative_cost(self):
         """ 
             If online optimisation is being performed ...
             Plot the overall speed-up in simulation due to the optimisation
@@ -645,7 +650,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         for optimisable in self.optimisables:
             match optimisable.split(':'):
                 case ['cstep', i]:
-                    csteps = self._preprocess_csteps(intg, intg.pseudointegrator.csteps)
+                    csteps = self._preprocess_csteps(intg.pseudointegrator.csteps)
                     unprocessed.append(csteps[int(i)])
                 case ['pseudo-dt-max',]:
                     unprocessed.append(intg.pseudointegrator.pintg.Δτᴹ)
@@ -668,12 +673,17 @@ class BayesianOptimisationPlugin(BasePlugin):
                 raise ValueError(f"Unrecognised optimisable {optimisable}")
         return post_processed
 
+    def _preprocess_csteps(self, csteps):
+        return csteps[0], csteps[self.depth], csteps[-2], csteps[-1]
 
-    def _preprocess_csteps(self, intg, csteps):
-        intg.depth = (len(csteps)-3)//2
-        return csteps[0], csteps[intg.depth+1], csteps[-2], csteps[-1]
+    def check_cycle(self, csteps):
+        """ Check if the candidate is a cycle """
 
-    def best_from_model(self, *, raw_samples=1024, num_restarts=10):
+        condensed_cycle =  csteps[0], csteps[self.depth], csteps[-2], csteps[-1]
+        if not (csteps[0] == csteps[1] == csteps[2] or csteps[-2] == csteps[-3] == csteps[-4]):
+            raise ValueError(f"Incorrect condensed cycle: {condensed_cycle} <-- {csteps}")
+        
+    def best_from_model(self):
 
         from botorch.acquisition import PosteriorMean
 
@@ -682,13 +692,15 @@ class BayesianOptimisationPlugin(BasePlugin):
             maximize = False,
             )
 
+        raw_samples = 1024 if self.be == 'cpu' else 4096
+        num_restarts = 10 if self.be == 'cpu' else 20
+
         X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
         X_b    = self.normalise.untransform(X_cand)
 
         return self.substitute_in_model(X_b)
 
-    def next_from_model(self, type = 'EI', *, 
-                        samples=1024, restarts=10,):
+    def next_from_model(self, type = 'EI'):
         """ Using model, optimise acquisition function and return next candidate
 
         Args:
@@ -710,10 +722,13 @@ class BayesianOptimisationPlugin(BasePlugin):
             from botorch.acquisition           import qKnowledgeGradient
             from botorch.acquisition.objective import ScalarizedPosteriorTransform
             
+            samples   = 1024
+            restarts  =   10
+            fantasies =  128
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
                 posterior_transform = ScalarizedPosteriorTransform(weights=negw),
-                num_fantasies       = 128,
+                num_fantasies       = fantasies,
                 )
             X_cand = self.optimise(_acquisition_function, samples, restarts)
             X_b = self.normalise.untransform(X_cand)
@@ -722,7 +737,10 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             from botorch.acquisition           import qNoisyExpectedImprovement
             from botorch.acquisition.objective import ScalarizedPosteriorTransform
-            
+
+            samples   = 4096 if self.be == 'cuda' else 1024
+            restarts  =   20 if self.be == 'cuda' else   10
+
             _acquisition_function = qNoisyExpectedImprovement(
                 self.model, self.norm_X,
                 posterior_transform = ScalarizedPosteriorTransform(weights=negw),
