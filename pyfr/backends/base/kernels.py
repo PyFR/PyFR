@@ -6,10 +6,11 @@ from pyfr.util import memoize
 
 
 class Kernel:
-    def __init__(self, mats=[], views=[], misc=[]):
+    def __init__(self, mats=[], views=[], misc=[], dt=float('nan')):
         self.mats = mats
         self.views = views
         self.misc = misc
+        self.dt = dt
 
     @property
     def retval(self):

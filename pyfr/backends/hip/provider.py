@@ -35,6 +35,22 @@ class HIPKernelProvider(BaseKernelProvider):
     def _build_kernel(self, name, src, argtypes):
         return SourceModule(self.backend, src).get_function(name, argtypes)
 
+    def _benchmark(self, kfunc, nbench=4, nwarmup=1):
+        stream = self.backend.hip.create_stream()
+        start_evt = self.backend.hip.create_event()
+        stop_evt = self.backend.hip.create_event()
+
+        for i in range(nbench + nwarmup):
+            if i == nwarmup:
+                start_evt.record(stream)
+
+            kfunc(stream)
+
+        stop_evt.record(stream)
+        stream.synchronize()
+
+        return stop_evt.elapsed_time(start_evt) / nbench
+
 
 class HIPPointwiseKernelProvider(HIPKernelProvider,
                                  BasePointwiseKernelProvider):
