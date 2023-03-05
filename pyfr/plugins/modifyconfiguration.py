@@ -57,9 +57,8 @@ class ModifyConfigPlugin(BasePlugin):
                         raise ValueError(f"Unknown key: {key}")
 
                 if any(c.startswith('cstep:') for c in intg.candidate):
-                    print("Next candidate:", self._postprocess_ccsteps4(csteps), "on rank", self.rank)
-                    intg.pseudointegrator.csteps = self._postprocess_ccsteps4(csteps)
-        
+                    intg.pseudointegrator.csteps = self._postprocess_ccsteps(csteps)
+                    #intg.pseudointegrator.csteps = self._postprocess_ccsteps4(csteps)
                 intg.candidate.clear()
 
             elif intg.opt_type == 'offline':
@@ -74,6 +73,14 @@ class ModifyConfigPlugin(BasePlugin):
         if intg.opt_type in ['onfline', 'online']:
             intg.prev_cfgs['opt-cfg'] = intg.cfg.tostr()
 
-    def _postprocess_ccsteps4(self, ccsteps):
-        return  (ccsteps[0],) * self.depth + (ccsteps[1],) + \
-                (ccsteps[2],) * (self.depth-1) + (ccsteps[3],)
+    def _postprocess_ccsteps(self, ccsteps):
+
+        if len(ccsteps) == 1:
+            return  (1.,) * self.depth + (1,) + \
+                    (1.,) * (self.depth-1) + (ccsteps[0],)
+        elif len(ccsteps) == 2:
+            return  (1.,) * self.depth + (ccsteps[0],) + \
+                    (1.,) * (self.depth-1) + (ccsteps[1],)
+        elif len(ccsteps) == 4:
+            return  (ccsteps[0],) * self.depth + (ccsteps[1],) + \
+                    (ccsteps[2],) * (self.depth-1) + (ccsteps[3],)

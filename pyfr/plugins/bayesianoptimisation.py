@@ -52,7 +52,9 @@ class BayesianOptimisationPlugin(BasePlugin):
             *[f't-{i}' for i in range(len(self.optimisables))],'t-m', 't-s', 
             *[f'n-{i}' for i in range(len(self.optimisables))],'n-m', 'n-s', 
             *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
-            'bounds-size', 'opt-time', 'tcurr', 'cumm-compute-time', 'repetition', 
+            'bounds-size', 
+            'opt-time', 'tcurr', 'cumm-compute-time', 
+            'repetition', 'LooCV',
             ] 
 
         self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 2)
@@ -124,10 +126,12 @@ class BayesianOptimisationPlugin(BasePlugin):
             self._bnds = self.torch.tensor(bnds_init, **self.torch_kwargs)
             self._hbnds = self.torch.tensor(hard_bnds, **self.torch_kwargs)
 
-            self.cost_plot = self.cfg.get(cfgsect, 'cost-plot', 'cost.png')
-            self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', 'cumm-cost.png')
-            self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', 'speedup.png')
+            self.cost_plot = self.cfg.get(cfgsect, 'cost-plot', None)
+            self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', None)
+            self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', None)
             self.outf = self.cfg.get(cfgsect, 'history'  , 'bayesopt.csv')
+
+            self.validate = self.cfg.getliteral(cfgsect, 'validate',[])
 
         self.deserialise(intg, data)
 
@@ -138,7 +142,10 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         self.check_offline_optimisation_status(intg)
 
+        self.loocv_error = 100
+
         if self.rank == self.root:
+            print(intg.tcurr)
             opt_time_start = perf_counter()
 
             if intg.opt_type == 'online' and intg.bad_sim:
@@ -155,7 +162,13 @@ class BayesianOptimisationPlugin(BasePlugin):
                 't-s': [intg.opt_cost_std], 
                 },)
             
-            if ((len(self.pd_opt.index)<(self.PM_limit)) or intg.bad_sim):
+            if not self.validate == [] : 
+                next_candidate = self.validate.pop()
+
+                for i, val in enumerate(next_candidate):
+                    t1[f'n-{i}'] = val
+
+            elif ((len(self.pd_opt.index)<(self.PM_limit)) or intg.bad_sim):
 
                 self.add_to_model(*self.process_raw(t1))
                 best_candidate, t1['b-m'], t1['b-s'] = self.best_from_model()
@@ -229,23 +242,26 @@ class BayesianOptimisationPlugin(BasePlugin):
             if intg.opt_type == 'online':
                 t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
 
+            t1['LooCV'] = self.loocv_error
+
             # Add all the data collected into the main dataframe
             self.pd_opt = pd.concat([self.pd_opt, t1], ignore_index=True)
 
-            test_cols = list(filter(lambda x: x.startswith('t-') and x[2:].isdigit(), t1.columns))
+            test_cols = list(filter(lambda x: x.startswith('t-') or x.startswith('t-'), t1.columns))
             self.pd_opt['repetition'] = (self.pd_opt
                                         .groupby(test_cols)
                                         .cumcount()+1)
 
             self.pd_opt.to_csv(self.outf, index=False)
 
-            if intg.opt_type == 'online':
-                self.plot_normalised_cummulative_cost()
-                self.plot_overall_speedup(intg)
+#            if intg.opt_type == 'online' and self.cumm_plot and self.speedup_plot:
+#                self.plot_normalised_cummulative_cost()
+#                self.plot_overall_speedup(intg)
+#
+#            if self.cost_plot:
+#                self.plot_normalised_cost(intg)
 
-            self.plot_normalised_cost(intg)
-
-            next_cols = list(filter(lambda x: x.startswith('n-'), self.pd_opt.columns))
+            next_cols = list(filter(lambda x: x.startswith('n-') and x[2:].isdigit(), self.pd_opt.columns))
 
             print(f"{t1[next_cols] = }") 
 
@@ -590,13 +606,13 @@ class BayesianOptimisationPlugin(BasePlugin):
             stan = Standardize(m=1),    # Then standardise
             )
 
-        self.norm_X = self.normalise.transform(
+        self._norm_X = self.normalise.transform(
             self.torch.tensor(tX , **self.torch_kwargs))
         stan_Y, stan_Yvar = self.trans.forward(
             self.torch.tensor(tY , **self.torch_kwargs),
             self.torch.tensor(tYv, **self.torch_kwargs))
 
-        self.model = FixedNoiseGP(train_X = self.norm_X, 
+        self.model = FixedNoiseGP(train_X = self._norm_X, 
                                   train_Y = stan_Y, 
                                   train_Yvar = stan_Yvar)
 
@@ -605,6 +621,14 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         mll = mll.to(**self.torch_kwargs)                      
         fit_model(mll)
+
+        if (len(self.pd_opt.index))>=4:
+            # Calculate LOOCV error only after the initialising 16 iterations
+            # This is to avoid wasting time in the start
+            #   when model is definitely not good enough
+            
+            self.loocv_error = self.cv_folds(self._norm_X, stan_Y, stan_Yvar).detach().cpu().numpy()
+            print(self.cv_folds(self._norm_X, stan_Y, stan_Yvar).detach().cpu().numpy())
 
     @property
     def bounds(self):
@@ -650,7 +674,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         for optimisable in self.optimisables:
             match optimisable.split(':'):
                 case ['cstep', i]:
-                    csteps = self._preprocess_csteps(intg.pseudointegrator.csteps)
+                    csteps = self._preprocess_csteps4(intg.pseudointegrator.csteps)
                     unprocessed.append(csteps[int(i)])
                 case ['pseudo-dt-max',]:
                     unprocessed.append(intg.pseudointegrator.pintg.Δτᴹ)
@@ -663,7 +687,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     def _postprocess_ccandidate(self, ccandidate):
         post_processed = {}
         for i, optimisable in enumerate(self.optimisables):
-            if optimisable.startswith('cstep:'):
+            if optimisable.startswith('cstep:') and optimisable[6:].isdigit():
                 post_processed[optimisable] = ccandidate[i]
             elif optimisable == 'pseudo-dt-max':
                 post_processed[optimisable] = ccandidate[i]
@@ -673,15 +697,14 @@ class BayesianOptimisationPlugin(BasePlugin):
                 raise ValueError(f"Unrecognised optimisable {optimisable}")
         return post_processed
 
-    def _preprocess_csteps(self, csteps):
+    def _preprocess_csteps4(self, csteps):
         return csteps[0], csteps[self.depth], csteps[-2], csteps[-1]
-
-    def check_cycle(self, csteps):
-        """ Check if the candidate is a cycle """
-
-        condensed_cycle =  csteps[0], csteps[self.depth], csteps[-2], csteps[-1]
-        if not (csteps[0] == csteps[1] == csteps[2] or csteps[-2] == csteps[-3] == csteps[-4]):
-            raise ValueError(f"Incorrect condensed cycle: {condensed_cycle} <-- {csteps}")
+        
+    def _preprocess_csteps2(self, csteps):
+        return csteps[self.depth], csteps[-1]
+        
+    def _preprocess_csteps1(self, csteps):
+        return csteps[-1],
         
     def best_from_model(self):
 
@@ -692,8 +715,8 @@ class BayesianOptimisationPlugin(BasePlugin):
             maximize = False,
             )
 
-        raw_samples = 1024 if self.be == 'cpu' else 4096
-        num_restarts = 10 if self.be == 'cpu' else 20
+        raw_samples  = 1024 if self.be == 'cpu' else 4096
+        num_restarts =   10 if self.be == 'cpu' else   20
 
         X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
         X_b    = self.normalise.untransform(X_cand)
@@ -742,7 +765,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             restarts  =   20 if self.be == 'cuda' else   10
 
             _acquisition_function = qNoisyExpectedImprovement(
-                self.model, self.norm_X,
+                self.model, self._norm_X,
                 posterior_transform = ScalarizedPosteriorTransform(weights=negw),
                 prune_baseline = True,
                 )
@@ -798,3 +821,25 @@ class BayesianOptimisationPlugin(BasePlugin):
         else:
             return XX, Y_m, Y_std
         
+    def cv_folds(self, train_X, train_Y, train_Yvar):
+
+        from botorch.cross_validation import gen_loo_cv_folds
+
+        cv_folds = gen_loo_cv_folds(train_X=train_X, train_Y=train_Y, train_Yvar=train_Yvar)
+
+        from botorch.cross_validation import batch_cross_validation
+        from botorch.models import FixedNoiseGP
+        from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
+
+        # instantiate and fit model
+        cv_results = batch_cross_validation(
+            model_cls=FixedNoiseGP,
+            mll_cls=ExactMarginalLogLikelihood,
+            cv_folds=cv_folds,
+        )
+
+        posterior = cv_results.posterior
+        mean = posterior.mean
+        cv_error = ((cv_folds.test_Y.squeeze() - mean.squeeze()) ** 2).mean()
+        
+        return cv_error
