@@ -52,7 +52,7 @@ class RewindPlugin(BasePlugin):
             
             if not self.if_rewind:
                 intg.pseudointegrator.reset_dtau()
-                print("Reset complete.")
+                #print("Reset complete.")
 
             else:
                 intg.pseudointegrator.rewind_dtau()

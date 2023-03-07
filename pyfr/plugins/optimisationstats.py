@@ -24,8 +24,8 @@ class OptimisationStatsPlugin(BasePlugin):
         self.opt_tend = self.cfg.getfloat(cfgsect, 'tend', intg.tend)
 
         # Skip first few iterations, and capture the rest few iterations
-        self.skip_first_n = self.cfg.getint(cfgsect, 'skip-first-n', 10)     
-        self.last_n = self.cfg.getint(cfgsect, 'capture-last-n', 30)
+        intg._skip_first_n = self.cfg.getint(cfgsect, 'skip-first-n', 10)     
+        intg._capture_last_n = self.cfg.getint(cfgsect, 'capture-last-n', 40)
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
         self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
@@ -150,13 +150,13 @@ class OptimisationStatsPlugin(BasePlugin):
              or (self.Δτ_controller == 'local-pi'
             and abs(intg.pseudointegrator.pintg.Δτᴹ
                   - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
-            and self.pd_stats.count(0)[0]> (self.skip_first_n + self.last_n)):
+            and self.pd_stats.count(0)[0]> (intg._skip_first_n + intg._capture_last_n)):
 
                 intg.reset_opt_stats = True
                 intg.bad_sim = False
 
-                intg.opt_cost_mean = self.pd_stats['cost'].tail(self.last_n).mean()
-                intg.opt_cost_std = self.pd_stats['cost'].tail(self.last_n).std()
+                intg.opt_cost_mean = self.pd_stats['cost'].tail(intg._capture_last_n).mean()
+                intg.opt_cost_std = self.pd_stats['cost'].tail(intg._capture_last_n).std()
         return
 
     def bcast_status(self, intg):

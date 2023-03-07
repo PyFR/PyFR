@@ -9,29 +9,6 @@ from pyfr.mpiutil import get_comm_rank_root
 
 class BayesianOptimisationPlugin(BasePlugin):
     """ Bayesian Optimisation applied to PyFR.
-
-        The configuration file for this plugin should contain the following:
-        
-        cost-plot    = ./bo_cost-plot.png
-        cumm-plot    = ./bo_cumm-plot.png
-        speedup-plot = ./bo_speedup-plot.png
-        history      = ./bo_history.csv
-        seed = 0
-
-        KG-limit   = 5
-        EI-limit   = 10
-        PM-limit   = 15
-
-        botorch-backend   = cuda
-        botorch-precision = double
-
-        optimisables = < a list of strings, where strings must be the following>
-                       < 'cstep:0','cstep:1','cstep:2','cstep:3',
-                         'pseudo-dt-max'>
-
-        bounds      = [(0.0125, 0.0150)]
-        hard-bounds = [(0.0125, 0.05)]
-
     """
 
     name = 'bayesian_optimisation'
@@ -41,63 +18,43 @@ class BayesianOptimisationPlugin(BasePlugin):
     def __init__(self, intg, cfgsect, suffix, **data):
 
         super().__init__(intg, cfgsect, suffix)
-
-        cfgostat = 'soln-plugin-optimisation_stats'
-        skip_n = self.cfg.getint(cfgostat, 'skip-first-n', 10)     
-        last_n = self.cfg.getint(cfgostat, 'capture-last-n', 40)
-
-        self.optimisables = self.cfg.getliteral(cfgsect, 'optimisables')
-
-        self.columns = [
-            *[f't-{i}' for i in range(len(self.optimisables))],'t-m', 't-s', 
-            *[f'n-{i}' for i in range(len(self.optimisables))],'n-m', 'n-s', 
-            *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
-            'bounds-size', 
-            'opt-time', 'tcurr', 'cumm-compute-time', 
-            'repetition', 'LooCV',
-            ] 
-
-        self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 2)
-
-        self.KG_limit = self.cfg.getint(cfgsect, 'KG-limit')
-        self.EI_limit = self.cfg.getint(cfgsect, 'EI-limit')
-        self.PM_limit = self.cfg.getint(cfgsect, 'PM-limit')
-
         self.comm, self.rank, self.root = get_comm_rank_root()
 
-        # Read the initial candidate and the validation candidate
-        #   This is a list of tuple of 4 floats
+        cfgostat = 'soln-plugin-optimisation_stats'
+        skip_n = self.cfg.getint(cfgostat, 'skip-first-n')     
+        last_n = self.cfg.getint(cfgostat, 'capture-last-n')
+        
+        self.plotter_switch = self.cfg.getbool(cfgsect, 'plotter-switch', False)
+        self.optimisables = self.cfg.getliteral(cfgsect, 'optimisables')
+        self.bad_sim_multiplier = self.cfg.getfloat(cfgsect, 'bad-sim-multiplier', 2.0)
+        self.columns_from_optimisables()
 
-        if self.cfg.getpath(cfgsect, 'base-sim-location', None):
-            # Read the base simulation data and prepare it for plotting
-            # If this does not exist, then extrapolate the first iteration data 
-            pass
+        self.bnds_var = self.cfg.getfloat(cfgsect, 'bounds-variability', 1)
+        self._A_lim = self.cfg.getint(cfgsect, 'KG-limit', 2**len(self.optimisables))
+        self._B_lim = self.cfg.getint(cfgsect, 'EI-limit', 3**len(self.optimisables))
+        self._C_lim = self.cfg.getint(cfgsect, 'PM-limit', 4**len(self.optimisables))
 
+        intg.opt_type = suffix
         if suffix == 'online':
-            intg.opt_type = 'online'
-
-            self._toptstart = self.cfg.getfloat(cfgostat, 'tstart', intg.tstart)     
+            self.columns.append('tcurr')
+            self.index_name = 'tcurr'
             self._toptend = self.cfg.getfloat(cfgostat, 'tend', intg.tend)     
             self._tend = intg.tend     
-
             self.noptiters_max = ((self._toptend - intg.tcurr)/intg._dt
                                 //(skip_n + last_n))
-            self.index_name = 'tcurr'
         elif suffix == 'onfline':
-            intg.opt_type = 'onfline'
-            self.noptiters_max = self.cfg.getint(cfgsect, 'iterations', 100)
-            intg.offline_optimisation_complete = False
+            self.columns.append('iteration')
             self.index_name = 'iteration'
+            self.noptiters_max = self.cfg.getint(cfgsect, 'iterations', 2*self._C_lim)
+            intg.offline_optimisation_complete = False
         elif suffix == 'offline':
             raise NotImplementedError(f'offline not implemented.')
         else:
             raise ValueError('Invalid suffix')
 
-        print(  f"KG limit: {self.KG_limit}, ",
-                f"EI limit: {self.EI_limit}, ",
-                f"PM limit: {self.PM_limit}",
-                f"stop limit: {self.noptiters_max}",
-            )
+        print(f"KG limit: {self._A_lim}, ", f"EI limit: {self._B_lim}, ",
+              f"PM limit: {self._C_lim}", f"stop limit: {self.noptiters_max}",
+                )
 
         if self.rank == self.root:
 
@@ -121,158 +78,216 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             self.torch_kwargs = {'dtype': dtyp, 'device': torch.device(self.be)}
 
-            bnds_init = list(zip(*self.cfg.getliteral(cfgsect, 'bounds')))
-            hard_bnds = list(zip(*self.cfg.getliteral(cfgsect, 'hard-bounds')))
-            self._bnds = self.torch.tensor(bnds_init, **self.torch_kwargs)
-            self._hbnds = self.torch.tensor(hard_bnds, **self.torch_kwargs)
+            bnd_r = self.cfg.getliteral(cfgsect, 'bounds')
+            bnd_init = list(zip(*bnd_r))
+            hbnd = list(zip(*self.cfg.getliteral(cfgsect, 'hard-bounds', bnd_r)))
+            self._bnds = self.torch.tensor(bnd_init, **self.torch_kwargs)
+            self._bbnds = self.torch.tensor(bnd_init, **self.torch_kwargs)
+            self._hbnds = self.torch.tensor(hbnd, **self.torch_kwargs)
 
+            self.negw = self.torch.tensor([-1.0], **self.torch_kwargs)
             self.cost_plot = self.cfg.get(cfgsect, 'cost-plot', None)
             self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', None)
             self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', None)
             self.outf = self.cfg.get(cfgsect, 'history'  , 'bayesopt.csv')
-
             self.validate = self.cfg.getliteral(cfgsect, 'validate',[])
+            self.opt_motive = None # Default first is random
+            self.cand_train = True # Default first candidate
 
         self.deserialise(intg, data)
 
     def __call__(self, intg):
 
         if not intg.reset_opt_stats:
+        # If optimisation statistics collected by the previous plugin is not reset yet
+        # then don't apply Bayesian Optimisation to the data
             return
 
         self.check_offline_optimisation_status(intg)
 
-        self.loocv_error = 100
-
         if self.rank == self.root:
-            print(intg.tcurr)
             opt_time_start = perf_counter()
 
             if intg.opt_type == 'online' and intg.bad_sim:
-                if np.isnan(intg.opt_cost_mean) and self.pd_opt.empty:
+                if np.isnan(intg.opt_cost_mean) and self.df_train.empty:
                     raise ValueError("Initial configuration must be working.")
-#                tcurr = self.pd_opt.loc[self.pd_opt.index[-1], ['tcurr']]
-                tcurr = self.pd_opt.iloc[-1, self.pd_opt.columns.get_loc('tcurr')]
+                tcurr = self.df_train.iloc[-1, self.df_train.columns.get_loc('tcurr')]
             else:
                 tcurr = intg.tcurr
 
+            # Convert last iteration data from intg to dataframe
+            tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
+
             t1 =  pd.DataFrame({
-                **{f't-{i}': [val] for i, val in enumerate(self.candidate_from_intg(intg))},
+                **{f't-{i}': [val] for i, val in enumerate(tested_candidate)},
                 't-m': [intg.opt_cost_mean], 
                 't-s': [intg.opt_cost_std], 
+                'if-train': [self.cand_train], # Training or validation
                 },)
             
-            if not self.validate == [] : 
+            if not self.validate == []: 
+                self.cand_train = False
                 next_candidate = self.validate.pop()
-
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
 
-            elif ((len(self.pd_opt.index)<(self.PM_limit)) or intg.bad_sim):
+            elif ((len(self.df_train.index)<self._C_lim) or 
+                  intg.bad_sim or 
+                  loocv_err>0.5 or 
+                  kcv_err>0.01):
 
-                self.add_to_model(*self.process_raw(t1))
-                best_candidate, t1['b-m'], t1['b-s'] = self.best_from_model()
+                # We need to add the latest candidate to the model only if 
+                #   it is for training (not validation)
+                # Else we add it to the validation set
+                if self.cand_train:
+                    t_X_Y_Yv = self.process_training_raw(t1)
+                    v_X_Y_Yv = self.process_validation_raw()
+                else:
+                    v_X_Y_Yv = self.process_validation_raw(t1)
+                    t_X_Y_Yv = self.process_training_raw()
 
-                for i, val in enumerate(best_candidate):
-                    t1[f'b-{i}'] = val
+                # Increase bounds only after exploration
+                if len(self.df_train.index)>=self._B_lim:
+                    # Set bounds on the basis of training data 
+                    self.expand_bounds(self.happening_region(v_X_Y_Yv[0]))
 
+                print(f"len(self.df_train.index)>=self._B_lim: {len(self.df_train.index)>=self._B_lim}")
+
+                self.add_to_model(*t_X_Y_Yv)
+
+                # Get loocv error with the validation set and training-set
                 t1['bounds-size'] = self.bounds_size
+                t1['LooCV'] = loocv_err = self.loocv_error
+                t1['KCV'] = kcv_err = self.kcv_error(*v_X_Y_Yv)
+                kcv_err = 0 if kcv_err==None else kcv_err
 
                 # Check if optimisation is performing alright
-                if (intg.bad_sim or
-                    (0.9*self.pd_opt['t-m'].min()) > t1['b-m'].tail(1).min() or
-                    0 > (t1['b-m'] - 2*t1['b-s']).tail(1).min() or
-                    self.pd_opt.empty):
-
-                    for i, val in enumerate(best_candidate):
-                        t1[f'n-{i}'] = val
-                        t1['n-m'], t1['n-s'] = t1['b-m'], t1['b-s']
-
-                    if intg.bad_sim:
-                        print("Bad simulation, using best candidate.")
-                    elif (0.9*self.pd_opt['t-m'].min()) > t1['b-m'].tail(1).min():
-                        print("Best candidate wall-time is lesser than 0.9 times the previous best.")
-                    elif 0 > (t1['b-m'] - 2*t1['b-s']).tail(1).min():
-                        print("Best candidate is worse than 2 sigma of the previous best.")
+                if self.df_train.empty:
+                    # Initialisation phase
+                    self.opt_motive = 'PM'
+                    self.cand_train = True
+                elif intg.bad_sim:
+                    # Fall-back
+                    print("Bad simulation.")
+                    self.opt_motive = 'PM'
+                    self.cand_train = False
+                elif len(self.df_train.index)<self._A_lim:
+                    # Initialisation phase - I
+                    self.opt_motive = 'KG'
+                    self.cand_train = True
+                elif loocv_err>0.5:
+                    # Explorative phase - II
+                    if not self.cand_train:
+                        self.opt_motive = 'KG'
+                        self.cand_train = True
                     else:
-                        print("No previous optimisation data. Using best candidate which is random enough.")
-
-                # Continue (if no issues) with the model or the best candidate
-
-                elif (len(self.pd_opt.index))<self.KG_limit:
-                    next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model('KG')
-                    for i, val in enumerate(next_candidate):
-                        t1[f'n-{i}'] = val
-                    print(f"KG: {next_candidate}")
-
-                elif (len(self.pd_opt.index))<self.EI_limit:
-                    next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model('EI')
-                    for i, val in enumerate(next_candidate):
-                        t1[f'n-{i}'] = val
-                    print(f"EI: {next_candidate}")
-
-                elif (len(self.pd_opt.index))<self.PM_limit:
-                    for i, val in enumerate(best_candidate):
-                        t1[f'n-{i}'] = val
-                    t1['n-m'], t1['n-s'] = t1['b-m'], t1['b-s']
-                    print(f"Best: {best_candidate}")
+                        self.opt_motive = 'PM'
+                        self.cand_train = False
+                elif len(self.df_train.index)<self._B_lim:
+                    # Exploitative phase - I
+                    self.opt_motive = 'EI'
+                    self.cand_train = True
+                elif kcv_err>0.01:
+                    # Exploitative phase - II
+                    if not self.cand_train:
+                        self.opt_motive = 'EI'
+                        self.cand_train = True
+                    else:
+                        self.opt_motive = 'PM'
+                        self.cand_train = False
                 else:
-                    raise ValueError("No more candidates to test.")
+                    # Finalising phase
+                    self.opt_motive = 'PM'
+                    self.cand_train = False
+
+                next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model(self.opt_motive)
+                for i, val in enumerate(next_candidate):
+                    t1[f'n-{i}'] = val
+                print(f"{self.opt_motive}: {next_candidate}")
+
+                if not self.opt_motive == 'PM':
+                    best_candidate, t1['b-m'], t1['b-s'] = self.next_from_model('PM')
+                    for i, val in enumerate(best_candidate):
+                        t1[f'b-{i}'] = val
+                else:
+                    # next candidate is the actual best candidate
+                    best_candidate = next_candidate
+                    t1['b-m'], t1['b-s'] = t1['n-m'], t1['n-s']
+                    for i, val in enumerate(best_candidate):
+                        t1[f'b-{i}'] = val
 
             # Finally, use the best tested working candidate in the end
             else:
-                next_candidate, t1['n-m'], t1['n-s'] = self.best_tested_from_dataframe()
+                next_candidate, t1['n-m'], t1['n-s'] = self.best_tested()
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
                 
                 # If offline optimisation, then abort the simulation at this point. 
-                if intg.opt_type == 'onfline':
-                    intg.abort = True
+                #if intg.opt_type == 'onfline':
+                #    intg.abort = True
                     
             t1['opt-time'] = perf_counter() - opt_time_start
 
-            match intg.opt_type:
-                case 'online':
-                    t1[self.index_name] = tcurr                
-                case 'onfline':
-                    t1[self.index_name] = len(self.pd_opt.index)+1
-                case _:
-                    raise ValueError('Not a valid opt_type')
+            if intg.opt_type == 'online': 
+                t1[self.index_name] = tcurr                
+            elif intg.opt_type == 'onfline':
+                t1[self.index_name] = len(self.df_train.index)+1
+            else:
+                raise ValueError('Not a valid opt_type')
 
-            if intg.opt_type == 'online':
-                t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
+            t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
 
-            t1['LooCV'] = self.loocv_error
-
+            # ------------------------------------------------------------------
             # Add all the data collected into the main dataframe
-            self.pd_opt = pd.concat([self.pd_opt, t1], ignore_index=True)
+            self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
+            # ------------------------------------------------------------------
+            # Post-process dataframe results
+            self.df_train['repetition'] = (self.df_train
+                                           .groupby(self._t_cols)
+                                           .cumcount()+1)
 
-            test_cols = list(filter(lambda x: x.startswith('t-') or x.startswith('t-'), t1.columns))
-            self.pd_opt['repetition'] = (self.pd_opt
-                                        .groupby(test_cols)
-                                        .cumcount()+1)
+            if self.df_train['LooCV'].count() > self._A_lim:
+                # Get a rolling mean of self.df_train['LooCV']
+                self.df_train[f'roll{self._A_lim}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._A_lim).mean().diff()
 
-            self.pd_opt.to_csv(self.outf, index=False)
+                # If last value in self.df_train[f'roll{self._A_lim}-diff-LooCV'] > 0                
+                # and if total number of True values is greater than self._A_lim
+                if (self.df_train[f'roll{self._A_lim}-diff-LooCV'].iloc[-1] > 0 
+                    and self.df_train['if-train'].sum() > self._A_lim  
+                    and kcv_err>0.01):
 
-#            if intg.opt_type == 'online' and self.cumm_plot and self.speedup_plot:
-#                self.plot_normalised_cummulative_cost()
-#                self.plot_overall_speedup(intg)
-#
-#            if self.cost_plot:
-#                self.plot_normalised_cost(intg)
+                    # First get the index of the first value in self.df_train['if-train'] that has the value True
+                    location = self.df_train['if-train'].index[self.df_train['if-train'] == True][0]
 
-            next_cols = list(filter(lambda x: x.startswith('n-') and x[2:].isdigit(), self.pd_opt.columns))
+                    # Set the true value to false
+                    self.df_train.loc[location, 'if-train'] = False
 
-            print(f"{t1[next_cols] = }") 
+                    intg._skip_first_n   += 1
+                    intg._capture_last_n += 4
+                    print(f"Skipping first {intg._skip_first_n} and capturing last {intg._capture_last_n}.")
 
-            intg.candidate = self._postprocess_ccandidate(list(t1[next_cols].values)[0])
+            # ------------------------------------------------------------------
+            # View results as csv file
+            self.df_train.to_csv(self.outf, index=False)
+            # ------------------------------------------------------------------
+            # Notify intg of the latest generated candidate 
+            intg.candidate = self._postprocess_ccandidate(list(t1[self._n_cols].values)[0])
+            # ------------------------------------------------------------------
+            # Finally, plot if required
+            if self.plotter_switch:
+                if intg.opt_type == 'online' and self.cumm_plot and self.speedup_plot:
+                    self.plot_normalised_cummulative_cost()
+                    self.plot_overall_speedup(intg)
 
-        print(f"{intg.candidate = }") 
+                if self.cost_plot:
+                    self.plot_normalised_cost(intg)
+            # ------------------------------------------------------------------
+
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
     def serialise(self, intg):
         if self.rank == self.root:
-            return {'pd_opt':self.pd_opt.to_numpy(dtype=np.float64),
+            return {'df_train':self.df_train.to_numpy(dtype=np.float64),
                     'bounds':self.bounds,
                     }
 
@@ -284,21 +299,20 @@ class BayesianOptimisationPlugin(BasePlugin):
         if self.rank == self.root:
 
             if bool(data):
-                self.pd_opt = pd.DataFrame(data['pd_opt'], columns=self.columns)
+                self.df_train = pd.DataFrame(data['df_train'], columns=self.columns)
                 self.bounds = data['bounds']
 
                 # Set the candidate to the next candidate if optimisation was being performed in the previous run                
-                next_cols = list(filter(lambda x: x.startswith('n-') and x[2:].isdigit(), self.pd_opt.columns))
-                next_candidate = self.pd_opt[next_cols].tail(1).to_numpy(dtype=np.float64)[0]
+                next_candidate = self.df_train[self._n_cols].tail(1).to_numpy(dtype=np.float64)[0]
                 intg.candidate = self._postprocess_ccandidate(next_candidate)
             else:
-                self.pd_opt = pd.DataFrame(columns=self.columns)
+                self.df_train = pd.DataFrame(columns=self.columns)
             
         if (self.rank == self.root) and len(intg.candidate)>0:
             intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
     def check_offline_optimisation_status(self, intg):
-        if (self.rank == self.root) and (len(self.pd_opt.index) > self.noptiters_max):
+        if (self.rank == self.root) and (len(self.df_train.index) > self.noptiters_max):
             intg.offline_optimisation_complete = True
         else:
             intg.offline_optimisation_complete = False
@@ -307,41 +321,64 @@ class BayesianOptimisationPlugin(BasePlugin):
                                            intg.offline_optimisation_complete, 
                                            root = self.root)
 
-    def process_raw(self, t1):
+    def process_training_raw(self, t1 = None):
 
-        # Process all optimisables
-        test_cols = list(filter(lambda x: x.startswith('t-') and x[2:].isdigit(), t1.columns))
+        new_df_train = self.df_train[self.df_train['if-train'] == True] 
+        args = {'axis' : 0, 'ignore_index' : True, 'sort' : False}
 
-        # tX  = np.vstack((self.pd_opt[test_cols].to_numpy(dtype=np.float64), 
-        #                           t1[test_cols].to_numpy(dtype=np.float64)))
-        # tY  = np.array(list(self.pd_opt['t-m'])+[list(t1['t-m'])[0]]).reshape(-1,1)
-        # tYv = np.array(list(self.pd_opt['t-s'])+[list(t1['t-s'])[0]])**2
+        if t1 is not None:
+            # Process all optimisables with t1 too
+            tX = pd.concat([new_df_train[self._t_cand], t1[self._t_cand]], **args).astype(np.float64).to_numpy()
+            tY = pd.concat([new_df_train['t-m'], t1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
+            tYv = pd.concat([new_df_train['t-s'], t1['t-s'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
+        else:
+            tX = new_df_train[self._t_cand].astype(np.float64).to_numpy()
+            tY = new_df_train['t-m'].to_numpy().reshape(-1, 1)
+            tYv = new_df_train['t-s'].to_numpy().reshape(-1, 1) ** 2
 
-        tX  = pd.concat([self.pd_opt[test_cols], t1[test_cols]]     , axis=0, ignore_index=True, sort=False).astype(np.float64).to_numpy()
-        tY  = pd.concat([self.pd_opt['t-m']    , t1['t-m'].iloc[:1]], axis=0, ignore_index=True, sort=False).to_numpy().reshape(-1, 1)
-        tYv = pd.concat([self.pd_opt['t-s']    , t1['t-s'].iloc[:1]], axis=0, ignore_index=True, sort=False).to_numpy().reshape(-1, 1) ** 2
-
-        # If NaN, then replace with twice the data of worst working candidate
-        tY[np.isnan(tY)] = 2*np.nanmax(tY)
-        tYv[np.isnan(tYv)] = 2*np.nanmax(tYv)
-        tYv = tYv.reshape(-1,1)
+        if len(tY) > 0:
+            # If NaN, then replace with twice the data of worst working candidate
+            tY[np.isnan(tY)] = self.bad_sim_multiplier*np.nanmax(tY)
+            tYv[np.isnan(tYv)] = self.bad_sim_multiplier*np.nanmax(tYv)
+            tYv = tYv.reshape(-1,1)
 
         return tX, tY, tYv
 
-    def best_tested_from_dataframe(self):
+    def process_validation_raw(self, v1 = None):
+
+        new_df_train = self.df_train[self.df_train['if-train'] == False] 
+        args = {'axis' : 0, 'ignore_index' : True, 'sort' : False}
+
+        if v1 is not None:
+            # Process all optimisables with t1 too
+            vX = pd.concat([new_df_train[self._t_cand], v1[self._t_cand]], **args).astype(np.float64).to_numpy()
+            vY = pd.concat([new_df_train['t-m'], v1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
+            vYv = pd.concat([new_df_train['t-s'], v1['t-s'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
+        else:
+            vX = new_df_train[self._t_cand].astype(np.float64).to_numpy()
+            vY = new_df_train['t-m'].to_numpy().reshape(-1, 1)
+            vYv = new_df_train['t-s'].to_numpy().reshape(-1, 1) ** 2
+
+        if len(vY) > 0:
+            # If NaN, then replace with twice the data of worst working candidate
+            vY[np.isnan(vY)] = self.bad_sim_multiplier*np.nanmax(vY)
+            vYv[np.isnan(vYv)] = self.bad_sim_multiplier*np.nanmax(vYv)
+            vYv = vYv.reshape(-1,1)
+
+        return vX, vY, vYv
+
+    def best_tested(self):
         """ 
             Return the best tested candidate and coresponding stats (mean, std)
         """
-        test_cols = list(filter(lambda x: x.startswith('t-') and x[2:].isdigit(), self.pd_opt.columns))
-        grouped_pd_opt = self.pd_opt.groupby(test_cols)
+        grouped_df_train = self.df_train.groupby(self._t_cand)
 
-        candidate = (grouped_pd_opt.mean(numeric_only = True)['t-m'].idxmin())
-        mean = (grouped_pd_opt.mean(numeric_only = True)['t-m'].min())
-        std = (grouped_pd_opt.std(numeric_only = True).fillna(grouped_pd_opt.last())
+        candidate = (grouped_df_train.mean(numeric_only = True)['t-m'].idxmin())
+        mean = (grouped_df_train.mean(numeric_only = True)['t-m'].min())
+        std = (grouped_df_train.std(numeric_only = True).fillna(grouped_df_train.last())
                                                       .at[candidate,'t-s'])
 
         candidate = [candidate] if isinstance(candidate, float) else list(candidate)
-
         return candidate, mean, std
 
     def plot_normalised_cost(self, intg):
@@ -355,7 +392,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         """
 
-        base = float(self.pd_opt.at[0, 't-m'])
+        base = float(self.df_train.at[0, 't-m'])
 
         cost_fig, cost_ax = plt.subplots(1,1, figsize = (8,8))
 
@@ -365,51 +402,51 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         cost_ax.axhline(y = 1, color = 'grey', linestyle = ':')
         
-#            cost_ax.plot(self.pd_opt[self.index_name], 
-#                        self.pd_opt['b-m']/base, 
+#            cost_ax.plot(self.df_train[self.index_name], 
+#                        self.df_train['b-m']/base, 
 #                        linestyle = ':', color = 'green',
 #                        label = 'Predicted best mean cost', 
 #                        )
 
 #            cost_ax.fill_between(
-#                    self.pd_opt[self.index_name], 
-#                    (self.pd_opt['b-m']-2*self.pd_opt['b-s'])/base, 
-#                    (self.pd_opt['b-m']+2*self.pd_opt['b-s'])/base, 
+#                    self.df_train[self.index_name], 
+#                    (self.df_train['b-m']-2*self.df_train['b-s'])/base, 
+#                    (self.df_train['b-m']+2*self.df_train['b-s'])/base, 
 #                    color = 'green', alpha = 0.1, 
 #                    label = 'Predicted best candidate''s confidence in cost',
 #                        )
 
-        cost_ax.scatter(self.pd_opt[self.index_name], 
-                     self.pd_opt['t-m']/base, 
+        cost_ax.scatter(self.df_train[self.index_name], 
+                     self.df_train['t-m']/base, 
                      color = 'blue', marker = '*',
                      label = 'Tested candidate mean cost', 
                     )
 
-        tested_best = (self.pd_opt['t-m']
+        tested_best = (self.df_train['t-m']
                        .expanding().min()
                        .reset_index(drop=True))
 
-        cost_ax.plot(self.pd_opt[self.index_name], 
+        cost_ax.plot(self.df_train[self.index_name], 
                      tested_best/base,
                      linestyle = ':', color = 'blue',
                      label = 'Best tested cost', 
                     )
         # 
-        cummin_loc = list(self.pd_opt['t-m']
+        cummin_loc = list(self.df_train['t-m']
                           .expanding().apply(lambda x: x.idxmin()).astype(int))
 
-        tested_best_std = (self.pd_opt.loc[cummin_loc]['t-s']
+        tested_best_std = (self.df_train.loc[cummin_loc]['t-s']
                            .reset_index(drop=True))
         cost_ax.fill_between(
-                self.pd_opt[self.index_name], 
+                self.df_train[self.index_name], 
                 (tested_best-2*tested_best_std)/base, 
                 (tested_best+2*tested_best_std)/base, 
                 color = 'blue', alpha = 0.04, 
                 label = 'Tested best candidate''s confidence in cost',
                     )
 
-        cost_ax.plot(self.pd_opt[self.index_name], 
-                     self.pd_opt['n-m']/base,
+        cost_ax.plot(self.df_train[self.index_name], 
+                     self.df_train['n-m']/base,
                      linestyle = ':', color = 'green',
                      label = 'Best next cost', 
                     )
@@ -417,9 +454,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         next_index_add = intg._dt if intg.opt_type == 'online' else 1
 
         cost_ax.fill_between(
-                self.pd_opt[self.index_name] + next_index_add, 
-                (self.pd_opt['n-m']-2*self.pd_opt['n-s'])/base, 
-                (self.pd_opt['n-m']+2*self.pd_opt['n-s'])/base, 
+                self.df_train[self.index_name] + next_index_add, 
+                (self.df_train['n-m']-2*self.df_train['n-s'])/base, 
+                (self.df_train['n-m']+2*self.df_train['n-s'])/base, 
                 color = 'green', alpha = 0.1, 
                 label = 'next candidate''s confidence in cost',
                     )
@@ -447,24 +484,24 @@ class BayesianOptimisationPlugin(BasePlugin):
         cumm_ax.set_xlabel(self.index_name)
         cumm_ax.set_ylabel('Overall speedup wrt base simulation')
 
-        proj = 1 + self.pd_opt.index - (self.pd_opt['t-m']
+        proj = 1 + self.df_train.index - (self.df_train['t-m']
                                         .isna()
                                         .expanding().sum())
 
-        base = (self.pd_opt.at[0, 'cumm-compute-time']*proj)
+        base = (self.df_train.at[0, 'cumm-compute-time']*proj)
 
         cumm_ax.axhline(y = 1, color = 'grey', linestyle = ':',)
 
-        ref = float(self.pd_opt.at[0, 't-m'])
+        ref = float(self.df_train.at[0, 't-m'])
 
-        if (len(self.pd_opt.index))<self.PM_limit:
-            m = float(self.pd_opt[
-                self.pd_opt['t-m'].reset_index(drop=True)
-                == self.pd_opt['t-m'].min()]['t-m'].reset_index(drop=True))
+        if (len(self.df_train.index))<self._C_lim:
+            m = float(self.df_train[
+                self.df_train['t-m'].reset_index(drop=True)
+                == self.df_train['t-m'].min()]['t-m'].reset_index(drop=True))
 
-            s = float(self.pd_opt[
-                self.pd_opt['t-m'].reset_index(drop=True) == 
-                self.pd_opt['t-m'].min()]['t-s'].reset_index(drop=True))
+            s = float(self.df_train[
+                self.df_train['t-m'].reset_index(drop=True) == 
+                self.df_train['t-m'].min()]['t-s'].reset_index(drop=True))
 
             cumm_ax.axhline(y = ref/m, 
                             linestyle = ':', color = 'green', 
@@ -476,8 +513,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                             )
         else:        
 
-            m1 = self.pd_opt.at[self.pd_opt.last_valid_index(), 'n-m']
-            s1 = self.pd_opt.at[self.pd_opt.last_valid_index(), 'n-s']
+            m1 = self.df_train.at[self.df_train.last_valid_index(), 'n-m']
+            s1 = self.df_train.at[self.df_train.last_valid_index(), 'n-s']
 
             cumm_ax.axhline(y = ref/m1, 
                             linestyle = ':', color = 'green', 
@@ -488,15 +525,15 @@ class BayesianOptimisationPlugin(BasePlugin):
                             label = 'Aiming speed-up',
                             )
 
-        cumm_ax.plot(self.pd_opt[self.index_name], 
-                     base/self.pd_opt['cumm-compute-time'],
+        cumm_ax.plot(self.df_train[self.index_name], 
+                     base/self.df_train['cumm-compute-time'],
                      linestyle = '-', color = 'g', marker = '*',
                      label = 'compute-time speedup',
                     )
 
-        cumm_ax.plot(self.pd_opt[self.index_name], 
-                     base/(self.pd_opt['cumm-compute-time'] + 
-                           self.pd_opt['opt-time'].expanding().sum()),
+        cumm_ax.plot(self.df_train[self.index_name], 
+                     base/(self.df_train['cumm-compute-time'] + 
+                           self.df_train['opt-time'].expanding().sum()),
                      linestyle = '-', color = 'b', marker = '*',
                      label = 'overall speedup',
                     )
@@ -529,30 +566,30 @@ class BayesianOptimisationPlugin(BasePlugin):
         cumm_ax.set_xlabel(self.index_name)
         cumm_ax.set_ylabel('cummilative costs (in seconds)')
 
-        proj = self.pd_opt.index - (self.pd_opt['t-m']
+        proj = self.df_train.index - (self.df_train['t-m']
                                     .isna().expanding().sum() + 1)
         
-        cumm_ax.plot(self.pd_opt[self.index_name], 
-                     self.pd_opt.at[0, 'cumm-compute-time']*proj,
+        cumm_ax.plot(self.df_train[self.index_name], 
+                     self.df_train.at[0, 'cumm-compute-time']*proj,
                      linestyle = '--', color = 'grey',
                      label = 'projected compute-time',
                     )
 
-        cumm_ax.plot(self.pd_opt[self.index_name], 
-                     self.pd_opt['cumm-compute-time'] + 
-                     self.pd_opt['opt-time'].expanding().sum(),
+        cumm_ax.plot(self.df_train[self.index_name], 
+                     self.df_train['cumm-compute-time'] + 
+                     self.df_train['opt-time'].expanding().sum(),
                      linestyle = '-', color = 'blue',
                      label = 'actual cost (compute + optimisation)',
                     )
 
-        cumm_ax.plot(self.pd_opt[self.index_name], 
-                     self.pd_opt['cumm-compute-time'],
+        cumm_ax.plot(self.df_train[self.index_name], 
+                     self.df_train['cumm-compute-time'],
                      linestyle = '-', color = 'green',
                      label = 'compute-cost',
                     )
 
-        cumm_ax.plot(self.pd_opt[self.index_name], 
-                     self.pd_opt['opt-time'].expanding().sum(),
+        cumm_ax.plot(self.df_train[self.index_name], 
+                     self.df_train['opt-time'].expanding().sum(),
                      linestyle = '-', color = 'red',
                      label = 'optimisation cost',
                      )
@@ -570,13 +607,13 @@ class BayesianOptimisationPlugin(BasePlugin):
         plt.close(cumm_fig)
 
     def add_limits_to_plot(self, ax):
-        limits = [(self.KG_limit, 'red', 'KG-EI transition'),
-                (self.EI_limit, 'orange', 'EI-PM transition'),
-                (self.PM_limit, 'yellow', 'Optimisation turned off')]
+        limits = [(self._A_lim, 'red', 'KG-EI transition'),
+                (self._B_lim, 'orange', 'EI-PM transition'),
+                (self._C_lim, 'yellow', 'Optimisation turned off')]
 
         for limit, color, label in limits:
-            if len(self.pd_opt.index) > limit:
-                ax.axvline(x=float(self.pd_opt.at[limit, self.index_name]),
+            if len(self.df_train.index) > limit:
+                ax.axvline(x=float(self.df_train.at[limit, self.index_name]),
                         color=color, linestyle='-.', label=label)
 
     def add_to_model(self, tX, tY, tYv):
@@ -591,30 +628,26 @@ class BayesianOptimisationPlugin(BasePlugin):
         from gpytorch.mlls             import ExactMarginalLogLikelihood
         from botorch.models            import FixedNoiseGP
         from botorch.fit               import fit_gpytorch_model as fit_model
-        from botorch.models.transforms import Standardize, Normalize, ChainedOutcomeTransform
-
-        self.expand_bounds(tX, tY) # Set bounds on the basis of training data 
-                         # given soft-bounds and hard-bounds
-
-        print(f'Bounds: {self._bnds}')
+        from botorch.models.transforms import Standardize, Normalize
 
         self.normalise = Normalize(d=tX.shape[1], bounds=self._bnds)
         self.standardise = Standardize(m=1)
 
-        self.trans = ChainedOutcomeTransform(
-#            log = Log(),                # First take log of cost
-            stan = Standardize(m=1),    # Then standardise
-            )
+        self.normalise.train(True)
+        self.standardise.train(True)
+        
+        # from botorch.models.transforms import ChainedOutcomeTransform
+        # self.trans = ChainedOutcomeTransform(stan=Standardize(m=1))
 
         self._norm_X = self.normalise.transform(
             self.torch.tensor(tX , **self.torch_kwargs))
-        stan_Y, stan_Yvar = self.trans.forward(
+        self._stan_Y, self._stan_Yvar = self.standardise.forward(
             self.torch.tensor(tY , **self.torch_kwargs),
             self.torch.tensor(tYv, **self.torch_kwargs))
 
         self.model = FixedNoiseGP(train_X = self._norm_X, 
-                                  train_Y = stan_Y, 
-                                  train_Yvar = stan_Yvar)
+                                  train_Y = self._stan_Y, 
+                                  train_Yvar = self._stan_Yvar)
 
         mll = ExactMarginalLogLikelihood(likelihood = self.model.likelihood, 
                                          model = self.model)
@@ -622,14 +655,42 @@ class BayesianOptimisationPlugin(BasePlugin):
         mll = mll.to(**self.torch_kwargs)                      
         fit_model(mll)
 
-        if (len(self.pd_opt.index))>=4:
+        self.normalise.train(False)
+        self.standardise.train(False)
+
+    @property
+    def loocv_error(self):
+        if (len(self.df_train.index))>=1:
             # Calculate LOOCV error only after the initialising 16 iterations
             # This is to avoid wasting time in the start
             #   when model is definitely not good enough
+            return self.cv_folds(self._norm_X, self._stan_Y, self._stan_Yvar
+                                 ).detach().cpu().numpy()
+        else:
+            return None
             
-            self.loocv_error = self.cv_folds(self._norm_X, stan_Y, stan_Yvar).detach().cpu().numpy()
-            print(self.cv_folds(self._norm_X, stan_Y, stan_Yvar).detach().cpu().numpy())
+    def kcv_error(self, vX, vY, vYv):
+        # Based on processing done like normalise and standardise, process vX
 
+        if len(vY) == 0:
+            return None
+
+        _norm_vX = self.normalise.transform(
+            self.torch.tensor(vX[-self._A_lim:] , **self.torch_kwargs)) 
+        _stan_vY, _stan_vYv = self.standardise.forward(
+            self.torch.tensor(vY[-self._A_lim:] , **self.torch_kwargs),
+            self.torch.tensor(vYv[-self._A_lim:], **self.torch_kwargs))
+
+        if (len(self.df_train.index))>=1:
+            # Calculate LOOCV error only after the initialising 16 iterations
+            # This is to avoid wasting time in the start
+            #   when model is definitely not good enough
+            return self.cv_folds(self._norm_X, self._stan_Y, self._stan_Yvar,
+                                 _norm_vX, _stan_vY, _stan_vYv,
+                                 ).detach().cpu().numpy()
+        else:
+            return None
+            
     @property
     def bounds(self):
         return self._bnds.detach().cpu().numpy()
@@ -638,23 +699,32 @@ class BayesianOptimisationPlugin(BasePlugin):
     def bounds(self, y):
         self._bnds = self.torch.tensor(y, **self.torch_kwargs)
 
-    def expand_bounds(self, tX, tY):
+    def happening_region(self, tX):
         # Create happening region 
-        # a cube of length 2*radius around the best points
-        radius = int(np.ceil(np.sqrt(tX.shape[0])))
-        best_cands = tX[tY.argsort(axis=0)[:,0] <= radius, :]
+        best_cands = tX[-self._A_lim :]
+
+        if len(best_cands) < self._A_lim:
+            return
+
         means, stds = np.mean(best_cands, axis=0), np.std( best_cands, axis=0)
         hr = self.torch.tensor(np.array([means - self.bnds_var * stds,
                                          means + self.bnds_var * stds]), 
                                **self.torch_kwargs)
+        
+        print('Happening region: ', hr , 'Bounds: ', self._bnds)
+
+        return hr
+
+    def expand_bounds(self, hr):
+        if hr is None:
+            return
 
         # Increase bounds to include happening region
-        l_bnds_inc_loc = self._bnds[0, :] > hr[0, :]
-        u_bnds_inc_loc = self._bnds[1, :] < hr[1, :]
+        l_bnds_inc_loc = self._bbnds[0, :] > hr[0, :]
+        u_bnds_inc_loc = self._bbnds[1, :] < hr[1, :]
         
         self._bnds[0, l_bnds_inc_loc] = hr[0, l_bnds_inc_loc]
         self._bnds[1, u_bnds_inc_loc] = hr[1, u_bnds_inc_loc]
-        self._bnds[0, self._bnds[0, :] < 0] = 0
 
         # Restrict the bounds to hardbounds region
         self._bnds[0, :] = self.torch.max(self._bnds[0, :], self._hbnds[0, :])
@@ -664,182 +734,174 @@ class BayesianOptimisationPlugin(BasePlugin):
     def bounds_size(self):
         return np.prod((self._bnds[1,:]-self._bnds[0,:]).detach().cpu().numpy())
         
-    def candidate_from_intg(self, intg):
+    def candidate_from_intg(self, pseudointegrator):
         """ 
             Get candidate used in the last window from the integrator 
             Store the results into a dictionary mapping optimisable name to value
             Use the same optimisable name in modify_configuration plugin
         """
         unprocessed = []
-        for optimisable in self.optimisables:
-            match optimisable.split(':'):
-                case ['cstep', i]:
-                    csteps = self._preprocess_csteps4(intg.pseudointegrator.csteps)
-                    unprocessed.append(csteps[int(i)])
-                case ['pseudo-dt-max',]:
-                    unprocessed.append(intg.pseudointegrator.pintg.Δτᴹ)
-                case ['pseudo-dt-fact',]:
-                    unprocessed.append(intg.pseudointegrator.dtauf)
-                case _:
-                    raise ValueError(f"Unrecognised optimisable: {optimisable}")
+
+        if any(opt.startswith('cstep:') for opt in self.optimisables):
+            n_csteps = sum(opt.startswith('cstep:') for opt in self.optimisables)
+            csteps = self._preprocess_csteps(pseudointegrator.csteps, n_csteps)
+
+        for opt in self.optimisables:
+            if opt.startswith('cstep:') and opt[6:].isdigit():
+                unprocessed.append(csteps[int(opt[6:])])
+            elif opt == 'pseudo-dt-max':
+                unprocessed.append(pseudointegrator.pintg.Δτᴹ)
+            elif opt == 'pseudo-dt-fact':
+                unprocessed.append(pseudointegrator.dtauf)
+            else:
+                raise ValueError(f"Unrecognised optimisable: {opt}")
+
         return unprocessed
 
     def _postprocess_ccandidate(self, ccandidate):
         post_processed = {}
-        for i, optimisable in enumerate(self.optimisables):
-            if optimisable.startswith('cstep:') and optimisable[6:].isdigit():
-                post_processed[optimisable] = ccandidate[i]
-            elif optimisable == 'pseudo-dt-max':
-                post_processed[optimisable] = ccandidate[i]
-            elif optimisable == 'pseudo-dt-fact':
-                post_processed[optimisable] = ccandidate[i]
+        for i, opt in enumerate(self.optimisables):
+            if opt.startswith('cstep:') and opt[6:].isdigit():
+                post_processed[opt] = ccandidate[i]
+            elif opt == 'pseudo-dt-max':
+                post_processed[opt] = ccandidate[i]
+            elif opt == 'pseudo-dt-fact':
+                post_processed[opt] = ccandidate[i]
             else:
-                raise ValueError(f"Unrecognised optimisable {optimisable}")
+                raise ValueError(f"Unrecognised optimisable {opt}")
         return post_processed
 
-    def _preprocess_csteps4(self, csteps):
-        return csteps[0], csteps[self.depth], csteps[-2], csteps[-1]
-        
-    def _preprocess_csteps2(self, csteps):
-        return csteps[self.depth], csteps[-1]
-        
-    def _preprocess_csteps1(self, csteps):
-        return csteps[-1],
-        
-    def best_from_model(self):
+    def _preprocess_csteps(self, csteps, n_csteps):
+
+        if n_csteps == 4:
+            return csteps[0], csteps[self.depth], csteps[-2], csteps[-1]
+        elif n_csteps == 3:
+            return csteps[0], csteps[self.depth], csteps[-1]
+        elif n_csteps == 2:
+            return csteps[self.depth], csteps[-1]
+        elif n_csteps == 1:
+            return csteps[-1],
+
+    def next_from_model(self, type):
+
+        from botorch.acquisition           import qKnowledgeGradient
+        from botorch.acquisition.objective import ScalarizedPosteriorTransform
+
+        from botorch.acquisition           import qNoisyExpectedImprovement
+        from botorch.acquisition.objective import ScalarizedPosteriorTransform
 
         from botorch.acquisition import PosteriorMean
 
-        _acquisition_function = PosteriorMean(
-            self.model, 
-            maximize = False,
-            )
-
-        raw_samples  = 1024 if self.be == 'cpu' else 4096
-        num_restarts =   10 if self.be == 'cpu' else   20
-
-        X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
-        X_b    = self.normalise.untransform(X_cand)
-
-        return self.substitute_in_model(X_b)
-
-    def next_from_model(self, type = 'EI'):
-        """ Using model, optimise acquisition function and return next candidate
-
-        Args:
-            type (str): Acquisition function acronym. Defaults to 'EI'.
-            raw_samples (int, optional): _description_. Defaults to 1024.
-            num_restarts (int, optional): _description_. Defaults to 10.
-
-        Raises:
-            ValueError: _description_
-
-        Returns:
-            tuple[list[float], float, float]: Candidate, expected mean and var
-        """
-
-        negw = self.torch.tensor([-1.0], **self.torch_kwargs)
-
         if type == 'KG':
-
-            from botorch.acquisition           import qKnowledgeGradient
-            from botorch.acquisition.objective import ScalarizedPosteriorTransform
-            
             samples   = 1024
             restarts  =   10
             fantasies =  128
+
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
-                posterior_transform = ScalarizedPosteriorTransform(weights=negw),
+                posterior_transform = ScalarizedPosteriorTransform(weights=self.negw),
                 num_fantasies       = fantasies,
                 )
             X_cand = self.optimise(_acquisition_function, samples, restarts)
             X_b = self.normalise.untransform(X_cand)
 
         elif type == 'EI':
-
-            from botorch.acquisition           import qNoisyExpectedImprovement
-            from botorch.acquisition.objective import ScalarizedPosteriorTransform
-
             samples   = 4096 if self.be == 'cuda' else 1024
             restarts  =   20 if self.be == 'cuda' else   10
 
             _acquisition_function = qNoisyExpectedImprovement(
                 self.model, self._norm_X,
-                posterior_transform = ScalarizedPosteriorTransform(weights=negw),
+                posterior_transform = ScalarizedPosteriorTransform(weights=self.negw),
                 prune_baseline = True,
                 )
             X_cand = self.optimise(_acquisition_function, samples, restarts)
             X_b = self.normalise.untransform(X_cand)
+
+        elif type == 'PM':
+            _acquisition_function = PosteriorMean(self.model, maximize = False)
+
+            raw_samples  = 1024 if self.be == 'cpu' else 4096
+            num_restarts =   10 if self.be == 'cpu' else   20
+
+            X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
+            X_b    = self.normalise.untransform(X_cand)
+
         else:
             raise ValueError(f'next_type {type} not recognised')
 
         return self.substitute_in_model(X_b)
 
     def optimise(self, _acquisition_function, raw_samples=4096, num_restarts=100):
-        """ Returns a transformed attached candidate which minimises the acquisition function
-        """
-
         from botorch.optim.optimize import optimize_acqf
-
-        X_cand, _ = optimize_acqf(
-            acq_function = _acquisition_function,
-            bounds       = self.normalise.transform(self._bnds),
-            q            = 1,
-            num_restarts = num_restarts,
-            raw_samples  = raw_samples,
-        )
-
+        X_cand, _ = optimize_acqf(acq_function = _acquisition_function, q = 1,
+            bounds = self.normalise.transform(self._bnds),
+            num_restarts = num_restarts,raw_samples = raw_samples)
         return X_cand
 
-    def substitute_in_model(self, X_b):
+    def substitute_in_model(self, X_sub):
         """ Accept an untransformed candidate into model. 
             Get an untransformed output.
-
-        Args:
-            X_b: Untransformed attached tensor of shape (1,4)
-
-        Returns:
-            X_best: tuple[float64, float64, float64, float64]
-            Y_mean: float64
-            Y_std : float64
         """
 
-        X_best = self.normalise.transform(X_b)
+        X_best = self.normalise.transform(X_sub)
         Y_low, Y_upp = self.model.posterior(X_best).mvn.confidence_region()
         Y_avg = self.model.posterior(X_best).mvn.mean
 
-        Y_m = self.trans.untransform(Y_avg)[0].squeeze().detach().cpu().numpy()
-        Y_l = self.trans.untransform(Y_low)[0].squeeze().detach().cpu().numpy()
-        Y_u = self.trans.untransform(Y_upp)[0].squeeze().detach().cpu().numpy()
+        Y_m = self.standardise.untransform(Y_avg)[0].squeeze().detach().cpu().numpy()
+        Y_l = self.standardise.untransform(Y_low)[0].squeeze().detach().cpu().numpy()
+        Y_u = self.standardise.untransform(Y_upp)[0].squeeze().detach().cpu().numpy()
         Y_std = (Y_u - Y_l)/4
 
-        XX = X_b.detach().cpu().squeeze().tolist()
+        XX = X_sub.detach().cpu().squeeze().tolist()
 
         if isinstance(XX, float):
             return [XX], Y_m, Y_std
         else:
             return XX, Y_m, Y_std
         
-    def cv_folds(self, train_X, train_Y, train_Yvar):
+    def cv_folds(self, train_X, train_Y, train_Yvar, 
+                 test_X=None, test_Y=None, test_Yvar=None):
 
-        from botorch.cross_validation import gen_loo_cv_folds
-
-        cv_folds = gen_loo_cv_folds(train_X=train_X, train_Y=train_Y, train_Yvar=train_Yvar)
-
+        from botorch.cross_validation import CVFolds, gen_loo_cv_folds
         from botorch.cross_validation import batch_cross_validation
         from botorch.models import FixedNoiseGP
         from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
 
+        if test_X is None or test_Y is None or test_Yvar is None:
+            cv_folds = gen_loo_cv_folds(
+                train_X=train_X, train_Y=train_Y, train_Yvar=train_Yvar)
+        else:
+            cv_folds = CVFolds(
+                train_X=train_X, test_X=test_X, 
+                train_Y=train_Y, test_Y=test_Y, 
+                train_Yvar=train_Yvar, test_Yvar=test_Yvar)
+
         # instantiate and fit model
-        cv_results = batch_cross_validation(
-            model_cls=FixedNoiseGP,
-            mll_cls=ExactMarginalLogLikelihood,
-            cv_folds=cv_folds,
-        )
+        cv_results = batch_cross_validation(model_cls=FixedNoiseGP,
+            mll_cls=ExactMarginalLogLikelihood, cv_folds=cv_folds,)
 
         posterior = cv_results.posterior
         mean = posterior.mean
         cv_error = ((cv_folds.test_Y.squeeze() - mean.squeeze()) ** 2).mean()
         
         return cv_error
+
+    def columns_from_optimisables(self):
+
+        self.columns = [
+            *[f't-{i}' for i in range(len(self.optimisables))],'t-m', 't-s', 
+            *[f'n-{i}' for i in range(len(self.optimisables))],'n-m', 'n-s', 
+            *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
+            'bounds-size', 
+            'opt-time', 'cumm-compute-time', 
+            'repetition', 'LooCV',  'KCV', 'if-train',
+            ] 
+
+        self._t_cols = list(filter(lambda x: x.startswith('t-'), self.columns))
+        self._t_cand = list(filter(lambda x: x.startswith('t-') and x[2:].isdigit(), self.columns))
+        
+        self._b_cols = list(filter(lambda x: x.startswith('b-'), self.columns))
+        self._b_cand = list(filter(lambda x: x.startswith('b-') and x[2:].isdigit(), self.columns))
+        
+        self._n_cols = list(filter(lambda x: x.startswith('n-'), self.columns))
+        self._n_cand = list(filter(lambda x: x.startswith('n-') and x[2:].isdigit(), self.columns))
