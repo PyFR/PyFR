@@ -37,6 +37,8 @@ class BaseBackend:
 
         # Convert to a NumPy data type
         self.fpdtype = np.dtype(prec).type
+        self.fpdtype_eps = np.finfo(self.fpdtype).eps
+        self.fpdtype_max = np.finfo(self.fpdtype).max
 
         # Allocated matrices
         self.mats = WeakValueDictionary()
@@ -53,8 +55,8 @@ class BaseBackend:
     @cached_property
     def lookup(self):
         pkg = f'pyfr.backends.{self.name}.kernels'
-        dfltargs = dict(fpdtype=self.fpdtype, soasz=self.soasz,
-                        csubsz=self.csubsz, math=math)
+        dfltargs = dict(fpdtype=self.fpdtype, fpdtype_max=self.fpdtype_max,
+                        soasz=self.soasz, csubsz=self.csubsz, math=math)
 
         return DottedTemplateLookup(pkg, dfltargs)
 
