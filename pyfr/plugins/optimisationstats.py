@@ -161,8 +161,9 @@ class OptimisationStatsPlugin(BasePlugin):
                                              )
             ):
 
-                mean = self.pd_stats['cost'].tail(intg._capture_next_n).mean()
-                std = self.pd_stats['cost'].tail(intg._capture_next_n).std()
+                # Accumilate mean and std after skipping steps
+                mean = self.pd_stats['cost'].tail(intg.actually_captured).mean()
+                std  = self.pd_stats['cost'].tail(intg.actually_captured).sem()
 
                 if (((std/mean) < intg._stability) or                                                                       # If deviation is within 5% of mean
                      (self.pd_stats.count(0)[0] > ( intg._skip_first_n
