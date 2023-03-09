@@ -286,9 +286,9 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # KEEP STRESSING THE OPTIMISER AT ITS BAD TIMES SO ITS ADAPTIVE ENOUGH
                     # ------------------------------------------------------------------
                     if self.cand_train:
-                        intg._skip_first_n   += 1
-                        intg._capture_next_n += 4
-                        intg._stabilise_final_n += 15
+                        intg._skip_first_n      += intg.increment
+                        intg._capture_next_n    += intg.increment*4
+                        intg._stabilise_final_n += intg.increment*16
                     # ------------------------------------------------------------------
 
             # If intg.actually_captured is equal to or greater than + intg._capture_next_n + intg._stabilise_final_n then 
