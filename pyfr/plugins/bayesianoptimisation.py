@@ -124,6 +124,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             t1 =  pd.DataFrame({
                 **{f't-{i}': [val] for i, val in enumerate(tested_candidate)},
                 't-m': [intg.opt_cost_mean], 
+                't-d': [intg.opt_cost_std], 
                 't-s': [intg.opt_cost_sem], 
                 'if-train': [self.cand_train], # Training or not 
                 'if-validate': [not self.cand_train], # Validation or not
