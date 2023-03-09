@@ -36,7 +36,7 @@ class OptimisationStatsPlugin(BasePlugin):
         self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
 
         intg.reset_opt_stats = intg.bad_sim = False
-        intg.opt_cost_mean = intg.opt_cost_std = None 
+        intg.opt_cost_mean = intg.opt_cost_sem = None 
 
         if self.rank == self.root:
 
@@ -140,42 +140,36 @@ class OptimisationStatsPlugin(BasePlugin):
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
             intg.reset_opt_stats = intg.bad_sim = True
-            intg.opt_cost_mean = intg.opt_cost_std = np.NaN 
+            intg.opt_cost_mean = intg.opt_cost_sem = np.NaN 
             return
 
-        if self.pd_stats.count(0)[0]<5:
+        if self.pd_stats.count(0)[0]<10:
             return
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
             if (self.maxniters != self.minniters):
                 intg.reset_opt_stats = intg.bad_sim = True
-                intg.opt_cost_mean = intg.opt_cost_std = np.NaN
+                intg.opt_cost_mean = intg.opt_cost_sem = np.NaN
                 return
        
         if (((self.Δτ_controller == 'none'
              or (self.Δτ_controller == 'local-pi'
             and abs(intg.pseudointegrator.pintg.Δτᴹ
                   - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
-            and self.pd_stats.count(0)[0] > (  intg._skip_first_n 
-                                             + intg._capture_next_n
-                                             )
-            ):
+            and self.pd_stats.count(0)[0] >=(intg._skip_first_n + intg._capture_next_n)):
 
-                # Accumilate mean and std after skipping steps
+                # Accumilate mean and sem after skipping steps
                 mean = self.pd_stats['cost'].tail(intg.actually_captured).mean()
-                std  = self.pd_stats['cost'].tail(intg.actually_captured).sem()
+                sem  = self.pd_stats['cost'].tail(intg.actually_captured).sem()
 
-                if (((std/mean) < intg._stability) or                                                                       # If deviation is within 5% of mean
-                     (self.pd_stats.count(0)[0] > ( intg._skip_first_n
-                                                  + intg._capture_next_n
-                                                  + intg._stabilise_final_n
-                                                  )
+                if (((sem/mean) < intg._stability) or                                                                       # If deviation is within 5% of mean
+                     (self.pd_stats.count(0)[0] >=( intg._skip_first_n + intg._capture_next_n + intg._stabilise_final_n )
                      )
                     ):
                     intg.reset_opt_stats = True
                     intg.bad_sim = False
                     intg.opt_cost_mean = mean
-                    intg.opt_cost_std = std
+                    intg.opt_cost_sem = sem
 
         return
 

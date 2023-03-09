@@ -115,8 +115,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             if self.df_train.empty:
                 # Set the reference acceptable error in cost
-                print(f"Setting error from {intg._stability} to {2*intg.opt_cost_std/intg.opt_cost_mean}")
-                intg._stability = 2*intg.opt_cost_std/intg.opt_cost_mean
+                print(f"Setting error from {intg._stability} to {2*intg.opt_cost_sem/intg.opt_cost_mean}")
+                intg._stability = 2*intg.opt_cost_sem/intg.opt_cost_mean
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
@@ -124,7 +124,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             t1 =  pd.DataFrame({
                 **{f't-{i}': [val] for i, val in enumerate(tested_candidate)},
                 't-m': [intg.opt_cost_mean], 
-                't-s': [intg.opt_cost_std], 
+                't-s': [intg.opt_cost_sem], 
                 'if-train': [self.cand_train], # Training or not 
                 'if-validate': [not self.cand_train], # Validation or not
                 },)
@@ -135,7 +135,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
 
-            elif ((len(self.df_train.index)<self._C_lim) or intg.bad_sim):
+            else:
 
                 # We need to add the latest candidate to the model only if 
                 #   it is for training (not validation)
@@ -233,13 +233,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                     t1['b-m'], t1['b-s'] = t1['n-m'], t1['n-s']
                     for i, val in enumerate(best_candidate):
                         t1[f'b-{i}'] = val
-
-            # Finally, use the best tested working candidate in the end
-            else:
-                self.cand_train = False
-                next_candidate, t1['n-m'], t1['n-s'] = self.best_tested()
-                for i, val in enumerate(next_candidate):
-                    t1[f'n-{i}'] = val
                 
                 # If offline optimisation, then abort the simulation at this point. 
                 #if intg.opt_type == 'onfline':
@@ -401,20 +394,6 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         return vX, vY, vYv
 
-    def best_tested(self):
-        """ 
-            Return the best tested candidate and coresponding stats (mean, std)
-        """
-        grouped_df_train = self.df_train.groupby(self._t_cand)
-
-        candidate = (grouped_df_train.mean(numeric_only = True)['t-m'].idxmin())
-        mean = (grouped_df_train.mean(numeric_only = True)['t-m'].min())
-        std = (grouped_df_train.std(numeric_only = True).fillna(grouped_df_train.last())
-                                                      .at[candidate,'t-s'])
-
-        candidate = [candidate] if isinstance(candidate, float) else list(candidate)
-        return candidate, mean, std
-
     def plot_normalised_cost(self, intg):
         """Plot cost function statistics.
                 onfline: wrt number of iterations.
@@ -469,12 +448,12 @@ class BayesianOptimisationPlugin(BasePlugin):
         cummin_loc = list(self.df_train['t-m']
                           .expanding().apply(lambda x: x.idxmin()).astype(int))
 
-        tested_best_std = (self.df_train.loc[cummin_loc]['t-s']
+        tested_best_sem = (self.df_train.loc[cummin_loc]['t-s']
                            .reset_index(drop=True))
         cost_ax.fill_between(
                 self.df_train[self.index_name], 
-                (tested_best-2*tested_best_std)/base, 
-                (tested_best+2*tested_best_std)/base, 
+                (tested_best-2*tested_best_sem)/base, 
+                (tested_best+2*tested_best_sem)/base, 
                 color = 'blue', alpha = 0.04, 
                 label = 'Tested best candidate''s confidence in cost',
                     )
@@ -902,14 +881,14 @@ class BayesianOptimisationPlugin(BasePlugin):
         Y_m = self.standardise.untransform(Y_avg)[0].squeeze().detach().cpu().numpy()
         Y_l = self.standardise.untransform(Y_low)[0].squeeze().detach().cpu().numpy()
         Y_u = self.standardise.untransform(Y_upp)[0].squeeze().detach().cpu().numpy()
-        Y_std = (Y_u - Y_l)/4
+        Y_sem = (Y_u - Y_l)/4
 
         XX = X_sub.detach().cpu().squeeze().tolist()
 
         if isinstance(XX, float):
-            return [XX], Y_m, Y_std
+            return [XX], Y_m, Y_sem
         else:
-            return XX, Y_m, Y_std
+            return XX, Y_m, Y_sem
         
     def cv_folds(self, train_X, train_Y, train_Yvar, 
                  test_X=None, test_Y=None, test_Yvar=None):
