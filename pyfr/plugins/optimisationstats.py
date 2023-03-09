@@ -24,9 +24,10 @@ class OptimisationStatsPlugin(BasePlugin):
         self.opt_tend = self.cfg.getfloat(cfgsect, 'tend', intg.tend)
 
         # Skip first few iterations, and capture the rest few iterations
-        intg._skip_first_n = self.cfg.getint(cfgsect, 'skip-first-n', 10)     
-        intg._capture_next_n = self.cfg.getint(cfgsect, 'capture-next-n', 40)
-        intg._stabilise_final_n = self.cfg.getint(cfgsect, 'stabilise-final-n', 150)
+        window_ref = int(2/intg._dt)
+        intg._skip_first_n      = window_ref//4 #  10     
+        intg._capture_next_n    = window_ref    #  40
+        intg._stabilise_final_n = window_ref*4  # 150
         intg._stability = 0.10 # Default, will change with first iteration
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
