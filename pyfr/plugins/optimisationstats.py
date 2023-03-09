@@ -149,9 +149,14 @@ class OptimisationStatsPlugin(BasePlugin):
                 intg.opt_cost_mean = intg.opt_cost_std = np.NaN
                 return
        
-        if (((self.Δτ_controller == 'none' or (self.Δτ_controller == 'local-pi'
-                                                and abs(intg.pseudointegrator.pintg.Δτᴹ - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
-                                                and self.pd_stats.count(0)[0]> (intg._skip_first_n + intg._capture_last_n)):
+        if (((self.Δτ_controller == 'none'
+             or (self.Δτ_controller == 'local-pi'
+            and abs(intg.pseudointegrator.pintg.Δτᴹ
+                  - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
+            and self.pd_stats.count(0)[0] > (  intg._skip_first_n 
+                                             + intg._capture_next_n
+                                             )
+            ):
 
                 mean = self.pd_stats['cost'].tail(intg._capture_next_n).mean()
                 std = self.pd_stats['cost'].tail(intg._capture_next_n).std()
