@@ -170,7 +170,7 @@ class OptimisationStatsPlugin(BasePlugin):
                     intg.reset_opt_stats = True
                     intg.bad_sim = False
                     intg.opt_cost_mean = mean
-                    intg.opt_cost_sem = std
+                    intg.opt_cost_std = std
                     intg.opt_cost_sem = sem
 
         return

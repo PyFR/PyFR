@@ -194,7 +194,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # Initialisation phase - I
                     self.opt_motive = 'KG'
                     self.cand_train = True
-                elif loocv_err>0.8:
+                elif loocv_err>0.7:
                     # Explorative phase - II
                     if not self.cand_train:
                         self.opt_motive = 'KG'
@@ -720,12 +720,10 @@ class BayesianOptimisationPlugin(BasePlugin):
             2. Find the happening region as 1+-10% mean +- 2*std in each direction
             3. Take union of the happening region and the initial bounds
         """
-
         
-        mean_var = 0.25 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
-        std_mult = 2.5  # NEXT TEST: 5                        # If wiggling too much, search more around here
+        mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
+        std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
 
-        # 
         best_cands = tX[-self._nbcs:]
 
         if len(best_cands) <= 2 :
@@ -923,7 +921,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     def columns_from_optimisables(self):
 
         self.columns = [
-            *[f't-{i}' for i in range(len(self.optimisables))],'t-m', 't-s', 
+            *[f't-{i}' for i in range(len(self.optimisables))],'t-m', 't-s', 't-d', 
             *[f'n-{i}' for i in range(len(self.optimisables))],'n-m', 'n-s', 
             *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
             'bounds-size', 
