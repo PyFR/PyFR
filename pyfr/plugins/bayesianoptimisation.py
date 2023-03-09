@@ -21,8 +21,6 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.comm, self.rank, self.root = get_comm_rank_root()
 
         cfgostat = 'soln-plugin-optimisation_stats'
-        skip_n = self.cfg.getint(cfgostat, 'skip-first-n')     
-        last_n = self.cfg.getint(cfgostat, 'capture-last-n')
         
         self.plotter_switch = self.cfg.getbool(cfgsect, 'plotter-switch', False)
         self.optimisables = self.cfg.getliteral(cfgsect, 'optimisables')
@@ -33,6 +31,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         self._A_lim = 2**len(self.optimisables)
         self._B_lim = 2*self._A_lim 
         self._C_lim = 4**len(self.optimisables)
+        self._D_lim = 2*4**len(self.optimisables) # Offline optimisation stop
 
         intg.opt_type = suffix
         if suffix == 'online':
@@ -40,20 +39,19 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.index_name = 'tcurr'
             self._toptend = self.cfg.getfloat(cfgostat, 'tend', intg.tend)     
             self._tend = intg.tend     
-            self.noptiters_max = ((self._toptend - intg.tcurr)/intg._dt
-                                //(skip_n + last_n))
         elif suffix == 'onfline':
             self.columns.append('iteration')
             self.index_name = 'iteration'
-            self.noptiters_max = self.cfg.getint(cfgsect, 'iterations', 2*self._C_lim)
+            self.noptiters_max = self._D_lim
             intg.offline_optimisation_complete = False
         elif suffix == 'offline':
             raise NotImplementedError(f'offline not implemented.')
         else:
             raise ValueError('Invalid suffix')
 
-        print(f"KG limit: {self._A_lim}, ", f"EI limit: {self._B_lim}, ",
-              f"PM limit: {self._C_lim}", f"stop limit: {self.noptiters_max}",
+        print(f"Initialise model with: {self._A_lim}, ", 
+              f"Start looking for an optimum untill: {self._B_lim}, ",
+              f"Try to stop optimisation by: {self._C_lim}  ",
                 )
 
         if self.rank == self.root:
@@ -114,6 +112,11 @@ class BayesianOptimisationPlugin(BasePlugin):
                 tcurr = self.df_train.iloc[-1, self.df_train.columns.get_loc('tcurr')]
             else:
                 tcurr = intg.tcurr
+
+            if self.df_train.empty:
+                # Set the reference acceptable error in cost
+                print(f"Setting error from {intg._stability} to {2*intg.opt_cost_std/intg.opt_cost_mean}")
+                intg._stability = 2*intg.opt_cost_std/intg.opt_cost_mean
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
@@ -253,7 +256,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
 
-            t1['capture-window'] = intg._capture_last_n
+            t1['capture-window'] = intg.actually_captured
             # ------------------------------------------------------------------
             # Add all the data collected into the main dataframe
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
@@ -276,6 +279,24 @@ class BayesianOptimisationPlugin(BasePlugin):
                     position = self.df_train[self.df_train['if-train']].index[0]
                     self.df_train.loc[position, 'if-train'] = False
 
+                    # ------------------------------------------------------------------
+                    # NOVEL IDEA: IF UNABLE TO MODEL WELL, INCREASE CAPTURE TIME FOR TRAINING
+                    # ------------------------------------------------------------------
+                    # HYPERTROPHY/SUCCESSIVE PROGRESSIVE LOADING
+                    # KEEP STRESSING THE OPTIMISER AT ITS BAD TIMES SO ITS ADAPTIVE ENOUGH
+                    # ------------------------------------------------------------------
+                    if self.cand_train:
+                        intg._skip_first_n   += 1
+                        intg._capture_next_n += 4
+                        intg._stabilise_final_n += 15
+                    # ------------------------------------------------------------------
+
+            # If intg.actually_captured is equal to or greater than + intg._capture_next_n + intg._stabilise_final_n then 
+            if intg.actually_captured >= intg._capture_next_n + intg._stabilise_final_n/2:
+                intg._skip_first_n   += 1
+                intg._capture_next_n += 4
+                intg._stabilise_final_n += 15
+
             # ------------------------------------------------------------------
             # View results as csv file
             self.df_train.to_csv(self.outf, index=False)
@@ -283,17 +304,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             # Notify intg of the latest generated candidate and other info
             intg.candidate = self._postprocess_ccandidate(list(t1[self._n_cols].values)[0])
 
-            # ------------------------------------------------------------------
-            # NOVEL IDEA: INCREASE CAPTURE TIME FOR TRAINING
-            # ------------------------------------------------------------------
-            # HYPERTROPHY/SUCCESSIVE PROGRESSIVE LOADING
-            # KEEP STRESSING THE OPTIMISER SO ITS ADAPTIVE ENOUGH
-            # ------------------------------------------------------------------
-            if self.cand_train:
-                intg._skip_first_n   += 1
-                intg._capture_last_n += 2
-
-            # ------------------------------------------------------------------
             # Finally, plot if required
             if self.plotter_switch:
                 if intg.opt_type == 'online' and self.cumm_plot and self.speedup_plot:
@@ -336,7 +346,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
     def check_offline_optimisation_status(self, intg):
-        if (self.rank == self.root) and (len(self.df_train.index) > self.noptiters_max):
+        if (self.rank == self.root) and (len(self.df_train.index) > self._D_lim):
             intg.offline_optimisation_complete = True
         else:
             intg.offline_optimisation_complete = False
@@ -731,8 +741,8 @@ class BayesianOptimisationPlugin(BasePlugin):
             3. Take union of the happening region and the initial bounds
         """
 
-        mean_var = 0.20
-        std_mult = 2.0
+        mean_var = 0.20 # Extra wiggle-room for hr around mean
+        std_mult = 2.0  # 95% confidence region around mean
 
         # 
         best_cands = tX[-self._nbcs:]

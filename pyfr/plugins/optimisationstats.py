@@ -25,7 +25,9 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Skip first few iterations, and capture the rest few iterations
         intg._skip_first_n = self.cfg.getint(cfgsect, 'skip-first-n', 10)     
-        intg._capture_last_n = self.cfg.getint(cfgsect, 'capture-last-n', 40)
+        intg._capture_next_n = self.cfg.getint(cfgsect, 'capture-next-n', 40)
+        intg._stabilise_final_n = self.cfg.getint(cfgsect, 'stabilise-final-n', 150)
+        intg._stability = 0.10 # Default, will change with first iteration
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
         self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
@@ -130,6 +132,7 @@ class OptimisationStatsPlugin(BasePlugin):
         self.pd_stats = pd.concat([self.pd_stats, t1], ignore_index=True)
 
     def check_status(self, intg):
+        intg.actually_captured=self.pd_stats.count(0)[0] - intg._skip_first_n
 
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
@@ -150,13 +153,26 @@ class OptimisationStatsPlugin(BasePlugin):
              or (self.Δτ_controller == 'local-pi'
             and abs(intg.pseudointegrator.pintg.Δτᴹ
                   - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
-            and self.pd_stats.count(0)[0]> (intg._skip_first_n + intg._capture_last_n)):
+            and self.pd_stats.count(0)[0] > (  intg._skip_first_n 
+                                             + intg._capture_next_n
+                                             )
+            ):
 
-                intg.reset_opt_stats = True
-                intg.bad_sim = False
+                mean = self.pd_stats['cost'].tail(intg._capture_next_n).mean()
+                std = self.pd_stats['cost'].tail(intg._capture_next_n).std()
 
-                intg.opt_cost_mean = self.pd_stats['cost'].tail(intg._capture_last_n).mean()
-                intg.opt_cost_std = self.pd_stats['cost'].tail(intg._capture_last_n).std()
+                if (((std/mean) < intg._stability) or                                                                       # If deviation is within 5% of mean
+                     (self.pd_stats.count(0)[0] > ( intg._skip_first_n
+                                                  + intg._capture_next_n
+                                                  + intg._stabilise_final_n
+                                                  )
+                     )
+                    ):
+                    intg.reset_opt_stats = True
+                    intg.bad_sim = False
+                    intg.opt_cost_mean = mean
+                    intg.opt_cost_std = std
+
         return
 
     def bcast_status(self, intg):
