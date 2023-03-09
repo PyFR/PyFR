@@ -107,7 +107,7 @@ Dependencies
 PyFR |release| has a hard dependency on Python 3.10+ and the following
 Python packages:
 
-1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.0
+1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.1.1
 2. `h5py <https://www.h5py.org/>`_ >= 2.10
 3. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
 4. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
@@ -137,6 +137,13 @@ The backend requires:
 1. `ROCm <https://docs.amd.com/>`_ >= 5.2.0
 2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >=
    2.41.0
+
+Metal Backend
+^^^^^^^^^^^^^
+
+The Metal backend targets Apple silicon GPUs. The backend requires:
+
+1. `pyobjc-framework-Metal <https://pyobjc.readthedocs.io/en/latest>`_ >= 9.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
