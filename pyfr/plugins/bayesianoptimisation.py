@@ -293,9 +293,9 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             # If intg.actually_captured is equal to or greater than + intg._capture_next_n + intg._stabilise_final_n then 
             if intg.actually_captured >= intg._capture_next_n + intg._stabilise_final_n/2:
-                intg._skip_first_n   += 1
-                intg._capture_next_n += 4
-                intg._stabilise_final_n += 15
+                intg._skip_first_n      += intg._increment
+                intg._capture_next_n    += intg._increment*4
+                intg._stabilise_final_n += intg._increment*8
 
             # ------------------------------------------------------------------
             # View results as csv file
@@ -741,8 +741,9 @@ class BayesianOptimisationPlugin(BasePlugin):
             3. Take union of the happening region and the initial bounds
         """
 
-        mean_var = 0.20 # Extra wiggle-room for hr around mean
-        std_mult = 2.0  # 95% confidence region around mean
+        
+        mean_var = 0.25 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
+        std_mult = 2.5  # NEXT TEST: 5                        # If wiggling too much, search more around here
 
         # 
         best_cands = tX[-self._nbcs:]
@@ -762,7 +763,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                                          (1.0+mean_var)*means + std_mult * stds]), 
                                **self.torch_kwargs)
         
-        print('Happening region: ', hr , 'Bounds: ', self._bnds)
+        print(f"{means = }, {stds = }, \n Happening-region \n {hr}  \n previous bounds \n {self._bnds} ")
 
         return hr
 
