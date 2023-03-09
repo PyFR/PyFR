@@ -29,7 +29,7 @@ class OptimisationStatsPlugin(BasePlugin):
         intg._increment         = window_ref//20
         intg._skip_first_n      = window_ref//4 #  10     
         intg._capture_next_n    = window_ref    #  40
-        intg._stabilise_final_n = window_ref*4  # 150
+        intg._stabilise_final_n = window_ref*2  # 150
         intg._stability = 0.10 # Default, will change with first iteration
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
