@@ -88,7 +88,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', None)
             self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', None)
             self.outf = self.cfg.get(cfgsect, 'history'  , 'bayesopt.csv')
-            self.validate = self.cfg.getliteral(cfgsect, 'validate',[])
+            self.test = self.cfg.getliteral(cfgsect, 'validate',[])
             self.opt_motive = None # Default first is random
             self.cand_train = True # Default first candidate
 
@@ -130,9 +130,12 @@ class BayesianOptimisationPlugin(BasePlugin):
                 'if-validate': [not self.cand_train], # Validation or not
                 },)
             
-            if not self.validate == []: 
+            if not self.test == []: 
                 self.cand_train = False
-                next_candidate = self.validate.pop()
+                t1['if-validate'] = False
+                t1['if-train'] = False
+
+                next_candidate = self.test.pop()
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
 
