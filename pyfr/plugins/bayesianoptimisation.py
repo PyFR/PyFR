@@ -206,28 +206,44 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_validate = False
                 elif loocv_err>0.7:
                     # Explorative phase - II
-                    if not self.cand_train and self.cand_validate:
+                    if not self.cand_train and kcv_err<loocv_err:
                         self.opt_motive = 'KG'
                         self.cand_train = True
                         self.cand_validate = False
-                    else:
+                    if self.cand_train and kcv_err<loocv_err:
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
+                    else:
+                        # This case is expected to occur only in online scenarios
+                        # This happens due to hysterisis, when PM candidate totally goes wrong.
+                        # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
+                        self.opt_motive = 'reset'
+                        self.cand_train = False
+                        self.cand_validate = False
+
                 elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
                     #                    # Exploitative phase - I
                     #                    self.opt_motive = 'EI'
                     #                    self.cand_train = True
                     #                elif kcv_err>0.1:
                     # Exploitative phase - II
-                    if not self.cand_train and self.cand_validate:
+                    if not self.cand_train and kcv_err<loocv_err:
                         self.opt_motive = 'EI'
                         self.cand_train = True
                         self.cand_validate = False
-                    else:
+                    if self.cand_train and kcv_err<loocv_err:
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
+                    else:
+                        # This case is expected to occur only in online scenarios
+                        # This happens due to hysterisis, when PM candidate totally goes wrong.
+                        # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
+                        self.opt_motive = 'reset'
+                        self.cand_train = False
+                        self.cand_validate = False
+
                 else:
                     # Finalising phase
                     self.opt_motive = 'PM'
@@ -819,10 +835,12 @@ class BayesianOptimisationPlugin(BasePlugin):
 
     def _preprocess_csteps(self, csteps, n_csteps):
 
+        if n_csteps == 5:
+            return csteps[0], csteps[1], csteps[self.depth], csteps[-2], csteps[-1]
         if n_csteps == 4:
-            return csteps[0], csteps[self.depth], csteps[-2], csteps[-1]
+            return csteps[1], csteps[self.depth], csteps[-2], csteps[-1]
         elif n_csteps == 3:
-            return csteps[0], csteps[self.depth], csteps[-1]
+            return csteps[1], csteps[self.depth], csteps[-1]
         elif n_csteps == 2:
             return csteps[self.depth], csteps[-1]
         elif n_csteps == 1:
@@ -871,6 +889,9 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
             X_b    = self.normalise.untransform(X_cand)
+
+        elif type == 'reset':
+            X_b = self.torch.tensor( [[1.,1.,1.,1.],] , **self.torch_kwargs)
 
         else:
             raise ValueError(f'next_type {type} not recognised')
