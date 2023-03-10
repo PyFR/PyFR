@@ -91,6 +91,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.test = self.cfg.getliteral(cfgsect, 'test',[])
             self.opt_motive = None # Default first is random
             self.cand_train = True # Default first candidate
+            self.cand_validate = False # Default first candidate
 
         self.deserialise(intg, data)
 
@@ -127,28 +128,31 @@ class BayesianOptimisationPlugin(BasePlugin):
                 't-d': [intg.opt_cost_std], 
                 't-s': [intg.opt_cost_sem], 
                 'if-train': [self.cand_train], # Training or not 
-                'if-validate': [not self.cand_train], # Validation or not
+                'if-validate': [self.cand_validate], # Validation or not
                 },)
-            
+
             if not self.test == []: 
                 self.cand_train = False
-                t1['if-validate'] = False
-                t1['if-train'] = False
-
+                self.cand_validate = False
                 next_candidate = self.test.pop()
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
+                t1['n-m'] = np.nan
+                t1['n-s'] = np.nan
 
             else:
 
                 # We need to add the latest candidate to the model only if 
                 #   it is for training (not validation)
                 # Else we add it to the validation set
-                if self.cand_train:
+                if self.cand_train and not self.cand_validate:
                     t_X_Y_Yv = self.process_training_raw(t1)
                     v_X_Y_Yv = self.process_validation_raw()
-                else:
+                elif not self.cand_train and self.cand_validate:
                     v_X_Y_Yv = self.process_validation_raw(t1)
+                    t_X_Y_Yv = self.process_training_raw()
+                else:
+                    v_X_Y_Yv = self.process_validation_raw()
                     t_X_Y_Yv = self.process_training_raw()
 
                 # ------------------------------------------------------------------
@@ -178,11 +182,13 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # Initialisation phase
                     self.opt_motive = 'PM'
                     self.cand_train = True
+                    self.cand_validate = False
                 elif intg.bad_sim:
                     # Fall-back
                     print("Bad simulation.")
                     self.opt_motive = 'PM'
                     self.cand_train = False
+                    self.cand_validate = True
 
                 # ------------------------------------------------------------------
                 # NOVEL IDEA: MULTI-STEP OPTIMISATION STRATEGY
@@ -197,30 +203,36 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # Initialisation phase - I
                     self.opt_motive = 'KG'
                     self.cand_train = True
+                    self.cand_validate = False
                 elif loocv_err>0.7:
                     # Explorative phase - II
-                    if not self.cand_train:
+                    if not self.cand_train and self.cand_validate:
                         self.opt_motive = 'KG'
                         self.cand_train = True
+                        self.cand_validate = False
                     else:
                         self.opt_motive = 'PM'
                         self.cand_train = False
+                        self.cand_validate = True
                 elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
                     #                    # Exploitative phase - I
                     #                    self.opt_motive = 'EI'
                     #                    self.cand_train = True
                     #                elif kcv_err>0.1:
                     # Exploitative phase - II
-                    if not self.cand_train:
+                    if not self.cand_train and self.cand_validate:
                         self.opt_motive = 'EI'
                         self.cand_train = True
+                        self.cand_validate = False
                     else:
                         self.opt_motive = 'PM'
                         self.cand_train = False
+                        self.cand_validate = True
                 else:
                     # Finalising phase
                     self.opt_motive = 'PM'
                     self.cand_train = False
+                    self.cand_validate = True
 
                 next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model(self.opt_motive)
                 for i, val in enumerate(next_candidate):
@@ -282,7 +294,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # HYPERTROPHY/SUCCESSIVE PROGRESSIVE LOADING
                     # KEEP STRESSING THE OPTIMISER AT ITS BAD TIMES SO ITS ADAPTIVE ENOUGH
                     # ------------------------------------------------------------------
-                    if self.cand_train:
+                    if self.cand_train and not self.cand_validate:
                         intg._skip_first_n      += intg._increment
                         intg._capture_next_n    += intg._increment*4
                         intg._stabilise_final_n += intg._increment*8
@@ -331,6 +343,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # Set the candidate to the next candidate if optimisation was being performed in the previous run                
                 next_candidate = self.df_train[self._n_cols].tail(1).to_numpy(dtype=np.float64)[0]
                 self.cand_train = self.df_train['if-train'].tail(1).to_numpy(dtype=np.bool)[0]
+                self.cand_validate = self.df_train['if-validate'].tail(1).to_numpy(dtype=np.bool)[0]
 
                 intg._skip_first_n   = int(0.5*self.df_train['capture-window'].tail(1).to_numpy(dtype=np.float64)[0])
                 intg._capture_last_n = self.df_train['capture-window'].tail(1).to_numpy(dtype=np.float64)[0]
@@ -677,7 +690,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
     @property
     def loocv_error(self):
-        if self.df_train['if-train'].sum()>=1:
+        if self.df_train['if-train'].sum()>=4:
                                                                                 # Calculate LOOCV error only after the initialising 16 iterations
                                                                                 # This is to avoid wasting time in the start
                                                                                 #   when model is definitely not good enough
