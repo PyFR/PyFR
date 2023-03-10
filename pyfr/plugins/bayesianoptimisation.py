@@ -116,7 +116,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             if self.df_train.empty:
                 # Set the reference acceptable error in cost
                 print(f"Setting error from {intg._stability} to {2*intg.opt_cost_sem/intg.opt_cost_mean}")
-                intg._stability = 2*intg.opt_cost_sem/intg.opt_cost_mean
+                intg._stability = intg.opt_cost_sem/intg.opt_cost_mean
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
