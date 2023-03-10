@@ -88,7 +88,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.cumm_plot = self.cfg.get(cfgsect, 'cumm-plot', None)
             self.speedup_plot = self.cfg.get(cfgsect, 'speedup-plot', None)
             self.outf = self.cfg.get(cfgsect, 'history'  , 'bayesopt.csv')
-            self.test = self.cfg.getliteral(cfgsect, 'validate',[])
+            self.test = self.cfg.getliteral(cfgsect, 'test',[])
             self.opt_motive = None # Default first is random
             self.cand_train = True # Default first candidate
 
