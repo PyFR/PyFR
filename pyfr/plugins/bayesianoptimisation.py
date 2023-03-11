@@ -92,6 +92,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.opt_motive = None # Default first is random
             self.cand_train = True # Default first candidate
             self.cand_validate = False # Default first candidate
+            self.reset_flag = False
 
         self.deserialise(intg, data)
 
@@ -116,7 +117,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             if self.df_train.empty:
                 # Set the reference acceptable error in cost
-                print(f"Setting error from {intg._stability} to {2*intg.opt_cost_sem/intg.opt_cost_mean}")
+                print(f"Setting error from {intg._stability} to {intg.opt_cost_sem/intg.opt_cost_mean}")
                 intg._stability = intg.opt_cost_sem/intg.opt_cost_mean
 
             # Convert last iteration data from intg to dataframe
@@ -201,26 +202,34 @@ class BayesianOptimisationPlugin(BasePlugin):
 
                 elif self.df_train['if-train'].sum()<self._A_lim:
                     # Initialisation phase - I
+                    print("Initialisation training with KG.")
                     self.opt_motive = 'KG'
                     self.cand_train = True
                     self.cand_validate = False
                 elif loocv_err>0.7:
                     # Explorative phase - II
-                    if not self.cand_train and kcv_err<loocv_err:
+
+                    # if kcv_err>2*loocv_err and self.reset_flag == True:
+                    #     # This case is expected to occur only in online scenarios
+                    #     # This happens due to hysterisis, when PM candidate totally goes wrong.
+                    #     # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
+                    #     print("Exploration reset.")
+                    #     self.opt_motive = 'reset'
+                    #     self.cand_train = False
+                    #     self.cand_validate = False
+                    #     self.reset_flag = False
+                    if not self.cand_train:
+                        print("Exploration training with KG.")
                         self.opt_motive = 'KG'
                         self.cand_train = True
                         self.cand_validate = False
-                    if self.cand_train and kcv_err<loocv_err:
+                        self.reset_flag = True
+                    else:
+                        print("Exploration validation with PM.")
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
-                    else:
-                        # This case is expected to occur only in online scenarios
-                        # This happens due to hysterisis, when PM candidate totally goes wrong.
-                        # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
-                        self.opt_motive = 'reset'
-                        self.cand_train = False
-                        self.cand_validate = False
+                        self.reset_flag = True
 
                 elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
                     #                    # Exploitative phase - I
@@ -228,24 +237,31 @@ class BayesianOptimisationPlugin(BasePlugin):
                     #                    self.cand_train = True
                     #                elif kcv_err>0.1:
                     # Exploitative phase - II
-                    if not self.cand_train and kcv_err<loocv_err:
+
+                    # if kcv_err>loocv_err and self.reset_flag == True:
+                    #     # This case is expected to occur only in online scenarios
+                    #     # This happens due to hysterisis, when PM candidate totally goes wrong.
+                    #     # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
+                    #     self.opt_motive = 'reset'
+                    #     print("Resetting.")
+                    #     self.cand_train = False
+                    #     self.cand_validate = False
+                    #     self.reset_flag = False
+                    if not self.cand_train:
+                        print("Exploitative EI phase.")
                         self.opt_motive = 'EI'
                         self.cand_train = True
                         self.cand_validate = False
-                    if self.cand_train and kcv_err<loocv_err:
+                        self.reset_flag = True
+                    else:
+                        print("Exploitative PM phase.")
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
-                    else:
-                        # This case is expected to occur only in online scenarios
-                        # This happens due to hysterisis, when PM candidate totally goes wrong.
-                        # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
-                        self.opt_motive = 'reset'
-                        self.cand_train = False
-                        self.cand_validate = False
-
+                        self.reset_flag = True
                 else:
                     # Finalising phase
+                    print("Finalising phase.")
                     self.opt_motive = 'PM'
                     self.cand_train = False
                     self.cand_validate = True
@@ -706,7 +722,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
     @property
     def loocv_error(self):
-        if self.df_train['if-train'].sum()>=4:
+        if self.df_train['if-train'].sum()>=2:
                                                                                 # Calculate LOOCV error only after the initialising 16 iterations
                                                                                 # This is to avoid wasting time in the start
                                                                                 #   when model is definitely not good enough

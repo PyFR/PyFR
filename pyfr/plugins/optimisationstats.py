@@ -25,10 +25,16 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Skip first few iterations, and capture the rest few iterations
 
-        intg._increment         = 10
-        intg._skip_first_n      = 10     #  10     
-        intg._capture_next_n    = 40     #  40
-        intg._stabilise_final_n = 80     # 150
+        # Decide on a window that you think will work in general
+        # You see that window is increasing from 40 to at least 120-200 many times 
+        # So you set the window to 100
+        # DO NOT CHANGE AGAIN. ITS FINE TO NOT CHANGE. YOU CANNOT COMPARE PEOPLE OR ELSE.
+        ref_window = 100
+
+        intg._increment         = ref_window//4
+        intg._skip_first_n      = ref_window//2
+        intg._capture_next_n    = ref_window
+        intg._stabilise_final_n = ref_window*2
         intg._stability = 0.10 # Default, will change with first iteration
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
