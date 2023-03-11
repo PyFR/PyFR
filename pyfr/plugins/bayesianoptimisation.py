@@ -120,6 +120,11 @@ class BayesianOptimisationPlugin(BasePlugin):
                 print(f"Setting error from {intg._stability} to {intg.opt_cost_sem/intg.opt_cost_mean}")
                 intg._stability = intg.opt_cost_sem/intg.opt_cost_mean
 
+                # Since an imprecise candidate simulation will be rewound, be careful
+                # Start with a conservative 2X
+                # Consider 2X to 3X 
+                intg._precision = 2*intg.opt_cost_std/intg.opt_cost_mean 
+
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
 
