@@ -50,22 +50,20 @@ class HIPKernelGenerator(BaseKernelGenerator):
 
         # Finally, add the vector arguments
         for va in self.vectargs:
+            if va.intent == 'in':
+                kargs.append(f'const {va.dtype}* __restrict__ {va.name}_v')
+            else:
+                kargs.append(f'{va.dtype}* __restrict__ {va.name}_v')
+
             # Views
             if va.isview:
-                kargs.append(f'{va.dtype}* __restrict__ {va.name}_v')
                 kargs.append(f'const int* __restrict__ {va.name}_vix')
 
                 if va.ncdim == 2:
                     kargs.append(f'const int* __restrict__ {va.name}_vrstri')
             # Arrays
-            else:
-                # Intent in arguments should be marked constant
-                const = 'const' if va.intent == 'in' else ''
-
-                kargs.append(f'{const} {va.dtype}* __restrict__ {va.name}_v')
-
-                if self.needs_ldim(va):
-                    kargs.append(f'int ld{va.name}')
+            elif self.needs_ldim(va):
+                kargs.append(f'int ld{va.name}')
 
         # Determine the launch bounds for the kernel
         nthrds = prod(self.block1d if self.ndim == 1 else self.block2d)

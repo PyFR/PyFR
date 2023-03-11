@@ -84,20 +84,17 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         # Finally, add the vector arguments
         for va in self.vectargs:
+            if va.intent == 'in':
+                kargs.append((f'const {va.dtype}*', f'{va.name}_v'))
+            else:
+                kargs.append((f'{va.dtype}*', f'{va.name}_v'))
+
             # Views
             if va.isview:
-                kargs.append((f'{va.dtype}*', f'{va.name}_v'))
                 kargs.append(('const int*', f'{va.name}_vix'))
 
                 if va.ncdim == 2:
                     kargs.append(('const int*', f'{va.name}_vrstri'))
-            # Arrays
-            else:
-                # Intent in arguments should be marked constant
-                if va.intent == 'in':
-                    kargs.append((f'const {va.dtype}*', f'{va.name}_v'))
-                else:
-                    kargs.append((f'{va.dtype}*', f'{va.name}_v'))
 
         # Argument definition and assignment operations
         kargdefn = ';\n'.join(f'{t} {n}' for t, n in kargs)

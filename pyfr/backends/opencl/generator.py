@@ -45,23 +45,21 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
 
         # Finally, add the vector arguments
         for va in self.vectargs:
+            if va.intent == 'in':
+                kargs.append(f'__global const {va.dtype}* restrict '
+                             f'{va.name}_v')
+            else:
+                kargs.append(f'__global {va.dtype}* restrict {va.name}_v')
+
             # Views
             if va.isview:
-                kargs.append(f'__global {va.dtype}* restrict {va.name}_v')
                 kargs.append(f'__global const int* restrict {va.name}_vix')
 
                 if va.ncdim == 2:
                     kargs.append('__global const int* restrict '
                                  f'{va.name}_vrstri')
             # Arrays
-            else:
-                if va.intent == 'in':
-                    kargs.append(f'__global const {va.dtype}* restrict '
-                                 f'{va.name}_v')
-                else:
-                    kargs.append(f'__global {va.dtype}* restrict {va.name}_v')
-
-                if self.needs_ldim(va):
-                    kargs.append(f'int ld{va.name}')
+            elif self.needs_ldim(va):
+                kargs.append(f'int ld{va.name}')
 
         return '__kernel void {0}({1})'.format(self.name, ', '.join(kargs))
