@@ -195,9 +195,9 @@ class BayesianOptimisationPlugin(BasePlugin):
                 elif intg.bad_sim:
                     # Fall-back
                     print("Bad simulation.")
-                    self.opt_motive = 'PM'
+                    self.opt_motive = 'reset'
                     self.cand_train = False
-                    self.cand_validate = True
+                    self.cand_validate = False
                     t1['phase'] = -1
 
                 # ------------------------------------------------------------------
@@ -246,7 +246,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                         self.reset_flag = True
                         t1['phase'] = 21
 
-                elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
+                elif kcv_err>0.1:
                     #                    # Exploitative phase - I
                     #                    self.opt_motive = 'EI'
                     #                    self.cand_train = True
@@ -345,15 +345,15 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # ------------------------------------------------------------------
                     if self.cand_train and not self.cand_validate:
                         intg._skip_first_n      += intg._increment
-                        intg._capture_next_n    += intg._increment*4
-                        intg._stabilise_final_n += intg._increment*8
+                        intg._capture_next_n    += intg._increment*2
+                        intg._stabilise_final_n += intg._increment*2
                     # ------------------------------------------------------------------
 
             # If intg.actually_captured is equal to or greater than + intg._capture_next_n + intg._stabilise_final_n then 
-            if intg.actually_captured >= intg._capture_next_n + intg._stabilise_final_n/2:
+            if intg.actually_captured >= intg._capture_next_n + intg._stabilise_final_n:
                 intg._skip_first_n      += intg._increment
-                intg._capture_next_n    += intg._increment*4
-                intg._stabilise_final_n += intg._increment*8
+                intg._capture_next_n    += intg._increment*2
+                intg._stabilise_final_n += intg._increment*2
 
             # ------------------------------------------------------------------
             # View results as csv file

@@ -30,7 +30,7 @@ class OptimisationStatsPlugin(BasePlugin):
         intg._increment         = ref_window//4
         intg._skip_first_n      = ref_window//2      
         intg._capture_next_n    = ref_window    
-        intg._stabilise_final_n = ref_window*2  
+        intg._stabilise_final_n = ref_window
 
         # This is how the cost converges to a value
         intg._stability = 1. # Default, set to sem/mean of first candidate cost
