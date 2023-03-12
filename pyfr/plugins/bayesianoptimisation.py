@@ -941,7 +941,11 @@ class BayesianOptimisationPlugin(BasePlugin):
             X_b    = self.normalise.untransform(X_cand)
 
         elif type == 'reset':
-            X_b = self.torch.tensor( [[1.,1.,1.,1., 0.001],] , **self.torch_kwargs)
+            # Get the first row candidates and convert them to a tensor
+            X_b1 = self.df_train[self._t_cand].iloc[0].astype(np.float64).to_numpy()
+            X_b = self.torch.tensor(X_b1, **self.torch_kwargs)
+
+            # X_b = self.torch.tensor( [[1.,1.,1.,1., 0.001, 1.75],] , **self.torch_kwargs)
 
         else:
             raise ValueError(f'next_type {type} not recognised')
