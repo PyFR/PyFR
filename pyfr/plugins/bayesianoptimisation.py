@@ -122,8 +122,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
                 # Since an imprecise candidate simulation will be rewound, be careful
                 # Start with a conservative 2X
-                # Consider 2X to 3X 
-                intg._precision = 2*intg.opt_cost_std/intg.opt_cost_mean 
+                # A good candidate MUST NOT BE KILLED THIS WAY
+                intg._precision = 5*intg.opt_cost_std/intg.opt_cost_mean 
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
@@ -214,26 +214,27 @@ class BayesianOptimisationPlugin(BasePlugin):
                 elif loocv_err>0.7:
                     # Explorative phase - II
 
-                    # if kcv_err>2*loocv_err and self.reset_flag == True:
-                    #     # This case is expected to occur only in online scenarios
-                    #     # This happens due to hysterisis, when PM candidate totally goes wrong.
-                    #     # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
-                    #     print("Exploration reset.")
-                    #     self.opt_motive = 'reset'
-                    #     self.cand_train = False
-                    #     self.cand_validate = False
-                    #     self.reset_flag = False
-                    if not self.cand_train:
-                        print("Exploration training with KG.")
-                        self.opt_motive = 'KG'
-                        self.cand_train = True
+                    if kcv_err>2*loocv_err and self.reset_flag == True:
+                        # This case is expected to occur only in online scenarios
+                        # This happens due to hysterisis, when PM candidate totally goes wrong.
+                        # We can expect LooCV too high because we may be looking at far-away points, but not kCV.
+                        # Looking at how the first candidate is performing will give us a feel of how reversible these hysterisis effects are
+                        print("Exploration reset.")
+                        self.opt_motive = 'reset'
+                        self.cand_train = False
                         self.cand_validate = False
-                        self.reset_flag = True
-                    else:
+                        self.reset_flag = False
+                    elif not self.cand_validate:
                         print("Exploration validation with PM.")
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
+                        self.reset_flag = True
+                    else:
+                        print("Exploration training with KG.")
+                        self.opt_motive = 'KG'
+                        self.cand_train = True
+                        self.cand_validate = False
                         self.reset_flag = True
 
                 elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
@@ -243,26 +244,27 @@ class BayesianOptimisationPlugin(BasePlugin):
                     #                elif kcv_err>0.1:
                     # Exploitative phase - II
 
-                    # if kcv_err>loocv_err and self.reset_flag == True:
-                    #     # This case is expected to occur only in online scenarios
-                    #     # This happens due to hysterisis, when PM candidate totally goes wrong.
-                    #     # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
-                    #     self.opt_motive = 'reset'
-                    #     print("Resetting.")
-                    #     self.cand_train = False
-                    #     self.cand_validate = False
-                    #     self.reset_flag = False
-                    if not self.cand_train:
-                        print("Exploitative EI phase.")
-                        self.opt_motive = 'EI'
-                        self.cand_train = True
+                    if kcv_err>loocv_err and self.reset_flag == True:
+                        # This case is expected to occur only in online scenarios
+                        # This happens due to hysterisis, when PM candidate totally goes wrong.
+                        # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
+                        # Looking at how the first candidate is performing will give us a feel of how reversible these hysterisis effects are
+                        self.opt_motive = 'reset'
+                        print("Resetting.")
+                        self.cand_train = False
                         self.cand_validate = False
-                        self.reset_flag = True
-                    else:
+                        self.reset_flag = False
+                    elif not self.cand_validate:
                         print("Exploitative PM phase.")
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
+                        self.reset_flag = True
+                    else:
+                        print("Exploitative EI phase.")
+                        self.opt_motive = 'EI'
+                        self.cand_train = True
+                        self.cand_validate = False
                         self.reset_flag = True
                 else:
                     # Finalising phase
