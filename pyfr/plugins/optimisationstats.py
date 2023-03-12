@@ -25,7 +25,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Skip first few iterations, and capture the rest few iterations
 
-        ref_window = 100
+        ref_window = self.cfg.getint(cfgsect, 'ref-window', 100)
 
         intg._increment         = ref_window//4
         intg._skip_first_n      = ref_window//2      

@@ -338,7 +338,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 self.df_train[f'roll{self._nbcs}-diff-KCV'] = self.df_train['KCV'].rolling(window=self._nbcs).mean().diff()
 
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
-                    and self.df_train['if-train'].sum() > self._A_lim
+                    and self.df_train['if-train'].sum() > self._B_lim
                     and kcv_err>0.1 
                     and intg.opt_type == 'online'):
 
