@@ -135,6 +135,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 't-s': [intg.opt_cost_sem], 
                 'if-train': [self.cand_train], # Training or not 
                 'if-validate': [self.cand_validate], # Validation or not
+                'phase':[0]
                 },)
 
             if not self.test == []: 
@@ -145,7 +146,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     t1[f'n-{i}'] = val
                 t1['n-m'] = np.nan
                 t1['n-s'] = np.nan
-
+                t1['phase'] = 10
             else:
 
                 # We need to add the latest candidate to the model only if 
@@ -189,12 +190,15 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.opt_motive = 'PM'
                     self.cand_train = True
                     self.cand_validate = False
+                    t1['phase'] = 11
+
                 elif intg.bad_sim:
                     # Fall-back
                     print("Bad simulation.")
                     self.opt_motive = 'PM'
                     self.cand_train = False
                     self.cand_validate = True
+                    t1['phase'] = -1
 
                 # ------------------------------------------------------------------
                 # NOVEL IDEA: MULTI-STEP OPTIMISATION STRATEGY
@@ -211,6 +215,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.opt_motive = 'KG'
                     self.cand_train = True
                     self.cand_validate = False
+                    t1['phase'] = 20
+
                 elif loocv_err>0.7:
                     # Explorative phase - II
 
@@ -224,18 +230,21 @@ class BayesianOptimisationPlugin(BasePlugin):
                         self.cand_train = False
                         self.cand_validate = False
                         self.reset_flag = False
+                        t1['phase'] = 23
                     elif not self.cand_validate:
                         print("Exploration validation with PM.")
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
                         self.reset_flag = True
+                        t1['phase'] = 22
                     else:
                         print("Exploration training with KG.")
                         self.opt_motive = 'KG'
                         self.cand_train = True
                         self.cand_validate = False
                         self.reset_flag = True
+                        t1['phase'] = 21
 
                 elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
                     #                    # Exploitative phase - I
@@ -254,24 +263,29 @@ class BayesianOptimisationPlugin(BasePlugin):
                         self.cand_train = False
                         self.cand_validate = False
                         self.reset_flag = False
+                        t1['phase'] = 33
                     elif not self.cand_validate:
                         print("Exploitative PM phase.")
                         self.opt_motive = 'PM'
                         self.cand_train = False
                         self.cand_validate = True
                         self.reset_flag = True
+                        t1['phase'] = 32
                     else:
                         print("Exploitative EI phase.")
                         self.opt_motive = 'EI'
                         self.cand_train = True
                         self.cand_validate = False
                         self.reset_flag = True
+                        t1['phase'] = 31
+
                 else:
                     # Finalising phase
                     print("Finalising phase.")
                     self.opt_motive = 'PM'
                     self.cand_train = False
                     self.cand_validate = True
+                    t1['phase'] = 41
 
                 next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model(self.opt_motive)
                 for i, val in enumerate(next_candidate):
@@ -980,9 +994,11 @@ class BayesianOptimisationPlugin(BasePlugin):
             *[f't-{i}' for i in range(len(self.optimisables))],'t-m', 't-s', 't-d', 
             *[f'n-{i}' for i in range(len(self.optimisables))],'n-m', 'n-s', 
             *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
-            'bounds-size', 
             'opt-time', 'cumm-compute-time', 
-            'if-train', 'if-validate', 'capture-window', 'LooCV',  'KCV',
+            'if-train', 'if-validate', 'capture-window', 
+            'LooCV',  'KCV',
+            'bounds-size', 
+            'phase'
             ] 
 
         self._t_cols = list(filter(lambda x: x.startswith('t-'), self.columns))
