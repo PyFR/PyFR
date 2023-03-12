@@ -117,13 +117,13 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             if self.df_train.empty:
                 # Set the reference acceptable error in cost
-                print(f"Setting error from {intg._stability} to {intg.opt_cost_sem/intg.opt_cost_mean}")
-                intg._stability = intg.opt_cost_sem/intg.opt_cost_mean
+                print(f"Setting error from {intg._stability} to {3*intg.opt_cost_sem}")
+                intg._stability = 3*intg.opt_cost_sem
 
                 # Since an imprecise candidate simulation will be rewound, be careful
                 # Start with a conservative 2X
                 # A good candidate MUST NOT BE KILLED THIS WAY
-                intg._precision = 5*intg.opt_cost_std/intg.opt_cost_mean 
+                intg._precision = 5*intg.opt_cost_std
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
@@ -173,7 +173,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # Increase bounds only after exploration
                 if self.df_train['if-validate'].sum()>=self._nbcs:
                     # Set bounds on the basis of training data 
-                    self.expand_bounds(self.happening_region(v_X_Y_Yv[0]))
+                    self.expand_bounds(self.happening_region(intg, v_X_Y_Yv[0]))
 
                 self.add_to_model(*t_X_Y_Yv)
 
@@ -195,10 +195,18 @@ class BayesianOptimisationPlugin(BasePlugin):
                 elif intg.bad_sim:
                     # Fall-back
                     print("Bad simulation.")
-                    self.opt_motive = 'reset'
-                    self.cand_train = False
-                    self.cand_validate = False
+
+                    if intg.opt_type == 'online':
+                        self.opt_motive = 'reset'
+                        self.cand_train = False
+                        self.cand_validate = False
+                    else:
+                        self.opt_motive = 'PM'
+                        self.cand_train = False
+                        self.cand_validate = True
+
                     t1['phase'] = -1
+
 
                 # ------------------------------------------------------------------
                 # NOVEL IDEA: MULTI-STEP OPTIMISATION STRATEGY
@@ -217,7 +225,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_validate = False
                     t1['phase'] = 20
 
-                elif loocv_err>0.5:
+                elif loocv_err>0.707:
                     # Explorative phase - II
 
                     #if kcv_err>2*loocv_err and self.reset_flag == True:
@@ -246,7 +254,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                         self.reset_flag = True
                         t1['phase'] = 21
 
-                elif self.df_train['if-train'].sum()<self._A_lim or kcv_err>0.05:
+                elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
                     #                    # Exploitative phase - I
                     #                    self.opt_motive = 'EI'
                     #                    self.cand_train = True
@@ -331,7 +339,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
                     and self.df_train['if-train'].sum() > self._A_lim
-                    and kcv_err>0.05):
+                    and kcv_err>0.1 
+                    and intg.opt_type == 'online'):
 
                     # Find the index of the first occurance of self.df_train['if-train'] == True 
                     position = self.df_train[self.df_train['if-train']].index[0]
@@ -778,7 +787,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     def bounds(self, y):
         self._bnds = self.torch.tensor(y, **self.torch_kwargs)
 
-    def happening_region(self, tX):
+    def happening_region(self, intg, tX):
         """ Expand the bounds based on the last 16 PM points
             How?
             1. Find the mean and standard deviation of the last 16 points
@@ -788,6 +797,13 @@ class BayesianOptimisationPlugin(BasePlugin):
         
         mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
         std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
+
+        if intg.opt_type == 'online':
+            mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
+            std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
+        else:
+            mean_var = 0.5
+            std_mult = 5
 
         best_cands = tX[-self._nbcs:]
 
@@ -821,9 +837,10 @@ class BayesianOptimisationPlugin(BasePlugin):
         self._bnds[0, l_bnds_inc_loc] = hr[0, l_bnds_inc_loc]
         self._bnds[1, u_bnds_inc_loc] = hr[1, u_bnds_inc_loc]
 
+        # REMOVED UBon!!!!!
         # Restrict the bounds to hardbounds region
         self._bnds[0, :] = self.torch.max(self._bnds[0, :], self._hbnds[0, :])
-        self._bnds[1, :] = self.torch.min(self._bnds[1, :], self._hbnds[1, :])
+        #self._bnds[1, :] = self.torch.min(self._bnds[1, :], self._hbnds[1, :])
 
     @property
     def bounds_size(self):
@@ -924,7 +941,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             X_b    = self.normalise.untransform(X_cand)
 
         elif type == 'reset':
-            X_b = self.torch.tensor( [[1.,1.,1.,1.],] , **self.torch_kwargs)
+            X_b = self.torch.tensor( [[1.,1.,1.,1., 0.001],] , **self.torch_kwargs)
 
         else:
             raise ValueError(f'next_type {type} not recognised')

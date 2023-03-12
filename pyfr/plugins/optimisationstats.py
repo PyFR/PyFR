@@ -33,11 +33,11 @@ class OptimisationStatsPlugin(BasePlugin):
         intg._stabilise_final_n = ref_window
 
         # This is how the cost converges to a value
-        intg._stability = 1. # Default, set to sem/mean of first candidate cost
+        intg._stability = 10. # Default, set to sem/mean of first candidate cost
 
         # Standard deviation of the cost determines how erratic the cost is
         # If the cost deviation is erratic, even if sem decreases, the candidate needs to be rejected
-        intg._precision = 1. # Default, set to 2*std/mean of first candidate cost
+        intg._precision = 1000. # Default, set to 2*std/mean of first candidate cost
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
         self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
@@ -170,13 +170,13 @@ class OptimisationStatsPlugin(BasePlugin):
                 std  = self.pd_stats['cost'].tail(intg.actually_captured).std()
                 sem  = self.pd_stats['cost'].tail(intg.actually_captured).sem()
 
-                if (((sem/mean) < intg._stability) or
-                     (self.pd_stats.count(0)[0] >=( intg._skip_first_n + intg._capture_next_n + intg._stabilise_final_n )
+                if ((sem<intg._stability) or
+                     (self.pd_stats.count(0)[0] >=(intg._skip_first_n+intg._capture_next_n+intg._stabilise_final_n)
                      )
                     ):
                     intg.reset_opt_stats = True
 
-                    intg.bad_sim = (std/mean) > intg._precision
+                    intg.bad_sim = std > intg._precision
 
                     intg.opt_cost_mean = mean
                     intg.opt_cost_std = std
