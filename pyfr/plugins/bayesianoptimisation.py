@@ -839,7 +839,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         # REMOVED UBon!!!!!
         # Restrict the bounds to hardbounds region
-        self._bnds[0, :] = self.torch.max(self._bnds[0, :], self._hbnds[0, :])
+        self._bnds[0, :] = self.torch.max(self._bnds[0, :], 0)
         #self._bnds[1, :] = self.torch.min(self._bnds[1, :], self._hbnds[1, :])
 
     @property
