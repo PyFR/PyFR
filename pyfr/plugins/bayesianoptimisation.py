@@ -309,11 +309,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             # Add all the data collected into the main dataframe
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
             # ------------------------------------------------------------------
-            # Post-process dataframe results
-            self.df_train['repetition'] = (self.df_train
-                                           .groupby(self._t_cols)
-                                           .cumcount()+1)
-
+            
             if self.df_train['LooCV'].count() > self._A_lim:
                 # Get a rolling mean of self.df_train['LooCV','KCV']
                 self.df_train[f'roll{self._nbcs}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._nbcs).mean().diff()
@@ -986,7 +982,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
             'bounds-size', 
             'opt-time', 'cumm-compute-time', 
-            'repetition', 'LooCV',  'KCV', 'if-train', 'if-validate', 'capture-window'
+            'if-train', 'if-validate', 'capture-window', 'LooCV',  'KCV',
             ] 
 
         self._t_cols = list(filter(lambda x: x.startswith('t-'), self.columns))
