@@ -8,10 +8,19 @@
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 
 // Atomic helpers
+__device__ void atomic_min_fpdtype(fpdtype_t* addr, fpdtype_t val)
+{
 % if pyfr.npdtype_to_ctype(fpdtype) == 'float':
-#define atomic_min_pos(addr, val) atomicMin((int*) addr, __float_as_int(val))
+    if (!signbit(val))
+        atomicMin((int*) addr, __float_as_int(val));
+    else
+        atomicMax((unsigned int*) addr, __float_as_uint(val));
 % else:
-#define atomic_min_pos(addr, val) atomicMin((long long*) addr, __double_as_longlong(val))
+    if (!signbit(val))
+        atomicMin((long long*) addr, __double_as_longlong(val));
+    else
+        atomicMax((unsigned long long*) addr, (unsigned long long) __double_as_longlong(val));
 % endif
+}
 
 ${next.body()}

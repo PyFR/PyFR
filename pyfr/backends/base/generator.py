@@ -12,7 +12,7 @@ class Arg:
         specptn = r'''
             (?:(in|inout|out)\s+)?                            # Intent
             (?:(broadcast(?:-row|-col)?|mpi|scalar|view)\s+)? # Attrs
-            (?:reduce\((min_pos)\)\s+)?                       # Reduction
+            (?:reduce\((min)\)\s+)?                           # Reduction
             ([A-Za-z_]\w*)                                    # Data type
             ((?:\[\d+\]){0,2})$                               # Dimensions
         '''
@@ -246,15 +246,16 @@ class BaseKernelGenerator:
                 body = re.sub(subp, darg, body)
             # Reduction
             else:
+                afun = f'atomic_{va.reduceop}_fpdtype'
                 body = f'fpdtype_t {va.name}{va.cdimstr};\n{body}'
 
                 if va.ncdim == 0:
-                    body += f'atomic_{va.reduceop}(&{darg}, {va.name});\n'
+                    body += f'{afun}(&{darg}, {va.name});\n'
                 else:
                     for ij in ndrange(*va.cdims):
                         lval = va.name + ''.join(f'[{i}]' for i in ij)
                         gval = re.sub(subp, darg, lval)
 
-                        body += f'atomic_{va.reduceop}(&{gval}, {lval});\n'
+                        body += f'{afun}(&{gval}, {lval});\n'
 
         return body
