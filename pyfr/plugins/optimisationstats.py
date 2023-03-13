@@ -146,6 +146,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
+            intg.actually_captured = 0
             intg.reset_opt_stats = intg.bad_sim = True
             intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN 
             return
@@ -155,6 +156,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
             if (self.maxniters != self.minniters):
+                intg.actually_captured = 0
                 intg.reset_opt_stats = intg.bad_sim = True
                 intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN
                 return

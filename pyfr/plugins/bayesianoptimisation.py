@@ -33,7 +33,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         self._C_lim = 4**len(self.optimisables)
         self._D_lim = 2*4**len(self.optimisables) # Offline optimisation stop
 
-        intg.opt_type = suffix
+        intg.opt_type = self.opt_type = suffix
         if suffix == 'online':
             self.columns.append('tcurr')
             self.index_name = 'tcurr'
@@ -108,7 +108,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         if self.rank == self.root:
             opt_time_start = perf_counter()
 
-            if intg.opt_type == 'online' and intg.bad_sim:
+            if self.opt_type == 'online' and intg.bad_sim:
                 if np.isnan(intg.opt_cost_mean) and self.df_train.empty:
                     raise ValueError("Initial configuration must be working.")
                 tcurr = self.df_train.iloc[-1, self.df_train.columns.get_loc('tcurr')]
@@ -196,7 +196,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # Fall-back
                     print("Bad simulation.")
 
-                    if intg.opt_type == 'online':
+                    if self.opt_type == 'online':
                         self.opt_motive = 'reset'
                         self.cand_train = False
                         self.cand_validate = False
@@ -312,14 +312,14 @@ class BayesianOptimisationPlugin(BasePlugin):
                         t1[f'b-{i}'] = val
                 
                 # If offline optimisation, then abort the simulation at this point. 
-                #if intg.opt_type == 'onfline':
+                #if self.opt_type == 'onfline':
                 #    intg.abort = True
                     
             t1['opt-time'] = perf_counter() - opt_time_start
 
-            if intg.opt_type == 'online': 
+            if self.opt_type == 'online': 
                 t1[self.index_name] = tcurr                
-            elif intg.opt_type == 'onfline':
+            elif self.opt_type == 'onfline':
                 t1[self.index_name] = len(self.df_train.index)+1
             else:
                 raise ValueError('Not a valid opt_type')
@@ -340,7 +340,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
                     and self.df_train['if-train'].sum() > self._B_lim
                     and kcv_err>0.1 
-                    and intg.opt_type == 'online'):
+                    and self.opt_type == 'online'):
 
                     # Find the index of the first occurance of self.df_train['if-train'] == True 
                     position = self.df_train[self.df_train['if-train']].index[0]
@@ -373,7 +373,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             # Finally, plot if required
             if self.plotter_switch:
-                if intg.opt_type == 'online' and self.cumm_plot and self.speedup_plot:
+                if self.opt_type == 'online' and self.cumm_plot and self.speedup_plot:
                     self.plot_normalised_cummulative_cost()
                     self.plot_overall_speedup(intg)
 
@@ -539,7 +539,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                      label = 'Best next cost', 
                     )
 
-        next_index_add = intg._dt if intg.opt_type == 'online' else 1
+        next_index_add = intg._dt if self.opt_type == 'online' else 1
 
         cost_ax.fill_between(
                 self.df_train[self.index_name] + next_index_add, 
@@ -553,8 +553,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         # Set lower limit for y axis to 0
         cost_ax.set_ylim(bottom = 0)
-        #if intg.opt_type == 'onfline':  cost_ax.set_xlim(left = 0)
-        #elif intg.opt_type == 'online': cost_ax.set_xlim(left = self._toptstart)
+        #if self.opt_type == 'onfline':  cost_ax.set_xlim(left = 0)
+        #elif self.opt_type == 'online': cost_ax.set_xlim(left = self._toptstart)
 
         cost_ax.legend(loc='upper right')
         cost_ax.get_figure().savefig(self.cost_plot)        
@@ -629,9 +629,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.add_limits_to_plot(cumm_ax)
 
         cumm_ax.set_ylim(bottom = 0)
-        #if intg.opt_type == 'onfline':
+        #if self.opt_type == 'onfline':
         #    cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
-        #elif intg.opt_type == 'online':
+        #elif self.opt_type == 'online':
         #    cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
 
         cumm_ax.legend(loc='lower right')
@@ -685,9 +685,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.add_limits_to_plot(cumm_ax)
 
         cumm_ax.set_ylim(bottom = 0)
-        #if intg.opt_type == 'onfline':
+        #if self.opt_type == 'onfline':
         #    cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
-        #elif intg.opt_type == 'online':
+        #elif self.opt_type == 'online':
         #    cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
 
         cumm_ax.legend(loc='lower right')
@@ -714,7 +714,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         """
 
         from gpytorch.mlls             import ExactMarginalLogLikelihood
-        from botorch.models            import FixedNoiseGP
+        from botorch.models            import FixedNoiseGP, SingleTaskGP
         from botorch.fit               import fit_gpytorch_model as fit_model
         from botorch.models.transforms import Standardize, Normalize
 
@@ -729,13 +729,21 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         self._norm_X = self.normalise.transform(
             self.torch.tensor(tX , **self.torch_kwargs))
-        self._stan_Y, self._stan_Yvar = self.standardise.forward(
-            self.torch.tensor(tY , **self.torch_kwargs),
-            self.torch.tensor(tYv, **self.torch_kwargs))
 
-        self.model = FixedNoiseGP(train_X = self._norm_X, 
-                                  train_Y = self._stan_Y, 
-                                  train_Yvar = self._stan_Yvar)
+        if self.opt_type == 'online':
+            self._stan_Y,_ = self.standardise.forward(
+                self.torch.tensor(tY , **self.torch_kwargs))
+
+            self.model = SingleTaskGP(train_X = self._norm_X, 
+                                      train_Y = self._stan_Y,)
+        else:
+            self._stan_Y, self._stan_Yvar = self.standardise.forward(
+                self.torch.tensor(tY , **self.torch_kwargs),
+                self.torch.tensor(tYv, **self.torch_kwargs))
+
+            self.model = FixedNoiseGP(train_X = self._norm_X, 
+                                      train_Y = self._stan_Y, 
+                                      train_Yvar = self._stan_Yvar)
 
         mll = ExactMarginalLogLikelihood(likelihood = self.model.likelihood, 
                                          model = self.model)
@@ -752,8 +760,13 @@ class BayesianOptimisationPlugin(BasePlugin):
                                                                                 # Calculate LOOCV error only after the initialising 16 iterations
                                                                                 # This is to avoid wasting time in the start
                                                                                 #   when model is definitely not good enough
-            return self.cv_folds(self._norm_X, self._stan_Y, self._stan_Yvar
-                                 ).detach().cpu().numpy()
+
+            if self.opt_type == 'online':
+                return self.cv_folds(Train_X = self._norm_X, Train_Y = self._stan_Y
+                                       ).detach().cpu().numpy()
+            else:
+                return self.cv_folds(Train_X = self._norm_X, Train_Y = self._stan_Y, Train_Yvar = self._stan_Yvar
+                                       ).detach().cpu().numpy()
         else:
             return None
             
@@ -773,9 +786,16 @@ class BayesianOptimisationPlugin(BasePlugin):
             # Calculate LOOCV error only after the initialising 16 iterations
             # This is to avoid wasting time in the start
             #   when model is definitely not good enough
-            return self.cv_folds(self._norm_X, self._stan_Y, self._stan_Yvar,
-                                 _norm_vX, _stan_vY, _stan_vYv,
-                                 ).detach().cpu().numpy()
+
+            if self.opt_type == 'online':
+                return self.cv_folds(Train_X = self._norm_X, Train_Y = self._stan_Y,
+                                     Val_X = _norm_vX, Val_Y = _stan_vY,
+                                     ).detach().cpu().numpy()
+            else:
+                return self.cv_folds(Train_X = self._norm_X, Train_Y = self._stan_Y, Train_Yvar = self._stan_Yvar,
+                                     Val_X = _norm_vX, Val_Y = _stan_vY, Val_Yvar = _stan_vYv,
+                                     ).detach().cpu().numpy()
+
         else:
             return None
             
@@ -798,7 +818,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
         std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
 
-        if intg.opt_type == 'online':
+        if self.opt_type == 'online':
             mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
             std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
         else:
@@ -839,8 +859,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         # REMOVED UBon!!!!!
         # Restrict the bounds to hardbounds region
-        self._bnds[0, :] = self.torch.max(self._bnds[0, :], 0)
-        #self._bnds[1, :] = self.torch.min(self._bnds[1, :], self._hbnds[1, :])
+        self._bnds[0, :] = self.torch.max(self._bnds[0, :], self._hbnds[0, :])
+        self._bnds[1, :] = self.torch.min(self._bnds[1, :], self._hbnds[1, :])
 
     @property
     def bounds_size(self):
@@ -980,26 +1000,47 @@ class BayesianOptimisationPlugin(BasePlugin):
         else:
             return XX, Y_m, Y_sem
         
-    def cv_folds(self, train_X, train_Y, train_Yvar, 
-                 test_X=None, test_Y=None, test_Yvar=None):
+    def cv_folds(self, Train_X, Train_Y, Train_Yvar = None, 
+                 Val_X = None, Val_Y=None, Val_Yvar=None):
 
         from botorch.cross_validation import CVFolds, gen_loo_cv_folds
         from botorch.cross_validation import batch_cross_validation
-        from botorch.models import FixedNoiseGP
+        from botorch.models import FixedNoiseGP, SingleTaskGP
         from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
 
-        if test_X is None or test_Y is None or test_Yvar is None:
-            cv_folds = gen_loo_cv_folds(
-                train_X=train_X, train_Y=train_Y, train_Yvar=train_Yvar)
-        else:
-            cv_folds = CVFolds(
-                train_X=train_X, test_X=test_X, 
-                train_Y=train_Y, test_Y=test_Y, 
-                train_Yvar=train_Yvar, test_Yvar=test_Yvar)
+        if self.opt_type == 'online':
 
-        # instantiate and fit model
-        cv_results = batch_cross_validation(model_cls=FixedNoiseGP,
-            mll_cls=ExactMarginalLogLikelihood, cv_folds=cv_folds,)
+            if Val_X is None or Val_Y is None:
+                # LooCV with inferred noise
+                cv_folds = gen_loo_cv_folds(
+                    train_X=Train_X, train_Y=Train_Y)
+            else:
+                # kCV with inferred noise
+                cv_folds = CVFolds(
+                    train_X = Train_X, test_X = Val_X, 
+                    train_Y = Train_Y, test_Y = Val_Y, )
+
+            # instantiate and fit model
+            cv_results = batch_cross_validation(model_cls=SingleTaskGP,
+                mll_cls=ExactMarginalLogLikelihood, cv_folds=cv_folds,)
+
+        else:
+            if Train_X is None or Train_Y is None or Train_Yvar is None:
+                # LooCV with fixed noise
+                cv_folds = gen_loo_cv_folds(
+                    train_X    = Train_X, 
+                    train_Y    = Train_Y, 
+                    train_Yvar = Train_Yvar)
+            else:
+                # kCV with fixed noise
+                cv_folds = CVFolds(
+                    train_X   = Train_X   , test_X    = Val_X, 
+                    train_Y   = Train_Y   , test_Y    = Val_Y, 
+                    train_Yvar= Train_Yvar, test_Yvar = Val_Yvar)
+
+            # instantiate and fit model
+            cv_results = batch_cross_validation(model_cls=FixedNoiseGP,
+                mll_cls=ExactMarginalLogLikelihood, cv_folds=cv_folds,)
 
         posterior = cv_results.posterior
         mean = posterior.mean
