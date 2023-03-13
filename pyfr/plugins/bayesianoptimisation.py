@@ -28,10 +28,12 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.columns_from_optimisables()
 
         self._nbcs = len(self.optimisables) # Number of best candidates to consider
-        self._A_lim = 2**len(self.optimisables)
-        self._B_lim = 2*self._A_lim 
-        self._C_lim = 4**len(self.optimisables)
-        self._D_lim = 2*4**len(self.optimisables) # Offline optimisation stop
+        self._INIT_lim = 2**(len(self.optimisables)-1)   # when to start looking at kCV (KG+PM)
+        self._KG_lim = 2**len(self.optimisables)       # When to start deciding on model quality (KG+PM)+LooCV 
+        self._EI_lim = 2*self._KG_lim                   # When to start looking for optimum (EI+PM)+kCV
+        self._END_lim = 3**len(self.optimisables)       # Abort simulation
+        self._E_lim = 2*4**len(self.optimisables)     # DOES NOTHING
+        self.force_abort = self.cfg.getbool(cfgsect, 'force-abort', False)
 
         intg.opt_type = self.opt_type = suffix
         if suffix == 'online':
@@ -42,16 +44,16 @@ class BayesianOptimisationPlugin(BasePlugin):
         elif suffix == 'onfline':
             self.columns.append('iteration')
             self.index_name = 'iteration'
-            self.noptiters_max = self._D_lim
+            self.noptiters_max = self._E_lim
             intg.offline_optimisation_complete = False
         elif suffix == 'offline':
             raise NotImplementedError(f'offline not implemented.')
         else:
             raise ValueError('Invalid suffix')
 
-        print(f"Initialise model with: {self._A_lim}, ", 
-              f"Start looking for an optimum untill: {self._B_lim}, ",
-              f"Try to stop optimisation by: {self._C_lim}  ",
+        print(f"Initialise model with: {self._KG_lim}, ", 
+              f"Start looking for an optimum untill: {self._EI_lim}, ",
+              f"Try {self.force_abort} to stop optimisation by: {self._END_lim}  ",
                 )
 
         if self.rank == self.root:
@@ -217,7 +219,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # FOURTH STEP: STRESS-TESTING FINAL MODEL WITH PM
                 # ------------------------------------------------------------------
 
-                elif self.df_train['if-train'].sum()<self._A_lim:
+                elif self.df_train['if-train'].sum()<self._INIT_lim:
                     # Initialisation phase - I
                     print("Initialisation training with KG.")
                     self.opt_motive = 'KG'
@@ -225,8 +227,25 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_validate = False
                     t1['phase'] = 20
 
-                elif loocv_err>0.707:
-                    # Explorative phase - II
+                elif self.df_train['if-train'].sum()<self._KG_lim:
+                    # Initialisation phase - II
+                    if not self.cand_validate:
+                        print("Exploration validation with PM.")
+                        self.opt_motive = 'PM'
+                        self.cand_train = False
+                        self.cand_validate = True
+                        self.reset_flag = True
+                        t1['phase'] = 22
+                    else:
+                        print("Exploration training with KG.")
+                        self.opt_motive = 'KG'
+                        self.cand_train = True
+                        self.cand_validate = False
+                        self.reset_flag = True
+                        t1['phase'] = 21
+
+                elif loocv_err>0.707:               # Somehow, this seems to scale with candidates. For future, use 2**ndims * loocv > K if you know K for the simulation. 
+                    # Explorative phase - III
 
                     #if kcv_err>2*loocv_err and self.reset_flag == True:
                     #    # This case is expected to occur only in online scenarios
@@ -245,16 +264,16 @@ class BayesianOptimisationPlugin(BasePlugin):
                         self.cand_train = False
                         self.cand_validate = True
                         self.reset_flag = True
-                        t1['phase'] = 22
+                        t1['phase'] = 24
                     else:
                         print("Exploration training with KG.")
                         self.opt_motive = 'KG'
                         self.cand_train = True
                         self.cand_validate = False
                         self.reset_flag = True
-                        t1['phase'] = 21
+                        t1['phase'] = 23
 
-                elif self.df_train['if-train'].sum()<self._B_lim or kcv_err>0.1:
+                elif self.df_train['if-train'].sum()<self._EI_lim or kcv_err>0.1:
                     #                    # Exploitative phase - I
                     #                    self.opt_motive = 'EI'
                     #                    self.cand_train = True
@@ -311,9 +330,9 @@ class BayesianOptimisationPlugin(BasePlugin):
                     for i, val in enumerate(best_candidate):
                         t1[f'b-{i}'] = val
                 
-                # If offline optimisation, then abort the simulation at this point. 
-                #if self.opt_type == 'onfline':
-                #    intg.abort = True
+                # If only to get data for paper, then tend is meaningless
+                if self.force_abort and len(self.df_train.index) > self._END_lim:
+                    intg.abort = True
                     
             t1['opt-time'] = perf_counter() - opt_time_start
 
@@ -332,13 +351,13 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
             # ------------------------------------------------------------------
             
-            if self.df_train['LooCV'].count() > self._A_lim:
+            if self.df_train['LooCV'].count() > self._KG_lim:
                 # Get a rolling mean of self.df_train['LooCV','KCV']
                 self.df_train[f'roll{self._nbcs}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._nbcs).mean().diff()
                 self.df_train[f'roll{self._nbcs}-diff-KCV'] = self.df_train['KCV'].rolling(window=self._nbcs).mean().diff()
 
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
-                    and self.df_train['if-train'].sum() > self._B_lim
+                    and self.df_train['if-train'].sum() > self._EI_lim
                     and kcv_err>0.1 
                     and self.opt_type == 'online'):
 
@@ -414,7 +433,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
     def check_offline_optimisation_status(self, intg):
-        if (self.rank == self.root) and (len(self.df_train.index) > self._D_lim):
+        if (self.rank == self.root) and (len(self.df_train.index) > self._E_lim):
             intg.offline_optimisation_complete = True
         else:
             intg.offline_optimisation_complete = False
@@ -582,7 +601,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         ref = float(self.df_train.at[0, 't-m'])
 
-        if (len(self.df_train.index))<self._C_lim:
+        if (len(self.df_train.index))<self._END_lim:
             m = float(self.df_train[
                 self.df_train['t-m'].reset_index(drop=True)
                 == self.df_train['t-m'].min()]['t-m'].reset_index(drop=True))
@@ -695,9 +714,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         plt.close(cumm_fig)
 
     def add_limits_to_plot(self, ax):
-        limits = [(self._A_lim, 'red', 'KG-EI transition'),
-                (self._B_lim, 'orange', 'EI-PM transition'),
-                (self._C_lim, 'yellow', 'Optimisation turned off')]
+        limits = [(self._KG_lim, 'red', 'KG-EI transition'),
+                (self._EI_lim, 'orange', 'EI-PM transition'),
+                (self._END_lim, 'yellow', 'Optimisation turned off')]
 
         for limit, color, label in limits:
             if len(self.df_train.index) > limit:
@@ -762,10 +781,13 @@ class BayesianOptimisationPlugin(BasePlugin):
                                                                                 #   when model is definitely not good enough
 
             if self.opt_type == 'online':
-                return self.cv_folds(Train_X = self._norm_X, Train_Y = self._stan_Y
+                return self.cv_folds(Train_X = self._norm_X, 
+                                     Train_Y = self._stan_Y,
                                        ).detach().cpu().numpy()
             else:
-                return self.cv_folds(Train_X = self._norm_X, Train_Y = self._stan_Y, Train_Yvar = self._stan_Yvar
+                return self.cv_folds(Train_X    = self._norm_X, 
+                                     Train_Y    = self._stan_Y, 
+                                     Train_Yvar = self._stan_Yvar,
                                        ).detach().cpu().numpy()
         else:
             return None
@@ -1013,7 +1035,8 @@ class BayesianOptimisationPlugin(BasePlugin):
             if Val_X is None or Val_Y is None:
                 # LooCV with inferred noise
                 cv_folds = gen_loo_cv_folds(
-                    train_X=Train_X, train_Y=Train_Y)
+                    train_X = Train_X, 
+                    train_Y = Train_Y)
             else:
                 # kCV with inferred noise
                 cv_folds = CVFolds(
@@ -1025,7 +1048,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 mll_cls=ExactMarginalLogLikelihood, cv_folds=cv_folds,)
 
         else:
-            if Train_X is None or Train_Y is None or Train_Yvar is None:
+            if Val_X is None or Val_Y is None or Val_Yvar is None:
                 # LooCV with fixed noise
                 cv_folds = gen_loo_cv_folds(
                     train_X    = Train_X, 
