@@ -124,12 +124,12 @@ class BayesianOptimisationPlugin(BasePlugin):
             if self.df_train.empty:
                 # Set the reference acceptable error in cost
                 print(f"Setting error from {intg._stability} to {3*intg.opt_cost_sem}")
-                intg._stability = 3*intg.opt_cost_sem
+                intg._stability = 2*(intg.opt_cost_sem/intg.opt_cost_mean)                                                       # THIS WAS 3* BEFORE
 
                 # Since an imprecise candidate simulation will be rewound, be careful
                 # Start with a conservative 2X
                 # A good candidate MUST NOT BE KILLED THIS WAY
-                intg._precision = 5*intg.opt_cost_std
+                intg._precision = 3*(intg.opt_cost_std/intg.opt_cost_mean)                                                       # THIS WAS 5* BEFORE
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
@@ -389,11 +389,10 @@ class BayesianOptimisationPlugin(BasePlugin):
             if self.df_train['LooCV'].count() > self._KG_lim:
                 # Get a rolling mean of self.df_train['LooCV','KCV']
                 self.df_train[f'roll{self._nbcs}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._nbcs).mean().diff()
-                self.df_train[f'roll{self._nbcs}-diff-KCV'] = self.df_train['KCV'].rolling(window=self._nbcs).mean().diff()
 
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
-                    and self.df_train['if-train'].sum() > self._EI_lim
-                    and kcv_err>self.kCV_limit):              # Figure out the critical number of datapooints for us to apply this to offline and online both
+                    and self.df_train['if-train'].sum() > self._KG_lim
+                    ) or (self.df_train['if-train'].sum() > self._EI_lim):              # Figure out the critical number of datapooints for us to apply this to offline and online both
                                                                  # If simulation time is more than 10% of first simulation time then number of datapoints should be noted
                     # Find the index of the first occurance of self.df_train['if-train'] == True 
                     position = self.df_train[self.df_train['if-train']].index[0]

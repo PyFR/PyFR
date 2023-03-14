@@ -25,7 +25,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Skip first few iterations, and capture the rest few iterations
 
-        ref_window = self.cfg.getint(cfgsect, 'ref-window', 100)
+        ref_window = self.cfg.getint(cfgsect, 'ref-window', 32)
 
         intg._increment         = ref_window//4
         intg._skip_first_n      = ref_window//2      
@@ -172,13 +172,13 @@ class OptimisationStatsPlugin(BasePlugin):
                 std  = self.pd_stats['cost'].tail(intg.actually_captured).std()
                 sem  = self.pd_stats['cost'].tail(intg.actually_captured).sem()
 
-                if ((sem<intg._stability) or
+                if (((sem/mean)<intg._stability) or
                      (self.pd_stats.count(0)[0] >=(intg._skip_first_n+intg._capture_next_n+intg._stabilise_final_n)
                      )
                     ):
                     intg.reset_opt_stats = True
 
-                    intg.bad_sim = std > intg._precision
+                    intg.bad_sim = (std/mean) > intg._precision
 
                     intg.opt_cost_mean = mean
                     intg.opt_cost_std = std
