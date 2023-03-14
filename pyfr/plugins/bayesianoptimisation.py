@@ -124,12 +124,12 @@ class BayesianOptimisationPlugin(BasePlugin):
             if self.df_train.empty:
                 # Set the reference acceptable error in cost
                 print(f"Setting error from {intg._stability} to {3*intg.opt_cost_sem}")
-                intg._stability = 3*(intg.opt_cost_sem/intg.opt_cost_mean)                                                       # THIS WAS 3* BEFORE
+                intg._stability = 2*intg.opt_cost_sem                                                       # THIS WAS 3* BEFORE
 
                 # Since an imprecise candidate simulation will be rewound, be careful
                 # Start with a conservative 2X
                 # A good candidate MUST NOT BE KILLED THIS WAY
-                intg._precision = 5*(intg.opt_cost_std/intg.opt_cost_mean)                                                       # THIS WAS 5* BEFORE
+                intg._precision = 3*intg.opt_cost_std                                                       # THIS WAS 5* BEFORE
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
