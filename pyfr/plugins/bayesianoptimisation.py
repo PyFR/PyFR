@@ -411,7 +411,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # ------------------------------------------------------------------
 
             # If intg.actually_captured is equal to or greater than + intg._capture_next_n + intg._stabilise_final_n then 
-            if intg.actually_captured >= intg._capture_next_n + intg._stabilise_final_n:
+            if intg.actually_captured >= intg._capture_next_n + intg._increment:
                 intg._skip_first_n      += intg._increment
                 intg._capture_next_n    += intg._increment*2
                 intg._stabilise_final_n += intg._increment*2
