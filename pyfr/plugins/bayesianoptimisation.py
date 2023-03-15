@@ -350,11 +350,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 self.df_train[f'roll{self._nbcs}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._nbcs).mean().diff()
 
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
-                    and self.df_train['if-train'].sum() > self._C_lim):              # Figure out the critical number of datapooints for us to apply this to offline and online both
-                                                                 # If simulation time is more than 10% of first simulation time then number of datapoints should be noted
-                    # Find the index of the first occurance of self.df_train['if-train'] == True 
-                    position = self.df_train[self.df_train['if-train']].index[0]
-                    self.df_train.loc[position, 'if-train'] = False
+                    and self.df_train['if-train'].sum() > self._C_lim):
 
                     # ------------------------------------------------------------------
                     # NOVEL IDEA: IF UNABLE TO MODEL WELL, INCREASE CAPTURE TIME FOR TRAINING
@@ -362,6 +358,10 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # HYPERTROPHY/SUCCESSIVE PROGRESSIVE LOADING
                     # KEEP STRESSING THE OPTIMISER AT ITS BAD TIMES SO ITS ADAPTIVE ENOUGH
                     # ------------------------------------------------------------------
+
+                    position = self.df_train[self.df_train['if-train']].index[0]
+                    self.df_train.loc[position, 'if-train'] = False
+
                     if self.cand_train and not self.cand_validate:
                         intg._skip_first_n      += intg._increment
                         intg._capture_next_n    += intg._increment*2
@@ -430,20 +430,12 @@ class BayesianOptimisationPlugin(BasePlugin):
             # Process all optimisables with t1 too
             tX = pd.concat([new_df_train[self._t_cand], t1[self._t_cand]], **args).astype(np.float64).to_numpy()
             tY = pd.concat([new_df_train['t-m'], t1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
-
-            if self.opt_type == 'online':
-                tYv = pd.concat([new_df_train['t-d'], t1['t-d'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
-            else:
-                tYv = pd.concat([new_df_train['t-e'], t1['t-e'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
+            tYv = pd.concat([new_df_train['t-d'], t1['t-d'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
 
         else:
             tX = new_df_train[self._t_cand].astype(np.float64).to_numpy()
             tY = new_df_train['t-m'].to_numpy().reshape(-1, 1)
-
-            if self.opt_type == 'online':
-                tYv = new_df_train['t-d'].to_numpy().reshape(-1, 1) ** 2
-            else:
-                tYv = new_df_train['t-e'].to_numpy().reshape(-1, 1) ** 2
+            tYv = new_df_train['t-d'].to_numpy().reshape(-1, 1) ** 2
 
         if len(tY) > 0:
             # If NaN, then replace with twice the data of worst working candidate
@@ -462,20 +454,12 @@ class BayesianOptimisationPlugin(BasePlugin):
             # Process all optimisables with t1 too
             vX = pd.concat([new_df_train[self._t_cand], v1[self._t_cand]], **args).astype(np.float64).to_numpy()
             vY = pd.concat([new_df_train['t-m'], v1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
-
-            if self.opt_type == 'online':
-                vYv = pd.concat([new_df_train['t-d'], v1['t-d'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
-            else:
-                vYv = pd.concat([new_df_train['t-e'], v1['t-e'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
+            vYv = pd.concat([new_df_train['t-d'], v1['t-d'].iloc[:1]], **args).to_numpy().reshape(-1, 1) ** 2
 
         else:
             vX = new_df_train[self._t_cand].astype(np.float64).to_numpy()
             vY = new_df_train['t-m'].to_numpy().reshape(-1, 1)
-
-            if self.opt_type == 'online':
-                vYv = new_df_train['t-d'].to_numpy().reshape(-1, 1) ** 2
-            else:
-                vYv = new_df_train['t-e'].to_numpy().reshape(-1, 1) ** 2
+            vYv = new_df_train['t-d'].to_numpy().reshape(-1, 1) ** 2
 
         if len(vY) > 0:
             # If NaN, then replace with twice the data of worst working candidate
@@ -515,13 +499,8 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.torch.tensor(tY , **self.torch_kwargs),
             self.torch.tensor(tYv, **self.torch_kwargs))
 
-        if self.opt_type == 'online':
-            self.model = SingleTaskGP(train_X = self._norm_X, 
-                                      train_Y = self._stan_Y,)
-        else:
-            self.model = FixedNoiseGP(train_X = self._norm_X, 
-                                      train_Y = self._stan_Y, 
-                                      train_Yvar = self._stan_Yvar)
+        self.model = SingleTaskGP(train_X = self._norm_X, 
+                                  train_Y = self._stan_Y,)
 
         mll = ExactMarginalLogLikelihood(likelihood = self.model.likelihood, 
                                          model = self.model)
@@ -587,13 +566,6 @@ class BayesianOptimisationPlugin(BasePlugin):
         
         mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
         std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
-
-        if self.opt_type == 'online':
-            mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
-            std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
-        else:
-            mean_var = 0.5
-            std_mult = 5
 
         best_cands = tX[-self._nbcs:]
 
