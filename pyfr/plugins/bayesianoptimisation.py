@@ -129,7 +129,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # Since an imprecise candidate simulation will be rewound, be careful
                 # Start with a conservative 2X
                 # A good candidate MUST NOT BE KILLED THIS WAY
-                intg._precision = 3*intg.opt_cost_std                                                       # THIS WAS 5* BEFORE
+                intg._precision = 5*intg.opt_cost_std                                                       # THIS WAS 5* BEFORE
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
