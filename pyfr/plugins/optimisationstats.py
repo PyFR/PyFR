@@ -27,7 +27,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         ref_window = self.cfg.getint(cfgsect, 'ref-window', 32)
 
-        intg._increment         = ref_window//4
+        intg._increment         = ref_window//2
         intg._skip_first_n      = ref_window//2      
         intg._capture_next_n    = ref_window    
         intg._stabilise_final_n = ref_window

@@ -25,11 +25,11 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.columns_from_optimisables()
 
         self._nbcs       = len(self.optimisables) # Number of best candidates to consider
-        self._A_lim      = self.cfg.getfloat(cfgsect, 'A-lim', 2**self._nbcs   ) # when to start looking               (KG)     64
-        self._B_lim      = self.cfg.getfloat(cfgsect, 'B-lim', 1.25*self._A_lim)                                                     # When start checking model quality  (EI)     80
-        self._C_lim      = self.cfg.getfloat(cfgsect, 'C-lim', 1.50*self._A_lim)                                                     # When start looking for optimum     (KG+PM)  96
-        self._D_lim      = self.cfg.getfloat(cfgsect, 'D-lim', 1.75*self._A_lim)                                                     # When start checking optimum        (EI+PM) 112
-        self._E_lim      = self.cfg.getfloat(cfgsect, 'E-lim', 2   *self._A_lim)                                                     # When start checking optimum        (EI+PM) 128
+        self._A_lim      = self.cfg.getfloat(cfgsect, 'A-lim', 0.75*2**self._nbcs) # when to start looking                                                                  (KG)     48
+        self._B_lim      = self.cfg.getfloat(cfgsect, 'B-lim', 1.00*2**self._nbcs)                                                     # When start checking model quality  (EI)     64
+        self._C_lim      = self.cfg.getfloat(cfgsect, 'C-lim', 1.25*2**self._nbcs)                                                     # When start looking for optimum     (KG+PM)  80
+        self._D_lim      = self.cfg.getfloat(cfgsect, 'D-lim', 1.50*2**self._nbcs)                                                     # When start checking optimum        (EI+PM)  96
+        self._E_lim      = self.cfg.getfloat(cfgsect, 'E-lim', 2   *2**self._nbcs)                                                     # When start checking optimum        (EI+PM) 128
         self._END_lim    = self.cfg.getfloat(cfgsect, 'stop-offline-simulation', 4*self._A_lim) # Buffer kCV and LooCV and delete more       256
         self.force_abort = self.cfg.getbool( cfgsect, 'force-abort', False)
 
@@ -115,12 +115,12 @@ class BayesianOptimisationPlugin(BasePlugin):
             if self.df_train.empty:
                 # Set the reference acceptable error in cost
                 print(f"Setting error from {intg._stability} to {3*intg.opt_cost_sem}")
-                intg._stability = 2*intg.opt_cost_sem                                                       # THIS WAS 3* BEFORE
+                intg._stability = 2*intg.opt_cost_sem
 
                 # Since an imprecise candidate simulation will be rewound, be careful
                 # Start with a conservative 2X
                 # A good candidate MUST NOT BE KILLED THIS WAY
-                intg._precision = 5*intg.opt_cost_std                                                       # THIS WAS 5* BEFORE
+                intg._precision = 5*intg.opt_cost_std
 
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
@@ -255,7 +255,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # FOURTH STEP: STRESS-TESTING FINAL MODEL WITH PM
                 # ------------------------------------------------------------------
 
-                elif self.df_train['if-train'].sum()<self._A_lim:       # 64
+                elif self.df_train['if-train'].sum()<self._A_lim:       # 48
                     # Initialisation phase - I
                     print("Initialisation training with KG.")
                     opt_motive = 'KG'
@@ -263,8 +263,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_train = True
                     self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._C_lim:      # 96
-                    # Initialisation phase - I
+                elif self.df_train['if-train'].sum()<self._B_lim:      # 64
+                    # Initialisation phase - II
                     print("Quick-optimum-search training with EI.")
                     opt_motive = 'EI'
                     self.cand_phase = 30
@@ -350,8 +350,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 self.df_train[f'roll{self._nbcs}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._nbcs).mean().diff()
 
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
-                    and self.df_train['if-train'].sum() > self._D_lim
-                    ) or (self.df_train['if-train'].sum() > self._E_lim):              # Figure out the critical number of datapooints for us to apply this to offline and online both
+                    and self.df_train['if-train'].sum() > self._C_lim):              # Figure out the critical number of datapooints for us to apply this to offline and online both
                                                                  # If simulation time is more than 10% of first simulation time then number of datapoints should be noted
                     # Find the index of the first occurance of self.df_train['if-train'] == True 
                     position = self.df_train[self.df_train['if-train']].index[0]
@@ -370,10 +369,17 @@ class BayesianOptimisationPlugin(BasePlugin):
                     # ------------------------------------------------------------------
 
             # If intg.actually_captured is equal to or greater than + intg._capture_next_n + intg._stabilise_final_n then 
-            if intg.actually_captured >= intg._capture_next_n + intg._increment:
-                intg._skip_first_n      += intg._increment
-                intg._capture_next_n    += intg._increment*2
-                intg._stabilise_final_n += intg._increment*2
+            if (intg.actually_captured >= intg._capture_next_n + intg._increment
+                ) or (self.df_train['if-train'].sum() > self._E_lim
+                ) or (self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0   
+                      ):  # If last 2 values in self.df_train['phase'] are negative then
+
+                position = self.df_train[self.df_train['if-train']].index[0]
+                self.df_train.loc[position, 'if-train'] = False
+
+                intg._skip_first_n      += intg._increment*2
+                intg._capture_next_n    += intg._increment*4
+                intg._stabilise_final_n += intg._increment*4
 
             # ------------------------------------------------------------------
             # View results as csv file
@@ -528,7 +534,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
     @property
     def loocv_error(self):
-        if self.df_train['if-train'].sum()>=self._B_lim:
+        if self.df_train['if-train'].sum()>=self._A_lim:
                                                                                 # Calculate LOOCV error only after the initialising 16 iterations
                                                                                 # This is to avoid wasting time in the start
                                                                                 #   when model is definitely not good enough
