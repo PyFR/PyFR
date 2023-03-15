@@ -102,6 +102,12 @@ class StdPIController(BaseStdController):
         self._atol = self.cfg.getfloat(sect, 'atol')
         self._rtol = self.cfg.getfloat(sect, 'rtol')
 
+        if self._atol < 10*self.backend.fpdtype_eps:
+            raise ValueError('Absolute tolerance too small')
+
+        if self._rtol < 10*self.backend.fpdtype_eps:
+            raise ValueError('Relative tolerance too small')
+
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')
         if self._norm not in {'l2', 'l4', 'l8', 'uniform'}:

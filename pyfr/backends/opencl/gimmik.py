@@ -20,10 +20,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
         self.nbench = backend.cfg.getint('backend-opencl', 'gimmik-nbench', 5)
 
         # Kernel cache
-        self._kerns = {}
-
-        # Queue used for benchmarking
-        self._queue = backend.cl.queue(profiling=True)
+        self._mul_kerns = {}
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
@@ -55,15 +52,14 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
 
         # Check the kernel cache
         try:
-            kern, gs, ls = self._kerns[ckey]
+            kern, gs, ls, dt = self._mul_kerns[ckey]
 
             # Clone the kernel so it gets its own set of arguments
             kern = kern.clone()
         except KeyError:
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
-            queue = self._queue
             local_mem_size = self.backend.cl.dev.local_mem_size
-            best_dt, best_kern = None, None
+            best_kern = None
             sdata = None
 
             # Save a copy of the contents of the output matrix
@@ -86,21 +82,14 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
                     kern.set_dims(gs, ls)
                     kern.set_args(b, out)
 
-                    # Benchmark with warmup
-                    for j in range(self.nbench + 1):
-                        if j == 1:
-                            start_evt = end_evt = kern.exec_async(queue,
-                                                                  ret_evt=True)
-                        elif j == self.nbench:
-                            end_evt = kern.exec_async(queue, ret_evt=True)
-                        else:
-                            kern.exec_async(queue)
+                    # Obtain the runtime
+                    dt = self._benchmark(
+                        lambda queue: kern.exec_async(queue, ret_evt=True),
+                        nbench=self.nbench
+                    )
 
-                    queue.finish()
-                    dt = end_evt.end_time - start_evt.start_time
-                    if best_dt is None or dt < best_dt:
-                        best_dt = dt
-                        best_kern = kern, gs, ls
+                    if best_kern is None or dt < best_kern[-1]:
+                        best_kern = kern, gs, ls, dt
 
                     sdata = {'runtime': dt}
             except StopIteration:
@@ -110,7 +99,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             getattr(out, 'parent', out).set(out_np)
 
             # Update the cache
-            self._kerns[ckey] = kern, gs, ls = best_kern
+            self._mul_kerns[ckey] = kern, gs, ls, dt = best_kern
 
         # Set the parameters
         kern.set_dims(gs, ls)
@@ -120,4 +109,4 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             def run(self, queue, wait_for=None, ret_evt=False):
                 return kern.exec_async(queue, wait_for, ret_evt)
 
-        return MulKernel(mats=[b, out])
+        return MulKernel(mats=[b, out], dt=dt)

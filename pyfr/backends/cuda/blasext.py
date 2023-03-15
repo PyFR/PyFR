@@ -63,7 +63,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         ncola, ncolb = rs[0].ioshape[1:]
 
         # Reduction block dimensions
-        block = (128, 1, 1)
+        block = (256, 1, 1)
 
         # Determine the grid size
         grid = get_grid_for_block(block, ncolb, ncola)
@@ -74,7 +74,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         # Empty result buffer on the host
         reduced_host = cuda.pagelocked_empty((ncola, grid[0]), dtype)
 
-        tplargs = dict(norm=norm, sharesz=block[0], method=method)
+        tplargs = dict(norm=norm, method=method)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'

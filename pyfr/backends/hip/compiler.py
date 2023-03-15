@@ -99,7 +99,7 @@ class SourceModule:
         arch = backend.props['gcn_arch_name']
 
         # Compiler flags
-        flags = [f'--gpu-architecture={arch}']
+        flags = [f'--gpu-architecture={arch}', '-munsafe-fp-atomics']
 
         # Compile
         code = backend.hiprtc.compile('kernel', src, flags)

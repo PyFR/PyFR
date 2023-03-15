@@ -265,7 +265,9 @@ class BaseSystem:
     def _preproc_graphs(self, uinbank):
         pass
 
-    def preproc(self, uinbank):
+    def preproc(self, t, uinbank):
+        self._prepare_kernels(t, uinbank, None)
+
         for graph in self._preproc_graphs(uinbank):
             self.backend.run_graph(graph)
 

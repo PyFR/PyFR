@@ -9,10 +9,22 @@ typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 
 // Atomic helpers
 % if pyfr.npdtype_to_ctype(fpdtype) == 'float':
-#define atomic_min_pos(addr, val) atomic_min((__global int *) addr, as_int(val))
+void atomic_min_fpdtype(__global const fpdtype_t *addr, fpdtype_t val)
+{
+    if (!signbit(val))
+        atomic_min((__global int *) addr, as_int(val));
+    else
+        atomic_max((__global uint *) addr, as_uint(val));
+}
 % else:
 #pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable
-#define atomic_min_pos(addr, val) atom_min((__global long *) addr, as_long(val))
+void atomic_min_fpdtype(__global const fpdtype_t *addr, fpdtype_t val)
+{
+    if (!signbit(val))
+        atom_min((__global long *) addr, as_long(val));
+    else
+        atom_max((__global ulong *) addr, as_ulong(val));
+}
 % endif
 
 ${next.body()}
