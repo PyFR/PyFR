@@ -20,43 +20,34 @@ class BayesianOptimisationPlugin(BasePlugin):
         super().__init__(intg, cfgsect, suffix)
         self.comm, self.rank, self.root = get_comm_rank_root()
 
-        cfgostat = 'soln-plugin-optimisation_stats'
-        
-        self.plotter_switch = self.cfg.getbool(cfgsect, 'plotter-switch', False)
         self.optimisables = self.cfg.getliteral(cfgsect, 'optimisables')
-        self.bad_sim_multiplier = self.cfg.getfloat(cfgsect, 'bad-sim-multiplier', 2.0)
+        self.bad_sim_multiplier = self.cfg.getfloat(cfgsect, 'bad-sim-multiplier', 1.5)
         self.columns_from_optimisables()
 
-        self._nbcs = len(self.optimisables) # Number of best candidates to consider
-        self._INIT_lim = 2**(len(self.optimisables)-1)   # when to start looking at kCV (KG+PM)
-        self._KG_lim = 2**len(self.optimisables)       # When to start deciding on model quality (KG+PM)+LooCV 
-        self._EI_lim = 2*self._KG_lim                   # When to start looking for optimum (EI+PM)+kCV
-        self._END_lim = 3**len(self.optimisables)       # Abort simulation
-        self.force_abort = self.cfg.getbool(cfgsect, 'force-abort', False)
+        self._nbcs       = len(self.optimisables) # Number of best candidates to consider
+        self._A_lim      = self.cfg.getfloat(cfgsect, 'A-lim', 2**self._nbcs   ) # when to start looking               (KG)     64
+        self._B_lim      = self.cfg.getfloat(cfgsect, 'B-lim', 1.25*self._A_lim)                                                     # When start checking model quality  (EI)     80
+        self._C_lim      = self.cfg.getfloat(cfgsect, 'C-lim', 1.50*self._A_lim)                                                     # When start looking for optimum     (KG+PM)  96
+        self._D_lim      = self.cfg.getfloat(cfgsect, 'D-lim', 1.75*self._A_lim)                                                     # When start checking optimum        (EI+PM) 112
+        self._E_lim      = self.cfg.getfloat(cfgsect, 'E-lim', 2   *self._A_lim)                                                     # When start checking optimum        (EI+PM) 128
+        self._END_lim    = self.cfg.getfloat(cfgsect, 'stop-offline-simulation', 4*self._A_lim) # Buffer kCV and LooCV and delete more       256
+        self.force_abort = self.cfg.getbool( cfgsect, 'force-abort', False)
 
         intg.opt_type = self.opt_type = suffix
         if suffix == 'online':
             self.columns.append('tcurr')
             self.index_name = 'tcurr'
-            self._toptend = self.cfg.getfloat(cfgostat, 'tend', intg.tend)     
-            self._tend = intg.tend     
         elif suffix == 'onfline':
             self.columns.append('iteration')
             self.index_name = 'iteration'
-            self.noptiters_max = self._END_lim
             intg.offline_optimisation_complete = False
         elif suffix == 'offline':
             raise NotImplementedError(f'offline not implemented.')
         else:
             raise ValueError('Invalid suffix')
 
-        print(f"Initialise model with: {self._KG_lim}, ", 
-              f"Start looking for an optimum untill: {self._EI_lim}, ",
-              f"Try to stop optimisation by {self._END_lim}? : {self.force_abort} ",
-                )
-
-        self.LooCV_limit = 0.8
-        self.kCV_limit = 0.10
+        self.LooCV_limit = self.cfg.getfloat(cfgsect, 'loocv-limit', 1.0)
+        self.kCV_limit = self.cfg.getfloat(cfgsect, 'kcv-limit', 0.5)
 
         if self.rank == self.root:
 
@@ -238,20 +229,20 @@ class BayesianOptimisationPlugin(BasePlugin):
                     elif self.cand_validate:
                         # Make sure you still continue to build up on both the model and the validation set alternatively
 
-                        opt_motive = 'KG'
-                        t1['phase'] = -21
+                        opt_motive = 'EI'
+                        t1['phase'] = -31
                         t1['if-train']   = True
                         t1['if-validate']= False
-                        self.cand_phase = 21
+                        self.cand_phase = 31
                         self.cand_train = True
                         self.cand_validate = False
 
                     else:
                         opt_motive = 'PM'
-                        t1['phase'] = -22
+                        t1['phase'] = -32
                         t1['if-train']   = True
                         t1['if-validate']= False
-                        self.cand_phase = 22
+                        self.cand_phase = 32
                         self.cand_train = False
                         self.cand_validate = True
 
@@ -264,7 +255,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # FOURTH STEP: STRESS-TESTING FINAL MODEL WITH PM
                 # ------------------------------------------------------------------
 
-                elif self.df_train['if-train'].sum()<self._INIT_lim:
+                elif self.df_train['if-train'].sum()<self._A_lim:       # 64
                     # Initialisation phase - I
                     print("Initialisation training with KG.")
                     opt_motive = 'KG'
@@ -272,7 +263,15 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_train = True
                     self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._KG_lim:
+                elif self.df_train['if-train'].sum()<self._C_lim:      # 96
+                    # Initialisation phase - I
+                    print("Quick-optimum-search training with EI.")
+                    opt_motive = 'EI'
+                    self.cand_phase = 30
+                    self.cand_train = True
+                    self.cand_validate = False
+
+                elif loocv_err>self.LooCV_limit:
                     # Initialisation phase - II
                     if self.cand_validate:
                         print("Exploration training with KG.")
@@ -287,59 +286,17 @@ class BayesianOptimisationPlugin(BasePlugin):
                         self.cand_train = False
                         self.cand_validate = True
 
-                elif loocv_err>self.LooCV_limit:               # Somehow, this seems to scale with candidates. For future, use 2**ndims * loocv > K if you know K for the simulation. 
-                    # Explorative phase - III
-
-                    #if kcv_err>2*loocv_err and self.reset_flag == True:
-                    #    # This case is expected to occur only in online scenarios
-                    #    # This happens due to hysterisis, when PM candidate totally goes wrong.
-                    #    # We can expect LooCV too high because we may be looking at far-away points, but not kCV.
-                    #    # Looking at how the first candidate is performing will give us a feel of how reversible these hysterisis effects are
-                    #    print("Exploration reset.")
-                    #    opt_motive = 'reset'
-                    #    self.cand_train = False
-                    #    self.cand_validate = False
-                    #    t1['phase'] = 23
-                    if self.cand_validate:
-                        print("Exploration training with KG.")
-                        opt_motive = 'KG'
-                        self.cand_phase = 23
-                        self.cand_train = True
-                        self.cand_validate = False
-                    else:
-                        print("Exploration validation with PM.")
-                        opt_motive = 'PM'
-                        self.cand_phase = 24
-                        self.cand_train = False
-                        self.cand_validate = True
-
-                elif self.df_train['if-train'].sum()<self._EI_lim or kcv_err>self.kCV_limit:
-                    #                    # Exploitative phase - I
-                    #                    opt_motive = 'EI'
-                    #                    self.cand_train = True
-                    #                elif kcv_err>.1:
-                    # Exploitative phase - II
-
-                    #if kcv_err>loocv_err and self.reset_flag == True:
-                    #    # This case is expected to occur only in online scenarios
-                    #    # This happens due to hysterisis, when PM candidate totally goes wrong.
-                    #    # We can expect LooCV to high because we may be looking at far-away points, but not kCV.
-                    #    # Looking at how the first candidate is performing will give us a feel of how reversible these hysterisis effects are
-                    #    opt_motive = 'reset'
-                    #    print("Resetting.")
-                    #    self.cand_train = False
-                    #    self.cand_validate = False
-                    #    t1['phase'] = 33
+                elif kcv_err>self.kCV_limit:
                     if self.cand_validate:
                         print("Exploitative EI phase.")
                         opt_motive = 'EI'
-                        self.cand_phase = 31
+                        self.cand_phase = 33
                         self.cand_train = True
                         self.cand_validate = False
                     else:
                         print("Exploitative PM phase.")
                         opt_motive = 'PM'
-                        self.cand_phase = 32
+                        self.cand_phase = 34
                         self.cand_train = False
                         self.cand_validate = True
 
@@ -368,7 +325,9 @@ class BayesianOptimisationPlugin(BasePlugin):
                         t1[f'b-{i}'] = val
                 
                 # If only to get data for paper, then tend is meaningless
-                if self.force_abort and len(self.df_train.index) > self._END_lim:
+                if (self.force_abort
+                    and (len(self.df_train.index)>self._END_lim
+                        or intg.tcurr>intg.tend)):
                     intg.abort = True
                     
             t1['opt-time'] = perf_counter() - opt_time_start
@@ -386,13 +345,13 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
             # ------------------------------------------------------------------
             
-            if self.df_train['LooCV'].count() > self._KG_lim:
+            if self.df_train['LooCV'].count() > self._nbcs:
                 # Get a rolling mean of self.df_train['LooCV','KCV']
                 self.df_train[f'roll{self._nbcs}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._nbcs).mean().diff()
 
                 if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
-                    and self.df_train['if-train'].sum() > self._KG_lim
-                    ) or (self.df_train['if-train'].sum() > self._EI_lim):              # Figure out the critical number of datapooints for us to apply this to offline and online both
+                    and self.df_train['if-train'].sum() > self._D_lim
+                    ) or (self.df_train['if-train'].sum() > self._E_lim):              # Figure out the critical number of datapooints for us to apply this to offline and online both
                                                                  # If simulation time is more than 10% of first simulation time then number of datapoints should be noted
                     # Find the index of the first occurance of self.df_train['if-train'] == True 
                     position = self.df_train[self.df_train['if-train']].index[0]
@@ -422,14 +381,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             # ------------------------------------------------------------------
             # Notify intg of the latest generated candidate and other info
             intg.candidate = self._postprocess_ccandidate(list(t1[self._n_cols].values)[0])
-
-            # Finally, plot if required
-            #if self.plotter_switch:
-            #    if self.opt_type == 'online' and self.cumm_plot and self.speedup_plot:
-            #        self.plot_normalised_cummulative_cost()
-            #        self.plot_overall_speedup(intg)
-            #    if self.cost_plot:
-            #        self.plot_normalised_cost(intg)
             # ------------------------------------------------------------------
 
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
@@ -528,241 +479,6 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         return vX, vY, vYv
 
-    def plot_normalised_cost(self, intg):
-        """Plot cost function statistics.
-                onfline: wrt number of iterations.
-                online: wrt current time. 
-
-            Normalise all of the below plots with the first iteration value.
-            Plot the cost functions for the tested candidate.
-            Plot the cost [mean, ub, lb] for predicted best candidate.
-
-        """
-
-        base = float(self.df_train.at[0, 't-m'])
-
-        cost_fig, cost_ax = plt.subplots(1,1, figsize = (8,8))
-
-        cost_ax.set_title(f'Online optimisation \n base cost: {str(base)}')
-        cost_ax.set_xlabel(self.index_name)
-        cost_ax.set_ylabel('Base-normalised cost')
-
-        cost_ax.axhline(y = 1, color = 'grey', linestyle = ':')
-        
-#            cost_ax.plot(self.df_train[self.index_name], 
-#                        self.df_train['b-m']/base, 
-#                        linestyle = ':', color = 'green',
-#                        label = 'Predicted best mean cost', 
-#                        )
-
-#            cost_ax.fill_between(
-#                    self.df_train[self.index_name], 
-#                    (self.df_train['b-m']-2*self.df_train['b-s'])/base, 
-#                    (self.df_train['b-m']+2*self.df_train['b-s'])/base, 
-#                    color = 'green', alpha = 0.1, 
-#                    label = 'Predicted best candidate''s confidence in cost',
-#                        )
-
-        cost_ax.scatter(self.df_train[self.index_name], 
-                     self.df_train['t-m']/base, 
-                     color = 'blue', marker = '*',
-                     label = 'Tested candidate mean cost', 
-                    )
-
-        tested_best = (self.df_train['t-m']
-                       .expanding().min()
-                       .reset_index(drop=True))
-
-        cost_ax.plot(self.df_train[self.index_name], 
-                     tested_best/base,
-                     linestyle = ':', color = 'blue',
-                     label = 'Best tested cost', 
-                    )
-        # 
-        cummin_loc = list(self.df_train['t-m']
-                          .expanding().apply(lambda x: x.idxmin()).astype(int))
-
-        tested_best_sem = (self.df_train.loc[cummin_loc]['t-e']
-                           .reset_index(drop=True))
-        cost_ax.fill_between(
-                self.df_train[self.index_name], 
-                (tested_best-2*tested_best_sem)/base, 
-                (tested_best+2*tested_best_sem)/base, 
-                color = 'blue', alpha = 0.04, 
-                label = 'Tested best candidate''s confidence in cost',
-                    )
-
-        cost_ax.plot(self.df_train[self.index_name], 
-                     self.df_train['n-m']/base,
-                     linestyle = ':', color = 'green',
-                     label = 'Best next cost', 
-                    )
-
-        next_index_add = intg._dt if self.opt_type == 'online' else 1
-
-        cost_ax.fill_between(
-                self.df_train[self.index_name] + next_index_add, 
-                (self.df_train['n-m']-2*self.df_train['n-s'])/base, 
-                (self.df_train['n-m']+2*self.df_train['n-s'])/base, 
-                color = 'green', alpha = 0.1, 
-                label = 'next candidate''s confidence in cost',
-                    )
-
-        self.add_limits_to_plot(cost_ax)
-
-        # Set lower limit for y axis to 0
-        cost_ax.set_ylim(bottom = 0)
-        #if self.opt_type == 'onfline':  cost_ax.set_xlim(left = 0)
-        #elif self.opt_type == 'online': cost_ax.set_xlim(left = self._toptstart)
-
-        cost_ax.legend(loc='upper right')
-        cost_ax.get_figure().savefig(self.cost_plot)        
-        plt.close(cost_fig)
-        
-    def plot_overall_speedup(self, intg):
-        """ 
-            If online optimisation is being performed ...
-            Plot the optimisation progress in terms of the cummulative cost.
-        """
-
-        cumm_fig, cumm_ax = plt.subplots(1, 1, figsize = (8, 8))
-
-        cumm_ax.set_title(f'Online optimisation\nSpeedup wrt base simulation')
-        cumm_ax.set_xlabel(self.index_name)
-        cumm_ax.set_ylabel('Overall speedup wrt base simulation')
-
-        proj = 1 + self.df_train.index - (self.df_train['t-m']
-                                        .isna()
-                                        .expanding().sum())
-
-        base = (self.df_train.at[0, 'cumm-compute-time']*proj)
-
-        cumm_ax.axhline(y = 1, color = 'grey', linestyle = ':',)
-
-        ref = float(self.df_train.at[0, 't-m'])
-
-        if (len(self.df_train.index))<self._END_lim:
-            m = float(self.df_train[
-                self.df_train['t-m'].reset_index(drop=True)
-                == self.df_train['t-m'].min()]['t-m'].reset_index(drop=True))
-
-            s = float(self.df_train[
-                self.df_train['t-m'].reset_index(drop=True) == 
-                self.df_train['t-m'].min()]['t-e'].reset_index(drop=True))
-
-            cumm_ax.axhline(y = ref/m, 
-                            linestyle = ':', color = 'green', 
-                            )
-
-            cumm_ax.axhspan(ref/(m-2*s), ref/(m+2*s), 
-                            color = 'green', alpha = 0.1, 
-                            label = 'Possible best tested speed-up'
-                            )
-        else:        
-
-            m1 = self.df_train.at[self.df_train.last_valid_index(), 'n-m']
-            s1 = self.df_train.at[self.df_train.last_valid_index(), 'n-s']
-
-            cumm_ax.axhline(y = ref/m1, 
-                            linestyle = ':', color = 'green', 
-                            )
-
-            cumm_ax.axhspan(ref/(m1-2*s1), ref/(m1+2*s1), 
-                            color = 'green', alpha = 0.1, 
-                            label = 'Aiming speed-up',
-                            )
-
-        cumm_ax.plot(self.df_train[self.index_name], 
-                     base/self.df_train['cumm-compute-time'],
-                     linestyle = '-', color = 'g', marker = '*',
-                     label = 'compute-time speedup',
-                    )
-
-        cumm_ax.plot(self.df_train[self.index_name], 
-                     base/(self.df_train['cumm-compute-time'] + 
-                           self.df_train['opt-time'].expanding().sum()),
-                     linestyle = '-', color = 'b', marker = '*',
-                     label = 'overall speedup',
-                    )
-
-        self.add_limits_to_plot(cumm_ax)
-
-        cumm_ax.set_ylim(bottom = 0)
-        #if self.opt_type == 'onfline':
-        #    cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
-        #elif self.opt_type == 'online':
-        #    cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
-
-        cumm_ax.legend(loc='lower right')
-        cumm_ax.get_figure().savefig(self.speedup_plot)
-        plt.close(cumm_fig)
-
-    def plot_normalised_cummulative_cost(self):
-        """ 
-            If online optimisation is being performed ...
-            Plot the overall speed-up in simulation due to the optimisation
-
-            Compare with base simulation if base simulation data exists
-            Else, extrapolate the first iteration data.
-
-        """
-
-        cumm_fig, cumm_ax = plt.subplots(1, 1, figsize = (8, 8))
-
-        cumm_ax.set_title(f'Online optimisation\nCummulative costs')
-        cumm_ax.set_xlabel(self.index_name)
-        cumm_ax.set_ylabel('cummilative costs (in seconds)')
-
-        proj = self.df_train.index - (self.df_train['t-m']
-                                    .isna().expanding().sum() + 1)
-        
-        cumm_ax.plot(self.df_train[self.index_name], 
-                     self.df_train.at[0, 'cumm-compute-time']*proj,
-                     linestyle = '--', color = 'grey',
-                     label = 'projected compute-time',
-                    )
-
-        cumm_ax.plot(self.df_train[self.index_name], 
-                     self.df_train['cumm-compute-time'] + 
-                     self.df_train['opt-time'].expanding().sum(),
-                     linestyle = '-', color = 'blue',
-                     label = 'actual cost (compute + optimisation)',
-                    )
-
-        cumm_ax.plot(self.df_train[self.index_name], 
-                     self.df_train['cumm-compute-time'],
-                     linestyle = '-', color = 'green',
-                     label = 'compute-cost',
-                    )
-
-        cumm_ax.plot(self.df_train[self.index_name], 
-                     self.df_train['opt-time'].expanding().sum(),
-                     linestyle = '-', color = 'red',
-                     label = 'optimisation cost',
-                     )
-
-        self.add_limits_to_plot(cumm_ax)
-
-        cumm_ax.set_ylim(bottom = 0)
-        #if self.opt_type == 'onfline':
-        #    cumm_ax.set_xlim(left = 0, right = self.noptiters_max)
-        #elif self.opt_type == 'online':
-        #    cumm_ax.set_xlim(left = self._toptstart, right = self._tend)
-
-        cumm_ax.legend(loc='lower right')
-        cumm_ax.get_figure().savefig(self.cumm_plot)
-        plt.close(cumm_fig)
-
-    def add_limits_to_plot(self, ax):
-        limits = [(self._KG_lim, 'red', 'KG-EI transition'),
-                (self._EI_lim, 'orange', 'EI-PM transition'),
-                (self._END_lim, 'yellow', 'Optimisation turned off')]
-
-        for limit, color, label in limits:
-            if len(self.df_train.index) > limit:
-                ax.axvline(x=float(self.df_train.at[limit, self.index_name]),
-                        color=color, linestyle='-.', label=label)
-
     def add_to_model(self, tX, tY, tYv):
         """ Fit a Fixed Noise Gaussian Process model on given data
 
@@ -812,7 +528,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
     @property
     def loocv_error(self):
-        if self.df_train['if-train'].sum()>=2:
+        if self.df_train['if-train'].sum()>=self._B_lim:
                                                                                 # Calculate LOOCV error only after the initialising 16 iterations
                                                                                 # This is to avoid wasting time in the start
                                                                                 #   when model is definitely not good enough
