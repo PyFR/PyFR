@@ -25,19 +25,23 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Skip first few iterations, and capture the rest few iterations
 
-        ref_window = self.cfg.getint(cfgsect, 'ref-window', 32)
+        ref_window = self.cfg.getint(cfgsect, 'ref-window',  32)
+        intg._max_window = self.cfg.getint(cfgsect, 'max-window', 1/intg._dt)
 
-        intg._increment         = ref_window//2
+        intg._increment         = ref_window//4
         intg._skip_first_n      = ref_window//2      
         intg._capture_next_n    = ref_window    
         intg._stabilise_final_n = ref_window
 
         # This is how the cost converges to a value
-        intg._stability = 10. # Default, set to sem/mean of first candidate cost
+        intg._stability = 100.0
 
         # Standard deviation of the cost determines how erratic the cost is
         # If the cost deviation is erratic, even if sem decreases, the candidate needs to be rejected
-        intg._precision = 1000. # Default, set to 2*std/mean of first candidate cost
+        # for re500, candidates had 4. So 2 is a good default
+        # Imagine an ex-gaussian distribution. Deviation cannot definitely be 1.
+        #   So we just choose 2 as a default
+        intg._precision = self.cfg.getfloat(cfgsect, 'precision', 0.5)
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
         self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
@@ -172,10 +176,12 @@ class OptimisationStatsPlugin(BasePlugin):
                 std  = self.pd_stats['cost'].tail(intg.actually_captured).std()
                 sem  = self.pd_stats['cost'].tail(intg.actually_captured).sem()
 
-                if (((sem/mean)<intg._stability) or
-                     (self.pd_stats.count(0)[0] >=(intg._skip_first_n+intg._capture_next_n+intg._stabilise_final_n)
-                     )
-                    ):
+                if (sem<intg._stability
+                    ) or (self.pd_stats.count(0)[0] 
+                          >=( intg._skip_first_n
+                             +intg._capture_next_n
+                             +intg._stabilise_final_n)
+                     ):
                     intg.reset_opt_stats = True
 
                     intg.bad_sim = (std/mean) > intg._precision

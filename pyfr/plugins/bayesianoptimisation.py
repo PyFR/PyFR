@@ -21,15 +21,14 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.comm, self.rank, self.root = get_comm_rank_root()
 
         self.optimisables = self.cfg.getliteral(cfgsect, 'optimisables')
-        self.bad_sim_multiplier = self.cfg.getfloat(cfgsect, 'bad-sim-multiplier', 1.5)
+        self.bad_sim_multiplier = self.cfg.getfloat(cfgsect, 'bad-sim-multiplier', 2.0)
         self.columns_from_optimisables()
 
         self._nbcs       = len(self.optimisables) # Number of best candidates to consider
-        self._A_lim      = self.cfg.getfloat(cfgsect, 'A-lim', 0.75*2**self._nbcs) # when to start looking                                                                  (KG)     48
-        self._B_lim      = self.cfg.getfloat(cfgsect, 'B-lim', 1.00*2**self._nbcs)                                                     # When start checking model quality  (EI)     64
-        self._C_lim      = self.cfg.getfloat(cfgsect, 'C-lim', 1.25*2**self._nbcs)                                                     # When start looking for optimum     (KG+PM)  80
-        self._D_lim      = self.cfg.getfloat(cfgsect, 'D-lim', 1.50*2**self._nbcs)                                                     # When start checking optimum        (EI+PM)  96
-        self._E_lim      = self.cfg.getfloat(cfgsect, 'E-lim', 2   *2**self._nbcs)                                                     # When start checking optimum        (EI+PM) 128
+        self._A_lim      = self.cfg.getfloat(cfgsect, 'A-lim', 1.00*2**self._nbcs)              # when to start looking              (KG)     64
+        self._B_lim      = self.cfg.getfloat(cfgsect, 'B-lim', 1.50*2**self._nbcs)              # When start checking model quality  (EI)     96
+        self._C_lim      = self.cfg.getfloat(cfgsect, 'C-lim', 1.75*2**self._nbcs)              # When start looking for optimum     (KG+PM) 112
+        self._E_lim      = self.cfg.getfloat(cfgsect, 'E-lim', 2   *2**self._nbcs)              # When start using optimum           (EI+PM) 128
         self._END_lim    = self.cfg.getfloat(cfgsect, 'stop-offline-simulation', 4*self._A_lim) # Buffer kCV and LooCV and delete more       256
         self.force_abort = self.cfg.getbool( cfgsect, 'force-abort', False)
 
@@ -47,7 +46,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             raise ValueError('Invalid suffix')
 
         self.LooCV_limit = self.cfg.getfloat(cfgsect, 'loocv-limit', 1.0)
-        self.kCV_limit = self.cfg.getfloat(cfgsect, 'kcv-limit', 0.5)
+        self.kCV_limit = self.cfg.getfloat(cfgsect, 'kcv-limit', 0.1)
 
         if self.rank == self.root:
 
@@ -117,11 +116,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                 print(f"Setting error from {intg._stability} to {3*intg.opt_cost_sem}")
                 intg._stability = 2*intg.opt_cost_sem
 
-                # Since an imprecise candidate simulation will be rewound, be careful
-                # Start with a conservative 2X
-                # A good candidate MUST NOT BE KILLED THIS WAY
-                intg._precision = 5*intg.opt_cost_std
-
             # Convert last iteration data from intg to dataframe
             tested_candidate = self.candidate_from_intg(intg.pseudointegrator)
 
@@ -134,6 +128,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                 'if-train': [self.cand_train],       # |----> Latest tested candidate 
                 'if-validate': [self.cand_validate], # |
                 },)
+
+            kcv_err = 0.0
 
             if not self.test == []: 
                 # GP model is not used for this
@@ -179,7 +175,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 t1['bounds-size'] = self.bounds_size
                 t1['LooCV'] = loocv_err = self.loocv_error
                 loocv_err = 0 if loocv_err==None else loocv_err
-                t1['KCV'] = kcv_err = self.kcv_error(*v_X_Y_Yv)
+                t1['kCV'] = kcv_err = self.kcv_error(*v_X_Y_Yv)
                 kcv_err = 0 if kcv_err==None else kcv_err
 
 
@@ -192,15 +188,15 @@ class BayesianOptimisationPlugin(BasePlugin):
                 #       takes more time to converge ... then its fine
                 #       starts to NaN               ... then we have a problem
                     intg.bad_sim = False
-                    if intg.opt_cost_std < intg._precision:
-                        raise ValueError("Something's wrong here.")                        
+                    if (intg.opt_cost_std/intg.opt_cost_mean) < intg._precision:
+                        raise ValueError("Something's wrong here. Investigate.")                        
                     else:
                         print("Base simulation was marked as bad due to "
                               "high deviation in cost of the first candidate."
                               "This is fine.")
 
                 # Check if optimisation is performing alright
-                if self.df_train.empty:
+                if self.df_train['if-train'].sum() <= 1:
                     # Initialisation phase
                     opt_motive = 'PM'
                     self.cand_phase = 11
@@ -255,7 +251,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # FOURTH STEP: STRESS-TESTING FINAL MODEL WITH PM
                 # ------------------------------------------------------------------
 
-                elif self.df_train['if-train'].sum()<self._A_lim:       # 48
+                elif self.df_train['if-train'].sum()<self._A_lim:       # 64
                     # Initialisation phase - I
                     print("Initialisation training with KG.")
                     opt_motive = 'KG'
@@ -263,7 +259,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_train = True
                     self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._B_lim:      # 64
+                elif self.df_train['if-train'].sum()<self._B_lim:      # 128
                     # Initialisation phase - II
                     print("Quick-optimum-search training with EI.")
                     opt_motive = 'EI'
@@ -308,6 +304,13 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_train = False
                     self.cand_validate = True
 
+                    # If we are finalising, better to be sure that our candidate works for long period of time
+                    # Longer than 1 flow-pass does not make sense                    
+                    if intg._capture_next_n <= intg._max_window/4:
+                        intg._skip_first_n      += intg._increment
+                        intg._capture_next_n    += intg._increment*2
+                        intg._stabilise_final_n += intg._increment*2
+
                 next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model(opt_motive)
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
@@ -345,41 +348,29 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
             # ------------------------------------------------------------------
             
-            if self.df_train['LooCV'].count() > self._nbcs:
-                # Get a rolling mean of self.df_train['LooCV','KCV']
-                self.df_train[f'roll{self._nbcs}-diff-LooCV'] = self.df_train['LooCV'].rolling(window=self._nbcs).mean().diff()
+            if ((kcv_err > 3*self.kCV_limit and self.df_train['if-train'].sum() > self._C_lim)
+                or (self.df_train['if-train'].sum() > self._E_lim)
+                or (intg.actually_captured >= intg._capture_next_n + intg._increment)
+                or (self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0   )
+                ):
 
-                if (self.df_train[f'roll{self._nbcs}-diff-LooCV'].iloc[-1] > 0 
-                    and self.df_train['if-train'].sum() > self._C_lim):
+                # ------------------------------------------------------------------
+                # NOVEL IDEA: IF UNABLE TO MODEL WELL, INCREASE CAPTURE TIME FOR TRAINING
+                # ------------------------------------------------------------------
+                # HYPERTROPHY/SUCCESSIVE PROGRESSIVE LOADING
+                # KEEP STRESSING THE OPTIMISER AT ITS BAD TIMES SO ITS ADAPTIVE ENOUGH
+                # ------------------------------------------------------------------
 
-                    # ------------------------------------------------------------------
-                    # NOVEL IDEA: IF UNABLE TO MODEL WELL, INCREASE CAPTURE TIME FOR TRAINING
-                    # ------------------------------------------------------------------
-                    # HYPERTROPHY/SUCCESSIVE PROGRESSIVE LOADING
-                    # KEEP STRESSING THE OPTIMISER AT ITS BAD TIMES SO ITS ADAPTIVE ENOUGH
-                    # ------------------------------------------------------------------
+                position = self.df_train[self.df_train['if-train']].index[0]
+                self.df_train.loc[position, 'if-train'] = False
 
-                    position = self.df_train[self.df_train['if-train']].index[0]
-                    self.df_train.loc[position, 'if-train'] = False
-
-                    if self.cand_train and not self.cand_validate:
+                if self.cand_train and not self.cand_validate:
+                    if intg._capture_next_n <= intg._max_window/4:
                         intg._skip_first_n      += intg._increment
                         intg._capture_next_n    += intg._increment*2
                         intg._stabilise_final_n += intg._increment*2
                     # ------------------------------------------------------------------
 
-            # If intg.actually_captured is equal to or greater than + intg._capture_next_n + intg._stabilise_final_n then 
-            if (intg.actually_captured >= intg._capture_next_n + intg._increment
-                ) or (self.df_train['if-train'].sum() > self._E_lim
-                ) or (self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0   
-                      ):  # If last 2 values in self.df_train['phase'] are negative then
-
-                position = self.df_train[self.df_train['if-train']].index[0]
-                self.df_train.loc[position, 'if-train'] = False
-
-                intg._skip_first_n      += intg._increment*2
-                intg._capture_next_n    += intg._increment*4
-                intg._stabilise_final_n += intg._increment*4
 
             # ------------------------------------------------------------------
             # View results as csv file
@@ -479,7 +470,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         """
 
         from gpytorch.mlls             import ExactMarginalLogLikelihood
-        from botorch.models            import FixedNoiseGP, SingleTaskGP
+        from botorch.models            import SingleTaskGP
         from botorch.fit               import fit_gpytorch_model as fit_model
         from botorch.models.transforms import Standardize, Normalize
 
@@ -564,8 +555,8 @@ class BayesianOptimisationPlugin(BasePlugin):
             3. Take union of the happening region and the initial bounds
         """
         
-        mean_var = 0.5 # NEXT TEST: 0.5                      # Extra wiggle-room for hr around mean
-        std_mult = 2  # NEXT TEST: 5                        # If wiggling too much, search more around here
+        mean_var = 0.5 # Extra wiggle-room for hr around mean
+        std_mult = 2   # If wiggling too much, search more around here
 
         best_cands = tX[-self._nbcs:]
 
@@ -745,7 +736,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         from botorch.cross_validation import CVFolds, gen_loo_cv_folds
         from botorch.cross_validation import batch_cross_validation
-        from botorch.models import FixedNoiseGP, SingleTaskGP
+        from botorch.models import FixedNoiseGP
         from gpytorch.mlls.exact_marginal_log_likelihood import ExactMarginalLogLikelihood
 
         if Val_X is None or Val_Y is None:
@@ -781,7 +772,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
             'opt-time', 'cumm-compute-time', 
             'if-train', 'if-validate', 'capture-window', 
-            'LooCV',  'KCV',
+            'LooCV',  'kCV',
             'bounds-size', 
             'phase'
             ] 
