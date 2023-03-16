@@ -75,13 +75,21 @@ class ModifyConfigPlugin(BasePlugin):
 
     def _postprocess_ccsteps(self, ccsteps):
 
-        if len(ccsteps) == 5:
+        if len(ccsteps) == 7:
+            return  (ccsteps[0],) + \
+                    (ccsteps[1],) + \
+                    (ccsteps[2],) * (self.depth-2) + \
+                    (ccsteps[3],) + \
+                    (ccsteps[4],) * (self.depth-2) + \
+                    (ccsteps[5],) + \
+                    (ccsteps[6],)
+        elif len(ccsteps) == 5:
             return  (ccsteps[0],) + \
                     (ccsteps[1],) * (self.depth-1) + \
                     (ccsteps[2],) + \
                     (ccsteps[3],) * (self.depth-1) + \
                     (ccsteps[4],)
-        if len(ccsteps) == 4:
+        elif len(ccsteps) == 4:
             return  (1.0,) + \
                     (ccsteps[0],) * (self.depth-1) + \
                     (ccsteps[1],) + \

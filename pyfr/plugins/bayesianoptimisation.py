@@ -351,7 +351,7 @@ class BayesianOptimisationPlugin(BasePlugin):
             if ((kcv_err > 3*self.kCV_limit and self.df_train['if-train'].sum() > self._C_lim)
                 or (self.df_train['if-train'].sum() > self._E_lim)
                 or (intg.actually_captured >= intg._capture_next_n + intg._increment)
-                or (self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0   )
+                or (self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0)
                 ):
 
                 # ------------------------------------------------------------------
@@ -638,9 +638,11 @@ class BayesianOptimisationPlugin(BasePlugin):
 
     def _preprocess_csteps(self, csteps, n_csteps):
 
-        if n_csteps == 5:
+        if n_csteps == 7:
+            return csteps[0], csteps[1],  csteps[2], csteps[self.depth], csteps[-3], csteps[-2], csteps[-1]
+        elif n_csteps == 5:
             return csteps[0], csteps[1], csteps[self.depth], csteps[-2], csteps[-1]
-        if n_csteps == 4:
+        elif n_csteps == 4:
             return csteps[1], csteps[self.depth], csteps[-2], csteps[-1]
         elif n_csteps == 3:
             return csteps[1], csteps[self.depth], csteps[-1]
@@ -661,8 +663,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         if type == 'KG':
             samples   = 1024
-            restarts  =   10
-            fantasies =   64
+            restarts  =    5
+            fantasies =   32
 
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
