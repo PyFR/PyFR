@@ -180,7 +180,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 
 
                 # ------------------------------------------------------------------
-                if intg.bad_sim and self.df_train['phase'].iloc[-1]==0 and self.opt_type == 'online':
+                if intg.bad_sim and self.cand_phase==1 and self.opt_type == 'online':
                 # We shall assume that the first candidate is a good candidate
                 #   This is because the first candidate is the initial configuration
                 #   and all our tolerances are set on the basis of this candidate
@@ -347,28 +347,42 @@ class BayesianOptimisationPlugin(BasePlugin):
             # Add all the data collected into the main dataframe
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
             # ------------------------------------------------------------------
-            
-            if ((kcv_err > 3*self.kCV_limit and self.df_train['if-train'].sum() > self._C_lim)
-                or (self.df_train['if-train'].sum() > self._E_lim)
-                or (intg.actually_captured >= intg._capture_next_n + intg._increment)
-                or (self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0)
-                ):
 
-                # ------------------------------------------------------------------
-                # NOVEL IDEA: IF UNABLE TO MODEL WELL, INCREASE CAPTURE TIME FOR TRAINING
-                # ------------------------------------------------------------------
-                # HYPERTROPHY/SUCCESSIVE PROGRESSIVE LOADING
-                # KEEP STRESSING THE OPTIMISER AT ITS BAD TIMES SO ITS ADAPTIVE ENOUGH
-                # ------------------------------------------------------------------
+
+            # If model is failing too much not good, lets assume that data quality is not good and delete old ones and add new better ones
+            if self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0:
 
                 position = self.df_train[self.df_train['if-train']].index[0]
                 self.df_train.loc[position, 'if-train'] = False
 
                 if self.cand_train and not self.cand_validate:
-                    if intg._capture_next_n <= intg._max_window/4:
-                        intg._skip_first_n      += intg._increment
-                        intg._capture_next_n    += intg._increment*2
-                        intg._stabilise_final_n += intg._increment*2
+                    intg._skip_first_n += intg._increment
+                    intg._capture_next_n += intg._increment*2
+                    intg._stabilise_final_n += intg._increment*2
+                    # ------------------------------------------------------------------
+
+            # If data quality is OK, but data continues to be collected and simulation continues           
+            # We will need to remove data so we do not run out of memory or compute effort
+            if ((kcv_err > 3*self.kCV_limit and self.df_train['if-train'].sum() > self._C_lim)
+                or (self.df_train['if-train'].sum() > self._E_lim)
+                ):
+
+                position = self.df_train[self.df_train['if-train']].index[0]
+                self.df_train.loc[position, 'if-train'] = False
+
+                if self.cand_train and not self.cand_validate:
+                    intg._capture_next_n += intg._increment
+                    # ------------------------------------------------------------------
+
+            # Add more freedom to window length
+            if (intg.actually_captured >= intg._capture_next_n + 0.75*intg._stabilise_final_n):
+                position = self.df_train[self.df_train['if-train']].index[0]
+                self.df_train.loc[position, 'if-train'] = False
+
+                if (self.cand_train and not self.cand_validate 
+                    and intg._skip_first_n <= intg._max_window/4): 
+                    intg._skip_first_n      += intg._increment
+                    intg._stabilise_final_n += intg._increment
                     # ------------------------------------------------------------------
 
 

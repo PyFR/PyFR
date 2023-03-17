@@ -41,7 +41,7 @@ class OptimisationStatsPlugin(BasePlugin):
         # for re500, candidates had 4. So 2 is a good default
         # Imagine an ex-gaussian distribution. Deviation cannot definitely be 1.
         #   So we just choose 2 as a default
-        intg._precision = self.cfg.getfloat(cfgsect, 'precision', 0.5)
+        intg._precision = self.cfg.getfloat(cfgsect, 'precision', 0.7)
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
         self.Δτ_controller = self.cfg.get(tsect, 'pseudo-controller')
