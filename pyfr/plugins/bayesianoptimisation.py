@@ -32,6 +32,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         self._END_lim    = self.cfg.getfloat(cfgsect, 'stop-offline-simulation', 4*self._A_lim) # Buffer kCV and LooCV and delete more       256
         self.force_abort = self.cfg.getbool( cfgsect, 'force-abort', False)
 
+        self.mean_mult = self.cfg.getfloat(cfgsect, 'mean-multiplier', 0.1)
+        self.std_mult  = self.cfg.getfloat(cfgsect, 'std-multiplier' , 1.0)
+
         intg.opt_type = self.opt_type = suffix
         if suffix == 'online':
             self.columns.append('tcurr')
@@ -306,10 +309,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
                     # If we are finalising, better to be sure that our candidate works for long period of time
                     # Longer than 1 flow-pass does not make sense                    
-                    if intg._capture_next_n <= intg._max_window/4:
-                        intg._skip_first_n      += intg._increment
-                        intg._capture_next_n    += intg._increment*2
-                        intg._stabilise_final_n += intg._increment*2
+                    intg._skip_first_n += intg._increment
+                    intg._capture_next_n += intg._increment
 
                 next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model(opt_motive)
                 for i, val in enumerate(next_candidate):
@@ -355,10 +356,9 @@ class BayesianOptimisationPlugin(BasePlugin):
                 position = self.df_train[self.df_train['if-train']].index[0]
                 self.df_train.loc[position, 'if-train'] = False
 
-                if self.cand_train and not self.cand_validate:
-                    intg._skip_first_n += intg._increment
-                    intg._capture_next_n += intg._increment*2
-                    intg._stabilise_final_n += intg._increment*2
+                intg._skip_first_n += intg._increment
+                intg._capture_next_n += intg._increment*2
+                intg._stabilise_final_n += intg._increment*2
                     # ------------------------------------------------------------------
 
             # If data quality is OK, but data continues to be collected and simulation continues           
@@ -370,8 +370,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 position = self.df_train[self.df_train['if-train']].index[0]
                 self.df_train.loc[position, 'if-train'] = False
 
-                if self.cand_train and not self.cand_validate:
-                    intg._capture_next_n += intg._increment
+                intg._capture_next_n += intg._increment
                     # ------------------------------------------------------------------
 
             # Add more freedom to window length
@@ -380,7 +379,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 self.df_train.loc[position, 'if-train'] = False
 
                 if (self.cand_train and not self.cand_validate 
-                    and intg._skip_first_n <= intg._max_window/4): 
+                    and intg._skip_first_n <= intg._max_window): 
                     intg._skip_first_n      += intg._increment
                     intg._stabilise_final_n += intg._increment
                     # ------------------------------------------------------------------
@@ -569,9 +568,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             3. Take union of the happening region and the initial bounds
         """
         
-        mean_var = 0.5 # Extra wiggle-room for hr around mean
-        std_mult = 2   # If wiggling too much, search more around here
-
         best_cands = tX[-self._nbcs:]
 
         if len(best_cands) <= 2 :
@@ -585,8 +581,8 @@ class BayesianOptimisationPlugin(BasePlugin):
         #                       **self.torch_kwargs)
 
         # AFTER        
-        hr = self.torch.tensor(np.array([(1.0-mean_var)*means - std_mult * stds,
-                                         (1.0+mean_var)*means + std_mult * stds]), 
+        hr = self.torch.tensor(np.array([(1.0-self.mean_mult)*means - self.std_mult * stds,
+                                         (1.0+self.mean_mult)*means + self.std_mult * stds]), 
                                **self.torch_kwargs)
         
         print(f"{means = }, {stds = }, \n Happening-region \n {hr}  \n previous bounds \n {self._bnds} ")
