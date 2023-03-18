@@ -69,8 +69,8 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                    #undef BCAST_BLK
                }}'''
 
-    def ldim_size(self, name, *factor):
-        return '*'.join(['BLK_SZ'] + [str(f) for f in factor])
+    def ldim_size(self, name, factor=1):
+        return f'{factor}*BLK_SZ' if factor > 1 else 'BLK_SZ'
 
     def needs_ldim(self, arg):
         return False

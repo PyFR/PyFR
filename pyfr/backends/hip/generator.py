@@ -1,45 +1,13 @@
 from math import prod
 
-from pyfr.backends.base.generator import BaseKernelGenerator
+from pyfr.backends.base.generator import BaseGPUKernelGenerator
 
 
-class HIPKernelGenerator(BaseKernelGenerator):
-    block1d = None
-    block2d = None
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Specialise
-        if self.ndim == 1:
-            self._limits = 'if (_x < _nx)'
-        else:
-            self._limits = '''
-                int _ysize = (_ny + blockDim.y - 1) / blockDim.y;
-                int _ystart = threadIdx.y*_ysize;
-                int _yend = (_ystart + _ysize > _ny) ? _ny : _ystart + _ysize;
-                for (int _y = _ystart; _x < _nx && _y < _yend; _y++)
-            '''
-
-    def render(self):
-        spec = self._render_spec()
-
-        return f'''{spec}
-               {{
-                   int _x = blockIdx.x*blockDim.x + threadIdx.x;
-                   #define X_IDX (_x)
-                   #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
-                   #define BLK_IDX 0
-                   #define BCAST_BLK(r, c, ld)  c
-                   {self._limits}
-                   {{
-                       {self.body}
-                   }}
-                   #undef X_IDX
-                   #undef X_IDX_AOSOA
-                   #undef BLK_IDX
-                   #undef BCAST_BLK
-               }}'''
+class HIPKernelGenerator(BaseGPUKernelGenerator):
+    _lid = ('threadIdx.x', 'threadIdx.y')
+    _gid = 'blockIdx.x*blockDim.x + threadIdx.x'
+    _shared_prfx = '__shared__'
+    _shared_sync = '__syncthreads()'
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions

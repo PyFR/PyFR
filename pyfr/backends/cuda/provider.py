@@ -59,22 +59,26 @@ class CUDAKernelProvider(BaseKernelProvider):
 
 class CUDAPointwiseKernelProvider(CUDAKernelProvider,
                                   BasePointwiseKernelProvider):
-    kernel_generator_cls = CUDAKernelGenerator
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._block1d = (64, 1, 1)
+        self._block2d = (32, 8, 1)
+
+        # Pass these block sizes to the generator
+        class KernelGenerator(CUDAKernelGenerator):
+            block1d = self._block1d
+            block2d = self._block2d
+
+        self.kernel_generator_cls = KernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst, argmv):
         rtargs = []
+        block = self._block1d if len(dims) == 1 else self._block2d
+        grid = get_grid_for_block(block, dims[-1])
 
         # Declare a preference for L1 cache over shared memory
         fun.set_cache_pref(prefer_l1=True)
-
-        # Determine the block size
-        if len(dims) == 1:
-            block = (64, 1, 1)
-        else:
-            block = (32, 8, 1)
-
-        # Use this to compute the grid size
-        grid = get_grid_for_block(block, dims[-1])
 
         params = fun.make_params(grid, block)
 
