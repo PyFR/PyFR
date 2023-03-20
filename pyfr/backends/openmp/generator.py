@@ -7,67 +7,67 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         if self.ndim == 1:
             core = f'''
-                   for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
-                   {{
-                       #pragma omp simd
-                       for (int _xj = 0; _xj < SOA_SZ; _xj++)
-                       {{
-                           {self.body}
-                       }}
-                   }}'''
+                for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+                {{
+                    #pragma omp simd
+                    for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                    {{
+                        {self.body}
+                    }}
+                }}'''
             clean = f'''
-                    int _xi = 0;
+                int _xi = 0;
+                #pragma omp simd
+                for (int _xj = 0; _xj < _nx % BLK_SZ; _xj++)
+                {{
+                    {self.body}
+                }}'''
+        else:
+            core = f'''
+                for (int _y = 0; _y < _ny; _y++)
+                {{
+                    for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+                    {{
+                        #pragma omp simd
+                        for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                        {{
+                            {self.body}
+                        }}
+                    }}
+                }}'''
+            clean = f'''
+                for (int _y = 0, _xi = 0; _y < _ny; _y++)
+                {{
                     #pragma omp simd
                     for (int _xj = 0; _xj < _nx % BLK_SZ; _xj++)
                     {{
                         {self.body}
-                    }}'''
-        else:
-            core = f'''
-                   for (int _y = 0; _y < _ny; _y++)
-                   {{
-                       for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
-                       {{
-                           #pragma omp simd
-                           for (int _xj = 0; _xj < SOA_SZ; _xj++)
-                           {{
-                               {self.body}
-                           }}
-                       }}
-                   }}'''
-            clean = f'''
-                    for (int _y = 0, _xi = 0; _y < _ny; _y++)
-                    {{
-                        #pragma omp simd
-                        for (int _xj = 0; _xj < _nx % BLK_SZ; _xj++)
-                        {{
-                            {self.body}
-                        }}
-                    }}'''
+                    }}
+                }}'''
 
         return f'''
-               struct kargs {{ {kargdefn}; }};
-               void {self.name}(const struct kargs *restrict args)
-               {{
-                   {kargassn};
-                   #define X_IDX (_xi + _xj)
-                   #define X_IDX_AOSOA(v, nv)\
-                       ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
-                   #define BLK_IDX (_ib*BLK_SZ)
-                   #define BCAST_BLK(r, c, ld)\
-                       ((c) % (ld) + ((c) / (ld))*(ld)*r)
-                   #pragma omp parallel for {self.schedule}
-                   for (int _ib = 0; _ib < _nx / BLK_SZ; _ib++)
-                   {{
-                       {core}
-                   }}
-                   int _ib = _nx / BLK_SZ;
-                   {clean}
-                   #undef X_IDX
-                   #undef X_IDX_AOSOA
-                   #undef BLK_IDX
-                   #undef BCAST_BLK
-               }}'''
+            struct {self.name}_kargs {{ {kargdefn}; }};
+            void {self.name}(int _ib, const struct {self.name}_kargs *args)
+            {{
+                {kargassn};
+                #define X_IDX (_xi + _xj)
+                #define X_IDX_AOSOA(v, nv)\
+                    ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
+                #define BLK_IDX (_ib*BLK_SZ)
+                #define BCAST_BLK(r, c, ld) ((c) % (ld) + ((c) / (ld))*(ld)*r)
+                if (_nx - BLK_IDX >= BLK_SZ)
+                {{
+                    {core}
+                }}
+                else
+                {{
+                    {clean}
+                }}
+                #undef X_IDX
+                #undef X_IDX_AOSOA
+                #undef BLK_IDX
+                #undef BCAST_BLK
+            }}'''
 
     def ldim_size(self, name, factor=1):
         return f'{factor}*BLK_SZ' if factor > 1 else 'BLK_SZ'

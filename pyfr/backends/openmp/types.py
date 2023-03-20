@@ -1,9 +1,9 @@
 from collections import defaultdict
 
-from ctypes import addressof, c_void_p, cast
 from functools import cached_property
 
 import pyfr.backends.base as base
+from pyfr.ctypesutil import make_array
 
 
 class OpenMPMatrixBase(base.MatrixBase):
@@ -75,10 +75,8 @@ class OpenMPGraph(base.Graph):
 
         n = len(self.klist)
 
-        # Obtain pointers to our kernel functions and their arguments
-        self._kfunargs = (c_void_p * (2*n))()
-        self._kfunargs[0::2] = [cast(k.fun, c_void_p) for k in self.klist]
-        self._kfunargs[1::2] = [addressof(k.kargs) for k in self.klist]
+        # Construct the argument list
+        self._krunargs = make_array(k.runargs for k in self.klist)
 
         # Group kernels in runs separated by MPI requests
         self._runlist, i = [], 0
@@ -95,7 +93,7 @@ class OpenMPGraph(base.Graph):
         self._startall(self.mpi_root_reqs)
 
         for i, n, reqs in self._runlist:
-            self.backend.krunner(i, n, self._kfunargs)
+            self.backend.krunner(i, n, self._krunargs)
 
             self._startall(reqs)
 

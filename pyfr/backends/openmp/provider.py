@@ -1,4 +1,5 @@
-from ctypes import Structure, byref, c_void_p
+from ctypes import Structure, addressof, byref, c_int, c_void_p, cast
+from functools import cached_property
 
 from pyfr.backends.base import (BaseKernelProvider,
                                 BasePointwiseKernelProvider, Kernel,
@@ -36,10 +37,21 @@ class OpenMPOrderedMetaKernel(_OpenCLMetaKernelCommon): pass
 class OpenMPUnorderedMetaKernel(_OpenCLMetaKernelCommon): pass
 
 
+class OpenMPKRunArgs(Structure):
+    _fields_ = [('fun', c_void_p), ('args', c_void_p), ('nblocks', c_int)]
+
+
 class OpenMPKernelFunction:
-    def __init__(self, fun, argcls):
+    def __init__(self, backend, fun, argcls):
+        self.krunner = backend.krunner
         self.fun = fun
         self.kargs = argcls()
+        self.nblocks = -1
+
+    @cached_property
+    def runargs(self):
+        return OpenMPKRunArgs(cast(self.fun, c_void_p), addressof(self.kargs),
+                              self.nblocks)
 
     def set_arg(self, i, v):
         setattr(self.kargs, f'arg{i}', getattr(v, '_as_parameter_', v))
@@ -48,8 +60,11 @@ class OpenMPKernelFunction:
         for i, arg in enumerate(args, start=start):
             self.set_arg(i, arg)
 
+    def set_nblocks(self, nblocks):
+        self.nblocks = nblocks
+
     def __call__(self):
-        self.fun(byref(self.kargs))
+        self.krunner(0, 1, byref(self.runargs))
 
 
 class OpenMPKernelProvider(BaseKernelProvider):
@@ -71,24 +86,21 @@ class OpenMPKernelProvider(BaseKernelProvider):
 
     def _build_kernel(self, name, src, argtypes):
         lib = self._build_library(src)
-        fun = lib.function(name, None, [c_void_p])
+        fun = lib.function(name)
 
-        return OpenMPKernelFunction(fun, self._get_arg_cls(tuple(argtypes)))
+        return OpenMPKernelFunction(self.backend, fun,
+                                    self._get_arg_cls(tuple(argtypes)))
 
 
 class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
                                     BasePointwiseKernelProvider):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Pass the OpenMP schedule to the generator
-        class KernelGenerator(OpenMPKernelGenerator):
-            schedule = self.backend.schedule
-
-        self.kernel_generator_cls = KernelGenerator
+    kernel_generator_cls = OpenMPKernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst, argmv):
         rtargs = []
+
+        # Set the number of blocks
+        fun.set_nblocks(-(-dims[-1] // self.backend.csubsz))
 
         # Process the arguments
         for i, k in enumerate(arglst):
