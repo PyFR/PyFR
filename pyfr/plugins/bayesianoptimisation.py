@@ -309,8 +309,23 @@ class BayesianOptimisationPlugin(BasePlugin):
 
                     # If we are finalising, better to be sure that our candidate works for long period of time
                     # Longer than 1 flow-pass does not make sense                    
-                    intg._skip_first_n += intg._increment
-                    intg._capture_next_n += intg._increment
+                    # If last ndims candidates were used for validation, then its time to look for a better candidate
+                    if (     self.df_train['if-validate'].iloc[-1]
+                         and self.df_train['if-validate'].iloc[-2]
+                         and self.df_train['if-validate'].iloc[-3]
+                         and self.df_train['if-validate'].iloc[-4]
+                         and self.df_train['if-validate'].iloc[-5]
+                         and self.df_train['if-validate'].iloc[-6]
+                         ):
+                
+                        if loocv_err != 0:
+                            self.LooCV_limit = loocv_err
+
+                        position = self.df_train[self.df_train['if-train']].index[0]
+                        self.df_train.loc[position, 'if-train'] = False
+
+                        intg._skip_first_n += intg._increment
+                        intg._capture_next_n += intg._increment*2
 
                 next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model(opt_motive)
                 for i, val in enumerate(next_candidate):
