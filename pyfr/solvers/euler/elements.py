@@ -87,6 +87,11 @@ class BaseFluidElements:
                 'order': self.basis.order
             }
 
+            # Check to see if running anti-aliasing
+            if self.antialias:
+                raise ValueError('Entropy filter not compatible with '
+                                 'anti-aliasing.')
+
             # Check to see if running collocated solution/flux points
             m0 = self.basis.m0
             mrowsum = np.max(np.abs(np.sum(m0, axis=1) - 1.0))
