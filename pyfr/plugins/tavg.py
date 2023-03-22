@@ -32,11 +32,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         if self.std_mode not in {'summary', 'all'}:
             raise ValueError('Invalid standard deviation mode')
 
-        # Std deviation mode
-        self.std_mode = self.cfg.get(cfgsect, 'std-mode', 'summary')
-        if self.std_mode not in {'summary', 'all'}:
-            raise ValueError('Invalid standard deviation mode')
-
         # Expressions pre-processing
         self._prepare_exprs()
 

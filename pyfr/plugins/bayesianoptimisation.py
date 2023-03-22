@@ -37,7 +37,6 @@ class BayesianOptimisationPlugin(BasePlugin):
         # After initialisation, fix the loocv and kcv and then continue to get better optimum
         #self.LooCV_limit = 0.0
         #self.kCV_limit = 0.0
-        self.timeout_sec = self.cfg.getfloat(cfgsect, 'timeout-sec', 60.0)
 
         # When to stop the offline simulation
         self._END_lim    = self.cfg.getfloat(cfgsect, 'stop-offline-simulation', 4.0*continue_ref_cands)
@@ -304,40 +303,57 @@ class BayesianOptimisationPlugin(BasePlugin):
 #                         self.cand_train = True
 #                         self.cand_validate = False
 # 
-                elif self.df_train['if-train'].sum()<self._E_lim:
-                    if t1['phase'] == 31:
-                        print("Continue exploration")
-                        opt_motive = 'KG'
+#                 elif self.df_train['if-train'].sum()<self._E_lim:
+#                     if t1['phase'] == 31:
+#                         print("Continue exploration")
+#                         opt_motive = 'KG'
+# 
+#                         self.cand_phase = 33
+#                         self.cand_train = True
+#                         self.cand_validate = False
+#                     if t1['phase'] == 33:
+#                         print("Exploitative EI phase.")
+#                         opt_motive = 'EI'
+#                         self.cand_phase = 32
+#                         self.cand_train = True
+#                         self.cand_validate = False
+#                     else:
+#                         print("Exploration validation with PM.")
+#                         opt_motive = 'PM'
+#                         self.cand_phase = 31
+#                         self.cand_train = True
+#                         self.cand_validate = False
 
-                        self.cand_phase = 33
-                        self.cand_train = True
-                        self.cand_validate = False
-                    if t1['phase'] == 33:
+                elif self.df_train['if-train'].sum()<self._E_lim:     # 128
+                    if self.cand_validate:
                         print("Exploitative EI phase.")
                         opt_motive = 'EI'
-                        self.cand_phase = 32
-                        self.cand_train = True
-                        self.cand_validate = False
-                    else:
-                        print("Exploration validation with PM.")
-                        opt_motive = 'PM'
                         self.cand_phase = 31
                         self.cand_train = True
                         self.cand_validate = False
+                    else:
+                        print("Exploitative PM phase.")
+                        opt_motive = 'PM'
+                        self.cand_phase = 32
+                        self.cand_train = False
+                        self.cand_validate = True
 
-#                elif self.df_train['if-train'].sum()<self._E_lim:     # 128
-#                    if self.cand_validate:
-#                        print("Exploitative EI phase.")
-#                        opt_motive = 'EI'
-#                        self.cand_phase = 33
-#                        self.cand_train = True
-#                        self.cand_validate = False
-#                    else:
-#                        print("Exploitative PM phase.")
-#                        opt_motive = 'PM'
-#                        self.cand_phase = 34
-#                        self.cand_train = False
-#                        self.cand_validate = True
+                elif self.df_train['t-m'].tail(self._nbcs).std() < 0.05:
+                    if self.cand_validate:
+                        print("Exploitative EI phase.")
+                        opt_motive = 'EI'
+                        self.cand_phase = 33
+                        self.cand_train = True
+                        self.cand_validate = False
+                    else:
+                        print("Exploitative PM phase.")
+                        opt_motive = 'PM'
+                        self.cand_phase = 34
+                        self.cand_train = False
+                        self.cand_validate = True
+
+                    intg._skip_first_n += intg._increment
+                    intg._capture_next_n += intg._increment*2
 
                 else:
                     # Finalising phase
@@ -346,24 +362,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_phase = 41
                     self.cand_train = False
                     self.cand_validate = True
-
-                    # If we are finalising, better to be sure that our candidate works for long period of time
-                    # Longer than 1 flow-pass does not make sense                    
-                    # If last ndims candidates were used for validation, then its time to look for a better candidate
-                    if (     self.df_train['if-validate'].iloc[-1]
-                         and self.df_train['if-validate'].iloc[-2]
-                         and self.df_train['if-validate'].iloc[-3]
-                         and self.df_train['if-validate'].iloc[-4]
-                         and self.df_train['if-validate'].iloc[-5]
-                         and self.df_train['if-validate'].iloc[-6]
-                         ):
                 
-#                        position = self.df_train[self.df_train['if-train']].index[0]
-#                        self.df_train.loc[position, 'if-train'] = False
-
-                        intg._skip_first_n += intg._increment
-                        intg._capture_next_n += intg._increment*2
-
                 next_candidate, t1['n-m'], t1['n-s'] = self.next_from_model(opt_motive)
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
@@ -410,8 +409,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             # If data quality is OK, but data continues to be collected and simulation continues           
             # We will need to remove data so we do not run out of memory or compute effort
             if self.df_train['if-train'].sum() > self._E_lim:
-                position = self.df_train[self.df_train['if-train']].index[0]
-                self.df_train.loc[position, 'if-train'] = False
                 intg._capture_next_n += intg._increment
                     # ------------------------------------------------------------------
 
@@ -708,8 +705,8 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         if type == 'KG':
             samples   = 1024
-            restarts  =    5
-            fantasies =   32
+            restarts  =   10
+            fantasies =  128
 
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
@@ -755,7 +752,6 @@ class BayesianOptimisationPlugin(BasePlugin):
         X_cand, _ = optimize_acqf(acq_function = _acquisition_function, q = 1,
             bounds = self.normalise.transform(self._bnds),
             num_restarts = num_restarts,raw_samples = raw_samples,
-            timeout_sec = self.timeout_sec,
             )
         return X_cand
 
