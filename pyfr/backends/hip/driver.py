@@ -1,4 +1,4 @@
-from ctypes import (POINTER, Structure, addressof, create_string_buffer,
+from ctypes import (POINTER, Structure, addressof, byref, create_string_buffer,
                     c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
                     c_void_p)
 from uuid import UUID
@@ -156,6 +156,9 @@ class HIPWrappers(LibWrapper):
     }
 
     # Constants
+    FUNC_ATTR_SHARED_SIZE_BYTES = 1
+    FUNC_ATTR_LOCAL_SIZE_BYTES = 3
+    FUNC_ATTR_NUM_REGS = 4
     MEMCPY_DEFAULT = 4
 
     # Functions
@@ -188,6 +191,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipModuleLaunchKernel', c_void_p, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p),
          c_void_p),
+        (c_int, 'hipFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
         (c_int, 'hipGraphCreate', POINTER(c_void_p), c_uint),
         (c_int, 'hipGraphDestroy', c_void_p),
         (c_int, 'hipGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
@@ -315,9 +319,21 @@ class HIPFunction(_HIPBase):
 
         super().__init__(hip, ptr)
 
+        self.nreg = self._get_attr('num_regs')
+        self.shared_mem = self._get_attr('shared_size_bytes')
+        self.local_mem = self._get_attr('local_size_bytes')
+
         # Save a reference to our underlying module and argument types
         self.module = module
         self.argtypes = list(argtypes)
+
+    def _get_attr(self, attr):
+        attr = getattr(self.hip.lib, f'FUNC_ATTR_{attr.upper()}')
+
+        v = c_int()
+        self.hip.lib.hipFuncGetAttribute(byref(v), attr, self)
+
+        return v.value
 
     def make_params(self, grid, block, sharedb=0):
         return HIPKernelNodeParams(self, grid, block, sharedb)

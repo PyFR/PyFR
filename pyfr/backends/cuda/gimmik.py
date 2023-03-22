@@ -88,7 +88,11 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                     if best_kern is None or dt < best_kern[-1]:
                         best_kern = kern, meta['grid'], meta['block'], dt
 
-                    kdata = {'runtime': dt, 'local_mem': kern.local_mem}
+                    kdata = {
+                        'runtime': dt,
+                        'registers': kern.nreg,
+                        'local_mem': kern.local_mem
+                    }
             except StopIteration:
                 pass
 
