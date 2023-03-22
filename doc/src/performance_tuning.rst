@@ -113,6 +113,8 @@ for long running simulations on complex geometries it may be worth
 partitioning a grid with both and observing which decomposition
 performs best.
 
+.. _perf mixed grids:
+
 Mixed grids
 -----------
 

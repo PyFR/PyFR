@@ -142,6 +142,10 @@ def process_partition(args):
     if not os.path.isdir(args.outd):
         raise ValueError('Invalid output directory')
 
+    # Read the mesh and query the partitoin info
+    mesh = NativeReader(args.mesh)
+    pinfo = mesh.partition_info('spt')
+
     # Partition weights
     if ':' in args.np:
         pwts = [int(w) for w in args.np.split(':')]
@@ -151,10 +155,15 @@ def process_partition(args):
     # Element weights
     if args.elewts == ['balanced']:
         ewts = None
-    elif args.elewts:
+    elif len(pinfo) == 1:
+        ewts = {next(iter(pinfo)): 1}
+    else args.elewts:
         ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
-    else:
-        ewts = {'quad': 6, 'tri': 3, 'tet': 3, 'hex': 18, 'pri': 10, 'pyr': 6}
+
+    # Ensure all weights have been provided
+    if ewts is not None and len(ewts) != len(pinfo):
+        missing = ', '.join(set(pinfo) - set(ewts))
+        raise ValueError(f'Missing element weights for: {missing}')
 
     # Partitioner-specific options
     opts = dict(s.split(':', 1) for s in args.popts)
@@ -173,7 +182,7 @@ def process_partition(args):
             raise RuntimeError('No partitioners available')
 
     # Partition the mesh
-    mesh, rnum, part_soln_fn = part.partition(NativeReader(args.mesh))
+    mesh, rnum, part_soln_fn = part.partition(mesh)
 
     # Prepare the solutions
     solnit = (part_soln_fn(NativeReader(s)) for s in args.solns)
