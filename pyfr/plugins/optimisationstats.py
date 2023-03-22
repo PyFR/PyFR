@@ -155,7 +155,9 @@ class OptimisationStatsPlugin(BasePlugin):
             intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN 
             return
 
-        if self.pd_stats.count(0)[0]<10:
+        if self.pd_stats.count(0)[0]<3:
+            # If it had to adapt, it would have taken all iterations to adapt already
+            # Beyond this, dtau set is just plain bad
             return
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
