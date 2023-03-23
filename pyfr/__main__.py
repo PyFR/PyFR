@@ -142,7 +142,7 @@ def process_partition(args):
     if not os.path.isdir(args.outd):
         raise ValueError('Invalid output directory')
 
-    # Read the mesh and query the partitoin info
+    # Read the mesh and query the partition info
     mesh = NativeReader(args.mesh)
     pinfo = mesh.partition_info('spt')
 
@@ -157,7 +157,7 @@ def process_partition(args):
         ewts = None
     elif len(pinfo) == 1:
         ewts = {next(iter(pinfo)): 1}
-    else args.elewts:
+    else:
         ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
 
     # Ensure all weights have been provided
