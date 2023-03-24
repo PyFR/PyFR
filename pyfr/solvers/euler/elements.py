@@ -50,14 +50,13 @@ class BaseFluidElements:
     @staticmethod
     def validate_formulation(ctrl):
         shock_capturing = ctrl.cfg.get('solver', 'shock-capturing', 'none')
-        if ctrl.formulation == 'dual' and shock_capturing == 'entropy-filter':
-            raise ValueError('Entropy filtering not compatible with '
-                             'dual time stepping.')
-
-        ctrlvardt = ctrl.controller_has_variable_dt
-        if ctrlvardt and shock_capturing == 'entropy-filter':
-            raise ValueError('Entropy filtering not compatible with '
-                             'adaptive time stepping.')
+        if shock_capturing == 'entropy-filter':
+            if ctrl.formulation == 'dual':
+                raise ValueError('Entropy filtering not compatible with '
+                                 'dual time stepping.')
+            elif ctrl.controller_has_variable_dt:
+                raise ValueError('Entropy filtering not compatible with '
+                                 'adaptive time stepping.')
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)
