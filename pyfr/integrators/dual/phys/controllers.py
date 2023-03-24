@@ -41,6 +41,7 @@ class BaseDualController(BaseDualIntegrator):
 
 class DualNoneController(BaseDualController):
     controller_name = 'none'
+    controller_has_variable_dt = False
 
     def advance_to(self, t):
         if t < self.tcurr:
