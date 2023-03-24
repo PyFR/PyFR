@@ -314,7 +314,6 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
 
         # Determine the total number of elements in the array
         n = prod(arg.cdims)
-        j = -(-n // by)
 
         if arg.dtype == 'fpdtype_t':
             itemsize = np.dtype(self.fpdtype).itemsize
@@ -342,7 +341,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
 
         # Emit the for loop to populate the array
         lcode += f'''
-            for (int _i = {ly}; _x < _nx && _i < {n}; _i += {j})
+            for (int _i = {ly}; _x < _nx && _i < {n}; _i += {by})
                 {lhs} = {rhs};'''
 
         return sname, lcode, nbytes
