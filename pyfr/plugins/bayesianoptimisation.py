@@ -32,6 +32,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         self._Ainit_lim  =     initialise_ref_cands # stop init model making (KG)  32
         self._Binit_lim  = 1.5*initialise_ref_cands # stop init exploitation (EI)  48
         self._Cinit_lim  = 2.0*initialise_ref_cands # stop init finalisation (PM)  64
+        self._Dinit_lim  = 3.0*initialise_ref_cands # stop init finalisation (PM)  96
         self._E_lim      = 2.0*continue_ref_cands   # stop init finalisation (PM) 128
 
         # After initialisation, fix the loocv and kcv and then continue to get better optimum
@@ -324,7 +325,7 @@ class BayesianOptimisationPlugin(BasePlugin):
 #                         self.cand_train = True
 #                         self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._E_lim:     # 128
+                elif self.df_train['if-train'].sum()<self._Dinit_lim:     # 96
                     if self.cand_validate:
                         print("Exploitative EI phase.")
                         opt_motive = 'EI'
@@ -335,8 +336,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                         print("Exploitative PM phase.")
                         opt_motive = 'PM'
                         self.cand_phase = 32
-                        self.cand_train = False
-                        self.cand_validate = True
+                        self.cand_train = True
+                        self.cand_validate = False
 
                 elif self.df_train['t-m'].tail(self._nbcs).std() < 0.05:
                     if self.cand_validate:
@@ -349,8 +350,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                         print("Exploitative PM phase.")
                         opt_motive = 'PM'
                         self.cand_phase = 34
-                        self.cand_train = False
-                        self.cand_validate = True
+                        self.cand_train = True
+                        self.cand_validate = False
 
                     intg._skip_first_n += intg._increment
                     intg._capture_next_n += intg._increment*2
