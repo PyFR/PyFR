@@ -326,32 +326,28 @@ class BayesianOptimisationPlugin(BasePlugin):
 #                         self.cand_validate = False
 
                 elif self.df_train['if-train'].sum()<self._Dinit_lim:     # 96
-                    if self.cand_validate:
+                    if self.cand_phase == 32:
                         print("Exploitative EI phase.")
                         opt_motive = 'EI'
                         self.cand_phase = 31
-                        self.cand_train = True
-                        self.cand_validate = False
                     else:
                         print("Exploitative PM phase.")
                         opt_motive = 'PM'
                         self.cand_phase = 32
-                        self.cand_train = True
-                        self.cand_validate = False
+                    self.cand_train = True
+                    self.cand_validate = False
 
                 elif self.df_train['t-m'].tail(self._nbcs).std() < 0.05:
-                    if self.cand_validate:
+                    if self.cand_phase == 34:
                         print("Exploitative EI phase.")
                         opt_motive = 'EI'
                         self.cand_phase = 33
-                        self.cand_train = True
-                        self.cand_validate = False
                     else:
                         print("Exploitative PM phase.")
                         opt_motive = 'PM'
                         self.cand_phase = 34
-                        self.cand_train = True
-                        self.cand_validate = False
+                    self.cand_train = True
+                    self.cand_validate = False
 
                     intg._skip_first_n += intg._increment
                     intg._capture_next_n += intg._increment*2
