@@ -701,9 +701,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         from botorch.acquisition import PosteriorMean
 
         if type == 'KG':
-            samples   = 1024
+            samples   = 2048
             restarts  =   10
-            fantasies =  128
+            fantasies =  256
 
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
