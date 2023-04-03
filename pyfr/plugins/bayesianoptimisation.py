@@ -25,8 +25,8 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.columns_from_optimisables()
 
         self._nbcs = len(self.optimisables) # Number of best candidates to consider
-        initialise_ref_cands = self.cfg.getfloat(cfgsect, 'initialise-reference', 2**(self._nbcs-1))
-        continue_ref_cands = self.cfg.getfloat(cfgsect, 'continue-reference', 2**self._nbcs)
+        initialise_ref_cands = self.cfg.getfloat(cfgsect, 'initialise-reference', 2**(self._nbcs))
+        continue_ref_cands = self.cfg.getfloat(cfgsect, 'continue-reference', 2**self._nbcs+1)
 
         # Quickly get some optimum
         self._Ainit_lim  =     initialise_ref_cands # stop init model making (KG)  32
@@ -701,9 +701,9 @@ class BayesianOptimisationPlugin(BasePlugin):
         from botorch.acquisition import PosteriorMean
 
         if type == 'KG':
-            samples   = 2048
+            samples   = 1024
             restarts  =   10
-            fantasies =  256
+            fantasies =  128
 
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
