@@ -1559,7 +1559,11 @@ Integrate quantities over the compuational domain. Parameterised with:
 
 4. ``quad-deg`` --- degree of quadrature rule (optional):
 
+    *int*
+
 5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+
+    *string*
 
 6. ``region`` --- region to integrate, specified as either the
    entire domain using ``*`` or a combination of the geometric shapes
