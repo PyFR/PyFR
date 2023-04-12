@@ -240,14 +240,19 @@ Plugins
 =======
 
 A common source of performance issues is running plugins too
-frequently.  Given the time steps taken by PyFR are typically much
-smaller than those associated with the underlying physics there is
-seldom any benefit to running integration and/or time average
-accumulation plugins more frequently than once every 50 steps.
-Further, when running with adaptive time stepping there is no need
-to run the NaN check plugin.  For simulations with fixed time steps,
-it is not recommended to run the NaN check plugin more frequently than
-once every 10 steps.
+frequently.  PyFR records the amount of time spent in plugins in the
+``[solver-time-integrator]`` section of the ``/stats`` object which is
+included in all PyFR solution files.  This can be extracted as::
+
+    h5dump -d /stats -b --output=stats.ini soln.pyfrs
+
+Given the time steps taken by PyFR are typically much smaller than
+those associated with the underlying physics there is seldom any
+benefit to running integration and/or time average accumulation plugins
+more frequently than once every 50 steps.  Further, when running with
+adaptive time stepping there is no need to run the NaN check plugin.
+For simulations with fixed time steps, it is not recommended to run the
+NaN check plugin more frequently than once every 10 steps.
 
 Start-up Time
 =============

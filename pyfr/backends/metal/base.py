@@ -81,6 +81,11 @@ class MetalBackend(BaseBackend):
         else:
             self.last_cbuf = cbuf
 
+    def wait(self):
+        if self.last_cbuf:
+            self.last_cbuf.waitUntilCompleted()
+            self.last_cbuf = None
+
     def _malloc_impl(self, nbytes):
         from Metal import MTLResourceStorageModeManaged
 

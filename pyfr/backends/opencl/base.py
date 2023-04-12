@@ -106,6 +106,9 @@ class OpenCLBackend(BaseBackend):
         if wait:
             self.queue.finish()
 
+    def wait(self):
+        self.queue.finish()
+
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer
         buf = self.cl.mem_alloc(nbytes)

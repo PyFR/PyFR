@@ -97,6 +97,9 @@ class HIPBackend(BaseBackend):
         if wait:
             self._stream.synchronize()
 
+    def wait(self):
+        self._stream.synchronize()
+
     def _malloc_impl(self, nbytes):
         # Allocate
         data = self.hip.mem_alloc(nbytes)

@@ -1,4 +1,4 @@
-from collections import deque
+from collections import defaultdict, deque
 import itertools as it
 import re
 import sys
@@ -56,6 +56,9 @@ class BaseIntegrator:
         # Record the starting wall clock time
         self._wstart = time.time()
 
+        # Record the total amount of time spent in each plugin
+        self._plugin_wtimes = defaultdict(lambda: 0)
+
         # Abort computation
         self.abort = False
 
@@ -78,6 +81,22 @@ class BaseIntegrator:
                 plugins.append(get_plugin(name, self, cfgsect, suffix, **data))
 
         return plugins
+
+    def _run_plugins(self):
+        self.backend.wait()
+
+        # Fire off the plugins and tally up the runtime
+        for plugin in self.plugins:
+            tstart = time.time()
+
+            plugin(self)
+
+            pname = getattr(plugin, 'name', 'other')
+            psuffix = getattr(plugin, 'suffix', None)
+            self._plugin_wtimes[pname, psuffix] += time.time() - tstart
+
+        # Abort if plugins request it
+        self._check_abort()
 
     @staticmethod
     def get_plugin_data_prefix(name, suffix):
@@ -126,6 +145,14 @@ class BaseIntegrator:
         # Simulation and wall clock times
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
         stats.set('solver-time-integrator', 'wall-time', wtime)
+
+        # Plugin wall clock times
+        for (pname, psuffix), t in self._plugin_wtimes.items():
+            k = f'plugin-wall-time-{pname}'
+            if psuffix:
+                k += f'-{psuffix}'
+
+            stats.set('solver-time-integrator', k, t)
 
         # Step counts
         stats.set('solver-time-integrator', 'nsteps', self.nsteps)
