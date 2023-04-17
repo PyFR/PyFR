@@ -69,6 +69,7 @@ tests = [
 package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
     'pyfr.backends.hip.kernels': ['*.mako'],
+    'pyfr.backends.metal.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
