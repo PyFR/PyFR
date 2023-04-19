@@ -107,7 +107,8 @@ install_requires = [
     'mpi4py >= 3.1.0',
     'numpy >= 1.20',
     'platformdirs >= 2.2.0',
-    'pytools >= 2016.2.1'
+    'pytools >= 2016.2.1',
+    'rtree >= 1.0.1'
 ]
 
 # Soft dependencies

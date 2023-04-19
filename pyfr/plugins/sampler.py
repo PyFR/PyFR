@@ -1,53 +1,38 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BaseSolnPlugin, init_csv
+from pyfr.plugins.base import BasePlugin, init_csv
 from pyfr.quadrules import get_quadrule
 
 
-def _closest_pts_bf(epts, pts):
-    for p in pts:
-        # Compute the distances between each point and p
-        dists = [np.linalg.norm(e - p, axis=2) for e in epts]
+def _closest_pts(epts, pts):
+    from rtree import index
 
-        # Get the index of the closest point to p for each element type
-        amins = [np.unravel_index(np.argmin(d), d.shape) for d in dists]
-
-        # Dereference to get the actual distances
-        dmins = [d[a] for d, a in zip(dists, amins)]
-
-        # Find the minimum across all element types
-        yield min(zip(dmins, range(len(epts)), amins))
-
-
-def _closest_pts_kd(epts, pts):
-    from scipy.spatial import cKDTree
-
-    # Flatten the physical location arrays
     fepts = [e.reshape(-1, e.shape[-1]) for e in epts]
 
-    # For each element type construct a KD-tree of the upt locations
-    trees = [cKDTree(f) for f in fepts]
+    idx = []
+
+    for f in fepts:
+        pr = index.Property()
+        pr.dimension = f.shape[1]
+        pr.interleaved = True
+        insl = []
+        for i in range(f.shape[0]):
+            ins = tuple(np.concatenate([f[i,:], f[i,:]]))
+            insl.append((i,ins,None))
+        idx.append(index.Index(insl,properties=pr))
 
     for p in pts:
-        # Query the distance/index of the closest upt to p
-        dmins, amins = zip(*[t.query(p) for t in trees])
-
-        # Unravel the indices
+        dmins = []
+        amins = []
+        for i, v in enumerate(idx):
+            amin = list(v.nearest(np.concatenate([p, p]), 1))[0]
+            amins.append(amin)
+            dmins.append(np.linalg.norm(fepts[i][amin,:] - p))
         amins = [np.unravel_index(i, e.shape[:2])
-                 for i, e in zip(amins, epts)]
+                 for i, e in zip(amins, epts)]    
 
-        # Reduce across element types
         yield min(zip(dmins, range(len(epts)), amins))
-
-
-def _closest_pts(epts, pts):
-    try:
-        # Attempt to use a KD-tree based approach
-        yield from _closest_pts_kd(epts, pts)
-    except ImportError:
-        # Otherwise fall back to brute force
-        yield from _closest_pts_bf(epts, pts)
 
 
 def _plocs_to_tlocs(sbasis, spts, plocs, tlocs):
@@ -80,7 +65,7 @@ def _plocs_to_tlocs(sbasis, spts, plocs, tlocs):
     return ktlocs, kplocs
 
 
-class SamplerPlugin(BaseSolnPlugin):
+class SamplerPlugin(BasePlugin):
     name = 'sampler'
     systems = ['*']
     formulations = ['dual', 'std']

@@ -266,6 +266,3 @@ It is also important that NumPy be configured to use an optimised
 BLAS/LAPACK distribution.  Further details can be found in the
 `NumPy building from source <https://numpy.org/devdocs/user/building.html>`_
 guide.
-
-If the point sampler plugin is being employed with a large number of
-sample points it is further recommended to install SciPy.

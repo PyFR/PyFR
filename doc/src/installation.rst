@@ -114,6 +114,7 @@ Python packages:
 5. `numpy <https://www.numpy.org/>`_ >= 1.20
 6. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
 7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
+8. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.0.1
 
 Note that due to a bug in NumPy, PyFR is not compatible with 32-bit
 Python distributions.
