@@ -25,6 +25,7 @@ class BaseSystem:
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
+        self.nregs = nregs
 
         # Obtain a nonce to uniquely identify this system
         nonce = str(next(self._nonce_seq))
@@ -56,19 +57,23 @@ class BaseSystem:
         self.nvars = eles[0].nvars
 
         # Load the interfaces
-        int_inters = self._load_int_inters(rallocs, mesh, elemap)
-        mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
-        bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
+        self._int_inters = self._load_int_inters(rallocs, mesh, elemap)
+        self._mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
+        self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
 
+    def commit(self):
         # Prepare the kernels and any associated MPI requests
-        self._gen_kernels(nregs, eles, int_inters, mpi_inters, bc_inters)
-        self._gen_mpireqs(mpi_inters)
-        backend.commit()
+        self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,
+                          self._mpi_inters, self._bc_inters)
+        self._gen_mpireqs(self._mpi_inters)
+        self.backend.commit()
+
+        # Delete the memory-intensive ele_map
+        del self.ele_map
 
         # Save the BC interfaces, but delete the memory-intensive elemap
-        self._bc_inters = bc_inters
-        for b in bc_inters:
+        for b in self._bc_inters:
             del b.elemap
 
         # Observed input/output bank numbers

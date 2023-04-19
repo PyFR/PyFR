@@ -1,9 +1,9 @@
 import numpy as np
 
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BaseSolnPlugin
 
 
-class NaNCheckPlugin(BasePlugin):
+class NaNCheckPlugin(BaseSolnPlugin):
     name = 'nancheck'
     systems = ['*']
     formulations = ['dual', 'std']

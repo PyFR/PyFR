@@ -130,9 +130,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Initialise the restriction and prolongation matrices
         self._init_proj_mats()
 
-        # Delete remaining elements maps from multigrid systems
-        for l in self.levels[1:]:
-            del self.pintgs[l].system.ele_map
+    def commit(self):
+        for s in self.pintgs.values():
+            s.system.commit()
 
     @property
     def _idxcurr(self):

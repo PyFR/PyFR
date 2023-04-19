@@ -61,6 +61,25 @@ class BasePlugin:
         return {}
 
 
+class BaseSolnPlugin(BasePlugin):
+    prefix = 'soln'
+
+
+class BaseSolverPlugin(BasePlugin):
+    prefix = 'solver'
+
+
+class BaseCLIPlugin:
+    name = None
+
+    def __init__(self, args):
+        self.args = args
+
+    @classmethod
+    def add_cli(cls, parser):
+        pass
+
+
 class PostactionMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
