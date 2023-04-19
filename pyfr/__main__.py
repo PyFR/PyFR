@@ -254,7 +254,7 @@ def _process_common(args, mesh, soln, cfg):
 
         # Register a callback to update the bar after each step
         callb = lambda intg: pb.advance_to(intg.tcurr)
-        solver.completed_step_handlers.append(callb)
+        solver.plugins.append(callb)
 
     # Execute!
     solver.run()

@@ -57,7 +57,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
             metadata = None
 
         # Fetch data from other plugins and add it to metadata with ad-hoc keys
-        for csh in intg.completed_step_handlers:
+        for csh in intg.plugins:
             try:
                 prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
                 pdata = csh.serialise(intg)

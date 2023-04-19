@@ -39,9 +39,7 @@ class MetalMatrixBase(base.MatrixBase):
 
     def _set(self, ary):
         # Wait for any outstanding work to finish
-        if self.backend.last_cbuf:
-            self.backend.last_cbuf.waitUntilCompleted()
-            self.backend.last_cbuf = None
+        self.backend.wait()
 
         # Update the host buffer contents
         self.hdata[:] = self._pack(ary).flat

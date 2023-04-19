@@ -109,6 +109,9 @@ class CUDABackend(BaseBackend):
         if wait:
             self._stream.synchronize()
 
+    def wait(self):
+        self._stream.synchronize()
+
     def _malloc_impl(self, nbytes):
         # Allocate
         data = self.cuda.mem_alloc(nbytes)

@@ -10,8 +10,7 @@ class BaseDualController(BaseDualIntegrator):
 
         # Fire off any event handlers if not restarting
         if not self.isrestart:
-            for csh in self.completed_step_handlers:
-                csh(self)
+            self._run_plugins()
 
     def _accept_step(self, idxcurr):
         self.tcurr += self._dt
@@ -28,12 +27,8 @@ class BaseDualController(BaseDualIntegrator):
         # Invalidate the solution gradients cache
         self._curr_grad_soln = None
 
-        # Fire off any event handlers
-        for csh in self.completed_step_handlers:
-            csh(self)
-
-        # Abort if plugins request it
-        self._check_abort()
+        # Run any plugins
+        self._run_plugins()
 
         # Clear the pseudo step info
         self.pseudointegrator.pseudostepinfo = []
