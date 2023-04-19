@@ -58,8 +58,8 @@ class MetalGiMMiKKernels(MetalKernelProvider):
             best_kern = None
             sdata = None
 
-            # Save a copy of the contents of the output matrix
-            out_np = getattr(out, 'parent', out).get()
+            # Allocate a temporary output buffer
+            temp_out = self.backend.matrix(out.ioshape, tags=out.tags)
 
             mm = MetalMatMul(alpha*arr, beta=beta, aligne=aligne, n=b.ncol,
                              ldb=ldb, ldc=ldc)
@@ -75,7 +75,8 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
                     # Obtain the runtime
                     dt = self._benchmark(
-                        lambda cbuf: kern(cbuf, grid, tgrp, b.data, out.data),
+                        lambda cbuf: kern(cbuf, grid, tgrp, b.data,
+                                          temp_out.data),
                         nbench=self.nbench
                     )
 
@@ -85,9 +86,6 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                     sdata = {'runtime': dt}
             except StopIteration:
                 pass
-
-            # Restore the output matrix
-            getattr(out, 'parent', out).set(out_np)
 
             # Update the cache
             self._mul_kerns[ckey] = kern, grid, tgrp, dt = best_kern

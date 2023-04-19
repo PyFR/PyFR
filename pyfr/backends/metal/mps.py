@@ -49,18 +49,16 @@ class MetalMPSKernels(MetalKernelProvider):
         try:
             dt = self._mul_timing[ckey]
         except KeyError:
-            # Save a copy of the contents of the output matrix
-            out_np = getattr(out, 'parent', out).get()
+            # Allocate a temporary output buffer
+            temp_out = self.backend.matrix(out.ioshape, tags=out.tags)
+            temp_mat = make_mps_mat(temp_out)
 
             def gemm(cbuf):
                 call_(mm, 'encodeTo', commandBuffer=cbuf, leftMatrix=A,
-                      rightMatrix=B, resultMatrix=C)
+                      rightMatrix=B, resultMatrix=temp_mat)
 
             # Benchmark the kernel and update the cache
             self._mul_timing[ckey] = dt = self._benchmark(gemm)
-
-            # Restore the output matrix
-            getattr(out, 'parent', out).set(out_np)
 
         class MulKernel(MetalKernel):
             def run(self, cbuf):
