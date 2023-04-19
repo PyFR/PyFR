@@ -1,10 +1,10 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BasePlugin, init_csv
+from pyfr.plugins.base import BaseSolnPlugin, init_csv
 
 
-class ResidualPlugin(BasePlugin):
+class ResidualPlugin(BaseSolnPlugin):
     name = 'residual'
     systems = ['*']
     formulations = ['std']

@@ -11,6 +11,7 @@ from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler
 from pyfr.partitioners import BasePartitioner, get_partitioner
+from pyfr.plugins import BaseCLIPlugin
 from pyfr.progress_bar import ProgressBar
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
@@ -111,6 +112,10 @@ def main():
                        help='backend to use')
         p.add_argument('--progress', '-p', action='store_true',
                        help='show a progress bar')
+
+    # Plugin commands
+    for scls in subclasses(BaseCLIPlugin, just_leaf=True):
+        scls.add_cli(sp)
 
     # Parse the arguments
     args = ap.parse_args()

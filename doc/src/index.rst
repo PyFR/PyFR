@@ -19,6 +19,7 @@ Contents:
 
    installation
    user_guide
+   cli
    developer_guide
    performance_tuning
    examples

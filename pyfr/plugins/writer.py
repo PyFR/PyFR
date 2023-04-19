@@ -1,10 +1,10 @@
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
+from pyfr.plugins.base import BaseSolnPlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
 
-class WriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
+class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
     name = 'writer'
     systems = ['*']
     formulations = ['dual', 'std']

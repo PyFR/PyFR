@@ -19,8 +19,8 @@ class BaseDualIntegrator(BaseIntegrator):
         # Event handlers for advance_to
         self.plugins = self._get_plugins(initsoln)
 
-        # Delete the memory-intensive elements map from the system
-        del self.system.ele_map
+        # Commit the pseudo integrators now we have the plugins
+        self.pseudointegrator.commit()
 
     @property
     def system(self):

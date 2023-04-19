@@ -5,11 +5,11 @@ import numpy as np
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
+from pyfr.plugins.base import BaseSolnPlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
 
-class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
+class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
     name = 'tavg'
     systems = ['*']
     formulations = ['dual', 'std']
