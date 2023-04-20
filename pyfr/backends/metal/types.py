@@ -35,7 +35,7 @@ class MetalMatrixBase(base.MatrixBase):
         self.backend.last_cbuf = None
 
         # Unpack
-        return self._unpack(self.hdata.reshape(1, self.nrow, self.leaddim))
+        return self._unpack(self.hdata).copy()
 
     def _set(self, ary):
         # Wait for any outstanding work to finish
