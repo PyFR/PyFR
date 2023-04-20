@@ -1411,9 +1411,7 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^
 
 Periodically samples specific points in the volume and writes them out
-to a CSV file. The point location process automatically takes
-advantage of `scipy.spatial.cKDTree <http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.cKDTree.html>`_
-where available. Parameterised with
+to a CSV file. Parameterised with
 
 1. ``nsteps`` --- sample every ``nsteps``:
 
