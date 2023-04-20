@@ -75,6 +75,7 @@ package_data = {
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
     'pyfr.integrators.std.kernels': ['*.mako'],
     'pyfr.integrators': ['schemes/*.txt'],
+    'pyfr.plugins.kernels': ['*.mako'],
     'pyfr.quadrules': [
         'hex/*.txt',
         'line/*.txt',
