@@ -14,17 +14,19 @@ def _closest_pts(epts, pts):
     for e in epts:
         # Build list of solution points for each element type
         ins = [(i, [*p, *p], None) for i, p in enumerate(e.reshape(-1, ndims))]
-        # Buld tree of solution points for each element type
+        
+        # Build tree of solution points for each element type
         trees.append(Index(ins, properties=props))
 
     for p in pts:
-        #Find index of solution point closest to p
+        # Find index of solution point closest to p
         amins = [np.unravel_index(next(t.nearest([*p, *p], 1)), ept.shape[:2])
                  for ept, t in zip(epts, trees)]
-        #Find distance of solution point closest to p     
+        
+        # Find distance of solution point closest to p     
         dmins = [np.linalg.norm(e[a] - p) for e, a in zip(epts, amins)]
 
-        # Reduce across element types        
+        # Reduce across element types
         yield min(zip(dmins, range(len(epts)), amins))
 
 
