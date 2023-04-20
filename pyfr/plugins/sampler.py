@@ -1,4 +1,5 @@
 import numpy as np
+from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.base import BaseSolnPlugin, init_csv
@@ -6,32 +7,24 @@ from pyfr.quadrules import get_quadrule
 
 
 def _closest_pts(epts, pts):
-    from rtree import index
+    ndims = len(pts[0])
+    props = Property(dimension=ndims, interleaved=True)
+    trees = []
 
-    fepts = [e.reshape(-1, e.shape[-1]) for e in epts]
-
-    idx = []
-
-    for f in fepts:
-        pr = index.Property()
-        pr.dimension = f.shape[1]
-        pr.interleaved = True
-        insl = []
-        for i in range(f.shape[0]):
-            ins = tuple(np.concatenate([f[i,:], f[i,:]]))
-            insl.append((i,ins,None))
-        idx.append(index.Index(insl,properties=pr))
+    for e in epts:
+        # Build list of solution points for each element type
+        ins = [(i, [*p, *p], None) for i, p in enumerate(e.reshape(-1, ndims))]
+        # Buld tree of solution points for each element type
+        trees.append(Index(ins, properties=props))
 
     for p in pts:
-        dmins = []
-        amins = []
-        for i, v in enumerate(idx):
-            amin = list(v.nearest(np.concatenate([p, p]), 1))[0]
-            amins.append(amin)
-            dmins.append(np.linalg.norm(fepts[i][amin,:] - p))
-        amins = [np.unravel_index(i, e.shape[:2])
-                 for i, e in zip(amins, epts)]    
+        #Find index of solution point closest to p
+        amins = [np.unravel_index(next(t.nearest([*p, *p], 1)), ept.shape[:2])
+                 for ept, t in zip(epts, trees)]
+        #Find distance of solution point closest to p     
+        dmins = [np.linalg.norm(e[a] - p) for e, a in zip(epts, amins)]
 
+        # Reduce across element types        
         yield min(zip(dmins, range(len(epts)), amins))
 
 
