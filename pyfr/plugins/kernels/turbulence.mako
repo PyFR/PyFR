@@ -58,6 +58,7 @@
     oldstate *= 277803737UL;
     oldstate ^= oldstate >> b22;
     pos[1] = ymin + (ymax-ymin)*((fpdtype_t)oldstate * tbc);
+    //pos[1] = ymin + (ymax-ymin)*ldexp((fpdtype_t)oldstate, -32);
     
     oldstate = newstate;
     newstate = (oldstate * 747796405UL) + 2891336453UL;
