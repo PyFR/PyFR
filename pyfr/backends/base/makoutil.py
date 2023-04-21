@@ -84,8 +84,10 @@ def _locals(body):
     # Extract the variable names
     lvars = [re.match(r'\s*(\w+)', v)[1] for v in decls]
 
+    keywords = {'if', 'int'}
+
     # Prune invalid names
-    return [lv for lv in lvars if lv != 'if']
+    return [lv for lv in lvars if lv not in keywords]
 
 
 @supports_caller

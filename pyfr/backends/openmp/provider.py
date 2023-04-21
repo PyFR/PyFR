@@ -72,7 +72,6 @@ class OpenMPKernelProvider(BaseKernelProvider):
     def _build_kernel(self, name, src, argtypes):
         lib = self._build_library(src)
         fun = lib.function(name, None, [c_void_p])
-
         return OpenMPKernelFunction(fun, self._get_arg_cls(tuple(argtypes)))
 
 

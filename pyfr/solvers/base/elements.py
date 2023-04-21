@@ -106,6 +106,11 @@ class BaseElements:
         return plocfpts
 
     @cached_property
+    def _scal_upts_cpy(self):
+        return self._be.matrix((self.nupts, self.nvars, self.neles),
+                               tags={'align'})
+
+    @cached_property
     def _srtd_face_fpts(self):
         plocfpts = self.plocfpts.transpose(1, 2, 0)
 
@@ -194,10 +199,6 @@ class BaseElements:
             self._scal_fpts = salloc('scal_fpts', nfpts)
         if 'scal_qpts' in sbufs:
             self._scal_qpts = salloc('scal_qpts', nqpts)
-
-        # Allocate additional scalar scratch space
-        if 'scal_upts_cpy' in sbufs:
-            self._scal_upts_cpy = salloc('scal_upts_cpy', nupts)
 
         # Allocate required vector scratch space
         if 'vect_upts' in sbufs:

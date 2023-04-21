@@ -1,3 +1,4 @@
+from pyfr.backends.base import NullKernel
 from pyfr.solvers.base import BaseElements
 
 
@@ -23,14 +24,9 @@ class BaseAdvectionElements(BaseElements):
     @property
     def _scratch_bufs(self):
         if 'flux' in self.antialias:
-            bufs = {'scal_fpts', 'scal_qpts', 'vect_qpts'}
+            return {'scal_fpts', 'scal_qpts', 'vect_qpts'}
         else:
-            bufs = {'scal_fpts', 'vect_upts'}
-
-        if self._soln_in_src_exprs:
-            bufs |= {'scal_upts_cpy'}
-
-        return bufs
+            return {'scal_fpts', 'vect_upts'}
 
     def add_src_macro(self, mod, name, tplargs, ploc=False, soln=False):
         self._ploc_in_src_macros |= ploc
@@ -67,8 +63,12 @@ class BaseAdvectionElements(BaseElements):
         fluxaa = 'flux' in self.antialias
 
         # What the source term expressions (if any) are a function of
-        plocsrc = self._ploc_in_src_exprs or self._ploc_in_src_macros
-        solnsrc = self._soln_in_src_exprs or self._soln_in_src_macros
+
+        def have_plocsrc():
+            return self._ploc_in_src_exprs or self._ploc_in_src_macros
+
+        def have_solnsrc():
+            return self._soln_in_src_exprs or self._soln_in_src_macros
 
         # Source term kernel arguments
         srctplargs = {
@@ -108,19 +108,23 @@ class BaseAdvectionElements(BaseElements):
         )
 
         # Transformed to physical divergence kernel + source term
-        plocupts = self.ploc_at('upts') if plocsrc else None
-        solnupts = self._scal_upts_cpy if solnsrc else None
 
-        if solnsrc:
-            kernels['copy_soln'] = lambda uin: self._be.kernel(
-                'copy', self._scal_upts_cpy, self.scal_upts[uin]
-            )
+        def copy_soln(uin):
+            if have_solnsrc():
+                return self._be.kernel('copy', self._scal_upts_cpy,
+                                        self.scal_upts[uin])
+            else:
+                return NullKernel()
+
+        kernels['copy_soln'] = copy_soln
 
         kernels['negdivconf'] = lambda fout: self._be.kernel(
             'negdivconf', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
             tdivtconf=self.scal_upts[fout], rcpdjac=self.rcpdjac_at('upts'),
-            ploc=plocupts, u=solnupts, **self._external_vals
+            ploc=self.ploc_at('upts') if have_plocsrc() else None, 
+            u=self._scal_upts_cpy if have_solnsrc() else None,
+            **self._external_vals
         )
 
         # In-place solution filter
