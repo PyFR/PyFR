@@ -49,9 +49,6 @@
   % endfor
 
   % for i in range(nvmax):
-    
-    if(state[${i}][0] > 0)
-    {
     pos[0] = xmin + (t-tinit[${i}][0])*ubar;
 
     oldstate = state[${i}][0];
@@ -86,6 +83,8 @@
     % endfor
 
     g = delta2[0] < ls2 ? delta2[1] < ls2 ? delta2[2] < ls2 ? pos[0] <= xmax ? fac2*${pyfr.polyfit(lambda x: 2.718281828459045**x, 0, 1, 8, 'arg')} : 0.0 : 0.0 : 0.0 : 0.0;
+
+    g = state[${i}][0] > 0 ? g : 0.0;
     
     eps[0] = (epscomp & 1) ? -1 : 1;
     eps[1] = (epscomp & 2) ? -1 : 1;
@@ -94,7 +93,6 @@
     % for j in range(ndims): 
       utilde[${j}] += eps[${j}]*g;
     % endfor
-    }
   % endfor
   
   % for i in range(ndims): 
