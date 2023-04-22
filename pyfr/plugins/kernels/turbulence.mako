@@ -49,8 +49,11 @@
   % endfor
 
   % for i in range(nvmax):
-    pos[0] = xmin + (t-tinit[${i}][0])*ubar;
     
+    if(state[${i}][0] > 0)
+    {
+    pos[0] = xmin + (t-tinit[${i}][0])*ubar;
+
     oldstate = state[${i}][0];
     newstate = (oldstate * 747796405UL) + 2891336453UL;
     rshift = oldstate >> (b32 - opbits);
@@ -91,6 +94,7 @@
     % for j in range(ndims): 
       utilde[${j}] += eps[${j}]*g;
     % endfor
+    }
   % endfor
   
   % for i in range(ndims): 
