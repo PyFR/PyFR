@@ -2,7 +2,7 @@
 
 struct kfunargs
 {
-    union { void (*fun)(void *); void (*fun_blks)(int, void *) };
+    union { void (*fun)(void *); void (*fun_blks)(int, void *, int); };
     void *args;
     int nblocks;
 };
@@ -17,7 +17,7 @@ void run_kernels(int off, int n, const struct kfunargs *kfa)
         {
             #pragma omp parallel for ${schedule}
             for (int blk = 0; blk < kfa[i].nblocks; blk++)
-                kfa[i].fun_blks(blk, kfa[i].args);
+                kfa[i].fun_blks(blk, kfa[i].args, 0);
         }
     }
 }

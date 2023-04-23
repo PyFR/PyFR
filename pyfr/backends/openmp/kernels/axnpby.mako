@@ -8,7 +8,7 @@ struct kargs
     fpdtype_t ${','.join(f'a{i}' for i in range(nv))};
 };
 
-void axnpby(int ib, const struct kargs *restrict args)
+void axnpby(int ib, const struct kargs *restrict args, int _disp_mask)
 {
     int nrow = args->nrow;
 % for i in range(nv):

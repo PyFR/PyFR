@@ -10,9 +10,9 @@ struct kargs
     int cblocksz;
 };
 
-void batch_gemm(int ib, const struct kargs *args)
+void batch_gemm(int ib, const struct kargs *args, int _disp_mask)
 {
     args->exec(args->blockk,
-               args->b + ib*args->bblocksz,
-               args->c + ib*args->cblocksz);
+               args->b + ((_disp_mask & 1) ? 0 : ib*args->bblocksz),
+               args->c + ((_disp_mask & 2) ? 0 : ib*args->cblocksz));
 }
