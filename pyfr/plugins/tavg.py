@@ -469,10 +469,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
 
                 # Write to disk
                 solnfname = self._writer.write(data, intg.tcurr, metadata)
+                vtufname = solnfname.rsplit('.', 1)[0] + '.vtu' # Replace extension for solnfname with .vtu
 
                 # If a post-action has been registered then invoke it
                 self._invoke_postaction(intg, mesh=intg.system.mesh.fname,
-                                        soln=solnfname, t=intg.tcurr)
+                                        soln=solnfname, t=intg.tcurr, vtu=vtufname)
 
                 # Reset the accumulators
                 if self.mode == 'windowed':

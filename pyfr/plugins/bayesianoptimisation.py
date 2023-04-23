@@ -2,8 +2,6 @@ from time import perf_counter
 import numpy as np
 import pandas as pd
 
-import matplotlib.pyplot as plt
-
 from pyfr.plugins.base import BasePlugin
 from pyfr.mpiutil import get_comm_rank_root
 
@@ -15,7 +13,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     systems = ['*']
     formulations = ['dual']
 
-    def __init__(self, intg, cfgsect, suffix, **data):
+    def __init__(self, intg, cfgsect, suffix):
 
         super().__init__(intg, cfgsect, suffix)
         self.comm, self.rank, self.root = get_comm_rank_root()
@@ -29,11 +27,11 @@ class BayesianOptimisationPlugin(BasePlugin):
         continue_ref_cands = self.cfg.getfloat(cfgsect, 'continue-reference', 2**self._nbcs+1)
 
         # Quickly get some optimum
-        self._Ainit_lim  =     initialise_ref_cands # stop init model making (KG)  32
-        self._Binit_lim  = 1.5*initialise_ref_cands # stop init exploitation (EI)  48
-        self._Cinit_lim  = 2.0*initialise_ref_cands # stop init finalisation (PM)  64
-        self._Dinit_lim  = 3.0*initialise_ref_cands # stop init finalisation (PM)  96
-        self._E_lim      = 2.0*continue_ref_cands   # stop init finalisation (PM) 128
+        self._Ainit_lim  =     initialise_ref_cands
+        self._Binit_lim  = 1.5*initialise_ref_cands
+        self._Cinit_lim  = 2.0*initialise_ref_cands
+        self._Dinit_lim  = 3.0*initialise_ref_cands
+        self._E_lim      = 2.0*continue_ref_cands  
 
         # After initialisation, fix the loocv and kcv and then continue to get better optimum
         #self.LooCV_limit = 0.0
@@ -101,30 +99,29 @@ class BayesianOptimisationPlugin(BasePlugin):
             self.cand_train = True     # First canddiate
             self.cand_validate = False # First canddiate
 
-        self.deserialise(intg, data)
+        intg.candidate = {}
+        self.depth = self.cfg.getint('solver', 'order', 0)
+
+        if self.rank == self.root:
+            self.df_train = pd.DataFrame(columns=self.columns)
 
     def __call__(self, intg):
 
+        # Skip optimisation untill opt-stats is reset
         if not intg.reset_opt_stats:
-        # If optimisation statistics collected by the previous plugin is not reset yet
-        # then don't apply Bayesian Optimisation to the data
             return
-
-        # self.check_offline_optimisation_status(intg)
 
         if self.rank == self.root:
             opt_time_start = perf_counter()
 
             if self.opt_type == 'online' and intg.bad_sim:
                 if np.isnan(intg.opt_cost_mean) and self.df_train.empty:
-                    raise ValueError("Initial configuration must be working.")
+                    raise ValueError("Start with a working base config.")
                 tcurr = self.df_train.iloc[-1, self.df_train.columns.get_loc('tcurr')]
             else:
                 tcurr = intg.tcurr
 
             if self.df_train.empty:
-                # Set the reference acceptable error in cost
-                print(f"Setting error from {intg._stability} to {3*intg.opt_cost_sem}")
                 intg._stability = 2*intg.opt_cost_sem
 
             # Convert last iteration data from intg to dataframe
@@ -141,7 +138,7 @@ class BayesianOptimisationPlugin(BasePlugin):
                 },)
 
             if not self.test == []: 
-                # GP model is not used for this
+                # GP model is not used for testing user-requested candidates
                 next_candidate = self.test.pop()
                 for i, val in enumerate(next_candidate):
                     t1[f'n-{i}'] = val
@@ -152,18 +149,15 @@ class BayesianOptimisationPlugin(BasePlugin):
                 self.cand_validate = False
             else:
 
-                # We need to add the latest candidate to the model only if 
-                #   it is for training (not validation)
-                # Else we add it to the validation set
-                if self.cand_train and not self.cand_validate:
+                if self.cand_train:
                     t_X_Y_Yv = self.process_training_raw(t1)
-                    v_X_Y_Yv = self.process_validation_raw()
-                elif not self.cand_train and self.cand_validate:
-                    v_X_Y_Yv = self.process_validation_raw(t1)
+                else:
                     t_X_Y_Yv = self.process_training_raw()
+
+                if self.cand_validate:
+                    v_X_Y_Yv = self.process_validation_raw(t1)
                 else:
                     v_X_Y_Yv = self.process_validation_raw()
-                    t_X_Y_Yv = self.process_training_raw()
 
                 # ------------------------------------------------------------------
                 # NOVEL IDEA: INCREASE BOUNDS ONLY AFTER EXPLORATION AND ONLY WITH VALIDATION DATA
@@ -173,42 +167,20 @@ class BayesianOptimisationPlugin(BasePlugin):
                 # VALIDATION DATA EXPLORES WELL BECAUSE IT IS AROUND THE OPTIMUM
                 # ------------------------------------------------------------------
 
-                # Increase bounds only after exploration
+                # Increase bounds only after first 2 phases.
                 if self.df_train['if-validate'].sum()>=self._nbcs:
-                    # Set bounds on the basis of training data 
-                    self.expand_bounds(self.happening_region(intg, v_X_Y_Yv[0]))
+                    self.expand_bounds(self.happening_region(v_X_Y_Yv[0]))
 
                 self.add_to_model(*t_X_Y_Yv)
-
-                # Get loocv error with the validation set and training-set
                 t1['bounds-size'] = self.bounds_size
 
-                # Set loocv and kcv after 64 candidates
-                # Model is made and validation set is understood
-                # t1['LooCV'] = loocv_err = self.loocv_error
-                # t1['kCV'] = kcv_err = self.kcv_error(*v_X_Y_Yv)
-                # loocv_err = 0 if loocv_err==None else loocv_err
-                # kcv_err = 0 if kcv_err==None else kcv_err
-
-                #if self.df_train['if-train'].sum()==self._Cinit_lim:
-                #    self.LooCV_limit = 1.2*loocv_err
-                #    self.kCV_limit = 1.2*kcv_err                            
-
-                # ------------------------------------------------------------------
                 if self.df_train['if-train'].sum() <= 1:
-                    # Initialisation phase
                     opt_motive = 'PM'
                     self.cand_phase = 11
                     self.cand_train = True
                     self.cand_validate = False
 
                 elif intg.bad_sim and self.cand_phase==1 and self.opt_type == 'online':
-                # We shall assume that the first candidate is a good candidate
-                #   This is because the first candidate is the initial configuration
-                #   and all our tolerances are set on the basis of this candidate
-                # If we use our first candidate to reset online simulation and  
-                #       takes more time to converge ... then its fine
-                #       starts to NaN               ... then we have a problem
                     intg.bad_sim = False
                     if (intg.opt_cost_std/intg.opt_cost_mean) < intg._precision:
                         raise ValueError("Something's wrong here. Investigate.")                        
@@ -218,16 +190,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                     self.cand_train = True
                     self.cand_validate = False
 
-                # Check if the last candidate was a the base candidate
                 elif intg.bad_sim:
-                    # Fall-back
-                    print("Bad simulation.")
-
                     if self.opt_type == 'online':
-                        # We will reset the solution fields with something we are confident of
-                        # This wil help us over-ride the source of bad candidate effects
-                        # We may not know the source, (which among the last 2 candidates caused this) and still fix it 
-                        
                         opt_motive = 'reset'
                         t1['phase'] = -1
                         t1['if-train']   = True
@@ -236,96 +200,28 @@ class BayesianOptimisationPlugin(BasePlugin):
                         self.cand_train = False
                         self.cand_validate = False
 
-                    # Else its definitely 'onfline'
-                    elif self.cand_validate:
-                        # Make sure you still continue to build up on both the model and the validation set alternatively
-
-                        opt_motive = 'EI'
-                        t1['phase'] = -31
-                        t1['if-train']   = True
-                        t1['if-validate']= False
-                        self.cand_phase = 31
-                        self.cand_train = True
-                        self.cand_validate = False
-
-                    else:
-                        opt_motive = 'PM'
-                        t1['phase'] = -32
-                        t1['if-train']   = True
-                        t1['if-validate']= False
-                        self.cand_phase = 32
-                        self.cand_train = True
-                        self.cand_validate = False
-
-                # ------------------------------------------------------------------
-                # NOVEL IDEA: MULTI-STEP OPTIMISATION STRATEGY
-                # ------------------------------------------------------------------
-                # FIRST STEP: INITIALISATION WITH KG
-                # SECOND STEP: EXPLORATION WITH KG AND PARALLEL VALIDATION WITH PM
-                # THIRD STEP: EXPLOITATION WITH EI AND PARALLEL VALIDATION WITH PM
-                # FOURTH STEP: STRESS-TESTING FINAL MODEL WITH PM
-                # ------------------------------------------------------------------
-
-                elif self.df_train['if-train'].sum()<self._Ainit_lim:       # 32
-                    # Initialisation phase - I
-                    print("Quick-optimum-search initialise")
+                elif self.df_train['if-train'].sum()<self._Ainit_lim:
+                    print("Phase I: Quick-search initialise")
                     opt_motive = 'KG'
                     self.cand_phase = 20
                     self.cand_train = True
                     self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._Binit_lim:      # 48
-                    # Initialisation phase - II
-                    print("Quick-optimum-search optimise")
+                elif self.df_train['if-train'].sum()<self._Binit_lim:
+                    print("Phase II: Quick-search explore")
                     opt_motive = 'EI'
                     self.cand_phase = 30
                     self.cand_train = True
                     self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._Cinit_lim:      # 64
-                    # Initialisation phase - II
-                    print("Quick-optimum-search finalise")
+                elif self.df_train['if-train'].sum()<self._Cinit_lim:
+                    print("Phase III: Quick-optimum-search optimise")
                     opt_motive = 'PM'
                     self.cand_phase = 40
                     self.cand_train = True
                     self.cand_validate = True
 
-#                 elif loocv_err>self.LooCV_limit:
-#                     if self.cand_validate:
-#                         print("Continue exploration")
-#                         opt_motive = 'KG'
-#                         self.cand_phase = 21
-#                         self.cand_train = True
-#                         self.cand_validate = False
-#                     else:
-#                         print("Exploration validation with PM.")
-#                         opt_motive = 'PM'
-#                         self.cand_phase = 22
-#                         self.cand_train = True
-#                         self.cand_validate = False
-# 
-#                 elif self.df_train['if-train'].sum()<self._E_lim:
-#                     if t1['phase'] == 31:
-#                         print("Continue exploration")
-#                         opt_motive = 'KG'
-# 
-#                         self.cand_phase = 33
-#                         self.cand_train = True
-#                         self.cand_validate = False
-#                     if t1['phase'] == 33:
-#                         print("Exploitative EI phase.")
-#                         opt_motive = 'EI'
-#                         self.cand_phase = 32
-#                         self.cand_train = True
-#                         self.cand_validate = False
-#                     else:
-#                         print("Exploration validation with PM.")
-#                         opt_motive = 'PM'
-#                         self.cand_phase = 31
-#                         self.cand_train = True
-#                         self.cand_validate = False
-
-                elif self.df_train['if-train'].sum()<self._Dinit_lim:     # 96
+                elif self.df_train['if-train'].sum()<self._Dinit_lim:
                     if self.cand_phase == 32:
                         print("Exploitative EI phase.")
                         opt_motive = 'EI'
@@ -353,7 +249,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                     intg._capture_next_n += intg._increment*2
 
                 else:
-                    # Finalising phase
                     print("Finalising phase.")
                     opt_motive = 'PM'
                     self.cand_phase = 41
@@ -376,7 +271,6 @@ class BayesianOptimisationPlugin(BasePlugin):
                     for i, val in enumerate(best_candidate):
                         t1[f'b-{i}'] = val
                 
-                # If only to get data for paper, then tend is meaningless
                 if (self.force_abort
                     and (len(self.df_train.index)>self._END_lim
                         or intg.tcurr>intg.tend)):
@@ -390,69 +284,17 @@ class BayesianOptimisationPlugin(BasePlugin):
                 t1[self.index_name] = len(self.df_train.index)+1
 
             t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
-
             t1['capture-window'] = intg.actually_captured
             # ------------------------------------------------------------------
             # Add all the data collected into the main dataframe
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
-            # ------------------------------------------------------------------
-
-            # If model is failing too much not good, lets assume that data quality is not good and delete old ones and add new better ones
-            if self.df_train['phase'].iloc[-1] < 0 and self.df_train['phase'].iloc[-2] < 0:
-                intg._skip_first_n += intg._increment
-                intg._capture_next_n += intg._increment*2
-                intg._stabilise_final_n += intg._increment*2
-
-            # If data quality is OK, but data continues to be collected and simulation continues           
-            # We will need to remove data so we do not run out of memory or compute effort
-            if self.df_train['if-train'].sum() > self._E_lim:
-                intg._capture_next_n += intg._increment
-                    # ------------------------------------------------------------------
-
-            # Add more freedom to window length
-            if (intg.actually_captured >= intg._capture_next_n + 0.75*intg._stabilise_final_n):
-                intg._skip_first_n      += intg._increment
-                intg._stabilise_final_n += intg._increment
-
-            # ------------------------------------------------------------------
             # View results as csv file
             self.df_train.to_csv(self.outf, index=False)
-            # ------------------------------------------------------------------
             # Notify intg of the latest generated candidate and other info
             intg.candidate = self._postprocess_ccandidate(list(t1[self._n_cols].values)[0])
             # ------------------------------------------------------------------
 
         intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
-
-    def serialise(self, intg):
-        if self.rank == self.root:
-            return {'df_train':self.df_train.to_numpy(dtype=np.float64),
-                    }
-
-    def deserialise(self, intg, data):
-
-        intg.candidate = {}
-        self.depth = self.cfg.getint('solver', 'order', 0)
-
-        if self.rank == self.root:
-
-            if bool(data):
-                self.df_train = pd.DataFrame(data['df_train'], columns=self.columns)
-
-                # Set the candidate to the next candidate if optimisation was being performed in the previous run                
-                next_candidate = self.df_train[self._n_cols].tail(1).to_numpy(dtype=np.float64)[0]
-                self.cand_train = self.df_train['if-train'].tail(1).to_numpy(dtype=np.bool)[0]
-                self.cand_validate = self.df_train['if-validate'].tail(1).to_numpy(dtype=np.bool)[0]
-
-                intg._skip_first_n   = int(0.5*self.df_train['capture-window'].tail(1).to_numpy(dtype=np.float64)[0])
-                intg._capture_last_n = self.df_train['capture-window'].tail(1).to_numpy(dtype=np.float64)[0]
-                intg.candidate = self._postprocess_ccandidate(next_candidate)
-                
-            else:
-                self.df_train = pd.DataFrame(columns=self.columns)
-            
-        if (self.rank == self.root) and len(intg.candidate)>0:
-            intg.candidate = self.comm.bcast(intg.candidate, root = self.root)
 
     def process_training_raw(self, t1 = None):
 
@@ -471,7 +313,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             tYv = new_df_train['t-d'].to_numpy().reshape(-1, 1) ** 2
 
         if len(tY) > 0:
-            # If NaN, then replace with twice the data of worst working candidate
             tY[np.isnan(tY)] = self.bad_sim_multiplier*np.nanmax(tY)
             tYv[np.isnan(tYv)] = self.bad_sim_multiplier*np.nanmax(tYv)
             tYv = tYv.reshape(-1,1)
@@ -503,13 +344,6 @@ class BayesianOptimisationPlugin(BasePlugin):
         return vX, vY, vYv
 
     def add_to_model(self, tX, tY, tYv):
-        """ Fit a Fixed Noise Gaussian Process model on given data
-
-        Args:
-            tX (numpy.ndarray): Training input
-            tY (numpy.ndarray): Training output
-            tYv (numpy.ndarray): Training output variance
-        """
 
         from gpytorch.mlls             import ExactMarginalLogLikelihood
         from botorch.models            import SingleTaskGP
@@ -522,9 +356,6 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.normalise.train(True)
         self.standardise.train(True)
         
-        # from botorch.models.transforms import ChainedOutcomeTransform
-        # self.trans = ChainedOutcomeTransform(stan=Standardize(m=1))
-
         self._norm_X = self.normalise.transform(
             self.torch.tensor(tX , **self.torch_kwargs))
 
@@ -545,43 +376,6 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.standardise.train(False)
 
     @property
-    def loocv_error(self):
-        if self.df_train['if-train'].sum()>=self._Cinit_lim:
-                                                                                # Calculate LOOCV error only after the initialising 16 iterations
-                                                                                # This is to avoid wasting time in the start
-                                                                                #   when model is definitely not good enough
-            return self.cv_folds(Train_X    = self._norm_X, 
-                                Train_Y    = self._stan_Y, 
-                                Train_Yvar = self._stan_Yvar,
-                                ).detach().cpu().numpy()
-        else:
-            return None
-            
-    def kcv_error(self, vX, vY, vYv):
-        # Based on processing done like normalise and standardise, process vX
-
-        if len(vY) == 0:
-            return None
-
-        _norm_vX = self.normalise.transform(
-            self.torch.tensor(vX[-self._nbcs:] , **self.torch_kwargs)) 
-        _stan_vY, _stan_vYv = self.standardise.forward(
-            self.torch.tensor(vY[-self._nbcs:] , **self.torch_kwargs),
-            self.torch.tensor(vYv[-self._nbcs:], **self.torch_kwargs))
-
-        if self.df_train['if-train'].sum()>=self._Cinit_lim:
-            # Calculate LOOCV error only after the initialising 16 iterations
-            # This is to avoid wasting time in the start
-            #   when model is definitely not good enough
-
-            return self.cv_folds(Train_X = self._norm_X, Train_Y = self._stan_Y, Train_Yvar = self._stan_Yvar,
-                                Val_X = _norm_vX, Val_Y = _stan_vY, Val_Yvar = _stan_vYv,
-                                ).detach().cpu().numpy()
-
-        else:
-            return None
-            
-    @property
     def bounds(self):
         return self._bnds.detach().cpu().numpy()
 
@@ -589,13 +383,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     def bounds(self, y):
         self._bnds = self.torch.tensor(y, **self.torch_kwargs)
 
-    def happening_region(self, intg, tX):
-        """ Expand the bounds based on the last 16 PM points
-            How?
-            1. Find the mean and standard deviation of the last 16 points
-            2. Find the happening region as 1+-10% mean +- 2*std in each direction
-            3. Take union of the happening region and the initial bounds
-        """
+    def happening_region(self, tX):
         
         best_cands = tX[-self._nbcs:]
 
@@ -604,12 +392,6 @@ class BayesianOptimisationPlugin(BasePlugin):
 
         means, stds = np.mean(best_cands, axis=0), np.std( best_cands, axis=0)
 
-        # BEFORE
-        # hr = self.torch.tensor(np.array([means - std_mult * stds,
-        #                                 (means + std_mult * stds]), 
-        #                       **self.torch_kwargs)
-
-        # AFTER        
         hr = self.torch.tensor(np.array([(1.0-self.mean_mult)*means - self.std_mult * stds,
                                          (1.0+self.mean_mult)*means + self.std_mult * stds]), 
                                **self.torch_kwargs)
@@ -622,15 +404,12 @@ class BayesianOptimisationPlugin(BasePlugin):
         if hr is None:
             return
 
-        # Increase bounds to include happening region
         l_bnds_inc_loc = self._bbnds[0, :] > hr[0, :]
         u_bnds_inc_loc = self._bbnds[1, :] < hr[1, :]
         
         self._bnds[0, l_bnds_inc_loc] = hr[0, l_bnds_inc_loc]
         self._bnds[1, u_bnds_inc_loc] = hr[1, u_bnds_inc_loc]
 
-        # REMOVED UBon!!!!!
-        # Restrict the bounds to hardbounds region
         self._bnds[0, :] = self.torch.max(self._bnds[0, :], self._hbnds[0, :])
         self._bnds[1, :] = self.torch.min(self._bnds[1, :], self._hbnds[1, :])
 
@@ -814,7 +593,6 @@ class BayesianOptimisationPlugin(BasePlugin):
             *[f'b-{i}' for i in range(len(self.optimisables))],'b-m', 'b-s',
             'opt-time', 'cumm-compute-time', 
             'if-train', 'if-validate', 'capture-window', 
-            'LooCV', # 'kCV',
             'bounds-size', 
             'phase'
             ] 

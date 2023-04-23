@@ -25,22 +25,15 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Skip first few iterations, and capture the rest few iterations
 
-        ref_window = self.cfg.getint(cfgsect, 'ref-window',  32)
-        intg._max_window = self.cfg.getint(cfgsect, 'max-window', 1/intg._dt)
+        ref_window = self.cfg.getint(cfgsect, 'ref-window',  8)
 
         intg._increment         = ref_window//4
         intg._skip_first_n      = ref_window//2      
         intg._capture_next_n    = ref_window    
         intg._stabilise_final_n = ref_window
 
-        # This is how the cost converges to a value
-        intg._stability = 100.0
+        intg._stability = 1000.0
 
-        # Standard deviation of the cost determines how erratic the cost is
-        # If the cost deviation is erratic, even if sem decreases, the candidate needs to be rejected
-        # for re500, candidates had 4. So 2 is a good default
-        # Imagine an ex-gaussian distribution. Deviation cannot definitely be 1.
-        #   So we just choose 2 as a default
         intg._precision = self.cfg.getfloat(cfgsect, 'precision', 0.7)
 
         self.Δτ_init = self.cfg.getfloat(tsect, 'pseudo-dt')
@@ -78,7 +71,6 @@ class OptimisationStatsPlugin(BasePlugin):
 
     def __call__(self, intg):
 
-        # Collect stats after tstart
         if intg.tcurr < self.opt_tstart:
             intg.pseudointegrator._compute_time = 0
             return
@@ -150,7 +142,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
-            intg.actually_captured = -self.pd_stats.count(0)[0]    # Negative sign denotes steps after which sim rewinds
+            intg.actually_captured = -self.pd_stats.count(0)[0]
             intg.reset_opt_stats = intg.bad_sim = True
             intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN 
             return
@@ -162,7 +154,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
             if (self.maxniters != self.minniters):
-                intg.actually_captured = -self.pd_stats.count(0)[0]     # Negative sign denotes steps after which sim rewinds
+                intg.actually_captured = -self.pd_stats.count(0)[0]
                 intg.reset_opt_stats = intg.bad_sim = True
                 intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN
                 return
@@ -191,8 +183,6 @@ class OptimisationStatsPlugin(BasePlugin):
                     intg.opt_cost_mean = mean
                     intg.opt_cost_std = std
                     intg.opt_cost_sem = sem
-
-        return
 
     def bcast_status(self, intg):
         intg.reset_opt_stats = self.comm.bcast(intg.reset_opt_stats, root=0)
