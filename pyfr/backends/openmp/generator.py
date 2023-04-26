@@ -102,39 +102,42 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
     def _render_args(self, argn):
         # We first need the argument list; starting with the dimensions
-        kargs = [('int ', d, None) for d in self._dims]
+        kargs = [('int ', d, None, None) for d in self._dims]
 
         # Now add any scalar arguments
-        kargs.extend((sa.dtype, sa.name, None) for sa in self.scalargs)
+        kargs.extend((sa.dtype, sa.name, None, None) for sa in self.scalargs)
 
         # Finally, add the vector arguments
-        for i, va in enumerate(self.vectargs):
-            disp = (i, da) if (da := self._displace_arg(va)) else None
+        for va in self.vectargs:
+            da = self._displace_arg(va)
+            mi = len(kargs) if da else None
 
             if va.intent == 'in':
-                kargs.append((f'const {va.dtype}*', f'{va.name}_v', disp))
+                kargs.append((f'const {va.dtype}*', f'{va.name}_v', da, mi))
             else:
-                kargs.append((f'{va.dtype}*', f'{va.name}_v', disp))
+                kargs.append((f'{va.dtype}*', f'{va.name}_v', da, mi))
 
             # Views
             if va.isview:
-                kargs.append(('const int*', f'{va.name}_vix',
-                             (i, '_ib*BLK_SZ')))
+                kargs.append(('const int*', f'{va.name}_vix', '_ib*BLK_SZ',
+                              None))
 
                 if va.ncdim == 2:
                     kargs.append(('const int*', f'{va.name}_vrstri',
-                                 (i, '_ib*BLK_SZ')))
+                                  '_ib*BLK_SZ', None))
 
-        # Argument definitions
-        kargdefn = ';\n'.join(f'{dtype} {name}' for dtype, name, disp in kargs)
-
-        # Argument assignments plus any required displacements
-        kargassn = []
-        for dtype, name, disp in kargs:
+        # Argument definitions and assignments
+        kargdefn, kargassn = [], []
+        for dtype, name, disp, midx in kargs:
             assn = f'{dtype} {name} = {argn}->{name}'
-            if disp:
-                assn += f' + ((_disp_mask & {1 << disp[0]}) ? 0 : {disp[1]})'
 
+            # Handle displacement and potential masking thereof
+            if disp and midx is not None:
+                assn += f' + ((_disp_mask & {1 << midx}) ? 0 : {disp})'
+            elif disp:
+                assn += f' + {disp}'
+
+            kargdefn.append(f'{dtype} {name}')
             kargassn.append(assn)
 
-        return kargdefn, ';\n'.join(kargassn)
+        return ';\n'.join(kargdefn), ';\n'.join(kargassn)

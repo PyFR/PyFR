@@ -73,27 +73,24 @@ class OpenMPGraph(base.Graph):
     def commit(self):
         super().commit()
 
-        n = len(self.klist)
-
-        # Construct the argument list
-        self._krunargs = make_array(k.runargs for k in self.klist)
-
         # Group kernels in runs separated by MPI requests
         self._runlist, i = [], 0
 
         for j in sorted(self.mpi_idxs):
-            self._runlist.append((i, j - i, self.mpi_idxs[j]))
+            krunargs = make_array(k.runargs for k in self.klist[i:j])
+            self._runlist.append((j - i, krunargs, self.mpi_idxs[j]))
             i = j
 
-        if i != n - 1:
-            self._runlist.append((i, n - i, []))
+        if i != len(self.klist) - 1:
+            krunargs = make_array(k.runargs for k in self.klist[i:])
+            self._runlist.append((len(self.klist) - i, krunargs, []))
 
     def run(self):
         # Start all dependency-free MPI requests
         self._startall(self.mpi_root_reqs)
 
-        for i, n, reqs in self._runlist:
-            self.backend.krunner(i, n, self._krunargs)
+        for n, krunargs, reqs in self._runlist:
+            self.backend.krunner(n, krunargs)
 
             self._startall(reqs)
 

@@ -131,7 +131,7 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argmv):
+    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
         kargs, rtargs = [], []
 
         # Determine the thread group and grid sizes
@@ -162,4 +162,4 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
             def run(self, cbuf):
                 fun(cbuf, grid, tgrp, *kargs)
 
-        return PointwiseKernel(*argmv)
+        return PointwiseKernel(argm, argv)
