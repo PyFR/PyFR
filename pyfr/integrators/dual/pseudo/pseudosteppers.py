@@ -38,9 +38,6 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
 
-        if self.stage_nregs > 1:
-            self._add(0, self._stage_regidx[self.currstg], 1, fout)
-
         # Registers and coefficients
         vals = [self.stepper_coeffs[-1], -1/self._dt, 1]
         regs = [fout, self._idxcurr, self._source_regidx]
