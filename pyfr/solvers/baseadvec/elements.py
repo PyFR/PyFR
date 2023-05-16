@@ -37,6 +37,7 @@ class BaseAdvectionElements(BaseElements):
                 raise RuntimeError(f'Aliased macros in srcmacros: {name}')
 
         for k, v in tplargs.items():
+            print(v)
             if k in self._srctplargs and self._srctplargs[k] != v:
                 raise RuntimeError(f'Aliased terms in template args: {k}')
 

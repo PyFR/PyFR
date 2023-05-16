@@ -65,6 +65,10 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         src = tpl.render(**tplargs)
         src = re.sub(r'\n\n+', r'\n\n', src)
 
+        print("***********")
+        print(src)
+        print("***********")
+
         # Check the kernel exists in the template
         if name not in argspecs:
             raise ValueError(f'Kernel "{name}" not defined in template')
