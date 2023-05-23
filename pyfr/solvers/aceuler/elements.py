@@ -27,6 +27,10 @@ class BaseACFluidElements:
         return convs
 
     @staticmethod
+    def diff_con_to_pri(cons, diff_cons, cfg):
+        return diff_cons
+
+    @staticmethod
     def validate_formulation(controller):
         if controller.formulation != 'dual':
             raise ValueError('System not compatible with time stepping '
