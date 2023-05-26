@@ -37,7 +37,6 @@ class BaseAdvectionElements(BaseElements):
                 raise RuntimeError(f'Aliased macros in srcmacros: {name}')
 
         for k, v in tplargs.items():
-            print(v)
             if k in self._srctplargs and self._srctplargs[k] != v:
                 raise RuntimeError(f'Aliased terms in template args: {k}')
 
@@ -72,11 +71,11 @@ class BaseAdvectionElements(BaseElements):
             return self._soln_in_src_exprs or self._soln_in_src_macros
 
         # Source term kernel arguments
-        srctplargs = {
-            'ndims': self.ndims,
-            'nvars': self.nvars,
-            'srcex': self._src_exprs
-        }
+        #srctplargs = {
+        #    'ndims': self.ndims,
+        #    'nvars': self.nvars,
+        #    'srcex': self._src_exprs
+        #}
 
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
@@ -125,6 +124,17 @@ class BaseAdvectionElements(BaseElements):
             tdivtconf=self.scal_upts[fout], rcpdjac=self.rcpdjac_at('upts'),
             ploc=self.ploc_at('upts') if have_plocsrc() else None, 
             u=self._scal_upts_cpy if have_solnsrc() else None,
+            **self._external_vals
+        )
+
+        #Add a new kernel with similar form to negdiv conf but with different arguments
+        # fgure out correct set of arguments
+        kernels['evalsrc'] = lambda uin: self._be.kernel(
+            'evalsrc', tplargs=self._srctplargs,
+            dims=[self.nupts, self.neles], extrns=self._external_args,
+            
+            ploc=self.ploc_at('upts') if have_plocsrc() else None, 
+            u=self._scal_upts[uin],
             **self._external_vals
         )
 

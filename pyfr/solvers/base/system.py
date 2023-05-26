@@ -206,6 +206,24 @@ class BaseSystem:
                                 kernels[f'{pn}/{kn}', None, i].append(kern)
 
                             tag_kern(pn, p, kern)
+
+
+
+                    # else if 'uin' in .. and srcout in k params (to support 2 kernel inputs)
+                    #    for i in range(nregs):
+                    #        kern = kgetter(i,nreg-1)
+                    #        if isinstance(kern, NullKernel):
+                    #            continue
+
+                         
+                     #       kernels[f'{pn}/{kn}', i, None].append(kern)
+                            
+
+                    #        tag_kern(pn, p, kern)
+
+
+
+
                     else:
                         kern = kgetter()
                         if isinstance(kern, NullKernel):
@@ -311,6 +329,20 @@ class BaseSystem:
         kkey = ('eles/modal_filter', uinoutbank, None)
 
         self.backend.run_kernels(self._kernels[kkey])
+
+# NOT NEEDED
+    # we have defined a new kernel in elements
+    # system is responsible form running it across all element types
+    # all integrato needs to do is ask the system to run the kernel    
+
+    #make something like this
+    # two parameters : where is solution and what do I add into
+    # currently none take two kernels
+    def evalsrc(self, uinoutbank):
+        kkey = ('eles/evalsrc', uinoutbank, None)
+
+        self.backend.run_kernels(self._kernels[kkey])
+
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]

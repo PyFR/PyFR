@@ -62,6 +62,35 @@ class BaseIntegrator:
         # Abort computation
         self.abort = False
 
+
+
+# this isnt needed
+    def add_src_macro(self, eles, mod, name, tplargs, ploc=False, soln=False):
+        eles.add_src_macro(mod, name, tplargs, ploc=False, soln=False)
+
+
+
+
+
+
+
+
+
+        #for eles in self.system.ele_map.values():
+       #     eles._ploc_in_src_macros |= ploc
+       #     eles._soln_in_src_macros |= soln
+
+       #     for m, n in eles._srctplargs['srcmacros']:
+       #         if m == mod or n == name:
+       #             raise RuntimeError(f'Aliased macros in srcmacros: {name}')
+
+       #     for k, v in tplargs.items():
+       #         if k in eles._srctplargs and eles._srctplargs[k] != v:
+       #             raise RuntimeError(f'Aliased terms in template args: {k}')
+
+       #     eles._srctplargs['srcmacros'].append((mod, name))
+       #     eles._srctplargs |= tplargs
+
     def _get_plugins(self, initsoln):
         plugins = []
 
