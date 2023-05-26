@@ -70,13 +70,6 @@ class BaseAdvectionElements(BaseElements):
         def have_solnsrc():
             return self._soln_in_src_exprs or self._soln_in_src_macros
 
-        # Source term kernel arguments
-        #srctplargs = {
-        #    'ndims': self.ndims,
-        #    'nvars': self.nvars,
-        #    'srcex': self._src_exprs
-        #}
-
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
             'mul', self.opmat('M0'), self.scal_upts[uin],
@@ -127,12 +120,10 @@ class BaseAdvectionElements(BaseElements):
             **self._external_vals
         )
 
-        #Add a new kernel with similar form to negdiv conf but with different arguments
-        # fgure out correct set of arguments
+        # NEW - takes in solution and overwrites with source
         kernels['evalsrc'] = lambda uin: self._be.kernel(
             'evalsrc', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
-            
             ploc=self.ploc_at('upts') if have_plocsrc() else None, 
             u=self._scal_upts[uin],
             **self._external_vals

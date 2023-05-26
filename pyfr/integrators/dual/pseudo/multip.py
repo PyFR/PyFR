@@ -40,6 +40,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Initialise the number of cycles
         self.npmgcycles = 0
 
+        self.start_cycle = True
+
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
         self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
@@ -211,6 +213,18 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
 
+        if self.start_cycle:
+            self.start_cycle == False
+            # 1.) copy the solution into some storage (soln)
+            stemp = 
+            # 2) call the kernel(soln) -> soln is now the src term (extra bit)
+            self.evalsrc(stemp)
+
+
+
+
+
+
         # detect if l1 and l2 meet conditions (are you going from the highest level to the next highest level for the first time or)
         # we have _source_regidx, make a copy at very start of pmg cycles, then 1st time we hit condition above we evaluate the src term kernel and add _source_regidx on top
         # ._source_regidx at the start of the cycles has the DIRK src term, we want to make a copy, and then += to that copy with updated physical sources
@@ -218,15 +232,19 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # newsrc = copy
 
 
-        # 1.) copy the solution into some storage (soln)
-        # 2) call the kernel(soln) -> soln is now the src term (extra bit)
+        
+
+
+        
+
+
         # 3.) soln += _source_regidx
         #4.) l1src is now this (soln)
         # can maybe use pmg aux storage (e.g aux_regidx) (rtemp ?)
 
         
 
-        # += stuff from that kernel
+
 
 
         # Restrict the physical source term
@@ -302,6 +320,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
+        self.start_cycle == True
 
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:

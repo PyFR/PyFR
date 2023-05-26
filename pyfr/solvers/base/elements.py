@@ -219,8 +219,6 @@ class BaseElements:
         ioshape = self.scal_upts[0].ioshape
         aliases = next((m for m in abufs if m.nbytes >= nbytes), None)
 
-
-        # one option is to write the src term inot this, or have the solution here
         self._scal_upts_temp = backend.matrix(ioshape, aliases=aliases,
                                               tags=tags)
 

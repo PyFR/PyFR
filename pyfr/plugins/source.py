@@ -21,18 +21,8 @@ class Source(BaseSolverPlugin):
         src_exprs = [self.cfg.getexpr('solver-plugin-source', v, '0', subs=subs)
                      for v in convars]
 
-        #loop over each element type and put eles                
-
-        #intg.add_src_macro('pyfr.plugins.kernels.source',
-        #                   'source',
-        #                   {'srcexprs': src_exprs},
-        #                   ploc=True,
-        #                   soln=True)
-        
-        something like this:
-        # this can actually revert back to how it was (at the elements level)
         for etype, eles in intg.system.ele_map.items():
-            intg.add_src_macro(eles,'pyfr.plugins.kernels.source','source', {'srcexprs': src_exprs}, ploc=True, soln=True)
+            eles.add_src_macro('pyfr.plugins.kernels.source','source', {'srcexprs': src_exprs}, ploc=True, soln=True)
 
     def __call__(self, intg):
         pass
