@@ -213,17 +213,21 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
 
+        # Restrict the physical source term
+        l1src = self.pintgs[l1]._source_regidx # this variable now needs to hold new proper updated src term
+        l2dst = self.pintgs[l2]._source_regidx
+
+        # Prevsoln is used as temporal storage at l1
+        rtemp = 0 if l1idxcurr == 1 else 1
+
         if self.start_cycle:
             self.start_cycle == False
-            # 1.) copy the solution into some storage (soln)
-            stemp = 
-            # 2) call the kernel(soln) -> soln is now the src term (extra bit)
-            self.evalsrc(stemp)
-
-
-
-
-
+            # copy the solution to rtemp
+            self._add(0, rtemp, 1, l1idxcurr)
+            # call evalsrc on rtemp and write source to rtemp
+            self.evalsrc(rtemp)
+            # l1src += rtemp
+            self._add(1, l1src, 1, rtemp)
 
         # detect if l1 and l2 meet conditions (are you going from the highest level to the next highest level for the first time or)
         # we have _source_regidx, make a copy at very start of pmg cycles, then 1st time we hit condition above we evaluate the src term kernel and add _source_regidx on top
@@ -231,25 +235,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # newsrc = copy
 
-
-        
-
-
-        
-
-
         # 3.) soln += _source_regidx
         #4.) l1src is now this (soln)
         # can maybe use pmg aux storage (e.g aux_regidx) (rtemp ?)
-
-        
-
-
-
-
-        # Restrict the physical source term
-        l1src = self.pintgs[l1]._source_regidx # this variable now needs to hold new proper updated src term
-        l2dst = self.pintgs[l2]._source_regidx
 
         self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
@@ -258,7 +246,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             self.backend.run_kernels(self.dtauproject(l1, l2))
 
         # Prevsoln is used as temporal storage at l1
-        rtemp = 0 if l1idxcurr == 1 else 1
+        #rtemp = 0 if l1idxcurr == 1 else 1
 
         # rtemp = R = -∇·f - dQ/dt
         self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp, mg_add=False)
