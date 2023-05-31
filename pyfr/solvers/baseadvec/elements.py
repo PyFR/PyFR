@@ -59,6 +59,10 @@ class BaseAdvectionElements(BaseElements):
             'pyfr.solvers.baseadvec.kernels.negdivconf'
         )
 
+        self._be.pointwise.register(
+            'pyfr.solvers.baseadvec.kernels.evalsrc'
+        )
+
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
 
@@ -125,7 +129,7 @@ class BaseAdvectionElements(BaseElements):
             'evalsrc', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
             ploc=self.ploc_at('upts') if have_plocsrc() else None, 
-            u=self._scal_upts[uin],
+            u=self.scal_upts[uin],
             **self._external_vals
         )
 

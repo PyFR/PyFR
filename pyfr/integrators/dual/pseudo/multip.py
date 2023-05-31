@@ -220,12 +220,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1
 
+        #print(self.start_cycle)
         if self.start_cycle:
-            self.start_cycle == False
+            self.start_cycle = False
             # copy the solution to rtemp
             self._add(0, rtemp, 1, l1idxcurr)
             # call evalsrc on rtemp and write source to rtemp
-            self.evalsrc(rtemp)
+            self.pintgs[l1].system.evalsrc(rtemp)
             # l1src += rtemp
             self._add(1, l1src, 1, rtemp)
 
@@ -308,7 +309,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
-        self.start_cycle == True
+        self.start_cycle = True
 
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:
