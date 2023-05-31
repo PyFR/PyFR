@@ -213,14 +213,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
 
-        # Restrict the physical source term
-        l1src = self.pintgs[l1]._source_regidx # this variable now needs to hold new proper updated src term
-        l2dst = self.pintgs[l2]._source_regidx
-
         # Prevsoln is used as temporal storage at l1
         rtemp = 0 if l1idxcurr == 1 else 1
 
-        #print(self.start_cycle)
+        # Restrict the physical source term
+        l1src = self.pintgs[l1]._source_regidx
+        l2dst = self.pintgs[l2]._source_regidx
+
         if self.start_cycle:
             self.start_cycle = False
             # copy the solution to rtemp
@@ -230,24 +229,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # l1src += rtemp
             self._add(1, l1src, 1, rtemp)
 
-        # detect if l1 and l2 meet conditions (are you going from the highest level to the next highest level for the first time or)
-        # we have _source_regidx, make a copy at very start of pmg cycles, then 1st time we hit condition above we evaluate the src term kernel and add _source_regidx on top
-        # ._source_regidx at the start of the cycles has the DIRK src term, we want to make a copy, and then += to that copy with updated physical sources
-
-        # newsrc = copy
-
-        # 3.) soln += _source_regidx
-        #4.) l1src is now this (soln)
-        # can maybe use pmg aux storage (e.g aux_regidx) (rtemp ?)
-
         self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
             self.backend.run_kernels(self.dtauproject(l1, l2))
-
-        # Prevsoln is used as temporal storage at l1
-        #rtemp = 0 if l1idxcurr == 1 else 1
 
         # rtemp = R = -∇·f - dQ/dt
         self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp, mg_add=False)
