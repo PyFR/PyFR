@@ -52,11 +52,9 @@ class RewindPlugin(BasePlugin):
             
             if not self.if_rewind:
                 intg.pseudointegrator.reset_dtau()
-                #print("Reset complete.")
 
             else:
                 intg.pseudointegrator.rewind_dtau()
-                print("Rewind complete.")
 
         if intg.save:
             intg.save_soln()
@@ -65,10 +63,8 @@ class RewindPlugin(BasePlugin):
 
             if not self.if_rewind:
                 intg.pseudointegrator.reset_dtau()
-                print("Reset complete.")
             else:
                 intg.pseudointegrator.save_dtau()
-                print("Save complete.")
                 
             #if self.rewind_dtau and self.rewind_multip_Δτ:
             #    intg.pseudointegrator.pintg.save_dtau()

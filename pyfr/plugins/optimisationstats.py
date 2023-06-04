@@ -21,7 +21,7 @@ class OptimisationStatsPlugin(BasePlugin):
         
         # Start and stop collecting stats
         self.opt_tstart = self.cfg.getfloat(cfgsect, 'tstart', intg.tstart)
-        self.opt_tend = self.cfg.getfloat(cfgsect, 'tend', intg.tend)
+        intg.opt_tend = self.cfg.getfloat(cfgsect, 'tend', intg.tend)
 
         # Skip first few iterations, and capture the rest few iterations
 
@@ -30,9 +30,6 @@ class OptimisationStatsPlugin(BasePlugin):
         intg._increment         = ref_window//4
         intg._skip_first_n      = ref_window//2      
         intg._capture_next_n    = ref_window    
-        intg._stabilise_final_n = ref_window
-
-        intg._stability = 1000.0
 
         intg._precision = self.cfg.getfloat(cfgsect, 'precision', 0.7)
 
@@ -75,16 +72,13 @@ class OptimisationStatsPlugin(BasePlugin):
             intg.pseudointegrator._compute_time = 0
             return
 
-        if intg.tcurr > self.opt_tend:
-            return
-
         # Collect stats from the integrator
         if self.rank == self.root:
 
             # If optimiser has used the data
             if intg.reset_opt_stats == True:
 
-                if self.outf2 is not None:
+                if (self.outf2 is not None) and (intg.tcurr <= intg.opt_tend):
                     self.print_condensed_stats()
                 if self.outf is not None:
                     self.print_expanded_stats()
@@ -147,9 +141,7 @@ class OptimisationStatsPlugin(BasePlugin):
             intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN 
             return
 
-        if self.pd_stats.count(0)[0]<3:
-            # If it had to adapt, it would have taken all iterations to adapt already
-            # Beyond this, dtau set is just plain bad
+        if self.pd_stats.count(0)[0]<intg._increment:
             return
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
@@ -163,26 +155,15 @@ class OptimisationStatsPlugin(BasePlugin):
              or (self.Δτ_controller == 'local-pi'
             and abs(intg.pseudointegrator.pintg.Δτᴹ
                   - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
-            and self.pd_stats.count(0)[0] >=(intg._skip_first_n + intg._capture_next_n)):
+            and self.pd_stats.count(0)[0] >= (intg._skip_first_n + intg._capture_next_n)):
+
+                intg.reset_opt_stats = True
 
                 # Accumilate mean, std and sem after skipping steps
-                mean = self.pd_stats['cost'].tail(intg.actually_captured).mean()
-                std  = self.pd_stats['cost'].tail(intg.actually_captured).std()
-                sem  = self.pd_stats['cost'].tail(intg.actually_captured).sem()
-
-                if (sem<intg._stability
-                    ) or (self.pd_stats.count(0)[0] 
-                          >=( intg._skip_first_n
-                             +intg._capture_next_n
-                             +intg._stabilise_final_n)
-                     ):
-                    intg.reset_opt_stats = True
-
-                    intg.bad_sim = (std/mean) > intg._precision
-
-                    intg.opt_cost_mean = mean
-                    intg.opt_cost_std = std
-                    intg.opt_cost_sem = sem
+                intg.opt_cost_mean= self.pd_stats['cost'].tail(intg.actually_captured).mean()
+                intg.opt_cost_std = self.pd_stats['cost'].tail(intg.actually_captured).std()
+                intg.opt_cost_sem = self.pd_stats['cost'].tail(intg.actually_captured).sem()
+                intg.bad_sim = (intg.opt_cost_std/intg.opt_cost_mean) > intg._precision
 
     def bcast_status(self, intg):
         intg.reset_opt_stats = self.comm.bcast(intg.reset_opt_stats, root=0)
