@@ -1,40 +1,11 @@
-from pyfr.backends.base.generator import BaseKernelGenerator
+from pyfr.backends.base.generator import BaseGPUKernelGenerator
 
 
-class OpenCLKernelGenerator(BaseKernelGenerator):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # Specialise
-        if self.ndim == 1:
-            self._limits = 'if (_x < _nx)'
-        else:
-            self._limits = '''
-                int _ysize = (_ny + get_local_size(1) - 1) / get_local_size(1);
-                int _ystart = get_global_id(1)*_ysize;
-                int _yend = (_ystart + _ysize > _ny) ? _ny : _ystart + _ysize;
-                for (int _y = _ystart; _x < _nx && _y < _yend; _y++)
-            '''
-
-    def render(self):
-        spec = self._render_spec()
-
-        return f'''{spec}
-               {{
-                   int _x = get_global_id(0);
-                   #define X_IDX (_x)
-                   #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
-                   #define BLK_IDX 0
-                   #define BCAST_BLK(r, c, ld)  c
-                   {self._limits}
-                   {{
-                       {self.body}
-                   }}
-                   #undef X_IDX
-                   #undef X_IDX_AOSOA
-                   #undef BLK_IDX
-                   #undef BCAST_BLK
-               }}'''
+class OpenCLKernelGenerator(BaseGPUKernelGenerator):
+    _lid = ('get_local_id(0)', 'get_local_id(1)')
+    _gid = 'get_global_id(0)'
+    _shared_prfx = '__local'
+    _shared_sync = 'work_group_barrier(CLK_GLOBAL_MEM_FENCE)'
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions
@@ -45,23 +16,26 @@ class OpenCLKernelGenerator(BaseKernelGenerator):
 
         # Finally, add the vector arguments
         for va in self.vectargs:
+            if va.intent == 'in':
+                kargs.append(f'__global const {va.dtype}* restrict '
+                             f'{va.name}_v')
+            else:
+                kargs.append(f'__global {va.dtype}* restrict {va.name}_v')
+
             # Views
             if va.isview:
-                kargs.append(f'__global {va.dtype}* restrict {va.name}_v')
                 kargs.append(f'__global const int* restrict {va.name}_vix')
 
                 if va.ncdim == 2:
                     kargs.append('__global const int* restrict '
                                  f'{va.name}_vrstri')
             # Arrays
-            else:
-                if va.intent == 'in':
-                    kargs.append(f'__global const {va.dtype}* restrict '
-                                 f'{va.name}_v')
-                else:
-                    kargs.append(f'__global {va.dtype}* restrict {va.name}_v')
+            elif self.needs_ldim(va):
+                kargs.append(f'int ld{va.name}')
 
-                if self.needs_ldim(va):
-                    kargs.append(f'int ld{va.name}')
+        # Determine the work group size for the kernel
+        wgs = (*self.block1d, 1, 1) if self.ndim == 1 else (*self.block2d, 1)
+        wgs = ', '.join(str(s) for s in wgs)
+        kattrs = f'__kernel __attribute__((reqd_work_group_size({wgs})))'
 
-        return '__kernel void {0}({1})'.format(self.name, ', '.join(kargs))
+        return '{0} void {1}({2})'.format(kattrs, self.name, ', '.join(kargs))

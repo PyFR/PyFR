@@ -3,10 +3,10 @@ from collections import defaultdict
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BasePlugin, init_csv
+from pyfr.plugins.base import BaseSolnPlugin, init_csv
 
 
-class FluidForcePlugin(BasePlugin):
+class FluidForcePlugin(BaseSolnPlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']

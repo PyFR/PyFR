@@ -65,6 +65,9 @@ class OpenMPBackend(BaseBackend):
     def run_graph(self, graph, wait=False):
         graph.run()
 
+    def wait(self):
+        pass
+
     @cached_property
     def lookup(self):
         lookup = super().lookup

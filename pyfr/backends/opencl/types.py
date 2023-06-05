@@ -39,7 +39,7 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
                                blocking=True)
 
         # Unpack
-        return self._unpack(buf[None, :, :])
+        return self._unpack(buf)
 
     def _set(self, ary):
         buf = self._pack(ary)

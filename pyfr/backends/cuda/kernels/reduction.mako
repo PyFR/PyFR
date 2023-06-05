@@ -14,9 +14,8 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
 {
     int tid = threadIdx.x;
     int i = blockIdx.x*blockDim.x + tid;
-    int lastblksize = ncolb % ${sharesz};
 
-    __shared__ fpdtype_t sdata[${sharesz}];
+    __shared__ fpdtype_t sdata[32];
     fpdtype_t r, acc = 0;
 
     if (i < ncolb)
@@ -36,45 +35,35 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
             acc += r*r;
         % endif
         }
-
-        sdata[tid] = acc;
     }
+
+    // Reduce within each warp
+    for (int off = warpSize / 2; off > 0; off >>= 1)
+% if norm == 'uniform':
+        acc = max(__shfl_down_sync(0xFFFFFFFFU, acc, off), acc);
+% else:
+        acc += __shfl_down_sync(0xFFFFFFFFU, acc, off);
+% endif
+
+    // Have the first thread in each warp write out to shared memory
+    if (tid % warpSize == 0)
+        sdata[tid / warpSize] = acc;
 
     __syncthreads();
 
-    // Unrolled reduction within full blocks
-    if (blockIdx.x != gridDim.x - 1)
+    // Have the first warp perform the final reduction
+    if (tid / warpSize == 0)
     {
-    % for n in pyfr.ilog2range(sharesz):
-        if (tid < ${n})
-        {
-        % if norm == 'uniform':
-            sdata[tid] = max(sdata[tid], sdata[tid + ${n}]);
-        % else:
-            sdata[tid] += sdata[tid + ${n}];
-        % endif
-        }
-        __syncthreads();
-    % endfor
-    }
-    // Last block reduced with a variable sized loop
-    else
-    {
-        for (int s = 1; s < lastblksize; s *= 2)
-        {
-            if (tid % (2*s) == 0 && tid + s < lastblksize)
-            {
-            % if norm == 'uniform':
-                sdata[tid] = max(sdata[tid], sdata[tid + s]);
-            % else:
-                sdata[tid] += sdata[tid + s];
-            % endif
-            }
-            __syncthreads();
-        }
-    }
+        acc = (tid < blockDim.x / warpSize) ? sdata[tid] : 0;
 
-    // Copy to global memory
-    if (tid == 0)
-        reduced[blockIdx.y*gridDim.x + blockIdx.x] = sdata[0];
+        for (int off = warpSize / 2; off > 0; off >>= 1)
+    % if norm == 'uniform':
+            acc = max(__shfl_down_sync(0xFFFFFFFFU, acc, off), acc);
+    % else:
+            acc += __shfl_down_sync(0xFFFFFFFFU, acc, off);
+    % endif
+
+        if (tid == 0)
+            reduced[blockIdx.y*gridDim.x + blockIdx.x] = acc;
+    }
 }

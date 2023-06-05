@@ -59,14 +59,6 @@ class CUDABackend(BaseBackend):
         if self.mpitype not in {'standard', 'cuda-aware'}:
             raise ValueError('Invalid CUDA backend MPI type')
 
-        # Some CUDA devices share L1 cache and shared memory; on these
-        # devices CUDA allows us to specify a preference between L1
-        # cache and shared memory.  For the sake of CUBLAS (which
-        # benefits greatly from more shared memory but fails to
-        # declare its preference) we set the global default to
-        # PREFER_SHARED.
-        self.cuda.set_cache_pref(prefer_shared=True)
-
         from pyfr.backends.cuda import (blasext, cublas, gimmik, packing,
                                         provider, types)
 
@@ -108,6 +100,9 @@ class CUDABackend(BaseBackend):
 
         if wait:
             self._stream.synchronize()
+
+    def wait(self):
+        self._stream.synchronize()
 
     def _malloc_impl(self, nbytes):
         # Allocate

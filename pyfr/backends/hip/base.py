@@ -46,8 +46,8 @@ class HIPBackend(BaseBackend):
         # Take the required alignment to be 128 bytes
         self.alignb = 128
 
-        # Take the SoA size to be 64 elements
-        self.soasz = 64
+        # Take the SoA size to be the warp size of the device
+        self.soasz = self.props['warp_size']
         self.csubsz = self.soasz
 
         # Get the MPI runtime type
@@ -96,6 +96,9 @@ class HIPBackend(BaseBackend):
 
         if wait:
             self._stream.synchronize()
+
+    def wait(self):
+        self._stream.synchronize()
 
     def _malloc_impl(self, nbytes):
         # Allocate

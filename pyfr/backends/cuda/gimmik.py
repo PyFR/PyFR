@@ -16,12 +16,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         self.nbench = backend.cfg.getint('backend-cuda', 'gimmik-nbench', 5)
 
         # Kernel cache
-        self._kerns = {}
-
-        # Stream and events used for kernel benchmarking
-        self._stream = backend.cuda.create_stream()
-        self._start_evt = backend.cuda.create_event(timing=True)
-        self._stop_evt = backend.cuda.create_event(timing=True)
+        self._mul_kerns = {}
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         # Ensure the matrices are compatible
@@ -54,12 +49,11 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
         # Check the kernel cache
         try:
-            kern, grid, block = self._kerns[ckey]
+            kern, grid, block, dt = self._mul_kerns[ckey]
         except KeyError:
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
-            stream, kdata = self._stream, None
-            start_evt, stop_evt = self._start_evt, self._stop_evt
-            best_dt, best_kern = None, None
+            kdata = None
+            best_kern = None
 
             # Save a copy of the contents of the output matrix
             out_np = getattr(out, 'parent', out).get()
@@ -85,22 +79,20 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                     params = kern.make_params(meta['grid'], meta['block'])
                     params.set_args(b, out)
 
-                    # Benchmark with warmup
-                    for j in range(self.nbench + 1):
-                        if j == 1:
-                            start_evt.record(stream)
+                    # Obtain the runtime
+                    dt = self._benchmark(
+                        lambda stream: kern.exec_async(stream, params),
+                        nbench=self.nbench
+                    )
 
-                        kern.exec_async(stream, params)
+                    if best_kern is None or dt < best_kern[-1]:
+                        best_kern = kern, meta['grid'], meta['block'], dt
 
-                    stop_evt.record(stream)
-                    stream.synchronize()
-
-                    dt = stop_evt.elapsed_time(start_evt)
-                    if best_dt is None or dt < best_dt:
-                        best_dt = dt
-                        best_kern = kern, meta['grid'], meta['block']
-
-                    kdata = {'runtime': dt, 'local_mem': kern.local_mem}
+                    kdata = {
+                        'runtime': dt,
+                        'registers': kern.nreg,
+                        'local_mem': kern.local_mem
+                    }
             except StopIteration:
                 pass
 
@@ -108,7 +100,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             getattr(out, 'parent', out).set(out_np)
 
             # Update the cache
-            self._kerns[ckey] = kern, grid, block = best_kern
+            self._mul_kerns[ckey] = kern, grid, block, dt = best_kern
 
         # Set the parameters
         params = kern.make_params(grid, block)
@@ -121,4 +113,4 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             def run(self, stream):
                 kern.exec_async(stream, params)
 
-        return MulKernel(mats=[b, out])
+        return MulKernel(mats=[b, out], dt=dt)

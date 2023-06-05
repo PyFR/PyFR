@@ -32,7 +32,7 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf[None, :, :])
+        return self._unpack(buf)
 
     def _set(self, ary):
         buf = self._pack(ary)

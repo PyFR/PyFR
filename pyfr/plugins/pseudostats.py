@@ -1,8 +1,8 @@
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BasePlugin, init_csv
+from pyfr.plugins.base import BaseSolnPlugin, init_csv
 
 
-class PseudoStatsPlugin(BasePlugin):
+class PseudoStatsPlugin(BaseSolnPlugin):
     name = 'pseudostats'
     systems = ['*']
     formulations = ['dual']

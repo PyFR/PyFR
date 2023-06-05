@@ -5,11 +5,11 @@ import numpy as np
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
+from pyfr.plugins.base import BaseSolnPlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
 
-class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
+class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
     name = 'tavg'
     systems = ['*']
     formulations = ['dual', 'std']
@@ -69,12 +69,12 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
         self._started = False
 
         # Get the total number of solution points in the region
-        em = intg.system.ele_map
+        emap = intg.system.ele_map
         ergn = self._ele_regions
         if self.cfg.get(self.cfgsect, 'region') == '*':
-            tpts = sum(em[e].nupts * em[e].neles for _, e, _ in ergn)
+            tpts = sum(emap[e].neles*emap[e].nupts for i, e, r in ergn)
         else:
-            tpts = sum(len(r) * em[e].nupts for _, e, r in ergn)
+            tpts = sum(len(r)*emap[e].nupts for i, e, r in ergn)
 
         # Reduce
         self.tpts = comm.reduce(tpts, op=mpi.SUM, root=root)
@@ -117,7 +117,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, BasePlugin):
                            for pname in gradpnames]
 
     def _init_accumex(self, intg):
-        comm, rank, root = get_comm_rank_root()
         self.tstart_acc = self.prevt = self.tout_last = intg.tcurr
         self.prevex = self._eval_acc_exprs(intg)
         self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]

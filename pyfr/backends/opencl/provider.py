@@ -35,6 +35,21 @@ class OpenCLUnorderedMetaKernel(_OpenCLMetaKernelCommon, MetaKernel):
 
 
 class OpenCLKernelProvider(BaseKernelProvider):
+    def _benchmark(self, kfunc, nbench=4, nwarmup=1):
+        queue = self.backend.cl.queue(profiling=True)
+
+        for i in range(nbench + nwarmup):
+            if i == nwarmup:
+                start_evt = end_evt = kfunc(queue)
+            elif i == nbench + nwarmup - 1:
+                end_evt = kfunc(queue)
+            else:
+                kfunc(queue)
+
+        queue.finish()
+
+        return (end_evt.end_time - start_evt.start_time) / nbench
+
     @memoize
     def _build_program(self, src):
         flags = ['-cl-fast-relaxed-math', '-cl-std=CL2.0']
@@ -49,17 +64,28 @@ class OpenCLKernelProvider(BaseKernelProvider):
 
 class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
                                     BasePointwiseKernelProvider):
-    kernel_generator_cls = OpenCLKernelGenerator
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._ls1d = (64,)
+        self._ls2d = (64, 4)
+
+        # Pass the local work group sizes to the generator
+        class KernelGenerator(OpenCLKernelGenerator):
+            block1d = self._ls1d
+            block2d = self._ls2d
+
+        self.kernel_generator_cls = KernelGenerator
 
     def _instantiate_kernel(self, dims, fun, arglst, argmv):
         rtargs = []
 
         # Determine the work group sizes
         if len(dims) == 1:
-            ls = (64,)
+            ls = self._ls1d
             gs = (dims[0] - dims[0] % -ls[0],)
         else:
-            ls = (64, 4)
+            ls = self._ls2d
             gs = (dims[1] - dims[1] % -ls[0], ls[1])
 
         fun.set_dims(gs, ls)

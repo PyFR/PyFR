@@ -53,7 +53,7 @@ def clean(origfn=None, tol=1e-10):
 
 
 _npeval_syms = {
-    '__builtins__': None,
+    '__builtins__': {},
     'exp': np.exp, 'log': np.log,
     'sin': np.sin, 'asin': np.arcsin,
     'cos': np.cos, 'acos': np.arccos,

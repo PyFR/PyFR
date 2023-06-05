@@ -79,39 +79,27 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
             # A class that bypasses pseudo-controller methods within a cycle
             class lpsint(*bases):
-                name = 'MultiPPseudoIntegrator' + str(l)
+                name = f'MultiPPseudoIntegrator{l}'
                 aux_nregs = 2 if l != self._order else 0
 
                 @property
-                def _aux_regidx(iself):
-                    if iself.aux_nregs != 0:
-                        return iself._regidx[-2:]
+                def _aux_regidx(self):
+                    if self.aux_nregs != 0:
+                        return self._regidx[-2:]
 
                 @property
                 def ntotiters(iself):
                     return self.npmgcycles
 
-                def convmon(iself, *args, **kwargs):
+                def convmon(self, *args, **kwargs):
                     pass
 
-                def _rhs_with_dts(iself, t, uin, fout, mg_add=True):
-                    # Compute -∇·f
-                    iself.system.rhs(t, uin, fout)
-
-                    if iself.stage_nregs > 1:
-                        iself._add(0, self._stage_regidx[iself.currstg],
-                                   1, fout)
-
-                    # Registers
-                    vals = [iself.stepper_coeffs[-1], -1/iself._dt, 1]
-                    regs = [fout, iself._idxcurr, iself._source_regidx]
-
-                    # Physical stepper source addition -∇·f - dQ/dt
-                    iself._addv(vals, regs, subdims=iself._subdims)
+                def _rhs_with_dts(self, t, uin, fout, mg_add=True):
+                    super()._rhs_with_dts(t, uin, fout)
 
                     # Multigrid r addition
-                    if mg_add and iself._aux_regidx:
-                        iself._add(1, fout, -1, iself._aux_regidx[0])
+                    if mg_add and self._aux_regidx:
+                        self._add(1, fout, -1, self._aux_regidx[0])
 
             stp_nregs = stepper_nregs if l == self._order else 0
             stg_nregs = stage_nregs if l == self._order else 0
@@ -130,9 +118,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Initialise the restriction and prolongation matrices
         self._init_proj_mats()
 
-        # Delete remaining elements maps from multigrid systems
-        for l in self.levels[1:]:
-            del self.pintgs[l].system.ele_map
+    def commit(self):
+        for s in self.pintgs.values():
+            s.system.commit()
 
     @property
     def _idxcurr(self):
@@ -296,9 +284,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
 
-        # Set current stage number and stepper coefficients for all levels
+        # Set time step and current stepper coefficients for all levels
         for l in self.levels:
-            self.pintgs[l].currstg = self.currstg
+            self.pintgs[l]._dt = self._dt
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr

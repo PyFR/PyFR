@@ -11,6 +11,7 @@ from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler
 from pyfr.partitioners import BasePartitioner, get_partitioner
+from pyfr.plugins import BaseCLIPlugin
 from pyfr.progress_bar import ProgressBar
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
@@ -112,6 +113,10 @@ def main():
         p.add_argument('--progress', '-p', action='store_true',
                        help='show a progress bar')
 
+    # Plugin commands
+    for scls in subclasses(BaseCLIPlugin, just_leaf=True):
+        scls.add_cli(sp)
+
     # Parse the arguments
     args = ap.parse_args()
 
@@ -142,6 +147,10 @@ def process_partition(args):
     if not os.path.isdir(args.outd):
         raise ValueError('Invalid output directory')
 
+    # Read the mesh and query the partition info
+    mesh = NativeReader(args.mesh)
+    pinfo = mesh.partition_info('spt')
+
     # Partition weights
     if ':' in args.np:
         pwts = [int(w) for w in args.np.split(':')]
@@ -151,10 +160,15 @@ def process_partition(args):
     # Element weights
     if args.elewts == ['balanced']:
         ewts = None
-    elif args.elewts:
-        ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
+    elif len(pinfo) == 1:
+        ewts = {next(iter(pinfo)): 1}
     else:
-        ewts = {'quad': 6, 'tri': 3, 'tet': 3, 'hex': 18, 'pri': 10, 'pyr': 6}
+        ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
+
+    # Ensure all weights have been provided
+    if ewts is not None and len(ewts) != len(pinfo):
+        missing = ', '.join(set(pinfo) - set(ewts))
+        raise ValueError(f'Missing element weights for: {missing}')
 
     # Partitioner-specific options
     opts = dict(s.split(':', 1) for s in args.popts)
@@ -173,7 +187,7 @@ def process_partition(args):
             raise RuntimeError('No partitioners available')
 
     # Partition the mesh
-    mesh, rnum, part_soln_fn = part.partition(NativeReader(args.mesh))
+    mesh, rnum, part_soln_fn = part.partition(mesh)
 
     # Prepare the solutions
     solnit = (part_soln_fn(NativeReader(s)) for s in args.solns)
@@ -245,7 +259,7 @@ def _process_common(args, mesh, soln, cfg):
 
         # Register a callback to update the bar after each step
         callb = lambda intg: pb.advance_to(intg.tcurr)
-        solver.completed_step_handlers.append(callb)
+        solver.plugins.append(callb)
 
     # Execute!
     solver.run()

@@ -2,7 +2,7 @@ from ctypes import POINTER, c_int, c_double, c_float, c_size_t, c_void_p
 
 import numpy as np
 
-from pyfr.backends.opencl.provider import OpenCLKernel
+from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 from pyfr.ctypesutil import LibWrapper
 
 
@@ -37,10 +37,14 @@ class CLBlastWrappers(LibWrapper):
     ]
 
 
-class OpenCLCLBlastKernels:
+class OpenCLCLBlastKernels(OpenCLKernelProvider):
     def __init__(self, backend):
-        self.backend = backend
+        super().__init__(backend)
+
         self._wrappers = CLBlastWrappers()
+
+        # Timing data cache
+        self._mul_timing = {}
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         w = self._wrappers
@@ -57,6 +61,32 @@ class OpenCLCLBlastKernels:
         else:
             clblastgemm = w.CLBlastSgemm
 
+        # Cache key
+        ckey = (a.dtype, alpha, beta, m, n, k, a.leaddim, b.leaddim,
+                out.leaddim)
+
+        # Obtain the performance of the kernel
+        try:
+            dt = self._mul_timing[ckey]
+        except KeyError:
+            # Save a copy of the contents of the output matrix
+            out_np = getattr(out, 'parent', out).get()
+
+            def gemm(queue):
+                evt_ptr, q_ptr = c_void_p(), c_void_p(int(queue))
+
+                clblastgemm(w.LayoutRowMajor, w.TransposeNo, w.TransposeNo,
+                            m, n, k, alpha, a, 0, a.leaddim, b, 0, b.leaddim,
+                            beta, out, 0, out.leaddim, q_ptr, evt_ptr)
+
+                return cl.event(evt_ptr)
+
+            # Benchmark the kernel and update the cache
+            self._mul_timing[ckey] = dt = self._benchmark(gemm)
+
+            # Restore the output matrix
+            getattr(out, 'parent', out).set(out_np)
+
         class MulKernel(OpenCLKernel):
             def run(self, queue, wait_for=None, ret_evt=False):
                 evt_ptr = c_void_p() if ret_evt else None
@@ -66,12 +96,12 @@ class OpenCLCLBlastKernels:
                 if wait_for:
                     queue.barrier(wait_for)
 
-                qptr = c_void_p(int(queue))
+                q_ptr = c_void_p(int(queue))
                 clblastgemm(w.LayoutRowMajor, w.TransposeNo, w.TransposeNo,
                             m, n, k, alpha, a, 0, a.leaddim, b, 0, b.leaddim,
-                            beta, out, 0, out.leaddim, qptr, evt_ptr)
+                            beta, out, 0, out.leaddim, q_ptr, evt_ptr)
 
                 if ret_evt:
                     return cl.event(evt_ptr)
 
-        return MulKernel(mats=[a, b, out])
+        return MulKernel(mats=[a, b, out], dt=dt)

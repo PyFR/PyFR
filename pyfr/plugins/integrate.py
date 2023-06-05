@@ -5,12 +5,12 @@ import numpy as np
 from pyfr.inifile import NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BasePlugin, init_csv
+from pyfr.plugins.base import BaseSolnPlugin, init_csv
 from pyfr.quadrules import get_quadrule
 from pyfr.regions import ConstructiveRegion
 
 
-class IntegratePlugin(BasePlugin):
+class IntegratePlugin(BaseSolnPlugin):
     name = 'integrate'
     systems = ['*']
     formulations = ['dual', 'std']

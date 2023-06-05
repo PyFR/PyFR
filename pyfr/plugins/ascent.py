@@ -7,7 +7,7 @@ import numpy as np
 from pyfr.ctypesutil import LibWrapper
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BasePlugin, RegionMixin
+from pyfr.plugins.base import BaseSolnPlugin, RegionMixin
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, subclass_where
 from pyfr.writers.vtk import BaseShapeSubDiv
@@ -109,7 +109,7 @@ class AscentWrappers(LibWrapper):
     ]
 
 
-class AscentPlugin(RegionMixin, BasePlugin):
+class AscentPlugin(RegionMixin, BaseSolnPlugin):
     name = 'ascent'
     systems = ['*']
     formulations = ['dual', 'std']
@@ -323,7 +323,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
                     elif kf == 'field':
                         self._fields_read.add(vf)
 
-                    params[kf.replace('-', '_')] = vf
+                    params[kf.replace('_', '/').replace('-', '_')] = vf
 
                 if ptype in self.v_filter:
                     self._fields_read.add('velocity')
@@ -348,7 +348,7 @@ class AscentPlugin(RegionMixin, BasePlugin):
                     rname = kc.removeprefix('render-')
                     self._render_options(f's_{sn}/renders/r_{rname}', vc)
                 else:
-                    key = kc.replace('-', '_')
+                    key = kc.replace('_', '/').replace('-', '_')
                     self.scenes[f's_{sn}/plots/p1/{key}'] = vc
 
             # If no render options then throw error

@@ -37,6 +37,10 @@ The following commands are available from the ``pyfr`` program:
    directory `outdir`.  Multiple solutions can be provided.
    Time-average files can also be partitioned, too.
 
+   For mixed grids it is usually necessary to provide weights for each
+   element type.  Further details can be found in the
+   :ref:`performance guide <perf mixed grids>`.
+
 3. ``pyfr run`` --- start a new PyFR simulation. Example::
 
         pyfr run mesh.pyfrm configuration.ini
@@ -1407,9 +1411,7 @@ Example::
 ^^^^^^^^^^^^^^^^^^^^^
 
 Periodically samples specific points in the volume and writes them out
-to a CSV file. The point location process automatically takes
-advantage of `scipy.spatial.cKDTree <http://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.cKDTree.html>`_
-where available. Parameterised with
+to a CSV file. Parameterised with
 
 1. ``nsteps`` --- sample every ``nsteps``:
 
@@ -1555,7 +1557,11 @@ Integrate quantities over the compuational domain. Parameterised with:
 
 4. ``quad-deg`` --- degree of quadrature rule (optional):
 
+    *int*
+
 5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+
+    *string*
 
 6. ``region`` --- region to integrate, specified as either the
    entire domain using ``*`` or a combination of the geometric shapes
@@ -1583,8 +1589,6 @@ Example::
 
     int-E = rho*(u*u + v*v + w*w)
     int-enst = rho*(%(vor1)s*%(vor1)s + %(vor2)s*%(vor2)s + %(vor3)s*%(vor3)s)
-
-.. _regions:
 
 Regions
 -------

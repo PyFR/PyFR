@@ -19,21 +19,22 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
 
+        # Event handlers for advance_to
+        self.plugins = self._get_plugins(initsoln)
+
+        # Commit the sytem
+        self.system.commit()
+
         # Register index list and current index
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
 
         # Pre-process solution if necessary
-        self.system.preproc(self.system.ele_scal_upts(self._idxcurr))
+        self.system.preproc(self.tcurr,
+                            self.system.ele_scal_upts(self._idxcurr))
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
-
-        # Event handlers for advance_to
-        self.completed_step_handlers = self._get_plugins(initsoln)
-
-        # Delete the memory-intensive elements map from the system
-        del self.system.ele_map
 
     @property
     def soln(self):
