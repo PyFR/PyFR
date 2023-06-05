@@ -120,8 +120,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.backend.pointwise.register(
             'pyfr.integrators.dual.pseudo.kernels.localerrest'
         )
-
-        # Storage for kernels that require dtau-min and dtau-max at runtime
         
         for ele, shape, dtaumat in zip(self.system.ele_map.values(),
                                        self.system.ele_shapes, self.dtau_upts):
@@ -138,6 +136,7 @@ class DualPIPseudoController(BaseDualPseudoController):
                         errprev=err_prev, dtau_upts=dtaumat
                     )
                 )
+
         self.dtau_multiplied(1.0)
 
         self.backend.commit()
@@ -147,9 +146,9 @@ class DualPIPseudoController(BaseDualPseudoController):
         self._dtau_min *= y
         self._dtau_max *= y
 
-        for key in self.pintgkernels:
-            if key[0] == 'localerrest':
-                for k in self.pintgkernels[key]:
+        for k, idx in self.pintgkernels:
+            if k[0] == 'localerrest':
+                for k in idx:
                     k.bind(dtau_min=self._dtau_min, dtau_max=self._dtau_max,
                            dtau_fieldf=self.dtau_fieldf)
 
@@ -162,7 +161,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
     @dt.setter
     def dt(self, y):
-        self.dtau_multiplied(y/self.dt)
+        self.dtau_multiplied(y / self.dt)
         self._dt = y
 
     def pseudo_advance(self, tcurr):
