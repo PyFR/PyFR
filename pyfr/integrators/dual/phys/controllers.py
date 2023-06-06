@@ -8,9 +8,9 @@ class BaseDualController(BaseDualIntegrator):
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
-        self.i = self.cfg.getint('solver-time-integrator', 'dt-switch', 10)
+        self.i = self.cfg.getint('solver-time-integrator', 'dt-switch', 2)
 
-        if self.i>1:
+        if self.i<=1:
             raise ValueError('dt-switch must be greater than 1')
 
         self._if_near = False
@@ -63,7 +63,6 @@ class DualNoneController(BaseDualController):
                 self._if_near = False
 
             if self.pseudointegrator.dt != dt:
-                # Change dt in pseudo-integrator (and multi-p levels)
                 self.pseudointegrator.dt = dt
 
             # Take the physical step

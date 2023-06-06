@@ -62,6 +62,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def _update_pseudostepinfo(self, niters, resid):
         self.pseudostepinfo.append((self.ntotiters, niters, resid))
 
+
 class DualNonePseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'none'
     pseudo_controller_needs_lerrest = False
@@ -164,7 +165,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
     @dt.setter
     def dt(self, y):
-        self.dtau_multiplied(y / self.dt)
+        self.dtau_multiplied(y / self._dt)
         self._dt = y
 
     def pseudo_advance(self, tcurr):
