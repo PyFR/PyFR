@@ -79,6 +79,16 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self.npseudosteps = 0
 
     @property
+    def dt(self):
+        return self._dt
+
+    @dt.setter
+    def dt(self, y):
+        self._dtau = self._dtau * y / self._dt
+        self._dt = y
+        print('dt =', self._dt, 'dtau =', self._dtau)
+
+    @property
     def _pseudo_stepper_regidx(self):
         return self._regidx[:self.pseudo_stepper_nregs]
 

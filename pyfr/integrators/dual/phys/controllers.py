@@ -55,18 +55,15 @@ class DualNoneController(BaseDualController):
                 if not self._if_near:
                     self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self._dt + 1.0)
                     self._if_near = True
-                dt = self._dt_near
+                self.dt = self._dt_near
             elif self.tcurr < t <= self.tcurr + self._dt:
-                dt = t - self.tcurr
+                self.dt = t - self.tcurr
             else:
-                dt = self._dt
+                self.dt = self._dt
                 self._if_near = False
 
-            if self.pseudointegrator.dt != dt:
-                self.pseudointegrator.dt = dt
-
             # Take the physical step
-            self.step(self.tcurr)
+            self.step(self.tcurr, self.dt)
 
             # We are not adaptive, so accept every step
             self._accept_step(self.pseudointegrator._idxcurr)

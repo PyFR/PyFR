@@ -274,11 +274,11 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     @dt.setter
     def dt(self, y):
-        if self.pintg.cfg.get('solver-time-integrator', 'pseudo-controller')=='local-pi':
-            self.pintg.dtau_multiplied(y/self.dt)
+        self._dt = y
+#        self.pintg.dtau_multiplied(y / self.dt)
 
-        for l in self.levels:
-            self.pintgs[l]._dt = y
+#        for l in self.levels:
+#            self.pintgs[l]._dt = y
 
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts

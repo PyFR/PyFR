@@ -22,14 +22,14 @@ class BaseDIRKStepper(BaseDualStepper):
     def stage_nregs(self):
         return self.nstages
 
-    def step(self, t):
+    def step(self, t, dt):
         for s, (sc, tc) in enumerate(zip(self.a, self.c)):
-            self.pseudointegrator.init_stage(s, sc, self.pseudointegrator.dt)
-            self.pseudointegrator.pseudo_advance(t + self.pseudointegrator.dt*tc)
-            self.pseudointegrator.finalise_stage(s, t + self.pseudointegrator.dt*tc)
+            self.pseudointegrator.init_stage(s, sc, dt)
+            self.pseudointegrator.pseudo_advance(t + dt*tc)
+            self.pseudointegrator.finalise_stage(s, t + dt*tc)
 
         if not self.fsal:
-            bcoeffs = [bt*self.pseudointegrator.dt for bt in self.b]
+            bcoeffs = [bt*dt for bt in self.b]
             self.pseudointegrator.obtain_solution(bcoeffs)
 
         self.pseudointegrator.store_current_soln()

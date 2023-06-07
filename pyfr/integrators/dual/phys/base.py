@@ -24,6 +24,10 @@ class BaseDualIntegrator(BaseIntegrator):
     def dt(self):
         return self.pseudointegrator.dt
 
+    @dt.setter
+    def dt(self, dt):
+        self.pseudointegrator.dt = dt
+
     @property
     def system(self):
         return self.pseudointegrator.system

@@ -112,7 +112,6 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         self._dtau_min = dtau_minf * self._dtau
         self._dtau_max = dtau_maxf * self._dtau
-        self.dtau_fieldf = 1.0
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
@@ -137,7 +136,9 @@ class DualPIPseudoController(BaseDualPseudoController):
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,
                         dims=[ele.nupts, ele.neles], err=err,
-                        errprev=err_prev, dtau_upts=dtaumat
+                        errprev=err_prev, dtau_upts=dtaumat,
+                        dtau_min=self._dtau_min, dtau_max=self._dtau_max,
+                        dtau_fieldf=1.0
                     )
                 )
 
@@ -146,7 +147,6 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.backend.commit()
 
     def dtau_multiplied(self, y):
-        self.dtau_fieldf = y
         self._dtau_min *= y
         self._dtau_max *= y
 
@@ -154,7 +154,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             if k[0] == 'localerrest':
                 for k in idx:
                     k.bind(dtau_min=self._dtau_min, dtau_max=self._dtau_max,
-                           dtau_fieldf=self.dtau_fieldf)
+                           dtau_fieldf=y)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
@@ -174,10 +174,11 @@ class DualPIPseudoController(BaseDualPseudoController):
         for i in range(self.maxniters):
             # Take the step
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
-            self.localerrest(self._idxerr)
 
-            if i == 0 and self.dtau_fieldf != 1.0:
+            if i == 0:
                 self.dtau_multiplied(1.0)
+
+            self.localerrest(self._idxerr)
 
             if self.convmon(i, self.minniters):
                 break
