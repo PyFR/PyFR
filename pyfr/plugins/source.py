@@ -21,8 +21,10 @@ class Source(BaseSolverPlugin):
         src_exprs = [self.cfg.getexpr('solver-plugin-source', v, '0', subs=subs)
                      for v in convars]
 
-        for etype, eles in intg.system.ele_map.items():
-            eles.add_src_macro('pyfr.plugins.kernels.source','source', {'srcexprs': src_exprs}, ploc=True, soln=True)
+        if src_exprs:
+            print('SOURCE')
+            for etype, eles in intg.system.ele_map.items():
+                eles.add_src_macro('pyfr.plugins.kernels.source','source', {'srcexprs': src_exprs}, ploc=True, soln=True)
 
     def __call__(self, intg):
         pass

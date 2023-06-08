@@ -220,16 +220,25 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1src = self.pintgs[l1]._source_regidx
         l2dst = self.pintgs[l2]._source_regidx
 
+        # just check l1
         if self.start_cycle:
             self.start_cycle = False
             # copy the solution to rtemp
             self._add(0, rtemp, 1, l1idxcurr)
             # call evalsrc on rtemp and write source to rtemp
             self.pintgs[l1].system.evalsrc(rtemp)
+            
             # l1src += rtemp
-            self._add(1, l1src, 1, rtemp)
+            #self._add(1, l1src, 1, rtemp)
 
+            # rtemp += l1src
+            self._add(1, rtemp, 1, l1src)
+            l1src = rtemp
+            #self.backend.run_kernels(self.mgproject(l1, rtemp, l2, l2dst))
+        #else:
         self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
+
+        
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
@@ -295,7 +304,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
-        self.start_cycle = True
+
+        #self.start_cycle = True
 
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:
@@ -305,6 +315,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
+            self.start_cycle = True
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 

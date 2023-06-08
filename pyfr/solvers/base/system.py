@@ -317,7 +317,6 @@ class BaseSystem:
 
         self.backend.run_kernels(self._kernels[kkey])
 
-
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
 
