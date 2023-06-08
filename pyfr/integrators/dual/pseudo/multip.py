@@ -221,8 +221,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l2dst = self.pintgs[l2]._source_regidx
 
         # just check l1
-        if self.start_cycle:
-            self.start_cycle = False
+        if l1 == self._order:
+            #print(f'l1 = {l1}')
             # copy the solution to rtemp
             self._add(0, rtemp, 1, l1idxcurr)
             # call evalsrc on rtemp and write source to rtemp
