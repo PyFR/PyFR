@@ -62,12 +62,16 @@ class BaseSystem:
         self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
 
+        self._has_src_macro = False
+
     def commit(self):
         # Prepare the kernels and any associated MPI requests
         self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,
                           self._mpi_inters, self._bc_inters)
         self._gen_mpireqs(self._mpi_inters)
         self.backend.commit()
+
+        self._has_src_macro = any([eles._has_src_macro for eles in self.ele_map.values()])
 
         # Delete the memory-intensive ele_map
         del self.ele_map
@@ -312,8 +316,8 @@ class BaseSystem:
 
         self.backend.run_kernels(self._kernels[kkey])
 
-    def evalsrc(self, uinoutbank):
-        kkey = ('eles/evalsrc', uinoutbank, None)
+    def evalsrcmacros(self, uinoutbank):
+        kkey = ('eles/evalsrcmacros', uinoutbank, None)
 
         self.backend.run_kernels(self._kernels[kkey])
 

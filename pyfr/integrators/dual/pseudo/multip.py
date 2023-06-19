@@ -220,10 +220,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1src = self.pintgs[l1]._source_regidx
         l2dst = self.pintgs[l2]._source_regidx
 
-        # If at top level re-evaluate physics source
-        if l1 == self._order:
+        # If at top level evaluate src macros
+        if l1 == self._order and self.system._has_src_macro:
             self._add(0, rtemp, 1, l1idxcurr)
-            self.pintgs[l1].system.evalsrc(rtemp)
+            self.pintgs[l1].system.evalsrcmacros(rtemp)
             self._add(1, rtemp, 1, l1src)
             l1src = rtemp
 

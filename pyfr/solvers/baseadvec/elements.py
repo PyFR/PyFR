@@ -20,6 +20,8 @@ class BaseAdvectionElements(BaseElements):
         self._ploc_in_src_macros = False
         self._soln_in_src_macros = False
 
+        self._has_src_macro = False
+
     @property
     def _scratch_bufs(self):
         if 'flux' in self.antialias:
@@ -42,6 +44,8 @@ class BaseAdvectionElements(BaseElements):
         self._srctplargs['srcmacros'].append((mod, name))
         self._srctplargs |= tplargs
 
+        self._has_src_macro = True
+
     def _set_external(self, name, spec, value=None):
         self._external_args[name] = spec
 
@@ -59,7 +63,7 @@ class BaseAdvectionElements(BaseElements):
         )
 
         self._be.pointwise.register(
-            'pyfr.solvers.baseadvec.kernels.evalsrc'
+            'pyfr.solvers.baseadvec.kernels.evalsrcmacros'
         )
 
         # What anti-aliasing options we're running with
@@ -123,10 +127,10 @@ class BaseAdvectionElements(BaseElements):
             **self._external_vals
         )
 
-        kernels['evalsrc'] = lambda uin: self._be.kernel(
-            'evalsrc', tplargs=self._srctplargs,
+        kernels['evalsrcmacros'] = lambda uin: self._be.kernel(
+            'evalsrcmacros', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
-            ploc=self.ploc_at('upts'), 
+            ploc=self.ploc_at('upts') if have_plocsrc() else None,
             u=self.scal_upts[uin],
             **self._external_vals
         )

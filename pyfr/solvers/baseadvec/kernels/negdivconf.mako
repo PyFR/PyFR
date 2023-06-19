@@ -10,13 +10,13 @@
               ploc='in fpdtype_t[${str(ndims)}]'
               u='in fpdtype_t[${str(nvars)}]'
               rcpdjac='in fpdtype_t'>
-fpdtype_t stemp[${nvars}] = {};
+fpdtype_t src[${nvars}] = {};
 
 % for mod, name in srcmacros:
-    ${pyfr.expand(name, 't', 'u', 'ploc', 'stemp')};
+    ${pyfr.expand(name, 't', 'u', 'ploc', 'src')};
 % endfor
 
 % for i in range(nvars):
-    tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + stemp[${i}];
+    tdivtconf[${i}] = -rcpdjac*tdivtconf[${i}] + src[${i}];
 % endfor
 </%pyfr:kernel>
