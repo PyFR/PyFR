@@ -71,7 +71,8 @@ class BaseSystem:
         self._gen_mpireqs(self._mpi_inters)
         self.backend.commit()
 
-        self._has_src_macro = any([eles._has_src_macro for eles in self.ele_map.values()])
+        self._has_src_macro = any([eles._has_src_macro
+                                   for eles in self.ele_map.values()])
 
         # Delete the memory-intensive ele_map
         del self.ele_map
