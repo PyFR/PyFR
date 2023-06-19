@@ -40,8 +40,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Initialise the number of cycles
         self.npmgcycles = 0
 
-        self.start_cycle = True
-
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
         self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
@@ -294,8 +292,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Multigrid levels and step counts
         cycle, csteps = self.cycle, self.csteps
 
-        #self.start_cycle = True
-
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:
             self.pintgs[l].currstg = self.currstg
@@ -304,7 +300,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
-            self.start_cycle = True
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 
