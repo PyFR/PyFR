@@ -26,10 +26,8 @@ class BaseDIRKStepper(BaseDualStepper):
         for s, (sc, tc) in enumerate(zip(self.a, self.c)):
             self.pseudointegrator.init_stage(s, sc, dt)
             self.pseudointegrator.pseudo_advance(t + dt*tc)
+            self.pseudointegrator.finalise_stage(s, t + dt*tc)
 
-        self._finalize_step()
-
-    def _finalize_step(self):
         if not self.fsal:
             bcoeffs = [bt*self._dt for bt in self.b]
             self.pseudointegrator.obtain_solution(bcoeffs)

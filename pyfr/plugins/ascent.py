@@ -323,7 +323,7 @@ class AscentPlugin(RegionMixin, BaseSolnPlugin):
                     elif kf == 'field':
                         self._fields_read.add(vf)
 
-                    params[kf.replace('-', '_')] = vf
+                    params[kf.replace('_', '/').replace('-', '_')] = vf
 
                 if ptype in self.v_filter:
                     self._fields_read.add('velocity')
@@ -348,7 +348,7 @@ class AscentPlugin(RegionMixin, BaseSolnPlugin):
                     rname = kc.removeprefix('render-')
                     self._render_options(f's_{sn}/renders/r_{rname}', vc)
                 else:
-                    key = kc.replace('-', '_')
+                    key = kc.replace('_', '/').replace('-', '_')
                     self.scenes[f's_{sn}/plots/p1/{key}'] = vc
 
             # If no render options then throw error

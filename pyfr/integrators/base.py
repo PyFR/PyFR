@@ -67,7 +67,7 @@ class BaseIntegrator:
 
         for s in self.cfg.sections():
             if (m := re.match('(soln|solver)-plugin-(.+?)(?:-(.+))?$', s)):
-                cfgsect, prefix, name, suffix = m[0], m[1], m[2], m[3]
+                cfgsect, ptype, name, suffix = m[0], m[1], m[2], m[3]
 
                 data = {}
                 if initsoln is not None:
@@ -78,7 +78,7 @@ class BaseIntegrator:
                             data[f.split('/')[2]] = initsoln[f]
 
                 # Instantiate
-                plugins.append(get_plugin(prefix, name, self, cfgsect, suffix,
+                plugins.append(get_plugin(ptype, name, self, cfgsect, suffix,
                                           **data))
 
         return plugins
