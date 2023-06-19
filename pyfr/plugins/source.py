@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import re
 
 from pyfr.plugins.base import BaseSolverPlugin
 
@@ -18,13 +19,17 @@ class Source(BaseSolverPlugin):
         subs |= dict(abs='fabs', pi=math.pi)
         subs |= {v: f'u[{i}]' for i, v in enumerate(convars)}
 
-        src_exprs = [self.cfg.getexpr('solver-plugin-source', v, '0', subs=subs)
-                     for v in convars]
+        src_exprs = [self.cfg.getexpr('solver-plugin-source', v, '0',
+                     subs=subs) for v in convars]
+
+        ploc_in_src = any(re.search(r'\bploc\b', ex) for ex in src_exprs)
+        soln_in_src = any(re.search(r'\bu\b', ex) for ex in src_exprs)
 
         if src_exprs:
-            print('SOURCE')
             for etype, eles in intg.system.ele_map.items():
-                eles.add_src_macro('pyfr.plugins.kernels.source','source', {'srcexprs': src_exprs}, ploc=True, soln=True)
+                eles.add_src_macro('pyfr.plugins.kernels.source','source',
+                                   {'srcexprs': src_exprs}, ploc=ploc_in_src,
+                                   soln=soln_in_src)
 
     def __call__(self, intg):
         pass

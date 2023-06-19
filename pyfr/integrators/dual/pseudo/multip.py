@@ -220,25 +220,14 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1src = self.pintgs[l1]._source_regidx
         l2dst = self.pintgs[l2]._source_regidx
 
-        # just check l1
+        # If at top level re-evaluate physics source
         if l1 == self._order:
-            #print(f'l1 = {l1}')
-            # copy the solution to rtemp
             self._add(0, rtemp, 1, l1idxcurr)
-            # call evalsrc on rtemp and write source to rtemp
             self.pintgs[l1].system.evalsrc(rtemp)
-            
-            # l1src += rtemp
-            #self._add(1, l1src, 1, rtemp)
-
-            # rtemp += l1src
             self._add(1, rtemp, 1, l1src)
             l1src = rtemp
-            #self.backend.run_kernels(self.mgproject(l1, rtemp, l2, l2dst))
-        #else:
-        self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
-        
+        self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:

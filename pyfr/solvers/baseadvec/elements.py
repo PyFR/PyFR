@@ -14,7 +14,6 @@ class BaseAdvectionElements(BaseElements):
         self._srctplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'srcex': self._src_exprs,
             'srcmacros': []
         }
 
@@ -69,10 +68,10 @@ class BaseAdvectionElements(BaseElements):
         # What the source term expressions (if any) are a function of
 
         def have_plocsrc():
-            return self._ploc_in_src_exprs or self._ploc_in_src_macros
+            return self._ploc_in_src_macros
 
         def have_solnsrc():
-            return self._soln_in_src_exprs or self._soln_in_src_macros
+            return self._soln_in_src_macros
 
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
@@ -124,11 +123,10 @@ class BaseAdvectionElements(BaseElements):
             **self._external_vals
         )
 
-        # NEW - takes in solution and overwrites with source
         kernels['evalsrc'] = lambda uin: self._be.kernel(
             'evalsrc', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
-            ploc=self.ploc_at('upts') if have_plocsrc() else None, 
+            ploc=self.ploc_at('upts'), 
             u=self.scal_upts[uin],
             **self._external_vals
         )
