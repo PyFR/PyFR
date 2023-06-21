@@ -172,8 +172,8 @@ requires:
 
 1. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
 2. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
-   0db15a0da13e3d9b9e3d57b992ecb3384d2e15ea compiled as a shared
-   library (STATIC=0) with BLAS=0.
+   79f8f74118ad640011db830435a57fa81c60b786 in the ``main`` branch
+   compiled as a shared library (STATIC=0) with BLAS=0.
 
 In order for PyFR to find libxsmm it must be located in a directory
 which is on the library search path.  Alternatively, the path can be
