@@ -1,6 +1,6 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-% for mod, name in srcmacros:
+% for mod, name in src_macros:
     <%include file='${mod}'/>
 % endfor
 
@@ -12,7 +12,7 @@
               rcpdjac='in fpdtype_t'>
 fpdtype_t src[${nvars}] = {};
 
-% for mod, name in srcmacros:
+% for mod, name in src_macros:
     ${pyfr.expand(name, 't', 'u', 'ploc', 'src')};
 % endfor
 

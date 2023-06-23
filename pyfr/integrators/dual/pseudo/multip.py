@@ -207,9 +207,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l2dst = self.pintgs[l2]._source_regidx
 
         # If at top level evaluate src macros
-        if l1 == self._order and self.system._has_src_macro:
+        if l1 == self._order and self.system.has_src_macros:
             self._add(0, rtemp, 1, l1idxcurr)
-            self.pintgs[l1].system.evalsrcmacros(rtemp)
+            self.system.evalsrcmacros(rtemp)
             self._add(1, rtemp, 1, l1src)
             l1src = rtemp
 

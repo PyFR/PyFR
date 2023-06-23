@@ -14,13 +14,15 @@ class BaseAdvectionElements(BaseElements):
         self._srctplargs = {
             'ndims': self.ndims,
             'nvars': self.nvars,
-            'srcmacros': []
+            'src_macros': []
         }
 
         self._ploc_in_src_macros = False
         self._soln_in_src_macros = False
 
-        self._has_src_macro = False
+    @property
+    def has_src_macros(self):
+        return bool(self._srctplargs['src_macros'])
 
     @property
     def _scratch_bufs(self):
@@ -33,18 +35,16 @@ class BaseAdvectionElements(BaseElements):
         self._ploc_in_src_macros |= ploc
         self._soln_in_src_macros |= soln
 
-        for m, n in self._srctplargs['srcmacros']:
+        for m, n in self._srctplargs['src_macros']:
             if m == mod or n == name:
-                raise RuntimeError(f'Aliased macros in srcmacros: {name}')
+                raise RuntimeError(f'Aliased macros in src_macros: {name}')
 
         for k, v in tplargs.items():
             if k in self._srctplargs and self._srctplargs[k] != v:
                 raise RuntimeError(f'Aliased terms in template args: {k}')
 
-        self._srctplargs['srcmacros'].append((mod, name))
+        self._srctplargs['src_macros'].append((mod, name))
         self._srctplargs |= tplargs
-
-        self._has_src_macro = True
 
     def _set_external(self, name, spec, value=None):
         self._external_args[name] = spec
@@ -68,14 +68,6 @@ class BaseAdvectionElements(BaseElements):
 
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
-
-        # What the source term expressions (if any) are a function of
-
-        def have_plocsrc():
-            return self._ploc_in_src_macros
-
-        def have_solnsrc():
-            return self._soln_in_src_macros
 
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
@@ -110,7 +102,7 @@ class BaseAdvectionElements(BaseElements):
         # Transformed to physical divergence kernel + source term
 
         def copy_soln(uin):
-            if have_solnsrc():
+            if self._soln_in_src_macros:
                 return self._be.kernel('copy', self._scal_upts_cpy,
                                         self.scal_upts[uin])
             else:
@@ -122,15 +114,15 @@ class BaseAdvectionElements(BaseElements):
             'negdivconf', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
             tdivtconf=self.scal_upts[fout], rcpdjac=self.rcpdjac_at('upts'),
-            ploc=self.ploc_at('upts') if have_plocsrc() else None, 
-            u=self._scal_upts_cpy if have_solnsrc() else None,
+            ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None, 
+            u=self._scal_upts_cpy if self._soln_in_src_macros else None,
             **self._external_vals
         )
 
         kernels['evalsrcmacros'] = lambda uin: self._be.kernel(
             'evalsrcmacros', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
-            ploc=self.ploc_at('upts') if have_plocsrc() else None,
+            ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None,
             u=self.scal_upts[uin],
             **self._external_vals
         )
