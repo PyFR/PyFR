@@ -61,7 +61,7 @@ class BaseSystem:
         self._mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
         self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
-    
+
     def commit(self):
         # Prepare the kernels and any associated MPI requests
         self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,
