@@ -11,8 +11,8 @@ class SourcePlugin(BaseSolverPlugin):
     systems = ['*']
     formulations = ['dual', 'std']
 
-    def __init__(self, intg, cfgsect, suffix):
-        super().__init__(intg, cfgsect, suffix)
+    def __init__(self, intg, cfgsect):
+        super().__init__(intg, cfgsect)
         
         convars = intg.system.elementscls.convarmap[self.ndims]
 
