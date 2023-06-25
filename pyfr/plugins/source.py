@@ -28,8 +28,5 @@ class SourcePlugin(BaseSolverPlugin):
 
         for etype, eles in intg.system.ele_map.items():
             eles.add_src_macro('pyfr.plugins.kernels.source', 'source', 
-                               {'srcexprs': src_exprs}, ploc=ploc_in_src, 
+                               {'src_exprs': src_exprs}, ploc=ploc_in_src, 
                                soln=soln_in_src)
-
-    def __call__(self, intg):
-        pass

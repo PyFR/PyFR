@@ -8,7 +8,6 @@
               t='scalar fpdtype_t'
               ploc='in fpdtype_t[${str(ndims)}]'
               u='inout fpdtype_t[${str(nvars)}]'>
-
 fpdtype_t src[${nvars}] = {};
 
 % for mod, name in src_macros:
