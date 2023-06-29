@@ -69,6 +69,13 @@ class BaseIntegrator:
             if (m := re.match('(soln|solver)-plugin-(.+?)(?:-(.+))?$', s)):
                 cfgsect, ptype, name, suffix = m[0], m[1], m[2], m[3]
 
+                if ptype == 'solver' and suffix:
+                    raise ValueError(f'solver-plugin-{name} cannot have suffix')
+
+                args = (ptype, name, self, cfgsect)
+                if ptype == 'soln':
+                    args += (suffix, )
+
                 data = {}
                 if initsoln is not None:
                     # Get the plugin data stored in the solution, if any
@@ -78,8 +85,7 @@ class BaseIntegrator:
                             data[f.split('/')[2]] = initsoln[f]
 
                 # Instantiate
-                plugins.append(get_plugin(ptype, name, self, cfgsect, suffix,
-                                          **data))
+                plugins.append(get_plugin(*args, **data))
 
         return plugins
 

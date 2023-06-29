@@ -106,6 +106,11 @@ class BaseElements:
         return plocfpts
 
     @cached_property
+    def _scal_upts_cpy(self):
+        return self._be.matrix((self.nupts, self.nvars, self.neles),
+                               tags={'align'})
+
+    @cached_property
     def _srtd_face_fpts(self):
         plocfpts = self.plocfpts.transpose(1, 2, 0)
 
@@ -148,27 +153,6 @@ class BaseElements:
         else:
             raise ValueError('Invalid slice region')
 
-    @cached_property
-    def _src_exprs(self):
-        convars = self.convarmap[self.ndims]
-
-        # Variable and function substitutions
-        subs = self.cfg.items('constants')
-        subs |= dict(x='ploc[0]', y='ploc[1]', z='ploc[2]')
-        subs |= dict(abs='fabs', pi=math.pi)
-        subs |= {v: f'u[{i}]' for i, v in enumerate(convars)}
-
-        return [self.cfg.getexpr('solver-source-terms', v, '0', subs=subs)
-                for v in convars]
-
-    @cached_property
-    def _ploc_in_src_exprs(self):
-        return any(re.search(r'\bploc\b', ex) for ex in self._src_exprs)
-
-    @cached_property
-    def _soln_in_src_exprs(self):
-        return any(re.search(r'\bu\b', ex) for ex in self._src_exprs)
-
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
 
@@ -194,10 +178,6 @@ class BaseElements:
             self._scal_fpts = salloc('scal_fpts', nfpts)
         if 'scal_qpts' in sbufs:
             self._scal_qpts = salloc('scal_qpts', nqpts)
-
-        # Allocate additional scalar scratch space
-        if 'scal_upts_cpy' in sbufs:
-            self._scal_upts_cpy = salloc('scal_upts_cpy', nupts)
 
         # Allocate required vector scratch space
         if 'vect_upts' in sbufs:

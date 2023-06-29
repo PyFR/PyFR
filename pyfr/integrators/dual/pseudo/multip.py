@@ -199,17 +199,25 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
 
+        # Prevsoln is used as temporal storage at l1
+        rtemp = 0 if l1idxcurr == 1 else 1
+
         # Restrict the physical source term
         l1src = self.pintgs[l1]._source_regidx
         l2dst = self.pintgs[l2]._source_regidx
+
+        # If at top level evaluate src macros
+        if l1 == self._order and self.system.has_src_macros:
+            self._add(0, rtemp, 1, l1idxcurr)
+            self.system.evalsrcmacros(rtemp)
+            self._add(1, rtemp, 1, l1src)
+            l1src = rtemp
+
         self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
             self.backend.run_kernels(self.dtauproject(l1, l2))
-
-        # Prevsoln is used as temporal storage at l1
-        rtemp = 0 if l1idxcurr == 1 else 1
 
         # rtemp = R = -∇·f - dQ/dt
         self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp, mg_add=False)

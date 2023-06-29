@@ -69,6 +69,9 @@ class BaseSystem:
         self._gen_mpireqs(self._mpi_inters)
         self.backend.commit()
 
+        self.has_src_macros = any(eles.has_src_macros
+                                  for eles in self.ele_map.values())
+
         # Delete the memory-intensive ele_map
         del self.ele_map
 
@@ -309,6 +312,11 @@ class BaseSystem:
 
     def filt(self, uinoutbank):
         kkey = ('eles/modal_filter', uinoutbank, None)
+
+        self.backend.run_kernels(self._kernels[kkey])
+
+    def evalsrcmacros(self, uinoutbank):
+        kkey = ('eles/evalsrcmacros', uinoutbank, None)
 
         self.backend.run_kernels(self._kernels[kkey])
 
