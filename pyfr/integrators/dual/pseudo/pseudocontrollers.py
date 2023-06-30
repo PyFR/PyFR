@@ -75,7 +75,7 @@ class DualNonePseudoController(BaseDualPseudoController):
             self._idxcurr, self._idxprev = self.step(self.tcurr)
 
             # Convergence monitoring
-            if self.convmon(i, self.minniters, self._dtau):
+            if self.convmon(i, self.minniters, self.dtau):
                 break
 
 
@@ -110,8 +110,8 @@ class DualPIPseudoController(BaseDualPseudoController):
         dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 1.0)
         dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
 
-        self._dtau_min = dtau_minf * self._dtau
-        self._dtau_max = dtau_maxf * self._dtau
+        self.dtau_min = dtau_minf * self.dtau
+        self.dtau_max = dtau_maxf * self.dtau
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
@@ -137,8 +137,6 @@ class DualPIPseudoController(BaseDualPseudoController):
                         'localerrest', tplargs=tplargs,
                         dims=[ele.nupts, ele.neles], err=err,
                         errprev=err_prev, dtau_upts=dtaumat,
-                        dtau_min=self._dtau_min, dtau_max=self._dtau_max,
-                        dtau_fieldf=1.0
                     )
                 )
 
@@ -146,27 +144,25 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         self.backend.commit()
 
+    def adjust_pseudo_step(self, dt):
+
+        self.__old_dtau = self.dtau
+        super().adjust_pseudo_step(dt)
+
+        self.dtau_multiplied(self.dtau / self.__old_dtau)
+
     def dtau_multiplied(self, y):
-        self._dtau_min *= y
-        self._dtau_max *= y
+        self.dtau_min *= y
+        self.dtau_max *= y
 
         for k, idx in self.pintgkernels:
-            if k[0] == 'localerrest':
-                for k in idx:
-                    k.bind(dtau_min=self._dtau_min, dtau_max=self._dtau_max,
-                           dtau_fieldf=y)
+            if k == 'localerrest':
+                for kk in self.pintgkernels[k, idx]:
+                    kk.bind(dtau_min=self.dtau_min, 
+                        dtau_max=self.dtau_max, dtau_fieldf=y)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
-
-    @property
-    def dt(self):
-        return self._dt
-
-    @dt.setter
-    def dt(self, y):
-        self.dtau_multiplied(y / self._dt)
-        self._dt = y
 
     def pseudo_advance(self, tcurr):
         self.tcurr = tcurr

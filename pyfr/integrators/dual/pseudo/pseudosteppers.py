@@ -68,7 +68,7 @@ class DualEulerPseudoStepper(BaseDualPseudoStepper):
             r0, r1 = r1, r0
 
         rhs(t, r0, r1)
-        add(0, r1, 1, r0, self._dtau, r1)
+        add(0, r1, 1, r0, self.dtau, r1)
 
         return r1, r0
 
@@ -88,7 +88,7 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
 
         add = self._add
         rhs = self._rhs_with_dts
-        dtau = self._dtau
+        dtau = self.dtau
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
@@ -132,7 +132,7 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
 
         add = self._add
         rhs = self._rhs_with_dts
-        dtau = self._dtau
+        dtau = self.dtau
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
@@ -339,8 +339,8 @@ class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
         rhs(t, r[0], r[1])
 
         # Pre-multiply a matrix and b vector with dtau
-        a = [[self._dtau*aj for aj in ar] for ar in self.a]
-        b = [self._dtau*bi for bi in self.b]
+        a = [[self.dtau*aj for aj in ar] for ar in self.a]
+        b = [self.dtau*bi for bi in self.b]
 
         # Other stages
         for i in range(self.pseudo_stepper_nregs - 2):
