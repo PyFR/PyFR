@@ -8,20 +8,12 @@ class BaseDualController(BaseDualIntegrator):
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
-        self.i = self.cfg.getint('solver-time-integrator', 'dt-switch', 2)
-
-        if self.i<=1:
-            raise ValueError('dt-switch must be greater than 1')
-
-        self._if_near = False
-        self._dt_near = self._dt
-
         # Fire off any event handlers if not restarting
         if not self.isrestart:
             self._run_plugins()
 
-    def _accept_step(self, idxcurr):
-        self.tcurr += self.dt
+    def _accept_step(self, dt, idxcurr):
+        self.tcurr += dt
         self.nacptsteps += 1
         self.nacptchain += 1
 
@@ -51,19 +43,12 @@ class DualNoneController(BaseDualController):
             raise ValueError('Advance time is in the past')
 
         while self.tcurr < t:
-            if self.tcurr + self._dt <= t < self.tcurr + self.i*self._dt:
-                if not self._if_near:
-                    self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self._dt + 1.0)
-                    self._if_near = True
-                self.dt = self._dt_near
-            elif self.tcurr < t <= self.tcurr + self._dt:
-                self.dt = t - self.tcurr
-            else:
-                self.dt = self._dt
-                self._if_near = False
+
+            # Decide on the time step
+            dt = self.adjust_step(t)
 
             # Take the physical step
-            self.step(self.tcurr, self.dt)
+            self.step(self.tcurr, dt)
 
             # We are not adaptive, so accept every step
-            self._accept_step(self.pseudointegrator._idxcurr)
+            self._accept_step(dt, self.pseudointegrator._idxcurr)

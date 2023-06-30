@@ -72,12 +72,7 @@ class StdNoneController(BaseStdController):
 
         while self.tcurr < t:
             # Decide on the time step
-            if self.tcurr + self._dt < t < self.tcurr + 2*self._dt:
-                dt = 0.5*(t - self.tcurr)
-            elif self.tcurr < t < self.tcurr + self._dt:
-                dt = t - self.tcurr
-            else:
-                dt = max(min(t - self.tcurr, self._dt), self.dtmin)
+            dt = self.adjust_step(t)
 
             # Take the step
             idxcurr = self.step(self.tcurr, dt)

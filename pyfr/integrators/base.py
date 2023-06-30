@@ -62,6 +62,27 @@ class BaseIntegrator:
         # Abort computation
         self.abort = False
 
+        # Smoothly step to target time in the last near_t steps
+        self.near_t = self.cfg.getint('solver-time-integrator', 'dt-switch', 10)
+        self._dt_near = None
+
+    def adjust_step(self, t):
+
+        if self.tcurr + self.near_t*self._dt <= t:
+            # Default, target time is not near
+            return self._dt
+        else:
+            if self.tcurr + self._dt <= t:
+                # Target time approaching
+                if self._dt_near is None:
+                    # adjust step to smoothly step to target time
+                    self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self._dt + 1.0)
+                return self._dt_near
+            else:
+                # Step exactly to target time
+                self._dt_near = None
+                return t - self.tcurr
+
     def _get_plugins(self, initsoln):
         plugins = []
 
