@@ -21,8 +21,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self._dtaumin = 1.0e-12
         self.dtau = cfg.getfloat(sect, 'pseudo-dt')
 
-        self._dt_dtau_ratio = self._dt / self.dtau
-
         self.maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self.minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
 
@@ -79,9 +77,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
 
         # Pseudo-step counter
         self.npseudosteps = 0
-
-    def adjust_pseudo_step(self, dt):
-        self.dtau = dt / self._dt_dtau_ratio
 
     @property
     def _pseudo_stepper_regidx(self):

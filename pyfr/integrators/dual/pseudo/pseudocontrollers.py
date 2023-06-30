@@ -8,6 +8,8 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self._dt_dtau_ratio = self._dt / self.dtau
+
         # Ensure the system is compatible with our formulation
         self.system.elementscls.validate_formulation(self)
 
@@ -61,6 +63,9 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
 
     def _update_pseudostepinfo(self, niters, resid):
         self.pseudostepinfo.append((self.ntotiters, niters, resid))
+
+    def adjust_pseudo_step(self, dt):
+        self.dtau = dt / self._dt_dtau_ratio
 
 
 class DualNonePseudoController(BaseDualPseudoController):
@@ -140,18 +145,16 @@ class DualPIPseudoController(BaseDualPseudoController):
                     )
                 )
 
-        self.dtau_multiplied(1.0)
+        self.pseudo_step_multiplied(1.0)
 
         self.backend.commit()
 
     def adjust_pseudo_step(self, dt):
-
-        self.__old_dtau = self.dtau
+        old_dtau = self.dtau
         super().adjust_pseudo_step(dt)
+        self.pseudo_step_multiplied(self.dtau / old_dtau)
 
-        self.dtau_multiplied(self.dtau / self.__old_dtau)
-
-    def dtau_multiplied(self, y):
+    def pseudo_step_multiplied(self, y):
         self.dtau_min *= y
         self.dtau_max *= y
 
@@ -172,7 +175,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
 
             if i == 0:
-                self.dtau_multiplied(1.0)
+                self.pseudo_step_multiplied(1.0)
 
             self.localerrest(self._idxerr)
 

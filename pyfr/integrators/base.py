@@ -41,7 +41,7 @@ class BaseIntegrator:
         self.nacptchain = 0
 
         # Current and minimum time steps
-        self._dt = cfg.getfloat('solver-time-integrator', 'dt')
+        self._dt = self.__dt = cfg.getfloat('solver-time-integrator', 'dt')
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
@@ -68,20 +68,20 @@ class BaseIntegrator:
 
     def adjust_step(self, t):
 
-        if self.tcurr + self.near_t*self._dt <= t:
+        if self.tcurr + self.near_t*self.__dt <= t:
             # Default, target time is not near
-            return self._dt
+            self._dt = self.__dt
         else:
-            if self.tcurr + self._dt <= t:
+            if self.tcurr + self.__dt <= t:
                 # Target time approaching
                 if self._dt_near is None:
                     # adjust step to smoothly step to target time
-                    self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self._dt + 1.0)
-                return self._dt_near
+                    self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self.__dt + 1.0)
+                self._dt = self._dt_near
             else:
                 # Step exactly to target time
                 self._dt_near = None
-                return t - self.tcurr
+                self._dt = t - self.tcurr
 
     def _get_plugins(self, initsoln):
         plugins = []
