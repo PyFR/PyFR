@@ -278,7 +278,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     def adjust_pseudo_step(self, dt):
         for l in self.levels:
-            self.pintgs[l]._dt = dt
             self.pintgs[l].adjust_pseudo_step(dt)
 
     def pseudo_advance(self, tcurr):

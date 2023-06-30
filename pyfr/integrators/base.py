@@ -41,7 +41,7 @@ class BaseIntegrator:
         self.nacptchain = 0
 
         # Current and minimum time steps
-        self._dt = self.__dt = cfg.getfloat('solver-time-integrator', 'dt')
+        self._dt = cfg.getfloat('solver-time-integrator', 'dt')
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
@@ -64,24 +64,24 @@ class BaseIntegrator:
 
         # Smoothly step to target time in the last near_t steps
         self.near_t = self.cfg.getint('solver-time-integrator', 'dt-switch', 10)
+        self._dt_far = cfg.getfloat('solver-time-integrator', 'dt')
         self._dt_near = None
 
     def adjust_step(self, t):
 
-        if self.tcurr + self.near_t*self.__dt <= t:
+        if self.tcurr + self.near_t*self._dt_far <= t:
             # Default, target time is not near
-            self._dt = self.__dt
+            self._dt = self._dt_far
+        elif (self.tcurr + self.near_t*self._dt_far > t) and (self.tcurr + self._dt_far <= t):
+            # Target time approaching
+            if self._dt_near is None:
+                # adjust step to smoothly step to target time
+                self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self._dt_far + 1.0)
+            self._dt = self._dt_near
         else:
-            if self.tcurr + self.__dt <= t:
-                # Target time approaching
-                if self._dt_near is None:
-                    # adjust step to smoothly step to target time
-                    self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self.__dt + 1.0)
-                self._dt = self._dt_near
-            else:
-                # Step exactly to target time
-                self._dt_near = None
-                self._dt = t - self.tcurr
+            # Step exactly to target time
+            self._dt_near = None
+            self._dt = t - self.tcurr
 
     def _get_plugins(self, initsoln):
         plugins = []
@@ -135,7 +135,7 @@ class BaseIntegrator:
 
     def call_plugin_dt(self, dt):
         ta = self.tlist
-        tb = deque(np.arange(self.tend-dt, self.tcurr, -dt).tolist()[::-1])
+        tb = deque(np.arange(self.tend - dt, self.tcurr, -dt).tolist()[::-1])
 
         self.tlist = tlist = deque()
 

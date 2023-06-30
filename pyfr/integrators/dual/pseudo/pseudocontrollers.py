@@ -128,7 +128,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.backend.pointwise.register(
             'pyfr.integrators.dual.pseudo.kernels.localerrest'
         )
-        
+
         for ele, shape, dtaumat in zip(self.system.ele_map.values(),
                                        self.system.ele_shapes, self.dtau_upts):
             # Allocate storage for previous error
@@ -141,7 +141,7 @@ class DualPIPseudoController(BaseDualPseudoController):
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,
                         dims=[ele.nupts, ele.neles], err=err,
-                        errprev=err_prev, dtau_upts=dtaumat,
+                        errprev=err_prev, dtau_upts=dtaumat
                     )
                 )
 
@@ -161,8 +161,10 @@ class DualPIPseudoController(BaseDualPseudoController):
         for k, idx in self.pintgkernels:
             if k == 'localerrest':
                 for kk in self.pintgkernels[k, idx]:
-                    kk.bind(dtau_min=self.dtau_min, 
-                        dtau_max=self.dtau_max, dtau_fieldf=y)
+                    kk.bind(
+                        dtau_min=self.dtau_min, 
+                        dtau_max=self.dtau_max, dtau_fieldf=y
+                    )
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])

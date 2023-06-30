@@ -72,13 +72,13 @@ class StdNoneController(BaseStdController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = self.adjust_step(t)
+            self.adjust_step(t)
 
             # Take the step
-            idxcurr = self.step(self.tcurr, dt)
+            idxcurr = self.step(self.tcurr, self._dt)
 
             # We are not adaptive, so accept every step
-            self._accept_step(dt, idxcurr)
+            self._accept_step(self._dt, idxcurr)
 
 
 class StdPIController(BaseStdController):
