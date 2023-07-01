@@ -32,7 +32,7 @@ class BaseFluidElements:
         gamma = cfg.getfloat('constants', 'gamma')
         E = p/(gamma - 1) + 0.5*rho*sum(c*c for c in pris[1:-1])
 
-        return [rho] + rhovs + [E]
+        return [rho, *rhovs, E]
 
     @staticmethod
     def con_to_pri(cons, cfg):
@@ -45,7 +45,7 @@ class BaseFluidElements:
         gamma = cfg.getfloat('constants', 'gamma')
         p = (gamma - 1)*(E - 0.5*rho*sum(v*v for v in vs))
 
-        return [rho] + vs + [p]
+        return [rho, *vs, p]
 
     @staticmethod
     def validate_formulation(ctrl):
