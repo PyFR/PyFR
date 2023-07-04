@@ -63,25 +63,28 @@ class BaseIntegrator:
         self.abort = False
 
         # Smoothly step to target time in the last near_t steps
-        self.near_t = self.cfg.getint('solver-time-integrator', 'dt-switch', 10)
-        self._dt_far = cfg.getfloat('solver-time-integrator', 'dt')
+        self.dt_fact = self.cfg.getfloat('solver-time-integrator', 'dt-fact', 0.9)
+        self._dt_in = cfg.getfloat('solver-time-integrator', 'dt')
         self._dt_near = None
 
     def adjust_step(self, t):
 
-        if self.tcurr + self.near_t*self._dt_far <= t:
+        t_diff = t - self.tcurr
+        flag = (t_diff//self._dt_in)*self._dt_in/t_diff
+
+        if flag > self.dt_fact:
             # Default, target time is not near
-            self._dt = self._dt_far
-        elif (self.tcurr + self.near_t*self._dt_far > t) and (self.tcurr + self._dt_far <= t):
+            self._dt = self._dt_in
+        elif flag <= self.dt_fact and (self.tcurr + self._dt_in <= t):
             # Target time approaching
             if self._dt_near is None:
                 # adjust step to smoothly step to target time
-                self._dt_near = (t-self.tcurr)/((t-self.tcurr)//self._dt_far + 1.0)
+                self._dt_near = t_diff/(t_diff//self._dt_in)
             self._dt = self._dt_near
         else:
             # Step exactly to target time
             self._dt_near = None
-            self._dt = t - self.tcurr
+            self._dt = t_diff
 
     def _get_plugins(self, initsoln):
         plugins = []
