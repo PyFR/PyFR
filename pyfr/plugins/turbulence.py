@@ -74,6 +74,8 @@ class TurbulencePlugin(BaseSolverPlugin):
         srafac = rhobar*(gamma-1.0)*machbar*machbar
         gc = math.sqrt((2.0*sigma/(math.sqrt(math.pi)))*(1.0/math.erf(1.0/sigma)))
 
+        fac = (rootrs*gc*gc*gc)/(sigma*sigma*sigma)
+
         ydim = self.cfg.getfloat(cfgsect,'y-dim')
         zdim = self.cfg.getfloat(cfgsect,'z-dim')
         
@@ -214,7 +216,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                 eles.add_src_macro('pyfr.plugins.kernels.turbulence','turbulence',
                 {'nvmax': nvmx, 'ls': ls, 'ubar': ubar, 'srafac': srafac,
                  'ymin': ymin, 'ymax': ymax, 'zmin': zmin, 'zmax': zmax,
-                 'sigma' : sigma, 'rootrs': rootrs, 'gc': gc, 'rot': rot, 'shift': shift
+                 'sigma' : sigma, 'rootrs': rootrs, 'gc': gc, 'fac': fac, 'rot': rot, 'shift': shift
                 }, ploc=True, soln=True)
 
                 eles._set_external('tinit',
