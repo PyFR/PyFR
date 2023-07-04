@@ -67,11 +67,13 @@ class OpenCLXchgView(base.XchgView): pass
 
 
 class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
-    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        super().__init__(backend, ioshape, initval, extent, aliases, tags)
+    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
+                 tags):
+        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
+                         tags)
 
         # Allocate an empty buffer on the host for MPI to send/recv from
-        shape, dtype = (self.nrow, self.ncol), self.dtype
+        shape = (self.nrow, self.ncol)
         self.hdata = backend.cl.pagelocked_empty(shape, dtype)
 
 

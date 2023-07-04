@@ -92,6 +92,11 @@ class BasePlugin:
             raise RuntimeError(f'Formulation {intg.formulation} not '
                                f'supported by plugin {self.name}')
 
+        # Check that we support dimensionality of simulation
+        if intg.system.ndims not in self.dimensions:
+            raise RuntimeError(f'Dimensionality of {intg.system.ndims} not '
+                               f'supported by plugin {self.name}')
+
     def __call__(self, intg):
         pass
 
@@ -174,7 +179,7 @@ class RegionMixin:
 
 class SurfaceMixin:
     @memoize
-    def surf_quad(self, itype, proj):
+    def _surf_quad(self, itype, proj, flags=''):
         # Obtain quadrature info
         rname = self.cfg.get(f'solver-interfaces-{itype}', 'flux-pts')
 
@@ -185,11 +190,9 @@ class SurfaceMixin:
         except NoOptionError:
             qdeg = self.cfg.getint(self.cfgsect, 'quad-deg')
 
-        q = get_quadrule(itype, qrule, qdeg=qdeg, flags='s')
+        # Get the quadrature rule
+        q = get_quadrule(itype, qrule, qdeg=qdeg, flags=flags)
 
-        return self._proj_pts(proj, q.pts), q.wts
-
-    @staticmethod
-    def _proj_pts(projector, pts):
-        pts = np.atleast_2d(pts.T)
-        return np.vstack(np.broadcast_arrays(*projector(*pts))).T
+        # Project its points onto the provided surface
+        pts = np.atleast_2d(q.pts.T)
+        return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts

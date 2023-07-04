@@ -6,6 +6,7 @@
 
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
+typedef unsigned int uint32_t;
 
 // Atomic helpers
 __device__ void atomic_min_fpdtype(fpdtype_t* addr, fpdtype_t val)

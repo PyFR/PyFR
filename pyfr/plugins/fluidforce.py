@@ -10,6 +10,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
+    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
@@ -88,7 +89,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
                 eles = elemap[etype]
                 itype, proj, norm = eles.basis.faces[fidx]
 
-                ppts, pwts = self.surf_quad(itype, proj)
+                ppts, pwts = self._surf_quad(itype, proj, flags='s')
                 nppts = len(ppts)
 
                 # Get phyical normals

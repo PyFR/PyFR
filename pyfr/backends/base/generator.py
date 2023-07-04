@@ -202,7 +202,7 @@ class BaseKernelGenerator:
         #   name[\1] => name_v[ldim*(\1) + X_IDX + BLK_IDX*ns]
         elif arg.ncdim == 1 and arg.isbroadcastc:
             lx = self.ldim_size(arg.name)
-            ix = fr'{lx}*(\1) + BLK_IDX*{arg.cdims[0]}'
+            ix = fr'{lx}*(\1) + X_IDX + BLK_IDX*{arg.cdims[0]}'
         # Matrix:
         #   name => name_v[ldim*_y + X_IDX + BLK_IDX*ny]
         elif arg.ncdim == 0:
