@@ -122,9 +122,11 @@ class MatrixBase:
 
 
 class Matrix(MatrixBase):
-    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        super().__init__(backend, backend.fpdtype, ioshape, initval, extent,
-                         aliases, tags)
+    def __init__(self, backend, ioshape, initval, extent, aliases, tags,
+                 dtype=None):
+        dtype = dtype or backend.fpdtype
+        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
+                         tags)
 
     def set(self, ary):
         if ary.shape != self.ioshape:

@@ -136,8 +136,10 @@ class BaseBackend:
 
     @recordmat
     def matrix(self, ioshape, initval=None, extent=None, aliases=None,
-               tags=set()):
-        return self.matrix_cls(self, ioshape, initval, extent, aliases, tags)
+               tags=set(), dtype=None):
+        dtype = dtype or self.fpdtype           
+        return self.matrix_cls(self, ioshape, initval, extent, aliases, tags,
+                               dtype)
 
     @recordmat
     def matrix_slice(self, mat, ra, rb, ca, cb):
