@@ -1,17 +1,15 @@
-# -*- coding: utf-8 -*-
-
 import math
-import numpy as np
 import random
 import time
 import uuid
-from rtree import index
+
+import numpy as np
 
 from collections import defaultdict
-from numpy.lib.recfunctions import structured_to_unstructured
 from pyfr.plugins.base import BaseSolverPlugin
 from pyfr.regions import BoxRegion
-from pyfr.mpiutil import get_comm_rank_root
+from rtree.index import Index, Property
+
 
 class pcg32rxs_m_xs:
     def __init__(self, seed):
@@ -31,7 +29,7 @@ class pcg32rxs_m_xs:
         oldstate ^= oldstate >> self.b22
         return oldstate
     def random(self):
-        # change to match kernel code exactly ?
+        # change to match kernel code exactly
         return np.ldexp(self.rand(),-32)
     def getstate(self):
         return self.state
@@ -39,7 +37,121 @@ class pcg32rxs_m_xs:
         return a + self.rand() % (b - a)
     def choice(self, seq):
         return seq[self.randint(0, len(seq))]
-        
+
+def vortbuff(self)
+    seed = self.cfg.getint(cfgsect, 'seed')
+    pcg32rng = pcg32rxs_m_xs(seed)
+    vid = 0
+    temp = []
+    xtemp = []
+    
+    tinits = []
+    
+    while vid < nvorts:
+        tinits.append(self.tstart + (xmax-xmin)*pcg32rng.random()/ubar)
+        vid += 1
+
+    while True:     
+        for vid, tinit in enumerate(tinits):
+            state = pcg32rng.getstate()
+            yinit = ymin + (ymax-ymin)*pcg32rng.random()
+            zinit = zmin + (zmax-zmin)*pcg32rng.random()
+            eps = 1.0*pcg32rng.randint(0,8)
+            if tinit+((xmax-xmin)/ubar) >= self.tbegin and tinit <= self.tend:
+                xtemp.append(((yinit,zinit),tinit,state))
+            tinits[vid] += (xmax-xmin)/ubar
+        if all(tinit > self.tend for tinit in tinits):
+            break
+    
+    return np.asarray(xtemp, self.vortdtype)
+
+def actbuffs(self)
+    actbuffs = []
+    for etype, eles in intg.system.ele_map.items(): 
+        neles = eles.neles
+        pts = eles.ploc_at_np('upts')
+        pts = np.moveaxis(pts, 1, 0)
+        ptsr = (rot @ (pts.reshape(3, -1) - shift[:,None])).reshape(pts.shape)
+        ptsr = np.moveaxis(ptsr, 0, -1)
+        inside = bbox.pts_in_region(ptsr)
+
+        stream = defaultdict(list)
+        sstream = defaultdict()
+
+        if np.any(inside):
+            eids = np.any(inside, axis=0).nonzero()[0] # eles in injection box
+            ptsri = ptsr[:,eids,:] # points in injection box
+
+            props = Property(dimension=3, interleaved=True)
+            idx3d = Index(properties=props)
+            
+            nleles = ptsri.shape[1]
+
+            for i in range(nleles):
+                idx3d.insert(i,(ptsri[:,i,0].min(),ptsri[:,i,1].min(),ptsri[:,i,2].min(),
+                                ptsri[:,i,0].max(),ptsri[:,i,1].max(),ptsri[:,i,2].max()))
+
+            for vid, vort in enumerate(self.vortbuff):
+                vbox = BoxRegion([xmin-ls, vort['loci'][0]-ls, vort['loci'][1]-ls],
+                                 [xmax+ls, vort['loci'][0]+ls, vort['loci'][1]+ls])
+
+                elestemp = []
+                candidate = np.array(list(set(idx3d.intersection((xmin-ls, vort['loci'][0]-ls, vort['loci'][1]-ls,
+                                                                  xmax+ls, vort['loci'][0]+ls, vort['loci'][1]+ls)))))   
+
+                if np.any(candidate):
+                    vinside = vbox.pts_in_region(ptsri[:,candidate,:])
+                    if np.any(vinside):
+                        elestemp = np.any(vinside, axis=0).nonzero()[0].tolist()
+
+                for leid in elestemp:
+                    exmin = ptsri[vinside[:,leid],candidate[leid],0].min()
+                    exmax = ptsri[vinside[:,leid],candidate[leid],0].max()
+                    ts = max(vort['tinit'], vort['tinit'] + ((exmin - xmin - ls)/ubar))
+                    te = max(ts,min(ts + (exmax-exmin+2*ls)/ubar,vort['tinit']+((xmax-xmin)/ubar)))
+                    stream[eids[candidate[leid]]].append((vid,ts,te))
+
+            for k, v in stream.items():
+                v.sort(key=lambda x: x[1]) 
+                sstream[k] = np.asarray(v, self.sstreamdtype)
+
+            nvmx = 0
+            for leid, actl in sstream.items():
+                for i, ts in enumerate(actl['ts']):
+                    cnt = 0
+                    while i-cnt >= 0:
+                        if actl['te'][i-cnt] < ts:
+                            break
+                        cnt += 1
+                    if cnt > nvmx:
+                        nvmx = cnt
+            nvmx += 1
+
+            buff = np.zeros((nvmx, neles), self.buffdtype)
+
+            actbuff = {'trcl': 0.0, 'sstream': sstream, 'nvmx': nvmx, 'buff': buff,
+                       'tinit': eles._be.matrix((nvmx, 1, neles), tags={'align'}),
+                       'state': eles._be.matrix((nvmx, 1, neles), tags={'align'}, dtype=np.uint32)}
+
+            eles.add_src_macro('pyfr.plugins.kernels.turbulence','turbulence',
+            {'nvmax': nvmx, 'ls': ls, 'ubar': ubar, 'srafac': srafac,
+             'ymin': ymin, 'ymax': ymax, 'zmin': zmin, 'zmax': zmax,
+             'sigma' : sigma, 'rootrs': rootrs, 'gc': gc, 'fac': fac, 'rot': rot, 'shift': shift
+            }, ploc=True, soln=True)
+
+            eles._set_external('tinit',
+                               f'in broadcast-col fpdtype_t[{nvmx}]',
+                               value=actbuff['tinit'])
+                               
+            eles._set_external('state',
+                               f'in broadcast-col uint32_t[{nvmx}]',
+                               value=actbuff['state'])
+
+            actbuffs.append(actbuff)
+
+    return actbuffs
+
+
 class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
     systems = ['navier-stokes']
@@ -52,24 +164,20 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.tbegin = intg.tcurr
         self.tnext = intg.tcurr
         self.tend = intg.tend
-        
-        comm, rank, root = get_comm_rank_root()
 
         fdptype = intg.backend.fpdtype
 
         self.vortdtype = np.dtype([('loci', fdptype, 2), ('tinit', fdptype), ('state', np.uint32)])
         self.sstreamdtype = np.dtype([('vid', '<i4'), ('ts', fdptype), ('te', fdptype)])
         self.buffdtype = np.dtype([('tinit', fdptype), ('state', np.uint32), ('ts', fdptype), ('te', fdptype)])
-        
-        btol = 0.01
 
         gamma = self.cfg.getfloat('constants', 'gamma')
-        rhobar = self.cfg.getfloat(cfgsect,'rho-bar')
-        ubar = self.cfg.getfloat(cfgsect,'u-bar')
-        machbar = self.cfg.getfloat(cfgsect,'mach-bar')
-        rootrs = np.sqrt(self.cfg.getfloat(cfgsect,'reynolds-stress'))
-        sigma = self.cfg.getfloat(cfgsect,'sigma')
-        ls = self.cfg.getfloat(cfgsect,'length-scale')
+        rhobar = self.cfg.getfloat(cfgsect, 'rho-bar')
+        ubar = self.cfg.getfloat(cfgsect, 'u-bar')
+        machbar = self.cfg.getfloat(cfgsect, 'mach-bar')
+        rootrs = np.sqrt(self.cfg.getfloat(cfgsect, 'reynolds-stress'))
+        sigma = self.cfg.getfloat(cfgsect, 'sigma')
+        ls = self.cfg.getfloat(cfgsect, 'length-scale')
 
         srafac = rhobar*(gamma-1.0)*machbar*machbar
         gc = math.sqrt((2.0*sigma/(math.sqrt(math.pi)))*(1.0/math.erf(1.0/sigma)))
@@ -81,18 +189,16 @@ class TurbulencePlugin(BaseSolverPlugin):
         
         xmin = - ls
         xmax = ls
-        ymin = -ydim/2.0
-        ymax = ydim/2.0
-        zmin = -zdim/2.0
-        zmax = zdim/2.0
+        ymin = -ydim/2
+        ymax = ydim/2
+        zmin = -zdim/2
+        zmax = zdim/2
 
         nvorts = int((ymax-ymin)*(zmax-zmin)/(4*ls*ls))
         bbox = BoxRegion([xmin-ls,ymin-ls,zmin-ls],
                          [xmax+ls,ymax+ls,zmax+ls])
         
         theta = -1.0*np.radians(self.cfg.getfloat(cfgsect,'rot-angle'))
-
-        periodicdim = self.cfg.get(cfgsect, 'periodic-dim', 'none')
 
         c = self.cfg.getliteral(cfgsect, 'centre')
         e = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
@@ -107,134 +213,13 @@ class TurbulencePlugin(BaseSolverPlugin):
         else:
             self.dtol = intg._dt
 
-        seed = self.cfg.getint(cfgsect, 'seed')
-        pcg32rng = pcg32rxs_m_xs(seed)
-        
-        ######################
-        # Make vortex buffer #
-        ######################
-        
-        vid = 0
-        temp = []
-        xtemp = []
-        
-        tinits = []
-        
-        while vid < nvorts:
-            tinits.append(self.tstart + (xmax-xmin)*pcg32rng.random()/ubar)
-            vid += 1
-  
-        while True:     
-            for vid, tinit in enumerate(tinits):
-                #print(vid)
-                state = pcg32rng.getstate()
-                yinit = ymin + (ymax-ymin)*pcg32rng.random()
-                zinit = zmin + (zmax-zmin)*pcg32rng.random()
-                eps = 1.0*pcg32rng.randint(0,8)
-                if tinit+((xmax-xmin)/ubar) >= self.tbegin and tinit <= self.tend:
-                    xtemp.append(((yinit,zinit),tinit,state))
-                tinits[vid] += (xmax-xmin)/ubar
-            if all(tinit > self.tend for tinit in tinits):
-                break
-        
-        self.vortbuff = np.asarray(xtemp, self.vortdtype)
-        
-        #####################
-        # Make action buffer#
-        #####################
-
-        self.actbuffs = []
-
-        for etype, eles in intg.system.ele_map.items(): 
-            neles = eles.neles
-            pts = eles.ploc_at_np('upts')
-            pts = np.moveaxis(pts, 1, 0)
-            ptsr = (rot @ (pts.reshape(3, -1) - shift[:,None])).reshape(pts.shape)
-            ptsr = np.moveaxis(ptsr, 0, -1)
-            inside = bbox.pts_in_region(ptsr)
-
-            stream = defaultdict(list)
-            sstream = defaultdict()
-
-            if np.any(inside):
-                eids = np.any(inside, axis=0).nonzero()[0] # eles in injection box
-                ptsri = ptsr[:,eids,:] # points in injection box
-
-                p = index.Property()
-                p.dimension = 3
-                p.interleaved = True
-                idx3d = index.Index(properties=p)
-                
-                nleles = ptsri.shape[1]
-
-                for i in range(nleles):
-                    idx3d.insert(i,(ptsri[:,i,0].min(),ptsri[:,i,1].min(),ptsri[:,i,2].min(),
-                                    ptsri[:,i,0].max(),ptsri[:,i,1].max(),ptsri[:,i,2].max()))
-
-                for vid, vort in enumerate(self.vortbuff):
-                    vbox = BoxRegion([xmin-ls, vort['loci'][0]-ls, vort['loci'][1]-ls],
-                                     [xmax+ls, vort['loci'][0]+ls, vort['loci'][1]+ls])
-
-                    elestemp = []
-                    candidate = np.array(list(set(idx3d.intersection((xmin-ls, vort['loci'][0]-ls, vort['loci'][1]-ls,
-                                                                      xmax+ls, vort['loci'][0]+ls, vort['loci'][1]+ls)))))   
-
-                    if np.any(candidate):
-                        vinside = vbox.pts_in_region(ptsri[:,candidate,:])
-                        if np.any(vinside):
-                            elestemp = np.any(vinside, axis=0).nonzero()[0].tolist()
- 
-                    for leid in elestemp:
-                        exmin = ptsri[vinside[:,leid],candidate[leid],0].min()
-                        exmax = ptsri[vinside[:,leid],candidate[leid],0].max()
-                        ts = max(vort['tinit'], vort['tinit'] + ((exmin - xmin - ls)/ubar))
-                        te = max(ts,min(ts + (exmax-exmin+2*ls)/ubar,vort['tinit']+((xmax-xmin)/ubar)))
-                        stream[eids[candidate[leid]]].append((vid,ts,te))
- 
-                for k, v in stream.items():
-                    v.sort(key=lambda x: x[1]) 
-                    sstream[k] = np.asarray(v, self.sstreamdtype)
-
-                nvmx = 0
-                for leid, actl in sstream.items():
-                    for i, ts in enumerate(actl['ts']):
-                        cnt = 0
-                        while i-cnt >= 0:
-                            if actl['te'][i-cnt] < ts:
-                                break
-                            cnt += 1
-                        if cnt > nvmx:
-                            nvmx = cnt
-                nvmx += 1
-
-                buff = np.zeros((nvmx, neles), self.buffdtype)
-
-                actbuff = {'trcl': 0.0, 'sstream': sstream, 'nvmx': nvmx, 'buff': buff,
-                           'tinit': eles._be.matrix((nvmx, 1, neles), tags={'align'}),
-                           'state': eles._be.matrix((nvmx, 1, neles), tags={'align'}, dtype=np.uint32)}
-
-                eles.add_src_macro('pyfr.plugins.kernels.turbulence','turbulence',
-                {'nvmax': nvmx, 'ls': ls, 'ubar': ubar, 'srafac': srafac,
-                 'ymin': ymin, 'ymax': ymax, 'zmin': zmin, 'zmax': zmax,
-                 'sigma' : sigma, 'rootrs': rootrs, 'gc': gc, 'fac': fac, 'rot': rot, 'shift': shift
-                }, ploc=True, soln=True)
-
-                eles._set_external('tinit',
-                                   f'in broadcast-col fpdtype_t[{nvmx}][1]',
-                                   value=actbuff['tinit'])
-                                   
-                eles._set_external('state',
-                                   f'in broadcast-col uint32_t[{nvmx}][1]',
-                                   value=actbuff['state'])
-
-                self.actbuffs.append(actbuff)
-                print(f'Rank = {rank}, etype = {etype}, nvorts = {nvorts}, nvmx = {nvmx}.')
+        self.vortbuff = vortbuff()
+        self.actbuffs = actbuffs()
 
         if not bool(self.actbuffs):
-           self.tnext = math.inf
+           self.tnext = float('inf')
                   
     def __call__(self, intg):
-        
         tcurr = intg.tcurr
         if tcurr+self.dtol >= self.tnext:
             for abid, actbuff in enumerate(self.actbuffs):    
