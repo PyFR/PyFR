@@ -192,7 +192,9 @@ class StdPIController(BaseStdController):
             fac = min(maxf, max(minf, saff*fac))
 
             # Compute the size of the next step
-            self._dt = fac*dt
+            self._dt_in = fac*dt
+
+            self.adjust_step(t)
 
             # Decide if to accept or reject the step
             if err < 1.0:
