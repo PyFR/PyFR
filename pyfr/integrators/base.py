@@ -70,21 +70,18 @@ class BaseIntegrator:
     def adjust_step(self, t):
 
         t_diff = t - self.tcurr
-        flag = (t_diff//self._dt_in)/(t_diff/self._dt_in)
+        steps_with_dt_far = t_diff/self._dt_in
+        steps_to_t = int(np.ceil(steps_with_dt_far))
 
-        if flag > self.dt_fact:
-            # Default, target time is not near
-            self._dt = self._dt_in
-        elif flag <= self.dt_fact and (self.tcurr + self._dt_in <= t):
-            # Target time approaching
-            if self._dt_near is None:
-                # adjust step to smoothly step to target time
-                self._dt_near = t_diff/(t_diff//self._dt_in + 1)
-            self._dt = self._dt_near
-        else:
-            # Step exactly to target time
+        if steps_with_dt_far < 1:
             self._dt_near = None
             self._dt = t_diff
+        elif (steps_with_dt_far-1)/(steps_to_t-1) < self.dt_fact:
+            if self._dt_near is None:
+                self._dt_near = t_diff/steps_to_t
+            self._dt = self._dt_near                
+        else:
+            self._dt = self._dt_in
 
     def _get_plugins(self, initsoln):
         plugins = []
