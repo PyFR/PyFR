@@ -2,13 +2,13 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%pyfr:macro name='turbulence' params='t, u, ploc, src'>
-  fpdtype_t tbc = 2.3283064365386962890625e-10;
+  fpdtype_t tbc = 5.9604644775390625e-8;
   fpdtype_t arg;  
   fpdtype_t xloc2;
   fpdtype_t sclip;
   fpdtype_t g;
   fpdtype_t pos[${ndims}];
-  fpdtype_t ttploc[${ndims}];
+  fpdtype_t tploc[${ndims}];
   fpdtype_t eps[${ndims}];
   fpdtype_t delta2[${ndims}];
   fpdtype_t utilde[${ndims}];
@@ -24,35 +24,34 @@
   int epscomp;
   
   % for i, r in enumerate(rot):
-    ttploc[${i}] = ${' + '.join(f'{r[j]}*(ploc[{j}] - {shift[j]})' for j in range(3))};
+    tploc[${i}] = ${' + '.join(f'{r[j]}*(ploc[{j}] - {shift[j]})' for j in range(3))};
   % endfor
 
   % for i in range(nvmax):
     pos[0] = ${-ls} + (t-tinit[${i}][0])*${ubar};
 
-    % for j in range(3):
+    % for j in range(2):
       % if loop.index == 0:
         oldstate = state[${i}][0];
       % else:
         oldstate = newstate;
       % endif
       newstate = (oldstate * 747796405UL) + 2891336453UL;
-      rshift = oldstate >> (32UL - 4UL);
+      rshift = oldstate >> (28UL);
       oldstate ^= oldstate >> (4UL + rshift);
       oldstate *= 277803737UL;
       oldstate ^= oldstate >> 22UL;
       % if loop.index == 0:
-        pos[1] = ${ymin} + ${ymax-ymin}*((fpdtype_t)oldstate * tbc);
-      % elif loop.index == 1:
-        pos[2] = ${zmin} + ${zmax-zmin}*((fpdtype_t)oldstate * tbc);
-      % elif loop.index == 2:
-        epscomp = oldstate % 8;
+        pos[1] = ${ymin} + ${ymax-ymin}*((fpdtype_t)(oldstate >> 8UL) * tbc);
+      % else:
+        pos[2] = ${zmin} + ${zmax-zmin}*((fpdtype_t)(oldstate >> 8UL) * tbc);
       % endif
     % endfor
+    epscomp = oldstate;
 
     arg = 0.0;
     % for j in range(ndims):
-      delta2[${j}] = (pos[${j}]-ttploc[${j}])*(pos[${j}]-ttploc[${j}]);
+      delta2[${j}] = (pos[${j}]-tploc[${j}])*(pos[${j}]-tploc[${j}]);
       arg += ${-0.5/(sigma*sigma*ls*ls)}*delta2[${j}];
     % endfor
 
@@ -61,13 +60,13 @@
     g = state[${i}][0] > 0 ? g : 0.0;
        
     % for j in range(ndims): 
-      utilde[${j}] += ((epscomp & 1 << ${j}) ? -1 : 1)*g;
+      utilde[${j}] += ((epscomp & (32UL << ${j}UL)) ? -1 : 1)*g;
     % endfor
   % endfor
     
-  xloc2 = ttploc[0]*ttploc[0]*${-0.5*math.pi/(ls*ls)};
+  xloc2 = tploc[0]*tploc[0]*${-0.5*math.pi/(ls*ls)};
   
-  sclip = ttploc[0] < ${ls} ? ttploc[0] > ${-ls} ? ${ubar/ls}*${pyfr.polyfit(lambda x: 2.718281828459045**x, 0, 1, 8, 'xloc2')} : 0.0: 0.0;
+  sclip = tploc[0] < ${ls} ? tploc[0] > ${-ls} ? ${ubar/ls}*${pyfr.polyfit(lambda x: 2.718281828459045**x, 0, 1, 8, 'xloc2')} : 0.0: 0.0;
   
   src[0] += ${srafac*fac}*utilde[0]*sclip;
   % for i in range(ndims):
