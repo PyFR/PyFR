@@ -1503,12 +1503,11 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     *int*
 
-
 5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
 
     *string*
 
-6. ``norm`` --- sets the degree and calculates an :math:`L_p` norm (optional),
+6. ``norm`` --- sets the degree and calculates an :math:`L_p` norm,
     otherwise standard integration is performed:
 
     *float* | ``inf`` | ``none``
