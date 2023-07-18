@@ -1503,17 +1503,23 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     *int*
 
+
 5. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
 
     *string*
 
-6. ``region`` --- region to integrate, specified as either the
+6. ``norm`` --- sets the degree and calculates an :math:`L_p` norm (optional),
+    otherwise standard integration is performed:
+
+    *float* | ``inf`` | ``none``
+
+7. ``region`` --- region to integrate, specified as either the
    entire domain using ``*`` or a combination of the geometric shapes
    specified in :ref:`regions`:
 
     ``*`` | ``shape(args, ...)``
 
-7. ``int``-*name* --- expression to integrate, written as a function of
+8. ``int``-*name* --- expression to integrate, written as a function of
    the primitive variables and gradients thereof, the physical coordinates
    [x, y, [z]] and/or the physical time [t]; multiple expressions,
    each with their own *name*, may be specified:
