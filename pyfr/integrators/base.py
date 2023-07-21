@@ -68,17 +68,16 @@ class BaseIntegrator:
         self._dt_near = None
 
     def adjust_step(self, t):
-
         t_diff = t - self.tcurr
-        steps_with_dt_far = t_diff/self._dt_in
-        steps_to_t = int(np.ceil(steps_with_dt_far))
+        steps_with_dt_far = t_diff / self._dt_in
+        steps_to_t = -(steps_with_dt_far // -1)
 
-        if steps_with_dt_far < 1:
+        if steps_with_dt_far == 0:
             self._dt_near = None
             self._dt = t_diff
-        elif (steps_with_dt_far-1)/(steps_to_t-1) < self.dt_fact:
+        elif (steps_with_dt_far - 1) / (steps_to_t - 1) < self.dt_fact:
             if self._dt_near is None:
-                self._dt_near = t_diff/steps_to_t
+                self._dt_near = t_diff / steps_to_t
             self._dt = self._dt_near                
         else:
             self._dt = self._dt_in
