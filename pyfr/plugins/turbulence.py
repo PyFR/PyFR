@@ -1,8 +1,4 @@
 import math
-import random
-import time
-import uuid
-
 import numpy as np
 
 from collections import defaultdict
@@ -14,24 +10,14 @@ from rtree.index import Index, Property
 class pcg32rxs_m_xs:
     def __init__(self, seed):
         self.state = np.uint32(seed)
-        self.multiplier = np.uint32(747796405)
-        self.mcgmultiplier = np.uint32(277803737)
-        self.increment = np.uint32(2891336453)
-        self.opbits = np.uint8(4)
-        self.b8 = np.uint8(8)
-        self.b22 = np.uint8(22)
-        self.b28 = np.uint8(28)
-        self.b32 = np.uint8(32)
-    def rand(self):
-        oldstate = self.state
-        self.state = (oldstate * self.multiplier) + self.increment
-        rshift = np.uint8(oldstate >> self.b28)
-        oldstate ^= oldstate >> (self.opbits + rshift)
-        oldstate *= self.mcgmultiplier
-        oldstate ^= oldstate >> self.b22
-        return oldstate
     def random(self):
-        return (self.rand() >> self.b8) * 5.9604644775390625e-8
+        oldstate = self.state
+        self.state = (oldstate * np.uint32(747796405)) + np.uint32(2891336453)
+        rshift = np.uint8(oldstate >> 28)
+        oldstate ^= oldstate >> (4 + rshift)
+        oldstate *= np.uint32(277803737)
+        oldstate ^= oldstate >> 22
+        return (oldstate >> 8) * 5.9604644775390625e-8
     def getstate(self):
         return self.state
 
@@ -40,9 +26,12 @@ class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
     systems = ['navier-stokes']
     formulations = ['dual', 'std']
+    dimensions = ['3']
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
+
+        fdptype = intg.backend.fpdtype
 
         self.tstart = intg.tstart
         self.tbegin = intg.tcurr
@@ -51,68 +40,65 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         self.seed = self.cfg.getint(cfgsect, 'seed')
 
-        fdptype = intg.backend.fpdtype
-
         self.vortdtype = np.dtype([('loci', fdptype, 2), ('tinit', fdptype), ('state', np.uint32)])
         self.sstreamdtype = np.dtype([('vid', '<i4'), ('ts', fdptype), ('te', fdptype)])
         self.buffdtype = np.dtype([('tinit', fdptype), ('state', np.uint32), ('ts', fdptype), ('te', fdptype)])
 
         gamma = self.cfg.getfloat('constants', 'gamma')
         rhobar = self.cfg.getfloat(cfgsect, 'rho-bar')
-        self.ubar = self.cfg.getfloat(cfgsect, 'u-bar')
+        self.ubar = ubar = self.cfg.getfloat(cfgsect, 'u-bar')
         machbar = self.cfg.getfloat(cfgsect, 'mach-bar')
-        rootrs = self.cfg.getfloat(cfgsect, 'turbulence-intensity')*self.ubar/100.0
+        ti = self.cfg.getfloat(cfgsect, 'turbulence-intensity')
         sigma = self.cfg.getfloat(cfgsect, 'sigma')
-        self.ls = self.cfg.getfloat(cfgsect, 'turbulence-length-scale')
+        self.ls = ls = self.cfg.getfloat(cfgsect, 'turbulence-length-scale')
 
-        srafac = rhobar*(gamma-1.0)*machbar*machbar
-        gc = math.sqrt((2.0*sigma/(math.sqrt(math.pi)))*(1.0/math.erf(1.0/sigma)))
+        gc = (2.0*sigma/((math.pi)**0.5))*(1.0/math.erf(1.0/sigma))**0.5
 
-        fac = (rootrs*gc*gc*gc)/(sigma*sigma*sigma)
+        fac1 = -0.5/(sigma*sigma*ls*ls)
+        fac2 = rhobar*(gamma - 1)*machbar**2
+        fac3 = (ti*ubar*gc*gc*gc)/(100*sigma*sigma*sigma)
 
         ydim = self.cfg.getfloat(cfgsect,'y-dim')
         zdim = self.cfg.getfloat(cfgsect,'z-dim')
         
-        self.xmin = - self.ls
-        self.xmax = self.ls
-        self.ymin = -ydim/2
-        self.ymax = ydim/2
-        self.zmin = -zdim/2
-        self.zmax = zdim/2
+        self.xmin = - ls
+        self.xmax = ls
+        self.ymin = ymin = -ydim/2
+        self.ymax = ymax = ydim/2
+        self.zmin = zmin = -zdim/2
+        self.zmax = zmax = zdim/2
 
-        self.nvorts = int((self.ymax-self.ymin)*(self.zmax-self.zmin)/(4*self.ls*self.ls))
-        self.bbox = BoxRegion([self.xmin-self.ls,self.ymin-self.ls,self.zmin-self.ls],
-                         [self.xmax+self.ls,self.ymax+self.ls,self.zmax+self.ls])
+        self.nvorts = int((ymax-ymin)*(zmax-zmin)/(4*ls**2))
+        self.bbox = BoxRegion([-2*ls,ymin-ls,zmin-ls], [2*ls,ymax+ls,zmax+ls])
         
         theta = -1.0*np.radians(self.cfg.getfloat(cfgsect,'rot-angle'))
-
         c = self.cfg.getliteral(cfgsect, 'centre')
         e = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
 
-        self.shift = np.array(c)
-        self.rot=(np.cos(theta)*np.identity(3))+(np.sin(theta)*(np.cross(e, np.identity(3) * -1)))+(1.0-np.cos(theta))*np.outer(e,e)
+        self.shift = shift = np.array(c)
+        self.rot = rot = (np.cos(theta)*np.identity(3))+(np.sin(theta)*(np.cross(e, np.identity(3) * -1)))+(1.0-np.cos(theta))*np.outer(e,e)
 
-        self.dtol = 0
-        
         if hasattr(intg, 'dtmax'):
             self.dtol = intg.dtmax
         else:
             self.dtol = intg._dt
 
-        self.macro_params = {'ls': self.ls, 'ubar': self.ubar, 'srafac': srafac,
-                 'ymin': self.ymin, 'ymax': self.ymax, 'zmin': self.zmin, 'zmax': self.zmax,
-                 'sigma' : sigma, 'rootrs': rootrs, 'gc': gc, 'fac': fac, 'rot': self.rot, 'shift': self.shift
-                }
+        self.macro_params = {'ls': ls, 'ubar': ubar, 'ymin': ymin, 'ymax': ymax,
+                             'zmin': zmin, 'zmax': zmax, 'fac1' : fac1,
+                             'fac2': fac2, 'fac3': fac3, 'rot': rot,
+                             'shift': shift
+                            }
 
         self.vortbuff = self.vortbuff()
         self.actbuffs = self.actbuffs(intg)
 
         if not bool(self.actbuffs):
            self.tnext = float('inf')
-                  
+
+                
     def __call__(self, intg):
         tcurr = intg.tcurr
-        if tcurr+self.dtol >= self.tnext:
+        if tcurr + self.dtol >= self.tnext:
             for abid, actbuff in enumerate(self.actbuffs):    
                 if actbuff['trcl'] <= self.tnext:
                     trcl = np.inf
@@ -145,6 +131,14 @@ class TurbulencePlugin(BaseSolverPlugin):
                 self.tnext = proptnext
             else:
                 print('Not advancing.')
+
+
+
+
+
+
+
+
 
     def vortbuff(self):
         pcg32rng = pcg32rxs_m_xs(self.seed)

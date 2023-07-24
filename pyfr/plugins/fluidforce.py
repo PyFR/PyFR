@@ -10,6 +10,7 @@ class FluidForcePlugin(BaseSolnPlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
+    dimensions = ['*']
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

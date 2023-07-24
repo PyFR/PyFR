@@ -14,6 +14,7 @@ class IntegratePlugin(BaseSolnPlugin):
     name = 'integrate'
     systems = ['*']
     formulations = ['dual', 'std']
+    dimensions = ['*']
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)

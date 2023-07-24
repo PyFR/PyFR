@@ -7,6 +7,7 @@ class NaNCheckPlugin(BaseSolnPlugin):
     name = 'nancheck'
     systems = ['*']
     formulations = ['dual', 'std']
+    dimensions = ['*']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

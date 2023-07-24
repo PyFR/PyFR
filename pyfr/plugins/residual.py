@@ -8,6 +8,7 @@ class ResidualPlugin(BaseSolnPlugin):
     name = 'residual'
     systems = ['*']
     formulations = ['std']
+    dimensions = ['*']
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

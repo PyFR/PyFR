@@ -10,6 +10,7 @@ class SourcePlugin(BaseSolverPlugin):
     name = 'source'
     systems = ['*']
     formulations = ['dual', 'std']
+    dimensions = ['*']
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
