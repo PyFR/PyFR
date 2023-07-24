@@ -11,12 +11,12 @@ class pcg32rxs_m_xs:
     def __init__(self, seed):
         self.state = np.uint32(seed)
     def random(self):
-        oldstate = self.state
+        oldstate = np.uint32(self.state)
         self.state = (oldstate * np.uint32(747796405)) + np.uint32(2891336453)
-        rshift = np.uint8(oldstate >> 28)
-        oldstate ^= oldstate >> (4 + rshift)
+        rshift = np.uint32(oldstate >> np.uint32(28))
+        oldstate ^= oldstate >> (np.uint32(4) + rshift)
         oldstate *= np.uint32(277803737)
-        oldstate ^= oldstate >> 22
+        oldstate ^= oldstate >> np.uint32(22)
         return (oldstate >> 8) * 5.9604644775390625e-8
     def getstate(self):
         return self.state
@@ -52,7 +52,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         sigma = self.cfg.getfloat(cfgsect, 'sigma')
         self.ls = ls = self.cfg.getfloat(cfgsect, 'turbulence-length-scale')
 
-        gc = (2.0*sigma/((math.pi)**0.5))*(1.0/math.erf(1.0/sigma))**0.5
+        gc = ((2.0*sigma/((math.pi)**0.5))*(1.0/math.erf(1.0/sigma)))**0.5
 
         fac1 = -0.5/(sigma*sigma*ls*ls)
         fac2 = rhobar*(gamma - 1)*machbar**2

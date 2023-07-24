@@ -58,7 +58,7 @@
      
   clip = (tploc[0] < ${ls} && tploc[0] > ${-ls}) ? ${ubar/ls}*${pyfr.polyfit(lambda x: 2.718281828459045**x, 0, 1, 8, 'xloc2')} : 0.0;
   
-  src[0] += ${fac2*fac3}*utilde[0]*clip;
+  src[0] += ${fac2}*${fac3}*utilde[0]*clip;
   % for i in range(3):
     src[${i + 1}] += u[0]*${fac3}*utilde[${i}]*clip;
   % endfor
