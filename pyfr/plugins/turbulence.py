@@ -61,8 +61,6 @@ class TurbulencePlugin(BaseSolverPlugin):
         ydim = self.cfg.getfloat(cfgsect,'y-dim')
         zdim = self.cfg.getfloat(cfgsect,'z-dim')
         
-        self.xmin = - ls
-        self.xmax = ls
         self.ymin = ymin = -ydim/2
         self.ymax = ymax = ydim/2
         self.zmin = zmin = -zdim/2
@@ -98,40 +96,41 @@ class TurbulencePlugin(BaseSolverPlugin):
                 
     def __call__(self, intg):
         tcurr = intg.tcurr
-        if tcurr + self.dtol >= self.tnext:
-            for abid, actbuff in enumerate(self.actbuffs):    
-                if actbuff['trcl'] <= self.tnext:
-                    trcl = np.inf
-                    for geid, sstream in actbuff['sstream'].items():
-                        if sstream['vid'].any():
-                            tmp = actbuff['buff'][:,geid][actbuff['buff'][:,geid]['te'] > tcurr]        
-                            shft = actbuff['nvmx']-len(tmp)   
-                            if shft:
-                                newb = np.zeros(shft, self.buffdtype)
-                                temp = self.vortbuff[['tinit', 'state']][sstream['vid'][:shft]]
-                                pad = shft-temp.shape[0]
-                                newb[['tinit', 'state']] = np.pad(temp, (0,pad), 'constant')
-                                newb[['ts', 'te']] = np.pad(sstream[['ts', 'te']][:shft], (0,pad), 'constant')
-                                self.actbuffs[abid]['buff'][:,geid] = np.concatenate((tmp,newb))
-                                self.actbuffs[abid]['sstream'][geid] = sstream[shft:]
-                            else:
-                                tstemp = sstream['ts'][0]
-                                if tcurr >= tstemp:
-                                    print(f'Active vortex in stream cannot fit on buffer.')
-                                
-                            if self.actbuffs[abid]['sstream'][geid]['vid'].any() and (self.actbuffs[abid]['buff'][-1,geid]['ts'] < trcl):
-                                trcl = self.actbuffs[abid]['buff'][-1,geid]['ts']
+        if tcurr + self.dtol < self.tnext:
+            return
 
-                    self.actbuffs[abid]['trcl'] = trcl
-                    self.actbuffs[abid]['tinit'].set(actbuff['buff']['tinit'][:, np.newaxis, :])
-                    self.actbuffs[abid]['state'].set(actbuff['buff']['state'][:, np.newaxis, :])
-            
-            proptnext = min(etype['trcl'] for etype in self.actbuffs)
-            if proptnext > self.tnext:
-                self.tnext = proptnext
-            else:
-                print('Not advancing.')
+        for abid, actbuff in enumerate(self.actbuffs):    
+            if actbuff['trcl'] <= self.tnext:
+                trcl = np.inf
+                for geid, sstream in actbuff['sstream'].items():
+                    if sstream['vid'].any():
+                        tmp = actbuff['buff'][:,geid][actbuff['buff'][:,geid]['te'] > tcurr]        
+                        shft = actbuff['nvmx']-len(tmp)   
+                        if shft:
+                            newb = np.zeros(shft, self.buffdtype)
+                            temp = self.vortbuff[['tinit', 'state']][sstream['vid'][:shft]]
+                            pad = shft-temp.shape[0]
+                            newb[['tinit', 'state']] = np.pad(temp, (0,pad), 'constant')
+                            newb[['ts', 'te']] = np.pad(sstream[['ts', 'te']][:shft], (0,pad), 'constant')
+                            self.actbuffs[abid]['buff'][:,geid] = np.concatenate((tmp,newb))
+                            self.actbuffs[abid]['sstream'][geid] = sstream[shft:]
+                        else:
+                            tstemp = sstream['ts'][0]
+                            if tcurr >= tstemp:
+                                print(f'Active vortex in stream cannot fit on buffer.')
+                            
+                        if self.actbuffs[abid]['sstream'][geid]['vid'].any() and (self.actbuffs[abid]['buff'][-1,geid]['ts'] < trcl):
+                            trcl = self.actbuffs[abid]['buff'][-1,geid]['ts']
 
+                self.actbuffs[abid]['trcl'] = trcl
+                self.actbuffs[abid]['tinit'].set(actbuff['buff']['tinit'][:, np.newaxis, :])
+                self.actbuffs[abid]['state'].set(actbuff['buff']['state'][:, np.newaxis, :])
+        
+        proptnext = min(etype['trcl'] for etype in self.actbuffs)
+        if proptnext > self.tnext:
+            self.tnext = proptnext
+        else:
+            print('Not advancing.')
 
 
 
@@ -144,26 +143,27 @@ class TurbulencePlugin(BaseSolverPlugin):
         pcg32rng = pcg32rxs_m_xs(self.seed)
         vid = 0
         temp = []
-        xtemp = []
-        
         tinits = []
         
         while vid < self.nvorts:
-            tinits.append(self.tstart + (self.xmax-self.xmin)*pcg32rng.random()/self.ubar)
+            tinits.append(self.tstart + 2*self.ls*pcg32rng.random()/self.ubar)
             vid += 1
 
-        while True:     
+        while any(tinit <= self.tend for tinit in tinits):     
             for vid, tinit in enumerate(tinits):
                 state = pcg32rng.getstate()
                 yinit = self.ymin + (self.ymax-self.ymin)*pcg32rng.random()
                 zinit = self.zmin + (self.zmax-self.zmin)*pcg32rng.random()
-                if tinit+((self.xmax-self.xmin)/self.ubar) >= self.tbegin and tinit <= self.tend:
-                    xtemp.append(((yinit,zinit),tinit,state))
-                tinits[vid] += (self.xmax-self.xmin)/self.ubar
-            if all(tinit > self.tend for tinit in tinits):
-                break
+                if tinit+(2*self.ls/self.ubar) >= self.tbegin and tinit <= self.tend:
+                    temp.append(((yinit,zinit),tinit,state))
+                tinits[vid] += 2*self.ls/self.ubar
     
-        return np.asarray(xtemp, self.vortdtype)
+        return np.asarray(temp, self.vortdtype)
+
+
+
+
+
 
     def actbuffs(self, intg):
         actbuffs = []
@@ -192,12 +192,12 @@ class TurbulencePlugin(BaseSolverPlugin):
                                     ptsri[:,i,0].max(),ptsri[:,i,1].max(),ptsri[:,i,2].max()))
 
                 for vid, vort in enumerate(self.vortbuff):
-                    vbox = BoxRegion([self.xmin-self.ls, vort['loci'][0]-self.ls, vort['loci'][1]-self.ls],
-                                     [self.xmax+self.ls, vort['loci'][0]+self.ls, vort['loci'][1]+self.ls])
+                    vbox = BoxRegion([-2*self.ls, vort['loci'][0]-self.ls, vort['loci'][1]-self.ls],
+                                     [2*self.ls, vort['loci'][0]+self.ls, vort['loci'][1]+self.ls])
 
                     elestemp = []
-                    candidate = np.array(list(set(idx3d.intersection((self.xmin-self.ls, vort['loci'][0]-self.ls, vort['loci'][1]-self.ls,
-                                                                      self.xmax+self.ls, vort['loci'][0]+self.ls, vort['loci'][1]+self.ls)))))   
+                    candidate = np.array(list(set(idx3d.intersection((-2*self.ls, vort['loci'][0]-self.ls, vort['loci'][1]-self.ls,
+                                                                      2*self.ls, vort['loci'][0]+self.ls, vort['loci'][1]+self.ls)))))   
 
                     if np.any(candidate):
                         vinside = vbox.pts_in_region(ptsri[:,candidate,:])
@@ -207,8 +207,8 @@ class TurbulencePlugin(BaseSolverPlugin):
                     for leid in elestemp:
                         exmin = ptsri[vinside[:,leid],candidate[leid],0].min()
                         exmax = ptsri[vinside[:,leid],candidate[leid],0].max()
-                        ts = max(vort['tinit'], vort['tinit'] + ((exmin - self.xmin - self.ls)/self.ubar))
-                        te = max(ts,min(ts + (exmax-exmin+2*self.ls)/self.ubar,vort['tinit']+((self.xmax-self.xmin)/self.ubar)))
+                        ts = max(vort['tinit'], vort['tinit'] + (exmin/self.ubar))
+                        te = max(ts,min(ts + (exmax-exmin+2*self.ls)/self.ubar,vort['tinit']+(2*self.ls/self.ubar)))
                         stream[eids[candidate[leid]]].append((vid,ts,te))
 
                 for k, v in stream.items():
