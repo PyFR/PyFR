@@ -1594,7 +1594,7 @@ Example::
     E = 1.0/(1.0+x)
 
 [solver-plugin-turbulence]
-^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Injects synthetic eddies into a region of the domain. Parameterised with
 
@@ -1648,7 +1648,7 @@ Injects synthetic eddies into a region of the domain. Parameterised with
 
 Example::
 
-    [solver-plugin-source]
+    [solver-plugin-turbulence]
     rho-bar = 1.0
     u-bar = 1.0
     mach-bar = 0.2

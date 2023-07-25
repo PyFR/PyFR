@@ -5,7 +5,6 @@
 <%pyfr:macro name='turbulence' params='t, u, ploc, src'>
   fpdtype_t tbc = 5.9604644775390625e-8;
   fpdtype_t arg;
-  fpdtype_t xloc2;
   fpdtype_t clip;
   fpdtype_t g;
   fpdtype_t tpos[3];
