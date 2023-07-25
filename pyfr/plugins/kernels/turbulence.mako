@@ -1,4 +1,5 @@
-<%namespace module='numpy' name='np'/>
+<% import numpy as np %>
+
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 <%pyfr:macro name='turbulence' params='t, u, ploc, src'>
@@ -45,7 +46,7 @@
       arg += ${fac1}*delta2[${j}];
     % endfor
 
-    g = (delta2[0] < ${ls**2} && delta2[1] < ${ls**2} && delta2[2] < ${ls**2} && tpos[0] <= ${ls}) ? ${pyfr.polyfit(lambda x: 2.718281828459045**x, 0, 1, 8, 'arg')} : 0.0;
+    g = (delta2[0] < ${ls**2} && delta2[1] < ${ls**2} && delta2[2] < ${ls**2} && tpos[0] <= ${ls}) ? ${pyfr.polyfit(np.exp, 3*fac1*ls**2, 0, 8, 'arg')} : 0.0;
 
     g = (state[${i}][0] > 0) ? g : 0.0;
        
@@ -54,9 +55,7 @@
     % endfor
   % endfor
 
-  xloc2 = tploc[0]*tploc[0]*${-0.5*math.pi/(ls**2)};
-     
-  clip = (tploc[0] < ${ls} && tploc[0] > ${-ls}) ? ${ubar/ls}*${pyfr.polyfit(lambda x: 2.718281828459045**x, 0, 1, 8, 'xloc2')} : 0.0;
+  clip = (tploc[0] < ${ls} && tploc[0] > ${-ls}) ? ${pyfr.polyfit(lambda x: (ubar/ls)*np.exp(-0.5*np.pi*x**2/ls**2), -ls, ls, 8, 'tploc[0]')} : 0.0;
   
   src[0] += ${fac2}*${fac3}*utilde[0]*clip;
   % for i in range(3):

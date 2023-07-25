@@ -87,10 +87,10 @@ class TurbulencePlugin(BaseSolverPlugin):
                              'shift': shift
                             }
 
-        self.vortbuff = self.vortbuff()
-        self.actbuffs = self.actbuffs(intg)
+        self.vortb = self.vortb()
+        self.actbs = self.actbs(intg)
 
-        if not bool(self.actbuffs):
+        if not bool(self.actbs):
            self.tnext = float('inf')
 
                 
@@ -99,47 +99,41 @@ class TurbulencePlugin(BaseSolverPlugin):
         if tcurr + self.dtol < self.tnext:
             return
 
-        for abid, actbuff in enumerate(self.actbuffs):    
-            if actbuff['trcl'] <= self.tnext:
+        for i, actb in enumerate(self.actbs):    
+            if actb['trcl'] <= self.tnext:
                 trcl = np.inf
-                for geid, sstream in actbuff['sstream'].items():
-                    if sstream['vid'].any():
-                        tmp = actbuff['buff'][:,geid][actbuff['buff'][:,geid]['te'] > tcurr]        
-                        shft = actbuff['nvmx']-len(tmp)   
-                        if shft:
-                            newb = np.zeros(shft, self.buffdtype)
-                            temp = self.vortbuff[['tinit', 'state']][sstream['vid'][:shft]]
-                            pad = shft-temp.shape[0]
-                            newb[['tinit', 'state']] = np.pad(temp, (0,pad), 'constant')
-                            newb[['ts', 'te']] = np.pad(sstream[['ts', 'te']][:shft], (0,pad), 'constant')
-                            self.actbuffs[abid]['buff'][:,geid] = np.concatenate((tmp,newb))
-                            self.actbuffs[abid]['sstream'][geid] = sstream[shft:]
+                for j, stream in actb['sstream'].items():
+                    if stream['vid'].any():
+                        temp1 = actb['buff'][:,j][actb['buff'][:,j]['te'] > tcurr]        
+                        shift = actb['nvmx']-len(temp1)   
+                        if shift:
+                            temp3 = self.vortb[['tinit', 'state']][stream['vid'][:shift]]
+                            pad = shift-temp3.shape[0]
+                            temp2 = np.zeros(shift, self.buffdtype)
+                            temp2[['tinit', 'state']] = np.pad(temp3, (0,pad), 'constant')
+                            temp2[['ts', 'te']] = np.pad(stream[['ts', 'te']][:shift], (0,pad), 'constant')
+                            self.actbs[i]['buff'][:,j] = np.concatenate((temp1,temp2))
+                            self.actbs[i]['sstream'][j] = stream[shift:]
                         else:
-                            tstemp = sstream['ts'][0]
-                            if tcurr >= tstemp:
+                            temp2 = stream['ts'][0]
+                            if tcurr >= temp2:
                                 print(f'Active vortex in stream cannot fit on buffer.')
                             
-                        if self.actbuffs[abid]['sstream'][geid]['vid'].any() and (self.actbuffs[abid]['buff'][-1,geid]['ts'] < trcl):
-                            trcl = self.actbuffs[abid]['buff'][-1,geid]['ts']
+                        if self.actbs[i]['sstream'][j]['vid'].any() and (self.actbs[i]['buff'][-1,j]['ts'] < trcl):
+                            trcl = self.actbs[i]['buff'][-1,j]['ts']
 
-                self.actbuffs[abid]['trcl'] = trcl
-                self.actbuffs[abid]['tinit'].set(actbuff['buff']['tinit'][:, np.newaxis, :])
-                self.actbuffs[abid]['state'].set(actbuff['buff']['state'][:, np.newaxis, :])
+                self.actbs[i]['trcl'] = trcl
+                self.actbs[i]['tinit'].set(actb['buff']['tinit'][:, np.newaxis, :])
+                self.actbs[i]['state'].set(actb['buff']['state'][:, np.newaxis, :])
         
-        proptnext = min(etype['trcl'] for etype in self.actbuffs)
+        proptnext = min(etype['trcl'] for etype in self.actbs)
         if proptnext > self.tnext:
             self.tnext = proptnext
         else:
             print('Not advancing.')
 
 
-
-
-
-
-
-
-    def vortbuff(self):
+    def vortb(self):
         pcg32rng = pcg32rxs_m_xs(self.seed)
         vid = 0
         temp = []
@@ -161,12 +155,8 @@ class TurbulencePlugin(BaseSolverPlugin):
         return np.asarray(temp, self.vortdtype)
 
 
-
-
-
-
-    def actbuffs(self, intg):
-        actbuffs = []
+    def actbs(self, intg):
+        actbs = []
         for etype, eles in intg.system.ele_map.items(): 
             neles = eles.neles
             pts = eles.ploc_at_np('upts')
@@ -179,8 +169,10 @@ class TurbulencePlugin(BaseSolverPlugin):
             sstream = defaultdict()
 
             if np.any(inside):
-                eids = np.any(inside, axis=0).nonzero()[0] # eles in injection box
-                ptsri = ptsr[:,eids,:] # points in injection box
+                # Get eles in injection box
+                eids = np.any(inside, axis=0).nonzero()[0]
+                # Get points in injection box
+                ptsri = ptsr[:,eids,:] 
 
                 props = Property(dimension=3, interleaved=True)
                 idx3d = Index(properties=props)
@@ -191,7 +183,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                     idx3d.insert(i,(ptsri[:,i,0].min(),ptsri[:,i,1].min(),ptsri[:,i,2].min(),
                                     ptsri[:,i,0].max(),ptsri[:,i,1].max(),ptsri[:,i,2].max()))
 
-                for vid, vort in enumerate(self.vortbuff):
+                for vid, vort in enumerate(self.vortb):
                     vbox = BoxRegion([-2*self.ls, vort['loci'][0]-self.ls, vort['loci'][1]-self.ls],
                                      [2*self.ls, vort['loci'][0]+self.ls, vort['loci'][1]+self.ls])
 
@@ -229,7 +221,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
                 buff = np.zeros((nvmx, neles), self.buffdtype)
 
-                actbuff = {'trcl': 0.0, 'sstream': sstream, 'nvmx': nvmx, 'buff': buff,
+                actb = {'trcl': 0.0, 'sstream': sstream, 'nvmx': nvmx, 'buff': buff,
                            'tinit': eles._be.matrix((nvmx, 1, neles), tags={'align'}),
                            'state': eles._be.matrix((nvmx, 1, neles), tags={'align'}, dtype=np.uint32)}
 
@@ -237,13 +229,13 @@ class TurbulencePlugin(BaseSolverPlugin):
 
                 eles._set_external('tinit',
                                    f'in broadcast-col fpdtype_t[{nvmx}][1]',
-                                   value=actbuff['tinit'])
+                                   value=actb['tinit'])
                                    
                 eles._set_external('state',
                                    f'in broadcast-col uint32_t[{nvmx}][1]',
-                                   value=actbuff['state'])
+                                   value=actb['state'])
 
-                actbuffs.append(actbuff)
+                actbs.append(actb)
 
-        return actbuffs
+        return actbs
 
