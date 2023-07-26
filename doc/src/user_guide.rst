@@ -1598,15 +1598,15 @@ Example::
 
 Injects synthetic eddies into a region of the domain. Parameterised with
 
-1. ``rho-bar`` --- average free-stream density:
+1. ``avg-rho`` --- average free-stream density:
 
     *float*
 
-2. ``u-bar`` --- average free-stream velocity magnitude:
+2. ``avg-u`` --- average free-stream velocity magnitude:
 
     *float*
 
-3. ``mach-bar`` --- averge free-stream Mach number:
+3. ``avg-mach`` --- averge free-stream Mach number:
 
     *float*
 
@@ -1638,7 +1638,7 @@ Injects synthetic eddies into a region of the domain. Parameterised with
 
     (*float*, *float*, *float*)
 
-11. ``rot-angle`` --- angle that plane is rotated:
+11. ``rot-angle`` --- angle in degrees that plane is rotated:
 
     *float*
 
@@ -1649,9 +1649,9 @@ Injects synthetic eddies into a region of the domain. Parameterised with
 Example::
 
     [solver-plugin-turbulence]
-    rho-bar = 1.0
-    u-bar = 1.0
-    mach-bar = 0.2
+    avg-rho = 1.0
+    avg-u = 1.0
+    avg-mach = 0.2
     turbulence-intensity = 1.0
     turbulence-length-scale = 0.075
     sigma = 0.7

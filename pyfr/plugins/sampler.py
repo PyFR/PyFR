@@ -64,7 +64,7 @@ class SamplerPlugin(BaseSolnPlugin):
     name = 'sampler'
     systems = ['*']
     formulations = ['dual', 'std']
-    dimensions = ['*']
+    dimensions = [2,3]
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

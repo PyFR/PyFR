@@ -26,7 +26,7 @@ class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
     systems = ['navier-stokes']
     formulations = ['dual', 'std']
-    dimensions = ['3']
+    dimensions = [3]
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
@@ -45,26 +45,29 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.buffdtype = np.dtype([('tinit', fdptype), ('state', np.uint32), ('ts', fdptype), ('te', fdptype)])
 
         gamma = self.cfg.getfloat('constants', 'gamma')
-        rhobar = self.cfg.getfloat(cfgsect, 'rho-bar')
-        self.ubar = ubar = self.cfg.getfloat(cfgsect, 'u-bar')
-        machbar = self.cfg.getfloat(cfgsect, 'mach-bar')
+        rhobar = self.cfg.getfloat(cfgsect, 'avg-rho')
+        self.ubar = ubar = self.cfg.getfloat(cfgsect, 'avg-u')
+        machbar = self.cfg.getfloat(cfgsect, 'avg-mach')
         ti = self.cfg.getfloat(cfgsect, 'turbulence-intensity')
         sigma = self.cfg.getfloat(cfgsect, 'sigma')
         self.ls = ls = self.cfg.getfloat(cfgsect, 'turbulence-length-scale')
 
-        gc = ((2.0*sigma/((math.pi)**0.5))*(1.0/math.erf(1.0/sigma)))**0.5
+        gc = ((2*sigma/(math.pi**0.5))*(1/math.erf(1/sigma)))**0.5
 
-        fac1 = -0.5/(sigma*sigma*ls*ls)
+        fac1 = -0.5/(sigma**2*ls**2)
         fac2 = rhobar*(gamma - 1)*machbar**2
-        fac3 = (ti*ubar*gc*gc*gc)/(100*sigma*sigma*sigma)
+        fac3 = (ti*ubar*gc**3)/(100*sigma**3)
 
-        ydim = self.cfg.getfloat(cfgsect,'y-dim')
-        zdim = self.cfg.getfloat(cfgsect,'z-dim')
+        ydim = self.cfg.getfloat(cfgsect, 'y-dim')
+        zdim = self.cfg.getfloat(cfgsect, 'z-dim')
         
         self.ymin = ymin = -ydim/2
         self.ymax = ymax = ydim/2
         self.zmin = zmin = -zdim/2
         self.zmax = zmax = zdim/2
+
+        yzmin = [ymin, zmin]
+        yzmax = [ymax, ymax]
 
         self.nvorts = int((ymax-ymin)*(zmax-zmin)/(4*ls**2))
         self.bbox = BoxRegion([-2*ls,ymin-ls,zmin-ls], [2*ls,ymax+ls,zmax+ls])
@@ -81,10 +84,9 @@ class TurbulencePlugin(BaseSolverPlugin):
         else:
             self.dtol = intg._dt
 
-        self.macro_params = {'ls': ls, 'ubar': ubar, 'ymin': ymin, 'ymax': ymax,
-                             'zmin': zmin, 'zmax': zmax, 'fac1' : fac1,
-                             'fac2': fac2, 'fac3': fac3, 'rot': rot,
-                             'shift': shift
+        self.macro_params = {'ls': ls, 'ubar': ubar, 'yzmin': yzmin,
+                             'yzmax': yzmax, 'fac1' : fac1, 'fac2': fac2,
+                             'fac3': fac3, 'rot': rot, 'shift': shift
                             }
 
         self.vortb = self.vortb()

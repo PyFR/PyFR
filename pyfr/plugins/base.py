@@ -55,7 +55,7 @@ class BasePlugin:
                                f'supported by plugin {self.name}')
 
         # Check that we support dimensionality of simulation
-        if not ('*' in self.dimensions or intg.system.ndims not in self.dimensions):
+        if intg.system.ndims not in self.dimensions:
             raise RuntimeError(f'Dimensionality of {intg.formulation} not '
                                f'supported by plugin {self.name}')
 
