@@ -23,8 +23,8 @@
 
     % for j in range(2):
       ${f'oldstate = state[{i}][0]' if loop.index == 0 else 'oldstate = newstate'};
-      newstate = (oldstate * 747796405UL) + 2891336453UL;
-      rshift = oldstate >> (28UL);
+      newstate = oldstate * 747796405UL + 2891336453UL;
+      rshift = oldstate >> 28UL;
       oldstate ^= oldstate >> (4UL + rshift);
       oldstate *= 277803737UL;
       oldstate ^= oldstate >> 22UL;
