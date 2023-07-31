@@ -1,6 +1,7 @@
+from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BaseSolnPlugin, init_csv
-
+from pyfr.readers.native import NativeReader
 
 class BenchmarkPlugin(BaseSolnPlugin):
     name = 'benchmark'
@@ -21,14 +22,32 @@ class BenchmarkPlugin(BaseSolnPlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            self.outf = init_csv(self.cfg, cfgsect, 'n,t,walldt')
+            self.outf = init_csv(self.cfg, cfgsect, 'n,t,walldt,performance')
         else:
             self.outf = None
+
+        mesh = NativeReader(self.cfg.get(self.cfgsect, 'mesh'))
+        order = self.cfg.getint('solver', 'order')
+
+        mesh_nep = mesh.partition_info('spt')
+
+        # Number of degrees of freedom per element, depends on order
+        # TODO: Get this by counting degrees() in polys.py
+        dof_in_elem = {'hex': (order+1)**3,
+                       'tet': (order+1)*(order+2)*(order+3)//6,
+                        'pri': (order+1)*(order+2)*(order+3)//2,
+                        'qua': (order+1)**2,
+                        'pyr': (order+1)*(order+2)//2,
+                        'tri': (order+1)*(order+2)//2}
+
+        mesh_dof = [dof_in_elem[e] * sum(mesh_nep[e]) for e in mesh_nep.keys()]
+
+        self.factor = sum(mesh_dof) * intg.stepper_order * intg.system.nvars
 
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
         for i, (walldt,) in enumerate(intg.perfinfo, start=self.count):
-            self.stats.append((i, self.tprev, walldt))
+            self.stats.append((i, self.tprev, walldt, self.factor/walldt))
 
         # Update the total step count and save the current time
         self.count += len(intg.perfinfo)

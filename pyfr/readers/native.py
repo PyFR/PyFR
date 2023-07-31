@@ -96,3 +96,12 @@ class NativeReader(Mapping):
             nep[v[0]][int(re.search(r'\d+$', k)[0])] = v[1][1]
 
         return nep
+
+    @memoize
+    def total_elements(self, prefix):
+        ai = self.array_info(prefix)
+
+        # Compute total number of elements
+        total = sum(v[1][1] for v in ai.values())
+        
+        return total
