@@ -1655,10 +1655,10 @@ Example::
     turbulence-intensity = 1.0
     turbulence-length-scale = 0.075
     sigma = 0.7
-    centre = (0.15,2.0,2.0)
+    centre = (0.15, 2.0, 2.0)
     y-dim = 3.0
     z-dim = 3.0
-    rot-axis = (0,0,1)
+    rot-axis = (0, 0, 1)
     rot-angle = 0.0
     seed = 42
 
