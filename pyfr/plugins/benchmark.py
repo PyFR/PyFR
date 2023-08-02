@@ -47,7 +47,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
         self.rem = 0.0
 
         # Allowed error in performance 
-        self.tol = self.cfg.getfloat(self.cfgsect, 'tol', 0.01)
+        self.tol = self.cfg.getfloat(self.cfgsect, 'tol', 1e-3)
 
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
@@ -55,8 +55,13 @@ class BenchmarkPlugin(BaseSolnPlugin):
 
             perf = self.factor/walldt
 
-            self.mean = (self.mean * i + perf) / (i+1)
-            self.rem = (self.rem * (i-1) + (perf - self.mean)**2) / i
+            # Skip the first 12 steps
+            if i < 10:
+                self.mean = (self.mean * (i+1) + perf) / (i+2)
+                self.rem = (self.rem * i + (perf - self.mean)**2) / (i+1)
+            else:
+                self.mean = '-'
+                self.rem = '-'
 
             self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, self.rem))
 
