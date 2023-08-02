@@ -41,13 +41,24 @@ class BenchmarkPlugin(BaseSolnPlugin):
                         'tri': (order+1)*(order+2)//2}
 
         mesh_dof = [dof_in_elem[e] * sum(mesh_nep[e]) for e in mesh_nep.keys()]
-
         self.factor = sum(mesh_dof) * intg.stepper_order * intg.system.nvars
+
+        self.mean = 0.0
+        self.rem = 0.0
+
+        # Allowed error in performance 
+        self.tol = self.cfg.getfloat(self.cfgsect, 'tol', 0.01)
 
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
         for i, (walldt,) in enumerate(intg.perfinfo, start=self.count):
-            self.stats.append((i, self.tprev, walldt, self.factor/walldt))
+
+            perf = self.factor/walldt
+
+            self.mean = (self.mean * i + perf) / (i+1)
+            self.rem = (self.rem * (i-1) + (perf - self.mean)**2) / i
+
+            self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, self.rem))
 
         # Update the total step count and save the current time
         self.count += len(intg.perfinfo)

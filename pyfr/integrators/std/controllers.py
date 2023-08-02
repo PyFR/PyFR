@@ -86,6 +86,7 @@ class StdNoneController(BaseStdController):
             wallt_start = perf_counter()
             idxcurr = self.step(self.tcurr, dt)
             walldt = perf_counter() - wallt_start
+
             # We are not adaptive, so accept every step
             self._accept_step(dt, idxcurr, None, walldt)
 
