@@ -22,7 +22,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            self.outf = init_csv(self.cfg, cfgsect, 'n,t,walldt,performance')
+            self.outf = init_csv(self.cfg, cfgsect, 'n,t,walldt,performance,mean,rem')
         else:
             self.outf = None
 
@@ -59,9 +59,6 @@ class BenchmarkPlugin(BaseSolnPlugin):
             if i >= 9:
                 self.mean = (self.mean * (i-8) + perf) / (i-7)
                 self.rem = (self.rem * (i-9) + (perf - self.mean)**2) / (i-8)
-            else:
-                self.mean = '-'
-                self.rem = '-'
 
             self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, self.rem))
 
