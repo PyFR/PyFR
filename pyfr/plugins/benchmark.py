@@ -49,6 +49,9 @@ class BenchmarkPlugin(BaseSolnPlugin):
         # Allowed error in performance 
         self.tol = self.cfg.getfloat(self.cfgsect, 'tol', 1e-3)
 
+        # If user wishes to continue simulation without any pause
+        self.continue_sim = self.cfg.getbool(self.cfgsect, 'continue-sim', True)
+
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
         for i, (walldt,) in enumerate(intg.perfinfo, start=self.count):
@@ -56,14 +59,14 @@ class BenchmarkPlugin(BaseSolnPlugin):
             perf = self.factor/walldt
 
             # Skip the first 12 steps
-            if i >= 9:
+            if i >= 12:
                 self.mean = (self.mean * (i-8) + perf) / (i-7)
                 self.rem = (self.rem * (i-9) + (perf - self.mean)**2) / (i-8)
 
             self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, self.rem))
 
         # If self.rem is lesser than self.tol, then we have converged. 
-        if self.rem < self.tol:
+        if self.rem < self.tol and i >= 42 and not self.continue_sim:
             raise RuntimeError(f'Converged at t = {intg.tcurr} with {self.rem} < {self.tol} after {intg.nacptsteps} steps')
 
         # Update the total step count and save the current time
