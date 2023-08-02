@@ -70,7 +70,8 @@ class BaseIntegrator:
                 cfgsect, ptype, name, suffix = m[0], m[1], m[2], m[3]
 
                 if ptype == 'solver' and suffix:
-                    raise ValueError(f'solver-plugin-{name} cannot have suffix')
+                    raise ValueError(f'solver-plugin-{name} cannot have a '
+                                     'suffix')
 
                 args = (ptype, name, self, cfgsect)
                 if ptype == 'soln':

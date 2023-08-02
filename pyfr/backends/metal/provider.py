@@ -12,10 +12,10 @@ from pyfr.util import memoize
 
 
 class MetalKernel(Kernel):
-     def add_to_graph(self, graph, dnodes):
-         graph.klist.append(self)
+    def add_to_graph(self, graph, dnodes):
+        graph.klist.append(self)
 
-         return len(graph.klist)
+        return len(graph.klist)
 
 
 class _MetalMetaKernelCommon(MetaKernel):

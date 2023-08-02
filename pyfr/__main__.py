@@ -18,13 +18,13 @@ from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import NativeReader
 from pyfr.solvers import get_solver
 from pyfr.util import subclasses
-from pyfr.writers import (BaseWriter, get_writer_by_name, get_writer_by_extn,
+from pyfr.writers import (BaseWriter, get_writer_by_extn, get_writer_by_name,
                           write_pyfrms)
 
 
 def main():
     ap = ArgumentParser(prog='pyfr')
-    sp = ap.add_subparsers(dest='cmd', help='sub-command help')
+    sp = ap.add_subparsers(help='sub-command help')
 
     # Common options
     ap.add_argument('--verbose', '-v', action='count')
@@ -115,7 +115,7 @@ def main():
 
     # Plugin commands
     for scls in subclasses(BaseCLIPlugin, just_leaf=True):
-        scls.add_cli(sp)
+        scls.add_cli(sp.add_parser(scls.name, help=f'{scls.name} --help'))
 
     # Parse the arguments
     args = ap.parse_args()

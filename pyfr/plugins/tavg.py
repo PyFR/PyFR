@@ -1,4 +1,3 @@
-from collections import defaultdict
 import re
 
 import h5py
@@ -7,14 +6,33 @@ import numpy as np
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import (BaseSolnPlugin, BaseCLIPlugin, cli_external,
-                               PostactionMixin, RegionMixin)
+from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, PostactionMixin,
+                               RegionMixin, cli_external)
 from pyfr.readers import NativeReader
 from pyfr.writers.native import NativeWriter
 from pyfr.util import merge_intervals
 
 
-class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
+class TavgMixin:
+    @staticmethod
+    def _fwd_diff(f, x, axis=0):
+        fx = f(x)
+        dfx = np.empty((len(x), *fx.shape), dtype=fx.dtype)
+
+        for xi, dfxi in zip(x, dfx):
+            # Calculate step size for finite difference
+            hi = np.finfo(x.dtype).eps**0.5*np.abs(xi)
+            hi[np.where(hi == 0)] = np.finfo(x.dtype).eps**0.5
+
+            # Apply the differencing
+            xi += hi
+            dfxi[:] = (f(x) - fx) / np.expand_dims(hi, axis)
+            xi -= hi
+
+        return fx, dfx
+
+
+class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
     name = 'tavg'
     systems = ['*']
     formulations = ['dual', 'std']
@@ -39,9 +57,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
 
         # Expressions pre-processing
         self._prepare_exprs()
-
-        # Floating point precision
-        self.delta_h = np.finfo(np.float64).eps**0.5
 
         # Output data type
         fpdtype = self.cfg.get(cfgsect, 'precision', 'single')
@@ -166,39 +181,25 @@ class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         return exprs
 
     def _eval_fun_exprs(self, avars):
-        # Prepare the substitution dictionary
         subs = dict(zip(self.anames, avars))
 
         # Evaluate the function and return
         return np.array([npeval(v, subs) for v in self.fexprs])
 
     def _eval_fun_var(self, dev, accex):
-        dfexpr, exprs = [], []
+        exprs, dexprs = [], []
 
-        # Iterate over each element type our averaging region
+        # Iterate over the element types
         for av in accex:
-            df = []
+            # Apply forward differencing
+            f, df = self._fwd_diff(self._eval_fun_exprs, av)
 
-            # Evaluate the function
-            fx = self._eval_fun_exprs(av)
-            exprs.append(fx)
-
-            for avi in av:
-                # Calculate step size for finite difference
-                h = self.delta_h*np.abs(avi)
-                h[np.where(h == 0)] = self.delta_h
-
-                # Calculate derivatives for functional averages
-                avi += h
-                df.append((self._eval_fun_exprs(av) - fx) / h)
-                avi -= h
-
-            # Stack derivatives
-            dfexpr.append(np.array(df))
+            exprs.append(f)
+            dexprs.append(df)
 
         # Multiply by variance and take RMS value
         fv = [np.linalg.norm(df*sd[:, None], axis=0)
-              for df, sd in zip(dfexpr, dev)]
+              for df, sd in zip(dexprs, dev)]
 
         return exprs, fv
 
@@ -280,7 +281,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         # Reduce these deviations across each element type
         for dx in dev:
             np.maximum(np.amax(dx, axis=(1, 2)), std_max_a,
-                        out=std_max_a)
+                       out=std_max_a)
             std_sum_a += dx.sum(axis=(1, 2))
 
         # Handle any functional expressions
@@ -294,7 +295,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             # Reduce these deviations across each element type
             for fx in fdev:
                 np.maximum(np.amax(fx, axis=(1, 2)), std_max_f,
-                            out=std_max_f)
+                           out=std_max_f)
                 std_sum_f += fx.sum(axis=(1, 2))
 
         # Add in standard deviations
@@ -364,20 +365,18 @@ class TavgPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
                 self.tout_last = intg.tcurr
 
 
-class TavgCLIPlugin(BaseCLIPlugin):
+class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
     name = 'tavg'
 
     @classmethod
     def add_cli(cls, parser):
-        cmd = cls.name
-        cp = parser.add_parser(cmd, help=f'{cmd} --help')
-        sp = cp.add_subparsers(dest='sub_cmd')
+        sp = parser.add_subparsers()
 
         # Merge command
-        ssp = sp.add_parser('merge', help=f'{cmd} merge --help')
-        ssp.set_defaults(process=cls.merge_cli)
-        ssp.add_argument('solns', nargs='*', help='Averages to merge')
-        ssp.add_argument('output', help='Output file name')
+        ap_merge = sp.add_parser('merge', help='tavg merge --help')
+        ap_merge.set_defaults(process=cls.merge_cli)
+        ap_merge.add_argument('solns', nargs='*', help='averages to merge')
+        ap_merge.add_argument('output', help='output file name')
 
     @cli_external
     def merge_cli(self):
@@ -395,57 +394,44 @@ class TavgCLIPlugin(BaseCLIPlugin):
             self._merge_meta(outf)
 
     def _eval_fun_exprs(self, avars):
-        # Prepare the substitution dictionary
-        subs = dict(zip(self.anames, avars.swapaxes(0, 1)))
+        subs = dict(zip(self.anames, avars))
 
         # Evaluate the function and return
         return np.stack([npeval(v, subs) for v in self.fexprs], axis=1)
 
     def _eval_fun_var(self, std, avars):
-        dfexpr = []
+        std, avars = std.swapaxes(0, 1), avars.swapaxes(0, 1)
 
-        # Evaluate the function
-        fexprs = self._eval_fun_exprs(avars)
+        # Apply forward differences to approximate the derivatives
+        fexprs, dfexprs = self._fwd_diff(self._eval_fun_exprs, avars, axis=1)
 
-        for avi in avars.swapaxes(0, 1):
-            # Calculate step size for finite difference
-            h = self.delta_h*np.abs(avi)
-            h[np.where(h == 0)] = self.delta_h
-
-            # Calculate derivatives for functional averages
-            avi += h
-            dfexpr.append((self._eval_fun_exprs(avars) - fexprs) / h[:,None])
-            avi -= h
-
-        # Multiply by variance and take RMS value
-        fv = np.linalg.norm(np.array(dfexpr)*std.swapaxes(0, 1)[:,:,None],
-                            axis=0)
-        return fexprs, fv
+        # Multiply by standard deviation and take the RMS value
+        return fexprs, np.linalg.norm(dfexprs*std[:, :, None], axis=0)
 
     def _init_tavg_merge(self):
-        self.delta_h = np.finfo(np.float64).eps**0.5
+        self.mapping = []
 
-        for i, (file, stats, cfg, dt) in enumerate(self.files):
+        for i, (file, cfg, stats, dt) in enumerate(self.files):
             fields = stats.get('data', 'fields').split(',')
             cfgsect = stats.get('tavg', 'cfg-section')
 
             # Mapping for expression to sorted list
             aidx = [i for i, v in enumerate(fields) if v.startswith('avg-')]
             anames = [fields[i].removeprefix('avg-') for i in aidx]
-            amap = [i for n, i in sorted(zip(anames, aidx),
-                                         key=lambda x: x[0])]
+            amap = [ai for an, ai in sorted(zip(anames, aidx))]
 
-            sidx = [i for i, v in enumerate(fields) if
-                    re.match(r'\bstd-(?!fun-avg-)', v)]
+            sidx = [i for i, v in enumerate(fields)
+                    if re.match(r'std-(?!fun-avg-)', v)]
             snames = [fields[i].removeprefix('std-') for i in sidx]
-            smap = [i for n, i in sorted(zip(snames, sidx),
-                                         key=lambda x: x[0])]
+            smap = [si for sn, si in sorted(zip(snames, sidx))]
+
+            self.mapping.append((amap, smap))
 
             if i == 0:
-                self.stats, self.cfg = stats, cfg
+                self.cfg, self.stats = cfg, stats
 
                 prec = cfg.get('backend', 'precision')
-                self.dtype = np.float32() if prec == 'single' else np.float64()
+                self.dtype = np.float32 if prec == 'single' else np.float64
 
                 self.fields = fields
                 self.cfgsect = cfgsect
@@ -453,26 +439,21 @@ class TavgCLIPlugin(BaseCLIPlugin):
                 self.uuid = file['mesh_uuid']
 
                 self.idxs = [k for k in file if re.search(r'_idxs_p\d+$', k)]
-                self.dkeys = [k for k in file if
-                              re.match(r'tavg_[^\W_]+_p\d+$', k)]
+                self.dkeys = [k for k in file
+                              if re.match(r'tavg_[^\W_]+_p\d+$', k)]
 
-                self.mapping = [(amap, smap)]
-                fnames = [x.removeprefix('fun-avg-') for x in fields if
-                          x.startswith('fun-avg-')]
-                self.anames = sorted(anames)
-                self.fnames = sorted(fnames)
-
-                # Initialise std max and avg registers
-                if self.std_all:
-                    self.std_max,self.std_avg  = np.zeros((2, len(anames)))
-                    self.fstd_max, self.fstd_avg = np.zeros((2, len(fnames)))
-
-                # Build fun avg expressions
+                # Build function avg expressions
                 c = cfg.items_as('constants', float)
-                self.fexprs = [cfg.getexpr(cfgsect, f'fun-avg-{k}', subs=c)
-                               for k in fnames]
-            else:
-                self.mapping.append((amap, smap))
+                fnames = sorted(f for f in fields if f.startswith('fun-avg-'))
+                self.fexprs = [cfg.getexpr(cfgsect, f, subs=c) for f in fnames]
+
+                self.anames = sorted(anames)
+                self.fnames = [f.removeprefix('fun-avg-') for f in fnames]
+
+                # Initialise std max and avg variables
+                if self.std_all:
+                    self.std_max, self.std_avg = np.zeros((2, len(anames)))
+                    self.fstd_max, self.fstd_avg = np.zeros((2, len(fnames)))
 
             # Check for compatibility of files
             if self.uuid != file['mesh_uuid']:
@@ -487,125 +468,109 @@ class TavgCLIPlugin(BaseCLIPlugin):
                     raise RuntimeError('Different average field definitions')
 
     def _merge_data(self, outf):
-        file0, stats, cfg, dt = self.files[0]
+        file0, cfg, stats, dt = self.files[0]
         amap0, smap0 = self.mapping[0]
 
         for key in self.dkeys:
             # Initialise accumulators
-            data = file0[key]
+            t, data = 0, file0[key].astype(np.float64)
             avg_acc = np.zeros_like(data[:, amap0])
             var_acc = np.zeros_like(data[:, smap0])
 
-            # Perform the rest of the accumulations
-            t = 0
-            for files, mapping in zip(self.files, self.mapping):
-                file, stats, cfg, dt = files
-                amap, smap = mapping
-                data = file[key]
+            # Average the averages
+            for (file, *_, dt), (amap, smap) in zip(self.files, self.mapping):
+                data = file[key].astype(np.float64)
+                avg, std = data[:, amap], data[:, smap]
 
                 if self.std_all:
-                    var_acc = ((t*var_acc + dt*data[:, smap]**2)/(t + dt) +
-                               dt/(t + dt)**2*(avg_acc - t*data[:, amap])**2)
-                avg_acc += dt*data[:, amap]
+                    var_acc = ((1 / (t + dt))*(t*var_acc + dt*std**2) +
+                               (dt / (t + dt)**2)*(avg_acc - t*avg)**2)
+
+                avg_acc += dt*avg
                 t += dt
 
             # Get standard deviation
             if self.std_all:
-                var_acc = var_acc**0.5
-                np.maximum(self.std_max, np.amax(var_acc, axis=(0, 2)),
+                std_acc = var_acc**0.5
+                np.maximum(self.std_max, np.amax(std_acc, axis=(0, 2)),
                            out=self.std_max)
-                self.std_avg += np.mean(var_acc, axis=(0, 2))
+                self.std_avg += np.mean(std_acc, axis=(0, 2))
 
             # Evaluate function expression and write out
             if self.fexprs and self.std_all:
-                fun_avg, fun_std = self._eval_fun_var(var_acc, avg_acc)
+                fun_avg, fun_std = self._eval_fun_var(std_acc, avg_acc)
                 np.maximum(self.fstd_max, np.amax(fun_std, axis=(0, 2)),
                            out=self.fstd_max)
                 self.fstd_avg += np.mean(fun_std, axis=(0, 2))
 
-                outstack = (avg_acc, fun_avg, var_acc, fun_std)
+                outstack = (avg_acc, fun_avg, std_acc, fun_std)
             elif self.fexprs:
-                fun_avg = self._eval_fun_exprs(avg_acc)
-                outstack = (avg_acc, fun_avg, var_acc)
+                fun_avg = self._eval_fun_exprs(avg_acc.swapaxes(0, 1))
+                outstack = (avg_acc, fun_avg, std_acc)
             else:
-                outstack = (avg_acc, var_acc)
+                outstack = (avg_acc, std_acc)
 
+            # Write out the data
             outf[key] = np.hstack(outstack, dtype=self.dtype)
 
     def _merge_meta(self, outf):
+        nstats = Inifile()
+
+        # Create the data block
+        nstats.set('data', 'prefix', 'tavg')
+        fields = [f'avg-{f}' for f in self.anames]
+        fields.extend(f'fun-avg-{f}' for f in self.fnames)
+        if self.std_all:
+            fields.extend(f'std-{f}' for f in self.anames)
+            fields.extend(f'std-fun-avg-{f}' for f in self.fnames)
+        nstats.set('data', 'fields', ','.join(fields))
+
+        # Create the tavg block
         cfgsect = self.stats.get('tavg', 'cfg-section')
-        self.stats.set('tavg', 'merged-from', self.merged_from)
+        nstats.set('tavg', 'cfg-section', cfgsect)
         self.stats.set('tavg', 'range', self.merged_range)
+        self.stats.set('tavg', 'merged-from', self.merged_from)
 
         # If all files have full std stats then these can be writen
         if self.std_all:
-            self.std_avg = self.std_avg.astype(self.dtype, copy=False)
-            self.std_max = self.std_max.astype(self.dtype, copy=False)
             for n, avg, max in zip(self.anames, self.std_avg, self.std_max):
-                self.stats.set('tavg', f'avg-std-{n}', avg)
-                self.stats.set('tavg', f'max-std-{n}', max)
+                nstats.set('tavg', f'avg-std-{n}', avg)
+                nstats.set('tavg', f'max-std-{n}', max)
 
             for n, avg, max in zip(self.fnames, self.fstd_avg, self.fstd_max):
-                self.stats.set('tavg', f'avg-std-fun-{n}', avg)
-                self.stats.set('tavg', f'max-std-fun-{n}', max)
-        # Otherwise the std summary has to be removed
-        else:
-            self.cfg.set(cfgsect, 'std-mode', 'none')
-            for opt in self.stats.items('tavg'):
-                if opt.startswith(('avg-std', 'max-std')):
-                    self.stats.remove_option('tavg', opt)
+                nstats.set('tavg', f'avg-std-fun-{n}', avg)
+                nstats.set('tavg', f'max-std-fun-{n}', max)
 
-        # Write out the region index data
-        file0, stats, cfg, dt = self.files[0]
-        for k in self.idxs:
-            outf[k] = file0[k]
-
-        # Write re-ordered data fields
-        fields = [f'avg-{x}' for x in self.anames]
-        fields.extend(f'fun-avg-{x}' for x in self.fnames)
-        if self.std_all:
-            fields.extend(f'std-{x}' for x in self.anames)
-            fields.extend(f'std-fun-avg-{x}' for x in self.fnames)
-        self.stats.set('data', 'fields', ','.join(fields))
-
-        # Merge runtime stats
-        sect = 'solver-time-integrator'
-        rt_stats = defaultdict(lambda: [])
-
-        for file, stats, cfg, dt in self.files:
-            for k in self.stats.items(sect):
-                rt_stats[k].append(stats.getliteral(sect, k))
-
-        for k, v in rt_stats.items():
-            self.stats.set(sect, k, v)
-
-        # Write out
+        # Write out the metadata
         outf['config'] = self.cfg.tostr()
-        outf['stats'] = self.stats.tostr()
+        outf['stats'] = nstats.tostr()
         outf['mesh_uuid'] = self.uuid
 
+        # Copy over the region index data
+        for k in self.idxs:
+            outf[k] = self.files[0][k]
+
     def _prepare_files(self, filenames):
-        self.files = files = []
-        twindows, std = [], []
+        files, twindows, std_all = [], [], True
         for filename in filenames:
             f = NativeReader(filename)
-            stats, cfg = Inifile(f['stats']), Inifile(f['config'])
+            cfg, stats = Inifile(f['config']), Inifile(f['stats'])
             cfgsect = stats.get('tavg', 'cfg-section')
-            std.append(cfg.get(cfgsect, 'std-mode'))
 
             twind = stats.getliteral('tavg', 'range')
+            dt = sum(te - ts for ts, te in twind)
+
+            files.append((f, cfg, stats, dt))
             twindows.extend(twind)
-            dt = sum(tend - tstart for tstart, tend in twind)
+            std_all &= cfg.get(cfgsect, 'std-mode') == 'all'
 
-            files.append((f, stats, cfg, dt))
-
+        self.std_all = std_all
         self.merged_from = twindows
-        self.std_all = all(s == 'all' for s in std)
 
         try:
             self.merged_range = merge_intervals(twindows)
         except ValueError:
             raise RuntimeError('Overlapping averge time ranges in files')
 
-        self.avg_time = at = sum(t[1] - t[0] for t in self.merged_range)
-        self.files = [(*fsc, dt / at) for *fsc, dt in files]
+        avg_time = sum(te - ts for ts, te in self.merged_range)
+        self.files = [(*fcs, dt / avg_time) for *fcs, dt in files]

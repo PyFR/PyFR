@@ -1,8 +1,6 @@
 import math
 import re
 
-import numpy as np
-
 from pyfr.plugins.base import BaseSolverPlugin
 
 
@@ -13,7 +11,7 @@ class SourcePlugin(BaseSolverPlugin):
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
-        
+
         convars = intg.system.elementscls.convarmap[self.ndims]
 
         subs = self.cfg.items('constants')
@@ -27,6 +25,6 @@ class SourcePlugin(BaseSolverPlugin):
         soln_in_src = any(re.search(r'\bu\b', ex) for ex in src_exprs)
 
         for etype, eles in intg.system.ele_map.items():
-            eles.add_src_macro('pyfr.plugins.kernels.source', 'source', 
-                               {'src_exprs': src_exprs}, ploc=ploc_in_src, 
+            eles.add_src_macro('pyfr.plugins.kernels.source', 'source',
+                               {'src_exprs': src_exprs}, ploc=ploc_in_src,
                                soln=soln_in_src)
