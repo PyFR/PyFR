@@ -56,14 +56,18 @@ class BenchmarkPlugin(BaseSolnPlugin):
             perf = self.factor/walldt
 
             # Skip the first 12 steps
-            if i < 10:
-                self.mean = (self.mean * (i+1) + perf) / (i+2)
-                self.rem = (self.rem * i + (perf - self.mean)**2) / (i+1)
+            if i >= 9:
+                self.mean = (self.mean * (i-8) + perf) / (i-7)
+                self.rem = (self.rem * (i-9) + (perf - self.mean)**2) / (i-8)
             else:
                 self.mean = '-'
                 self.rem = '-'
 
             self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, self.rem))
+
+        # If self.rem is lesser than self.tol, then we have converged. 
+        if self.rem < self.tol:
+            raise RuntimeError(f'Converged at t = {intg.tcurr} with {self.rem} < {self.tol} after {intg.nacptsteps} steps')
 
         # Update the total step count and save the current time
         self.count += len(intg.perfinfo)
