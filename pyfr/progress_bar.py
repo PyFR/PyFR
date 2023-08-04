@@ -62,7 +62,7 @@ class ProgressBar:
         st, cu, el, en = self.ststrt, self.stcurr, self.stelap, self.stend
 
         # Relative times
-        rcu, ren = cu - st,  en - st
+        rcu, ren = cu - st, en - st
 
         # Fraction of the simulation we've completed
         frac = rcu / ren

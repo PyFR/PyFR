@@ -33,7 +33,7 @@ class HIPRTCWrappers(LibWrapper):
 
     # Functions
     _functions = [
-        (c_int, 'hiprtcCreateProgram',  POINTER(c_void_p), c_char_p, c_char_p,
+        (c_int, 'hiprtcCreateProgram', POINTER(c_void_p), c_char_p, c_char_p,
          c_int, POINTER(c_char_p), POINTER(c_char_p)),
         (c_int, 'hiprtcDestroyProgram', POINTER(c_void_p)),
         (c_int, 'hiprtcCompileProgram', c_void_p, c_int, POINTER(c_char_p)),

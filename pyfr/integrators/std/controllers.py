@@ -40,11 +40,7 @@ class BaseStdController(BaseStdIntegrator):
         if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
             self.system.filt(idxcurr)
 
-        # Invalidate the solution cache
-        self._curr_soln = None
-
-        # Invalidate the solution gradients cache
-        self._curr_grad_soln = None
+        self._invalidate_caches()
 
         # Run any plugins
         self._run_plugins()

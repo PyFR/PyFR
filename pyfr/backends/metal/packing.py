@@ -1,7 +1,6 @@
 import numpy as np
 
 from pyfr.backends.metal.provider import MetalKernel, MetalKernelProvider
-from pyfr.backends.metal.util import call_
 
 
 class MetalPackingKernels(MetalKernelProvider):

@@ -99,8 +99,6 @@ class BaseAdvectionElements(BaseElements):
             out=self.scal_upts[fout], beta=float(self.basis.order > 0)
         )
 
-        # Transformed to physical divergence kernel + source term
-
         def copy_soln(uin):
             if self._soln_in_src_macros:
                 return self._be.kernel('copy', self._scal_upts_cpy,
@@ -110,11 +108,12 @@ class BaseAdvectionElements(BaseElements):
 
         kernels['copy_soln'] = copy_soln
 
+        # Transformed to physical divergence kernel + source term
         kernels['negdivconf'] = lambda fout: self._be.kernel(
             'negdivconf', tplargs=self._srctplargs,
             dims=[self.nupts, self.neles], extrns=self._external_args,
             tdivtconf=self.scal_upts[fout], rcpdjac=self.rcpdjac_at('upts'),
-            ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None, 
+            ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None,
             u=self._scal_upts_cpy if self._soln_in_src_macros else None,
             **self._external_vals
         )
