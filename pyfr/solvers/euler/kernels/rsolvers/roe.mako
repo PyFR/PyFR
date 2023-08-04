@@ -3,70 +3,74 @@
 
 <% eps = 0.001 %>
 
-<%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
+<%pyfr:macro name='rsolve_1d' params='ul, ur, nf'>
     // Compute the left and right fluxes + velocities and pressures
-    fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
-    fpdtype_t vl[${ndims}], vr[${ndims}], va[${ndims}], dv[${ndims}];
-    fpdtype_t v1[${nvars}], v2[${nvars}], v3[${nvars}];
-    fpdtype_t pl, pr, r2a2;
+    fpdtype_t fl[${nvars}], fr[${nvars}];
+    fpdtype_t vl[${ndims}], vr[${ndims}];
+    fpdtype_t pl, pr;
+    fpdtype_t va[${ndims}], dv[${ndims}];
 
-    ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
-    ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'pr', 'vr')};
-
-    // Get the normal velocity jump
-    fpdtype_t dvs = ${pyfr.dot('n[{i}]', 'vr[{i}] - vl[{i}]', i=ndims)};
+    ${pyfr.expand('inviscid_flux_1d', 'ul', 'fl', 'pl', 'vl')};
+    ${pyfr.expand('inviscid_flux_1d', 'ur', 'fr', 'pr', 'vr')};
 
     // Compute Roe averaged density and enthalpy
     fpdtype_t roa = sqrt(ul[0])*sqrt(ur[0]);
-    fpdtype_t ha = (sqrt(ul[0])*(pr + ur[${ndims + 1}])
-                 + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
-                / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
-    fpdtype_t invsqrulpur = 1/(sqrt(ul[0]) + sqrt(ur[0]));
+    fpdtype_t ha = (sqrt(ul[0])*(pr + ur[${nvars - 1}]) +
+                    sqrt(ur[0])*(pl + ul[${nvars - 1}])) /
+                    (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
 
+    fpdtype_t inv_rar = 1 / (sqrt(ul[0]) + sqrt(ur[0]));
 % for i in range(ndims):
-    va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0]))*invsqrulpur;
+    va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0])) * inv_rar;
 % endfor
 
-    fpdtype_t qq = ${pyfr.dot('va[{i}]', 'va[{i}]', i=ndims)};
-    fpdtype_t vs = ${pyfr.dot('n[{i}]', 'va[{i}]', i=ndims)};
+    fpdtype_t qq = ${pyfr.dot('va[{i}]', i=ndims)};
     fpdtype_t a = sqrt(${c['gamma'] - 1}*(ha - 0.5*qq));
 
     // Compute the Eigenvalues
-    fpdtype_t l1 = fabs(vs - a);
-    fpdtype_t l2 = fabs(vs);
-    fpdtype_t l3 = fabs(vs + a);
+    fpdtype_t l1 = fabs(va[0] - a);
+    fpdtype_t l2 = fabs(va[0]);
+    fpdtype_t l3 = fabs(va[0] + a);
 
     // Entropy fix
-    l1 = (l1 < ${eps}) ? ${1/(2*eps)}*(l1*l1 + ${eps**2}) : l1;
-    l3 = (l3 < ${eps}) ? ${1/(2*eps)}*(l3*l3 + ${eps**2}) : l3;
+    l1 = (l1 < ${eps}) ? ${0.5 / eps}*(l1*l1 + ${eps**2}) : l1;
+    l3 = (l3 < ${eps}) ? ${0.5 / eps}*(l3*l3 + ${eps**2}) : l3;
 
-    // Get the jumps
+    // Calculate the jump values
 % for i in range(ndims):
     dv[${i}] = vr[${i}] - vl[${i}];
 % endfor
-
     fpdtype_t dro = ur[0] - ul[0];
     fpdtype_t dp = pr - pl;
 
-    // Compute the Eigenvectors
-    r2a2 = 1/(2*a*a);
-    v1[0] = (dp - roa*a*dvs)*r2a2;
-    v1[${nvars - 1}] = (dp - roa*a*dvs)*r2a2*(ha - a*vs);
-    v2[0] = dro - dp*2*r2a2;
-    v2[${nvars - 1}] = (dro - dp*2*r2a2)*qq*0.5 + roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - vs*dvs);
-    v3[0] = (dp + roa*a*dvs)*r2a2;
-    v3[${nvars - 1}] = (dp + roa*a*dvs)*r2a2*(ha + a*vs);
+    fpdtype_t inv_a2 = 1 / (2*a*a);
 
+    // Compute the mass eigenvectors
+    fpdtype_t v1 = (dp - roa*a*dv[0])*inv_a2;
+    fpdtype_t v2 = dro - dp*2*inv_a2;
+    fpdtype_t v3 = (dp + roa*a*dv[0])*inv_a2;
+    nf[0] = 0.5*(fl[0] + fr[0]) - (l1*v1 + l2*v2 + l3*v3);
+
+    // Compute the momentum eigenvectors
 % for i in range(ndims):
-    v1[${i + 1}] = (dp - roa*a*dvs)*r2a2*(va[${i}] - a*n[${i}]);
-    v2[${i + 1}] = (dro - dp*2*r2a2)*va[${i}] + roa*(dv[${i}] - dvs*n[${i}]);
-    v3[${i + 1}] = (dp + roa*a*dvs)*r2a2*(va[${i}] + a*n[${i}]);
+% if i == 0:
+    v1 = (dp - roa*a*dv[0])*inv_a2*(va[${i}] - a);
+    v2 = (dro - dp*2*inv_a2)*va[${i}];
+    v3 = (dp + roa*a*dv[0])*inv_a2*(va[${i}] + a);
+% else:
+    v1 = (dp - roa*a*dv[0])*inv_a2*va[${i}];
+    v2 = (dro - dp*2*inv_a2)*va[${i}] + roa*dv[${i}];
+    v3 = (dp + roa*a*dv[0])*inv_a2*va[${i}];
+% endif
+    nf[${i + 1}] = 0.5*(fl[${i + 1}] + fr[${i + 1}]) - (l1*v1 + l2*v2 + l3*v3);
 % endfor
 
-    // Output
-% for i in range(nvars):
-    nf[${i}] = 0.5*(${' + '.join(f'n[{j}]*(fl[{j}][{i}] + fr[{j}][{i}])'
-                                 for j in range(ndims))}
-             - (l1*v1[${i}] + l2*v2[${i}] + l3*v3[${i}]));
-% endfor
+    // Compute the energy eigenvectors
+    v1 = (dp - roa*a*dv[0])*inv_a2*(ha - a*va[0]);
+    v2 = roa*(${pyfr.dot('va[{i}]', 'dv[{i}]', i=ndims)} - va[0]*dv[0]) +
+         (dro - dp*2*inv_a2)*qq*0.5;
+    v3 = (dp + roa*a*dv[0])*inv_a2*(ha + a*va[0]);
+    nf[${nvars - 1}] = 0.5*(fl[${nvars - 1}] + fr[${nvars - 1}]) - (l1*v1 + l2*v2 + l3*v3);
 </%pyfr:macro>
+
+<%include file='pyfr.solvers.euler.kernels.rsolvers.rsolve1d'/>
