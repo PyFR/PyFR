@@ -7,7 +7,7 @@ from pyfr.plugins.base import BaseSolnPlugin, init_csv
 class ResidualPlugin(BaseSolnPlugin):
     name = 'residual'
     systems = ['*']
-    formulations = ['std']
+    formulations = ['std', 'dual']
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
@@ -17,6 +17,17 @@ class ResidualPlugin(BaseSolnPlugin):
         # Output frequency
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
+        # Norm used on residual
+        self.lp = self.cfg.getfloat(cfgsect, 'norm', 2)
+
+        # Set MPI reduction op and post process function
+        if self.lp == float('inf'):
+            self._mpi_op = mpi.MAX
+            self._post_func = lambda x: x
+        else:
+            self._mpi_op = mpi.SUM
+            self._post_func = lambda x: x**(1/self.lp)
+
         # The root rank needs to open the output file
         if rank == root:
             header = ['t'] + intg.system.elementscls.convarmap[self.ndims]
@@ -24,44 +35,30 @@ class ResidualPlugin(BaseSolnPlugin):
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
 
-        # Prep work if an output is due next step
-        self._prep_next_output(intg)
-
-    def _prep_next_output(self, intg):
-        if (intg.nacptsteps + 1) % self.nsteps == 0:
-            self._prev = [s.copy() for s in intg.soln]
-            self._tprev = intg.tcurr
-
     def __call__(self, intg):
         # If an output is due this step
         if intg.nacptsteps % self.nsteps == 0 and intg.nacptsteps:
             # MPI info
             comm, rank, root = get_comm_rank_root()
 
-            # Previous and current solution
-            prev = self._prev
-            curr = intg.soln
-
-            # Square of the residual vector for each variable
-            resid = sum(np.linalg.norm(p - c, axis=(0, 2))**2
-                        for p, c in zip(prev, curr))
+            # Rank local norm for each variable
+            norm = lambda x: np.linalg.norm(x, axis=(0, 2), ord=self.lp)
+            if self.lp == float('inf'):
+                resid = max(norm(dt_s) for dt_s in intg.dt_soln)
+            else:
+                resid = sum(norm(dt_s)**self.lp for dt_s in intg.dt_soln)
 
             # Reduce and, if we are the root rank, output
             if rank != root:
-                comm.Reduce(resid, None, op=mpi.SUM, root=root)
+                comm.Reduce(resid, None, op=self._mpi_op, root=root)
             else:
-                comm.Reduce(mpi.IN_PLACE, resid, op=mpi.SUM, root=root)
+                comm.Reduce(mpi.IN_PLACE, resid, op=self._mpi_op, root=root)
 
-                # Normalise
-                resid = np.sqrt(resid) / (intg.tcurr - self._tprev)
+                # Post process
+                resid = (self._post_func(r) for r in resid)
 
                 # Write
                 print(intg.tcurr, *resid, sep=',', file=self.outf)
 
                 # Flush to disk
                 self.outf.flush()
-
-            del self._prev, self._tprev
-
-        # Prep work if an output is due next step
-        self._prep_next_output(intg)
