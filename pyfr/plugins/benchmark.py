@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BaseSolnPlugin, init_csv
@@ -22,7 +24,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            self.outf = init_csv(self.cfg, cfgsect, 'n,t,walldt,performance,mean,rem')
+            self.outf = init_csv(self.cfg, cfgsect, 'n,t,walldt,performance,mean,rel-err')
         else:
             self.outf = None
 
@@ -44,7 +46,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
         self.factor = sum(mesh_dof) * intg.stepper_order * intg.system.nvars
 
         self.mean = 0.0
-        self.rem = 0.0
+        self.var = 0.0
 
         # Allowed error in performance 
         self.tol = self.cfg.getfloat(self.cfgsect, 'tol', 1e-3)
@@ -52,22 +54,29 @@ class BenchmarkPlugin(BaseSolnPlugin):
         # If user wishes to continue simulation without any pause
         self.continue_sim = self.cfg.getbool(self.cfgsect, 'continue-sim', True)
 
+        self.skip_first_n = self.cfg.getbool(self.cfgsect, 'skip-first-n', 2)
+
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
         for i, (walldt,) in enumerate(intg.perfinfo, start=self.count):
 
             perf = self.factor/walldt
-
+            relative_error = 0.0
+            
             # Skip the first 12 steps
-            if i >= 12:
-                self.mean = (self.mean * (i-8) + perf) / (i-7)
-                self.rem = (self.rem * (i-9) + (perf - self.mean)**2) / (i-8)
+            if i > self.skip_first_n:
+                self.old_mean = self.mean
+                self.mean = (self.mean * (i-self.skip_first_n-1) + perf) / (i-self.skip_first_n)
 
-            self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, self.rem))
+            if i > self.skip_first_n+1:
+                self.var  = (self.var  * (i-self.skip_first_n-1) + (perf - self.old_mean)**2) / (i-self.skip_first_n)
+                relative_error = np.sqrt(self.var)/self.mean
+                
+            self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, relative_error))
 
-        # If self.rem is lesser than self.tol, then we have converged. 
-        if self.rem < self.tol and i >= 42 and not self.continue_sim:
-            raise RuntimeError(f'Converged at t = {intg.tcurr} with {self.rem} < {self.tol} after {intg.nacptsteps} steps')
+            # If self.var is lesser than self.tol, then we have converged. 
+            if self.var < self.tol and i > self.skip_first_n+2 and not self.continue_sim:
+                raise RuntimeError(f'Converged at t = {intg.tcurr} with {self.var} < {self.tol} after {intg.nacptsteps} steps')
 
         # Update the total step count and save the current time
         self.count += len(intg.perfinfo)
