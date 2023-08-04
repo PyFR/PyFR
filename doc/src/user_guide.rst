@@ -1293,12 +1293,18 @@ Parameterised with
 
     *boolean*
 
+4. ``norm`` --- sets the degree and calculates an :math:`L_p` norm,
+    default is ``2``:
+
+    *float* | ``inf``
+
 Example::
 
     [soln-plugin-residual]
     nsteps = 10
     file = residual.csv
     header = true
+    norm = inf
 
 [soln-plugin-dtstats]
 ^^^^^^^^^^^^^^^^^^^^^^

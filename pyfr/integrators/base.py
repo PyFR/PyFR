@@ -47,11 +47,7 @@ class BaseIntegrator:
         # Extract the UUID of the mesh (to be saved with solutions)
         self.mesh_uuid = mesh['mesh_uuid']
 
-        # Solution cache
-        self._curr_soln = None
-
-        # Solution gradients cache
-        self._curr_grad_soln = None
+        self._invalidate_caches()
 
         # Record the starting wall clock time
         self._wstart = time.time()
@@ -128,6 +124,11 @@ class BaseIntegrator:
         for t in it.chain(ta, tb):
             if not tlist or t - tlist[-1] > self.dtmin:
                 tlist.append(t)
+
+    def _invalidate_caches(self):
+        self._curr_soln = None
+        self._curr_grad_soln = None
+        self._curr_dt_soln = None
 
     def step(self, t, dt):
         pass
