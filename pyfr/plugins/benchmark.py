@@ -13,7 +13,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)
 
-        self.flushsteps = self.cfg.getint(self.cfgsect, 'flushsteps', 500)
+        self.flushsteps = self.cfg.getint(self.cfgsect, 'flushsteps', 1)
 
         self.count = 0
         self.stats = []
@@ -54,7 +54,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
         # If user wishes to continue simulation without any pause
         self.continue_sim = self.cfg.getbool(self.cfgsect, 'continue-sim', True)
 
-        self.skip_first_n = self.cfg.getbool(self.cfgsect, 'skip-first-n', 2)
+        self.skip_first_n = self.cfg.getint(self.cfgsect, 'skip-first-n', 10)
 
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
@@ -75,7 +75,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
             self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, relative_error))
 
             # If self.var is lesser than self.tol, then we have converged. 
-            if self.var < self.tol and i > self.skip_first_n+2 and not self.continue_sim:
+            if relative_error < self.tol and i > self.skip_first_n+2 and not self.continue_sim:
                 raise RuntimeError(f'Converged at t = {intg.tcurr} with {self.var} < {self.tol} after {intg.nacptsteps} steps')
 
         # Update the total step count and save the current time
