@@ -76,7 +76,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
 
             # If self.var is lesser than self.tol, then we have converged. 
             if relative_error < self.tol and i > self.skip_first_n+2 and not self.continue_sim:
-                raise RuntimeError(f'Converged at t = {intg.tcurr} with {self.var} < {self.tol} after {intg.nacptsteps} steps')
+                raise RuntimeError(f'Converged at t = {intg.tcurr} with {relative_error} < {self.tol} after {intg.nacptsteps} steps')
 
         # Update the total step count and save the current time
         self.count += len(intg.perfinfo)
