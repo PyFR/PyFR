@@ -54,7 +54,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
         # If user wishes to continue simulation without any pause
         self.continue_sim = self.cfg.getbool(self.cfgsect, 'continue-sim', True)
 
-        self.skip_first_n = self.cfg.getint(self.cfgsect, 'skip-first-n', 10)
+        self.skip_first_n = self.cfg.getint(self.cfgsect, 'skip-first-n', 5)
 
     def __call__(self, intg):
         # Process the sequence of rejected/accepted steps
@@ -63,7 +63,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
             perf = self.factor/walldt
             relative_error = 0.0
             
-            # Skip the first 12 steps
+            # Skip the first few steps
             if i > self.skip_first_n:
                 self.old_mean = self.mean
                 self.mean = (self.mean * (i-self.skip_first_n-1) + perf) / (i-self.skip_first_n)
@@ -72,7 +72,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
                 self.var  = (self.var  * (i-self.skip_first_n-1) + (perf - self.old_mean)**2) / (i-self.skip_first_n)
                 relative_error = np.sqrt(self.var)/self.mean
                 
-            self.stats.append((i, self.tprev, walldt, self.factor/walldt, self.mean, relative_error))
+            self.stats.append((i-self.skip_first_n, self.tprev, walldt, self.factor/walldt, self.mean, relative_error))
 
             # If self.var is lesser than self.tol, then we have converged. 
             if relative_error < self.tol and i > self.skip_first_n+2 and not self.continue_sim:
