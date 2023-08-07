@@ -6,6 +6,7 @@ import numpy as np
 
 from pyfr.nputil import fuzzysort
 from pyfr.polys import get_polybasis
+from pyfr.progress import NullProgressSpinner
 from pyfr.shapes import BaseShape
 from pyfr.util import digest, subclass_where
 
@@ -166,24 +167,30 @@ class NodalMeshAssembler:
 
         return bfaces
 
-    def get_connectivity(self):
+    def get_connectivity(self, spinner=NullProgressSpinner()):
         # For connectivity a first-order representation is sufficient
         eles = self._to_first_order(self._elenodes)
+        spinner()
 
         # Split into fluid and boundary parts
         fpart, bpart = self._split_fluid(eles)
+        spinner()
 
         # Extract the faces of the fluid elements
         ffaces = self._extract_faces(fpart)
+        spinner()
 
         # Pair the fluid-fluid faces
         fpairs, resid = self._pair_fluid_faces(ffaces)
+        spinner()
 
         # Tag and pair periodic boundary faces
         pfpairs, pmap = self._pair_periodic_fluid_faces(bpart, resid)
+        spinner()
 
         # Identify the fixed boundary faces
         bf = self._ident_boundary_faces(bpart, resid)
+        spinner()
 
         if any(resid.values()):
             raise ValueError('Unpaired faces in mesh')
@@ -206,6 +213,8 @@ class NodalMeshAssembler:
         for pbcrgn, pent in self._bfacespents.items():
             bcon[pbcrgn] = bf[pent]
 
+        spinner()
+
         # Output
         ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i2').T}
 
@@ -217,7 +226,7 @@ class NodalMeshAssembler:
 
         return ret
 
-    def _linearise_eles(self, lintol):
+    def _linearise_eles(self, lintol, spinner):
         lidx = {}
 
         for etype, pent in self._elenodes:
@@ -258,13 +267,15 @@ class NodalMeshAssembler:
             for ix in np.nonzero(lin)[0]:
                 self._nodepts[elesix[ix], :ndim] = leles[ptoi, ix]
 
+            spinner()
+
         return lidx
 
-    def get_shape_points(self, lintol):
+    def get_shape_points(self, lintol, spinner=NullProgressSpinner()):
         spts = {}
 
         # Apply tolerance-based linearisation to the elements
-        lidx = self._linearise_eles(lintol)
+        lidx = self._linearise_eles(lintol, spinner)
 
         for etype, pent in self._elenodes:
             if pent != self._felespent:
@@ -285,5 +296,7 @@ class NodalMeshAssembler:
 
             spts[f'spt_{petype}_p0'] = arr
             spts[f'spt_{petype}_p0', 'linear'] = lidx[petype]
+
+            spinner()
 
         return spts
