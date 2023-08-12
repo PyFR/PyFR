@@ -1,6 +1,9 @@
 from collections import defaultdict
 import itertools as it
 import re
+import random
+
+import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -276,9 +279,22 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx
 
+    def weighted(self, I):
+        return np.random.choice([int(np.floor(I)), int(np.ceil(I))], 
+                     p = np.array([1.-I+int(np.floor(I)), I-int(np.floor(I))]))
+
+    def new_weighted(self, I):
+        floor_val = int(I)
+        ceil_val = int(I + 1)
+        
+        prob_floor = 1. - (I - floor_val)
+        prob_ceil = I - floor_val
+        
+        return random.choices([floor_val, ceil_val], weights=[prob_floor, prob_ceil])[0]
+        
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
-        cycle, csteps = self.cycle, self.csteps
+        cycle, cstepsf = self.cycle, self.csteps
 
         # Set time step and current stepper coefficients for all levels
         for l in self.levels:
@@ -288,6 +304,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
+            csteps = tuple(self.weighted(cstepf) for cstepf in cstepsf)
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 
