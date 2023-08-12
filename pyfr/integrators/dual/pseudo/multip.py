@@ -2,6 +2,8 @@ from collections import defaultdict
 import itertools as it
 import re
 
+import math
+
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.integrators.dual.pseudo.pseudocontrollers import (
@@ -42,8 +44,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
-        self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
-
+        dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+        self._dtaufs = cfg.getliteral(mgsect, 'pseudo-dt-facts', 
+                                      [dtauf for _ in self.levels]) 
+        
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self._minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
 
@@ -71,7 +75,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 mcfg = Inifile(cfg.tostr())
                 mcfg.set('solver', 'order', l)
-                mcfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(order - l))
+                mcfg.set(sect, 'pseudo-dt', dtau*math.prod(self._dtaufs[:order-l]))
 
                 for s in cfg.sections():
                     if (m := re.match(f'solver-(.*)-mg-p{l}$', s)):
@@ -162,6 +166,22 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def pintg(self):
         return self.pintgs[self.level]
 
+    @property
+    def dtauf(self):
+        return self._dtaufs[0]
+
+    @dtauf.setter
+    def dtauf(self, y):
+        self._dtaufs = [y for _ in self.levels]
+
+    @property
+    def dtaufs(self):
+        return self._dtaufs
+
+    @dtaufs.setter
+    def dtaufs(self, y):
+        self._dtaufs = y
+
     def _init_proj_mats(self):
         self.projmats = defaultdict(list)
         cmat = lambda m: self.backend.const_matrix(m, tags={'align'})
@@ -185,13 +205,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return projk
 
     @memoize
-    def dtauproject(self, l1, l2):
+    def dtauproject(self, l1, l2, dtaufs):
         projk = []
         for i, a in enumerate(self.projmats[l1, l2]):
             b = self.pintgs[l1].dtau_upts[i]
             c = self.pintgs[l2].dtau_upts[i]
             projk.append(self.backend.kernel('mul', a, b, out=c,
-                                             alpha=self.dtauf))
+                                             alpha=dtaufs[l2]))
 
         return projk
 
@@ -217,7 +237,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
-            self.backend.run_kernels(self.dtauproject(l1, l2))
+            self.backend.run_kernels(self.dtauproject(l1, l2, self._dtaufs))
 
         # rtemp = R = -∇·f - dQ/dt
         self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp, mg_add=False)
