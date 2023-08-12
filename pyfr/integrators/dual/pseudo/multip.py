@@ -26,6 +26,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
+        random.seed(cfg.getint(mgsect, 'seed', 0))
+        
         self.levels = sorted(set(self.cycle), reverse=True)
 
         if max(self.cycle) > self._order:
@@ -280,10 +282,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return self.pintg._aux_regidx
 
     def weighted(self, I):
-        return np.random.choice([int(np.floor(I)), int(np.ceil(I))], 
-                     p = np.array([1.-I+int(np.floor(I)), I-int(np.floor(I))]))
-
-    def new_weighted(self, I):
         floor_val = int(I)
         ceil_val = int(I + 1)
         
