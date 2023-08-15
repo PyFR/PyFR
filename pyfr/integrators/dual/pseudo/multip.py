@@ -279,7 +279,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx
 
-    def weighted(self, I):
+    def wround(self, I):
         floor_val = int(I)
         w = I - floor_val
         
@@ -297,7 +297,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
-            csteps = tuple(self.weighted(cstepf) for cstepf in cstepsf)
+            csteps = tuple(self.wround(cstepf) for cstepf in cstepsf)
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 
