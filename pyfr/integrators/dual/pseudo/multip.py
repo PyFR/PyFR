@@ -75,7 +75,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 mcfg = Inifile(cfg.tostr())
                 mcfg.set('solver', 'order', l)
-                mcfg.set(sect, 'pseudo-dt', dtau*math.prod(self._dtaufs[:order-l]))
+                mcfg.set(sect, 'pseudo-dt', 
+                         dtau*math.prod(self._dtaufs[:order - l]))
 
                 for s in cfg.sections():
                     if (m := re.match(f'solver-(.*)-mg-p{l}$', s)):
