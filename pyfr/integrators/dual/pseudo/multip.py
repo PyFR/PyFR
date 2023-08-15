@@ -3,8 +3,6 @@ import itertools as it
 import re
 import random
 
-import numpy as np
-
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.integrators.dual.pseudo.pseudocontrollers import (
