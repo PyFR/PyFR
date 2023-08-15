@@ -1,7 +1,7 @@
 from collections import defaultdict
 import itertools as it
-import re
 import random
+import re
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
