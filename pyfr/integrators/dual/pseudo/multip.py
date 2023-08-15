@@ -281,12 +281,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     def weighted(self, I):
         floor_val = int(I)
-        ceil_val = int(I + 1)
+        w = I - floor_val
         
-        prob_floor = 1. - (I - floor_val)
-        prob_ceil = I - floor_val
-        
-        return random.choices([floor_val, ceil_val], weights=[prob_floor, prob_ceil])[0]
+        return floor_val if random.random() < 1 - w else floor_val + 1
         
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
