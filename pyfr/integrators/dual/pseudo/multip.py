@@ -46,7 +46,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         dtau = cfg.getfloat(sect, 'pseudo-dt')
         dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
         self._dtaufs = cfg.getliteral(mgsect, 'pseudo-dt-facts', 
-                                      [dtauf for _ in self.levels]) 
+                                      [dtauf]*len(self.levels)) 
         
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self._minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
