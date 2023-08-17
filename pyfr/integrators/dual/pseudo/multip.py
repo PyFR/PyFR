@@ -25,6 +25,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
+        self._fgen = np.random.default_rng(0)
+
         self.levels = sorted(set(self.cycle), reverse=True)
 
         if max(self.cycle) > self._order:
@@ -238,7 +240,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
-            self.backend.run_kernels(self.dtauproject(l1, l2, self._dtaufs[l2]))
+            fdtauf = 10*self._dtaufs[l2]
+            dtauf = 0.1*self._fgen.choice([np.floor(fdtauf), np.ceil(fdtauf)], 
+                                  p=[fdtauf % 1, 1 - fdtauf % 1])
+            self.backend.run_kernels(self.dtauproject(l1, l2, dtauf))
 
         # rtemp = R = -∇·f - dQ/dt
         self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp, mg_add=False)
