@@ -290,12 +290,13 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr
+        fgen = self._fgen
 
         for i in range(self._maxniters):
-
             # Choose either ⌊c⌋ and ⌈c⌉ in a way that the average is c
-            csteps = [self._fgen.choice([np.floor(c), np.ceil(c)], 
-                                       p=[c % 1, 1 - c % 1]) for c in cstepsf]
+            csteps = [fgen.choice(
+                            [np.floor(c), np.ceil(c)], p=[c % 1, 1 - c % 1]
+                        ) for c in cstepsf]
 
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
