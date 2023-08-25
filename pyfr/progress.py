@@ -117,7 +117,7 @@ class NullProgressBar(ProgressBar):
     def __init__(self):
         pass
 
-    def start(self, start, curr, end):
+    def start(self, end, *, start=0, curr=None):
         pass
 
     def __call__(self, t=None):
