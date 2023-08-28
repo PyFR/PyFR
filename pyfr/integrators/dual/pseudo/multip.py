@@ -301,7 +301,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 self.level = l
 
                 # Set the number of smoothing steps at each level
-                self.pintg.maxniters = self.pintg.minniters = n
+                self.pintg.maxniters = self.pintg.minniters = int(n)
 
                 self.pintg.pseudo_advance(tcurr)
 
