@@ -195,6 +195,11 @@ class AscentPlugin(BaseSolnPlugin):
         self._ele_regions_lin.append((d_str, idx, rgn, soln_op))
 
         mesh_n[f'{d_str}/state/domain_id'] = intg.rallocs.prank
+        mesh_n[f'{d_str}/state/config/keyword'] = 'Config'
+        mesh_n[f'{d_str}/state/config/data'] = intg.cfg.tostr()
+        mesh_n[f'{d_str}/state/mesh_uuid/keyword'] = 'Mesh_UUID'
+        mesh_n[f'{d_str}/state/mesh_uuid/data'] = intg.mesh_uuid
+
         mesh_n[f'{d_str}/coordsets/coords/type'] = 'explicit'
         mesh_n[f'{d_str}/topologies/mesh/coordset'] = 'coords'
         mesh_n[f'{d_str}/topologies/mesh/type'] = 'unstructured'
@@ -224,6 +229,9 @@ class AscentPlugin(BaseSolnPlugin):
 
         # Iterate over each element type in our region
         for d_str, idx, rgn, soln_op in self._ele_regions_lin:
+            self.mesh_n[f'{d_str}/state/time/keyword'] = 'Time'
+            self.mesh_n[f'{d_str}/state/time/data'] = intg.tcurr
+
             # Subset and transpose the solution
             soln = intg.soln[idx][..., rgn].swapaxes(0, 1)
 
