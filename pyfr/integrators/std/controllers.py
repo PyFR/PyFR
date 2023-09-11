@@ -190,7 +190,7 @@ class StdPIController(BaseStdController):
             # Compute the size of the next step
             self.dt_in = fac*dt
 
-            self.adjust_step(t)
+            self.adjust_dt(t)
 
             # Decide if to accept or reject the step
             if err < 1.0:
