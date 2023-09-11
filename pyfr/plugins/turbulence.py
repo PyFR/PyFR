@@ -79,7 +79,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                              'yzdim': [ydim, ydim], 'beta1' : beta1, 'beta2': beta2,
                              'beta3': beta3, 'rot': rot, 'shift': shift, 'ac': ac}
 
-        self.vortbuff = self.getvortbuff()
+        self.vortbuf = self.getvortbuf()
         self.vortstructs = self.getvortstructs(intg)
 
         if not bool(self.vortstructs):
@@ -89,7 +89,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         if intg.tcurr + intg._dt < self.tnext:
             return
 
-        for i, [trcl, streams, streamsidx, buff, tinit, state] in enumerate(self.vortstructs):
+        for i, [trcl, streams, streamsidx, buf, tinit, state] in enumerate(self.vortstructs):
             if trcl > self.tnext:
                 continue
 
@@ -99,27 +99,27 @@ class TurbulencePlugin(BaseSolverPlugin):
                 if sid >= stream.shape[0]:
                     continue
          
-                tmp = buff[:,ele][buff[:,ele].te > self.tnext]
+                tmp = buf[:,ele][buf[:,ele].te > self.tnext]
                 rem = tmp.shape[0]
-                sft = sid + buff.shape[0] - rem
+                sft = sid + buf.shape[0] - rem
                 add = rem + stream[sid:sft].shape[0]
-                buff[:rem, ele] = tmp
-                buff[rem:add, ele] = stream[sid:sft]
-                buff[add:, ele] = 0
+                buf[:rem, ele] = tmp
+                buf[rem:add, ele] = stream[sid:sft]
+                buf[add:, ele] = 0
 
-                if sft < stream.shape[0] and (buff['ts'][-1, ele] < trcltemp):
-                    trcltemp = buff['ts'][-1, ele]
+                if sft < stream.shape[0] and (buf['ts'][-1, ele] < trcltemp):
+                    trcltemp = buf['ts'][-1, ele]
 
                 self.vortstructs[i][2][ele] = sft
 
             self.vortstructs[i][0] = trcltemp
-            tinit.set(buff.tinit)
-            state.set(buff.state)
+            tinit.set(buf.tinit)
+            state.set(buf.state)
     
         self.tnext = min(etype[0] for etype in self.vortstructs)
 
 
-    def getvortbuff(self):
+    def getvortbuf(self):
         lcgg = lcg(self.seed)
 
         vid = 0
@@ -164,7 +164,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                           for i, p in enumerate(ptsri.swapaxes(0, 1))]
                 idx3d = Index(insert, properties=Property(dimension=3, interleaved=True))
                 
-                for vid, vort in enumerate(self.vortbuff):
+                for vid, vort in enumerate(self.vortbuf):
                     elestemp = []
                     vbmin = [-2*self.ls, vort.yinit - self.ls, vort.zinit - self.ls]
                     vbmax = [2*self.ls, vort.yinit + self.ls, vort.zinit + self.ls]
@@ -182,10 +182,12 @@ class TurbulencePlugin(BaseSolverPlugin):
                         xvmin = xv.min()
                         xvmax = xv.max()
                         ts = max(vort.tinit, vort.tinit + xvmin/self.avgu)
-                        te = max(ts, min(ts + (xvmax-xvmin+2*self.ls)/self.avgu, vort.tinit + 2*self.ls/self.avgu))
+                        te = max(ts, min(ts + (xvmax-xvmin+2*self.ls)/self.avgu,
+                                         vort.tinit + 2*self.ls/self.avgu))
 
                         # record when a vortex enters and exits an element
-                        temp[eids[c]].append((self.vortbuff[vid].tinit, self.vortbuff[vid].state, ts, te))
+                        temp[eids[c]].append((self.vortbuf[vid].tinit,
+                                              self.vortbuf[vid].state, ts, te))
 
                 for ele, stream in temp.items():
                     streams[ele] = np.sort(np.core.records.fromrecords(stream, dtype = self.eventdtype), order='ts')
@@ -203,9 +205,12 @@ class TurbulencePlugin(BaseSolverPlugin):
 
                 nvmx += 1
 
-                buff = np.core.records.fromrecords(np.zeros((nvmx, neles)), dtype = self.eventdtype)
+                buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
+                                                   dtype = self.eventdtype)
 
-                vortstruct = [0.0, streams, streamsidx, buff, intg.backend.matrix((nvmx, neles), tags={'align'}), intg.backend.matrix((nvmx, neles), tags={'align'}, dtype=np.uint32)]  
+                vortstruct = [0.0, streams, streamsidx, buf,
+                              intg.backend.matrix((nvmx, neles), tags={'align'}),
+                              intg.backend.matrix((nvmx, neles), tags={'align'}, dtype=np.uint32)]  
 
                 eles.add_src_macro('pyfr.plugins.kernels.turbulence',
                                    'turbulence',
