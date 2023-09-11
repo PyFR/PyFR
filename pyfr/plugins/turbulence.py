@@ -50,15 +50,15 @@ class TurbulencePlugin(BaseSolverPlugin):
         ti = self.cfg.getfloat(cfgsect, 'turbulence-intensity')
         sigma = self.cfg.getfloat(cfgsect, 'sigma')
         centre = self.cfg.getliteral(cfgsect, 'centre')
-        rotaxis = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
-        rotangle = -1.0*np.radians(self.cfg.getfloat(cfgsect,'rot-angle'))
+        rax = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
+        ran = np.radians(self.cfg.getfloat(cfgsect,'rot-angle'))
         self.avgu = avgu = self.cfg.getfloat(cfgsect, 'avg-u')
         self.ls = ls = self.cfg.getfloat(cfgsect, 'turbulence-length-scale')
 
         gc = (2*sigma/(math.erf(1/sigma)*math.pi**0.5))**0.5
-        fac1 = -0.5/(sigma*ls)**2
-        fac2 = avgrho*(gamma - 1)*avgmach**2
-        fac3 = 0.01*ti*avgu*(gc/sigma)**3
+        beta1 = -0.5/(sigma*ls)**2
+        beta2 = avgrho*(gamma - 1)*avgmach**2
+        beta3 = 0.01*ti*avgu*(gc/sigma)**3
 
         self.ydim = ydim = self.cfg.getfloat(cfgsect, 'y-dim')
         self.zdim = zdim = self.cfg.getfloat(cfgsect, 'z-dim')
@@ -71,13 +71,13 @@ class TurbulencePlugin(BaseSolverPlugin):
                               [2*ls, ymin+ydim+ls, zmin+zdim+ls])
         
         self.shift = shift = np.array(centre)
-        self.rot = rot = np.cos(rotangle)*np.identity(3) +\
-                         np.sin(rotangle)*(np.cross(rotaxis, np.identity(3) * -1)) +\
-                         (1.0 - np.cos(rotangle))*np.outer(rotaxis,rotaxis)
+        self.rot = rot = (np.cos(ran)*np.eye(3) -
+                          np.sin(ran)*(np.cross(rax, -np.eye(3))) +
+                          (1.0 - np.cos(ran))*rax@rax.T)
 
         self.macro_params = {'ls': ls, 'avgu': avgu, 'yzmin': [ymin, zmin],
-                             'yzdim': [ydim, ydim], 'fac1' : fac1, 'fac2': fac2,
-                             'fac3': fac3, 'rot': rot, 'shift': shift, 'ac': ac}
+                             'yzdim': [ydim, ydim], 'beta1' : beta1, 'beta2': beta2,
+                             'beta3': beta3, 'rot': rot, 'shift': shift, 'ac': ac}
 
         self.vortbuff = self.getvortbuff()
         self.vortstructs = self.getvortstructs(intg)
@@ -140,9 +140,9 @@ class TurbulencePlugin(BaseSolverPlugin):
                 tinits[vid] += 2*self.ls/self.avgu
     
         return np.core.records.fromrecords(temp, dtype = [('yinit', self.fdptype),
-                                          ('zinit', self.fdptype),
-                                          ('tinit', self.fdptype),
-                                          ('state', np.uint32)])
+                                                          ('zinit', self.fdptype),
+                                                          ('tinit', self.fdptype),
+                                                          ('state', np.uint32)])
 
     def getvortstructs(self, intg):
         vortstructs = []

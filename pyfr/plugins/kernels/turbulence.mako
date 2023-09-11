@@ -4,10 +4,7 @@
 
 <%pyfr:macro name='turbulence' params='t, u, ploc, src'>
   fpdtype_t arg, clip, g;
-  fpdtype_t tpos[3];
-  fpdtype_t tploc[3];
-  fpdtype_t delta2[3];
-  fpdtype_t utilde[3] = {};
+  fpdtype_t tpos[3], tploc[3], delta2[3], utilde[3] = {};
 
   uint32_t oldstate, newstate, rshift;
 
@@ -34,18 +31,18 @@
       arg += delta2[${j}];
     % endfor
 
-    g = (delta2[0] < ${ls**2} && delta2[1] < ${ls**2} && delta2[2] < ${ls**2} && tpos[0] <= ${ls} && state[${i}] > 0) ? ${pyfr.polyfit(lambda x: np.exp(fac1*x), 0, 3*ls**2, 8, 'arg')} : 0.0;
+    g = (delta2[0] < ${ls**2} && delta2[1] < ${ls**2} && delta2[2] < ${ls**2} && tpos[0] <= ${ls} && state[${i}] > 0) ? ${pyfr.polyfit(lambda x: np.exp(beta1*x), 0, 3*ls**2, 8, 'arg')} : 0.0;
        
     % for j in range(3): 
       utilde[${j}] += (oldstate & ${32 << j}) ? -g : g;
     % endfor
   % endfor
 
-  clip = (tploc[0] < ${ls} && tploc[0] > ${-ls}) ? ${pyfr.polyfit(lambda x: (fac3*avgu/ls)*np.exp(-0.5*np.pi*x**2/ls**2), -ls, ls, 8, 'tploc[0]')} : 0.0;
+  clip = (tploc[0] < ${ls} && tploc[0] > ${-ls}) ? ${pyfr.polyfit(lambda x: (beta3*avgu/ls)*np.exp(-0.5*np.pi*x**2/ls**2), -ls, ls, 8, 'tploc[0]')} : 0.0;
   
   % if not ac:
-    src[0] += ${fac2}*utilde[0]*clip;
-    src[${nvars - 1}] += ${0.5*fac3}*u[0]*(${pyfr.dot('utilde[{i}]', i=3)})*clip;
+    src[0] += ${beta2}*utilde[0]*clip;
+    src[${nvars - 1}] += ${0.5*beta3}*u[0]*(${pyfr.dot('utilde[{i}]', i=3)})*clip;
   % endif
 
   % for i in range(3):
