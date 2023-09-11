@@ -71,10 +71,10 @@ class StdNoneController(BaseStdController):
             self.adjust_step(t)
 
             # Take the step
-            idxcurr = self.step(self.tcurr, self._dt)
+            idxcurr = self.step(self.tcurr, self.dt)
 
             # We are not adaptive, so accept every step
-            self._accept_step(self._dt, idxcurr)
+            self._accept_step(self.dt, idxcurr)
 
 
 class StdPIController(BaseStdController):
@@ -175,7 +175,7 @@ class StdPIController(BaseStdController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt, self.dtmax), self.dtmin)
+            dt = max(min(t - self.tcurr, self.dt, self.dtmax), self.dtmin)
 
             # Take the step
             idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
@@ -188,7 +188,7 @@ class StdPIController(BaseStdController):
             fac = min(maxf, max(minf, saff*fac))
 
             # Compute the size of the next step
-            self._dt_in = fac*dt
+            self.dt_in = fac*dt
 
             self.adjust_step(t)
 

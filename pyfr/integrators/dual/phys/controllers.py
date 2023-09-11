@@ -44,10 +44,10 @@ class DualNoneController(BaseDualController):
             self.adjust_step(t)
 
             # Decide on the pseudo time step
-            self.pseudointegrator.adjust_dtau(self._dt)
+            self.pseudointegrator.adjust_dtau(self.dt)
 
             # Take the physical step
-            self.step(self.tcurr, self._dt)
+            self.step(self.tcurr, self.dt)
 
             # We are not adaptive, so accept every step
-            self._accept_step(self._dt, self.pseudointegrator._idxcurr)
+            self._accept_step(self.dt, self.pseudointegrator._idxcurr)

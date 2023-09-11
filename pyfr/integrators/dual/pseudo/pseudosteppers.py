@@ -39,7 +39,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         self.system.rhs(t, uin, fout)
 
         # Registers and coefficients
-        vals = [self.stepper_coeffs[-1], -1/self._dt, 1]
+        vals = [self.stepper_coeffs[-1], -1/self.dt, 1]
         regs = [fout, self._idxcurr, self._source_regidx]
 
         # Physical stepper source addition -∇·f - dQ/dt
@@ -191,7 +191,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
         self._nstages = len(self.b)
 
         # Allocate storage for the local pseudo time-step field
-        self.dtau_upts = [self.backend.matrix(shape, np.ones(shape)*self._dtau,
+        self.dtau_upts = [self.backend.matrix(shape, np.ones(shape)*self.dtau,
                                               tags={'align'})
                           for shape in self.system.ele_shapes]
 

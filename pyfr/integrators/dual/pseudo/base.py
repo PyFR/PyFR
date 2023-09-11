@@ -14,7 +14,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
-        self._dt = dt
+        self.dt = dt
 
         sect = 'solver-time-integrator'
 
@@ -99,7 +99,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
 
     def init_stage(self, currstg, stepper_coeffs, dt):
         self.stepper_coeffs = stepper_coeffs
-        self._dt = dt
+        self.dt = dt
 
         svals = [0, 1 / dt, *stepper_coeffs[:-1]]
         sregs = [self._source_regidx, *self._stepper_regidx,

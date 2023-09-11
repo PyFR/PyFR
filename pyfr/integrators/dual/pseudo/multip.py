@@ -286,7 +286,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Set time step and current stepper coefficients for all levels
         for l in self.levels:
-            self.pintgs[l]._dt = self._dt
+            self.pintgs[l].dt = self.dt
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr

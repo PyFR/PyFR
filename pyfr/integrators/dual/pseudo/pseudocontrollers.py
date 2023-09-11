@@ -8,7 +8,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._dt_dtau_ratio = self._dt / self.dtau
+        self._dt_dtau_ratio = self.dt / self.dtau
 
         # Ensure the system is compatible with our formulation
         self.system.elementscls.validate_formulation(self)
