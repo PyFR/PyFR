@@ -64,7 +64,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def _update_pseudostepinfo(self, niters, resid):
         self.pseudostepinfo.append((self.ntotiters, niters, resid))
 
-    def adjust_pseudo_step(self, dt):
+    def adjust_pseudodt(self, dt):
         self.dtau = dt / self._dt_dtau_ratio
 
 
@@ -145,19 +145,22 @@ class DualPIPseudoController(BaseDualPseudoController):
                     )
                 )
 
-        self.pseudo_step_multiplied(1.0)
+        self.bind_pseudodt()
 
         self.backend.commit()
 
-    def adjust_pseudo_step(self, dt):
+    def adjust_pseudodt(self, dt):
         old_dtau = self.dtau
-        super().adjust_pseudo_step(dt)
-        self.pseudo_step_multiplied(self.dtau / old_dtau)
+        self.dtau = dt / self._dt_dtau_ratio
+        self.multiply_limits(self.dtau / old_dtau)
 
-    def pseudo_step_multiplied(self, y):
+    def multiply_limits(self, y):
         self.dtau_min *= y
         self.dtau_max *= y
 
+        self.bind_pseudodt(y)
+
+    def bind_pseudodt(self, y=1.0):
         for k, idx in self.pintgkernels:
             if k == 'localerrest':
                 for kk in self.pintgkernels[k, idx]:
@@ -177,7 +180,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
 
             if i == 0:
-                self.pseudo_step_multiplied(1.0)
+                self.bind_pseudodt()
 
             self.localerrest(self._idxerr)
 

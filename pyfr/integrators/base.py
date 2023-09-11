@@ -63,7 +63,7 @@ class BaseIntegrator:
         self._dt_in = cfg.getfloat('solver-time-integrator', 'dt')
         self._dt_near = None
 
-    def adjust_step(self, t):
+    def adjust_dt(self, t):
         t_diff = t - self.tcurr
         steps_with_dt_far = t_diff / self._dt_in
         steps_to_t = -(steps_with_dt_far // -1)
