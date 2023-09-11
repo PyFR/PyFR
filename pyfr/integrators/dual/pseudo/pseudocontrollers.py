@@ -165,8 +165,8 @@ class DualPIPseudoController(BaseDualPseudoController):
             if k == 'localerrest':
                 for kk in self.pintgkernels[k, idx]:
                     kk.bind(
-                        dtau_min=self.dtau_min, 
-                        dtau_max=self.dtau_max, dtau_fieldf=y
+                        dtau_min=self.dtau_min, dtau_max=self.dtau_max,
+                        dtau_fieldf=y
                     )
 
     def localerrest(self, errbank):
