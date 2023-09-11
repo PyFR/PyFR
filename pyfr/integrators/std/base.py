@@ -56,6 +56,21 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         return self._curr_grad_soln
 
     @property
+    def dt_soln(self):
+        system = self.system
+
+        if not self._curr_dt_soln:
+            copy = self.soln
+            system.rhs(self.tcurr, self._idxcurr, self._idxcurr)
+            self._curr_dt_soln = system.ele_scal_upts(self._idxcurr)
+
+            # Reset current register with original contents
+            for c, e in zip(copy, system.ele_banks):
+                e[self._idxcurr].set(c)
+
+        return self._curr_dt_soln
+
+    @property
     def controller_needs_errest(self):
         pass
 

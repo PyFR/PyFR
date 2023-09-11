@@ -108,7 +108,6 @@ class MetalBlasExtKernels(MetalKernelProvider):
         class ReductionKernel(MetalKernel):
             @property
             def retval(self):
-                #print(reduced_host)
                 return reducer(reduced_host, axis=1)
 
             def bind(self, *facs):

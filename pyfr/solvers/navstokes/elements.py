@@ -26,7 +26,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                                np.einsum('ijk,iljk->ljk', rhouvw, grad_uvw))
         grad_p *= (gamma - 1)
 
-        return [grad_rho] + grad_uvw + [grad_p]
+        return [grad_rho, *grad_uvw, grad_p]
 
     def set_backend(self, *args, **kwargs):
         super().set_backend(*args, **kwargs)

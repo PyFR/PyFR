@@ -65,3 +65,11 @@ Plugin Commands
 Plugins are able to define tools that are accessible from the command line,
 below are listed the the various options currently available.
 
+Time Average
+^^^^^^^^^^^^
+
+1. ``pyfr tavg merge`` --- merge together multiple time average files into a
+   single time average file. The averaging times are read from the file and do
+   not need to be evenly spaced in time. Example::
+
+        pyfr tavg merge avg-1.00.pyfrs avg-2.00.pyfrs avg-10.00.pyfrs merged_avg.pyfrs

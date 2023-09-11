@@ -6,6 +6,7 @@ from uuid import UUID
 import numpy as np
 
 from pyfr.inifile import Inifile
+from pyfr.progress import NullProgressSequence
 from pyfr.util import digest
 
 
@@ -364,48 +365,59 @@ class BasePartitioner:
 
         return con, eleglmap
 
-    def partition(self, mesh):
+    def partition(self, mesh, progress=NullProgressSequence):
         # Extract the current UUID from the mesh
         curruuid = mesh['mesh_uuid']
 
         # Combine any pre-existing partitions
-        mesh, rnum = self._combine_mesh_parts(mesh)
+        with progress.start('Combine mesh parts'):
+            mesh, rnum = self._combine_mesh_parts(mesh)
 
         # Obtain the element weighting table
         elewts = self._get_elewts(mesh)
 
         # Merge periodic elements
-        con, exwts, pmerge, pnames = self._group_periodic_eles(mesh, elewts)
+        with progress.start('Group periodic elements'):
+            con, exwts, pmerge, pnames = self._group_periodic_eles(mesh,
+                                                                   elewts)
 
         # Obtain the dual graph for this mesh
-        graph, vetimap = self._construct_graph(con, elewts, exwts=exwts)
+        with progress.start('Construct graph'):
+            graph, vetimap = self._construct_graph(con, elewts, exwts=exwts)
 
         # Partition the graph
-        if self.nparts > 1:
-            vparts = self._partition_graph(graph, self.partwts).tolist()
+        with progress.start('Partition graph'):
+            if self.nparts > 1:
+                vparts = self._partition_graph(graph, self.partwts).tolist()
 
-            if (n := len(set(vparts))) != self.nparts:
-                raise RuntimeError(f'Partitioner error: mesh has {n} parts '
-                                   f'versus goal of {self.nparts}')
-        else:
-            vparts = [0]*len(vetimap)
+                if (n := len(set(vparts))) != self.nparts:
+                    raise RuntimeError(f'Partitioner error: mesh has {n} '
+                                       f'parts versus goal of {self.nparts}')
+            else:
+                vparts = [0]*len(vetimap)
 
         # Unmerge periodic elements
-        vetimap, vparts = self._ungroup_periodic_eles(pmerge, vetimap, vparts)
+        with progress.start('Ungroup periodic elements'):
+            vetimap, vparts = self._ungroup_periodic_eles(pmerge, vetimap,
+                                                          vparts)
 
         # Renumber vertices
-        vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
+        with progress.start('Renumber vertices'):
+            vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
 
-        # Partition the connectivity portion of the mesh
-        newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts, pnames)
+        # Repartition the mesh
+        with progress.start('Repartition mesh'):
+            # Partition the connectivity portion of the mesh
+            newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts,
+                                                    pnames)
 
-        # Handle the shape points
-        newmesh |= self._partition_spts(mesh, vetimap, vparts)
+            # Handle the shape points
+            newmesh |= self._partition_spts(mesh, vetimap, vparts)
 
-        # Update the renumbering table
-        for etype, emap in rnum.items():
-            for k, (pidx, eidx) in emap.items():
-                emap[k] = eleglmap[etype, eidx]
+            # Update the renumbering table
+            for etype, emap in rnum.items():
+                for k, (pidx, eidx) in emap.items():
+                    emap[k] = eleglmap[etype, eidx]
 
         # Generate a new UUID for the mesh
         newmesh['mesh_uuid'] = newuuid = str(UUID(digest(curruuid, rnum)[:32]))

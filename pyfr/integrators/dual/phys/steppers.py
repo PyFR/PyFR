@@ -67,7 +67,7 @@ class SDIRK43Stepper(BaseDIRKStepper):
 
     a = [
         [_a_lam],
-        [0.5 - _a_lam,  _a_lam],
+        [0.5 - _a_lam, _a_lam],
         [2*_a_lam, 1 - 4*_a_lam, _a_lam]
     ]
 

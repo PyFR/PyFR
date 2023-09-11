@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 import re
 from setuptools import setup
+import sys
+
+
+# Check Python version
+if sys.version_info < (3, 10):
+    sys.exit('Minimum Python version is 3.10')
 
 
 # PyFR version

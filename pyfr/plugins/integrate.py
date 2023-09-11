@@ -31,6 +31,24 @@ class IntegratePlugin(BaseSolnPlugin):
         self.exprs = [self.cfg.getexpr(cfgsect, k, subs=c)
                       for k in self.cfg.items(cfgsect, prefix='int-')]
 
+        # Add optional integral L-p degree
+        if self.cfg.get(cfgsect, 'norm', 'none').lower() != 'none':
+            self.lp = self.cfg.getfloat(cfgsect, 'norm')
+
+            # Modify expressions for L-p norm
+            if self.lp == 1 or self.lp == float('inf'):
+                self.exprs = [f'abs({e})' for e in self.exprs]
+                self._post_func = lambda x: x
+            else:
+                self.exprs = [f'pow(abs({e}), {self.lp})' for e in self.exprs]
+                self._post_func = lambda x: x**(1 / self.lp)
+        else:
+            self.lp = None
+            self._post_func = lambda x: x
+
+        # Set MPI reduction op
+        self.mpi_op = mpi.MAX if self.lp == float('inf') else mpi.SUM
+
         # Integration region pre-processing
         esetmask = self._prepare_esetmask(intg)
 
@@ -173,10 +191,16 @@ class IntegratePlugin(BaseSolnPlugin):
 
             for j, v in enumerate(self.exprs):
                 # Evaluate the expression at each point
-                iex = wts*npeval(v, subs)
+                e = npeval(v, subs)
 
-                # Accumulate
-                intvals[j] += np.sum(iex) - np.sum(iex[emask])
+                # Either max or quadrature and sum
+                if self.lp == float('inf'):
+                    intvals[j] = max(intvals[j], np.amax(e))
+                else:
+                    iex = wts*e
+
+                    # Accumulate
+                    intvals[j] += np.sum(iex) - np.sum(iex[emask])
 
         return intvals
 
@@ -190,9 +214,12 @@ class IntegratePlugin(BaseSolnPlugin):
 
             # Reduce and output if we're the root rank
             if rank != root:
-                comm.Reduce(iintex, None, op=mpi.SUM, root=root)
+                comm.Reduce(iintex, None, op=self.mpi_op, root=root)
             else:
-                comm.Reduce(mpi.IN_PLACE, iintex, op=mpi.SUM, root=root)
+                comm.Reduce(mpi.IN_PLACE, iintex, op=self.mpi_op, root=root)
+
+                # Apply post integration function
+                iintex = (self._post_func(i) for i in iintex)
 
                 # Write
                 print(intg.tcurr, *iintex, sep=',', file=self.outf)

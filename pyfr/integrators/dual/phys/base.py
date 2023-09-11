@@ -47,6 +47,30 @@ class BaseDualIntegrator(BaseIntegrator):
 
         return self._curr_grad_soln
 
+    @property
+    def dt_soln(self):
+        system = self.system
+
+        if not self._curr_dt_soln:
+            copy = self.soln
+            idx = self.pseudointegrator._idxcurr
+            system.rhs(self.tcurr, idx, idx)
+            self._curr_dt_soln = system.ele_scal_upts(idx)
+
+            # Reset current register with original contents
+            for c, e in zip(copy, system.ele_banks):
+                e[idx].set(c)
+
+        return self._curr_dt_soln
+
+    def call_plugin_dt(self, dt):
+        rem = math.fmod(dt, self._dt)
+        tol = 5.0*self.dtmin
+        if rem > tol and (self._dt - rem) > tol:
+            raise ValueError('Plugin call times must be multiples of dt')
+
+        super().call_plugin_dt(dt)
+
     def collect_stats(self, stats):
         super().collect_stats(stats)
 

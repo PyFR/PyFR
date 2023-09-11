@@ -1,6 +1,4 @@
 from functools import cached_property
-import math
-import re
 
 import numpy as np
 
