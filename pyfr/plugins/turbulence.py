@@ -21,6 +21,23 @@ def pcg32rxs_m_xs_random(state):
         state ^= state >> np.uint32(22)
         return (state >> 8) * 5.9604644775390625e-8
 
+def binary_search(f):
+    lbnd = 0
+    ubnd = 1
+
+    while not f(ubnd):
+        lbnd = ubnd
+        ubnd *= 2
+
+    while ubnd - lbnd > 1:
+        mpnt = (lbnd + ubnd) // 2
+        if f(mpnt):
+            ubnd = mpnt
+        else:
+            lbnd = mpnt
+
+    return ubnd
+
 class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
     systems = [ 'ac-navier-stokes', 'navier-stokes']
@@ -89,35 +106,54 @@ class TurbulencePlugin(BaseSolverPlugin):
         if intg.tcurr + intg._dt < self.tnext:
             return
 
-        for i, [trcl, streams, streamsidx, buf, tinit, state] in enumerate(self.vortstructs):
+        for etype, [trcl, streams, streamsidx, buf, tinit, state] in enumerate(self.vortstructs):
             if trcl > self.tnext:
                 continue
 
-            trcltemp = np.inf
-            for ele, stream in streams.items():
-                sid = streamsidx[ele]
-                if sid >= stream.shape[0]:
-                    continue
-         
-                tmp = buf[:,ele][buf[:,ele].te > self.tnext]
-                rem = tmp.shape[0]
-                sft = sid + buf.shape[0] - rem
-                add = rem + stream[sid:sft].shape[0]
-                buf[:rem, ele] = tmp
-                buf[rem:add, ele] = stream[sid:sft]
-                buf[add:, ele] = 0
-
-                if sft < stream.shape[0] and (buf['ts'][-1, ele] < trcltemp):
-                    trcltemp = buf['ts'][-1, ele]
-
-                self.vortstructs[i][2][ele] = sft
-
-            self.vortstructs[i][0] = trcltemp
+            self.vortstructs[etype][0] = self.update_buf(streams, streamsidx, buf, self.tnext)
             tinit.set(buf.tinit)
             state.set(buf.state)
     
         self.tnext = min(etype[0] for etype in self.vortstructs)
 
+    def update_buf(self, streams, streamsidx, buf, tnext):
+        trcltemp = np.inf
+        for ele, stream in streams.items():
+            sid = streamsidx[ele]
+            if sid >= stream.shape[0]:
+                continue
+     
+            tmp = buf[:,ele][buf[:,ele].te > tnext]
+            rem = tmp.shape[0]
+            sft = sid + buf.shape[0] - rem
+            add = rem + stream[sid:sft].shape[0]
+            buf[:rem, ele] = tmp
+            buf[rem:add, ele] = stream[sid:sft]
+            buf[add:, ele] = 0
+
+            if sft < stream.shape[0] and (buf[-1, ele].ts < trcltemp):
+                trcltemp = buf[-1, ele].ts
+
+            streamsidx[ele] = sft
+
+        return trcltemp
+
+    def testnvmx(self, streams, neles, nvmx):
+        tnext = self.tnext
+        streamsidx = defaultdict()
+        for ele in streams.keys():
+            streamsidx[ele] = 0
+        buf = np.core.records.fromrecords(np.zeros((nvmx, neles)), 
+                                          dtype = self.eventdtype)
+
+        while tnext < np.inf:
+            trcltemp = self.update_buf(streams, streamsidx, buf, tnext)
+            if trcltemp < (tnext + 0.1):
+                return False
+            
+            tnext = trcltemp
+
+        return True
 
     def getvortbuf(self):
         lcgg = lcg(self.seed)
@@ -146,6 +182,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
     def getvortstructs(self, intg):
         vortstructs = []
+
         for etype, eles in intg.system.ele_map.items(): 
             neles = eles.neles
             pts = eles.ploc_at_np('upts').swapaxes(0, 1)
@@ -193,17 +230,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                     streams[ele] = np.sort(np.core.records.fromrecords(stream, dtype = self.eventdtype), order='ts')
                     streamsidx[ele] = 0
 
-                nvmx = 0
-                for stream in streams.values():
-                    for i, ts in enumerate(stream.ts):
-                        cnt = 0
-                        while i-cnt >= 0:
-                            if stream.te[i-cnt] < ts:
-                                break
-                            cnt += 1
-                        nvmx = max(nvmx, cnt)
-
-                nvmx += 1
+                nvmx = binary_search(lambda x: self.testnvmx(streams, neles, x))
 
                 buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
                                                    dtype = self.eventdtype)
@@ -226,5 +253,5 @@ class TurbulencePlugin(BaseSolverPlugin):
                                    value=vortstruct[5])
 
                 vortstructs.append(vortstruct)
-
+   
         return vortstructs
