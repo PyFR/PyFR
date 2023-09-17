@@ -18,6 +18,7 @@ class BaseIntegrator:
         self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
+        cfgsect = 'solver-time-integrator'
         self.prevcfgs = {f: initsoln[f] for f in initsoln or []
                          if f.startswith('config-')}
 
@@ -41,7 +42,7 @@ class BaseIntegrator:
         self.nacptchain = 0
 
         # Current and minimum time steps
-        self.dt = cfg.getfloat('solver-time-integrator', 'dt')
+        self.dt = cfg.getfloat(cfgsect, 'dt')
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
@@ -59,27 +60,26 @@ class BaseIntegrator:
         self.abort = False
 
         # Smoothly step to target time in the last near_t steps
-        self.fact = self.cfg.getfloat('solver-time-integrator', 'dt-fact', 0.9)
-        self.fact_max = 1.001
-        self.dt_in = cfg.getfloat('solver-time-integrator', 'dt')
+        self.fact = self.cfg.getfloat(cfgsect, 'dt-fact', 0.9)
+        self.fact_max = self.cfg.getfloat(cfgsect, 'dt-fact-max', 1.001)
+        self.dt_fallback = cfg.getfloat(cfgsect, 'dt')
         self.dt_near = None
 
     def adjust_dt(self, t):
         t_diff = t - self.tcurr
-        steps_with_dt_far = t_diff / self.dt_in
-        steps_to_t = -(steps_with_dt_far // -self.fact_max)
+        fallback_steps = t_diff / self.dt_fallback
+        steps_to_t = -(fallback_steps // -self.fact_max)
 
         if steps_to_t == 1:
             self.dt = t_diff
-        elif steps_with_dt_far == 0:
+        elif fallback_steps == 0:
             self.dt_near = None
             self.dt = t_diff
-        elif (steps_with_dt_far - 1) / (steps_to_t - 1) < self.fact:
-            if self.dt_near is None:
-                self.dt_near = t_diff / steps_to_t
+        elif (fallback_steps - 1) / (steps_to_t - 1) < self.fact:
+            self.dt_near = self.dt_near or t_diff / steps_to_t
             self.dt = self.dt_near                
         else:
-            self.dt = self.dt_in
+            self.dt = self.dt_fallback
 
     def _get_plugins(self, initsoln):
         plugins = []

@@ -9,6 +9,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         super().__init__(*args, **kwargs)
 
         self._dt_dtau_ratio = self.dt / self.dtau
+        self._dtau_fieldf = 1.0
 
         # Ensure the system is compatible with our formulation
         self.system.elementscls.validate_formulation(self)
@@ -157,16 +158,16 @@ class DualPIPseudoController(BaseDualPseudoController):
     def multiply_limits(self, y):
         self.dtau_min *= y
         self.dtau_max *= y
+        self._dtau_fieldf = y
+        self.bind_dtau()
 
-        self.bind_dtau(y)
-
-    def bind_dtau(self, y=1.0):
+    def bind_dtau(self):
         for k, idx in self.pintgkernels:
             if k == 'localerrest':
                 for kk in self.pintgkernels[k, idx]:
                     kk.bind(
                         dtau_min=self.dtau_min, dtau_max=self.dtau_max,
-                        dtau_fieldf=y
+                        dtau_fieldf=self._dtau_fieldf
                     )
 
     def localerrest(self, errbank):
@@ -179,7 +180,9 @@ class DualPIPseudoController(BaseDualPseudoController):
             # Take the step
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
 
+            # Reset the dtau field factor after the first iteration
             if i == 0:
+                self._dtau_fieldf = 1.0
                 self.bind_dtau()
 
             self.localerrest(self._idxerr)
