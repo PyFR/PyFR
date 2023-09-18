@@ -163,6 +163,7 @@ class HIPWrappers(LibWrapper):
 
     # Functions
     _functions = [
+        (c_int, 'hipRuntimeGetVersion', POINTER(c_int)),
         (c_int, 'hipGetDeviceCount', POINTER(c_int)),
         (c_int, 'hipGetDeviceProperties', POINTER(HIPDevProps), c_int),
         (c_int, 'hipSetDevice', c_int),
@@ -211,6 +212,21 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipGraphExecDestroy', c_void_p),
         (c_int, 'hipGraphLaunch', c_void_p, c_void_p)
     ]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        version = c_int()
+        self.hipRuntimeGetVersion(version)
+
+        major, rem = divmod(version.value, 10000000)
+        minor, patch = divmod(rem, 100000)
+
+        if (major, minor) < (5, 2):
+            raise RuntimeError(f'HIP version {major}.{minor}.{patch} < 5.2')
+
+        if major > 5:
+            raise RuntimeError(f'HIP major version {major} > 5')
 
 
 class _HIPBase:
