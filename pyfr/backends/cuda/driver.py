@@ -130,6 +130,7 @@ class CUDAWrappers(LibWrapper):
     # Functions
     _functions = [
         (c_int, 'cuInit', c_int),
+        (c_int, 'cuDriverGetVersion', POINTER(c_int)),
         (c_int, 'cuDeviceGet', POINTER(c_int), c_int),
         (c_int, 'cuDeviceGetCount', POINTER(c_int)),
         (c_int, 'cuDeviceGetAttribute', POINTER(c_int), c_int, c_int),
@@ -184,6 +185,16 @@ class CUDAWrappers(LibWrapper):
 
     def _transname(self, name):
         return name.removesuffix('_v2')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        version = c_int()
+        self.cuDriverGetVersion(version)
+
+        major, minor = version.value // 1000, (version.value % 1000) // 10
+        if (major, minor) < (11, 4):
+            raise RuntimeError(f'CUDA version {major}.{minor} < 11.4')
 
 
 class _CUDABase:
