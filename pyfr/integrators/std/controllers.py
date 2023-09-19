@@ -68,7 +68,7 @@ class StdNoneController(BaseStdController):
 
         while self.tcurr < t:
             # Decide on the time step
-            self.adjust_step(t)
+            self.adjust_dt(t)
 
             # Take the step
             idxcurr = self.step(self.tcurr, self.dt)
