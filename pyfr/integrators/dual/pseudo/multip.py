@@ -294,8 +294,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         for i in range(self._maxniters):
             # Choose either ⌊c⌋ and ⌈c⌉ in a way that the average is c
-            csteps = [int(self._fgen.choice([np.floor(c), np.ceil(c)], 
-                          p=[1 - c % 1, c % 1])) for c in cstepsf]
+            csteps = [int(c + (self._fgen.random() < c % 1)) for c in cstepsf]
 
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
