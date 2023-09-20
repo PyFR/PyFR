@@ -39,7 +39,6 @@ class DualNoneController(BaseDualController):
             raise ValueError('Advance time is in the past')
 
         while self.tcurr < t:
-
             # Decide on the time step
             self.adjust_dt(t)
 
