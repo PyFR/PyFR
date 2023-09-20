@@ -12,6 +12,10 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         elif self.grad_fusion:
             bufs |= {'grad_upts'}
 
+        if self.basis.fpts_in_upts:
+            bufs |= {'comm_fpts'}
+            bufs -= {'vect_fpts'}
+
         return bufs
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
@@ -29,7 +33,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
             kernels['copy_fpts'] = lambda: kernel(
-                'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
+                'copy', self._comm_fpts, self._scal_fpts
             )
 
         if self.basis.order > 0:
@@ -38,7 +42,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 out=self._grad_upts
             )
         kernels['tgradcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
+            'mul', self.opmat('M6'), self._comm_fpts,
             out=self._grad_upts, beta=float(self.basis.order > 0)
         )
 
@@ -85,7 +89,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             return self._be.unordered_meta_kernel(muls)
 
-        kernels['gradcoru_fpts'] = gradcoru_fpts
+        if not self.basis.fpts_in_upts:
+            kernels['gradcoru_fpts'] = gradcoru_fpts
 
         if 'flux' in self.antialias and self.basis.order > 0:
             def gradcoru_qpts():

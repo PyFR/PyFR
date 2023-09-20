@@ -39,7 +39,7 @@ class NavierStokesIntInters(TplargsMixin,
         self.kernels['con_u'] = lambda: self._be.kernel(
             'intconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             ulin=self._scal_lhs, urin=self._scal_rhs,
-            ulout=self._vect_lhs, urout=self._vect_rhs
+            ulout=self._comm_lhs, urout=self._comm_rhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -61,7 +61,7 @@ class NavierStokesMPIInters(TplargsMixin,
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._vect_lhs
+            ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._comm_lhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -88,7 +88,7 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ulin=self._scal_lhs,
-            ulout=self._vect_lhs, nlin=self._pnorm_lhs,
+            ulout=self._comm_lhs, nlin=self._pnorm_lhs,
             **self._external_vals
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
