@@ -25,7 +25,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
-        self._fgen = np.random.default_rng(0)
+        self._fgen = np.random.Generator(np.random.MT19937(0))
         
         self.levels = sorted(set(self.cycle), reverse=True)
 
