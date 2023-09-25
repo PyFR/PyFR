@@ -517,17 +517,18 @@ Parameterises multi-p for dual time-stepping with
 
 2. ``cycle`` --- nature of a single multi-p cycle:
 
-    ``[(order,nsteps), (order,nsteps), ... (order,nsteps)]``
+    ``[(order, nsteps), (order, nsteps), ... (order, nsteps)]``
 
     where ``order`` in the first and last bracketed pair must be the
-    overall polynomial order used for the simulation, and ``order`` can
-    only change by one between subsequent bracketed pairs
+    overall polynomial order used for the simulation, ``order`` can
+    only change by one between subsequent bracketed pairs, and 
+    ``nsteps`` is a positive rational number.
 
 Example::
 
     [solver-dual-time-integrator-multip]
     pseudo-dt-fact = 2.3
-    cycle = [(3, 1), (2, 1), (1, 1), (0, 2), (1, 1), (2, 1), (3, 3)]
+    cycle = [(3, 0.13), (2, 0.13), (1, 0.13), (0, 1.38), (1, 1.15), (2, 1.15), (3, 4.52)]
 
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
