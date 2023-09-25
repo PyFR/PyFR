@@ -37,9 +37,9 @@ class METISWrappers(LibWrapper):
     METIS_OPTION_NITER = 7
     METIS_OPTION_NCUTS = 8
     METIS_OPTION_SEED = 9
-    METIS_OPTION_MINCONN = 12
-    METIS_OPTION_NSEPS = 17
-    METIS_OPTION_UFACTOR = 18
+    METIS_OPTION_MINCONN = 11
+    METIS_OPTION_NSEPS = 16
+    METIS_OPTION_UFACTOR = 17
 
     def _load_library(self):
         lib = super()._load_library()

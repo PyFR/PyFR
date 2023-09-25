@@ -12,7 +12,7 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import register_finalize_handler
 from pyfr.partitioners import BasePartitioner, get_partitioner
 from pyfr.plugins import BaseCLIPlugin
-from pyfr.progress_bar import ProgressBar
+from pyfr.progress import ProgressBar, ProgressSequenceAction
 from pyfr.rank_allocator import get_rank_allocation
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import NativeReader
@@ -30,6 +30,8 @@ def main():
     ap.add_argument('--verbose', '-v', action='count')
     ap.add_argument('--version', '-V', action='version',
                     version=f'%(prog)s {__version__}')
+    ap.add_argument('--progress', '-p', action=ProgressSequenceAction,
+                    help='show progress')
 
     # Import command
     ap_import = sp.add_parser('import', help='import --help')
@@ -110,8 +112,6 @@ def main():
     for p in [ap_run, ap_restart]:
         p.add_argument('--backend', '-b', choices=backends, required=True,
                        help='backend to use')
-        p.add_argument('--progress', '-p', action='store_true',
-                       help='show a progress bar')
 
     # Plugin commands
     for scls in subclasses(BaseCLIPlugin, just_leaf=True):
@@ -130,16 +130,17 @@ def main():
 def process_import(args):
     # Get a suitable mesh reader instance
     if args.type:
-        reader = get_reader_by_name(args.type, args.inmesh)
+        reader = get_reader_by_name(args.type, args.inmesh, args.progress)
     else:
         extn = os.path.splitext(args.inmesh.name)[1]
-        reader = get_reader_by_extn(extn, args.inmesh)
+        reader = get_reader_by_extn(extn, args.inmesh, args.progress)
 
     # Get the mesh in the PyFR format
     mesh = reader.to_pyfrm(args.lintol)
 
     # Save to disk
-    write_pyfrms(args.outmesh, mesh)
+    with args.progress.start('Write mesh'):
+        write_pyfrms(args.outmesh, mesh)
 
 
 def process_partition(args):
@@ -187,30 +188,31 @@ def process_partition(args):
             raise RuntimeError('No partitioners available')
 
     # Partition the mesh
-    mesh, rnum, part_soln_fn = part.partition(mesh)
+    mesh, rnum, part_soln_fn = part.partition(mesh, args.progress)
 
-    # Prepare the solutions
-    solnit = (part_soln_fn(NativeReader(s)) for s in args.solns)
-
-    # Output paths/files
-    paths = it.chain([args.mesh], args.solns)
-    files = it.chain([mesh], solnit)
-
-    # Iterate over the output mesh/solutions
-    for path, data in zip(paths, files):
-        # Compute the output path
-        path = os.path.join(args.outd, os.path.basename(path.rstrip('/')))
-
-        # Save to disk
-        write_pyfrms(path, data)
+    # Write the repartitioned mesh file
+    with args.progress.start('Write mesh'):
+        write_pyfrms(os.path.join(args.outd, os.path.basename(args.mesh)),
+                     mesh)
 
     # Write out the renumbering table
     if args.rnumf:
-        print('etype,pold,iold,pnew,inew', file=args.rnumf)
+        with args.progress.start('Write renumbering table'):
+            print('etype,pold,iold,pnew,inew', file=args.rnumf)
 
-        for etype, emap in sorted(rnum.items()):
-            for k, v in sorted(emap.items()):
-                print(etype, *k, *v, sep=',', file=args.rnumf)
+            for etype, emap in sorted(rnum.items()):
+                for k, v in sorted(emap.items()):
+                    print(etype, *k, *v, sep=',', file=args.rnumf)
+
+    # Repartition any solutions
+    if args.solns:
+        with args.progress.start_with_bar('Repartition solutions') as pbar:
+            for ipath in pbar.start_with_iter(args.solns):
+                # Compute the output path
+                opath = os.path.join(args.outd, os.path.basename(ipath))
+
+                # Save to disk
+                write_pyfrms(opath, part_soln_fn(NativeReader(ipath)))
 
 
 def process_export(args):
@@ -222,7 +224,8 @@ def process_export(args):
         writer = get_writer_by_extn(extn, args)
 
     # Write the output file
-    writer.write_out()
+    with args.progress.start_with_bar('Write output') as pbar:
+        writer.write_out(pbar)
 
 
 def _process_common(args, mesh, soln, cfg):
@@ -255,11 +258,11 @@ def _process_common(args, mesh, soln, cfg):
 
     # If we are running interactively then create a progress bar
     if args.progress and MPI.COMM_WORLD.rank == 0:
-        pb = ProgressBar(solver.tstart, solver.tcurr, solver.tend)
+        pbar = ProgressBar()
+        pbar.start(solver.tend, start=solver.tstart, curr=solver.tcurr)
 
         # Register a callback to update the bar after each step
-        callb = lambda intg: pb.advance_to(intg.tcurr)
-        solver.plugins.append(callb)
+        solver.plugins.append(lambda intg: pbar(intg.tcurr))
 
     # Execute!
     solver.run()

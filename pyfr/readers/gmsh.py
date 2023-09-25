@@ -192,42 +192,48 @@ class GmshReader(BaseReader):
                        3, 15, 14, 13, 12, 2]
     }
 
-    def __init__(self, msh):
+    def __init__(self, msh, progress):
+        self.progress = progress
+
         if isinstance(msh, str):
             msh = open(msh)
 
-        # Get an iterator over the lines of the mesh
-        mshit = iter(msh)
+        with progress.start_with_spinner('Reading .msh') as pspinner:
+            # Get an iterator over the lines of the mesh
+            mshit = iter(msh)
 
-        # Section readers
-        sect_map = {
-            'MeshFormat': self._read_mesh_format,
-            'PhysicalNames': self._read_phys_names,
-            'Entities': self._read_entities,
-            'Nodes': self._read_nodes,
-            'Elements': self._read_eles
-        }
+            # Have our spinner flashed every 10,000 lines
+            mshit = pspinner.wrap_iterable(mshit, 10000)
 
-        for l in filter(lambda l: l != '\n', mshit):
-            # Ensure we have encountered a section
-            if not l.startswith('$'):
-                raise ValueError('Expected a mesh section')
+            # Section readers
+            sect_map = {
+                'MeshFormat': self._read_mesh_format,
+                'PhysicalNames': self._read_phys_names,
+                'Entities': self._read_entities,
+                'Nodes': self._read_nodes,
+                'Elements': self._read_eles
+            }
 
-            # Strip the '$' and '\n' to get the section name
-            sect = l[1:-1]
+            for l in filter(lambda l: l != '\n', mshit):
+                # Ensure we have encountered a section
+                if not l.startswith('$'):
+                    raise ValueError('Expected a mesh section')
 
-            # Try to read the section
-            try:
-                sect_map[sect](mshit)
-            # Else skip over it
-            except KeyError:
-                endsect = f'$End{sect}\n'
+                # Strip the '$' and '\n' to get the section name
+                sect = l[1:-1]
 
-                for el in mshit:
-                    if el == endsect:
-                        break
-                else:
-                    raise ValueError(f'Expected $End{sect}')
+                # Try to read the section
+                try:
+                    sect_map[sect](mshit)
+                # Else skip over it
+                except KeyError:
+                    endsect = f'$End{sect}\n'
+
+                    for el in mshit:
+                        if el == endsect:
+                            break
+                    else:
+                        raise ValueError(f'Expected $End{sect}')
 
     def _read_mesh_format(self, mshit):
         ver, ftype, dsize = next(mshit).split()
@@ -408,4 +414,10 @@ class GmshReader(BaseReader):
         pents = self._felespent, self._bfacespents, self._pfacespents
         mesh = NodalMeshAssembler(self._nodepts, self._elenodes, pents, maps)
 
-        return mesh.get_connectivity() | mesh.get_shape_points(lintol)
+        with self.progress.start_with_spinner('Processing connectivity') as p:
+            pyfrm = mesh.get_connectivity(p)
+
+        with self.progress.start('Processing shape points'):
+             pyfrm |= mesh.get_shape_points(lintol)
+
+        return pyfrm

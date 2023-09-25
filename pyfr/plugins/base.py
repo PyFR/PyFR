@@ -12,8 +12,7 @@ from pyfr.regions import BoundaryRegion, ConstructiveRegion
 def cli_external(meth):
     @ft.wraps(meth)
     def newmeth(cls, args):
-        obj = cls(args)
-        return meth(obj)
+        return meth(cls(), args)
 
     return classmethod(newmeth)
 
@@ -81,9 +80,6 @@ class BaseSolverPlugin(BasePlugin):
 
 class BaseCLIPlugin:
     name = None
-
-    def __init__(self, args):
-        self.args = args
 
     @classmethod
     def add_cli(cls, parser):
