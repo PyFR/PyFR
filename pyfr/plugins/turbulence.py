@@ -6,37 +6,26 @@ from pyfr.plugins.base import BaseSolverPlugin
 from pyfr.regions import BoxRegion
 from rtree.index import Index, Property
 
-def lcg(seed):
+# pcg32rxs_m_xs
+def pcg(seed):
     state = np.uint32(seed)
-    while True:
-        yield state
-        with np.errstate(over='ignore'):
-            state = state*np.uint32(747796405) + np.uint32(2891336453)
-
-def pcg32rxs_m_xs_random(state):
+    multiplier = np.uint32(747796405)
+    increment = np.uint32(2891336453)
+    mcgmultiplier = np.uint32(277803737)
+    n4 = np.uint32(4)
+    n22 = np.uint32(22)
+    n28 = np.uint32(28)
     with np.errstate(over='ignore'):
-        rshift = np.uint32(state >> np.uint32(28))
-        state ^= state >> (np.uint32(4) + rshift)
-        state *= np.uint32(277803737)
-        state ^= state >> np.uint32(22)
-        return (state >> 8) * 5.9604644775390625e-8
-
-def binary_search(f):
-    lbnd = 0
-    ubnd = 1
-
-    while not f(ubnd):
-        lbnd = ubnd
-        ubnd *= 2
-
-    while ubnd - lbnd > 1:
-        mpnt = (lbnd + ubnd) // 2
-        if f(mpnt):
-            ubnd = mpnt
-        else:
-            lbnd = mpnt
-
-    return ubnd
+        while True:
+            ostate = state
+            ostatet = state
+            state = ostatet*multiplier + increment
+            rshift = np.uint32(ostatet >> n28)
+            ostatet ^= ostatet >> (n4 + rshift)
+            ostatet *= mcgmultiplier
+            ostatet ^= ostatet >> n22
+            random = (ostatet >> 8) * 5.9604644775390625e-8
+            yield (ostate, random)
 
 class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
@@ -51,6 +40,9 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         ac = intg.system.name.startswith('ac')
 
+        self.nmvxinit = 6
+        self.nvmxtol = 0.1
+
         self.tstart = intg.tstart
         self.tbegin = intg.tcurr
         self.tnext = intg.tcurr
@@ -61,21 +53,22 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.eventdtype = [('tinit', fdptype), ('state', np.uint32),
                            ('ts', fdptype), ('te', fdptype)]
 
-        gamma = self.cfg.getfloat('constants', 'gamma')
-        avgrho = self.cfg.getfloat(cfgsect, 'avg-rho')
-        avgmach = self.cfg.getfloat(cfgsect, 'avg-mach')
         ti = self.cfg.getfloat(cfgsect, 'turbulence-intensity')
         sigma = self.cfg.getfloat(cfgsect, 'sigma')
-        centre = self.cfg.getliteral(cfgsect, 'centre')
-        rax = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
-        ran = np.radians(self.cfg.getfloat(cfgsect,'rot-angle'))
         self.avgu = avgu = self.cfg.getfloat(cfgsect, 'avg-u')
         self.ls = ls = self.cfg.getfloat(cfgsect, 'turbulence-length-scale')
 
         gc = (2*sigma/(math.erf(1/sigma)*math.pi**0.5))**0.5
         beta1 = -0.5/(sigma*ls)**2
-        beta2 = avgrho*(gamma - 1)*avgmach**2
         beta3 = 0.01*ti*avgu*(gc/sigma)**3
+
+        if not ac:
+            gamma = self.cfg.getfloat('constants', 'gamma')
+            avgrho = self.cfg.getfloat(cfgsect, 'avg-rho')
+            avgmach = self.cfg.getfloat(cfgsect, 'avg-mach')
+            beta2 = avgrho*(gamma - 1)*avgmach**2
+        else:
+            beta2 = 0
 
         self.ydim = ydim = self.cfg.getfloat(cfgsect, 'y-dim')
         self.zdim = zdim = self.cfg.getfloat(cfgsect, 'z-dim')
@@ -87,6 +80,10 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.bbox = BoxRegion([-2*ls, ymin-ls, zmin-ls],
                               [2*ls, ymin+ydim+ls, zmin+zdim+ls])
         
+        centre = self.cfg.getliteral(cfgsect, 'centre')
+        rax = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
+        ran = np.radians(self.cfg.getfloat(cfgsect,'rot-angle'))
+
         self.shift = shift = np.array(centre)
         self.rot = rot = (np.cos(ran)*np.eye(3) -
                           np.sin(ran)*(np.cross(rax, -np.eye(3))) +
@@ -138,7 +135,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         return trcltemp
 
-    def testnvmx(self, streams, neles, nvmx):
+    def test_nvmx(self, streams, neles, nvmx):
         tnext = self.tnext
         streamsidx = defaultdict()
         for ele in streams.keys():
@@ -148,7 +145,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         while tnext < np.inf:
             trcltemp = self.update_buf(streams, streamsidx, buf, tnext)
-            if trcltemp < (tnext + 0.1):
+            if trcltemp < (tnext + self.nvmxtol):
                 return False
             
             tnext = trcltemp
@@ -156,21 +153,21 @@ class TurbulencePlugin(BaseSolverPlugin):
         return True
 
     def getvortbuf(self):
-        lcgg = lcg(self.seed)
+        pcgg = pcg(self.seed)
 
         vid = 0
         temp = []
         tinits = []
 
         while vid < self.nvorts:
-            tinits.append(self.tstart + 2*self.ls*pcg32rxs_m_xs_random(next(lcgg))/self.avgu)
+            tinits.append(self.tstart + 2*self.ls*next(pcgg)[1]/self.avgu)
             vid += 1
 
         while any(tinit <= self.tend for tinit in tinits):     
             for vid, tinit in enumerate(tinits):
-                state = next(lcgg)
-                yinit = self.ymin + self.ydim*pcg32rxs_m_xs_random(state)
-                zinit = self.zmin + self.zdim*pcg32rxs_m_xs_random(next(lcgg))
+                (state, floaty) = next(pcgg)
+                yinit = self.ymin + self.ydim*floaty
+                zinit = self.zmin + self.zdim*next(pcgg)[1]
                 if tinit+(2*self.ls/self.avgu) >= self.tbegin and tinit <= self.tend:
                     temp.append((yinit, zinit, tinit, state))
                 tinits[vid] += 2*self.ls/self.avgu
@@ -230,7 +227,9 @@ class TurbulencePlugin(BaseSolverPlugin):
                     streams[ele] = np.sort(np.core.records.fromrecords(stream, dtype = self.eventdtype), order='ts')
                     streamsidx[ele] = 0
 
-                nvmx = binary_search(lambda x: self.testnvmx(streams, neles, x))
+                nvmx = self.nmvxinit
+                while not self.test_nvmx(streams, neles, nvmx):
+                    nvmx += 1
 
                 buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
                                                    dtype = self.eventdtype)
