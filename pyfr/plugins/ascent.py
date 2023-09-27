@@ -1,5 +1,5 @@
 from collections import defaultdict
-from ctypes import c_char_p, c_double, c_int, c_int64, c_void_p, RTLD_GLOBAL
+from ctypes import RTLD_GLOBAL, c_char_p, c_double, c_int, c_int64, c_void_p
 import re
 
 import numpy as np
@@ -7,7 +7,7 @@ import numpy as np
 from pyfr.ctypesutil import LibWrapper
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BaseSolnPlugin, RegionMixin
+from pyfr.plugins.base import BaseSolnPlugin, region_data
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, subclass_where
 from pyfr.writers.vtk import BaseShapeSubDiv
@@ -109,7 +109,7 @@ class AscentWrappers(LibWrapper):
     ]
 
 
-class AscentPlugin(RegionMixin, BaseSolnPlugin):
+class AscentPlugin(BaseSolnPlugin):
     name = 'ascent'
     systems = ['*']
     formulations = ['dual', 'std']
@@ -162,10 +162,16 @@ class AscentPlugin(RegionMixin, BaseSolnPlugin):
         # Generate conduit blueprint of mesh
         self.mesh_n = ConduitNode(self.conduit)
 
+        # Parse the region
+        ridxs = region_data(self.cfg, cfgsect, intg.system.mesh, intg.rallocs)
+
+        # Build the conduit blueprint mesh for the regions
         self._ele_regions_lin = []
-        for ele in self._ele_regions:
+        for etype, eidxs in ridxs.items():
+            eoff = intg.system.ele_types.index(etype)
+
             # Build the conduit blueprint mesh for the regions
-            self._build_blueprint(intg, ele, divisors)
+            self._build_blueprint(intg, eoff, etype, eidxs, divisors)
 
         # Initalise ascent and the open an instance
         self._init_ascent()
@@ -174,8 +180,7 @@ class AscentPlugin(RegionMixin, BaseSolnPlugin):
         if getattr(self, 'ascent_ptr', None):
             self.lib.ascent_close(self.ascent_ptr)
 
-    def _build_blueprint(self, intg, ele, divisors):
-        idx, ename, rgn = ele
+    def _build_blueprint(self, intg, idx, ename, rgn, divisors):
         mesh_n = self.mesh_n
         d_str = f'domain_{intg.rallocs.prank}_{ename}'
 
