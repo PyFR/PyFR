@@ -521,7 +521,7 @@ Parameterises multi-p for dual time-stepping with
 
     where ``order`` in the first and last bracketed pair must be the
     overall polynomial order used for the simulation, ``order`` can
-    only change by one between subsequent bracketed pairs, and 
+    only change by one between subsequent bracketed pairs, and
     ``nsteps`` is a non-negative rational number.
 
 Example::
@@ -1253,12 +1253,22 @@ vectors to a CSV file. Parameterised with
 
     ``(x, y, [z])``
 
+5. ``quad-deg-{etype}`` --- degree of quadrature rule for fluid force
+   integration, optionally this can be specified for different element types:
+
+    *int*
+
+6. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+
+    *string*
+
 Example::
 
     [soln-plugin-fluidforce-wing]
     nsteps = 10
     file = wing-forces.csv
     header = true
+    quad-deg = 6
     morigin = (0.0, 0.0, 0.5)
 
 [soln-plugin-nancheck]
