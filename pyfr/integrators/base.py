@@ -18,7 +18,6 @@ class BaseIntegrator:
         self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
-        cfgsect = 'solver-time-integrator'
         self.prevcfgs = {f: initsoln[f] for f in initsoln or []
                          if f.startswith('config-')}
 
@@ -42,7 +41,7 @@ class BaseIntegrator:
         self.nacptchain = 0
 
         # Current and minimum time steps
-        self.dt = cfg.getfloat(cfgsect, 'dt')
+        self.dt = cfg.getfloat('solver-time-integrator', 'dt')
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
@@ -60,9 +59,10 @@ class BaseIntegrator:
         self.abort = False
 
         # Smoothly step to target time in the last near_t steps
-        self.fact = self.cfg.getfloat(cfgsect, 'dt-fact', 0.9)
-        self.fact_max = self.cfg.getfloat(cfgsect, 'dt-fact-max', 1.001)
-        self.dt_fallback = cfg.getfloat(cfgsect, 'dt')
+        self.fact = self.cfg.getfloat('solver-time-integrator', 'dt-fact', 0.9)
+        self.fact_max = self.cfg.getfloat('solver-time-integrator', 
+                                          'dt-fact-max', 1.001)
+        self.dt_fallback = cfg.getfloat('solver-time-integrator', 'dt')
         self.dt_near = None
 
     def adjust_dt(self, t):
