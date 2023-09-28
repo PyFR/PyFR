@@ -1,6 +1,6 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%pyfr:macro name='inviscid_flux' params='s, f'>
+<%pyfr:macro name='inviscid_flux' params='s, f' externs='ac_zeta'>
    // Velocity in the indices 1 to ndims+1 of the conservative variable array
    fpdtype_t v[] = ${pyfr.array('s[{i}]', i=(1, ndims + 1))};
 
@@ -9,7 +9,7 @@
 
     // Mass flux
 % for i in range(ndims):
-    f[${i}][0] = ${c['ac-zeta']}*v[${i}];
+    f[${i}][0] = ac_zeta*v[${i}];
 % endfor
 
     // Momentum fluxes

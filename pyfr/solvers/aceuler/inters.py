@@ -13,9 +13,11 @@ class ACEulerIntInters(BaseAdvectionIntInters):
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        c=self.c)
 
+        self._set_external('ac_zeta', 'scalar fpdtype_t')
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs,
+            extrns=self._external_args, 
         )
 
 
@@ -29,9 +31,11 @@ class ACEulerMPIInters(BaseAdvectionMPIInters):
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        c=self.c)
 
+        self._set_external('ac_zeta', 'scalar fpdtype_t')
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self._scal_lhs, ur=self._scal_rhs, 
+            nl=self._pnorm_lhs, extrns=self._external_args, 
         )
 
 
@@ -45,10 +49,10 @@ class ACEulerBaseBCInters(BaseAdvectionBCInters):
         tplargs = dict(ndims=self.ndims, nvars=self.nvars, rsolver=rsolver,
                        c=self.c, bctype=self.type)
 
+        self._set_external('ac_zeta', 'scalar fpdtype_t')
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ul=self._scal_lhs, nl=self._pnorm_lhs,
-            **self._external_vals
         )
 
 

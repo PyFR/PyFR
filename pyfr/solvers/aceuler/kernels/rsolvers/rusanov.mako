@@ -1,7 +1,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.aceuler.kernels.flux'/>
 
-<%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
+<%pyfr:macro name='rsolve' params='ul, ur, n, nf' externs='ac_zeta'>
     fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
 
     ${pyfr.expand('inviscid_flux', 'ul', 'fl')};
@@ -14,7 +14,7 @@
     fpdtype_t nv = 0.5*${pyfr.dot('n[{i}]', 'vl[{i}] + vr[{i}]', i=ndims)};
 
     // Estimate the wave speed
-    fpdtype_t a = fabs(nv) + sqrt(nv*nv + ${c['ac-zeta']});
+    fpdtype_t a = fabs(nv) + sqrt(nv*nv + ac_zeta);
 
     // Output
 % for i in range(nvars):
