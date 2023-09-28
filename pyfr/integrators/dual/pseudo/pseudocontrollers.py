@@ -153,12 +153,11 @@ class DualPIPseudoController(BaseDualPseudoController):
     def adjust_dtau(self, dt):
         old_dtau = self.dtau
         self.dtau = dt / self._dt_dtau_ratio
-        self.multiply_limits(self.dtau / old_dtau)
 
-    def multiply_limits(self, y):
-        self.dtau_min *= y
-        self.dtau_max *= y
-        self._dtau_fieldf = y
+        ratio = self.dtau / old_dtau
+        self.dtau_min *= ratio
+        self.dtau_max *= ratio
+        self._dtau_fieldf = ratio
         self.bind_dtau()
 
     def bind_dtau(self):
