@@ -87,7 +87,6 @@ class StdPIController(BaseStdController):
         sect = 'solver-time-integrator'
 
         # Maximum time step
-        self.dtmax = self.cfg.getfloat(sect, 'dt-max', 1e2)
 
         # Error tolerances
         self._atol = self.cfg.getfloat(sect, 'atol')
@@ -175,26 +174,25 @@ class StdPIController(BaseStdController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self.dt, self.dtmax), self.dtmin)
+            self.adjust_dt(t)
 
             # Take the step
-            idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
+            idxcurr, idxprev, idxerr = self.step(self.tcurr, self.dt)
 
             # Estimate the error
             err = self._errest(idxcurr, idxprev, idxerr)
+
+            print("AFTER: ", self.dt)
+            # Decide if to accept or reject the step
+            if err < 1.0:
+                self._errprev = err
+                self._accept_step(self.dt, idxcurr, err=err)
+            else:
+                self._reject_step(self.dt, idxprev, err=err)
 
             # Determine time step adjustment factor
             fac = err**-expa * self._errprev**expb
             fac = min(maxf, max(minf, saff*fac))
 
             # Compute the size of the next step
-            self.dt_in = fac*dt
-
-            self.adjust_dt(t)
-
-            # Decide if to accept or reject the step
-            if err < 1.0:
-                self._errprev = err
-                self._accept_step(dt, idxcurr, err=err)
-            else:
-                self._reject_step(dt, idxprev, err=err)
+            self.dt_fallback = fac*self.dt

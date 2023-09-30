@@ -77,7 +77,7 @@ class BaseIntegrator:
             self.dt = t_diff
         elif (fallback_steps - 1) / (steps_to_t - 1) < self.fact:
             self.dt_near = self.dt_near or t_diff / steps_to_t
-            self.dt = self.dt_near                
+            self.dt = self.dt_near
         else:
             self.dt = self.dt_fallback
 
