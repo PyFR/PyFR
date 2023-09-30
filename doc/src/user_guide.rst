@@ -522,7 +522,7 @@ Example::
     safety-fact = 0.9
     min-fact = 0.3
     max-fact = 2.5
-    dt-adjust-min-fact = 0.9
+    dt-adjust-min-fact = 0.99
     dt-adjust-max-fact = 1.01
 
 [solver-dual-time-integrator-multip]
