@@ -80,6 +80,7 @@ class BaseIntegrator:
             self.dt = self.dt_near
         else:
             self.dt = self.dt_fallback
+        self.dt = max(self.dt, self.dtmin)
 
     def _get_plugins(self, initsoln):
         plugins = []
