@@ -182,7 +182,6 @@ class StdPIController(BaseStdController):
             # Estimate the error
             err = self._errest(idxcurr, idxprev, idxerr)
 
-            print("AFTER: ", self.dt)
             # Decide if to accept or reject the step
             if err < 1.0:
                 self._errprev = err
