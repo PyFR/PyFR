@@ -1,35 +1,35 @@
+from collections import defaultdict
 import math
+
+from pyfr.regions import BoxRegion
 import numpy as np
 
-from collections import defaultdict
 from pyfr.plugins.base import BaseSolverPlugin
-from pyfr.regions import BoxRegion
 from rtree.index import Index, Property
 
-# pcg32rxs_m_xs
+
 def pcg(seed):
+    # pcg32rxs_m_xs
     state = np.uint32(seed)
     multiplier = np.uint32(747796405)
     increment = np.uint32(2891336453)
     mcgmultiplier = np.uint32(277803737)
-    n4 = np.uint32(4)
-    n22 = np.uint32(22)
-    n28 = np.uint32(28)
+    n4, n22, n28 = np.uint32(4), np.uint32(22), np.uint32(28)
     with np.errstate(over='ignore'):
         while True:
-            ostate = state
-            ostatet = state
+            ostate = ostatet = state
             state = ostatet*multiplier + increment
             rshift = np.uint32(ostatet >> n28)
             ostatet ^= ostatet >> (n4 + rshift)
             ostatet *= mcgmultiplier
             ostatet ^= ostatet >> n22
-            random = (ostatet >> 8) * 5.9604644775390625e-8
+            random = (ostatet >> 8) * pow(2, -24)
             yield (ostate, random)
+
 
 class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
-    systems = [ 'ac-navier-stokes', 'navier-stokes']
+    systems = ['ac-navier-stokes', 'navier-stokes']
     formulations = ['dual', 'std']
     dimensions = [3]
 
@@ -72,83 +72,84 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         self.ydim = ydim = self.cfg.getfloat(cfgsect, 'y-dim')
         self.zdim = zdim = self.cfg.getfloat(cfgsect, 'z-dim')
-        
+
         self.ymin = ymin = -ydim/2
         self.zmin = zmin = -zdim/2
 
         self.nvorts = int(ydim*zdim/(4*ls**2))
         self.bbox = BoxRegion([-2*ls, ymin-ls, zmin-ls],
                               [2*ls, ymin+ydim+ls, zmin+zdim+ls])
-        
+
         centre = self.cfg.getliteral(cfgsect, 'centre')
         rax = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
-        ran = np.radians(self.cfg.getfloat(cfgsect,'rot-angle'))
+        ran = np.radians(self.cfg.getfloat(cfgsect, 'rot-angle'))
 
         self.shift = shift = np.array(centre)
-        self.rot = rot = (np.cos(ran)*np.eye(3) -
-                          np.sin(ran)*(np.cross(rax, -np.eye(3))) +
-                          (1.0 - np.cos(ran))*rax@rax.T)
+        self.rot = rot = (np.cos(ran)*np.eye(3) +
+                          np.sin(ran)*(np.cross(rax, np.eye(3))) +
+                          (1 - np.cos(ran))*rax @ rax.T)
 
         self.macro_params = {'ls': ls, 'avgu': avgu, 'yzmin': [ymin, zmin],
-                             'yzdim': [ydim, ydim], 'beta1' : beta1, 'beta2': beta2,
-                             'beta3': beta3, 'rot': rot, 'shift': shift, 'ac': ac}
+                             'yzdim': [ydim, ydim], 'beta1': beta1,
+                             'beta2': beta2, 'beta3': beta3, 'rot': rot,
+                             'shift': shift, 'ac': ac}
 
         self.trcl = defaultdict()
         self.vortbuf = self.getvortbuf()
         self.vortstructs = self.getvortstructs(intg)
 
         if not bool(self.vortstructs):
-           self.tnext = float('inf')
+            self.tnext = float('inf')
 
     def __call__(self, intg):
         if intg.tcurr + intg._dt < self.tnext:
             return
 
-        for etype, [streams, streamsidx, buf, tinit, state] in self.vortstructs.items():
+        for etype, [strms, strmsid, buf, tinit, state] in self.vortstructs.items():
             if self.trcl[etype] > self.tnext:
                 continue
 
-            self.trcl[etype] = self.update_buf(streams, streamsidx, buf, self.tnext)
+            self.trcl[etype] = self.update_buf(strms, strmsid, buf, self.tnext)
             tinit.set(buf.tinit)
             state.set(buf.state)
-    
+
         self.tnext = min(self.trcl.values())
 
-    def update_buf(self, streams, streamsidx, buf, tnext):
-        trcltemp = np.inf
-        for ele, stream in streams.items():
-            sid = streamsidx[ele]
-            if sid >= stream.shape[0]:
+    def update_buf(self, strms, strmsid, buf, tnext):
+        trcltemp = float('inf')
+        for ele, strm in strms.items():
+            sid = strmsid[ele]
+            if sid >= strm.shape[0]:
                 continue
-     
-            tmp = buf[:,ele][buf[:,ele].te > tnext]
+
+            tmp = buf[:, ele][buf[:, ele].te > tnext]
             rem = tmp.shape[0]
             sft = sid + buf.shape[0] - rem
-            add = rem + stream[sid:sft].shape[0]
+            add = rem + strm[sid:sft].shape[0]
             buf[:rem, ele] = tmp
-            buf[rem:add, ele] = stream[sid:sft]
+            buf[rem:add, ele] = strm[sid:sft]
             buf[add:, ele] = 0
 
-            if sft < stream.shape[0] and (buf[-1, ele].ts < trcltemp):
+            if sft < strm.shape[0] and (buf[-1, ele].ts < trcltemp):
                 trcltemp = buf[-1, ele].ts
 
-            streamsidx[ele] = sft
+            strmsid[ele] = sft
 
         return trcltemp
 
-    def test_nvmx(self, streams, neles, nvmx):
+    def test_nvmx(self, strms, neles, nvmx):
         tnext = self.tnext
-        streamsidx = defaultdict()
-        for ele in streams.keys():
-            streamsidx[ele] = 0
-        buf = np.core.records.fromrecords(np.zeros((nvmx, neles)), 
-                                          dtype = self.eventdtype)
+        strmsid = defaultdict()
+        for ele in strms:
+            strmsid[ele] = 0
+        buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
+                                          dtype=self.eventdtype)
 
-        while tnext < np.inf:
-            trcltemp = self.update_buf(streams, streamsidx, buf, tnext)
+        while tnext < float('inf'):
+            trcltemp = self.update_buf(strms, strmsid, buf, tnext)
             if trcltemp < (tnext + self.nvmxtol):
                 return False
-            
+
             tnext = trcltemp
 
         return True
@@ -164,51 +165,58 @@ class TurbulencePlugin(BaseSolverPlugin):
             tinits.append(self.tstart + 2*self.ls*next(pcgg)[1]/self.avgu)
             vid += 1
 
-        while any(tinit <= self.tend for tinit in tinits):     
+        while any(tinit <= self.tend for tinit in tinits):
             for vid, tinit in enumerate(tinits):
                 (state, floaty) = next(pcgg)
                 yinit = self.ymin + self.ydim*floaty
                 zinit = self.zmin + self.zdim*next(pcgg)[1]
-                if tinit+(2*self.ls/self.avgu) >= self.tbegin and tinit <= self.tend:
+                tend = tinit + (2*self.ls/self.avgu)
+                if tend >= self.tbegin and tinit <= self.tend:
                     temp.append((yinit, zinit, tinit, state))
                 tinits[vid] += 2*self.ls/self.avgu
-    
-        return np.core.records.fromrecords(temp, dtype = [('yinit', self.fdptype),
-                                                          ('zinit', self.fdptype),
-                                                          ('tinit', self.fdptype),
-                                                          ('state', np.uint32)])
+
+        return np.core.records.fromrecords(temp,
+                                           dtype=[('yinit', self.fdptype),
+                                                  ('zinit', self.fdptype),
+                                                  ('tinit', self.fdptype),
+                                                  ('state', np.uint32)])
 
     def getvortstructs(self, intg):
         vortstructs = defaultdict()
 
-        for etype, eles in intg.system.ele_map.items(): 
+        for etype, eles in intg.system.ele_map.items():
             neles = eles.neles
             pts = eles.ploc_at_np('upts').swapaxes(0, 1)
-            ptsr = (self.rot @ (pts.reshape(3, -1) - self.shift[:,None])).reshape(pts.shape)
+            ptsr = (self.rot @ (pts.reshape(3, -1) -
+                    self.shift[:, None])).reshape(pts.shape)
             ptsr = np.moveaxis(ptsr, 0, -1)
             inside = self.bbox.pts_in_region(ptsr)
 
             temp = defaultdict(list)
-            streams = defaultdict()
-            streamsidx = defaultdict()
+            strms = defaultdict()
+            strmsid = defaultdict()
 
             if np.any(inside):
                 eids = np.any(inside, axis=0).nonzero()[0]
-                ptsri = ptsr[:,eids]
+                ptsri = ptsr[:, eids]
                 insert = [(i, [*p.min(axis=0), *p.max(axis=0)], None)
                           for i, p in enumerate(ptsri.swapaxes(0, 1))]
-                idx3d = Index(insert, properties=Property(dimension=3, interleaved=True))
-                
+                idx3d = Index(insert,
+                              properties=Property(dimension=3,
+                                                  interleaved=True))
+
                 for vid, vort in enumerate(self.vortbuf):
-                    elestemp = []
-                    vbmin = [-2*self.ls, vort.yinit - self.ls, vort.zinit - self.ls]
-                    vbmax = [2*self.ls, vort.yinit + self.ls, vort.zinit + self.ls]
+                    vbmin = [-2*self.ls, vort.yinit - self.ls,
+                             vort.zinit - self.ls]
+                    vbmax = [2*self.ls, vort.yinit + self.ls,
+                             vort.zinit + self.ls]
 
                     # get candidate points from rtree
-                    can = np.array(list(set(idx3d.intersection((*vbmin, *vbmax)))), dtype=int)   
-                    
+                    can = np.array(list(set(idx3d.intersection((*vbmin, *vbmax)))),
+                                   dtype=int)
+
                     # get exact points candidate points
-                    vinside = BoxRegion(vbmin, vbmax).pts_in_region(ptsri[:,can])
+                    vinside = BoxRegion(vbmin, vbmax).pts_in_region(ptsri[:, can])
 
                     for vi, c in zip(vinside.swapaxes(0, 1), can):
                         if not np.any(vi):
@@ -217,27 +225,33 @@ class TurbulencePlugin(BaseSolverPlugin):
                         xvmin = xv.min()
                         xvmax = xv.max()
                         ts = max(vort.tinit, vort.tinit + xvmin/self.avgu)
-                        te = max(ts, min(ts + (xvmax-xvmin+2*self.ls)/self.avgu,
-                                         vort.tinit + 2*self.ls/self.avgu))
+                        te = max(ts,
+                                 min(ts + (xvmax - xvmin + 2*self.ls)/self.avgu,
+                                     vort.tinit + 2*self.ls/self.avgu))
 
                         # record when a vortex enters and exits an element
                         temp[eids[c]].append((self.vortbuf[vid].tinit,
                                               self.vortbuf[vid].state, ts, te))
 
-                for ele, stream in temp.items():
-                    streams[ele] = np.sort(np.core.records.fromrecords(stream, dtype = self.eventdtype), order='ts')
-                    streamsidx[ele] = 0
+                for ele, strm in temp.items():
+                    strms[ele] = np.sort(np.core.records.fromrecords(strm,
+                                                                     dtype=self.eventdtype),
+                                                                     order='ts')
+                    strmsid[ele] = 0
 
                 nvmx = self.nmvxinit
-                while not self.test_nvmx(streams, neles, nvmx):
+                while not self.test_nvmx(strms, neles, nvmx):
                     nvmx += 1
 
                 buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
-                                                   dtype = self.eventdtype)
+                                                  dtype=self.eventdtype)
 
-                vortstruct = [streams, streamsidx, buf,
-                              intg.backend.matrix((nvmx, neles), tags={'align'}),
-                              intg.backend.matrix((nvmx, neles), tags={'align'}, dtype=np.uint32)]  
+                vortstruct = [strms, strmsid, buf,
+                              intg.backend.matrix((nvmx, neles),
+                                                  tags={'align'}),
+                              intg.backend.matrix((nvmx, neles),
+                                                  tags={'align'},
+                                                  dtype=np.uint32)]
 
                 eles.add_src_macro('pyfr.plugins.kernels.turbulence',
                                    'turbulence',
@@ -247,12 +261,12 @@ class TurbulencePlugin(BaseSolverPlugin):
                 eles._set_external('tinit',
                                    f'in broadcast-col fpdtype_t[{nvmx}]',
                                    value=vortstruct[3])
-                                   
+                       
                 eles._set_external('state',
                                    f'in broadcast-col uint32_t[{nvmx}]',
                                    value=vortstruct[4])
 
                 self.trcl[etype] = 0
                 vortstructs[etype] = vortstruct
-   
+
         return vortstructs

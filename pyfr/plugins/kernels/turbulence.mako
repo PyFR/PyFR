@@ -22,7 +22,7 @@
       oldstate ^= oldstate >> (4UL + rshift);
       oldstate *= 277803737UL;
       oldstate ^= oldstate >> 22UL;
-      tpos[${j + 1}] = ${yzmin[j]} + ${yzdim[j]}*((fpdtype_t)(oldstate >> 8UL) * 5.9604644775390625e-8);
+      tpos[${j + 1}] = ${yzmin[j]} + ${yzdim[j]}*((fpdtype_t)(oldstate >> 8UL)*${pow(2, -24)});
     % endfor
 
     arg = 0.0;
