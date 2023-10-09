@@ -93,6 +93,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                              'yzdim': [ydim, ydim], 'beta1' : beta1, 'beta2': beta2,
                              'beta3': beta3, 'rot': rot, 'shift': shift, 'ac': ac}
 
+        self.trcl = defaultdict()
         self.vortbuf = self.getvortbuf()
         self.vortstructs = self.getvortstructs(intg)
 
@@ -103,15 +104,15 @@ class TurbulencePlugin(BaseSolverPlugin):
         if intg.tcurr + intg._dt < self.tnext:
             return
 
-        for etype, [trcl, streams, streamsidx, buf, tinit, state] in enumerate(self.vortstructs):
-            if trcl > self.tnext:
+        for etype, [streams, streamsidx, buf, tinit, state] in self.vortstructs.items():
+            if self.trcl[etype] > self.tnext:
                 continue
 
-            self.vortstructs[etype][0] = self.update_buf(streams, streamsidx, buf, self.tnext)
+            self.trcl[etype] = self.update_buf(streams, streamsidx, buf, self.tnext)
             tinit.set(buf.tinit)
             state.set(buf.state)
     
-        self.tnext = min(etype[0] for etype in self.vortstructs)
+        self.tnext = min(self.trcl.values())
 
     def update_buf(self, streams, streamsidx, buf, tnext):
         trcltemp = np.inf
@@ -178,7 +179,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                                                           ('state', np.uint32)])
 
     def getvortstructs(self, intg):
-        vortstructs = []
+        vortstructs = defaultdict()
 
         for etype, eles in intg.system.ele_map.items(): 
             neles = eles.neles
@@ -234,7 +235,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                 buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
                                                    dtype = self.eventdtype)
 
-                vortstruct = [0.0, streams, streamsidx, buf,
+                vortstruct = [streams, streamsidx, buf,
                               intg.backend.matrix((nvmx, neles), tags={'align'}),
                               intg.backend.matrix((nvmx, neles), tags={'align'}, dtype=np.uint32)]  
 
@@ -245,12 +246,13 @@ class TurbulencePlugin(BaseSolverPlugin):
 
                 eles._set_external('tinit',
                                    f'in broadcast-col fpdtype_t[{nvmx}]',
-                                   value=vortstruct[4])
+                                   value=vortstruct[3])
                                    
                 eles._set_external('state',
                                    f'in broadcast-col uint32_t[{nvmx}]',
-                                   value=vortstruct[5])
+                                   value=vortstruct[4])
 
-                vortstructs.append(vortstruct)
+                self.trcl[etype] = 0
+                vortstructs[etype] = vortstruct
    
         return vortstructs
