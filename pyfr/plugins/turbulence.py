@@ -8,8 +8,7 @@ from pyfr.plugins.base import BaseSolverPlugin
 from rtree.index import Index, Property
 
 
-def pcg(seed):
-    # pcg32rxs_m_xs
+def pcg32rxs_m_xs(seed):
     state = np.uint32(seed)
     multiplier = np.uint32(747796405)
     increment = np.uint32(2891336453)
@@ -94,7 +93,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                              'beta2': beta2, 'beta3': beta3, 'rot': rot,
                              'shift': shift, 'ac': ac}
 
-        self.trcl = defaultdict()
+        self.trcl = {}
         self.vortbuf = self.getvortbuf()
         self.vortstructs = self.getvortstructs(intg)
 
@@ -155,21 +154,21 @@ class TurbulencePlugin(BaseSolverPlugin):
         return True
 
     def getvortbuf(self):
-        pcgg = pcg(self.seed)
+        pcg = pcg32rxs_m_xs(self.seed)
 
         vid = 0
         temp = []
         tinits = []
 
         while vid < self.nvorts:
-            tinits.append(self.tstart + 2*self.ls*next(pcgg)[1]/self.avgu)
+            tinits.append(self.tstart + 2*self.ls*next(pcg)[1]/self.avgu)
             vid += 1
 
         while any(tinit <= self.tend for tinit in tinits):
             for vid, tinit in enumerate(tinits):
-                (state, floaty) = next(pcgg)
+                (state, floaty) = next(pcg)
                 yinit = self.ymin + self.ydim*floaty
-                zinit = self.zmin + self.zdim*next(pcgg)[1]
+                zinit = self.zmin + self.zdim*next(pcg)[1]
                 tend = tinit + (2*self.ls/self.avgu)
                 if tend >= self.tbegin and tinit <= self.tend:
                     temp.append((yinit, zinit, tinit, state))
