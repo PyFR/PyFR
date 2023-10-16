@@ -495,14 +495,16 @@ Parameterises the time-integration scheme used by the solver with
 
                *float*
 
-2. ``dt-adjust-min-fact`` --- minimum factor by which the changed 
-   time-step can be further changed as per target time constraints
+2. ``dt-adjust-min-fact`` --- minimum allowed factor by which the 
+   time-step modified by controller can be further changed to 
+   satisfy the constraints set by the target time
    (suitable range 0.5-0.99)
 
     *float*
 
-2. ``dt-adjust-max-fact`` --- maximum factor by which the changed 
-   time-step can be further changed as per target time constraints
+2. ``dt-adjust-max-fact`` --- maximum allowed factor by which the 
+   time-step modified by controller can be further changed to 
+   satisfy the constraints set by the target time
     (suitable range 1.0-1.1)
 
     *float*
