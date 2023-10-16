@@ -5,8 +5,8 @@ import shlex
 import numpy as np
 from pytools import prefork
 
-from pyfr.mpiutil import get_comm_rank_root
-from pyfr.regions import BoundaryRegion, ConstructiveRegion
+from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.regions import parse_region_expr
 
 
 def cli_external(meth):
@@ -34,6 +34,32 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
 
     # Return the file
     return outf
+
+
+def region_data(cfg, cfgsect, mesh, rallocs):
+    region = cfg.get(cfgsect, 'region', '*')
+
+    # Determine the element types in our partition
+    sptptn = f'spt_(.+?)_p{rallocs.prank}$'
+    etypes = [m[1] for f in mesh if (m := re.match(sptptn, f))]
+
+    # All elements
+    if region == '*':
+        return {etype: slice(None) for etype in etypes}
+    # All elements inside some region
+    else:
+        comm, rank, root = get_comm_rank_root()
+
+        # Parse the region expression and obtain the element set
+        rgn = parse_region_expr(region)
+        eset = rgn.interior_eles(mesh, rallocs)
+
+        # Ensure the region is not empty
+        if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
+            raise ValueError(f'Empty region {region}')
+
+        return {etype: np.unique(eidxs).astype(np.int32)
+                for etype, eidxs in sorted(eset.items())}
 
 
 class BasePlugin:
@@ -129,35 +155,15 @@ class RegionMixin:
     def __init__(self, intg, *args, **kwargs):
         super().__init__(intg, *args, **kwargs)
 
-        # Region of interest
-        region = self.cfg.get(self.cfgsect, 'region', '*')
+        # Parse the region
+        ridxs = region_data(self.cfg, self.cfgsect, intg.system.mesh,
+                            intg.rallocs)
 
-        # All elements
-        if region == '*':
-            self._prepare_region_data_all(intg)
-        # All elements inside some region
-        else:
-            # Geometric region
-            if '(' in region:
-                rgn = ConstructiveRegion(region)
-            # Boundary region
-            else:
-                m = re.match(r'(\w+)(?:\s+\+(\d+))?$', region)
-                rgn = BoundaryRegion(m[1], nlayers=int(m[2] or 1))
-
-            eset = rgn.interior_eles(intg.system.mesh, intg.rallocs)
-            self._prepare_region_data_eset(intg, eset)
-
-    def _prepare_region_data_all(self, intg):
-        self._ele_regions = [(i, etype, slice(None))
-                             for i, etype in enumerate(intg.system.ele_types)]
-        self._ele_region_data = {}
-
-    def _prepare_region_data_eset(self, intg, eset):
+        # Generate the appropriate metadata arrays
         self._ele_regions, self._ele_region_data = [], {}
-        for etype, eidxs in sorted(eset.items()):
+        for etype, eidxs in ridxs.items():
             doff = intg.system.ele_types.index(etype)
-            darr = np.unique(eidxs).astype(np.int32)
+            self._ele_regions.append((doff, etype, eidxs))
 
-            self._ele_regions.append((doff, etype, darr))
-            self._ele_region_data[f'{etype}_idxs'] = darr
+            if not isinstance(eidxs, slice):
+                self._ele_region_data[f'{etype}_idxs'] = eidxs

@@ -1,4 +1,4 @@
-from pkg_resources import resource_listdir, resource_string
+from importlib.resources import files
 import re
 
 import numpy as np
@@ -44,13 +44,12 @@ class BaseTabulatedQuadRule:
 class BaseStoredQuadRule(BaseTabulatedQuadRule):
     @classmethod
     def _iter_rules(cls):
-        rpaths = getattr(cls, '_rpaths', None)
-        if rpaths is None:
-            cls._rpaths = rpaths = resource_listdir(__name__, cls.shape)
+        if not hasattr(cls, '_rpaths'):
+            cls._rpaths = list(files(f'{__name__}.{cls.shape}').iterdir())
 
-        for path in rpaths:
+        for path in cls._rpaths:
             m = re.match(r'([a-zA-Z0-9\-~+]+)-n(\d+)'
-                         r'(?:-d(\d+))?(?:-([pstu]+))?\.txt$', path)
+                         r'(?:-d(\d+))?(?:-([pstu]+))?\.txt$', path.name)
             if m:
                 yield (path, m[1], int(m[2]), int(m[3] or -1), set(m[4] or ''))
 
@@ -76,8 +75,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
             raise ValueError('No suitable quadrature rule found')
 
         # Load the rule
-        rule = resource_string(__name__, f'{self.shape}/{best[0]}')
-        super().__init__(rule.decode(), rflags)
+        super().__init__(best[0].read_text(), rflags)
 
 
 def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):
