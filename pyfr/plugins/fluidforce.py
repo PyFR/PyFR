@@ -88,7 +88,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
                 eles = elemap[etype]
                 itype, proj, norm = eles.basis.faces[fidx]
 
-                ppts, pwts = self.surf_quad(itype, proj)
+                ppts, pwts = self._surf_quad(itype, proj, flags='s')
                 nppts = len(ppts)
 
                 # Get phyical normals
