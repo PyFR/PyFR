@@ -5,8 +5,11 @@ import shlex
 import numpy as np
 from pytools import prefork
 
+from pyfr.inifile import NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.quadrules import get_quadrule
 from pyfr.regions import parse_region_expr
+from pyfr.util import memoize
 
 
 def cli_external(meth):
@@ -167,3 +170,26 @@ class RegionMixin:
 
             if not isinstance(eidxs, slice):
                 self._ele_region_data[f'{etype}_idxs'] = eidxs
+
+
+class SurfaceMixin:
+    @memoize
+    def surf_quad(self, itype, proj):
+        # Obtain quadrature info
+        rname = self.cfg.get(f'solver-interfaces-{itype}', 'flux-pts')
+
+        # Quadrature rule (default to that of the solution points)
+        qrule = self.cfg.get(self.cfgsect, f'quad-pts-{itype}', rname)
+        try:
+            qdeg = self.cfg.getint(self.cfgsect, f'quad-deg-{itype}')
+        except NoOptionError:
+            qdeg = self.cfg.getint(self.cfgsect, 'quad-deg')
+
+        q = get_quadrule(itype, qrule, qdeg=qdeg, flags='s')
+
+        return self._proj_pts(proj, q.pts), q.wts
+
+    @staticmethod
+    def _proj_pts(projector, pts):
+        pts = np.atleast_2d(pts.T)
+        return np.vstack(np.broadcast_arrays(*projector(*pts))).T
