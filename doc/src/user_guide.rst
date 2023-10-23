@@ -517,17 +517,18 @@ Parameterises multi-p for dual time-stepping with
 
 2. ``cycle`` --- nature of a single multi-p cycle:
 
-    ``[(order,nsteps), (order,nsteps), ... (order,nsteps)]``
+    ``[(order, nsteps), (order, nsteps), ... (order, nsteps)]``
 
     where ``order`` in the first and last bracketed pair must be the
-    overall polynomial order used for the simulation, and ``order`` can
-    only change by one between subsequent bracketed pairs
+    overall polynomial order used for the simulation, ``order`` can
+    only change by one between subsequent bracketed pairs, and
+    ``nsteps`` is a non-negative rational number.
 
 Example::
 
     [solver-dual-time-integrator-multip]
     pseudo-dt-fact = 2.3
-    cycle = [(3, 1), (2, 1), (1, 1), (0, 2), (1, 1), (2, 1), (3, 3)]
+    cycle = [(3, 0.1), (2, 0.1), (1, 0.2), (0, 1.4), (1, 1.1), (2, 1.1), (3, 4.5)]
 
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
@@ -536,11 +537,11 @@ Parameterises the interfaces with
 
 1. ``riemann-solver`` --- type of Riemann solver:
 
-    ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem``
+    ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem`` | ``exact``
 
     where
 
-    ``hll`` | ``hllc`` | ``roe`` | ``roem`` do not work with
+    ``hll`` | ``hllc`` | ``roe`` | ``roem`` | ``exact`` do not work with
     ``ac-euler`` | ``ac-navier-stokes``
 
 2. ``ldg-beta`` --- beta parameter used for LDG:
@@ -1252,12 +1253,22 @@ vectors to a CSV file. Parameterised with
 
     ``(x, y, [z])``
 
+5. ``quad-deg-{etype}`` --- degree of quadrature rule for fluid force
+   integration, optionally this can be specified for different element types:
+
+    *int*
+
+6. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+
+    *string*
+
 Example::
 
     [soln-plugin-fluidforce-wing]
     nsteps = 10
     file = wing-forces.csv
     header = true
+    quad-deg = 6
     morigin = (0.0, 0.0, 0.5)
 
 [soln-plugin-nancheck]
@@ -1293,12 +1304,18 @@ Parameterised with
 
     *boolean*
 
+4. ``norm`` --- sets the degree and calculates an :math:`L_p` norm,
+    default is ``2``:
+
+    *float* | ``inf``
+
 Example::
 
     [soln-plugin-residual]
     nsteps = 10
     file = residual.csv
     header = true
+    norm = inf
 
 [soln-plugin-dtstats]
 ^^^^^^^^^^^^^^^^^^^^^^
@@ -1507,13 +1524,18 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     *string*
 
-6. ``region`` --- region to integrate, specified as either the
+6. ``norm`` --- sets the degree and calculates an :math:`L_p` norm,
+    otherwise standard integration is performed:
+
+    *float* | ``inf`` | ``none``
+
+7. ``region`` --- region to integrate, specified as either the
    entire domain using ``*`` or a combination of the geometric shapes
    specified in :ref:`regions`:
 
     ``*`` | ``shape(args, ...)``
 
-7. ``int``-*name* --- expression to integrate, written as a function of
+8. ``int``-*name* --- expression to integrate, written as a function of
    the primitive variables and gradients thereof, the physical coordinates
    [x, y, [z]] and/or the physical time [t]; multiple expressions,
    each with their own *name*, may be specified:

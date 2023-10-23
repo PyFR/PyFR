@@ -120,6 +120,9 @@ class Inifile:
 
         return iv
 
+    def remove_option(self, section, option):
+        self._cp.remove_option(section, option)
+
     def sections(self):
         return self._cp.sections()
 

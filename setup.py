@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 import re
 from setuptools import setup
+import sys
+
+
+# Check Python version
+if sys.version_info < (3, 10):
+    sys.exit('Minimum Python version is 3.10')
 
 
 # PyFR version
@@ -74,7 +80,6 @@ package_data = {
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
     'pyfr.integrators.std.kernels': ['*.mako'],
-    'pyfr.integrators': ['schemes/*.txt'],
     'pyfr.plugins.kernels': ['*.mako'],
     'pyfr.quadrules': [
         'hex/*.txt',
