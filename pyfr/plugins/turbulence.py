@@ -69,15 +69,13 @@ class TurbulencePlugin(BaseSolverPlugin):
         else:
             beta2 = 0
 
-        self.ydim = ydim = self.cfg.getfloat(cfgsect, 'y-dim')
-        self.zdim = zdim = self.cfg.getfloat(cfgsect, 'z-dim')
-
-        self.ymin = ymin = -ydim/2
-        self.zmin = zmin = -zdim/2
+        ydim = self.cfg.getfloat(cfgsect, 'y-dim')
+        zdim = self.cfg.getfloat(cfgsect, 'z-dim')
 
         self.nvorts = int(ydim*zdim/(4*ls**2))
-        self.bbox = BoxRegion([-2*ls, ymin-ls, zmin-ls],
-                              [2*ls, ymin+ydim+ls, zmin+zdim+ls])
+        self.yzdim = yzdim = np.array([ydim, zdim])
+        self.bbox = BoxRegion([-2*ls, *(-0.5*yzdim - ls)],
+                              [2*ls, *(0.5*yzdim + ls)])
 
         centre = self.cfg.getliteral(cfgsect, 'centre')
         rax = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
@@ -91,9 +89,9 @@ class TurbulencePlugin(BaseSolverPlugin):
                           (1 - np.cos(ran))*rax @ rax.T)
 
         self.macro_params = {
-            'ls': ls, 'avgu': avgu, 'yzmin': [ymin, zmin],
-            'yzdim': [ydim, ydim], 'beta1': beta1, 'beta2': beta2,
-            'beta3': beta3, 'rot': rot, 'shift': shift, 'ac': ac
+            'ls': ls, 'avgu': avgu, 'yzdim': yzdim, 'beta1': beta1,
+            'beta2': beta2, 'beta3': beta3, 'rot': rot, 'shift': shift,
+            'ac': ac
         }
 
         self.trcl = {}
@@ -118,7 +116,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.tnext = min(self.trcl.values())
 
     def update_buf(self, strms, strmsid, buf, tnext):
-        trcltemp = float('inf')
+        trcltmp = float('inf')
         for ele, strm in strms.items():
             sid = strmsid[ele]
             if sid >= strm.shape[0]:
@@ -132,12 +130,12 @@ class TurbulencePlugin(BaseSolverPlugin):
             buf[rem:add, ele] = strm[sid:sft]
             buf[add:, ele] = 0
 
-            if sft < strm.shape[0] and buf[-1, ele].ts < trcltemp:
-                trcltemp = buf[-1, ele].ts
+            if sft < strm.shape[0] and buf[-1, ele].ts < trcltmp:
+                trcltmp = buf[-1, ele].ts
 
             strmsid[ele] = sft
 
-        return trcltemp
+        return trcltmp
 
     def test_nvmx(self, strms, neles, nvmx):
         tnext = self.tnext
@@ -146,11 +144,11 @@ class TurbulencePlugin(BaseSolverPlugin):
                                           dtype=self.eventdtype)
 
         while tnext < float('inf'):
-            trcltemp = self.update_buf(strms, strmsid, buf, tnext)
-            if trcltemp < (tnext + self.nvmxtol):
+            trcltmp = self.update_buf(strms, strmsid, buf, tnext)
+            if trcltmp < (tnext + self.nvmxtol):
                 return False
 
-            tnext = trcltemp
+            tnext = trcltmp
 
         return True
 
@@ -158,7 +156,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         pcg = pcg32rxs_m_xs(self.seed)
 
         vid = 0
-        temp = []
+        tmp = []
         tinits = []
 
         while vid < self.nvorts:
@@ -168,14 +166,14 @@ class TurbulencePlugin(BaseSolverPlugin):
         while any(tinit <= self.tend for tinit in tinits):
             for vid, tinit in enumerate(tinits):
                 (state, floaty) = next(pcg)
-                yinit = self.ymin + self.ydim*floaty
-                zinit = self.zmin + self.zdim*next(pcg)[1]
+                yinit = self.yzdim[0]*(-0.5 + floaty)
+                zinit = self.yzdim[1]*(-0.5 + next(pcg)[1])
                 tend = tinit + (2*self.ls/self.avgu)
                 if tend >= self.tbegin and tinit <= self.tend:
-                    temp.append((yinit, zinit, tinit, state))
+                    tmp.append((yinit, zinit, tinit, state))
                 tinits[vid] += 2*self.ls/self.avgu
 
-        return np.core.records.fromrecords(temp,
+        return np.core.records.fromrecords(tmp,
                                            dtype=[('yinit', self.fdptype),
                                                   ('zinit', self.fdptype),
                                                   ('tinit', self.fdptype),
@@ -194,7 +192,7 @@ class TurbulencePlugin(BaseSolverPlugin):
             ptsr = np.moveaxis(ptsr, 0, -1)
             inside = self.bbox.pts_in_region(ptsr)
 
-            temp = defaultdict(list)
+            tmp = defaultdict(list)
             strms = {}
             strmsid = {}
 
@@ -232,10 +230,10 @@ class TurbulencePlugin(BaseSolverPlugin):
                                      vort.tinit + 2*self.ls/self.avgu))
 
                         # record when a vortex enters and exits an element
-                        temp[eids[c]].append((self.vortbuf[vid].tinit,
+                        tmp[eids[c]].append((self.vortbuf[vid].tinit,
                                               self.vortbuf[vid].state, ts, te))
 
-                for ele, strm in temp.items():
+                for ele, strm in tmp.items():
                     strms[ele] = np.sort(
                         np.core.records.fromrecords(strm,
                                                     dtype=self.eventdtype),

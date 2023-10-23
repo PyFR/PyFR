@@ -17,12 +17,12 @@
 
     % for j in range(2):
       oldstate = ${f'state[{i}]' if loop.index == 0 else 'newstate'};
-      newstate = oldstate * 747796405UL + 2891336453UL;
-      rshift = oldstate >> 28UL;
-      oldstate ^= oldstate >> (4UL + rshift);
-      oldstate *= 277803737UL;
-      oldstate ^= oldstate >> 22UL;
-      tpos[${j + 1}] = ${yzmin[j]} + ${yzdim[j]}*((fpdtype_t)(oldstate >> 8UL)*${pow(2, -24)});
+      newstate = oldstate * 747796405 + 2891336453;
+      rshift = oldstate >> 28;
+      oldstate ^= oldstate >> (4 + rshift);
+      oldstate *= 277803737;
+      oldstate ^= oldstate >> 22;
+      tpos[${j + 1}] = ${yzdim[j]}*(-0.5 + (fpdtype_t)(oldstate >> 8)*${pow(2, -24)});
     % endfor
 
     arg = 0.0;
