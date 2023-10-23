@@ -81,8 +81,6 @@ class TurbulencePlugin(BaseSolverPlugin):
         rax = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
         ran = np.radians(self.cfg.getfloat(cfgsect, 'rot-angle'))
 
-        # np.diag(np.cos(ran))
-
         self.shift = shift = np.array(centre)
         self.rot = rot = (np.cos(ran)*np.eye(3) +
                           np.sin(ran)*(np.cross(rax, np.eye(3))) +
@@ -95,8 +93,8 @@ class TurbulencePlugin(BaseSolverPlugin):
         }
 
         self.trcl = {}
-        self.vortbuf = self.getvortbuf()
-        self.vortstructs = self.getvortstructs(intg)
+        self.vortbuf = self.get_vort_buf()
+        self.vortstructs = self.get_vort_structs(intg)
 
         if not bool(self.vortstructs):
             self.tnext = float('inf')
@@ -152,16 +150,12 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         return True
 
-    def getvortbuf(self):
+    def get_vort_buf(self):
         pcg = pcg32rxs_m_xs(self.seed)
 
-        vid = 0
         tmp = []
-        tinits = []
-
-        while vid < self.nvorts:
-            tinits.append(self.tstart + 2*self.ls*next(pcg)[1]/self.avgu)
-            vid += 1   
+        tinits = [self.tstart + 2*self.ls*next(pcg)[1]/self.avgu
+                  for vid in range(self.nvorts)] 
 
         while any(tinit <= self.tend for tinit in tinits):
             for vid, tinit in enumerate(tinits):
@@ -179,7 +173,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                                                   ('tinit', self.fdptype),
                                                   ('state', np.uint32)])
 
-    def getvortstructs(self, intg):
+    def get_vort_structs(self, intg):
         VortStruct = namedtuple('vortstruct',
                                 ['strms', 'strmsid', 'buf', 'tinit', 'state'])
         vortstructs = {}
