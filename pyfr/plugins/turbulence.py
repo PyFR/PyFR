@@ -8,6 +8,10 @@ from pyfr.plugins.base import BaseSolverPlugin
 from pyfr.regions import BoxRegion
 
 
+VortStruct = namedtuple('vortstruct',
+                        ['strms', 'strmsid', 'buf', 'tinit', 'state'])
+
+
 def pcg32rxs_m_xs(seed):
     state = np.uint32(seed)
     multiplier = np.uint32(747796405)
@@ -103,13 +107,14 @@ class TurbulencePlugin(BaseSolverPlugin):
         if intg.tcurr + intg._dt < self.tnext:
             return
 
-        for etype, (strms, strmsid, buf, tinit, state) in self.vortstructs.items():
+        for etype, vs in self.vortstructs.items():
             if self.trcl[etype] > self.tnext:
                 continue
 
-            self.trcl[etype] = self.update_buf(strms, strmsid, buf, self.tnext)
-            tinit.set(buf.tinit)
-            state.set(buf.state)
+            self.trcl[etype] = self.update_buf(vs.strms, vs.strmsid, vs.buf,
+                                               self.tnext)
+            vs.tinit.set(vs.buf.tinit)
+            vs.state.set(vs.buf.state)
 
         self.tnext = min(self.trcl.values())
 
@@ -174,8 +179,6 @@ class TurbulencePlugin(BaseSolverPlugin):
                                                   ('state', np.uint32)])
 
     def get_vort_structs(self, intg):
-        VortStruct = namedtuple('vortstruct',
-                                ['strms', 'strmsid', 'buf', 'tinit', 'state'])
         vortstructs = {}
 
         for etype, eles in intg.system.ele_map.items():
@@ -248,7 +251,7 @@ class TurbulencePlugin(BaseSolverPlugin):
                                                   dtype=self.eventdtype)
 
                 self.trcl[etype] = 0
-                vortstructs[etype] = VortStruct(
+                vortstructs[etype] = vs = VortStruct(
                     strms, strmsid, buf,
                     intg.backend.matrix((nvmx, neles), tags={'align'}),
                     intg.backend.matrix((nvmx, neles), tags={'align'}, 
@@ -257,10 +260,10 @@ class TurbulencePlugin(BaseSolverPlugin):
 
                 eles._set_external('tinit',
                                    f'in broadcast-col fpdtype_t[{nvmx}]',
-                                   value=vortstructs[etype].tinit)
+                                   value=vs.tinit)
                        
                 eles._set_external('state',
                                    f'in broadcast-col uint32_t[{nvmx}]',
-                                   value=vortstructs[etype].state)
+                                   value=vs.state)
 
         return vortstructs
