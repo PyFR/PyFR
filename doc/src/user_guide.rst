@@ -1642,10 +1642,6 @@ Injects synthetic eddies into a region of the domain. Parameterised with
 
     *float*
 
-12. ``seed`` --- seed for random number generator that produces eddies:
-
-    *int*
-
 Example::
 
     [solver-plugin-turbulence]
@@ -1660,7 +1656,6 @@ Example::
     z-dim = 3.0
     rot-axis = (0, 0, 1)
     rot-angle = 0.0
-    seed = 42
 
 Regions
 -------

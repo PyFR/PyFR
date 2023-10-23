@@ -1,11 +1,11 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import math
 
-from pyfr.regions import BoxRegion
 import numpy as np
+from rtree.index import Index, Property
 
 from pyfr.plugins.base import BaseSolverPlugin
-from rtree.index import Index, Property
+from pyfr.regions import BoxRegion
 
 
 def pcg32rxs_m_xs(seed):
@@ -18,7 +18,7 @@ def pcg32rxs_m_xs(seed):
         while True:
             ostate = ostatet = state
             state = ostatet*multiplier + increment
-            rshift = np.uint32(ostatet >> n28)
+            rshift = ostatet >> n28
             ostatet ^= ostatet >> (n4 + rshift)
             ostatet *= mcgmultiplier
             ostatet ^= ostatet >> n22
@@ -47,7 +47,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.tnext = intg.tcurr
         self.tend = intg.tend
 
-        self.seed = self.cfg.getint(cfgsect, 'seed')
+        self.seed = 42
 
         self.eventdtype = [('tinit', fdptype), ('state', np.uint32),
                            ('ts', fdptype), ('te', fdptype)]
@@ -83,15 +83,18 @@ class TurbulencePlugin(BaseSolverPlugin):
         rax = np.array(self.cfg.getliteral(cfgsect, 'rot-axis'))
         ran = np.radians(self.cfg.getfloat(cfgsect, 'rot-angle'))
 
+        # np.diag(np.cos(ran))
+
         self.shift = shift = np.array(centre)
         self.rot = rot = (np.cos(ran)*np.eye(3) +
                           np.sin(ran)*(np.cross(rax, np.eye(3))) +
                           (1 - np.cos(ran))*rax @ rax.T)
 
-        self.macro_params = {'ls': ls, 'avgu': avgu, 'yzmin': [ymin, zmin],
-                             'yzdim': [ydim, ydim], 'beta1': beta1,
-                             'beta2': beta2, 'beta3': beta3, 'rot': rot,
-                             'shift': shift, 'ac': ac}
+        self.macro_params = {
+            'ls': ls, 'avgu': avgu, 'yzmin': [ymin, zmin],
+            'yzdim': [ydim, ydim], 'beta1': beta1, 'beta2': beta2,
+            'beta3': beta3, 'rot': rot, 'shift': shift, 'ac': ac
+        }
 
         self.trcl = {}
         self.vortbuf = self.getvortbuf()
@@ -104,7 +107,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         if intg.tcurr + intg._dt < self.tnext:
             return
 
-        for etype, [strms, strmsid, buf, tinit, state] in self.vortstructs.items():
+        for etype, (strms, strmsid, buf, tinit, state) in self.vortstructs.items():
             if self.trcl[etype] > self.tnext:
                 continue
 
@@ -129,7 +132,7 @@ class TurbulencePlugin(BaseSolverPlugin):
             buf[rem:add, ele] = strm[sid:sft]
             buf[add:, ele] = 0
 
-            if sft < strm.shape[0] and (buf[-1, ele].ts < trcltemp):
+            if sft < strm.shape[0] and buf[-1, ele].ts < trcltemp:
                 trcltemp = buf[-1, ele].ts
 
             strmsid[ele] = sft
@@ -138,9 +141,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
     def test_nvmx(self, strms, neles, nvmx):
         tnext = self.tnext
-        strmsid = defaultdict()
-        for ele in strms:
-            strmsid[ele] = 0
+        strmsid = {ele: 0 for ele in strms}
         buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
                                           dtype=self.eventdtype)
 
@@ -162,7 +163,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         while vid < self.nvorts:
             tinits.append(self.tstart + 2*self.ls*next(pcg)[1]/self.avgu)
-            vid += 1
+            vid += 1   
 
         while any(tinit <= self.tend for tinit in tinits):
             for vid, tinit in enumerate(tinits):
@@ -181,7 +182,9 @@ class TurbulencePlugin(BaseSolverPlugin):
                                                   ('state', np.uint32)])
 
     def getvortstructs(self, intg):
-        vortstructs = defaultdict()
+        VortStruct = namedtuple('vortstruct',
+                                ['strms', 'strmsid', 'buf', 'tinit', 'state'])
+        vortstructs = {}
 
         for etype, eles in intg.system.ele_map.items():
             neles = eles.neles
@@ -192,8 +195,8 @@ class TurbulencePlugin(BaseSolverPlugin):
             inside = self.bbox.pts_in_region(ptsr)
 
             temp = defaultdict(list)
-            strms = defaultdict()
-            strmsid = defaultdict()
+            strms = {}
+            strmsid = {}
 
             if np.any(inside):
                 eids = np.any(inside, axis=0).nonzero()[0]
@@ -233,39 +236,39 @@ class TurbulencePlugin(BaseSolverPlugin):
                                               self.vortbuf[vid].state, ts, te))
 
                 for ele, strm in temp.items():
-                    strms[ele] = np.sort(np.core.records.fromrecords(strm,
-                                                                     dtype=self.eventdtype),
-                                                                     order='ts')
+                    strms[ele] = np.sort(
+                        np.core.records.fromrecords(strm,
+                                                    dtype=self.eventdtype),
+                        order='ts'
+                    )
                     strmsid[ele] = 0
 
                 nvmx = self.nmvxinit
                 while not self.test_nvmx(strms, neles, nvmx):
                     nvmx += 1
 
+                eles.add_src_macro(
+                    'pyfr.plugins.kernels.turbulence', 'turbulence',
+                    self.macro_params | {'nvmx': nvmx}, ploc=True, soln=True
+                )
+
                 buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
                                                   dtype=self.eventdtype)
 
-                vortstruct = [strms, strmsid, buf,
-                              intg.backend.matrix((nvmx, neles),
-                                                  tags={'align'}),
-                              intg.backend.matrix((nvmx, neles),
-                                                  tags={'align'},
-                                                  dtype=np.uint32)]
-
-                eles.add_src_macro('pyfr.plugins.kernels.turbulence',
-                                   'turbulence',
-                                   self.macro_params | {'nvmx': nvmx},
-                                   ploc=True, soln=True)
+                self.trcl[etype] = 0
+                vortstructs[etype] = VortStruct(
+                    strms, strmsid, buf,
+                    intg.backend.matrix((nvmx, neles), tags={'align'}),
+                    intg.backend.matrix((nvmx, neles), tags={'align'}, 
+                                        dtype=np.uint32)
+                )
 
                 eles._set_external('tinit',
                                    f'in broadcast-col fpdtype_t[{nvmx}]',
-                                   value=vortstruct[3])
+                                   value=vortstructs[etype].tinit)
                        
                 eles._set_external('state',
                                    f'in broadcast-col uint32_t[{nvmx}]',
-                                   value=vortstruct[4])
-
-                self.trcl[etype] = 0
-                vortstructs[etype] = vortstruct
+                                   value=vortstructs[etype].state)
 
         return vortstructs

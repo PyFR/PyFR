@@ -2,7 +2,7 @@
 
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%pyfr:macro name='turbulence' params='t, u, ploc, src'>
+<%pyfr:macro name='turbulence' params='t, u, ploc, src' externs='tinit, state'>
   fpdtype_t arg, clip, g;
   fpdtype_t tpos[3], tploc[3], delta2[3], utilde[3] = {};
 
