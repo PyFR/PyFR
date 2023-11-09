@@ -84,7 +84,7 @@ class StdNoneController(BaseStdController):
             walldt = perf_counter() - wallt_start
 
             # We are not adaptive, so accept every step
-            self._accept_step(dt, idxcurr, None, walldt)
+            self._accept_step(dt, idxcurr, None, walldt=walldt)
 
 
 class StdPIController(BaseStdController):
@@ -188,7 +188,9 @@ class StdPIController(BaseStdController):
             dt = max(min(t - self.tcurr, self._dt, self.dtmax), self.dtmin)
 
             # Take the step
+            wallt_start = perf_counter()
             idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
+            walldt = perf_counter() - wallt_start
 
             # Estimate the error
             err = self._errest(idxcurr, idxprev, idxerr)
@@ -203,6 +205,6 @@ class StdPIController(BaseStdController):
             # Decide if to accept or reject the step
             if err < 1.0:
                 self._errprev = err
-                self._accept_step(dt, idxcurr, err=err)
+                self._accept_step(dt, idxcurr, err=err, walldt=walldt)
             else:
                 self._reject_step(dt, idxprev, err=err)
