@@ -33,14 +33,14 @@ class BaseRegion:
 
         # Eliminate any faces with internal connectivity
         con = mesh[f'con_p{rallocs.prank}'].T
-        for l, r in con[['f0', 'f1', 'f2']].astype('U4,i4,i1').tolist():
+        for l, r in con[['f0', 'f1', 'f2']].astype('U4,i8,i1').tolist():
             if l in sfaces and r in sfaces:
                 sfaces.difference_update([l, r])
 
         # Eliminate faces on specified boundaries
         for b in exclbcs:
             if (f := f'bcon_{b}_p{rallocs.prank}') in mesh:
-                bcon = mesh[f][['f0', 'f1', 'f2']].astype('U4,i4,i1')
+                bcon = mesh[f][['f0', 'f1', 'f2']].astype('U4,i8,i1')
                 sfaces.difference_update(bcon.tolist())
 
         comm, rank, root = get_comm_rank_root()
@@ -49,7 +49,7 @@ class BaseRegion:
         # Next, consider faces on partition boundaries
         for p in rallocs.prankconn[rallocs.prank]:
             con = mesh[f'con_p{rallocs.prank}p{p}']
-            con = con[['f0', 'f1', 'f2']].astype('U4,i4,i1').tolist()
+            con = con[['f0', 'f1', 'f2']].astype('U4,i8,i1').tolist()
 
             # See which of these faces are on the surface boundary
             sb = np.array([c in sfaces for c in con])

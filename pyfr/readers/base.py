@@ -216,13 +216,13 @@ class NodalMeshAssembler:
         spinner()
 
         # Output
-        ret = {'con_p0': np.array(con, dtype='S4,i4,i1,i2').T}
+        ret = {'con_p0': np.array(con, dtype='S4,i8,i1,i2').T}
 
         for k, v in con_pnames.items():
-            ret['con_p0', f'periodic_{k}'] = np.array(v, dtype=np.int32)
+            ret['con_p0', f'periodic_{k}'] = np.array(v, dtype=np.int64)
 
         for k, v in bcon.items():
-            ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i4,i1,i2')
+            ret[f'bcon_{k}_p0'] = np.array(v, dtype='S4,i8,i1,i2')
 
         return ret
 

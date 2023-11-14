@@ -26,7 +26,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                 }}'''
         else:
             core = f'''
-                for (int _y = 0; _y < _ny; _y++)
+                for (ixdtype_t _y = 0; _y < _ny; _y++)
                 {{
                     for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
                     {{
@@ -38,7 +38,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     }}
                 }}'''
             clean = f'''
-                for (int _y = 0, _xi = 0; _y < _ny; _y++)
+                for (ixdtype_t _y = 0, _xi = 0; _y < _ny; _y++)
                 {{
                     #pragma omp simd
                     for (int _xj = 0; _xj < _nx % BLK_SZ; _xj++)
@@ -49,7 +49,8 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
         return f'''
             struct {self.name}_kargs {{ {kargdefn}; }};
-            void {self.name}(int _ib, const struct {self.name}_kargs *args,
+            void {self.name}(ixdtype_t _ib,
+                             const struct {self.name}_kargs *args,
                              int _disp_mask)
             {{
                 {kargassn};
@@ -102,7 +103,7 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
     def _render_args(self, argn):
         # We first need the argument list; starting with the dimensions
-        kargs = [('int ', d, None, None) for d in self._dims]
+        kargs = [('ixdtype_t', d, None, None) for d in self._dims]
 
         # Now add any scalar arguments
         kargs.extend((sa.dtype, sa.name, None, None) for sa in self.scalargs)
@@ -119,11 +120,11 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
 
             # Views
             if va.isview:
-                kargs.append(('const int*', f'{va.name}_vix', '_ib*BLK_SZ',
-                              None))
+                kargs.append(('const ixdtype_t*', f'{va.name}_vix',
+                              '_ib*BLK_SZ', None))
 
                 if va.ncdim == 2:
-                    kargs.append(('const int*', f'{va.name}_vrstri',
+                    kargs.append(('const ixdtype_t*', f'{va.name}_vrstri',
                                   '_ib*BLK_SZ', None))
 
         # Argument definitions and assignments

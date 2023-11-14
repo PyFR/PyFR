@@ -425,7 +425,7 @@ class OpenCLProgram(_OpenCLBase):
 class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):
     _destroyfn = 'clReleaseKernel'
 
-    typemap = [c_double, c_float, c_int32, c_int64, c_ulong]
+    typemap = [c_double, c_float, c_int32, c_int64, c_uint64]
     typemap = {k: (k(), sizeof(k)) for k in typemap}
 
     def __init__(self, lib, ptr, argtypes):

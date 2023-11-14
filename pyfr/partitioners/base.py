@@ -53,7 +53,7 @@ class BasePartitioner:
                     rnum[en].update(((i, j), (0, off + j)) for j in range(n))
 
         def offset_con(con, pr):
-            con = con.copy().astype('U4,i4,i1,i2')
+            con = con.copy().astype('U4,i8,i1,i2')
 
             for en, pn in pinf.items():
                 if pn[pr] > 0:
@@ -88,7 +88,7 @@ class BasePartitioner:
                 bccon[name].append(offset_con(mesh[f], l))
 
         # Output data type
-        dtype = 'U4,i4,i1,i2'
+        dtype = 'U4,i8,i1,i2'
 
         # Concatenate these arrays to from the new mesh
         newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
@@ -345,7 +345,7 @@ class BasePartitioner:
                     bcon_px[m[1], lpart].append(conl)
 
         # Output data type
-        dtype = 'S4,i4,i1,i2'
+        dtype = 'S4,i8,i1,i2'
 
         # Output
         con = {}

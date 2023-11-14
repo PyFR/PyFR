@@ -6,6 +6,7 @@ from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
 class CUDAPackingKernels(CUDAKernelProvider):
     def pack(self, mv):
         cuda = self.backend.cuda
+        ixdtype = self.backend.ixdtype
 
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -14,7 +15,7 @@ class CUDAPackingKernels(CUDAKernelProvider):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, 'iiiPPPP')
+        kern = self._build_kernel('pack_view', src, [ixdtype]*3 + [np.uintp]*4)
 
         # Compute the grid and thread-block size
         block = (128, 1, 1)

@@ -11,7 +11,7 @@ class MetalKernelGenerator(BaseGPUKernelGenerator):
 
     def _render_spec(self):
         # We first need the argument list; starting with the dimensions
-        kargs = [f'constant int& {d}' for d in self._dims]
+        kargs = [f'constant ixdtype_t& {d}' for d in self._dims]
 
         # Now add any scalar arguments
         kargs.extend(f'constant {sa.dtype}& {sa.name}' for sa in self.scalargs)
@@ -25,13 +25,13 @@ class MetalKernelGenerator(BaseGPUKernelGenerator):
 
             # Views
             if va.isview:
-                kargs.append(f'device const int* {va.name}_vix')
+                kargs.append(f'device const ixdtype_t* {va.name}_vix')
 
                 if va.ncdim == 2:
-                    kargs.append(f'device const int* {va.name}_vrstri')
+                    kargs.append(f'device const ixdtype_t* {va.name}_vrstri')
             # Arrays
             elif self.needs_ldim(va):
-                kargs.append(f'device const int& ld{va.name}')
+                kargs.append(f'device const ixdtype_t& ld{va.name}')
 
         # Finally, the attribute arguments
         kargs.append('uint2 _tpig [[thread_position_in_grid]]')

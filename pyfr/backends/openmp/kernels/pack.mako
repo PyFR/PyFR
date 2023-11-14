@@ -3,20 +3,20 @@
 
 struct kargs
 {
-    int n;
+    ixdtype_t n;
     fpdtype_t *v;
-    int *vix, *vrstri;
+    ixdtype_t *vix, *vrstri;
     fpdtype_t *pmat;
 };
 
 void pack_view(const struct kargs *restrict args)
 {
-    int n = args->n;
-    int *vix = args->vix, *vrstri = args->vrstri;
+    ixdtype_t n = args->n;
+    ixdtype_t *vix = args->vix, *vrstri = args->vrstri;
     fpdtype_t *v = args->v, *pmat = args->pmat;
 
     #pragma omp simd
-    for (int i = 0; i < n; i++)
+    for (ixdtype_t i = 0; i < n; i++)
     {
     % if nrv == 1:
     % for c in range(ncv):
