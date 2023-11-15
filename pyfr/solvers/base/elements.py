@@ -220,7 +220,8 @@ class BaseElements:
         smats_mpts, _ = self._smats_djacs_mpts
 
         # Interpolation matrix to pts
-        m0 = self.basis.mbasis.nodal_basis_at(getattr(self.basis, name))
+        pt = getattr(self.basis, name) if isinstance(name, str) else name
+        m0 = self.basis.mbasis.nodal_basis_at(pt)
 
         # Interpolate the smats
         smats = np.array([m0 @ smat for smat in smats_mpts])
@@ -258,7 +259,7 @@ class BaseElements:
         op = self.basis.sbasis.nodal_basis_at(pt)
 
         ploc = op @ self.eles.reshape(self.nspts, -1)
-        ploc = ploc.reshape(-1, self.neles, self.ndims).swapaxes(1, 2)
+        ploc = ploc.reshape(len(pt), -1, self.ndims).swapaxes(1, 2)
 
         return ploc
 
@@ -277,21 +278,25 @@ class BaseElements:
 
     @cached_property
     def _pnorm_fpts(self):
-        smats = self.smat_at_np('fpts').transpose(1, 3, 0, 2)
+        return self.pnorm_at('fpts', self.basis.norm_fpts)
+
+    @memoize
+    def pnorm_at(self, name, norm):
+        smats = self.smat_at_np(name).transpose(1, 3, 0, 2)
 
         # We need to compute |J|*[(J^{-1})^{T}.N] where J is the
-        # Jacobian and N is the normal for each fpt.  Using
+        # Jacobian and N is the normal for each point. Using
         # J^{-1} = S/|J| where S are the smats, we have S^{T}.N.
-        pnorm_fpts = np.einsum('ijlk,il->ijk', smats, self.basis.norm_fpts)
+        pnorm = np.einsum('ijlk,il->ijk', smats, norm)
 
         # Compute the magnitudes of these flux point normals
-        mag_pnorm_fpts = np.einsum('...i,...i', pnorm_fpts, pnorm_fpts)
+        mag_pnorm = np.einsum('...i,...i', pnorm, pnorm)
 
         # Check that none of these magnitudes are zero
-        if np.any(np.sqrt(mag_pnorm_fpts) < 1e-10):
+        if np.any(np.sqrt(mag_pnorm) < 1e-10):
             raise RuntimeError('Zero face normals detected')
 
-        return pnorm_fpts
+        return pnorm
 
     @cached_property
     def _smats_djacs_mpts(self):

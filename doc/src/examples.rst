@@ -35,7 +35,7 @@ simulation on a structured mesh:
 4. Run pyfr to solve the Euler equations on the mesh, generating a
    series of PyFR solution files called ``euler-vortex*.pyfrs``::
 
-        mpiexec -n 2 pyfr run -b cuda -p euler-vortex.pyfrm euler-vortex.ini
+        mpiexec -n 2 pyfr -p run -b cuda euler-vortex.pyfrm euler-vortex.ini
 
 5. Run pyfr on the solution file ``euler-vortex-100.0.pyfrs``
    converting it into an unstructured VTK file called
@@ -76,7 +76,7 @@ simulation on a mixed unstructured mesh:
    generating a series of PyFR solution files called
    ``couette-flow-*.pyfrs``::
 
-        pyfr run -b cuda -p couette-flow.pyfrm couette-flow.ini
+        pyfr -p run -b cuda couette-flow.pyfrm couette-flow.ini
 
 4. Run pyfr on the solution file ``couette-flow-040.pyfrs``
    converting it into an unstructured VTK file called
@@ -117,7 +117,7 @@ flow simulation on a mixed unstructured mesh:
    generating a series of PyFR solution files called
    ``inc-cylinder-*.pyfrs``::
 
-        pyfr run -b cuda -p inc-cylinder.pyfrm inc-cylinder.ini
+        pyfr -p run -b cuda inc-cylinder.pyfrm inc-cylinder.ini
 
 4. Run pyfr on the solution file ``inc-cylinder-75.00.pyfrs``
    converting it into an unstructured VTK file called
@@ -159,7 +159,7 @@ simulation on a structured mesh:
    generating a series of PyFR solution files called
    ``double-mach-reflection-*.pyfrs``::
 
-        pyfr run -b cuda -p double-mach-reflection.pyfrm double-mach-reflection.ini
+        pyfr -p run -b cuda double-mach-reflection.pyfrm double-mach-reflection.ini
 
 4. Run pyfr on the solution file ``double-mach-reflection-0.20.pyfrs``
    converting it into an unstructured VTK file called
@@ -201,7 +201,7 @@ simulation on a structured mesh:
    generating a series of PyFR solution files called
    ``viscous-shock-tube-*.pyfrs``::
 
-        pyfr run -b cuda -p viscous-shock-tube.pyfrm viscous-shock-tube.ini
+        pyfr -p run -b cuda viscous-shock-tube.pyfrm viscous-shock-tube.ini
 
 4. Run pyfr on the solution file ``viscous-shock-tube-1.00.pyfrs``
    converting it into an unstructured VTK file called

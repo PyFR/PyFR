@@ -9,6 +9,16 @@ from pyfr.shapes import BaseShape
 from pyfr.util import match_paired_paren, subclasses, subclass_where
 
 
+def parse_region_expr(expr):
+    # Geometric region
+    if '(' in expr:
+        return ConstructiveRegion(expr)
+    # Boundary region
+    else:
+        m = re.match(r'(\w+)(?:\s+\+(\d+))?$', expr)
+        return BoundaryRegion(m[1], nlayers=int(m[2] or 1))
+
+
 class BaseRegion:
     def interior_eles(self, mesh, rallocs):
         pass

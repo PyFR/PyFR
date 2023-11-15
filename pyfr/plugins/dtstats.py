@@ -6,6 +6,7 @@ class DtStatsPlugin(BaseSolnPlugin):
     name = 'dtstats'
     systems = ['*']
     formulations = ['std']
+    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)

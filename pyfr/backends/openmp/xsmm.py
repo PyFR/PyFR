@@ -103,8 +103,9 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('batch-gemm').render()
 
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src, 'PPiPiPi')
-        batch_gemm.set_args(self._exec_ptr, blkptr, b.nblocks, b, b.blocksz,
-                            out, out.blocksz)
+        batch_gemm = self._build_kernel('batch_gemm', src, 'PPPiPi')
+        batch_gemm.set_args(self._exec_ptr, blkptr, b, b.blocksz, out,
+                            out.blocksz)
+        batch_gemm.set_nblocks(b.nblocks)
 
         return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)
