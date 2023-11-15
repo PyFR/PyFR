@@ -2,6 +2,8 @@ from collections import defaultdict
 import itertools as it
 import re
 
+import numpy as np
+
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.integrators.dual.pseudo.pseudocontrollers import (
@@ -23,6 +25,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
+        self._fgen = np.random.Generator(np.random.PCG64(0))
+        
         self.levels = sorted(set(self.cycle), reverse=True)
 
         if max(self.cycle) > self._order:
@@ -277,8 +281,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         return self.pintg._aux_regidx
 
     def pseudo_advance(self, tcurr):
+        fgen = self._fgen
+
         # Multigrid levels and step counts
-        cycle, csteps = self.cycle, self.csteps
+        cycle, cstepsf = self.cycle, self.csteps
 
         # Set time step and current stepper coefficients for all levels
         for l in self.levels:
@@ -288,6 +294,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
+            # Choose either ⌊c⌋ or ⌈c⌉ in a way that the average is c
+            csteps = [int(c + (self._fgen.random() < c % 1)) for c in cstepsf]
+
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 

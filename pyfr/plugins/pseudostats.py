@@ -6,6 +6,7 @@ class PseudoStatsPlugin(BaseSolnPlugin):
     name = 'pseudostats'
     systems = ['*']
     formulations = ['dual']
+    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)

@@ -77,7 +77,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argmv):
+    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
         rtargs = []
 
         # Determine the work group sizes
@@ -106,4 +106,4 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
             def run(self, queue, wait_for=None, ret_evt=False):
                 return fun.exec_async(queue, wait_for, ret_evt)
 
-        return PointwiseKernel(*argmv)
+        return PointwiseKernel(argm, argv)

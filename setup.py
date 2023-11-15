@@ -6,8 +6,12 @@ import sys
 
 # Check Python version
 if sys.version_info < (3, 10):
+<<<<<<< HEAD
     print('Minimum Python version is 3.10')
     sys.exit()
+=======
+    sys.exit('Minimum Python version is 3.10')
+>>>>>>> 165ce11663a5222ed69e9ed4b1e25e717abb0130
 
 
 # PyFR version
@@ -81,7 +85,6 @@ package_data = {
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
     'pyfr.integrators.std.kernels': ['*.mako'],
-    'pyfr.integrators': ['schemes/*.txt'],
     'pyfr.plugins.kernels': ['*.mako'],
     'pyfr.quadrules': [
         'hex/*.txt',

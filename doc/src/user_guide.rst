@@ -517,17 +517,18 @@ Parameterises multi-p for dual time-stepping with
 
 2. ``cycle`` --- nature of a single multi-p cycle:
 
-    ``[(order,nsteps), (order,nsteps), ... (order,nsteps)]``
+    ``[(order, nsteps), (order, nsteps), ... (order, nsteps)]``
 
     where ``order`` in the first and last bracketed pair must be the
-    overall polynomial order used for the simulation, and ``order`` can
-    only change by one between subsequent bracketed pairs
+    overall polynomial order used for the simulation, ``order`` can
+    only change by one between subsequent bracketed pairs, and
+    ``nsteps`` is a non-negative rational number.
 
 Example::
 
     [solver-dual-time-integrator-multip]
     pseudo-dt-fact = 2.3
-    cycle = [(3, 1), (2, 1), (1, 1), (0, 2), (1, 1), (2, 1), (3, 3)]
+    cycle = [(3, 0.1), (2, 0.1), (1, 0.2), (0, 1.4), (1, 1.1), (2, 1.1), (3, 4.5)]
 
 [solver-interfaces]
 ^^^^^^^^^^^^^^^^^^^
@@ -1252,12 +1253,22 @@ vectors to a CSV file. Parameterised with
 
     ``(x, y, [z])``
 
+5. ``quad-deg-{etype}`` --- degree of quadrature rule for fluid force
+   integration, optionally this can be specified for different element types:
+
+    *int*
+
+6. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+
+    *string*
+
 Example::
 
     [soln-plugin-fluidforce-wing]
     nsteps = 10
     file = wing-forces.csv
     header = true
+    quad-deg = 6
     morigin = (0.0, 0.0, 0.5)
 
 [soln-plugin-nancheck]
@@ -1603,6 +1614,70 @@ Example::
     rhov = z*rho
     rhow = 1.0
     E = 1.0/(1.0+x)
+
+[solver-plugin-turbulence]
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Injects synthetic eddies into a region of the domain. Parameterised with
+
+1. ``avg-rho`` --- average free-stream density:
+
+    *float*
+
+2. ``avg-u`` --- average free-stream velocity magnitude:
+
+    *float*
+
+3. ``avg-mach`` --- averge free-stream Mach number:
+
+    *float*
+
+4. ``turbulence-intensity`` --- percentage turbulence intensity:
+
+    *float*
+
+5. ``turbulence-length-scale`` --- turbulent length scale:
+
+    *float*
+
+6. ``sigma`` --- standard deviation of Gaussian sythetic eddy profile:
+
+    *float*
+
+7. ``centre`` --- centre of plane on which synthetic eddies are injected:
+
+    (*float*, *float*, *float*)
+
+8. ``y-dim`` --- y-dimension of plane:
+
+    *float*
+
+9. ``z-dim`` --- z-dimension of plane:
+
+    *float*
+
+10. ``rot-axis`` --- axis about which plane is rotated:
+
+    (*float*, *float*, *float*)
+
+11. ``rot-angle`` --- angle in degrees that plane is rotated:
+
+    *float*
+
+Example::
+
+    [solver-plugin-turbulence]
+    avg-rho = 1.0
+    avg-u = 1.0
+    avg-mach = 0.2
+    turbulence-intensity = 1.0
+    turbulence-length-scale = 0.075
+    sigma = 0.7
+    centre = (0.15, 2.0, 2.0)
+    y-dim = 3.0
+    z-dim = 3.0
+    rot-axis = (0, 0, 1)
+    rot-angle = 0.0
 
 Regions
 -------

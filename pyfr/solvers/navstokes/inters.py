@@ -14,9 +14,17 @@ class TplargsMixin:
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
+        if shock_capturing == 'entropy-filter':
+            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p_min',
+                                           1e-6)
+        else:
+            self.p_min = self.cfg.getfloat('solver-interfaces', 'p_min',
+                                           5*self._be.fpdtype_eps)
+
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                              rsolver=rsolver, visc_corr=visc_corr,
-                             shock_capturing=shock_capturing, c=self.c)
+                             shock_capturing=shock_capturing, c=self.c,
+                             p_min=self.p_min)
 
 
 class NavierStokesIntInters(TplargsMixin,

@@ -112,8 +112,7 @@
             }
             else
             {
-                fpdtype_t cml = cl*pow(p0 / pl, ${gmrtg});
-                if (us < cml)
+                if (us < cl*pow(p0 / pl, ${gmrtg}))
                 {
                     w0[0] = rl*pow(p0 / pl, ${1 / gamma});
                     w0[1] = us;
@@ -179,8 +178,7 @@
             else
             {
                 fpdtype_t p0p = p0 / pr;
-                fpdtype_t cmr = cr*pow(p0p, ${gmrtg});
-                if (us + cmr >= 0)
+                if (us + cr*pow(p0p, ${gmrtg}) >= 0)
                 {
                     w0[0] = rr*pow(p0p, ${1 / gamma});
                     w0[1] = us;

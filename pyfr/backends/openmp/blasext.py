@@ -19,14 +19,15 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*2 + [np.intp]*nv + [dtype]*nv)
+                                  [np.int32] + [np.intp]*nv + [dtype]*nv)
 
         # Set the static arguments
-        kern.set_args(nrow, nblocks, *arr)
+        kern.set_nblocks(nblocks)
+        kern.set_args(nrow, *arr)
 
         class AxnpbyKernel(OpenMPKernel):
             def bind(self, *consts):
-                self.kernel.set_args(*consts, start=2 + nv)
+                self.kernel.set_args(*consts, start=1 + nv)
 
         return AxnpbyKernel(mats=arr, kernel=kern)
 

@@ -8,6 +8,7 @@ from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, PostactionMixin,
                                RegionMixin, cli_external)
+from pyfr.progress import NullProgressBar
 from pyfr.readers import NativeReader
 from pyfr.writers.native import NativeWriter
 from pyfr.util import merge_intervals
@@ -36,6 +37,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
     name = 'tavg'
     systems = ['*']
     formulations = ['dual', 'std']
+    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
@@ -379,19 +381,22 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
         ap_merge.add_argument('output', help='output file name')
 
     @cli_external
-    def merge_cli(self):
+    def merge_cli(self, args):
         # Open all the solution files
-        self._prepare_files(self.args.solns)
+        with args.progress.start('Prepare files'):
+            self._prepare_files(args.solns)
 
         # Initialise things needed for the merge
         self._init_tavg_merge()
 
-        with h5py.File(self.args.output, 'w') as outf:
-            # Merge the averages and stds
-            self._merge_data(outf)
+        with h5py.File(args.output, 'w') as outf:
+            # Merge the averages
+            with args.progress.start_with_bar('Merge data') as pbar:
+                self._merge_data(outf, pbar)
 
             # Merge the metadata
-            self._merge_meta(outf)
+            with args.progress.start('Merge metadata'):
+                self._merge_meta(outf)
 
     def _eval_fun_exprs(self, avars):
         subs = dict(zip(self.anames, avars))
@@ -467,11 +472,11 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 if cfg.get(cfgsect, k) != self.cfg.get(self.cfgsect, k):
                     raise RuntimeError('Different average field definitions')
 
-    def _merge_data(self, outf):
+    def _merge_data(self, outf, pbar=NullProgressBar()):
         file0, cfg, stats, dt = self.files[0]
         amap0, smap0 = self.mapping[0]
 
-        for key in self.dkeys:
+        for key in pbar.start_with_iter(self.dkeys):
             # Initialise accumulators
             t, data = 0, file0[key].astype(np.float64)
             avg_acc = np.zeros_like(data[:, amap0])
