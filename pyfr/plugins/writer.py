@@ -23,6 +23,8 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
         self.tout_last = intg.tcurr
 
+        self.wall_time_past = 0.0
+
         # Output field names
         self.fields = intg.system.elementscls.convarmap[self.ndims]
 
@@ -48,11 +50,16 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         stats.set('data', 'prefix', 'soln')
         intg.collect_stats(stats)
 
+        walltime_difference = float(stats.get('solver-time-integrator', 'wall-time')) - self.wall_time_past
+
         # If we are the root rank then prepare the metadata
         if rank == root:
             metadata = dict(intg.cfgmeta,
                             stats=stats.tostr(),
                             mesh_uuid=intg.mesh_uuid)
+            # Write walltime to degrees_of_freedom.dat
+            with open('degrees_of_freedom.dat', 'a') as f:
+                f.write(str(walltime_difference) + '\n')
         else:
             metadata = None
 

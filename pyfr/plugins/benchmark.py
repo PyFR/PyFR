@@ -45,6 +45,12 @@ class BenchmarkPlugin(BaseSolnPlugin):
         mesh_dof = [dof_in_elem[e] * sum(mesh_nep[e]) for e in mesh_nep.keys()]
         self.factor = sum(mesh_dof) * intg.stepper_order * intg.system.nvars
 
+        # Write the factor into a .dat file
+        # If we're the root rank then output
+        if self.outf:
+            with open('degrees_of_freedom.dat', 'w') as f:
+                f.write(str(self.factor) + '\n')
+
         self.mean = 0.0
         self.var = 0.0
 
@@ -72,7 +78,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
                 self.var  = (self.var  * (i-self.skip_first_n-1) + (perf - self.old_mean)**2) / (i-self.skip_first_n)
                 relative_error = np.sqrt(self.var)/self.mean
                 
-            self.stats.append((i-self.skip_first_n, self.tprev, walldt, self.factor/walldt, self.mean, relative_error))
+            self.stats.append((i-self.skip_first_n, self.tprev, walldt, perf, self.mean, relative_error))
 
             # If self.var is lesser than self.tol, then we have converged. 
             if relative_error < self.tol and i > self.skip_first_n+2 and not self.continue_sim:

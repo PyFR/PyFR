@@ -24,8 +24,10 @@ class BaseStdController(BaseStdIntegrator):
         self.perfinfo = []
 
         # Fire off any event handlers if not restarting
-        if not self.isrestart:
-            self._run_plugins()
+        print("stuck?", flush=True)
+#        if not self.isrestart:
+#            self._run_plugins()
+        print("Commented out above lines !!", flush=True)
 
     def _accept_step(self, dt, idxcurr, err=None, walldt=None):
         self.tcurr += dt
