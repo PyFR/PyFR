@@ -69,6 +69,18 @@ def load_library(name, mode=ctypes.DEFAULT_MODE):
     return ctypes.CDLL(lname, mode=mode)
 
 
+def make_array(vals, type=None):
+    vals = list(vals)
+    if not vals:
+        return None
+
+    type = type or vals[0].__class__
+    arr = (type*len(vals))()
+    arr[:] = vals
+
+    return arr
+
+
 def platform_libname(name):
     if sys.platform == 'darwin':
         return f'lib{name}.dylib'
