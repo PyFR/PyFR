@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser, FileType
-import itertools as it
 import os
 
 import mpi4py.rc
