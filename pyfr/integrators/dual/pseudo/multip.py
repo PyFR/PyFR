@@ -26,7 +26,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
         self._fgen = np.random.Generator(np.random.PCG64(0))
-        
+
         self.levels = sorted(set(self.cycle), reverse=True)
 
         if max(self.cycle) > self._order:
@@ -285,8 +285,6 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             self.pintgs[l].adjust_dtau(dt)
 
     def pseudo_advance(self, tcurr):
-        fgen = self._fgen
-
         # Multigrid levels and step counts
         cycle, cstepsf = self.cycle, self.csteps
 

@@ -219,7 +219,7 @@ class ProgressSequence:
 
         sys.stderr.write(prefix)
 
-        yield (ps := ProgressSpinner())
+        yield ProgressSpinner()
 
         self._finish_phase(phase, prefix, tstart)
 

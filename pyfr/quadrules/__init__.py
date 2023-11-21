@@ -45,7 +45,7 @@ class BaseStoredQuadRule(BaseTabulatedQuadRule):
     @classmethod
     def _iter_rules(cls):
         if not hasattr(cls, '_rpaths'):
-            cls._rpaths = list(files(f'{__name__}.{cls.shape}').iterdir())
+            cls._rpaths = list(files(__name__).joinpath(cls.shape).iterdir())
 
         for path in cls._rpaths:
             m = re.match(r'([a-zA-Z0-9\-~+]+)-n(\d+)'

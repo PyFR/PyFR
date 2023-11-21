@@ -418,6 +418,6 @@ class GmshReader(BaseReader):
             pyfrm = mesh.get_connectivity(p)
 
         with self.progress.start('Processing shape points'):
-             pyfrm |= mesh.get_shape_points(lintol)
+            pyfrm |= mesh.get_shape_points(lintol)
 
         return pyfrm

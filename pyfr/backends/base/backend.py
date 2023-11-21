@@ -136,8 +136,10 @@ class BaseBackend:
 
     @recordmat
     def matrix(self, ioshape, initval=None, extent=None, aliases=None,
-               tags=set()):
-        return self.matrix_cls(self, ioshape, initval, extent, aliases, tags)
+               tags=set(), dtype=None):
+        dtype = dtype or self.fpdtype
+        return self.matrix_cls(self, dtype, ioshape, initval, extent, aliases,
+                               tags)
 
     @recordmat
     def matrix_slice(self, mat, ra, rb, ca, cb):
@@ -146,8 +148,8 @@ class BaseBackend:
     @recordmat
     def xchg_matrix(self, ioshape, initval=None, extent=None, aliases=None,
                     tags=set()):
-        return self.xchg_matrix_cls(self, ioshape, initval, extent, aliases,
-                                    tags)
+        return self.xchg_matrix_cls(self, self.fpdtype, ioshape, initval,
+                                    extent, aliases, tags)
 
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol*view.n), tags=tags)

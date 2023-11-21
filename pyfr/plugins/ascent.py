@@ -113,6 +113,7 @@ class AscentPlugin(BaseSolnPlugin):
     name = 'ascent'
     systems = ['*']
     formulations = ['dual', 'std']
+    dimensions = [2, 3]
 
     # Element name mapping for conduit
     bp_emap = {'hex': 'hex', 'pri': 'wedge', 'pyr': 'pyramid', 'quad': 'quad',

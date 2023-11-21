@@ -5,8 +5,11 @@ import shlex
 import numpy as np
 from pytools import prefork
 
+from pyfr.inifile import NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.quadrules import get_quadrule
 from pyfr.regions import parse_region_expr
+from pyfr.util import memoize
 
 
 def cli_external(meth):
@@ -89,6 +92,11 @@ class BasePlugin:
             raise RuntimeError(f'Formulation {intg.formulation} not '
                                f'supported by plugin {self.name}')
 
+        # Check that we support dimensionality of simulation
+        if intg.system.ndims not in self.dimensions:
+            raise RuntimeError(f'Dimensionality of {intg.system.ndims} not '
+                               f'supported by plugin {self.name}')
+
     def __call__(self, intg):
         pass
 
@@ -167,3 +175,24 @@ class RegionMixin:
 
             if not isinstance(eidxs, slice):
                 self._ele_region_data[f'{etype}_idxs'] = eidxs
+
+
+class SurfaceMixin:
+    @memoize
+    def _surf_quad(self, itype, proj, flags=''):
+        # Obtain quadrature info
+        rname = self.cfg.get(f'solver-interfaces-{itype}', 'flux-pts')
+
+        # Quadrature rule (default to that of the solution points)
+        qrule = self.cfg.get(self.cfgsect, f'quad-pts-{itype}', rname)
+        try:
+            qdeg = self.cfg.getint(self.cfgsect, f'quad-deg-{itype}')
+        except NoOptionError:
+            qdeg = self.cfg.getint(self.cfgsect, 'quad-deg')
+
+        # Get the quadrature rule
+        q = get_quadrule(itype, qrule, qdeg=qdeg, flags=flags)
+
+        # Project its points onto the provided surface
+        pts = np.atleast_2d(q.pts.T)
+        return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts
