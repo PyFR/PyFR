@@ -130,11 +130,14 @@ class BaseSystem:
     def _load_int_inters(self, rallocs, mesh, elemap):
         key = f'con_p{rallocs.prank}'
 
-        lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
-        int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
-                                       self.cfg)
+        try:
+            lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
+            int_inters = [self.intinterscls(self.backend, lhs, rhs, elemap,
+                                            self.cfg)]
+        except KeyError:
+            int_inters = []
 
-        return [int_inters]
+        return int_inters
 
     def _load_mpi_inters(self, rallocs, mesh, elemap):
         lhsprank = rallocs.prank

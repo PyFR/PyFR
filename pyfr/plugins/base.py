@@ -5,7 +5,7 @@ import shlex
 import numpy as np
 from pytools import prefork
 
-from pyfr.inifile import NoOptionError
+from pyfr.inifile import Inifile, NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.quadrules import get_quadrule
 from pyfr.regions import parse_region_expr
@@ -39,8 +39,8 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     return outf
 
 
-def region_data(cfg, cfgsect, mesh, rallocs):
-    region = cfg.get(cfgsect, 'region', '*')
+def region_data(cfg, cfgsect, mesh, rallocs, region=None):
+    region = region or cfg.get(cfgsect, 'region', '*')
 
     # Determine the element types in our partition
     sptptn = f'spt_(.+?)_p{rallocs.prank}$'
@@ -196,3 +196,18 @@ class SurfaceMixin:
         # Project its points onto the provided surface
         pts = np.atleast_2d(q.pts.T)
         return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts
+
+class WriterMixin:
+    def __init__(self, intg, *args, **kwargs):
+        super().__init__(intg, *args, **kwargs)
+
+        self._stats = None
+
+    @property
+    def stats(self):
+        if self._stats is None:
+            stats = Inifile()
+            stats.set('data', 'fields', ','.join(self.fields))
+            stats.set('data', 'prefix', 'soln')
+            self._stats = stats
+        return self._stats

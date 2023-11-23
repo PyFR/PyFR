@@ -1116,7 +1116,7 @@ the prismatic elements at multi-p level *order*, with
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
-    ``alpha-opt~gauss-legendre-lobatto`` | 
+    ``alpha-opt~gauss-legendre-lobatto`` |
     ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto``
 
@@ -1281,10 +1281,32 @@ Periodically checks the solution for NaN values. Parameterised with
 
     *int*
 
+2. ``region-dump`` --- if NaN regions should be dumped once detected:
+
+    *boolean*
+
+3. ``region-len`` --- side length of box region placed around the centriod of
+   NaN points:
+
+    *float*
+
+4. ``basedir`` --- relative path to directory where dump file will be
+   written:
+
+    *string*
+
+5. ``basename`` --- pattern of dump file name:
+
+    *string*
+
 Example::
 
     [soln-plugin-nancheck]
     nsteps = 10
+    region-dump = true
+    region-len = 0.5
+    basedir = data
+    basename = nan_dump
 
 [soln-plugin-residual]
 ^^^^^^^^^^^^^^^^^^^^^^
