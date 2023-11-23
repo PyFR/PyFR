@@ -39,8 +39,8 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     return outf
 
 
-def region_data(cfg, cfgsect, mesh, rallocs):
-    region = cfg.get(cfgsect, 'region', '*')
+def region_data(cfg, cfgsect, mesh, rallocs, region=None):
+    region = region or cfg.get(cfgsect, 'region', '*')
 
     # Determine the element types in our partition
     sptptn = f'spt_(.+?)_p{rallocs.prank}$'
