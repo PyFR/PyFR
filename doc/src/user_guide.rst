@@ -1715,8 +1715,13 @@ Sphere ``sphere(x0, r)``
   A sphere centred at *x0* with a radius of *r*. Equivalent to
   ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
 
-Region expressions can also be added and subtracted together
-arbitrarily.  For example
+All region shapes also support rotation.  In 2D this is accomplished by
+passing a trailing `rot=angle` argument where `angle` is a rotation
+angle in degrees; for example ``box((-5, 2), (2, 0), rot=30)``.
+In 3D the syntax is `rot=(phi, theta, phi)` and corresponds to a
+sequence of Euler angles in the so-called *ZYX convention*.  Region
+expressions can also be added and subtracted together  arbitrarily.
+For example
 ``box((-10, -10, -10), (10, 10, 10)) - sphere((0, 0, 0), 3)`` will
 result in a cube-shaped region with a sphere cut out of the middle.
 
