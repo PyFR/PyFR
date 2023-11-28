@@ -37,8 +37,8 @@ The following commands are available from the ``pyfr`` program:
    directory `outdir`.  Multiple solutions can be provided.
    Time-average files can also be partitioned, too.
 
-   For mixed grids it is usually necessary to provide weights for each
-   element type.  Further details can be found in the
+   For mixed grids one must provide weights for each element type.  
+   Further details can be found in the
    :ref:`performance guide <perf mixed grids>`.
 
 3. ``pyfr run`` --- start a new PyFR simulation. Example::
@@ -80,6 +80,12 @@ The following commands are available from the ``pyfr`` program:
    exported. If only a specific field is desired this can be specified
    with the ``-f`` flag; for example ``-f density -f velocity`` will
    only export the *density* and *velocity* fields.
+
+6. ``pyfr tavg merge`` --- merge together multiple time average files into a
+   single time average file. The averaging times are read from the files and do
+   not need to be evenly spaced in time. Example::
+
+        pyfr tavg merge avg-1.00.pyfrs avg-2.00.pyfrs avg-10.00.pyfrs merged_avg.pyfrs
 
 Running in Parallel
 -------------------
