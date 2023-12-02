@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from ctypes import c_void_p
 import functools as ft
 import hashlib
@@ -113,30 +112,6 @@ def merge_intervals(ivals, tol=1e-5):
             mivals.append((cstart, cend))
 
     return mivals
-
-
-@contextmanager
-def setenv(**kwargs):
-    _env = os.environ.copy()
-    os.environ.update(kwargs)
-
-    try:
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(_env)
-
-
-@contextmanager
-def chdir(dirname):
-    cdir = os.getcwd()
-
-    try:
-        if dirname:
-            os.chdir(dirname)
-        yield
-    finally:
-        os.chdir(cdir)
 
 
 def subclasses(cls, just_leaf=False):

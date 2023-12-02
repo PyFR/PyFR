@@ -945,7 +945,7 @@ suffixed the triangular interfaces at multi-p level *order*, with
 1. ``flux-pts`` --- location of the flux points on a triangular
    interface:
 
-    ``williams-shunn``
+    ``alpha-opt`` | ``williams-shunn``
 
 2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
    triangular interface:
@@ -1002,7 +1002,7 @@ the triangular elements at multi-p level *order*, with
 1. ``soln-pts`` --- location of the solution points in a triangular
    element:
 
-    ``williams-shunn``
+    ``alpha-opt`` | ``williams-shunn``
 
 2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    triangular element:
@@ -1088,7 +1088,7 @@ the tetrahedral elements at multi-p level *order*, with
 1. ``soln-pts`` --- location of the solution points in a tetrahedral
    element:
 
-    ``shunn-ham``
+    ``alpha-opt`` | ``shunn-ham``
 
 2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    tetrahedral element:
@@ -1116,6 +1116,7 @@ the prismatic elements at multi-p level *order*, with
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
+    ``alpha-opt~gauss-legendre-lobatto`` | 
     ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto``
 

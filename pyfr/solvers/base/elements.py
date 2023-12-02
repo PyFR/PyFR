@@ -39,6 +39,10 @@ class BaseElements:
         # If we need quadrature points or not
         haveqpts = 'flux' in self.antialias
 
+        # If we are doing gradient fusion
+        self.grad_fusion = (cfg.getbool('solver', 'grad-fusion', True) and
+                            not haveqpts)
+
         # Sizes
         self.nupts = basis.nupts
         self.nqpts = basis.nqpts if haveqpts else None
@@ -184,6 +188,11 @@ class BaseElements:
             self._vect_qpts = valloc('vect_qpts', nqpts)
         if 'vect_fpts' in sbufs:
             self._vect_fpts = valloc('vect_fpts', nfpts)
+
+        if 'grad_upts' in sbufs and self.grad_fusion:
+            self._grad_upts = valloc('grad_upts', nupts)
+        else:
+            self._grad_upts = self._vect_upts
 
         # Allocate the storage required by the time integrator
         self.scal_upts = [backend.matrix(self.scal_upts.shape,

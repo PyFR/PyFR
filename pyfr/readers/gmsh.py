@@ -264,8 +264,9 @@ class GmshReader(BaseReader):
         self._bfacespents = {}
         self._pfacespents = defaultdict(list)
 
-        # Seen physical names
-        seen = set()
+        # Seen physical names and IDs
+        seen_names = set()
+        seen_ids = set()
 
         # Extract the physical names
         for l in msh_section(mshit, 'PhysicalNames'):
@@ -276,8 +277,12 @@ class GmshReader(BaseReader):
             pent, name = int(m[2]), m[3].lower()
 
             # Ensure we have not seen this name before
-            if name in seen:
+            if name in seen_names:
                 raise ValueError(f'Duplicate physical name: {name}')
+
+            # Ensure physical entitiy IDs are unique
+            if pent in seen_ids:
+                raise ValueError(f'Duplicate physical entity ID: {pent}')
 
             # Fluid elements
             if name == 'fluid':
@@ -293,7 +298,8 @@ class GmshReader(BaseReader):
             else:
                 self._bfacespents[name] = pent
 
-            seen.add(name)
+            seen_names.add(name)
+            seen_ids.add(pent)
 
         if self._felespent is None:
             raise ValueError('No fluid elements in mesh')
@@ -418,6 +424,6 @@ class GmshReader(BaseReader):
             pyfrm = mesh.get_connectivity(p)
 
         with self.progress.start('Processing shape points'):
-             pyfrm |= mesh.get_shape_points(lintol)
+            pyfrm |= mesh.get_shape_points(lintol)
 
         return pyfrm
