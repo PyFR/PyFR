@@ -36,7 +36,8 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             return
 
         # Register our flux kernels
-        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.tflux')
+        kprefix = 'pyfr.solvers.navstokes.kernels'
+        self._be.pointwise.register(f'{kprefix}.tflux')
 
         # Handle shock capturing and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
@@ -59,31 +60,35 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         c, l = 'curved', 'linear'
         r, s = self._mesh_regions, self._slice_mat
         av = self.artvisc
+        kernel, kernels = self._be.kernel, self.kernels
 
-        if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs | {'ktype': 'curved'},
+        if c in r and self.grad_fusion:
+            kernels['tdisf_fused_curved'] = lambda uin: kernel(
+                'tflux', tplargs=tplargs | {'ktype': 'curved-fused'},
                 dims=[self.nupts, r[c]], u=s(self.scal_upts[uin], c),
-                f=s(self._vect_upts, c), artvisc=s(av, c),
+                artvisc=s(av, c), f=s(self._vect_upts, c),
+                gradu=s(self._grad_upts, c),
+                rcpdjac=self.rcpdjac_at('upts', 'curved'),
                 smats=self.curved_smat_at('upts')
             )
         elif c in r:
-            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
+            kernels['tdisf_curved'] = lambda: kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nqpts, r[c]], u=s(self._scal_qpts, c),
                 f=s(self._vect_qpts, c), artvisc=s(av, c),
                 smats=self.curved_smat_at('qpts')
             )
 
-        if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs | {'ktype': 'linear'},
+        if l in r and self.grad_fusion:
+            kernels['tdisf_fused_linear'] = lambda uin: kernel(
+                'tflux', tplargs=tplargs | {'ktype': 'linear-fused'},
                 dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
-                f=s(self._vect_upts, l), artvisc=s(av, l),
-                verts=self.ploc_at('linspts', l), upts=self.upts
+                artvisc=s(av, l), f=s(self._vect_upts, l),
+                gradu=s(self._grad_upts, l), verts=self.ploc_at('linspts', l),
+                upts=self.upts
             )
         elif l in r:
-            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
+            kernels['tdisf_linear'] = lambda: kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nqpts, r[l]], u=s(self._scal_qpts, l),
                 f=s(self._vect_qpts, l), artvisc=s(av, l),

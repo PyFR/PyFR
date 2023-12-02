@@ -5,7 +5,7 @@ Examples
 ********
 
 Test cases are available in the
-`PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>` 
+`PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>`_ 
 repository. It is important to note, however, that these examples 
 are all relatively small 2D simulations and, as such, are *not* 
 suitable for scalability or performance studies.

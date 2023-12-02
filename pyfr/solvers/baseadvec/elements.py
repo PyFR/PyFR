@@ -102,7 +102,7 @@ class BaseAdvectionElements(BaseElements):
         def copy_soln(uin):
             if self._soln_in_src_macros:
                 return self._be.kernel('copy', self._scal_upts_cpy,
-                                        self.scal_upts[uin])
+                                       self.scal_upts[uin])
             else:
                 return NullKernel()
 

@@ -1,5 +1,6 @@
 <%inherit file='base'/>
 
+#include <alloca.h>
 #include <string.h>
 
 typedef struct

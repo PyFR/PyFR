@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser, FileType
-import itertools as it
 import os
 
 import mpi4py.rc
@@ -9,7 +8,7 @@ mpi4py.rc.initialize = False
 from pyfr._version import __version__
 from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import register_finalize_handler
+from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import BasePartitioner, get_partitioner
 from pyfr.plugins import BaseCLIPlugin
 from pyfr.progress import ProgressBar, ProgressSequenceAction
@@ -229,23 +228,10 @@ def process_export(args):
 
 
 def _process_common(args, mesh, soln, cfg):
-    # Prefork to allow us to exec processes after MPI is initialised
-    if hasattr(os, 'fork'):
-        from pytools.prefork import enable_prefork
-
-        enable_prefork()
-
-    # Work around issues with UCX-derived MPI libraries
-    os.environ['UCX_MEMTYPE_CACHE'] = 'n'
-
-    # Import but do not initialise MPI
-    from mpi4py import MPI
-
     # Manually initialise MPI
-    MPI.Init()
+    init_mpi()
 
-    # Ensure MPI is suitably cleaned up
-    register_finalize_handler()
+    comm, rank, root = get_comm_rank_root()
 
     # Create a backend
     backend = get_backend(args.backend, cfg)
@@ -257,7 +243,7 @@ def _process_common(args, mesh, soln, cfg):
     solver = get_solver(backend, rallocs, mesh, soln, cfg)
 
     # If we are running interactively then create a progress bar
-    if args.progress and MPI.COMM_WORLD.rank == 0:
+    if args.progress and rank == root:
         pbar = ProgressBar()
         pbar.start(solver.tend, start=solver.tstart, curr=solver.tcurr)
 
