@@ -102,7 +102,7 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
 
 _ctype_map = {
     np.int32: 'int', np.uint32: 'unsigned int',
-    np.int64: 'long long', np.uint64: 'unsigned long long',
+    np.int64: 'int64_t', np.uint64: 'uint64_t',
     np.float32: 'float', np.float64: 'double'
 }
 

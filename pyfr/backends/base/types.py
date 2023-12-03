@@ -237,13 +237,16 @@ class View:
         if any(m.dtype != self.refdtype for m in self._mats):
             raise TypeError('Mixed data types are not supported')
 
+        # Index type
+        ixdtype = backend.ixdtype
+
         # SoA size
         k, csubsz = backend.soasz, backend.csubsz
 
         # Base offsets and leading dimensions for each point
-        offset = np.empty(self.n, dtype=np.int32)
-        leaddim = np.empty(self.n, dtype=np.int32)
-        blkdisp = np.empty(self.n, dtype=np.int32)
+        offset = np.empty(self.n, dtype=ixdtype)
+        leaddim = np.empty(self.n, dtype=ixdtype)
+        blkdisp = np.empty(self.n, dtype=ixdtype)
 
         for m in self._mats:
             ix = np.where(matmap == m.mid)
@@ -256,12 +259,12 @@ class View:
         coldisp = (cmapmod // k)*k*self.nvcol + cmapmod % k
 
         mapping = (offset + blkdisp + rowdisp + coldisp)[None, :]
-        self.mapping = backend.const_matrix(mapping, dtype=np.int32, tags=tags)
+        self.mapping = backend.const_matrix(mapping, dtype=ixdtype, tags=tags)
 
         # Row strides
         if self.nvrow > 1:
             rstrides = (rstridemap*leaddim)[None, :]
-            self.rstrides = backend.const_matrix(rstrides, dtype=np.int32,
+            self.rstrides = backend.const_matrix(rstrides, dtype=ixdtype,
                                                  tags=tags)
 
 

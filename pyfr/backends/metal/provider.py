@@ -91,7 +91,7 @@ class MetalKernelProvider(BaseKernelProvider):
         # Classify the arguments as either pointers or scalars
         pargs, sargs = [], []
         for i, argt in enumerate(argtypes):
-            if argt == np.intp:
+            if argt == np.uintp:
                 pargs.append(i)
             else:
                 ctype = npdtype_to_ctypestype(argt)
