@@ -89,7 +89,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.shift = shift = np.array(centre)
         self.rot = rot = (np.cos(ran)*np.eye(3) +
                           np.sin(ran)*(np.cross(rax, np.eye(3))) +
-                          (1 - np.cos(ran))*np.outer(rax,rax))
+                          (1 - np.cos(ran))*np.outer(rax, rax))
 
         self.macro_params = {
             'ls': ls, 'avgu': avgu, 'yzdim': yzdim, 'beta1': beta1,
