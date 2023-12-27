@@ -46,8 +46,7 @@ class BaseSystem:
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
 
-        if hasattr(eles[0], '_vect_upts'):
-            self.eles_vect_upts = [e._vect_upts for e in eles]
+        self.eles_vect_upts = [e._grad_upts for e in eles]
 
         if hasattr(eles[0], 'entmin_int'):
             self.eles_entmin_int = [e.entmin_int for e in eles]
@@ -130,7 +129,7 @@ class BaseSystem:
     def _load_int_inters(self, rallocs, mesh, elemap):
         key = f'con_p{rallocs.prank}'
 
-        lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
+        lhs, rhs = mesh[key].tolist()
         int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
                                        self.cfg)
 
@@ -143,7 +142,7 @@ class BaseSystem:
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh[f'con_p{lhsprank}p{rhsprank}']
-            interarr = interarr.astype('U4,i4,i1,i2').tolist()
+            interarr = interarr.tolist()
 
             mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
                                          rallocs, elemap, self.cfg)
@@ -162,7 +161,7 @@ class BaseSystem:
                 cfgsect = f'soln-bcs-{m[1]}'
 
                 # Get the interface
-                interarr = mesh[f].astype('U4,i4,i1,i2').tolist()
+                interarr = mesh[f].tolist()
 
                 # Instantiate
                 bcclass = bcmap[self.cfg.get(cfgsect, 'type')]

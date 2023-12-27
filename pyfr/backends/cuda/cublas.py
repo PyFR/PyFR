@@ -81,14 +81,21 @@ class CUDACUBLASKernels(CUDAKernelProvider):
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
 
-        # CUBLAS expects inputs to be column-major (or Fortran order in
+        # cuBLAS expects inputs to be column-major (or Fortran order in
         # numpy parlance).  However as C = A*B => C^T = (A*B)^T
         # = (B^T)*(A^T) with a little trickery we can multiply our
         # row-major matrices directly.
         m, n, k = b.ncol, a.nrow, a.ncol
         A, B, C = b, a, out
 
-        # α and β factors for C = α*(A*op(B)) + β*C
+        # Cache key
+        ckey = (A.dtype, alpha, beta, m, n, k, A.leaddim, B.leaddim, C.leaddim)
+
+        # Size checks
+        if any(sz > 2**31 - 1 for sz in ckey[3:]):
+            raise ValueError('Matrices too large for cuBLAS')
+
+        # α and β factors for C = α*(A*B) + β*C
         if a.dtype == np.float64:
             cublasgemm = w.cublasDgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
@@ -101,9 +108,6 @@ class CUDACUBLASKernels(CUDAKernelProvider):
             w.cublasSetStream(h, stream)
             cublasgemm(h, w.OP_N, w.OP_N, m, n, k, alpha_ct, A, A.leaddim,
                        B, B.leaddim, beta_ct, C, C.leaddim)
-
-        # Cache key
-        ckey = (A.dtype, alpha, beta, m, n, k, A.leaddim, B.leaddim, C.leaddim)
 
         # Obtain the performance of the kernel
         try:

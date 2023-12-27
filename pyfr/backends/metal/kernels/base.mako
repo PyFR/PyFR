@@ -10,6 +10,7 @@ using namespace metal;
 
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
+typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
 
 // Atomic helpers
 inline void atomic_min_fpdtype(device fpdtype_t* addr, fpdtype_t val)

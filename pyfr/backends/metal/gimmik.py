@@ -71,7 +71,7 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                     src, meta = kgen.send(sdata)
 
                     grid, tgrp = meta['grid'], meta['threadgroup']
-                    kern = self._build_kernel(kname, src, [np.intp]*2)
+                    kern = self._build_kernel(kname, src, [np.uintp]*2)
 
                     # Obtain the runtime
                     dt = self._benchmark(

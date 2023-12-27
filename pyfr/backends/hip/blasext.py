@@ -10,7 +10,8 @@ class HIPBlasExtKernels(HIPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         nv = len(arr)
-        nrow, ncol, ldim, dtype = arr[0].traits[1:]
+        ixdtype = self.backend.ixdtype
+        nrow, ncol, ldim, fpdtype = arr[0].traits[1:]
         ncola, ncolb = arr[0].ioshape[1:]
 
         # Determine the grid/block
@@ -24,7 +25,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [np.int32]*3 + [np.intp]*nv + [dtype]*nv)
+                                  [ixdtype]*3 + [np.uintp]*nv + [fpdtype]*nv)
 
         # Set the parameters
         params = kern.make_params(grid, block)
@@ -59,7 +60,8 @@ class HIPBlasExtKernels(HIPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         hip = self.backend.hip
-        nrow, ncol, ldim, dtype = rs[0].traits[1:]
+        ixdtype = self.backend.ixdtype
+        nrow, ncol, ldim, fpdtype = rs[0].traits[1:]
         ncola, ncolb = rs[0].ioshape[1:]
 
         # Reduction block dimensions
@@ -72,7 +74,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         reduced_dev = hip.mem_alloc(ncola*grid[0]*rs[0].itemsize)
 
         # Empty result buffer on the host
-        reduced_host = hip.pagelocked_empty((ncola, grid[0]), dtype)
+        reduced_host = hip.pagelocked_empty((ncola, grid[0]), fpdtype)
 
         tplargs = dict(norm=norm, blocksz=block[0], method=method)
 
@@ -86,11 +88,11 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         # Argument types for reduction kernel
         if method == 'errest':
-            argt = [np.int32]*3 + [np.intp]*4 + [dtype]*2
+            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]*2
         elif method == 'resid' and dt_mat:
-            argt = [np.int32]*3 + [np.intp]*4 + [dtype]
+            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]
         else:
-            argt = [np.int32]*3 + [np.intp]*3 + [dtype]
+            argt = [ixdtype]*3 + [np.uintp]*3 + [fpdtype]
 
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
@@ -100,7 +102,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         params.set_args(nrow, ncolb, ldim, reduced_dev, *regs)
 
         # Runtime argument offset
-        facoff = argt.index(dtype)
+        facoff = argt.index(fpdtype)
 
         # Norm type
         reducer = np.max if norm == 'uniform' else np.sum

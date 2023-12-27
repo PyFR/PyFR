@@ -22,10 +22,10 @@ class TplargsMixin:
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
-            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p_min',
+            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
                                            1e-6)
         else:
-            self.p_min = self.cfg.getfloat('solver-interfaces', 'p_min',
+            self.p_min = self.cfg.getfloat('solver-interfaces', 'p-min',
                                            5*self._be.fpdtype_eps)
 
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,

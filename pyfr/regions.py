@@ -33,14 +33,14 @@ class BaseRegion:
 
         # Eliminate any faces with internal connectivity
         con = mesh[f'con_p{rallocs.prank}'].T
-        for l, r in con[['f0', 'f1', 'f2']].astype('U4,i4,i1').tolist():
+        for l, r in con[['f0', 'f1', 'f2']].tolist():
             if l in sfaces and r in sfaces:
                 sfaces.difference_update([l, r])
 
         # Eliminate faces on specified boundaries
         for b in exclbcs:
             if (f := f'bcon_{b}_p{rallocs.prank}') in mesh:
-                bcon = mesh[f][['f0', 'f1', 'f2']].astype('U4,i4,i1')
+                bcon = mesh[f][['f0', 'f1', 'f2']]
                 sfaces.difference_update(bcon.tolist())
 
         comm, rank, root = get_comm_rank_root()
@@ -49,7 +49,7 @@ class BaseRegion:
         # Next, consider faces on partition boundaries
         for p in rallocs.prankconn[rallocs.prank]:
             con = mesh[f'con_p{rallocs.prank}p{p}']
-            con = con[['f0', 'f1', 'f2']].astype('U4,i4,i1').tolist()
+            con = con[['f0', 'f1', 'f2']].tolist()
 
             # See which of these faces are on the surface boundary
             sb = np.array([c in sfaces for c in con])
@@ -94,20 +94,20 @@ class BoundaryRegion(BaseRegion):
 
         # Determine which of our elements are directly on the boundary
         if bc in mesh:
-            for etype, eidx in mesh[bc][['f0', 'f1']].astype('U4,i4'):
+            for etype, eidx in mesh[bc][['f0', 'f1']]:
                 eset[etype].append(eidx)
 
         # Handle the case where multiple layers have been requested
         if self.nlayers > 1:
             # Load our internal connectivity array
             con = mesh[f'con_p{rallocs.prank}'].T
-            con = con[['f0', 'f1']].astype('U4,i4').tolist()
+            con = con[['f0', 'f1']].tolist()
 
             # Load our partition boundary connectivity arrays
             pcon = {}
             for p in rallocs.prankconn[rallocs.prank]:
                 pc = mesh[f'con_p{rallocs.prank}p{p}']
-                pc = pc[['f0', 'f1']].astype('U4,i4').tolist()
+                pc = pc[['f0', 'f1']].tolist()
                 pcon[p] = (pc, *np.empty((2, len(pc)), dtype=bool))
 
             # Tag all elements in the set as belonging to the first layer
