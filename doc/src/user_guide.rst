@@ -81,12 +81,6 @@ The following commands are available from the ``pyfr`` program:
    with the ``-f`` flag; for example ``-f density -f velocity`` will
    only export the *density* and *velocity* fields.
 
-6. ``pyfr tavg merge`` --- merge together multiple time average files into a
-   single time average file. The averaging times are read from the files and do
-   not need to be evenly spaced in time. Example::
-
-        pyfr tavg merge avg-1.00.pyfrs avg-2.00.pyfrs avg-10.00.pyfrs merged_avg.pyfrs
-
 Running in Parallel
 -------------------
 
