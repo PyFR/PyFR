@@ -117,15 +117,20 @@ Parameterises the backend with
 
     ``single`` | ``double``
 
-2. ``rank-allocator`` --- MPI rank allocator:
+2.  ``memory-model`` --- if to enable support for large working sets;
+    should be ``normal`` unless a memory-model error is encountered:
+
+    ``normal`` | ``large``
+
+3. ``rank-allocator`` --- MPI rank allocator:
 
     ``linear`` | ``random``
 
-3. ``collect-wait-times`` --- If to track MPI request wait times or not:
+4. ``collect-wait-times`` --- if to track MPI request wait times or not:
 
     ``True`` | ``False``
 
-4. ``collect-wait-times-len`` --- Size of the wait time history buffer:
+5. ``collect-wait-times-len`` --- size of the wait time history buffer:
 
      *int*
 

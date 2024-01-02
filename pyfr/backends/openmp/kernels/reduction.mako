@@ -3,7 +3,7 @@
 
 struct kargs
 {
-    int nrow, nblocks;
+    ixdtype_t nrow, nblocks;
     fpdtype_t *reduced, *rcurr, *rold;
 % if method == 'errest':
     fpdtype_t *rerr, atol, rtol;
@@ -16,7 +16,7 @@ struct kargs
 
 void reduction(const struct kargs *restrict args)
 {
-    int nrow = args->nrow, nblocks = args->nblocks;
+    ixdtype_t nrow = args->nrow, nblocks = args->nblocks;
     fpdtype_t *reduced = args->reduced, *rcurr = args->rcurr, *rold = args->rold;
 % if method == 'errest':
     fpdtype_t *rerr = args->rerr, atol = args->atol, rtol = args->rtol;
@@ -36,16 +36,16 @@ void reduction(const struct kargs *restrict args)
 % else:
     #pragma omp parallel for ${schedule} reduction(+ : ${','.join(f'red{i}' for i in range(ncola))})
 % endif
-    for (int ib = 0; ib < nblocks; ib++)
+    for (ixdtype_t ib = 0; ib < nblocks; ib++)
     {
-        for (int _y = 0; _y < nrow; _y++)
+        for (ixdtype_t _y = 0; _y < nrow; _y++)
         {
-            for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+            for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
             {
                 #pragma omp simd
-                for (int _xj = 0; _xj < SOA_SZ; _xj++)
+                for (ixdtype_t _xj = 0; _xj < SOA_SZ; _xj++)
                 {
-                    int idx;
+                    ixdtype_t idx;
                     fpdtype_t temp;
 
                 % for i in range(ncola):

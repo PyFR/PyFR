@@ -80,10 +80,17 @@ class HIPRocBLASKernels(HIPKernelProvider):
         m, n, k = b.ncol, a.nrow, a.ncol
         A, B, C = b, a, out
 
+        # Cache key
+        ckey = (A.dtype, alpha, beta, m, n, k, A.leaddim, B.leaddim, C.leaddim)
+
+        # Size checks
+        if any(sz > 2**31 - 1 for sz in ckey[3:]):
+            raise ValueError('Matrices too large for rocBLAS')
+
         # Do not transpose either A or B
         opA = opB = w.OPERATION_NONE
 
-        # α and β factors for C = α*(A*op(B)) + β*C
+        # α and β factors for C = α*(A*B) + β*C
         if a.dtype == np.float64:
             rocblas_gemm = w.rocblas_dgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
@@ -96,9 +103,6 @@ class HIPRocBLASKernels(HIPKernelProvider):
             w.rocblas_set_stream(h, stream)
             rocblas_gemm(h, opA, opB, m, n, k, alpha_ct, A, A.leaddim, B,
                          B.leaddim, beta_ct, C, C.leaddim)
-
-        # Cache key
-        ckey = (A.dtype, alpha, beta, m, n, k, A.leaddim, B.leaddim, C.leaddim)
 
         # Obtain the performance of the kernel
         try:
