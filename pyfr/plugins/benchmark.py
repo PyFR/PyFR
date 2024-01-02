@@ -9,6 +9,7 @@ class BenchmarkPlugin(BaseSolnPlugin):
     name = 'benchmark'
     systems = ['*']
     formulations = ['std']
+    dimensions = [3,]
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)
@@ -35,12 +36,24 @@ class BenchmarkPlugin(BaseSolnPlugin):
 
         # Number of degrees of freedom per element, depends on order
         # TODO: Get this by counting degrees() in polys.py
-        dof_in_elem = {'hex': (order+1)**3,
-                       'tet': (order+1)*(order+2)*(order+3)//6,
-                        'pri': (order+1)*(order+2)*(order+3)//2,
-                        'qua': (order+1)**2,
-                        'pyr': (order+1)*(order+2)//2,
-                        'tri': (order+1)*(order+2)//2}
+        dof_in_elem = {
+            'tri': (order+1)*(order+2)//2,
+            'qua': (order+1)**2,
+            'tet': (order+1)*(order+2)*(order+3)//6,
+            'pyr': (order+1)*(order+2)//2,
+            'pri': (order+1)*(order+2)*(order+3)//2,
+            'hex': (order+1)**3,
+            }
+
+        dof_on_elem = {
+            'tri': (order+1)*(order+2)//2,
+            'qua': (order+1)**2,
+            'tet': (order+1)*(order+2)*(order+3)//6,
+            'pyr': (order+1)*(order+2)//2,
+            'pri': (order+1)*(order+2)*(order+3)//2,
+            'hex': (order+1)**3,
+            }
+
 
         mesh_dof = [dof_in_elem[e] * sum(mesh_nep[e]) for e in mesh_nep.keys()]
         self.factor = sum(mesh_dof) * intg.stepper_order * intg.system.nvars
