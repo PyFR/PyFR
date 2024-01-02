@@ -62,6 +62,9 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         if beta != 0.0 and beta != 1.0:
             raise NotSuitableError('libxsmm requires β = 0 or β = 1')
 
+        # Index type
+        ixdtype = self.backend.ixdtype
+
         # Dimensions
         ldb, ldc = b.leaddim, out.leaddim
 
@@ -103,7 +106,8 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         src = self.backend.lookup.get_template('batch-gemm').render()
 
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src, 'PPPiPi')
+        batch_gemm = self._build_kernel('batch_gemm', src,
+                                        [np.uintp]*2 + [np.uintp, ixdtype]*2)
         batch_gemm.set_args(self._exec_ptr, blkptr, b, b.blocksz, out,
                             out.blocksz)
         batch_gemm.set_nblocks(b.nblocks)

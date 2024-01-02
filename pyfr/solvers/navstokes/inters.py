@@ -15,10 +15,10 @@ class TplargsMixin:
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
         if shock_capturing == 'entropy-filter':
-            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p_min',
+            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
                                            1e-6)
         else:
-            self.p_min = self.cfg.getfloat('solver-interfaces', 'p_min',
+            self.p_min = self.cfg.getfloat('solver-interfaces', 'p-min',
                                            5*self._be.fpdtype_eps)
 
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,

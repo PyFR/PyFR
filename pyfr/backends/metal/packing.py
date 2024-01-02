@@ -5,6 +5,8 @@ from pyfr.backends.metal.provider import MetalKernel, MetalKernelProvider
 
 class MetalPackingKernels(MetalKernelProvider):
     def pack(self, mv):
+        ixdtype = self.backend.ixdtype
+
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
 
@@ -12,7 +14,7 @@ class MetalPackingKernels(MetalKernelProvider):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
+        kern = self._build_kernel('pack_view', src, [ixdtype]*3 + [np.uintp]*4)
         grid, tgrp = (v.n, 1, 1), (128, 1, 1)
 
         # Arguments
