@@ -19,7 +19,6 @@ Contents:
 
    installation
    user_guide
-   plugins
    developer_guide
    performance_tuning
    examples

@@ -1171,6 +1171,93 @@ Example::
     quad-deg = 10
     quad-pts = witherden-vincent
 
+Plugins
+-------
+
+Plugins allow for powerful additional functionality to be swapped
+in and out. There are two classes of plugin available; solution
+plugins which are prefixed by ``soln-`` and solver plugins which
+are prefixed by ``solver-``. It is possible to create multiple
+instances of the same solution plugin by appending a suffix, for
+example::
+
+    [soln-plugin-writer]
+    ...
+
+    [soln-plugin-writer-2]
+    ...
+
+    [soln-plugin-writer-three]
+    ...
+
+Certain plugins also expose functionality via a CLI, which can
+be invoked independently of a PyFR run.
+
+Solution Plugins
+^^^^^^^^^^^^^^^^
+
+.. toctree::
+   :maxdepth: 3
+
+   plugins/soln-plugin-dtstats.rst
+   plugins/soln-plugin-fluid-force.rst
+   plugins/soln-plugin-integrate.rst
+   plugins/soln-plugin-nancheck.rst
+   plugins/soln-plugin-pseudostats.rst
+   plugins/soln-plugin-residual.rst
+   plugins/soln-plugin-sampler.rst
+   plugins/soln-plugin-tavg.rst
+   plugins/soln-plugin-writer.rst
+
+Solver Plugins
+^^^^^^^^^^^^^^
+
+.. toctree::
+   :maxdepth: 3
+
+   plugins/solver-plugin-source.rst
+   plugins/solver-plugin-turbulence.rst
+
+Regions
+^^^^^^^
+
+Certain plugins are capable of performing operations on a subset of the
+elements inside the domain. One means of constructing these element
+subsets is through parameterised regions. Note that an element is
+considered part of a region if *any* of its nodes are found to be
+contained within the region. Supported regions:
+
+Rectangular cuboid ``box(x0, x1)``
+  A rectangular cuboid defined by two diametrically opposed vertices.
+  Valid in both 2D and 3D.
+
+Conical frustum ``conical_frustum(x0, x1, r0, r1)``
+  A conical frustum whose end caps are at *x0* and *x1* with radii
+  *r0* and *r1*, respectively. Only valid in 3D.
+
+Cone ``cone(x0, x1, r)``
+  A cone of radius *r* whose centre-line is defined by *x0* and *x1*.
+  Equivalent to ``conical_frustum(x0, x1, r, 0)``. Only valid in 3D.
+
+Cylinder ``cylinder(x0, x1, r)``
+  A circular cylinder of radius *r* whose centre-line is defined by
+  *x0* and *x1*. Equivalent to ``conical_frustum(x0, x1, r, r)``.
+  Only valid in 3D.
+
+Cartesian ellipsoid ``ellipsoid(x0, a, b, c)``
+  An ellipsoid centred at *x0* with Cartesian coordinate axes whose
+  extents in the *x*, *y*, and *z* directions are given by *a*, *b*,
+  and *c*, respectively. Only valid in 3D.
+
+Sphere ``sphere(x0, r)``
+  A sphere centred at *x0* with a radius of *r*. Equivalent to
+  ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
+
+Region expressions can also be added and subtracted together
+arbitrarily.  For example
+``box((-10, -10, -10), (10, 10, 10)) - sphere((0, 0, 0), 3)`` will
+result in a cube-shaped region with a sphere cut out of the middle.
+
 Additional Information
 ----------------------
 
