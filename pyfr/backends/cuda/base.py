@@ -59,7 +59,7 @@ class CUDABackend(BaseBackend):
         if self.mpitype not in {'standard', 'cuda-aware'}:
             raise ValueError('Invalid CUDA backend MPI type')
 
-        from pyfr.backends.cuda import (blasext, cublas, gimmik, packing,
+        from pyfr.backends.cuda import (blasext, cublaslt, gimmik, packing,
                                         provider, types)
 
         # Register our data types and meta kernels
@@ -78,7 +78,7 @@ class CUDABackend(BaseBackend):
                   blasext.CUDABlasExtKernels,
                   packing.CUDAPackingKernels,
                   gimmik.CUDAGiMMiKKernels,
-                  cublas.CUDACUBLASKernels]
+                  cublaslt.CUDACUBLASLtKernels]
         self._providers = [k(self) for k in kprovs]
 
         # Pointwise kernels
