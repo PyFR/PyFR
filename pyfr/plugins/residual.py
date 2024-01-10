@@ -21,13 +21,15 @@ class ResidualPlugin(BaseSolnPlugin):
         # Norm used on residual
         self.lp = self.cfg.getfloat(cfgsect, 'norm', 2)
 
-        # Set MPI reduction op and post process function
+        # Reduction parameters
         if self.lp == float('inf'):
+            self._lp_exp = 1
+            self._np_op = np.maximum
             self._mpi_op = mpi.MAX
-            self._post_func = lambda x: x
         else:
+            self._lp_exp = self.lp
+            self._np_op = np.add
             self._mpi_op = mpi.SUM
-            self._post_func = lambda x: x**(1/self.lp)
 
         # The root rank needs to open the output file
         if rank == root:
@@ -42,21 +44,23 @@ class ResidualPlugin(BaseSolnPlugin):
             # MPI info
             comm, rank, root = get_comm_rank_root()
 
-            # Rank local norm for each variable
-            norm = lambda x: np.linalg.norm(x, axis=(0, 2), ord=self.lp)
-            if self.lp == float('inf'):
-                resid = max(norm(dt_s) for dt_s in intg.dt_soln)
-            else:
-                resid = sum(norm(dt_s)**self.lp for dt_s in intg.dt_soln)
+            # Compute the norms of du/dt
+            norms = []
+            for dudt in intg.dt_soln:
+                dudt = dudt.swapaxes(0, 1).reshape(self.nvars, -1)
+                norms.append(np.linalg.norm(dudt, axis=1, ord=self.lp))
 
-            # Reduce and, if we are the root rank, output
+            # Reduce over each element type in our domain
+            resid = self._np_op.reduce([n**self._lp_exp for n in norms])
+
+            # Reduce over all domains and, if we are the root rank, output
             if rank != root:
                 comm.Reduce(resid, None, op=self._mpi_op, root=root)
             else:
                 comm.Reduce(mpi.IN_PLACE, resid, op=self._mpi_op, root=root)
 
                 # Post process
-                resid = (self._post_func(r) for r in resid)
+                resid = (r**(1 / self._lp_exp) for r in resid)
 
                 # Write
                 print(intg.tcurr, *resid, sep=',', file=self.outf)
