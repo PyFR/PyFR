@@ -71,7 +71,7 @@ class BaseRegion:
         # Group the remaining faces by element type
         nsfaces = defaultdict(list)
         for etype, eidx, fidx in sfaces:
-            nsfaces[etype].append((eidx, fidx))
+            nsfaces[etype, fidx].append(eidx)
 
         # Sort and return
         return {k: sorted(v) for k, v in nsfaces.items()}
