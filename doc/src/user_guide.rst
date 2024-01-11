@@ -1739,7 +1739,6 @@ Example::
     region = box((1, -5), (10, 5))
     header = true
     tstart = 10
-    tend = 100
     dt = 1e-2
     observer-pts = [(1, 10), (1, 30), (1, 100), (1, 300)]
 

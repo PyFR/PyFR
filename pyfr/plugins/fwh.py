@@ -86,8 +86,8 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
 
             # Get ops and components of the surface
             m0 = eles.basis.ubasis.nodal_basis_at(qpts)
-            norn_mag = np.linalg.norm(pnorm, axis=-1, keepdims=True)
-            n = (pnorm / norn_mag).transpose(2, 0, 1).reshape(self.ndims, -1)
+            norm_mag = np.linalg.norm(pnorm, axis=-1, keepdims=True)
+            n = (pnorm / norm_mag).transpose(2, 0, 1).reshape(self.ndims, -1)
             area = (qwts[:, None] / rcpdjac).reshape((-1))
             dist = self._distances(ploc)
 
@@ -167,16 +167,10 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
             f = mom_n*u + (p - self.qinf['p'])*param.norm
             f_t = mom_t_n*u + mom_n*u_t + p_t*param.norm
 
-            acc += ci*param.r_star_inv*np.einsum(
-                'ki,ijk->ij',
-                f_t,
-                param.r_tilde_vec
-            )
-            acc += param.r_star_inv**2*np.einsum(
-                'ki,ijk->ij',
-                f,
-                param.r_star_tilde_vec
-            )
+            acc += ci*param.r_star_inv*np.einsum('ki,ijk->ij', f_t,
+                                                 param.r_tilde_vec)
+            acc += param.r_star_inv**2*np.einsum('ki,ijk->ij', f,
+                                                 param.r_star_tilde_vec)
 
             # Quadrature and accumulate
             o_vals += param.area @ acc
@@ -193,7 +187,6 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
             self.t_last = intg.tcurr
 
             o_vals = self._fwh_solve(intg)
-            comm.Barrier()
 
             if rank != root:
                 comm.Reduce(o_vals, None, op=mpi.SUM, root=root)
