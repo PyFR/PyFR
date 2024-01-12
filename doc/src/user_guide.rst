@@ -176,6 +176,11 @@ Parameterises the HIP backend with
 
      ``standard`` | ``hip-aware``
 
+3. ``rocblas-nkerns`` --- maximum number of kernel algorithms to try, defaults
+   to 2048:
+
+     *int*
+
 Example::
 
     [backend-hip]
@@ -1121,7 +1126,7 @@ the prismatic elements at multi-p level *order*, with
 1. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
-    ``alpha-opt~gauss-legendre-lobatto`` | 
+    ``alpha-opt~gauss-legendre-lobatto`` |
     ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto``
 

@@ -35,7 +35,7 @@ class RocBLASWrappers(LibWrapper):
     OPERATION_TRANSPOSE = 112
     DATATYPE_F32_R = 151
     DATATYPE_F64_R = 152
-    GEMM_ALGO_SOLUTION_INDEX = 0x1
+    GEMM_ALGO_SOLUTION_INDEX = 1
 
     # Functions
     _functions = [
@@ -64,11 +64,11 @@ class HIPRocBLASKernels(HIPKernelProvider):
         self._handle = c_void_p()
         self._wrappers.rocblas_create_handle(self._handle)
 
-        # Timing data cache
+        # GEMM cache
         self._mul_cache = {}
 
         # Maximum number of solution indices to try
-        self.nbench = backend.cfg.getint('backend-hip', 'rocblas-nbench', 2048)
+        self.nkerns = backend.cfg.getint('backend-hip', 'rocblas-nkerns', 2048)
 
     def __del__(self):
         try:
@@ -109,7 +109,6 @@ class HIPRocBLASKernels(HIPKernelProvider):
             rtype = w.DATATYPE_F32_R
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        algo = 0
         def gemm(stream):
             w.rocblas_set_stream(h, stream)
             w.rocblas_gemm_ex(
@@ -121,7 +120,7 @@ class HIPRocBLASKernels(HIPKernelProvider):
         try:
             algo, dt = self._mul_cache[ckey]
         except KeyError:
-            def get_solution(sidx):
+            def get_solutions(sidx):
                 size_ct = c_int(len(sidx) if sidx is not None else 0)
                 w.rocblas_gemm_ex_get_solutions(
                     h, opA, opB, m, n, k, byref(alpha_ct), A, rtype, A.leaddim,
@@ -132,15 +131,15 @@ class HIPRocBLASKernels(HIPKernelProvider):
                 return size_ct.value
 
             # Get applicable gemm algorithm solution indices
-            sidx = (c_int * min(get_solution(None), self.nbench))()
-            get_solution(sidx)
+            sidx = (c_int * min(get_solutions(None), self.nkerns))()
+            get_solutions(sidx)
 
             # Save a copy of the contents of the output matrix
             out_np = getattr(out, 'parent', out).get()
 
             best_kern = None
+            # Benchmark suggested algorithms
             for algo in sidx:
-                # Benchmark the kernel
                 dt = self._benchmark(gemm)
                 if best_kern is None or dt < best_kern[-1]:
                     best_kern = algo, dt
