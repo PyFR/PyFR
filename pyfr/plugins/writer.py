@@ -51,10 +51,13 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         stats.set('data', 'prefix', 'soln')
         intg.collect_stats(stats)
 
-        walltime_difference = float(stats.get('solver-time-integrator', 'wall-time')) \
-                            - self.wall_time_past \
-                            - float(stats.get('solver-time-integrator', 'plugin-wall-time-benchmark')) \
-                            - float(stats.get('solver-time-integrator', 'plugin-wall-time-writer'))
+        if intg.tcurr >0:
+            plugin_wall_times = float(stats.get('solver-time-integrator', 'plugin-wall-time-benchmark')) \
+                                + float(stats.get('solver-time-integrator', 'plugin-wall-time-writer'))
+        else:
+            plugin_wall_times = 0.0
+
+        walltime_difference = float(stats.get('solver-time-integrator', 'wall-time')) - self.wall_time_past - plugin_wall_times
 
         # If we are the root rank then prepare the metadata
         if rank == root:
