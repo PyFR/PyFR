@@ -151,7 +151,7 @@ class BaseGeometricRegion(BaseRegion):
     name = None
 
     def __init__(self, rot=None):
-        rot = np.rad2deg(rot) if rot is not None else rot
+        rot = np.deg2rad(rot) if rot is not None else rot
 
         match rot:
             case None:
