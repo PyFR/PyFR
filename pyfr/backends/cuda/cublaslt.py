@@ -260,7 +260,7 @@ class CUDACUBLASLtKernels(CUDAKernelProvider):
             self._mul_cache[ckey] = desc, dt = best_kern
 
         # Allocate workspace for gemm
-        ws_ptr = cuda.mem_alloc(desc.ws_size) if desc.ws_size.value else None
+        ws_ptr = cuda.mem_alloc(desc.ws_size) if desc.ws_size else None
 
         class MulKernel(CUDAKernel):
             def add_to_graph(self, graph, deps):
