@@ -35,7 +35,8 @@ def clean(origfn=None, tol=1e-10):
 
                 i, ix = 0, amix[0]
                 for j, jx in enumerate(amix[1:], start=1):
-                    if amfl[jx] - amfl[ix] >= tol:
+                    if not np.isclose(amfl[jx], amfl[ix], rtol=tol,
+                                      atol=0.1*tol):
                         if j - i > 1:
                             amfl[amix[i:j]] = np.median(amfl[amix[i:j]])
                         i, ix = j, jx

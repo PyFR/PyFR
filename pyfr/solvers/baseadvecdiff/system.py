@@ -91,15 +91,22 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
                          'eles/gradcoru_upts_linear')
             g2.add(l, deps=ldeps)
 
+        # Set dependencies for interface flux interpolation
+        if k['eles/gradcoru_fpts']:
+            ideps = k['eles/gradcoru_fpts']
+        else:
+            ideps = (k['eles/gradcoru_upts_curved'] +
+                     k['eles/gradcoru_upts_linear'])
+
         # Pack and send these interpolated gradients to our neighbours
-        g2.add_all(k['mpiint/vect_fpts_pack'], deps=k['eles/gradcoru_fpts'])
+        g2.add_all(k['mpiint/vect_fpts_pack'], deps=ideps)
         for send, pack in zip(m['vect_fpts_send'], k['mpiint/vect_fpts_pack']):
             g2.add_mpi_req(send, deps=[pack])
 
         # Compute the common normal flux at our internal/boundary interfaces
         g2.add_all(k['iint/comm_flux'],
-                   deps=k['eles/gradcoru_fpts'] + k['mpiint/vect_fpts_pack'])
-        g2.add_all(k['bcint/comm_flux'], deps=k['eles/gradcoru_fpts'])
+                   deps=ideps + k['mpiint/vect_fpts_pack'])
+        g2.add_all(k['bcint/comm_flux'], deps=ideps)
 
         # Interpolate the gradients to the quadrature points
         for l in k['eles/gradcoru_qpts']:
@@ -114,8 +121,11 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         for l in k['eles/tdisf_curved'] + k['eles/tdisf_linear']:
             if k['eles/qptsu']:
                 ldeps = deps(l, 'eles/gradcoru_qpts', 'eles/qptsu')
-            else:
+            elif k['eles/gradcoru_fpts']:
                 ldeps = deps(l, 'eles/gradcoru_fpts')
+            else:
+                ldeps = deps(l, 'eles/gradcoru_upts_curved',
+                             'eles/gradcoru_upts_linear')
             g2.add(l, deps=ldeps)
 
         # Compute the transformed divergence of the partially corrected flux

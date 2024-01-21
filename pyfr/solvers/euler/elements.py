@@ -48,6 +48,26 @@ class BaseFluidElements:
         return [rho, *vs, p]
 
     @staticmethod
+    def diff_con_to_pri(cons, diff_cons, cfg):
+        rho, *rhouvw = cons[:-1]
+        diff_rho, *diff_rhouvw, diff_E = diff_cons
+
+        # Divide momentum components by ρ
+        uvw = [rhov / rho for rhov in rhouvw]
+
+        # Velocity gradients: ∂u⃗ = 1/ρ·[∂(ρu⃗) - u⃗·∂ρ]
+        diff_uvw = [(diff_rhov - v*diff_rho) / rho
+                    for diff_rhov, v in zip(diff_rhouvw, uvw)]
+
+        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) - ρu⃗·∂u⃗)]
+        gamma = cfg.getfloat('constants', 'gamma')
+        diff_p = diff_E - 0.5*(np.einsum('ijk,ijk->jk', uvw,  diff_rhouvw) +
+                               np.einsum('ijk,ijk->jk', rhouvw, diff_uvw))
+        diff_p *= gamma - 1
+
+        return [diff_rho, *diff_uvw, diff_p]
+
+    @staticmethod
     def validate_formulation(ctrl):
         shock_capturing = ctrl.cfg.get('solver', 'shock-capturing', 'none')
         if shock_capturing == 'entropy-filter':
