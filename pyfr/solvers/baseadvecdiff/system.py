@@ -156,6 +156,9 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         # Obtain the physical divergence of the corrected flux
         for l in k['eles/negdivconf']:
             g3.add(l, deps=deps(l, 'eles/tdivtconf'))
+
+        g3.group([k['eles/tdivtconf'], k['eles/negdivconf']],
+                 subs = [[('tdivtconf', 'out'), ('negdivconf', 'tdivtconf')]])
         g3.commit()
 
         return g1, g2, g3

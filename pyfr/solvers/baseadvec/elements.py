@@ -72,31 +72,32 @@ class BaseAdvectionElements(BaseElements):
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
             'mul', self.opmat('M0'), self.scal_upts[uin],
-            out=self._scal_fpts
+            out=self._scal_fpts, kname='disu'
         )
 
         if fluxaa and self.basis.order > 0:
             kernels['qptsu'] = lambda uin: self._be.kernel(
                 'mul', self.opmat('M7'), self.scal_upts[uin],
-                out=self._scal_qpts
+                out=self._scal_qpts, kname='qptsu'
             )
 
         # First flux correction kernel
         if fluxaa and self.basis.order > 0:
             kernels['tdivtpcorf'] = lambda fout: self._be.kernel(
                 'mul', self.opmat('(M1 - M3*M2)*M9'), self._vect_qpts,
-                out=self.scal_upts[fout]
+                out=self.scal_upts[fout], kname='tdivtpcorf'
             )
         elif self.basis.order > 0:
             kernels['tdivtpcorf'] = lambda fout: self._be.kernel(
                 'mul', self.opmat('M1 - M3*M2'), self._vect_upts,
-                out=self.scal_upts[fout]
+                out=self.scal_upts[fout], kname='tdivtpcorf'
             )
 
         # Second flux correction kernel
         kernels['tdivtconf'] = lambda fout: self._be.kernel(
             'mul', self.opmat('M3'), self._scal_fpts,
-            out=self.scal_upts[fout], beta=float(self.basis.order > 0)
+            out=self.scal_upts[fout], beta=float(self.basis.order > 0),
+            kname='tdivtconf'
         )
 
         def copy_soln(uin):

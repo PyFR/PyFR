@@ -45,7 +45,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
             self._wrappers.libxsmm_finalize()
 
-    def mul(self, a, b, out, alpha=1.0, beta=0.0):
+    def mul(self, a, b, out, alpha=1.0, beta=0.0, kname=None):
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
             raise ValueError('Incompatible matrices for out = a*b')
@@ -102,12 +102,16 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
             # Update the cache
             self._kerns[ckey] = blkptr
 
+        kn = kname if kname else 'batch_gemm'
+
         # Render our parallel wrapper kernel
-        src = self.backend.lookup.get_template('batch-gemm').render()
+        src = self.backend.lookup.get_template('batch-gemm').render(kname=kn)
 
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src,
-                                        [np.uintp]*2 + [np.uintp, ixdtype]*2)
+        batch_gemm = self._build_kernel(
+            kn, src, [np.uintp]*2 + [np.uintp, ixdtype]*2,
+            ['exec_ptr', 'blkptr', 'b', 'bblocksz', 'out', 'outblocksz']
+        )
         batch_gemm.set_args(self._exec_ptr, blkptr, b, b.blocksz, out,
                             out.blocksz)
         batch_gemm.set_nblocks(b.nblocks)

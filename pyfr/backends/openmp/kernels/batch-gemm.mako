@@ -10,7 +10,7 @@ struct kargs
     ixdtype_t cblocksz;
 };
 
-void batch_gemm(ixdtype_t ib, const struct kargs *args, int _disp_mask)
+void ${kname}(ixdtype_t ib, const struct kargs *args, int _disp_mask)
 {
     args->exec(args->blockk,
                args->b + ((_disp_mask & 1) ? 0 : ib*args->bblocksz),

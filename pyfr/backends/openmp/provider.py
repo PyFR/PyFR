@@ -71,11 +71,14 @@ class OpenMPKRunArgs(Structure):
 
 
 class OpenMPKernelFunction:
-    def __init__(self, backend, fun, argcls):
+    def __init__(self, backend, fun, fname, argcls, argn):
         self.krunner = backend.krunner
         self.fun = fun
+        self.fname = fname
         self.kargs = argcls()
+        self.argn = argn
         self.nblocks = None
+        self.argblks = dict()
 
     @cached_property
     def runargs(self):
@@ -92,11 +95,14 @@ class OpenMPKernelFunction:
             return OpenMPKRunArgs(ktype=OpenMPKRunArgs.KTYPE_BLOCK_GROUP,
                                   b=bra)
 
-    def arg_off(self, i):
+    def arg_off(self, arg):
+        i = self.argn.index(arg)
         return getattr(self.kargs.__class__, f'arg{i}').offset
 
     def set_arg(self, i, v):
         setattr(self.kargs, f'arg{i}', getattr(v, '_as_parameter_', v))
+        blksz = getattr(v, 'blocksz', 0)
+        self.argblks[f'arg{i}'] = blksz
 
     def set_args(self, *args, start=0):
         for i, arg in enumerate(args, start=start):
@@ -126,12 +132,13 @@ class OpenMPKernelProvider(BaseKernelProvider):
         return lib.function(name, restype,
                             [npdtype_to_ctypestype(arg) for arg in argtypes])
 
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, argnames=[]):
         lib = self._build_library(src)
         fun = lib.function(name)
 
-        return OpenMPKernelFunction(self.backend, fun,
-                                    self._get_arg_cls(tuple(argtypes)))
+        return OpenMPKernelFunction(self.backend, fun, name,
+                                    self._get_arg_cls(tuple(argtypes)),
+                                    argnames)
 
 
 class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,

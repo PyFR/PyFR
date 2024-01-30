@@ -74,7 +74,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         return src, ndim, argn, argt
 
-    def _build_kernel(self, name, src, args):
+    def _build_kernel(self, name, src, args, argn=[]):
         pass
 
     def _build_arglst(self, dims, argn, argt, argdict):
@@ -154,7 +154,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                                                         tplargs)
 
             # Compile the kernel
-            fun = self._build_kernel(name, src, list(it.chain(*argt)))
+            fun = self._build_kernel(name, src, list(it.chain(*argt)), argn)
 
             # Process the argument list
             argb, argm, argv = self._build_arglst(dims, argn, argt, kwargs)
