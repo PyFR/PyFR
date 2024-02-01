@@ -16,7 +16,7 @@ class BaseAdvectionSystem(BaseSystem):
         # Perform post-processing of the previous solution stage
         g1.add_all(k['eles/entropy_filter'])
 
-        # # Interpolate the solution to the flux points
+        # Interpolate the solution to the flux points
         for l in k['eles/disu']:
             g1.add(l, deps=deps(l, 'eles/entropy_filter'))
 
