@@ -2,9 +2,9 @@ from ctypes import c_float, c_int32, c_int64, c_ulong, sizeof
 
 import numpy as np
 
-from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, Kernel,
-                                MetaKernel)
+from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
+                                BasePointwiseKernelProvider,
+                                BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.metal.util import call_
 from pyfr.backends.metal.generator import MetalKernelGenerator
 from pyfr.nputil import npdtype_to_ctypestype
@@ -18,7 +18,7 @@ class MetalKernel(Kernel):
         return len(graph.klist)
 
 
-class _MetalMetaKernelCommon(MetaKernel):
+class _MetalMetaKernel:
     def add_to_graph(self, graph, dnodes):
         for k in self.kernels:
             k.add_to_graph(graph, dnodes)
@@ -26,8 +26,8 @@ class _MetalMetaKernelCommon(MetaKernel):
         return len(graph.klist)
 
 
-class MetalOrderedMetaKernel(_MetalMetaKernelCommon): pass
-class MetalUnorderedMetaKernel(_MetalMetaKernelCommon): pass
+class MetalOrderedMetaKernel(_MetalMetaKernel, BaseOrderedMetaKernel): pass
+class MetalUnorderedMetaKernel(_MetalMetaKernel, BaseUnorderedMetaKernel): pass
 
 
 class MetalKernelProvider(BaseKernelProvider):
@@ -66,7 +66,7 @@ class MetalKernelProvider(BaseKernelProvider):
 
         return lib
 
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, argn):
         from Metal import MTLComputePipelineDescriptor, MTLSizeMake
 
         # Build the program

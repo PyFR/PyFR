@@ -176,6 +176,14 @@ class BaseElements:
         else:
             raise ValueError('Invalid slice region')
 
+    def _make_sliced_kernel(self, kseq):
+        klist = list(kseq)
+
+        if len(klist) > 1:
+            return self._be.unordered_meta_kernel(klist, [self._linoff])
+        else:
+            return klist[0]
+
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
 

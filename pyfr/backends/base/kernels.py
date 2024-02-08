@@ -6,6 +6,8 @@ from pyfr.util import memoize
 
 
 class Kernel:
+    compound = False
+
     def __init__(self, mats=[], views=[], misc=[], dt=float('nan')):
         self.mats = mats
         self.views = views
@@ -24,11 +26,29 @@ class NullKernel(Kernel):
     pass
 
 
-class MetaKernel(Kernel):
+class BaseOrderedMetaKernel(Kernel):
     def __init__(self, kernels):
         super().__init__()
 
         self.kernels = list(kernels)
+
+    def run(self, *args):
+        for k in self.kernels:
+            k.run(*args)
+
+
+class BaseUnorderedMetaKernel(Kernel):
+    def __init__(self, kernels, splits):
+        super().__init__()
+
+        self.kernels = list(kernels)
+
+        if splits is not None:
+            self.splits = list(splits)
+            self.compound = True
+
+            if len(self.splits) != len(self.kernels) - 1:
+                raise ValueError('Invalid split points')
 
     def run(self, *args):
         for k in self.kernels:
@@ -74,7 +94,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         return src, ndim, argn, argt
 
-    def _build_kernel(self, name, src, args):
+    def _build_kernel(self, name, src, args, argn=[]):
         pass
 
     def _build_arglst(self, dims, argn, argt, argdict):
@@ -154,7 +174,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                                                         tplargs)
 
             # Compile the kernel
-            fun = self._build_kernel(name, src, list(it.chain(*argt)))
+            fun = self._build_kernel(name, src, list(it.chain(*argt)), argn)
 
             # Process the argument list
             argb, argm, argv = self._build_arglst(dims, argn, argt, kwargs)

@@ -2,9 +2,9 @@ from ctypes import (POINTER, Structure, Union, addressof, byref, c_int,
                     c_void_p, cast, pointer, sizeof)
 from functools import cached_property
 
-from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, Kernel,
-                                MetaKernel)
+from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
+                                BasePointwiseKernelProvider,
+                                BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.openmp.generator import OpenMPKernelGenerator
 from pyfr.nputil import npdtype_to_ctypestype
 from pyfr.util import memoize
@@ -26,7 +26,7 @@ class OpenMPKernel(Kernel):
         self.kernel()
 
 
-class _OpenCLMetaKernelCommon(MetaKernel):
+class _OpenMPMetaKernel:
     def add_to_graph(self, graph, dnodes):
         for k in self.kernels:
             k.add_to_graph(graph, dnodes)
@@ -34,8 +34,12 @@ class _OpenCLMetaKernelCommon(MetaKernel):
         return len(graph.klist)
 
 
-class OpenMPOrderedMetaKernel(_OpenCLMetaKernelCommon): pass
-class OpenMPUnorderedMetaKernel(_OpenCLMetaKernelCommon): pass
+class OpenMPOrderedMetaKernel(_OpenMPMetaKernel, BaseOrderedMetaKernel):
+    pass
+
+
+class OpenMPUnorderedMetaKernel(_OpenMPMetaKernel, BaseUnorderedMetaKernel):
+    pass
 
 
 class OpenMPRegularRunArgs(Structure):
@@ -46,7 +50,8 @@ class OpenMPBlockKernelArgs(Structure):
     _fields_ = [('fun', c_void_p),
                 ('args', c_void_p),
                 ('argmask', c_int),
-                ('argsz', c_int)]
+                ('argsz', c_int),
+                ('offset', c_int)]
 
 
 class OpenMPBlockRunArgs(Structure):
@@ -71,10 +76,14 @@ class OpenMPKRunArgs(Structure):
 
 
 class OpenMPKernelFunction:
-    def __init__(self, backend, fun, argcls):
+    def __init__(self, backend, fun, argcls, argnames):
         self.krunner = backend.krunner
         self.fun = fun
         self.kargs = argcls()
+
+        # Blocking info
+        self.argnames = list(argnames)
+        self.argsizes = [None]*len(argnames)
         self.nblocks = None
 
     @cached_property
@@ -95,8 +104,18 @@ class OpenMPKernelFunction:
     def arg_off(self, i):
         return getattr(self.kargs.__class__, f'arg{i}').offset
 
+    def arg_idx(self, name):
+        return self.argnames.index(name)
+
+    def arg_blocksz(self, i):
+        return self.argsizes[i]
+
     def set_arg(self, i, v):
         setattr(self.kargs, f'arg{i}', getattr(v, '_as_parameter_', v))
+        try:
+            self.argsizes[i] = v.blocksz*v.itemsize
+        except (AttributeError, IndexError):
+            pass
 
     def set_args(self, *args, start=0):
         for i, arg in enumerate(args, start=start):
@@ -126,12 +145,13 @@ class OpenMPKernelProvider(BaseKernelProvider):
         return lib.function(name, restype,
                             [npdtype_to_ctypestype(arg) for arg in argtypes])
 
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, argnames=[]):
         lib = self._build_library(src)
         fun = lib.function(name)
 
         return OpenMPKernelFunction(self.backend, fun,
-                                    self._get_arg_cls(tuple(argtypes)))
+                                    self._get_arg_cls(tuple(argtypes)),
+                                    argnames)
 
 
 class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,

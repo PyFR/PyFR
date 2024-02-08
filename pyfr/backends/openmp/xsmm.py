@@ -40,8 +40,11 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
     def __del__(self):
         if hasattr(self, '_wrappers'):
-            for blkptr in self._kerns.values():
+            for blkptr, blkptr_nt in self._kerns.values():
                 self._wrappers.libxsmm_fsspmdm_destroy(blkptr)
+
+                if blkptr_nt != blkptr:
+                    self._wrappers.libxsmm_fsspmdm_destroy(blkptr_nt)
 
             self._wrappers.libxsmm_finalize()
 
@@ -73,7 +76,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Check the JIT kernel cache
         try:
-            blkptr = self._kerns[ckey]
+            blkptr, blkptr_nt = self._kerns[ckey]
         except KeyError:
             c_is_nt = (beta == 0 and
                        out.nbytes >= 32*1024**2 and
@@ -91,25 +94,38 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
             timer_tick = cast(self._wrappers.libxsmm_timer_tick, c_void_p)
 
-            # JIT and register an block leaddim size kernel for this matrix
+            # Create a block leaddim size kernel for this matrix
             blkptr = self._wrappers.libxsmm_fsspmdm_create(
                 xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(alpha),
-                byref(beta), a_np.ctypes.data, c_is_nt, timer_tick
+                byref(beta), a_np.ctypes.data, False, timer_tick
             )
             if not blkptr:
                 raise NotSuitableError('libxsmm unable to JIT a kernel')
 
+            # Also consider creating a non-temporal kernel
+            if c_is_nt:
+                blkptr_nt = self._wrappers.libxsmm_fsspmdm_create(
+                    xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(alpha),
+                    byref(beta), a_np.ctypes.data, True, timer_tick
+                )
+                if not blkptr_nt:
+                    raise NotSuitableError('libxsmm unable to JIT a kernel')
+            else:
+                blkptr_nt = blkptr
+
             # Update the cache
-            self._kerns[ckey] = blkptr
+            self._kerns[ckey] = blkptr, blkptr_nt
 
         # Render our parallel wrapper kernel
         src = self.backend.lookup.get_template('batch-gemm').render()
 
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src,
-                                        [np.uintp]*2 + [np.uintp, ixdtype]*2)
-        batch_gemm.set_args(self._exec_ptr, blkptr, b, b.blocksz, out,
-                            out.blocksz)
+        batch_gemm = self._build_kernel(
+            'batch_gemm', src, [np.uintp]*3 + [np.uintp, ixdtype]*2,
+            ['exec', 'blkptr', 'blkptr_nt', 'b', 'bsz', 'out', 'outsz']
+        )
+        batch_gemm.set_args(self._exec_ptr, blkptr, blkptr_nt, b, b.blocksz,
+                            out, out.blocksz)
         batch_gemm.set_nblocks(b.nblocks)
 
         return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)
