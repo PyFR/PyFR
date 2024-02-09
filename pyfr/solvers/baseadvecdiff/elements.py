@@ -22,8 +22,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         super().set_backend(backend, nscalupts, nonce, linoff)
 
         kernel, kernels = self._be.kernel, self.kernels
+        metak = self._be.unordered_meta_kernel
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
-        slicem = self._slice_mat
+        slicem, slicedk = self._slice_mat, self._make_sliced_kernel
 
         # Register our pointwise kernels
         self._be.pointwise.register(f'{kprefix}.gradcoru')
@@ -54,28 +55,27 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             'jac_exprs': self.basis.jac_exprs
         }
 
+        gradcoru_u = []
         if 'curved' in regions:
-            kernels['gradcoru_u_curved'] = lambda: kernel(
+            gradcoru_u.append(lambda: kernel(
                 'gradcoru', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nupts, regions['curved']],
                 gradu=slicem(self._grad_upts, 'curved'),
                 smats=self.curved_smat_at('upts'),
                 rcpdjac=self.rcpdjac_at('upts', 'curved')
-            )
-
+            ))
         if 'linear' in regions:
-            kernels['gradcoru_u_linear'] = lambda: kernel(
+            gradcoru_u.append(lambda: kernel(
                 'gradcoru', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nupts, regions['linear']],
                 gradu=slicem(self._grad_upts, 'linear'),
                 upts=self.upts, verts=self.ploc_at('linspts', 'linear')
-            )
+            ))
+
+        kernels['gradcoru_u'] = lambda: slicedk(k() for k in gradcoru_u)
 
         if not self.grad_fusion or self.basis.order == 0:
-            if 'linear' in regions:
-                kernels['gradcoru_upts_linear'] = kernels['gradcoru_u_linear']
-            if 'curved' in regions:
-                kernels['gradcoru_upts_curved'] = kernels['gradcoru_u_curved']
+            kernels['gradcoru_upts'] = kernels['gradcoru_u']
 
         def gradcoru_fpts():
             nupts, nfpts = self.nupts, self.nfpts

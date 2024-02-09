@@ -151,12 +151,12 @@ class BaseGeometricRegion(BaseRegion):
     name = None
 
     def __init__(self, rot=None):
-        rot = np.deg2rad(rot) if rot is not None else rot
-
         match rot:
             case None:
                 self.rot = None
             case [phi, theta, psi]:
+                phi, theta, psi = np.deg2rad([phi, theta, psi])
+
                 c, s = np.cos(phi), np.sin(phi)
                 Z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
 
@@ -168,6 +168,8 @@ class BaseGeometricRegion(BaseRegion):
 
                 self.rot = Z @ Y @ X
             case theta:
+                theta = np.deg2rad(theta)
+
                 c, s = np.cos(theta), np.sin(theta)
                 self.rot = np.array([[c, -s], [s, c]])
 
@@ -260,9 +262,10 @@ class EllipsoidRegion(BaseGeometricRegion):
     name = 'ellipsoid'
 
     def __init__(self, x0, a, b, c, rot=None):
+        super().__init__(rot=rot)
+
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])
-        self.rot = rot
 
     def _pts_in_region(self, pts):
         return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1

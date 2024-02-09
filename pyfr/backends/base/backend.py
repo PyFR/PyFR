@@ -213,8 +213,8 @@ class BaseBackend:
     def ordered_meta_kernel(self, kerns):
         return self.ordered_meta_kernel_cls(kerns)
 
-    def unordered_meta_kernel(self, kerns):
-        return self.unordered_meta_kernel_cls(kerns)
+    def unordered_meta_kernel(self, kerns, splits=None):
+        return self.unordered_meta_kernel_cls(kerns, splits)
 
     def graph(self):
         return self.graph_cls(self)

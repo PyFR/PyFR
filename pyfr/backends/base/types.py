@@ -298,6 +298,9 @@ class Graph:
         self.kdeps = {}
         self.depk = set()
 
+        # Grouped kernels
+        self.groupk = set()
+
         # MPI wrappers
         self._startall = mpi.Prequest.Startall
 
@@ -358,6 +361,38 @@ class Graph:
     def add_mpi_reqs(self, reqs, deps=[]):
         for r in reqs:
             self.add_mpi_req(r, deps)
+
+    def _iter_deps(self, kern):
+        for d in self.kdeps[kern]:
+            yield d
+            yield from self._iter_deps(d)
+
+    def group(self, kerns, subs=[]):
+        if self.committed:
+            raise RuntimeError('Can not group kernels in a committed graph')
+
+        klist = list(kerns)
+        kset = set(klist)
+
+        # Ensure kernels are only in a single group
+        if not self.groupk.isdisjoint(kset):
+            raise ValueError('Kernels can only be in one group')
+
+        # Validate the dependencies of the grouping
+        for i, k in enumerate(klist):
+            for d in self.kdeps[k]:
+                if d in klist[i + 1:]:
+                    raise ValueError('Inconsistent kernel grouping order')
+
+                if d not in kset and not kset.isdisjoint(self._iter_deps(d)):
+                    raise ValueError('Kernel grouping violates dependencies')
+
+        # Ensure the substitutions are consistent with the grouping
+        if any(k not in klist for s in subs for k, v in s):
+            raise ValueError('Invalid kernels in substitution list')
+
+        # Mark these kernels as being grouped
+        self.groupk.update(kerns)
 
     def commit(self):
         mreqs, mdeps = self.mpi_reqs, self.mpi_req_deps
