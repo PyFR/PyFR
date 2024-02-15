@@ -22,7 +22,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         super().set_backend(backend, nscalupts, nonce, linoff)
 
         kernel, kernels = self._be.kernel, self.kernels
-        metak = self._be.unordered_meta_kernel
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
         slicem, slicedk = self._slice_mat, self._make_sliced_kernel
 

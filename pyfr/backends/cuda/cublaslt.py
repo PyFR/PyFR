@@ -4,7 +4,6 @@ from ctypes import (POINTER, Structure, byref, c_double, c_float, c_int,
 
 import numpy as np
 
-from pyfr.backends.cuda.driver import CUDADevAlloc
 from pyfr.backends.cuda.provider import CUDAKernel, CUDAKernelProvider
 from pyfr.ctypesutil import LibWrapper
 
