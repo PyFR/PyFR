@@ -215,56 +215,59 @@ class BasePartitioner:
 
         return vnetimap, vnparts
 
-    def _renumber_verts(self, mesh, vetimap, vparts):
+    def _renumber_verts(self, p, mesh, vetimap, vparts):
         pscon = [[] for i in range(self.nparts)]
         elewts = defaultdict(lambda: 1)
         vpartmap, bndeti = dict(zip(vetimap, vparts)), set()
 
         # Construct per-partition connectivity arrays and tag elements
         # which are on partition boundaries
-        for l, r in zip(*mesh['con_p0'][['f0', 'f1']].tolist()):
-            if vpartmap[l] == vpartmap[r]:
-                pscon[vpartmap[l]].append([l, r])
-            else:
-                pscon[vpartmap[l]].append([l, r])
-                pscon[vpartmap[r]].append([l, r])
-                bndeti |= {l, r}
+        with p.start('Identify partition boundary elements'):
+            for l, r in zip(*mesh['con_p0'][['f0', 'f1']].tolist()):
+                if vpartmap[l] == vpartmap[r]:
+                    pscon[vpartmap[l]].append([l, r])
+                else:
+                    pscon[vpartmap[l]].append([l, r])
+                    pscon[vpartmap[r]].append([l, r])
+                    bndeti |= {l, r}
 
-        # Start by assigning the lowest numbers to these boundary elements
-        nvetimap = sorted(bndeti)
-        nvparts = [vpartmap[eti] for eti in nvetimap]
+            # Start by assigning the lowest numbers to these boundary elements
+            nvetimap = sorted(bndeti)
+            nvparts = [vpartmap[eti] for eti in nvetimap]
 
         # Use sub-partitioning to assign interior element numbers
-        for part, scon in enumerate(pscon):
-            # Construct a graph for this partition
-            scon = np.array(scon, dtype='U4,i4').T
-            sgraph, svetimap = self._construct_graph(scon, elewts)
+        with p.start_with_bar('Sub-partition interior elements') as pb:
+            psit = pb.start_with_iter(enumerate(pscon), n=self.nparts)
+            for part, scon in psit:
+                # Construct a graph for this partition
+                scon = np.array(scon, dtype='U4,i4').T
+                sgraph, svetimap = self._construct_graph(scon, elewts)
 
-            # Determine the number of sub-partitions
-            nsp = len(svetimap) // self.nsubeles + 1
+                # Determine the number of sub-partitions
+                nsp = len(svetimap) // self.nsubeles + 1
 
-            # Partition the graph
-            if nsp == 1:
-                svparts = [0]*len(svetimap)
-            else:
-                svparts = self._partition_graph(sgraph, [1]*nsp)
-
-            # Group elements according to their type (linear vs curved)
-            # and sub-partition number
-            linsvetimap = [[] for i in range(nsp)]
-            cursvetimap = [[] for i in range(nsp)]
-            for (etype, eidx), spart in zip(svetimap, svparts):
-                if (etype, eidx) in bndeti:
-                    continue
-
-                if mesh[f'spt_{etype}_p0', 'linear'][eidx]:
-                    linsvetimap[spart].append((etype, eidx))
+                # Partition the graph
+                if nsp == 1:
+                    svparts = [0]*len(svetimap)
                 else:
-                    cursvetimap[spart].append((etype, eidx))
+                    svparts = self._partition_graph(sgraph, [1]*nsp)
 
-            # Append to the global list
-            nvetimap.extend(it.chain(*cursvetimap, *linsvetimap))
-            nvparts.extend([part]*sum(map(len, cursvetimap + linsvetimap)))
+                # Group elements according to their type (linear vs curved)
+                # and sub-partition number
+                linsvetimap = [[] for i in range(nsp)]
+                cursvetimap = [[] for i in range(nsp)]
+                for (etype, eidx), spart in zip(svetimap, svparts):
+                    if (etype, eidx) in bndeti:
+                        continue
+
+                    if mesh[f'spt_{etype}_p0', 'linear'][eidx]:
+                        linsvetimap[spart].append((etype, eidx))
+                    else:
+                        cursvetimap[spart].append((etype, eidx))
+
+                # Append to the global list
+                nvetimap.extend(it.chain(*cursvetimap, *linsvetimap))
+                nvparts.extend([part]*sum(map(len, cursvetimap + linsvetimap)))
 
         return nvetimap, nvparts
 
@@ -399,8 +402,8 @@ class BasePartitioner:
                                                           vparts)
 
         # Renumber vertices
-        with progress.start('Renumber vertices'):
-            vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
+        with progress.start_with_sequence('Renumber vertices') as p:
+            vetimap, vparts = self._renumber_verts(p, mesh, vetimap, vparts)
 
         # Repartition the mesh
         with progress.start('Repartition mesh'):
