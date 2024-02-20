@@ -24,7 +24,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         for send, pack in zip(m['scal_fpts_send'], k['mpiint/scal_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
 
-        # If entropy filtering, pack and send the entropy values to neighbors
+        # If entropy filtering, pack and send the entropy values to neighbours
         g1.add_all(k['mpiint/ent_fpts_pack'], deps=k['eles/entropy_filter'])
         for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
