@@ -1,5 +1,6 @@
 import math
 from time import perf_counter
+import itt
 
 import numpy as np
 
@@ -80,7 +81,9 @@ class StdNoneController(BaseStdController):
 
             # Take the step
             wallt_start = perf_counter()
+            itt.resume()
             idxcurr = self.step(self.tcurr, dt)
+            itt.pause()
             walldt = perf_counter() - wallt_start
 
             # We are not adaptive, so accept every step

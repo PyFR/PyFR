@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser, FileType
 import os
+import itt
 
 import mpi4py.rc
 mpi4py.rc.initialize = False
@@ -22,6 +23,7 @@ from pyfr.writers import (BaseWriter, get_writer_by_extn, get_writer_by_name,
 
 
 def main():
+    itt.pause()
     ap = ArgumentParser(prog='pyfr')
     sp = ap.add_subparsers(help='sub-command help')
 
