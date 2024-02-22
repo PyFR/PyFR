@@ -20,13 +20,13 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*3 + [np.uintp]*nv + [fpdtype]*nv)
-        kern.set_dims((ncolb, nrow))
-        kern.set_args(nrow, ncolb, ldim, *arr)
+                                  [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv)
+        kern.set_dims((ncolb, nrow), (128, 1))
+        kern.set_args(ncolb, ldim, *arr)
 
         class AxnpbyKernel(OpenCLKernel):
             def bind(self, *consts):
-                kern.set_args(*consts, start=3 + nv)
+                kern.set_args(*consts, start=2 + nv)
 
             def run(self, queue, wait_for=None, ret_evt=False):
                 return kern.exec_async(queue, wait_for, ret_evt)
