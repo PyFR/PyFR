@@ -140,11 +140,11 @@ class BasePartitioner:
         vtab = np.concatenate(([0], vtab + 1, [len(lhs)]))
 
         # Compute the element type/index to vertex number map
-        vetimap = lhs[vtab[:-1]].tolist()
-        etivmap = {k: v for v, k in enumerate(vetimap)}
+        vetimap = lhs[vtab[:-1]]
 
         # Prepare the edges and their weights
-        etab = np.array([etivmap[r] for r in rhs.tolist()])
+        etab = np.searchsorted(vetimap, rhs)
+        vetimap = vetimap.tolist()
         ewts = np.ones_like(etab)
 
         # Prepare the vertex weights
