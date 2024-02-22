@@ -50,8 +50,8 @@ class ProgressBar:
 
         sys.stderr.write(self.prefix)
 
-    def start_with_iter(self, iterable):
-        self.start(len(iterable))
+    def start_with_iter(self, iterable, n=None):
+        self.start(len(iterable) if n is None else n)
 
         for i in iterable:
             yield i
@@ -202,6 +202,9 @@ class ProgressSequence:
     @contextlib.contextmanager
     def start_with_sequence(self, phase):
         prefix, tstart = self._start_phase(phase)
+
+        sys.stderr.write(prefix + '\n')
+        sys.stderr.flush()
 
         yield ProgressSequence(prefix=self._prefix + '  ')
 
