@@ -1,4 +1,4 @@
-.. _integrate-plugin:
+.. _soln-plugin-integrate:
 
 ***********************
 [soln-plugin-integrate]
