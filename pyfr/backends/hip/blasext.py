@@ -25,15 +25,15 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*3 + [np.uintp]*nv + [fpdtype]*nv)
+                                  [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv)
 
         # Set the parameters
         params = kern.make_params(grid, block)
-        params.set_args(nrow, ncolb, ldim, *arr)
+        params.set_args(ncolb, ldim, *arr)
 
         class AxnpbyKernel(HIPKernel):
             def bind(self, *consts):
-                params.set_args(*consts, start=3 + nv)
+                params.set_args(*consts, start=2 + nv)
 
             def run(self, stream):
                 kern.exec_async(stream, params)

@@ -1,8 +1,8 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-__kernel void
-axnpby(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
+__kernel __attribute__((reqd_work_group_size(128, 1, 1))) void
+axnpby(ixdtype_t ncolb, ixdtype_t ldim,
        __global fpdtype_t* restrict x0,
        ${', '.join(f'__global const fpdtype_t* restrict x{i}'
                    for i in range(1, nv))},
