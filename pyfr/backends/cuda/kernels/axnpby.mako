@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 __global__ void
-axnpby(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
+axnpby(ixdtype_t ncolb, ixdtype_t ldim,
        fpdtype_t* __restrict__ x0,
        ${', '.join(f'const fpdtype_t* __restrict__ x{i}'
                    for i in range(1, nv))},

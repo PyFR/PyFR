@@ -17,7 +17,7 @@ typedef struct
     {
         void (*fun)(int, void *, int);
         void *args;
-        int argmask, argsz;
+        int argmask, argsz, offset;
     } *kernels;
 } block_group_t;
 
@@ -54,12 +54,13 @@ void run_kernels(int n, const kfunargs_t *kfa)
 
                 // Apply any argument substitutions
                 for (int j = 0; j < bg.nsubs; j++)
-                    *(kargs[as[3*j + 0]] + as[3*j + 1]) = lmem + as[3*j + 2];
+                    kargs[as[3*j + 0]][as[3*j + 1] / sizeof(char *)] = lmem + as[3*j + 2];
 
                 #pragma omp for ${schedule}
                 for (int blk = 0; blk < bg.nblocks; blk++)
                     for (int j = 0; j < bg.nkerns; j++)
-                        bg.kernels[j].fun(blk, kargs[j], bg.kernels[j].argmask);
+                        bg.kernels[j].fun(bg.kernels[j].offset + blk, kargs[j],
+                                          bg.kernels[j].argmask);
 
                 if (lmem)
                     free(lmem);

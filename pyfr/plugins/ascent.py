@@ -221,7 +221,6 @@ class _CLIAdapter:
 
     def soln_op_vpts(self, ename, divisors):
         meshf = self._mesh[f'spt_{ename}_p{self.prank}']
-        solnf = self._soln[f'soln_{ename}_p{self.prank}']
 
         shapecls = subclass_where(BaseShape, name=ename)
         shape = shapecls(len(meshf), self.scfg)
@@ -559,8 +558,8 @@ class AscentCLIPlugin(BaseCLIPlugin):
         # Initialise MPI
         init_mpi()
 
-        # Current Ascent render
-        renderer = None
+        # Current Ascent render and associated config
+        renderer, rcfg = None, None
 
         # Iterate over the solutions
         for s in args.solns:

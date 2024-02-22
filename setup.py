@@ -107,7 +107,7 @@ package_data = {
 
 # Hard dependencies
 install_requires = [
-    'gimmik >= 3.1.1',
+    'gimmik >= 3.2.1',
     'h5py >= 2.10',
     'mako >= 1.0.0',
     'mpi4py >= 3.1.0',

@@ -21,13 +21,13 @@ class MetalBlasExtKernels(MetalKernelProvider):
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
-                                  [ixdtype]*3 + [np.uintp]*nv + [fpdtype]*nv)
+                                  [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv)
         grid, tgrp = (ncolb, nrow, 1), (128, 1, 1)
-        kargs = [nrow, ncolb, ldim] + [a.data for a in arr] + [1.0]*nv
+        kargs = [ncolb, ldim] + [a.data for a in arr] + [1.0]*nv
 
         class AxnpbyKernel(MetalKernel):
             def bind(self, *consts):
-                kargs[3 + nv:] = consts
+                kargs[2 + nv:] = consts
 
             def run(self, cbuf):
                 kern(cbuf, grid, tgrp, *kargs)

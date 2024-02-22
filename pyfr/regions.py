@@ -71,7 +71,7 @@ class BaseRegion:
         # Group the remaining faces by element type
         nsfaces = defaultdict(list)
         for etype, eidx, fidx in sfaces:
-            nsfaces[etype].append((eidx, fidx))
+            nsfaces[etype, fidx].append(eidx)
 
         # Sort and return
         return {k: sorted(v) for k, v in nsfaces.items()}
@@ -150,6 +150,29 @@ class BoundaryRegion(BaseRegion):
 class BaseGeometricRegion(BaseRegion):
     name = None
 
+    def __init__(self, rot=None):
+        match rot:
+            case None:
+                self.rot = None
+            case [phi, theta, psi]:
+                phi, theta, psi = np.deg2rad([phi, theta, psi])
+
+                c, s = np.cos(phi), np.sin(phi)
+                Z = np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
+
+                c, s = np.cos(theta), np.sin(theta)
+                Y = np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]])
+
+                c, s = np.cos(psi), np.sin(psi)
+                X = np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
+
+                self.rot = Z @ Y @ X
+            case theta:
+                theta = np.deg2rad(theta)
+
+                c, s = np.cos(theta), np.sin(theta)
+                self.rot = np.array([[c, -s], [s, c]])
+
     def interior_eles(self, mesh, rallocs):
         eset = {}
 
@@ -165,17 +188,22 @@ class BaseGeometricRegion(BaseRegion):
         return eset
 
     def pts_in_region(self, pts):
-        pass
+        if self.rot is not None:
+            pts = np.einsum('ij,klj->kli', self.rot.T, pts)
+
+        return self._pts_in_region(pts)
 
 
 class BoxRegion(BaseGeometricRegion):
     name = 'box'
 
-    def __init__(self, x0, x1):
+    def __init__(self, x0, x1, rot=None):
+        super().__init__(rot=rot)
+
         self.x0 = x0
         self.x1 = x1
 
-    def pts_in_region(self, pts):
+    def _pts_in_region(self, pts):
         pts = np.moveaxis(pts, -1, 0)
 
         inside = np.ones(pts.shape[1:], dtype=bool)
@@ -188,7 +216,9 @@ class BoxRegion(BaseGeometricRegion):
 class ConicalFrustumRegion(BaseGeometricRegion):
     name = 'conical_frustum'
 
-    def __init__(self, x0, x1, r0, r1):
+    def __init__(self, x0, x1, r0, r1, rot=None):
+        super().__init__(rot=rot)
+
         self.x0 = x0 = np.array(x0)
         self.x1 = x1 = np.array(x1)
         self.r0 = r0
@@ -198,7 +228,7 @@ class ConicalFrustumRegion(BaseGeometricRegion):
         self.h = (x1 - x0) / np.linalg.norm(x1 - x0)
         self.h_mag = np.linalg.norm(x1 - x0)
 
-    def pts_in_region(self, pts):
+    def _pts_in_region(self, pts):
         r0, r1 = self.r0, self.r1
 
         # Project the points onto the centre line
@@ -217,33 +247,35 @@ class ConicalFrustumRegion(BaseGeometricRegion):
 class ConeRegion(ConicalFrustumRegion):
     name = 'cone'
 
-    def __init__(self, x0, x1, r):
-        super().__init__(x0, x1, r, 0)
+    def __init__(self, x0, x1, r, rot=None):
+        super().__init__(x0, x1, r, 0, rot=rot)
 
 
 class CylinderRegion(ConicalFrustumRegion):
     name = 'cylinder'
 
-    def __init__(self, x0, x1, r):
-        super().__init__(x0, x1, r, r)
+    def __init__(self, x0, x1, r, rot=None):
+        super().__init__(x0, x1, r, r, rot=rot)
 
 
 class EllipsoidRegion(BaseGeometricRegion):
     name = 'ellipsoid'
 
-    def __init__(self, x0, a, b, c):
+    def __init__(self, x0, a, b, c, rot=None):
+        super().__init__(rot=rot)
+
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])
 
-    def pts_in_region(self, pts):
+    def _pts_in_region(self, pts):
         return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1
 
 
 class SphereRegion(EllipsoidRegion):
     name = 'sphere'
 
-    def __init__(self, x0, r):
-        super().__init__(x0, r, r, r)
+    def __init__(self, x0, r, rot=None):
+        super().__init__(x0, r, r, r, rot=rot)
 
 
 class ConstructiveRegion(BaseGeometricRegion):
@@ -265,7 +297,15 @@ class ConstructiveRegion(BaseGeometricRegion):
         self.regions = regions = []
         for name, args in rexprs:
             cls = subclass_where(BaseGeometricRegion, name=name)
-            regions.append(cls(*literal_eval(args)))
+
+            # Handle special rotation arguments
+            args, hasrot = re.subn(r'rot\s*=\s*', '', args)
+
+            largs = literal_eval(args)
+            if hasrot:
+                regions.append(cls(*largs[:-1], rot=largs[-1]))
+            else:
+                regions.append(cls(*largs))
 
     def pts_in_region(self, pts):
         # Helper to translate + and - to their boolean algebra equivalents

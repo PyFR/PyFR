@@ -12,6 +12,10 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         elif self.grad_fusion:
             bufs |= {'grad_upts'}
 
+        if self.basis.fpts_in_upts:
+            bufs |= {'comm_fpts'}
+            bufs -= {'vect_fpts'}
+
         return bufs
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
@@ -19,7 +23,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         kernel, kernels = self._be.kernel, self.kernels
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
-        slicem = self._slice_mat
+        slicem, slicedk = self._slice_mat, self._make_sliced_kernel
 
         # Register our pointwise kernels
         self._be.pointwise.register(f'{kprefix}.gradcoru')
@@ -29,7 +33,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
             kernels['copy_fpts'] = lambda: kernel(
-                'copy', self._vect_fpts.slice(0, self.nfpts), self._scal_fpts
+                'copy', self._comm_fpts, self._scal_fpts
             )
 
         if self.basis.order > 0:
@@ -38,7 +42,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
                 out=self._grad_upts
             )
         kernels['tgradcoru_upts'] = lambda: kernel(
-            'mul', self.opmat('M6'), self._vect_fpts.slice(0, self.nfpts),
+            'mul', self.opmat('M6'), self._comm_fpts,
             out=self._grad_upts, beta=float(self.basis.order > 0)
         )
 
@@ -50,28 +54,27 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             'jac_exprs': self.basis.jac_exprs
         }
 
+        gradcoru_u = []
         if 'curved' in regions:
-            kernels['gradcoru_u_curved'] = lambda: kernel(
+            gradcoru_u.append(lambda: kernel(
                 'gradcoru', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nupts, regions['curved']],
                 gradu=slicem(self._grad_upts, 'curved'),
                 smats=self.curved_smat_at('upts'),
                 rcpdjac=self.rcpdjac_at('upts', 'curved')
-            )
-
+            ))
         if 'linear' in regions:
-            kernels['gradcoru_u_linear'] = lambda: kernel(
+            gradcoru_u.append(lambda: kernel(
                 'gradcoru', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nupts, regions['linear']],
                 gradu=slicem(self._grad_upts, 'linear'),
                 upts=self.upts, verts=self.ploc_at('linspts', 'linear')
-            )
+            ))
+
+        kernels['gradcoru_u'] = lambda: slicedk(k() for k in gradcoru_u)
 
         if not self.grad_fusion or self.basis.order == 0:
-            if 'linear' in regions:
-                kernels['gradcoru_upts_linear'] = kernels['gradcoru_u_linear']
-            if 'curved' in regions:
-                kernels['gradcoru_upts_curved'] = kernels['gradcoru_u_curved']
+            kernels['gradcoru_upts'] = kernels['gradcoru_u']
 
         def gradcoru_fpts():
             nupts, nfpts = self.nupts, self.nfpts
@@ -85,7 +88,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             return self._be.unordered_meta_kernel(muls)
 
-        kernels['gradcoru_fpts'] = gradcoru_fpts
+        if not self.basis.fpts_in_upts:
+            kernels['gradcoru_fpts'] = gradcoru_fpts
 
         if 'flux' in self.antialias and self.basis.order > 0:
             def gradcoru_qpts():

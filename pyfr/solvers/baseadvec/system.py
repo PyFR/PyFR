@@ -16,7 +16,7 @@ class BaseAdvectionSystem(BaseSystem):
         # Perform post-processing of the previous solution stage
         g1.add_all(k['eles/entropy_filter'])
 
-        # # Interpolate the solution to the flux points
+        # Interpolate the solution to the flux points
         for l in k['eles/disu']:
             g1.add(l, deps=deps(l, 'eles/entropy_filter'))
 
@@ -25,7 +25,7 @@ class BaseAdvectionSystem(BaseSystem):
         for send, pack in zip(m['scal_fpts_send'], k['mpiint/scal_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
 
-        # If entropy filtering, pack and send the entropy values to neighbors
+        # If entropy filtering, pack and send the entropy values to neighbours
         g1.add_all(k['mpiint/ent_fpts_pack'], deps=k['eles/entropy_filter'])
         for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])
@@ -49,14 +49,13 @@ class BaseAdvectionSystem(BaseSystem):
         g1.add_all(k['eles/qptsu'], deps=k['eles/entropy_filter'])
 
         # Compute the transformed flux
-        for l in k['eles/tdisf_curved'] + k['eles/tdisf_linear']:
+        for l in k['eles/tdisf']:
             ldeps = deps(l, 'eles/qptsu')
             g1.add(l, deps=ldeps + k['eles/entropy_filter'])
 
         # Compute the transformed divergence of the partially corrected flux
         for l in k['eles/tdivtpcorf']:
-            ldeps = deps(l, 'eles/tdisf_curved', 'eles/tdisf_linear',
-                         'eles/copy_soln', 'eles/disu')
+            ldeps = deps(l, 'eles/tdisf', 'eles/copy_soln', 'eles/disu')
             g1.add(l, deps=ldeps + k['mpiint/scal_fpts_pack'])
         g1.commit()
 
@@ -78,6 +77,7 @@ class BaseAdvectionSystem(BaseSystem):
         # Obtain the physical divergence of the corrected flux
         for l in k['eles/negdivconf']:
             g2.add(l, deps=deps(l, 'eles/tdivtconf'))
+
         g2.commit()
 
         return g1, g2
@@ -99,7 +99,7 @@ class BaseAdvectionSystem(BaseSystem):
         # Compute local minimum entropy within element
         g1.add_all(k['eles/local_entropy'])
 
-        # Pack and send the entropy values to neighbors
+        # Pack and send the entropy values to neighbours
         g1.add_all(k['mpiint/ent_fpts_pack'], deps=k['eles/local_entropy'])
         for send, pack in zip(m['ent_fpts_send'], k['mpiint/ent_fpts_pack']):
             g1.add_mpi_req(send, deps=[pack])

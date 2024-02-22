@@ -48,6 +48,26 @@ class BaseFluidElements:
         return [rho, *vs, p]
 
     @staticmethod
+    def diff_con_to_pri(cons, diff_cons, cfg):
+        rho, *rhouvw = cons[:-1]
+        diff_rho, *diff_rhouvw, diff_E = diff_cons
+
+        # Divide momentum components by ρ
+        uvw = [rhov / rho for rhov in rhouvw]
+
+        # Velocity gradients: ∂u⃗ = 1/ρ·[∂(ρu⃗) - u⃗·∂ρ]
+        diff_uvw = [(diff_rhov - v*diff_rho) / rho
+                    for diff_rhov, v in zip(diff_rhouvw, uvw)]
+
+        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) - ρu⃗·∂u⃗)]
+        gamma = cfg.getfloat('constants', 'gamma')
+        diff_p = diff_E - 0.5*(np.einsum('ijk,ijk->jk', uvw,  diff_rhouvw) +
+                               np.einsum('ijk,ijk->jk', rhouvw, diff_uvw))
+        diff_p *= gamma - 1
+
+        return [diff_rho, *diff_uvw, diff_p]
+
+    @staticmethod
     def validate_formulation(ctrl):
         shock_capturing = ctrl.cfg.get('solver', 'shock-capturing', 'none')
         if shock_capturing == 'entropy-filter':
@@ -157,33 +177,40 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         }
 
         # Helpers
+        tdisf = []
         c, l = 'curved', 'linear'
         r, s = self._mesh_regions, self._slice_mat
+        slicedk = self._make_sliced_kernel
 
         if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
+            tdisf.append(lambda uin: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nupts, r[c]], u=s(self.scal_upts[uin], c),
                 f=s(self._vect_upts, c), smats=self.curved_smat_at('upts')
-            )
+            ))
         elif c in r:
-            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
+            tdisf.append(lambda: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nqpts, r[c]], u=s(self._scal_qpts, c),
                 f=s(self._vect_qpts, c), smats=self.curved_smat_at('qpts')
-            )
+            ))
 
         if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
+            tdisf.append(lambda uin: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
                 f=s(self._vect_upts, l), verts=self.ploc_at('linspts', l),
                 upts=self.upts
-            )
+            ))
         elif l in r:
-            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
+            tdisf.append(lambda: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nqpts, r[l]], u=s(self._scal_qpts, l),
                 f=s(self._vect_qpts, l), verts=self.ploc_at('linspts', l),
                 upts=self.qpts
-            )
+            ))
+
+        if 'flux' not in self.antialias:
+            self.kernels['tdisf'] = lambda uin: slicedk(k(uin) for k in tdisf)
+        else:
+            self.kernels['tdisf'] = lambda: slicedk(k() for k in tdisf)
