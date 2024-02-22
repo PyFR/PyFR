@@ -12,6 +12,11 @@ Parameterises the HIP backend with
 
      ``standard`` | ``hip-aware``
 
+3. ``rocblas-nkerns`` --- maximum number of kernel algorithms to try, defaults
+   to 2048:
+
+     *int*
+
 Example::
 
     [backend-hip]
