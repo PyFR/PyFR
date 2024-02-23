@@ -64,3 +64,16 @@ Example::
 Note that setting ``nsteps`` to be too small can have a significant impact on
 performance as generating each image has overhead and may require some
 MPI communication to occur.
+
+This plugin also exposes functionality via a CLI. The following functions
+are available
+
+1. ``pyfr ascent render`` --- render an image from a pre-existing mesh and
+solution file. It must be run with the same number of ranks as partitions in
+the mesh. By default it will use settings from the ``[soln-plugin-ascent]``
+section of the settings file that it is passed. Alternatively, a specific
+section name can be provided. In both cases all other sections are ignored.
+
+   Example::
+
+    pyfr ascent render mesh.pyfrm solution.pyfrs settings.ini

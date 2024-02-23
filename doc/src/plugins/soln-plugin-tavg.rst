@@ -21,9 +21,11 @@ Time average quantities. Parameterised with
     ``continuous`` | ``windowed``
 
     In continuous mode each output file contains average data from
-    ``tstart`` until the current time. In windowed mode each output
-    file only contains average data for the most recent ``dt-out`` time
-    units. The default is ``windowed``.
+    ``tstart`` up until the time at which the file is written. In windowed 
+    mode each output file only contains average data for the preceding 
+    ``dt-out`` time units. The default is ``windowed``. Average data files
+    obtained using the windowed mode can be accumulated after-the-fact using
+    the CLI.
 
 5. ``std-mode`` --- standard deviation reporting mode:
 
