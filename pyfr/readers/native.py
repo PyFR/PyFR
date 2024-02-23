@@ -23,21 +23,15 @@ class NativeReader(Mapping):
 
     def __getitem__(self, aname):
         if isinstance(aname, str):
-            ret = self._file[aname]
+            ret = self._file[aname][()]
 
-            if ret.shape == ():
-                ret = ret[()]
-            else:
-                ret = np.array(ret)
+            if ret.dtype.kind == 'V':
+                ndtype = []
+                for k, v in ret.dtype.descr:
+                    v = v[0] if isinstance(v, tuple) else v
+                    ndtype.append((k, v.replace('S', 'U')))
 
-                # Handle strings in compound data types
-                if ret.dtype.kind == 'V':
-                    ndtype = []
-                    for k, v in ret.dtype.descr:
-                        v = v[0] if isinstance(v, tuple) else v
-                        ndtype.append((k, v.replace('S', 'U')))
-
-                    ret = ret.astype(ndtype)
+                ret = ret.astype(ndtype)
 
             return ret.decode() if isinstance(ret, bytes) else ret
         else:
