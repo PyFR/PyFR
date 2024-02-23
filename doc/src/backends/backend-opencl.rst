@@ -17,7 +17,17 @@ Parameterises the OpenCL backend with
     *int* | *string* | ``local-rank`` | ``uuid``
 
 4. ``gimmik-max-nnz`` --- cutoff for GiMMiK in terms of the number of
-   non-zero entires in a constant matrix:
+   non-zero entires in a constant matrix, defaults to 2048:
+
+    *int*
+
+5. ``gimmik-nkerns`` --- number of kernel algorithms to try when
+   benchmarking, defaults to 8:
+
+    *int*
+
+6. ``gimmik-nbench`` --- number of benchmarking runs for each
+   kernel, defaults to 5:
 
      *int*
 

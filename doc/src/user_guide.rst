@@ -111,6 +111,7 @@ then PyFR will fall back to built-in default settings.
    backends/backend.rst
    backends/backend-cuda.rst
    backends/backend-hip.rst
+   backends/backend-metal.rst
    backends/backend-opencl.rst
    backends/backend-openmp.rst
 
@@ -129,8 +130,8 @@ charateristics of the spatial and temporal schemes to be used.
    systems/solver-dual-time-integrator-multip.rst
    systems/solver-entropy-filter.rst
    systems/solver-artificial-viscosity.rst
-   systems/soln-filter.rst
    systems/solver-interfaces.rst
+   systems/soln-filter.rst
 
 Boundary and Initial Conditions
 -------------------------------

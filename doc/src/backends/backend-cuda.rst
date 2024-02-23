@@ -16,6 +16,21 @@ Parameterises the CUDA backend with
 
     *string*
 
+4. ``cublas-nkerns`` --- number of kernel algorithms to try when
+   benchmarking, defaults to 512:
+
+    *int*
+
+5. ``gimmik-nkerns`` --- number of kernel algorithms to try when
+   benchmarking, defaults to 8:
+
+    *int*
+
+6. ``gimmik-nbench`` --- number of benchmarking runs for each
+   kernel, defaults to 5:
+
+    *int*
+
 Example::
 
     [backend-cuda]

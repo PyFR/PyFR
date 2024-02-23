@@ -23,3 +23,7 @@ Example::
     [solver-dual-time-integrator-multip]
     pseudo-dt-fact = 2.3
     cycle = [(3, 0.1), (2, 0.1), (1, 0.2), (0, 1.4), (1, 1.1), (2, 1.1), (3, 4.5)]
+
+Used in the following Examples:
+
+1. :ref:`2D Incompressible Cylinder Flow`

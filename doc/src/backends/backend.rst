@@ -4,7 +4,8 @@
 
 Parameterises the backend with
 
-1. ``precision`` --- number precision:
+1. ``precision`` --- number precision, note not all backends support 
+   double precision:
 
     ``single`` | ``double``
 
