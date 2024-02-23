@@ -138,7 +138,19 @@ def ndrange(*args):
 
 
 def digest(*args, hash='sha256'):
-    return getattr(hashlib, hash)(pickle.dumps(args)).hexdigest()
+    class Hasher:
+        def __init__(self, hash):
+            self.h = getattr(hashlib, hash)()
+
+        def write(self, b):
+            self.h.update(b)
+
+        def __str__(self):
+            return self.h.hexdigest()
+
+    h = Hasher(hash)
+    pickle.dump(args, h)
+    return str(h)
 
 
 def rm(path):
