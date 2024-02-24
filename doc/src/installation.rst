@@ -194,3 +194,22 @@ directory which is on the library search path.  Alternatively, the
 paths can be specified explicitly by exporting the environment
 variables ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
 ``PYFR_SCOTCH_LIBRARY_PATH=/path/to/libscotch.so``.
+
+Ascent
+^^^^^^
+
+To run the :ref:`soln-plugin-ascent` plugin, MPI, VTK-m, and Conduit are required.
+VTK-m is a supplimentary VTK library, and Conduit is a library that implements
+the data classes used in Ascent. Detailed information on compilation and installation
+of `Conduit <https://llnl-conduit.readthedocs.io>`_ and `Ascent <https://ascent.readthedocs.io>`_ can
+be found in the respective documentation. Ascent must be version >=0.9.0.
+When compiling Ascent a renderer must be selected to be compiled, currently
+PyFR only supports the VTK-h option that comes with Ascent. The paths to the
+libraries may need to be set as an environment variable. For example, on linux
+you will need::
+
+    PYFR_CONDUIT_LIBRARY_PATH=/path/to/libconduit.so
+    PYFR_ASCENT_MPI_LIBRARY_PATH=/path/to/libascent_mpi.so
+
+Currently the plugin requires that Ascent and Conduit are 64-bit, this is
+default when compiling in most cases.
