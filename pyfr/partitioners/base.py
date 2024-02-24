@@ -6,6 +6,7 @@ from uuid import UUID
 import numpy as np
 
 from pyfr.inifile import Inifile
+from pyfr.nputil import iter_struct
 from pyfr.progress import NullProgressSequence
 from pyfr.util import digest
 
@@ -144,7 +145,7 @@ class BasePartitioner:
         etivmap = {k: v for v, k in enumerate(vetimap)}
 
         # Prepare the edges and their weights
-        etab = np.array([etivmap[r] for r in rhs.tolist()])
+        etab = np.array([etivmap[r] for r in iter_struct(rhs)])
         ewts = np.ones_like(etab)
 
         # Prepare the vertex weights
@@ -163,7 +164,7 @@ class BasePartitioner:
         # Extract the periodic connectivity from the mesh
         for f, v in mesh.items():
             if f[0] == 'con_p0' and f[1].startswith('periodic'):
-                for i, (l, r) in zip(v, con[:, v].T.tolist()):
+                for i, (l, r) in zip(v, iter_struct(con[:, v].T)):
                     pnames[i] = f[1]
                     if l != r:
                         if l in pmerge and r in pmerge:
@@ -186,7 +187,7 @@ class BasePartitioner:
             con = np.delete(con, list(pnames), axis=1)
 
             # Merge the associated elements
-            for i, (l, r) in enumerate(con.T.tolist()):
+            for i, (l, r) in enumerate(iter_struct(con.T)):
                 if l in pmerge:
                     con[0, i] = pmerge[l]
                 if r in pmerge:
@@ -223,7 +224,8 @@ class BasePartitioner:
         # Construct per-partition connectivity arrays and tag elements
         # which are on partition boundaries
         with p.start('Identify partition boundary elements'):
-            for l, r in zip(*mesh['con_p0'][['f0', 'f1']].tolist()):
+            lhs, rhs = mesh['con_p0'][['f0', 'f1']]
+            for l, r in zip(iter_struct(lhs), iter_struct(rhs)):
                 if vpartmap[l] == vpartmap[r]:
                     pscon[vpartmap[l]].append([l, r])
                 else:
@@ -315,7 +317,7 @@ class BasePartitioner:
             pcounter[etype, part] += 1
 
         # Generate the face connectivity
-        for i, (l, r) in enumerate(mesh['con_p0'].T.tolist()):
+        for i, (l, r) in enumerate(iter_struct(mesh['con_p0'].T)):
             letype, leidxg, lfidx, lflags = l
             retype, reidxg, rfidx, rflags = r
 
@@ -338,7 +340,7 @@ class BasePartitioner:
         # Generate boundary conditions
         for f in filter(lambda f: isinstance(f, str), mesh):
             if (m := re.match('bcon_(.+?)_p0$', f)):
-                for lpetype, leidxg, lfidx, lflags in mesh[f].tolist():
+                for lpetype, leidxg, lfidx, lflags in iter_struct(mesh[f]):
                     lpart, leidxl = eleglmap[lpetype, leidxg]
                     conl = (lpetype, leidxl, lfidx, lflags)
 

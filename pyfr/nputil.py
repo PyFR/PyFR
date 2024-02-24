@@ -101,6 +101,11 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
     return srtdidx
 
 
+def iter_struct(arr, n=1000, axis=0):
+    for c in np.array_split(arr, -(-arr.shape[axis] // n), axis=axis):
+        yield from c.tolist()
+
+
 _ctype_map = {
     np.int32: 'int', np.uint32: 'unsigned int',
     np.int64: 'int64_t', np.uint64: 'uint64_t',
