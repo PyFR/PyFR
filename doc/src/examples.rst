@@ -95,6 +95,53 @@ simulation on a mixed unstructured mesh:
 
    Colour map of steady-state density distribution.
 
+3D Triangular Aerofoil
+----------------------
+
+Proceed with the following steps to run a serial 3D triangular aerofoil
+simulation with inflow turbulence:
+
+1. Navigate to the ``PyFR-Test-Cases/3d-triangular-aerofoil`` directory::
+
+        cd PyFR-Test-Cases/3d-triangular-aerofoil
+
+2. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file file and run pyfr to covert it into a PyFR mesh file called
+   ``triangular-aerofoil.pyfrm``::
+
+        unxz triangular-aerofoil.msh.xz
+        pyfr import triangular-aerofoil.msh triangular-aerofoil.pyfrm
+
+3. Run pyfr to solve the Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``triangular-aerofoil-*.pyfrs``::
+
+        pyfr -p run -b cuda triangular-aerofoil.pyfrm triangular-aerofoil.ini
+
+4. Run pyfr on the solution file ``triangular-aerofoil-5.00.pyfrs``
+   converting it into an unstructured VTK file called
+   ``triangular-aerofoil-5.00.vtu``::
+
+        pyfr export triangular-aerofoil.pyfrm triangular-aerofoil-5.00.pyfrs triangular-aerofoil-5.00.vtu
+
+5. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/3d-triangular-aerofoil/3d-triangular-aerofoil.jpg
+   :width: 450px
+   :figwidth: 450px
+   :alt: triangular
+   :align: center
+
+   Colour map of velocity magnitude distribution at 5 time units.
+
+6. If you have installed :ref:`Ascent` you can run the same case with the
+   :ref:`soln-plugin-ascent` plugin activated, which will produce a series
+   of .png images that can then be merged into an animation using a utility
+   such as ffmpeg::
+
+        pyfr -p run -b cuda triangular-aerofoil.pyfrm triangular-aerofoil-ascent.ini
+
 Incompressible Navier--Stokes Equations
 =======================================
 
@@ -149,8 +196,9 @@ simulation on a structured mesh:
 
         cd PyFR-Test-Cases/2d-double-mach-reflection
 
-2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``double-mach-reflection.pyfrm``::
+2. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file file and run pyfr to covert it into a PyFR mesh file
+   called ``double-mach-reflection.pyfrm``::
 
         unxz double-mach-reflection.msh.xz
         pyfr import double-mach-reflection.msh double-mach-reflection.pyfrm
@@ -191,8 +239,9 @@ simulation on a structured mesh:
 
         cd PyFR-Test-Cases/2d-viscous-shock-tube
 
-2. Unzip the file and run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``viscous-shock-tube.pyfrm``::
+2. Unzip the the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file and run pyfr to covert it into a PyFR mesh file
+   called ``viscous-shock-tube.pyfrm``::
 
         unxz viscous-shock-tube.msh.xz
         pyfr import viscous-shock-tube.msh viscous-shock-tube.pyfrm
