@@ -70,9 +70,9 @@ are available
 
 1. ``pyfr ascent render`` --- render an image from a pre-existing mesh and
 solution file. It must be run with the same number of ranks as partitions in
-the mesh. By default it will use settings from the ``[soln-plugin-ascent]``
-section of the settings file that it is passed. Alternatively, a specific
-section name can be provided. In both cases all other sections are ignored.
+the mesh. By default it will use settings from the first section of the settings
+file that it is passed. Alternatively, a specific section name can be
+provided. In both cases all other sections are ignored.
 
    Example::
 
