@@ -25,7 +25,7 @@ class NativeReader(Mapping):
         if isinstance(aname, str):
             ret = self._file[aname][()]
 
-            if ret.dtype.kind == 'V':
+            if hasattr(ret, 'dtype') and ret.dtype.kind == 'V':
                 ndtype = []
                 for k, v in ret.dtype.descr:
                     v = v[0] if isinstance(v, tuple) else v
