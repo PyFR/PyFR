@@ -53,9 +53,8 @@ class BaseElements:
         # If we need quadrature points or not
         haveqpts = 'flux' in self.antialias
 
-        # If we are doing gradient fusion
-        self.grad_fusion = (cfg.getbool('solver', 'grad-fusion', True) and
-                            not haveqpts)
+        # Always do gradient fusion if flux anti-aliasing is off
+        self.grad_fusion = not haveqpts
 
         # Sizes
         self.nupts = basis.nupts
