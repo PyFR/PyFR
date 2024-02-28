@@ -422,7 +422,7 @@ class BasePartitioner:
                     emap[k] = eleglmap[etype, eidx]
 
         # Generate a new UUID for the mesh
-        newuuid = np.array(str(UUID(digest(mesh)[:32])), dtype='S')
+        newuuid = np.array(UUID(digest(mesh)[:32]), dtype='S')
         newmesh['mesh_uuid'] = newuuid
 
         # Build the solution converter
