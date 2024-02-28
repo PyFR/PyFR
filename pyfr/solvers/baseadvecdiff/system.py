@@ -1,3 +1,5 @@
+from itertools import zip_longest
+
 from pyfr.solvers.baseadvec import BaseAdvectionSystem
 from pyfr.util import memoize
 
@@ -137,6 +139,11 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         # Obtain the physical divergence of the corrected flux
         for l in k['eles/negdivconf']:
             g3.add(l, deps=deps(l, 'eles/tdivtconf'))
+
+        # Group tdivtconf and negdivconf kernels
+        for k1, k2 in zip_longest(k['eles/tdivtconf'], k['eles/negdivconf']):
+            self._group(g3, [k1, k2])
+
         g3.commit()
 
         return g1, g2, g3
