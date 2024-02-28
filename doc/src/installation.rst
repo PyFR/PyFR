@@ -23,34 +23,29 @@ below to setup the OpenMP backend on macOS:
 
         brew install mpi4py
 
-2. Install METIS and set the library path::
-
-        brew install metis
-        export PYFR_METIS_LIBRARY_PATH=/opt/homebrew/lib/libmetis.dylib
-
-3. Download and install libxsmm and set the library path::
+2. Download and install libxsmm and set the library path::
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
 
-4. Make a venv and activate it::
+3. Make a venv and activate it::
 
         python3.10 -m venv pyfr-venv
         source pyfr-venv/bin/activate
 
-5. Install PyFR::
+4. Install PyFR::
 
         pip install pyfr
 
-6. Add the following to your :ref:`configuration-file`::
+5. Add the following to your :ref:`configuration-file`::
 
         [backend-openmp]
-        cc = gcc-12
+        cc = gcc-13
 
 Note the version of the compiler which must support the ``openmp``
-flag. This has been tested on macOS 12.5 with an Apple M1 Max.
+flag. This has been tested on macOS 13.6.2 with an Apple M1 Max.
 
 Ubuntu
 ------
@@ -62,27 +57,23 @@ Follow the steps below to setup the OpenMP backend on Ubuntu:
         sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
         pip3 install virtualenv
 
-2. Install METIS::
-
-        sudo apt install metis libmetis-dev
-
-3. Download and install libxsmm and set the library path::
+2. Download and install libxsmm and set the library path::
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
 
-4. Make a virtualenv and activate it::
+3. Make a virtualenv and activate it::
 
         python3 -m virtualenv pyfr-venv
         source pyfr-venv/bin/activate
 
-5. Install PyFR::
+4. Install PyFR::
 
         pip install pyfr
 
-This has been tested on Ubuntu 20.04.
+This has been tested on Ubuntu 22.04.
 
 .. _compile-from-source:
 
@@ -191,8 +182,8 @@ have one of the following partitioners installed:
 
 In order for PyFR to find these libraries they must be located in a
 directory which is on the library search path.  Alternatively, the
-paths can be specified explicitly by exporting the environment
-variables ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
+paths can be specified explicitly by exporting environment
+variables e.g. ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
 ``PYFR_SCOTCH_LIBRARY_PATH=/path/to/libscotch.so``.
 
 Ascent
