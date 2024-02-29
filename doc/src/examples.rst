@@ -142,6 +142,52 @@ simulation with inflow turbulence:
 
         pyfr -p run -b cuda triangular-aerofoil.pyfrm triangular-aerofoil-ascent.ini
 
+3D Taylor-Green
+---------------
+
+Proceed with the following steps to run a serial 3D Taylor-Green simulation:
+
+1. Navigate to the ``PyFR-Test-Cases/3d-taylor-green`` directory::
+
+        cd PyFR-Test-Cases/3d-taylor-green
+
+2. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file file and run pyfr to covert it into a PyFR mesh file called
+   ``taylor-green.pyfrm``::
+
+        unxz taylor-green.msh.xz
+        pyfr import taylor-green.msh taylor-green.pyfrm
+
+3. Run pyfr to solve the Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``taylor-green-*.pyfrs``::
+
+        pyfr -p run -b cuda taylor-green.pyfrm taylor-green.ini
+
+4. Run pyfr on the solution file ``taylor-green-10.00.pyfrs``
+   converting it into an unstructured VTK file called
+   ``taylor-green-10.00.vtu``::
+
+        pyfr export taylor-green.pyfrm taylor-green-10.00.pyfrs taylor-green-10.00.vtu
+
+5. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/3d-taylor-green/3d-taylor-green.jpg
+   :width: 450px
+   :figwidth: 450px
+   :alt: triangular
+   :align: center
+
+   Colour map of velocity magnitude distribution at 10 time units.
+
+6. If you have installed :ref:`Ascent` you can run the same case with the
+   :ref:`soln-plugin-ascent` plugin activated, which will produce a series
+   of .png images that can then be merged into an animation using a utility
+   such as ffmpeg::
+
+        pyfr -p run -b cuda taylor-green.pyfrm taylor-green-ascent.ini
+
 Incompressible Navier--Stokes Equations
 =======================================
 
