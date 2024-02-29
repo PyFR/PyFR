@@ -326,6 +326,13 @@ class BaseSystem:
     def get_ele_entmin_int(self):
         return [e.get() for e in self.eles_entmin_int]
 
+    def _group(self, g, kerns, subs=[]):
+        # Eliminate non-existing kernels
+        kerns = [k for k in kerns if k is not None]
+        subs = [sub for sub in subs if None not in it.chain(*sub)]
+
+        g.group(kerns, subs)
+
     def set_ele_entmin_int(self, entmin_int):
         for e, em in zip(self.eles_entmin_int, entmin_int):
             e.set(em)

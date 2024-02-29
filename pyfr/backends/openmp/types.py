@@ -76,15 +76,7 @@ class OpenMPGraph(base.Graph):
         return kranges
 
     def _get_nblocks(self, idxs):
-        nblocks = None
-        for i in idxs:
-            n = self.klist[i].runargs.b.nblocks
-            if nblocks is None:
-                nblocks = n
-            elif n != nblocks:
-                raise RuntimeError('Incompatible block sizes')
-
-        return nblocks
+        return max(self.klist[i].runargs.b.nblocks for i in idxs)
 
     def _make_runlist(self, start, stop):
         rlist = []
@@ -118,11 +110,11 @@ class OpenMPGraph(base.Graph):
 
             # Handle compound (split) kernels
             if k.compound:
-                splits.update(k.splits)
                 ksplits = [0] + [s // blocksz for s in k.splits] + [nblocks]
+                splits.update(ksplits[1:-1])
 
                 for i, (j, ra) in enumerate(runargs.items()):
-                    gkerns[j] = (*ksplits[i:i + 1], ra.kernels[0])
+                    gkerns[j] = (*ksplits[i:i + 2], ra.kernels[0])
             else:
                 for i, (j, ra) in enumerate(runargs.items()):
                     gkerns[j] = (0, ra.nblocks, ra.kernels[0])
