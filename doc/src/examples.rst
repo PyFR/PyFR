@@ -7,7 +7,7 @@ Examples
 Test cases are available in the
 `PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>`_ 
 repository. It is important to note, however, that these examples 
-are all relatively small 2D simulations and, as such, are *not* 
+are all relatively small 2D/3D simulations and, as such, are *not* 
 suitable for scalability or performance studies.
 
 Euler Equations
@@ -54,8 +54,48 @@ simulation on a structured mesh:
 
    Colour map of density distribution at 100 time units.
 
-Compressible Navier--Stokes Equations
-=====================================
+2D Double Mach Reflection
+-------------------------
+
+Proceed with the following steps to run a serial 2D double Mach reflection
+simulation on a structured mesh:
+
+1. Navigate to the ``PyFR-Test-Cases/2d-double-mach-reflection`` directory::
+
+        cd PyFR-Test-Cases/2d-double-mach-reflection
+
+2. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file file and run pyfr to covert it into a PyFR mesh file
+   called ``double-mach-reflection.pyfrm``::
+
+        unxz double-mach-reflection.msh.xz
+        pyfr import double-mach-reflection.msh double-mach-reflection.pyfrm
+
+3. Run pyfr to solve the compressible Euler equations on the mesh,
+   generating a series of PyFR solution files called
+   ``double-mach-reflection-*.pyfrs``::
+
+        pyfr -p run -b cuda double-mach-reflection.pyfrm double-mach-reflection.ini
+
+4. Run pyfr on the solution file ``double-mach-reflection-0.20.pyfrs``
+   converting it into an unstructured VTK file called
+   ``double-mach-reflection-0.20.vtu``::
+
+        pyfr export double-mach-reflection.pyfrm double-mach-reflection-0.20.pyfrs double-mach-reflection-0.20.vtu
+
+5. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/2d-double-mach-reflection/2d-double-mach-reflection.jpg
+   :width: 450px
+   :figwidth: 450px
+   :alt: double mach
+   :align: center
+
+   Colour map of density distribution at 0.2 time units.
+
+Navier--Stokes Equations
+========================
 
 2D Couette Flow
 ---------------
@@ -94,6 +134,84 @@ simulation on a mixed unstructured mesh:
    :align: center
 
    Colour map of steady-state density distribution.
+
+2D Incompressible Cylinder Flow
+-------------------------------
+
+Proceed with the following steps to run a serial 2D incompressible cylinder
+flow simulation on a mixed unstructured mesh:
+
+1. Navigate to the ``PyFR-Test-Cases/2d-inc-cylinder`` directory::
+
+        cd PyFR-Test-Cases/2d-inc-cylinder
+        
+2. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file into a PyFR mesh file called ``inc-cylinder.pyfrm``::
+
+        pyfr import inc-cylinder.msh inc-cylinder.pyfrm
+
+3. Run pyfr to solve the incompressible Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``inc-cylinder-*.pyfrs``::
+
+        pyfr -p run -b cuda inc-cylinder.pyfrm inc-cylinder.ini
+
+4. Run pyfr on the solution file ``inc-cylinder-75.00.pyfrs``
+   converting it into an unstructured VTK file called
+   ``inc-cylinder-75.00.vtu``::
+
+        pyfr export inc-cylinder.pyfrm inc-cylinder-75.00.pyfrs inc-cylinder-75.00.vtu
+
+5. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/2d-inc-cylinder/2d-inc-cylinder.png
+   :width: 450px
+   :figwidth: 450px
+   :alt: cylinder
+   :align: center
+
+   Colour map of velocity magnitude distribution at 75 time units.
+
+2D Viscous Shock Tube
+---------------------
+
+Proceed with the following steps to run a serial 2D viscous shock tube
+simulation on a structured mesh:
+
+1. Navigate to the ``PyFR-Test-Cases/2d-viscous-shock-tube`` directory::
+
+        cd PyFR-Test-Cases/2d-viscous-shock-tube
+
+2. Unzip the the `Gmsh <http:http://geuz.org/gmsh/>`_
+   mesh file and run pyfr to covert it into a PyFR mesh file
+   called ``viscous-shock-tube.pyfrm``::
+
+        unxz viscous-shock-tube.msh.xz
+        pyfr import viscous-shock-tube.msh viscous-shock-tube.pyfrm
+
+3. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
+   generating a series of PyFR solution files called
+   ``viscous-shock-tube-*.pyfrs``::
+
+        pyfr -p run -b cuda viscous-shock-tube.pyfrm viscous-shock-tube.ini
+
+4. Run pyfr on the solution file ``viscous-shock-tube-1.00.pyfrs``
+   converting it into an unstructured VTK file called
+   ``viscous-shock-tube-1.00.vtu``::
+
+        pyfr export viscous-shock-tube.pyfrm viscous-shock-tube-1.00.pyfrs viscous-shock-tube-1.00.vtu
+
+5. Visualise the unstructured VTK file in `Paraview
+   <http://www.paraview.org/>`_
+
+.. figure:: ../fig/2d-viscous-shock-tube/2d-viscous-shock-tube.jpg
+   :width: 450px
+   :figwidth: 450px
+   :alt: shock tube
+   :align: center
+
+   Colour map of density distribution at 1 time unit.
 
 3D Triangular Aerofoil
 ----------------------
@@ -142,129 +260,48 @@ simulation with inflow turbulence:
 
         pyfr -p run -b cuda triangular-aerofoil.pyfrm triangular-aerofoil-ascent.ini
 
-Incompressible Navier--Stokes Equations
-=======================================
+3D Taylor-Green
+---------------
 
-2D Incompressible Cylinder Flow
--------------------------------
+Proceed with the following steps to run a serial 3D Taylor-Green simulation:
 
-Proceed with the following steps to run a serial 2D incompressible cylinder
-flow simulation on a mixed unstructured mesh:
+1. Navigate to the ``PyFR-Test-Cases/3d-taylor-green`` directory::
 
-1. Navigate to the ``PyFR-Test-Cases/2d-inc-cylinder`` directory::
-
-        cd PyFR-Test-Cases/2d-inc-cylinder
-        
-2. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file into a PyFR mesh file called ``inc-cylinder.pyfrm``::
-
-        pyfr import inc-cylinder.msh inc-cylinder.pyfrm
-
-3. Run pyfr to solve the incompressible Navier-Stokes equations on the mesh,
-   generating a series of PyFR solution files called
-   ``inc-cylinder-*.pyfrs``::
-
-        pyfr -p run -b cuda inc-cylinder.pyfrm inc-cylinder.ini
-
-4. Run pyfr on the solution file ``inc-cylinder-75.00.pyfrs``
-   converting it into an unstructured VTK file called
-   ``inc-cylinder-75.00.vtu``::
-
-        pyfr export inc-cylinder.pyfrm inc-cylinder-75.00.pyfrs inc-cylinder-75.00.vtu
-
-5. Visualise the unstructured VTK file in `Paraview
-   <http://www.paraview.org/>`_
-
-.. figure:: ../fig/2d-inc-cylinder/2d-inc-cylinder.png
-   :width: 450px
-   :figwidth: 450px
-   :alt: cylinder
-   :align: center
-
-   Colour map of velocity magnitude distribution at 75 time units.
-
-Compressible Supersonic Euler Equations
-=======================================
-
-2D Double Mach Reflection
--------------------------
-
-Proceed with the following steps to run a serial 2D double Mach reflection
-simulation on a structured mesh:
-
-1. Navigate to the ``PyFR-Test-Cases/2d-double-mach-reflection`` directory::
-
-        cd PyFR-Test-Cases/2d-double-mach-reflection
+        cd PyFR-Test-Cases/3d-taylor-green
 
 2. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file file and run pyfr to covert it into a PyFR mesh file
-   called ``double-mach-reflection.pyfrm``::
+   mesh file file and run pyfr to covert it into a PyFR mesh file called
+   ``taylor-green.pyfrm``::
 
-        unxz double-mach-reflection.msh.xz
-        pyfr import double-mach-reflection.msh double-mach-reflection.pyfrm
+        unxz taylor-green.msh.xz
+        pyfr import taylor-green.msh taylor-green.pyfrm
 
-3. Run pyfr to solve the compressible Euler equations on the mesh,
+3. Run pyfr to solve the Navier-Stokes equations on the mesh,
    generating a series of PyFR solution files called
-   ``double-mach-reflection-*.pyfrs``::
+   ``taylor-green-*.pyfrs``::
 
-        pyfr -p run -b cuda double-mach-reflection.pyfrm double-mach-reflection.ini
+        pyfr -p run -b cuda taylor-green.pyfrm taylor-green.ini
 
-4. Run pyfr on the solution file ``double-mach-reflection-0.20.pyfrs``
+4. Run pyfr on the solution file ``taylor-green-5.00.pyfrs``
    converting it into an unstructured VTK file called
-   ``double-mach-reflection-0.20.vtu``::
+   ``taylor-green-5.00.vtu``::
 
-        pyfr export double-mach-reflection.pyfrm double-mach-reflection-0.20.pyfrs double-mach-reflection-0.20.vtu
+        pyfr export taylor-green.pyfrm taylor-green-5.00.pyfrs taylor-green-5.00.vtu
 
 5. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
 
-.. figure:: ../fig/2d-double-mach-reflection/2d-double-mach-reflection.jpg
+.. figure:: ../fig/3d-taylor-green/3d-taylor-green.jpg
    :width: 450px
    :figwidth: 450px
-   :alt: double mach
+   :alt: triangular
    :align: center
 
-   Colour map of density distribution at 0.2 time units.
+   Colour map of velocity magnitude distribution at 5 time units.
 
-Compressible Supersonic Navier--Stokes Equations
-================================================
+6. If you have installed :ref:`Ascent` you can run the same case with the
+   :ref:`soln-plugin-ascent` plugin activated, which will produce a series
+   of .png images that can then be merged into an animation using a utility
+   such as ffmpeg::
 
-2D Viscous Shock Tube
----------------------
-
-Proceed with the following steps to run a serial 2D viscous shock tube
-simulation on a structured mesh:
-
-1. Navigate to the ``PyFR-Test-Cases/2d-viscous-shock-tube`` directory::
-
-        cd PyFR-Test-Cases/2d-viscous-shock-tube
-
-2. Unzip the the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file and run pyfr to covert it into a PyFR mesh file
-   called ``viscous-shock-tube.pyfrm``::
-
-        unxz viscous-shock-tube.msh.xz
-        pyfr import viscous-shock-tube.msh viscous-shock-tube.pyfrm
-
-3. Run pyfr to solve the compressible Navier-Stokes equations on the mesh,
-   generating a series of PyFR solution files called
-   ``viscous-shock-tube-*.pyfrs``::
-
-        pyfr -p run -b cuda viscous-shock-tube.pyfrm viscous-shock-tube.ini
-
-4. Run pyfr on the solution file ``viscous-shock-tube-1.00.pyfrs``
-   converting it into an unstructured VTK file called
-   ``viscous-shock-tube-1.00.vtu``::
-
-        pyfr export viscous-shock-tube.pyfrm viscous-shock-tube-1.00.pyfrs viscous-shock-tube-1.00.vtu
-
-5. Visualise the unstructured VTK file in `Paraview
-   <http://www.paraview.org/>`_
-
-.. figure:: ../fig/2d-viscous-shock-tube/2d-viscous-shock-tube.jpg
-   :width: 450px
-   :figwidth: 450px
-   :alt: shock tube
-   :align: center
-
-   Colour map of density distribution at 1 time unit.
+        pyfr -p run -b cuda taylor-green.pyfrm taylor-green-ascent.ini
