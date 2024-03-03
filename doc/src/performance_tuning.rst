@@ -55,6 +55,16 @@ two MPI ranks, with each process being bound to a single socket.  The
 specifics of how to accomplish this depend on both the job scheduler
 and MPI distribution.
 
+Asynchronous MPI progression
+----------------------------
+
+The parallel scalability of the OpenMP backend depends *heavily* on
+MPI having support for asynchronous progression; that is to say the
+ability for non-blocking send and receive requests to complete
+*without* the need for the host application to make explicit calls into
+MPI routines.  A lack of support for asynchronous progression prevents
+PyFR from being able to overlap computation with communication.
+
 .. _perf cuda backend:
 
 CUDA Backend
@@ -103,6 +113,8 @@ for long running simulations on complex geometries it may be worth
 partitioning a grid with both and observing which decomposition
 performs best.
 
+.. _perf mixed grids:
+
 Mixed grids
 -----------
 
@@ -117,11 +129,27 @@ considering mixed grids this relationship begins to break down since the
 computational cost of one element type can be appreciably more than that
 of another.
 
-Thus in order to obtain a good decomposition it is necessary to assign
-a weight to each type of element in the domain.  Element types which
-are more computationally intensive should be assigned a larger weight
-than those that are less intensive.  Unfortunately, the relative cost
-of different element types depends on a variety of factors, including:
+There are two main solutions to this problem.  The first is to require
+that each partition contain the same number of elements of each type.
+For example, if partitioning a mesh with 500 quadrilaterals and
+1,500 triangles into two parts, then a sensible goal is to aim for
+each domain to have 250 quadrilaterals and 750 triangles.  Irrespective
+of what the relative performance differential between the element types
+is, both partitions will have near identical amounts of work.  In PyFR
+this is known as the *balanced* approach and can be requested via::
+
+    pyfr partition -e balanced ...
+
+This approach typically works well when the number of partitions is
+small.  However, for larger partition counts it can become difficult to
+achieve such a balance whilst simultaneously minimising communication
+volume.  Thus, in order to obtain a good decomposition a secondary
+approach is required in which each type of element in the domain is
+assigned a *weight*.  Element types which are more computationally
+intensive are assigned a larger weight than those that are less
+intensive.  Through this mechanism the total cost of each partition can
+remain balanced.  Unfortunately, the relative cost of different element
+types depends on a variety of factors, including:
 
  - The polynomial order.
  - If anti-aliasing is enabled in the simulation, and if so, to what
@@ -212,27 +240,29 @@ Plugins
 =======
 
 A common source of performance issues is running plugins too
-frequently.  Given the time steps taken by PyFR are typically much
-smaller than those associated with the underlying physics there is
-seldom any benefit to running integration and/or time average
-accumulation plugins more frequently than once every 50 steps.
-Further, when running with adaptive time stepping there is no need
-to run the NaN check plugin.  For simulations with fixed time steps,
-it is not recommended to run the NaN check plugin more frequently than
-once every 10 steps.
+frequently.  PyFR records the amount of time spent in plugins in the
+``[solver-time-integrator]`` section of the ``/stats`` object which is
+included in all PyFR solution files.  This can be extracted as::
+
+    h5dump -d /stats -b --output=stats.ini soln.pyfrs
+
+Given the time steps taken by PyFR are typically much smaller than
+those associated with the underlying physics there is seldom any
+benefit to running integration and/or time average accumulation plugins
+more frequently than once every 50 steps.  Further, when running with
+adaptive time stepping there is no need to run the NaN check plugin.
+For simulations with fixed time steps, it is not recommended to run the
+NaN check plugin more frequently than once every 10 steps.
 
 Start-up Time
 =============
 
 The start-up time required by PyFR can be reduced by ensuring that
 Python is compiled from source with profile guided optimisations (PGO)
-which can be enabled by passing ``--enable-optimizations`` to the
-``configure`` script.
+which can be enabled by passing ``--enable-optimizations --with-lto``
+to the ``configure`` script.
 
 It is also important that NumPy be configured to use an optimised
 BLAS/LAPACK distribution.  Further details can be found in the
 `NumPy building from source <https://numpy.org/devdocs/user/building.html>`_
 guide.
-
-If the point sampler plugin is being employed with a large number of
-sample points it is further recommended to install SciPy.

@@ -1,25 +1,15 @@
-# -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 
-<%pyfr:macro name='rsolve' params='ul, ur, n, nf'>
+<%pyfr:macro name='rsolve_1d' params='ul, ur, nf'>
     // Compute the left and right fluxes + velocities and pressures
-    fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
+    fpdtype_t fl[${nvars}], fr[${nvars}];
     fpdtype_t vl[${ndims}], vr[${ndims}];
-    fpdtype_t pl, pr;
-    fpdtype_t nf_fl, nf_fr, nf_flstar, nf_frstar, d_star;
-    fpdtype_t rcp_lstar, rcp_rstar;
+    fpdtype_t pl, pr, fsl, fsr;
+    fpdtype_t usl[${nvars}], usr[${nvars}];
 
-    ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
-    ${pyfr.expand('inviscid_flux', 'ur', 'fr', 'pr', 'vr')};
-
-    // Get the normal left and right velocities
-    fpdtype_t nvl = ${pyfr.dot('n[{i}]', 'vl[{i}]', i=ndims)};
-    fpdtype_t nvr = ${pyfr.dot('n[{i}]', 'vr[{i}]', i=ndims)};
-
-    // Compute the Roe-averaged velocity
-    fpdtype_t nv = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)
-                 / (sqrt(ul[0]) + sqrt(ur[0]));
+    ${pyfr.expand('inviscid_flux_1d', 'ul', 'fl', 'pl', 'vl')};
+    ${pyfr.expand('inviscid_flux_1d', 'ur', 'fr', 'pr', 'vr')};
 
     // Compute the Roe-averaged enthalpy
     fpdtype_t H = (sqrt(ul[0])*(pr + ur[${ndims + 1}])
@@ -27,35 +17,46 @@
                 / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
 
     // Roe average sound speed
-    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*nv*nv));
+    fpdtype_t u = (sqrt(ul[0])*vl[0] + sqrt(ur[0])*vr[0]) /
+                  (sqrt(ul[0]) + sqrt(ur[0]));
+    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*u*u));
 
     // Estimate the left and right wave speed, sl and sr
-    fpdtype_t sl = nv - a;
-    fpdtype_t sr = nv + a;
-    fpdtype_t s_star = (pr - pl + ul[0]*nvl*(sl - nvl) -
-                        ur[0]*nvr*(sr - nvr)) /
-                       (ul[0]*(sl - nvl) - ur[0]*(sr - nvr));
+    fpdtype_t sl = u - a;
+    fpdtype_t sr = u + a;
+    fpdtype_t sstar = (pr - pl + ul[0]*vl[0]*(sl - vl[0])
+                               - ur[0]*vr[0]*(sr - vr[0])) /
+                      (ul[0]*(sl - vl[0]) - ur[0]*(sr - vr[0]));
+
+    // Star state common factors
+    fpdtype_t ul_com = (sl - vl[0]) / (sl - sstar);
+    fpdtype_t ur_com = (sr - vr[0]) / (sr - sstar);
+
+    // Star state mass
+    usl[0] = ul_com*ul[0];
+    usr[0] = ur_com*ur[0];
+
+    // Star state momenetum
+    usl[1] = ul_com*ul[0]*sstar;
+    usr[1] = ur_com*ur[0]*sstar;
+% for i in range(2, ndims + 1):
+    usl[${i}] = ul_com*ul[${i}];
+    usr[${i}] = ur_com*ur[${i}];
+% endfor
+
+    // Star state energy
+    usl[${nvars - 1}] = ul_com*(ul[${nvars - 1}] + (sstar - vl[0])*
+                                (ul[0]*sstar + pl/(sl - vl[0])));
+    usr[${nvars - 1}] = ur_com*(ur[${nvars - 1}] + (sstar - vr[0])*
+                                (ur[0]*sstar + pr/(sr - vr[0])));
 
     // Output
-    rcp_lstar = 1 / (sl - s_star);
-    rcp_rstar = 1 / (sr - s_star);
 % for i in range(nvars):
-    nf_fl = ${' + '.join(f'n[{j}]*fl[{j}][{i}]' for j in range(ndims))};
-    nf_fr = ${' + '.join(f'n[{j}]*fr[{j}][{i}]' for j in range(ndims))};
-% if i == 0:
-    nf_flstar = s_star*(sl*ul[${i}] - nf_fl) * rcp_lstar;
-    nf_frstar = s_star*(sr*ur[${i}] - nf_fr) * rcp_rstar;
-% else:
-    d_star = ${'s_star' if i == nvars - 1 else f'n[{i - 1}]'};
-    nf_flstar = (s_star*(sl*ul[${i}] - nf_fl) +
-                 sl*(pl + ul[0]*(sl - nvl)*(s_star - nvl))*d_star) *
-                rcp_lstar;
-    nf_frstar = (s_star*(sr*ur[${i}] - nf_fr) +
-                 sr*(pr + ur[0]*(sr - nvr)*(s_star - nvr))*d_star) *
-                rcp_rstar;
-% endif
-
-    nf[${i}] = (sl >= 0) ? nf_fl : (sl <= 0 && s_star >= 0) ? nf_flstar :
-               (s_star <= 0 && sr >= 0) ? nf_frstar : nf_fr;
+    fsl = fl[${i}] + sl*(usl[${i}] - ul[${i}]);
+    fsr = fr[${i}] + sr*(usr[${i}] - ur[${i}]);
+    nf[${i}] = (0 <= sl) ? fl[${i}] : (sl <= 0 && 0 <= sstar) ? fsl :
+               (sstar <= 0 && 0 <= sr) ? fsr : fr[${i}];
 % endfor
 </%pyfr:macro>
+
+<%include file='pyfr.solvers.euler.kernels.rsolvers.rsolve1d'/>

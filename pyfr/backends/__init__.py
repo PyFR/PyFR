@@ -1,8 +1,7 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.backends.base import BaseBackend
 from pyfr.backends.cuda import CUDABackend
 from pyfr.backends.hip import HIPBackend
+from pyfr.backends.metal import MetalBackend
 from pyfr.backends.opencl import OpenCLBackend
 from pyfr.backends.openmp import OpenMPBackend
 from pyfr.util import subclass_where

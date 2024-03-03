@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
@@ -8,6 +6,7 @@ from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 class OpenCLPackingKernels(OpenCLKernelProvider):
     def pack(self, mv):
         cl = self.backend.cl
+        ixdtype = self.backend.ixdtype
 
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -16,7 +15,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
+        kern = self._build_kernel('pack_view', src, [ixdtype]*3 + [np.uintp]*4)
         kern.set_dims((v.n,))
         kern.set_args(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
                       v.rstrides or 0, m)
@@ -24,8 +23,8 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         class PackXchgViewKernel(OpenCLKernel):
             def run(self, queue, wait_for=None, ret_evt=False):
                 pevt = kern.exec_async(queue, wait_for, True)
-                return cl.memcpy_async(queue, m.hdata, m.data, m.nbytes,
-                                       [pevt], ret_evt)
+                return cl.memcpy(queue, m.hdata, m.data, m.nbytes,
+                                 False, [pevt], ret_evt)
 
         return PackXchgViewKernel(mats=[mv])
 
@@ -34,7 +33,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
 
         class UnpackXchgMatrixKernel(OpenCLKernel):
             def run(self, queue, wait_for=None, ret_evt=False):
-                return cl.memcpy_async(queue, mv.data, mv.hdata, mv.nbytes,
-                                       wait_for, ret_evt)
+                return cl.memcpy(queue, mv.data, mv.hdata, mv.nbytes,
+                                 False, wait_for, ret_evt)
 
         return UnpackXchgMatrixKernel(mats=[mv])

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import CDLL
 from functools import cached_property
 import itertools as it
@@ -75,7 +73,7 @@ class OpenMPCompiler:
         cmd = [
             self.cc,                # Compiler name
             '-shared',              # Create a shared library
-            '-std=c99',             # Enable C99 support
+            '-std=c11',             # Enable C11 support
             '-Ofast',               # Optimise, incl. -ffast-math
             '-march=native',        # Use CPU-specific instructions
             '-fopenmp',             # Enable OpenMP support
@@ -137,9 +135,10 @@ class OpenMPCompilerModule:
     def __init__(self, mod):
         self.mod = mod
 
-    def function(self, name, restype, argtypes):
+    def function(self, name, restype=None, argtypes=None):
         fn = getattr(self.mod, name)
         fn.restype = restype
-        fn.argtypes = argtypes
+        if argtypes:
+            fn.argtypes = argtypes
 
         return fn

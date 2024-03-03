@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
@@ -21,7 +19,7 @@ class ACNavierStokesIntInters(BaseAdvectionDiffusionIntInters):
         self.kernels['con_u'] = lambda: self._be.kernel(
             'intconu', tplargs=tplargs, dims=[self.ninterfpts],
             ulin=self._scal_lhs, urin=self._scal_rhs,
-            ulout=self._vect_lhs, urout=self._vect_rhs
+            ulout=self._comm_lhs, urout=self._comm_rhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=tplargs, dims=[self.ninterfpts],
@@ -46,7 +44,7 @@ class ACNavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'mpiconu', tplargs=tplargs, dims=[self.ninterfpts],
-            ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._vect_lhs
+            ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._comm_lhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs=tplargs, dims=[self.ninterfpts],
@@ -74,7 +72,7 @@ class ACNavierStokesBaseBCInters(BaseAdvectionDiffusionBCInters):
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ulin=self._scal_lhs,
-            ulout=self._vect_lhs, nlin=self._pnorm_lhs, **self._external_vals
+            ulout=self._comm_lhs, nlin=self._pnorm_lhs, **self._external_vals
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=tplargs, dims=[self.ninterfpts],

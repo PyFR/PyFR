@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
 import itertools as it
 import re
+
+import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -25,6 +25,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         # Get the multigrid cycle
         self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
+        self._fgen = np.random.Generator(np.random.PCG64(0))
+
         self.levels = sorted(set(self.cycle), reverse=True)
 
         if max(self.cycle) > self._order:
@@ -81,39 +83,27 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
             # A class that bypasses pseudo-controller methods within a cycle
             class lpsint(*bases):
-                name = 'MultiPPseudoIntegrator' + str(l)
+                name = f'MultiPPseudoIntegrator{l}'
                 aux_nregs = 2 if l != self._order else 0
 
                 @property
-                def _aux_regidx(iself):
-                    if iself.aux_nregs != 0:
-                        return iself._regidx[-2:]
+                def _aux_regidx(self):
+                    if self.aux_nregs != 0:
+                        return self._regidx[-2:]
 
                 @property
                 def ntotiters(iself):
                     return self.npmgcycles
 
-                def convmon(iself, *args, **kwargs):
+                def convmon(self, *args, **kwargs):
                     pass
 
-                def _rhs_with_dts(iself, t, uin, fout, mg_add=True):
-                    # Compute -∇·f
-                    iself.system.rhs(t, uin, fout)
-
-                    if iself.stage_nregs > 1:
-                        iself._add(0, self._stage_regidx[iself.currstg],
-                                   1, fout)
-
-                    # Registers
-                    vals = [iself.stepper_coeffs[-1], -1/iself._dt, 1]
-                    regs = [fout, iself._idxcurr, iself._source_regidx]
-
-                    # Physical stepper source addition -∇·f - dQ/dt
-                    iself._addv(vals, regs, subdims=iself._subdims)
+                def _rhs_with_dts(self, t, uin, fout, mg_add=True):
+                    super()._rhs_with_dts(t, uin, fout)
 
                     # Multigrid r addition
-                    if mg_add and iself._aux_regidx:
-                        iself._add(1, fout, -1, iself._aux_regidx[0])
+                    if mg_add and self._aux_regidx:
+                        self._add(1, fout, -1, self._aux_regidx[0])
 
             stp_nregs = stepper_nregs if l == self._order else 0
             stg_nregs = stage_nregs if l == self._order else 0
@@ -132,9 +122,9 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Initialise the restriction and prolongation matrices
         self._init_proj_mats()
 
-        # Delete remaining elements maps from multigrid systems
-        for l in self.levels[1:]:
-            del self.pintgs[l].system.ele_map
+    def commit(self):
+        for s in self.pintgs.values():
+            s.system.commit()
 
     @property
     def _idxcurr(self):
@@ -213,17 +203,25 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         l1idxcurr = self.pintgs[l1]._idxcurr
         l2idxcurr = self.pintgs[l2]._idxcurr
 
+        # Prevsoln is used as temporal storage at l1
+        rtemp = 0 if l1idxcurr == 1 else 1
+
         # Restrict the physical source term
         l1src = self.pintgs[l1]._source_regidx
         l2dst = self.pintgs[l2]._source_regidx
+
+        # If at top level evaluate src macros
+        if l1 == self._order and self.system.has_src_macros:
+            self._add(0, rtemp, 1, l1idxcurr)
+            self.system.evalsrcmacros(rtemp)
+            self._add(1, rtemp, 1, l1src)
+            l1src = rtemp
+
         self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
         # Project local dtau field to lower multigrid levels
         if self.pintgs[self._order].pseudo_controller_needs_lerrest:
             self.backend.run_kernels(self.dtauproject(l1, l2))
-
-        # Prevsoln is used as temporal storage at l1
-        rtemp = 0 if l1idxcurr == 1 else 1
 
         # rtemp = R = -∇·f - dQ/dt
         self.pintg._rhs_with_dts(self.tcurr, l1idxcurr, rtemp, mg_add=False)
@@ -284,16 +282,19 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
-        cycle, csteps = self.cycle, self.csteps
+        cycle, cstepsf = self.cycle, self.csteps
 
-        # Set current stage number and stepper coefficients for all levels
+        # Set time step and current stepper coefficients for all levels
         for l in self.levels:
-            self.pintgs[l].currstg = self.currstg
+            self.pintgs[l]._dt = self._dt
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr
 
         for i in range(self._maxniters):
+            # Choose either ⌊c⌋ or ⌈c⌉ in a way that the average is c
+            csteps = [int(c + (self._fgen.random() < c % 1)) for c in cstepsf]
+
             for l, m, n in it.zip_longest(cycle, cycle[1:], csteps):
                 self.level = l
 

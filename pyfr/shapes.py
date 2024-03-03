@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import itertools as it
 from functools import cached_property
 from math import exp
@@ -315,6 +313,16 @@ class BaseShape:
     @cached_property
     def nmpts(self):
         return len(self.mpts)
+
+    @cached_property
+    def fpts_in_upts(self):
+        return np.all(np.count_nonzero(self.m0, axis=1) == 1)
+
+    @cached_property
+    def fpts_map_upts(self):
+        if not self.fpts_in_upts:
+            raise ValueError('Flux points not subset of solution points')
+        return np.argwhere(np.abs(self.m0 - 1) <= 1e-8)[:, 1]
 
 
 class TensorProdShape:

@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-
-from ctypes import byref, cast, c_int, c_double, c_float, c_void_p
+from ctypes import byref, cast, c_int, c_double, c_float, c_ulonglong, c_void_p
 
 import numpy as np
 
@@ -17,9 +15,10 @@ class XSMMWrappers(LibWrapper):
         (None, 'libxsmm_init'),
         (None, 'libxsmm_finalize'),
         (c_void_p, 'libxsmm_fsspmdm_create', c_int, c_int, c_int, c_int, c_int,
-         c_int, c_int, c_void_p, c_void_p, c_int, c_void_p),
+         c_int, c_int, c_void_p, c_void_p, c_void_p, c_int, c_void_p),
         (None, 'libxsmm_fsspmdm_execute', c_void_p, c_void_p, c_void_p),
-        (None, 'libxsmm_fsspmdm_destroy', c_void_p)
+        (None, 'libxsmm_fsspmdm_destroy', c_void_p),
+        (c_ulonglong, 'libxsmm_timer_tick')
     ]
 
 
@@ -41,8 +40,11 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
     def __del__(self):
         if hasattr(self, '_wrappers'):
-            for blkptr in self._kerns.values():
+            for blkptr, blkptr_nt in self._kerns.values():
                 self._wrappers.libxsmm_fsspmdm_destroy(blkptr)
+
+                if blkptr_nt != blkptr:
+                    self._wrappers.libxsmm_fsspmdm_destroy(blkptr_nt)
 
             self._wrappers.libxsmm_finalize()
 
@@ -61,7 +63,10 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Check that beta is zero or one
         if beta != 0.0 and beta != 1.0:
-            raise NotSuitableError('libxssm requires β = 0 or β = 1')
+            raise NotSuitableError('libxsmm requires β = 0 or β = 1')
+
+        # Index type
+        ixdtype = self.backend.ixdtype
 
         # Dimensions
         ldb, ldc = b.leaddim, out.leaddim
@@ -71,7 +76,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
         # Check the JIT kernel cache
         try:
-            blkptr = self._kerns[ckey]
+            blkptr, blkptr_nt = self._kerns[ckey]
         except KeyError:
             c_is_nt = (beta == 0 and
                        out.nbytes >= 32*1024**2 and
@@ -87,23 +92,40 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
                 xsmm_dtype = 1
                 alpha, beta = c_float(alpha), c_float(beta)
 
-            # JIT and register an block leaddim size kernel for this matrix
+            timer_tick = cast(self._wrappers.libxsmm_timer_tick, c_void_p)
+
+            # Create a block leaddim size kernel for this matrix
             blkptr = self._wrappers.libxsmm_fsspmdm_create(
                 xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(alpha),
-                byref(beta), c_is_nt, a_np.ctypes.data
+                byref(beta), a_np.ctypes.data, False, timer_tick
             )
             if not blkptr:
-                raise NotSuitableError('libxssm unable to JIT a kernel')
+                raise NotSuitableError('libxsmm unable to JIT a kernel')
+
+            # Also consider creating a non-temporal kernel
+            if c_is_nt:
+                blkptr_nt = self._wrappers.libxsmm_fsspmdm_create(
+                    xsmm_dtype, m, b.leaddim, k, k, ldb, ldc, byref(alpha),
+                    byref(beta), a_np.ctypes.data, True, timer_tick
+                )
+                if not blkptr_nt:
+                    raise NotSuitableError('libxsmm unable to JIT a kernel')
+            else:
+                blkptr_nt = blkptr
 
             # Update the cache
-            self._kerns[ckey] = blkptr
+            self._kerns[ckey] = blkptr, blkptr_nt
 
         # Render our parallel wrapper kernel
         src = self.backend.lookup.get_template('batch-gemm').render()
 
         # Build
-        batch_gemm = self._build_kernel('batch_gemm', src, 'PPiPiPi')
-        batch_gemm.set_args(self._exec_ptr, blkptr, b.nblocks, b, b.blocksz,
+        batch_gemm = self._build_kernel(
+            'batch_gemm', src, [np.uintp]*3 + [np.uintp, ixdtype]*2,
+            ['exec', 'blkptr', 'blkptr_nt', 'b', 'bsz', 'out', 'outsz']
+        )
+        batch_gemm.set_args(self._exec_ptr, blkptr, blkptr_nt, b, b.blocksz,
                             out, out.blocksz)
+        batch_gemm.set_nblocks(b.nblocks)
 
         return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)

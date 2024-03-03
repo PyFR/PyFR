@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections.abc import Mapping
 from functools import cached_property
 import os
@@ -25,12 +23,15 @@ class NativeReader(Mapping):
 
     def __getitem__(self, aname):
         if isinstance(aname, str):
-            ret = self._file[aname]
+            ret = self._file[aname][()]
 
-            if ret.shape == ():
-                ret = ret[()]
-            else:
-                ret = np.array(ret)
+            if hasattr(ret, 'dtype') and ret.dtype.kind == 'V':
+                ndtype = []
+                for k, v in ret.dtype.descr:
+                    v = v[0] if isinstance(v, tuple) else v
+                    ndtype.append((k, v.replace('S', 'U')))
+
+                ret = ret.astype(ndtype)
 
             return ret.decode() if isinstance(ret, bytes) else ret
         else:

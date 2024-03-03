@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import (POINTER, Structure, addressof, byref, create_string_buffer,
                     c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
                     c_ulonglong, c_void_p)
@@ -127,15 +125,12 @@ class CUDAWrappers(LibWrapper):
     FUNC_ATTR_NUM_REGS = 4
     FUNC_ATTR_MAX_DYNAMIC_SHARED_SIZE_BYTES = 8
     FUNC_ATTR_PREFERRED_SHARED_MEMORY_CARVEOUT = 9
-    FUNC_CACHE_PREFER_NONE = 0
-    FUNC_CACHE_PREFER_SHARED = 1
-    FUNC_CACHE_PREFER_L1 = 2
-    FUNC_CACHE_PREFER_EQUAL = 3
     MEMORYTYPE_UNIFIED = 4
 
     # Functions
     _functions = [
         (c_int, 'cuInit', c_int),
+        (c_int, 'cuDriverGetVersion', POINTER(c_int)),
         (c_int, 'cuDeviceGet', POINTER(c_int), c_int),
         (c_int, 'cuDeviceGetCount', POINTER(c_int)),
         (c_int, 'cuDeviceGetAttribute', POINTER(c_int), c_int, c_int),
@@ -143,7 +138,6 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuDevicePrimaryCtxRetain', POINTER(c_void_p), c_int),
         (c_int, 'cuDevicePrimaryCtxRelease', c_int),
         (c_int, 'cuCtxSetCurrent', c_void_p),
-        (c_int, 'cuCtxSetCacheConfig', c_int),
         (c_int, 'cuMemAlloc_v2', POINTER(c_void_p), c_size_t),
         (c_int, 'cuMemFree_v2', c_void_p),
         (c_int, 'cuMemAllocHost_v2', POINTER(c_void_p), c_size_t),
@@ -169,7 +163,6 @@ class CUDAWrappers(LibWrapper):
          c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p), c_void_p),
         (c_int, 'cuFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
         (c_int, 'cuFuncSetAttribute', c_void_p, c_int, c_int),
-        (c_int, 'cuFuncSetCacheConfig', c_void_p, c_int),
         (c_int, 'cuGraphCreate', POINTER(c_void_p), c_uint),
         (c_int, 'cuGraphDestroy', c_void_p),
         (c_int, 'cuGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
@@ -192,6 +185,16 @@ class CUDAWrappers(LibWrapper):
 
     def _transname(self, name):
         return name.removesuffix('_v2')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        version = c_int()
+        self.cuDriverGetVersion(version)
+
+        major, minor = version.value // 1000, (version.value % 1000) // 10
+        if (major, minor) < (11, 4):
+            raise RuntimeError(f'CUDA version {major}.{minor} < 11.4')
 
 
 class _CUDABase:
@@ -325,10 +328,6 @@ class CUDAFunction(_CUDABase):
         attr = getattr(self.cuda.lib, f'FUNC_ATTR_{attr.upper()}')
         self.cuda.lib.cuFuncSetAttribute(self, attr, val)
 
-    def set_cache_pref(self, *, prefer_l1=None, prefer_shared=None):
-        pref = self.cuda._get_cache_pref(prefer_l1, prefer_shared)
-        self.cuda.lib.cuFuncSetCacheConfig(self, pref)
-
     def set_shared_size(self, *, dynm_shared=0, carveout=None):
         self._set_attr('max_dynamic_shared_size_bytes', dynm_shared)
 
@@ -448,16 +447,6 @@ class CUDA:
         if getattr(self, 'ctx', None):
             self.lib.cuDevicePrimaryCtxRelease(self.dev)
 
-    def _get_cache_pref(self, prefer_l1, prefer_shared):
-        if prefer_l1 is None and prefer_shared is None:
-            return self.lib.FUNC_CACHE_PREFER_NONE
-        elif prefer_l1 and not prefer_shared:
-            return self.lib.FUNC_CACHE_PREFER_L1
-        elif prefer_shared and not prefer_l1:
-            return self.lib.FUNC_CACHE_PREFER_SHARED
-        else:
-            return self.lib.FUNC_CACHE_PREFER_EQUAL
-
     def device_count(self):
         count = c_int()
         self.lib.cuDeviceGetCount(count)
@@ -482,10 +471,6 @@ class CUDA:
         self.lib.cuDevicePrimaryCtxRetain(self.ctx, dev)
         self.lib.cuCtxSetCurrent(self.ctx)
         self.dev = dev.value
-
-    def set_cache_pref(self, *, prefer_l1=None, prefer_shared=None):
-        pref = self._get_cache_pref(prefer_l1, prefer_shared)
-        self.lib.cuCtxSetCacheConfig(pref)
 
     def compute_capability(self):
         dev, lib = self.dev, self.lib

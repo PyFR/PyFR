@@ -1,7 +1,6 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.readers.base import BaseReader, NodalMeshAssembler
 from pyfr.readers.gmsh import GmshReader
+from pyfr.readers.native import NativeReader
 
 from pyfr.util import subclasses, subclass_where
 

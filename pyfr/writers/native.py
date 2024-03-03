@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
-
 import os
-import re
 
 import h5py
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
+from pyfr.util import file_path_gen
 
 
 def write_pyfrms(path, data):
@@ -21,10 +19,6 @@ def write_pyfrms(path, data):
 
 class NativeWriter:
     def __init__(self, intg, basedir, basename, prefix, *, extn='.pyfrs'):
-        # Base output directory and file name
-        self.basedir = basedir
-        self.basename = basename
-
         # Data prefix
         self.prefix = prefix
 
@@ -32,11 +26,11 @@ class NativeWriter:
         self.prank = intg.rallocs.prank
 
         # Append the relevant extension
-        if not self.basename.endswith(extn):
-            self.basename += extn
+        if not basename.endswith(extn):
+            basename += extn
 
         # Output counter (incremented each time write() is called)
-        self.nout = self._restore_nout() if intg.isrestart else 0
+        self.fgen = file_path_gen(basedir, basename, intg.isrestart)
 
         # MPI info
         comm, rank, root = get_comm_rank_root()
@@ -51,38 +45,13 @@ class NativeWriter:
 
     def write(self, data, tcurr, metadata=None):
         # Determine the output path
-        path = self._get_output_path(tcurr)
+        path = self.fgen.send(tcurr)
 
         # Delegate to _write to do the actual outputting
         self._write(path, data, metadata)
 
-        # Increment the output number
-        self.nout += 1
-
         # Return the path
         return path
-
-    def _restore_nout(self):
-        nout = 0
-
-        # See if the basename appears to depend on {n}
-        if re.search('{n[^}]*}', self.basename):
-            # Quote and substitute
-            bn = re.escape(self.basename)
-            bn = re.sub(r'\\{n[^}]*\\}', r'(\\s*\\d+\\s*)', bn)
-            bn = re.sub(r'\\{t[^}]*\\}', r'(?:.*?)', bn) + '$'
-
-            for f in os.listdir(self.basedir):
-                if (m := re.match(bn, f)):
-                    nout = max(nout, int(m[1]) + 1)
-
-        return nout
-
-    def _get_output_path(self, tcurr):
-        # Substitute {t} and {n} for the current time and output number
-        fname = self.basename.format(t=tcurr, n=self.nout)
-
-        return os.path.join(self.basedir, fname)
 
     def _prepare_data_info(self, data):
         info = {}

@@ -1,24 +1,29 @@
-# -*- coding: utf-8 -*-
-
 from collections import Counter, defaultdict, namedtuple
 import itertools as it
 import re
-import uuid
+from uuid import UUID
 
 import numpy as np
 
 from pyfr.inifile import Inifile
+from pyfr.nputil import iter_struct
+from pyfr.progress import NullProgressSequence
+from pyfr.util import digest
 
 
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
 class BasePartitioner:
-    def __init__(self, partwts, elewts, nsubeles=64, opts={}):
+    def __init__(self, partwts, elewts=None, nsubeles=64, opts={}):
         self.partwts = partwts
         self.elewts = elewts
         self.nparts = len(partwts)
         self.nsubeles = nsubeles
+
+        if elewts is None and not self.has_multiple_constraints:
+            raise ValueError(f'Partitioner {self.name} does not support '
+                             'balanced partitioning')
 
         # Parse the options list
         self.opts = {}
@@ -49,7 +54,7 @@ class BasePartitioner:
                     rnum[en].update(((i, j), (0, off + j)) for j in range(n))
 
         def offset_con(con, pr):
-            con = con.copy().astype('U4,i4,i1,i2')
+            con = con.copy()
 
             for en, pn in pinf.items():
                 if pn[pr] > 0:
@@ -83,11 +88,8 @@ class BasePartitioner:
                 name, l = bc[1], int(bc[2])
                 bccon[name].append(offset_con(mesh[f], l))
 
-        # Output data type
-        dtype = 'U4,i4,i1,i2'
-
         # Concatenate these arrays to from the new mesh
-        newmesh = {'con_p0': np.hstack(intcon).astype(dtype)}
+        newmesh = {'con_p0': np.hstack(intcon)}
 
         for en in spts:
             newmesh[f'spt_{en}_p0'] = np.hstack(spts[en])
@@ -97,9 +99,22 @@ class BasePartitioner:
             newmesh['con_p0', k] = np.hstack(v)
 
         for k, v in bccon.items():
-            newmesh[f'bcon_{k}_p0'] = np.hstack(v).astype(dtype)
+            newmesh[f'bcon_{k}_p0'] = np.hstack(v)
 
         return newmesh, rnum
+
+    def _get_elewts(self, mesh):
+        # If we have an element weighting table then use it
+        if self.elewts is not None:
+            return self.elewts
+        # Else, use multiple constraints for a balanced partitioning
+        else:
+            etypes = []
+            for f in mesh:
+                if isinstance(f, str) and f.startswith('spt'):
+                    etypes.append(f.split('_')[1])
+
+            return dict(zip(etypes, np.eye(len(etypes), dtype=int)))
 
     def _combine_soln_parts(self, soln, prefix):
         newsoln = defaultdict(list)
@@ -109,7 +124,7 @@ class BasePartitioner:
 
         return {k: np.dstack(v) for k, v in newsoln.items()}
 
-    def _construct_graph(self, con, exwts={}):
+    def _construct_graph(self, con, elewts, exwts={}):
         # Edges of the dual graph
         con = con[['f0', 'f1']]
         con = np.hstack([con, con[::-1]])
@@ -130,25 +145,26 @@ class BasePartitioner:
         etivmap = {k: v for v, k in enumerate(vetimap)}
 
         # Prepare the edges and their weights
-        etab = np.array([etivmap[r] for r in rhs.tolist()])
+        etab = np.array([etivmap[r] for r in iter_struct(rhs)])
         ewts = np.ones_like(etab)
 
         # Prepare the vertex weights
-        vwts = np.array([exwts.get(ti, self.elewts[ti[0]]) for ti in vetimap])
+        vwts = np.array([exwts.get(ti, elewts[ti[0]]) for ti in vetimap])
+        vwts = vwts.reshape(len(vwts), -1)
 
         return Graph(vtab, etab, vwts, ewts), vetimap
 
     def _partition_graph(self, graph, partwts):
         pass
 
-    def _group_periodic_eles(self, mesh):
+    def _group_periodic_eles(self, mesh, elewts):
         con = mesh['con_p0'][['f0', 'f1']]
         pmerge, pnames = {}, {}
 
         # Extract the periodic connectivity from the mesh
         for f, v in mesh.items():
             if f[0] == 'con_p0' and f[1].startswith('periodic'):
-                for i, (l, r) in zip(v, con[:, v].T.tolist()):
+                for i, (l, r) in zip(v, iter_struct(con[:, v].T)):
                     pnames[i] = f[1]
                     if l != r:
                         if l in pmerge and r in pmerge:
@@ -171,16 +187,16 @@ class BasePartitioner:
             con = np.delete(con, list(pnames), axis=1)
 
             # Merge the associated elements
-            for i, (l, r) in enumerate(con.T.tolist()):
+            for i, (l, r) in enumerate(iter_struct(con.T)):
                 if l in pmerge:
                     con[0, i] = pmerge[l]
                 if r in pmerge:
                     con[1, i] = pmerge[r]
 
         # Tally up the weights for the merged elements
-        exwts = {(t, i): self.elewts[t] for t, i in set(pmerge.values())}
+        exwts = {(t, i): elewts[t] for t, i in set(pmerge.values())}
         for (lt, li), r in pmerge.items():
-            exwts[r] += self.elewts[lt]
+            exwts[r] += elewts[lt]
 
         return con, exwts, pmerge, pnames
 
@@ -200,54 +216,60 @@ class BasePartitioner:
 
         return vnetimap, vnparts
 
-    def _renumber_verts(self, mesh, vetimap, vparts):
+    def _renumber_verts(self, p, mesh, vetimap, vparts):
         pscon = [[] for i in range(self.nparts)]
+        elewts = defaultdict(lambda: 1)
         vpartmap, bndeti = dict(zip(vetimap, vparts)), set()
 
         # Construct per-partition connectivity arrays and tag elements
         # which are on partition boundaries
-        for l, r in zip(*mesh['con_p0'][['f0', 'f1']].tolist()):
-            if vpartmap[l] == vpartmap[r]:
-                pscon[vpartmap[l]].append([l, r])
-            else:
-                pscon[vpartmap[l]].append([l, r])
-                pscon[vpartmap[r]].append([l, r])
-                bndeti |= {l, r}
+        with p.start('Identify partition boundary elements'):
+            lhs, rhs = mesh['con_p0'][['f0', 'f1']]
+            for l, r in zip(iter_struct(lhs), iter_struct(rhs)):
+                if vpartmap[l] == vpartmap[r]:
+                    pscon[vpartmap[l]].append([l, r])
+                else:
+                    pscon[vpartmap[l]].append([l, r])
+                    pscon[vpartmap[r]].append([l, r])
+                    bndeti |= {l, r}
 
-        # Start by assigning the lowest numbers to these boundary elements
-        nvetimap, nvparts = list(bndeti), [vpartmap[eti] for eti in bndeti]
+            # Start by assigning the lowest numbers to these boundary elements
+            nvetimap = sorted(bndeti)
+            nvparts = [vpartmap[eti] for eti in nvetimap]
 
         # Use sub-partitioning to assign interior element numbers
-        for part, scon in enumerate(pscon):
-            # Construct a graph for this partition
-            scon = np.array(scon, dtype='U4,i4').T
-            sgraph, svetimap = self._construct_graph(scon)
+        with p.start_with_bar('Sub-partition interior elements') as pb:
+            psit = pb.start_with_iter(enumerate(pscon), n=self.nparts)
+            for part, scon in psit:
+                # Construct a graph for this partition
+                scon = np.array(scon, dtype='U4,i4').T
+                sgraph, svetimap = self._construct_graph(scon, elewts)
 
-            # Determine the number of sub-partitions
-            nsp = len(svetimap) // self.nsubeles + 1
+                # Determine the number of sub-partitions
+                nsp = len(svetimap) // self.nsubeles + 1
 
-            # Partition the graph
-            if nsp == 1:
-                svparts = [0]*len(svetimap)
-            else:
-                svparts = self._partition_graph(sgraph, [1]*nsp)
-
-            # Group elements according to their type (linear vs curved)
-            # and sub-partition number
-            linsvetimap = [[] for i in range(nsp)]
-            cursvetimap = [[] for i in range(nsp)]
-            for (etype, eidx), spart in zip(svetimap, svparts):
-                if (etype, eidx) in bndeti:
-                    continue
-
-                if mesh[f'spt_{etype}_p0', 'linear'][eidx]:
-                    linsvetimap[spart].append((etype, eidx))
+                # Partition the graph
+                if nsp == 1:
+                    svparts = [0]*len(svetimap)
                 else:
-                    cursvetimap[spart].append((etype, eidx))
+                    svparts = self._partition_graph(sgraph, [1]*nsp)
 
-            # Append to the global list
-            nvetimap.extend(it.chain(*cursvetimap, *linsvetimap))
-            nvparts.extend([part]*sum(map(len, cursvetimap + linsvetimap)))
+                # Group elements according to their type (linear vs curved)
+                # and sub-partition number
+                linsvetimap = [[] for i in range(nsp)]
+                cursvetimap = [[] for i in range(nsp)]
+                for (etype, eidx), spart in zip(svetimap, svparts):
+                    if (etype, eidx) in bndeti:
+                        continue
+
+                    if mesh[f'spt_{etype}_p0', 'linear'][eidx]:
+                        linsvetimap[spart].append((etype, eidx))
+                    else:
+                        cursvetimap[spart].append((etype, eidx))
+
+                # Append to the global list
+                nvetimap.extend(it.chain(*cursvetimap, *linsvetimap))
+                nvparts.extend([part]*sum(map(len, cursvetimap + linsvetimap)))
 
         return nvetimap, nvparts
 
@@ -295,7 +317,7 @@ class BasePartitioner:
             pcounter[etype, part] += 1
 
         # Generate the face connectivity
-        for i, (l, r) in enumerate(mesh['con_p0'].T.tolist()):
+        for i, (l, r) in enumerate(iter_struct(mesh['con_p0'].T)):
             letype, leidxg, lfidx, lflags = l
             retype, reidxg, rfidx, rflags = r
 
@@ -318,14 +340,14 @@ class BasePartitioner:
         # Generate boundary conditions
         for f in filter(lambda f: isinstance(f, str), mesh):
             if (m := re.match('bcon_(.+?)_p0$', f)):
-                for lpetype, leidxg, lfidx, lflags in mesh[f].tolist():
+                for lpetype, leidxg, lfidx, lflags in iter_struct(mesh[f]):
                     lpart, leidxl = eleglmap[lpetype, leidxg]
                     conl = (lpetype, leidxl, lfidx, lflags)
 
                     bcon_px[m[1], lpart].append(conl)
 
         # Output data type
-        dtype = 'S4,i4,i1,i2'
+        dtype = 'S4,i8,i1,i2'
 
         # Output
         con = {}
@@ -345,48 +367,63 @@ class BasePartitioner:
 
         return con, eleglmap
 
-    def partition(self, mesh):
+    def partition(self, mesh, progress=NullProgressSequence):
         # Extract the current UUID from the mesh
         curruuid = mesh['mesh_uuid']
 
         # Combine any pre-existing partitions
-        mesh, rnum = self._combine_mesh_parts(mesh)
+        with progress.start('Combine mesh parts'):
+            mesh, rnum = self._combine_mesh_parts(mesh)
+
+        # Obtain the element weighting table
+        elewts = self._get_elewts(mesh)
 
         # Merge periodic elements
-        con, exwts, pmerge, pnames = self._group_periodic_eles(mesh)
+        with progress.start('Group periodic elements'):
+            con, exwts, pmerge, pnames = self._group_periodic_eles(mesh,
+                                                                   elewts)
 
         # Obtain the dual graph for this mesh
-        graph, vetimap = self._construct_graph(con, exwts=exwts)
+        with progress.start('Construct graph'):
+            graph, vetimap = self._construct_graph(con, elewts, exwts=exwts)
 
         # Partition the graph
-        if self.nparts > 1:
-            vparts = self._partition_graph(graph, self.partwts).tolist()
+        with progress.start('Partition graph'):
+            if self.nparts > 1:
+                vparts = self._partition_graph(graph, self.partwts).tolist()
 
-            if (n := len(set(vparts))) != self.nparts:
-                raise RuntimeError(f'Partitioner error: mesh has {n} parts '
-                                   f'versus goal of {self.nparts}')
-        else:
-            vparts = [0]*len(vetimap)
+                if (n := len(set(vparts))) != self.nparts:
+                    raise RuntimeError(f'Partitioner error: mesh has {n} '
+                                       f'parts versus goal of {self.nparts}')
+            else:
+                vparts = [0]*len(vetimap)
 
         # Unmerge periodic elements
-        vetimap, vparts = self._ungroup_periodic_eles(pmerge, vetimap, vparts)
+        with progress.start('Ungroup periodic elements'):
+            vetimap, vparts = self._ungroup_periodic_eles(pmerge, vetimap,
+                                                          vparts)
 
         # Renumber vertices
-        vetimap, vparts = self._renumber_verts(mesh, vetimap, vparts)
+        with progress.start_with_sequence('Renumber vertices') as p:
+            vetimap, vparts = self._renumber_verts(p, mesh, vetimap, vparts)
 
-        # Partition the connectivity portion of the mesh
-        newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts, pnames)
+        # Repartition the mesh
+        with progress.start('Repartition mesh'):
+            # Partition the connectivity portion of the mesh
+            newmesh, eleglmap = self._partition_con(mesh, vetimap, vparts,
+                                                    pnames)
 
-        # Handle the shape points
-        newmesh |= self._partition_spts(mesh, vetimap, vparts)
+            # Handle the shape points
+            newmesh |= self._partition_spts(mesh, vetimap, vparts)
 
-        # Update the renumbering table
-        for etype, emap in rnum.items():
-            for k, (pidx, eidx) in emap.items():
-                emap[k] = eleglmap[etype, eidx]
+            # Update the renumbering table
+            for etype, emap in rnum.items():
+                for k, (pidx, eidx) in emap.items():
+                    emap[k] = eleglmap[etype, eidx]
 
         # Generate a new UUID for the mesh
-        newmesh['mesh_uuid'] = newuuid = str(uuid.uuid4())
+        newuuid = np.array(UUID(digest(mesh)[:32]), dtype='S')
+        newmesh['mesh_uuid'] = newuuid
 
         # Build the solution converter
         def partition_soln(soln):

@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
 import inspect
 import itertools as it
@@ -27,6 +25,7 @@ class BaseSystem:
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
+        self.nregs = nregs
 
         # Obtain a nonce to uniquely identify this system
         nonce = str(next(self._nonce_seq))
@@ -50,24 +49,34 @@ class BaseSystem:
         if hasattr(eles[0], '_vect_upts'):
             self.eles_vect_upts = [e._vect_upts for e in eles]
 
+        if hasattr(eles[0], 'entmin_int'):
+            self.eles_entmin_int = [e.entmin_int for e in eles]
+
         # Save the number of dimensions and field variables
         self.ndims = eles[0].ndims
         self.nvars = eles[0].nvars
 
         # Load the interfaces
-        int_inters = self._load_int_inters(rallocs, mesh, elemap)
-        mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
-        bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
+        self._int_inters = self._load_int_inters(rallocs, mesh, elemap)
+        self._mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
+        self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
 
+    def commit(self):
         # Prepare the kernels and any associated MPI requests
-        self._gen_kernels(nregs, eles, int_inters, mpi_inters, bc_inters)
-        self._gen_mpireqs(mpi_inters)
-        backend.commit()
+        self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,
+                          self._mpi_inters, self._bc_inters)
+        self._gen_mpireqs(self._mpi_inters)
+        self.backend.commit()
+
+        self.has_src_macros = any(eles.has_src_macros
+                                  for eles in self.ele_map.values())
+
+        # Delete the memory-intensive ele_map
+        del self.ele_map
 
         # Save the BC interfaces, but delete the memory-intensive elemap
-        self._bc_inters = bc_inters
-        for b in bc_inters:
+        for b in self._bc_inters:
             del b.elemap
 
         # Observed input/output bank numbers
@@ -111,13 +120,8 @@ class BaseSystem:
 
         # Allocate these elements on the backend
         for etype, ele in elemap.items():
-            k = f'spt_{etype}_p{rallocs.prank}'
-
-            try:
-                curved = ~mesh[k, 'linear']
-                linoff = np.max(*np.nonzero(curved), initial=-1) + 1
-            except KeyError:
-                linoff = ele.neles
+            curved = ~mesh[f'spt_{etype}_p{rallocs.prank}', 'linear']
+            linoff = np.max(*np.nonzero(curved), initial=-1) + 1
 
             ele.set_backend(self.backend, nregs, nonce, linoff)
 
@@ -126,7 +130,7 @@ class BaseSystem:
     def _load_int_inters(self, rallocs, mesh, elemap):
         key = f'con_p{rallocs.prank}'
 
-        lhs, rhs = mesh[key].astype('U4,i4,i1,i2').tolist()
+        lhs, rhs = mesh[key].tolist()
         int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
                                        self.cfg)
 
@@ -139,7 +143,7 @@ class BaseSystem:
         for rhsprank in rallocs.prankconn[lhsprank]:
             rhsmrank = rallocs.pmrankmap[rhsprank]
             interarr = mesh[f'con_p{lhsprank}p{rhsprank}']
-            interarr = interarr.astype('U4,i4,i1,i2').tolist()
+            interarr = interarr.tolist()
 
             mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
                                          rallocs, elemap, self.cfg)
@@ -158,7 +162,7 @@ class BaseSystem:
                 cfgsect = f'soln-bcs-{m[1]}'
 
                 # Get the interface
-                interarr = mesh[f].astype('U4,i4,i1,i2').tolist()
+                interarr = mesh[f].tolist()
 
                 # Instantiate
                 bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
@@ -174,6 +178,7 @@ class BaseSystem:
         # Helper function to tag the element type/MPI interface
         # associated with a kernel; used for dependency analysis
         self._ktags = {}
+
         def tag_kern(pname, prov, kern):
             if pname == 'eles':
                 self._ktags[kern] = f'e-{prov.basis.name}'
@@ -265,6 +270,18 @@ class BaseSystem:
         for graph in self._rhs_graphs(uinbank, foutbank):
             self.backend.run_graph(graph)
 
+    def _preproc_graphs(self, uinbank):
+        pass
+
+    def preproc(self, t, uinbank):
+        self._prepare_kernels(t, uinbank, None)
+
+        for graph in self._preproc_graphs(uinbank):
+            self.backend.run_graph(graph)
+
+    def postproc(self, uinbank):
+        pass
+
     def rhs_wait_times(self):
         # Group together timings for graphs which are semantically equivalent
         times = defaultdict(list)
@@ -294,9 +311,28 @@ class BaseSystem:
             self.backend.run_graph(graph)
 
     def filt(self, uinoutbank):
-        kkey = ('eles/filter_soln', uinoutbank, None)
+        kkey = ('eles/modal_filter', uinoutbank, None)
+
+        self.backend.run_kernels(self._kernels[kkey])
+
+    def evalsrcmacros(self, uinoutbank):
+        kkey = ('eles/evalsrcmacros', uinoutbank, None)
 
         self.backend.run_kernels(self._kernels[kkey])
 
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
+
+    def get_ele_entmin_int(self):
+        return [e.get() for e in self.eles_entmin_int]
+
+    def _group(self, g, kerns, subs=[]):
+        # Eliminate non-existing kernels
+        kerns = [k for k in kerns if k is not None]
+        subs = [sub for sub in subs if None not in it.chain(*sub)]
+
+        g.group(kerns, subs)
+
+    def set_ele_entmin_int(self, entmin_int):
+        for e, em in zip(self.eles_entmin_int, entmin_int):
+            e.set(em)

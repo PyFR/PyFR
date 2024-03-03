@@ -1,5 +1,4 @@
-# -*- coding: utf-8 -*-
-
+from math import prod
 import re
 
 import numpy as np
@@ -14,12 +13,12 @@ class Arg:
         specptn = r'''
             (?:(in|inout|out)\s+)?                            # Intent
             (?:(broadcast(?:-row|-col)?|mpi|scalar|view)\s+)? # Attrs
-            (?:reduce\((min_pos)\)\s+)?                       # Reduction
+            (?:reduce\((min)\)\s+)?                           # Reduction
             ([A-Za-z_]\w*)                                    # Data type
             ((?:\[\d+\]){0,2})$                               # Dimensions
         '''
         dimsptn = r'(?<=\[)\d+(?=\])'
-        usedptn = fr'(?:[^A-Za-z_]|^){name}[^A-Za-z0-9]'
+        usedptn = fr'(?:[^A-Za-z_]|^){name}\W'
 
         # Parse our specification
         m = re.match(specptn, spec, re.X)
@@ -57,8 +56,6 @@ class Arg:
             raise ValueError('Broadcasts must have two dimensions')
         if self.isbroadcastr and self.ncdim != 1:
             raise ValueError('Row broadcasts must have one dimension')
-        if self.isbroadcastc and self.ncdim == 1:
-            raise ValueError('Column broadcasts must have zero or two dims')
         if self.isreduce and self.intent != 'out':
             raise ValueError('Reduction arguments must be of intent out')
         if self.isreduce and self.dtype != 'fpdtype_t':
@@ -70,10 +67,11 @@ class Arg:
 
 
 class BaseKernelGenerator:
-    def __init__(self, name, ndim, args, body, fpdtype):
+    def __init__(self, name, ndim, args, body, fpdtype, ixdtype):
         self.name = name
         self.ndim = ndim
         self.fpdtype = fpdtype
+        self.ixdtype = ixdtype
 
         # Parse and sort our argument list
         sargs = sorted((k, Arg(k, v, body)) for k, v in args.items())
@@ -95,7 +93,7 @@ class BaseKernelGenerator:
             raise ValueError('MPI matrices are not supported for 2D kernels')
 
         # Render the main body of our kernel
-        self.body = self._render_body(body)
+        self.body, self.preamble = self._render_body_preamble(body)
 
         # Determine the dimensions to be iterated over
         self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
@@ -106,7 +104,7 @@ class BaseKernelGenerator:
 
         # Dimensions
         argn += self._dims
-        argt += [[np.int32]]*self.ndim
+        argt += [[self.ixdtype]]*self.ndim
 
         # Scalar args (always of type fpdtype)
         argn += [sa.name for sa in self.scalargs]
@@ -117,23 +115,29 @@ class BaseKernelGenerator:
             argn.append(va.name)
 
             if va.isview:
-                argt.append([np.intp]*(2 + (va.ncdim == 2)))
+                argt.append([np.uintp]*(2 + (va.ncdim == 2)))
             elif self.needs_ldim(va):
-                argt.append([np.intp, np.int32])
+                argt.append([np.uintp, self.ixdtype])
             else:
-                argt.append([np.intp])
+                argt.append([np.uintp])
 
         # Return
         return self.ndim, argn, argt
 
-    def ldim_size(self, name, *factor):
-        return f'ld{name}'
+    def ldim_size(self, name, factor=1):
+        pass
 
     def needs_ldim(self, arg):
-        return self.ndim == 2 or (arg.ncdim > 0 and not arg.ismpi)
+        pass
 
     def render(self):
         pass
+
+    def _match_arg(self, arg):
+        bmtch = r'\[({0})\]'.format(match_paired_paren('[]'))
+        ptrns = [r'\b{0}\b', r'\b{0}' + bmtch, r'\b{0}' + 2*bmtch]
+
+        return ptrns[arg.ncdim].format(arg.name)
 
     def _deref_arg(self, arg):
         if arg.isview:
@@ -150,38 +154,36 @@ class BaseKernelGenerator:
             r'{0}_v[{0}_vix[{1}] + {0}_vrstri[{1}]*(\1) + SOA_SZ*(\2)]'
         ]
 
-        return ptns[arg.ncdim].format(arg.name, 'BLK_IDX + X_IDX')
+        return ptns[arg.ncdim].format(arg.name, 'X_IDX')
 
     def _deref_arg_array_1d(self, arg):
         # Vector:
-        #   name => name_v[X_IDX + BLK_IDX]
+        #   name => name_v[X_IDX]
         if arg.ncdim == 0:
-            ix = 'X_IDX + BLK_IDX'
+            ix = 'X_IDX'
         # 2D broadcast vector
         #   name[\1][\2] => name_v[ldim*(\1) + (\2)]
         elif arg.isbroadcast and arg.ncdim == 2:
             lx = self.ldim_size(arg.name)
             ix = fr'{lx}*\1 + BCAST_BLK({arg.cdims[0]}, \2, {lx})'
         # Tightly packed MPI Vector:
-        #   name[\1] => name_v[nx*(\1) + X_IDX + BLK_IDX]
+        #   name[\1] => name_v[nx*(\1) + X_IDX]
         elif arg.ncdim == 1 and arg.ismpi:
-            ix = r'_nx*(\1) + X_IDX + BLK_IDX'
+            ix = r'_nx*(\1) + X_IDX'
         # Stacked vector:
-        #   name[\1] => name_v[ldim*(\1) + X_IDX + BLK_IDX*nv]
+        #   name[\1] => name_v[ldim*(\1) + X_IDX]
         elif arg.ncdim == 1:
             lx = self.ldim_size(arg.name)
-            ix = fr'{lx}*(\1) + X_IDX + BLK_IDX*{arg.cdims[0]}'
+            ix = fr'{lx}*(\1) + X_IDX'
         # Doubly stacked MPI vector:
-        #   name[\1][\2] => name_v[(nv*(\1) + (\2))*nx + X_IDX + BLK_IDX]
+        #   name[\1][\2] => name_v[(nv*(\1) + (\2))*nx + X_IDX]
         elif arg.ncdim == 2 and arg.ismpi:
-            ix = fr'({arg.cdims[1]}*(\1) + (\2))*_nx + X_IDX + BLK_IDX'
+            ix = fr'({arg.cdims[1]}*(\1) + (\2))*_nx + X_IDX'
         # Doubly stacked vector:
-        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv) +
-        #                          BLK_IDX*ns*nv]
+        #   name[\1][\2] => name_v[ldim*(\1) + X_IDX_AOSOA(\2, nv)]
         else:
             lx = self.ldim_size(arg.name, arg.cdims[1])
-            ix = (fr'{lx}*(\1) + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
-                  f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}')
+            ix = fr'{lx}*(\1) + X_IDX_AOSOA(\2, {arg.cdims[1]})'
 
         return f'{arg.name}_v[{ix}]'
 
@@ -190,49 +192,45 @@ class BaseKernelGenerator:
         #   name[\1][\2] => name_v[ldim*(\1) + (\2)]
         if arg.isbroadcast and arg.ncdim == 2:
             lx = self.ldim_size(arg.name)
-            ix = fr'{lx}*\1 + BCAST_BLK({arg.cdims[0]}, \2, {lx})'
+            ix = fr'{lx}*(\1) + BCAST_BLK({arg.cdims[0]}, \2, {lx})'
         # Column broadcast matrix with zero dimension:
-        #   name => name_v[X_IDX + BLK_IDX]
+        #   name => name_v[X_IDX]
         elif arg.ncdim == 0 and arg.isbroadcastc:
-            ix = 'X_IDX + BLK_IDX'
+            ix = 'X_IDX'
+        # Column broadcast matrix with one dimension
+        #   name[\1] => name_v[ldim*(\1) + X_IDX]
+        elif arg.ncdim == 1 and arg.isbroadcastc:
+            lx = self.ldim_size(arg.name)
+            ix = fr'{lx}*(\1) + X_IDX'
         # Matrix:
-        #   name => name_v[ldim*_y + X_IDX + BLK_IDX*ny]
+        #   name => name_v[ldim*_y + X_IDX]
         elif arg.ncdim == 0:
             lx = self.ldim_size(arg.name)
-            ix = f'{lx}*_y + X_IDX + BLK_IDX*_ny'
+            ix = f'{lx}*_y + X_IDX'
         # Row broadcast matrix
         #   name[\1] => name_v[ldim*_y + \1]
         elif arg.isbroadcastr:
             lx = self.ldim_size(arg.name)
             ix = fr'{lx}*_y + BCAST_BLK(_ny, \1, {lx})'
         # Stacked matrix:
-        #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv) + BLK_IDX*nv*ny]
+        #   name[\1] => name_v[ldim*_y + X_IDX_AOSOA(\1, nv)]
         elif arg.ncdim == 1:
             lx = self.ldim_size(arg.name, arg.cdims[0])
-            ix = (fr'{lx}*_y + X_IDX_AOSOA(\1, {arg.cdims[0]}) + '
-                  f'BLK_IDX*{arg.cdims[0]}*_ny')
+            ix = fr'{lx}*_y + X_IDX_AOSOA(\1, {arg.cdims[0]})'
         # Column broadcast matrix
-        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv) +
-        #                          BLK_IDX*ns*nv]
+        #   name[\1][\2] => name_v[ldim*\1 + X_IDX_AOSOA(\2, nv)]
         elif arg.isbroadcastc:
             lx = self.ldim_size(arg.name, arg.cdims[1])
-            ix = (fr'{lx}*\1 + X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
-                  f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}')
+            ix = fr'{lx}*(\1) + X_IDX_AOSOA(\2, {arg.cdims[1]})'
         # Doubly stacked matrix:
-        #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv) +
-        #                          BLK_IDX*ns*nv*ny]
+        #   name[\1][\2] => name_v[((\1)*ny + _y)*ldim + X_IDX_AOSOA(\2, nv)]
         else:
             lx = self.ldim_size(arg.name, arg.cdims[1])
-            ix = (fr'((\1)*_ny + _y)*{lx} + '
-                  fr'X_IDX_AOSOA(\2, {arg.cdims[1]}) + '
-                  f'BLK_IDX*{arg.cdims[0]*arg.cdims[1]}*_ny')
+            ix = fr'((\1)*_ny + _y)*{lx} + X_IDX_AOSOA(\2, {arg.cdims[1]})'
 
         return f'{arg.name}_v[{ix}]'
 
     def _render_body(self, body):
-        bmch = r'\[({0})\]'.format(match_paired_paren('[]'))
-        ptns = [r'\b{0}\b', r'\b{0}' + bmch, r'\b{0}' + 2*bmch]
-
         # At single precision suffix all floating point constants by 'f'
         if self.fpdtype == np.float32:
             body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
@@ -240,23 +238,156 @@ class BaseKernelGenerator:
 
         # Dereference vector arguments
         for va in self.vectargs:
+            subp = self._match_arg(va)
             darg = self._deref_arg(va)
-            subp = ptns[va.ncdim].format(va.name)
 
             # Regular
             if not va.isreduce:
                 body = re.sub(subp, darg, body)
             # Reduction
             else:
+                afun = f'atomic_{va.reduceop}_fpdtype'
                 body = f'fpdtype_t {va.name}{va.cdimstr};\n{body}'
 
                 if va.ncdim == 0:
-                    body += f'atomic_{va.reduceop}(&{darg}, {va.name});\n'
+                    body += f'{afun}(&{darg}, {va.name});\n'
                 else:
                     for ij in ndrange(*va.cdims):
                         lval = va.name + ''.join(f'[{i}]' for i in ij)
                         gval = re.sub(subp, darg, lval)
 
-                        body += f'atomic_{va.reduceop}(&{gval}, {lval});\n'
+                        body += f'{afun}(&{gval}, {lval});\n'
 
         return body
+
+    def _render_body_preamble(self, body):
+        return self._render_body(body), ''
+
+
+class BaseGPUKernelGenerator(BaseKernelGenerator):
+    # Block sizes for 1D and 2D kernels, respectively
+    block1d = None
+    block2d = None
+
+    # Expressions for local x/y id's and global x id
+    _lid = None
+    _gid = None
+
+    # Prefix for variables in shared memory
+    _shared_prfx = None
+
+    # Expression for synchronising shared memory
+    _shared_sync = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Specialise
+        if self.ndim == 1:
+            self.preamble += 'if (_x < _nx)'
+        else:
+            blk_y, lid_y = self.block2d[1], self._lid[1]
+            self.preamble += f'''
+                ixdtype_t _ysize = (_ny + {blk_y - 1}) / {blk_y};
+                ixdtype_t _ystart = {lid_y}*_ysize;
+                ixdtype_t _yend = min(_ny, _ystart + _ysize);
+                for (ixdtype_t _y = _ystart; _x < _nx && _y < _yend; _y++)'''
+
+    def ldim_size(self, name, factor=1):
+        return f'ld{name}'
+
+    def needs_ldim(self, arg):
+        return self.ndim == 2 or (arg.ncdim > 0 and not arg.ismpi)
+
+    def _preload_arg(self, arg):
+        bx, by = self.block2d[:2]
+        lx, ly = self._lid
+        sprfx = self._shared_prfx
+
+        sname = f'{arg.name}_s'
+
+        # Determine the total number of elements in the array
+        n = prod(arg.cdims)
+
+        if arg.dtype == 'fpdtype_t':
+            itemsize = np.dtype(self.fpdtype).itemsize
+        else:
+            itemsize = 4
+
+        # Tally up the number of bytes required for the shared array
+        nbytes = n*bx*itemsize
+
+        # Dereference the argument
+        rhs = self._deref_arg(arg)
+
+        if arg.ncdim == 1:
+            lhs = f'{sname}[_i][{lx}]'
+            rhs = rhs.replace(r'\1', '_i')
+        else:
+            dim1 = f'(_i / {arg.cdims[1]})'
+            dim2 = f'(_i % {arg.cdims[1]})'
+
+            lhs = f'{sname}[{dim1}][{dim2}][{lx}]'
+            rhs = rhs.replace(r'\1', dim1).replace(r'\2', dim2)
+
+        # Declare the shared array
+        lcode = f'{sprfx} {arg.dtype} {sname}{arg.cdimstr}[{bx}];'
+
+        # Emit the for loop to populate the array
+        lcode += f'''
+            for (int _i = {ly}; _x < _nx && _i < {n}; _i += {by})
+                {lhs} = {rhs};'''
+
+        return sname, lcode, nbytes
+
+    def _render_body_preamble(self, body):
+        preamble = []
+
+        # For 2D kernels, preload data from column broadcast arrays
+        # into shared memory to guarantee reuse
+        if self.ndim == 2:
+            usedb = 0
+
+            for va in self.vectargs:
+                if va.isbroadcastc and va.ncdim >= 1:
+                    # Preload the argument into shared memory
+                    sname, lcode, nbytes = self._preload_arg(va)
+
+                    # Limit ourselves to 32KiB of shared state
+                    if usedb + nbytes > 32*1024:
+                        continue
+
+                    preamble.append(lcode)
+                    usedb += nbytes
+
+                    if va.ncdim == 1:
+                        subs = fr'{sname}[\1][{self._lid[0]}]'
+                    else:
+                        subs = fr'{sname}[\1][\2][{self._lid[0]}]'
+
+                    # Substitute all uses of the argument in the body
+                    body = re.sub(self._match_arg(va), subs, body)
+
+        # If we performed any preloading then emit a shared memory barrier
+        if preamble:
+            preamble.append(f'{self._shared_sync};')
+
+        return self._render_body(body), '\n'.join(preamble)
+
+    def render(self):
+        spec = self._render_spec()
+
+        return f'''{spec}
+            {{
+                ixdtype_t _x = {self._gid};
+                #define X_IDX (_x)
+                #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
+                #define BCAST_BLK(r, c, ld)  c
+                {self.preamble}
+                {{
+                    {self.body}
+                }}
+                #undef X_IDX
+                #undef X_IDX_AOSOA
+                #undef BCAST_BLK
+            }}'''

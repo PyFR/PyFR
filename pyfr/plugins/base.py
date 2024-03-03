@@ -1,14 +1,23 @@
-# -*- coding: utf-8 -*-
-
-import os
+import functools as ft
 import re
 import shlex
 
 import numpy as np
 from pytools import prefork
 
-from pyfr.mpiutil import get_comm_rank_root
-from pyfr.regions import BoundaryRegion, ConstructiveRegion
+from pyfr.inifile import NoOptionError
+from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.quadrules import get_quadrule
+from pyfr.regions import parse_region_expr
+from pyfr.util import memoize
+
+
+def cli_external(meth):
+    @ft.wraps(meth)
+    def newmeth(cls, args):
+        return meth(cls(), args)
+
+    return classmethod(newmeth)
 
 
 def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
@@ -23,11 +32,54 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     outf = open(fname, 'a')
 
     # Output a header if required
-    if os.path.getsize(fname) == 0 and cfg.getbool(cfgsect, headerkey, True):
+    if outf.tell() == 0 and cfg.getbool(cfgsect, headerkey, True):
         print(header, file=outf)
 
     # Return the file
     return outf
+
+
+def region_data(cfg, cfgsect, mesh, rallocs):
+    region = cfg.get(cfgsect, 'region', '*')
+
+    # Determine the element types in our partition
+    sptptn = f'spt_(.+?)_p{rallocs.prank}$'
+    etypes = [m[1] for f in mesh if (m := re.match(sptptn, f))]
+
+    # All elements
+    if region == '*':
+        return {etype: slice(None) for etype in etypes}
+    # All elements inside some region
+    else:
+        comm, rank, root = get_comm_rank_root()
+
+        # Parse the region expression and obtain the element set
+        rgn = parse_region_expr(region)
+        eset = rgn.interior_eles(mesh, rallocs)
+
+        # Ensure the region is not empty
+        if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
+            raise ValueError(f'Empty region {region}')
+
+        return {etype: np.unique(eidxs)
+                for etype, eidxs in sorted(eset.items())}
+
+
+def surface_data(cfg, cfgsect, mesh, rallocs):
+    surf = cfg.get(cfgsect, 'surface')
+
+    comm, rank, root = get_comm_rank_root()
+
+    # Parse the surface expression and obtain the element set
+    rgn = parse_region_expr(surf)
+    eset = rgn.surface_faces(mesh, rallocs)
+
+    # Ensure the surface is not empty
+    if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
+        raise ValueError(f'Empty surface {surf}')
+
+    return {etype: np.unique(eidxs).astype(np.int32)
+            for etype, eidxs in sorted(eset.items())}
 
 
 class BasePlugin:
@@ -57,11 +109,32 @@ class BasePlugin:
             raise RuntimeError(f'Formulation {intg.formulation} not '
                                f'supported by plugin {self.name}')
 
+        # Check that we support dimensionality of simulation
+        if intg.system.ndims not in self.dimensions:
+            raise RuntimeError(f'Dimensionality of {intg.system.ndims} not '
+                               f'supported by plugin {self.name}')
+
     def __call__(self, intg):
         pass
 
     def serialise(self, intg):
         return {}
+
+
+class BaseSolnPlugin(BasePlugin):
+    prefix = 'soln'
+
+
+class BaseSolverPlugin(BasePlugin):
+    prefix = 'solver'
+
+
+class BaseCLIPlugin:
+    name = None
+
+    @classmethod
+    def add_cli(cls, parser):
+        pass
 
 
 class PostactionMixin:
@@ -94,13 +167,10 @@ class PostactionMixin:
                 prefork.wait(self.postactaid)
 
             # Prepare the command line
-            cmdline = shlex.split(self.postact.format(**kwargs))
+            cmdline = shlex.split(self.postact.format_map(kwargs))
 
             # Invoke
             if self.postactmode == 'blocking':
-                # Store returning code of the post-action
-                # If it is different from zero
-                # request intg to abort the computation
                 intg.abort |= bool(prefork.call(cmdline))
             else:
                 self.postactaid = prefork.call_async(cmdline)
@@ -110,35 +180,51 @@ class RegionMixin:
     def __init__(self, intg, *args, **kwargs):
         super().__init__(intg, *args, **kwargs)
 
-        # Region of interest
-        region = self.cfg.get(self.cfgsect, 'region', '*')
+        # Parse the region
+        ridxs = region_data(self.cfg, self.cfgsect, intg.system.mesh,
+                            intg.rallocs)
 
-        # All elements
-        if region == '*':
-            self._prepare_region_data_all(intg)
-        # All elements inside some region
-        else:
-            # Geometric region
-            if '(' in region:
-                rgn = ConstructiveRegion(region)
-            # Boundary region
-            else:
-                m = re.match(r'(\w+)(?:\s+\+(\d+))?$', region)
-                rgn = BoundaryRegion(m[1], nlayers=int(m[2] or 1))
-
-            eset = rgn.interior_eles(intg.system.mesh, intg.rallocs)
-            self._prepare_region_data_eset(intg, eset)
-
-    def _prepare_region_data_all(self, intg):
-        self._ele_regions = [(i, etype, slice(None))
-                             for i, etype in enumerate(intg.system.ele_types)]
-        self._ele_region_data = {}
-
-    def _prepare_region_data_eset(self, intg, eset):
+        # Generate the appropriate metadata arrays
         self._ele_regions, self._ele_region_data = [], {}
-        for etype, eidxs in sorted(eset.items()):
+        for etype, eidxs in ridxs.items():
             doff = intg.system.ele_types.index(etype)
-            darr = np.unique(eidxs).astype(np.int32)
+            self._ele_regions.append((doff, etype, eidxs))
 
-            self._ele_regions.append((doff, etype, darr))
-            self._ele_region_data[f'{etype}_idxs'] = darr
+            if not isinstance(eidxs, slice):
+                self._ele_region_data[f'{etype}_idxs'] = eidxs
+
+
+class SurfaceMixin:
+    def _surf_region(self, intg):
+        # Parse the region
+        sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh,
+                             intg.rallocs)
+
+        # Generate the appropriate metadata arrays
+        ele_surface, ele_surface_data = [], {}
+        for (etype, face), eidxs in sidxs.items():
+            doff = intg.system.ele_types.index(etype)
+            ele_surface.append((doff, etype, face, eidxs))
+
+            if not isinstance(eidxs, slice):
+                ele_surface_data[f'{etype}_f{face}_idxs'] = eidxs
+        return ele_surface, ele_surface_data
+
+    @memoize
+    def _surf_quad(self, itype, proj, flags=''):
+        # Obtain quadrature info
+        rname = self.cfg.get(f'solver-interfaces-{itype}', 'flux-pts')
+
+        # Quadrature rule (default to that of the solution points)
+        qrule = self.cfg.get(self.cfgsect, f'quad-pts-{itype}', rname)
+        try:
+            qdeg = self.cfg.getint(self.cfgsect, f'quad-deg-{itype}')
+        except NoOptionError:
+            qdeg = self.cfg.getint(self.cfgsect, 'quad-deg')
+
+        # Get the quadrature rule
+        q = get_quadrule(itype, qrule, qdeg=qdeg, flags=flags)
+
+        # Project its points onto the provided surface
+        pts = np.atleast_2d(q.pts.T)
+        return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts

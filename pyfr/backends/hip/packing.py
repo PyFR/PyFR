@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+import numpy as np
 
 from pyfr.backends.base import NullKernel
 from pyfr.backends.hip.provider import (HIPKernel, HIPKernelProvider,
@@ -8,6 +8,7 @@ from pyfr.backends.hip.provider import (HIPKernel, HIPKernelProvider,
 class HIPPackingKernels(HIPKernelProvider):
     def pack(self, mv):
         hip = self.backend.hip
+        ixdtype = self.backend.ixdtype
 
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -20,7 +21,7 @@ class HIPPackingKernels(HIPKernelProvider):
         src = self.backend.lookup.get_template('pack').render(blocksz=block[0])
 
         # Build
-        kern = self._build_kernel('pack_view', src, 'iiiPPPP')
+        kern = self._build_kernel('pack_view', src, [ixdtype]*3 + [np.uintp]*4)
 
         # Set the arguments
         params = kern.make_params(grid, block)

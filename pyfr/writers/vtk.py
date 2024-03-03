@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
-
 from collections import defaultdict
 import os
 import re
 
 import numpy as np
 
+from pyfr.progress import NullProgressBar
 from pyfr.shapes import BaseShape
 from pyfr.util import memoize, subclass_where
 from pyfr.writers import BaseWriter
@@ -393,21 +392,27 @@ class VTKWriter(BaseWriter):
             self._vtk_vars = [(k, [k]) for k in self._soln_fields]
             self.tcurr = None
 
-    def _pre_proc_fields_soln(self, name, mesh, soln):
+        # Handle field subsetting
+        if args.fields:
+            self._vtk_vars = [(f, v) for f, v in self._vtk_vars
+                              if f in args.fields]
+
+            if len(self._vtk_vars) != len(args.fields):
+                raise RuntimeError('Invalid field specification')
+
+    def _pre_proc_fields_soln(self, soln):
         # Convert from conservative to primitive variables
         return np.array(self.elementscls.con_to_pri(soln, self.cfg))
 
-    def _pre_proc_fields_scal(self, name, mesh, soln):
+    def _pre_proc_fields_scal(self, soln):
         return soln
 
     def _post_proc_fields_soln(self, vsoln):
-        # Primitive and visualisation variable maps
         privarmap = self.elementscls.privarmap[self.ndims]
-        visvarmap = self.elementscls.visvarmap[self.ndims]
 
         # Prepare the fields
         fields = []
-        for fnames, vnames in visvarmap:
+        for fnames, vnames in self._vtk_vars:
             ix = [privarmap.index(vn) for vn in vnames]
 
             fields.append(vsoln[ix])
@@ -494,7 +499,7 @@ class VTKWriter(BaseWriter):
         shape = self._get_shape(name, nspts)
         return shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
 
-    def write_out(self):
+    def write_out(self, progress=NullProgressBar()):
         name, extn = os.path.splitext(self.outf)
         parallel = extn == '.pvtu'
 
@@ -507,7 +512,7 @@ class VTKWriter(BaseWriter):
 
         write_s_to_fh = lambda s: fh.write(s.encode())
 
-        for pfn, misil in parts.items():
+        for pfn, misil in progress.start_with_iter(parts.items()):
             with open(pfn, 'wb') as fh:
                 write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
                               'byte_order="LittleEndian" '
@@ -655,7 +660,7 @@ class VTKWriter(BaseWriter):
         vpts = vpts.reshape(nsvpts, -1, self.ndims)
 
         # Pre-process the solution
-        soln = self._pre_proc_fields(name, mesh, soln).swapaxes(0, 1)
+        soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
         # Interpolate the solution to the vis points
         vsoln = soln_vtu_op @ soln.reshape(len(soln), -1)
@@ -737,7 +742,7 @@ class TensorProdShapeSubDiv(BaseShapeSubDiv):
             conbase = np.hstack((conbase, conbase + (1 + n)**2))
 
         # Calculate offset of each subdivided element's nodes
-        nodeoff = np.zeros((n,)*cls.ndim, dtype=np.int)
+        nodeoff = np.zeros((n,)*cls.ndim, dtype=np.int32)
         for dim, off in enumerate(np.ix_(*(range(n),)*cls.ndim)):
             nodeoff += off*(n + 1)**dim
 

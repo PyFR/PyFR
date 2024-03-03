@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 #include <omp.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <tgmath.h>
 
@@ -13,8 +13,9 @@
 
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
+typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
 
 // Atomic helpers
-#define atomic_min_pos(addr, val) _Pragma("omp atomic compare") if ((val) < *(addr)) { *(addr) = (val); }
+#define atomic_min_fpdtype(addr, val) _Pragma("omp atomic compare") if ((val) < *(addr)) { *(addr) = (val); }
 
 ${next.body()}

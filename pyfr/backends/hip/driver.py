@@ -1,6 +1,4 @@
-# -*- coding: utf-8 -*-
-
-from ctypes import (POINTER, Structure, addressof, create_string_buffer,
+from ctypes import (POINTER, Structure, addressof, byref, cast, create_string_buffer,
                     c_char, c_char_p, c_float, c_int, c_size_t, c_uint,
                     c_void_p)
 from uuid import UUID
@@ -23,82 +21,6 @@ class HIPFileNotFound(HIPError): pass
 class HIPNotFound(HIPError): pass
 class HIPIllegalAddress(HIPError): pass
 class HIPLaunchFailure(HIPError): pass
-
-
-class HIPDevProps(Structure):
-    _fields_ = [
-        ('s_name', c_char*256),
-        ('i_total_global_mem', c_size_t),
-        ('i_shared_mem_per_block', c_size_t),
-        ('i_regs_per_block', c_int),
-        ('i_warp_size', c_int),
-        ('i_max_threads_per_block', c_int),
-        ('ia_max_threads_dim', c_int*3),
-        ('ia_max_grid_size', c_int*3),
-        ('i_clock_rate', c_int),
-        ('i_memory_clock_rate', c_int),
-        ('i_memory_bus_width', c_int),
-        ('i_total_const_mem', c_size_t),
-        ('i_major', c_int),
-        ('i_minor', c_int),
-        ('i_multi_processor_count', c_int),
-        ('i_l2_cache_size', c_int),
-        ('i_max_threads_per_multiprocessor', c_int),
-        ('i_compute_mode', c_int),
-        ('i_clock_instruction_rate', c_int),
-        ('b_global_int32_atomics', c_uint, 1),
-        ('b_global_float_atomic_exch', c_uint, 1),
-        ('b_shared_int32_atomics', c_uint, 1),
-        ('b_shared_float_atomic_exch', c_uint, 1),
-        ('b_float_atomic_add', c_uint, 1),
-        ('b_global_int64_atomics', c_uint, 1),
-        ('b_shared_int64_atomics', c_uint, 1),
-        ('b_doubles', c_uint, 1),
-        ('b_warp_vote', c_uint, 1),
-        ('b_wrap_ballot', c_uint, 1),
-        ('b_warp_shuffle', c_uint, 1),
-        ('b_funnel_shift', c_uint, 1),
-        ('b_thread_fence_system', c_uint, 1),
-        ('b_sync_threads_ext', c_uint, 1),
-        ('b_surface_funcs', c_uint, 1),
-        ('b_3d_grid', c_uint, 1),
-        ('b_dynamic_parallelism', c_uint, 1),
-        ('b_concurrent_kernels', c_int),
-        ('i_pci_domain_id', c_int),
-        ('i_pci_bus_id', c_int),
-        ('i_pci_device_id', c_int),
-        ('i_max_shared_memory_per_multiprocessor', c_size_t),
-        ('b_is_multi_gpu_board', c_int),
-        ('b_can_map_host_memory', c_int),
-        ('i_gcn_arch', c_int),
-        ('s_gcn_arch_name', c_char*256),
-        ('b_integrated', c_int),
-        ('b_cooperative_launch', c_int),
-        ('b_cooperative_multi_device_launch', c_int),
-        ('i_max_texture_1d', c_int),
-        ('ia_max_texture_2d', c_int*2),
-        ('ia_max_texture_3d', c_int*3),
-        ('hdp_mem_flush_cntl', c_void_p),
-        ('hdp_reg_flush_cntl', c_void_p),
-        ('i_mem_pitch', c_size_t),
-        ('i_texture_alignment', c_size_t),
-        ('i_texture_pitch_alignment', c_size_t),
-        ('b_kernel_exec_timeout_enalbed', c_int),
-        ('b_ecc_enalbed', c_int),
-        ('b_tcc_driver', c_int),
-        ('b_cooperative_multi_device_unmatched_func', c_int),
-        ('b_cooperative_multi_device_unmatched_grid_dim', c_int),
-        ('b_cooperative_multi_device_unmatched_block_dim', c_int),
-        ('b_cooperative_multi_device_unmatched_shared_mem', c_int),
-        ('b_is_large_bar', c_int),
-        ('i_asic_revision', c_int),
-        ('b_managed_memory', c_int),
-        ('b_direct_managed_mem_access_from_host', c_int),
-        ('b_concurrent_managed_access', c_int),
-        ('b_pageable_memory_access', c_int),
-        ('b_pageable_memory_access_using_page_tables', c_int),
-        ('reserved', c_int*64)
-    ]
 
 
 class HIPKernelNodeParams(Structure):
@@ -158,12 +80,16 @@ class HIPWrappers(LibWrapper):
     }
 
     # Constants
+    FUNC_ATTR_SHARED_SIZE_BYTES = 1
+    FUNC_ATTR_LOCAL_SIZE_BYTES = 3
+    FUNC_ATTR_NUM_REGS = 4
     MEMCPY_DEFAULT = 4
 
     # Functions
     _functions = [
+        (c_int, 'hipRuntimeGetVersion', POINTER(c_int)),
         (c_int, 'hipGetDeviceCount', POINTER(c_int)),
-        (c_int, 'hipGetDeviceProperties', POINTER(HIPDevProps), c_int),
+        (c_int, 'hipGetDevicePropertiesR0600', c_void_p, c_int),
         (c_int, 'hipSetDevice', c_int),
         (c_int, 'hipDeviceGetUuid', 16*c_char, c_int),
         (c_int, 'hipMalloc', POINTER(c_void_p), c_size_t),
@@ -190,6 +116,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipModuleLaunchKernel', c_void_p, c_uint, c_uint, c_uint,
          c_uint, c_uint, c_uint, c_uint, c_void_p, POINTER(c_void_p),
          c_void_p),
+        (c_int, 'hipFuncGetAttribute', POINTER(c_int), c_int, c_void_p),
         (c_int, 'hipGraphCreate', POINTER(c_void_p), c_uint),
         (c_int, 'hipGraphDestroy', c_void_p),
         (c_int, 'hipGraphAddEmptyNode', POINTER(c_void_p), c_void_p,
@@ -209,6 +136,9 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipGraphExecDestroy', c_void_p),
         (c_int, 'hipGraphLaunch', c_void_p, c_void_p)
     ]
+
+    def _transname(self, name):
+        return name.removesuffix('R0600')
 
 
 class _HIPBase:
@@ -317,9 +247,21 @@ class HIPFunction(_HIPBase):
 
         super().__init__(hip, ptr)
 
+        self.nreg = self._get_attr('num_regs')
+        self.shared_mem = self._get_attr('shared_size_bytes')
+        self.local_mem = self._get_attr('local_size_bytes')
+
         # Save a reference to our underlying module and argument types
         self.module = module
         self.argtypes = list(argtypes)
+
+    def _get_attr(self, attr):
+        attr = getattr(self.hip.lib, f'FUNC_ATTR_{attr.upper()}')
+
+        v = c_int()
+        self.hip.lib.hipFuncGetAttribute(byref(v), attr, self)
+
+        return v.value
 
     def make_params(self, grid, block, sharedb=0):
         return HIPKernelNodeParams(self, grid, block, sharedb)
@@ -423,21 +365,13 @@ class HIP:
         return count.value
 
     def device_properties(self, devid):
-        props = HIPDevProps()
-        self.lib.hipGetDeviceProperties(props, devid)
+        buf = create_string_buffer(2048)
+        self.lib.hipGetDeviceProperties(buf, devid)
 
-        dprops = {}
-        for name, *t in props._fields_:
-            if name.startswith('b_'):
-                dprops[name[2:]] = bool(getattr(props, name))
-            elif name.startswith('i_'):
-                dprops[name[2:]] = int(getattr(props, name))
-            elif name.startswith('ia_'):
-                dprops[name[3:]] = [int(v) for v in getattr(props, name)]
-            elif name.startswith('s_'):
-                dprops[name[2:]] = getattr(props, name).decode()
-
-        return dprops
+        return {
+            'gcn_arch_name': cast(buf[1160:], c_char_p).value.decode(),
+            'warp_size': cast(buf[308:], POINTER(c_int)).contents.value
+        }
 
     def device_uuid(self, devid):
         buf = create_string_buffer(16)

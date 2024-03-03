@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import math
 
 from pyfr.integrators.base import BaseIntegrator
@@ -19,10 +17,10 @@ class BaseDualIntegrator(BaseIntegrator):
         )
 
         # Event handlers for advance_to
-        self.completed_step_handlers = self._get_plugins(initsoln)
+        self.plugins = self._get_plugins(initsoln)
 
-        # Delete the memory-intensive elements map from the system
-        del self.system.ele_map
+        # Commit the pseudo integrators now we have the plugins
+        self.pseudointegrator.commit()
 
     @property
     def system(self):
@@ -50,6 +48,22 @@ class BaseDualIntegrator(BaseIntegrator):
             self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
 
         return self._curr_grad_soln
+
+    @property
+    def dt_soln(self):
+        system = self.system
+
+        if not self._curr_dt_soln:
+            copy = self.soln
+            idx = self.pseudointegrator._idxcurr
+            system.rhs(self.tcurr, idx, idx)
+            self._curr_dt_soln = system.ele_scal_upts(idx)
+
+            # Reset current register with original contents
+            for c, e in zip(copy, system.ele_banks):
+                e[idx].set(c)
+
+        return self._curr_dt_soln
 
     def call_plugin_dt(self, dt):
         rem = math.fmod(dt, self._dt)

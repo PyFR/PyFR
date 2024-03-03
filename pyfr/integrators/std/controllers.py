@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import math
 
 import numpy as np
@@ -12,6 +10,9 @@ class BaseStdController(BaseStdIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Ensure the system is compatible with our formulation/controller
+        self.system.elementscls.validate_formulation(self)
+
         # Solution filtering frequency
         self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
 
@@ -20,8 +21,7 @@ class BaseStdController(BaseStdIntegrator):
 
         # Fire off any event handlers if not restarting
         if not self.isrestart:
-            for csh in self.completed_step_handlers:
-                csh(self)
+            self._run_plugins()
 
     def _accept_step(self, dt, idxcurr, err=None):
         self.tcurr += dt
@@ -35,18 +35,10 @@ class BaseStdController(BaseStdIntegrator):
         if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
             self.system.filt(idxcurr)
 
-        # Invalidate the solution cache
-        self._curr_soln = None
+        self._invalidate_caches()
 
-        # Invalidate the solution gradients cache
-        self._curr_grad_soln = None
-
-        # Fire off any event handlers
-        for csh in self.completed_step_handlers:
-            csh(self)
-
-        # Abort if plugins request it
-        self._check_abort()
+        # Run any plugins
+        self._run_plugins()
 
         # Clear the step info
         self.stepinfo = []
@@ -64,6 +56,7 @@ class BaseStdController(BaseStdIntegrator):
 
 class StdNoneController(BaseStdController):
     controller_name = 'none'
+    controller_has_variable_dt = False
 
     @property
     def controller_needs_errest(self):
@@ -86,6 +79,7 @@ class StdNoneController(BaseStdController):
 
 class StdPIController(BaseStdController):
     controller_name = 'pi'
+    controller_has_variable_dt = True
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -98,6 +92,12 @@ class StdPIController(BaseStdController):
         # Error tolerances
         self._atol = self.cfg.getfloat(sect, 'atol')
         self._rtol = self.cfg.getfloat(sect, 'rtol')
+
+        if self._atol < 10*self.backend.fpdtype_eps:
+            raise ValueError('Absolute tolerance too small')
+
+        if self._rtol < 10*self.backend.fpdtype_eps:
+            raise ValueError('Relative tolerance too small')
 
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')

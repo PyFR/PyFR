@@ -1,11 +1,7 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseACFluidElements:
-    formulations = ['dual']
-
     privarmap = {2: ['p', 'u', 'v'],
                  3: ['p', 'u', 'v', 'w']}
 
@@ -30,6 +26,16 @@ class BaseACFluidElements:
     def con_to_pri(convs, cfg):
         return convs
 
+    @staticmethod
+    def diff_con_to_pri(cons, diff_cons, cfg):
+        return diff_cons
+
+    @staticmethod
+    def validate_formulation(controller):
+        if controller.formulation != 'dual':
+            raise ValueError('System not compatible with time stepping '
+                             'formulation.')
+
 
 class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
     def set_backend(self, *args, **kwargs):
@@ -41,7 +47,6 @@ class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
 
         # Register our flux kernels
         self._be.pointwise.register('pyfr.solvers.aceuler.kernels.tflux')
-        self._be.pointwise.register('pyfr.solvers.aceuler.kernels.tfluxlin')
 
         # Template parameters for the flux kernels
         tplargs = {
@@ -53,31 +58,38 @@ class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
         }
 
         # Helpers
+        tdisf = []
         c, l = 'curved', 'linear'
         r, s = self._mesh_regions, self._slice_mat
+        slicedk = self._make_sliced_kernel
 
         if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
-                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
-                smats=self.curved_smat_at('upts')
-            )
+            tdisf.append(lambda uin: self._be.kernel(
+                'tflux', tplargs=tplargs | {'ktype': 'curved'},
+                dims=[self.nupts, r[c]], u=s(self.scal_upts[uin], c),
+                f=s(self._vect_upts, c), smats=self.curved_smat_at('upts')
+            ))
         elif c in r:
-            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
+            tdisf.append(lambda: self._be.kernel(
+                'tflux', tplargs=tplargs | {'ktype': 'curved'},
+                dims=[self.nqpts, r[c]],
                 u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
                 smats=self.curved_smat_at('qpts')
-            )
+            ))
 
         if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
-                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
-                verts=self.ploc_at('linspts', l), upts=self.upts
-            )
+            tdisf.append(lambda uin: self._be.kernel(
+                'tflux', tplargs=tplargs | {'ktype': 'linear'},
+                dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
+                f=s(self._vect_upts, l), verts=self.ploc_at('linspts', l),
+                upts=self.upts
+            ))
         elif l in r:
-            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
-                u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
-                verts=self.ploc_at('linspts', l), upts=self.qpts
-            )
+            tdisf.append(lambda: self._be.kernel(
+                'tflux', tplargs=tplargs | {'ktype': 'linear'},
+                dims=[self.nqpts, r[l]], u=s(self._scal_qpts, l),
+                f=s(self._vect_qpts, l), verts=self.ploc_at('linspts', l),
+                upts=self.qpts
+            ))
+
+        self.kernels['tdisf'] = lambda: slicedk(k() for k in tdisf)

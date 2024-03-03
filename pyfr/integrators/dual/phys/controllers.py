@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.integrators.dual.phys.base import BaseDualIntegrator
 
 
@@ -12,8 +10,7 @@ class BaseDualController(BaseDualIntegrator):
 
         # Fire off any event handlers if not restarting
         if not self.isrestart:
-            for csh in self.completed_step_handlers:
-                csh(self)
+            self._run_plugins()
 
     def _accept_step(self, idxcurr):
         self.tcurr += self._dt
@@ -24,18 +21,10 @@ class BaseDualController(BaseDualIntegrator):
         if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
             self.pseudointegrator.system.filt(idxcurr)
 
-        # Invalidate the solution cache
-        self._curr_soln = None
+        self._invalidate_caches()
 
-        # Invalidate the solution gradients cache
-        self._curr_grad_soln = None
-
-        # Fire off any event handlers
-        for csh in self.completed_step_handlers:
-            csh(self)
-
-        # Abort if plugins request it
-        self._check_abort()
+        # Run any plugins
+        self._run_plugins()
 
         # Clear the pseudo step info
         self.pseudointegrator.pseudostepinfo = []
@@ -43,6 +32,7 @@ class BaseDualController(BaseDualIntegrator):
 
 class DualNoneController(BaseDualController):
     controller_name = 'none'
+    controller_has_variable_dt = False
 
     def advance_to(self, t):
         if t < self.tcurr:

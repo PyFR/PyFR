@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -9,6 +7,9 @@ from pyfr.mpiutil import get_comm_rank_root, mpi
 class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        # Ensure the system is compatible with our formulation
+        self.system.elementscls.validate_formulation(self)
 
         # Stats on the most recent step
         self.pseudostepinfo = []
@@ -23,6 +24,9 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         else:
             self._update_pseudostepinfo(i + 1, None)
             return False
+
+    def commit(self):
+        self.system.commit()
 
     def _resid(self, rcurr, rold, dt_fac):
         comm, rank, root = get_comm_rank_root()

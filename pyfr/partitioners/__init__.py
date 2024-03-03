@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from pyfr.partitioners.base import BasePartitioner
 from pyfr.partitioners.metis import METISPartitioner
 from pyfr.partitioners.scotch import SCOTCHPartitioner

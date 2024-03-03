@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 from ctypes import (POINTER, create_string_buffer, c_char_p, c_int, c_size_t,
                     c_void_p)
 import shlex
@@ -36,7 +34,7 @@ class NVRTCWrappers(LibWrapper):
 
     # Functions
     _functions = [
-        (c_int, 'nvrtcCreateProgram',  POINTER(c_void_p), c_char_p, c_char_p,
+        (c_int, 'nvrtcCreateProgram', POINTER(c_void_p), c_char_p, c_char_p,
          c_int, POINTER(c_char_p), POINTER(c_char_p)),
         (c_int, 'nvrtcDestroyProgram', POINTER(c_void_p)),
         (c_int, 'nvrtcCompileProgram', c_void_p, c_int, POINTER(c_char_p)),

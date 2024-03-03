@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import itertools as it
 import math
 
@@ -17,6 +15,17 @@ class BaseAdvectionIntInters(BaseInters):
         # Generate the left and right hand side view matrices
         self._scal_lhs = self._scal_view(lhs, 'get_scal_fpts_for_inter')
         self._scal_rhs = self._scal_view(rhs, 'get_scal_fpts_for_inter')
+
+        # Generate the additional view matrices for entropy filtering
+        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            self._entmin_lhs = self._view(
+                lhs, 'get_entmin_int_fpts_for_inter', with_perm=False
+            )
+            self._entmin_rhs = self._view(
+                rhs, 'get_entmin_int_fpts_for_inter', with_perm=False
+            )
+        else:
+            self._entmin_lhs = self._entmin_rhs = None
 
         # Generate the constant matrices
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
@@ -65,6 +74,29 @@ class BaseAdvectionMPIInters(BaseInters):
             self._rhsrank, scal_fpts_tag
         )
 
+        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            self._entmin_lhs = self._xchg_view(
+                lhs, 'get_entmin_int_fpts_for_inter', with_perm=False
+            )
+            self._entmin_rhs = be.xchg_matrix_for_view(self._entmin_lhs)
+
+            self.kernels['ent_fpts_pack'] = lambda: be.kernel(
+                'pack', self._entmin_lhs
+            )
+            self.kernels['ent_fpts_unpack'] = lambda: be.kernel(
+                'unpack', self._entmin_rhs
+            )
+
+            ent_fpts_tag = next(self._mpi_tag_counter)
+            self.mpireqs['ent_fpts_send'] = lambda: self._entmin_lhs.sendreq(
+                self._rhsrank, ent_fpts_tag
+            )
+            self.mpireqs['ent_fpts_recv'] = lambda: self._entmin_rhs.recvreq(
+                self._rhsrank, ent_fpts_tag
+            )
+        else:
+            self._entmin_lhs = self._entmin_rhs = None
+
 
 class BaseAdvectionBCInters(BaseInters):
     type = None
@@ -84,6 +116,11 @@ class BaseAdvectionBCInters(BaseInters):
 
         # Make the simulation time available inside kernels
         self._set_external('t', 'scalar fpdtype_t')
+
+        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+            self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
+        else:
+            self._entmin_lhs = None
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be

@@ -1,16 +1,16 @@
-# -*- coding: utf-8 -*-
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 __global__ __launch_bounds__(${block[0]*block[1]}) void
-axnpby(int nrow, int ncolb, int ldim, fpdtype_t* __restrict__ x0,
+axnpby(ixdtype_t ncolb, ixdtype_t ldim,
+       fpdtype_t* __restrict__ x0,
        ${', '.join(f'const fpdtype_t* __restrict__ x{i}'
                    for i in range(1, nv))},
        ${', '.join(f'fpdtype_t a{i}' for i in range(nv))})
 {
     int i = blockIdx.y*blockDim.y + threadIdx.y;
-    int j = blockIdx.x*blockDim.x + threadIdx.x;
-    int idx;
+    ixdtype_t j = ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x;
+    ixdtype_t idx;
 
     if (j < ncolb && a0 == 0.0)
     {
