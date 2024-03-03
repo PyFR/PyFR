@@ -102,7 +102,7 @@ Python packages:
 2. `h5py <https://www.h5py.org/>`_ >= 2.10
 3. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
 4. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
-5. `numpy <https://www.numpy.org/>`_ >= 1.20
+5. `numpy <https://www.numpy.org/>`_ >= 1.26.4
 6. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
 7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 8. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.0.1
@@ -163,7 +163,7 @@ requires:
 
 1. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
 2. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
-   79f8f74118ad640011db830435a57fa81c60b786 in the ``main`` branch
+   bf5313db8bf2edfc127bb715c36353e610ce7c04 in the ``main`` branch
    compiled as a shared library (STATIC=0) with BLAS=0.
 
 In order for PyFR to find libxsmm it must be located in a directory

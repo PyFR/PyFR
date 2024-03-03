@@ -9,7 +9,7 @@ Parameterises the backend with
 
     ``single`` | ``double``
 
-2.  ``memory-model`` --- if to enable support for large working sets;
+2. ``memory-model`` --- if to enable support for large working sets;
     should be ``normal`` unless a memory-model error is encountered:
 
     ``normal`` | ``large``
