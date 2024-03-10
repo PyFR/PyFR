@@ -14,9 +14,17 @@ class TplargsMixin:
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
+        if shock_capturing == 'entropy-filter':
+            self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
+                                           1e-6)
+        else:
+            self.p_min = self.cfg.getfloat('solver-interfaces', 'p-min',
+                                           5*self._be.fpdtype_eps)
+
         self._tplargs = dict(ndims=self.ndims, nvars=self.nvars,
                              rsolver=rsolver, visc_corr=visc_corr,
-                             shock_capturing=shock_capturing, c=self.c)
+                             shock_capturing=shock_capturing, c=self.c,
+                             p_min=self.p_min)
 
 
 class NavierStokesIntInters(TplargsMixin,
@@ -31,7 +39,7 @@ class NavierStokesIntInters(TplargsMixin,
         self.kernels['con_u'] = lambda: self._be.kernel(
             'intconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             ulin=self._scal_lhs, urin=self._scal_rhs,
-            ulout=self._vect_lhs, urout=self._vect_rhs
+            ulout=self._comm_lhs, urout=self._comm_rhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -53,7 +61,7 @@ class NavierStokesMPIInters(TplargsMixin,
 
         self.kernels['con_u'] = lambda: self._be.kernel(
             'mpiconu', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._vect_lhs
+            ulin=self._scal_lhs, urin=self._scal_rhs, ulout=self._comm_lhs
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -80,7 +88,7 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ulin=self._scal_lhs,
-            ulout=self._vect_lhs, nlin=self._pnorm_lhs,
+            ulout=self._comm_lhs, nlin=self._pnorm_lhs,
             **self._external_vals
         )
         self.kernels['comm_flux'] = lambda: self._be.kernel(

@@ -25,6 +25,9 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
             self._update_pseudostepinfo(i + 1, None)
             return False
 
+    def commit(self):
+        self.system.commit()
+
     def _resid_multiple(self, rcurr, rold, dt_fac):
 
         if self._pseudo_norm in ('l2', 'uniform'):

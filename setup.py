@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 import re
 from setuptools import setup
+import sys
+
+
+# Check Python version
+if sys.version_info < (3, 10):
+    sys.exit('Minimum Python version is 3.10')
 
 
 # PyFR version
@@ -20,6 +26,8 @@ modules = [
     'pyfr.backends.cuda.kernels',
     'pyfr.backends.hip',
     'pyfr.backends.hip.kernels',
+    'pyfr.backends.metal',
+    'pyfr.backends.metal.kernels',
     'pyfr.backends.opencl',
     'pyfr.backends.opencl.kernels',
     'pyfr.backends.openmp',
@@ -67,11 +75,12 @@ tests = [
 package_data = {
     'pyfr.backends.cuda.kernels': ['*.mako'],
     'pyfr.backends.hip.kernels': ['*.mako'],
+    'pyfr.backends.metal.kernels': ['*.mako'],
     'pyfr.backends.opencl.kernels': ['*.mako'],
     'pyfr.backends.openmp.kernels': ['*.mako'],
     'pyfr.integrators.dual.pseudo.kernels': ['*.mako'],
     'pyfr.integrators.std.kernels': ['*.mako'],
-    'pyfr.integrators': ['schemes/*.txt'],
+    'pyfr.plugins.kernels': ['*.mako'],
     'pyfr.quadrules': [
         'hex/*.txt',
         'line/*.txt',
@@ -98,14 +107,20 @@ package_data = {
 
 # Hard dependencies
 install_requires = [
-    'gimmik ~= 3.0',
+    'gimmik >= 3.2.1',
     'h5py >= 2.10',
     'mako >= 1.0.0',
     'mpi4py >= 3.1.0',
-    'numpy >= 1.20',
+    'numpy >= 1.26.4',
     'platformdirs >= 2.2.0',
-    'pytools >= 2016.2.1'
+    'pytools >= 2016.2.1',
+    'rtree >= 1.0.1'
 ]
+
+# Soft dependencies
+extras_require = {
+    'metal': ['pyobjc-framework-Metal >= 9.0']
+}
 
 # Scripts
 console_scripts = [
@@ -142,4 +157,5 @@ setup(name='pyfr',
       entry_points={'console_scripts': console_scripts},
       python_requires='>=3.10',
       install_requires=install_requires,
+      extras_require=extras_require,
       classifiers=classifiers)

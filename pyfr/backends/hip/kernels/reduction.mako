@@ -2,7 +2,8 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 __global__ __launch_bounds__(${blocksz}) void
-reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
+reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
+          fpdtype_t *__restrict__ reduced,
           fpdtype_t *__restrict__ rcurr, fpdtype_t *__restrict__ rold,
 % if method == 'errest':
           fpdtype_t *__restrict__ rerr, fpdtype_t atol, fpdtype_t rtol)
@@ -13,16 +14,16 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
 % endif
 {
     int tid = threadIdx.x;
-    int i = blockIdx.x*blockDim.x + tid;
+    ixdtype_t i = ixdtype_t(blockIdx.x)*blockDim.x + tid;
 
     __shared__ fpdtype_t sdata[32];
     fpdtype_t r, acc = 0;
 
     if (i < ncolb)
     {
-        for (int j = 0; j < nrow; j++)
+        for (ixdtype_t j = 0; j < nrow; j++)
         {
-            int idx = j*ldim + SOA_IX(i, blockIdx.y, gridDim.y);
+            ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, gridDim.y);
         % if method == 'errest':
             r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
         % elif method == 'resid':
@@ -68,6 +69,6 @@ reduction(int nrow, int ncolb, int ldim, fpdtype_t *__restrict__ reduced,
     % endif
 
         if (tid == 0)
-            reduced[blockIdx.y*gridDim.x + blockIdx.x] = acc;
+            reduced[ixdtype_t(blockIdx.y)*gridDim.x + blockIdx.x] = acc;
     }
 }

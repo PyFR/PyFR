@@ -144,7 +144,10 @@
                     f3 = (e_high > 0.0) ? f_high : (0.5*f_low*e_high - f_high*e_low)/(0.5*e_high - e_low + ${ill_tol});
 
                     // Compute guess as minima of individual constraints
-                    fnew = fmin(f1, fmin(f2, f3));
+                    fnew = fmin(f1, f2);
+
+                    // Avoid using entropy constraint to guess new bracket if entropy is not well-defined
+                    fnew = (fmax(e_low, e_high) < ${0.9*fpdtype_max}) ? fmin(f3, fnew) : fnew;
 
                     // In case of bracketing failure (due to roundoff errors), revert to bisection
                     fnew = ((fnew > f_high) || (fnew < f_low)) ? 0.5*(f_low + f_high) : fnew;

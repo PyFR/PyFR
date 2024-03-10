@@ -2,7 +2,8 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 __kernel void
-reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
+reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
+          __global fpdtype_t* restrict reduced,
           __global const fpdtype_t* restrict rcurr,
           __global const fpdtype_t* restrict rold,
 % if method == 'errest':
@@ -13,17 +14,17 @@ reduction(int nrow, int ncolb, int ldim, __global fpdtype_t* restrict reduced,
           fpdtype_t dt_fac)
 % endif
 {
-    int i = get_global_id(0), tid = get_local_id(0);
-    int gdim = get_num_groups(0), bid = get_group_id(0);
-    int ncola = get_num_groups(1), k = get_group_id(1);
+    ixdtype_t i = get_global_id(0), tid = get_local_id(0);
+    ixdtype_t gdim = get_num_groups(0), bid = get_group_id(0);
+    ixdtype_t ncola = get_num_groups(1), k = get_group_id(1);
 
     fpdtype_t r, acc = 0;
 
     if (i < ncolb)
     {
-        for (int j = 0; j < nrow; j++)
+        for (ixdtype_t j = 0; j < nrow; j++)
         {
-            int idx = j*ldim + SOA_IX(i, k, ncola);
+            ixdtype_t idx = j*ldim + SOA_IX(i, k, ncola);
         % if method == 'errest':
             r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
         % elif method == 'resid':

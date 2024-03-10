@@ -1,8 +1,8 @@
 from weakref import WeakKeyDictionary
 
-from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, Kernel,
-                                MetaKernel)
+from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
+                                BasePointwiseKernelProvider,
+                                BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.hip.compiler import SourceModule
 from pyfr.backends.hip.generator import HIPKernelGenerator
 from pyfr.util import memoize
@@ -20,19 +20,19 @@ class HIPKernel(Kernel):
             self.gnodes = WeakKeyDictionary()
 
 
-class HIPOrderedMetaKernel(MetaKernel):
+class HIPOrderedMetaKernel(BaseOrderedMetaKernel):
     def add_to_graph(self, graph, dnodes):
         pass
 
 
-class HIPUnorderedMetaKernel(MetaKernel):
+class HIPUnorderedMetaKernel(BaseUnorderedMetaKernel):
     def add_to_graph(self, graph, dnodes):
         pass
 
 
 class HIPKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, argn=[]):
         return SourceModule(self.backend, src).get_function(name, argtypes)
 
     def _benchmark(self, kfunc, nbench=4, nwarmup=1):
@@ -67,7 +67,7 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
 
         self.kernel_generator_cls = KernelGenerator
 
-    def _instantiate_kernel(self, dims, fun, arglst, argmv):
+    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
         rtargs = []
         block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
@@ -93,4 +93,4 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
             def run(self, stream):
                 fun.exec_async(stream, params)
 
-        return PointwiseKernel(*argmv)
+        return PointwiseKernel(argm, argv)

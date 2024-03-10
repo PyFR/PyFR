@@ -1,5 +1,3 @@
-from pkg_resources import resource_string
-
 import numpy as np
 
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
@@ -37,9 +35,6 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
     def _rhs_with_dts(self, t, uin, fout):
         # Compute -∇·f
         self.system.rhs(t, uin, fout)
-
-        if self.stage_nregs > 1:
-            self._add(0, self._stage_regidx[self.currstg], 1, fout)
 
         # Registers and coefficients
         vals = [self.stepper_coeffs[-1], -1/self._dt, 1]
@@ -388,46 +383,3 @@ class DualRK59PseudoStepper(DualRKVdH2RPseudoStepper):
         772137014323 / 4386814405182,
         277420604269 / 1857595682219,
     ]
-
-
-class DualDenseRKPseudoStepper(BaseDualPseudoStepper):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        scheme = resource_string('pyfr.integrators', 'schemes/' + self.path)
-
-        self.a, self.b = _get_coefficients_from_txt(scheme.decode())
-
-    @property
-    def pseudo_stepper_nfevals(self):
-        return len(self.b)*self.npseudosteps
-
-    def step(self, t):
-        self.npseudosteps += 1
-
-        addv = self._addv
-        rhs = self._rhs_with_dts
-
-        r = list(self._pseudo_stepper_regidx)
-
-        # Ensure r0 references the bank containing u(n+1,m)
-        if r[0] != self._idxcurr:
-            r[0], r[1] = r[1], r[0]
-
-        # First stage
-        rhs(t, r[0], r[1])
-
-        # Pre-multiply a matrix and b vector with dtau
-        a = [[self._dtau*aj for aj in ar] for ar in self.a]
-        b = [self._dtau*bi for bi in self.b]
-
-        # Other stages
-        for i in range(self.pseudo_stepper_nregs - 2):
-            addv([0, 1] + a[i], [r[i + 2], r[0]] + r[1:])
-            rhs(t, r[i + 2], r[i + 2])
-
-        # Final accumulation
-        addv([b[0], 1] + b[1:], [r[1], r[0]] + r[2:])
-
-        # Return the bank indices of u(n+1,m+1) and u(n+1,m)
-        return r[1], r[0]

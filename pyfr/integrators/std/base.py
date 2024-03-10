@@ -19,6 +19,12 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self.system = systemcls(backend, rallocs, mesh, initsoln,
                                 nregs=self.nregs, cfg=cfg)
 
+        # Event handlers for advance_to
+        self.plugins = self._get_plugins(initsoln)
+
+        # Commit the sytem
+        self.system.commit()
+
         # Register index list and current index
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
@@ -29,12 +35,6 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
-
-        # Event handlers for advance_to
-        self.completed_step_handlers = self._get_plugins(initsoln)
-
-        # Delete the memory-intensive elements map from the system
-        del self.system.ele_map
 
     @property
     def soln(self):
@@ -54,6 +54,21 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
             self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
 
         return self._curr_grad_soln
+
+    @property
+    def dt_soln(self):
+        system = self.system
+
+        if not self._curr_dt_soln:
+            copy = self.soln
+            system.rhs(self.tcurr, self._idxcurr, self._idxcurr)
+            self._curr_dt_soln = system.ele_scal_upts(self._idxcurr)
+
+            # Reset current register with original contents
+            for c, e in zip(copy, system.ele_banks):
+                e[self._idxcurr].set(c)
+
+        return self._curr_dt_soln
 
     @property
     def controller_needs_errest(self):

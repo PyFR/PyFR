@@ -122,9 +122,10 @@ class MatrixBase:
 
 
 class Matrix(MatrixBase):
-    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
-        super().__init__(backend, backend.fpdtype, ioshape, initval, extent,
-                         aliases, tags)
+    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
+                 tags):
+        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
+                         tags)
 
     def set(self, ary):
         if ary.shape != self.ioshape:
@@ -236,13 +237,16 @@ class View:
         if any(m.dtype != self.refdtype for m in self._mats):
             raise TypeError('Mixed data types are not supported')
 
+        # Index type
+        ixdtype = backend.ixdtype
+
         # SoA size
         k, csubsz = backend.soasz, backend.csubsz
 
         # Base offsets and leading dimensions for each point
-        offset = np.empty(self.n, dtype=np.int32)
-        leaddim = np.empty(self.n, dtype=np.int32)
-        blkdisp = np.empty(self.n, dtype=np.int32)
+        offset = np.empty(self.n, dtype=ixdtype)
+        leaddim = np.empty(self.n, dtype=ixdtype)
+        blkdisp = np.empty(self.n, dtype=ixdtype)
 
         for m in self._mats:
             ix = np.where(matmap == m.mid)
@@ -255,12 +259,12 @@ class View:
         coldisp = (cmapmod // k)*k*self.nvcol + cmapmod % k
 
         mapping = (offset + blkdisp + rowdisp + coldisp)[None, :]
-        self.mapping = backend.const_matrix(mapping, dtype=np.int32, tags=tags)
+        self.mapping = backend.const_matrix(mapping, dtype=ixdtype, tags=tags)
 
         # Row strides
         if self.nvrow > 1:
             rstrides = (rstridemap*leaddim)[None, :]
-            self.rstrides = backend.const_matrix(rstrides, dtype=np.int32,
+            self.rstrides = backend.const_matrix(rstrides, dtype=ixdtype,
                                                  tags=tags)
 
 
@@ -293,6 +297,9 @@ class Graph:
         self.knodes = {}
         self.kdeps = {}
         self.depk = set()
+
+        # Grouped kernels
+        self.groupk = set()
 
         # MPI wrappers
         self._startall = mpi.Prequest.Startall
@@ -354,6 +361,38 @@ class Graph:
     def add_mpi_reqs(self, reqs, deps=[]):
         for r in reqs:
             self.add_mpi_req(r, deps)
+
+    def _iter_deps(self, kern):
+        for d in self.kdeps[kern]:
+            yield d
+            yield from self._iter_deps(d)
+
+    def group(self, kerns, subs=[]):
+        if self.committed:
+            raise RuntimeError('Can not group kernels in a committed graph')
+
+        klist = list(kerns)
+        kset = set(klist)
+
+        # Ensure kernels are only in a single group
+        if not self.groupk.isdisjoint(kset):
+            raise ValueError('Kernels can only be in one group')
+
+        # Validate the dependencies of the grouping
+        for i, k in enumerate(klist):
+            for d in self.kdeps[k]:
+                if d in klist[i + 1:]:
+                    raise ValueError('Inconsistent kernel grouping order')
+
+                if d not in kset and not kset.isdisjoint(self._iter_deps(d)):
+                    raise ValueError('Kernel grouping violates dependencies')
+
+        # Ensure the substitutions are consistent with the grouping
+        if any(k not in klist for s in subs for k, v in s):
+            raise ValueError('Invalid kernels in substitution list')
+
+        # Mark these kernels as being grouped
+        self.groupk.update(kerns)
 
     def commit(self):
         mreqs, mdeps = self.mpi_reqs, self.mpi_req_deps

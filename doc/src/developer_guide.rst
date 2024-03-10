@@ -191,17 +191,8 @@ PseudoStepper
 
 A `PseudoStepper`_ acts to advance the simulation by a single pseudo-time-step.
 They are used to converge implicit `Stepper`_ time-steps via a dual
-time-stepping formulation. There are six types of `PseudoStepper`_ available
+time-stepping formulation. There are five types of `PseudoStepper`_ available
 in PyFR |release|:
-
-.. toggle-header::
-    :header: *DualDenseRKPseudoStepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualDenseRKPseudoStepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
 
 .. toggle-header::
     :header: *DualRK4PseudoStepper* **Click to show**
@@ -249,11 +240,6 @@ in PyFR |release|:
         :private-members:
 
 |
-
-Note that DualDenseRKPseudoStepper includes families of
-`PseudoStepper`_ whose coefficients are read from .txt files named thus:
-
-`{scheme name}-s{stage count}-p{temporal order}-sp{optimal spatial polynomial order}.txt`
 
 Types of `PseudoStepper`_ are related via the following inheritance
 diagram:
@@ -489,7 +475,7 @@ inheritance diagram:
 Backend
 -------
 
-A `Backend`_ holds information/data for a backend. There are four types
+A `Backend`_ holds information/data for a backend. There are five types
 of `Backend`_ available in PyFR |release|:
 
 .. toggle-header::
@@ -528,6 +514,15 @@ of `Backend`_ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+.. toggle-header::
+    :header: *MetalBackend* **Click to show**
+
+    .. autoclass:: pyfr.backends.metal.base.MetalBackend
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
 |
 
 Types of `Backend`_ are related via the following inheritance diagram:
@@ -537,6 +532,7 @@ Types of `Backend`_ are related via the following inheritance diagram:
                          pyfr.backends.hip.base
                          pyfr.backends.opencl.base
                          pyfr.backends.openmp.base
+                         pyfr.backends.metal.base
     :top-classes: pyfr.backends.base.base.BaseBackend
     :parts: 1
 
@@ -598,6 +594,15 @@ Provider`_ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+.. toggle-header::
+    :header: *MetalPointwiseKernelProvider* **Click to show**
+
+    .. autoclass:: pyfr.backends.metal.provider.MetalPointwiseKernelProvider
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
 |
 
 Types of `Pointwise Kernel Provider`_ are related via the following
@@ -607,6 +612,7 @@ inheritance diagram:
                          pyfr.backends.cuda.provider
                          pyfr.backends.hip.provider
                          pyfr.backends.opencl.provider
+                         pyfr.backends.metal.provider
                          pyfr.backends.base.kernels.BasePointwiseKernelProvider
     :top-classes: pyfr.backends.base.kernels.BaseKernelProvider
     :parts: 1
@@ -660,6 +666,15 @@ available in PyFR |release|:
         :inherited-members:
         :private-members:
 
+.. toggle-header::
+    :header: *MetalKernelGenerator* **Click to show**
+
+    .. autoclass:: pyfr.backends.metal.generator.MetalKernelGenerator
+        :members:
+        :undoc-members:
+        :inherited-members:
+        :private-members:
+
 |
 
 Types of `Kernel Generator`_ are related via the following inheritance diagram:
@@ -667,6 +682,8 @@ Types of `Kernel Generator`_ are related via the following inheritance diagram:
 .. inheritance-diagram:: pyfr.backends.cuda.generator.CUDAKernelGenerator
                          pyfr.backends.opencl.generator.OpenCLKernelGenerator
                          pyfr.backends.openmp.generator.OpenMPKernelGenerator
+                         pyfr.backends.hip.generator.HIPKernelGenerator
+                         pyfr.backends.metal.generator.MetalKernelGenerator
     :top-classes: pyfr.backends.base.generator.BaseKernelGenerator
     :parts: 1
 

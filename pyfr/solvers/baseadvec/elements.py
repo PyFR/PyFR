@@ -1,18 +1,56 @@
+from pyfr.backends.base import NullKernel
 from pyfr.solvers.base import BaseElements
 
 
 class BaseAdvectionElements(BaseElements):
+    def __init__(self, *kargs, **kwargs):
+        super().__init__(*kargs, **kwargs)
+
+        # Global kernel arguments
+        self._external_args = {}
+        self._external_vals = {}
+
+        # Source term kernel arguments
+        self._srctplargs = {
+            'ndims': self.ndims,
+            'nvars': self.nvars,
+            'src_macros': []
+        }
+
+        self._ploc_in_src_macros = False
+        self._soln_in_src_macros = False
+
+    @property
+    def has_src_macros(self):
+        return bool(self._srctplargs['src_macros'])
+
     @property
     def _scratch_bufs(self):
         if 'flux' in self.antialias:
-            bufs = {'scal_fpts', 'scal_qpts', 'vect_qpts'}
+            return {'scal_fpts', 'scal_qpts', 'vect_qpts'}
         else:
-            bufs = {'scal_fpts', 'vect_upts'}
+            return {'scal_fpts', 'vect_upts'}
 
-        if self._soln_in_src_exprs:
-            bufs |= {'scal_upts_cpy'}
+    def add_src_macro(self, mod, name, tplargs, ploc=False, soln=False):
+        self._ploc_in_src_macros |= ploc
+        self._soln_in_src_macros |= soln
 
-        return bufs
+        for m, n in self._srctplargs['src_macros']:
+            if m == mod or n == name:
+                raise RuntimeError(f'Aliased macros in src_macros: {name}')
+
+        for k, v in tplargs.items():
+            if k in self._srctplargs and self._srctplargs[k] != v:
+                raise RuntimeError(f'Aliased terms in template args: {k}')
+
+        self._srctplargs['src_macros'].append((mod, name))
+        self._srctplargs |= tplargs
+
+    def _set_external(self, name, spec, value=None):
+        self._external_args[name] = spec
+
+        if value is not None:
+            self._external_vals[name] = value
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         super().set_backend(backend, nscalupts, nonce, linoff)
@@ -24,19 +62,12 @@ class BaseAdvectionElements(BaseElements):
             'pyfr.solvers.baseadvec.kernels.negdivconf'
         )
 
+        self._be.pointwise.register(
+            'pyfr.solvers.baseadvec.kernels.evalsrcmacros'
+        )
+
         # What anti-aliasing options we're running with
         fluxaa = 'flux' in self.antialias
-
-        # What the source term expressions (if any) are a function of
-        plocsrc = self._ploc_in_src_exprs
-        solnsrc = self._soln_in_src_exprs
-
-        # Source term kernel arguments
-        srctplargs = {
-            'ndims': self.ndims,
-            'nvars': self.nvars,
-            'srcex': self._src_exprs
-        }
 
         # Interpolation from elemental points
         kernels['disu'] = lambda uin: self._be.kernel(
@@ -68,19 +99,31 @@ class BaseAdvectionElements(BaseElements):
             out=self.scal_upts[fout], beta=float(self.basis.order > 0)
         )
 
+        def copy_soln(uin):
+            if self._soln_in_src_macros:
+                return self._be.kernel('copy', self._scal_upts_cpy,
+                                       self.scal_upts[uin])
+            else:
+                return NullKernel()
+
+        kernels['copy_soln'] = copy_soln
+
         # Transformed to physical divergence kernel + source term
-        plocupts = self.ploc_at('upts') if plocsrc else None
-        solnupts = self._scal_upts_cpy if solnsrc else None
-
-        if solnsrc:
-            kernels['copy_soln'] = lambda uin: self._be.kernel(
-                'copy', self._scal_upts_cpy, self.scal_upts[uin]
-            )
-
         kernels['negdivconf'] = lambda fout: self._be.kernel(
-            'negdivconf', tplargs=srctplargs,
-            dims=[self.nupts, self.neles], tdivtconf=self.scal_upts[fout],
-            rcpdjac=self.rcpdjac_at('upts'), ploc=plocupts, u=solnupts
+            'negdivconf', tplargs=self._srctplargs,
+            dims=[self.nupts, self.neles], extrns=self._external_args,
+            tdivtconf=self.scal_upts[fout], rcpdjac=self.rcpdjac_at('upts'),
+            ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None,
+            u=self._scal_upts_cpy if self._soln_in_src_macros else None,
+            **self._external_vals
+        )
+
+        kernels['evalsrcmacros'] = lambda uin: self._be.kernel(
+            'evalsrcmacros', tplargs=self._srctplargs,
+            dims=[self.nupts, self.neles], extrns=self._external_args,
+            ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None,
+            u=self.scal_upts[uin],
+            **self._external_vals
         )
 
         # In-place solution filter

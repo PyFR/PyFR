@@ -23,34 +23,29 @@ below to setup the OpenMP backend on macOS:
 
         brew install mpi4py
 
-2. Install METIS and set the library path::
-
-        brew install metis
-        export PYFR_METIS_LIBRARY_PATH=/opt/homebrew/lib/libmetis.dylib
-
-3. Download and install libxsmm and set the library path::
+2. Download and install libxsmm and set the library path::
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
 
-4. Make a venv and activate it::
+3. Make a venv and activate it::
 
         python3.10 -m venv pyfr-venv
         source pyfr-venv/bin/activate
 
-5. Install PyFR::
+4. Install PyFR::
 
         pip install pyfr
 
-6. Add the following to your :ref:`configuration-file`::
+5. Add the following to your :ref:`configuration-file`::
 
         [backend-openmp]
-        cc = gcc-12
+        cc = gcc-13
 
 Note the version of the compiler which must support the ``openmp``
-flag. This has been tested on macOS 12.5 with an Apple M1 Max.
+flag. This has been tested on macOS 13.6.2 with an Apple M1 Max.
 
 Ubuntu
 ------
@@ -62,27 +57,23 @@ Follow the steps below to setup the OpenMP backend on Ubuntu:
         sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
         pip3 install virtualenv
 
-2. Install METIS::
-
-        sudo apt install metis libmetis-dev
-
-3. Download and install libxsmm and set the library path::
+2. Download and install libxsmm and set the library path::
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
 
-4. Make a virtualenv and activate it::
+3. Make a virtualenv and activate it::
 
         python3 -m virtualenv pyfr-venv
         source pyfr-venv/bin/activate
 
-5. Install PyFR::
+4. Install PyFR::
 
         pip install pyfr
 
-This has been tested on Ubuntu 20.04.
+This has been tested on Ubuntu 22.04.
 
 .. _compile-from-source:
 
@@ -107,13 +98,14 @@ Dependencies
 PyFR |release| has a hard dependency on Python 3.10+ and the following
 Python packages:
 
-1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.0
+1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.1.1
 2. `h5py <https://www.h5py.org/>`_ >= 2.10
 3. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
 4. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
-5. `numpy <https://www.numpy.org/>`_ >= 1.20
+5. `numpy <https://www.numpy.org/>`_ >= 1.26.4
 6. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
 7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
+8. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.0.1
 
 Note that due to a bug in NumPy, PyFR is not compatible with 32-bit
 Python distributions.
@@ -134,9 +126,16 @@ HIP Backend
 The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
-1. `ROCm <https://docs.amd.com/>`_ >= 5.2.0
+1. `ROCm <https://docs.amd.com/>`_ >= 6.0.0
 2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >=
-   2.41.0
+   4.0.0
+
+Metal Backend
+^^^^^^^^^^^^^
+
+The Metal backend targets Apple silicon GPUs. The backend requires:
+
+1. `pyobjc-framework-Metal <https://pyobjc.readthedocs.io/en/latest>`_ >= 9.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -164,8 +163,8 @@ requires:
 
 1. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
 2. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
-   0db15a0da13e3d9b9e3d57b992ecb3384d2e15ea compiled as a shared
-   library (STATIC=0) with BLAS=0.
+   bf5313db8bf2edfc127bb715c36353e610ce7c04 in the ``main`` branch
+   compiled as a shared library (STATIC=0) with BLAS=0.
 
 In order for PyFR to find libxsmm it must be located in a directory
 which is on the library search path.  Alternatively, the path can be
@@ -178,11 +177,30 @@ Parallel
 To partition meshes for running in parallel it is also necessary to
 have one of the following partitioners installed:
 
-1. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.0
+1. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.2
 2. `SCOTCH <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 7.0
 
 In order for PyFR to find these libraries they must be located in a
 directory which is on the library search path.  Alternatively, the
-paths can be specified explicitly by exporting the environment
-variables ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
+paths can be specified explicitly by exporting environment
+variables e.g. ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
 ``PYFR_SCOTCH_LIBRARY_PATH=/path/to/libscotch.so``.
+
+Ascent
+^^^^^^
+
+To run the :ref:`soln-plugin-ascent` plugin, MPI, VTK-m, and Conduit are required.
+VTK-m is a supplimentary VTK library, and Conduit is a library that implements
+the data classes used in Ascent. Detailed information on compilation and installation
+of `Conduit <https://llnl-conduit.readthedocs.io>`_ and `Ascent <https://ascent.readthedocs.io>`_ can
+be found in the respective documentation. Ascent must be version >=0.9.0.
+When compiling Ascent a renderer must be selected to be compiled, currently
+PyFR only supports the VTK-h option that comes with Ascent. The paths to the
+libraries may need to be set as an environment variable. For example, on linux
+you will need::
+
+    PYFR_CONDUIT_LIBRARY_PATH=/path/to/libconduit.so
+    PYFR_ASCENT_MPI_LIBRARY_PATH=/path/to/libascent_mpi.so
+
+Currently the plugin requires that Ascent and Conduit are 64-bit, this is
+default when compiling in most cases.

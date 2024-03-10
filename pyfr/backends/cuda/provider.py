@@ -1,8 +1,8 @@
 from weakref import WeakKeyDictionary
 
-from pyfr.backends.base import (BaseKernelProvider,
-                                BasePointwiseKernelProvider, Kernel,
-                                MetaKernel)
+from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
+                                BasePointwiseKernelProvider,
+                                BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.cuda.generator import CUDAKernelGenerator
 from pyfr.backends.cuda.compiler import SourceModule
 from pyfr.util import memoize
@@ -20,7 +20,7 @@ class CUDAKernel(Kernel):
             self.gnodes = WeakKeyDictionary()
 
 
-class CUDAOrderedMetaKernel(MetaKernel):
+class CUDAOrderedMetaKernel(BaseOrderedMetaKernel):
     def add_to_graph(self, graph, dnodes):
         for k in self.kernels:
             dnodes = [k.add_to_graph(graph, dnodes)]
@@ -28,7 +28,7 @@ class CUDAOrderedMetaKernel(MetaKernel):
         return dnodes[0]
 
 
-class CUDAUnorderedMetaKernel(MetaKernel):
+class CUDAUnorderedMetaKernel(BaseUnorderedMetaKernel):
     def add_to_graph(self, graph, dnodes):
         nodes = [k.add_to_graph(graph, dnodes) for k in self.kernels]
 
@@ -37,7 +37,7 @@ class CUDAUnorderedMetaKernel(MetaKernel):
 
 class CUDAKernelProvider(BaseKernelProvider):
     @memoize
-    def _build_kernel(self, name, src, argtypes):
+    def _build_kernel(self, name, src, argtypes, argn=[]):
         return SourceModule(self.backend, src).get_function(name, argtypes)
 
     def _benchmark(self, kfunc, nbench=4, nwarmup=1):
@@ -59,22 +59,26 @@ class CUDAKernelProvider(BaseKernelProvider):
 
 class CUDAPointwiseKernelProvider(CUDAKernelProvider,
                                   BasePointwiseKernelProvider):
-    kernel_generator_cls = CUDAKernelGenerator
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-    def _instantiate_kernel(self, dims, fun, arglst, argmv):
+        self._block1d = (64, 1, 1)
+        self._block2d = (32, 8, 1)
+
+        # Pass these block sizes to the generator
+        class KernelGenerator(CUDAKernelGenerator):
+            block1d = self._block1d
+            block2d = self._block2d
+
+        self.kernel_generator_cls = KernelGenerator
+
+    def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
         rtargs = []
-
-        # Declare a preference for L1 cache over shared memory
-        fun.set_cache_pref(prefer_l1=True)
-
-        # Determine the block size
-        if len(dims) == 1:
-            block = (64, 1, 1)
-        else:
-            block = (32, 8, 1)
-
-        # Use this to compute the grid size
+        block = self._block1d if len(dims) == 1 else self._block2d
         grid = get_grid_for_block(block, dims[-1])
+
+        # Set shared memory carveout locally for kernel
+        fun.set_shared_size(carveout=25 if fun.shared_mem else 0)
 
         params = fun.make_params(grid, block)
 
@@ -108,4 +112,4 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
             def run(self, stream):
                 fun.exec_async(stream, params)
 
-        return PointwiseKernel(*argmv)
+        return PointwiseKernel(argm, argv)

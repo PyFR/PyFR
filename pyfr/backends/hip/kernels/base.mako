@@ -6,6 +6,7 @@
 
 // Typedefs
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
+typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
 
 // Atomic helpers
 #define atomic_min_fpdtype(addr, val) atomicMin(addr, val)

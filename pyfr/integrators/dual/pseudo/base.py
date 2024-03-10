@@ -114,24 +114,26 @@ class BaseDualPseudoIntegrator(BaseCommon):
         return self._regidx[psnregs:psnregs + self.stepper_nregs]
 
     def init_stage(self, currstg, stepper_coeffs, dt):
-        self.currstg = currstg
         self.stepper_coeffs = stepper_coeffs
         self._dt = dt
 
-        svals = [0, 1/self._dt] + self.stepper_coeffs[:-1]
-        sregs = ([self._source_regidx] + self._stepper_regidx
-                 + self._stage_regidx[:self.currstg])
+        svals = [0, 1 / dt, *stepper_coeffs[:-1]]
+        sregs = [self._source_regidx, *self._stepper_regidx,
+                 *self._stage_regidx[:currstg]]
 
         # Accumulate physical stepper sources into a single register
         self._addv(svals, sregs, subdims=self._subdims)
+
+    def finalise_stage(self, currstg, tcurr):
+        if self.stage_nregs > 1:
+            self.system.rhs(tcurr, self._idxcurr, self._stage_regidx[currstg])
 
     def store_current_soln(self):
         # Copy the current soln into the first source register
         self._add(0, self._stepper_regidx[0], 1, self._idxcurr)
 
     def obtain_solution(self, bcoeffs):
-        consts = [0, 1] + bcoeffs
-        regidxs = ([self._idxcurr, self._stepper_regidx[0]]
-                   + self._stage_regidx)
+        consts = [0, 1, *bcoeffs]
+        regidxs = [self._idxcurr, self._stepper_regidx[0], *self._stage_regidx]
 
         self._addv(consts, regidxs, subdims=self._subdims)

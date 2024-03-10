@@ -65,6 +65,9 @@ class OpenMPBackend(BaseBackend):
     def run_graph(self, graph, wait=False):
         graph.run()
 
+    def wait(self):
+        pass
+
     @cached_property
     def lookup(self):
         lookup = super().lookup
@@ -76,7 +79,7 @@ class OpenMPBackend(BaseBackend):
     def krunner(self):
         ksrc = self.lookup.get_template('run-kernels').render()
         klib = self.compiler.build(ksrc)
-        return klib.function('run_kernels', None, [c_int, c_int, c_void_p])
+        return klib.function('run_kernels', None, [c_int, c_void_p])
 
     def _malloc_impl(self, nbytes):
         data = np.zeros(nbytes + self.alignb, dtype=np.uint8)

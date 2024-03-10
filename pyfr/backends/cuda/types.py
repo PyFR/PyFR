@@ -32,7 +32,7 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
         # Unpack
-        return self._unpack(buf[None, :, :])
+        return self._unpack(buf)
 
     def _set(self, ary):
         buf = self._pack(ary)
@@ -54,9 +54,11 @@ class CUDAXchgView(base.XchgView): pass
 
 
 class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
-    def __init__(self, backend, ioshape, initval, extent, aliases, tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
+                 tags):
         # Call the standard matrix constructor
-        super().__init__(backend, ioshape, initval, extent, aliases, tags)
+        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
+                         tags)
 
         # If MPI is CUDA-aware then simply annotate our device buffer
         if backend.mpitype == 'cuda-aware':
@@ -71,7 +73,7 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
             self.hdata = np.array(HostData(), copy=False)
         # Otherwise, allocate a buffer on the host for MPI to send/recv from
         else:
-            shape, dtype = (self.nrow, self.ncol), self.dtype
+            shape = (self.nrow, self.ncol)
             self.hdata = backend.cuda.pagelocked_empty(shape, dtype)
 
 
@@ -102,7 +104,6 @@ class CUDAGraph(base.Graph):
         for node, params in self.stale_kparams.items():
             self.exc_graph.set_kernel_node_params(node, params)
 
-        stream.synchronize()
         self.exc_graph.launch(stream)
         self.stale_kparams.clear()
 

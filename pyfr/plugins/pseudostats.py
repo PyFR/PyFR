@@ -1,11 +1,12 @@
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BasePlugin, init_csv
 from itertools import product
+from pyfr.plugins.base import BaseSolnPlugin, init_csv
 
-class PseudoStatsPlugin(BasePlugin):
+class PseudoStatsPlugin(BaseSolnPlugin):
     name = 'pseudostats'
     systems = ['*']
     formulations = ['dual']
+    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)

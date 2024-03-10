@@ -4,18 +4,16 @@ struct kargs
 {
     void (*exec)(void *, const fpdtype_t *, fpdtype_t *);
     void *blockk;
-    int nblocks;
+    void *blockk_nt;
     const fpdtype_t *b;
-    int bblocksz;
+    ixdtype_t bblocksz;
     fpdtype_t *c;
-    int cblocksz;
+    ixdtype_t cblocksz;
 };
 
-void batch_gemm(const struct kargs *restrict args)
+void batch_gemm(ixdtype_t ib, const struct kargs *args, int _disp_mask)
 {
-    #pragma omp parallel for ${schedule}
-    for (int ib = 0; ib < args->nblocks; ib++)
-        args->exec(args->blockk,
-                   args->b + ib*args->bblocksz,
-                   args->c + ib*args->cblocksz);
+    args->exec((_disp_mask & 32) ? args->blockk : args->blockk_nt,
+               args->b + ((_disp_mask & 8) ? 0 : ib*args->bblocksz),
+               args->c + ((_disp_mask & 32) ? 0 : ib*args->cblocksz));
 }

@@ -18,7 +18,6 @@ class ACNavierStokesElements(BaseACFluidElements,
         # Register our flux kernels
         kprefix = 'pyfr.solvers.acnavstokes.kernels'
         self._be.pointwise.register(f'{kprefix}.tflux')
-        self._be.pointwise.register(f'{kprefix}.tfluxlin')
 
         # Template parameters for the flux kernels
         tplargs = {
@@ -30,31 +29,49 @@ class ACNavierStokesElements(BaseACFluidElements,
         }
 
         # Helpers
+        tdisf = []
         c, l = 'curved', 'linear'
         r, s = self._mesh_regions, self._slice_mat
 
-        if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nupts, r[c]],
-                u=s(self.scal_upts[uin], c), f=s(self._vect_upts, c),
-                smats=self.curved_smat_at('upts')
-            )
-        elif c in r:
-            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
-                'tflux', tplargs=tplargs, dims=[self.nqpts, r[c]],
-                u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
-                smats=self.curved_smat_at('qpts')
-            )
+        # Gradient + flux kernel fusion
+        if self.grad_fusion:
+            if c in r:
+                tdisf.append(lambda uin: self._be.kernel(
+                    'tflux', tplargs=tplargs | {'ktype': 'curved-fused'},
+                    dims=[self.nupts, r[c]],  u=s(self.scal_upts[uin], c),
+                    f=s(self._vect_upts, c), gradu=s(self._grad_upts, c),
+                    rcpdjac=self.rcpdjac_at('upts', 'curved'),
+                    smats=self.curved_smat_at('upts')
+                ))
+            if l in r:
+                tdisf.append(lambda uin: self._be.kernel(
+                    'tflux', tplargs=tplargs | {'ktype': 'linear-fused'},
+                    dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
+                    f=s(self._vect_upts, l), gradu=s(self._grad_upts, l),
+                    verts=self.ploc_at('linspts', l), upts=self.upts
+                ))
 
-        if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nupts, r[l]],
-                u=s(self.scal_upts[uin], l), f=s(self._vect_upts, l),
-                verts=self.ploc_at('linspts', l), upts=self.upts
-            )
-        elif l in r:
-            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
-                'tfluxlin', tplargs=tplargs, dims=[self.nqpts, r[l]],
-                u=s(self._scal_qpts, l), f=s(self._vect_qpts, l),
-                verts=self.ploc_at('linspts', l), upts=self.qpts
-            )
+            def tdisf_k(uin):
+                return self._make_sliced_kernel(k(uin) for k in tdisf)
+
+            self.kernels['tdisf_fused'] = tdisf_k
+        # No gradient + flux kernel fusion
+        else:
+            if c in r:
+                tdisf.append(lambda: self._be.kernel(
+                    'tflux', tplargs=tplargs | {'ktype': 'curved'},
+                    dims=[self.nqpts, r[c]], u=s(self._scal_qpts, c),
+                    f=s(self._vect_qpts, c), smats=self.curved_smat_at('qpts')
+                ))
+            if l in r:
+                tdisf.append(lambda: self._be.kernel(
+                    'tflux', tplargs=tplargs | {'ktype': 'linear'},
+                    dims=[self.nqpts, r[l]], u=s(self._scal_qpts, l),
+                    f=s(self._vect_qpts, l), verts=self.ploc_at('linspts', l),
+                    upts=self.qpts
+                ))
+
+            def tdisf_k():
+                return self._make_sliced_kernel(k() for k in tdisf)
+
+            self.kernels['tdisf'] = tdisf_k

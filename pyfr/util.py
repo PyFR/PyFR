@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from ctypes import c_void_p
 import functools as ft
 import hashlib
@@ -96,28 +95,23 @@ class silence:
         os.close(self.saved_fds[1])
 
 
-@contextmanager
-def setenv(**kwargs):
-    _env = os.environ.copy()
-    os.environ.update(kwargs)
+def merge_intervals(ivals, tol=1e-5):
+    ivals = sorted(ivals, reverse=True)
+    mivals = [ivals.pop()]
 
-    try:
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(_env)
+    while ivals:
+        lstart, lend = mivals[-1]
+        cstart, cend = ivals.pop()
 
+        if cstart < lend:
+            raise ValueError('Overlapping range')
 
-@contextmanager
-def chdir(dirname):
-    cdir = os.getcwd()
+        if abs(cstart - lend) < tol:
+            mivals[-1] = (lstart, cend)
+        else:
+            mivals.append((cstart, cend))
 
-    try:
-        if dirname:
-            os.chdir(dirname)
-        yield
-    finally:
-        os.chdir(cdir)
+    return mivals
 
 
 def subclasses(cls, just_leaf=False):
@@ -144,7 +138,19 @@ def ndrange(*args):
 
 
 def digest(*args, hash='sha256'):
-    return getattr(hashlib, hash)(pickle.dumps(args)).hexdigest()
+    class Hasher:
+        def __init__(self, hash):
+            self.h = getattr(hashlib, hash)()
+
+        def write(self, b):
+            self.h.update(b)
+
+        def __str__(self):
+            return self.h.hexdigest()
+
+    h = Hasher(hash)
+    pickle.dump(args, h)
+    return str(h)
 
 
 def rm(path):

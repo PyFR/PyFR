@@ -33,12 +33,13 @@ class METISWrappers(LibWrapper):
     METIS_OPTION_CTYPE = 2
     METIS_OPTION_IPTYPE = 3
     METIS_OPTION_RTYPE = 4
-    METIS_OPTION_NITER = 6
-    METIS_OPTION_NCUTS = 7
-    METIS_OPTION_SEED = 8
-    METIS_OPTION_MINCONN = 10
-    METIS_OPTION_NSEPS = 15
-    METIS_OPTION_UFACTOR = 16
+    METIS_OPTION_NIPARTS = 6
+    METIS_OPTION_NITER = 7
+    METIS_OPTION_NCUTS = 8
+    METIS_OPTION_SEED = 9
+    METIS_OPTION_MINCONN = 11
+    METIS_OPTION_NSEPS = 16
+    METIS_OPTION_UFACTOR = 17
 
     def _load_library(self):
         lib = super()._load_library()
@@ -103,13 +104,13 @@ class METISPartitioner(BasePartitioner):
     has_multiple_constraints = True
 
     # Integer options
-    int_opts = {'niter', 'ncuts', 'seed', 'nseps', 'ufactor'}
+    int_opts = {'niter', 'niparts', 'ncuts', 'seed', 'nseps', 'ufactor'}
 
     # Enumeration options
     enum_opts = {
         'ptype': {'rb': 0, 'kway': 1},
         'ctype': {'rm': 0, 'shem': 1},
-        'iptype': {'grow': 0, 'random': 1, 'edge': 2, 'node': 3},
+        'iptype': {'grow': 0, 'random': 1, 'edge': 2, 'node': 3, 'metisrb': 4},
         'rtype': {'fm': 0, 'greedy': 1, 'sep2sided': 3, 'sep1sided': 4},
         'minconn': {'false': 0, 'true': 1}
     }
