@@ -108,6 +108,7 @@ class OptimisationStatsPlugin(BasePlugin):
         Δt = intg._dt               
         # Compute time per physical time-step
         Δc = intg.pseudointegrator._compute_time - self.ctime_p  
+        intg.Δc = Δc
         # Wall-time per physical time-step
         Δw = (time() - intg._wstart) - self.wtime_p
         self.ΔcΔt, ΔwΔt = Δc/Δt, Δw/Δt
@@ -117,7 +118,7 @@ class OptimisationStatsPlugin(BasePlugin):
 
         t1 = pd.DataFrame({ 'physical-time': [intg.tcurr - intg._dt], 
                             'compute-Δt'   : [Δc], 
-                            'wall-Δt'      : [Δw],
+                               'wall-Δt'   : [Δw],
                             'cost'         : [self.ΔcΔt],
                           }) 
 
@@ -125,7 +126,7 @@ class OptimisationStatsPlugin(BasePlugin):
         if self.Δτ_controller == 'local-pi' and intg.dtau_stats:
             t1['max-Δτ'] = intg.dtau_stats['max']['all']
             t1['min-Δτ'] = intg.dtau_stats['min']['all']
-            t1['n'] = intg.dtau_stats[ 'n' ]['all']
+            t1[     'n'] = intg.dtau_stats[ 'n' ]['all']
         elif self.Δτ_controller == 'none':
             t1['Δτ'] = self.Δτ_init
 

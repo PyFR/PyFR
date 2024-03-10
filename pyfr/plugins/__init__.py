@@ -14,6 +14,7 @@ from pyfr.util import subclass_where
 from pyfr.plugins.pseudodtstats import PseudodtStatsPlugin
 
  # Order of plugin execution controlled here for writing pyfrs
+from pyfr.plugins.computetime    import ComputeTimePlugin
 from pyfr.plugins.rewind         import RewindPlugin
 from pyfr.plugins.writer         import WriterPlugin
 from pyfr.plugins.tavg           import TavgPlugin

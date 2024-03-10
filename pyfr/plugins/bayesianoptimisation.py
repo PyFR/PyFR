@@ -363,11 +363,8 @@ class BayesianOptimisationPlugin(BasePlugin):
         self.normalise.train(True)
         self.standardise.train(True)
         
-        self._norm_X = self.normalise.transform(
-            self.torch.tensor(tX , **self.torch_kwargs))
-
-        self._stan_Y, _ = self.standardise.forward(
-            self.torch.tensor(tY , **self.torch_kwargs))
+        self._norm_X = self.normalise.transform(self.torch.tensor(tX , **self.torch_kwargs))
+        self._stan_Y, _ = self.standardise.forward(self.torch.tensor(tY , **self.torch_kwargs))
 
         self.model = SingleTaskGP(train_X = self._norm_X, 
                                   train_Y = self._stan_Y,)
@@ -431,9 +428,10 @@ class BayesianOptimisationPlugin(BasePlugin):
         """
         unprocessed = []
 
-        if any(opt.startswith('cstep:') for opt in self.optimisables):
-            n_csteps = sum(opt.startswith('cstep:') for opt in self.optimisables)
-            csteps = self._preprocess_csteps(pseudointegrator.csteps, n_csteps)
+        if any(opt.startswith('cstep:')   for opt in self.optimisables): n_csteps  = sum(opt.startswith('cstep:'  ) for opt in self.optimisables); csteps  = self._preprocess_csteps(pseudointegrator.csteps , n_csteps)
+        if any(opt.startswith('cstep-a:') for opt in self.optimisables): n_cstepsa = sum(opt.startswith('cstep-a:') for opt in self.optimisables); cstepsa = self._preprocess_csteps(pseudointegrator.cstepsa, n_cstepsa)
+        if any(opt.startswith('cstep-b:') for opt in self.optimisables): n_cstepsb = sum(opt.startswith('cstep-b:') for opt in self.optimisables); cstepsb = self._preprocess_csteps(pseudointegrator.cstepsb, n_cstepsb)
+        if any(opt.startswith('cstep-c:') for opt in self.optimisables): n_cstepsc = sum(opt.startswith('cstep-c:') for opt in self.optimisables); cstepsc = self._preprocess_csteps(pseudointegrator.cstepsc, n_cstepsc)
 
         if any(opt.startswith('pseudo-dt-fact:') for opt in self.optimisables):
             dtaufs = pseudointegrator.dtaufs
@@ -441,8 +439,10 @@ class BayesianOptimisationPlugin(BasePlugin):
                 raise ValueError(f"{len(dtaufs) = } neq 1+{self.depth}")
 
         for opt in self.optimisables:
-            if opt.startswith('cstep:') and opt[6:].isdigit():
-                unprocessed.append(csteps[int(opt[6:])])
+            if   opt.startswith('cstep:'  ) and opt[6:].isdigit(): unprocessed.append(csteps[ int(opt[6:])])
+            elif opt.startswith('cstep-a:') and opt[8:].isdigit(): unprocessed.append(cstepsa[int(opt[8:])])
+            elif opt.startswith('cstep-b:') and opt[8:].isdigit(): unprocessed.append(cstepsb[int(opt[8:])])
+            elif opt.startswith('cstep-c:') and opt[8:].isdigit(): unprocessed.append(cstepsc[int(opt[8:])])
             elif opt == 'pseudo-dt-max':
                 unprocessed.append(pseudointegrator.pintg.Δτᴹ)
             elif opt == 'pseudo-dt-fact':
@@ -457,14 +457,13 @@ class BayesianOptimisationPlugin(BasePlugin):
     def _postprocess_ccandidate(self, ccandidate):
         post_processed = {}
         for i, opt in enumerate(self.optimisables):
-            if opt.startswith('cstep:') and opt[6:].isdigit():
-                post_processed[opt] = ccandidate[i]
-            elif opt == 'pseudo-dt-max':
-                post_processed[opt] = ccandidate[i]
-            elif opt == 'pseudo-dt-fact':
-                post_processed[opt] = ccandidate[i]
-            elif opt.startswith('pseudo-dt-fact:') and opt[15:].isdigit():
-                post_processed[opt] = ccandidate[i]
+            if   opt.startswith('cstep:'  ) and opt[6:].isdigit():         post_processed[opt] = ccandidate[i]
+            elif opt.startswith('cstep-a:') and opt[8:].isdigit():         post_processed[opt] = ccandidate[i]
+            elif opt.startswith('cstep-b:') and opt[8:].isdigit():         post_processed[opt] = ccandidate[i]
+            elif opt.startswith('cstep-c:') and opt[8:].isdigit():         post_processed[opt] = ccandidate[i]
+            elif opt == 'pseudo-dt-max':                                   post_processed[opt] = ccandidate[i]
+            elif opt == 'pseudo-dt-fact':                                  post_processed[opt] = ccandidate[i]
+            elif opt.startswith('pseudo-dt-fact:') and opt[15:].isdigit(): post_processed[opt] = ccandidate[i]
             else:
                 raise ValueError(f"Unrecognised optimisable {opt}")
         return post_processed

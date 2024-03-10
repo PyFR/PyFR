@@ -12,6 +12,7 @@ from pyfr.integrators.dual.pseudo.pseudocontrollers import (
     BaseDualPseudoController
 )
 from pyfr.util import memoize, subclass_where
+from pyfr.mpiutil import mpi
 
 
 class DualMultiPIntegrator(BaseDualPseudoIntegrator):
@@ -28,7 +29,10 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self._order = self.level = order = cfg.getint('solver', 'order')
 
         # Get the multigrid cycle
-        self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
+        try: 
+            self.cycle, self.cstepsa, self.cstepsb , self.cstepsc = zip(*cfg.getliteral(mgsect, 'cycle'))
+        except:
+            self.cycle, self.csteps = zip(*cfg.getliteral(mgsect, 'cycle'))
         self.levels = sorted(set(self.cycle), reverse=True)
 
         if max(self.cycle) > self._order:
@@ -349,7 +353,12 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
-        cycle, csteps_f = self.cycle, self.csteps
+        try:
+            cycle, cstepsa_f, cstepsb_f, cstepsc_f = self.cycle, self.cstepsa, self.cstepsb, self.cstepsc
+        except:
+            cycle, csteps_f = self.cycle, self.csteps
+            cstepsa_f = cstepsb_f = csteps_f
+            cstepsc_f = 0.05
 
         # Set current stage number and stepper coefficients for all levels
         for l in self.levels:
@@ -357,9 +366,16 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr
-
+        
+        mpi.Prequest.Waitall
         ctime_start = perf_counter()    
         for i in range(self._maxniters):
+
+            csteps_f = []
+            # perform element-wise operation
+            for a, b, c in zip(cstepsa_f, cstepsb_f, cstepsc_f):
+                csteps_f.append(a + (b - a)*np.exp(-c*i))                
+
             csteps = tuple(self.weighted(cstep_f) for cstep_f in csteps_f)
             #self.print_cstep_avg(csteps)
 
@@ -369,9 +385,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
                 # TODO: Set the number of smoothing steps at each level
                 self.pintg.maxniters = self.pintg.minniters = n
 
-                start = perf_counter()
                 self.pintg.pseudo_advance(tcurr)
-                self._compute_time += perf_counter() - start
 
                 if m is not None and l > m:
                     self.restrict(l, m)
@@ -384,6 +398,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Convergence monitoring
             if self.mg_convmon(self.pintg, i, self._minniters):
                 break
+        mpi.Prequest.Waitall
         self._compute_time += (perf_counter() - ctime_start)
 
     def collect_stats(self, stats):
