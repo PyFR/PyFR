@@ -3,14 +3,16 @@ from time import perf_counter
 import numpy as np
 
 from pyfr.mpiutil import mpi
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BaseSolnPlugin
 
 import csv
 
-class ComputeTimePlugin(BasePlugin):
+class ComputeTimePlugin(BaseSolnPlugin):
     name = 'computetime'
     systems = ['*']
     formulations = ['dual', 'std']
+    dimensions = [2, 3]
+    
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
@@ -29,7 +31,7 @@ class ComputeTimePlugin(BasePlugin):
 
             # output to csv
             #print(f"{intg.compute_time}, {intg.Δc}", file=self.outf, flush=True)
-            with open('compute_time8.csv', mode='a') as compute_time_file:
+            with open('compute_time10.csv', mode='a') as compute_time_file:
                 compute_time_writer = csv.writer(compute_time_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
                 compute_time_writer.writerow([
                     intg.compute_time,            

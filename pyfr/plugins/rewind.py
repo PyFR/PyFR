@@ -1,9 +1,10 @@
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BaseSolnPlugin
 
-class RewindPlugin(BasePlugin):
+class RewindPlugin(BaseSolnPlugin):
     name = 'rewind'
     systems = ['*']
     formulations = ['dual']
+    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

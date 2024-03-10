@@ -1,10 +1,11 @@
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BaseSolnPlugin
 from pyfr.mpiutil import get_comm_rank_root
 
-class ModifyConfigPlugin(BasePlugin):
+class ModifyConfigPlugin(BaseSolnPlugin):
     name = 'modify_configuration'
     systems = ['*']
     formulations = ['dual']
+    dimensions = [2, 3]
     
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

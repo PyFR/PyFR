@@ -364,7 +364,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         self.tcurr = tcurr
         
-        mpi.Prequest.Waitall
+#        mpi.Prequest.Waitall
         ctime_start = perf_counter()    
         for i in range(self._maxniters):
 
@@ -395,7 +395,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Convergence monitoring
             if self.mg_convmon(self.pintg, i, self._minniters):
                 break
-        mpi.Prequest.Waitall
+#        mpi.Prequest.Waitall
         self._compute_time += (perf_counter() - ctime_start)
 
     def collect_stats(self, stats):

@@ -2,10 +2,10 @@ from time import perf_counter
 import numpy as np
 import pandas as pd
 
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BaseSolnPlugin
 from pyfr.mpiutil import get_comm_rank_root
 
-class BayesianOptimisationPlugin(BasePlugin):
+class BayesianOptimisationPlugin(BaseSolnPlugin):
     """ Bayesian Optimisation applied to some optimisable parameters in PyFR.
         Currently, the optimisation is done using the BoTorch library.
         
@@ -19,6 +19,7 @@ class BayesianOptimisationPlugin(BasePlugin):
     name = 'bayesian_optimisation'
     systems = ['*']
     formulations = ['dual']
+    dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix):
 

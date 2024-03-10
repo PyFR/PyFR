@@ -5,12 +5,13 @@ import numpy as np
 import pandas as pd
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins.base import BaseSolnPlugin
 
-class OptimisationStatsPlugin(BasePlugin):
+class OptimisationStatsPlugin(BaseSolnPlugin):
     name = 'optimisation_stats'
     systems = ['*']
     formulations = ['dual']
+    dimensions = [2, 3]
     
     def __init__(self, intg, cfgsect, suffix):
         
