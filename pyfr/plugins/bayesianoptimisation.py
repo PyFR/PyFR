@@ -123,11 +123,11 @@ class BayesianOptimisationPlugin(BasePlugin):
 
             t1 =  pd.DataFrame({
                 **{f't-{i}': [val] for i, val in enumerate(tested_candidate)},
-                't-m': [intg.opt_cost_mean], 
-                't-d': [intg.opt_cost_std], 
-                't-e': [intg.opt_cost_sem], 
-                'phase':[self.cand_phase],           # |   
-                'if-train': [self.cand_train],       # |----> Latest tested candidate 
+                't-m':         [intg.opt_cost_mean], 
+                't-d':         [intg.opt_cost_std], 
+                't-e':         [intg.opt_cost_sem], 
+                'phase':       [self.cand_phase],           # |   
+                'if-train':    [self.cand_train],       # |----> Latest tested candidate 
                 'if-validate': [self.cand_validate], # |
                 },)
 
@@ -285,7 +285,11 @@ class BayesianOptimisationPlugin(BasePlugin):
             t1['capture-window'] = intg.actually_captured
             # ------------------------------------------------------------------
             # Add all the data collected into the main dataframe
+
             self.df_train = pd.concat([self.df_train, t1], ignore_index=True)
+            # Ensure no all-NA columns in self.df_train and t1 before concat
+            # self.df_train = pd.concat([self.df_train.dropna(how='all', axis=1), t1.dropna(how='all', axis=1)], ignore_index=True)
+
             # View results as csv file
             self.df_train.to_csv(self.outf, index=False)
             # Notify intg of the latest generated candidate and other info
@@ -303,9 +307,19 @@ class BayesianOptimisationPlugin(BasePlugin):
         args = {'axis' : 0, 'ignore_index' : True, 'sort' : False}
 
         if t1 is not None:
+
             # Process all optimisables with t1 too
+
             tX = pd.concat([new_df_train[self._t_cand], t1[self._t_cand]], **args).astype(np.float64).to_numpy()
             tY = pd.concat([new_df_train['t-m'], t1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
+
+            # Ensure no all-NA columns in new_df_train[self._t_cand] and t1[self._t_cand] before concat
+            # filtered_new_df_train = new_df_train[self._t_cand].dropna(how='all', axis=1)
+            # filtered_t1 = t1[self._t_cand].dropna(how='all', axis=1)
+            # tX = pd.concat([filtered_new_df_train, filtered_t1], **args).astype(np.float64).to_numpy()
+
+            # If handling empty entries explicitly before concat
+            # tY = pd.concat([new_df_train['t-m'].dropna(), t1['t-m'].iloc[:1].dropna()], **args).to_numpy().reshape(-1, 1)
 
         else:
             tX = new_df_train[self._t_cand].astype(np.float64).to_numpy()
@@ -421,6 +435,11 @@ class BayesianOptimisationPlugin(BasePlugin):
             n_csteps = sum(opt.startswith('cstep:') for opt in self.optimisables)
             csteps = self._preprocess_csteps(pseudointegrator.csteps, n_csteps)
 
+        if any(opt.startswith('pseudo-dt-fact:') for opt in self.optimisables):
+            dtaufs = pseudointegrator.dtaufs
+            if len(dtaufs) != self.depth+1:
+                raise ValueError(f"{len(dtaufs) = } neq 1+{self.depth}")
+
         for opt in self.optimisables:
             if opt.startswith('cstep:') and opt[6:].isdigit():
                 unprocessed.append(csteps[int(opt[6:])])
@@ -428,6 +447,8 @@ class BayesianOptimisationPlugin(BasePlugin):
                 unprocessed.append(pseudointegrator.pintg.Δτᴹ)
             elif opt == 'pseudo-dt-fact':
                 unprocessed.append(pseudointegrator.dtauf)
+            elif opt.startswith('pseudo-dt-fact:') and opt[15:].isdigit():
+                unprocessed.append(dtaufs[int(opt[15:])])
             else:
                 raise ValueError(f"Unrecognised optimisable: {opt}")
 
@@ -442,24 +463,21 @@ class BayesianOptimisationPlugin(BasePlugin):
                 post_processed[opt] = ccandidate[i]
             elif opt == 'pseudo-dt-fact':
                 post_processed[opt] = ccandidate[i]
+            elif opt.startswith('pseudo-dt-fact:') and opt[15:].isdigit():
+                post_processed[opt] = ccandidate[i]
             else:
                 raise ValueError(f"Unrecognised optimisable {opt}")
         return post_processed
 
     def _preprocess_csteps(self, csteps, n_csteps):
 
-        if n_csteps == 7:
-            return csteps[0], csteps[1],  csteps[2], csteps[self.depth], csteps[-3], csteps[-2], csteps[-1]
-        elif n_csteps == 5:
-            return csteps[0], csteps[1], csteps[self.depth], csteps[-2], csteps[-1]
-        elif n_csteps == 4:
-            return csteps[1], csteps[self.depth], csteps[-2], csteps[-1]
-        elif n_csteps == 3:
-            return csteps[1], csteps[self.depth], csteps[-1]
-        elif n_csteps == 2:
-            return csteps[self.depth], csteps[-1]
-        elif n_csteps == 1:
-            return csteps[-1],
+        if   n_csteps == 7 and self.depth == 4: return csteps[0], csteps[1], csteps[2], csteps[self.depth], csteps[-3], csteps[-2], csteps[-1],
+        elif n_csteps == 6 and self.depth == 3: return            csteps[1], csteps[2], csteps[self.depth], csteps[-3], csteps[-2], csteps[-1],
+        elif n_csteps == 5:                     return csteps[0], csteps[1],            csteps[self.depth], csteps[-2], csteps[-1],
+        elif n_csteps == 4:                     return            csteps[1],            csteps[self.depth], csteps[-2], csteps[-1],
+        elif n_csteps == 3:                     return            csteps[1],            csteps[self.depth],             csteps[-1],
+        elif n_csteps == 2:                     return                                  csteps[self.depth],             csteps[-1],
+        elif n_csteps == 1:                     return                                                                  csteps[-1],
         else:
             raise ValueError(f"Unrecognised number of csteps {n_csteps}")
 
@@ -476,7 +494,7 @@ class BayesianOptimisationPlugin(BasePlugin):
         if type == 'KG':
             samples   = 1024
             restarts  =   10
-            fantasies =  128
+            fantasies =   64 # 128
 
             _acquisition_function = qKnowledgeGradient(
                 self.model, 

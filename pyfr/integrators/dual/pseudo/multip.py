@@ -49,6 +49,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         # Multigrid pseudo-time steps
         dtau = cfg.getfloat(sect, 'pseudo-dt')
         self._Δτf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
+        self.if_enable_dtauf = cfg.getbool(mgsect, 'enable-dtau-fact', True)
         self._dtaufs = cfg.getliteral(mgsect, 'pseudo-dt-facts', 
                                      [self._Δτf for _ in self.levels]) 
 
@@ -71,12 +72,14 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         for l in self.levels:
             pc = get_pseudo_stepper_cls(pn, l)
 
-            if l == order:
+            if l == order or not self.if_enable_dtauf:
                 bases = [cc, pc]
-                mcfg = cfg
             else:
                 bases = [cc_none, pc]
-
+                
+            if l == order:
+                mcfg = cfg
+            else:
                 mcfg = Inifile(cfg.tostr())
                 mcfg.set('solver', 'order', l)
                 mcfg.set(sect, 'pseudo-dt', dtau*np.prod(self.dtaufs[:order-l]))
@@ -255,7 +258,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.backend.run_kernels(self.mgproject(l1, l1src, l2, l2dst))
 
         # Project local dtau field to lower multigrid levels
-        if self.pintgs[self._order].pseudo_controller_needs_lerrest:
+        if self.pintgs[self._order].pseudo_controller_needs_lerrest and self.if_enable_dtauf:
             self.backend.run_kernels(self.dtauproject(l1, l2, self.dtaufs))
 
         # Prevsoln is used as temporal storage at l1

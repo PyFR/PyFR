@@ -132,7 +132,7 @@ class OptimisationStatsPlugin(BasePlugin):
         self.pd_stats = pd.concat([self.pd_stats, t1], ignore_index=True)
 
     def check_status(self, intg):
-        intg.actually_captured=self.pd_stats.count(0)[0] - intg._skip_first_n
+        intg.actually_captured=self.pd_stats.count(0).iloc[0] - intg._skip_first_n
 
         # Stop because simulation is totally bad
         if any(np.isnan(np.sum(s)) for s in intg.soln):
@@ -141,7 +141,7 @@ class OptimisationStatsPlugin(BasePlugin):
             intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN 
             return
 
-        if self.pd_stats.count(0)[0]<intg._increment:
+        if self.pd_stats.count(0).iloc[0] < intg._increment:
             return
 
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
@@ -155,7 +155,7 @@ class OptimisationStatsPlugin(BasePlugin):
              or (self.Δτ_controller == 'local-pi'
             and abs(intg.pseudointegrator.pintg.Δτᴹ
                   - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
-            and self.pd_stats.count(0)[0] >= (intg._skip_first_n + intg._capture_next_n)):
+            and self.pd_stats.count(0).iloc[0] >= (intg._skip_first_n + intg._capture_next_n)):
 
                 intg.reset_opt_stats = True
 
