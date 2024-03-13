@@ -196,21 +196,26 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
     def pintg(self):
         return self.pintgs[self.level]
 
+    # If only Δτ-factor given ...
     @property
-    def dtauf(self):
-        return self._dtaufs[0]
-
+    def dtauf(self):     return self._dtaufs[0]
     @dtauf.setter
-    def dtauf(self, y):
-        self._dtaufs = [y for _ in self.levels]
+    def dtauf(self, y):  self._dtaufs = [y for _ in self.levels]
 
+    # If an array of Δτ-factors given ...
     @property
-    def dtaufs(self):
-        return self._dtaufs
-
+    def dtaufs(self):    return self._dtaufs
     @dtaufs.setter
-    def dtaufs(self, y):
-        self._dtaufs = y
+    def dtaufs(self, y): self._dtaufs = y
+
+    # If Δτᴹᵃˣ array given ...
+    @property
+    def dtau_maxs(self): return self._dtau_maxs
+    @dtau_maxs.setter
+    def dtau_maxs(self, y): 
+        for l in self.levels:
+            self.pintgs[l].Δτᴹ = y[l]        
+        self._dtau_maxs = y
 
     def _init_proj_mats(self):
         self.projmats = defaultdict(list)
@@ -364,14 +369,14 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         self.tcurr = tcurr
         
-#        mpi.Prequest.Waitall
+        mpi.Prequest.Waitall
         ctime_start = perf_counter()    
         for i in range(self._maxniters):
 
             cstepsf = []
             # perform element-wise operation
             for a, b, c in zip(cstepsa_f, cstepsb_f, cstepsc_f):
-                cstepsf.append(a + (b - a)*np.exp(-c*i))                
+                cstepsf.append(b + (a - b)*np.exp(-c*i))
 
             # Choose either ⌊c⌋ or ⌈c⌉ in a way that the average is c
             csteps = [int(c + (self._fgen.random() < c % 1)) for c in cstepsf]
@@ -395,7 +400,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             # Convergence monitoring
             if self.mg_convmon(self.pintg, i, self._minniters):
                 break
-#        mpi.Prequest.Waitall
+        mpi.Prequest.Waitall
         self._compute_time += (perf_counter() - ctime_start)
 
     def collect_stats(self, stats):

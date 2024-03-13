@@ -429,27 +429,28 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
         """
         unprocessed = []
 
-        if any(opt.startswith('cstep:')   for opt in self.optimisables): n_csteps  = sum(opt.startswith('cstep:'  ) for opt in self.optimisables); csteps  = self._preprocess_csteps(pseudointegrator.csteps , n_csteps)
-        if any(opt.startswith('cstep-a:') for opt in self.optimisables): n_cstepsa = sum(opt.startswith('cstep-a:') for opt in self.optimisables); cstepsa = self._preprocess_csteps(pseudointegrator.cstepsa, n_cstepsa)
-        if any(opt.startswith('cstep-b:') for opt in self.optimisables): n_cstepsb = sum(opt.startswith('cstep-b:') for opt in self.optimisables); cstepsb = self._preprocess_csteps(pseudointegrator.cstepsb, n_cstepsb)
-        if any(opt.startswith('cstep-c:') for opt in self.optimisables): n_cstepsc = sum(opt.startswith('cstep-c:') for opt in self.optimisables); cstepsc = self._preprocess_csteps(pseudointegrator.cstepsc, n_cstepsc)
+        if any(opt.startswith(         'cstep:') for opt in self.optimisables):  n_csteps = sum(opt.startswith(  'cstep:') for opt in self.optimisables);  csteps = self._preprocess_csteps(pseudointegrator.csteps , n_csteps )
+        if any(opt.startswith(       'cstep-a:') for opt in self.optimisables): n_cstepsa = sum(opt.startswith('cstep-a:') for opt in self.optimisables); cstepsa = self._preprocess_csteps(pseudointegrator.cstepsa, n_cstepsa)
+        if any(opt.startswith(       'cstep-b:') for opt in self.optimisables): n_cstepsb = sum(opt.startswith('cstep-b:') for opt in self.optimisables); cstepsb = self._preprocess_csteps(pseudointegrator.cstepsb, n_cstepsb)
+        if any(opt.startswith(       'cstep-c:') for opt in self.optimisables): n_cstepsc = sum(opt.startswith('cstep-c:') for opt in self.optimisables); cstepsc = self._preprocess_csteps(pseudointegrator.cstepsc, n_cstepsc)
+        if any(opt.startswith('pseudo-dt-fact:') for opt in self.optimisables):    dtaufs = pseudointegrator.dtaufs
+        if any(opt.startswith( 'pseudo-dt-max:') for opt in self.optimisables): dtau_maxs = pseudointegrator.dtau_maxs
 
-        if any(opt.startswith('pseudo-dt-fact:') for opt in self.optimisables):
-            dtaufs = pseudointegrator.dtaufs
-            if len(dtaufs) != self.depth+1:
-                raise ValueError(f"{len(dtaufs) = } neq 1+{self.depth}")
+        # Check consistency of the number of optimisables
+        if any(opt.startswith('pseudo-dt-fact:') for opt in self.optimisables) and len(dtaufs)    != self.depth+1: raise ValueError(f"{len(dtaufs   ) = } neq 1+{self.depth}")
+        if any(opt.startswith( 'pseudo-dt-max:') for opt in self.optimisables) and len(dtau_maxs) != self.depth+1: raise ValueError(f"{len(dtau_maxs) = } neq 1+{self.depth}")
 
         for opt in self.optimisables:
-            if   opt.startswith('cstep:'  ) and opt[6:].isdigit(): unprocessed.append(csteps[ int(opt[6:])])
-            elif opt.startswith('cstep-a:') and opt[8:].isdigit(): unprocessed.append(cstepsa[int(opt[8:])])
-            elif opt.startswith('cstep-b:') and opt[8:].isdigit(): unprocessed.append(cstepsb[int(opt[8:])])
-            elif opt.startswith('cstep-c:') and opt[8:].isdigit(): unprocessed.append(cstepsc[int(opt[8:])])
-            elif opt == 'pseudo-dt-max':
-                unprocessed.append(pseudointegrator.pintg.Δτᴹ)
-            elif opt == 'pseudo-dt-fact':
-                unprocessed.append(pseudointegrator.dtauf)
-            elif opt.startswith('pseudo-dt-fact:') and opt[15:].isdigit():
-                unprocessed.append(dtaufs[int(opt[15:])])
+            # Array optimisables, those with colon
+            if   opt.startswith(         'cstep:') and opt[ 6:].isdigit(): unprocessed.append(   csteps[int(opt[ 6:])])
+            elif opt.startswith(       'cstep-a:') and opt[ 8:].isdigit(): unprocessed.append(  cstepsa[int(opt[ 8:])])
+            elif opt.startswith(       'cstep-b:') and opt[ 8:].isdigit(): unprocessed.append(  cstepsb[int(opt[ 8:])])
+            elif opt.startswith(       'cstep-c:') and opt[ 8:].isdigit(): unprocessed.append(  cstepsc[int(opt[ 8:])])
+            elif opt.startswith( 'pseudo-dt-max:') and opt[14:].isdigit(): unprocessed.append(dtau_maxs[int(opt[14:])])
+            elif opt.startswith('pseudo-dt-fact:') and opt[15:].isdigit(): unprocessed.append(   dtaufs[int(opt[15:])])
+            # Non-array optimisables
+            elif opt == 'pseudo-dt-max':                           unprocessed.append(pseudointegrator.pintg.Δτᴹ)
+            elif opt == 'pseudo-dt-fact':                          unprocessed.append(pseudointegrator.dtauf)
             else:
                 raise ValueError(f"Unrecognised optimisable: {opt}")
 
@@ -458,26 +459,26 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
     def _postprocess_ccandidate(self, ccandidate):
         post_processed = {}
         for i, opt in enumerate(self.optimisables):
-            if   opt.startswith('cstep:'  ) and opt[6:].isdigit():         post_processed[opt] = ccandidate[i]
-            elif opt.startswith('cstep-a:') and opt[8:].isdigit():         post_processed[opt] = ccandidate[i]
-            elif opt.startswith('cstep-b:') and opt[8:].isdigit():         post_processed[opt] = ccandidate[i]
-            elif opt.startswith('cstep-c:') and opt[8:].isdigit():         post_processed[opt] = ccandidate[i]
-            elif opt == 'pseudo-dt-max':                                   post_processed[opt] = ccandidate[i]
-            elif opt == 'pseudo-dt-fact':                                  post_processed[opt] = ccandidate[i]
+            # Array optimisables, those with colon
+            if   opt.startswith(         'cstep:') and opt[ 6:].isdigit(): post_processed[opt] = ccandidate[i]
+            elif opt.startswith(       'cstep-a:') and opt[ 8:].isdigit(): post_processed[opt] = ccandidate[i]
+            elif opt.startswith(       'cstep-b:') and opt[ 8:].isdigit(): post_processed[opt] = ccandidate[i]
+            elif opt.startswith(       'cstep-c:') and opt[ 8:].isdigit(): post_processed[opt] = ccandidate[i]
             elif opt.startswith('pseudo-dt-fact:') and opt[15:].isdigit(): post_processed[opt] = ccandidate[i]
+            elif opt.startswith( 'pseudo-dt-max:') and opt[14:].isdigit(): post_processed[opt] = ccandidate[i]
+            # Non-array optimisables
+            elif opt ==  'pseudo-dt-max': post_processed[opt] = ccandidate[i]
+            elif opt == 'pseudo-dt-fact': post_processed[opt] = ccandidate[i]
             else:
                 raise ValueError(f"Unrecognised optimisable {opt}")
         return post_processed
 
     def _preprocess_csteps(self, csteps, n_csteps):
-
-        if   n_csteps == 7 and self.depth == 4: return csteps[0], csteps[1], csteps[2], csteps[self.depth], csteps[-3], csteps[-2], csteps[-1],
-        elif n_csteps == 6 and self.depth == 3: return            csteps[1], csteps[2], csteps[self.depth], csteps[-3], csteps[-2], csteps[-1],
-        elif n_csteps == 5:                     return csteps[0], csteps[1],            csteps[self.depth], csteps[-2], csteps[-1],
-        elif n_csteps == 4:                     return            csteps[1],            csteps[self.depth], csteps[-2], csteps[-1],
-        elif n_csteps == 3:                     return            csteps[1],            csteps[self.depth],             csteps[-1],
-        elif n_csteps == 2:                     return                                  csteps[self.depth],             csteps[-1],
-        elif n_csteps == 1:                     return                                                                  csteps[-1],
+        if   n_csteps == 5: return csteps[0], csteps[1], csteps[self.depth], csteps[-2], csteps[-1],
+        elif n_csteps == 4: return            csteps[1], csteps[self.depth], csteps[-2], csteps[-1],
+        elif n_csteps == 3: return            csteps[1], csteps[self.depth],             csteps[-1],
+        elif n_csteps == 2: return                       csteps[self.depth],             csteps[-1],
+        elif n_csteps == 1: return                                                       csteps[-1],
         else:
             raise ValueError(f"Unrecognised number of csteps {n_csteps}")
 
