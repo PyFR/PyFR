@@ -41,21 +41,19 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
         self._Cinit_lim  = 2.0*initialise_ref_cands # Exploit
         self._Dinit_lim  = 2.5*initialise_ref_cands # Explore/Exploit + expand
 
-        # When to stop the offline simulation
+        # If offline optimisation, stop optimisation after some iterations
         self._END_lim    = self.cfg.getfloat(cfgsect, 'stop-optimisation')
+
+        # Abort after the last candidate
         self.force_abort = self.cfg.getbool( cfgsect, 'force-abort', False)
 
+        # Bounds expansion parameters
         self.mean_mult = self.cfg.getfloat(cfgsect, 'mean-multiplier', 0.1)
         self.std_mult  = self.cfg.getfloat(cfgsect, 'std-multiplier' , 1.0)
 
         intg.opt_type = self.opt_type = suffix
-        if suffix == 'online':
-            self.columns.append('tcurr')
-            self.index_name = 'tcurr'
-        elif suffix == 'onfline':
-            self.columns.append('iteration')
-            self.index_name = 'iteration'
-            intg.offline_optimisation_complete = False
+        if   suffix ==  'online': self.columns.append('tcurr')    ; self.index_name = 'tcurr'
+        elif suffix == 'onfline': self.columns.append('iteration'); self.index_name = 'iteration'; intg.offline_optimisation_complete = False
         else:
             raise ValueError('Invalid suffix')
 
@@ -98,7 +96,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
 
         intg._no_more_optimisation = False
         intg.candidate = {}
-        self.depth = self.cfg.getint('solver', 'order', 0)
+        self.depth = self.cfg.getint('solver', 'order')
 
         if self.rank == self.root:
             self.df_train = pd.DataFrame(columns=self.columns)
@@ -143,15 +141,11 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
                 self.cand_train = False
                 self.cand_validate = False
             else:
-                if self.cand_train:
-                    t_X_Y = self.process_training_raw(t1)
-                else:
-                    t_X_Y = self.process_training_raw()
+                if self.cand_train:    t_X_Y = self.process_training_raw(t1)
+                else:                  t_X_Y = self.process_training_raw()
 
-                if self.cand_validate:
-                    v_X_Y = self.process_validation_raw(t1)
-                else:
-                    v_X_Y = self.process_validation_raw()
+                if self.cand_validate: v_X_Y = self.process_validation_raw(t1)
+                else:                  v_X_Y = self.process_validation_raw()
 
                 if self.df_train['if-validate'].sum()>=self._nbcs:
                     self.expand_bounds(self.happening_region(v_X_Y[0]))
@@ -160,11 +154,8 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
                 t1['bounds-size'] = self.bounds_size
 
                 if self.df_train['if-train'].sum() < 1:                        # Phase 1: Random candidate initialisation
-                    opt_phase = "Random"
-                    opt_motive = 'PM'
-                    self.cand_phase = 11
-                    self.cand_train = True
-                    self.cand_validate = False
+                    opt_phase, opt_motive  = "Random", 'PM'
+                    self.cand_phase, self.cand_train, self.cand_validate = 11, True, False
 
                 elif intg.bad_sim:
                     if self.opt_type == 'online':
@@ -275,15 +266,11 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
                     for i, val in enumerate(best_candidate):
                         t1[f'b-{i}'] = val
                 
-            t1['opt-time'] = perf_counter() - opt_time_start
-
-            if self.opt_type == 'online': 
-                t1[self.index_name] = tcurr                
-            else:
-                t1[self.index_name] = len(self.df_train.index)+1
-
+            t1['opt-time']          = perf_counter() - opt_time_start
             t1['cumm-compute-time'] = intg.pseudointegrator._compute_time
-            t1['capture-window'] = intg.actually_captured
+            t1['capture-window']    = intg.actually_captured
+            t1[self.index_name] = tcurr if self.opt_type == 'online' else len(self.df_train.index)+1
+
             # ------------------------------------------------------------------
             # Add all the data collected into the main dataframe
 
@@ -308,19 +295,9 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
         args = {'axis' : 0, 'ignore_index' : True, 'sort' : False}
 
         if t1 is not None:
-
             # Process all optimisables with t1 too
-
-            tX = pd.concat([new_df_train[self._t_cand], t1[self._t_cand]], **args).astype(np.float64).to_numpy()
-            tY = pd.concat([new_df_train['t-m'], t1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
-
-            # Ensure no all-NA columns in new_df_train[self._t_cand] and t1[self._t_cand] before concat
-            # filtered_new_df_train = new_df_train[self._t_cand].dropna(how='all', axis=1)
-            # filtered_t1 = t1[self._t_cand].dropna(how='all', axis=1)
-            # tX = pd.concat([filtered_new_df_train, filtered_t1], **args).astype(np.float64).to_numpy()
-
-            # If handling empty entries explicitly before concat
-            # tY = pd.concat([new_df_train['t-m'].dropna(), t1['t-m'].iloc[:1].dropna()], **args).to_numpy().reshape(-1, 1)
+            tX = pd.concat([new_df_train[self._t_cand], t1[self._t_cand]  ], **args).astype(np.float64).to_numpy()
+            tY = pd.concat([new_df_train['t-m']       , t1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
 
         else:
             tX = new_df_train[self._t_cand].astype(np.float64).to_numpy()
@@ -338,8 +315,8 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
 
         if v1 is not None:
             # Process all optimisables with t1 too
-            vX = pd.concat([new_df_train[self._t_cand], v1[self._t_cand]], **args).astype(np.float64).to_numpy()
-            vY = pd.concat([new_df_train['t-m'], v1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
+            vX = pd.concat([new_df_train[self._t_cand], v1[self._t_cand]]  , **args).astype(np.float64).to_numpy()
+            vY = pd.concat([new_df_train['t-m']       , v1['t-m'].iloc[:1]], **args).to_numpy().reshape(-1, 1)
 
         else:
             vX = new_df_train[self._t_cand].astype(np.float64).to_numpy()
@@ -437,7 +414,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
         if any(opt.startswith( 'pseudo-dt-max:') for opt in self.optimisables): dtau_maxs = pseudointegrator.dtau_maxs
 
         # Check consistency of the number of optimisables
-        if any(opt.startswith('pseudo-dt-fact:') for opt in self.optimisables) and len(dtaufs)    != self.depth+1: raise ValueError(f"{len(dtaufs   ) = } neq 1+{self.depth}")
+        if any(opt.startswith('pseudo-dt-fact:') for opt in self.optimisables) and len(dtaufs)    != self.depth: raise ValueError(f"{len(dtaufs   ) = } neq 1+{self.depth}")
         if any(opt.startswith( 'pseudo-dt-max:') for opt in self.optimisables) and len(dtau_maxs) != self.depth+1: raise ValueError(f"{len(dtau_maxs) = } neq 1+{self.depth}")
 
         for opt in self.optimisables:
@@ -493,10 +470,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
         from botorch.acquisition import PosteriorMean
 
         if type == 'KG':
-            samples   = 1024
-            restarts  =   10
-            fantasies =   64 # 128
-
+            samples, restarts, fantasies   = 1024, 10, 64
             _acquisition_function = qKnowledgeGradient(
                 self.model, 
                 posterior_transform = ScalarizedPosteriorTransform(weights=self.negw),
@@ -506,9 +480,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
             X_b = self.normalise.untransform(X_cand)
 
         elif type == 'EI':
-            samples   = 1024
-            restarts  =   10
-
+            samples, restarts = 1024, 10
             _acquisition_function = qNoisyExpectedImprovement(
                 self.model, self._norm_X,
                 posterior_transform = ScalarizedPosteriorTransform(weights=self.negw),
@@ -518,10 +490,8 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
             X_b = self.normalise.untransform(X_cand)
 
         elif type == 'PM':
+            raw_samples,num_restarts  = 2048, 20 
             _acquisition_function = PosteriorMean(self.model, maximize = False)
-
-            raw_samples  = 2048 
-            num_restarts =   20 
 
             X_cand = self.optimise(_acquisition_function, raw_samples, num_restarts)
             X_b    = self.normalise.untransform(X_cand)
@@ -586,14 +556,12 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
         self._n_cols = list(filter(lambda x: x.startswith('n-'), self.columns))
         self._n_cand = list(filter(lambda x: x.startswith('n-') and x[2:].isdigit(), self.columns))
 
-    def cce_true(self, df: pd.DataFrame) -> int:
+    def cce_true(self, df):
         continuous_true_count = 1
 
         for value in df['if-validate'].values[::-1]:
-            if value:
-                continuous_true_count += 1
-            else:
-                break
+            if value: continuous_true_count += 1
+            else:     break
 
         return continuous_true_count
     

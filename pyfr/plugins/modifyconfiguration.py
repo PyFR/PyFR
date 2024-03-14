@@ -75,9 +75,9 @@ class ModifyConfigPlugin(BaseSolnPlugin):
 
                 # If any of the optimisables in the config file have a certain colon
                 if any(c.startswith(         'cstep:') for c in intg.candidate): intg.pseudointegrator.csteps   = self._postprocess_ccsteps(csteps)
-                if any(c.startswith(       'cstep-a:') for c in intg.candidate): intg.pseudointegrator.cstepsa  = self._postprocess_ccsteps(cstepsa)
-                if any(c.startswith(       'cstep-b:') for c in intg.candidate): intg.pseudointegrator.cstepsb  = self._postprocess_ccsteps(cstepsb)
-                if any(c.startswith(       'cstep-c:') for c in intg.candidate): intg.pseudointegrator.cstepsc  = self._postprocess_ccsteps(cstepsc)
+                if any(c.startswith(       'cstep-a:') for c in intg.candidate): intg.pseudointegrator.cstepsa  = self._postprocess_ccsteps(cstepsa, def_c = 1.00)
+                if any(c.startswith(       'cstep-b:') for c in intg.candidate): intg.pseudointegrator.cstepsb  = self._postprocess_ccsteps(cstepsb, def_c = 1.00)
+                if any(c.startswith(       'cstep-c:') for c in intg.candidate): intg.pseudointegrator.cstepsc  = self._postprocess_ccsteps(cstepsc, def_c = 0.05)
                 if any(c.startswith( 'pseudo-dt-max:') for c in intg.candidate): intg.pseudointegrator.dtau_maxs = dtau_maxs
                 if any(c.startswith('pseudo-dt-fact:') for c in intg.candidate): intg.pseudointegrator.dtaufs   = dtaufs
 
@@ -97,11 +97,11 @@ class ModifyConfigPlugin(BaseSolnPlugin):
 
     def _postprocess_ccsteps(self, ccsteps, def_c = 1.):
         #                                                    LVL-highest                                              LVL-lowest                                                                                    LVL-highest 
-        if   len(ccsteps) == 7:                     return (ccsteps[0],)      + (ccsteps[1],)                  + (ccsteps[2],) * (self.depth-2) + (ccsteps[3],) + (ccsteps[4],) * (self.depth-2) + (ccsteps[5],) + (ccsteps[6],)
-        elif len(ccsteps) == 6 and self.depth == 3: return        (def_c ,)      + (ccsteps[0],)                  + (ccsteps[1],)                  + (ccsteps[2],) + (ccsteps[3],)                  + (ccsteps[4],) + (ccsteps[5],)
-        elif len(ccsteps) == 5:                     return (ccsteps[0],)      + (ccsteps[1],) * (self.depth-1) + (ccsteps[2],)                  + (ccsteps[3],) * (self.depth-1)                                 + (ccsteps[4],)
-        elif len(ccsteps) == 4:                     return (def_c,)             + (ccsteps[0],) * (self.depth-1) + (ccsteps[1],) + (ccsteps[2],) * (self.depth-1) + (ccsteps[3],)
-        elif len(ccsteps) == 1:                     return (def_c,) * self.depth                                  + (1,)                           + (def_c,) * (self.depth-1)                                         + (ccsteps[0],)
-        elif len(ccsteps) == 2:                     return (def_c,) * self.depth                                  + (ccsteps[0],) + (def_c,) * (self.depth-1)                                                          + (ccsteps[1],)
+        if   len(ccsteps) == 7:                     return (ccsteps[0],)          + (ccsteps[1],)                  + (ccsteps[2],) * (self.depth-2) + (ccsteps[3],) + (ccsteps[4],) * (self.depth-2) + (ccsteps[5],) + (ccsteps[6],)
+        elif len(ccsteps) == 6 and self.depth == 3: return        (def_c ,)       + (ccsteps[0],)                  + (ccsteps[1],)                  + (ccsteps[2],) + (ccsteps[3],)                  + (ccsteps[4],) + (ccsteps[5],)
+        elif len(ccsteps) == 5:                     return (ccsteps[0],)          + (ccsteps[1],) * (self.depth-1) + (ccsteps[2],)                  + (ccsteps[3],) * (self.depth-1)                                 + (ccsteps[4],)
+        elif len(ccsteps) == 4:                     return (def_c,)               + (ccsteps[0],) * (self.depth-1) + (ccsteps[1],)                  + (ccsteps[2],) * (self.depth-1)                                 + (ccsteps[3],)
+        elif len(ccsteps) == 2:                     return (def_c,) * self.depth                                   + ((ccsteps[0],) * self.depth                                                                   ) + (ccsteps[1],)
+        elif len(ccsteps) == 1:                     return (def_c,) * self.depth                                   + (1,)                           + (def_c,) * (self.depth-1)                                      + (ccsteps[0],)
         else:
             raise ValueError(f"Ensure that the combination of number of csteps: {len(ccsteps)} and depth: {self.depth} is valid.")

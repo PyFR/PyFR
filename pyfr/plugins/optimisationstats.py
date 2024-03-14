@@ -136,16 +136,18 @@ class OptimisationStatsPlugin(BaseSolnPlugin):
     def check_status(self, intg):
         intg.actually_captured=self.pd_stats.count(0).iloc[0] - intg._skip_first_n
 
-        # Stop because simulation is totally bad
+        # Stop collection if simulation explodes
         if any(np.isnan(np.sum(s)) for s in intg.soln):
             intg.actually_captured = -self.pd_stats.count(0)[0]
             intg.reset_opt_stats = intg.bad_sim = True
             intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN 
             return
 
+        # Continue if not enough data
         if self.pd_stats.count(0).iloc[0] < intg._increment:
             return
 
+        # Stop collection if max-n-iterations is reached
         if (self.pd_stats['n'][self.pd_stats.index[-1]] == self.maxniters*intg.nstages): 
             if (self.maxniters != self.minniters):
                 intg.actually_captured = -self.pd_stats.count(0)[0]
@@ -153,10 +155,14 @@ class OptimisationStatsPlugin(BaseSolnPlugin):
                 intg.opt_cost_mean = intg.opt_cost_std = intg.opt_cost_sem = np.NaN
                 return
        
-        if (((self.Δτ_controller == 'none'
-             or (self.Δτ_controller == 'local-pi'
-            and abs(intg.pseudointegrator.pintg.Δτᴹ
-                  - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]])<1e-6)))
+        # Typical case: If Δτ is constant and enough data is collected
+        if ((self.Δτ_controller == 'none'
+              or (self.Δτ_controller == 'local-pi'
+                  and abs(intg.pseudointegrator.pintg.Δτᴹ
+                          - self.pd_stats['max-Δτ'][self.pd_stats.index[-1]]
+                         )<1e-6
+                  )
+             )
             and self.pd_stats.count(0).iloc[0] >= (intg._skip_first_n + intg._capture_next_n)):
 
                 intg.reset_opt_stats = True
@@ -165,7 +171,7 @@ class OptimisationStatsPlugin(BaseSolnPlugin):
                 intg.opt_cost_mean= self.pd_stats['cost'].tail(intg.actually_captured).mean()
                 intg.opt_cost_std = self.pd_stats['cost'].tail(intg.actually_captured).std()
                 intg.opt_cost_sem = self.pd_stats['cost'].tail(intg.actually_captured).sem()
-                intg.bad_sim = (intg.opt_cost_std/intg.opt_cost_mean) > intg._precision
+                intg.bad_sim = False # (intg.opt_cost_std/intg.opt_cost_mean) > intg._precision
 
     def bcast_status(self, intg):
         intg.reset_opt_stats = self.comm.bcast(intg.reset_opt_stats, root=0)
