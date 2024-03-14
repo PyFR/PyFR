@@ -92,18 +92,25 @@ class NodalMeshAssembler:
 
     def _foface_info(self, petype, pftype, foeles):
         # Face numbers of faces of this type on this element
-        fnums = self._petype_fnums[petype][pftype]
+        fnums = np.array(self._petype_fnums[petype][pftype])
 
         # First-order nodes associated with this face
         fnmap = self._petype_fnmap[petype][pftype]
 
-        # Connectivity: (petype, eidx, fidx, flags)
-        con = [(petype, i, j, 0) for i in range(len(foeles)) for j in fnums]
+        # Element, face, and first-order node count
+        neles, nfaces, nnodes = len(foeles), len(fnums), len(fnmap[0])
 
-        # Nodes
-        nodes = np.sort(foeles[:, fnmap]).reshape(len(con), -1)
-        nodes = np.ascontiguousarray(nodes)
-        nodes = nodes.view([('', nodes.dtype)]*nodes.shape[-1]).squeeze()
+        # Extract the first-order nodes
+        nodes = np.sort(foeles[:, fnmap]).reshape(-1, nnodes)
+
+        # To improve face-pairing performance sort the faces
+        nodeix = np.argsort(nodes, axis=0)[:, 0]
+        nodes = nodes[nodeix].view([('', nodes.dtype)]*nnodes).squeeze()
+
+        # Generate the connectivity
+        eidx, fidx = divmod(nodeix, nfaces)
+        con = [(petype, e, f, 0)
+               for e, f in np.column_stack([eidx, fnums[fidx]]).tolist()]
 
         return con, nodes
 
@@ -122,11 +129,12 @@ class NodalMeshAssembler:
         resid = {}
 
         for pftype, faces in ffofaces.items():
+            append, pop = pairs[pftype].append, resid.pop
             fnit = (zip(f, iter_struct(n)) for f, n in faces)
             for f, n in chain.from_iterable(fnit):
                 # See if the nodes are in resid
-                if n in resid:
-                    pairs[pftype].append([resid.pop(n), f])
+                if (lf := pop(n, None)):
+                    append([lf, f])
                 # Otherwise add them to the unpaired dict
                 else:
                     resid[n] = f
