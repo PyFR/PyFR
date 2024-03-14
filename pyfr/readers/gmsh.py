@@ -203,7 +203,7 @@ class GmshReader(BaseReader):
             mshit = iter(msh)
 
             # Have our spinner flashed every 10,000 lines
-            mshit = pspinner.wrap_iterable(mshit, 10000)
+            mshit = pspinner.wrap_file_lines(mshit, 10000)
 
             # Section readers
             sect_map = {
@@ -347,7 +347,7 @@ class GmshReader(BaseReader):
         # Pack them into a dense array
         self._nodepts = nodepts = np.empty((max(nodemap) + 1, 3))
         for k, nv in nodemap.items():
-            nodepts[k] = [float(x) for x in nv]
+            nodepts[k] = nv
 
     def _read_nodes_impl_v41(self, mshit):
         # Entity count, node count, minimum and maximum node numbers
@@ -357,10 +357,10 @@ class GmshReader(BaseReader):
 
         for i in range(ne):
             nen = int(next(mshit).split()[-1])
-            nix = [int(next(mshit)[:-1]) for _ in range(nen)]
+            nix = [int(next(mshit)) for _ in range(nen)]
 
             for j in nix:
-                nodepts[j] = [float(x) for x in next(mshit).split()]
+                nodepts[j] = next(mshit).split()
 
         if next(mshit) != '$EndNodes\n':
             raise ValueError('Expected $EndNodes')
@@ -399,20 +399,26 @@ class GmshReader(BaseReader):
             if etype not in self._etype_map:
                 raise ValueError(f'Unsupported element type {etype}')
 
-            # Physical entity type (used for BCs)
-            epent = self._tagpents.get((edim, etag), -1)
-            append = elenodes[etype, epent].append
+            # Determine the number of nodes associated with each element
+            nnodes = self._etype_map[etype][1]
 
+            # Lookup the physical entity type
+            epent = self._tagpents[edim, etag]
+
+            # Allocate space for, and read in, these elements
+            enodes = np.empty((ecount, nnodes), dtype=np.int64)
             for j in range(ecount):
-                append([int(k) for k in next(mshit).split()[1:]])
+                enodes[j] = next(mshit).split()[1:]
 
-        if ne != sum(len(v) for v in elenodes.values()):
+            elenodes[etype, epent].append(enodes)
+
+        if ne != sum(len(vv) for v in elenodes.values() for vv in v):
             raise ValueError('Invalid element count')
 
         if next(mshit) != '$EndElements\n':
             raise ValueError('Expected $EndElements')
 
-        self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
+        self._elenodes = {k: np.vstack(v) for k, v in elenodes.items()}
 
     def _to_raw_pyfrm(self, lintol):
         # Assemble a nodal mesh
