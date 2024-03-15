@@ -128,8 +128,8 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['minf'] = self.cfg.getfloat(sect, 'min-fact', 0.98)
         tplargs['saff'] = self.cfg.getfloat(sect, 'safety-fact', 0.8)
 
-        dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
         dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 1.0)
+        dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
         
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
@@ -138,7 +138,7 @@ class DualPIPseudoController(BaseDualPseudoController):
             raise ValueError('Invalid pseudo-dt-min-mult, pseudo-dt-max-mult')
 
         # Limits for the local pseudo-time-step size
-        self._dtau_max = self._dtau * dtau_maxf
+        self.dtau_max = self._dtau * dtau_maxf
         tplargs['dtau_min'] = dtau_minf * self._dtau
 
         # Register a kernel to compute local error
@@ -167,17 +167,17 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             for i in self.ele_scal_upts_locs:
                 for k in self.pintgkernels['localerrest', i]:
-                    k.bind(dtau_max = self._dtau_max)
+                    k.bind(dtau_max = self.dtau_max)
 
         self.backend.commit()
 
     @property
     def Δτᴹ(self):
-        return self._dtau_max
+        return self.dtau_max
 
     @Δτᴹ.setter
     def Δτᴹ(self, y):
-        self._dtau_max = y
+        self.dtau_max = y
         for i in self.ele_scal_upts_locs:
             for k in self.pintgkernels['localerrest', i]:
                 k.bind(dtau_max = y)

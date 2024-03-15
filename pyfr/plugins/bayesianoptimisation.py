@@ -165,7 +165,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
                         t1['if-train']   = True
                         t1['if-validate']= False
                         self.cand_phase = 1
-                        self.cand_train = False
+                        self.cand_train = True # False
                         self.cand_validate = False
 
                     else:
@@ -178,38 +178,46 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
                         self.cand_train = True
                         self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._Ainit_lim:           # Phase 2: KG
+                elif self.df_train['if-train'].sum()<self._Ainit_lim:           # KG initialisation 
                     opt_phase = "Initialise"
                     opt_motive = 'KG'
                     self.cand_phase = 20
                     self.cand_train = True
                     self.cand_validate = False
 
-                elif self.df_train['if-train'].sum()<self._Binit_lim:           # Phase 3: EI
-                    opt_phase = "Explore"
-                    opt_motive = 'EI'
-                    self.cand_phase = 30
-                    self.cand_train = True
-                    self.cand_validate = False
+                elif self.df_train['if-train'].sum()<self._Dinit_lim:           # EI + PM Expand
 
-                elif self.df_train['if-train'].sum()<self._Cinit_lim:           # Phase 4: PM
-                    opt_phase = "Exploit"
-                    opt_motive = 'PM'
-                    self.cand_phase = 40
-                    self.cand_train = True
-                    self.cand_validate = True
-
-                elif self.df_train['if-train'].sum()<self._Dinit_lim:           # Phase 5: s-expansion + EI
-                    if self.cand_phase == 52:
-                        opt_phase = "Explore+b-expansion"
-                        opt_motive = 'EI'
-                        self.cand_phase = 51
+                    if self.cand_phase == 32:
+                        opt_phase, opt_motive = "Explore+b-expansion", 'EI'
+                        self.cand_phase, self.cand_validate = 31, False
                     else:
-                        opt_phase = "Exploit+b-expansion"
-                        opt_motive = 'PM'
-                        self.cand_phase = 52
+                        opt_phase, opt_motive = "Exploit+b-expansion", 'PM'
+                        self.cand_phase, self.cand_validate = 32, True
                     self.cand_train = True
-                    self.cand_validate = True
+
+#                    opt_phase = "Explore"
+#                    opt_motive = 'EI'
+#                    self.cand_phase = 30
+#                    self.cand_validate = False
+#
+#                elif self.df_train['if-train'].sum()<self._Cinit_lim:           # Phase 4: PM
+#                    opt_phase = "Exploit"
+#                    opt_motive = 'PM'
+#                    self.cand_phase = 40
+#                    self.cand_train = True
+#                    self.cand_validate = True
+#
+#                elif self.df_train['if-train'].sum()<self._Dinit_lim:           # Phase 5: s-expansion + EI
+#                    if self.cand_phase == 52:
+#                        opt_phase = "Explore+b-expansion"
+#                        opt_motive = 'EI'
+#                        self.cand_phase = 51
+#                    else:
+#                        opt_phase = "Exploit+b-expansion"
+#                        opt_motive = 'PM'
+#                        self.cand_phase = 52
+#                    self.cand_train = True
+#                    self.cand_validate = True
 
                 elif (self.cce_true(self.df_train)>=self._nbcs
                     and not self.cand_phase == 61):                             # Phase 6: s-expansion + w-expansion + EI
@@ -227,7 +235,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
                     opt_phase = "Exploit+b-expansion+w-expansion"
                     opt_motive = 'PM'
                     self.cand_phase = 62
-                    self.cand_train = False
+                    self.cand_train = True # False
                     self.cand_validate = True
                 
                     intg._skip_first_n += intg._increment
@@ -237,7 +245,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
                     opt_phase = "Use-only-model-optimum"
                     opt_motive = 'PM'
                     self.cand_phase = 100
-                    self.cand_train = False
+                    self.cand_train = True # False
                     self.cand_validate = False
                 
                     # Back to normal, with no more rewinding
@@ -406,7 +414,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
         """
         unprocessed = []
 
-        if any(opt.startswith(         'cstep:') for opt in self.optimisables):  n_csteps = sum(opt.startswith(  'cstep:') for opt in self.optimisables);  csteps = self._preprocess_csteps(pseudointegrator.csteps , n_csteps )
+        if any(opt.startswith(         'cstep:') for opt in self.optimisables): n_csteps  = sum(opt.startswith(  'cstep:') for opt in self.optimisables);  csteps = self._preprocess_csteps(pseudointegrator.csteps , n_csteps )
         if any(opt.startswith(       'cstep-a:') for opt in self.optimisables): n_cstepsa = sum(opt.startswith('cstep-a:') for opt in self.optimisables); cstepsa = self._preprocess_csteps(pseudointegrator.cstepsa, n_cstepsa)
         if any(opt.startswith(       'cstep-b:') for opt in self.optimisables): n_cstepsb = sum(opt.startswith('cstep-b:') for opt in self.optimisables); cstepsb = self._preprocess_csteps(pseudointegrator.cstepsb, n_cstepsb)
         if any(opt.startswith(       'cstep-c:') for opt in self.optimisables): n_cstepsc = sum(opt.startswith('cstep-c:') for opt in self.optimisables); cstepsc = self._preprocess_csteps(pseudointegrator.cstepsc, n_cstepsc)
@@ -419,7 +427,7 @@ class BayesianOptimisationPlugin(BaseSolnPlugin):
 
         for opt in self.optimisables:
             # Array optimisables, those with colon
-            if   opt.startswith(         'cstep:') and opt[ 6:].isdigit(): unprocessed.append(   csteps[int(opt[ 6:])])
+            if   opt.startswith(         'cstep:') and opt[ 6:].isdigit(): unprocessed.append(  csteps [int(opt[ 6:])])
             elif opt.startswith(       'cstep-a:') and opt[ 8:].isdigit(): unprocessed.append(  cstepsa[int(opt[ 8:])])
             elif opt.startswith(       'cstep-b:') and opt[ 8:].isdigit(): unprocessed.append(  cstepsb[int(opt[ 8:])])
             elif opt.startswith(       'cstep-c:') and opt[ 8:].isdigit(): unprocessed.append(  cstepsc[int(opt[ 8:])])

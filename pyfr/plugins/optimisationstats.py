@@ -171,7 +171,7 @@ class OptimisationStatsPlugin(BaseSolnPlugin):
                 intg.opt_cost_mean= self.pd_stats['cost'].tail(intg.actually_captured).mean()
                 intg.opt_cost_std = self.pd_stats['cost'].tail(intg.actually_captured).std()
                 intg.opt_cost_sem = self.pd_stats['cost'].tail(intg.actually_captured).sem()
-                intg.bad_sim = False # (intg.opt_cost_std/intg.opt_cost_mean) > intg._precision
+                intg.bad_sim = (intg.opt_cost_std/intg.opt_cost_mean) > intg._precision
 
     def bcast_status(self, intg):
         intg.reset_opt_stats = self.comm.bcast(intg.reset_opt_stats, root=0)

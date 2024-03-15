@@ -210,12 +210,12 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
     # If Δτᴹᵃˣ array given ...
     @property
-    def dtau_maxs(self): return self._dtau_maxs
+    def dtau_maxs(self): return self.dtau_maxs
     @dtau_maxs.setter
     def dtau_maxs(self, y): 
         for l in self.levels:
             self.pintgs[l].Δτᴹ = y[l]        
-        self._dtau_maxs = y
+        self.dtau_maxs = y
 
     def _init_proj_mats(self):
         self.projmats = defaultdict(list)
