@@ -100,7 +100,6 @@
         // Setup filter (solve for f = exp(-zeta))
         fpdtype_t f = 1.0;
         fpdtype_t f_low, f_high, fnew;
-        fpdtype_t f1, f2, f3;
 
         fpdtype_t d, p, e;
         fpdtype_t d_low, p_low, e_low;
@@ -138,19 +137,8 @@
                 // Iterate filter strength with Illinois algorithm
                 for (int iter = 0; iter < ${niters} && f_high - f_low > ${f_tol}; iter++)
                 {
-                    // Compute new guess for each constraint (catch if root is not bracketed)
-                    f1 = (d_high > 0.0) ? f_high : (0.5*f_low*d_high - f_high*d_low)/(0.5*d_high - d_low + ${ill_tol});
-                    f2 = (p_high > 0.0) ? f_high : (0.5*f_low*p_high - f_high*p_low)/(0.5*p_high - p_low + ${ill_tol});
-                    f3 = (e_high > 0.0) ? f_high : (0.5*f_low*e_high - f_high*e_low)/(0.5*e_high - e_low + ${ill_tol});
-
-                    // Compute guess as minima of individual constraints
-                    fnew = fmin(f1, f2);
-
-                    // Avoid using entropy constraint to guess new bracket if entropy is not well-defined
-                    fnew = (fmax(e_low, e_high) < ${0.9*fpdtype_max}) ? fmin(f3, fnew) : fnew;
-
-                    // In case of bracketing failure (due to roundoff errors), revert to bisection
-                    fnew = ((fnew > f_high) || (fnew < f_low)) ? 0.5*(f_low + f_high) : fnew;
+                    // Compute new guess using bisection
+                    fnew = 0.5*(f_low + f_high);
 
                     // Compute filtered state
                     ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'p', 'e')};
