@@ -23,6 +23,15 @@ class BaseDualController(BaseDualIntegrator):
 
         self._invalidate_caches()
 
+        # Invalidate the solution gradients cache
+        self._curr_grad_soln = None
+
+        if self.rewind: self.rewind = False
+        if self.save:   self.save   = False
+
+        # Abort if plugins request it
+        self._check_abort()
+
         # Run any plugins
         self._run_plugins()
 

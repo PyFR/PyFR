@@ -198,6 +198,10 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
             'pyfr.integrators.dual.pseudo.kernels.rkvdh2pseudo'
         )
 
+    @property
+    def dtau_mats(self):
+        return [dtau_mat.get() for dtau_mat in self.dtau_upts]
+
     @memoize
     def _get_rkvdh2pseudo_kerns(self, stage, r1, r2, rold, rerr=None):
         kerns = []
@@ -220,6 +224,22 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
     def pseudo_stepper_has_lerrest(self):
         return self.pseudo_controller_needs_lerrest and self.bhat
 
+    @property
+    def dtau_mats(self):
+        return [Δτ_mat.get() for Δτ_mat in self.dtau_upts]
+
+    @dtau_mats.setter
+    def dtau_mats(self, y:float):
+        [Δτ_mat.set(y*np.ones_like(saved_Δτ_mat)) for Δτ_mat, saved_Δτ_mat in zip(self.dtau_upts, self.saved_Δτ_upts)]
+
+    def save_dtau(self):
+        self.saved_Δτ_upts = self.dtau_mats
+
+    def rewind_dtau(self):
+        [Δτ_mat.set(saved_Δτ_mat) for Δτ_mat, saved_Δτ_mat in zip(self.dtau_upts, self.saved_Δτ_upts)]
+
+    def reset_dtau(self):
+        self.dtau_mats = self._dtau
 
 class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
     @property
@@ -255,6 +275,23 @@ class DualRKVdH2RPseudoStepper(DualEmbeddedPairPseudoStepper):
         # Return
         return (r2, rold, *rerr)
 
+class DualRK12PseudoStepper(DualRKVdH2RPseudoStepper):
+    pseudo_stepper_name = 'rk12'
+    pseudo_stepper_order = 1
+
+    a = [
+        1/1,
+    ]
+
+    b = [
+        1/2,
+        1/2,
+    ]
+
+    bhat = [
+        1/1,
+        0/1,
+    ]
 
 class DualRK34PseudoStepper(DualRKVdH2RPseudoStepper):
     pseudo_stepper_name = 'rk34'
@@ -306,4 +343,43 @@ class DualRK45PseudoStepper(DualRKVdH2RPseudoStepper):
         -1563879915014 / 6823010717585,
         606302364029 / 971179775848,
         1097981568119 / 3980877426909
+    ]
+
+class DualRK59PseudoStepper(DualRKVdH2RPseudoStepper):
+    pseudo_stepper_name = 'rk59'
+    pseudo_stepper_order = 5
+
+    a = [
+        1107026461565 / 5417078080134,
+        38141181049399 / 41724347789894,
+        493273079041 / 11940823631197,
+        1851571280403 / 6147804934346,
+        11782306865191 / 62590030070788,
+        9452544825720 / 13648368537481,
+        4435885630781 / 26285702406235,
+        2357909744247 / 11371140753790,
+    ]
+
+    b = [
+        2274579626619 / 23610510767302,
+        693987741272 / 12394497460941,
+        -347131529483 / 15096185902911,
+        1144057200723 / 32081666971178,
+        1562491064753 / 11797114684756,
+        13113619727965 / 44346030145118,
+        393957816125 / 7825732611452,
+        720647959663 / 6565743875477,
+        3559252274877 / 14424734981077
+    ]
+
+    bhat = [
+        266888888871 / 3040372307578,
+        34125631160 / 2973680843661,
+        -653811289250 / 9267220972999,
+        323544662297 / 2461529853637,
+        1105885670474 / 4964345317203,
+        1408484642121 / 8758221613943,
+        1454774750537 / 11112645198328,
+        772137014323 / 4386814405182,
+        277420604269 / 1857595682219,
     ]

@@ -20,10 +20,10 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def convmon(self, i, minniters, dt_fac=1):
         if i >= minniters - 1:
             # Compute the normalised residual
-            resid = self._resid(self._idxcurr, self._idxprev, dt_fac)
+            resid, if_converged = self._resid_multiple(self._idxcurr, self._idxprev, dt_fac)
 
             self._update_pseudostepinfo(i + 1, resid)
-            return all(r <= t for r, t in zip(resid, self._pseudo_residtol))
+            return if_converged
         else:
             self._update_pseudostepinfo(i + 1, None)
             return False
@@ -31,12 +31,33 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def commit(self):
         self.system.commit()
 
-    def _resid(self, rcurr, rold, dt_fac):
+    def _resid_multiple(self, rcurr, rold, dt_fac):
+
+        if self._pseudo_norm in ('l2', 'uniform'):
+            resid = self._resid(rcurr, rold, dt_fac, self._pseudo_norm)                
+            return resid, all(r <= t for r, t in zip(resid, self._pseudo_residtol))
+
+        elif self._pseudo_norm == 'all':
+
+            resid_l2 = self._resid(rcurr, rold, dt_fac, 'l2')
+            resid_li = self._resid(rcurr, rold, dt_fac, 'uniform')
+
+            if_converged_l2 = all(r <= t for r, t in zip(resid_l2, self._pseudo_residtol_l2))
+            if_converged_li = all(r <= t for r, t in zip(resid_li, self._pseudo_residtol_li))
+
+            if_converged = if_converged_l2 and if_converged_li
+
+            return (*resid_l2, *resid_li), if_converged
+
+        else:
+            raise ValueError('Invalid pseudo-norm entered.')
+
+    def _resid(self, rcurr, rold, dt_fac, pseudo_norm):
         comm, rank, root = get_comm_rank_root()
 
         # Get a set of kernels to compute the residual
         rkerns = self._get_reduction_kerns(rcurr, rold, method='resid',
-                                           norm=self._pseudo_norm)
+                                           norm=pseudo_norm)
 
         # Bind the dynmaic arguments
         for kern in rkerns:
@@ -46,7 +67,7 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
         self.backend.run_kernels(rkerns, wait=True)
 
         # Pseudo L2 norm
-        if self._pseudo_norm == 'l2':
+        if pseudo_norm == 'l2':
             # Reduce locally (element types) and globally (MPI ranks)
             res = np.array([sum(e) for e in zip(*[r.retval for r in rkerns])])
             comm.Allreduce(mpi.IN_PLACE, res, op=mpi.SUM)
@@ -95,7 +116,7 @@ class DualPIPseudoController(BaseDualPseudoController):
 
         # Error norm
         self._norm = self.cfg.get(sect, 'errest-norm', 'l2')
-        if self._norm not in {'l2', 'uniform'}:
+        if self._norm not in {'l2', 'l4', 'l8', 'uniform'}:
             raise ValueError('Invalid error norm')
 
         tplargs = {'nvars': self.system.nvars}
@@ -119,17 +140,21 @@ class DualPIPseudoController(BaseDualPseudoController):
         self.dtau_min = dtau_minf*self.dtau
         self.dtau_max = dtau_maxf*self.dtau
 
-        if tplargs['maxf'] < 1 or tplargs['minf'] > 1:
+        if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
-        if dtau_maxf < 1 or dtau_minf > 1:
-            raise ValueError('Invalid pseudo-dt-max-mult, pseudo-dt-min-mult')
+        if not dtau_minf <= 1 < dtau_maxf:
+            raise ValueError('Invalid pseudo-dt-min-mult, pseudo-dt-max-mult')
+
+        # Limits for the local pseudo-time-step size
 
         # Register a kernel to compute local error
         self.backend.pointwise.register(
             'pyfr.integrators.dual.pseudo.kernels.localerrest'
         )
 
+        self.ele_scal_upts_locs = []
+        
         for ele, shape, dtaumat in zip(self.system.ele_map.values(),
                                        self.system.ele_shapes, self.dtau_upts):
             # Allocate storage for previous error
@@ -138,17 +163,27 @@ class DualPIPseudoController(BaseDualPseudoController):
 
             # Append the error kernels to the list
             for i, err in enumerate(ele.scal_upts):
+                self.ele_scal_upts_locs.append(i)
                 self.pintgkernels['localerrest', i].append(
                     self.backend.kernel(
                         'localerrest', tplargs=tplargs,
                         dims=[ele.nupts, ele.neles], err=err,
-                        errprev=err_prev, dtau_upts=dtaumat
+                        errprev=err_prev, dtau_upts=dtaumat,
                     )
                 )
 
         self.bind_dtau()
 
         self.backend.commit()
+
+    def bind_dtau(self):
+        for k, idx in self.pintgkernels:
+            if k == 'localerrest':
+                for kk in self.pintgkernels[k, idx]:
+                    kk.bind(
+                        dtau_min=self.dtau_min, dtau_max=self.dtau_max,
+                        dtau_fieldf=self._dtau_fieldf
+                    )
 
     def adjust_dtau(self, dt):
         old_dtau = self.dtau
@@ -160,14 +195,16 @@ class DualPIPseudoController(BaseDualPseudoController):
         self._dtau_fieldf = ratio
         self.bind_dtau()
 
-    def bind_dtau(self):
-        for k, idx in self.pintgkernels:
-            if k == 'localerrest':
-                for kk in self.pintgkernels[k, idx]:
-                    kk.bind(
-                        dtau_min=self.dtau_min, dtau_max=self.dtau_max,
-                        dtau_fieldf=self._dtau_fieldf
-                    )
+    @property
+    def Δτᴹ(self):
+        return self.dtau_max
+
+    @Δτᴹ.setter
+    def Δτᴹ(self, y):
+        self.dtau_max = y
+        for i in self.ele_scal_upts_locs:
+            for k in self.pintgkernels['localerrest', i]:
+                k.bind(dtau_max = y)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
