@@ -136,6 +136,11 @@ class BaseFluidElements:
                                                      'ill-tol', 1e-6)
             eftplargs['niters'] = self.cfg.getfloat('solver-entropy-filter',
                                                     'niters', 20)
+            efunc = self.cfg.get('solver-entropy-filter', 'entropy-func',
+                                 'numerical')
+            eftplargs['entropy_func'] = efunc
+            if efunc not in {'numerical', 'physical'}:
+                raise ValueError(f'Unknown entropy functional: {efunc}')
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
