@@ -41,6 +41,7 @@ modules = [
     'pyfr.integrators.std.kernels',
     'pyfr.partitioners',
     'pyfr.plugins',
+    'pyfr.plugins.kernels',
     'pyfr.quadrules',
     'pyfr.readers',
     'pyfr.solvers',
