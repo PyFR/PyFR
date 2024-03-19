@@ -14,12 +14,12 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
-        self._dt = dt
+        self.dt = dt
 
         sect = 'solver-time-integrator'
 
         self._dtaumin = 1.0e-12
-        self._dtau = cfg.getfloat(sect, 'pseudo-dt')
+        self.dtau = cfg.getfloat(sect, 'pseudo-dt')
 
         self.maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self.minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
@@ -61,16 +61,32 @@ class BaseDualPseudoIntegrator(BaseCommon):
                          for v in elementscls.dualcoeffs[self.system.ndims]]
 
         # Convergence tolerances
-        self._pseudo_residtol = residtol = []
-        for v in elementscls.convarmap[self.system.ndims]:
-            try:
-                residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol-' + v))
-            except NoOptionError:
-                residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol'))
-
         self._pseudo_norm = cfg.get(sect, 'pseudo-resid-norm', 'l2')
-        if self._pseudo_norm not in {'l2', 'uniform'}:
+        if self._pseudo_norm not in {'l2', 'uniform', 'all'}:
             raise ValueError('Invalid pseudo-residual norm')
+
+        if self._pseudo_norm == 'all':
+            self._pseudo_residtol_l2 = residtol_l2 = []
+            self._pseudo_residtol_li = residtol_li = []
+
+            for v in elementscls.convarmap[self.system.ndims]:
+                try:
+                    residtol_l2.append(cfg.getfloat(sect, 'pseudo-resid-l2-tol-' + v))
+                except NoOptionError:
+                    residtol_l2.append(cfg.getfloat(sect, 'pseudo-resid-l2-tol'))
+
+                try:
+                    residtol_li.append(cfg.getfloat(sect, 'pseudo-resid-li-tol-' + v))
+                except NoOptionError:
+                    residtol_li.append(cfg.getfloat(sect, 'pseudo-resid-li-tol'))
+
+        else:
+            self._pseudo_residtol = residtol = []
+            for v in elementscls.convarmap[self.system.ndims]:
+                try:
+                    residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol-' + v))
+                except NoOptionError:
+                    residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol'))
 
         # Pointwise kernels for the pseudo-integrator
         self.pintgkernels = defaultdict(list)
@@ -99,7 +115,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
 
     def init_stage(self, currstg, stepper_coeffs, dt):
         self.stepper_coeffs = stepper_coeffs
-        self._dt = dt
+        self.dt = dt
 
         svals = [0, 1 / dt, *stepper_coeffs[:-1]]
         sregs = [self._source_regidx, *self._stepper_regidx,

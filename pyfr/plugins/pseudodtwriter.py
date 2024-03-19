@@ -1,14 +1,12 @@
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BaseSolnPlugin, PostactionMixin, RegionMixin
+from pyfr.plugins.base import BasePlugin, PostactionMixin, RegionMixin
 from pyfr.writers.native import NativeWriter
 
-
-class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
-    name = 'writer'
+class PseudodtWriterPlugin(PostactionMixin, RegionMixin, BasePlugin):
+    name = 'pseudodt_writer'
     systems = ['*']
-    formulations = ['dual', 'std']
-    dimensions = [2, 3]
+    formulations = ['dual']
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
@@ -42,7 +40,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         if intg.tcurr - self.tout_last < self.dt_out - self.tol:
             return
 
-        comm, rank, root = get_comm_rank_root()
+        _, rank, root = get_comm_rank_root()
 
         stats = Inifile()
         stats.set('data', 'fields', ','.join(self.fields))
@@ -57,29 +55,18 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         else:
             metadata = None
 
-        # Fetch data from other plugins and add it to metadata with ad-hoc keys
-        for csh in intg.plugins:
-            try:
-                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
-                pdata = csh.serialise(intg)
-            except AttributeError:
-                pdata = {}
-
-            if rank == root:
-                metadata |= {f'{prefix}/{k}': v for k, v in pdata.items()}
-
-        # Fetch and (if necessary) subset the solution
         data = dict(self._ele_region_data)
         for idx, etype, rgn in self._ele_regions:
-            data[etype] = intg.soln[idx][..., rgn].astype(self.fpdtype)
 
-        # Write out the file
+            vals = intg.pseudointegrator.pintg.dtau_mats[idx]
+
+            data[etype] = vals[..., rgn].astype(self.fpdtype)
+
         solnfname = self._writer.write(data, intg.tcurr, metadata)
-        vtufname = solnfname.rsplit('.', 1)[0] + '.vtu' # Replace extension for solnfname with .vtu
 
         # If a post-action has been registered then invoke it
         self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
-                                soln=solnfname, t=intg.tcurr, vtu=vtufname)
+                                soln=solnfname, t=intg.tcurr)
 
         # Update the last output time
         self.tout_last = intg.tcurr

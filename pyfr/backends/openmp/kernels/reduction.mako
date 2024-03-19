@@ -59,6 +59,10 @@ void reduction(const struct kargs *restrict args)
 
                 % if norm == 'uniform':
                     red${i} = max(red${i}, temp*temp);
+                % if norm == 'l8':
+                    red${i} += temp*temp*temp*temp*temp*temp*temp*temp;
+                % if norm == 'l4':
+                    red${i} += temp*temp*temp*temp;
                 % else:
                     red${i} += temp*temp;
                 % endif
