@@ -70,6 +70,7 @@ class SCOTCHWrappers(LibWrapper):
 
 class SCOTCHPartitioner(BasePartitioner):
     name = 'scotch'
+    has_part_weights = True
     has_multiple_constraints = False
 
     # Interger options
@@ -122,7 +123,7 @@ class SCOTCHPartitioner(BasePartitioner):
             )
 
             # Permitted load imbalance ratio
-            balrat = self.opts['ufactor'] / 1000.0
+            balrat = self.opts['ufactor'] / 1000
 
             # Partitioning stratergy
             w.SCOTCH_stratInit(strat)
@@ -157,4 +158,4 @@ class SCOTCHPartitioner(BasePartitioner):
             if any(v != 0.0 for v in arch):
                 w.SCOTCH_archExit(arch)
 
-        return parts
+        return parts.astype(np.int32)

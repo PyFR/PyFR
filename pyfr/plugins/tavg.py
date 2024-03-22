@@ -9,7 +9,6 @@ from pyfr.nputil import npeval
 from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, PostactionMixin,
                                RegionMixin, cli_external)
 from pyfr.progress import NullProgressBar
-from pyfr.readers import NativeReader
 from pyfr.writers.native import NativeWriter
 from pyfr.util import merge_intervals
 
@@ -58,7 +57,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             raise ValueError('Invalid standard deviation mode')
 
         # Expressions pre-processing
-        self._prepare_exprs()
+        nfields = self._prepare_exprs()
 
         # Output data type
         fpdtype = self.cfg.get(cfgsect, 'precision', 'single')
@@ -73,8 +72,15 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
 
+        # Get the element map and region data
+        emap, erdata = intg.system.ele_map, self._ele_region_data
+
+        # Figure out the shape of each element type in our region
+        ershapes = {etype: (nfields, emap[etype].nupts) for etype in erdata}
+
         # Construct the file writer
         self._writer = NativeWriter(intg, basedir, basename, 'tavg')
+        self._writer.set_shapes_eidxs(ershapes, erdata)
 
         # Gradient pre-processing
         self._init_gradients()
@@ -91,12 +97,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         self._started = False
 
         # Get the total number of solution points in the region
-        emap = intg.system.ele_map
-        ergn = self._ele_regions
+        ergns = self._ele_regions
         if self.cfg.get(self.cfgsect, 'region') == '*':
-            tpts = sum(emap[e].neles*emap[e].nupts for i, e, r in ergn)
+            tpts = sum(emap[e].neles*emap[e].nupts for i, e, r in ergns)
         else:
-            tpts = sum(len(r)*emap[e].nupts for i, e, r in ergn)
+            tpts = sum(len(r)*emap[e].nupts for i, e, r in ergns)
 
         # Reduce
         self.tpts = comm.reduce(tpts, op=mpi.SUM, root=root)
@@ -127,6 +132,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
             for k in cfg.items(cfgsect, prefix='fun-avg-'):
                 self.outfields.append(f'std-fun-{k[4:]}')
+
+        return len(self.outfields)
 
     def _init_gradients(self):
         # Determine what gradients, if any, are required
@@ -315,7 +322,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         tavg = [np.vstack(list(avgs)) for avgs in zip(*tavg)]
 
         for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
-            data[etype] = d.swapaxes(0, 1).astype(self.fpdtype)
+            data[etype] = d.transpose(2, 0, 1).astype(self.fpdtype)
 
         # Prepare the metadata
         metadata = self._prepare_meta(intg, std_max, std_sum)

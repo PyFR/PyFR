@@ -8,10 +8,9 @@ class BaseDualPseudoIntegrator(BaseCommon):
     formulation = 'dual'
     aux_nregs = 0
 
-    def __init__(self, backend, systemcls, rallocs, mesh,
-                 initsoln, cfg, stepper_nregs, stage_nregs, dt):
+    def __init__(self, backend, systemcls, mesh, initsoln, cfg, stepper_nregs,
+                 stage_nregs, dt):
         self.backend = backend
-        self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
         self._dt = dt
@@ -46,8 +45,8 @@ class BaseDualPseudoIntegrator(BaseCommon):
                       self.stage_nregs + source_nregs + self.aux_nregs)
 
         # Construct the relevant system
-        self.system = systemcls(backend, rallocs, mesh, initsoln,
-                                nregs=self.nregs, cfg=cfg)
+        self.system = systemcls(backend, mesh, initsoln, nregs=self.nregs,
+                                cfg=cfg)
 
         # Register index list and current index
         self._regidx = list(range(self.nregs))
