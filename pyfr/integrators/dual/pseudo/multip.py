@@ -13,8 +13,8 @@ from pyfr.util import memoize, subclass_where
 
 
 class DualMultiPIntegrator(BaseDualPseudoIntegrator):
-    def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg,
-                 stepper_nregs, stage_nregs, dt):
+    def __init__(self, backend, systemcls, mesh, initsoln, cfg, stepper_nregs,
+                 stage_nregs, dt):
         self.backend = backend
 
         sect = 'solver-time-integrator'
@@ -109,8 +109,8 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
             stg_nregs = stage_nregs if l == self._order else 0
 
             self.pintgs[l] = lpsint(
-                backend, systemcls, rallocs, mesh, initsoln, mcfg,
-                stp_nregs, stg_nregs, dt
+                backend, systemcls, mesh, initsoln, mcfg, stp_nregs, stg_nregs,
+                dt
             )
 
         # Get the highest p system from plugins

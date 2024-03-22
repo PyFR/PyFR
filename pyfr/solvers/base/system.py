@@ -1,7 +1,6 @@
 from collections import defaultdict
 import inspect
 import itertools as it
-import re
 import statistics
 
 import numpy as np
@@ -21,7 +20,7 @@ class BaseSystem:
     # Nonce sequence
     _nonce_seq = it.count()
 
-    def __init__(self, backend, rallocs, mesh, initsoln, nregs, cfg):
+    def __init__(self, backend, mesh, initsoln, nregs, cfg):
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
@@ -31,7 +30,7 @@ class BaseSystem:
         nonce = str(next(self._nonce_seq))
 
         # Load the elements
-        eles, elemap = self._load_eles(rallocs, mesh, initsoln, nregs, nonce)
+        eles, elemap = self._load_eles(mesh, initsoln, nregs, nonce)
         backend.commit()
 
         # Retain the element map; this may be deleted by clients
@@ -41,7 +40,8 @@ class BaseSystem:
         self.ele_banks = [e.scal_upts for e in eles]
         self.ele_types = list(elemap)
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
-        self.ele_shapes = [(e.nupts, e.nvars, e.neles) for e in eles]
+        self.ele_shapes = {etype: (e.nupts, e.nvars, e.neles)
+                           for etype, e in elemap.items()}
 
         # Get all the solution point locations for the elements
         self.ele_ploc_upts = [e.ploc_at_np('upts') for e in eles]
@@ -57,9 +57,9 @@ class BaseSystem:
         self.nvars = eles[0].nvars
 
         # Load the interfaces
-        self._int_inters = self._load_int_inters(rallocs, mesh, elemap)
-        self._mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
-        self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
+        self._int_inters = self._load_int_inters(mesh, elemap)
+        self._mpi_inters = self._load_mpi_inters(mesh, elemap)
+        self._bc_inters = self._load_bc_inters(mesh, elemap)
         backend.commit()
 
     def commit(self):
@@ -82,17 +82,12 @@ class BaseSystem:
         # Observed input/output bank numbers
         self._rhs_uin_fout = set()
 
-    def _load_eles(self, rallocs, mesh, initsoln, nregs, nonce):
+    def _load_eles(self, mesh, initsoln, nregs, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
-        # Look for and load each element type from the mesh
-        elemap = {}
-        for f in mesh:
-            if (m := re.match(f'spt_(.+?)_p{rallocs.prank}$', f)):
-                # Element type
-                t = m[1]
-
-                elemap[t] = self.elementscls(basismap[t], mesh[f], self.cfg)
+        # Load the elements
+        elemap = {etype: self.elementscls(basismap[etype], spts, self.cfg)
+                  for etype, spts in mesh.spts.items()}
 
         eles = list(elemap.values())
 
@@ -112,7 +107,7 @@ class BaseSystem:
 
             # Process the solution
             for etype, ele in elemap.items():
-                soln = initsoln[f'soln_{etype}_p{rallocs.prank}']
+                soln = initsoln[f'soln_{etype}']
                 ele.set_ics_from_soln(soln, solncfg)
         else:
             for ele in eles:
@@ -120,55 +115,42 @@ class BaseSystem:
 
         # Allocate these elements on the backend
         for etype, ele in elemap.items():
-            curved = ~mesh[f'spt_{etype}_p{rallocs.prank}', 'linear']
+            curved = mesh.spts_curved[etype]
             linoff = np.max(*np.nonzero(curved), initial=-1) + 1
 
             ele.set_backend(self.backend, nregs, nonce, linoff)
 
         return eles, elemap
 
-    def _load_int_inters(self, rallocs, mesh, elemap):
-        key = f'con_p{rallocs.prank}'
-
-        lhs, rhs = mesh[key].tolist()
-        int_inters = self.intinterscls(self.backend, lhs, rhs, elemap,
+    def _load_int_inters(self, mesh, elemap):
+        int_inters = self.intinterscls(self.backend, *mesh.con, elemap,
                                        self.cfg)
 
         return [int_inters]
 
-    def _load_mpi_inters(self, rallocs, mesh, elemap):
-        lhsprank = rallocs.prank
-
+    def _load_mpi_inters(self, mesh, elemap):
         mpi_inters = []
-        for rhsprank in rallocs.prankconn[lhsprank]:
-            rhsmrank = rallocs.pmrankmap[rhsprank]
-            interarr = mesh[f'con_p{lhsprank}p{rhsprank}']
-            interarr = interarr.tolist()
-
-            mpiiface = self.mpiinterscls(self.backend, interarr, rhsmrank,
-                                         rallocs, elemap, self.cfg)
+        for p, con in mesh.con_p.items():
+            mpiiface = self.mpiinterscls(self.backend, con, p, elemap,
+                                         self.cfg)
             mpi_inters.append(mpiiface)
 
         return mpi_inters
 
-    def _load_bc_inters(self, rallocs, mesh, elemap):
+    def _load_bc_inters(self, mesh, elemap):
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
 
         bc_inters = []
-        for f in mesh:
-            if (m := re.match(f'bcon_(.+?)_p{rallocs.prank}$', f)):
-                # Determine the config file section
-                cfgsect = f'soln-bcs-{m[1]}'
+        for bname, interarr in mesh.bcon.items():
+            # Determine the config file section
+            cfgsect = f'soln-bcs-{bname}'
 
-                # Get the interface
-                interarr = mesh[f].tolist()
-
-                # Instantiate
-                bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
-                bciface = bcclass(self.backend, interarr, elemap, cfgsect,
-                                  self.cfg)
-                bc_inters.append(bciface)
+            # Instantiate
+            bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
+            bciface = bcclass(self.backend, interarr, elemap, cfgsect,
+                                self.cfg)
+            bc_inters.append(bciface)
 
         return bc_inters
 

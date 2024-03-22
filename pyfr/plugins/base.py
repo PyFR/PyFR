@@ -1,5 +1,4 @@
 import functools as ft
-import re
 import shlex
 
 import numpy as np
@@ -39,12 +38,12 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     return outf
 
 
-def region_data(cfg, cfgsect, mesh, rallocs):
+def region_data(cfg, cfgsect, mesh):
+    comm, rank, root = get_comm_rank_root()
     region = cfg.get(cfgsect, 'region', '*')
 
     # Determine the element types in our partition
-    sptptn = f'spt_(.+?)_p{rallocs.prank}$'
-    etypes = [m[1] for f in mesh if (m := re.match(sptptn, f))]
+    etypes = list(mesh.spts)
 
     # All elements
     if region == '*':
@@ -55,7 +54,7 @@ def region_data(cfg, cfgsect, mesh, rallocs):
 
         # Parse the region expression and obtain the element set
         rgn = parse_region_expr(region)
-        eset = rgn.interior_eles(mesh, rallocs)
+        eset = rgn.interior_eles(mesh)
 
         # Ensure the region is not empty
         if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
@@ -65,14 +64,14 @@ def region_data(cfg, cfgsect, mesh, rallocs):
                 for etype, eidxs in sorted(eset.items())}
 
 
-def surface_data(cfg, cfgsect, mesh, rallocs):
+def surface_data(cfg, cfgsect, mesh):
     surf = cfg.get(cfgsect, 'surface')
 
     comm, rank, root = get_comm_rank_root()
 
     # Parse the surface expression and obtain the element set
     rgn = parse_region_expr(surf)
-    eset = rgn.surface_faces(mesh, rallocs)
+    eset = rgn.surface_faces(mesh)
 
     # Ensure the surface is not empty
     if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
@@ -181,8 +180,7 @@ class RegionMixin:
         super().__init__(intg, *args, **kwargs)
 
         # Parse the region
-        ridxs = region_data(self.cfg, self.cfgsect, intg.system.mesh,
-                            intg.rallocs)
+        ridxs = region_data(self.cfg, self.cfgsect, intg.system.mesh)
 
         # Generate the appropriate metadata arrays
         self._ele_regions, self._ele_region_data = [], {}
@@ -190,15 +188,15 @@ class RegionMixin:
             doff = intg.system.ele_types.index(etype)
             self._ele_regions.append((doff, etype, eidxs))
 
-            if not isinstance(eidxs, slice):
-                self._ele_region_data[f'{etype}_idxs'] = eidxs
+            # Obtain the global element numbers
+            geidxs = intg.system.mesh.eidxs[etype][eidxs]
+            self._ele_region_data[etype] = geidxs
 
 
 class SurfaceMixin:
     def _surf_region(self, intg):
         # Parse the region
-        sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh,
-                             intg.rallocs)
+        sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh)
 
         # Generate the appropriate metadata arrays
         ele_surface, ele_surface_data = [], {}

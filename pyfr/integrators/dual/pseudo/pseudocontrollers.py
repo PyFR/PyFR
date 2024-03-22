@@ -125,7 +125,8 @@ class DualPIPseudoController(BaseDualPseudoController):
         )
 
         for ele, shape, dtaumat in zip(self.system.ele_map.values(),
-                                       self.system.ele_shapes, self.dtau_upts):
+                                       self.system.ele_shapes.values(),
+                                       self.dtau_upts):
             # Allocate storage for previous error
             err_prev = self.backend.matrix(shape, np.ones(shape),
                                            tags={'align'})

@@ -30,8 +30,8 @@ class ACNavierStokesIntInters(BaseAdvectionDiffusionIntInters):
 
 
 class ACNavierStokesMPIInters(BaseAdvectionDiffusionMPIInters):
-    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
-        super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
+    def __init__(self, be, lhs, rhsrank, elemap, cfg):
+        super().__init__(be, lhs, rhsrank, elemap, cfg)
 
         # Pointwise template arguments
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')

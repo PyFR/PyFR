@@ -13,12 +13,12 @@ class BaseFluidElements:
     dualcoeffs = convarmap
 
     visvarmap = {
-        2: [('density', ['rho']),
-            ('velocity', ['u', 'v']),
-            ('pressure', ['p'])],
-        3: [('density', ['rho']),
-            ('velocity', ['u', 'v', 'w']),
-            ('pressure', ['p'])]
+        2: {'density': ['rho'],
+            'velocity': ['u', 'v'],
+            'pressure': ['p']},
+        3: {'density': ['rho'],
+            'velocity': ['u', 'v', 'w'],
+            'pressure': ['p']}
     }
 
     @staticmethod

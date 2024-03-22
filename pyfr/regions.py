@@ -6,7 +6,7 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
-from pyfr.util import match_paired_paren, subclasses, subclass_where
+from pyfr.util import match_paired_paren, subclass_where
 
 
 def parse_region_expr(expr):
@@ -20,44 +20,39 @@ def parse_region_expr(expr):
 
 
 class BaseRegion:
-    def interior_eles(self, mesh, rallocs):
+    def interior_eles(self, mesh):
         pass
 
-    def surface_faces(self, mesh, rallocs, exclbcs=[]):
+    def surface_faces(self, mesh, exclbcs=[]):
+        comm, rank, root = get_comm_rank_root()
+
         sfaces = set()
 
         # Begin by assuming all faces of all elements are on the surface
-        for etype, eidxs in self.interior_eles(mesh, rallocs).items():
+        for etype, eidxs in self.interior_eles(mesh).items():
             nfaces = len(subclass_where(BaseShape, name=etype).faces)
             sfaces.update((etype, i, j) for i in eidxs for j in range(nfaces))
 
         # Eliminate any faces with internal connectivity
-        con = mesh[f'con_p{rallocs.prank}'].T
-        for l, r in con[['f0', 'f1', 'f2']].tolist():
+        for l, r in zip(mesh.con):
             if l in sfaces and r in sfaces:
                 sfaces.difference_update([l, r])
 
         # Eliminate faces on specified boundaries
         for b in exclbcs:
-            if (f := f'bcon_{b}_p{rallocs.prank}') in mesh:
-                bcon = mesh[f][['f0', 'f1', 'f2']]
-                sfaces.difference_update(bcon.tolist())
+            sfaces.difference_update(mesh.bcon.get(b, set()))
 
-        comm, rank, root = get_comm_rank_root()
         reqs, bufs = [], []
 
         # Next, consider faces on partition boundaries
-        for p in rallocs.prankconn[rallocs.prank]:
-            con = mesh[f'con_p{rallocs.prank}p{p}']
-            con = con[['f0', 'f1', 'f2']].tolist()
-
+        for p, con in mesh.con_p.items():
             # See which of these faces are on the surface boundary
             sb = np.array([c in sfaces for c in con])
             rb = np.empty_like(sb)
 
             # Exchange this information with our neighbour
-            reqs.append(comm.Isend(sb, rallocs.pmrankmap[p]))
-            reqs.append(comm.Irecv(rb, rallocs.pmrankmap[p]))
+            reqs.append(comm.Isend(sb, p))
+            reqs.append(comm.Irecv(rb, p))
 
             bufs.append((con, sb, rb))
 
@@ -82,32 +77,30 @@ class BoundaryRegion(BaseRegion):
         self.bcname = bcname
         self.nlayers = nlayers
 
-    def interior_eles(self, mesh, rallocs):
-        bc = f'bcon_{self.bcname}_p{rallocs.prank}'
-        eset = defaultdict(list)
+    def interior_eles(self, mesh):
         comm, rank, root = get_comm_rank_root()
 
+        eset = defaultdict(list)
+
         # Ensure the boundary exists
-        bcranks = comm.gather(bc in mesh, root=root)
+        bcranks = comm.gather(self.bcname in mesh.bcon, root=root)
         if rank == root and not any(bcranks):
             raise ValueError(f'Boundary {self.bcname} does not exist')
 
         # Determine which of our elements are directly on the boundary
-        if bc in mesh:
-            for etype, eidx in mesh[bc][['f0', 'f1']]:
+        if self.bcname in mesh:
+            for etype, eidx, fidx in mesh[self.bcname]:
                 eset[etype].append(eidx)
 
         # Handle the case where multiple layers have been requested
         if self.nlayers > 1:
             # Load our internal connectivity array
-            con = mesh[f'con_p{rallocs.prank}'].T
-            con = con[['f0', 'f1']].tolist()
+            con = [(l[:2], r[:2]) for l, r in zip(mesh.con)]
 
             # Load our partition boundary connectivity arrays
             pcon = {}
-            for p in rallocs.prankconn[rallocs.prank]:
-                pc = mesh[f'con_p{rallocs.prank}p{p}']
-                pc = pc[['f0', 'f1']].tolist()
+            for p, pc in mesh.con_p.items():
+                pc = [(etype, eidx) for etype, eidx, fidx in pc]
                 pcon[p] = (pc, *np.empty((2, len(pc)), dtype=bool))
 
             # Tag all elements in the set as belonging to the first layer
@@ -122,8 +115,8 @@ class BoundaryRegion(BaseRegion):
                     sb[:] = [neset.get(c, -1) == i for c in pc]
 
                     # Start the send/recv requests
-                    reqs.append(comm.Isend(sb, rallocs.pmrankmap[p]))
-                    reqs.append(comm.Irecv(rb, rallocs.pmrankmap[p]))
+                    reqs.append(comm.Isend(sb, p))
+                    reqs.append(comm.Irecv(rb, p))
 
                 # Grow our element set by considering internal connectivity
                 for l, r in con:
@@ -173,17 +166,14 @@ class BaseGeometricRegion(BaseRegion):
                 c, s = np.cos(theta), np.sin(theta)
                 self.rot = np.array([[c, -s], [s, c]])
 
-    def interior_eles(self, mesh, rallocs):
+    def interior_eles(self, mesh):
+        comm, rank, root = get_comm_rank_root()
         eset = {}
 
-        for shape in subclasses(BaseShape, just_leaf=True):
-            f = f'spt_{shape.name}_p{rallocs.prank}'
-            if f not in mesh:
-                continue
-
-            inside = self.pts_in_region(mesh[f])
+        for etype, spts in mesh.spts.items():
+            inside = self.pts_in_region(spts)
             if np.any(inside):
-                eset[shape.name] = np.any(inside, axis=0).nonzero()[0].tolist()
+                eset[etype] = np.any(inside, axis=0).nonzero()[0].tolist()
 
         return eset
 

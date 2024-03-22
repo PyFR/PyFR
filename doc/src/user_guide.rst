@@ -13,39 +13,50 @@ Running PyFR
 
 PyFR |release| uses three distinct file formats:
 
-1. ``.ini`` --- configuration file
-2. ``.pyfrm`` --- mesh file
-3. ``.pyfrs`` --- solution file
+#. ``.ini`` --- configuration file
+#. ``.pyfrm`` --- mesh file
+#. ``.pyfrs`` --- solution file
 
-The following commands are available from the ``pyfr`` program:
+The following core commands are available from the ``pyfr`` program:
 
-1. ``pyfr import`` --- convert a `Gmsh
+#. ``pyfr import`` --- convert a `Gmsh
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
 
    Example::
 
         pyfr import mesh.msh mesh.pyfrm
 
-2. ``pyfr partition`` --- partition or repartition an existing mesh and
-   associated solution files.
+#. ``pyfr partition`` --- handles mesh partitioning.
 
-   Example::
+   #. ``pyfr partition add`` --- adds a new partitioning to mesh.
+      Example::
 
-       pyfr partition 2 mesh.pyfrm solution.pyfrs outdir/
+         pyfr partition add mesh.pyfrm 10 ten_parts
 
-   Here, the newly partitioned mesh and solution are placed into the
-   directory `outdir`.  Multiple solutions can be provided.
-   Time-average files can also be partitioned, too.
+      Here, ``ten_parts`` is the *name* of the partitioning and is an
+      arbitrary identifier.  If no name is provided it defaults to the
+      number of parts.
 
-   For mixed grids one must include the ``-e`` flag followed by weights
-   for each element type, or the ``balanced`` argument. Further details
-   can be found in the :ref:`performance guide <perf mixed grids>`.
+      For mixed grids one must include the ``-e`` flag followed by
+      weights for each element type, or the ``balanced`` argument.
+      Further details can be found in the
+      :ref:`performance guide <perf mixed grids>`.
 
-3. ``pyfr run`` --- start a new PyFR simulation. Example::
+   #. ``pyfr partition list`` --- lists partitionings in a mesh.
+      Example::
+
+         pyfr partition list mesh.pyfrm
+
+   #. ``pyfr partition remove`` --- deletes a partitioning from a mesh.
+      Example::
+
+         pyfr partition remove mesh.pyfrm ten_parts
+
+#. ``pyfr run`` --- start a new PyFR simulation. Example::
 
         pyfr run mesh.pyfrm configuration.ini
 
-4. ``pyfr restart`` --- restart a PyFR simulation from an existing
+#. ``pyfr restart`` --- restart a PyFR simulation from an existing
    solution file. Example::
 
         pyfr restart mesh.pyfrm solution.pyfrs
@@ -55,7 +66,7 @@ The following commands are available from the ``pyfr`` program:
 
         pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
 
-5. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an
+#. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an
    unstructured VTK ``.vtu`` or ``.pvtu`` file. If a ``-k`` flag is
    provided with an integer argument then ``.pyfrs`` elements are
    converted to high-order VTK cells which are exported, where the
@@ -81,10 +92,10 @@ The following commands are available from the ``pyfr`` program:
    with the ``-f`` flag; for example ``-f density -f velocity`` will
    only export the *density* and *velocity* fields.
 
-PyFR can be run in parallel. To do so prefix ``pyfr`` with
-``mpiexec -n <cores/devices>``. Note that the mesh must be
-pre-partitioned, and the number of cores or devices must be equal to
-the number of partitions.
+The ``run``, ``restart``, and ``export`` commands can be run in
+parallel. To do so prefix ``pyfr`` with
+``mpiexec -n <cores/devices>``. Note that there must exist a
+partitioning in the mesh with an appropriate number of parts.
 
 .. _configuration-file:
 
@@ -102,8 +113,8 @@ Backends
 --------
 
 These sections detail how the solver will be configured for a range of
-different hardware platforms. If a hardware specific backend section is omitted,
-then PyFR will fall back to built-in default settings.
+different hardware platforms. If a hardware specific backend section is
+omitted, then PyFR will fall back to built-in default settings.
 
 .. toctree::
    :maxdepth: 3
@@ -278,21 +289,21 @@ In several places within the ``.ini`` file expressions may be used. As well as
 the constant ``pi``, expressions containing the following functions are
 supported:
 
-1. ``+, -, *, /`` --- basic arithmetic
+#. ``+, -, *, /`` --- basic arithmetic
 
-2. ``sin, cos, tan`` --- basic trigonometric functions (radians)
+#. ``sin, cos, tan`` --- basic trigonometric functions (radians)
 
-3. ``asin, acos, atan, atan2`` --- inverse trigonometric functions
+#. ``asin, acos, atan, atan2`` --- inverse trigonometric functions
 
-4. ``exp, log`` --- exponential and the natural logarithm
+#. ``exp, log`` --- exponential and the natural logarithm
 
-5. ``tanh`` --- hyperbolic tangent
+#. ``tanh`` --- hyperbolic tangent
 
-6. ``pow`` --- power, note ``**`` is not supported
+#. ``pow`` --- power, note ``**`` is not supported
 
-7. ``sqrt`` --- square root
+#. ``sqrt`` --- square root
 
-8. ``abs`` --- absolute value
+#. ``abs`` --- absolute value
 
-9. ``min, max`` --- two variable minimum and maximum functions,
+#. ``min, max`` --- two variable minimum and maximum functions,
    arguments can be arrays

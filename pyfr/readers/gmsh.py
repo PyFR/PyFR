@@ -235,6 +235,10 @@ class GmshReader(BaseReader):
                     else:
                         raise ValueError(f'Expected $End{sect}')
 
+        # Account for any starting node offsets
+        for k, v in self._elenodes.items():
+            v -= self._nodeoff
+
     def _read_mesh_format(self, mshit):
         ver, ftype, dsize = next(mshit).split()
 
@@ -344,23 +348,35 @@ class GmshReader(BaseReader):
             nv = l.split()
             nodemap[int(nv[0])] = nv[1:]
 
+        # Determine the minimum and maximum node numbers
+        ixl, ixu = min(nodemap), max(nodemap)
+
         # Pack them into a dense array
-        self._nodepts = nodepts = np.empty((max(nodemap) + 1, 3))
+        self._nodepts = nodepts = np.empty((ixu - ixl + 1, 3))
+        nodepts.fill(np.nan)
+
         for k, nv in nodemap.items():
-            nodepts[k] = nv
+            nodepts[k - ixl] = nv
+
+        # Save the starting node offset
+        self._nodeoff = ixl
 
     def _read_nodes_impl_v41(self, mshit):
         # Entity count, node count, minimum and maximum node numbers
         ne, nn, ixl, ixu = (int(i) for i in next(mshit).split())
 
-        self._nodepts = nodepts = np.empty((ixu + 1, 3))
+        self._nodepts = nodepts = np.empty((ixu - ixl + 1, 3))
+        nodepts.fill(np.nan)
 
         for i in range(ne):
             nen = int(next(mshit).split()[-1])
             nix = [int(next(mshit)) for _ in range(nen)]
 
             for j in nix:
-                nodepts[j] = next(mshit).split()
+                nodepts[j - ixl] = next(mshit).split()
+
+        # Save the starting node offset
+        self._nodeoff = ixl
 
         if next(mshit) != '$EndNodes\n':
             raise ValueError('Expected $EndNodes')
@@ -420,16 +436,10 @@ class GmshReader(BaseReader):
 
         self._elenodes = {k: np.vstack(v) for k, v in elenodes.items()}
 
-    def _to_raw_pyfrm(self, lintol):
+    def _to_raw_mesh(self, lintol):
         # Assemble a nodal mesh
         maps = self._etype_map, self._petype_fnmap, self._nodemaps
         pents = self._felespent, self._bfacespents, self._pfacespents
         mesh = NodalMeshAssembler(self._nodepts, self._elenodes, pents, maps)
 
-        with self.progress.start_with_spinner('Processing connectivity') as p:
-            pyfrm = mesh.get_connectivity(p)
-
-        with self.progress.start('Processing shape points'):
-            pyfrm |= mesh.get_shape_points(lintol)
-
-        return pyfrm
+        return mesh.get_eles(lintol, self.progress)

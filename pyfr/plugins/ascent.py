@@ -11,7 +11,6 @@ from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, cli_external,
                                region_data)
-from pyfr.rank_allocator import LinearRankAllocator
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, subclass_where
@@ -148,13 +147,8 @@ class _IntegratorAdapter:
         return self.intg.system.backend.fpdtype
 
     @property
-    def prank(self):
-        return self.intg.rallocs.prank
-
-    @property
     def region_data(self):
-        return region_data(self.acfg, self.cfgsect, self.intg.system.mesh,
-                           self.intg.rallocs)
+        return region_data(self.acfg, self.cfgsect, self.intg.system.mesh)
 
     def soln_op_vpts(self, ename, divisor):
         eles = self.intg.system.ele_map[ename]
@@ -188,20 +182,18 @@ class _CLIAdapter:
         self._soln = soln
 
         self.scfg = Inifile(soln['config'])
-        self._rallocs = LinearRankAllocator(mesh, self.scfg)
 
     @property
     def ndims(self):
-        return next(iter(self._mesh.array_info('spt').values()))[1][2]
+        return self._mesh.ndims
 
     @property
     def etypes(self):
-        pinfo = self._soln.partition_info('soln')
-        return [et for et, ep in pinfo.items() if ep[self.prank]]
+        return list(self._mesh.eidxs)
 
     @property
     def mesh_uuid(self):
-        return self._mesh['mesh_uuid']
+        return self._mesh.uuid
 
     @property
     def elementscls(self):
@@ -215,16 +207,11 @@ class _CLIAdapter:
         return np.float32
 
     @property
-    def prank(self):
-        return self._rallocs.prank
-
-    @property
     def region_data(self):
-        return region_data(self.acfg, self.cfgsect, self._mesh,
-                           self._rallocs)
+        return region_data(self.acfg, self.cfgsect, self._mesh)
 
     def soln_op_vpts(self, ename, divisor):
-        meshf = self._mesh[f'spt_{ename}_p{self.prank}']
+        meshf = self._mesh.spts[ename]
 
         shapecls = subclass_where(BaseShape, name=ename)
         shape = shapecls(len(meshf), self.scfg)
@@ -245,7 +232,7 @@ class _CLIAdapter:
 
     @property
     def soln(self):
-        return [self._soln[f'soln_{et}_p{self.prank}'] for et in self.etypes]
+        return [self._soln[f'soln_{et}'] for et in self.etypes]
 
     @property
     def grad_soln(self):
@@ -305,14 +292,16 @@ class _AscentRenderer:
             self.lib.ascent_close(self.ascent_ptr)
 
     def _build_blueprint(self, adapter, etype, rgn, divisor):
+        comm, rank, root = get_comm_rank_root()
+
         mesh_n = self.mesh_n
-        d_str = f'domain_{adapter.prank}_{etype}'
+        d_str = f'domain_{rank}_{etype}'
 
         eidx = adapter.etypes.index(etype)
         soln_op, xd = adapter.soln_op_vpts(etype, divisor)
         self._ele_regions_lin.append((d_str, eidx, rgn, soln_op))
 
-        mesh_n[f'{d_str}/state/domain_id'] = adapter.prank
+        mesh_n[f'{d_str}/state/domain_id'] = rank
         mesh_n[f'{d_str}/state/config/keyword'] = 'Config'
         mesh_n[f'{d_str}/state/config/data'] = adapter.scfg.tostr()
         mesh_n[f'{d_str}/state/mesh_uuid/keyword'] = 'Mesh_UUID'
@@ -581,12 +570,12 @@ class AscentCLIPlugin(BaseCLIPlugin):
 
     @cli_external
     def render_cli(self, args):
-        mesh = NativeReader(args.mesh)
-        acfg = Inifile.load(args.cfg)
-        acfgsect = args.cfgsect or acfg.sections()[0]
-
         # Initialise MPI
         init_mpi()
+
+        reader = NativeReader(args.mesh, construct_con=False)
+        acfg = Inifile.load(args.cfg)
+        acfgsect = args.cfgsect or acfg.sections()[0]
 
         # Current Ascent render and associated config
         renderer, rcfg = None, None
@@ -594,7 +583,7 @@ class AscentCLIPlugin(BaseCLIPlugin):
         # Iterate over the solutions
         for s in args.solns:
             # Open the solution and create an Ascent adapter
-            soln = NativeReader(s)
+            mesh, soln = reader.load_subset_mesh_soln(s)
             adapter = _CLIAdapter(mesh, soln, acfg, acfgsect)
 
             # See if we need to create a new Ascent renderer

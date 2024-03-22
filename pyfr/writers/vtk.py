@@ -4,9 +4,9 @@ import re
 
 import numpy as np
 
-from pyfr.progress import NullProgressBar
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
-from pyfr.util import memoize, subclass_where
+from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
@@ -374,7 +374,7 @@ class VTKWriter(BaseWriter):
         else:
             self.ho_output = False
             self.divisor = args.divisor
-            self.vtkfile_version = '0.1'
+            self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
         # Solutions need a separate processing pipeline to other data
@@ -382,20 +382,26 @@ class VTKWriter(BaseWriter):
             self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
             self._soln_fields = list(self.elementscls.privarmap[self.ndims])
-            self._vtk_vars = list(self.elementscls.visvarmap[self.ndims])
+            self._vtk_vars = dict(self.elementscls.visvarmap[self.ndims])
             self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
         # Otherwise we're dealing with simple scalar data
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
             self._soln_fields = self.stats.get('data', 'fields').split(',')
-            self._vtk_vars = [(k, [k]) for k in self._soln_fields]
+            self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
+
+        # Element information
+        self.einfo = einfo = []
+        for etype in self.mesh.eidxs:
+            soln = self.soln[f'{self.dataprefix}_{etype}']
+            einfo.append((etype, soln.shape[2]))
 
         # Handle field subsetting
         if args.fields:
-            self._vtk_vars = [(f, v) for f, v in self._vtk_vars
-                              if f in args.fields]
+            self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
+                              if f in args.fields}
 
             if len(self._vtk_vars) != len(args.fields):
                 raise RuntimeError('Invalid field specification')
@@ -412,7 +418,7 @@ class VTKWriter(BaseWriter):
 
         # Prepare the fields
         fields = []
-        for fnames, vnames in self._vtk_vars:
+        for vnames in self._vtk_vars.values():
             ix = [privarmap.index(vn) for vn in vnames]
 
             fields.append(vsoln[ix])
@@ -420,11 +426,9 @@ class VTKWriter(BaseWriter):
         return fields
 
     def _post_proc_fields_scal(self, vsoln):
-        return [vsoln[self._soln_fields.index(v)] for v, _ in self._vtk_vars]
+        return [vsoln[self._soln_fields.index(k)] for k in self._vtk_vars]
 
-    def _get_npts_ncells_nnodes_lin(self, sk):
-        etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
-
+    def _get_npts_ncells_nnodes_lin(self, etype, neles):
         # Get the shape and sub division classes
         shapecls = subclass_where(BaseShape, name=etype)
         subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
@@ -438,12 +442,10 @@ class VTKWriter(BaseWriter):
 
         return npts, ncells, nnodes
 
-    def _get_npts_ncells_nnodes_ho(self, sk):
-        etype, neles = self.soln_inf[sk][0], self.soln_inf[sk][1][2]
-
+    def _get_npts_ncells_nnodes_ho(self, etype, neles):
         # Fallback to subdivision for pyramids
         if etype == 'pyr':
-            return self._get_npts_ncells_nnodes_lin(sk)
+            return self._get_npts_ncells_nnodes_lin(etype, neles)
 
         # Get the shape and sub division classes
         shapecls = subclass_where(BaseShape, name=etype)
@@ -453,130 +455,158 @@ class VTKWriter(BaseWriter):
 
         return npts, neles, npts
 
-    def _get_array_attrs(self, sk=None):
+    def _get_array_attrs(self, etype=None, neles=None):
+        vvars = self._vtk_vars
+
+        # Floating point data type and size
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
         dsize = np.dtype(self.dtype).itemsize
 
-        vvars = self._vtk_vars
-
         names = ['', 'connectivity', 'offsets', 'types', 'Partition']
-        types = [dtype, 'Int32', 'Int32', 'UInt8', 'Int32']
+        types = [dtype, 'Int64', 'Int64', 'UInt8', 'Int32']
         comps = ['3', '', '', '', '1']
 
-        for fname, varnames in vvars:
+        for fname, varnames in vvars.items():
             names.append(fname.title())
             types.append(dtype)
             comps.append(str(len(varnames)))
 
-        # If a solution has been given the compute the sizes
-        if sk:
-            npts, ncells, nnodes = self._get_npts_ncells_nnodes(sk)
+        if etype and neles:
+            npts, ncells, nnodes = self._get_npts_ncells_nnodes(etype, neles)
             nb = npts*dsize
 
-            sizes = [3*nb, 4*nnodes, 4*ncells, ncells, 4*ncells]
-            sizes.extend(len(varnames)*nb for fname, varnames in vvars)
+            sizes = [3*nb, 8*nnodes, 8*ncells, ncells, 4*ncells]
+            sizes.extend(len(varnames)*nb for varnames in vvars.values())
 
             return names, types, comps, sizes
         else:
             return names, types, comps
 
-    @memoize
-    def _get_shape(self, name, nspts):
-        shapecls = subclass_where(BaseShape, name=name)
-        return shapecls(nspts, self.cfg)
+    def write_vtu(self, fname):
+        comm, rank, root = get_comm_rank_root()
 
-    @memoize
-    def _get_std_ele(self, name, nspts):
-        return self._get_shape(name, nspts).std_ele(self.etypes_div[name])
+        fh = mpi.File.Open(comm, fname, mpi.MODE_CREATE | mpi.MODE_WRONLY)
+        write_s = lambda s: fh.Write(s.encode())
 
-    @memoize
-    def _get_mesh_op(self, name, nspts, svpts):
-        shape = self._get_shape(name, nspts)
-        return shape.sbasis.nodal_basis_at(svpts).astype(self.dtype)
+        # Gather the element information to the root rank
+        geinfo = comm.gather(self.einfo, root=root)
 
-    @memoize
-    def _get_soln_op(self, name, nspts, svpts):
-        shape = self._get_shape(name, nspts)
-        return shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
+        # If we have any header information then write it
+        if rank == root:
+            write_s('<?xml version="1.0" ?>\n<VTKFile '
+                    'byte_order="LittleEndian" type="UnstructuredGrid" '
+                    f'version="{self.vtkfile_version}" '
+                    'header_type="UInt64">\n<UnstructuredGrid>\n')
 
-    def write_out(self, progress=NullProgressBar()):
-        name, extn = os.path.splitext(self.outf)
-        parallel = extn == '.pvtu'
+            if self.tcurr is not None:
+                self._write_time_value(write_s)
 
-        parts = defaultdict(list)
-        for sk, (etype, shape) in self.soln_inf.items():
-            part = int(sk.split('_p')[-1])
-            pname = f'{name}_p{part}.vtu' if parallel else self.outf
+            # Running byte-offset for appended data
+            soffs, off = [], 0
 
-            parts[pname].append((part, f'spt_{etype}_p{part}', sk))
+            # Write out the array headers
+            for einfo in geinfo:
+                # Save the starting byte offset for this rank
+                soffs.append(off)
 
-        write_s_to_fh = lambda s: fh.write(s.encode())
+                for etype, neles in einfo:
+                    off = self._write_serial_header(write_s, etype, neles, off)
 
-        for pfn, misil in progress.start_with_iter(parts.items()):
-            with open(pfn, 'wb') as fh:
-                write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
-                              'byte_order="LittleEndian" '
-                              'type="UnstructuredGrid" '
-                              f'version="{self.vtkfile_version}">\n'
-                              '<UnstructuredGrid>\n')
+            write_s('</UnstructuredGrid>\n<AppendedData encoding="raw">\n_')
 
-                if self.tcurr is not None and not parallel:
-                    self._write_time_value(write_s_to_fh)
+            # Get the size of the header
+            hsize = fh.Get_position()
 
-                # Running byte-offset for appended data
-                off = 0
+            # Use this to displace the offsets
+            soffs = [s + hsize for s in soffs]
 
-                # Header
-                for pn, mk, sk in misil:
-                    off = self._write_serial_header(fh, sk, off)
+            # Compute the total size of the file sans footer
+            size = hsize + off
+        else:
+            size, soffs = None, None
 
-                write_s_to_fh('</UnstructuredGrid>\n'
-                              '<AppendedData encoding="raw">\n_')
+        # Distribute the total size and starting offset information
+        size = comm.bcast(size, root=root)
+        soff = comm.scatter(soffs, root=root)
 
-                # Data
-                for pn, mk, sk in misil:
-                    self._write_data(fh, pn, mk, sk)
+        # Allocate space in the file
+        fh.Set_size(size)
 
-                write_s_to_fh('\n</AppendedData>\n</VTKFile>')
+        # Have the root rank also write out the footer
+        if rank == root:
+            fh.Seek(0, mpi.SEEK_END)
+            write_s('\n</AppendedData>\n</VTKFile>')
 
-        if parallel:
-            with open(self.outf, 'wb') as fh:
-                write_s_to_fh('<?xml version="1.0" ?>\n<VTKFile '
-                              'byte_order="LittleEndian" '
-                              'type="PUnstructuredGrid" '
-                              f'version="{self.vtkfile_version}">\n'
-                              '<PUnstructuredGrid>\n')
+        # Seek to our region of the file
+        fh.Seek(soff, mpi.SEEK_SET)
+
+        # Write out our ranks data
+        for etype, *_ in self.einfo:
+            self._write_data(lambda b: fh.Write(b), etype)
+
+        # Wait for all ranks to finish writing
+        fh.Close()
+
+    def write_pvtu(self, fname):
+        comm, rank, root = get_comm_rank_root()
+        write_s = lambda s: fh.write(s.encode())
+
+        # Have each rank write out its own VTU file
+        with open(f'{fname[:-5]}_p{rank}.vtu', 'wb') as fh:
+            write_s('<?xml version="1.0" ?>\n<VTKFile '
+                    'byte_order="LittleEndian" type="UnstructuredGrid" '
+                    f'version="{self.vtkfile_version}" '
+                    'header_type="UInt64">\n<UnstructuredGrid>\n')
+
+            # Running byte-offset for appended data
+            off = 0
+
+            # Write out the array headers
+            for etype, neles in self.einfo:
+                off = self._write_serial_header(write_s, etype, neles, off)
+
+            # Followed by the data
+            for etype, *_ in self.einfo:
+                self._write_data(lambda b: fh.write(b), etype)
+
+            write_s('</UnstructuredGrid>\n<AppendedData encoding="raw">\n_')
+
+        # Also have the root rank write out the PVTU file itself
+        if rank == root:
+            with open(fname, 'wb') as fh:
+                write_s('<?xml version="1.0" ?>\n<VTKFile '
+                        'byte_order="LittleEndian" type="PUnstructuredGrid" '
+                        f'version="{self.vtkfile_version}">\n'
+                        '<PUnstructuredGrid>\n')
 
                 if self.tcurr is not None:
-                    self._write_time_value(write_s_to_fh)
+                    self._write_time_value(write_s)
 
                 # Header
-                self._write_parallel_header(fh)
+                self._write_parallel_header(write_s)
 
                 # Constitutent pieces
-                for pfn in parts:
-                    bname = os.path.basename(pfn)
-                    write_s_to_fh(f'<Piece Source="{bname}"/>\n')
+                for r in range(comm.size):
+                    bname = os.path.basename(f'{fname[:-5]}_p{r}.vtu')
+                    write_s(f'<Piece Source="{bname}"/>\n')
 
-                write_s_to_fh('</PUnstructuredGrid>\n</VTKFile>\n')
+                write_s('</PUnstructuredGrid>\n</VTKFile>\n')
 
-    def _write_darray(self, array, vtuf, dtype):
-        array = array.astype(dtype)
+    def _write_darray(self, array, write, dtype):
+        array = np.ascontiguousarray(array, dtype=dtype)
 
-        np.uint32(array.nbytes).tofile(vtuf)
-        array.tofile(vtuf)
+        write(np.uint64(array.nbytes))
+        write(array)
 
     def _process_name(self, name):
         return re.sub(r'\W+', '_', name)
 
-    def _write_serial_header(self, vtuf, sk, off):
-        names, types, comps, sizes = self._get_array_attrs(sk)
-        npts, ncells = self._get_npts_ncells_nnodes(sk)[:2]
+    def _write_serial_header(self, write_s, etype, neles, off):
+        names, types, comps, sizes = self._get_array_attrs(etype, neles)
+        npts, ncells = self._get_npts_ncells_nnodes(etype, neles)[:2]
 
-        write_s = lambda s: vtuf.write(s.encode())
-
-        write_s(f'<Piece NumberOfPoints="{npts}" NumberOfCells="{ncells}">\n'
-                '<Points>\n')
+        write_s(f'<Piece NumberOfPoints="{npts}" '
+                f'NumberOfCells="{ncells}">\n<Points>\n')
 
         # Write VTK DataArray headers
         for i, (n, t, c, s) in enumerate(zip(names, types, comps, sizes)):
@@ -584,7 +614,7 @@ class VTKWriter(BaseWriter):
                     f'NumberOfComponents="{c}" '
                     f'format="appended" offset="{off}"/>\n')
 
-            off += 4 + s
+            off += 8 + s
 
             # Points => Cells => CellData => PointData transition
             if i == 0:
@@ -600,17 +630,15 @@ class VTKWriter(BaseWriter):
         # Return the current offset
         return off
 
-    def _write_parallel_header(self, vtuf):
+    def _write_parallel_header(self, write_s):
         names, types, comps = self._get_array_attrs()
-
-        write_s = lambda s: vtuf.write(s.encode())
 
         write_s('<PPoints>\n')
 
         # Write VTK DataArray headers
-        for i, (n, t, s) in enumerate(zip(names, types, comps)):
+        for i, (n, t, c) in enumerate(zip(names, types, comps)):
             write_s(f'<PDataArray Name="{self._process_name(n)}" type="{t}" '
-                    f'NumberOfComponents="{s}"/>\n')
+                    f'NumberOfComponents="{c}"/>\n')
 
             # Points => Cells => CellData => PointData transition
             if i == 0:
@@ -630,33 +658,34 @@ class VTKWriter(BaseWriter):
                 f'{self.tcurr}\n'
                 '</DataArray>\n</FieldData>\n')
 
-    def _write_data(self, vtuf, pn, mk, sk):
-        name = self.mesh_inf[mk][0]
-        mesh = self.mesh[mk].astype(self.dtype)
-        soln = self.soln[sk].swapaxes(0, 1).astype(self.dtype)
+    def _write_data(self, write, etype):
+        spts = self.mesh.spts[etype].astype(self.dtype)
+        soln = self.soln[f'{self.dataprefix}_{etype}']
+        soln = soln.swapaxes(0, 1).astype(self.dtype)
 
-        # Handle the case of partial solution files
-        if soln.shape[2] != mesh.shape[1]:
-            skpre, skpost = sk.rsplit('_', 1)
-
-            mesh = mesh[:, self.soln[f'{skpre}_idxs_{skpost}'], :]
+        # Extract the partition number information
+        part = self.soln[f'{self.dataprefix}_{etype}_parts']
 
         # Dimensions
-        nspts, neles = mesh.shape[:2]
+        nspts, neles = spts.shape[:2]
+
+        # Shape
+        shapecls = subclass_where(BaseShape, name=etype)
 
         # Sub divison points inside of a standard element
-        svpts = self._get_std_ele(name, nspts)
+        svpts = shapecls.std_ele(self.divisor)
         nsvpts = len(svpts)
 
-        if name != 'pyr' and self.ho_output:
-            svpts = [svpts[i] for i in self._nodemaps[name, nsvpts]]
+        if etype != 'pyr' and self.ho_output:
+            svpts = [svpts[i] for i in self._nodemaps[etype, nsvpts]]
 
         # Generate the operator matrices
-        mesh_vtu_op = self._get_mesh_op(name, nspts, svpts)
-        soln_vtu_op = self._get_soln_op(name, nspts, svpts)
+        soln_b = shapecls(nspts, self.cfg)
+        mesh_vtu_op = soln_b.sbasis.nodal_basis_at(svpts)
+        soln_vtu_op = soln_b.ubasis.nodal_basis_at(svpts)
 
         # Calculate node locations of VTU elements
-        vpts = mesh_vtu_op @ mesh.reshape(nspts, -1)
+        vpts = mesh_vtu_op @ spts.reshape(nspts, -1)
         vpts = vpts.reshape(nsvpts, -1, self.ndims)
 
         # Pre-process the solution
@@ -671,18 +700,18 @@ class VTKWriter(BaseWriter):
             vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
 
         # Write element node locations to file
-        self._write_darray(vpts.swapaxes(0, 1), vtuf, self.dtype)
+        self._write_darray(vpts.swapaxes(0, 1), write, self.dtype)
 
         # Perform the sub division
-        if name != 'pyr' and self.ho_output:
+        if etype != 'pyr' and self.ho_output:
             nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
-            types = self.vtk_types_ho[name]
+            types = self.vtk_types_ho[etype]
         else:
-            subdvcls = subclass_where(BaseShapeSubDiv, name=name)
-            nodes = subdvcls.subnodes(self.etypes_div[name])
-            subcellsoff = subdvcls.subcelloffs(self.etypes_div[name])
-            types = subdvcls.subcelltypes(self.etypes_div[name])
+            subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
+            nodes = subdvcls.subnodes(self.etypes_div[etype])
+            subcellsoff = subdvcls.subcelloffs(self.etypes_div[etype])
+            types = subdvcls.subcelltypes(self.etypes_div[etype])
 
         # Prepare VTU cell arrays
         vtu_con = np.tile(nodes, (neles, 1))
@@ -696,19 +725,19 @@ class VTKWriter(BaseWriter):
         vtu_typ = np.tile(types, neles)
 
         # VTU cell partition numbers
-        vtu_part = np.full_like(vtu_typ, pn)
+        vtu_part = np.repeat(part, len(vtu_typ) // neles)
 
         # Write VTU node connectivity, connectivity offsets and cell types
-        self._write_darray(vtu_con, vtuf, np.int32)
-        self._write_darray(vtu_off, vtuf, np.int32)
-        self._write_darray(vtu_typ, vtuf, np.uint8)
+        self._write_darray(vtu_con, write, np.int64)
+        self._write_darray(vtu_off, write, np.int64)
+        self._write_darray(vtu_typ, write, np.uint8)
 
         # Write VTU cell partition number array
-        self._write_darray(vtu_part, vtuf, np.int32)
+        self._write_darray(vtu_part, write, np.int32)
 
         # Process and write out the various fields
         for arr in self._post_proc_fields(vsoln):
-            self._write_darray(arr.T, vtuf, self.dtype)
+            self._write_darray(arr.T, write, self.dtype)
 
 
 class BaseShapeSubDiv:
@@ -748,7 +777,7 @@ class TensorProdShapeSubDiv(BaseShapeSubDiv):
 
         # Tile standard element node ordering mapping, then apply offsets
         internal_con = np.tile(conbase, (n**cls.ndim, 1))
-        internal_con += nodeoff.T.flatten()[:, None]
+        internal_con += nodeoff.T.ravel()[:, None]
 
         return np.hstack(internal_con)
 

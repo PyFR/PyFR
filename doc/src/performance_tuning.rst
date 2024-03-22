@@ -138,7 +138,7 @@ of what the relative performance differential between the element types
 is, both partitions will have near identical amounts of work.  In PyFR
 this is known as the *balanced* approach and can be requested via::
 
-    pyfr partition -e balanced ...
+    pyfr partition add -e balanced ...
 
 This approach typically works well when the number of partitions is
 small.  However, for larger partition counts it can become difficult to
@@ -161,7 +161,7 @@ Weights can be specified when partitioning the mesh as
 quadrilateral is found to be 50% more expensive than a triangle this
 can be specified as::
 
-        pyfr partition -e quad:3 -e tri:2 ...
+        pyfr partition add -e quad:3 -e tri:2 ...
 
 If precise profiling data is not available regarding the performance of
 each element type in a given configuration a helpful rule of thumb is

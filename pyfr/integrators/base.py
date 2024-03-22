@@ -28,9 +28,8 @@ def _common_plugin_prop(attr):
 
 
 class BaseIntegrator:
-    def __init__(self, backend, rallocs, mesh, initsoln, cfg):
+    def __init__(self, backend, mesh, initsoln, cfg):
         self.backend = backend
-        self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
         self.prevcfgs = {f: initsoln[f] for f in initsoln or []
@@ -60,7 +59,7 @@ class BaseIntegrator:
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
-        self.mesh_uuid = mesh['mesh_uuid']
+        self.mesh_uuid = mesh.uuid
 
         self._invalidate_caches()
 
@@ -166,10 +165,6 @@ class BaseIntegrator:
 
     def collect_stats(self, stats):
         wtime = time.time() - self._wstart
-
-        # Rank allocation
-        stats.set('backend', 'rank-allocation',
-                  ','.join(str(r) for r in self.rallocs.mprankmap))
 
         # Simulation and wall clock times
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)

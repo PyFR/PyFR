@@ -6,7 +6,7 @@ def _get_inter_objs(interside, getter, elemap):
     emap = {type: getattr(ele, getter) for type, ele in elemap.items()}
 
     # Get the data from the interface
-    return [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
+    return [emap[type](eidx, fidx) for type, eidx, fidx in interside]
 
 
 class BaseInters:
@@ -24,7 +24,7 @@ class BaseInters:
 
         # Compute the total number of interface flux points
         self.ninterfpts = sum(elemap[etype].nfacefpts[fidx]
-                              for etype, eidx, fidx, flags in lhs)
+                              for etype, eidx, fidx in lhs)
 
         # By default do not permute any of the interface arrays
         self._perm = Ellipsis

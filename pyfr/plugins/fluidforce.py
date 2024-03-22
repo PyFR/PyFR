@@ -35,9 +35,6 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
-        # Boundary to integrate over
-        bc = f'bcon_{suffix}_p{intg.rallocs.prank}'
-
         # Moments
         mcomp = 3 if self.ndims == 3 else 1
         self._mcomp = mcomp if self.cfg.hasopt(cfgsect, 'morigin') else 0
@@ -50,7 +47,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         mesh, elemap = intg.system.mesh, intg.system.ele_map
 
         # See which ranks have the boundary
-        bcranks = comm.gather(bc in mesh, root=root)
+        bcranks = comm.gather(suffix in mesh.bcon, root=root)
 
         # The root rank needs to open the output file
         if rank == root:
@@ -78,14 +75,14 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
             rcpjact = {}
 
         # If we have the boundary then process the interface
-        if bc in mesh:
+        if suffix in mesh.bcon:
             # Element indices, associated face normals and relative flux
             # points position with respect to the moments origin
             eidxs = defaultdict(list)
             norms = defaultdict(list)
             rfpts = defaultdict(list)
 
-            for etype, eidx, fidx, flags in mesh[bc].tolist():
+            for etype, eidx, fidx in mesh.bcon[suffix]:
                 eles = elemap[etype]
                 itype, proj, norm = eles.basis.faces[fidx]
 

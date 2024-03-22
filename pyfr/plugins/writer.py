@@ -17,8 +17,15 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
         basename = self.cfg.get(self.cfgsect, 'basename')
 
+        # Get the element map and region data
+        emap, erdata = intg.system.ele_map, self._ele_region_data
+
+        # Figure out the shape of each element type in our region
+        ershapes = {etype: (self.nvars, emap[etype].nupts) for etype in erdata}
+
         # Construct the solution writer
         self._writer = NativeWriter(intg, basedir, basename, 'soln')
+        self._writer.set_shapes_eidxs(ershapes, erdata)
 
         # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
@@ -68,10 +75,10 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             if rank == root:
                 metadata |= {f'{prefix}/{k}': v for k, v in pdata.items()}
 
-        # Fetch and (if necessary) subset the solution
-        data = dict(self._ele_region_data)
+        # Fetch the solution
+        data = {}
         for idx, etype, rgn in self._ele_regions:
-            data[etype] = intg.soln[idx][..., rgn].astype(self.fpdtype)
+            data[etype] = intg.soln[idx][..., rgn].T.astype(self.fpdtype)
 
         # Write out the file
         solnfname = self._writer.write(data, intg.tcurr, metadata)

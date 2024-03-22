@@ -1,5 +1,4 @@
 from pyfr.writers.base import BaseWriter
-from pyfr.writers.native import write_pyfrms
 from pyfr.writers.vtk import VTKWriter
 
 from pyfr.util import subclasses, subclass_where
