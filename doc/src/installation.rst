@@ -115,7 +115,7 @@ Python distributions.
 CUDA Backend
 ^^^^^^^^^^^^
 
-The CUDA backend targets NVIDIA GPUs with a compute capability of 3.0
+The CUDA backend targets NVIDIA GPUs with a compute capability of 3.5
 or greater. The backend requires:
 
 1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 11.4
