@@ -5,7 +5,7 @@ from pyfr.integrators.std import BaseStdController, BaseStdStepper
 from pyfr.util import subclass_where
 
 
-def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
+def get_integrator(backend, systemcls, mesh, initsoln, cfg):
     form = cfg.get('solver-time-integrator', 'formulation', 'std')
 
     if form == 'std':
@@ -31,4 +31,4 @@ def get_integrator(backend, systemcls, rallocs, mesh, initsoln, cfg):
     integrator = type(name, (cc, sc), dict(name=name))
 
     # Construct and return an instance of this new integrator class
-    return integrator(backend, systemcls, rallocs, mesh, initsoln, cfg)
+    return integrator(backend, systemcls, mesh, initsoln, cfg)
