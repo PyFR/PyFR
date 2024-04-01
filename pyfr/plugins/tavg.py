@@ -487,7 +487,8 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
             t, data = 0, file0[key].astype(np.float64)
             avg_acc = np.zeros_like(data[:, amap0])
             var_acc = np.zeros_like(data[:, smap0])
-
+            std_acc = np.zeros_like(data[:, smap0])  # Initialize std_acc
+            
             # Average the averages
             for (file, *_, dt), (amap, smap) in zip(self.files, self.mapping):
                 data = file[key].astype(np.float64)
