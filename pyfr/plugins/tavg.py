@@ -517,7 +517,7 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 outstack = (avg_acc, fun_avg, std_acc, fun_std)
             elif self.fexprs:
                 fun_avg = self._eval_fun_exprs(avg_acc.swapaxes(0, 1))
-                outstack = (avg_acc, fun_avg, std_acc)
+                outstack = (avg_acc, fun_avg)
             elif self.std_all:
                 outstack = (avg_acc, std_acc)
             else:
