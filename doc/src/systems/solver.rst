@@ -41,4 +41,4 @@ Example::
     order = 3
     anti-alias = flux
     viscosity-correction = none
-    shock-capturing = entropy-filter
+    shock-capturing = none
