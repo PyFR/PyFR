@@ -102,7 +102,7 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
 
 
 def iter_struct(arr, n=1000, axis=0):
-    for c in np.array_split(arr, -(arr.shape[axis] // -n), axis=axis):
+    for c in np.array_split(arr, -(arr.shape[axis] // -n) or 1, axis=axis):
         yield from c.tolist()
 
 
