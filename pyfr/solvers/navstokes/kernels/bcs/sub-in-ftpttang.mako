@@ -4,8 +4,9 @@
 <%pyfr:macro name='bc_rsolve_state' params='ul, nl, ur' externs='ploc, t'>
     fpdtype_t pl = ${c['gamma'] - 1.0}*(ul[${nvars - 1}]
                  - (0.5/ul[0])*${pyfr.dot('ul[{i}]', i=(1, ndims + 1))});
-    fpdtype_t udotu = fmax(0, ${2.0*c['cpTt']}*(1.0
-                    - ${c['pt']**(-c['Rdcp'])}*pow(pl, ${c['Rdcp']})));
+    fpdtype_t udotu = ${2.0*c['cpTt']}*(1.0
+                    - ${c['pt']**(-c['Rdcp'])}*pow(pl, ${c['Rdcp']}));
+    udotu = fmax(0, udotu);
 
     ur[0] = ${1.0/c['Rdcp']}*pl/(${c['cpTt']} - 0.5*udotu);
 % for i, v in enumerate(c['vc']):
