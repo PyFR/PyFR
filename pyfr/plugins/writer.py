@@ -14,8 +14,8 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         super().__init__(intg, cfgsect, suffix)
 
         # Base output directory and file name
-        basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
-        basename = self.cfg.get(self.cfgsect, 'basename')
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
+        basename = self.cfg.get(cfgsect, 'basename')
 
         # Get the element map and region data
         emap, erdata = intg.system.ele_map, self._ele_region_data
@@ -26,6 +26,9 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         # Construct the solution writer
         self._writer = NativeWriter(intg, basedir, basename, 'soln')
         self._writer.set_shapes_eidxs(ershapes, erdata)
+
+        # Asynchronous output options
+        self._async_timeout = self.cfg.getfloat(cfgsect, 'async-timeout', 60)
 
         # Output time step and last output time
         self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
@@ -46,6 +49,8 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             self.tout_last -= self.dt_out
 
     def __call__(self, intg):
+        self._writer.probe()
+
         if intg.tcurr - self.tout_last < self.dt_out - self.tol:
             return
 
@@ -80,12 +85,19 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         for idx, etype, rgn in self._ele_regions:
             data[etype] = intg.soln[idx][..., rgn].T.astype(self.fpdtype)
 
-        # Write out the file
-        solnfname = self._writer.write(data, intg.tcurr, metadata)
+        # Prepare a callback to kick off any postactions
+        callback = lambda fname, t=intg.tcurr: self._invoke_postaction(
+            intg=intg, mesh=intg.system.mesh.fname, soln=fname, t=t
+        )
 
-        # If a post-action has been registered then invoke it
-        self._invoke_postaction(intg=intg, mesh=intg.system.mesh.fname,
-                                soln=solnfname, t=intg.tcurr)
+        # Write out the file
+        self._writer.write(data, intg.tcurr, metadata, self._async_timeout,
+                           callback)
 
         # Update the last output time
         self.tout_last = intg.tcurr
+
+    def finalise(self, intg):
+        super().finalise(intg)
+
+        self._writer.flush()

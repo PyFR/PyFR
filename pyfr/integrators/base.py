@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
 from pyfr.util import memoize
 
@@ -121,6 +121,11 @@ class BaseIntegrator:
         # Abort if plugins request it
         self._check_abort()
 
+    def _finalise_plugins(self):
+        for plugin in self.plugins:
+            if (finalise := getattr(plugin, 'finalise', None)):
+                finalise(self)
+
     @staticmethod
     def get_plugin_data_prefix(name, suffix):
         if suffix:
@@ -158,6 +163,8 @@ class BaseIntegrator:
     def run(self):
         for t in self.tlist:
             self.advance_to(t)
+
+        self._finalise_plugins()
 
     @property
     def nsteps(self):
@@ -209,9 +216,10 @@ class BaseIntegrator:
 
     def _check_abort(self):
         comm, rank, root = get_comm_rank_root()
-        if comm.allreduce(self.abort, op=mpi.LOR):
-            # Ensure that the callbacks registered in atexit
-            # are called only once if stopping the computation
+
+        if scal_coll(comm.Allreduce, int(self.abort), op=mpi.LOR):
+            self._finalise_plugins(self)
+
             sys.exit(1)
 
 

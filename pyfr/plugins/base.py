@@ -119,6 +119,9 @@ class BasePlugin:
     def serialise(self, intg):
         return {}
 
+    def finalise(self, intg):
+        pass
+
 
 class BaseSolnPlugin(BasePlugin):
     prefix = 'soln'
@@ -152,7 +155,9 @@ class PostactionMixin:
             if self.postactmode not in {'blocking', 'non-blocking'}:
                 raise ValueError('Invalid post action mode')
 
-    def __del__(self):
+    def finalise(self, intg):
+        super().finalise(intg)
+
         if getattr(self, 'postactaid', None) is not None:
             prefork.wait(self.postactaid)
 

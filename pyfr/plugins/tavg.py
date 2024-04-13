@@ -69,8 +69,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             raise ValueError('Invalid floating point data type')
 
         # Base output directory and file name
-        basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
-        basename = self.cfg.get(self.cfgsect, 'basename')
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
+        basename = self.cfg.get(cfgsect, 'basename')
 
         # Get the element map and region data
         emap, erdata = intg.system.ele_map, self._ele_region_data
@@ -81,6 +81,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         # Construct the file writer
         self._writer = NativeWriter(intg, basedir, basename, 'tavg')
         self._writer.set_shapes_eidxs(ershapes, erdata)
+
+        # Asynchronous output options
+        self._async_timeout = self.cfg.getfloat(cfgsect, 'async-timeout', 60)
 
         # Gradient pre-processing
         self._init_gradients()
@@ -98,7 +101,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
         # Get the total number of solution points in the region
         ergns = self._ele_regions
-        if self.cfg.get(self.cfgsect, 'region') == '*':
+        if self.cfg.get(cfgsect, 'region') == '*':
             tpts = sum(emap[e].neles*emap[e].nupts for i, e, r in ergns)
         else:
             tpts = sum(len(r)*emap[e].nupts for i, e, r in ergns)
@@ -269,7 +272,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             return dict(intg.cfgmeta, stats=stats.tostr(),
                         mesh_uuid=intg.mesh_uuid)
 
-    def _write_avg(self, intg):
+    def _prepare_data(self, intg):
         accex, vaccex = self.accex, self.vaccex
         nacc, nfun = len(self.anames), len(self.fnames)
         tavg = []
@@ -327,13 +330,15 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         # Prepare the metadata
         metadata = self._prepare_meta(intg, std_max, std_sum)
 
-        # Write to disk and return the file name
-        return self._writer.write(data, intg.tcurr, metadata)
+        # Write to disk and return the writer callback
+        return data, metadata
 
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return
         if intg.tcurr < self.tstart:
             return
+
+        self._writer.probe()
 
         # If necessary, run the start-up routines
         if not self._started:
@@ -356,12 +361,17 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             self.prevex = currex
 
             if dowrite:
-                # Write the file out to disk
-                solnfname = self._write_avg(intg)
+                # Prepare the data and metadata
+                data, metadata = self._prepare_data(intg)
 
-                # If a post-action has been registered then invoke it
-                self._invoke_postaction(intg, mesh=intg.system.mesh.fname,
-                                        soln=solnfname, t=intg.tcurr)
+                # Prepare a callback to kick off any postactions
+                callback = lambda fname, t=intg.tcurr: self._invoke_postaction(
+                    intg, mesh=intg.system.mesh.fname, soln=fname, t=t
+                )
+
+                # Write out the file
+                self._writer.write(data, intg.tcurr, metadata,
+                                   self._async_timeout, callback)
 
                 # Reset the accumulators
                 if self.mode == 'windowed':
@@ -372,6 +382,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
                     self.tstart_acc = intg.tcurr
 
                 self.tout_last = intg.tcurr
+
+    def finalise(self, intg):
+        super().finalise(intg)
+
+        self._writer.flush()
 
 
 class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):

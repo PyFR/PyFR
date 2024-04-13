@@ -1,10 +1,11 @@
 import os
+import time
 import uuid
 
 import h5py
 import numpy as np
 
-from pyfr.mpiutil import Gatherer, get_comm_rank_root, mpi
+from pyfr.mpiutil import Gatherer, get_comm_rank_root, mpi, scal_coll
 from pyfr.quadrules import get_quadrule
 from pyfr.util import file_path_gen, mv
 
@@ -40,13 +41,8 @@ class NativeWriter:
 
         self.tname = comm.bcast(tname, root=root)
 
-        # Parallel I/O
-        if (h5py.get_config().mpi and
-            'PYFR_FORCE_SERIAL_HDF5' not in os.environ):
-            self._write = self._write_parallel
-        # Serial I/O
-        else:
-            self._write = self._write_serial
+        # Current asynchronous writing operation (if any)
+        self._awriter = None
 
     def set_shapes_eidxs(self, shapes, eidxs):
         comm, rank, root = get_comm_rank_root()
@@ -77,8 +73,22 @@ class NativeWriter:
 
                 self._einfo[etype] = (gatherer, subset, shape, noff, upts)
 
-    def write(self, data, tcurr, metadata=None):
+    def probe(self):
+        if self._awriter is not None and self._awriter.test():
+            self._awriter = None
+
+    def flush(self):
+        if self._awriter is not None:
+            self._awriter.wait()
+            self._awriter = None
+
+    def write(self, data, tcurr, metadata=None, timeout=0, callback=None):
         comm, rank, root = get_comm_rank_root()
+
+        # Wait for any existing write operations to finish
+        if self._awriter is not None:
+            self._awriter.wait()
+            self._awriter = None
 
         if metadata:
             if rank != root:
@@ -101,118 +111,122 @@ class NativeWriter:
             gdata[etype] = gatherer(dset)
 
         # Delegate to _write to do the actual outputting
-        self._write(self.tname, gdata)
+        f, reqs = self._write(self.tname, gdata, metadata)
 
         # Determine the final output path
         path = self.fgen.send(tcurr)
 
-        # Add in the metadata
-        if rank == root:
-            with h5py.File(self.tname, 'r+') as f:
-                self._write_meta(f, metadata)
+        awriter = _AsyncWriter(f, reqs, self.tname, path, timeout, callback)
 
-            # Move the file to its final location
-            mv(self.tname, path)
-
-        # Wait for everyone to finish
-        comm.barrier()
-
-        # Return the path
-        return path
-
-    def _write_meta(self, f, metadata):
-        # Write the metadata
-        for k, v in metadata.items():
-            if isinstance(v, str):
-                f[k] = np.array(v.encode(), dtype='S')
-            else:
-                f[k] = v
-
-        # Add each elements nodal points as an attribute
-        for etype, (*_, upts) in self._einfo.items():
-            f[f'{self.prefix}/{etype}'].attrs['pts'] = upts
-
-    def _write_parallel(self, path, data):
-        comm, rank, root = get_comm_rank_root()
-        prefix = self.prefix
-
-        kwargs = {'driver': 'mpio', 'comm': comm, 'libver': 'latest'}
-        with h5py.File(path, 'w', **kwargs) as f:
-            # Collectively create all of the datasets
-            for etype, (gatherer, subset, shape, *_) in self._einfo.items():
-                f.create_dataset(f'{prefix}/{etype}', shape, self.fpdtype)
-                f.create_dataset(f'{prefix}/{etype}_parts', shape[0:1],
-                                 np.int32)
-
-                if subset:
-                    f.create_dataset(f'{prefix}/{etype}_idxs', shape[0:1],
-                                     np.int64)
-
-            # Write out our element data
-            for etype, (gatherer, subset, *_) in self._einfo.items():
-                region = slice(gatherer.off, gatherer.off + gatherer.cnt)
-                f[f'{prefix}/{etype}'][region] = data[etype]
-                f[f'{prefix}/{etype}_parts'][region] = gatherer.rsrc
-
-                # If the element has been subset then write the index data
-                if subset:
-                    f[f'{prefix}/{etype}_idxs'][region] = gatherer.ridx
-
-    def _write_serial(self, path, data):
-        einfo = self._einfo
-        comm, rank, root = get_comm_rank_root()
-
-        if rank != root:
-            for etype, (gatherer, subset, *_) in einfo.items():
-                if not gatherer.cnt:
-                    continue
-
-                # Send the data to the root rank for writing
-                comm.Send(np.ascontiguousarray(data[etype]), root)
-                comm.Send(np.ascontiguousarray(gatherer.rsrc), root)
-
-                # And, if needed, the associated indices
-                if subset:
-                    comm.Send(np.ascontiguousarray(gatherer.ridx), root)
+        if timeout == 0:
+            awriter.wait()
         else:
-            with h5py.File(path, 'w', libver='latest') as f:
-                # Collect and write solution and index data
-                for etype, ei in einfo.items():
-                    gatherer, subset, shape, noff, upts = ei
-                    dtype = self.fpdtype
+            self._awriter = awriter
 
-                    # Allocate the solution and partition datasets
-                    fdata = f.create_dataset(f'{self.prefix}/{etype}', shape,
-                                             dtype=dtype)
-                    fpart = f.create_dataset(f'{self.prefix}/{etype}_parts',
-                                             gatherer.tot, dtype=np.int32)
+    def _prepare_file(self, path, metadata):
+        doffs = {}
 
-                    # If needed allocate an index dataset
-                    if subset:
-                        fidx = f.create_dataset(f'{self.prefix}/{etype}_idxs',
-                                                gatherer.tot, dtype=int)
+        with h5py.File(path, 'w') as f:
+            # Write the metadata
+            for k, v in metadata.items():
+                if isinstance(v, str):
+                    f[k] = np.array(v.encode(), dtype='S')
+                else:
+                    f[k] = v
 
-                    # Receive the data from the remaining ranks
-                    for i, (n, off) in noff.items():
-                        if i != root:
-                            rdata = np.empty((n, *shape[1:]), dtype=dtype)
-                            rpart = np.empty(n, dtype=np.int32)
-                            comm.Recv(rdata, i)
-                            comm.Recv(rpart, i)
-                        else:
-                            rdata = data[etype]
-                            rpart = gatherer.rsrc
+            # Create the datasets
+            g = f.create_group(self.prefix)
+            for etype, (gatherer, subset, shape, *_) in self._einfo.items():
+                g.create_dataset(etype, shape, self.fpdtype)
+                g.create_dataset(f'{etype}_parts', shape[0:1], np.int32)
 
-                        # Write out the data
-                        fdata[off:off + n] = rdata
-                        fpart[off:off + n] = rpart
+                if subset:
+                    g.create_dataset(f'{etype}_idxs', shape[0:1], np.int64)
 
-                        if subset:
-                            if i != root:
-                                ridx = np.empty(n, dtype=int)
-                                comm.Recv(ridx, i)
-                            else:
-                                ridx = gatherer.ridx
+            # Add each elements nodal points as an attribute
+            for etype, (*_, upts) in self._einfo.items():
+                g[etype].attrs['pts'] = upts
 
-                            # Write out the indices
-                            fidx[off:off + n] = ridx
+            # Obtain the offsets of these datasets
+            for k, v in g.items():
+                v[(-1,)*v.ndim] = 0
+                doffs[k] = v.id.get_offset()
+
+        return doffs
+
+    def _write(self, path, data, metadata):
+        comm, rank, root = get_comm_rank_root()
+
+        # Have the root rank prepare the output file
+        if rank == root:
+            doffs = self._prepare_file(path, metadata)
+        else:
+            doffs = None
+
+        # Distrbute the offsets of each dataset
+        doffs = comm.bcast(doffs, root=root)
+
+        # Collectively open the file for writing
+        f = mpi.File.Open(comm, path, mpi.MODE_WRONLY)
+
+        # Track the active write requests
+        reqs = []
+
+        def write_off(k, v, n):
+            if len(v):
+                reqs.append(f.Iwrite_at(doffs[k] + n*(v.nbytes // len(v)), v))
+
+        # Write out our element data
+        for etype, (gatherer, subset, *_) in self._einfo.items():
+            write_off(etype, data[etype], gatherer.off)
+            write_off(f'{etype}_parts', gatherer.rsrc, gatherer.off)
+
+            # If the element has been subset then write the index data
+            if subset:
+                write_off(f'{etype}_idxs', gatherer.ridx, gatherer.off)
+
+        return f, reqs
+
+
+class _AsyncWriter:
+    def __init__(self, f, reqs, tname, fname, timeout, callback):
+        self.f = f
+        self.reqs = reqs
+        self.tname = tname
+        self.fname = fname
+        self.timeout = timeout
+        self.callback = callback
+
+        self.done = False
+        self.start = time.time()
+
+    def _test_with_timeout(self, timeout):
+        comm, rank, root = get_comm_rank_root()
+
+        if not self.done:
+            if time.time() - self.start >= timeout:
+                mpi.Request.Waitall(self.reqs)
+
+            if mpi.Request.Testall(self.reqs):
+                self.done = True
+
+        # See if everyone is done
+        if scal_coll(comm.Allreduce, int(self.done), op=mpi.LAND):
+            self.f.Close()
+
+            # Move the file into place
+            if rank == root:
+                mv(self.tname, self.fname)
+
+            if self.callback is not None:
+                self.callback(self.fname)
+
+            return True
+        else:
+            return False
+
+    def test(self):
+        return self._test_with_timeout(self.timeout)
+
+    def wait(self):
+        return self._test_with_timeout(0.0)
