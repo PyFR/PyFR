@@ -19,10 +19,13 @@ def block_diag(arrs):
     return out
 
 
-def clean(origfn=None, tol=1e-10):
+def clean(origfn=None, tol=1e-10, ckwarg='clean'):
     def cleanfn(fn):
         @ft.wraps(fn)
         def newfn(*args, **kwargs):
+            if not kwargs.pop(ckwarg, True):
+                return fn(*args, **kwargs)
+
             arr = fn(*args, **kwargs).copy()
 
             # Flush small elements to zero

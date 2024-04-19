@@ -297,6 +297,9 @@ class NodalMeshAssembler:
                 fnmap = self._petype_fnmap[petype]
                 nfaces = sum(len(fn) for fn in fnmap.values())
 
+                # Add the element type to the codec
+                codec.append(f'eles/{petype}')
+
                 # Add the face info to the codec
                 codec.extend(f'eles/{petype}/{i}' for i in range(nfaces))
 

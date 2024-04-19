@@ -331,6 +331,10 @@ class TensorProdShape:
         pts1d = np.linspace(-1, 1, sptord + 1)
         return [p[::-1] for p in it.product(pts1d, repeat=cls.ndims)]
 
+    @classmethod
+    def valid_spt(cls, pt, tol=1e-9):
+        return all(abs(p) < 1 + tol for p in pt)
+
 
 class QuadShape(TensorProdShape, BaseShape):
     name = 'quad'
@@ -440,6 +444,13 @@ class TriShape(BaseShape):
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
 
+    @classmethod
+    def valid_spt(cls, spt, tol=1e-9):
+        x, y = spt
+
+        return (x + tol > -1 and x - tol < -y and
+                y + tol > -1 and y - tol < 1)
+
 
 class TetShape(BaseShape):
     name = 'tet'
@@ -471,6 +482,14 @@ class TetShape(BaseShape):
                 for i, r in enumerate(pts1d)
                 for j, q in enumerate(pts1d[:(sptord + 1 - i)])
                 for p in pts1d[:(sptord + 1 - i - j)]]
+
+    @classmethod
+    def valid_spt(spt, tol=1e-9):
+        x, y, z = spt
+
+        return (x + tol > -1 and x - tol < -1 - y - z and
+                y + tol > -1 and y - tol < -z and
+                z + tol > -1 and z - tol < 1)
 
 
 class PriShape(BaseShape):
@@ -511,6 +530,10 @@ class PriShape(BaseShape):
                 for r in pts1d
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
+
+    @classmethod
+    def valid_spt(cls, spt, tol=1e-9):
+        return abs(spt[2]) < 1 + tol and TriShape.valid_spt(spt[:2], tol=tol)
 
 
 class PyrShape(BaseShape):
@@ -558,3 +581,12 @@ class PyrShape(BaseShape):
                 for i, r in enumerate(pts1d[::2])
                 for q in pts1d[i:npts1d - i:2]
                 for p in pts1d[i:npts1d - i:2]]
+
+    @classmethod
+    def valid_spt(cls, spt, tol=1e-9):
+        x, y, z = spt
+        u = (1 - z) / 2
+
+        return (x + tol > -u and x - tol < u and
+                y + tol > -u and y - tol < u and
+                z + tol > -1 and z - tol < 1)

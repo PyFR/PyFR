@@ -199,7 +199,7 @@ def process_partition_add(args):
 
     # Get the partitioning name
     pname = args.name or str(len(pwts))
-    if not re.match(r'\w+', pname):
+    if not re.match(r'\w+$', pname):
         raise ValueError('Invalid partitioning name')
 
     # Check it does not already exist unless --force is given

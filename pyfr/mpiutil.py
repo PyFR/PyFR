@@ -90,6 +90,16 @@ def scal_coll(colfn, v, *args, **kwargs):
     return dtype(v[0])
 
 
+def get_start_end_csize(comm, n):
+    rank, size = comm.rank, comm.size
+
+    # Determine how much data each rank is responsible for
+    csize = max(-(-n // size), 1)
+
+    # Determine which part of the dataset we should handle
+    return min(rank*csize, n), min((rank + 1)*csize, n), csize
+
+
 class AlltoallMixin:
     def _count_to_disp(self, count):
         return np.concatenate(([0], np.cumsum(count[:-1])))
@@ -136,21 +146,16 @@ class AlltoallMixin:
 class BaseGathererScatterer(AlltoallMixin):
     def __init__(self, comm, aidx):
         self.comm = comm
-        rank, size = comm.rank, comm.size
 
         # Determine array size
         n = aidx[-1] if len(aidx) else -1
         n = scal_coll(comm.Allreduce, n, op=mpi.MAX) + 1
 
-        # Determine how much data each rank is responsible for
-        csize = max(-(-n // size), 1)
-
         # Determine which part of the dataset we should handle
-        self.start = min(rank*csize, n)
-        self.end = min((rank + 1)*csize, n)
+        self.start, self.end, csize = get_start_end_csize(comm, n)
 
         # Map each index to its associated rank
-        adisps = np.searchsorted(aidx, csize*np.arange(size))
+        adisps = np.searchsorted(aidx, csize*np.arange(comm.size))
         acount = np.diff(adisps, append=len(aidx))
 
         # Exchange the indices
@@ -245,12 +250,8 @@ class SparseScatterer(AlltoallMixin):
         # Determine the array size
         n = len(iset)
 
-        # Determine how much data each rank is responsible for
-        csize = max(-(-n // comm.size), 1)
-
         # Determine which part of the dataset we should handle
-        self.start = min(comm.rank*csize, n)
-        self.end = min((comm.rank + 1)*csize, n)
+        self.start, self.end, _ = get_start_end_csize(comm, n)
 
         # Read our portion of the sorted index table
         cidx = iset[self.start:self.end]

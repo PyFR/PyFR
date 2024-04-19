@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field, replace
+import re
 
 import h5py
 
@@ -9,11 +10,13 @@ from pyfr.nputil import iter_struct
 @dataclass
 class _Mesh:
     fname: str
+    raw: object
 
     ndims: int = None
     subset: bool = False
 
     creator: str = None
+    codec: list = None
     uuid: str = None
     version: int = None
 
@@ -21,6 +24,7 @@ class _Mesh:
     eidxs: dict = field(default_factory=dict)
 
     spts: dict = field(default_factory=dict)
+    spts_nodes: dict = field(default_factory=dict)
     spts_curved: dict = field(default_factory=dict)
 
     con: list = field(default_factory=list)
@@ -31,7 +35,7 @@ class _Mesh:
 class NativeReader:
     def __init__(self, fname, pname=None, *, construct_con=True):
         self.f = h5py.File(fname, 'r')
-        self.mesh = _Mesh(fname=fname)
+        self.mesh = _Mesh(fname=fname, raw=self.f)
 
         # Read in and transform the various parts of the mesh
         self._read_metadata()
@@ -41,6 +45,9 @@ class NativeReader:
 
         if construct_con:
             self._construct_con()
+
+    def close(self):
+        self.f.close()
 
     def load_soln(self, sname, prefix='soln'):
         mesh, soln = self.load_subset_mesh_soln(sname, prefix)
@@ -105,7 +112,7 @@ class NativeReader:
             return self.mesh, soln
 
     def _subset_mesh(self, subset):
-        eidxs, spts, spts_curved = {}, {}, {}
+        eidxs, spts, spts_nodes, spts_curved = {}, {}, {}, {}
 
         for etype in self.mesh.spts:
             if etype in subset:
@@ -113,15 +120,17 @@ class NativeReader:
                 if len(sidx):
                     eidxs[etype] = sidx
                     spts[etype] = self.mesh.spts[etype][:, sidx]
+                    spts_nodes[etype] = self.mesh.spts_nodes[etype][:, sidx]
                     spts_curved[etype] = self.mesh.spts_curved[etype][sidx]
             else:
                 eidxs[etype] = self.mesh.eidxs[etype]
                 spts[etype] = self.mesh.spts[etype]
+                spts_nodes[etype] = self.mesh.spts_nodes[etype]
                 spts_curved[etype] = self.mesh.spts_curved[etype]
 
         return replace(self.mesh, subset=True, eidxs=eidxs, spts=spts,
-                       spts_curved=spts_curved, con=None, con_p=None,
-                       bcon=None)
+                       spts_nodes=spts_nodes, spts_curved=spts_curved,
+                       con=None, con_p=None, bcon=None)
 
     def _read_metadata(self):
         mesh = self.mesh
@@ -129,14 +138,16 @@ class NativeReader:
 
         if rank == root:
             creator = self.f['creator'][()].decode()
+            codec = [c.decode() for c in self.f['codec']]
             uuid = self.f['mesh_uuid'][()].decode()
             version = self.f['version'][()]
 
-            meta = (creator, uuid, version)
+            meta = (creator, codec, uuid, version)
         else:
             meta = None
 
-        mesh.creator, mesh.uuid, mesh.version = comm.bcast(meta, root=root)
+        meta = comm.bcast(meta, root=root)
+        mesh.creator, mesh.codec, mesh.uuid, mesh.version = meta
 
     def _read_with_idxs(self, dset, idxs):
         comm, rank, root = get_comm_rank_root()
@@ -237,10 +248,11 @@ class NativeReader:
             spts = n.reshape(*einfo['nodes'].shape, -1).swapaxes(0, 1)
 
             self.mesh.spts[etype] = spts
+            self.mesh.spts_nodes[etype] = einfo['nodes']
             self.mesh.spts_curved[etype] = einfo['curved']
 
     def _construct_con(self):
-        codec = [c.decode() for c in self.f['codec']]
+        codec = self.mesh.codec
         eidxs = {k: v.tolist() for k, v in self.mesh.eidxs.items()}
         etypes = self.mesh.etypes
 
@@ -253,8 +265,8 @@ class NativeReader:
         # Create cidx indexed maps
         cdone, cefidx = [None]*len(codec), [None]*len(codec)
         for cidx, c in enumerate(codec):
-            if c.startswith('eles/'):
-                etype, fidx = c.split('/')[1:]
+            if (m := re.match(r'eles/(\w+)/(\d+)$', c)):
+                etype, fidx = m[1], m[2]
                 cdone[cidx] = set()
                 cefidx[cidx] = (etype, etypes.index(etype), int(fidx))
 

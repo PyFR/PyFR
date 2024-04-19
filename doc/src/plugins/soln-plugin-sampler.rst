@@ -9,9 +9,9 @@ to a CSV file. Parameterised with
 
     *int*
 
-2. ``samp-pts`` --- list of points to sample:
+2. ``samp-pts`` --- list of points to sample or a *named* point set:
 
-    ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]``
+    ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]`` | *name*
 
 3. ``format`` --- output variable format:
 
@@ -34,3 +34,32 @@ Example::
     format = primitive
     file = point-data.csv
     header = true
+
+This plugin also exposes functionality via a CLI. The following
+functions are available
+
+#. ``pyfr sampler add`` --- preprocesses and adds a set of points to a
+   mesh.  This command can be run under MPI.
+
+   Example::
+
+     pyfr sampler add mesh.pyfrm mypoints.csv
+
+#. ``pyfr sampler list`` --- lists the named point sets in a mesh.
+
+   Example::
+
+     pyfr sampler list mesh.pyfrm
+
+#. ``pyfr sampler dump`` --- dumps the locations of all points in a
+   named point set.
+
+   Example::
+
+     pyfr sampler dump mesh.pyfrm mypoints
+
+#. ``pyfr sampler remove`` --- removes a named point set from a mesh.
+
+   Example::
+
+     pyfr sampler remove mesh.pyfrm mypoints
