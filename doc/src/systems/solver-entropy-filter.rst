@@ -16,7 +16,7 @@ Parameterises entropy filter for shock capturing with
 
     *float*
 
-4. ``entropy-func`` --- type of entropy function:
+4. ``e-func`` --- type of entropy functional:
 
     ``numerical`` | ``physical``
 
