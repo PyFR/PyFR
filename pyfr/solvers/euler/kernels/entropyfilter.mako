@@ -134,7 +134,7 @@
                 p_low -= ${p_min}; p_high -= ${p_min};
                 e_low -= entmin - ${e_tol}; e_high -= entmin - ${e_tol};
 
-                // Iterate filter strength with Illinois algorithm
+                // Iterate filter strength with bisection algorithm
                 for (int iter = 0; iter < ${niters} && f_high - f_low > ${f_tol}; iter++)
                 {
                     // Compute new guess using bisection

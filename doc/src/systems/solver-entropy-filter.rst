@@ -16,12 +16,17 @@ Parameterises entropy filter for shock capturing with
 
     *float*
 
+4. ``e-func`` --- type of entropy functional:
+
+    ``numerical`` | ``physical``
+
 Example::
 
     [solver-entropy-filter]
     d-min = 1e-6
     p-min = 1e-6
     e-tol = 1e-6
+    e-func = numerical
 
 Used in the following Examples:
 
