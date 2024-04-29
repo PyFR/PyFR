@@ -48,8 +48,7 @@ def init_mpi():
 
         # If we are exiting normally then call MPI_Finalize
         if (MPI.COMM_WORLD.size == 1 or exc is None or
-            isinstance(exc, KeyboardInterrupt) or
-            (isinstance(exc, SystemExit) and exc.code == 0)):
+            isinstance(exc, (KeyboardInterrupt, SystemExit))):
             MPI.Finalize()
         # Otherwise forcefully abort
         else:

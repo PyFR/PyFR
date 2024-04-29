@@ -175,7 +175,8 @@ class PostactionMixin:
 
             # Invoke
             if self.postactmode == 'blocking':
-                intg.abort |= bool(prefork.call(cmdline))
+                if (status := prefork.call(cmdline)):
+                    intg.plugin_abort(status)
             else:
                 self.postactaid = prefork.call_async(cmdline)
 
