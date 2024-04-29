@@ -289,7 +289,7 @@ class NativeReader:
                         ketype, ketidx, kfidx = cefidx[cidx]
 
                         # If our rank has the element then pair it
-                        if (k := glmap[ketidx].get(off, None)) is not None:
+                        if (k := glmap[ketidx].get(off)) is not None:
                             conl.append((etype, j, fidx))
                             conr.append((ketype, k, kfidx))
                             cdone[cidx].add(k)

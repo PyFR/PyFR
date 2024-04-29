@@ -2,6 +2,7 @@ from ctypes import CDLL
 from functools import cached_property
 import itertools as it
 import os
+from pathlib import Path
 import platform
 import shlex
 import tempfile
@@ -44,24 +45,21 @@ class OpenMPCompiler:
         if not mod:
             # Create a scratch directory
             tmpidx = next(self._dir_seq)
-            tmpdir = tempfile.mkdtemp(prefix=f'pyfr-{tmpidx}-')
+            tmpdir = Path(tempfile.mkdtemp(prefix=f'pyfr-{tmpidx}-'))
 
             try:
                 # Compile and link the source into a shared library
                 cname, lname = 'tmp.c', platform_libname('tmp')
 
                 # Write the source code out
-                with open(os.path.join(tmpdir, cname), 'w') as f:
+                with open(tmpdir / cname, 'w') as f:
                     f.write(src)
 
                 # Invoke the compiler
                 call_capture_output(self.cc_cmd(cname, lname), cwd=tmpdir)
 
-                # Determine the fully qualified library name
-                lpath = os.path.join(tmpdir, lname)
-
                 # Add it to the cache and load
-                mod = self._cache_set_and_loadlib(ckey, lpath)
+                mod = self._cache_set_and_loadlib(ckey, tmpdir / lname)
             finally:
                 # Unless we're debugging delete the scratch directory
                 if 'PYFR_DEBUG_OMP_KEEP_LIBS' not in os.environ:
@@ -87,8 +85,8 @@ class OpenMPCompiler:
 
     @cached_property
     def cachedir(self):
-        return os.environ.get('PYFR_OMP_CACHE_DIR',
-                              user_cache_dir('pyfr', 'pyfr'))
+        cdir = user_cache_dir('pyfr', 'pyfr')
+        return Path(os.environ.get('PYFR_OMP_CACHE_DIR', cdir))
 
     def _cache_loadlib(self, ckey):
         # If caching is disabled then return
@@ -101,7 +99,7 @@ class OpenMPCompiler:
 
             # Attempt to load the library
             try:
-                return CDLL(os.path.join(self.cachedir, clname))
+                return CDLL(self.cachedir / clname)
             except OSError:
                 return
 
@@ -113,12 +111,12 @@ class OpenMPCompiler:
         else:
             # Determine the cached library name and path
             clname = platform_libname(ckey)
-            clpath = os.path.join(self.cachedir, clname)
-            ctpath = os.path.join(self.cachedir, str(uuid.uuid4()))
+            clpath = self.cachedir / clname
+            ctpath = self.cachedir / str(uuid.uuid4())
 
             try:
                 # Ensure the cache directory exists
-                os.makedirs(self.cachedir, exist_ok=True)
+                self.cachedir.mkdir(exist_ok=True)
 
                 # Perform a two-phase move to get the library in place
                 mv(lpath, ctpath)

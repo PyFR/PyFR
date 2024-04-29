@@ -51,7 +51,7 @@ class NativeWriter:
         self._einfo = {}
         for etype, ecount in self._ecounts.items():
             # See if any ranks want to write elements of this type
-            eshape = comm.allgather(shapes.get(etype, None))
+            eshape = comm.allgather(shapes.get(etype))
             if any(eshape):
                 # Create a gatherer for this element type
                 idxs = eidxs.get(etype, [])

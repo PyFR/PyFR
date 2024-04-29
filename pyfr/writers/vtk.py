@@ -1,5 +1,5 @@
 from collections import defaultdict
-import os
+from pathlib import Path
 import re
 
 import numpy as np
@@ -587,7 +587,7 @@ class VTKWriter(BaseWriter):
 
                 # Constitutent pieces
                 for r in range(comm.size):
-                    bname = os.path.basename(f'{fname[:-5]}_p{r}.vtu')
+                    bname = Path(f'{fname[:-5]}_p{r}.vtu').name
                     write_s(f'<Piece Source="{bname}"/>\n')
 
                 write_s('</PUnstructuredGrid>\n</VTKFile>\n')

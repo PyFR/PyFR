@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser, FileType
-import os
+from pathlib import Path
 import re
 
 import h5py
@@ -23,13 +23,14 @@ from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
 
 def main():
     ap = ArgumentParser(prog='pyfr')
-    sp = ap.add_subparsers(help='sub-command help')
+    sp = ap.add_subparsers(help='sub-command help', metavar='command')
 
     # Common options
-    ap.add_argument('--verbose', '-v', action='count')
-    ap.add_argument('--version', '-V', action='version',
+    ap.add_argument('-v', '--verbose', action='count',
+                    help='increase verbosity')
+    ap.add_argument('-V', '--version', action='version',
                     version=f'%(prog)s {__version__}')
-    ap.add_argument('--progress', '-p', action=ProgressSequenceAction,
+    ap.add_argument('-p', '--progress', action=ProgressSequenceAction,
                     help='show progress')
 
     # Import command
@@ -155,7 +156,7 @@ def process_import(args):
     if args.type:
         reader = get_reader_by_name(args.type, args.inmesh, args.progress)
     else:
-        extn = os.path.splitext(args.inmesh.name)[1]
+        extn = Path(args.inmesh.name).suffix
         reader = get_reader_by_extn(extn, args.inmesh, args.progress)
 
     # Write out the mesh
@@ -262,7 +263,7 @@ def process_export(args):
     if args.type:
         writer = get_writer_by_name(args.type, args)
     else:
-        extn = os.path.splitext(args.outf)[1]
+        extn = Path(args.outf).suffix
         writer = get_writer_by_extn(extn, args)
 
     # Write the output file
