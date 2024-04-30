@@ -8,15 +8,16 @@ import numpy as np
 from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, get_start_end_csize, init_mpi, mpi
-from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, cli_external,
-                               init_csv)
+from pyfr.nputil import iter_struct
+from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, DatasetAppender,
+                               cli_external, init_csv, open_hdf5_a)
 from pyfr.polys import get_polybasis
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.util import memoize, subclass_where
 
 
-class _PointLocator:
+class PointLocator:
     def __init__(self, mesh, fine_order=6):
         self.mesh = mesh
         self.fine_order = fine_order
@@ -235,10 +236,62 @@ class SamplerPlugin(BaseSolnPlugin):
             # Form the reordering list
             self._ptsinv = np.argsort([i for pr in ptsrank for i in pr])
 
-            # Open the output file
-            self.outf = init_csv(self.cfg, cfgsect, self._header)
+            match self.cfg.get(cfgsect, 'file-format', 'csv'):
+                case 'csv':
+                    self._init_csv()
+                case 'hdf5':
+                    self._init_hdf5()
+                case _:
+                    raise ValueError('Invalid file format')
         else:
             self._ptsrecv = None
+
+    def _init_csv(self):
+        self.outf = init_csv(self.cfg, self.cfgsect, self._header)
+        self._write = self._write_csv
+
+    def _write_csv(self, t, samps):
+        for ploc, samp in zip(self.pts, samps):
+            print(t, *ploc, *samp, sep=',', file=self.outf)
+
+        # Flush to disk
+        self.outf.flush()
+
+    def _init_hdf5(self):
+        outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))
+
+        npts, nvars = len(self.pts), self.nvars
+        chunk = 128
+
+        dset = self.cfg.get(self.cfgsect, 'file-dataset')
+        if dset in outf:
+            d = outf[dset]
+            t = d.dims[0][0]
+            p = d.dims[1][0]
+
+            # Ensure the point sets are compatible
+            if p.shape != self.pts.shape or not np.allclose(p[:], self.pts):
+                raise ValueError('Inconsistent sample points')
+        else:
+            d = outf.create_dataset(dset, (0, npts, nvars), float,
+                                    chunks=(chunk, min(4, npts), nvars),
+                                    maxshape=(None, npts, nvars))
+            t = outf.create_dataset(f'{dset}_t', (0,), float, chunks=(chunk,),
+                                    maxshape=(None,))
+            p = outf.create_dataset(f'{dset}_p', data=self.pts)
+
+            t.make_scale('t')
+            p.make_scale('pts')
+            d.dims[0].attach_scale(t)
+            d.dims[1].attach_scale(p)
+
+        self._t = DatasetAppender(t)
+        self._samps = DatasetAppender(d)
+        self._write = self._write_hdf5
+
+    def _write_hdf5(self, t, samps):
+        self._t(t)
+        self._samps(samps)
 
     @property
     def _header(self):
@@ -269,7 +322,7 @@ class SamplerPlugin(BaseSolnPlugin):
         # Otherwise we have a list of points to parse and locate
         else:
             pts = np.array(self.cfg.getliteral(self.cfgsect, 'samp-pts'))
-            locs = _PointLocator(mesh).locate(pts)
+            locs = PointLocator(mesh).locate(pts)
 
             return pts, locs[['cidx', 'eidx', 'tloc']]
 
@@ -329,11 +382,7 @@ class SamplerPlugin(BaseSolnPlugin):
 
         # If we're the root rank then output
         if rank == root:
-            for ploc, samp in zip(self.pts, self._ptsbuf[self._ptsinv]):
-                print(intg.tcurr, *ploc, *samp, sep=',', file=self.outf)
-
-            # Flush to disk
-            self.outf.flush()
+            self._write(intg.tcurr, self._ptsbuf[self._ptsinv])
 
 
 class SamplerCLIPlugin(BaseCLIPlugin):
@@ -414,7 +463,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         pts = comm.bcast(pts, root=root)
 
         # Identify which element each point is located in
-        locs = _PointLocator(mesh).locate(pts)
+        locs = PointLocator(mesh).locate(pts)
 
         # Close the mesh file so it can be reopened for writing
         reader.close()

@@ -1,6 +1,9 @@
 import functools as ft
+from pathlib import Path
 import shlex
+from weakref import WeakValueDictionary
 
+import h5py
 import numpy as np
 from pytools import prefork
 
@@ -36,6 +39,22 @@ def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
 
     # Return the file
     return outf
+
+
+def open_hdf5_a(path):
+    path = Path(path).absolute()
+
+    try:
+        pool = open_hdf5_a.pool
+    except AttributeError:
+        pool = open_hdf5_a.pool = WeakValueDictionary()
+
+    try:
+        return pool[path]
+    except KeyError:
+        f = pool[path] = h5py.File(path, 'a', libver='latest')
+
+        return f
 
 
 def region_data(cfg, cfgsect, mesh):
@@ -232,3 +251,38 @@ class SurfaceMixin:
         # Project its points onto the provided surface
         pts = np.atleast_2d(q.pts.T)
         return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts
+
+
+class DatasetAppender:
+    def __init__(self, dset, flush=None, swmr=True):
+        self.dset = dset
+        self.file = dset.file
+        self.swmr = swmr
+
+        flush = flush or dset.chunks[0]
+
+        self._buf = np.empty((flush, *dset.shape[1:]), dtype=dset.dtype)
+        self._i = 0
+
+    def __del__(self):
+        self.flush()
+
+    def __call__(self, v):
+        self._buf[self._i] = v
+        self._i += 1
+
+        if self._i == len(self._buf):
+            self.flush()
+
+    def flush(self):
+        if self._i:
+            n = len(self.dset)
+
+            self.dset.resize((n + self._i, *self.dset.shape[1:]))
+            self.dset[n:] = self._buf[:self._i]
+            self.dset.flush()
+
+            if self.swmr and not self.file.swmr_mode:
+                self.file.swmr_mode = True
+
+            self._i = 0

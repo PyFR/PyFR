@@ -3,7 +3,8 @@ from collections import defaultdict
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BaseSolnPlugin, SurfaceMixin, init_csv
+from pyfr.plugins.base import (BaseSolnPlugin, DatasetAppender, SurfaceMixin,
+                               init_csv, open_hdf5_a)
 
 
 class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
@@ -54,17 +55,13 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
             if not any(bcranks):
                 raise RuntimeError(f'Boundary {suffix} does not exist')
 
-            # CSV header
-            header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
-            if self._mcomp:
-                header += ['mpx', 'mpy', 'mpz'][3 - mcomp:]
-            if self._viscous:
-                header += ['vx', 'vy', 'vz'][:self.ndims]
-                if self._mcomp:
-                    header += ['mvx', 'mvy', 'mvz'][3 - mcomp:]
-
-            # Open
-            self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
+            match self.cfg.get(cfgsect, 'file-format', 'csv'):
+                case 'csv':
+                    self._init_csv()
+                case 'hdf5':
+                    self._init_hdf5()
+                case _:
+                    raise ValueError('Invalid file format')
 
         # Interpolation matrices and quadrature weights
         self._m0 = m0 = {}
@@ -125,6 +122,48 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
             if self._viscous:
                 self._rcpjact = {k: rcpjact[k[0]][..., v]
                                  for k, v in self._eidxs.items()}
+
+    @property
+    def _header(self):
+        header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
+        if self._mcomp:
+            header += ['mpx', 'mpy', 'mpz'][3 - self._mcomp:]
+        if self._viscous:
+            header += ['vx', 'vy', 'vz'][:self.ndims]
+            if self._mcomp:
+                header += ['mvx', 'mvy', 'mvz'][3 - self._mcomp:]
+
+        return ','.join(header)
+
+    def _init_csv(self):
+        self.outf = init_csv(self.cfg, self.cfgsect, self._header)
+        self._write = self._write_csv
+
+    def _write_csv(self, t, forces):
+        print(t, *forces.ravel(), sep=',', file=self.outf)
+        self.outf.flush()
+
+    def _init_hdf5(self):
+        outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))
+        nvars = 1 + (2 if self._viscous else 1)*(self.ndims + self._mcomp)
+
+        dset = self.cfg.get(self.cfgsect, 'file-dataset')
+        if dset in outf:
+            ff = outf[dset]
+
+            if ff.shape[1] != nvars:
+                raise ValueError('Invalid dataset')
+        else:
+            ff = outf.create_dataset(dset, (0, nvars), float,
+                                     chunks=(128, nvars),
+                                     maxshape=(None, nvars))
+            ff.dims[1].label = self._header
+
+        self._forces = DatasetAppender(ff)
+        self._write = self._write_hdf5
+
+    def _write_hdf5(self, t, forces):
+        self._forces(np.concatenate(([t], forces.ravel())))
 
     def __call__(self, intg):
         # Return if no output is due
@@ -218,11 +257,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         else:
             comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
 
-            # Write
-            print(intg.tcurr, *fm.ravel(), sep=',', file=self.outf)
-
-            # Flush to disk
-            self.outf.flush()
+            self._write(intg.tcurr, fm)
 
     def stress_tensor(self, u, du):
         c = self._constants
