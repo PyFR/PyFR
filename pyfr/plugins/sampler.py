@@ -444,7 +444,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             # Check it does not already exist unless --force is given
             if f'plugins/sampler/{pname}' in mesh.raw and not args.force:
                 raise ValueError(f'Point set {pname} already exists; use '
-                                    '-f to replace')
+                                 '-f to replace')
 
             def line_reader(f):
                 for l in f:

@@ -59,7 +59,7 @@ class BasePartitioner:
         conn = []
         for etype, einfo in efaces.items():
             # Allocate the element-element connectivity array
-            econ = np.empty(einfo.shape + (2,), dtype=int)
+            econ = np.empty((*einfo.shape, 2), dtype=int)
 
             # Compute our element numbers
             disp = edisps[etype]
@@ -67,7 +67,7 @@ class BasePartitioner:
 
             # Next, prune element-boundary connectivity
             eidx = einfo['off'] >= 0
-            einfo, econ = einfo[eidx], econ[eidx, :]
+            einfo, econ = einfo[eidx], econ[eidx]
 
             # Compute the numbers of the elements we are connected to
             econ[:, 1] = cdisps[einfo['cidx']] + einfo['off']
@@ -77,7 +77,7 @@ class BasePartitioner:
         # Stack all of the global connectivity arrays together
         conn = np.vstack(conn)
 
-        # Sort the connectivity pairs to eliminate duplicates
+        # Sort the connectivity pairs to help identify duplicates
         conn.sort()
 
         # Eliminate duplicates
