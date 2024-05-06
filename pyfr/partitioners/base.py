@@ -146,7 +146,9 @@ class BasePartitioner:
             for ll, rr in pmerge.items():
                 if rr == pr:
                     pmerge[ll] = pmerge[l]
-            pmerge[pr] = pmerge[l]
+
+            if pr != pmerge[l]:
+                pmerge[pr] = pmerge[l]
         elif l in pmerge:
             if r != pmerge[l]:
                 pmerge[r] = pmerge[l]
