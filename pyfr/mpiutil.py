@@ -170,6 +170,8 @@ class BaseGathererScatterer(AlltoallMixin):
 
 class Scatterer(BaseGathererScatterer):
     def __init__(self, comm, idx):
+        idx = np.asanyarray(idx, dtype=int)
+
         # Eliminate duplicates from our index array
         ridx, self.rinv = np.unique(idx, return_inverse=True)
 
@@ -198,7 +200,7 @@ class Scatterer(BaseGathererScatterer):
 
 class Gatherer(BaseGathererScatterer):
     def __init__(self, comm, idx):
-        idx = np.asanyarray(idx)
+        idx = np.asanyarray(idx, dtype=int)
 
         # Sort our send array
         self.sinv = np.argsort(idx)
