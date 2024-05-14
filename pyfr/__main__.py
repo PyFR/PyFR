@@ -58,6 +58,15 @@ def main():
                                    help='separator')
     ap_partition_list.set_defaults(process=process_partition_list)
 
+    # Get info about a partitioning
+    ap_partition_info = ap_partition.add_parser('info',
+                                                help='partition info --help')
+    ap_partition_info.add_argument('mesh', help='input mesh file')
+    ap_partition_info.add_argument('name', help='partitioning name')
+    ap_partition_info.add_argument('-s', '--sep', default='\t',
+                                   help='separator')
+    ap_partition_info.set_defaults(process=process_partition_info)
+
     # Add partitioning
     ap_partition_add = ap_partition.add_parser('add',
                                                help='partition add --help')
@@ -170,6 +179,21 @@ def process_partition_list(args):
         for name, part in sorted(mesh['partitionings'].items()):
             nparts = len(part['eles'].attrs['regions'])
             print(name, nparts, sep=args.sep)
+
+
+def process_partition_info(args):
+    # Open the mesh
+    mesh = h5py.File(args.mesh, 'r')
+
+    # Read the partition region info from the mesh
+    regions = mesh[f'partitionings/{args.name}/eles'].attrs['regions']
+
+    # Print out the header
+    print('part', *mesh['eles'], sep=args.sep)
+
+    # Compute and output the number of elements in each partition
+    for i, neles in enumerate(regions[:, 1:] - regions[:, :-1]):
+        print(i, *neles, sep=args.sep)
 
 
 def process_partition_add(args):

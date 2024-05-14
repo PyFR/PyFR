@@ -47,6 +47,11 @@ The following core commands are available from the ``pyfr`` program:
 
          pyfr partition list mesh.pyfrm
 
+   #. ``pyfr partition info`` --- shows information about a specific
+      partitioning in a mesh.  Example::
+
+         pyfr partition info mesh.pyfrm ten_parts
+
    #. ``pyfr partition remove`` --- deletes a partitioning from a mesh.
       Example::
 
