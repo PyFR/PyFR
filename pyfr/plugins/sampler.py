@@ -452,6 +452,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
             # Read in the points
             pts = np.loadtxt(line_reader(args.pts), skiprows=args.skip)
+            pts = np.atleast_2d(pts)
 
             # Validate the dimensionality
             if pts.shape[1] != mesh.ndims:
