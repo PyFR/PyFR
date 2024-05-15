@@ -141,22 +141,28 @@ class BasePartitioner:
         pass
 
     def _merge_con(self, pmerge, l, r):
-        if l in pmerge and r in pmerge:
-            pr = pmerge[r]
-            for ll, rr in pmerge.items():
-                if rr == pr:
-                    pmerge[ll] = pmerge[l]
+        if l == r:
+            return
 
-            if pr != pmerge[l]:
-                pmerge[pr] = pmerge[l]
+        if l in pmerge and r in pmerge:
+            self._merge_con(pmerge, pmerge[l], pmerge[r])
         elif l in pmerge:
-            if r != pmerge[l]:
-                pmerge[r] = pmerge[l]
+            self._merge_con(pmerge, pmerge[l], r)
         elif r in pmerge:
-            if l != pmerge[r]:
-                pmerge[l] = pmerge[r]
+            self._merge_con(pmerge, l, pmerge[r])
         else:
             pmerge[l] = r
+
+    def _resolve_merge(self, pmerge):
+        nmerge = {}
+
+        for l, r in pmerge.items():
+            while (rr := pmerge.get(r)) is not None:
+                r = rr
+
+            nmerge[l] = r
+
+        return nmerge
 
     def _group_periodic_eles(self, mesh, con, cdisps, elewts_fn):
         cdtype = [('l', np.int64), ('r', np.int64)]
@@ -188,10 +194,11 @@ class BasePartitioner:
 
             # Determine which elements require mering
             for l, r in iter_struct(pcon.reshape(-1, 2)):
-                if l != r:
-                    self._merge_con(pmerge, l, r)
+                self._merge_con(pmerge, l, r)
 
         if pmerge:
+            pmerge = self._resolve_merge(pmerge)
+
             # Eliminate connectivity entries associated with periodic faces
             con = np.delete(con, np.hstack(pidx), axis=0)
 
