@@ -98,16 +98,18 @@ class BaseSystem:
             solnsts = Inifile(initsoln['stats'])
 
             # Get the names of the conserved variables (fields)
-            solnfields = solnsts.get('data', 'fields', '')
-            currfields = ','.join(eles[0].convarmap[eles[0].ndims])
+            solnfields = solnsts.get('data', 'fields').split(',')
+            currfields = eles[0].convarmap[eles[0].ndims]
 
-            # Ensure they match up
-            if solnfields and solnfields != currfields:
+            # Construct a mapping between the solution file and the system
+            try:
+                smap = [solnfields.index(cf) for cf in currfields]
+            except ValueError:
                 raise RuntimeError('Invalid solution for system')
 
             # Process the solution
             for etype, ele in elemap.items():
-                soln = initsoln[f'soln_{etype}']
+                soln = initsoln[f'soln_{etype}'][:, smap, :]
                 ele.set_ics_from_soln(soln, solncfg)
         else:
             for ele in eles:

@@ -377,6 +377,9 @@ class VTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
+        # Get the fields in the data set
+        dfields = self.stats.get('data', 'fields').split(',')
+
         # Solutions need a separate processing pipeline to other data
         if self.dataprefix == 'soln':
             self._pre_proc_fields = self._pre_proc_fields_soln
@@ -384,11 +387,28 @@ class VTKWriter(BaseWriter):
             self._soln_fields = list(self.elementscls.privarmap[self.ndims])
             self._vtk_vars = dict(self.elementscls.visvarmap[self.ndims])
             self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
+
+            # See if our solution contains gradient data
+            if len(dfields) == (1 + self.ndims)*len(self._soln_fields):
+                self._gradients = True
+
+                # Update list of solution fields
+                self._soln_fields.extend(f'{f}-{d}'
+                                         for f in list(self._soln_fields)
+                                         for d in range(self.ndims))
+
+                # Update the mapping of VTK variables to solution fields
+                for var, fields in list(self._vtk_vars.items()):
+                    self._vtk_vars[f'grad {var}'] = nfields = []
+                    for f in fields:
+                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
+            else:
+                self._gradients = False
         # Otherwise we're dealing with simple scalar data
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
-            self._soln_fields = self.stats.get('data', 'fields').split(',')
+            self._soln_fields = dfields
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
 
@@ -407,19 +427,29 @@ class VTKWriter(BaseWriter):
                 raise RuntimeError('Invalid field specification')
 
     def _pre_proc_fields_soln(self, soln):
-        # Convert from conservative to primitive variables
-        return np.array(self.elementscls.con_to_pri(soln, self.cfg))
+        ecls = self.elementscls
+        nvars = len(ecls.privarmap[self.ndims])
+
+        # Convert the solution to primitive variables
+        fields = ecls.con_to_pri(soln[:nvars], self.cfg)
+
+        # Convert any solution gradients to primitive variables
+        if self._gradients:
+            diff_cons = soln[nvars:].reshape(nvars, -1, *soln.shape[1:])
+            diff_pri = ecls.diff_con_to_pri(soln[:nvars], diff_cons, self.cfg)
+
+            fields += [f for gf in diff_pri for f in gf]
+
+        return np.array(fields)
 
     def _pre_proc_fields_scal(self, soln):
         return soln
 
     def _post_proc_fields_soln(self, vsoln):
-        privarmap = self.elementscls.privarmap[self.ndims]
-
         # Prepare the fields
         fields = []
         for vnames in self._vtk_vars.values():
-            ix = [privarmap.index(vn) for vn in vnames]
+            ix = [self._soln_fields.index(vn) for vn in vnames]
 
             fields.append(vsoln[ix])
 
@@ -598,8 +628,19 @@ class VTKWriter(BaseWriter):
         write(np.uint64(array.nbytes))
         write(array)
 
-    def _process_name(self, name):
-        return re.sub(r'\W+', '_', name)
+    def _component_names(self, ncomps):
+        cnames = {
+            '2': ['X', 'Y'],
+            '3': ['X', 'Y', 'Z'],
+            '4': ['XX', 'XY', 'YX', 'YY'],
+            '9': ['XX', 'XY', 'XZ', 'YX', 'YY', 'YZ', 'ZX', 'ZY', 'ZZ']
+        }
+
+        if ncomps in cnames:
+            return ' '.join(f'ComponentName{i}="{n}"'
+                            for i, n in enumerate(cnames[ncomps]))
+        else:
+            return ''
 
     def _write_serial_header(self, write_s, etype, neles, off):
         names, types, comps, sizes = self._get_array_attrs(etype, neles)
@@ -610,8 +651,8 @@ class VTKWriter(BaseWriter):
 
         # Write VTK DataArray headers
         for i, (n, t, c, s) in enumerate(zip(names, types, comps, sizes)):
-            write_s(f'<DataArray Name="{self._process_name(n)}" type="{t}" '
-                    f'NumberOfComponents="{c}" '
+            write_s(f'<DataArray Name="{n}" type="{t}" '
+                    f'NumberOfComponents="{c}" {self._component_names(c)} '
                     f'format="appended" offset="{off}"/>\n')
 
             off += 8 + s
@@ -637,8 +678,8 @@ class VTKWriter(BaseWriter):
 
         # Write VTK DataArray headers
         for i, (n, t, c) in enumerate(zip(names, types, comps)):
-            write_s(f'<PDataArray Name="{self._process_name(n)}" type="{t}" '
-                    f'NumberOfComponents="{c}"/>\n')
+            write_s(f'<PDataArray Name="{n}" type="{t}" '
+                    f'NumberOfComponents="{c}" {self._component_names(c)}/>\n')
 
             # Points => Cells => CellData => PointData transition
             if i == 0:

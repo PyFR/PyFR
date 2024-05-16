@@ -20,15 +20,15 @@ class BaseACFluidElements:
 
     @staticmethod
     def pri_to_con(pris, cfg):
-        return pris
+        return list(pris)
 
     @staticmethod
     def con_to_pri(convs, cfg):
-        return convs
+        return list(convs)
 
     @staticmethod
     def diff_con_to_pri(cons, diff_cons, cfg):
-        return diff_cons
+        return list(diff_cons)
 
     @staticmethod
     def validate_formulation(controller):

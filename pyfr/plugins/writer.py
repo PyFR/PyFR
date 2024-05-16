@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BaseSolnPlugin, PostactionMixin, RegionMixin
@@ -20,8 +22,12 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         # Get the element map and region data
         emap, erdata = intg.system.ele_map, self._ele_region_data
 
+        # Decide if gradients should be written or not
+        self._write_grads = self.cfg.getbool(cfgsect, 'write-gradients', False)
+
         # Figure out the shape of each element type in our region
-        ershapes = {etype: (self.nvars, emap[etype].nupts) for etype in erdata}
+        nvars = self.nvars + self._write_grads*(self.nvars*self.ndims)
+        ershapes = {etype: (nvars, emap[etype].nupts) for etype in erdata}
 
         # Construct the solution writer
         self._writer = NativeWriter(intg, basedir, basename, 'soln')
@@ -36,6 +42,9 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
 
         # Output field names
         self.fields = intg.system.elementscls.convarmap[self.ndims]
+        if self._write_grads:
+            dims = 'xyz'[:self.ndims]
+            self.fields += [f'grad_{f}_{d}' for f in self.fields for d in dims]
 
         # Output data type
         self.fpdtype = intg.backend.fpdtype
@@ -48,12 +57,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         if not intg.isrestart:
             self.tout_last -= self.dt_out
 
-    def __call__(self, intg):
-        self._writer.probe()
-
-        if intg.tcurr - self.tout_last < self.dt_out - self.tol:
-            return
-
+    def _prepare_metadata(self, intg):
         comm, rank, root = get_comm_rank_root()
 
         stats = Inifile()
@@ -63,8 +67,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
 
         # If we are the root rank then prepare the metadata
         if rank == root:
-            metadata = dict(intg.cfgmeta,
-                            stats=stats.tostr(),
+            metadata = dict(intg.cfgmeta, stats=stats.tostr(),
                             mesh_uuid=intg.mesh_uuid)
         else:
             metadata = None
@@ -80,10 +83,38 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             if rank == root:
                 metadata |= {f'{prefix}/{k}': v for k, v in pdata.items()}
 
-        # Fetch the solution
+        return metadata
+
+    def _prepare_data(self, intg):
         data = {}
+
+        if self._write_grads:
+            soln, grad_soln = intg.soln, intg.grad_soln
+        else:
+            soln, grad_soln = intg.soln, None
+
         for idx, etype, rgn in self._ele_regions:
-            data[etype] = intg.soln[idx][..., rgn].T.astype(self.fpdtype)
+            d = soln[idx][..., rgn].T.astype(self.fpdtype)
+
+            if self._write_grads:
+                g = grad_soln[idx][..., rgn].transpose(3, 2, 0, 1)
+                g = g.reshape(len(g), self.ndims*self.nvars, -1)
+
+                d = np.hstack([d, g], dtype=self.fpdtype)
+
+            data[etype] = d
+
+        return data
+
+    def __call__(self, intg):
+        self._writer.probe()
+
+        if intg.tcurr - self.tout_last < self.dt_out - self.tol:
+            return
+
+        # Prepare the data and metadata
+        data = self._prepare_data(intg)
+        metadata = self._prepare_metadata(intg)
 
         # Prepare a callback to kick off any postactions
         callback = lambda fname, t=intg.tcurr: self._invoke_postaction(

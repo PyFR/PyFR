@@ -180,12 +180,12 @@ class Scatterer(BaseGathererScatterer):
         # Save the receive count
         self.cnt = len(ridx)
 
-    def __call__(self, dset):
+    def __call__(self, dset, didxs=(...,)):
         rcount, rdisps = self.acountdisps
         scount, sdisps = self.bcountdisps
 
         # Read the data
-        svals = dset[self.start:self.end][self.sidx]
+        svals = dset[self.start:self.end, *didxs][self.sidx]
 
         # Allocate space for receiving the data
         rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
@@ -287,12 +287,12 @@ class SparseScatterer(AlltoallMixin):
         self.ridx = ainv[np.searchsorted(bidx, ridx)]
         self.cnt = self.rcountdisps[0].sum()
 
-    def __call__(self, dset):
+    def __call__(self, dset, didxs=(...,)):
         scount, sdisps = self.scountdisps
         rcount, rdisps = self.rcountdisps
 
         # Read and appropriately reorder our send data
-        svals = dset[self.start:self.end][self.sidx]
+        svals = dset[self.start:self.end, *didxs][self.sidx]
 
         # Allocate space for receiving the data
         rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
