@@ -10,6 +10,18 @@ from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
+def _interpolate_pts(op, pts):
+    ipts = op.astype(pts.dtype) @ pts.reshape(op.shape[1], -1)
+    ipts = ipts.reshape(op.shape[0], *pts.shape[1:])
+
+    return ipts
+
+
+def _search(a, v):
+    idx = np.argsort(a)
+    return idx[np.searchsorted(a, v, sorter=idx)]
+
+
 class VTKWriter(BaseWriter):
     # Supported file types and extensions
     name = 'vtk'
@@ -412,12 +424,6 @@ class VTKWriter(BaseWriter):
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
 
-        # Element information
-        self.einfo = einfo = []
-        for etype in self.mesh.eidxs:
-            soln = self.soln[f'{self.dataprefix}_{etype}']
-            einfo.append((etype, soln.shape[2]))
-
         # Handle field subsetting
         if args.fields:
             self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
@@ -425,6 +431,82 @@ class VTKWriter(BaseWriter):
 
             if len(self._vtk_vars) != len(args.fields):
                 raise RuntimeError('Invalid field specification')
+
+        # Handle volume vs surface export
+        if not args.boundaries:
+            self._init_volume()
+        else:
+            if self.ndims != 3:
+                raise RuntimeError('Surface export only supported for 3D '
+                                   'grids')
+
+            self._init_surface(args.boundaries)
+
+    def _init_volume(self):
+        self.einfo = []
+        for etype in self.mesh.eidxs:
+            soln = self.soln[f'{self.dataprefix}_{etype}']
+            self.einfo.append((etype, soln.shape[2]))
+
+        self._prepare_pts = self._prepare_pts_volume
+
+    def _init_surface(self, boundaries):
+        ecount = defaultdict(int)
+        self._surface_info = defaultdict(list)
+
+        rmesh, smesh = self.reader.mesh, self.mesh
+        cidxs = [smesh.codec.index(f'bc/{b}') for b in boundaries]
+
+        for etype, einfo in self.reader.eles.items():
+            # See which of our faces are on the selected boundaries
+            mask = np.isin(einfo['faces']['cidx'], cidxs)
+            eoff, fidx = mask.nonzero()
+
+            # Handle the case where the solution is subset
+            if smesh.subset:
+                eidxs = rmesh.eidxs[etype]
+                beidx = eidxs[mask.any(axis=1)]
+                if not np.isin(beidx, smesh.eidxs[etype]).all():
+                    raise ValueError('Output boundaries not present in '
+                                     'subset solution')
+
+                eoff = _search(smesh.eidxs[etype], eidxs[eoff])
+
+            # Obtain the associated surface info
+            for stype, *info in self._get_surface_info(etype, eoff, fidx):
+                ecount[stype] += len(info[-1])
+                self._surface_info[stype].append((etype, *info))
+
+        self.einfo = list(ecount.items())
+        self._prepare_pts = self._prepare_pts_surface
+
+    def _get_surface_info(self, etype, eoff, fidx):
+        info, idxs = {}, defaultdict(list)
+
+        # Get the shape associated with our element type
+        shapecls = subclass_where(BaseShape, name=etype)
+        shape = shapecls(len(self.mesh.spts[etype]), self.cfg)
+
+        for e, f in zip(eoff, fidx):
+            if f not in info:
+                itype, proj, norm = shape.faces[f]
+                ishapecls = subclass_where(BaseShape, name=itype)
+
+                # Obtain the visualisation points on this face
+                svpts = np.array(ishapecls.std_ele(self.divisor))
+                svpts = np.vstack(np.broadcast_arrays(*proj(*svpts.T))).T
+
+                if self.ho_output:
+                    svpts = svpts[self._nodemaps[itype, len(svpts)]]
+
+                mesh_op = shape.sbasis.nodal_basis_at(svpts)
+                soln_op = shape.ubasis.nodal_basis_at(svpts)
+
+                info[f] = (itype, mesh_op, soln_op)
+
+            idxs[f].append(e)
+
+        return [(*info[f], idxs[f]) for f in info]
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -511,6 +593,68 @@ class VTKWriter(BaseWriter):
             return names, types, comps, sizes
         else:
             return names, types, comps
+
+    def _prepare_pts_volume(self, etype):
+        spts = self.mesh.spts[etype].astype(self.dtype)
+        soln = self.soln[f'{self.dataprefix}_{etype}']
+        soln = soln.swapaxes(0, 1).astype(self.dtype)
+
+        # Extract the partition number information
+        part = self.soln[f'{self.dataprefix}_{etype}_parts']
+
+        # Dimensions
+        nspts, neles = spts.shape[:2]
+
+        # Shape
+        shapecls = subclass_where(BaseShape, name=etype)
+
+        # Sub divison points inside of a standard element
+        svpts = shapecls.std_ele(self.divisor)
+        nsvpts = len(svpts)
+
+        if etype != 'pyr' and self.ho_output:
+            svpts = [svpts[i] for i in self._nodemaps[etype, nsvpts]]
+
+        # Generate the operator matrices
+        soln_b = shapecls(nspts, self.cfg)
+        mesh_vtu_op = soln_b.sbasis.nodal_basis_at(svpts)
+        soln_vtu_op = soln_b.ubasis.nodal_basis_at(svpts)
+
+        # Calculate node locations of VTU elements
+        vpts = _interpolate_pts(mesh_vtu_op, spts)
+
+        # Append dummy z dimension for points in 2D
+        if self.ndims == 2:
+            vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
+
+        # Pre-process the solution
+        soln = self._pre_proc_fields(soln).swapaxes(0, 1)
+
+        # Interpolate the solution to the vis points
+        vsoln = _interpolate_pts(soln_vtu_op, soln)
+
+        return vpts, vsoln, part
+
+    def _prepare_pts_surface(self, itype):
+        vspts, vsoln, part = [], [], []
+
+        for etype, mesh_op, soln_op, idxs in self._surface_info[itype]:
+            spts = self.mesh.spts[etype][:, idxs]
+            soln = self.soln[f'{self.dataprefix}_{etype}'][..., idxs]
+            soln = soln.swapaxes(0, 1).astype(self.dtype)
+
+            # Pre-process the solution
+            soln = self._pre_proc_fields(soln).swapaxes(0, 1)
+
+            vspts.append(_interpolate_pts(mesh_op, spts))
+            vsoln.append(_interpolate_pts(soln_op, soln))
+            part.append(self.soln[f'{self.dataprefix}_{etype}_parts'][idxs])
+
+        vspts = np.hstack(vspts)
+        vsoln = np.dstack(vsoln)
+        part = np.concatenate(part)
+
+        return vspts, vsoln, part
 
     def write_vtu(self, fname):
         comm, rank, root = get_comm_rank_root()
@@ -700,45 +844,8 @@ class VTKWriter(BaseWriter):
                 '</DataArray>\n</FieldData>\n')
 
     def _write_data(self, write, etype):
-        spts = self.mesh.spts[etype].astype(self.dtype)
-        soln = self.soln[f'{self.dataprefix}_{etype}']
-        soln = soln.swapaxes(0, 1).astype(self.dtype)
-
-        # Extract the partition number information
-        part = self.soln[f'{self.dataprefix}_{etype}_parts']
-
-        # Dimensions
-        nspts, neles = spts.shape[:2]
-
-        # Shape
-        shapecls = subclass_where(BaseShape, name=etype)
-
-        # Sub divison points inside of a standard element
-        svpts = shapecls.std_ele(self.divisor)
-        nsvpts = len(svpts)
-
-        if etype != 'pyr' and self.ho_output:
-            svpts = [svpts[i] for i in self._nodemaps[etype, nsvpts]]
-
-        # Generate the operator matrices
-        soln_b = shapecls(nspts, self.cfg)
-        mesh_vtu_op = soln_b.sbasis.nodal_basis_at(svpts)
-        soln_vtu_op = soln_b.ubasis.nodal_basis_at(svpts)
-
-        # Calculate node locations of VTU elements
-        vpts = mesh_vtu_op @ spts.reshape(nspts, -1)
-        vpts = vpts.reshape(nsvpts, -1, self.ndims)
-
-        # Pre-process the solution
-        soln = self._pre_proc_fields(soln).swapaxes(0, 1)
-
-        # Interpolate the solution to the vis points
-        vsoln = soln_vtu_op @ soln.reshape(len(soln), -1)
-        vsoln = vsoln.reshape(nsvpts, -1, neles).swapaxes(0, 1)
-
-        # Append dummy z dimension for points in 2D
-        if self.ndims == 2:
-            vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
+        vpts, vsoln, part = self._prepare_pts(etype)
+        nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
 
         # Write element node locations to file
         self._write_darray(vpts.swapaxes(0, 1), write, self.dtype)
@@ -777,7 +884,7 @@ class VTKWriter(BaseWriter):
         self._write_darray(vtu_part, write, np.int32)
 
         # Process and write out the various fields
-        for arr in self._post_proc_fields(vsoln):
+        for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
             self._write_darray(arr.T, write, self.dtype)
 
 

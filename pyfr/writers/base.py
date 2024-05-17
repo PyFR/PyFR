@@ -8,8 +8,8 @@ class BaseWriter:
         from pyfr.solvers.base import BaseSystem
 
         # Load the mesh and solution files
-        reader = NativeReader(args.meshf, construct_con=False)
-        self.mesh, self.soln = reader.load_subset_mesh_soln(args.solnf)
+        self.reader = NativeReader(args.meshf, construct_con=False)
+        self.mesh, self.soln = self.reader.load_subset_mesh_soln(args.solnf)
 
         # Load the configuration and stats files
         self.cfg = Inifile(self.soln['config'])
