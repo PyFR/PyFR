@@ -118,9 +118,9 @@ class NativeReader:
             if etype in subset:
                 sidx = subset[etype]
                 if len(sidx):
-                    eidxs[etype] = sidx
+                    eidxs[etype] = self.mesh.eidxs[etype][sidx]
                     spts[etype] = self.mesh.spts[etype][:, sidx]
-                    spts_nodes[etype] = self.mesh.spts_nodes[etype][:, sidx]
+                    spts_nodes[etype] = self.mesh.spts_nodes[etype][sidx]
                     spts_curved[etype] = self.mesh.spts_curved[etype][sidx]
             else:
                 eidxs[etype] = self.mesh.eidxs[etype]

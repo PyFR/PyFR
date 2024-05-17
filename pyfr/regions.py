@@ -88,8 +88,8 @@ class BoundaryRegion(BaseRegion):
             raise ValueError(f'Boundary {self.bcname} does not exist')
 
         # Determine which of our elements are directly on the boundary
-        if self.bcname in mesh:
-            for etype, eidx, fidx in mesh[self.bcname]:
+        if self.bcname in mesh.bcon:
+            for etype, eidx, fidx in mesh.bcon[self.bcname]:
                 eset[etype].append(eidx)
 
         # Handle the case where multiple layers have been requested
