@@ -18,7 +18,11 @@ Parameterises entropy filter for shock capturing with
 
 4. ``e-func`` --- type of entropy functional:
 
-    ``numerical`` | ``physical``
+    ``physical`` | ``numerical``
+
+5. ``niters`` --- number of filter strength solver iterations:
+
+    *int*
 
 Example::
 
@@ -26,7 +30,8 @@ Example::
     d-min = 1e-6
     p-min = 1e-6
     e-tol = 1e-6
-    e-func = numerical
+    e-func = physical
+    niters = 2
 
 Used in the following Examples:
 
