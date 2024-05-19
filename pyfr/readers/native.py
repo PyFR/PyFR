@@ -3,6 +3,7 @@ import re
 
 import h5py
 
+from pyfr.inifile import Inifile
 from pyfr.mpiutil import Scatterer, SparseScatterer, get_comm_rank_root
 from pyfr.nputil import iter_struct
 
@@ -49,7 +50,7 @@ class NativeReader:
     def close(self):
         self.f.close()
 
-    def load_soln(self, sname, prefix='soln'):
+    def load_soln(self, sname, prefix=None):
         mesh, soln = self.load_subset_mesh_soln(sname, prefix)
 
         # Ensure the solution is not subset
@@ -58,7 +59,7 @@ class NativeReader:
 
         return soln
 
-    def load_subset_mesh_soln(self, sname, prefix='soln'):
+    def load_subset_mesh_soln(self, sname, prefix=None):
         comm, rank, root = get_comm_rank_root()
 
         with h5py.File(sname, 'r') as f:
@@ -75,35 +76,41 @@ class NativeReader:
             else:
                 soln = None
 
+            # Broadcast and parse
             soln = comm.bcast(soln, root=root)
+            soln = {k: Inifile(v) for k, v in soln.items()}
+
+            # If no prefix has been specified then obtain it from the file
+            if prefix is None:
+                prefix = soln['stats'].get('data', 'prefix')
 
             # Note if any elements are subset
             subset = {}
 
             # Read and scatter the solution data
-            for et in self.escatter:
+            for etype in self.escatter:
                 # If the element is not present, mark it as completely subset
-                if (ek := f'{prefix}/{et}') not in f:
-                    subset[et] = []
+                if (ek := f'{prefix}/{etype}') not in f:
+                    subset[etype] = []
                     continue
                 # If the element is partially subset use a sparse scatterer
                 elif (ei := f'{ek}_idxs') in f:
-                    idxs = self.mesh.eidxs[et]
+                    idxs = self.mesh.eidxs[etype]
                     escatter = SparseScatterer(comm, f[ei], idxs)
-                    subset[et] = escatter.ridx
+                    subset[etype] = escatter.ridx
                 # Complete element present so reuse the elements scatterer
                 else:
-                    escatter = self.escatter[et]
+                    escatter = self.escatter[etype]
 
                 # Read the solution
                 esoln = escatter(f[ek])
                 if escatter.cnt:
-                    soln[f'{prefix}_{et}'] = esoln.swapaxes(0, 2)
+                    soln[etype] = esoln.swapaxes(0, 2)
 
                 # Read the partition data
                 epart = escatter(f[f'{ek}_parts'])
                 if escatter.cnt:
-                    soln[f'{prefix}_{et}_parts'] = epart
+                    soln[f'{etype}_parts'] = epart
 
         # If the solution is subset then subset the mesh, too
         if subset:

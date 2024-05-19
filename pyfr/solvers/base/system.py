@@ -94,8 +94,8 @@ class BaseSystem:
         # Set the initial conditions
         if initsoln:
             # Load the config and stats files from the solution
-            solncfg = Inifile(initsoln['config'])
-            solnsts = Inifile(initsoln['stats'])
+            solncfg = initsoln['config']
+            solnsts = initsoln['stats']
 
             # Get the names of the conserved variables (fields)
             solnfields = solnsts.get('data', 'fields').split(',')
@@ -109,7 +109,7 @@ class BaseSystem:
 
             # Process the solution
             for etype, ele in elemap.items():
-                soln = initsoln[f'soln_{etype}'][:, smap, :]
+                soln = initsoln[etype][:, smap, :]
                 ele.set_ics_from_soln(soln, solncfg)
         else:
             for ele in eles:

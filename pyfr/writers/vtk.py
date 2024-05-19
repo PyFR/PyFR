@@ -1,6 +1,5 @@
 from collections import defaultdict
 from pathlib import Path
-import re
 
 import numpy as np
 
@@ -443,11 +442,8 @@ class VTKWriter(BaseWriter):
             self._init_surface(args.boundaries)
 
     def _init_volume(self):
-        self.einfo = []
-        for etype in self.mesh.eidxs:
-            soln = self.soln[f'{self.dataprefix}_{etype}']
-            self.einfo.append((etype, soln.shape[2]))
-
+        self.einfo = [(etype, self.soln[etype].shape[2])
+                      for etype in self.mesh.eidxs]
         self._prepare_pts = self._prepare_pts_volume
 
     def _init_surface(self, boundaries):
@@ -596,11 +592,10 @@ class VTKWriter(BaseWriter):
 
     def _prepare_pts_volume(self, etype):
         spts = self.mesh.spts[etype].astype(self.dtype)
-        soln = self.soln[f'{self.dataprefix}_{etype}']
-        soln = soln.swapaxes(0, 1).astype(self.dtype)
+        soln = self.soln[etype].swapaxes(0, 1).astype(self.dtype)
 
         # Extract the partition number information
-        part = self.soln[f'{self.dataprefix}_{etype}_parts']
+        part = self.soln[f'{etype}_parts']
 
         # Dimensions
         nspts, neles = spts.shape[:2]
@@ -640,7 +635,7 @@ class VTKWriter(BaseWriter):
 
         for etype, mesh_op, soln_op, idxs in self._surface_info[itype]:
             spts = self.mesh.spts[etype][:, idxs]
-            soln = self.soln[f'{self.dataprefix}_{etype}'][..., idxs]
+            soln = self.soln[etype][..., idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
 
             # Pre-process the solution
@@ -648,13 +643,9 @@ class VTKWriter(BaseWriter):
 
             vspts.append(_interpolate_pts(mesh_op, spts))
             vsoln.append(_interpolate_pts(soln_op, soln))
-            part.append(self.soln[f'{self.dataprefix}_{etype}_parts'][idxs])
+            part.append(self.soln[f'{etype}_parts'][idxs])
 
-        vspts = np.hstack(vspts)
-        vsoln = np.dstack(vsoln)
-        part = np.concatenate(part)
-
-        return vspts, vsoln, part
+        return np.hstack(vspts), np.dstack(vsoln), np.hstack(part)
 
     def write_vtu(self, fname):
         comm, rank, root = get_comm_rank_root()

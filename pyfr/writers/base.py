@@ -1,4 +1,3 @@
-from pyfr.inifile import Inifile
 from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where
 
@@ -12,8 +11,8 @@ class BaseWriter:
         self.mesh, self.soln = self.reader.load_subset_mesh_soln(args.solnf)
 
         # Load the configuration and stats files
-        self.cfg = Inifile(self.soln['config'])
-        self.stats = Inifile(self.soln['stats'])
+        self.cfg = self.soln['config']
+        self.stats = self.soln['stats']
 
         # Data file prefix
         self.dataprefix = self.stats.get('data', 'prefix')

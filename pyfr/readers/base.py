@@ -30,8 +30,8 @@ class BaseReader:
             einfo = eles[etype]
 
             # Move curved elements to the start of the list
-            ceidx = (einfo['curved'] == True).nonzero()[0]
-            leidx = (einfo['curved'] == False).nonzero()[0]
+            ceidx = einfo['curved'].nonzero()[0]
+            leidx = (~einfo['curved']).nonzero()[0]
 
             # Add them to the array
             if len(ceidx):

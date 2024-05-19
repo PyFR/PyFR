@@ -316,7 +316,7 @@ def _process_common(args, soln, cfg):
 
     # If we do not have a config file then take it from the solution
     if cfg is None:
-        cfg = Inifile(soln['config'])
+        cfg = soln['config']
 
     # Create a backend
     backend = get_backend(args.backend, cfg)

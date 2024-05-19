@@ -6,7 +6,6 @@ import time
 
 import numpy as np
 
-from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
 from pyfr.util import memoize
@@ -41,7 +40,7 @@ class BaseIntegrator:
 
         # Current time; defaults to tstart unless restarting
         if self.isrestart:
-            stats = Inifile(initsoln['stats'])
+            stats = initsoln['stats']
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
         else:
             self.tcurr = self.tstart

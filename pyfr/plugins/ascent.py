@@ -181,7 +181,7 @@ class _CLIAdapter:
         self._mesh = mesh
         self._soln = soln
 
-        self.scfg = Inifile(soln['config'])
+        self.scfg = soln['config']
 
     @property
     def ndims(self):
@@ -227,12 +227,12 @@ class _CLIAdapter:
 
     @property
     def tcurr(self):
-        stats = Inifile(self._soln['stats'])
+        stats = self._soln['stats']
         return stats.getfloat('solver-time-integrator', 'tcurr')
 
     @property
     def soln(self):
-        return [self._soln[f'soln_{et}'] for et in self.etypes]
+        return [self._soln[etype] for etype in self.etypes]
 
     @property
     def grad_soln(self):
@@ -583,7 +583,7 @@ class AscentCLIPlugin(BaseCLIPlugin):
         # Iterate over the solutions
         for s in args.solns:
             # Open the solution and create an Ascent adapter
-            mesh, soln = reader.load_subset_mesh_soln(s)
+            mesh, soln = reader.load_subset_mesh_soln(s, prefix='soln')
             adapter = _CLIAdapter(mesh, soln, acfg, acfgsect)
 
             # See if we need to create a new Ascent renderer
