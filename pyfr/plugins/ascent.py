@@ -294,30 +294,32 @@ class _AscentRenderer:
     def _build_blueprint(self, adapter, etype, rgn, divisor):
         comm, rank, root = get_comm_rank_root()
 
-        mesh_n = self.mesh_n
-        d_str = f'domain_{rank}_{etype}'
-
         eidx = adapter.etypes.index(etype)
-        soln_op, xd = adapter.soln_op_vpts(etype, divisor)
+        soln_op, xd = adapter.soln_op_vpts(etype, divisors)
         self._ele_regions_lin.append((d_str, eidx, rgn, soln_op))
-
-        mesh_n[f'{d_str}/state/domain_id'] = rank
-        mesh_n[f'{d_str}/state/config/keyword'] = 'Config'
-        mesh_n[f'{d_str}/state/config/data'] = adapter.scfg.tostr()
-        mesh_n[f'{d_str}/state/mesh_uuid/keyword'] = 'Mesh_UUID'
-        mesh_n[f'{d_str}/state/mesh_uuid/data'] = adapter.mesh_uuid
-
-        mesh_n[f'{d_str}/coordsets/coords/type'] = 'explicit'
-        mesh_n[f'{d_str}/topologies/mesh/coordset'] = 'coords'
-        mesh_n[f'{d_str}/topologies/mesh/type'] = 'unstructured'
 
         xd = xd[..., rgn].transpose(1, 2, 0)
         ndims, neles, nsvpts = xd.shape
 
-        for l, x in zip('xyz', xd.reshape(ndims, -1)):
-            mesh_n[f'{d_str}/coordsets/coords/values/{l}'] = x
+        mesh_n = self.mesh_n
+        ckey = f'domain_{rank}_{etype}/coordsets/coords'
+        ekey = f'domain_{rank}_{etype}/topologies/mesh/elements'
+        fkey = f'domain_{rank}_{etype}/fields'
+        skey = f'domain_{rank}_{etype}/state'
+        tkey = f'domain_{rank}_{etype}/topologies/mesh'
 
-        e_str = f'{d_str}/topologies/mesh/elements'
+        for l, x in zip('xyz', xd.reshape(ndims, -1)):
+            mesh_n[f'{ckey}/values/{l}'] = x
+
+        mesh_n[f'{skey}/domain_id'] = rank
+        mesh_n[f'{skey}/config/keyword'] = 'Config'
+        mesh_n[f'{skey}/config/data'] = adapter.scfg.tostr()
+        mesh_n[f'{skey}/mesh_uuid/keyword'] = 'Mesh_UUID'
+        mesh_n[f'{skey}/mesh_uuid/data'] = adapter.mesh_uuid
+
+        mesh_n[f'{ckey}/type'] = 'explicit'
+        mesh_n[f'{tkey}/coordset'] = 'coords'
+        mesh_n[f'{tkey}/type'] = 'unstructured'
 
         # Subdivide the element
         subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
@@ -325,34 +327,34 @@ class _AscentRenderer:
 
         sconn = np.tile(snodes, (neles, 1))
         sconn += (np.arange(neles)*nsvpts)[:, None]
-        mesh_n[f'{e_str}/connectivity'] = sconn
+        mesh_n[f'{ekey}/connectivity'] = sconn
 
         # Handle elements which subdivide into more than one type of element
         if len(scells := set(subdvcls.subcells(divisor))) > 1:
-            mesh_n[f'{e_str}/shape'] = 'mixed'
+            mesh_n[f'{ekey}/shape'] = 'mixed'
 
             for sc in scells:
                 an = self.bp_emap[sc]
-                mesh_n[f'{e_str}/shape_map/{an}'] = subdvcls.vtk_types[sc]
+                mesh_n[f'{ekey}/shape_map/{an}'] = subdvcls.vtk_types[sc]
 
             scell_t = subdvcls.subcelltypes(divisor)
-            mesh_n[f'{e_str}/shapes'] = np.tile(scell_t, neles)
+            mesh_n[f'{ekey}/shapes'] = np.tile(scell_t, neles)
 
             scell_s = subdvcls.subcells(divisor)
             scell_s = [subdvcls.vtk_nodes[sc] for sc in scell_s]
-            mesh_n[f'{e_str}/sizes'] = np.tile(scell_s, neles)
+            mesh_n[f'{ekey}/sizes'] = np.tile(scell_s, neles)
 
             scell_o = np.tile(subdvcls.subcelloffs(divisor), (neles, 1))
             scell_o += (np.arange(neles)*len(snodes))[:, None]
             scell_o = np.concatenate(([0], scell_o.flat[:-1]))
-            mesh_n[f'{e_str}/offsets'] = scell_o
+            mesh_n[f'{ekey}/offsets'] = scell_o
         else:
-            mesh_n[f'{e_str}/shape'] = self.bp_emap[etype]
+            mesh_n[f'{ekey}/shape'] = self.bp_emap[etype]
 
         for field, path, expr in self._exprs:
-            mesh_n[f'{d_str}/fields/{field}/association'] = 'vertex'
-            mesh_n[f'{d_str}/fields/{field}/volume_dependent'] = 'false'
-            mesh_n[f'{d_str}/fields/{field}/topology'] = 'mesh'
+            mesh_n[f'{fkey}/{field}/association'] = 'vertex'
+            mesh_n[f'{fkey}/{field}/volume_dependent'] = 'false'
+            mesh_n[f'{fkey}/{field}/topology'] = 'mesh'
 
     def _init_ascent(self, adapter):
         comm, rank, root = get_comm_rank_root()

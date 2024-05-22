@@ -902,6 +902,10 @@ class BaseShapeSubDiv:
 
 class TensorProdShapeSubDiv(BaseShapeSubDiv):
     @classmethod
+    def subcells(cls, n):
+        return [cls.name]*(n**cls.ndim)
+
+    @classmethod
     def subnodes(cls, n):
         conbase = np.array([0, 1, n + 2, n + 1])
 
@@ -925,18 +929,10 @@ class QuadShapeSubDiv(TensorProdShapeSubDiv):
     name = 'quad'
     ndim = 2
 
-    @classmethod
-    def subcells(cls, n):
-        return ['quad']*(n**2)
-
 
 class HexShapeSubDiv(TensorProdShapeSubDiv):
     name = 'hex'
     ndim = 3
-
-    @classmethod
-    def subcells(cls, n):
-        return ['hex']*(n**3)
 
 
 class TriShapeSubDiv(BaseShapeSubDiv):
@@ -962,7 +958,7 @@ class TriShapeSubDiv(BaseShapeSubDiv):
             subin = np.ravel(np.arange(row - 1)[..., None] + off)
             subex = [ix + row - 1 for ix in off[:3]]
 
-            # Extent list
+            # Extend list
             conlst.extend([subin, subex])
 
         return np.hstack(conlst)
