@@ -195,6 +195,150 @@ class PointLocator:
         return dists, ktlocs
 
 
+class PointSampler:
+    def __init__(self, mesh, spts):
+        self.mesh = mesh
+
+        # If spts is a string then treat it as a named point set
+        if isinstance(spts, str):
+            comm, rank, root = get_comm_rank_root()
+
+            if rank == root:
+                sinfo = mesh.raw[f'plugins/sampler/{spts}'][:]
+            else:
+                sinfo = None
+
+            sinfo = comm.bcast(sinfo, root=root)
+
+            pts, locs = sinfo['ploc'], sinfo[['cidx', 'eidx', 'tloc']]
+        # Otherwise, treat it as a list of points
+        else:
+            pts = np.array(spts)
+            locs = PointLocator(mesh).locate(pts)[['cidx', 'eidx', 'tloc']]
+
+        self.pts, self.locs = pts, locs
+
+    def configure_with_intg_nvars(self, intg, nvars):
+        # Get the solution bases from the system
+        ubases = {etype: eles.basis.ubasis
+                  for etype, eles in intg.system.ele_map.items()}
+
+        self._configure_ubases_nvars(ubases, nvars)
+
+    def configure_with_cfg_nvars(self, cfg, nvars):
+        ubases = {}
+
+        for etype in self.mesh.eidxs:
+            shapecls = subclass_where(BaseShape, name=etype)
+            ubases[etype] = shapecls(None, cfg).ubasis
+
+        self._configure_ubases_nvars(ubases, nvars)
+
+    def _configure_ubases_nvars(self, ubases, nvars):
+        comm, rank, root = get_comm_rank_root()
+        locs = self.locs
+        self.pinfo = {}
+
+        for j, (etype, eidxs) in enumerate(self.mesh.eidxs.items()):
+            eimap = np.argsort(eidxs)
+            ubasis = ubases[etype]
+
+            # Filter points which do not belong to this element type
+            elocs = locs['cidx'] == self.mesh.codec.index(f'eles/{etype}')
+            elocs = elocs.nonzero()[0]
+
+            # See what points we have
+            esrch = np.searchsorted(eidxs, locs[elocs]['eidx'], sorter=eimap)
+            for i, k, l in zip(elocs, esrch, locs[elocs]):
+                if k < eimap.size and eidxs[eimap[k]] == l['eidx']:
+                    op = ubasis.nodal_basis_at(l['tloc'][None], clean=False)
+                    self.pinfo[i] = (j, eimap[k], op)
+
+        # Tell the root rank which points we are responsible for
+        ptsrank = comm.gather(list(self.pinfo), root=root)
+
+        if rank == root:
+            # Allocate a buffer to store the sampled points
+            self._ptsbuf = ptsbuf = np.empty((len(self.pts), nvars))
+
+            # Compute the counts and displacements, sans nvars
+            ptscounts = np.array([len(pr) for pr in ptsrank])
+            ptsdisps = np.concatenate(([0], np.cumsum(ptscounts[:-1])))
+
+            if ptscounts.sum() != len(self.pts):
+                raise RuntimeError('Missing points in solution')
+
+            # Form the MPI Gatherv receive buffer tuple
+            self._ptsrecv = (ptsbuf, (nvars*ptscounts, nvars*ptsdisps))
+
+            # Form the reordering list
+            self._ptsinv = np.argsort([i for pr in ptsrank for i in pr])
+
+    def sample(self, solns, process=None):
+        comm, rank, root = get_comm_rank_root()
+
+        # Get information about the points we are responsible for
+        pinfo = self.pinfo.values()
+
+        # Perform the sampling and interpolation
+        samples = [op @ solns[et][:, :, ei] for et, ei, op in pinfo]
+        samples = np.array(samples, dtype=float).squeeze()
+
+        # Post-process the samples
+        if process:
+            samples = np.ascontiguousarray(process(samples))
+
+        # Gather to the root rank and return
+        if rank == root:
+            comm.Gatherv(samples, self._ptsrecv, root=root)
+            return self._ptsbuf[self._ptsinv]
+        else:
+            comm.Gatherv(samples, None, root=root)
+            return None
+
+
+def _read_pts(ptsf, ndims=None, skip=0):
+    def line_reader(f):
+        for l in f:
+            yield l.replace(',', ' ')
+
+    # Read in the points
+    pts = np.loadtxt(line_reader(ptsf), skiprows=skip)
+    pts = np.atleast_2d(pts)
+
+    # Validate the dimensionality
+    if ndims and pts.shape[1] != ndims:
+        raise ValueError('Invalid point set dimensionality')
+
+    return pts
+
+
+def _process_con_to_pri(elementscls, ndims, cfg):
+    nvars = len(elementscls.convarmap[ndims])
+    con_to_pri = elementscls.con_to_pri
+    diff_con_to_pri = elementscls.diff_con_to_pri
+
+    def process(samps):
+        if samps.size:
+            samps = samps.T
+
+            # Convert the samples to primitive variables
+            psamps = con_to_pri(samps[:nvars], cfg)
+
+            # Also convert any gradient data
+            if len(samps) == (1 + ndims)*nvars:
+                diff_con = samps[nvars:].reshape(nvars, ndims, -1)
+                diff_pri = diff_con_to_pri(samps[:nvars], diff_con, cfg)
+
+                psamps += [f for gf in diff_pri for f in gf]
+
+            samps = np.array(psamps).T
+
+        return samps
+
+    return process
+
+
 class SamplerPlugin(BaseSolnPlugin):
     name = 'sampler'
     systems = ['*']
@@ -210,32 +354,35 @@ class SamplerPlugin(BaseSolnPlugin):
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
-        # Output frequency and format
+        # Output frequency
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
+
+        # Output format
         self.fmt = self.cfg.get(cfgsect, 'format', 'primitive')
+        if self.fmt == 'primitive':
+            self._process = _process_con_to_pri(self.elementscls, self.ndims,
+                                                self.cfg)
+        else:
+            self._process = None
 
-        # Search locations in transformed and physical space
-        self.pts, self._pinfo = self._process_pts(intg)
+        # Decide if gradients should be sampled or not
+        self._sample_grads = self.cfg.getbool(cfgsect, 'sample-gradients',
+                                              False)
 
-        # Tell the root rank which points we are responsible for
-        ptsrank = comm.gather(list(self._pinfo), root=root)
+        # Get the sample points
+        spts = self.cfg.get(self.cfgsect, 'samp-pts')
+        if ',' in spts:
+            spts = self.cfg.getliteral(self.cfgsect, 'samp-pts')
 
+        # Determine the number of variables per sample
+        self.nsvars = (1 + self.ndims*self._sample_grads)*self.nvars
+
+        # Construct and configure the point sampler
+        self.psampler = PointSampler(intg.system.mesh, spts)
+        self.psampler.configure_with_intg_nvars(intg, self.nsvars)
+
+        # Have the root rank open the output file
         if rank == root:
-            nvars = self.nvars
-
-            # Allocate a buffer to store the sampled points
-            self._ptsbuf = ptsbuf = np.empty((len(self.pts), self.nvars))
-
-            # Compute the counts and displacements, sans nvars
-            ptscounts = np.array([len(pr) for pr in ptsrank])
-            ptsdisps = np.concatenate(([0], np.cumsum(ptscounts[:-1])))
-
-            # Form the MPI Gatherv receive buffer tuple
-            self._ptsrecv = (ptsbuf, (nvars*ptscounts, nvars*ptsdisps))
-
-            # Form the reordering list
-            self._ptsinv = np.argsort([i for pr in ptsrank for i in pr])
-
             match self.cfg.get(cfgsect, 'file-format', 'csv'):
                 case 'csv':
                     self._init_csv()
@@ -243,15 +390,13 @@ class SamplerPlugin(BaseSolnPlugin):
                     self._init_hdf5()
                 case _:
                     raise ValueError('Invalid file format')
-        else:
-            self._ptsrecv = None
 
     def _init_csv(self):
         self.outf = init_csv(self.cfg, self.cfgsect, self._header)
         self._write = self._write_csv
 
     def _write_csv(self, t, samps):
-        for ploc, samp in zip(self.pts, samps):
+        for ploc, samp in zip(self.psampler.pts, samps):
             print(t, *ploc, *samp, sep=',', file=self.outf)
 
         # Flush to disk
@@ -260,7 +405,8 @@ class SamplerPlugin(BaseSolnPlugin):
     def _init_hdf5(self):
         outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))
 
-        npts, nvars = len(self.pts), self.nvars
+        pts = self.psampler.pts
+        npts, nsvars = len(pts), self.nsvars
         chunk = 128
 
         dset = self.cfg.get(self.cfgsect, 'file-dataset')
@@ -270,15 +416,15 @@ class SamplerPlugin(BaseSolnPlugin):
             p = d.dims[1][0]
 
             # Ensure the point sets are compatible
-            if p.shape != self.pts.shape or not np.allclose(p[:], self.pts):
+            if p.shape != pts.shape or not np.allclose(p[:], pts):
                 raise ValueError('Inconsistent sample points')
         else:
-            d = outf.create_dataset(dset, (0, npts, nvars), float,
-                                    chunks=(chunk, min(4, npts), nvars),
-                                    maxshape=(None, npts, nvars))
+            d = outf.create_dataset(dset, (0, npts, nsvars), float,
+                                    chunks=(chunk, min(4, npts), nsvars),
+                                    maxshape=(None, npts, nsvars))
             t = outf.create_dataset(f'{dset}_t', (0,), float, chunks=(chunk,),
                                     maxshape=(None,))
-            p = outf.create_dataset(f'{dset}_p', data=self.pts)
+            p = outf.create_dataset(f'{dset}_p', data=pts)
 
             t.make_scale('t')
             p.make_scale('pts')
@@ -295,94 +441,58 @@ class SamplerPlugin(BaseSolnPlugin):
 
     @property
     def _header(self):
-        colnames = ['t', 'x', 'y', 'z'][:self.ndims + 1]
+        dims = 'xyz'[:self.ndims]
 
         if self.fmt == 'primitive':
-            colnames += self.elementscls.privarmap[self.ndims]
+            vmap = self.elementscls.privarmap[self.ndims]
         else:
-            colnames += self.elementscls.convarmap[self.ndims]
+            vmap = self.elementscls.convarmap[self.ndims]
+
+        colnames = ['t', *dims, *vmap]
+        if self._sample_grads:
+            colnames.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
 
         return ','.join(colnames)
 
-    def _load_pts_locs(self, mesh):
-        spts = self.cfg.get(self.cfgsect, 'samp-pts')
+    def _process_pri(self, samps):
+        if samps.size:
+            ecls = self.elementscls
+            samps = samps.T
 
-        # If we have a named set then load the points from the mesh
-        if re.match(r'\w+$', spts):
-            comm, rank, root = get_comm_rank_root()
+            # Convert the samples to primitive variables
+            psamps = ecls.con_to_pri(samps[:self.nvars], self.cfg)
 
-            if rank == root:
-                sinfo = mesh.raw[f'plugins/sampler/{spts}'][:]
-            else:
-                sinfo = None
+            # Also convert any gradient data
+            if self._sample_grads:
+                diff_con = samps[nvars:].reshape(self.nvars, self.ndims, -1)
+                psamps += ecls.diff_con_to_pri(samps[:self.nvars], diff_con,
+                                               self.cfg)
 
-            sinfo = comm.bcast(sinfo, root=root)
+            samps = np.array(psamps).T
 
-            return sinfo['ploc'], sinfo[['cidx', 'eidx', 'tloc']]
-        # Otherwise we have a list of points to parse and locate
-        else:
-            pts = np.array(self.cfg.getliteral(self.cfgsect, 'samp-pts'))
-            locs = PointLocator(mesh).locate(pts)
-
-            return pts, locs[['cidx', 'eidx', 'tloc']]
-
-    def _process_pts(self, intg):
-        mesh = intg.system.mesh
-        pts, locs = self._load_pts_locs(mesh)
-
-        pinfo = {}
-
-        for j, (etype, eidxs) in enumerate(mesh.eidxs.items()):
-            eimap = np.argsort(eidxs)
-            ubasis = intg.system.ele_map[etype].basis.ubasis
-
-            # Filter points which do not belong to this element type
-            elocs = locs['cidx'] == mesh.codec.index(f'eles/{etype}')
-            elocs = elocs.nonzero()[0]
-
-            # See what points we have
-            esrch = np.searchsorted(eidxs, locs[elocs]['eidx'], sorter=eimap)
-            for i, k, l in zip(elocs, esrch, locs[elocs]):
-                if k < eimap.size and eidxs[eimap[k]] == l['eidx']:
-                    op = ubasis.nodal_basis_at(l['tloc'][None], clean=False)
-                    pinfo[i] = (j, eimap[k], op)
-
-        return pts, pinfo
-
-    def _process_samples(self, samps):
-        samps = np.array(samps)
-
-        # If necessary then convert to primitive form
-        if self.fmt == 'primitive' and samps.size:
-            samps = self.elementscls.con_to_pri(samps.T, self.cfg)
-            samps = np.array(samps).T
-
-        return np.ascontiguousarray(samps, dtype=float)
+        return samps
 
     def __call__(self, intg):
         # Return if no output is due
         if intg.nacptsteps % self.nsteps:
             return
 
-        # MPI info
-        comm, rank, root = get_comm_rank_root()
+        # Fetch the solution
+        soln = list(intg.soln)
 
-        # Get the solution matrices
-        solns = intg.soln
+        # If requested also fetch solution gradients
+        if self._sample_grads:
+            for i, g in enumerate(intg.grad_soln):
+                g = g.transpose(1, 2, 0, 3)
+                g = g.reshape(len(g), self.ndims*self.nvars, -1)
+                soln[i] = np.hstack([soln[i], g])
 
-        # Get information about the points we are responsible for
-        pinfo = self._pinfo.values()
-
-        # Perform the sampling and interpolation
-        samples = [op @ solns[et][:, :, ei] for et, ei, op in pinfo]
-        samples = self._process_samples(samples)
-
-        # Gather to the root rank
-        comm.Gatherv(samples, self._ptsrecv, root=root)
+        # Perform the sampling
+        samps = self.psampler.sample(soln, process=self._process)
 
         # If we're the root rank then output
-        if rank == root:
-            self._write(intg.tcurr, self._ptsbuf[self._ptsinv])
+        if samps is not None:
+            self._write(intg.tcurr, samps)
 
 
 class SamplerCLIPlugin(BaseCLIPlugin):
@@ -423,6 +533,23 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         ap_remove.add_argument('name', help='point set')
         ap_remove.set_defaults(process=cls.remove_cmd)
 
+        # Sample command
+        ap_sample = sp.add_parser('sample', help='sampler sample --help')
+        ap_sample.add_argument('mesh', help='input mesh file')
+        ap_sample.add_argument('soln', help='input solution file')
+        sample_opts = ap_sample.add_mutually_exclusive_group(required=True)
+        sample_opts.add_argument('-n', '--name', help='point set')
+        sample_opts.add_argument('-p', '--pts', type=FileType('r'),
+                                 help='input points file')
+        ap_sample.add_argument('--skip', type=int, default=0,
+                               help='number of rows to skip')
+        ap_sample.add_argument(
+            '-f', '--format',  choices=['conservative', 'primitive'],
+             default='conservative', help='output format'
+        )
+        ap_sample.add_argument('-s', '--sep', default='\t', help='separator')
+        ap_sample.set_defaults(process=cls.sample_cmd)
+
     @cli_external
     def add_cmd(self, args):
         # Initialise MPI
@@ -446,17 +573,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 raise ValueError(f'Point set {pname} already exists; use '
                                  '-f to replace')
 
-            def line_reader(f):
-                for l in f:
-                    yield l.replace(',', ' ')
-
-            # Read in the points
-            pts = np.loadtxt(line_reader(args.pts), skiprows=args.skip)
-            pts = np.atleast_2d(pts)
-
-            # Validate the dimensionality
-            if pts.shape[1] != mesh.ndims:
-                raise ValueError('Invalid point set dimensionality')
+            pts = _read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
         else:
             pts = None
 
@@ -513,3 +630,78 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 raise ValueError(f'Point set {args.name} does not exist')
 
             del mesh[f'plugins/sampler/{args.name}']
+
+    @cli_external
+    def sample_cmd(self, args):
+        # Initialise MPI
+        init_mpi()
+
+        # Get our MPI info
+        comm, rank, root = get_comm_rank_root()
+
+        # Read the mesh and solution
+        reader = NativeReader(args.mesh, construct_con=False)
+        mesh, soln = reader.load_subset_mesh_soln(args.soln)
+
+        # Dimension and field names
+        dims = 'xyz'[:mesh.ndims]
+        fields = soln['stats'].get('data', 'fields').split(',')
+
+        # Read the sample points from a CSV file
+        if args.pts:
+            if rank == root:
+                pts = _read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
+            else:
+                pts = None
+
+            spts = pts = comm.bcast(pts, root=root)
+        # Obtain the pre-processed sample points from the mesh
+        else:
+            spts = args.name
+
+            if rank == root:
+                pts = mesh.raw[f'plugin/sampler/{spts}']['ploc']
+
+        # Handle conversion from conservative to primitive variables
+        if args.format == 'primitive':
+            from pyfr.solvers.base import BaseSystem
+
+            if soln['stats'].get('data', 'prefix') != 'soln':
+                raise ValueError('Primitive output only supported for '
+                                 'solution files')
+
+            # Obtain the system associated with the solution
+            systemcls = subclass_where(
+                BaseSystem, name=soln['config'].get('solver', 'system')
+            )
+            elementscls = systemcls.elementscls
+            vmap = elementscls.privarmap[mesh.ndims]
+
+            # Solution data
+            if len(fields) == len(vmap):
+                fields = list(vmap)
+            # Solution and gradient data
+            elif len(fields) == (1 + mesh.ndims)*len(vmap):
+                fields = list(vmap)
+                fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
+            else:
+                raise ValueError('Invalid number of field variables')
+
+            process = _process_con_to_pri(elementscls, mesh.ndims,
+                                          soln['config'])
+        else:
+            process = None
+
+        # Construct and configure the point sampler
+        sampler = PointSampler(mesh, spts)
+        sampler.configure_with_cfg_nvars(soln['config'], len(fields))
+
+        # Sample the solution
+        samps = sampler.sample([soln[etype] for etype in mesh.eidxs],
+                               process=process)
+
+        if rank == root:
+            print(*dims, *fields, sep=args.sep)
+
+            for ploc, samp in zip(pts, samps):
+                print(*ploc, *samp, sep=args.sep)

@@ -5,24 +5,36 @@
 Periodically samples specific points in the volume and writes them out
 to a CSV file. Parameterised with
 
-1. ``nsteps`` --- sample every ``nsteps``:
+#. ``nsteps`` --- sample every ``nsteps``:
 
     *int*
 
-2. ``samp-pts`` --- list of points to sample or a *named* point set:
+#. ``samp-pts`` --- list of points to sample or a *named* point set:
 
     ``[(x, y), (x, y), ...]`` | ``[(x, y, z), (x, y, z), ...]`` | *name*
 
-3. ``format`` --- output variable format:
+#. ``format`` --- output variable format:
 
     ``primitive`` | ``conservative``
 
-4. ``file`` --- output file path; should the file already exist it
+#. ``sample-gradients`` --- if to sample gradient information or not:
+
+    *boolean*
+
+#. ``file`` --- output file path; should the file already exist it
    will be appended to:
 
     *string*
 
-5. ``header`` --- if to output a header row or not:
+#. ``file-format`` --- type of file to output:
+
+    ``csv`` | ``hdf5``
+
+#. ``file-dataset`` --- for HDF5 output the dataset to write into:
+
+    *string*
+
+#. ``header`` --- for CSV output to output a header row or not:
 
     *boolean*
 
@@ -63,3 +75,9 @@ functions are available
    Example::
 
      pyfr sampler remove mesh.pyfrm mypoints
+
+#. ``pyfr sampler sample`` --- samples a solution file.
+
+   Example::
+
+     pyfr sampler sample --pts=mypoints.csv mesh.pyfrm soln.pyfrs
