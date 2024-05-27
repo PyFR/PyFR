@@ -235,9 +235,11 @@ class PointSampler:
         self._configure_ubases_nvars(ubases, nvars)
 
     def _configure_ubases_nvars(self, ubases, nvars):
-        comm, rank, root = get_comm_rank_root()
+        self.nvars = nvars
         locs = self.locs
-        self.pinfo = {}
+
+        comm, rank, root = get_comm_rank_root()
+        ptsrank, pinfo = [], defaultdict(list)
 
         for j, (etype, eidxs) in enumerate(self.mesh.eidxs.items()):
             eimap = np.argsort(eidxs)
@@ -252,10 +254,21 @@ class PointSampler:
             for i, k, l in zip(elocs, esrch, locs[elocs]):
                 if k < eimap.size and eidxs[eimap[k]] == l['eidx']:
                     op = ubasis.nodal_basis_at(l['tloc'][None], clean=False)
-                    self.pinfo[i] = (j, eimap[k], op)
+
+                    ptsrank.append(i)
+                    pinfo[j, eimap[k]].append((i, op))
+
+        # Group points according to the element they're inside
+        self.pinfo, self.pcount = [], len(ptsrank)
+        for (et, ei), info in pinfo.items():
+            if len(info) == 1:
+                self.pinfo.append((et, ei, *info[0]))
+            else:
+                idxs, ops = zip(*info)
+                self.pinfo.append((et, ei, np.array(idxs), np.vstack(ops)))
 
         # Tell the root rank which points we are responsible for
-        ptsrank = comm.gather(list(self.pinfo), root=root)
+        ptsrank = comm.gather(ptsrank, root=root)
 
         if rank == root:
             # Allocate a buffer to store the sampled points
@@ -277,12 +290,10 @@ class PointSampler:
     def sample(self, solns, process=None):
         comm, rank, root = get_comm_rank_root()
 
-        # Get information about the points we are responsible for
-        pinfo = self.pinfo.values()
-
-        # Perform the sampling and interpolation
-        samples = [op @ solns[et][:, :, ei] for et, ei, op in pinfo]
-        samples = np.array(samples, dtype=float).squeeze()
+        # Perform the sampling
+        samples = np.empty((self.pcount, self.nvars))
+        for et, ei, idxs, ops in self.pinfo:
+            samples[idxs] = ops @ solns[et][:, :, ei]
 
         # Post-process the samples
         if process:
