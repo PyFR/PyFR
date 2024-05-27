@@ -4,22 +4,36 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements:
-    privarmap = {2: ['rho', 'u', 'v', 'p'],
-                 3: ['rho', 'u', 'v', 'w', 'p']}
+    @staticmethod
+    def privars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'u', 'v', 'p']
+        elif ndims == 3:
+            return ['rho', 'u', 'v', 'w', 'p']
 
-    convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
-                 3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+    @staticmethod
+    def convars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'rhou', 'rhov', 'E']
+        elif ndims == 3:
+            return ['rho', 'rhou', 'rhov', 'rhow', 'E']
 
-    dualcoeffs = convarmap
+    dualcoeffs = convars
 
-    visvarmap = {
-        2: {'density': ['rho'],
-            'velocity': ['u', 'v'],
-            'pressure': ['p']},
-        3: {'density': ['rho'],
-            'velocity': ['u', 'v', 'w'],
-            'pressure': ['p']}
-    }
+    @staticmethod
+    def visvars(ndims, cfg):
+        if ndims == 2:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v'],
+                'pressure': ['p']
+            }
+        elif ndims == 3:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v', 'w'],
+                'pressure': ['p']
+            }
 
     @staticmethod
     def pri_to_con(pris, cfg):

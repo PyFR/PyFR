@@ -14,7 +14,7 @@ from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, DatasetAppender,
 from pyfr.polys import get_polybasis
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
-from pyfr.util import memoize, subclass_where
+from pyfr.util import first, memoize, subclass_where
 
 
 class PointLocator:
@@ -325,7 +325,7 @@ def _read_pts(ptsf, ndims=None, skip=0):
 
 
 def _process_con_to_pri(elementscls, ndims, cfg):
-    nvars = len(elementscls.convarmap[ndims])
+    nvars = len(elementscls.convars(ndims, cfg))
     con_to_pri = elementscls.con_to_pri
     diff_con_to_pri = elementscls.diff_con_to_pri
 
@@ -396,14 +396,14 @@ class SamplerPlugin(BaseSolnPlugin):
         if rank == root:
             match self.cfg.get(cfgsect, 'file-format', 'csv'):
                 case 'csv':
-                    self._init_csv()
+                    self._init_csv(intg)
                 case 'hdf5':
-                    self._init_hdf5()
+                    self._init_hdf5(intg)
                 case _:
                     raise ValueError('Invalid file format')
 
-    def _init_csv(self):
-        self.outf = init_csv(self.cfg, self.cfgsect, self._header)
+    def _init_csv(self, intg):
+        self.outf = init_csv(self.cfg, self.cfgsect, self._header(intg))
         self._write = self._write_csv
 
     def _write_csv(self, t, samps):
@@ -413,7 +413,7 @@ class SamplerPlugin(BaseSolnPlugin):
         # Flush to disk
         self.outf.flush()
 
-    def _init_hdf5(self):
+    def _init_hdf5(self, intg):
         outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))
 
         pts = self.psampler.pts
@@ -450,14 +450,11 @@ class SamplerPlugin(BaseSolnPlugin):
         self._t(t)
         self._samps(samps)
 
-    @property
-    def _header(self):
+    def _header(self, intg):
+        eles = first(intg.system.ele_map.values())
         dims = 'xyz'[:self.ndims]
 
-        if self.fmt == 'primitive':
-            vmap = self.elementscls.privarmap[self.ndims]
-        else:
-            vmap = self.elementscls.convarmap[self.ndims]
+        vmap = eles.privars if self.fmt == 'primitive' else eles.convars
 
         colnames = ['t', *dims, *vmap]
         if self._sample_grads:
@@ -686,7 +683,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 BaseSystem, name=soln['config'].get('solver', 'system')
             )
             elementscls = systemcls.elementscls
-            vmap = elementscls.privarmap[mesh.ndims]
+            vmap = elementscls.privars(mesh.ndims, soln['config'])
 
             # Solution data
             if len(fields) == len(vmap):

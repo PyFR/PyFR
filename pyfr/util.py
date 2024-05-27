@@ -114,6 +114,10 @@ def merge_intervals(ivals, tol=1e-5):
     return mivals
 
 
+def first(v):
+    return next(iter(v))
+
+
 def subclasses(cls, just_leaf=False):
     sc = cls.__subclasses__()
     ssc = [g for s in sc for g in subclasses(s, just_leaf)]

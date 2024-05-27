@@ -5,6 +5,7 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BaseSolnPlugin, SurfaceMixin, init_csv
+from pyfr.util import first
 
 
 FWHSurfParams = namedtuple(
@@ -40,13 +41,13 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
 
         # Far field conditions
         self.incomp = intg.system.name in {'ac-euler', 'ac-navier-stokes'}
-        privarmap = intg.system.elementscls.privarmap[ndims]
-        self._vidx = [x in 'uvw' for x in privarmap]
-        self._pidx = privarmap.index('p')
+        privars = first(intg.system.ele_map.values()).privars
+        self._vidx = [x in 'uvw' for x in privars]
+        self._pidx = privars.index('p')
         self.consts = self.cfg.items_as('constants', float)
 
         self.qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts)
-                     for k in privarmap}
+                     for k in privars}
         self.uinf = np.array([[self.qinf[k]] for k in 'uvw'[:ndims]])
 
         if self.incomp:

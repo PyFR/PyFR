@@ -10,7 +10,7 @@ from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, PostactionMixin,
                                RegionMixin, cli_external)
 from pyfr.progress import NullProgressBar
 from pyfr.writers.native import NativeWriter
-from pyfr.util import merge_intervals
+from pyfr.util import first, merge_intervals
 
 
 class TavgMixin:
@@ -45,6 +45,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
         # Underlying elements class
         self.elementscls = intg.system.elementscls
+
+        # Primitive variables
+        self.privars = first(intg.system.ele_map.values()).privars
 
         # Averaging mode
         self.mode = self.cfg.get(cfgsect, 'mode', 'windowed')
@@ -144,8 +147,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         for ex in self.aexprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
-        privarmap = self.elementscls.privarmap[self.ndims]
-        self._gradpinfo = [(pname, privarmap.index(pname))
+        self._gradpinfo = [(pname, self.privars.index(pname))
                            for pname in gradpnames]
 
     def _init_accumex(self, intg):
@@ -156,9 +158,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
     def _eval_acc_exprs(self, intg):
         exprs = []
-
-        # Get the primitive variable names
-        pnames = self.elementscls.privarmap[self.ndims]
 
         # Compute the gradients
         if self._gradpinfo:
@@ -172,7 +171,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             psolns = self.elementscls.con_to_pri(soln, self.cfg)
 
             # Prepare the substitutions dictionary
-            subs = dict(zip(pnames, psolns))
+            subs = dict(zip(self.privars, psolns))
 
             # Prepare any required gradients
             if self._gradpinfo:

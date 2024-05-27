@@ -2,6 +2,7 @@ from collections import defaultdict
 from configparser import NoOptionError
 
 from pyfr.integrators.base import BaseCommon
+from pyfr.util import first
 
 
 class BaseDualPseudoIntegrator(BaseCommon):
@@ -55,15 +56,14 @@ class BaseDualPseudoIntegrator(BaseCommon):
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
 
-        elementscls = self.system.elementscls
-        self._subdims = [elementscls.convarmap[self.system.ndims].index(v)
-                         for v in elementscls.dualcoeffs[self.system.ndims]]
+        eles = first(self.system.ele_map.values())
+        self._subdims = [eles.convars.index(v) for v in eles.dualcoeffs]
 
         # Convergence tolerances
         self._pseudo_residtol = residtol = []
-        for v in elementscls.convarmap[self.system.ndims]:
+        for v in eles.convars:
             try:
-                residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol-' + v))
+                residtol.append(cfg.getfloat(sect, f'pseudo-resid-tol-{v}'))
             except NoOptionError:
                 residtol.append(cfg.getfloat(sect, 'pseudo-resid-tol'))
 

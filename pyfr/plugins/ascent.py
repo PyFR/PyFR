@@ -400,9 +400,8 @@ class _AscentRenderer:
         for field, path, expr in self._exprs:
             g_pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', expr))
 
-        privarmap = adapter.elementscls.privarmap[adapter.ndims]
-        self._gradpinfo = [(pname, privarmap.index(pname))
-                           for pname in g_pnames]
+        privars = adapter.elementscls.privars(adapter.ndims, adapter.scfg)
+        self._gradpinfo = [(pname, privars.index(pname)) for pname in g_pnames]
 
     def _init_pipelines(self, adapter, cfgsect):
         pipel_cfg = {}
@@ -461,7 +460,7 @@ class _AscentRenderer:
         elementscls = adapter.elementscls
 
         # Get the primitive variable names
-        pnames = elementscls.privarmap[adapter.ndims]
+        pames = elementscls.privars(adapter.ndims, adapter.scfg)
 
         # Obtain the solution
         soln = adapter.soln

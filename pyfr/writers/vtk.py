@@ -395,8 +395,8 @@ class VTKWriter(BaseWriter):
         if self.dataprefix == 'soln':
             self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
-            self._soln_fields = list(self.elementscls.privarmap[self.ndims])
-            self._vtk_vars = dict(self.elementscls.visvarmap[self.ndims])
+            self._soln_fields = self.elementscls.privars(self.ndims, self.cfg)
+            self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
             self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
 
             # See if our solution contains gradient data
@@ -506,7 +506,7 @@ class VTKWriter(BaseWriter):
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
-        nvars = len(ecls.privarmap[self.ndims])
+        nvars = len(ecls.privars(self.ndims, self.cfg))
 
         # Convert the solution to primitive variables
         fields = ecls.con_to_pri(soln[:nvars], self.cfg)

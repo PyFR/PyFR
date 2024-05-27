@@ -8,7 +8,7 @@ import numpy as np
 from pyfr.backends.base import NullKernel
 from pyfr.inifile import Inifile
 from pyfr.shapes import BaseShape
-from pyfr.util import memoize, subclasses
+from pyfr.util import first, memoize, subclasses
 
 
 class BaseSystem:
@@ -99,7 +99,7 @@ class BaseSystem:
 
             # Get the names of the conserved variables (fields)
             solnfields = solnsts.get('data', 'fields').split(',')
-            currfields = eles[0].convarmap[eles[0].ndims]
+            currfields = eles[0].convars
 
             # Construct a mapping between the solution file and the system
             try:
