@@ -34,7 +34,7 @@ class BaseRegion:
             sfaces.update((etype, i, j) for i in eidxs for j in range(nfaces))
 
         # Eliminate any faces with internal connectivity
-        for l, r in zip(mesh.con):
+        for l, r in zip(*mesh.con):
             if l in sfaces and r in sfaces:
                 sfaces.difference_update([l, r])
 
@@ -95,7 +95,7 @@ class BoundaryRegion(BaseRegion):
         # Handle the case where multiple layers have been requested
         if self.nlayers > 1:
             # Load our internal connectivity array
-            con = [(l[:2], r[:2]) for l, r in zip(mesh.con)]
+            con = [(l[:2], r[:2]) for l, r in zip(*mesh.con)]
 
             # Load our partition boundary connectivity arrays
             pcon = {}
