@@ -87,6 +87,8 @@ class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
 
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
             self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
+            self._tplargs['e_func'] = self.cfg.get('solver-entropy-filter',
+                                                   'e-func', 'numerical')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
