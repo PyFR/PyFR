@@ -176,6 +176,7 @@ def process_import(args):
 
 
 def process_partition_list(args):
+
     with h5py.File(args.mesh, 'r') as mesh:
         print('name', 'parts', sep=args.sep)
 
@@ -186,88 +187,87 @@ def process_partition_list(args):
 
 def process_partition_info(args):
     # Open the mesh
-    mesh = h5py.File(args.mesh, 'r')
+    with h5py.File(args.mesh, 'r') as mesh:
+        # Read the partition region info from the mesh
+        regions = mesh[f'partitionings/{args.name}/eles'].attrs['regions']
 
-    # Read the partition region info from the mesh
-    regions = mesh[f'partitionings/{args.name}/eles'].attrs['regions']
+        # Print out the header
+        print('part', *mesh['eles'], sep=args.sep)
 
-    # Print out the header
-    print('part', *mesh['eles'], sep=args.sep)
-
-    # Compute and output the number of elements in each partition
-    for i, neles in enumerate(regions[:, 1:] - regions[:, :-1]):
-        print(i, *neles, sep=args.sep)
+        # Compute and output the number of elements in each partition
+        for i, neles in enumerate(regions[:, 1:] - regions[:, :-1]):
+            print(i, *neles, sep=args.sep)
 
 
 def process_partition_add(args):
     # Open the mesh
-    mesh = h5py.File(args.mesh, 'r+')
+    with h5py.File(args.mesh, 'r+') as mesh:
+        # Determine the element types
+        etypes = list(mesh['eles'])
 
-    # Determine the element types
-    etypes = list(mesh['eles'])
-
-    # Partition weights
-    if ':' in args.np:
-        pwts = [int(w) for w in args.np.split(':')]
-    else:
-        pwts = [1]*int(args.np)
-
-    # Element weights
-    if args.elewts == ['balanced']:
-        ewts = None
-    elif len(etypes) == 1:
-        ewts = {etypes[0]: 1}
-    else:
-        ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
-
-    # Ensure all weights have been provided
-    if ewts is not None and len(ewts) != len(etypes):
-        missing = ', '.join(set(etypes) - set(ewts))
-        raise ValueError(f'Missing element weights for: {missing}')
-
-    # Get the partitioning name
-    pname = args.name or str(len(pwts))
-    if not re.match(r'\w+$', pname):
-        raise ValueError('Invalid partitioning name')
-
-    # Check it does not already exist unless --force is given
-    if pname in mesh['partitionings'] and not args.force:
-        raise ValueError('Partitioning already exists; use -f to replace')
-
-    # Path to store the partitioning in the mesh
-    ppath = f'partitionings/{pname}'
-
-    # Partitioner-specific options
-    opts = dict(s.split(':', 1) for s in args.popts)
-
-    # Create the partitioner
-    if args.partitioner:
-        part = get_partitioner(args.partitioner, pwts, ewts, opts=opts)
-    else:
-        for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
-            try:
-                part = get_partitioner(name, pwts, ewts)
-                break
-            except OSError:
-                pass
+        # Partition weights
+        if ':' in args.np:
+            pwts = [int(w) for w in args.np.split(':')]
         else:
-            raise RuntimeError('No partitioners available')
+            pwts = [1]*int(args.np)
 
-    # Partition the mesh
-    pinfo = part.partition(mesh, args.progress)
-    (partitioning, pregions), (neighbours, nregions) = pinfo
-
-    # Write out the new partitioning
-    with args.progress.start('Write partitioning'):
-        if ppath in mesh:
-            mesh[f'{ppath}/eles'][:] = partitioning
-            del mesh[f'{ppath}/neighbours']
+        # Element weights
+        if args.elewts == ['balanced']:
+            ewts = None
+        elif len(etypes) == 1:
+            ewts = {etypes[0]: 1}
         else:
-            mesh[f'{ppath}/eles'] = partitioning
+            ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
 
-        mesh[f'{ppath}/neighbours'] = neighbours
-        mesh[f'{ppath}/eles'].attrs['regions'] = pregions
-        mesh[f'{ppath}/neighbours'].attrs['regions'] = nregions
+        # Ensure all weights have been provided
+        if ewts is not None and len(ewts) != len(etypes):
+            missing = ', '.join(set(etypes) - set(ewts))
+            raise ValueError(f'Missing element weights for: {missing}')
+
+        # Get the partitioning name
+        pname = args.name or str(len(pwts))
+        if not re.match(r'\w+$', pname):
+            raise ValueError('Invalid partitioning name')
+
+        # Check it does not already exist unless --force is given
+        if pname in mesh['partitionings'] and not args.force:
+            raise ValueError('Partitioning already exists; use -f to replace')
+
+        # Path to store the partitioning in the mesh
+        ppath = f'partitionings/{pname}'
+
+        # Partitioner-specific options
+        opts = dict(s.split(':', 1) for s in args.popts)
+
+        # Create the partitioner
+        if args.partitioner:
+            part = get_partitioner(args.partitioner, pwts, ewts, opts=opts)
+        else:
+            parts = sorted(cls.name for cls in subclasses(BasePartitioner))
+            for name in parts:
+                try:
+                    part = get_partitioner(name, pwts, ewts)
+                    break
+                except OSError:
+                    pass
+            else:
+                raise RuntimeError('No partitioners available')
+
+        # Partition the mesh
+        pinfo = part.partition(mesh, args.progress)
+        (partitioning, pregions), (neighbours, nregions) = pinfo
+
+        # Write out the new partitioning
+        with args.progress.start('Write partitioning'):
+            if ppath in mesh:
+                mesh[f'{ppath}/eles'][:] = partitioning
+                del mesh[f'{ppath}/neighbours']
+            else:
+                mesh[f'{ppath}/eles'] = partitioning
+
+            mesh[f'{ppath}/neighbours'] = neighbours
+            mesh[f'{ppath}/eles'].attrs['regions'] = pregions
+            mesh[f'{ppath}/neighbours'].attrs['regions'] = nregions
 
 
 def process_partition_remove(args):
