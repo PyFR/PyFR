@@ -292,10 +292,7 @@ def process_export(args):
         writer = get_writer_by_extn(extn, args)
 
     # Write the output file
-    if extn == '.vtu':
-        writer.write_vtu(args.outf)
-    else:
-        writer.write_pvtu(args.outf)
+    writer.write(args.outf)
 
 
 def _process_common(args, soln, cfg):
