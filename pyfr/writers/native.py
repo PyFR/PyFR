@@ -83,6 +83,7 @@ class NativeWriter:
             self._awriter = None
 
     def write(self, data, tcurr, metadata=None, timeout=0, callback=None):
+        async_ = bool(timeout)
         comm, rank, root = get_comm_rank_root()
 
         # Wait for any existing write operations to finish
@@ -111,17 +112,27 @@ class NativeWriter:
             gdata[etype] = gatherer(dset)
 
         # Delegate to _write to do the actual outputting
-        f, reqs = self._write(self.tname, gdata, metadata)
+        f, reqs = self._write(self.tname, gdata, metadata, async_=async_)
 
         # Determine the final output path
         path = self.fgen.send(tcurr)
 
-        awriter = _AsyncWriter(f, reqs, self.tname, path, timeout, callback)
+        def oncomplete():
+            # Close the file
+            f.Close()
 
-        if timeout == 0:
-            awriter.wait()
+            # Have the root rank move it into place
+            if rank == root:
+                mv(self.tname, path)
+
+            # Fire off any user-provided callback
+            if callback is not None:
+                callback(path)
+
+        if async_:
+            self._awriter = _AsyncCompleter(reqs, timeout, oncomplete)
         else:
-            self._awriter = awriter
+            oncomplete()
 
     def _prepare_file(self, path, metadata):
         doffs = {}
@@ -154,7 +165,7 @@ class NativeWriter:
 
         return doffs
 
-    def _write(self, path, data, metadata):
+    def _write(self, path, data, metadata, *, async_=True):
         comm, rank, root = get_comm_rank_root()
 
         # Have the root rank prepare the output file
@@ -174,7 +185,11 @@ class NativeWriter:
 
         def write_off(k, v, n):
             if len(v):
-                reqs.append(f.Iwrite_at(doffs[k] + n*(v.nbytes // len(v)), v))
+                args = (doffs[k] + n*(v.nbytes // len(v)), v)
+                if async_:
+                    reqs.append(f.Iwrite_at(*args))
+                else:
+                    f.Write_at(*args)
 
         # Write out our element data
         for etype, (gatherer, subset, *_) in self._einfo.items():
@@ -188,12 +203,9 @@ class NativeWriter:
         return f, reqs
 
 
-class _AsyncWriter:
-    def __init__(self, f, reqs, tname, fname, timeout, callback):
-        self.f = f
+class _AsyncCompleter:
+    def __init__(self, reqs, timeout, callback):
         self.reqs = reqs
-        self.tname = tname
-        self.fname = fname
         self.timeout = timeout
         self.callback = callback
 
@@ -212,14 +224,7 @@ class _AsyncWriter:
 
         # See if everyone is done
         if scal_coll(comm.Allreduce, int(self.done), op=mpi.LAND):
-            self.f.Close()
-
-            # Move the file into place
-            if rank == root:
-                mv(self.tname, self.fname)
-
-            if self.callback is not None:
-                self.callback(self.fname)
+            self.callback()
 
             return True
         else:
