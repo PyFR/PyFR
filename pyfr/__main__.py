@@ -176,7 +176,6 @@ def process_import(args):
 
 
 def process_partition_list(args):
-
     with h5py.File(args.mesh, 'r') as mesh:
         print('name', 'parts', sep=args.sep)
 
@@ -186,7 +185,6 @@ def process_partition_list(args):
 
 
 def process_partition_info(args):
-    # Open the mesh
     with h5py.File(args.mesh, 'r') as mesh:
         # Read the partition region info from the mesh
         regions = mesh[f'partitionings/{args.name}/eles'].attrs['regions']
@@ -200,7 +198,6 @@ def process_partition_info(args):
 
 
 def process_partition_add(args):
-    # Open the mesh
     with h5py.File(args.mesh, 'r+') as mesh:
         # Determine the element types
         etypes = list(mesh['eles'])
@@ -217,7 +214,8 @@ def process_partition_add(args):
         elif len(etypes) == 1:
             ewts = {etypes[0]: 1}
         else:
-            ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
+            ewts = (ew.split(':') for ew in args.elewts)
+            ewts = {e: int(w) for e, w in ewts}
 
         # Ensure all weights have been provided
         if ewts is not None and len(ewts) != len(etypes):

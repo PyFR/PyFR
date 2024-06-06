@@ -8,7 +8,6 @@ import numpy as np
 from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, get_start_end_csize, init_mpi, mpi
-from pyfr.nputil import iter_struct
 from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, DatasetAppender,
                                cli_external, init_csv, open_hdf5_a)
 from pyfr.polys import get_polybasis
@@ -68,8 +67,7 @@ class PointLocator:
 
     def _minloc(self, coll, x, y, ndim=None):
         dtype = y.dtype
-        fields = list(dtype.fields)
-        fields = fields if ndim is None else fields[:ndim]
+        fields = list(dtype.fields)[:ndim]
 
         def op(pmem, qmem, dt):
             p = np.frombuffer(pmem, dtype=dtype)
@@ -465,15 +463,16 @@ class SamplerPlugin(BaseSolnPlugin):
     def _process_pri(self, samps):
         if samps.size:
             ecls = self.elementscls
+            nvars = self.nvars
             samps = samps.T
 
             # Convert the samples to primitive variables
-            psamps = ecls.con_to_pri(samps[:self.nvars], self.cfg)
+            psamps = ecls.con_to_pri(samps[:nvars], self.cfg)
 
             # Also convert any gradient data
             if self._sample_grads:
-                diff_con = samps[nvars:].reshape(self.nvars, self.ndims, -1)
-                psamps += ecls.diff_con_to_pri(samps[:self.nvars], diff_con,
+                diff_con = samps[nvars:].reshape(nvars, self.ndims, -1)
+                psamps += ecls.diff_con_to_pri(samps[:nvars], diff_con,
                                                self.cfg)
 
             samps = np.array(psamps).T
