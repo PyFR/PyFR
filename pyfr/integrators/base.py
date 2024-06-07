@@ -31,7 +31,7 @@ class BaseIntegrator:
         self.backend = backend
         self.isrestart = initsoln is not None
         self.cfg = cfg
-        self.prevcfgs = {f: initsoln[f] for f in initsoln or []
+        self.prevcfgs = {f: initsoln[f].tostr() for f in initsoln or []
                          if f.startswith('config-')}
 
         # Start time
