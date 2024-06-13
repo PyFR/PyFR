@@ -103,7 +103,9 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         # Interpolate the gradients to the quadrature points
         for l in k['eles/gradcoru_qpts']:
             ldeps = deps(l, 'eles/gradcoru_upts')
-            g2.add(l, deps=ldeps + k['mpiint/vect_fpts_pack'])
+            if self.backend.name != 'openmp':
+                ldeps = ldeps + k['mpiint/vect_fpts_pack']
+            g2.add(l, deps=ldeps)
 
         # Interpolate the solution to the quadrature points
         g2.add_all(k['eles/qptsu'])
@@ -128,11 +130,13 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             k['eles/gradcoru_qpts'], k['eles/qptsu'],
             k['eles/tdisf'], k['eles/tdivtpcorf']
         ]
-        for ks in zip_longest(*kgroup):
-            self._group(g2, ks, subs=[
-                [(ks[5], 'out'), (ks[6], 'u')],
-                [(ks[2], 'f'), (ks[4], 'out'), (ks[6], 'f'), (ks[7], 'b')]
-            ])
+
+        if(self.backend.name == 'openmp'):
+            for ks in zip_longest(*kgroup):
+                self._group(g2, ks, subs=[
+                    [(ks[5], 'out'), (ks[6], 'u')],
+                    [(ks[2], 'f'), (ks[4], 'out'), (ks[6], 'f'), (ks[7], 'b')]
+                ])
 
         g2.commit()
 
