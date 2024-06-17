@@ -57,6 +57,8 @@ class OpenMPView(base.View): pass
 
 
 class OpenMPGraph(base.Graph):
+    needs_pdeps = False
+
     def __init__(self, backend):
         super().__init__(backend)
 

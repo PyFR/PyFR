@@ -78,6 +78,8 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
 
 
 class CUDAGraph(base.Graph):
+    needs_pdeps = True
+
     def __init__(self, backend):
         super().__init__(backend)
 

@@ -97,13 +97,13 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
 
         # Compute the common normal flux at our internal/boundary interfaces
         g2.add_all(k['iint/comm_flux'],
-                   deps=ideps + k['mpiint/vect_fpts_pack'])
+                   deps=ideps, pdeps=k['mpiint/vect_fpts_pack'])
         g2.add_all(k['bcint/comm_flux'], deps=ideps)
 
         # Interpolate the gradients to the quadrature points
         for l in k['eles/gradcoru_qpts']:
             ldeps = deps(l, 'eles/gradcoru_upts')
-            g2.add(l, deps=ldeps + k['mpiint/vect_fpts_pack'])
+            g2.add(l, deps=ldeps, pdeps=k['mpiint/vect_fpts_pack'])
 
         # Interpolate the solution to the quadrature points
         g2.add_all(k['eles/qptsu'])

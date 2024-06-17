@@ -62,6 +62,8 @@ class MetalXchgMatrix(MetalMatrix, base.XchgMatrix): pass
 
 
 class MetalGraph(base.Graph):
+    needs_pdeps = False
+
     def __init__(self, backend):
         super().__init__(backend)
 
