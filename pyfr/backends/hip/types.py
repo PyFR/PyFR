@@ -79,6 +79,8 @@ class HIPXchgMatrix(HIPMatrix, base.XchgMatrix):
 
 
 class HIPGraph(base.Graph):
+    needs_pdeps = False
+
     def commit(self):
         super().commit()
 

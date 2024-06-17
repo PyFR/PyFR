@@ -78,6 +78,8 @@ class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
 
 
 class OpenCLGraph(base.Graph):
+    needs_pdeps = True
+
     def commit(self):
         super().commit()
 
