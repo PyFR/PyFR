@@ -47,28 +47,22 @@ class BaseAdvectionSystem(BaseSystem):
         # Make a copy of the solution (if used by source terms)
         g1.add_all(k['eles/copy_soln'], deps=k['eles/entropy_filter'])
 
+        g1.commit()
+
+        g2 = self.backend.graph()
+
         # Interpolate the solution to the quadrature points
-        g1.add_all(k['eles/qptsu'], deps=k['eles/entropy_filter'])
+        g2.add_all(k['eles/qptsu'])
 
         # Compute the transformed flux
         for l in k['eles/tdisf']:
             ldeps = deps(l, 'eles/qptsu')
-            g1.add(l, deps=ldeps + k['eles/entropy_filter'])
+            g2.add(l, deps=ldeps)
 
         # Compute the transformed divergence of the partially corrected flux
         for l in k['eles/tdivtpcorf']:
-            ldeps = deps(l, 'eles/tdisf', 'eles/copy_soln', 'eles/disu')
-            g1.add(l, deps=ldeps + k['mpiint/scal_fpts_pack'])
-
-        # Group tdisf, qptsu, and tdivtpcorf kernels
-        kgroup = [k['eles/qptsu'], k['eles/tdisf'], k['eles/tdivtpcorf']]
-        for k1, k2, k3 in zip_longest(*kgroup):
-            self._group(g1, [k1, k2, k3], subs=[[(k1, 'out'), (k2, 'u')],
-                                                [(k2, 'f'), (k3, 'b')]])
-
-        g1.commit()
-
-        g2 = self.backend.graph()
+            ldeps = deps(l, 'eles/tdisf')
+            g2.add(l, deps=ldeps)
 
         # Compute the common normal flux at our MPI interfaces
         g2.add_all(k['mpiint/scal_fpts_unpack'])
@@ -87,9 +81,13 @@ class BaseAdvectionSystem(BaseSystem):
         for l in k['eles/negdivconf']:
             g2.add(l, deps=deps(l, 'eles/tdivtconf'))
 
-        # Group tdivtconf and negdivconf kernels
-        for k1, k2 in zip_longest(k['eles/tdivtconf'], k['eles/negdivconf']):
-            self._group(g2, [k1, k2])
+        kgroup = [k['eles/qptsu'], k['eles/tdisf'], k['eles/tdivtpcorf'],
+                  k['eles/tdivtconf'], k['eles/negdivconf']]
+        for ks in zip_longest(*kgroup):
+            self._group(g2, ks, subs=[
+                [(ks[0], 'out'), (ks[1], 'u')],
+                [(ks[1], 'f'), (ks[2], 'b')],
+            ])
 
         g2.commit()
 
