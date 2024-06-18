@@ -73,6 +73,9 @@ class BasePolyBasis:
     def vdm(self):
         return self.ortho_basis_at(self.pts)
 
+    def vdm_at(self, pts):
+        return self.ortho_basis_at(pts)
+
     def proj_to(self, tobasis):
         if tobasis.order > self.order:
             return self.nodal_basis_at(tobasis.pts)

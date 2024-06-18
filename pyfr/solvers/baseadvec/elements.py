@@ -1,6 +1,7 @@
 from pyfr.backends.base import NullKernel
 from pyfr.solvers.base import BaseElements
 
+import numpy as np
 
 class BaseAdvectionElements(BaseElements):
     def __init__(self, *kargs, **kwargs):
@@ -148,12 +149,23 @@ class BaseAdvectionElements(BaseElements):
             # Allocate one minimum entropy value per interface
             self.nfaces = len(self.nfacefpts)
             ext = nonce + 'entmin_int'
+            # Set values to -inf for pre-proc filter to enforce positivity
+            entmin_int = np.full((self.nfaces, self.neles),
+                                 -self._be.fpdtype_max)
             self.entmin_int = self._be.matrix((self.nfaces, self.neles),
-                                              tags=tags, extent=ext)
+                                              tags=tags, extent=ext,
+                                              initval=entmin_int)
 
             # Setup nodal/modal operator matrices
-            self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
             self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
+            if self.basis.fpts_in_upts:
+                self.vdm_ef = self._be.const_matrix(self.basis.ubasis.vdm.T)
+                self.m0 = None
+            else:
+                vdmu = self.basis.ubasis.vdm.T
+                vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
+                self.vdm_ef = self._be.const_matrix(np.vstack((vdmu, vdmf)))
+                self.m0 = self._be.const_matrix(self.basis.m0)
         else:
             self.entmin_int = None
 
