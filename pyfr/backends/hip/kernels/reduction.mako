@@ -32,6 +32,10 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
 
         % if norm == 'uniform':
             acc = max(r*r, acc);
+        % elif norm == 'l8':
+            acc += r*r*r*r*r*r*r*r;
+        % elif norm == 'l4':
+            acc += r*r*r*r;
         % else:
             acc += r*r;
         % endif

@@ -12,8 +12,8 @@ class BaseDualController(BaseDualIntegrator):
         if not self.isrestart:
             self._run_plugins()
 
-    def _accept_step(self, idxcurr):
-        self.tcurr += self._dt
+    def _accept_step(self, dt, idxcurr):
+        self.tcurr += dt
         self.nacptsteps += 1
         self.nacptchain += 1
 
@@ -22,6 +22,15 @@ class BaseDualController(BaseDualIntegrator):
             self.pseudointegrator.system.filt(idxcurr)
 
         self._invalidate_caches()
+
+        # Invalidate the solution gradients cache
+        self._curr_grad_soln = None
+
+        if self.rewind: self.rewind = False
+        if self.save:   self.save   = False
+
+        # Abort if plugins request it
+        self._check_abort()
 
         # Run any plugins
         self._run_plugins()
@@ -39,8 +48,14 @@ class DualNoneController(BaseDualController):
             raise ValueError('Advance time is in the past')
 
         while self.tcurr < t:
+            # Decide on the time step
+            self.adjust_dt(t)
+
+            # Decide on the pseudo time step
+            self.pseudointegrator.adjust_dtau(self.dt)
+
             # Take the physical step
-            self.step(self.tcurr, self._dt)
+            self.step(self.tcurr, self.dt)
 
             # We are not adaptive, so accept every step
-            self._accept_step(self.pseudointegrator._idxcurr)
+            self._accept_step(self.dt, self.pseudointegrator._idxcurr)
