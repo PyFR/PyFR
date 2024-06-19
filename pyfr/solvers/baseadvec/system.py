@@ -105,12 +105,14 @@ class BaseAdvectionSystem(BaseSystem):
         g1 = self.backend.graph()
         g1.add_mpi_reqs(m['ent_fpts_recv'])
 
+        g1.add_all(k['eles/entropy_filter'])
+
         # Interpolate the solution to the flux points
         if 'eles/local_entropy' in k:
-            g1.add_all(k['eles/disu'])
+            g1.add_all(k['eles/disu'], deps=k['eles/entropy_filter'])
 
         # Compute local minimum entropy within element
-        g1.add_all(k['eles/local_entropy'])
+        g1.add_all(k['eles/local_entropy'], deps=k['eles/entropy_filter'])
 
         # Pack and send the entropy values to neighbours
         g1.add_all(k['mpiint/ent_fpts_pack'], deps=k['eles/local_entropy'])
