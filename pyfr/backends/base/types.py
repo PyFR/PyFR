@@ -330,19 +330,21 @@ class Graph:
         if kern in self.knodes:
             raise RuntimeError('Can only add a kernel to a graph once')
 
-        # Note our dependencies
-        self.kdeps[kern] = list(deps)
-        self.depk.update(deps)
+        adeps = deps
 
         # Handle priority-enforcing (false) dependencies
         if self.needs_pdeps:
-            deps = [*deps, *pdeps]
+            adeps = [*deps, *pdeps]
 
         # Resolve the dependency list
-        rdeps = [self.knodes[d] for d in deps]
+        rdeps = [self.knodes[d] for d in adeps]
 
         # Ask the kernel to add itself
         self.knodes[kern] = kern.add_to_graph(self, rdeps)
+
+        # Note our dependencies
+        self.kdeps[kern] = list(deps)
+        self.depk.update(deps)
 
     def add_all(self, kerns, deps=[], pdeps=[]):
         for k in kerns:
