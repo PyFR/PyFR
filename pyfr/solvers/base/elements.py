@@ -2,7 +2,7 @@ from functools import cached_property, wraps
 
 import numpy as np
 
-from pyfr.nputil import npeval, fuzzysort
+from pyfr.nputil import fuzzysort, npeval
 from pyfr.util import memoize
 
 
@@ -21,9 +21,6 @@ def inters_map(meth):
 
 
 class BaseElements:
-    privarmap = None
-    convarmap = None
-
     def __init__(self, basiscls, eles, cfg):
         self._be = None
 
@@ -34,15 +31,20 @@ class BaseElements:
         self.neles = neles = eles.shape[1]
         self.ndims = ndims = eles.shape[2]
 
+        # Field variables
+        self.convars = self.convars(ndims, cfg)
+        self.privars = self.privars(ndims, cfg)
+        self.dualcoeffs = self.dualcoeffs(ndims, cfg)
+
         # Kernels we provide
         self.kernels = {}
 
         # Check the dimensionality of the problem
-        if ndims != basiscls.ndims or ndims not in self.privarmap:
+        if ndims != basiscls.ndims:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables
-        self.nvars = len(self.privarmap[ndims])
+        self.nvars = len(self.convars)
 
         # Instantiate the basis class
         self.basis = basis = basiscls(nspts, cfg)
@@ -70,16 +72,6 @@ class BaseElements:
             self.get_vect_fpts_for_inter = self._get_vect_fpts_for_inter
             self.get_comm_fpts_for_inter = self._get_vect_fpts_for_inter
 
-    @staticmethod
-    def validate_formulation(form, intg, cfg):
-        pass
-
-    def pri_to_con(pris, cfg):
-        pass
-
-    def con_to_pri(cons, cfg):
-        pass
-
     def set_ics_from_cfg(self):
         # Bring simulation constants into scope
         vars = self.cfg.items_as('constants', float)
@@ -93,7 +85,7 @@ class BaseElements:
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
-               for dv in self.privarmap[self.ndims]]
+               for dv in self.privars]
 
         # Allocate
         self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))

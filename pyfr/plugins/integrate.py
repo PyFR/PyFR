@@ -8,6 +8,7 @@ from pyfr.nputil import npeval
 from pyfr.plugins.base import BaseSolnPlugin, init_csv
 from pyfr.quadrules import get_quadrule
 from pyfr.regions import ConstructiveRegion
+from pyfr.util import first
 
 
 class IntegratePlugin(BaseSolnPlugin):
@@ -26,6 +27,9 @@ class IntegratePlugin(BaseSolnPlugin):
 
         # Underlying system elements class
         self.elementscls = system.elementscls
+
+        # Primitive variables
+        self.privars = first(intg.system.ele_map.values()).privars
 
         # Expressions to integrate
         c = self.cfg.items_as('constants', float)
@@ -141,15 +145,11 @@ class IntegratePlugin(BaseSolnPlugin):
         for ex in self.exprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
-        privarmap = self.elementscls.privarmap[self.ndims]
-        self._gradpinfo = [(pname, privarmap.index(pname))
+        self._gradpinfo = [(pname, self.privars.index(pname))
                            for pname in gradpnames]
 
     def _eval_exprs(self, intg):
         intvals = np.zeros(len(self.exprs))
-
-        # Get the primitive variable names
-        pnames = self.elementscls.privarmap[self.ndims]
 
         # Compute the gradients
         if self._gradpinfo:
@@ -170,7 +170,7 @@ class IntegratePlugin(BaseSolnPlugin):
             psolns = self.elementscls.con_to_pri(soln, self.cfg)
 
             # Prepare the substitutions dictionary
-            subs = dict(zip(pnames, psolns), t=intg.tcurr)
+            subs = dict(zip(self.privars, psolns), t=intg.tcurr)
             subs |= dict(zip('xyz', plocs))
 
             # Prepare any required gradients

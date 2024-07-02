@@ -2,6 +2,7 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.base import BaseSolnPlugin, init_csv
+from pyfr.util import first
 
 
 class ResidualPlugin(BaseSolnPlugin):
@@ -33,7 +34,7 @@ class ResidualPlugin(BaseSolnPlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            header = ['t'] + intg.system.elementscls.convarmap[self.ndims]
+            header = ['t'] + first(intg.system.ele_map.values()).convars
 
             # Open
             self.outf = init_csv(self.cfg, cfgsect, ','.join(header))

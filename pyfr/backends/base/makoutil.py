@@ -22,7 +22,7 @@ def npdtype_to_ctype(context, dtype):
 
 
 def dot(context, a_, b_=None, /, **kwargs):
-    ix, nd = next(iter(kwargs.items()))
+    ix, nd = util.first(kwargs.items())
     ab = '({})*({})'.format(a_, b_ or a_)
 
     # Allow for flexible range arguments
@@ -32,7 +32,7 @@ def dot(context, a_, b_=None, /, **kwargs):
 
 
 def array(context, expr_, vals_={}, /, **kwargs):
-    ix = next(iter(kwargs))
+    ix = util.first(kwargs)
     ni = kwargs.pop(ix)
     items = []
 

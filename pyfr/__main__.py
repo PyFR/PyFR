@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser, FileType
-import os
+from pathlib import Path
+import re
 
+import h5py
 import mpi4py.rc
 mpi4py.rc.initialize = False
 
@@ -12,24 +14,23 @@ from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import BasePartitioner, get_partitioner
 from pyfr.plugins import BaseCLIPlugin
 from pyfr.progress import ProgressBar, ProgressSequenceAction
-from pyfr.rank_allocator import get_rank_allocation
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import NativeReader
 from pyfr.solvers import get_solver
 from pyfr.util import subclasses
-from pyfr.writers import (BaseWriter, get_writer_by_extn, get_writer_by_name,
-                          write_pyfrms)
+from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
 
 
 def main():
     ap = ArgumentParser(prog='pyfr')
-    sp = ap.add_subparsers(help='sub-command help')
+    sp = ap.add_subparsers(help='sub-command help', metavar='command')
 
     # Common options
-    ap.add_argument('--verbose', '-v', action='count')
-    ap.add_argument('--version', '-V', action='version',
+    ap.add_argument('-v', '--verbose', action='count',
+                    help='increase verbosity')
+    ap.add_argument('-V', '--version', action='version',
                     version=f'%(prog)s {__version__}')
-    ap.add_argument('--progress', '-p', action=ProgressSequenceAction,
+    ap.add_argument('-p', '--progress', action=ProgressSequenceAction,
                     help='show progress')
 
     # Import command
@@ -45,40 +46,72 @@ def main():
                            help='linearisation tolerance')
     ap_import.set_defaults(process=process_import)
 
-    # Partition command
+    # Partition subcommand
     ap_partition = sp.add_parser('partition', help='partition --help')
-    ap_partition.add_argument('np', help='number of partitions or a colon '
-                              'delimited list of weights')
-    ap_partition.add_argument('mesh', help='input mesh file')
-    ap_partition.add_argument('solns', metavar='soln', nargs='*',
-                              help='input solution files')
-    ap_partition.add_argument('outd', help='output directory')
+    ap_partition = ap_partition.add_subparsers()
+
+    # List partitionings
+    ap_partition_list = ap_partition.add_parser('list',
+                                                help='partition list --help')
+    ap_partition_list.add_argument('mesh', help='input mesh file')
+    ap_partition_list.add_argument('-s', '--sep', default='\t',
+                                   help='separator')
+    ap_partition_list.set_defaults(process=process_partition_list)
+
+    # Get info about a partitioning
+    ap_partition_info = ap_partition.add_parser('info',
+                                                help='partition info --help')
+    ap_partition_info.add_argument('mesh', help='input mesh file')
+    ap_partition_info.add_argument('name', help='partitioning name')
+    ap_partition_info.add_argument('-s', '--sep', default='\t',
+                                   help='separator')
+    ap_partition_info.set_defaults(process=process_partition_info)
+
+    # Add partitioning
+    ap_partition_add = ap_partition.add_parser('add',
+                                               help='partition add --help')
+    ap_partition_add.add_argument('mesh', help='input mesh file')
+    ap_partition_add.add_argument('np', help='number of partitions or a colon '
+                                  'delimited list of weights')
+    ap_partition_add.add_argument('name', nargs='?', help='partitioning name')
+    ap_partition_add.add_argument('-f', '--force', action='count',
+                                  help='overwrite existing partitioning')
     partitioners = sorted(cls.name for cls in subclasses(BasePartitioner))
-    ap_partition.add_argument('-p', dest='partitioner', choices=partitioners,
-                              help='partitioner to use')
-    ap_partition.add_argument('-r', dest='rnumf', type=FileType('w'),
-                              help='output renumbering file')
-    ap_partition.add_argument('-e', dest='elewts', action='append',
-                              default=[], metavar='shape:weight',
-                              help='element weighting factor or "balanced"')
-    ap_partition.add_argument('--popt', dest='popts', action='append',
-                              default=[], metavar='key:value',
-                              help='partitioner-specific option')
-    ap_partition.set_defaults(process=process_partition)
+    ap_partition_add.add_argument(
+        '-p', dest='partitioner', choices=partitioners,
+        help='partitioner to use'
+    )
+    ap_partition_add.add_argument(
+        '-e', dest='elewts', action='append', default=[],
+        metavar='shape:weight', help='element weighting factor or "balanced"'
+    )
+    ap_partition_add.add_argument(
+        '--popt', dest='popts', action='append', default=[],
+        metavar='key:value', help='partitioner-specific option'
+    )
+    ap_partition_add.set_defaults(process=process_partition_add)
+
+    # Remove partitioning
+    ap_partition_remove = ap_partition.add_parser(
+        'remove', help='partition remove --help'
+    )
+    ap_partition_remove.add_argument('mesh', help='input mesh file')
+    ap_partition_remove.add_argument('name', help='partitioning')
+    ap_partition_remove.set_defaults(process=process_partition_remove)
 
     # Export command
     ap_export = sp.add_parser('export', help='export --help')
     ap_export.add_argument('meshf', help='PyFR mesh file to be converted')
     ap_export.add_argument('solnf', help='PyFR solution file to be converted')
-    ap_export.add_argument('outf', type=str, help='output file')
+    ap_export.add_argument('outf', help='output file')
     types = [cls.name for cls in subclasses(BaseWriter)]
     ap_export.add_argument('-t', dest='type', choices=types, required=False,
                            help='output file type; this is usually inferred '
                            'from the extension of outf')
     ap_export.add_argument('-f', '--field', dest='fields', action='append',
-                           metavar='FIELD', required=False, help='what fields '
-                           'should be output; may be repeated, by default all '
-                           'fields are output')
+                           metavar='FIELD', help='what fields should be '
+                           'output; may be repeated, by default all fields '
+                           'are output')
     output_options = ap_export.add_mutually_exclusive_group(required=False)
     output_options.add_argument('-d', '--divisor', type=int,
                                 help='sets the level to which high order '
@@ -90,6 +123,9 @@ def main():
     ap_export.add_argument('-p', '--precision', choices=['single', 'double'],
                            default='single', help='output number precision; '
                            'defaults to single')
+    ap_export.add_argument('-b', '--boundary', dest='boundaries',
+                           action='append', metavar='BOUNDARY',
+                           help='boundary to output; may be repeated')
     ap_export.set_defaults(process=process_export)
 
     # Run command
@@ -109,8 +145,9 @@ def main():
     # Options common to run and restart
     backends = sorted(cls.name for cls in subclasses(BaseBackend))
     for p in [ap_run, ap_restart]:
-        p.add_argument('--backend', '-b', choices=backends, required=True,
+        p.add_argument('-b', '--backend', choices=backends, required=True,
                        help='backend to use')
+        p.add_argument('-p', '--pname', help='partitioning to use')
 
     # Plugin commands
     for scls in subclasses(BaseCLIPlugin, just_leaf=True):
@@ -131,116 +168,156 @@ def process_import(args):
     if args.type:
         reader = get_reader_by_name(args.type, args.inmesh, args.progress)
     else:
-        extn = os.path.splitext(args.inmesh.name)[1]
+        extn = Path(args.inmesh.name).suffix
         reader = get_reader_by_extn(extn, args.inmesh, args.progress)
 
-    # Get the mesh in the PyFR format
-    mesh = reader.to_pyfrm(args.lintol)
-
-    # Save to disk
-    with args.progress.start('Write mesh'):
-        write_pyfrms(args.outmesh, mesh)
+    # Write out the mesh
+    reader.write(args.outmesh, args.lintol)
 
 
-def process_partition(args):
-    # Ensure outd is a directory
-    if not os.path.isdir(args.outd):
-        raise ValueError('Invalid output directory')
+def process_partition_list(args):
+    with h5py.File(args.mesh, 'r') as mesh:
+        print('name', 'parts', sep=args.sep)
 
-    # Read the mesh and query the partition info
-    mesh = NativeReader(args.mesh)
-    pinfo = mesh.partition_info('spt')
+        for name, part in sorted(mesh['partitionings'].items()):
+            nparts = len(part['eles'].attrs['regions'])
+            print(name, nparts, sep=args.sep)
 
-    # Partition weights
-    if ':' in args.np:
-        pwts = [int(w) for w in args.np.split(':')]
-    else:
-        pwts = [1]*int(args.np)
 
-    # Element weights
-    if args.elewts == ['balanced']:
-        ewts = None
-    elif len(pinfo) == 1:
-        ewts = {next(iter(pinfo)): 1}
-    else:
-        ewts = {e: int(w) for e, w in (ew.split(':') for ew in args.elewts)}
+def process_partition_info(args):
+    with h5py.File(args.mesh, 'r') as mesh:
+        # Read the partition region info from the mesh
+        regions = mesh[f'partitionings/{args.name}/eles'].attrs['regions']
 
-    # Ensure all weights have been provided
-    if ewts is not None and len(ewts) != len(pinfo):
-        missing = ', '.join(set(pinfo) - set(ewts))
-        raise ValueError(f'Missing element weights for: {missing}')
+        # Print out the header
+        print('part', *mesh['eles'], sep=args.sep)
 
-    # Partitioner-specific options
-    opts = dict(s.split(':', 1) for s in args.popts)
+        # Compute and output the number of elements in each partition
+        for i, neles in enumerate(regions[:, 1:] - regions[:, :-1]):
+            print(i, *neles, sep=args.sep)
 
-    # Create the partitioner
-    if args.partitioner:
-        part = get_partitioner(args.partitioner, pwts, ewts, opts=opts)
-    else:
-        for name in sorted(cls.name for cls in subclasses(BasePartitioner)):
-            try:
-                part = get_partitioner(name, pwts, ewts)
-                break
-            except OSError:
-                pass
+
+def process_partition_add(args):
+    with h5py.File(args.mesh, 'r+') as mesh:
+        # Determine the element types
+        etypes = list(mesh['eles'])
+
+        # Partition weights
+        if ':' in args.np:
+            pwts = [int(w) for w in args.np.split(':')]
         else:
-            raise RuntimeError('No partitioners available')
+            pwts = [1]*int(args.np)
 
-    # Partition the mesh
-    mesh, rnum, part_soln_fn = part.partition(mesh, args.progress)
+        # Element weights
+        if args.elewts == ['balanced']:
+            ewts = None
+        elif len(etypes) == 1:
+            ewts = {etypes[0]: 1}
+        else:
+            ewts = (ew.split(':') for ew in args.elewts)
+            ewts = {e: int(w) for e, w in ewts}
 
-    # Write the repartitioned mesh file
-    with args.progress.start('Write mesh'):
-        write_pyfrms(os.path.join(args.outd, os.path.basename(args.mesh)),
-                     mesh)
+        # Ensure all weights have been provided
+        if ewts is not None and len(ewts) != len(etypes):
+            missing = ', '.join(set(etypes) - set(ewts))
+            raise ValueError(f'Missing element weights for: {missing}')
 
-    # Write out the renumbering table
-    if args.rnumf:
-        with args.progress.start('Write renumbering table'):
-            print('etype,pold,iold,pnew,inew', file=args.rnumf)
+        # Get the partitioning name
+        pname = args.name or str(len(pwts))
+        if not re.match(r'\w+$', pname):
+            raise ValueError('Invalid partitioning name')
 
-            for etype, emap in sorted(rnum.items()):
-                for k, v in sorted(emap.items()):
-                    print(etype, *k, *v, sep=',', file=args.rnumf)
+        # Check it does not already exist unless --force is given
+        if pname in mesh['partitionings'] and not args.force:
+            raise ValueError('Partitioning already exists; use -f to replace')
 
-    # Repartition any solutions
-    if args.solns:
-        with args.progress.start_with_bar('Repartition solutions') as pbar:
-            for ipath in pbar.start_with_iter(args.solns):
-                # Compute the output path
-                opath = os.path.join(args.outd, os.path.basename(ipath))
+        # Path to store the partitioning in the mesh
+        ppath = f'partitionings/{pname}'
 
-                # Save to disk
-                write_pyfrms(opath, part_soln_fn(NativeReader(ipath)))
+        # Partitioner-specific options
+        opts = dict(s.split(':', 1) for s in args.popts)
+
+        # Create the partitioner
+        if args.partitioner:
+            part = get_partitioner(args.partitioner, pwts, ewts, opts=opts)
+        else:
+            parts = sorted(cls.name for cls in subclasses(BasePartitioner))
+            for name in parts:
+                try:
+                    part = get_partitioner(name, pwts, ewts)
+                    break
+                except OSError:
+                    pass
+            else:
+                raise RuntimeError('No partitioners available')
+
+        # Partition the mesh
+        pinfo = part.partition(mesh, args.progress)
+        (partitioning, pregions), (neighbours, nregions) = pinfo
+
+        # Write out the new partitioning
+        with args.progress.start('Write partitioning'):
+            if ppath in mesh:
+                mesh[f'{ppath}/eles'][:] = partitioning
+                del mesh[f'{ppath}/neighbours']
+            else:
+                mesh[f'{ppath}/eles'] = partitioning
+
+            mesh[f'{ppath}/neighbours'] = neighbours
+            mesh[f'{ppath}/eles'].attrs['regions'] = pregions
+            mesh[f'{ppath}/neighbours'].attrs['regions'] = nregions
+
+
+def process_partition_remove(args):
+    with h5py.File(args.mesh, 'r+') as mesh:
+        mparts = mesh['partitionings']
+
+        if args.name not in mparts:
+            raise ValueError(f'Partitioning {args.name} does not exist')
+
+        del mparts[args.name]
 
 
 def process_export(args):
-    # Get writer instance by specified type or outf extension
-    if args.type:
-        writer = get_writer_by_name(args.type, args)
-    else:
-        extn = os.path.splitext(args.outf)[1]
-        writer = get_writer_by_extn(extn, args)
-
-    # Write the output file
-    with args.progress.start_with_bar('Write output') as pbar:
-        writer.write_out(pbar)
-
-
-def _process_common(args, mesh, soln, cfg):
     # Manually initialise MPI
     init_mpi()
 
     comm, rank, root = get_comm_rank_root()
 
+    # Get writer instance by specified type or outf extension
+    if args.type:
+        writer = get_writer_by_name(args.type, args)
+    else:
+        extn = Path(args.outf).suffix
+        writer = get_writer_by_extn(extn, args)
+
+    # Write the output file
+    writer.write(args.outf)
+
+
+def _process_common(args, soln, cfg):
+    # Manually initialise MPI
+    init_mpi()
+
+    comm, rank, root = get_comm_rank_root()
+
+    # Read the mesh
+    reader = NativeReader(args.mesh, pname=args.pname)
+    mesh = reader.mesh
+
+    # Load a provided solution, if any
+    if soln is not None:
+        soln = reader.load_soln(soln)
+
+    # If we do not have a config file then take it from the solution
+    if cfg is None:
+        cfg = soln['config']
+
     # Create a backend
     backend = get_backend(args.backend, cfg)
 
-    # Get the mapping from physical ranks to MPI ranks
-    rallocs = get_rank_allocation(mesh, cfg)
-
     # Construct the solver
-    solver = get_solver(backend, rallocs, mesh, soln, cfg)
+    solver = get_solver(backend, mesh, soln, cfg)
 
     # If we are running interactively then create a progress bar
     if args.progress and rank == root:
@@ -255,26 +332,12 @@ def _process_common(args, mesh, soln, cfg):
 
 
 def process_run(args):
-    _process_common(
-        args, NativeReader(args.mesh), None, Inifile.load(args.cfg)
-    )
+    _process_common(args, None, Inifile.load(args.cfg))
 
 
 def process_restart(args):
-    mesh = NativeReader(args.mesh)
-    soln = NativeReader(args.soln)
-
-    # Ensure the solution is from the mesh we are using
-    if soln['mesh_uuid'] != mesh['mesh_uuid']:
-        raise RuntimeError('Invalid solution for mesh.')
-
-    # Process the config file
-    if args.cfg:
-        cfg = Inifile.load(args.cfg)
-    else:
-        cfg = Inifile(soln['config'])
-
-    _process_common(args, mesh, soln, cfg)
+    cfg = Inifile.load(args.cfg) if args.cfg else None
+    _process_common(args, args.soln, cfg)
 
 
 if __name__ == '__main__':

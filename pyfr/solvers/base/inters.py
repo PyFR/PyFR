@@ -1,12 +1,14 @@
 import numpy as np
 
+from pyfr.util import first
+
 
 def _get_inter_objs(interside, getter, elemap):
     # Map from element type to view mat getter
     emap = {type: getattr(ele, getter) for type, ele in elemap.items()}
 
     # Get the data from the interface
-    return [emap[type](eidx, fidx) for type, eidx, fidx, flags in interside]
+    return [emap[type](eidx, fidx) for type, eidx, fidx in interside]
 
 
 class BaseInters:
@@ -16,15 +18,15 @@ class BaseInters:
         self.cfg = cfg
 
         # Get the number of dimensions and variables
-        self.ndims = next(iter(elemap.values())).ndims
-        self.nvars = next(iter(elemap.values())).nvars
+        self.ndims = first(elemap.values()).ndims
+        self.nvars = first(elemap.values()).nvars
 
         # Get the number of interfaces
         self.ninters = len(lhs)
 
         # Compute the total number of interface flux points
         self.ninterfpts = sum(elemap[etype].nfacefpts[fidx]
-                              for etype, eidx, fidx, flags in lhs)
+                              for etype, eidx, fidx in lhs)
 
         # By default do not permute any of the interface arrays
         self._perm = Ellipsis

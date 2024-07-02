@@ -1,5 +1,6 @@
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BaseSolnPlugin, init_csv
+from pyfr.util import first
 
 
 class PseudoStatsPlugin(BaseSolnPlugin):
@@ -17,7 +18,7 @@ class PseudoStatsPlugin(BaseSolnPlugin):
         self.stats = []
         self.tprev = intg.tcurr
 
-        fvars = ','.join(intg.system.elementscls.convarmap[self.ndims])
+        fvars = ','.join(first(intg.system.ele_map.values()).convars)
 
         # MPI info
         comm, rank, root = get_comm_rank_root()
