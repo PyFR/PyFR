@@ -61,8 +61,25 @@ def region_data(cfg, cfgsect, mesh, rallocs):
         if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
             raise ValueError(f'Empty region {region}')
 
-        return {etype: np.unique(eidxs).astype(np.int32)
+        return {etype: np.unique(eidxs)
                 for etype, eidxs in sorted(eset.items())}
+
+
+def surface_data(cfg, cfgsect, mesh, rallocs):
+    surf = cfg.get(cfgsect, 'surface')
+
+    comm, rank, root = get_comm_rank_root()
+
+    # Parse the surface expression and obtain the element set
+    rgn = parse_region_expr(surf)
+    eset = rgn.surface_faces(mesh, rallocs)
+
+    # Ensure the surface is not empty
+    if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
+        raise ValueError(f'Empty surface {surf}')
+
+    return {etype: np.unique(eidxs).astype(np.int32)
+            for etype, eidxs in sorted(eset.items())}
 
 
 class BasePlugin:
@@ -178,6 +195,21 @@ class RegionMixin:
 
 
 class SurfaceMixin:
+    def _surf_region(self, intg):
+        # Parse the region
+        sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh,
+                             intg.rallocs)
+
+        # Generate the appropriate metadata arrays
+        ele_surface, ele_surface_data = [], {}
+        for (etype, face), eidxs in sidxs.items():
+            doff = intg.system.ele_types.index(etype)
+            ele_surface.append((doff, etype, face, eidxs))
+
+            if not isinstance(eidxs, slice):
+                ele_surface_data[f'{etype}_f{face}_idxs'] = eidxs
+        return ele_surface, ele_surface_data
+
     @memoize
     def _surf_quad(self, itype, proj, flags=''):
         # Obtain quadrature info

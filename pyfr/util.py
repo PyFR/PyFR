@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from ctypes import c_void_p
 import functools as ft
 import hashlib
@@ -115,30 +114,6 @@ def merge_intervals(ivals, tol=1e-5):
     return mivals
 
 
-@contextmanager
-def setenv(**kwargs):
-    _env = os.environ.copy()
-    os.environ.update(kwargs)
-
-    try:
-        yield
-    finally:
-        os.environ.clear()
-        os.environ.update(_env)
-
-
-@contextmanager
-def chdir(dirname):
-    cdir = os.getcwd()
-
-    try:
-        if dirname:
-            os.chdir(dirname)
-        yield
-    finally:
-        os.chdir(cdir)
-
-
 def subclasses(cls, just_leaf=False):
     sc = cls.__subclasses__()
     ssc = [g for s in sc for g in subclasses(s, just_leaf)]
@@ -163,7 +138,19 @@ def ndrange(*args):
 
 
 def digest(*args, hash='sha256'):
-    return getattr(hashlib, hash)(pickle.dumps(args)).hexdigest()
+    class Hasher:
+        def __init__(self, hash):
+            self.h = getattr(hashlib, hash)()
+
+        def write(self, b):
+            self.h.update(b)
+
+        def __str__(self):
+            return self.h.hexdigest()
+
+    h = Hasher(hash)
+    pickle.dump(args, h)
+    return str(h)
 
 
 def rm(path):

@@ -2,6 +2,7 @@ from collections import defaultdict, namedtuple
 import math
 
 import numpy as np
+from numpy.core.records import fromrecords
 from rtree.index import Index, Property
 
 from pyfr.plugins.base import BaseSolverPlugin
@@ -26,7 +27,7 @@ def pcg32rxs_m_xs(seed):
             ostatet ^= ostatet >> (n4 + rshift)
             ostatet *= mcgmultiplier
             ostatet ^= ostatet >> n22
-            random = (ostatet >> 8) * pow(2, -24)
+            random = (ostatet >> 8) * 2**-24
             yield (ostate, random)
 
 
@@ -76,7 +77,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         ydim = self.cfg.getfloat(cfgsect, 'y-dim')
         zdim = self.cfg.getfloat(cfgsect, 'z-dim')
 
-        self.nvorts = int(ydim*zdim/(4*ls**2))
+        self.nvorts = int(ydim*zdim / (4*ls**2))
         self.yzdim = yzdim = np.array([ydim, zdim])
         self.bbox = BoxRegion([-2*ls, *(-0.5*yzdim - ls)],
                               [2*ls, *(0.5*yzdim + ls)])
@@ -88,7 +89,7 @@ class TurbulencePlugin(BaseSolverPlugin):
         self.shift = shift = np.array(centre)
         self.rot = rot = (np.cos(ran)*np.eye(3) +
                           np.sin(ran)*(np.cross(rax, np.eye(3))) +
-                          (1 - np.cos(ran))*rax @ rax.T)
+                          (1 - np.cos(ran))*np.outer(rax, rax))
 
         self.macro_params = {
             'ls': ls, 'avgu': avgu, 'yzdim': yzdim, 'beta1': beta1,
@@ -143,12 +144,11 @@ class TurbulencePlugin(BaseSolverPlugin):
     def test_nvmx(self, strms, neles, nvmx):
         tnext = self.tnext
         strmsid = {ele: 0 for ele in strms}
-        buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
-                                          dtype=self.eventdtype)
+        buf = fromrecords(np.zeros((nvmx, neles)), dtype=self.eventdtype)
 
         while tnext < float('inf'):
             trcltmp = self.update_buf(strms, strmsid, buf, tnext)
-            if trcltmp < (tnext + self.nvmxtol):
+            if trcltmp < tnext + self.nvmxtol:
                 return False
 
             tnext = trcltmp
@@ -156,29 +156,31 @@ class TurbulencePlugin(BaseSolverPlugin):
         return True
 
     def get_vort_buf(self):
+        dt = 2*self.ls/self.avgu
         pcg = pcg32rxs_m_xs(self.seed)
 
         tmp = []
-        tinits = [self.tstart + 2*self.ls*next(pcg)[1]/self.avgu
-                  for vid in range(self.nvorts)] 
+        tinits = [self.tstart + dt*next(pcg)[1] for vid in range(self.nvorts)]
 
         while any(tinit <= self.tend for tinit in tinits):
             for vid, tinit in enumerate(tinits):
-                (state, floaty) = next(pcg)
+                state, floaty = next(pcg)
                 yinit = self.yzdim[0]*(-0.5 + floaty)
                 zinit = self.yzdim[1]*(-0.5 + next(pcg)[1])
-                tend = tinit + (2*self.ls/self.avgu)
+                tend = tinit + dt
                 if tend >= self.tbegin and tinit <= self.tend:
                     tmp.append((yinit, zinit, tinit, state))
-                tinits[vid] += 2*self.ls/self.avgu
 
-        return np.core.records.fromrecords(tmp,
-                                           dtype=[('yinit', self.fdptype),
-                                                  ('zinit', self.fdptype),
-                                                  ('tinit', self.fdptype),
-                                                  ('state', np.uint32)])
+                tinits[vid] += dt
+
+        dtype = [('yinit', self.fdptype), ('zinit', self.fdptype),
+                 ('tinit', self.fdptype), ('state', np.uint32)]
+        return fromrecords(tmp, dtype=dtype)
 
     def get_vort_structs(self, intg):
+        ls, avgu = self.ls, self.avgu
+        props = Property(dimension=3, interleaved=True)
+        eventdtype = self.eventdtype
         vortstructs = {}
 
         for etype, eles in intg.system.ele_map.items():
@@ -187,83 +189,75 @@ class TurbulencePlugin(BaseSolverPlugin):
             ptsr = (self.rot @ (pts.reshape(3, -1) -
                     self.shift[:, None])).reshape(pts.shape)
             ptsr = np.moveaxis(ptsr, 0, -1)
+
             inside = self.bbox.pts_in_region(ptsr)
+            if not np.any(inside):
+                continue
 
             tmp = defaultdict(list)
             strms = {}
             strmsid = {}
 
-            if np.any(inside):
-                eids = np.any(inside, axis=0).nonzero()[0]
-                ptsri = ptsr[:, eids]
-                insert = [(i, [*p.min(axis=0), *p.max(axis=0)], None)
-                          for i, p in enumerate(ptsri.swapaxes(0, 1))]
-                idx3d = Index(insert,
-                              properties=Property(dimension=3,
-                                                  interleaved=True))
+            eids = np.any(inside, axis=0).nonzero()[0]
+            ptsri = ptsr[:, eids]
+            insert = [(i, [*p.min(axis=0), *p.max(axis=0)], None)
+                      for i, p in enumerate(ptsri.swapaxes(0, 1))]
+            rtree = Index(insert, properties=props)
 
-                for vid, vort in enumerate(self.vortbuf):
-                    vbmin = [-2*self.ls, vort.yinit - self.ls,
-                             vort.zinit - self.ls]
-                    vbmax = [2*self.ls, vort.yinit + self.ls,
-                             vort.zinit + self.ls]
+            for vid, vort in enumerate(self.vortbuf):
+                vbmin = [-2*ls, vort.yinit - ls, vort.zinit - ls]
+                vbmax = [2*ls, vort.yinit + ls, vort.zinit + ls]
 
-                    # get candidate points from rtree
-                    can = np.array(list(set(idx3d.intersection((*vbmin, *vbmax)))),
-                                   dtype=int)
+                # Get candidate points from the R-tree
+                isect = rtree.intersection((*vbmin, *vbmax))
+                cands = np.array(list(set(isect)), dtype=int)
 
-                    # get exact points candidate points
-                    vinside = BoxRegion(vbmin, vbmax).pts_in_region(ptsri[:, can])
+                # Get exact points candidate points
+                boxrgn = BoxRegion(vbmin, vbmax)
+                vinside = boxrgn.pts_in_region(ptsri[:, cands])
 
-                    for vi, c in zip(vinside.swapaxes(0, 1), can):
-                        if not np.any(vi):
-                            continue
-                        xv = ptsri[vi, c, 0]
-                        xvmin = xv.min()
-                        xvmax = xv.max()
-                        ts = max(vort.tinit, vort.tinit + xvmin/self.avgu)
-                        te = max(ts,
-                                 min(ts + (xvmax - xvmin + 2*self.ls)/self.avgu,
-                                     vort.tinit + 2*self.ls/self.avgu))
+                for vi, c in zip(vinside.swapaxes(0, 1), cands):
+                    if not np.any(vi):
+                        continue
 
-                        # record when a vortex enters and exits an element
-                        tmp[eids[c]].append((self.vortbuf[vid].tinit,
-                                              self.vortbuf[vid].state, ts, te))
+                    xv = ptsri[vi, c, 0]
+                    xvmin, xvmax = xv.min(), xv.max()
 
-                for ele, strm in tmp.items():
-                    strms[ele] = np.sort(
-                        np.core.records.fromrecords(strm,
-                                                    dtype=self.eventdtype),
-                        order='ts'
-                    )
-                    strmsid[ele] = 0
+                    ts = max(vort.tinit, vort.tinit + xvmin/avgu)
+                    te = max(ts, min(ts + (xvmax - xvmin + 2*ls)/avgu,
+                                     vort.tinit + 2*ls/avgu))
 
-                nvmx = self.nmvxinit
-                while not self.test_nvmx(strms, neles, nvmx):
-                    nvmx += 1
+                    # Record when a vortex enters and exits an element
+                    tmp[eids[c]].append((self.vortbuf[vid].tinit,
+                                         self.vortbuf[vid].state, ts, te))
 
-                eles.add_src_macro(
-                    'pyfr.plugins.kernels.turbulence', 'turbulence',
-                    self.macro_params | {'nvmx': nvmx}, ploc=True, soln=True
-                )
+            for ele, strm in tmp.items():
+                strms[ele] = np.sort(fromrecords(strm, dtype=eventdtype),
+                                     order='ts')
+                strmsid[ele] = 0
 
-                buf = np.core.records.fromrecords(np.zeros((nvmx, neles)),
-                                                  dtype=self.eventdtype)
+            nvmx = self.nmvxinit
+            while not self.test_nvmx(strms, neles, nvmx):
+                nvmx += 1
 
-                self.trcl[etype] = 0
-                vortstructs[etype] = vs = VortStruct(
-                    strms, strmsid, buf,
-                    intg.backend.matrix((nvmx, neles), tags={'align'}),
-                    intg.backend.matrix((nvmx, neles), tags={'align'}, 
-                                        dtype=np.uint32)
-                )
+            eles.add_src_macro(
+                'pyfr.plugins.kernels.turbulence', 'turbulence',
+                self.macro_params | {'nvmx': nvmx}, ploc=True, soln=True
+            )
 
-                eles._set_external('tinit',
-                                   f'in broadcast-col fpdtype_t[{nvmx}]',
-                                   value=vs.tinit)
-                       
-                eles._set_external('state',
-                                   f'in broadcast-col uint32_t[{nvmx}]',
-                                   value=vs.state)
+            buf = fromrecords(np.zeros((nvmx, neles)), dtype=eventdtype)
+
+            self.trcl[etype] = 0
+            vortstructs[etype] = vs = VortStruct(
+                strms, strmsid, buf,
+                intg.backend.matrix((nvmx, neles), tags={'align'}),
+                intg.backend.matrix((nvmx, neles), tags={'align'},
+                                    dtype=np.uint32)
+            )
+
+            eles._set_external('tinit', f'in broadcast-col fpdtype_t[{nvmx}]',
+                               value=vs.tinit)
+            eles._set_external('state', f'in broadcast-col uint32_t[{nvmx}]',
+                               value=vs.state)
 
         return vortstructs

@@ -447,6 +447,12 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 self.dkeys = [k for k in file
                               if re.match(r'tavg_[^\W_]+_p\d+$', k)]
 
+                # Tally up the total number of degrees of freedom
+                self.tpts = 0
+                for k in self.dkeys:
+                    v = file[k]
+                    self.tpts += v.shape[0]*v.shape[2]
+
                 # Build function avg expressions
                 c = cfg.items_as('constants', float)
                 fnames = sorted(f for f in fields if f.startswith('fun-avg-'))
@@ -457,8 +463,8 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
 
                 # Initialise std max and avg variables
                 if self.std_all:
-                    self.std_max, self.std_avg = np.zeros((2, len(anames)))
-                    self.fstd_max, self.fstd_avg = np.zeros((2, len(fnames)))
+                    self.std_max, self.std_sum = np.zeros((2, len(anames)))
+                    self.fstd_max, self.fstd_sum = np.zeros((2, len(fnames)))
 
             # Check for compatibility of files
             if self.uuid != file['mesh_uuid']:
@@ -499,21 +505,23 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 std_acc = var_acc**0.5
                 np.maximum(self.std_max, np.amax(std_acc, axis=(0, 2)),
                            out=self.std_max)
-                self.std_avg += np.mean(std_acc, axis=(0, 2))
+                self.std_sum += np.sum(std_acc, axis=(0, 2))
 
             # Evaluate function expression and write out
             if self.fexprs and self.std_all:
                 fun_avg, fun_std = self._eval_fun_var(std_acc, avg_acc)
                 np.maximum(self.fstd_max, np.amax(fun_std, axis=(0, 2)),
                            out=self.fstd_max)
-                self.fstd_avg += np.mean(fun_std, axis=(0, 2))
+                self.fstd_sum += np.sum(fun_std, axis=(0, 2))
 
                 outstack = (avg_acc, fun_avg, std_acc, fun_std)
             elif self.fexprs:
                 fun_avg = self._eval_fun_exprs(avg_acc.swapaxes(0, 1))
-                outstack = (avg_acc, fun_avg, std_acc)
-            else:
+                outstack = (avg_acc, fun_avg)
+            elif self.std_all:
                 outstack = (avg_acc, std_acc)
+            else:
+                outstack = (avg_acc,)
 
             # Write out the data
             outf[key] = np.hstack(outstack, dtype=self.dtype)
@@ -538,12 +546,12 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
 
         # If all files have full std stats then these can be writen
         if self.std_all:
-            for n, avg, max in zip(self.anames, self.std_avg, self.std_max):
-                nstats.set('tavg', f'avg-std-{n}', avg)
+            for n, sum, max in zip(self.anames, self.std_sum, self.std_max):
+                nstats.set('tavg', f'avg-std-{n}', sum / self.tpts)
                 nstats.set('tavg', f'max-std-{n}', max)
 
-            for n, avg, max in zip(self.fnames, self.fstd_avg, self.fstd_max):
-                nstats.set('tavg', f'avg-std-fun-{n}', avg)
+            for n, sum, max in zip(self.fnames, self.fstd_sum, self.fstd_max):
+                nstats.set('tavg', f'avg-std-fun-{n}', sum / self.tpts)
                 nstats.set('tavg', f'max-std-fun-{n}', max)
 
         # Write out the metadata

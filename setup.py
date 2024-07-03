@@ -41,6 +41,7 @@ modules = [
     'pyfr.integrators.std.kernels',
     'pyfr.partitioners',
     'pyfr.plugins',
+    'pyfr.plugins.kernels',
     'pyfr.quadrules',
     'pyfr.readers',
     'pyfr.solvers',
@@ -107,11 +108,11 @@ package_data = {
 
 # Hard dependencies
 install_requires = [
-    'gimmik >= 3.1.1',
+    'gimmik >= 3.2.1',
     'h5py >= 2.10',
     'mako >= 1.0.0',
     'mpi4py >= 3.1.0',
-    'numpy >= 1.20',
+    'numpy >= 1.26.4',
     'platformdirs >= 2.2.0',
     'pytools >= 2016.2.1',
     'rtree >= 1.0.1'

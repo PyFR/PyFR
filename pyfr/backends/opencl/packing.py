@@ -6,6 +6,7 @@ from pyfr.backends.opencl.provider import OpenCLKernel, OpenCLKernelProvider
 class OpenCLPackingKernels(OpenCLKernelProvider):
     def pack(self, mv):
         cl = self.backend.cl
+        ixdtype = self.backend.ixdtype
 
         # An exchange view is simply a regular view plus an exchange matrix
         m, v = mv.xchgmat, mv.view
@@ -14,7 +15,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
         src = self.backend.lookup.get_template('pack').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, [np.int32]*3 + [np.intp]*4)
+        kern = self._build_kernel('pack_view', src, [ixdtype]*3 + [np.uintp]*4)
         kern.set_dims((v.n,))
         kern.set_args(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
                       v.rstrides or 0, m)

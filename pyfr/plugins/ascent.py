@@ -1,3 +1,4 @@
+from argparse import FileType
 from collections import defaultdict
 from ctypes import RTLD_GLOBAL, c_char_p, c_double, c_int, c_int64, c_void_p
 import re
@@ -5,9 +6,13 @@ import re
 import numpy as np
 
 from pyfr.ctypesutil import LibWrapper
-from pyfr.mpiutil import get_comm_rank_root
+from pyfr.inifile import Inifile
+from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BaseSolnPlugin, region_data
+from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, cli_external,
+                               region_data)
+from pyfr.rank_allocator import LinearRankAllocator
+from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, subclass_where
 from pyfr.writers.vtk import BaseShapeSubDiv
@@ -109,12 +114,141 @@ class AscentWrappers(LibWrapper):
     ]
 
 
-class AscentPlugin(BaseSolnPlugin):
-    name = 'ascent'
-    systems = ['*']
-    formulations = ['dual', 'std']
-    dimensions = [2, 3]
+class _IntegratorAdapter:
+    def __init__(self, intg, cfgsect):
+        self.intg = intg
+        self.acfg = self.scfg = intg.cfg
+        self.cfgsect = cfgsect
 
+    @property
+    def ndims(self):
+        return self.intg.system.ndims
+
+    @property
+    def etypes(self):
+        return self.intg.system.ele_types
+
+    @property
+    def mesh_uuid(self):
+        return self.intg.mesh_uuid
+
+    @property
+    def elementscls(self):
+        return self.intg.system.elementscls
+
+    def eidx(self, etype):
+        return self.intg.system.ele_types.index(etype)
+
+    @property
+    def dtype(self):
+        return self.intg.system.backend.fpdtype
+
+    @property
+    def prank(self):
+        return self.intg.rallocs.prank
+
+    @property
+    def region_data(self):
+        return region_data(self.acfg, self.cfgsect, self.intg.system.mesh,
+                           self.intg.rallocs)
+
+    def soln_op_vpts(self, ename, divisors):
+        eles = self.intg.system.ele_map[ename]
+        shapecls = subclass_where(BaseShape, name=ename)
+        shape = shapecls(eles.nspts, self.scfg)
+
+        svpts = shape.std_ele(divisors[ename])
+        soln_op = shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
+
+        return soln_op, eles.ploc_at_np(svpts)
+
+    @property
+    def tcurr(self):
+        return self.intg.tcurr
+
+    @property
+    def soln(self):
+        return self.intg.soln
+
+    @property
+    def grad_soln(self):
+        return self.intg.grad_soln
+
+
+class _CLIAdapter:
+    def __init__(self, mesh, soln, acfg, acfgsect):
+        self.acfg = acfg
+        self.cfgsect = acfgsect
+
+        self._mesh = mesh
+        self._soln = soln
+
+        self.scfg = Inifile(soln['config'])
+        self._rallocs = LinearRankAllocator(mesh, self.scfg)
+
+    @property
+    def ndims(self):
+        return next(iter(self._mesh.array_info('spt').values()))[1][2]
+
+    @property
+    def etypes(self):
+        pinfo = self._soln.partition_info('soln')
+        return [et for et, ep in pinfo.items() if ep[self.prank]]
+
+    @property
+    def mesh_uuid(self):
+        return self._mesh['mesh_uuid']
+
+    @property
+    def elementscls(self):
+        from pyfr.solvers.base import BaseSystem
+
+        sname = self.scfg.get('solver', 'system')
+        return subclass_where(BaseSystem, name=sname).elementscls
+
+    @property
+    def dtype(self):
+        return np.float32
+
+    @property
+    def prank(self):
+        return self._rallocs.prank
+
+    @property
+    def region_data(self):
+        return region_data(self.acfg, self.cfgsect, self._mesh,
+                           self._rallocs)
+
+    def soln_op_vpts(self, ename, divisors):
+        meshf = self._mesh[f'spt_{ename}_p{self.prank}']
+
+        shapecls = subclass_where(BaseShape, name=ename)
+        shape = shapecls(len(meshf), self.scfg)
+
+        svpts = shapecls.std_ele(divisors[ename])
+        mesh_op = shape.sbasis.nodal_basis_at(svpts)
+        soln_op = shape.ubasis.nodal_basis_at(svpts)
+
+        vpts = mesh_op @ meshf.reshape(len(meshf), -1)
+        vpts = vpts.reshape(-1, *meshf.shape[1:])
+
+        return soln_op, vpts.swapaxes(1, 2)
+
+    @property
+    def tcurr(self):
+        stats = Inifile(self._soln['stats'])
+        return stats.getfloat('solver-time-integrator', 'tcurr')
+
+    @property
+    def soln(self):
+        return [self._soln[f'soln_{et}_p{self.prank}'] for et in self.etypes]
+
+    @property
+    def grad_soln(self):
+        raise NotImplementedError('Gradients are not supported in CLI mode')
+
+
+class _AscentRenderer:
     # Element name mapping for conduit
     bp_emap = {'hex': 'hex', 'pri': 'wedge', 'pyr': 'pyramid', 'quad': 'quad',
                'tet': 'tet', 'tri': 'tri'}
@@ -122,96 +256,77 @@ class AscentPlugin(BaseSolnPlugin):
     # Ascent filters that implicitly require velocity expression
     v_filter = ['qcriterion', 'vorticity']
 
-    def __init__(self, intg, cfgsect, suffix=None):
-        super().__init__(intg, cfgsect, suffix)
-
-        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
-
-        # Get datatype
-        self.dtype = intg.system.backend.fpdtype
-
-        # Underlying system elements class
-        self.elementscls = intg.system.elementscls
-
-        # Set order for division
-        sorder = self.cfg.getint('solver', 'order')
-        dorder = self.cfg.getint(cfgsect, 'division', sorder)
+    def __init__(self, adapter, isrestart):
+        # Set order for subdivision
+        sorder = adapter.scfg.getint('solver', 'order')
+        dorder = adapter.acfg.getint(adapter.cfgsect, 'division', sorder)
         divisors = defaultdict(lambda: dorder, pyr=0)
 
-        # Load conduit library
+        # Load Conduit
         self.conduit = ConduitWrappers()
 
         # Setup outputting options
-        self.basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
-        self.isrestart = intg.isrestart
+        self.basedir = adapter.acfg.getpath(adapter.cfgsect, 'basedir', '.',
+                                            abs=True)
+        self.isrestart = isrestart
         self._image_paths = []
 
         # Expressions to plot and configs
         self._exprs = []
         self._fields_write = set()
         self._fields_read = set()
-        self._init_fields(cfgsect)
-        self._init_scenes(cfgsect)
-        self._init_pipelines(cfgsect)
+        self._init_fields(adapter, adapter.cfgsect)
+        self._init_scenes(adapter, adapter.cfgsect)
+        self._init_pipelines(adapter, adapter.cfgsect)
 
         if not self._fields_read.issubset(self._fields_write):
             raise AscentError('Not all fields used are defined')
 
         # Gradient pre-processing
-        self._init_gradients()
+        self._init_gradients(adapter)
 
-        # Generate conduit blueprint of mesh
+        # Generate a Conduit node for the mesh
         self.mesh_n = ConduitNode(self.conduit)
 
-        # Parse the region
-        ridxs = region_data(self.cfg, cfgsect, intg.system.mesh, intg.rallocs)
-
-        # Build the conduit blueprint mesh for the regions
+        # Build the Conduit blueprint mesh for the regions
         self._ele_regions_lin = []
-        for etype, eidxs in ridxs.items():
-            eoff = intg.system.ele_types.index(etype)
-
+        for etype, eidxs in adapter.region_data.items():
             # Build the conduit blueprint mesh for the regions
-            self._build_blueprint(intg, eoff, etype, eidxs, divisors)
+            self._build_blueprint(adapter, etype, eidxs, divisors)
 
-        # Initalise ascent and the open an instance
-        self._init_ascent()
+        # Initalise Ascent and the open an instance
+        self._init_ascent(adapter)
 
     def __del__(self):
         if getattr(self, 'ascent_ptr', None):
             self.lib.ascent_close(self.ascent_ptr)
 
-    def _build_blueprint(self, intg, idx, ename, rgn, divisors):
+    def _build_blueprint(self, adapter, etype, rgn, divisors):
         mesh_n = self.mesh_n
-        d_str = f'domain_{intg.rallocs.prank}_{ename}'
+        d_str = f'domain_{adapter.prank}_{etype}'
 
-        eles = intg.system.ele_map[ename]
-        shapecls = subclass_where(BaseShape, name=ename)
-        shape = shapecls(eles.nspts, self.cfg)
+        eidx = adapter.etypes.index(etype)
+        soln_op, xd = adapter.soln_op_vpts(etype, divisors)
+        nsvpts = len(xd)
+        self._ele_regions_lin.append((d_str, eidx, rgn, soln_op))
 
-        svpts = shape.std_ele(divisors[ename])
-        nsvpts = len(svpts)
-
-        soln_op = shape.ubasis.nodal_basis_at(svpts).astype(self.dtype)
-        self._ele_regions_lin.append((d_str, idx, rgn, soln_op))
-
-        mesh_n[f'{d_str}/state/domain_id'] = intg.rallocs.prank
+        mesh_n[f'{d_str}/state/domain_id'] = adapter.prank
         mesh_n[f'{d_str}/state/config/keyword'] = 'Config'
-        mesh_n[f'{d_str}/state/config/data'] = intg.cfg.tostr()
+        mesh_n[f'{d_str}/state/config/data'] = adapter.scfg.tostr()
         mesh_n[f'{d_str}/state/mesh_uuid/keyword'] = 'Mesh_UUID'
-        mesh_n[f'{d_str}/state/mesh_uuid/data'] = intg.mesh_uuid
+        mesh_n[f'{d_str}/state/mesh_uuid/data'] = adapter.mesh_uuid
 
         mesh_n[f'{d_str}/coordsets/coords/type'] = 'explicit'
         mesh_n[f'{d_str}/topologies/mesh/coordset'] = 'coords'
         mesh_n[f'{d_str}/topologies/mesh/type'] = 'unstructured'
-        mesh_n[f'{d_str}/topologies/mesh/elements/shape'] = self.bp_emap[ename]
+        mesh_n[f'{d_str}/topologies/mesh/elements/shape'] = self.bp_emap[etype]
 
-        xd = eles.ploc_at_np(svpts)[..., rgn].transpose(1, 2, 0)
-        for l, x in zip('xyz', xd.reshape(eles.ndims, -1)):
+        xd = xd[..., rgn].transpose(1, 2, 0)
+        for l, x in zip('xyz', xd.reshape(adapter.ndims, -1)):
             mesh_n[f'{d_str}/coordsets/coords/values/{l}'] = x
 
-        subdvcls = subclass_where(BaseShapeSubDiv, name=ename)
-        sconn = subdvcls.subnodes(divisors[ename])
+        subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
+        sconn = subdvcls.subnodes(divisors[etype])
         subdvcon = np.hstack([sconn + j*nsvpts for j in range(xd.shape[1])])
         mesh_n[f'{d_str}/topologies/mesh/elements/connectivity'] = subdvcon
 
@@ -220,56 +335,7 @@ class AscentPlugin(BaseSolnPlugin):
             mesh_n[f'{d_str}/fields/{field}/volume_dependent'] = 'false'
             mesh_n[f'{d_str}/fields/{field}/topology'] = 'mesh'
 
-    def _eval_exprs(self, intg):
-        # Get the primitive variable names
-        pnames = self.elementscls.privarmap[self.ndims]
-
-        # Compute the gradients
-        if self._gradpinfo:
-            grad_soln = intg.grad_soln
-
-        # Iterate over each element type in our region
-        for d_str, idx, rgn, soln_op in self._ele_regions_lin:
-            self.mesh_n[f'{d_str}/state/time/keyword'] = 'Time'
-            self.mesh_n[f'{d_str}/state/time/data'] = intg.tcurr
-
-            # Subset and transpose the solution
-            soln = intg.soln[idx][..., rgn].swapaxes(0, 1)
-
-            # Interpolate the solution to the subdivided points
-            soln = soln_op @ soln
-
-            # Convert from conservative to primitive variables
-            psolns = self.elementscls.con_to_pri(soln, self.cfg)
-
-            # Prepare the substitutions dictionary
-            subs = dict(zip(pnames, psolns), t=intg.tcurr)
-
-            # Prepare any required gradients
-            if self._gradpinfo:
-                grads = np.moveaxis(grad_soln[idx], 2, 0)[..., rgn]
-
-                # Interpolate the gradients to the points
-                grad_soln = soln_op @ grad_soln
-
-                # Transform from conservative to primitive gradients
-                pgrads = self.elementscls.grad_con_to_pri(soln, grads,
-                                                          self.cfg)
-
-                # Add them to the substitutions dictionary
-                for pname, idx in self._gradpinfo:
-                    for dim, grad in zip('xyz', pgrads[idx]):
-                        subs[f'grad_{pname}_{dim}'] = grad
-
-            for field, path, expr in self._exprs:
-                fun = npeval(expr, subs)
-                if isinstance(fun, tuple):
-                    for f, x in zip(fun, 'xyz'):
-                        self.mesh_n[f'{d_str}/{path}/{x}'] = f.T
-                else:
-                    self.mesh_n[f'{d_str}/{path}'] = fun.T
-
-    def _init_ascent(self):
+    def _init_ascent(self, adapter):
         comm, rank, root = get_comm_rank_root()
 
         self.lib = lib = AscentWrappers()
@@ -278,7 +344,8 @@ class AscentPlugin(BaseSolnPlugin):
         self.ascent_config = ConduitNode(self.conduit)
         self.ascent_config['mpi_comm'] = comm.py2f()
         self.ascent_config['runtime/type'] = 'ascent'
-        vtkm_backend = self.cfg.get(self.cfgsect, 'vtkm-backend', 'serial')
+        vtkm_backend = adapter.acfg.get(adapter.cfgsect, 'vtkm-backend',
+                                        'serial')
         self.ascent_config['runtine/vtkm/backend'] = vtkm_backend
 
         lib.ascent_open(self.ascent_ptr, self.ascent_config)
@@ -293,36 +360,36 @@ class AscentPlugin(BaseSolnPlugin):
         self._add_pipeline['action'] = 'add_pipelines'
         self._add_pipeline['pipelines'] = self.pipelines
 
-    def _init_fields(self, cfgsect):
-        cons = self.cfg.items_as('constants', float)
+    def _init_fields(self, adapter, cfgsect):
+        cons = adapter.scfg.items_as('constants', float)
 
-        for k in self.cfg.items(cfgsect, prefix='field-'):
+        for k in adapter.acfg.items(cfgsect, prefix='field-'):
             field = k.removeprefix('field-')
 
             if field in self._fields_write:
                 raise KeyError(f"Field '{field}' already exists")
             self._fields_write.add(field)
 
-            exprs = self.cfg.getexpr(cfgsect, k, subs=cons)
+            exprs = adapter.acfg.getexpr(cfgsect, k, subs=cons)
             self._exprs.append((field, f'fields/{field}/values', exprs))
 
-    def _init_gradients(self):
+    def _init_gradients(self, adapter):
         # Determine what gradients, if any, are required
         g_pnames = set()
         for field, path, expr in self._exprs:
             g_pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', expr))
 
-        privarmap = self.elementscls.privarmap[self.ndims]
+        privarmap = adapter.elementscls.privarmap[adapter.ndims]
         self._gradpinfo = [(pname, privarmap.index(pname))
                            for pname in g_pnames]
 
-    def _init_pipelines(self, cfgsect):
+    def _init_pipelines(self, adapter, cfgsect):
         pipel_cfg = {}
         self.pipelines = pl = ConduitNode(self.conduit)
 
-        for k in self.cfg.items(cfgsect, prefix='pipeline-'):
+        for k in adapter.acfg.items(cfgsect, prefix='pipeline-'):
             pn = k.removeprefix('pipeline-')
-            cfg = self.cfg.getliteral(cfgsect, k)
+            cfg = adapter.acfg.getliteral(cfgsect, k)
             pipel_cfg[pn] = cfg = [cfg] if isinstance(cfg, dict) else cfg
 
             for j, filter in enumerate(cfg):
@@ -344,13 +411,13 @@ class AscentPlugin(BaseSolnPlugin):
 
                 pl[f'pl_{pn}/f{j}/params'] = params
 
-    def _init_scenes(self, cfgsect):
+    def _init_scenes(self, adapter, cfgsect):
         self._scene_cfg = scene_cfg = {}
         self.scenes = ConduitNode(self.conduit)
 
-        for k in self.cfg.items(cfgsect, prefix='scene-'):
+        for k in adapter.acfg.items(cfgsect, prefix='scene-'):
             sn = k.removeprefix('scene-')
-            scene_cfg[sn] = cfg = self.cfg.getliteral(cfgsect, k)
+            scene_cfg[sn] = cfg = adapter.acfg.getliteral(cfgsect, k)
 
             if cfg['type'] != 'mesh':
                 self._fields_read.add(cfg['field'])
@@ -369,28 +436,141 @@ class AscentPlugin(BaseSolnPlugin):
             if not any(kc.startswith('render-') for kc in cfg):
                 raise KeyError(f"No render config given for scene '{sn}'")
 
+    def _eval_exprs(self, adapter):
+        elementscls = adapter.elementscls
+
+        # Get the primitive variable names
+        pnames = elementscls.privarmap[adapter.ndims]
+
+        # Obtain the solution
+        soln = adapter.soln
+
+        # Compute the gradients
+        if self._gradpinfo:
+            grad_soln = adapter.grad_soln
+
+        # Iterate over each element type in our region
+        for d_str, idx, rgn, soln_op in self._ele_regions_lin:
+            self.mesh_n[f'{d_str}/state/time/keyword'] = 'Time'
+            self.mesh_n[f'{d_str}/state/time/data'] = adapter.tcurr
+
+            # Subset and transpose the solution
+            csolns = soln[idx][..., rgn].swapaxes(0, 1)
+
+            # Interpolate the solution to the subdivided points
+            csolns = soln_op @ csolns
+
+            # Convert from conservative to primitive variables
+            psolns = elementscls.con_to_pri(csolns, adapter.scfg)
+
+            # Prepare the substitutions dictionary
+            subs = dict(zip(pnames, psolns), t=adapter.tcurr)
+
+            # Prepare any required gradients
+            if self._gradpinfo:
+                grads = np.moveaxis(grad_soln[idx], 2, 0)[..., rgn]
+
+                # Interpolate the gradients to the points
+                grad_soln = soln_op @ grad_soln
+
+                # Transform from conservative to primitive gradients
+                pgrads = elementscls.grad_con_to_pri(soln, grads, adapter.scfg)
+
+                # Add them to the substitutions dictionary
+                for pname, idx in self._gradpinfo:
+                    for dim, grad in zip('xyz', pgrads[idx]):
+                        subs[f'grad_{pname}_{dim}'] = grad
+
+            for field, path, expr in self._exprs:
+                fun = npeval(expr, subs)
+                if isinstance(fun, tuple):
+                    for f, x in zip(fun, 'xyz'):
+                        self.mesh_n[f'{d_str}/{path}/{x}'] = f.T
+                else:
+                    self.mesh_n[f'{d_str}/{path}'] = fun.T
+
     def _render_options(self, path, opts):
         for k, v in opts.items():
             if k != 'image-name':
-                # Replace for vectors and sections
+                # Replace - with _ for vectors and sections
                 key = k.replace('_', '/').replace('-', '_')
                 self.scenes[f'{path}/{key}'] = v
 
         gen = file_path_gen(self.basedir, opts['image-name'], self.isrestart)
         self._image_paths.append((f'scenes/{path}/image_name', gen))
 
+    def render(self, adapter):
+        comm, rank, root = get_comm_rank_root()
+
+        # Set file names
+        for path, gen in self._image_paths:
+            self._add_scene[path] = gen.send(adapter.tcurr)
+
+        # Set field expressions
+        self._eval_exprs(adapter)
+
+        self.lib.ascent_publish(self.ascent_ptr, self.mesh_n)
+        self.lib.ascent_execute(self.ascent_ptr, self.actions)
+
+        comm.barrier()
+
+
+class AscentPlugin(BaseSolnPlugin):
+    name = 'ascent'
+    systems = ['*']
+    formulations = ['dual', 'std']
+    dimensions = [2, 3]
+
+    def __init__(self, intg, cfgsect, suffix=None):
+        super().__init__(intg, cfgsect, suffix)
+
+        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
+        self._renderer = _AscentRenderer(_IntegratorAdapter(intg, cfgsect),
+                                         intg.isrestart)
+
     def __call__(self, intg):
         if intg.nacptsteps % self.nsteps == 0:
-            comm, rank, root = get_comm_rank_root()
+            self._renderer.render(_IntegratorAdapter(intg, self.cfgsect))
 
-            # Set file names
-            for path, gen in self._image_paths:
-                self._add_scene[path] = gen.send(intg.tcurr)
 
-            # Set field expressions
-            self._eval_exprs(intg)
+class AscentCLIPlugin(BaseCLIPlugin):
+    name = 'ascent'
 
-            self.lib.ascent_publish(self.ascent_ptr, self.mesh_n)
-            self.lib.ascent_execute(self.ascent_ptr, self.actions)
+    @classmethod
+    def add_cli(cls, parser):
+        sp = parser.add_subparsers()
 
-            comm.barrier()
+        # Render command
+        ap_render = sp.add_parser('render', help='ascent render --help')
+        ap_render.set_defaults(process=cls.render_cli)
+        ap_render.add_argument('mesh', help='mesh file')
+        ap_render.add_argument('solns', nargs='*', help='solution files')
+        ap_render.add_argument('cfg', type=FileType('r'),
+                               help='ascent config file')
+        ap_render.add_argument('--cfgsect', help='ascent config file section')
+
+    @cli_external
+    def render_cli(self, args):
+        mesh = NativeReader(args.mesh)
+        acfg = Inifile.load(args.cfg)
+        acfgsect = args.cfgsect or acfg.sections()[0]
+
+        # Initialise MPI
+        init_mpi()
+
+        # Current Ascent render and associated config
+        renderer, rcfg = None, None
+
+        # Iterate over the solutions
+        for s in args.solns:
+            # Open the solution and create an Ascent adapter
+            soln = NativeReader(s)
+            adapter = _CLIAdapter(mesh, soln, acfg, acfgsect)
+
+            # See if we need to create a new Ascent renderer
+            if not renderer or rcfg != soln['config']:
+                renderer = _AscentRenderer(adapter, isrestart=True)
+                rcfg = soln['config']
+
+            # Perform the rendering
+            renderer.render(adapter)

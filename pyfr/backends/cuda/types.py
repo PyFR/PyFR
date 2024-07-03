@@ -78,6 +78,8 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
 
 
 class CUDAGraph(base.Graph):
+    needs_pdeps = True
+
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -104,7 +106,6 @@ class CUDAGraph(base.Graph):
         for node, params in self.stale_kparams.items():
             self.exc_graph.set_kernel_node_params(node, params)
 
-        stream.synchronize()
         self.exc_graph.launch(stream)
         self.stale_kparams.clear()
 

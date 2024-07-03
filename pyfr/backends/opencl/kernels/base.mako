@@ -5,7 +5,10 @@
 #define SOA_IX(a, v, nv) ((((a) / SOA_SZ)*(nv) + (v))*SOA_SZ + (a) % SOA_SZ)
 
 // Typedefs
+typedef unsigned int uint32_t;
+typedef long int64_t;
 typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
+typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
 
 // Atomic helpers
 % if pyfr.npdtype_to_ctype(fpdtype) == 'float':

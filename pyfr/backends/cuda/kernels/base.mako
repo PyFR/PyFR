@@ -5,8 +5,11 @@
 #define SOA_IX(a, v, nv) ((((a) / SOA_SZ)*(nv) + (v))*SOA_SZ + (a) % SOA_SZ)
 
 // Typedefs
-typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
 typedef unsigned int uint32_t;
+typedef long long int64_t;
+typedef unsigned long long uint64_t;
+typedef ${pyfr.npdtype_to_ctype(fpdtype)} fpdtype_t;
+typedef ${pyfr.npdtype_to_ctype(ixdtype)} ixdtype_t;
 
 // Atomic helpers
 __device__ void atomic_min_fpdtype(fpdtype_t* addr, fpdtype_t val)

@@ -27,6 +27,10 @@ class BaseACFluidElements:
         return convs
 
     @staticmethod
+    def diff_con_to_pri(cons, diff_cons, cfg):
+        return diff_cons
+
+    @staticmethod
     def validate_formulation(controller):
         if controller.formulation != 'dual':
             raise ValueError('System not compatible with time stepping '
@@ -54,34 +58,38 @@ class ACEulerElements(BaseACFluidElements, BaseAdvectionElements):
         }
 
         # Helpers
+        tdisf = []
         c, l = 'curved', 'linear'
         r, s = self._mesh_regions, self._slice_mat
+        slicedk = self._make_sliced_kernel
 
         if c in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_curved'] = lambda uin: self._be.kernel(
+            tdisf.append(lambda uin: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nupts, r[c]], u=s(self.scal_upts[uin], c),
                 f=s(self._vect_upts, c), smats=self.curved_smat_at('upts')
-            )
+            ))
         elif c in r:
-            self.kernels['tdisf_curved'] = lambda: self._be.kernel(
+            tdisf.append(lambda: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'curved'},
                 dims=[self.nqpts, r[c]],
                 u=s(self._scal_qpts, c), f=s(self._vect_qpts, c),
                 smats=self.curved_smat_at('qpts')
-            )
+            ))
 
         if l in r and 'flux' not in self.antialias:
-            self.kernels['tdisf_linear'] = lambda uin: self._be.kernel(
+            tdisf.append(lambda uin: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
                 f=s(self._vect_upts, l), verts=self.ploc_at('linspts', l),
                 upts=self.upts
-            )
+            ))
         elif l in r:
-            self.kernels['tdisf_linear'] = lambda: self._be.kernel(
+            tdisf.append(lambda: self._be.kernel(
                 'tflux', tplargs=tplargs | {'ktype': 'linear'},
                 dims=[self.nqpts, r[l]], u=s(self._scal_qpts, l),
                 f=s(self._vect_qpts, l), verts=self.ploc_at('linspts', l),
                 upts=self.qpts
-            )
+            ))
+
+        self.kernels['tdisf'] = lambda: slicedk(k() for k in tdisf)

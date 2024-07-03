@@ -67,10 +67,11 @@ class Arg:
 
 
 class BaseKernelGenerator:
-    def __init__(self, name, ndim, args, body, fpdtype):
+    def __init__(self, name, ndim, args, body, fpdtype, ixdtype):
         self.name = name
         self.ndim = ndim
         self.fpdtype = fpdtype
+        self.ixdtype = ixdtype
 
         # Parse and sort our argument list
         sargs = sorted((k, Arg(k, v, body)) for k, v in args.items())
@@ -103,7 +104,7 @@ class BaseKernelGenerator:
 
         # Dimensions
         argn += self._dims
-        argt += [[np.int32]]*self.ndim
+        argt += [[self.ixdtype]]*self.ndim
 
         # Scalar args (always of type fpdtype)
         argn += [sa.name for sa in self.scalargs]
@@ -114,11 +115,11 @@ class BaseKernelGenerator:
             argn.append(va.name)
 
             if va.isview:
-                argt.append([np.intp]*(2 + (va.ncdim == 2)))
+                argt.append([np.uintp]*(2 + (va.ncdim == 2)))
             elif self.needs_ldim(va):
-                argt.append([np.intp, np.int32])
+                argt.append([np.uintp, self.ixdtype])
             else:
-                argt.append([np.intp])
+                argt.append([np.uintp])
 
         # Return
         return self.ndim, argn, argt
@@ -285,11 +286,12 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
         if self.ndim == 1:
             self.preamble += 'if (_x < _nx)'
         else:
+            blk_y, lid_y = self.block2d[1], self._lid[1]
             self.preamble += f'''
-                int _ysize = (_ny + {self.block2d[1] - 1}) / {self.block2d[1]};
-                int _ystart = {self._lid[1]}*_ysize;
-                int _yend = min(_ny, _ystart + _ysize);
-                for (int _y = _ystart; _x < _nx && _y < _yend; _y++)'''
+                ixdtype_t _ysize = (_ny + {blk_y - 1}) / {blk_y};
+                ixdtype_t _ystart = {lid_y}*_ysize;
+                ixdtype_t _yend = min(_ny, _ystart + _ysize);
+                for (ixdtype_t _y = _ystart; _x < _nx && _y < _yend; _y++)'''
 
     def ldim_size(self, name, factor=1):
         return f'ld{name}'
@@ -377,7 +379,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
 
         return f'''{spec}
             {{
-                int _x = {self._gid};
+                ixdtype_t _x = {self._gid};
                 #define X_IDX (_x)
                 #define X_IDX_AOSOA(v, nv) SOA_IX(X_IDX, v, nv)
                 #define BCAST_BLK(r, c, ld)  c
