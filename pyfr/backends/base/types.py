@@ -323,26 +323,29 @@ class Graph:
         self.mpi_reqs = []
         self.mpi_req_deps = []
 
-    def add(self, kern, deps=[]):
+    def add(self, kern, deps=[], pdeps=[]):
         if self.committed:
             raise RuntimeError('Can not add nodes to a committed graph')
 
         if kern in self.knodes:
             raise RuntimeError('Can only add a kernel to a graph once')
 
+        # Handle priority-enforcing (false) dependencies
+        adeps = [*deps, *pdeps] if self.needs_pdeps else deps
+
         # Resolve the dependency list
-        rdeps = [self.knodes[d] for d in deps]
+        rdeps = [self.knodes[d] for d in adeps]
 
         # Ask the kernel to add itself
         self.knodes[kern] = kern.add_to_graph(self, rdeps)
 
         # Note our dependencies
-        self.kdeps[kern] = deps
+        self.kdeps[kern] = list(deps)
         self.depk.update(deps)
 
-    def add_all(self, kerns, deps=[]):
+    def add_all(self, kerns, deps=[], pdeps=[]):
         for k in kerns:
-            self.add(k, deps)
+            self.add(k, deps, pdeps)
 
     def add_mpi_req(self, req, deps=[]):
         if self.committed:
