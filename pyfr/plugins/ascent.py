@@ -260,7 +260,7 @@ class _AscentRenderer:
         # Set order for subdivision
         sorder = adapter.scfg.getint('solver', 'order')
         dorder = adapter.acfg.getint(adapter.cfgsect, 'division', sorder)
-        divisors = defaultdict(lambda: dorder, pyr=0)
+        divisors = defaultdict(lambda: dorder, pyr=1)
 
         # Load Conduit
         self.conduit = ConduitWrappers()
