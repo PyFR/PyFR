@@ -15,7 +15,7 @@ _sentinel = object()
 
 class Inifile:
     def __init__(self, inistr=None):
-        self._cp = cp = ConfigParser(inline_comment_prefixes=[';'])
+        self._cp = cp = ConfigParser(inline_comment_prefixes=[';', '#'])
 
         # Preserve case
         cp.optionxform = str
