@@ -123,8 +123,8 @@ def expand(context, name, /, *args, **kwargs):
     # Get the macro parameter list and the body
     mparams, mexterns, body = context['_macros'][name]
 
-    # Ensure mparams and args are the same length
-    if len(mparams) != len(args):
+    # Ensure an appropriate number of arguments have been passed
+    if len(mparams) != len(args) + len(kwargs):
         raise ValueError(f'Inconsistent macro parameter list in {name}')
 
     # Parse the parameter list
