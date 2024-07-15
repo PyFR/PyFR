@@ -23,3 +23,4 @@ doc/build/
 
 # Hidden files
 .*
+pyfr_bogaev-venv/

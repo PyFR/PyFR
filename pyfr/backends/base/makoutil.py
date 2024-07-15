@@ -98,11 +98,6 @@ def macro(context, name, params, externs=''):
     params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
-    # Ensure no invalid characters in params/extern variables
-    for p in it.chain(params, externs):
-        if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid param "{p}" in macro "{name}"')
-
     # Capture the function body
     body = capture(context, context['caller'].body)
 
@@ -122,10 +117,6 @@ def macro(context, name, params, externs=''):
 def expand(context, name, /, *args, **kwargs):
     # Get the macro parameter list and the body
     mparams, mexterns, body = context['_macros'][name]
-
-    # Ensure mparams and args are the same length
-    if len(mparams) != len(args):
-        raise ValueError(f'Inconsistent macro parameter list in {name}')
 
     # Parse the parameter list
     params = dict(zip(mparams, args))
