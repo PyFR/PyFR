@@ -1,4 +1,4 @@
-from pyfr.integrators.base import BaseIntegrator
+from pyfr.integrators.base import BaseIntegrator, _common_plugin_prop
 from pyfr.integrators.base import BaseCommon
 
 
@@ -36,39 +36,29 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
 
-    @property
+    @_common_plugin_prop('_curr_soln')
     def soln(self):
-        if not self._curr_soln:
-            self.system.postproc(self._idxcurr)
-            self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
+        self.system.postproc(self._idxcurr)
+        return self.system.ele_scal_upts(self._idxcurr)
 
-        return self._curr_soln
-
-    @property
+    @_common_plugin_prop('_curr_grad_soln')
     def grad_soln(self):
-        system = self.system
+        self.system.postproc(self._idxcurr)
+        self.system.compute_grads(self.tcurr, self._idxcurr)
+        return [e.get() for e in self.system.eles_vect_upts]
 
-        if not self._curr_grad_soln:
-            system.postproc(self._idxcurr)
-            system.compute_grads(self.tcurr, self._idxcurr)
-            self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
-
-        return self._curr_grad_soln
-
-    @property
+    @_common_plugin_prop('_curr_dt_soln')
     def dt_soln(self):
-        system = self.system
+        soln = self.soln
 
-        if not self._curr_dt_soln:
-            copy = self.soln
-            system.rhs(self.tcurr, self._idxcurr, self._idxcurr)
-            self._curr_dt_soln = system.ele_scal_upts(self._idxcurr)
+        self.system.rhs(self.tcurr, self._idxcurr, self._idxcurr)
+        dt_soln = self.system.ele_scal_upts(self._idxcurr)
 
-            # Reset current register with original contents
-            for c, e in zip(copy, system.ele_banks):
-                e[self._idxcurr].set(c)
+        # Reset current register with original contents
+        for e, s in zip(self.system.ele_banks, soln):
+            e[self._idxcurr].set(s)
 
-        return self._curr_dt_soln
+        return dt_soln
 
     @property
     def controller_needs_errest(self):
