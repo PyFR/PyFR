@@ -300,7 +300,7 @@ class BasePartitioner:
         pregions[:, 0] = np.unique(vparts, return_index=True)[1]
         pregions[:, -1] = np.concatenate((pregions[1:, 0], [len(vparts)]))
 
-        # Finally, fill in where we the element type transitions are
+        # Finally, fill in where the element type transitions are
         for i, p in enumerate(pregions):
             s, e = p[0], p[-1]
             p[:-1] = np.searchsorted(petype[s:e], etypes) + s
