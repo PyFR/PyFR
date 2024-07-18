@@ -145,6 +145,8 @@ AMD, Intel, and NVIDIA. The backend requires:
 
 1. OpenCL >= 2.1
 2. Optionally `CLBlast <https://github.com/CNugteren/CLBlast>`_
+3. Optionally `TinyTC <https://intel.github.io/tiny-tensor-compiler/>`_
+   >= 0.3.1
 
 Note that when running on NVIDIA GPUs the OpenCL backend may terminate
 with a segmentation fault after the simulation has finished.  This is
