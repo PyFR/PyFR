@@ -74,7 +74,7 @@ class Inifile:
         expr = self.get(section, option, default)
 
         # Ensure the expression does not contain invalid characters
-        if not re.match(r'[A-Za-z0-9_ \t\n\r.,+\-*/%()]+$', expr):
+        if not re.match(r'[A-Za-z0-9_ \t\n\r.,+\-*/%()\[\]]+$', expr):
             raise ValueError('Invalid characters in expression')
 
         # Substitute variables
