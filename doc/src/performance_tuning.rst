@@ -246,6 +246,12 @@ included in all PyFR solution files.  This can be extracted as::
 
     h5dump -d /stats -b --output=stats.ini soln.pyfrs
 
+Here, the *common* field contains the amount of time spent obtaining
+properties which are not directly attributable to any specific plugin.
+Examples include fetching the solution, computing its gradient, and
+computing its time derivative.  The *other* field accounts for time
+spent in unnamed plugins such as the progress bar.
+
 Given the time steps taken by PyFR are typically much smaller than
 those associated with the underlying physics there is seldom any
 benefit to running integration and/or time average accumulation plugins
