@@ -595,7 +595,7 @@ class VTKWriter(BaseWriter):
         soln = self.soln[etype].swapaxes(0, 1).astype(self.dtype)
 
         # Extract the partition number information
-        part = self.soln[f'{etype}_parts']
+        part = self.soln[f'{etype}-parts']
 
         # Dimensions
         nspts, neles = spts.shape[:2]
@@ -643,7 +643,7 @@ class VTKWriter(BaseWriter):
 
             vspts.append(_interpolate_pts(mesh_op, spts))
             vsoln.append(_interpolate_pts(soln_op, soln))
-            part.append(self.soln[f'{etype}_parts'][idxs])
+            part.append(self.soln[f'{etype}-parts'][idxs])
 
         return np.hstack(vspts), np.dstack(vsoln), np.hstack(part)
 

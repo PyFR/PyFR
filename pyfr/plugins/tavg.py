@@ -470,7 +470,7 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
 
                 self.tpts = 0
                 for k, v in f['tavg'].items():
-                    if '_' not in k:
+                    if re.match(r'p\d+-[a-z]+$', k):
                         dshapes[f'tavg/{k}'] = v.shape
                         self.tpts += v.shape[0]*v.shape[2]
 

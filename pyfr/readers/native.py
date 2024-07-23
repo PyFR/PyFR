@@ -80,6 +80,9 @@ class NativeReader:
             soln = comm.bcast(soln, root=root)
             soln = {k: Inifile(v) for k, v in soln.items()}
 
+            # Obtain the polynomial order
+            order = soln['config'].getint('solver', 'order')
+
             # If no prefix has been specified then obtain it from the file
             if prefix is None:
                 prefix = soln['stats'].get('data', 'prefix')
@@ -90,11 +93,11 @@ class NativeReader:
             # Read and scatter the solution data
             for etype in self.escatter:
                 # If the element is not present, mark it as completely subset
-                if (ek := f'{prefix}/{etype}') not in f:
+                if (ek := f'{prefix}/p{order}-{etype}') not in f:
                     subset[etype] = []
                     continue
                 # If the element is partially subset use a sparse scatterer
-                elif (ei := f'{ek}_idxs') in f:
+                elif (ei := f'{ek}-idxs') in f:
                     idxs = self.mesh.eidxs[etype]
                     escatter = SparseScatterer(comm, f[ei], idxs)
                     subset[etype] = escatter.ridx
@@ -108,9 +111,9 @@ class NativeReader:
                     soln[etype] = esoln.swapaxes(0, 2)
 
                 # Read the partition data
-                epart = escatter(f[f'{ek}_parts'])
+                epart = escatter(f[f'{ek}-parts'])
                 if escatter.cnt:
-                    soln[f'{etype}_parts'] = epart
+                    soln[f'{etype}-parts'] = epart
 
         # If the solution is subset then subset the mesh, too
         if subset:

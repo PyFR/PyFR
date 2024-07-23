@@ -47,6 +47,8 @@ class NativeWriter:
     def set_shapes_eidxs(self, shapes, eidxs):
         comm, rank, root = get_comm_rank_root()
 
+        order = self.cfg.getint('solver', 'order')
+
         # Prepare the element information
         self._einfo = {}
         for etype, ecount in self._ecounts.items():
@@ -71,7 +73,8 @@ class NativeWriter:
                 rname = self.cfg.get(f'solver-elements-{etype}', 'soln-pts')
                 upts = get_quadrule(etype, rname, shape[2]).pts
 
-                self._einfo[etype] = (gatherer, subset, shape, noff, upts)
+                ek = f'p{order}-{etype}'
+                self._einfo[ek] = (gatherer, subset, shape, etype, noff, upts)
 
     def probe(self):
         if self._awriter is not None and self._awriter.test():
@@ -103,13 +106,13 @@ class NativeWriter:
 
         # Gather the solution data into contiguous arrays
         gdata = {}
-        for etype, (gatherer, subset, shape, *_) in self._einfo.items():
+        for ek, (gatherer, subset, shape, etype, *_) in self._einfo.items():
             if etype in data:
                 dset = data[etype]
             else:
                 dset = np.empty((0, *shape[1:]), dtype=self.fpdtype)
 
-            gdata[etype] = gatherer(dset)
+            gdata[ek] = gatherer(dset)
 
         # Delegate to _write to do the actual outputting
         f, reqs = self._write(self.tname, gdata, metadata, async_=async_)
@@ -147,16 +150,16 @@ class NativeWriter:
 
             # Create the datasets
             g = f.create_group(self.prefix)
-            for etype, (gatherer, subset, shape, *_) in self._einfo.items():
-                g.create_dataset(etype, shape, self.fpdtype)
-                g.create_dataset(f'{etype}_parts', shape[0:1], np.int32)
+            for ek, (gatherer, subset, shape, *_) in self._einfo.items():
+                g.create_dataset(ek, shape, self.fpdtype)
+                g.create_dataset(f'{ek}-parts', shape[0:1], np.int32)
 
                 if subset:
-                    g.create_dataset(f'{etype}_idxs', shape[0:1], np.int64)
+                    g.create_dataset(f'{ek}-idxs', shape[0:1], np.int64)
 
             # Add each elements nodal points as an attribute
-            for etype, (*_, upts) in self._einfo.items():
-                g[etype].attrs['pts'] = upts
+            for ek, (*_, upts) in self._einfo.items():
+                g[ek].attrs['pts'] = upts
 
             # Obtain the offsets of these datasets
             for k, v in g.items():
@@ -192,13 +195,13 @@ class NativeWriter:
                     f.Write_at(*args)
 
         # Write out our element data
-        for etype, (gatherer, subset, *_) in self._einfo.items():
-            write_off(etype, data[etype], gatherer.off)
-            write_off(f'{etype}_parts', gatherer.rsrc, gatherer.off)
+        for ek, (gatherer, subset, *_) in self._einfo.items():
+            write_off(ek, data[ek], gatherer.off)
+            write_off(f'{ek}-parts', gatherer.rsrc, gatherer.off)
 
             # If the element has been subset then write the index data
             if subset:
-                write_off(f'{etype}_idxs', gatherer.ridx, gatherer.off)
+                write_off(f'{ek}-idxs', gatherer.ridx, gatherer.off)
 
         return f, reqs
 
