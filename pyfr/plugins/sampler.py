@@ -58,12 +58,12 @@ class PointLocator:
         return locs
 
     @memoize
-    def _get_shape_basis_order(self, etype, nspts):
+    def _get_shape_basis(self, etype, nspts):
         shape = subclass_where(BaseShape, name=etype)
-        order = shape.order_from_nspts(nspts)
-        basis = get_polybasis(etype, order, shape.std_ele(order - 1))
+        order = shape.order_from_npts(nspts)
+        basis = get_polybasis(etype, order, shape.std_ele(order))
 
-        return shape, basis, order
+        return shape, basis
 
     def _minloc(self, coll, x, y, ndim=None):
         dtype = y.dtype
@@ -150,7 +150,7 @@ class PointLocator:
         return dict(zip(pidx, zip(dists[tidx], sidx, tlocs[tidx])))
 
     def _initial_tlocs(self, etype, spts, plocs):
-        shape, basis, order = self._get_shape_basis_order(etype, len(spts))
+        shape, basis = self._get_shape_basis(etype, len(spts))
 
         # Obtain a fine sampling of points inside each element
         fop = basis.nodal_basis_at(shape.std_ele(self.fine_order))
@@ -164,7 +164,7 @@ class PointLocator:
         return fpts[amins]
 
     def _compute_tlocs(self, etype, spts, plocs):
-        shape, basis, order = self._get_shape_basis_order(etype, len(spts))
+        shape, basis = self._get_shape_basis(etype, len(spts))
 
         # Evaluate the initial guesses
         ktlocs = self._initial_tlocs(etype, spts, plocs)

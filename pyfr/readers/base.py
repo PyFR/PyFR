@@ -371,8 +371,8 @@ class NodalMeshAssembler:
 
             # Generate the associated polynomial bases
             shape = subclass_where(BaseShape, name=petype)
-            order = shape.order_from_nspts(nnodes)
-            hbasis = get_polybasis(petype, order, shape.std_ele(order - 1))
+            order = shape.order_from_npts(nnodes)
+            hbasis = get_polybasis(petype, order + 1, shape.std_ele(order))
             lbasis = get_polybasis(petype, 2, shape.std_ele(1))
 
             htol = hbasis.nodal_basis_at(lbasis.pts)

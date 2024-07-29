@@ -542,7 +542,7 @@ class VTKWriter(BaseWriter):
         subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
 
         # Number of vis points
-        npts = shapecls.nspts_from_order(self.etypes_div[etype] + 1)*neles
+        npts = shapecls.npts_from_order(self.etypes_div[etype])*neles
 
         # Number of sub cells and nodes
         ncells = len(subdvcls.subcells(self.etypes_div[etype]))*neles
@@ -559,7 +559,7 @@ class VTKWriter(BaseWriter):
         shapecls = subclass_where(BaseShape, name=etype)
 
         # Total number of vis points
-        npts = neles*shapecls.nspts_from_order(self.etypes_div[etype] + 1)
+        npts = neles*shapecls.npts_from_order(self.etypes_div[etype])
 
         return npts, neles, npts
 

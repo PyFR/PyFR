@@ -47,8 +47,8 @@ class BaseShape:
         self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
 
         if nspts:
-            self.nsptsord = nsptord = self.order_from_nspts(nspts)
-            self.sbasis = get_polybasis(self.name, nsptord, self.spts)
+            self.nsptsord = nsptord = self.order_from_npts(nspts)
+            self.sbasis = get_polybasis(self.name, nsptord + 1, self.spts)
 
             # Basis for free-stream metric
             # We need p-th order pseudo grid points, which includes
@@ -61,18 +61,18 @@ class BaseShape:
                                         self.mpts)
 
     @classmethod
-    def nspts_from_order(cls, sptord):
-        return int(np.polyval(cls.npts_coeffs, sptord)) // cls.npts_cdenom
+    def npts_from_order(cls, sptord):
+        return int(np.polyval(cls.npts_coeffs, sptord + 1)) // cls.npts_cdenom
 
     @classmethod
-    def order_from_nspts(cls, nspts):
+    def order_from_npts(cls, nspts):
         # Obtain the coefficients for the poly: P(n) - nspts = 0
         coeffs = list(cls.npts_coeffs)
         coeffs[-1] -= cls.npts_cdenom*int(nspts)
 
         # Iterate
-        for n in range(1, 15):
-            if np.polyval(coeffs, n) == 0:
+        for n in range(15):
+            if np.polyval(coeffs, n + 1) == 0:
                 return n
         else:
             raise ValueError('Invalid number of shape points')
@@ -268,7 +268,7 @@ class BaseShape:
 
     @cached_property
     def spts(self):
-        return self.std_ele(self.nsptsord - 1)
+        return self.std_ele(self.nsptsord)
 
     @cached_property
     def linspts(self):
