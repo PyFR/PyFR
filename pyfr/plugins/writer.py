@@ -42,7 +42,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         self.tout_last = intg.tcurr
 
         # Output field names
-        self.fields = first(intg.system.ele_map.values()).convars
+        self.fields = list(first(intg.system.ele_map.values()).convars)
         if self._write_grads:
             dims = 'xyz'[:self.ndims]
             self.fields += [f'grad_{f}_{d}' for f in self.fields for d in dims]
