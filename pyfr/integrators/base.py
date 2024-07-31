@@ -12,6 +12,21 @@ from pyfr.plugins import get_plugin
 from pyfr.util import memoize
 
 
+def _common_plugin_prop(attr):
+    def wrapfn(fn):
+        @property
+        def newfn(self):
+            if not (p := getattr(self, attr)):
+                t, c = time.time(), self._plugin_wtimes['common', None]
+                p = fn(self)
+                self._plugin_wtimes['common', None] = c + time.time() - t
+                setattr(self, attr, p)
+
+            return p
+        return newfn
+    return wrapfn
+
+
 class BaseIntegrator:
     def __init__(self, backend, rallocs, mesh, initsoln, cfg):
         self.backend = backend
@@ -112,17 +127,22 @@ class BaseIntegrator:
         return plugins
 
     def _run_plugins(self):
+        wtimes = self._plugin_wtimes
+
         self.backend.wait()
 
         # Fire off the plugins and tally up the runtime
         for plugin in self.plugins:
             tstart = time.time()
+            tcommon = wtimes['common', None]
 
             plugin(self)
 
+            dt = time.time() - tstart - wtimes['common', None] + tcommon
+
             pname = getattr(plugin, 'name', 'other')
             psuffix = getattr(plugin, 'suffix', None)
-            self._plugin_wtimes[pname, psuffix] += time.time() - tstart
+            wtimes[pname, psuffix] += dt
 
         # Abort if plugins request it
         self._check_abort()
