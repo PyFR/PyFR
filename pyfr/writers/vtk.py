@@ -537,16 +537,16 @@ class VTKWriter(BaseWriter):
         return [vsoln[self._soln_fields.index(k)] for k in self._vtk_vars]
 
     def _get_npts_ncells_nnodes_lin(self, etype, neles):
-        # Get the shape and sub division classes
-        shapecls = subclass_where(BaseShape, name=etype)
-        subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
+        div = self.etypes_div[etype]
 
-        # Number of vis points
+        # Get the number of shape points
+        shapecls = subclass_where(BaseShape, name=etype)
         npts = shapecls.npts_from_order(self.etypes_div[etype])*neles
 
-        # Number of sub cells and nodes
-        ncells = len(subdvcls.subcells(self.etypes_div[etype]))*neles
-        nnodes = len(subdvcls.subnodes(self.etypes_div[etype]))*neles
+        # Get the number of subdivided nodes
+        subdv = subclass_where(BaseShapeSubDiv, name=etype)(div)
+        ncells = len(subdv.subcells)*neles
+        nnodes = len(subdv.subnodes)*neles
 
         return npts, ncells, nnodes
 
@@ -855,10 +855,11 @@ class VTKWriter(BaseWriter):
             subcellsoff = nsvpts
             types = self.vtk_types_ho[etype]
         else:
-            subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
-            nodes = subdvcls.subnodes(self.etypes_div[etype])
-            subcellsoff = subdvcls.subcelloffs(self.etypes_div[etype])
-            types = subdvcls.subcelltypes(self.etypes_div[etype])
+            subdiv = get_subdiv(etype, self.etypes_div[etype])
+
+            nodes = subdiv.subnodes
+            subcellsoff = subdiv.subcelloffs
+            types = subdiv.subcelltypes
 
         # Prepare VTU cell arrays
         vtu_con = np.tile(nodes, (neles, 1))
@@ -887,47 +888,46 @@ class VTKWriter(BaseWriter):
             self._write_darray(arr.T, write, self.dtype)
 
 
+def get_subdiv(name, n):
+    return subclass_where(BaseShapeSubDiv, name=name)(n)
+
+
 class BaseShapeSubDiv:
     vtk_types = dict(tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
     vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
 
-    @classmethod
-    def subcells(cls, n):
-        pass
+    def __init__(self, n):
+        self.n = n
 
-    @classmethod
-    def subcelloffs(cls, n):
-        return np.cumsum([cls.vtk_nodes[t] for t in cls.subcells(n)])
+    @property
+    def subcelloffs(self):
+        return np.cumsum([self.vtk_nodes[t] for t in self.subcells])
 
-    @classmethod
-    def subcelltypes(cls, n):
-        return np.array([cls.vtk_types[t] for t in cls.subcells(n)])
-
-    @classmethod
-    def subnodes(cls, n):
-        pass
+    @property
+    def subcelltypes(self):
+        return np.array([self.vtk_types[t] for t in self.subcells])
 
 
 class TensorProdShapeSubDiv(BaseShapeSubDiv):
-    @classmethod
-    def subcells(cls, n):
-        return [cls.name]*(n**cls.ndim)
+    @property
+    def subcells(self):
+        return [self.name]*(self.n**self.ndim)
 
-    @classmethod
-    def subnodes(cls, n):
-        conbase = np.array([0, 1, n + 2, n + 1])
+    @property
+    def subnodes(self):
+        conbase = np.array([0, 1, self.n + 2, self.n + 1])
 
         # Extend quad mapping to hex mapping
-        if cls.ndim == 3:
-            conbase = np.hstack((conbase, conbase + (1 + n)**2))
+        if self.ndim == 3:
+            conbase = np.hstack((conbase, conbase + (1 + self.n)**2))
 
         # Calculate offset of each subdivided element's nodes
-        nodeoff = np.zeros((n,)*cls.ndim, dtype=np.int32)
-        for dim, off in enumerate(np.ix_(*(range(n),)*cls.ndim)):
-            nodeoff += off*(n + 1)**dim
+        nodeoff = np.zeros((self.n,)*self.ndim, dtype=np.int32)
+        for dim, off in enumerate(np.ix_(*(range(self.n),)*self.ndim)):
+            nodeoff += off*(self.n + 1)**dim
 
         # Tile standard element node ordering mapping, then apply offsets
-        internal_con = np.tile(conbase, (n**cls.ndim, 1))
+        internal_con = np.tile(conbase, (self.n**self.ndim, 1))
         internal_con += nodeoff.T.ravel()[:, None]
 
         return np.hstack(internal_con)
@@ -946,17 +946,17 @@ class HexShapeSubDiv(TensorProdShapeSubDiv):
 class TriShapeSubDiv(BaseShapeSubDiv):
     name = 'tri'
 
-    @classmethod
-    def subcells(cls, n):
-        return ['tri']*(n**2)
+    @property
+    def subcells(self):
+        return ['tri']*(self.n**2)
 
-    @classmethod
-    def subnodes(cls, n):
+    @property
+    def subnodes(self):
         conlst = []
 
-        for row in range(n, 0, -1):
+        for row in range(self.n, 0, -1):
             # Lower and upper indices
-            l = (n - row)*(n + row + 3) // 2
+            l = (self.n - row)*(self.n + row + 3) // 2
             u = l + row + 1
 
             # Base offsets
@@ -975,16 +975,16 @@ class TriShapeSubDiv(BaseShapeSubDiv):
 class TetShapeSubDiv(BaseShapeSubDiv):
     name = 'tet'
 
-    @classmethod
-    def subcells(cls, nsubdiv):
-        return ['tet']*(nsubdiv**3)
+    @property
+    def subcells(self):
+        return ['tet']*(self.n**3)
 
-    @classmethod
-    def subnodes(cls, nsubdiv):
+    @property
+    def subnodes(self):
         conlst = []
         jump = 0
 
-        for n in range(nsubdiv, 0, -1):
+        for n in range(self.n, 0, -1):
             for row in range(n, 0, -1):
                 # Lower and upper indices
                 l = (n - row)*(n + row + 3) // 2 + jump
@@ -1014,18 +1014,18 @@ class TetShapeSubDiv(BaseShapeSubDiv):
 class PriShapeSubDiv(BaseShapeSubDiv):
     name = 'pri'
 
-    @classmethod
-    def subcells(cls, n):
-        return ['pri']*(n**3)
+    @property
+    def subcells(self):
+        return ['pri']*(self.n**3)
 
-    @classmethod
-    def subnodes(cls, n):
+    @property
+    def subnodes(self):
         # Triangle connectivity
-        tcon = TriShapeSubDiv.subnodes(n).reshape(-1, 3)
+        tcon = TriShapeSubDiv(self.n).subnodes.reshape(-1, 3)
 
         # Layer these rows of triangles to define prisms
-        loff = (n + 1)*(n + 2) // 2
-        lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in range(n)]
+        loff = (self.n + 1)*(self.n + 2) // 2
+        lcon = [[tcon + i*loff, tcon + (i + 1)*loff] for i in range(self.n)]
 
         return np.hstack([np.hstack(l).flat for l in lcon])
 
@@ -1033,23 +1033,23 @@ class PriShapeSubDiv(BaseShapeSubDiv):
 class PyrShapeSubDiv(BaseShapeSubDiv):
     name = 'pyr'
 
-    @classmethod
-    def subcells(cls, n):
+    @property
+    def subcells(self):
         cells = []
 
-        for i in range(n, 0, -1):
+        for i in range(self.n, 0, -1):
             cells += ['pyr']*(i**2 + (i - 1)**2)
             cells += ['tet']*(2*i*(i - 1))
 
         return cells
 
-    @classmethod
-    def subnodes(cls, nsubdiv):
+    @property
+    def subnodes(self):
         lcon = []
 
         # Quad connectivity
-        qcon = [QuadShapeSubDiv.subnodes(n + 1).reshape(-1, 4)
-                for n in range(nsubdiv)]
+        qcon = [QuadShapeSubDiv(n + 1).subnodes.reshape(-1, 4)
+                for n in range(self.n)]
 
         # Simple functions
         def _row_in_quad(n, a=0, b=0):
@@ -1063,7 +1063,7 @@ class PyrShapeSubDiv(BaseShapeSubDiv):
                              for j in range(a, n + b)])
 
         u = 0
-        for n in range(nsubdiv, 0, -1):
+        for n in range(self.n, 0, -1):
             l = u
             u += (n + 1)**2
 

@@ -14,7 +14,7 @@ from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, cli_external,
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, subclass_where
-from pyfr.writers.vtk import BaseShapeSubDiv
+from pyfr.writers.vtk import get_subdiv
 
 
 class AscentError(Exception): pass
@@ -319,29 +319,29 @@ class _AscentRenderer:
             mesh_n[f'{d_str}/coordsets/coords/values/{l}'] = x
 
         # Subdivide the element
-        subdvcls = subclass_where(BaseShapeSubDiv, name=etype)
-        snodes = subdvcls.subnodes(divisor)
+        subdiv = get_subdiv(etype, divisor)
+        snodes = subdiv.subnodes
 
         sconn = np.tile(snodes, (neles, 1))
         sconn += (np.arange(neles)*nsvpts)[:, None]
         mesh_n[f'{e_str}/connectivity'] = sconn
 
         # Handle elements which subdivide into more than one type of element
-        if len(scells := set(subdvcls.subcells(divisor))) > 1:
+        if len(scells := set(subdiv.subcells)) > 1:
             mesh_n[f'{e_str}/shape'] = 'mixed'
 
             for sc in scells:
                 an = self.bp_emap[sc]
-                mesh_n[f'{e_str}/shape_map/{an}'] = subdvcls.vtk_types[sc]
+                mesh_n[f'{e_str}/shape_map/{an}'] = subdiv.vtk_types[sc]
 
-            scell_t = subdvcls.subcelltypes(divisor)
+            scell_t = subdiv.subcelltypes
             mesh_n[f'{e_str}/shapes'] = np.tile(scell_t, neles)
 
-            scell_s = subdvcls.subcells(divisor)
-            scell_s = [subdvcls.vtk_nodes[sc] for sc in scell_s]
+            scell_s = subdiv.subcells
+            scell_s = [subdiv.vtk_nodes[sc] for sc in scell_s]
             mesh_n[f'{e_str}/sizes'] = np.tile(scell_s, neles)
 
-            scell_o = np.tile(subdvcls.subcelloffs(divisor), (neles, 1))
+            scell_o = np.tile(subdiv.subcelloffs, (neles, 1))
             scell_o += (np.arange(neles)*len(snodes))[:, None]
             scell_o = np.concatenate(([0], scell_o.flat[:-1]))
             mesh_n[f'{e_str}/offsets'] = scell_o
