@@ -10,7 +10,7 @@ from pyfr.nputil import iter_struct, fuzzysort
 from pyfr.polys import get_polybasis
 from pyfr.progress import NullProgressSequence
 from pyfr.shapes import BaseShape
-from pyfr.util import digest, subclass_where
+from pyfr.util import digest, first, subclass_where
 
 
 class BaseReader:
@@ -359,7 +359,7 @@ class NodalMeshAssembler:
 
     def _linearise_eles(self, emap, lintol, spinner):
         # Create a copy of the node points
-        ndim = self._petype_ndim[next(iter(emap))]
+        ndim = self._petype_ndim[first(emap)]
         nodepts = self._nodepts[:, :ndim].copy()
 
         for petype, einfo in emap.items():

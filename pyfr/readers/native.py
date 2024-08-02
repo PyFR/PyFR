@@ -2,6 +2,7 @@ from dataclasses import dataclass, field, replace
 import re
 
 import h5py
+import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import Scatterer, SparseScatterer, get_comm_rank_root
