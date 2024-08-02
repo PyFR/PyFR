@@ -61,7 +61,7 @@ class PointLocator:
     def _get_shape_basis(self, etype, nspts):
         shape = subclass_where(BaseShape, name=etype)
         order = shape.order_from_npts(nspts)
-        basis = get_polybasis(etype, order, shape.std_ele(order))
+        basis = get_polybasis(etype, order + 1, shape.std_ele(order))
 
         return shape, basis
 
