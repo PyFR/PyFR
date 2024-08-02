@@ -268,8 +268,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
                 stats.set('tavg', f'max-std-fun-{fn}', fm)
                 stats.set('tavg', f'avg-std-fun-{fn}', fs / self.tpts)
 
-            return dict(intg.cfgmeta, stats=stats.tostr(),
-                        mesh_uuid=intg.mesh_uuid)
+            return {**intg.cfgmeta, 'stats': stats.tostr(),
+                    'mesh-uuid': intg.mesh_uuid}
 
     def _prepare_data(self, intg):
         accex, vaccex = self.accex, self.vaccex
@@ -466,7 +466,7 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 self.fields = fields
                 self.cfgsect = cfgsect
                 self.region = cfg.get(cfgsect, 'region')
-                self.uuid = f['mesh_uuid'][()].decode()
+                self.uuid = f['mesh-uuid'][()].decode()
 
                 self.tpts = 0
                 for k, v in f['tavg'].items():
@@ -488,7 +488,7 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                     self.fstd_max, self.fstd_sum = np.zeros((2, len(fnames)))
 
             # Check for compatibility of files
-            if self.uuid != f['mesh_uuid'][()].decode():
+            if self.uuid != f['mesh-uuid'][()].decode():
                 raise RuntimeError('Average files computed on different '
                                    'meshes')
             if self.region != cfg.get(cfgsect, 'region'):

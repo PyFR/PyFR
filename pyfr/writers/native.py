@@ -5,9 +5,11 @@ import uuid
 import h5py
 import numpy as np
 
+from pyfr._version import __version__
+from pyfr.shapes import BaseShape
 from pyfr.mpiutil import Gatherer, get_comm_rank_root, mpi, scal_coll
 from pyfr.quadrules import get_quadrule
-from pyfr.util import file_path_gen, mv
+from pyfr.util import file_path_gen, mv, subclass_where
 
 
 class NativeWriter:
@@ -47,8 +49,6 @@ class NativeWriter:
     def set_shapes_eidxs(self, shapes, eidxs):
         comm, rank, root = get_comm_rank_root()
 
-        order = self.cfg.getint('solver', 'order')
-
         # Prepare the element information
         self._einfo = {}
         for etype, ecount in self._ecounts.items():
@@ -65,6 +65,10 @@ class NativeWriter:
 
                 # Determine the final shape of the element array
                 shape = (gatherer.tot, *next(es for es in eshape if es))
+
+                # Determine the polynomial order
+                ecls = subclass_where(BaseShape, name=etype)
+                order = ecls.order_from_npts(shape[2])
 
                 # See if the element is being subset
                 subset = comm.allreduce(len(idxs) != ecount, op=mpi.LOR)
@@ -98,11 +102,12 @@ class NativeWriter:
             if rank != root:
                 raise ValueError('Metadata must be written by the root rank')
 
+            metadata = dict(metadata, creator=f'pyfr {__version__}', version=1)
+
             # Convert all strings to arrays
-            metadata = dict(metadata)
             for k, v in metadata.items():
                 if isinstance(v, str):
-                    metadata[k] = np.array(v.encode(), dtype='S')
+                    metadata[k] = np.array(v, dtype='S')
 
         # Gather the solution data into contiguous arrays
         gdata = {}
@@ -143,10 +148,7 @@ class NativeWriter:
         with h5py.File(path, 'w') as f:
             # Write the metadata
             for k, v in metadata.items():
-                if isinstance(v, str):
-                    f[k] = np.array(v.encode(), dtype='S')
-                else:
-                    f[k] = v
+                f[k] = v
 
             # Create the datasets
             g = f.create_group(self.prefix)

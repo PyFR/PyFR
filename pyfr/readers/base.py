@@ -65,7 +65,7 @@ class BaseReader:
                 # Write out the metadata
                 f['codec'] = np.array(codec, dtype='S')
                 f['creator'] = np.array(f'pyfr {__version__}', dtype='S')
-                f['mesh_uuid'] = np.array(str(uuid), dtype='S')
+                f['mesh-uuid'] = np.array(str(uuid), dtype='S')
                 f['version'] = 1
 
                 # Write out the nodes

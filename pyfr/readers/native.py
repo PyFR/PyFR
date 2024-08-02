@@ -65,7 +65,7 @@ class NativeReader:
         with h5py.File(sname, 'r') as f:
             if rank == root:
                 # Ensure the solution is from the mesh we are using
-                uuid = f['mesh_uuid'][()].decode()
+                uuid = f['mesh-uuid'][()].decode()
                 if uuid != self.mesh.uuid:
                     raise RuntimeError('Invalid solution for mesh')
 
@@ -149,7 +149,7 @@ class NativeReader:
         if rank == root:
             creator = self.f['creator'][()].decode()
             codec = [c.decode() for c in self.f['codec']]
-            uuid = self.f['mesh_uuid'][()].decode()
+            uuid = self.f['mesh-uuid'][()].decode()
             version = self.f['version'][()]
 
             meta = (creator, codec, uuid, version)
