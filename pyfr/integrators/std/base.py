@@ -31,7 +31,7 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
 
         # Pre-process solution if necessary
         self.system.preproc(self.tcurr,
-                            self.system.ele_scal_upts(self._idxcurr))
+                            self._idxcurr)
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
