@@ -56,14 +56,15 @@
 % endfor
 
     // Apply filter to local value
-    fpdtype_t v = 1.0;
+    fpdtype_t v = 1.0, v2 = 1.0;
     for (int pidx = 1; pidx < ${order+1}; pidx++)
     {
-        // Utilize exp(-zeta*p**2) = pow(f, p**2)
+        // Utilize exp(-zeta*(p+1)**2) = exp(-zeta*p**2)*exp(-2*zeta*p)*exp(-zeta) 
+        v2 *= v*v*f;
         v *= f;
 
         % for vidx in range(nvars):
-        ui[${vidx}] += v*v*up[pidx][${vidx}];
+        ui[${vidx}] += v2*up[pidx][${vidx}];
         % endfor
     }
 
