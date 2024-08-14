@@ -2,7 +2,10 @@ from functools import cached_property, wraps
 
 import numpy as np
 
+from pyfr.inifile import NoOptionError
 from pyfr.nputil import npeval, fuzzysort
+from pyfr.quadrules import get_quadrule
+from pyfr.shapes import _proj_l2
 from pyfr.util import memoize
 
 
@@ -88,8 +91,26 @@ class BaseElements:
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
         # Get the physical location of each solution point
-        coords = self.ploc_at_np('upts').swapaxes(0, 1)
-        vars |= dict(zip('xyz', coords))
+        coords = self.ploc_at_np('upts').swapaxes(0,1)
+
+        # See if performing L2 projection
+        ename = self.basis.name
+        upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
+        qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or 
+                self.cfg.getint('soln-ics', f'quad-deg', 0))
+        # Default to solution points if quad-pts are not specified
+        qpts = (self.cfg.get('soln-ics', f'quad-pts-{ename}', upts) or 
+                self.cfg.get('soln-ics', f'quad-pts', upts))
+        # Get prolongation/projection operators 
+        if qdeg:
+            qrule = get_quadrule(ename, qpts, qdeg=qdeg)
+            m7 = self.basis.ubasis.nodal_basis_at(qrule.pts)
+            qcoords = m7 @ coords
+            m8 = _proj_l2(qrule, self.basis.ubasis)
+            vars |= dict(zip('xyz', qcoords))
+        else:
+            m8 = None
+            vars |= dict(zip('xyz', coords))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
@@ -100,7 +121,7 @@ class BaseElements:
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
-            self.scal_upts[:, i, :] = v
+            self.scal_upts[:, i, :] = m8 @ v if m8 is not None else v
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
