@@ -17,7 +17,8 @@ class BaseAdvectionIntInters(BaseInters):
         self._scal_rhs = self._scal_view(rhs, 'get_scal_fpts_for_inter')
 
         # Generate the additional view matrices for entropy filtering
-        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if (cfg.get('solver', 'shock-capturing') == 'entropy-filter' and
+            cfg.getint('solver', 'order') != 0):
             self._entmin_lhs = self._view(
                 lhs, 'get_entmin_int_fpts_for_inter', with_perm=False
             )
@@ -74,7 +75,8 @@ class BaseAdvectionMPIInters(BaseInters):
             self._rhsrank, scal_fpts_tag
         )
 
-        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if (cfg.get('solver', 'shock-capturing') == 'entropy-filter' and
+            cfg.getint('solver', 'order') != 0):
             self._entmin_lhs = self._xchg_view(
                 lhs, 'get_entmin_int_fpts_for_inter', with_perm=False
             )
@@ -117,7 +119,8 @@ class BaseAdvectionBCInters(BaseInters):
         # Make the simulation time available inside kernels
         self._set_external('t', 'scalar fpdtype_t')
 
-        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if (cfg.get('solver', 'shock-capturing') == 'entropy-filter' and
+            cfg.getint('solver', 'order') != 0):
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
         else:
             self._entmin_lhs = None

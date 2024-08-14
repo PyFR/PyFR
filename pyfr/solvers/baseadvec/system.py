@@ -108,9 +108,6 @@ class BaseAdvectionSystem(BaseSystem):
         # Interpolate the solution to the flux points
         if 'eles/local_entropy' in k:
             g1.add_all(k['eles/disu'])
-            bdeps = k['eles/disu']
-        else:
-            bdeps = []
 
         # Compute local minimum entropy within element
         g1.add_all(k['eles/local_entropy'])
@@ -123,7 +120,7 @@ class BaseAdvectionSystem(BaseSystem):
         # Compute common entropy minima at internal/boundary interfaces
         g1.add_all(k['iint/comm_entropy'], deps=k['eles/local_entropy'])
         g1.add_all(k['bcint/comm_entropy'],
-                   deps=k['eles/local_entropy'] + bdeps)
+                   deps=k['eles/local_entropy'] + k['eles/disu'])
         g1.commit()
 
         if 'mpiint/comm_entropy' in k:
