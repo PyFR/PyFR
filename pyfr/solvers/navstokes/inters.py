@@ -98,8 +98,7 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
             artviscl=self._artvisc_lhs, **self._external_vals
         )
 
-        if (self.cfg.get('solver', 'shock-capturing') == 'entropy-filter' and
-            self.cfg.getint('solver', 'order') != 0):
+        if self._ef_enabled:
             self._be.pointwise.register(
                 'pyfr.solvers.navstokes.kernels.bccent'
             )
