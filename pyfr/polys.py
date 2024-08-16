@@ -1,4 +1,5 @@
 from functools import cached_property
+
 import numpy as np
 
 from pyfr.nputil import clean

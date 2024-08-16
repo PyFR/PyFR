@@ -22,10 +22,10 @@
     fpdtype_t uf[${nvars}];
     for (int fidx = 0; fidx < ${nfpts}; fidx++)
     {
-        for (int vidx = 0; vidx < ${nvars}; vidx++)
-        {
-            uf[vidx] = ${pyfr.dot('m0[fidx][{k}]', 'u[{k}][vidx]', k=nupts)};
-        }
+        % for vidx in range(nvars):
+        uf[${vidx}] = ${pyfr.dot('m0[fidx][{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
+        % endfor
+
         ${pyfr.expand('compute_entropy', 'uf', 'd', 'p', 'e')};
         dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
     }
@@ -86,7 +86,7 @@
 <%pyfr:kernel name='entropyfilter' ndim='1'
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
-              vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
+              vdm='in broadcast fpdtype_t[${str(nefpts)}][${str(nupts)}]'
               invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
               m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'>
     fpdtype_t dmin, pmin, emin;
@@ -122,11 +122,7 @@
         // Compute f on a rolling basis per solution point
         fpdtype_t up[${order+1}][${nvars}];
         
-        % if fpts_in_upts:
-        for (int uidx = 0; uidx < ${nupts}; uidx++)
-        % else:
-        for (int uidx = 0; uidx < ${nupts + nfpts}; uidx++)
-        % endif
+        for (int uidx = 0; uidx < ${nefpts}; uidx++)
         {
             // Group nodal contributions by common filter factor
             % for pidx, vidx in pyfr.ndrange(order+1, nvars):
