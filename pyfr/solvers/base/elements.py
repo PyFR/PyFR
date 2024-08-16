@@ -2,10 +2,9 @@ from functools import cached_property, wraps
 
 import numpy as np
 
-from pyfr.inifile import NoOptionError
 from pyfr.nputil import npeval, fuzzysort
 from pyfr.quadrules import get_quadrule
-from pyfr.shapes import _proj_l2
+from pyfr.shapes import proj_l2
 from pyfr.util import memoize
 
 
@@ -104,9 +103,8 @@ class BaseElements:
         # Get prolongation/projection operators 
         if qdeg:
             qrule = get_quadrule(ename, qpts, qdeg=qdeg)
-            m7 = self.basis.ubasis.nodal_basis_at(qrule.pts)
-            qcoords = m7 @ coords
-            m8 = _proj_l2(qrule, self.basis.ubasis)
+            qcoords = self.ploc_at_np(qrule.pts).swapaxes(0,1)
+            m8 = proj_l2(qrule, self.basis.ubasis)
             vars |= dict(zip('xyz', qcoords))
         else:
             m8 = None
