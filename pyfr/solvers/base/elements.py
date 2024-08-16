@@ -89,9 +89,6 @@ class BaseElements:
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
-        # Get the physical location of each solution point
-        coords = self.ploc_at_np('upts').swapaxes(0,1)
-
         # See if performing L2 projection
         ename = self.basis.name
         upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
@@ -100,15 +97,16 @@ class BaseElements:
         # Default to solution points if quad-pts are not specified
         qpts = (self.cfg.get('soln-ics', f'quad-pts-{ename}', upts) or 
                 self.cfg.get('soln-ics', f'quad-pts', upts))
-        # Get prolongation/projection operators 
+        # Get the physical location of each interpolation point
         if qdeg:
             qrule = get_quadrule(ename, qpts, qdeg=qdeg)
-            qcoords = self.ploc_at_np(qrule.pts).swapaxes(0,1)
+            coords = self.ploc_at_np(qrule.pts).swapaxes(0,1)
+            # Compute projection operator
             m8 = proj_l2(qrule, self.basis.ubasis)
-            vars |= dict(zip('xyz', qcoords))
         else:
             m8 = None
-            vars |= dict(zip('xyz', coords))
+            coords = self.ploc_at_np('upts').swapaxes(0,1)
+        vars |= dict(zip('xyz', coords))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
