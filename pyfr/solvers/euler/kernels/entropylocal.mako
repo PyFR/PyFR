@@ -25,10 +25,9 @@
     fpdtype_t uf[${nvars}];
     for (int fidx = 0; fidx < ${nfpts}; fidx++)
     {
-        for (int vidx = 0; vidx < ${nvars}; vidx++)
-        {
-            uf[vidx] = ${pyfr.dot('m0[fidx][{k}]', 'u[{k}][vidx]', k=nupts)};
-        }
+        % for vidx in range(nvars):
+        uf[${vidx}] = ${pyfr.dot('m0[fidx][{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
+        % endfor
         ${pyfr.expand('compute_entropy', 'uf', 'd', 'p', 'e')};
         entmin = fmin(entmin, e);
     }
