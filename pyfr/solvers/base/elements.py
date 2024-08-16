@@ -101,13 +101,14 @@ class BaseElements:
         if qdeg:
             qrule = get_quadrule(ename, qpts, qdeg=qdeg)
             coords = self.ploc_at_np(qrule.pts)
+
             # Compute projection operator
             m8 = proj_l2(qrule, self.basis.ubasis)
         else:
             m8 = None
             coords = self.ploc_at_np('upts')
 
-        vars |= dict(zip('xyz', coords.swapaxes(0,1)))
+        vars |= dict(zip('xyz', coords.swapaxes(0, 1)))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
