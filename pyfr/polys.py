@@ -1,5 +1,4 @@
 from functools import cached_property
-
 import numpy as np
 
 from pyfr.nputil import clean
@@ -71,7 +70,7 @@ class BasePolyBasis:
 
     @cached_property
     def vdm(self):
-        return self.ortho_basis_at(self.pts)
+        return self.vdm_at(self.pts)
 
     def vdm_at(self, pts):
         return self.ortho_basis_at(pts)
