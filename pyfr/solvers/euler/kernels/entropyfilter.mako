@@ -103,8 +103,6 @@
         fpdtype_t f_low, f_high, fnew;
 
         fpdtype_t d, p, e;
-        fpdtype_t d_low, p_low, e_low;
-        fpdtype_t d_high, p_high, e_high;
 
         // Compute f on a rolling basis per solution point
         fpdtype_t up[${order+1}][${nvars}];
@@ -127,13 +125,7 @@
                 f_low = 0.0;
 
                 // Compute brackets
-                d_high = d; p_high = p; e_high = e;
-                ${pyfr.expand('apply_filter_single', 'up', 'f_low', 'd_low', 'p_low', 'e_low')};
-
-                // Regularize constraints to be around zero
-                d_low -= ${d_min}; d_high -= ${d_min};
-                p_low -= ${p_min}; p_high -= ${p_min};
-                e_low -= entmin - ${e_tol}; e_high -= entmin - ${e_tol};
+                ${pyfr.expand('apply_filter_single', 'up', 'f_low', 'd', 'p', 'e')};
 
                 // Iterate filter strength with bisection algorithm
                 for (int iter = 0; iter < ${niters} && f_high - f_low > ${f_tol}; iter++)
@@ -148,16 +140,10 @@
                     if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
                     {
                         f_high = fnew;
-                        d_high = d - ${d_min};
-                        p_high = p - ${p_min};
-                        e_high = e - (entmin - ${e_tol});
                     }
                     else
                     {
                         f_low = fnew;
-                        d_low = d - ${d_min};
-                        p_low = p - ${p_min};
-                        e_low = e - (entmin - ${e_tol});
                     }
                 }
 
