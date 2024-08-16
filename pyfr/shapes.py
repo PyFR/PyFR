@@ -16,7 +16,7 @@ def _proj_pts(projector, pts):
 
 
 @clean
-def _proj_l2(qrule, basis):
+def proj_l2(qrule, basis):
     return basis.vdm.T @ (qrule.wts*basis.ortho_basis_at(qrule.pts))
 
 
@@ -106,7 +106,7 @@ class BaseShape:
         m = self.gbasis_at(self.upts)
 
         if 'surf-flux' in self.antialias:
-            fp = [_proj_l2(self._iqrules[kind], self.facebases[kind])
+            fp = [proj_l2(self._iqrules[kind], self.facebases[kind])
                   for kind, proj, norm in self.faces]
 
             m = m @ block_diag(fp)
@@ -129,7 +129,7 @@ class BaseShape:
 
     @cached_property
     def m8(self):
-        return _proj_l2(self._eqrule, self.ubasis)
+        return proj_l2(self._eqrule, self.ubasis)
 
     @property
     def m9(self):
