@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="/home/dp114856/pyfr_bogaev-venv"
+VIRTUAL_ENV="/home/dp114856/PyFR_bogaev/venv"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"
@@ -55,9 +55,9 @@ fi
 
 if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT:-}" ] ; then
     _OLD_VIRTUAL_PS1="${PS1:-}"
-    PS1="(pyfr_bogaev-venv) ${PS1:-}"
+    PS1="(venv) ${PS1:-}"
     export PS1
-    VIRTUAL_ENV_PROMPT="(pyfr_bogaev-venv) "
+    VIRTUAL_ENV_PROMPT="(venv) "
     export VIRTUAL_ENV_PROMPT
 fi
 
