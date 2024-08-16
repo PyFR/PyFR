@@ -26,8 +26,8 @@
 
     // Utilize exp(-zeta*p**2) = pow(f, p**2)
 % for d in range(1, order + 1):
+    ffac[${d}] = ffac[${d - 1}]*v*v*f;
     v *= f;
-    ffac[${d}] = v*v;
 % endfor
 
     // Compute filtered solution
