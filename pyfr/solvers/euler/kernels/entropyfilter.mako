@@ -138,13 +138,9 @@
 
                     // Update brackets
                     if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
-                    {
                         f_high = fnew;
-                    }
                     else
-                    {
                         f_low = fnew;
-                    }
                 }
 
                 // Set current minimum f as the bounds-preserving value
