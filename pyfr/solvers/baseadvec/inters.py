@@ -4,7 +4,8 @@ import math
 from pyfr.solvers.base import BaseInters
 from pyfr.nputil import npeval
 
-class IntersMixin:
+
+class BaseAdvectionIntersMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -12,7 +13,8 @@ class IntersMixin:
                             'entropy-filter' and
                             self.cfg.getint('solver', 'order'))
 
-class BaseAdvectionIntInters(IntersMixin, BaseInters):
+
+class BaseAdvectionIntInters(BaseAdvectionIntersMixin, BaseInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
 
@@ -43,7 +45,7 @@ class BaseAdvectionIntInters(IntersMixin, BaseInters):
         self._perm = self._get_perm_for_view(lhs, 'get_scal_fpts_for_inter')
 
 
-class BaseAdvectionMPIInters(IntersMixin, BaseInters):
+class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
     # Starting tag used for MPI
     BASE_MPI_TAG = 2314
 
@@ -105,7 +107,7 @@ class BaseAdvectionMPIInters(IntersMixin, BaseInters):
             self._entmin_lhs = self._entmin_rhs = None
 
 
-class BaseAdvectionBCInters(IntersMixin, BaseInters):
+class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
     type = None
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
