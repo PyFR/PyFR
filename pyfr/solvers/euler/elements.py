@@ -96,15 +96,18 @@ class BaseFluidElements:
             )
 
             # Template arguments
+            fpts_in_upts = self.basis.fpts_in_upts
+            self.nefpts = self.nupts if fpts_in_upts else self.nupts + self.nfpts
             eftplargs = {
                 'ndims': self.ndims,
                 'nupts': self.nupts,
                 'nfpts': self.nfpts,
+                'nefpts': self.nefpts,
                 'nvars': self.nvars,
                 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
                 'order': self.basis.order,
-                'fpts_in_upts': self.basis.fpts_in_upts
+                'fpts_in_upts': fpts_in_upts
             }
 
             # Check to see if running anti-aliasing
