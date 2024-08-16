@@ -95,18 +95,19 @@ class BaseElements:
         qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or 
                 self.cfg.getint('soln-ics', f'quad-deg', 0))
         # Default to solution points if quad-pts are not specified
-        qpts = (self.cfg.get('soln-ics', f'quad-pts-{ename}', upts) or 
-                self.cfg.get('soln-ics', f'quad-pts', upts))
+        qpts = self.cfg.get('soln-ics', f'quad-pts-{ename}', upts)
+
         # Get the physical location of each interpolation point
         if qdeg:
             qrule = get_quadrule(ename, qpts, qdeg=qdeg)
-            coords = self.ploc_at_np(qrule.pts).swapaxes(0,1)
+            coords = self.ploc_at_np(qrule.pts)
             # Compute projection operator
             m8 = proj_l2(qrule, self.basis.ubasis)
         else:
             m8 = None
-            coords = self.ploc_at_np('upts').swapaxes(0,1)
-        vars |= dict(zip('xyz', coords))
+            coords = self.ploc_at_np('upts')
+
+        vars |= dict(zip('xyz', coords.swapaxes(0,1)))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)

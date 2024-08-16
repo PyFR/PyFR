@@ -47,4 +47,4 @@ Example::
     w = 1.0
     p = 1.0/(1.0+x)
     quad-deg = 9
-    quad-pts = gauss-legendre
+    quad-pts-hex = gauss-legendre
