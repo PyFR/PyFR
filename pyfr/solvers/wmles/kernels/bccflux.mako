@@ -1,10 +1,11 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.navstokes.kernels.bcs.${bctype}'/>
+<%include file='pyfr.solvers.wmles.kernels.sgs.smagorinsky'/>
+<%include file='pyfr.solvers.wmles.kernels.bcs.${bctype}'/>
 
 % if bccfluxstate:
-<%include file='pyfr.solvers.navstokes.kernels.bcs.${bccfluxstate}'/>
+<%include file='pyfr.solvers.wmles.kernels.bcs.${bccfluxstate}'/>
 % endif
 
 <%pyfr:kernel name='bccflux' ndim='1'

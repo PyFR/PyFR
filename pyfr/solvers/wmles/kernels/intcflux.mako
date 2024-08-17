@@ -1,9 +1,10 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
+<%include file='pyfr.solvers.wmles.kernels.sgs.smagorinsky'/>
 <%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
-<%include file='pyfr.solvers.navstokes.kernels.flux'/>
+<%include file='pyfr.solvers.wmles.kernels.flux'/>
 
 <% beta, tau = c['ldg-beta'], c['ldg-tau'] %>
 

@@ -19,20 +19,8 @@
     fpdtype_t E_x = grad_uin[0][3];
     fpdtype_t E_y = grad_uin[1][3];
 
-% if sgs_model == 'smagorinsky':
-    // Compute strain rate tensor components
-    fpdtype_t S_xx = u_x;
-    fpdtype_t S_yy = v_y;
-    fpdtype_t S_xy = 0.5*(u_y + v_x);
-
-    // Compute |S| = sqrt(2*S_ij*S_ij)
-    fpdtype_t S_mag = sqrt(2.0*(S_xx*S_xx + S_yy*S_yy + 2.0*S_xy*S_xy));
-
-    // Compute eddy viscosity
-    fpdtype_t nu_sgs = ${sgs['Csgs']*sgs['Csgs']*sgs['delta']*sgs['delta']}*S_mag;
-% else:
     fpdtype_t nu_sgs = 0;
-% endif
+    ${pyfr.expand('sub_grid_scale', 'uin', 'grad_uin', 'nu_sgs')};
 
 % if visc_corr == 'sutherland':
     // Compute the temperature and viscosity
@@ -56,16 +44,12 @@
     fout[0][1] += t_xx;     fout[1][1] += t_xy;
     fout[0][2] += t_xy;     fout[1][2] += t_yy;
 
-% if sgs_model != 'none':
     fout[0][3] += u*t_xx + v*t_xy - (mu_c*${c['gamma']/c['Pr']}
                 + nu_sgs*rho*${c['gamma']/c['Prt']})*T_x;
     fout[1][3] += u*t_xy + v*t_yy - (mu_c*${c['gamma']/c['Pr']}
                 + nu_sgs*rho*${c['gamma']/c['Prt']})*T_y;
-% else:
-    fout[0][3] += u*t_xx + v*t_xy + -mu_c*${c['gamma']/c['Pr']}*T_x;
-    fout[1][3] += u*t_xy + v*t_yy + -mu_c*${c['gamma']/c['Pr']}*T_y;
-% endif
 </%pyfr:macro>
+
 % elif ndims == 3:
 <%pyfr:macro name='viscous_flux_add' params='uin, grad_uin, fout'>
     fpdtype_t rho  = uin[0];
@@ -94,24 +78,8 @@
     fpdtype_t E_y = grad_uin[1][4];
     fpdtype_t E_z = grad_uin[2][4];
 
-% if sgs_model == 'smagorinsky':
-    // Compute strain rate tensor components
-    fpdtype_t S_xx = u_x;
-    fpdtype_t S_yy = v_y;
-    fpdtype_t S_zz = w_z;
-    fpdtype_t S_xy = 0.5*(u_y + v_x);
-    fpdtype_t S_xz = 0.5*(u_z + w_x);
-    fpdtype_t S_yz = 0.5*(v_z + w_y);
-
-    // Compute |S| = sqrt(2*S_ij*S_ij)
-    fpdtype_t S_mag = sqrt(2.0*(S_xx*S_xx + S_yy*S_yy + S_zz*S_zz 
-                    + 2.0*(S_xy*S_xy + S_xz*S_xz + S_yz*S_yz)));
-    
-    // Compute eddy viscosity
-    fpdtype_t nu_sgs = ${sgs['Csgs']*sgs['Csgs']*sgs['delta']*sgs['delta']}*S_mag;
-% else:
     fpdtype_t nu_sgs = 0;
-% endif
+    ${pyfr.expand('sub_grid_scale', 'uin', 'grad_uin', 'nu_sgs')};
 
 % if visc_corr == 'sutherland':
     // Compute the temperature and viscosity
@@ -140,17 +108,11 @@
     fout[0][2] += t_xy;     fout[1][2] += t_yy;     fout[2][2] += t_yz;
     fout[0][3] += t_xz;     fout[1][3] += t_yz;     fout[2][3] += t_zz;
 
-% if sgs_model != 'none':
     fout[0][4] += u*t_xx + v*t_xy + w*t_xz - (mu_c*${c['gamma']/c['Pr']}
                 + nu_sgs*rho*${c['gamma']/c['Prt']})*T_x;
     fout[1][4] += u*t_xy + v*t_yy + w*t_yz - (mu_c*${c['gamma']/c['Pr']}
                 + nu_sgs*rho*${c['gamma']/c['Prt']})*T_y;
     fout[2][4] += u*t_xz + v*t_yz + w*t_zz - (mu_c*${c['gamma']/c['Pr']}
                 + nu_sgs*rho*${c['gamma']/c['Prt']})*T_z;
-% else:
-    fout[0][4] += u*t_xx + v*t_xy + w*t_xz + -mu_c*${c['gamma']/c['Pr']}*T_x;
-    fout[1][4] += u*t_xy + v*t_yy + w*t_yz + -mu_c*${c['gamma']/c['Pr']}*T_y;
-    fout[2][4] += u*t_xz + v*t_yz + w*t_zz + -mu_c*${c['gamma']/c['Pr']}*T_z;
-% endif
 </%pyfr:macro>
 % endif
