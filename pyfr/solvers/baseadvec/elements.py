@@ -149,6 +149,7 @@ class BaseAdvectionElements(BaseElements):
             # Allocate one minimum entropy value per interface
             self.nfaces = len(self.nfacefpts)
             ext = nonce + 'entmin_int'
+
             # Set values to -inf for pre-proc filter to enforce positivity
             entmin_int = np.full((self.nfaces, self.neles),
                                  -self._be.fpdtype_max)
