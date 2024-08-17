@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.entropy'/>
 
-<%pyfr:macro name='get_minima' params='u, dmin, pmin, emin'>
+<%pyfr:macro name='get_minima' params='u, m0, dmin, pmin, emin'>
     fpdtype_t d, p, e;
     fpdtype_t ui[${nvars}];
 
@@ -96,7 +96,7 @@
     for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
 
     // Check if solution is within bounds
-    ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
+    ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
 
     // Filter if out of bounds
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
@@ -184,7 +184,7 @@
         ${pyfr.expand('apply_filter_full', 'umodes', 'vdm', 'u', 'f')};
 
         // Calculate minimum entropy from filtered solution
-        ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
+        ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
     }
 
     // Set new minimum entropy within element for next stage
