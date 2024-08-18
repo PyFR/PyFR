@@ -52,6 +52,7 @@ class WMLESElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             'ndims': self.ndims,
             'nvars': self.nvars,
             'nverts': len(self.basis.linspts),
+            'order': self.basis.order,
             'c': self.cfg.items_as('constants', float),
             'jac_exprs': self.basis.jac_exprs,
             'shock_capturing': shock_capturing,

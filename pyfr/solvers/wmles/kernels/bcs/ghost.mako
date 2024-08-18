@@ -2,7 +2,8 @@
 
 <%include file='pyfr.solvers.baseadvecdiff.kernels.artvisc'/>
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
-<%include file='pyfr.solvers.navstokes.kernels.flux'/>
+<%include file='pyfr.solvers.wmles.kernels.flux'/>
+<%include file='pyfr.solvers.wmles.kernels.sgsflux'/>
 
 <% tau = c['ldg-tau'] %>
 
@@ -14,6 +15,7 @@
 
     fpdtype_t fvr[${ndims}][${nvars}] = {{0}};
     ${pyfr.expand('viscous_flux_add', 'ur', 'gradur', 'fvr')};
+    ${pyfr.expand('eddy_viscous_flux_add', 'ur', 'gradur', 'fvr')};
     ${pyfr.expand('artificial_viscosity_add', 'gradur', 'fvr', 'artviscl')};
 
     // Inviscid (Riemann solve) state

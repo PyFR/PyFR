@@ -6,6 +6,7 @@
 <%include file='pyfr.solvers.baseadvecdiff.kernels.transform_grad'/>
 <%include file='pyfr.solvers.euler.kernels.flux'/>
 <%include file='pyfr.solvers.wmles.kernels.flux'/>
+<%include file='pyfr.solvers.wmles.kernels.sgsflux'/>
 
 <% gradu = 'gradu' if 'fused' in ktype else 'f' %>
 <% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
@@ -37,6 +38,7 @@
     fpdtype_t p, v[${ndims}];
     ${pyfr.expand('inviscid_flux', 'u', 'ftemp', 'p', 'v')};
     ${pyfr.expand('viscous_flux_add', 'u', gradu, 'ftemp')};
+    ${pyfr.expand('eddy_viscous_flux_add', 'u', gradu, 'ftemp')};
     ${pyfr.expand('artificial_viscosity_add', gradu, 'ftemp', 'artvisc')};
 
     // Transform the fluxes
