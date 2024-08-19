@@ -1,7 +1,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
 % if ndims == 2:
-<%pyfr:macro name='eddy_viscosity' params='grad_uvw, nu_sgs'>
+<%pyfr:macro name='eddy_viscosity' params='grad_uvw, delta, nu_sgs'>
     // Velocity derivatives
     fpdtype_t u_x = grad_uvw[0][0];
     fpdtype_t u_y = grad_uvw[1][0];
@@ -17,11 +17,12 @@
     fpdtype_t S_mag = sqrt(2.0*(S_xx*S_xx + S_yy*S_yy + 2.0*S_xy*S_xy));
 
     // Compute eddy viscosity
-    fpdtype_t nu_sgs = ${sgs['Csgs']*sgs['Csgs']*sgs['delta']*sgs['delta']}*S_mag;
+    fpdtype_t Csgs = 0.16;
+    fpdtype_t nu_sgs = pow(Csgs*delta, 2)*S_mag;
 </%pyfr:macro>
 
 % elif ndims == 3:
-<%pyfr:macro name='eddy_viscosity' params='grad_uvw, nu_sgs'>
+<%pyfr:macro name='eddy_viscosity' params='grad_uvw, delta, nu_sgs'>
     // Velocity derivatives (rho*grad[u,v,w])
     fpdtype_t u_x = grad_uvw[0][0];
     fpdtype_t u_y = grad_uvw[1][0];
@@ -46,6 +47,7 @@
                     + 2.0*(S_xy*S_xy + S_xz*S_xz + S_yz*S_yz)));
     
     // Compute eddy viscosity
-    fpdtype_t nu_sgs = ${sgs['Csgs']*sgs['Csgs']*sgs['delta']*sgs['delta']}*S_mag;
+    fpdtype_t Csgs = 0.16;
+    fpdtype_t nu_sgs = pow(Csgs*delta, 2)*S_mag;
 </%pyfr:macro>
 % endif

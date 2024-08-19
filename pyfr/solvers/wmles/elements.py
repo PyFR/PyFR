@@ -59,10 +59,6 @@ class WMLESElements(BaseFluidElements, BaseAdvectionDiffusionElements):
             'sgs_model': sgs_model,
             'visc_corr': visc_corr
         }
-        if sgs_model != 'none':
-            tplargs.update({
-                'sgs': self.cfg.items_as('solver-sgs-model', float)
-            })
 
         # Helpers
         tdisf = []
