@@ -158,14 +158,20 @@ class BaseAdvectionElements(BaseElements):
                                               initval=entmin_int)
 
             # Setup nodal/modal operator matrices
-            self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
-            if self.basis.fpts_in_upts:
-                self.vdm_ef = self._be.const_matrix(self.basis.ubasis.vdm.T)
-                self.m0 = None
+            linearize = self.cfg.getbool('solver-entropy-filter', 'linearize',
+                                         False)
+            if linearize:
+                self.invvdm = self.vdm_ef = None
             else:
+                self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
                 vdmu = self.basis.ubasis.vdm.T
                 vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
-                self.vdm_ef = self._be.const_matrix(np.vstack((vdmu, vdmf)))
+                vdm = vdmu if self.basis.fpts_in_upts else np.vstack((vdmu, vdmf))
+                self.vdm_ef = self._be.const_matrix(vdm)
+
+            if self.basis.fpts_in_upts:
+                self.m0 = None
+            else:
                 self.m0 = self._be.const_matrix(self.basis.m0)
         else:
             self.entmin_int = None

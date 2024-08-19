@@ -102,6 +102,56 @@
     // Filter if out of bounds
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
+        % if linearize:
+        // Compute mean quantities
+        fpdtype_t uavg[${nvars}], davg, pavg, eavg;
+        % for vidx in range(nvars):
+        uavg[${vidx}] = ${' + '.join(f'{jx}*u[{j}][{vidx}]'
+                                     for j, jx in enumerate(meanwts) if jx != 0)};
+        % endfor
+
+        ${pyfr.expand('compute_entropy', 'uavg', 'davg', 'pavg', 'eavg')};
+
+        // Apply density limiting
+        fpdtype_t alpha;
+        if (dmin < ${d_min})
+        {
+            alpha = (dmin - ${d_min})/(dmin - davg);
+            alpha = fmin(fmax(alpha, 0.0), 1.0);
+
+            % for uidx in range(nupts):
+            u[${uidx}][0] += alpha*(uavg[0] - u[${uidx}][0]);
+            % endfor
+
+            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+        }
+
+        // Apply pressure limiting
+        if (pmin < ${p_min})
+        {
+            alpha = (pmin - ${p_min})/(pmin - pavg);
+            alpha = fmin(fmax(alpha, 0.0), 1.0);
+
+            % for uidx, vidx in pyfr.ndrange(nupts, nvars):
+            u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
+            % endfor
+
+            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+        }
+        
+        // Apply entropy limiting
+        if (emin < entmin - ${e_tol})
+        {
+            alpha = (emin - (entmin - ${e_tol}))/(emin - eavg);
+            alpha = fmin(fmax(alpha, 0.0), 1.0);
+
+            % for uidx, vidx in pyfr.ndrange(nupts, nvars):
+            u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
+            % endfor
+
+            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+        }
+        % else:
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
         for (int uidx = 0; uidx < ${nupts}; uidx++)
@@ -168,6 +218,7 @@
 
         // Calculate minimum entropy from filtered solution
         ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+        % endif
     }
 
     // Set new minimum entropy within element for next stage
