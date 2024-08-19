@@ -2,7 +2,7 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.entropy'/>
 
-<%pyfr:macro name='get_minima' params='u, dmin, pmin, emin'>
+<%pyfr:macro name='get_minima' params='u, m0, dmin, pmin, emin'>
     fpdtype_t d, p, e;
     fpdtype_t ui[${nvars}];
 
@@ -17,6 +17,19 @@
         ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
         dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
     }
+
+    % if not fpts_in_upts:
+    fpdtype_t uf[${nvars}];
+    for (int fidx = 0; fidx < ${nfpts}; fidx++)
+    {
+        % for vidx in range(nvars):
+        uf[${vidx}] = ${pyfr.dot('m0[fidx][{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
+        % endfor
+
+        ${pyfr.expand('compute_entropy', 'uf', 'd', 'p', 'e')};
+        dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
+    }
+    % endif
 </%pyfr:macro>
 
 <%pyfr:macro name='apply_filter_full' params='umodes, vdm, uf, f'>
@@ -74,8 +87,9 @@
 <%pyfr:kernel name='entropyfilter' ndim='1'
               u='inout fpdtype_t[${str(nupts)}][${str(nvars)}]'
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
-              vdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
-              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'>
+              vdm='in broadcast fpdtype_t[${str(nefpts)}][${str(nupts)}]'
+              invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
+              m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'>
     fpdtype_t dmin, pmin, emin;
 
     // Compute minimum entropy from current and adjacent elements
@@ -83,7 +97,7 @@
     for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
 
     // Check if solution is within bounds
-    ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
+    ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
 
     // Filter if out of bounds
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
@@ -106,13 +120,14 @@
 
         // Compute f on a rolling basis per solution point
         fpdtype_t up[${order+1}][${nvars}];
-        for (int uidx = 0; uidx < ${nupts}; uidx++)
+        
+        for (int uidx = 0; uidx < ${nefpts}; uidx++)
         {
             // Group nodal contributions by common filter factor
-        % for pidx, vidx in pyfr.ndrange(order+1, nvars):
+            % for pidx, vidx in pyfr.ndrange(order+1, nvars):
             up[${pidx}][${vidx}] = (${' + '.join(f'vdm[uidx][{k}]*umodes[{k}][{vidx}]'
                                                    for k, dd in enumerate(ubdegs) if dd == pidx)});
-        % endfor
+            % endfor
 
             // Compute constraints with current minimum f value
             ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'p', 'e')};
@@ -152,7 +167,7 @@
         ${pyfr.expand('apply_filter_full', 'umodes', 'vdm', 'u', 'f')};
 
         // Calculate minimum entropy from filtered solution
-        ${pyfr.expand('get_minima', 'u', 'dmin', 'pmin', 'emin')};
+        ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
     }
 
     // Set new minimum entropy within element for next stage
