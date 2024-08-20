@@ -158,8 +158,7 @@ class BaseAdvectionElements(BaseElements):
                                               initval=entmin_int)
 
             # Setup nodal/modal operator matrices
-            linearize = self.cfg.getbool('solver-entropy-filter', 'linearize',
-                                         False)
+            linearize = self.cfg.getbool('solver-entropy-filter', 'linearize')
             if linearize:
                 self.invvdm = self.vdm_ef = None
             else:
