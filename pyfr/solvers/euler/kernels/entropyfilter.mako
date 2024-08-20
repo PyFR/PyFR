@@ -114,10 +114,10 @@
 
         // Apply density, pressure, and entropy limiting sequentially
         fpdtype_t alpha;
-        % for (fvar, bound) in [('d', f'{d_min}'), ('p', f'{p_min}'), ('e', f'entmin - {e_tol}')]:
+        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('e', f'entmin - {e_tol}')]:
         if (${f'{fvar}min < {bound}'}) 
         {
-            alpha = (${f'{fvar}min'} - (${bound}))/(${f'{fvar}min'} - ${f'{fvar}avg'});
+            alpha = ${f'({fvar}min - ({bound}))/({fvar}min - {fvar}avg)'};
             alpha = fmin(fmax(alpha, 0.0), 1.0);
 
             % for uidx, vidx in pyfr.ndrange(nupts, 1 if fvar == 'd' else nvars):
