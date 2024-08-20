@@ -112,45 +112,21 @@
 
         ${pyfr.expand('compute_entropy', 'uavg', 'davg', 'pavg', 'eavg')};
 
-        // Apply density limiting
+        // Apply density, pressure, and entropy limiting sequentially
         fpdtype_t alpha;
-        if (dmin < ${d_min})
+        % for (fvar, bound) in [('d', f'{d_min}'), ('p', f'{p_min}'), ('e', f'entmin - {e_tol}')]:
+        if (${f'{fvar}min < {bound}'}) 
         {
-            alpha = (dmin - ${d_min})/(dmin - davg);
+            alpha = (${f'{fvar}min'} - (${bound}))/(${f'{fvar}min'} - ${f'{fvar}avg'});
             alpha = fmin(fmax(alpha, 0.0), 1.0);
 
-            % for uidx in range(nupts):
-            u[${uidx}][0] += alpha*(uavg[0] - u[${uidx}][0]);
-            % endfor
-
-            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
-        }
-
-        // Apply pressure limiting
-        if (pmin < ${p_min})
-        {
-            alpha = (pmin - ${p_min})/(pmin - pavg);
-            alpha = fmin(fmax(alpha, 0.0), 1.0);
-
-            % for uidx, vidx in pyfr.ndrange(nupts, nvars):
+            % for uidx, vidx in pyfr.ndrange(nupts, 1 if fvar == 'd' else nvars):
             u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
             % endfor
 
             ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
         }
-        
-        // Apply entropy limiting
-        if (emin < entmin - ${e_tol})
-        {
-            alpha = (emin - (entmin - ${e_tol}))/(emin - eavg);
-            alpha = fmin(fmax(alpha, 0.0), 1.0);
-
-            % for uidx, vidx in pyfr.ndrange(nupts, nvars):
-            u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
-            % endfor
-
-            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
-        }
+        % endfor
         % else:
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
