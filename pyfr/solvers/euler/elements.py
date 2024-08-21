@@ -99,7 +99,7 @@ class BaseFluidElements:
             fpts_in_upts = self.basis.fpts_in_upts
             self.nefpts = self.nupts if fpts_in_upts else self.nupts + self.nfpts
             ub = self.basis.ubasis
-            meanwts = ub.invvdm[:,0]/np.sum(ub.invvdm[:,0])
+            meanwts = ub.invvdm[:, 0] / np.sum(ub.invvdm[:, 0])
             eftplargs = {
                 'ndims': self.ndims, 'nupts': self.nupts,
                 'nfpts': self.nfpts, 'nefpts': self.nefpts,
@@ -135,10 +135,10 @@ class BaseFluidElements:
             if efunc not in {'numerical', 'physical'}:
                 raise ValueError(f'Unknown entropy functional: {efunc}')
 
-            # Use linearized constraints/limiting kernel approach from
+            # Use linearised constraints/limiting kernel approach from
             # Ching et al. (doi:10.1016/j.jcp.2024.112881)
-            eftplargs['linearize'] = self.cfg.getbool('solver-entropy-filter',
-                                                      'linearize', False)
+            eftplargs['linearise'] = self.cfg.getbool('solver-entropy-filter',
+                                                      'linearise', False)
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees

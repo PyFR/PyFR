@@ -24,7 +24,7 @@ Parameterises entropy filter for shock capturing with
 
     *int*
 
-6. ``linearize`` --- linearize constraints and filter kernel:
+6. ``linearise`` --- linearise constraints and filter kernel:
 
     *bool*
 
@@ -36,7 +36,7 @@ Example::
     e-tol = 1e-6
     e-func = physical
     niters = 2
-    linearize = False
+    linearise = False
 
 Used in the following Examples:
 

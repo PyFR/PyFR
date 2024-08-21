@@ -102,7 +102,7 @@
     // Filter if out of bounds
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
-        % if linearize:
+        % if linearise:
         // Compute mean quantities
         fpdtype_t uavg[${nvars}], davg, pavg, eavg;
         % for vidx in range(nvars):
