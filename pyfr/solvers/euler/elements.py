@@ -138,7 +138,7 @@ class BaseFluidElements:
             # Use linearised constraints/limiting kernel approach from
             # Ching et al. (doi:10.1016/j.jcp.2024.112881)
             eftplargs['linearise'] = self.cfg.getbool('solver-entropy-filter',
-                                                      'linearise', False)
+                                                      'linearise')
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
