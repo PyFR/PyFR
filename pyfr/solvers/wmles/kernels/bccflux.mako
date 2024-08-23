@@ -1,7 +1,7 @@
 <%inherit file='base'/>
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 
-<%include file='pyfr.solvers.wmles.kernels.sgs.smagorinsky'/>
+<%include file='pyfr.solvers.wmles.kernels.sgs.${sgs_model}'/>
 <%include file='pyfr.solvers.wmles.kernels.bcs.${bctype}'/>
 
 % if bccfluxstate:
