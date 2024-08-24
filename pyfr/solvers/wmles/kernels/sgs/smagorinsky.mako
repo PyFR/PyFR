@@ -3,10 +3,10 @@
 % if ndims == 2:
 <%pyfr:macro name='eddy_viscosity' params='grad_uvw, delta, nu_sgs'>
     // Velocity derivatives
-    fpdtype_t u_x = grad_uvw[0][0];
-    fpdtype_t u_y = grad_uvw[1][0];
-    fpdtype_t v_x = grad_uvw[0][1];
-    fpdtype_t v_y = grad_uvw[1][1];
+    fpdtype_t u_x = grad_uvw[0][0]; // g_xx
+    fpdtype_t u_y = grad_uvw[1][0]; // g_yx
+    fpdtype_t v_x = grad_uvw[0][1]; // g_xy
+    fpdtype_t v_y = grad_uvw[1][1]; // g_yy
 
     // Compute strain rate tensor components
     fpdtype_t S_xx = u_x;
@@ -23,16 +23,16 @@
 
 % elif ndims == 3:
 <%pyfr:macro name='eddy_viscosity' params='grad_uvw, delta, nu_sgs'>
-    // Velocity derivatives (rho*grad[u,v,w])
-    fpdtype_t u_x = grad_uvw[0][0];
-    fpdtype_t u_y = grad_uvw[1][0];
-    fpdtype_t u_z = grad_uvw[2][0];
-    fpdtype_t v_x = grad_uvw[0][1];
-    fpdtype_t v_y = grad_uvw[1][1];
-    fpdtype_t v_z = grad_uvw[2][1];
-    fpdtype_t w_x = grad_uvw[0][2];
-    fpdtype_t w_y = grad_uvw[1][2];
-    fpdtype_t w_z = grad_uvw[2][2];
+    // Velocity derivatives
+    fpdtype_t u_x = grad_uvw[0][0]; // g_xx
+    fpdtype_t u_y = grad_uvw[1][0]; // g_yx
+    fpdtype_t u_z = grad_uvw[2][0]; // g_zx
+    fpdtype_t v_x = grad_uvw[0][1]; // g_xy
+    fpdtype_t v_y = grad_uvw[1][1]; // g_yy
+    fpdtype_t v_z = grad_uvw[2][1]; // g_zy
+    fpdtype_t w_x = grad_uvw[0][2]; // g_xz
+    fpdtype_t w_y = grad_uvw[1][2]; // g_yz
+    fpdtype_t w_z = grad_uvw[2][2]; // g_zz
 
     // Compute strain rate tensor components
     fpdtype_t S_xx = u_x;

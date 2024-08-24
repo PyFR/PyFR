@@ -41,7 +41,7 @@ class WMLESElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         # Handle shock capturing, sgs model, and Sutherland's law
         shock_capturing = self.cfg.get('solver', 'shock-capturing')
         sgs_model = self.cfg.get('solver', 'sgs-model', 'none')
-        if sgs_model not in {'smagorinsky', 'none'}:
+        if sgs_model not in {'smagorinsky', 'vreman', 'wale', 'none'}:
             raise ValueError('Invalid sgs-model option')
         visc_corr = self.cfg.get('solver', 'viscosity-correction', 'none')
         if visc_corr not in {'sutherland', 'none'}:
