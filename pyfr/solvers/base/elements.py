@@ -93,7 +93,7 @@ class BaseElements:
         ename = self.basis.name
         upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
         qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or 
-                self.cfg.getint('soln-ics', f'quad-deg', 0))
+                self.cfg.getint('soln-ics', 'quad-deg', 0))
         # Default to solution points if quad-pts are not specified
         qpts = self.cfg.get('soln-ics', f'quad-pts-{ename}', upts)
 

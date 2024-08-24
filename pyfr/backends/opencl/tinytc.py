@@ -1,5 +1,5 @@
-from ctypes import (POINTER, addressof, byref, c_double, c_int, c_int32,
-                    c_int64, c_float, c_size_t, c_uint, c_void_p)
+from ctypes import (POINTER, byref, c_double, c_int, c_int32, c_int64, c_float,
+                    c_size_t, c_uint, c_void_p)
 
 import numpy as np
 
@@ -88,7 +88,7 @@ class OpenCLTinyTCKernels(OpenCLKernelProvider):
 
     def _mul(self, a, b, out, alpha=1.0, beta=0.0):
         cl = self.backend.cl
-        w, h = self.lib, self.handle
+        w = self.lib
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
