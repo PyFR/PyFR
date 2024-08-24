@@ -13,7 +13,7 @@
     ur[${nvars - 1}] = ul[${nvars - 1}];
 </%pyfr:macro>
 
-<%pyfr:macro name='bc_common_flux_state' params='ul, gradul, artviscl, nl, magnl'>
+<%pyfr:macro name='bc_common_flux_state' params='ul, gradul, rcpdjacl, artviscl, nl, magnl'>
     // Ghost state r
     fpdtype_t ur[${nvars}];
     ${pyfr.expand('bc_rsolve_state', 'ul', 'nl', 'ur')};

@@ -100,7 +100,8 @@ class WMLESBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
             'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ul=self._scal_lhs,
             gradul=self._vect_lhs, nl=self._pnorm_lhs,
-            artviscl=self._artvisc_lhs, **self._external_vals
+            rcpdjacl=self._rcpdjac_lhs, artviscl=self._artvisc_lhs,
+            **self._external_vals
         )
 
         if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':

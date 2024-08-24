@@ -14,7 +14,7 @@
     fpdtype_t S_xy = 0.5*(u_y + v_x);
 
     // Compute |S| = sqrt(2*S_ij*S_ij)
-    fpdtype_t S_mag = sqrt(2.0*(S_xx*S_xx + S_yy*S_yy + 2.0*S_xy*S_xy));
+    fpdtype_t S_mag = sqrt(2*(S_xx*S_xx + S_yy*S_yy + 2*S_xy*S_xy));
 
     // Compute eddy viscosity
     fpdtype_t Csgs = 0.16;
@@ -43,8 +43,8 @@
     fpdtype_t S_yz = 0.5*(v_z + w_y);
 
     // Compute |S| = sqrt(2*S_ij*S_ij)
-    fpdtype_t S_mag = sqrt(2.0*(S_xx*S_xx + S_yy*S_yy + S_zz*S_zz 
-                    + 2.0*(S_xy*S_xy + S_xz*S_xz + S_yz*S_yz)));
+    fpdtype_t S_mag = sqrt(2*(S_xx*S_xx + S_yy*S_yy + S_zz*S_zz 
+                    + 2*(S_xy*S_xy + S_xz*S_xz + S_yz*S_yz)));
     
     // Compute eddy viscosity
     fpdtype_t Csgs = 0.16;
