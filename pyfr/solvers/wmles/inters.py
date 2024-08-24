@@ -48,6 +48,7 @@ class WMLESIntInters(TplargsMixin,
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
+            rcpdjacl=self._rcpdjac_lhs, rcpdjacr=self._rcpdjac_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
             nl=self._pnorm_lhs
         )
@@ -70,6 +71,7 @@ class WMLESMPIInters(TplargsMixin,
             'mpicflux', tplargs=self._tplargs, dims=[self.ninterfpts],
             ul=self._scal_lhs, ur=self._scal_rhs,
             gradul=self._vect_lhs, gradur=self._vect_rhs,
+            rcpdjacl=self._rcpdjac_lhs, rcpdjacr=self._rcpdjac_rhs,
             artviscl=self._artvisc_lhs, artviscr=self._artvisc_rhs,
             nl=self._pnorm_lhs
         )

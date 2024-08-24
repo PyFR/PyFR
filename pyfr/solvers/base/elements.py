@@ -408,6 +408,14 @@ class BaseElements:
     def get_pnorms_for_inter(self, eidx, fidx):
         fpts_idx = self._srtd_face_fpts[fidx][eidx]
         return self._pnorm_fpts[fpts_idx, eidx]
+    
+    @cached_property
+    def _rcpdjac_fpts(self):
+        return self.rcpdjac_at_np('fpts')
+
+    def get_rcpdjac_fpts_for_inter(self, eidx, fidx):
+        fpts_idx = self._srtd_face_fpts[fidx][eidx]
+        return self._rcpdjac_fpts[fpts_idx, eidx]
 
     @inters_map
     def get_scal_fpts_for_inter(self, eidx, fidx):

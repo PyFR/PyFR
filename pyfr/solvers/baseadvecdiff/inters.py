@@ -13,6 +13,10 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
         self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inter')
         self._comm_rhs = self._scal_view(rhs, 'get_comm_fpts_for_inter')
 
+        # Generate the additional constant matrices
+        self._rcpdjac_lhs = self._const_mat(lhs, 'get_rcpdjac_fpts_for_inter')
+        self._rcpdjac_rhs = self._const_mat(rhs, 'get_rcpdjac_fpts_for_inter')
+
         # Generate the additional view matrices for artificial viscosity
         if cfg.get('solver', 'shock-capturing') == 'artificial-viscosity':
             self._artvisc_lhs = self._view(lhs, 'get_artvisc_fpts_for_inter')
@@ -45,6 +49,10 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         self._vect_rhs = be.xchg_matrix_for_view(self._vect_lhs)
         self._comm_lhs = self._scal_xchg_view(lhs, 'get_comm_fpts_for_inter')
         self._comm_rhs = be.xchg_matrix_for_view(self._comm_lhs)
+
+        # Generate the second set of additional constant matrices
+        self._rcpdjac_lhs = self._const_mat(lhs, 'get_rcpdjac_fpts_for_inter')
+        self._rcpdjac_rhs = be.xchg_matrix_for_view(self._rcpdjac_lhs)
 
         # Additional kernel constants
         self.c |= cfg.items_as('solver-interfaces', float)
@@ -80,6 +88,29 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
             )
             self.kernels['vect_fpts_unpack'] = lambda: be.kernel(
                 'unpack', self._vect_rhs
+            )
+
+        # Allocate a tag
+        rcpdjac_fpts_tag = next(self._mpi_tag_counter)
+
+        # If we need to send rcpdjac to the RHS
+        if self.c['ldg-beta'] != -0.5:
+            rdj_lhs = self._rcpdjac_lhs
+            self.kernels['rcpdjac_fpts_pack'] = lambda: be.kernel(
+                'pack', rdj_lhs
+            )
+            self.mpireqs['rcpdjac_fpts_send'] = lambda: rdj_lhs.sendreq(
+                self._rhsrank, rcpdjac_fpts_tag
+            )
+
+        # If we need to recv rcpdjac from the RHS
+        if self.c['ldg-beta'] != 0.5:
+            rdj_rhs = self._rcpdjac_rhs
+            self.mpireqs['rcpdjac_fpts_recv'] = lambda: rdj_rhs.recvreq(
+                self._rhsrank, rcpdjac_fpts_tag
+            )
+            self.kernels['rcpdjac_fpts_unpack'] = lambda: be.kernel(
+                'unpack', rdj_rhs
             )
 
         # Generate the additional kernels/views for artificial viscosity
@@ -121,6 +152,9 @@ class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
         # Additional view matrices
         self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')
         self._comm_lhs = self._scal_view(lhs, 'get_comm_fpts_for_inter')
+
+        # Generate the additional constant matrix for rcpdjac
+        self._rcpdjac_lhs = self._const_mat(lhs, 'get_rcpdjac_fpts_for_inter')
 
         # Additional kernel constants
         self.c |= cfg.items_as('solver-interfaces', float)
