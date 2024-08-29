@@ -42,8 +42,10 @@ def _plocs_to_tlocs(sbasis, spts, plocs, tlocs):
     # Apply three iterations of Newton's method
     for k in range(3):
         jac_ops = sbasis.jac_nodal_basis_at(ktlocs)
-        kjplocs = np.einsum('ijk,jkl->kli', jac_ops, spts)
-        ktlocs -= np.linalg.solve(kjplocs, kplocs - plocs)
+
+        A = np.einsum('ijk,jkl->kli', jac_ops, spts)
+        b = kplocs - plocs
+        ktlocs -= np.linalg.solve(A, b[..., None]).squeeze()
 
         ops = sbasis.nodal_basis_at(ktlocs)
         np.einsum('ij,jik->ik', ops, spts, out=kplocs)
