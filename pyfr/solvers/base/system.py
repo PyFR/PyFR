@@ -25,6 +25,19 @@ class BaseSystem:
         self.cfg = cfg
         self.nregs = nregs
 
+        # Conservative and physical variable names
+        convars = self.elementscls.convars(mesh.ndims, cfg)
+        privars = self.elementscls.privars(mesh.ndims, cfg)
+
+        # Validate the constants block
+        for c in cfg.items('constants'):
+            if c in convars or c in privars:
+                raise ValueError(f'Invalid variable "{c}" in [constants]')
+
+        # Save the number of dimensions and field variables
+        self.ndims = mesh.ndims
+        self.nvars = len(convars)
+
         # Obtain a nonce to uniquely identify this system
         nonce = str(next(self._nonce_seq))
 
@@ -50,10 +63,6 @@ class BaseSystem:
 
         if hasattr(eles[0], 'entmin_int'):
             self.eles_entmin_int = [e.entmin_int for e in eles]
-
-        # Save the number of dimensions and field variables
-        self.ndims = eles[0].ndims
-        self.nvars = eles[0].nvars
 
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
