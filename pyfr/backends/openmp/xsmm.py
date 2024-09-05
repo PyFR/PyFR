@@ -1,4 +1,5 @@
 from ctypes import byref, cast, c_int, c_double, c_float, c_ulonglong, c_void_p
+from weakref import finalize
 
 import numpy as np
 
@@ -38,14 +39,16 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
         # Init
         w.libxsmm_init()
 
+    def _destroy_kern(self, k):
+        blkptr, blkptr_nt = self._kerns.pop(k)
+
+        self._wrappers.libxsmm_fsspmdm_destroy(blkptr)
+
+        if blkptr_nt != blkptr:
+            self._wrappers.libxsmm_fsspmdm_destroy(blkptr_nt)
+
     def __del__(self):
         if hasattr(self, '_wrappers'):
-            for blkptr, blkptr_nt in self._kerns.values():
-                self._wrappers.libxsmm_fsspmdm_destroy(blkptr)
-
-                if blkptr_nt != blkptr:
-                    self._wrappers.libxsmm_fsspmdm_destroy(blkptr_nt)
-
             self._wrappers.libxsmm_finalize()
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
@@ -115,6 +118,7 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
 
             # Update the cache
             self._kerns[ckey] = blkptr, blkptr_nt
+            finalize(a, self._destroy_kern, ckey)
 
         # Render our parallel wrapper kernel
         src = self.backend.lookup.get_template('batch-gemm').render()
@@ -128,4 +132,4 @@ class OpenMPXSMMKernels(OpenMPKernelProvider):
                             out, out.blocksz)
         batch_gemm.set_nblocks(b.nblocks)
 
-        return OpenMPKernel(mats=[b, out], misc=[self], kernel=batch_gemm)
+        return OpenMPKernel(mats=[a, b, out], misc=[self], kernel=batch_gemm)
