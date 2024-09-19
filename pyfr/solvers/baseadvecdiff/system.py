@@ -130,11 +130,24 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             k['eles/qptsu'], k['eles/tdisf'], k['eles/tdivtpcorf']
         ]
         for ks in zip_longest(*kgroup):
-            self._group(g2, ks, subs=[
-                [(ks[6], 'out'), (ks[7], 'u')],
-                [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'f'),
-                 (ks[3], 'f'), (ks[5], 'out'), (ks[7], 'f'), (ks[8], 'b')]
-            ])
+            if k['eles/qpts']:
+                self._group(g2, ks, subs=[
+                    [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
+                     (ks[4], 'b'), (ks[5], 'b')],
+                    [(ks[6], 'out'), (ks[7], 'u')],
+                    [(ks[7], 'f'), (ks[8], 'b')],
+                ])
+            elif k['eles/tdisf_fused']:
+                self._group(g2, ks, subs=[
+                    [(ks[0], 'out'), (ks[1], 'out'),
+                     (ks[3], 'gradu'), (ks[4], 'b')],
+                    [(ks[3], 'f'), (ks[8], 'b')],
+                ])
+            else:
+                self._group(g2, ks, subs=[
+                    [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
+                     (ks[4], 'b'), (ks[7], 'f'), (ks[8], 'b')],
+                ])
 
         g2.commit()
 

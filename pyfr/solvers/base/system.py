@@ -327,9 +327,12 @@ class BaseSystem:
         return [e.get() for e in self.eles_entmin_int]
 
     def _group(self, g, kerns, subs=[]):
-        # Eliminate non-existing kernels
+        # Eliminate non-existent kernels
         kerns = [k for k in kerns if k is not None]
-        subs = [sub for sub in subs if None not in it.chain(*sub)]
+
+        # Eliminate substitutions associated with non-existent kernels
+        subs = [[(k, n) for k, n in sub if k] for sub in subs]
+        subs = [sub for sub in subs if len(sub) > 1]
 
         g.group(kerns, subs)
 
