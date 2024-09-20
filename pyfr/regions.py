@@ -3,16 +3,17 @@ from collections import defaultdict
 import re
 
 import numpy as np
+from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
 from pyfr.util import match_paired_paren, subclass_where
 
 
-def parse_region_expr(expr):
+def parse_region_expr(expr, rdata=None):
     # Geometric region
     if '(' in expr:
-        return ConstructiveRegion(expr)
+        return ConstructiveRegion(expr, rdata)
     # Boundary region
     else:
         m = re.match(r'(\w+)(?:\s+\+(\d+))?$', expr)
@@ -143,7 +144,7 @@ class BoundaryRegion(BaseRegion):
 class BaseGeometricRegion(BaseRegion):
     name = None
 
-    def __init__(self, rot=None):
+    def __init__(self, rdata=None, rot=None):
         match rot:
             case None:
                 self.rot = None
@@ -167,13 +168,13 @@ class BaseGeometricRegion(BaseRegion):
                 self.rot = np.array([[c, -s], [s, c]])
 
     def interior_eles(self, mesh):
-        comm, rank, root = get_comm_rank_root()
         eset = {}
 
         for etype, spts in mesh.spts.items():
-            inside = self.pts_in_region(spts)
-            if np.any(inside):
-                eset[etype] = np.any(inside, axis=0).nonzero()[0].tolist()
+            inside = self.pts_in_region(np.mean(spts, axis=0))
+            inside[~inside] = self.pts_in_region(spts[:, ~inside]).any(axis=0)
+
+            eset[etype] = inside.nonzero()[0].tolist()
 
         return eset
 
@@ -187,8 +188,8 @@ class BaseGeometricRegion(BaseRegion):
 class BoxRegion(BaseGeometricRegion):
     name = 'box'
 
-    def __init__(self, x0, x1, rot=None):
-        super().__init__(rot=rot)
+    def __init__(self, x0, x1, rdata=None, rot=None):
+        super().__init__(rdata=rdata, rot=rot)
 
         self.x0 = x0
         self.x1 = x1
@@ -206,8 +207,8 @@ class BoxRegion(BaseGeometricRegion):
 class ConicalFrustumRegion(BaseGeometricRegion):
     name = 'conical_frustum'
 
-    def __init__(self, x0, x1, r0, r1, rot=None):
-        super().__init__(rot=rot)
+    def __init__(self, x0, x1, r0, r1, rdata=None, rot=None):
+        super().__init__(rdata=rdata, rot=rot)
 
         self.x0 = x0 = np.array(x0)
         self.x1 = x1 = np.array(x1)
@@ -237,22 +238,22 @@ class ConicalFrustumRegion(BaseGeometricRegion):
 class ConeRegion(ConicalFrustumRegion):
     name = 'cone'
 
-    def __init__(self, x0, x1, r, rot=None):
-        super().__init__(x0, x1, r, 0, rot=rot)
+    def __init__(self, x0, x1, r, rdata=None, rot=None):
+        super().__init__(x0, x1, r, 0, rdata=rdata, rot=rot)
 
 
 class CylinderRegion(ConicalFrustumRegion):
     name = 'cylinder'
 
-    def __init__(self, x0, x1, r, rot=None):
-        super().__init__(x0, x1, r, r, rot=rot)
+    def __init__(self, x0, x1, r, rdata=None, rot=None):
+        super().__init__(x0, x1, r, r, rdata=rdata, rot=rot)
 
 
 class EllipsoidRegion(BaseGeometricRegion):
     name = 'ellipsoid'
 
-    def __init__(self, x0, a, b, c, rot=None):
-        super().__init__(rot=rot)
+    def __init__(self, x0, a, b, c, rdata=None, rot=None):
+        super().__init__(rdata=rdata, rot=rot)
 
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])
@@ -264,12 +265,86 @@ class EllipsoidRegion(BaseGeometricRegion):
 class SphereRegion(EllipsoidRegion):
     name = 'sphere'
 
-    def __init__(self, x0, r, rot=None):
-        super().__init__(x0, r, r, r, rot=rot)
+    def __init__(self, x0, r, rdata=None, rot=None):
+        super().__init__(x0, r, r, r, rdata=rdata, rot=rot)
+
+
+class STLRegion(BaseGeometricRegion):
+    name = 'stl'
+
+    def __init__(self, name, rdata, rot=None):
+        super().__init__(rdata=rdata, rot=rot)
+
+        stl = rdata[f'stl/{name}']
+        if not stl.attrs['closed']:
+            raise ValueError('STL region must be closed')
+
+        faces = stl[:, 1:].astype(float)
+
+        # Compute the global bounding box
+        self.x0 = faces.min(axis=(0, 1))
+        self.x1 = faces.max(axis=(0, 1))
+
+        # Compute the face direction vectors
+        fa, fb, fc = faces.swapaxes(0, 1)
+        e1, e2 = fb - fa, fc - fa
+
+        # Compute the associated normals
+        norms = np.cross(e1, e2)
+
+        # Prune faces which are parallel to the z-axis
+        valid = np.abs(norms[:, 2]) > 1e-6
+        faces, norms = faces[valid], norms[valid]
+        fa, e1, e2 = fa[valid], e1[valid], e2[valid]
+
+        # Compute the Barycentric and intersection point projection matrix
+        z = np.zeros(len(fa))
+        mat = (-1 / norms[:, 2])*np.array([
+            [-e2[:, 1], e2[:, 0], z],
+            [e1[:, 1], -e1[:, 0], z],
+            norms.T
+        ])
+
+        # Save the required face data
+        self.fa = fa.copy()
+        self.mat = np.moveaxis(mat, 2, 0).copy()
+
+        # Compute the per-face bounding box
+        tbox = np.hstack([faces.min(axis=1) - 1e-6,
+                            faces.max(axis=1) + 1e-6])
+
+        # Use this to construct an R-tree index
+        ins = ((i, p.tolist(), None) for i, p in enumerate(tbox))
+        props = Property(dimension=3, interleaved=True)
+        self.tri_idx = Index(ins, properties=props)
+
+    def _pts_in_region(self, pts):
+        inside = np.ones(pts.shape[:-1], dtype=bool)
+        finside = inside.reshape(-1)
+
+        # Exclude points outside the bounding box
+        for i, (l, u) in enumerate(zip(self.x0, self.x1)):
+            inside &= (l <= pts[..., i]) & (pts[..., i] <= u)
+
+        # Iterate through the remaining points
+        cidx = np.nonzero(finside)[0]
+        for i, ro in zip(cidx, pts.reshape(-1, 3)[cidx]):
+            crossings = 0
+
+            # Count how many times a ray cast in +z from this point
+            # itersects a face on our surface
+            tbox = [*ro, *ro[:2], self.x1[2]]
+            for j in self.tri_idx.intersection(tbox, objects=False):
+                u, v, t = np.dot(self.mat[j], (ro - self.fa[j]).T).tolist()
+                crossings += t >= 0 and u >= 0 and v >= 0 and (u + v) <= 1
+
+            finside[i] = (crossings % 2) == 1
+
+        return inside
 
 
 class ConstructiveRegion(BaseGeometricRegion):
-    def __init__(self, expr):
+    def __init__(self, expr, rdata=None):
         rexprs = []
 
         # Factor out the individual region expressions
@@ -291,11 +366,11 @@ class ConstructiveRegion(BaseGeometricRegion):
             # Handle special rotation arguments
             args, hasrot = re.subn(r'rot\s*=\s*', '', args)
 
-            largs = literal_eval(args)
+            largs = literal_eval(args + ',')
             if hasrot:
-                regions.append(cls(*largs[:-1], rot=largs[-1]))
+                regions.append(cls(*largs[:-1], rdata=rdata, rot=largs[-1]))
             else:
-                regions.append(cls(*largs))
+                regions.append(cls(*largs, rdata=rdata))
 
     def pts_in_region(self, pts):
         # Helper to translate + and - to their boolean algebra equivalents

@@ -97,6 +97,23 @@ The following core commands are available from the ``pyfr`` program:
    with the ``-f`` flag; for example ``-f density -f velocity`` will
    only export the *density* and *velocity* fields.
 
+#. ``pyfr region`` --- handles STL region processing.
+
+   #. ``pyfr region add`` --- adds an STL region to the mesh.
+      Example::
+
+         pyfr partition add mesh.pyfrm teapot.stl teapot
+
+   #. ``pyfr region list`` --- lists the STL regions in the mesh.
+      Example::
+
+         pyfr partition list mesh.pyfrm
+
+   #. ``pyfr region remove`` --- removes an STL region from the mesh.
+      Example::
+
+         pyfr region remove mesh.pyfrm teapot
+
 The ``run``, ``restart``, and ``export`` commands can be run in
 parallel. To do so prefix ``pyfr`` with
 ``mpiexec -n <cores/devices>``. Note that there must exist a

@@ -72,7 +72,7 @@ def region_data(cfg, cfgsect, mesh):
         comm, rank, root = get_comm_rank_root()
 
         # Parse the region expression and obtain the element set
-        rgn = parse_region_expr(region)
+        rgn = parse_region_expr(region, mesh.raw.get('regions'))
         eset = rgn.interior_eles(mesh)
 
         # Ensure the region is not empty
@@ -89,7 +89,7 @@ def surface_data(cfg, cfgsect, mesh):
     comm, rank, root = get_comm_rank_root()
 
     # Parse the surface expression and obtain the element set
-    rgn = parse_region_expr(surf)
+    rgn = parse_region_expr(surf, mesh.raw.get('regions'))
     eset = rgn.surface_faces(mesh)
 
     # Ensure the surface is not empty

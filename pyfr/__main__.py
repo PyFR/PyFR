@@ -5,6 +5,7 @@ import re
 
 import h5py
 import mpi4py.rc
+import numpy as np
 mpi4py.rc.initialize = False
 
 from pyfr._version import __version__
@@ -16,6 +17,7 @@ from pyfr.plugins import BaseCLIPlugin
 from pyfr.progress import ProgressBar, ProgressSequenceAction
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import NativeReader
+from pyfr.readers.stl import read_stl
 from pyfr.solvers import get_solver
 from pyfr.util import subclasses
 from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
@@ -127,6 +129,30 @@ def main():
                            action='append', metavar='BOUNDARY',
                            help='boundary to output; may be repeated')
     ap_export.set_defaults(process=process_export)
+
+    # Region subcommand
+    ap_region = sp.add_parser('region', help='region --help')
+    ap_region = ap_region.add_subparsers()
+
+    # Add region
+    ap_region_add = ap_region.add_parser('add', help='region add --help')
+    ap_region_add.add_argument('mesh', help='input mesh file')
+    ap_region_add.add_argument('stl', type=FileType('rb'), help='STL file')
+    ap_region_add.add_argument('name', help='region name')
+    ap_region_add.set_defaults(process=process_region_add)
+
+    # List regions
+    ap_region_list = ap_region.add_parser('list', help='region list --help')
+    ap_region_list.add_argument('mesh', help='input mesh file')
+    ap_region_list.add_argument('-s', '--sep', default='\t', help='separator')
+    ap_region_list.set_defaults(process=process_region_list)
+
+    # Remove region
+    ap_region_remove = ap_region.add_parser('remove',
+                                            help='region remove --help')
+    ap_region_remove.add_argument('mesh', help='input mesh file')
+    ap_region_remove.add_argument('name', help='region name')
+    ap_region_remove.set_defaults(process=process_region_remove)
 
     # Run command
     ap_run = sp.add_parser('run', help='run --help')
@@ -276,6 +302,48 @@ def process_partition_remove(args):
             raise ValueError(f'Partitioning {args.name} does not exist')
 
         del mparts[args.name]
+
+
+def process_region_add(args):
+    # Read the STL file
+    stl = read_stl(args.stl)
+
+    # See if the surface is closed
+    edges = np.vstack([stl[:, 1:3], stl[:, 2:4], stl[:, [3, 1]]])
+    edges.view('f4,f4,f4').sort(axis=1)
+    closed = (np.unique(edges, axis=0, return_counts=True)[1] == 2).all()
+
+    # Validate the name
+    if not re.match(r'\w+$', args.name):
+        raise ValueError('Invalid region name')
+
+    with h5py.File(args.mesh, 'r+') as mesh:
+        g = mesh.require_group('regions/stl')
+
+        if args.name in g:
+            del g[args.name]
+
+        g[args.name] = stl
+        g[args.name].attrs['closed'] = closed
+
+
+def process_region_list(args):
+    with h5py.File(args.mesh, 'r') as mesh:
+        print('name', 'tris', 'closed', sep=args.sep)
+
+        for name, tris in sorted(mesh.get('regions/stl', {}).items()):
+            print(name, len(tris), str(tris.attrs['closed']).lower(),
+                  sep=args.sep)
+
+
+def process_region_remove(args):
+    with h5py.File(args.mesh, 'r+') as mesh:
+        rparts = mesh.get('regions/stl')
+
+        if rparts is None or args.name not in rparts:
+            raise ValueError(f'Region {args.name} does not exist')
+
+        del rparts[args.name]
 
 
 def process_export(args):
