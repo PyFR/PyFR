@@ -570,9 +570,9 @@ class VTKWriter(BaseWriter):
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
         dsize = np.dtype(self.dtype).itemsize
 
-        names = ['', 'connectivity', 'offsets', 'types', 'Partition']
-        types = [dtype, 'Int64', 'Int64', 'UInt8', 'Int32']
-        comps = ['3', '', '', '', '1']
+        names = ['', 'connectivity', 'offsets', 'types', 'Curved', 'Partition']
+        types = [dtype, 'Int64', 'Int64', 'UInt8', 'UInt8', 'Int32']
+        comps = ['3', '', '', '', '1', '1']
 
         for fname, varnames in vvars.items():
             names.append(fname.title())
@@ -583,7 +583,7 @@ class VTKWriter(BaseWriter):
             npts, ncells, nnodes = self._get_npts_ncells_nnodes(etype, neles)
             nb = npts*dsize
 
-            sizes = [3*nb, 8*nnodes, 8*ncells, ncells, 4*ncells]
+            sizes = [3*nb, 8*nnodes, 8*ncells, ncells, ncells, 4*ncells]
             sizes.extend(len(varnames)*nb for varnames in vvars.values())
 
             return names, types, comps, sizes
@@ -593,6 +593,7 @@ class VTKWriter(BaseWriter):
     def _prepare_pts_volume(self, etype):
         spts = self.mesh.spts[etype].astype(self.dtype)
         soln = self.soln[etype].swapaxes(0, 1).astype(self.dtype)
+        curved = self.mesh.spts_curved[etype]
 
         # Extract the partition number information
         part = self.soln[f'{etype}-parts']
@@ -628,10 +629,10 @@ class VTKWriter(BaseWriter):
         # Interpolate the solution to the vis points
         vsoln = _interpolate_pts(soln_vtu_op, soln)
 
-        return vpts, vsoln, part
+        return vpts, vsoln, curved, part
 
     def _prepare_pts_surface(self, itype):
-        vspts, vsoln, part = [], [], []
+        vspts, vsoln, curved, part = [], [], [], []
 
         for etype, mesh_op, soln_op, idxs in self._surface_info[itype]:
             spts = self.mesh.spts[etype][:, idxs]
@@ -643,9 +644,11 @@ class VTKWriter(BaseWriter):
 
             vspts.append(_interpolate_pts(mesh_op, spts))
             vsoln.append(_interpolate_pts(soln_op, soln))
+            curved.append(self.mesh.spts_curved[etype][idxs])
             part.append(self.soln[f'{etype}-parts'][idxs])
 
-        return np.hstack(vspts), np.dstack(vsoln), np.hstack(part)
+        return (np.hstack(vspts), np.dstack(vsoln),
+                np.hstack(curved), np.hstack(part))
 
     def write(self, fname):
         if Path(fname).suffix == '.vtu':
@@ -805,7 +808,7 @@ class VTKWriter(BaseWriter):
                 write_s('</Points>\n<Cells>\n')
             elif i == 3:
                 write_s('</Cells>\n<CellData>\n')
-            elif i == 4:
+            elif i == 5:
                 write_s('</CellData>\n<PointData>\n')
 
         # Close
@@ -829,7 +832,7 @@ class VTKWriter(BaseWriter):
                 write_s('</PPoints>\n<PCells>\n')
             elif i == 3:
                 write_s('</PCells>\n<PCellData>\n')
-            elif i == 4:
+            elif i == 5:
                 write_s('</PCellData>\n<PPointData>\n')
 
         # Close
@@ -843,7 +846,7 @@ class VTKWriter(BaseWriter):
                 '</DataArray>\n</FieldData>\n')
 
     def _write_data(self, write, etype):
-        vpts, vsoln, part = self._prepare_pts(etype)
+        vpts, vsoln, curved, part = self._prepare_pts(etype)
         nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
 
         # Write element node locations to file
@@ -872,6 +875,9 @@ class VTKWriter(BaseWriter):
         # Tile VTU cell type numbers
         vtu_typ = np.tile(types, neles)
 
+        # VTU cell curvature information
+        vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
+
         # VTU cell partition numbers
         vtu_part = np.repeat(part, len(vtu_typ) // neles)
 
@@ -880,7 +886,8 @@ class VTKWriter(BaseWriter):
         self._write_darray(vtu_off, write, np.int64)
         self._write_darray(vtu_typ, write, np.uint8)
 
-        # Write VTU cell partition number array
+        # Write VTU cell curvature and partition number data
+        self._write_darray(vtu_curved, write, np.uint8)
         self._write_darray(vtu_part, write, np.int32)
 
         # Process and write out the various fields
