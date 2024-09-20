@@ -460,25 +460,6 @@ class SamplerPlugin(BaseSolnPlugin):
 
         return ','.join(colnames)
 
-    def _process_pri(self, samps):
-        if samps.size:
-            ecls = self.elementscls
-            nvars = self.nvars
-            samps = samps.T
-
-            # Convert the samples to primitive variables
-            psamps = ecls.con_to_pri(samps[:nvars], self.cfg)
-
-            # Also convert any gradient data
-            if self._sample_grads:
-                diff_con = samps[nvars:].reshape(nvars, self.ndims, -1)
-                psamps += ecls.diff_con_to_pri(samps[:nvars], diff_con,
-                                               self.cfg)
-
-            samps = np.array(psamps).T
-
-        return samps
-
     def __call__(self, intg):
         # Return if no output is due
         if intg.nacptsteps % self.nsteps:
@@ -633,10 +614,12 @@ class SamplerCLIPlugin(BaseCLIPlugin):
     @cli_external
     def remove_cmd(self, args):
         with h5py.File(args.mesh, 'r+') as mesh:
-            if args.name not in mesh['plugins/sampler']:
+            sgroup = mesh.get('plugins/sampler')
+
+            if sgroup is None or args.name not in sgroup:
                 raise ValueError(f'Point set {args.name} does not exist')
 
-            del mesh[f'plugins/sampler/{args.name}']
+            del sgroup[args.name]
 
     @cli_external
     def sample_cmd(self, args):
