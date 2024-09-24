@@ -158,14 +158,18 @@ class BaseAdvectionElements(BaseElements):
                                               initval=entmin_int)
 
             # Setup nodal/modal operator matrices
-            if self.cfg.getbool('solver-entropy-filter', 'linearise', False):
+            form = self.cfg.get('solver-entropy-filter', 'formulation',
+                                'nonlinear')
+            if form == 'linearised':
                 self.invvdm = self.vdm_ef = None
-            else:
+            elif form == 'nonlinear':
                 self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
                 vdmu = self.basis.ubasis.vdm.T
                 vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
                 vdm = vdmu if self.basis.fpts_in_upts else np.vstack((vdmu, vdmf))
                 self.vdm_ef = self._be.const_matrix(vdm)
+            else:
+                raise ValueError('Invalid entropy filter formulation.')
 
             if self.basis.fpts_in_upts:
                 self.m0 = None
