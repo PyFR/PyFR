@@ -98,12 +98,15 @@ class BaseFluidElements:
             # Template arguments
             fpts_in_upts = self.basis.fpts_in_upts
             self.nefpts = self.nupts if fpts_in_upts else self.nupts + self.nfpts
+            ub = self.basis.ubasis
+            meanwts = ub.invvdm[:, 0] / np.sum(ub.invvdm[:, 0])
             eftplargs = {
                 'ndims': self.ndims, 'nupts': self.nupts,
                 'nfpts': self.nfpts, 'nefpts': self.nefpts,
                 'nvars': self.nvars, 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
-                'order': self.basis.order, 'fpts_in_upts': fpts_in_upts
+                'order': self.basis.order, 'fpts_in_upts': fpts_in_upts,
+                'meanwts': meanwts
             }
 
             # Check to see if running anti-aliasing
@@ -131,6 +134,12 @@ class BaseFluidElements:
             eftplargs['e_func'] = efunc
             if efunc not in {'numerical', 'physical'}:
                 raise ValueError(f'Unknown entropy functional: {efunc}')
+
+            # Use linearised constraints/limiting kernel approach from
+            # Ching et al. (doi:10.1016/j.jcp.2024.112881)
+            form = self.cfg.get('solver-entropy-filter', 'formulation',
+                                'nonlinear')
+            eftplargs['linearise'] = form == 'linearised'
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
