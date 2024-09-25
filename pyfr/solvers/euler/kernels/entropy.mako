@@ -10,7 +10,7 @@
 
     // Compute numerical or specific physical entropy
     % if e_func == 'numerical':
-    e = (d > 0 && p > 0) ? d*(log(p) - ${c['gamma']}*log(d)) : ${fpdtype_max};
+    e = (d > 0 && p > 0) ? log(p) - ${c['gamma']}*log(d) : ${fpdtype_max};
     % elif e_func == 'physical':
     e = (d > 0 && p > 0) ? p*pow(rcpd, ${c['gamma']}) : ${fpdtype_max};
     % endif

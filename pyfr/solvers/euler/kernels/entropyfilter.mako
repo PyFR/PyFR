@@ -2,11 +2,12 @@
 <%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
 <%include file='pyfr.solvers.euler.kernels.entropy'/>
 
-<%pyfr:macro name='get_minima' params='u, m0, dmin, pmin, emin'>
+<%pyfr:macro name='get_minima' params='u, m0, dmin, pmin, emin, Xmin, entmin'>
     fpdtype_t d, p, e;
     fpdtype_t ui[${nvars}];
 
-    dmin = ${fpdtype_max}; pmin = ${fpdtype_max}; emin = ${fpdtype_max};
+    dmin = ${fpdtype_max}; pmin = ${fpdtype_max};
+    emin = ${fpdtype_max}, Xmin = ${fpdtype_max};
 
     for (int i = 0; i < ${nupts}; i++)
     {
@@ -15,7 +16,8 @@
     % endfor
 
         ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
-        dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
+        dmin = fmin(dmin, d); pmin = fmin(pmin, p);
+        emin = fmin(emin, e); Xmin = fmin(Xmin, d*(e-entmin));
     }
 
     % if not fpts_in_upts:
@@ -27,7 +29,8 @@
         % endfor
 
         ${pyfr.expand('compute_entropy', 'uf', 'd', 'p', 'e')};
-        dmin = fmin(dmin, d); pmin = fmin(pmin, p); emin = fmin(emin, e);
+        dmin = fmin(dmin, d); pmin = fmin(pmin, p);
+        emin = fmin(emin, e); Xmin = fmin(Xmin, d*(e-entmin));
     }
     % endif
 </%pyfr:macro>
@@ -61,7 +64,7 @@
     }
 </%pyfr:macro>
 
-<%pyfr:macro name='apply_filter_single' params='up, f, d, p, e'>
+<%pyfr:macro name='apply_filter_single' params='up, f, d, p, X, entmin'>
     // Start accumulation
     fpdtype_t ui[${nvars}];
 % for vidx in range(nvars):
@@ -81,7 +84,9 @@
         % endfor
     }
 
-    ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e' )};
+    fpdtype_t e;
+    ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
+    X = d*(e - entmin);
 </%pyfr:macro>
 
 <%pyfr:kernel name='entropyfilter' ndim='1'
@@ -90,32 +95,36 @@
               vdm='in broadcast fpdtype_t[${str(nefpts)}][${str(nupts)}]'
               invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
               m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'>
-    fpdtype_t dmin, pmin, emin;
+
+    // X = rho*(s-s0)
+    fpdtype_t dmin, pmin, emin, Xmin;
 
     // Compute minimum entropy from current and adjacent elements
     fpdtype_t entmin = ${fpdtype_max};
     for (int fidx = 0; fidx < ${nfaces}; fidx++) entmin = fmin(entmin, entmin_int[fidx]);
 
     // Check if solution is within bounds
-    ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+    ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin', 'Xmin', 'entmin')};
 
     // Filter if out of bounds
-    if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
+    if (dmin < ${d_min} || pmin < ${p_min} || Xmin < -${e_tol})
     {
         % if linearise:
         // Compute mean quantities
-        fpdtype_t uavg[${nvars}], davg, pavg, eavg;
+        fpdtype_t uavg[${nvars}], davg, pavg, Xavg;
         % for vidx in range(nvars):
         uavg[${vidx}] = ${' + '.join(f'{jx}*u[{j}][{vidx}]'
                                      for j, jx in enumerate(meanwts) if jx != 0)};
         % endfor
 
+        fpdtype_t eavg;
         ${pyfr.expand('compute_entropy', 'uavg', 'davg', 'pavg', 'eavg')};
+        Xavg = davg*(eavg - entmin);
 
         // Apply density, pressure, and entropy limiting sequentially
         fpdtype_t alpha;
-        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('e', f'entmin - {e_tol}')]:
-        if (${fvar}min < ${bound}) 
+        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('X', f'-{e_tol}')]:
+        if (${fvar}min < ${bound})
         {
             alpha = (${fvar}min - (${bound}))/(${fvar}min - ${fvar}avg);
             alpha = fmin(fmax(alpha, 0.0), 1.0);
@@ -124,7 +133,7 @@
             u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
             % endfor
 
-            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin', 'Xmin', 'entmin')};
         }
         % endfor
         % else:
@@ -142,7 +151,7 @@
         fpdtype_t f = 1.0;
         fpdtype_t f_low, f_high, fnew;
 
-        fpdtype_t d, p, e;
+        fpdtype_t d, p, X;
 
         // Compute f on a rolling basis per solution point
         fpdtype_t up[${order+1}][${nvars}];
@@ -156,10 +165,10 @@
             % endfor
 
             // Compute constraints with current minimum f value
-            ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'p', 'e')};
+            ${pyfr.expand('apply_filter_single', 'up', 'f', 'd', 'p', 'X', 'entmin')};
 
             // Update f if constraints aren't satisfied
-            if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
+            if (d < ${d_min} || p < ${p_min} || X < -${e_tol})
             {
                 // Set root-finding interval
                 f_high = f;
@@ -172,10 +181,10 @@
                     fnew = 0.5*(f_low + f_high);
 
                     // Compute filtered state
-                    ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'p', 'e')};
+                    ${pyfr.expand('apply_filter_single', 'up', 'fnew', 'd', 'p', 'X', 'entmin')};
 
                     // Update brackets
-                    if (d < ${d_min} || p < ${p_min} || e < entmin - ${e_tol})
+                    if (d < ${d_min} || p < ${p_min} || X < -${e_tol})
                         f_high = fnew;
                     else
                         f_low = fnew;
@@ -190,7 +199,7 @@
         ${pyfr.expand('apply_filter_full', 'umodes', 'vdm', 'u', 'f')};
 
         // Calculate minimum entropy from filtered solution
-        ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+        ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin', 'Xmin', 'entmin')};
         % endif
     }
 
