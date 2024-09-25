@@ -17,7 +17,7 @@
 
         ${pyfr.expand('compute_entropy', 'ui', 'd', 'p', 'e')};
         dmin = fmin(dmin, d); pmin = fmin(pmin, p);
-        emin = fmin(emin, e); Xmin = fmin(Xmin, d*(e-entmin));
+        emin = fmin(emin, e); Xmin = fmin(Xmin, d*(e - entmin));
     }
 
     % if not fpts_in_upts:
@@ -30,7 +30,7 @@
 
         ${pyfr.expand('compute_entropy', 'uf', 'd', 'p', 'e')};
         dmin = fmin(dmin, d); pmin = fmin(pmin, p);
-        emin = fmin(emin, e); Xmin = fmin(Xmin, d*(e-entmin));
+        emin = fmin(emin, e); Xmin = fmin(Xmin, d*(e - entmin));
     }
     % endif
 </%pyfr:macro>
@@ -123,7 +123,7 @@
 
         // Apply density, pressure, and entropy limiting sequentially
         fpdtype_t alpha;
-        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('X', f'-{e_tol}')]:
+        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('X', -e_tol)]:
         if (${fvar}min < ${bound})
         {
             alpha = (${fvar}min - (${bound}))/(${fvar}min - ${fvar}avg);
