@@ -97,7 +97,7 @@ class PointLocator:
 
         # Read our portion of the nodes table
         start, end, _ = get_start_end_csize(comm, len(self.mesh.raw['nodes']))
-        nodes = self.mesh.raw['nodes'][start:end]
+        nodes = self.mesh.raw['nodes'][start:end]['location']
 
         # Insert these points into a spatial index
         props = Property(dimension=self.mesh.ndims, interleaved=True)

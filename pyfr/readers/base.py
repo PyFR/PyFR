@@ -14,8 +14,8 @@ from pyfr.util import digest, first, subclass_where
 
 
 class BaseReader:
-    def __init__(self):
-        pass
+    def __init__(self, progress):
+        self.progress = progress
 
     def _get_default_partitioning(self, eles, codec):
         # Allocate the partitioning array
@@ -46,6 +46,21 @@ class BaseReader:
 
         return partitioning, pregions
 
+    def _get_nodes(self, nodes, eles):
+        # Allocate the new nodes table
+        dtype = [('location', float, nodes.shape[1]), ('valency', np.uint16)]
+        nnodes = np.zeros(len(nodes), dtype=dtype)
+
+        # Copy over the nodes
+        nnodes['location'] = nodes
+
+        # Tally up the valencies
+        for etype, ele in eles.items():
+            k, v = np.unique(ele['nodes'], return_counts=True)
+            nnodes['valency'][k] += v.astype(np.uint16)
+
+        return nnodes
+
     def _to_raw_mesh(self, lintol):
         pass
 
@@ -69,7 +84,7 @@ class BaseReader:
                 f['version'] = 1
 
                 # Write out the nodes
-                f['nodes'] = nodes
+                f['nodes'] = self._get_nodes(nodes, eles)
 
                 # Write out the elements
                 for etype, einfo in eles.items():

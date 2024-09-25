@@ -193,7 +193,7 @@ class GmshReader(BaseReader):
     }
 
     def __init__(self, msh, progress):
-        self.progress = progress
+        super().__init__(progress)
 
         if isinstance(msh, str):
             msh = open(msh)

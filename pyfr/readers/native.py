@@ -243,7 +243,7 @@ class NativeReader:
         idxs = np.concatenate([en.ravel() for en in enodes])
 
         # Note how many dimensions we have
-        self.mesh.ndims = self.f['nodes'].shape[1]
+        self.mesh.ndims = self.f['nodes'].dtype['location'].shape[0]
 
         # Read in these nodes
         nodes = self._read_with_idxs(self.f['nodes'], idxs.ravel())[0]
@@ -252,7 +252,7 @@ class NativeReader:
         eoffs = np.cumsum([en.size for en in enodes])
 
         # Use this to split the nodes array back up
-        nodes = np.array_split(nodes, eoffs[:-1])
+        nodes = np.array_split(nodes['location'], eoffs[:-1])
 
         # Reshape and add to the mesh
         for (etype, einfo), n in zip(self.eles.items(), nodes):
