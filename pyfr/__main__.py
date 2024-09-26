@@ -103,11 +103,11 @@ def main():
 
     # Export command
     ap_export = sp.add_parser('export', help='export --help')
-    ap_export.add_argument('meshf', help='PyFR mesh file to be converted')
-    ap_export.add_argument('solnf', help='PyFR solution file to be converted')
+    ap_export.add_argument('meshf', help='input mesh file')
+    ap_export.add_argument('solnf', help='input solution file')
     ap_export.add_argument('outf', help='output file')
     types = [cls.name for cls in subclasses(BaseWriter)]
-    ap_export.add_argument('-t', dest='type', choices=types, required=False,
+    ap_export.add_argument('-t', dest='ftype', choices=types, required=False,
                            help='output file type; this is usually inferred '
                            'from the extension of outf')
     ap_export.add_argument('-f', '--field', dest='fields', action='append',
@@ -352,12 +352,21 @@ def process_export(args):
 
     comm, rank, root = get_comm_rank_root()
 
+    kwargs = {
+        'prec': np.dtype(args.precision).type,
+        'order': args.order,
+        'divisor': args.divisor,
+        'fields': args.fields,
+        'boundaries': args.boundaries
+    }
+
     # Get writer instance by specified type or outf extension
-    if args.type:
-        writer = get_writer_by_name(args.type, args)
+    if args.ftype:
+        writer = get_writer_by_name(args.ftype, args.meshf, args.solnf,
+                                    **kwargs)
     else:
         extn = Path(args.outf).suffix
-        writer = get_writer_by_extn(extn, args)
+        writer = get_writer_by_extn(extn, args.meshf, args.solnf, **kwargs)
 
     # Write the output file
     writer.write(args.outf)

@@ -3,12 +3,12 @@ from pyfr.util import subclass_where
 
 
 class BaseWriter:
-    def __init__(self, args):
+    def __init__(self, meshf, solnf):
         from pyfr.solvers.base import BaseSystem
 
         # Load the mesh and solution files
-        self.reader = NativeReader(args.meshf, construct_con=False)
-        self.mesh, self.soln = self.reader.load_subset_mesh_soln(args.solnf)
+        self.reader = NativeReader(meshf, construct_con=False)
+        self.mesh, self.soln = self.reader.load_subset_mesh_soln(solnf)
 
         # Load the configuration and stats files
         self.cfg = self.soln['config']

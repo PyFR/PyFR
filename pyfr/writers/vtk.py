@@ -366,25 +366,26 @@ class VTKWriter(BaseWriter):
         ]
     }
 
-    def __init__(self, args):
-        super().__init__(args)
+    def __init__(self, meshf, solnf, *, prec=np.float32, order=None,
+                 divisor=None, fields=[], boundaries=None):
+        super().__init__(meshf, solnf)
 
-        self.dtype = np.dtype(args.precision).type
+        self.dtype = np.dtype(prec).type
 
         # Divisor for each type element
         self.etypes_div = defaultdict(lambda: self.divisor)
 
         # Choose whether to output subdivided cells or high order VTK cells
-        if args.order or args.divisor is None:
+        if order or divisor is None:
             self.ho_output = True
-            self.divisor = args.order or self.cfg.getint('solver', 'order')
+            self.divisor = order or self.cfg.getint('solver', 'order')
             self.vtkfile_version = '2.1'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
 
             self.etypes_div['pyr'] += 2
         else:
             self.ho_output = False
-            self.divisor = args.divisor
+            self.divisor = divisor
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
@@ -409,9 +410,9 @@ class VTKWriter(BaseWriter):
                                          for d in range(self.ndims))
 
                 # Update the mapping of VTK variables to solution fields
-                for var, fields in list(self._vtk_vars.items()):
+                for var, vfields in list(self._vtk_vars.items()):
                     self._vtk_vars[f'grad {var}'] = nfields = []
-                    for f in fields:
+                    for f in vfields:
                         nfields.extend(f'{f}-{d}' for d in range(self.ndims))
             else:
                 self._gradients = False
@@ -424,26 +425,27 @@ class VTKWriter(BaseWriter):
             self.tcurr = None
 
         # Handle field subsetting
-        if args.fields:
+        if fields:
             self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
-                              if f in args.fields}
+                              if f in fields}
 
-            if len(self._vtk_vars) != len(args.fields):
+            if len(self._vtk_vars) != len(fields):
                 raise RuntimeError('Invalid field specification')
 
         # Handle volume vs surface export
-        if not args.boundaries:
+        if not boundaries:
             self._init_volume()
         else:
             if self.ndims != 3:
                 raise RuntimeError('Surface export only supported for 3D '
                                    'grids')
 
-            self._init_surface(args.boundaries)
+            self._init_surface(boundaries)
 
     def _init_volume(self):
         self.einfo = [(etype, self.soln[etype].shape[2])
                       for etype in self.mesh.eidxs]
+        self._output_curved = self._output_partition = True
         self._prepare_pts = self._prepare_pts_volume
 
     def _init_surface(self, boundaries):
@@ -474,6 +476,7 @@ class VTKWriter(BaseWriter):
                 self._surface_info[stype].append((etype, *info))
 
         self.einfo = list(ecount.items())
+        self._output_curved = self._output_partition = True
         self._prepare_pts = self._prepare_pts_surface
 
     def _get_surface_info(self, etype, eoff, fidx):
@@ -570,25 +573,36 @@ class VTKWriter(BaseWriter):
         dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
         dsize = np.dtype(self.dtype).itemsize
 
-        names = ['', 'connectivity', 'offsets', 'types', 'Curved', 'Partition']
-        types = [dtype, 'Int64', 'Int64', 'UInt8', 'UInt8', 'Int32']
-        comps = ['3', '', '', '', '1', '1']
+        # Base array attributes
+        attrs = [('', dtype, '3'), ('connectivity', 'Int64', ''),
+                 ('offsets', 'Int64', ''), ('types', 'UInt8', '')]
+
+        if self._output_curved:
+            attrs.append(('Curved', 'UInt8', '1'))
+
+        if self._output_partition:
+            attrs.append(('Partition', 'Int32', '1'))
 
         for fname, varnames in vvars.items():
-            names.append(fname.title())
-            types.append(dtype)
-            comps.append(str(len(varnames)))
+            attrs.append((fname.title(), dtype, str(len(varnames))))
 
         if etype and neles:
             npts, ncells, nnodes = self._get_npts_ncells_nnodes(etype, neles)
             nb = npts*dsize
 
-            sizes = [3*nb, 8*nnodes, 8*ncells, ncells, ncells, 4*ncells]
+            sizes = [3*nb, 8*nnodes, 8*ncells, ncells]
+
+            if self._output_curved:
+                sizes.append(ncells)
+
+            if self._output_partition:
+                sizes.append(4*ncells)
+
             sizes.extend(len(varnames)*nb for varnames in vvars.values())
 
-            return names, types, comps, sizes
+            return tuple((*a, s) for a, s in zip(attrs, sizes))
         else:
-            return names, types, comps
+            return attrs
 
     def _prepare_pts_volume(self, etype):
         spts = self.mesh.spts[etype].astype(self.dtype)
@@ -789,14 +803,14 @@ class VTKWriter(BaseWriter):
             return ''
 
     def _write_serial_header(self, write_s, etype, neles, off):
-        names, types, comps, sizes = self._get_array_attrs(etype, neles)
+        ncelld = self._output_curved + self._output_partition
         npts, ncells = self._get_npts_ncells_nnodes(etype, neles)[:2]
 
         write_s(f'<Piece NumberOfPoints="{npts}" '
                 f'NumberOfCells="{ncells}">\n<Points>\n')
 
         # Write VTK DataArray headers
-        for i, (n, t, c, s) in enumerate(zip(names, types, comps, sizes)):
+        for i, (n, t, c, s) in enumerate(self._get_array_attrs(etype, neles)):
             write_s(f'<DataArray Name="{n}" type="{t}" '
                     f'NumberOfComponents="{c}" {self._component_names(c)} '
                     f'format="appended" offset="{off}"/>\n')
@@ -806,9 +820,9 @@ class VTKWriter(BaseWriter):
             # Points => Cells => CellData => PointData transition
             if i == 0:
                 write_s('</Points>\n<Cells>\n')
-            elif i == 3:
+            if i == 3:
                 write_s('</Cells>\n<CellData>\n')
-            elif i == 5:
+            if i == 3 + ncelld:
                 write_s('</CellData>\n<PointData>\n')
 
         # Close
@@ -818,21 +832,20 @@ class VTKWriter(BaseWriter):
         return off
 
     def _write_parallel_header(self, write_s):
-        names, types, comps = self._get_array_attrs()
-
+        ncelld = self._output_curved + self._output_partition
         write_s('<PPoints>\n')
 
         # Write VTK DataArray headers
-        for i, (n, t, c) in enumerate(zip(names, types, comps)):
+        for i, (n, t, c) in enumerate(self._get_array_attrs()):
             write_s(f'<PDataArray Name="{n}" type="{t}" '
                     f'NumberOfComponents="{c}" {self._component_names(c)}/>\n')
 
             # Points => Cells => CellData => PointData transition
             if i == 0:
                 write_s('</PPoints>\n<PCells>\n')
-            elif i == 3:
+            if i == 3:
                 write_s('</PCells>\n<PCellData>\n')
-            elif i == 5:
+            if i == 3 + ncelld:
                 write_s('</PCellData>\n<PPointData>\n')
 
         # Close
@@ -875,20 +888,21 @@ class VTKWriter(BaseWriter):
         # Tile VTU cell type numbers
         vtu_typ = np.tile(types, neles)
 
-        # VTU cell curvature information
-        vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
-
-        # VTU cell partition numbers
-        vtu_part = np.repeat(part, len(vtu_typ) // neles)
-
         # Write VTU node connectivity, connectivity offsets and cell types
         self._write_darray(vtu_con, write, np.int64)
         self._write_darray(vtu_off, write, np.int64)
         self._write_darray(vtu_typ, write, np.uint8)
 
-        # Write VTU cell curvature and partition number data
-        self._write_darray(vtu_curved, write, np.uint8)
-        self._write_darray(vtu_part, write, np.int32)
+        # VTU cell curvature information
+        if self._output_curved:
+            vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
+            self._write_darray(vtu_curved, write, np.uint8)
+
+        # VTU cell partition numbers
+        if self._output_partition:
+            vtu_part = np.repeat(part, len(vtu_typ) // neles)
+            self._write_darray(vtu_part, write, np.int32)
+
 
         # Process and write out the various fields
         for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
