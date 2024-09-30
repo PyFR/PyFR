@@ -376,7 +376,7 @@ class _AscentRenderer:
         self.ascent_config['runtime/type'] = 'ascent'
         vtkm_backend = adapter.acfg.get(adapter.cfgsect, 'vtkm-backend',
                                         'serial')
-        self.ascent_config['runtine/vtkm/backend'] = vtkm_backend
+        self.ascent_config['runtime/vtkm/backend'] = vtkm_backend
 
         lib.ascent_open(self.ascent_ptr, self.ascent_config)
 
