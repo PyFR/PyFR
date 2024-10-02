@@ -118,12 +118,12 @@ class OpenMPKernelFunction:
         setattr(self.kargs, f'arg{i}', getattr(v, '_as_parameter_', v))
 
         try:
-            self.subs_offsets[i] = v.ra*v.leaddim*v.itemsize
+            self.argsizes[i] = v.blocksz*v.itemsize
         except (AttributeError, IndexError):
             pass
 
         try:
-            self.argsizes[i] = v.blocksz*v.itemsize
+            self.subs_offsets[i] = v.ra*v.leaddim*v.itemsize
         except (AttributeError, IndexError):
             pass
 
