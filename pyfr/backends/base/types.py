@@ -201,15 +201,26 @@ class ConstMatrix(MatrixBase):
 class XchgMatrix(Matrix):
     _base_tags = {'xchg'}
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._reqs = []
+
+    def __del__(self):
+        for r in self._reqs:
+            r.free()
+
     def recvreq(self, pid, tag):
         comm, rank, root = get_comm_rank_root()
 
-        return comm.Recv_init(self.hdata, pid, tag)
+        self._reqs.append(req := comm.Recv_init(self.hdata, pid, tag))
+        return req
 
     def sendreq(self, pid, tag):
         comm, rank, root = get_comm_rank_root()
 
-        return comm.Send_init(self.hdata, pid, tag)
+        self._reqs.append(req := comm.Send_init(self.hdata, pid, tag))
+        return req
 
 
 class View:
