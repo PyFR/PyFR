@@ -12,7 +12,8 @@ from pyfr._version import __version__
 from pyfr.backends import BaseBackend, get_backend
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
-from pyfr.partitioners import BasePartitioner, get_partitioner
+from pyfr.partitioners import (BasePartitioner, get_partitioner,
+                               reconstruct_partitioning, write_partitioning)
 from pyfr.plugins import BaseCLIPlugin
 from pyfr.progress import ProgressBar, ProgressSequenceAction
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
@@ -92,6 +93,20 @@ def main():
         metavar='key:value', help='partitioner-specific option'
     )
     ap_partition_add.set_defaults(process=process_partition_add)
+
+    # Reconstruct partitioning
+    ap_partition_reconstruct = ap_partition.add_parser(
+        'reconstruct', help='partition reconstruct --help'
+    )
+    ap_partition_reconstruct.add_argument('mesh', help='input mesh file')
+    ap_partition_reconstruct.add_argument('soln', help='input solution file')
+    ap_partition_reconstruct.add_argument('name', help='partitioning name')
+    ap_partition_reconstruct.add_argument(
+        '-f', '--force', action='count', help='overwrite existing partitioning'
+    )
+    ap_partition_reconstruct.set_defaults(
+        process=process_partition_reconstruct
+    )
 
     # Remove partitioning
     ap_partition_remove = ap_partition.add_parser(
@@ -257,9 +272,6 @@ def process_partition_add(args):
         if pname in mesh['partitionings'] and not args.force:
             raise ValueError('Partitioning already exists; use -f to replace')
 
-        # Path to store the partitioning in the mesh
-        ppath = f'partitionings/{pname}'
-
         # Partitioner-specific options
         opts = dict(s.split(':', 1) for s in args.popts)
 
@@ -279,19 +291,29 @@ def process_partition_add(args):
 
         # Partition the mesh
         pinfo = part.partition(mesh, args.progress)
-        (partitioning, pregions), (neighbours, nregions) = pinfo
 
         # Write out the new partitioning
         with args.progress.start('Write partitioning'):
-            if ppath in mesh:
-                mesh[f'{ppath}/eles'][:] = partitioning
-                del mesh[f'{ppath}/neighbours']
-            else:
-                mesh[f'{ppath}/eles'] = partitioning
+            write_partitioning(mesh, pname, pinfo)
 
-            mesh[f'{ppath}/neighbours'] = neighbours
-            mesh[f'{ppath}/eles'].attrs['regions'] = pregions
-            mesh[f'{ppath}/neighbours'].attrs['regions'] = nregions
+
+def process_partition_reconstruct(args):
+    with (h5py.File(args.mesh, 'r+') as mesh,
+          h5py.File(args.soln, 'r') as soln):
+        # Validate the partitioning name
+        if not re.match(r'\w+$', args.name):
+            raise ValueError('Invalid partitioning name')
+
+        # Check it does not already exist unless --force is given
+        if args.name in mesh['partitionings'] and not args.force:
+            raise ValueError('Partitioning already exists; use -f to replace')
+
+        # Reconstruct the partitioning used in the solution
+        pinfo = reconstruct_partitioning(mesh, soln, args.progress)
+
+        # Write out the new partitioning
+        with args.progress.start('Write partitioning'):
+            write_partitioning(mesh, args.name, pinfo)
 
 
 def process_partition_remove(args):

@@ -42,6 +42,11 @@ The following core commands are available from the ``pyfr`` program:
       Further details can be found in the
       :ref:`performance guide <perf mixed grids>`.
 
+   #. ``pyfr partition reconstruct`` --- reconstructs a partitioning
+      from a solution file.  Example::
+
+         pyfr partition reconstruct mesh.pyfrm soln.pyfrm part_name
+
    #. ``pyfr partition list`` --- lists partitionings in a mesh.
       Example::
 

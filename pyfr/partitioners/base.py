@@ -9,6 +9,21 @@ from pyfr.progress import NullProgressSequence
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
 
 
+def write_partitioning(mesh, pname, pinfo):
+    ppath = f'partitionings/{pname}'
+    (partitioning, pregions), (neighbours, nregions) = pinfo
+
+    if ppath in mesh:
+        mesh[f'{ppath}/eles'][:] = partitioning
+        del mesh[f'{ppath}/neighbours']
+    else:
+        mesh[f'{ppath}/eles'] = partitioning
+
+    mesh[f'{ppath}/neighbours'] = neighbours
+    mesh[f'{ppath}/eles'].attrs['regions'] = pregions
+    mesh[f'{ppath}/neighbours'].attrs['regions'] = nregions
+
+
 class BasePartitioner:
     def __init__(self, partwts, elewts=None, nsubeles=64, opts={}):
         self.partwts = partwts
@@ -34,7 +49,8 @@ class BasePartitioner:
             else:
                 raise ValueError('Invalid partitioner option')
 
-    def _construct_global_con(self, mesh):
+    @staticmethod
+    def construct_global_con(mesh):
         codec = [c.decode() for c in mesh['codec']]
         edisps, efaces, ecurved = {}, {}, []
 
@@ -106,7 +122,8 @@ class BasePartitioner:
 
         return wts
 
-    def _construct_graph(self, con, elewts_fn, exwts={}):
+    @staticmethod
+    def _construct_graph(con, elewts_fn, exwts={}):
         # Construct the dual graph
         con = np.vstack([con, con[:, ::-1]])
 
@@ -140,20 +157,22 @@ class BasePartitioner:
     def _partition_graph(self, graph, partwts):
         pass
 
-    def _merge_con(self, pmerge, l, r):
+    @classmethod
+    def _merge_con(cls, pmerge, l, r):
         if l == r:
             return
 
         if l in pmerge and r in pmerge:
-            self._merge_con(pmerge, pmerge[l], pmerge[r])
+            cls._merge_con(pmerge, pmerge[l], pmerge[r])
         elif l in pmerge:
-            self._merge_con(pmerge, pmerge[l], r)
+            cls._merge_con(pmerge, pmerge[l], r)
         elif r in pmerge:
-            self._merge_con(pmerge, l, pmerge[r])
+            cls._merge_con(pmerge, l, pmerge[r])
         else:
             pmerge[l] = r
 
-    def _resolve_merge(self, pmerge):
+    @staticmethod
+    def _resolve_merge(pmerge):
         nmerge = {}
 
         for l, r in pmerge.items():
@@ -164,7 +183,8 @@ class BasePartitioner:
 
         return nmerge
 
-    def _group_periodic_eles(self, mesh, con, cdisps, elewts_fn):
+    @classmethod
+    def _group_periodic_eles(cls, mesh, con, cdisps, elewts_fn):
         cdtype = [('l', np.int64), ('r', np.int64)]
         pmerge, pidx = {}, []
 
@@ -194,10 +214,10 @@ class BasePartitioner:
 
             # Determine which elements require mering
             for l, r in iter_struct(pcon.reshape(-1, 2)):
-                self._merge_con(pmerge, l, r)
+                cls._merge_con(pmerge, l, r)
 
         if pmerge:
-            pmerge = self._resolve_merge(pmerge)
+            pmerge = cls._resolve_merge(pmerge)
 
             # Eliminate connectivity entries associated with periodic faces
             con = np.delete(con, np.hstack(pidx), axis=0)
@@ -225,7 +245,8 @@ class BasePartitioner:
 
         return con, exwts, pmerge
 
-    def _ungroup_periodic_eles(self, pmerge, vemap, vparts):
+    @staticmethod
+    def _ungroup_periodic_eles(pmerge, vemap, vparts):
         # For each merged element identify its partition number
         pparts = vparts[np.searchsorted(vemap, list(pmerge.values()))]
 
@@ -236,8 +257,9 @@ class BasePartitioner:
         # Sort by vemap to give the global element number partition array
         return vparts[np.argsort(vemap)]
 
-    def _analyse_parts(self, con, vparts):
-        neighbours = [[] for i in range(self.nparts)]
+    @staticmethod
+    def _analyse_parts(nparts, con, vparts):
+        neighbours = [[] for i in range(nparts)]
 
         # Map element numbers to partitions numbers in the connectivity array
         vpcon = vparts[con]
@@ -255,7 +277,7 @@ class BasePartitioner:
         vpcon = vpcon[np.lexsort(vpcon.T)]
 
         # With this, identify unique pairings
-        pidx = np.searchsorted(vpcon[:, 1], np.arange(1, self.nparts))
+        pidx = np.searchsorted(vpcon[:, 1], np.arange(1, nparts))
         for i, vpicon in enumerate(np.array_split(vpcon[:, 0], pidx)):
             for j in iter_struct(np.unique(vpicon)):
                 if i != j:
@@ -267,12 +289,14 @@ class BasePartitioner:
 
         return neighbours, internal
 
-    def _construct_partitioning(self, mesh, ecurved, edisps, con, vparts):
+    @classmethod
+    def construct_partitioning(cls, mesh, ecurved, edisps, con, vparts):
+        nparts = vparts.max() + 1
         etypes = np.arange(len(edisps))
         edisps = list(edisps.values())[1:]
 
         # Analyse the partitioning
-        neighbours, internal = self._analyse_parts(con, vparts)
+        neighbours, internal = cls._analyse_parts(nparts, con, vparts)
 
         # Put the neighbours data into canonical form
         nregions = np.cumsum([len(n) for n in neighbours])
@@ -296,7 +320,7 @@ class BasePartitioner:
         peidx, petype, vparts = peidx[pidx], petype[pidx], vparts[pidx]
 
         # Determine region of peidx associated with each partition
-        pregions = np.empty((self.nparts, len(etypes) + 1), dtype=np.int64)
+        pregions = np.empty((nparts, len(etypes) + 1), dtype=np.int64)
         pregions[:, 0] = np.unique(vparts, return_index=True)[1]
         pregions[:, -1] = np.concatenate((pregions[1:, 0], [len(vparts)]))
 
@@ -310,7 +334,7 @@ class BasePartitioner:
     def partition(self, mesh, progress=NullProgressSequence):
         # Construct the global connectivity array
         with progress.start('Construct global connectivity array'):
-            con, ecurved, edisps, cdisps = self._construct_global_con(mesh)
+            con, ecurved, edisps, cdisps = self.construct_global_con(mesh)
 
         # Obtain the global element number weighting function
         elewts_fn = self._get_elewts_fn(edisps)
@@ -341,7 +365,7 @@ class BasePartitioner:
 
         # Construct the partitioning data
         with progress.start('Construct partitioning'):
-            pinfo = self._construct_partitioning(mesh, ecurved, edisps, con,
-                                                 vparts)
+            pinfo = self.construct_partitioning(mesh, ecurved, edisps, con,
+                                                vparts)
 
         return pinfo
