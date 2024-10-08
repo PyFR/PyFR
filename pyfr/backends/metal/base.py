@@ -7,6 +7,7 @@ from pyfr.backends.metal.util import call_
 class MetalBackend(BaseBackend):
     name = 'metal'
     blocks = False
+    pref_grad_fusion = True
 
     def __init__(self, cfg):
         super().__init__(cfg)
