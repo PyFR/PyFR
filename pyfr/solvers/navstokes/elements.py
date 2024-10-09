@@ -86,8 +86,8 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
                 return self._make_sliced_kernel(k(uin) for k in tdisf)
 
             self.kernels['tdisf_fused'] = tdisf_k
-        # No gradient + flux kernel fusion
-        else:
+        # No gradient + flux kernel fusion, with flux-AA
+        elif 'flux' in self.antialias:
             if c in r:
                 tdisf.append(lambda: self._be.kernel(
                     'tflux', tplargs=tplargs | {'ktype': 'curved'},
@@ -105,5 +105,26 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
 
             def tdisf_k():
                 return self._make_sliced_kernel(k() for k in tdisf)
+
+            self.kernels['tdisf'] = tdisf_k
+        # No gradient + flux kernel fusion, no flux-AA
+        else:
+            if c in r:
+                tdisf.append(lambda uin: self._be.kernel(
+                    'tflux', tplargs=tplargs | {'ktype': 'curved'},
+                    dims=[self.nupts, r[c]], u=s(self.scal_upts[uin], c),
+                    f=s(self._vect_upts, c), artvisc=s(av, c),
+                    smats=self.curved_smat_at('upts')
+                ))
+            if l in r:
+                tdisf.append(lambda uin: self._be.kernel(
+                    'tflux', tplargs=tplargs | {'ktype': 'linear'},
+                    dims=[self.nupts, r[l]], u=s(self.scal_upts[uin], l),
+                    f=s(self._vect_upts, l), artvisc=s(av, l),
+                    verts=self.ploc_at('linspts', l), upts=self.upts
+                ))
+
+            def tdisf_k(uin):
+                return self._make_sliced_kernel(k(uin) for k in tdisf)
 
             self.kernels['tdisf'] = tdisf_k
