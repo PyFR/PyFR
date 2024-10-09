@@ -7,7 +7,6 @@ from pyfr.mpiutil import get_local_rank
 class OpenCLBackend(BaseBackend):
     name = 'opencl'
     blocks = False
-    pref_grad_fusion = True
 
     def __init__(self, cfg):
         super().__init__(cfg)

@@ -11,7 +11,6 @@ from pyfr.backends.openmp.compiler import OpenMPCompiler
 class OpenMPBackend(BaseBackend):
     name = 'openmp'
     blocks = True
-    pref_grad_fusion = False
 
     def __init__(self, cfg):
         super().__init__(cfg)
