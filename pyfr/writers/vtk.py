@@ -492,7 +492,7 @@ class VTKWriter(BaseWriter):
                 ishapecls = subclass_where(BaseShape, name=itype)
 
                 # Obtain the visualisation points on this face
-                svpts = np.array(ishapecls.std_ele(self.divisor))
+                svpts = np.array(ishapecls.std_ele(self.etypes_div[itype]))
                 svpts = np.vstack(np.broadcast_arrays(*proj(*svpts.T))).T
 
                 if self.ho_output:
@@ -544,7 +544,7 @@ class VTKWriter(BaseWriter):
 
         # Get the number of shape points
         shapecls = subclass_where(BaseShape, name=etype)
-        npts = shapecls.npts_from_order(self.etypes_div[etype])*neles
+        npts = shapecls.npts_from_order(div)*neles
 
         # Get the number of subdivided nodes
         subdv = subclass_where(BaseShapeSubDiv, name=etype)(div)
@@ -619,7 +619,7 @@ class VTKWriter(BaseWriter):
         shapecls = subclass_where(BaseShape, name=etype)
 
         # Sub divison points inside of a standard element
-        svpts = shapecls.std_ele(self.divisor)
+        svpts = shapecls.std_ele(self.etypes_div[etype])
         nsvpts = len(svpts)
 
         if etype != 'pyr' and self.ho_output:
