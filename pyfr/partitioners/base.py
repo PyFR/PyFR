@@ -314,7 +314,7 @@ class BasePartitioner:
             p[:] = i
 
         # Sort by partition number, type, internal, and if curved or not
-        pidx = np.lexsort((ecurved, ~internal, petype, vparts))
+        pidx = np.lexsort((ecurved, internal, petype, vparts))
 
         # Apply this permutation to the various arrays
         peidx, petype, vparts = peidx[pidx], petype[pidx], vparts[pidx]
