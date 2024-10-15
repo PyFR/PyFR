@@ -98,8 +98,7 @@ class BaseFluidElements:
             # Template arguments
             fpts_in_upts = self.basis.fpts_in_upts
             self.nefpts = self.nupts if fpts_in_upts else self.nupts + self.nfpts
-            ub = self.basis.ubasis
-            meanwts = ub.invvdm[:, 0] / np.sum(ub.invvdm[:, 0])
+            meanwts = self.basis.upts_wts/np.sum(self.basis.upts_wts)
             eftplargs = {
                 'ndims': self.ndims, 'nupts': self.nupts,
                 'nfpts': self.nfpts, 'nefpts': self.nefpts,
