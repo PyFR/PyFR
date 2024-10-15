@@ -129,11 +129,6 @@ class BaseFluidElements:
                                                    'f-tol', 1e-4)
             eftplargs['niters'] = self.cfg.getfloat('solver-entropy-filter',
                                                     'niters', 2)
-            efunc = self.cfg.get('solver-entropy-filter', 'e-func',
-                                 'physical')
-            eftplargs['e_func'] = efunc
-            if efunc not in {'numerical', 'physical'}:
-                raise ValueError(f'Unknown entropy functional: {efunc}')
 
             # Use linearised constraints/limiting kernel approach from
             # Ching et al. (doi:10.1016/j.jcp.2024.112881)
