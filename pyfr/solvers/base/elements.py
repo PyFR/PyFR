@@ -52,15 +52,9 @@ class BaseElements:
         # See what kind of projection the basis is using
         self.antialias = basis.antialias
 
-        # If we need quadrature points or not
-        haveqpts = 'flux' in self.antialias
-
-        # Always do gradient fusion if flux anti-aliasing is off
-        self.grad_fusion = not haveqpts
-
         # Sizes
         self.nupts = basis.nupts
-        self.nqpts = basis.nqpts if haveqpts else None
+        self.nqpts = basis.nqpts if 'flux' in self.antialias else None
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
@@ -204,6 +198,9 @@ class BaseElements:
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
+
+        # If we are doing gradient fusion
+        self.grad_fusion = not (self._be.blocks or 'flux' in self.antialias)
 
         if self.basis.order >= 2:
             self._linoff = linoff - linoff % -backend.csubsz
