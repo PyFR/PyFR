@@ -16,15 +16,11 @@ Parameterises entropy filter for shock capturing with
 
     *float*
 
-4. ``e-func`` --- type of entropy functional:
-
-    ``physical`` | ``numerical``
-
-5. ``niters`` --- number of filter strength solver iterations:
+4. ``niters`` --- number of filter strength solver iterations:
 
     *int*
 
-6. ``formulation`` --- formulation for constraints and filter kernel:
+5. ``formulation`` --- formulation for constraints and filter kernel:
 
     ``nonlinear`` | ``linearised``
 
@@ -34,7 +30,6 @@ Example::
     d-min = 1e-6
     p-min = 1e-6
     e-tol = 1e-6
-    e-func = physical
     niters = 2
     formulation = nonlinear
 
