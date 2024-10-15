@@ -137,8 +137,9 @@ class OpenMPGraph(base.Graph):
                     aidx = self.klist[j].arg_idx(aname)
                     aoff = self.klist[j].arg_off(aidx)
                     absz = self.klist[j].arg_blocksz(aidx)
+                    suboff = self.klist[j].subs_off(aidx)
 
-                    argsubs[j].append((aoff, allocsz))
+                    argsubs[j].append((aoff, allocsz + suboff))
                     argmasks[j] |= 1 << aidx
 
             allocsz += absz

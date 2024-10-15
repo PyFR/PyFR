@@ -85,6 +85,7 @@ class OpenMPKernelFunction:
         self.argnames = list(argnames)
         self.argsizes = [None]*len(argnames)
         self.nblocks = None
+        self.subs_offsets = [0]*len(argnames)
 
     @cached_property
     def runargs(self):
@@ -110,10 +111,19 @@ class OpenMPKernelFunction:
     def arg_blocksz(self, i):
         return self.argsizes[i]
 
+    def subs_off(self, i):
+        return self.subs_offsets[i]
+
     def set_arg(self, i, v):
         setattr(self.kargs, f'arg{i}', getattr(v, '_as_parameter_', v))
+
         try:
             self.argsizes[i] = v.blocksz*v.itemsize
+        except (AttributeError, IndexError):
+            pass
+
+        try:
+            self.subs_offsets[i] = v.ra*v.leaddim*v.itemsize
         except (AttributeError, IndexError):
             pass
 
