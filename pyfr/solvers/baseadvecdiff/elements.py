@@ -115,7 +115,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             self._be.pointwise.register(f'{kprefix}.shocksensor')
 
             # Obtain the scalar variable to be used for shock sensing
-            shockvar = self.convarmap[self.ndims].index(self.shockvar)
+            shockvar = self.convars.index(self.shockvar)
 
             # Obtain the name, degrees, and order of our solution basis
             ubname = self.basis.ubasis.name

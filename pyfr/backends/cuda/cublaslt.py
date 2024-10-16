@@ -53,10 +53,10 @@ class CUBLASLtWrappers(LibWrapper):
     # Constants
     COMPUTE_32F = 68
     COMPUTE_64F = 70
-    MATMUL_DESC_TRANSA = 3
-    MATMUL_DESC_TRANSB = 4
-    MATMUL_DESC_TRANSC = 5
-    MATMUL_PREF_MAX_WORKSPACE_BYTES = 1
+    MATMUL_DESC_TRANSA = (c_int, 3)
+    MATMUL_DESC_TRANSB = (c_int, 4)
+    MATMUL_DESC_TRANSC = (c_int, 5)
+    MATMUL_PREF_MAX_WORKSPACE_BYTES = (c_size_t, 1)
     OP_N = 0
     OP_T = 1
     R_32F = 0
@@ -89,14 +89,13 @@ class CUBLASLtWrappers(LibWrapper):
 class _CUBLASLtBase:
     _fn_prefix = None
 
-    def __init__(self, cublaslt, ptr, attr=()):
+    def __init__(self, cublaslt, ptr, attrs=[]):
         self.cublaslt = cublaslt
         self._as_parameter_ = ptr.value
 
-        for k, v, vtype in attr:
-            set = getattr(self.cublaslt.lib, f'{self._fn_prefix}SetAttribute')
-            v_ct = vtype(v)
-            set(self, k, byref(v_ct), sizeof(v_ct))
+        for (ctype, k), v in attrs:
+            setter = getattr(cublaslt.lib, f'{self._fn_prefix}SetAttribute')
+            setter(self, k, byref(ctype(v)), sizeof(ctype))
 
     def __del__(self):
         try:
@@ -108,31 +107,32 @@ class _CUBLASLtBase:
 class CUBLASLtMatmulDesc(_CUBLASLtBase):
     _fn_prefix = 'cublasLtMatmulDesc'
 
-    def __init__(self, cublaslt, ctype, dtype, attr=()):
+    def __init__(self, cublaslt, ctype, dtype, attrs=[]):
         ptr = c_void_p()
         getattr(cublaslt.lib, f'{self._fn_prefix}Create')(ptr, ctype, dtype)
 
-        super().__init__(cublaslt, ptr, attr)
+        super().__init__(cublaslt, ptr, attrs)
 
 
 class CUBLASLtMatmulPreference(_CUBLASLtBase):
     _fn_prefix = 'cublasLtMatmulPreference'
 
-    def __init__(self, cublaslt, attr=()):
+    def __init__(self, cublaslt, attrs=[]):
         ptr = c_void_p()
         getattr(cublaslt.lib, f'{self._fn_prefix}Create')(ptr)
 
-        super().__init__(cublaslt, ptr, attr)
+        super().__init__(cublaslt, ptr, attrs)
 
 
 class CUBLASLtMatrixLayout(_CUBLASLtBase):
     _fn_prefix = 'cublasLtMatrixLayout'
 
-    def __init__(self, cublaslt, m, dtype):
+    def __init__(self, cublaslt, mat, dtype):
         ptr = c_void_p()
-        # PyFR is row-major and CUBLASLt is colunm-major
+
+        # PyFR is row-major and CUBLASLt is column-major
         getattr(cublaslt.lib, f'{self._fn_prefix}Create')(
-            ptr, dtype, m.ncol, m.nrow, m.leaddim
+            ptr, dtype, mat.ncol, mat.nrow, mat.leaddim
         )
 
         super().__init__(cublaslt, ptr)
@@ -212,18 +212,17 @@ class CUDACUBLASLtKernels(CUDAKernelProvider):
             c_desc = CUBLASLtMatrixLayout(self, C, dtype)
 
             # Matmul descriptor
-            mm_attr = [(w.MATMUL_DESC_TRANSA, w.OP_N, c_int),
-                       (w.MATMUL_DESC_TRANSB, w.OP_N, c_int),
-                       (w.MATMUL_DESC_TRANSC, w.OP_N, c_int)]
-            mm_desc = CUBLASLtMatmulDesc(self, ctype, dtype, attr=mm_attr)
+            mm_attrs = [(w.MATMUL_DESC_TRANSA, w.OP_N),
+                        (w.MATMUL_DESC_TRANSB, w.OP_N),
+                        (w.MATMUL_DESC_TRANSC, w.OP_N)]
+            mm_desc = CUBLASLtMatmulDesc(self, ctype, dtype, attrs=mm_attrs)
 
-            # Allocate some temporary worspace for benchmarks
+            # Allocate some temporary workspace for benchmarks
             ws_ptr = cuda.mem_alloc(self.WORKSPACE_MAX_SIZE)
 
             # Heuristic preference descriptor
-            pref_attr = [(w.MATMUL_PREF_MAX_WORKSPACE_BYTES, ws_ptr.nbytes,
-                          c_size_t)]
-            pref = CUBLASLtMatmulPreference(self, attr=pref_attr)
+            pref_attrs = [(w.MATMUL_PREF_MAX_WORKSPACE_BYTES, ws_ptr.nbytes)]
+            pref = CUBLASLtMatmulPreference(self, attrs=pref_attrs)
 
             # Get matmul heuristics
             heurs = (CUBLASLtMatmulHeuristicResult * self.nkerns)()

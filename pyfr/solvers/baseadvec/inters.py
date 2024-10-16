@@ -49,10 +49,9 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
     # Starting tag used for MPI
     BASE_MPI_TAG = 2314
 
-    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
+    def __init__(self, be, lhs, rhsrank, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
         self._rhsrank = rhsrank
-        self._rallocs = rallocs
 
         # Name our interface so we can match kernels to MPI requests
         self.name = 'p{rhsrank}'

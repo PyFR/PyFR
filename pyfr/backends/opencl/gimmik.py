@@ -1,3 +1,5 @@
+from weakref import finalize
+
 from gimmik import OpenCLMatMul
 import numpy as np
 
@@ -100,6 +102,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = kern, gs, ls, dt = best_kern
+            finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
         kern.set_dims(gs, ls)
@@ -109,4 +112,4 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             def run(self, queue, wait_for=None, ret_evt=False):
                 return kern.exec_async(queue, wait_for, ret_evt)
 
-        return MulKernel(mats=[b, out], dt=dt)
+        return MulKernel(mats=[a, b, out], dt=dt)

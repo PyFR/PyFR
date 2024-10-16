@@ -138,7 +138,7 @@ of what the relative performance differential between the element types
 is, both partitions will have near identical amounts of work.  In PyFR
 this is known as the *balanced* approach and can be requested via::
 
-    pyfr partition -e balanced ...
+    pyfr partition add -e balanced ...
 
 This approach typically works well when the number of partitions is
 small.  However, for larger partition counts it can become difficult to
@@ -161,7 +161,7 @@ Weights can be specified when partitioning the mesh as
 quadrilateral is found to be 50% more expensive than a triangle this
 can be specified as::
 
-        pyfr partition -e quad:3 -e tri:2 ...
+        pyfr partition add -e quad:3 -e tri:2 ...
 
 If precise profiling data is not available regarding the performance of
 each element type in a given configuration a helpful rule of thumb is
@@ -217,24 +217,6 @@ where :math:`N` is the number of ranks, :math:`T_1` is the simulation
 time with one rank, and :math:`T_N` is the simulation time with
 :math:`N` ranks.  This represents a reasonable trade-off between the
 overall time-to-solution and efficient resource utilisation.
-
-Parallel I/O
-============
-
-PyFR incorporates support for parallel file I/O via HDF5 and will use it
-automatically where available.  However, for this work several
-prerequisites must be satisfied:
-
- - HDF5 must be explicitly compiled with support for parallel I/O.
- - The mpi4py Python module *must* be compiled against the same MPI
-   distribution as HDF5.  A version mismatch here can result in subtle
-   and difficult to diagnose errors.
- - The h5py Python module *must* be built with support for parallel
-   I/O.
-
-After completing this process it is highly recommended to verify
-everything is working by trying the
-`h5py parallel HDF5 example <https://docs.h5py.org/en/stable/mpi.html#using-parallel-hdf5-from-h5py>`_.
 
 Plugins
 =======

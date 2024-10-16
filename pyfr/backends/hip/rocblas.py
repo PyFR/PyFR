@@ -138,6 +138,7 @@ class HIPRocBLASKernels(HIPKernelProvider):
             out_np = getattr(out, 'parent', out).get()
 
             best_kern = None
+
             # Benchmark suggested algorithms
             for algo in sidx:
                 dt = self._benchmark(gemm)
