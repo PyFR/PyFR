@@ -13,7 +13,7 @@ class BaseDualIntegrator(BaseIntegrator):
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
             backend, systemcls, rallocs, mesh, initsoln, cfg,
-            self.stepper_nregs, self.stage_nregs, self._dt
+            self.stepper_nregs, self.stage_nregs, self.dt
         )
 
         # Event handlers for advance_to
@@ -55,9 +55,9 @@ class BaseDualIntegrator(BaseIntegrator):
         return dt_soln
 
     def call_plugin_dt(self, dt):
-        rem = math.fmod(dt, self._dt)
+        rem = math.fmod(dt, self.dt)
         tol = 5.0*self.dtmin
-        if rem > tol and (self._dt - rem) > tol:
+        if rem > tol and (self.dt - rem) > tol:
             raise ValueError('Plugin call times must be multiples of dt')
 
         super().call_plugin_dt(dt)

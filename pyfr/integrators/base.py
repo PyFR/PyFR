@@ -56,7 +56,7 @@ class BaseIntegrator:
         self.nacptchain = 0
 
         # Current and minimum time steps
-        self._dt = cfg.getfloat('solver-time-integrator', 'dt')
+        self.dt = cfg.getfloat('solver-time-integrator', 'dt')
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
@@ -72,6 +72,31 @@ class BaseIntegrator:
 
         # Abort computation
         self.abort = False
+
+        # Smoothly step to target time in the last near_t steps
+        self.fact_min = self.cfg.getfloat('solver-time-integrator', 
+                                          'dt-adjust-min-fact', 0.9)
+        self.fact_max = self.cfg.getfloat('solver-time-integrator', 
+                                          'dt-adjust-max-fact', 1.001)
+        self.dt_fallback = cfg.getfloat('solver-time-integrator', 'dt')
+        self.dt_near = None
+
+    def adjust_dt(self, t):
+        t_diff = t - self.tcurr
+        fallback_steps = t_diff / self.dt_fallback
+        steps_to_t = -(fallback_steps // -self.fact_max)
+
+        if steps_to_t == 1:
+            self.dt = t_diff
+        elif fallback_steps == 0:
+            self.dt_near = None
+            self.dt = t_diff
+        elif (fallback_steps - 1) / (steps_to_t - 1) < self.fact_min:
+            self.dt_near = self.dt_near or t_diff / steps_to_t
+            self.dt = self.dt_near
+        else:
+            self.dt = self.dt_fallback
+        self.dt = max(self.dt, self.dtmin)
 
     def _get_plugins(self, initsoln):
         plugins = []
@@ -131,7 +156,7 @@ class BaseIntegrator:
 
     def call_plugin_dt(self, dt):
         ta = self.tlist
-        tb = deque(np.arange(self.tcurr, self.tend, dt).tolist())
+        tb = deque(np.arange(self.tend - dt, self.tcurr, -dt).tolist()[::-1])
 
         self.tlist = tlist = deque()
 
