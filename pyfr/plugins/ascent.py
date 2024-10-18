@@ -376,7 +376,7 @@ class _AscentRenderer:
         self.ascent_config['runtime/type'] = 'ascent'
         vtkm_backend = adapter.acfg.get(adapter.cfgsect, 'vtkm-backend',
                                         'serial')
-        self.ascent_config['runtine/vtkm/backend'] = vtkm_backend
+        self.ascent_config['runtime/vtkm/backend'] = vtkm_backend
 
         lib.ascent_open(self.ascent_ptr, self.ascent_config)
 
@@ -482,7 +482,7 @@ class _AscentRenderer:
         # Iterate over each element type in our region
         for d_str, idx, rgn, soln_op in self._ele_regions_lin:
             self.mesh_n[f'{d_str}/state/time/keyword'] = 'Time'
-            self.mesh_n[f'{d_str}/state/time/data'] = adapter.tcurr
+            self.mesh_n[f'{d_str}/state/time/data'] = str(adapter.tcurr)
 
             # Subset and transpose the solution
             csolns = soln[idx][..., rgn].swapaxes(0, 1)

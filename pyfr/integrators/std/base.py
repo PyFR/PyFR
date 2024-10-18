@@ -29,9 +29,8 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
 
-        # Pre-process solution if necessary
-        self.system.preproc(self.tcurr,
-                            self.system.ele_scal_upts(self._idxcurr))
+        # Pre-process solution
+        self.system.preproc(self.tcurr, self._idxcurr)
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()

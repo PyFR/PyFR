@@ -3,6 +3,8 @@ from functools import cached_property, wraps
 import numpy as np
 
 from pyfr.nputil import npeval, fuzzysort
+from pyfr.quadrules import get_quadrule
+from pyfr.shapes import proj_l2
 from pyfr.util import memoize
 
 
@@ -50,15 +52,9 @@ class BaseElements:
         # See what kind of projection the basis is using
         self.antialias = basis.antialias
 
-        # If we need quadrature points or not
-        haveqpts = 'flux' in self.antialias
-
-        # Always do gradient fusion if flux anti-aliasing is off
-        self.grad_fusion = not haveqpts
-
         # Sizes
         self.nupts = basis.nupts
-        self.nqpts = basis.nqpts if haveqpts else None
+        self.nqpts = basis.nqpts if 'flux' in self.antialias else None
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
@@ -87,9 +83,26 @@ class BaseElements:
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
-        # Get the physical location of each solution point
-        coords = self.ploc_at_np('upts').swapaxes(0, 1)
-        vars |= dict(zip('xyz', coords))
+        # See if performing L2 projection
+        ename = self.basis.name
+        upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
+        qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or 
+                self.cfg.getint('soln-ics', 'quad-deg', 0))
+        # Default to solution points if quad-pts are not specified
+        qpts = self.cfg.get('soln-ics', f'quad-pts-{ename}', upts)
+
+        # Get the physical location of each interpolation point
+        if qdeg:
+            qrule = get_quadrule(ename, qpts, qdeg=qdeg)
+            coords = self.ploc_at_np(qrule.pts)
+
+            # Compute projection operator
+            m8 = proj_l2(qrule, self.basis.ubasis)
+        else:
+            m8 = None
+            coords = self.ploc_at_np('upts')
+
+        vars |= dict(zip('xyz', coords.swapaxes(0, 1)))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
@@ -100,7 +113,7 @@ class BaseElements:
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
-            self.scal_upts[:, i, :] = v
+            self.scal_upts[:, i, :] = m8 @ v if m8 is not None else v
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -185,6 +198,9 @@ class BaseElements:
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
+
+        # If we are doing gradient fusion
+        self.grad_fusion = not (self._be.blocks or 'flux' in self.antialias)
 
         if self.basis.order >= 2:
             self._linoff = linoff - linoff % -backend.csubsz

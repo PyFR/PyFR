@@ -96,28 +96,23 @@ class BaseFluidElements:
             )
 
             # Template arguments
+            fpts_in_upts = self.basis.fpts_in_upts
+            self.nefpts = self.nupts if fpts_in_upts else self.nupts + self.nfpts
+            ub = self.basis.ubasis
+            meanwts = ub.invvdm[:, 0] / np.sum(ub.invvdm[:, 0])
             eftplargs = {
-                'ndims': self.ndims,
-                'nupts': self.nupts,
-                'nfpts': self.nfpts,
-                'nvars': self.nvars,
-                'nfaces': self.nfaces,
+                'ndims': self.ndims, 'nupts': self.nupts,
+                'nfpts': self.nfpts, 'nefpts': self.nefpts,
+                'nvars': self.nvars, 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
-                'order': self.basis.order
+                'order': self.basis.order, 'fpts_in_upts': fpts_in_upts,
+                'meanwts': meanwts
             }
 
             # Check to see if running anti-aliasing
             if self.antialias:
                 raise ValueError('Entropy filter not compatible with '
                                  'anti-aliasing.')
-
-            # Check to see if running collocated solution/flux points
-            m0 = self.basis.m0
-            mrowsum = np.max(np.abs(np.sum(m0, axis=1) - 1.0))
-            if np.min(m0) < -1e-8 or mrowsum > 1e-8:
-                raise ValueError('Entropy filter requires flux points to be a '
-                                 'subset of solution points or a convex '
-                                 'combination thereof.')
 
             # Minimum density/pressure constraints
             eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter',
@@ -134,11 +129,12 @@ class BaseFluidElements:
                                                    'f-tol', 1e-4)
             eftplargs['niters'] = self.cfg.getfloat('solver-entropy-filter',
                                                     'niters', 2)
-            efunc = self.cfg.get('solver-entropy-filter', 'e-func',
-                                 'physical')
-            eftplargs['e_func'] = efunc
-            if efunc not in {'numerical', 'physical'}:
-                raise ValueError(f'Unknown entropy functional: {efunc}')
+
+            # Use linearised constraints/limiting kernel approach from
+            # Ching et al. (doi:10.1016/j.jcp.2024.112881)
+            form = self.cfg.get('solver-entropy-filter', 'formulation',
+                                'nonlinear')
+            eftplargs['linearise'] = form == 'linearised'
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
@@ -148,14 +144,15 @@ class BaseFluidElements:
             # Compute local entropy bounds
             self.kernels['local_entropy'] = lambda uin: self._be.kernel(
                 'entropylocal', tplargs=eftplargs, dims=[self.neles],
-                u=self.scal_upts[uin], entmin_int=self.entmin_int
+                u=self.scal_upts[uin], entmin_int=self.entmin_int,
+                m0=self.m0
             )
 
             # Apply entropy filter
             self.kernels['entropy_filter'] = lambda uin: self._be.kernel(
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
-                vdm=self.vdm, invvdm=self.invvdm
+                vdm=self.vdm_ef, invvdm=self.invvdm, m0=self.m0
             )
 
 
