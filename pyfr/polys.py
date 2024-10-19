@@ -63,11 +63,11 @@ class BasePolyBasis:
 
     @clean
     def nodal_basis_at(self, epts):
-        return (self.invvdm @ self.ortho_basis_at(epts)).T
+        return (self.invvdm @ self.ortho_basis_at(epts, clean=False)).T
 
     @clean
     def jac_nodal_basis_at(self, epts):
-        return self.invvdm @ self.jac_ortho_basis_at(epts)
+        return self.invvdm @ self.jac_ortho_basis_at(epts, clean=False)
 
     @cached_property
     def vdm(self):

@@ -253,8 +253,8 @@ class PointSampler:
                 if k < eimap.size and eidxs[eimap[k]] == l['eidx']:
                     op = ubasis.nodal_basis_at(l['tloc'][None], clean=False)
 
+                    pinfo[j, eimap[k]].append((len(ptsrank), op))
                     ptsrank.append(i)
-                    pinfo[j, eimap[k]].append((i, op))
 
         # Group points according to the element they're inside
         self.pinfo, self.pcount = [], len(ptsrank)
