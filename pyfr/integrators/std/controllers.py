@@ -173,8 +173,10 @@ class StdPIController(BaseStdController):
         expb = self._beta / sord
 
         while self.tcurr < t:
-            # Decide on the time step
+            # Adjust current time step per target t
             self.adjust_dt(t)
+
+            self.dt = max(self.dt, self.dtmin)
 
             # Take the step
             idxcurr, idxprev, idxerr = self.step(self.tcurr, self.dt)
@@ -189,9 +191,9 @@ class StdPIController(BaseStdController):
             else:
                 self._reject_step(self.dt, idxprev, err=err)
 
-            # Determine time step adjustment factor
+            # Adjust time step per PI controller
             fac = err**-expa * self._errprev**expb
             fac = min(maxf, max(minf, saff*fac))
 
-            # Compute the size of the next step
+            # Compute the next time step
             self.dt_fallback = fac*self.dt

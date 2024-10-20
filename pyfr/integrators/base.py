@@ -74,29 +74,39 @@ class BaseIntegrator:
         self.abort = False
 
         # Smoothly step to target time in the last near_t steps
-        self.fact_min = self.cfg.getfloat('solver-time-integrator', 
+        self.aminf = self.cfg.getfloat('solver-time-integrator', 
                                           'dt-adjust-min-fact', 0.9)
-        self.fact_max = self.cfg.getfloat('solver-time-integrator', 
+        self.amaxf = self.cfg.getfloat('solver-time-integrator', 
                                           'dt-adjust-max-fact', 1.001)
         self.dt_fallback = cfg.getfloat('solver-time-integrator', 'dt')
         self.dt_near = None
 
     def adjust_dt(self, t):
+        # Time difference to traverse 
         t_diff = t - self.tcurr
-        fallback_steps = t_diff / self.dt_fallback
-        steps_to_t = -(fallback_steps // -self.fact_max)
 
-        if steps_to_t == 1:
+        # Estimate steps to reach t upon taking self.dt_fallback steps
+        est_nsteps = t_diff / self.dt_fallback
+        est_nsteps_roundup = -(est_nsteps // -self.amaxf)
+
+        if est_nsteps_roundup == 1:
+            # Exactly reach t
             self.dt = t_diff
-        elif fallback_steps == 0:
             self.dt_near = None
-            self.dt = t_diff
-        elif (fallback_steps - 1) / (steps_to_t - 1) < self.fact_min:
-            self.dt_near = self.dt_near or t_diff / steps_to_t
+
+        elif (est_nsteps - 1) / (est_nsteps_roundup - 1) < self.aminf:
+            # Modify step to the approaching t
+
+            dt_near = t_diff / est_nsteps_roundup
+
+            if (self.dt_near is None 
+                or not self.aminf < (self.dt_near/dt_near) < self.amaxf): 
+                self.dt_near = dt_near
+
             self.dt = self.dt_near
         else:
+            # Reset step if far from t
             self.dt = self.dt_fallback
-        self.dt = max(self.dt, self.dtmin)
 
     def _get_plugins(self, initsoln):
         plugins = []
