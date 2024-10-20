@@ -9,24 +9,27 @@ from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
-def _interpolate_pts(op, pts):
+def interpolate_pts(op, pts):
     ipts = op.astype(pts.dtype) @ pts.reshape(op.shape[1], -1)
     ipts = ipts.reshape(op.shape[0], *pts.shape[1:])
 
     return ipts
 
 
-def _search(a, v):
-    idx = np.argsort(a)
-    return idx[np.searchsorted(a, v, sorter=idx)]
-
-
-class VTKWriter(BaseWriter):
+class BaseVTKWriter(BaseWriter):
     # Supported file types and extensions
     name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
-    vtk_types_ho = dict(tri=69, quad=70, tet=71, pri=73, hex=72)
+    # Type of export (volume/boundary/STL)
+    type = None
+
+    # If to output curvature or partition number data
+    output_curved = False
+    output_partition = False
+
+    # VTK high-order types
+    _vtk_types_ho = {'tri': 69, 'quad': 70, 'tet': 71, 'pri': 73, 'hex': 72}
 
     # Mappings betwen the node ordering of PyFR and that of VTK
     _nodemaps = {
@@ -366,8 +369,8 @@ class VTKWriter(BaseWriter):
         ]
     }
 
-    def __init__(self, meshf, solnf, *, prec=np.float32, order=None,
-                 divisor=None, fields=[], boundaries=None):
+    def __init__(self, meshf, solnf, *, prec='single', order=None,
+                 divisor=None, fields=[]):
         super().__init__(meshf, solnf)
 
         self.dtype = np.dtype(prec).type
@@ -431,81 +434,6 @@ class VTKWriter(BaseWriter):
 
             if len(self._vtk_vars) != len(fields):
                 raise RuntimeError('Invalid field specification')
-
-        # Handle volume vs surface export
-        if not boundaries:
-            self._init_volume()
-        else:
-            if self.ndims != 3:
-                raise RuntimeError('Surface export only supported for 3D '
-                                   'grids')
-
-            self._init_surface(boundaries)
-
-    def _init_volume(self):
-        self.einfo = [(etype, self.soln[etype].shape[2])
-                      for etype in self.mesh.eidxs]
-        self._output_curved = self._output_partition = True
-        self._prepare_pts = self._prepare_pts_volume
-
-    def _init_surface(self, boundaries):
-        ecount = defaultdict(int)
-        self._surface_info = defaultdict(list)
-
-        rmesh, smesh = self.reader.mesh, self.mesh
-        cidxs = [smesh.codec.index(f'bc/{b}') for b in boundaries]
-
-        for etype, einfo in self.reader.eles.items():
-            # See which of our faces are on the selected boundaries
-            mask = np.isin(einfo['faces']['cidx'], cidxs)
-            eoff, fidx = mask.nonzero()
-
-            # Handle the case where the solution is subset
-            if smesh.subset:
-                eidxs = rmesh.eidxs[etype]
-                beidx = eidxs[mask.any(axis=1)]
-                if not np.isin(beidx, smesh.eidxs[etype]).all():
-                    raise ValueError('Output boundaries not present in '
-                                     'subset solution')
-
-                eoff = _search(smesh.eidxs[etype], eidxs[eoff])
-
-            # Obtain the associated surface info
-            for stype, *info in self._get_surface_info(etype, eoff, fidx):
-                ecount[stype] += len(info[-1])
-                self._surface_info[stype].append((etype, *info))
-
-        self.einfo = list(ecount.items())
-        self._output_curved = self._output_partition = True
-        self._prepare_pts = self._prepare_pts_surface
-
-    def _get_surface_info(self, etype, eoff, fidx):
-        info, idxs = {}, defaultdict(list)
-
-        # Get the shape associated with our element type
-        shapecls = subclass_where(BaseShape, name=etype)
-        shape = shapecls(len(self.mesh.spts[etype]), self.cfg)
-
-        for e, f in zip(eoff, fidx):
-            if f not in info:
-                itype, proj, norm = shape.faces[f]
-                ishapecls = subclass_where(BaseShape, name=itype)
-
-                # Obtain the visualisation points on this face
-                svpts = np.array(ishapecls.std_ele(self.etypes_div[itype]))
-                svpts = np.vstack(np.broadcast_arrays(*proj(*svpts.T))).T
-
-                if self.ho_output:
-                    svpts = svpts[self._nodemaps[itype, len(svpts)]]
-
-                mesh_op = shape.sbasis.nodal_basis_at(svpts)
-                soln_op = shape.ubasis.nodal_basis_at(svpts)
-
-                info[f] = (itype, mesh_op, soln_op)
-
-            idxs[f].append(e)
-
-        return [(*info[f], idxs[f]) for f in info]
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -577,10 +505,10 @@ class VTKWriter(BaseWriter):
         attrs = [('', dtype, '3'), ('connectivity', 'Int64', ''),
                  ('offsets', 'Int64', ''), ('types', 'UInt8', '')]
 
-        if self._output_curved:
+        if self.output_curved:
             attrs.append(('Curved', 'UInt8', '1'))
 
-        if self._output_partition:
+        if self.output_partition:
             attrs.append(('Partition', 'Int32', '1'))
 
         for fname, varnames in vvars.items():
@@ -592,10 +520,10 @@ class VTKWriter(BaseWriter):
 
             sizes = [3*nb, 8*nnodes, 8*ncells, ncells]
 
-            if self._output_curved:
+            if self.output_curved:
                 sizes.append(ncells)
 
-            if self._output_partition:
+            if self.output_partition:
                 sizes.append(4*ncells)
 
             sizes.extend(len(varnames)*nb for varnames in vvars.values())
@@ -603,66 +531,6 @@ class VTKWriter(BaseWriter):
             return tuple((*a, s) for a, s in zip(attrs, sizes))
         else:
             return attrs
-
-    def _prepare_pts_volume(self, etype):
-        spts = self.mesh.spts[etype].astype(self.dtype)
-        soln = self.soln[etype].swapaxes(0, 1).astype(self.dtype)
-        curved = self.mesh.spts_curved[etype]
-
-        # Extract the partition number information
-        part = self.soln[f'{etype}-parts']
-
-        # Dimensions
-        nspts, neles = spts.shape[:2]
-
-        # Shape
-        shapecls = subclass_where(BaseShape, name=etype)
-
-        # Sub divison points inside of a standard element
-        svpts = shapecls.std_ele(self.etypes_div[etype])
-        nsvpts = len(svpts)
-
-        if etype != 'pyr' and self.ho_output:
-            svpts = [svpts[i] for i in self._nodemaps[etype, nsvpts]]
-
-        # Generate the operator matrices
-        soln_b = shapecls(nspts, self.cfg)
-        mesh_vtu_op = soln_b.sbasis.nodal_basis_at(svpts)
-        soln_vtu_op = soln_b.ubasis.nodal_basis_at(svpts)
-
-        # Calculate node locations of VTU elements
-        vpts = _interpolate_pts(mesh_vtu_op, spts)
-
-        # Append dummy z dimension for points in 2D
-        if self.ndims == 2:
-            vpts = np.pad(vpts, [(0, 0), (0, 0), (0, 1)], 'constant')
-
-        # Pre-process the solution
-        soln = self._pre_proc_fields(soln).swapaxes(0, 1)
-
-        # Interpolate the solution to the vis points
-        vsoln = _interpolate_pts(soln_vtu_op, soln)
-
-        return vpts, vsoln, curved, part
-
-    def _prepare_pts_surface(self, itype):
-        vspts, vsoln, curved, part = [], [], [], []
-
-        for etype, mesh_op, soln_op, idxs in self._surface_info[itype]:
-            spts = self.mesh.spts[etype][:, idxs]
-            soln = self.soln[etype][..., idxs]
-            soln = soln.swapaxes(0, 1).astype(self.dtype)
-
-            # Pre-process the solution
-            soln = self._pre_proc_fields(soln).swapaxes(0, 1)
-
-            vspts.append(_interpolate_pts(mesh_op, spts))
-            vsoln.append(_interpolate_pts(soln_op, soln))
-            curved.append(self.mesh.spts_curved[etype][idxs])
-            part.append(self.soln[f'{etype}-parts'][idxs])
-
-        return (np.hstack(vspts), np.dstack(vsoln),
-                np.hstack(curved), np.hstack(part))
 
     def write(self, fname):
         if Path(fname).suffix == '.vtu':
@@ -803,7 +671,7 @@ class VTKWriter(BaseWriter):
             return ''
 
     def _write_serial_header(self, write_s, etype, neles, off):
-        ncelld = self._output_curved + self._output_partition
+        ncelld = self.output_curved + self.output_partition
         npts, ncells = self._get_npts_ncells_nnodes(etype, neles)[:2]
 
         write_s(f'<Piece NumberOfPoints="{npts}" '
@@ -832,7 +700,7 @@ class VTKWriter(BaseWriter):
         return off
 
     def _write_parallel_header(self, write_s):
-        ncelld = self._output_curved + self._output_partition
+        ncelld = self.output_curved + self.output_partition
         write_s('<PPoints>\n')
 
         # Write VTK DataArray headers
@@ -869,7 +737,7 @@ class VTKWriter(BaseWriter):
         if etype != 'pyr' and self.ho_output:
             nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
-            types = self.vtk_types_ho[etype]
+            types = self._vtk_types_ho[etype]
         else:
             subdiv = get_subdiv(etype, self.etypes_div[etype])
 
@@ -894,12 +762,12 @@ class VTKWriter(BaseWriter):
         self._write_darray(vtu_typ, write, np.uint8)
 
         # VTU cell curvature information
-        if self._output_curved:
+        if self.output_curved:
             vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
             self._write_darray(vtu_curved, write, np.uint8)
 
         # VTU cell partition numbers
-        if self._output_partition:
+        if self.output_partition:
             vtu_part = np.repeat(part, len(vtu_typ) // neles)
             self._write_darray(vtu_part, write, np.int32)
 

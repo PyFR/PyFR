@@ -118,32 +118,45 @@ def main():
 
     # Export command
     ap_export = sp.add_parser('export', help='export --help')
-    ap_export.add_argument('meshf', help='input mesh file')
-    ap_export.add_argument('solnf', help='input solution file')
-    ap_export.add_argument('outf', help='output file')
-    types = [cls.name for cls in subclasses(BaseWriter)]
-    ap_export.add_argument('-t', dest='ftype', choices=types, required=False,
-                           help='output file type; this is usually inferred '
-                           'from the extension of outf')
-    ap_export.add_argument('-f', '--field', dest='fields', action='append',
-                           metavar='FIELD', help='what fields should be '
-                           'output; may be repeated, by default all fields '
-                           'are output')
-    output_options = ap_export.add_mutually_exclusive_group(required=False)
-    output_options.add_argument('-d', '--divisor', type=int,
-                                help='sets the level to which high order '
-                                'elements are divided; output is linear '
-                                'between nodes, so increased resolution '
-                                'may be required')
-    output_options.add_argument('-k', '--order', type=int, dest='order',
-                                help='sets the order of high order elements')
-    ap_export.add_argument('-p', '--precision', choices=['single', 'double'],
-                           default='single', help='output number precision; '
-                           'defaults to single')
-    ap_export.add_argument('-b', '--boundary', dest='boundaries',
-                           action='append', metavar='BOUNDARY',
-                           help='boundary to output; may be repeated')
-    ap_export.set_defaults(process=process_export)
+    ap_export = ap_export.add_subparsers()
+
+    for etype in ('boundary', 'stl', 'volume'):
+        ap_export_type = ap_export.add_parser(etype,
+                                              help=f'export {etype} --help')
+
+        ap_export_type.add_argument('meshf', help='input mesh file')
+        ap_export_type.add_argument('solnf', help='input solution file')
+
+        if etype == 'boundary':
+            ap_export_type.add_argument('eargs', nargs='+', metavar='boundary',
+                                        help='boundary to output')
+        elif etype == 'stl':
+            ap_export_type.add_argument('eargs', nargs='+', metavar='stl',
+                                        help='STL region to output')
+
+        ap_export_type.add_argument('outf', help='output file')
+
+        ftypes = [c.name for c in subclasses(BaseWriter) if c.type == etype]
+        ap_export_type.add_argument(
+            '-t', dest='ftype', choices=ftypes, required=False,
+            help='output file type; this is usually inferred from the '
+            'extension of outf'
+        )
+        ap_export_type.add_argument(
+            '-f', '--field', dest='fields', action='append', metavar='FIELD',
+            help='what fields should be output; may be repeated, by default '
+            'all fields are output'
+        )
+        ap_export_type.add_argument(
+            '-p', '--precision', choices=['single', 'double'],
+            default='single', help='output number precision; defaults to '
+            'single'
+        )
+        ap_export_type.add_argument(
+            '--eopt', dest='eopts', action='append', default=[],
+            metavar='key:value', help='exporter-specific option'
+        )
+        ap_export_type.set_defaults(etype=etype, process=process_export)
 
     # Region subcommand
     ap_region = sp.add_parser('region', help='region --help')
@@ -374,21 +387,23 @@ def process_export(args):
 
     comm, rank, root = get_comm_rank_root()
 
-    kwargs = {
-        'prec': np.dtype(args.precision).type,
-        'order': args.order,
-        'divisor': args.divisor,
-        'fields': args.fields,
-        'boundaries': args.boundaries
-    }
+    # Common arguments
+    kargs = [args.eargs] if 'eargs' in args else []
+    kwargs = {'fields': args.fields, 'prec': args.precision}
+
+    # Process any exporter-specific options
+    for e in args.eopts:
+        k, v = e.split(':', 1)
+        kwargs[k] = int(v) if re.match(r'\d+', v) else v
 
     # Get writer instance by specified type or outf extension
     if args.ftype:
-        writer = get_writer_by_name(args.ftype, args.meshf, args.solnf,
-                                    **kwargs)
+        writer = get_writer_by_name(args.ftype, args.etype, args.meshf,
+                                    args.solnf, *kargs, **kwargs)
     else:
         extn = Path(args.outf).suffix
-        writer = get_writer_by_extn(extn, args.meshf, args.solnf, **kwargs)
+        writer = get_writer_by_extn(extn, args.etype, args.meshf, args.solnf,
+                                    *kargs, **kwargs)
 
     # Write the output file
     writer.write(args.outf)
