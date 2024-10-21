@@ -101,14 +101,11 @@ Python packages:
 #. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.1.1
 #. `h5py <https://www.h5py.org/>`_ >= 2.10
 #. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
-#. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
+#. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 4.0
 #. `numpy <https://www.numpy.org/>`_ >= 1.26.4
 #. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
 #. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 #. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.0.1
-
-Note that due to a bug in NumPy, PyFR is not compatible with 32-bit
-Python distributions.
 
 .. _install cuda backend:
 

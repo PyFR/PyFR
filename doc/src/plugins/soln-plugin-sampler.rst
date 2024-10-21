@@ -50,33 +50,34 @@ Example::
 This plugin also exposes functionality via a CLI. The following
 functions are available
 
-#. ``pyfr sampler add`` --- preprocesses and adds a set of points to a
+-  ``pyfr sampler add`` --- preprocesses and adds a set of points to a
    mesh.  This command can be run under MPI.
 
    Example::
 
      pyfr sampler add mesh.pyfrm mypoints.csv
 
-#. ``pyfr sampler list`` --- lists the named point sets in a mesh.
+-  ``pyfr sampler list`` --- lists the named point sets in a mesh.
 
    Example::
 
      pyfr sampler list mesh.pyfrm
 
-#. ``pyfr sampler dump`` --- dumps the locations of all points in a
+-  ``pyfr sampler dump`` --- dumps the locations of all points in a
    named point set.
 
    Example::
 
      pyfr sampler dump mesh.pyfrm mypoints
 
-#. ``pyfr sampler remove`` --- removes a named point set from a mesh.
+-  ``pyfr sampler remove`` --- removes a named point set from a mesh.
 
    Example::
 
      pyfr sampler remove mesh.pyfrm mypoints
 
-#. ``pyfr sampler sample`` --- samples a solution file.
+-  ``pyfr sampler sample`` --- samples a solution file.  This command
+   can be run in parallel using ``mpiexec -np n``.
 
    Example::
 

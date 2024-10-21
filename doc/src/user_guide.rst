@@ -19,16 +19,16 @@ PyFR |release| uses three distinct file formats:
 
 The following core commands are available from the ``pyfr`` program:
 
-#. ``pyfr import`` --- convert a `Gmsh
+-  ``pyfr import`` --- convert a `Gmsh
    <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
 
    Example::
 
         pyfr import mesh.msh mesh.pyfrm
 
-#. ``pyfr partition`` --- handles mesh partitioning.
+-  ``pyfr partition`` --- handles mesh partitioning.
 
-   #. ``pyfr partition add`` --- adds a new partitioning to mesh.
+   -  ``pyfr partition add`` --- adds a new partitioning to mesh.
       Example::
 
          pyfr partition add mesh.pyfrm 10 ten_parts
@@ -42,31 +42,31 @@ The following core commands are available from the ``pyfr`` program:
       Further details can be found in the
       :ref:`performance guide <perf mixed grids>`.
 
-   #. ``pyfr partition reconstruct`` --- reconstructs a partitioning
+   -  ``pyfr partition reconstruct`` --- reconstructs a partitioning
       from a solution file.  Example::
 
          pyfr partition reconstruct mesh.pyfrm soln.pyfrm part_name
 
-   #. ``pyfr partition list`` --- lists partitionings in a mesh.
+   -  ``pyfr partition list`` --- lists partitionings in a mesh.
       Example::
 
          pyfr partition list mesh.pyfrm
 
-   #. ``pyfr partition info`` --- shows information about a specific
+   -  ``pyfr partition info`` --- shows information about a specific
       partitioning in a mesh.  Example::
 
          pyfr partition info mesh.pyfrm ten_parts
 
-   #. ``pyfr partition remove`` --- deletes a partitioning from a mesh.
+   -  ``pyfr partition remove`` --- deletes a partitioning from a mesh.
       Example::
 
          pyfr partition remove mesh.pyfrm ten_parts
 
-#. ``pyfr run`` --- start a new PyFR simulation. Example::
+-  ``pyfr run`` --- start a new PyFR simulation. Example::
 
         pyfr run mesh.pyfrm configuration.ini
 
-#. ``pyfr restart`` --- restart a PyFR simulation from an existing
+-  ``pyfr restart`` --- restart a PyFR simulation from an existing
    solution file. Example::
 
         pyfr restart mesh.pyfrm solution.pyfrs
@@ -76,53 +76,66 @@ The following core commands are available from the ``pyfr`` program:
 
         pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
 
-#. ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an
-   unstructured VTK ``.vtu`` or ``.pvtu`` file. If a ``-k`` flag is
-   provided with an integer argument then ``.pyfrs`` elements are
-   converted to high-order VTK cells which are exported, where the
-   order of the VTK cells is equal to the value of the integer
-   argument. Example::
+-  ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an
+   unstructured VTK ``.vtu`` or ``.pvtu`` file.
+   
+   -  ``pyfr export volume`` --- exports a volume grid.  If
+      ``--eopt=order:n`` is provided then PyFR elements are converted
+      where possible to high-order VTK elements.  Example::
 
-        pyfr export -k 4 mesh.pyfrm solution.pyfrs solution.vtu
+        pyfr export --eopt=order:4 mesh.pyfrm solution.pyfrs solution.vtu
 
-   If a ``-d`` flag is provided with an integer argument then
-   ``.pyfrs`` elements are subdivided into linear VTK cells which are
-   exported, where the number of sub-divisions is equal to the value of
-   the integer argument. Example::
+      If a ``--eopt=divisor:n`` flag is provided with an integer
+      argument then elements are subdivided into linear VTK cells.
+      Example::
 
-        pyfr export -d 4 mesh.pyfrm solution.pyfrs solution.vtu
+        pyfr export --eopt=divisor:4 mesh.pyfrm solution.pyfrs solution.vtu
 
-   If no flags are provided then ``.pyfrs`` elements are converted to
-   high-order VTK cells which are exported, where the order of the
-   cells is equal to the order of the solution data in the ``.pyfrs``
-   file.
+      By default elements are converted to high-order VTK cells which
+      are exported, where the order of the cells is equal to the order
+      of the solution data in the file.
 
-   By default all of the fields in the ``.pyfrs`` file will be
-   exported. If only a specific field is desired this can be specified
-   with the ``-f`` flag; for example ``-f density -f velocity`` will
-   only export the *density* and *velocity* fields.
+      By default all of the fields in the solution file will be
+      exported. If only a specific field is desired this can be
+      specified with the ``-f`` flag; for example ``-f density -f
+      velocity`` will only export   the *density* and *velocity* fields.
 
-#. ``pyfr region`` --- handles STL region processing.
+   -  ``pyfr export boundary`` --- exports one of more boundaries.
+      Example::
 
-   #. ``pyfr region add`` --- adds an STL region to the mesh.
+        pyfr export boundary mesh.pyfrm solution.pyfrms lower_wall upper_wall solution.vtu
+
+      Note that boundary export is only supported for 3D grids.
+
+   -  ``pyfr export stl`` --- exports one or more STL surfaces.
+      Example::
+
+        pyfr export boundary mesh.pyfrm solution.pyfrms teapot solution.vtu
+
+      The STL surfaces must have already been added to the mesh with
+      ``pyfr region add``.
+
+-  ``pyfr region`` --- handles STL region processing.
+
+   -  ``pyfr region add`` --- adds an STL region to the mesh.
       Example::
 
          pyfr partition add mesh.pyfrm teapot.stl teapot
 
-   #. ``pyfr region list`` --- lists the STL regions in the mesh.
+   -  ``pyfr region list`` --- lists the STL regions in the mesh.
       Example::
 
          pyfr partition list mesh.pyfrm
 
-   #. ``pyfr region remove`` --- removes an STL region from the mesh.
+   -  ``pyfr region remove`` --- removes an STL region from the mesh.
       Example::
 
          pyfr region remove mesh.pyfrm teapot
 
 The ``run``, ``restart``, and ``export`` commands can be run in
-parallel. To do so prefix ``pyfr`` with
-``mpiexec -n <cores/devices>``. Note that there must exist a
-partitioning in the mesh with an appropriate number of parts.
+parallel. To do so prefix ``pyfr`` with ``mpiexec -n <cores/devices>``.
+Note that there must exist a partitioning in the mesh with an
+appropriate number of parts.
 
 .. _configuration-file:
 
@@ -132,9 +145,9 @@ Configuration File (.ini)
 The .ini configuration file parameterises the simulation. It is written
 in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
-their associated parameters are described below. Note that both ``;`` and
-``#`` may be used as comment characters.  Additionally, all parameter
-values support environment variable expansion.
+their associated parameters are described below. Note that both ``;``
+and ``#`` may be used as comment characters.  Additionally, all
+parameter values support environment variable expansion.
 
 Backends
 --------
@@ -156,8 +169,8 @@ omitted, then PyFR will fall back to built-in default settings.
 Systems
 -------
 
-These sections setup and control the physical system being solved, as well as
-charateristics of the spatial and temporal schemes to be used.
+These sections setup and control the physical system being solved, as
+well as charateristics of the spatial and temporal schemes to be used.
 
 .. toctree::
    :maxdepth: 3
@@ -186,12 +199,13 @@ conditions of calculations.
 Nodal Point Sets
 ----------------
 
-Solution point sets must be specified for each element type that is used and
-flux point sets must be specified for each interface type that is used. If
-anti-aliasing is enabled then quadrature point sets for each element and
-interface type that is used must also be specified. For example, a 3D mesh
-comprised only of prisms requires a solution point set for prism elements and
-flux point sets for quadrilateral and triangular interfaces.
+Solution point sets must be specified for each element type that is used
+and flux point sets must be specified for each interface type that is
+used. If anti-aliasing is enabled then quadrature point sets for each
+element and interface type that is used must also be specified. For
+example, a 3D mesh comprised only of prisms requires a solution point
+set for prism elements and flux point sets for quadrilateral and
+triangular interfaces.
 
 .. toctree::
    :maxdepth: 3
@@ -209,12 +223,11 @@ flux point sets for quadrilateral and triangular interfaces.
 Plugins
 -------
 
-Plugins allow for powerful additional functionality to be swapped
-in and out. There are two classes of plugin available; solution
-plugins which are prefixed by ``soln-`` and solver plugins which
-are prefixed by ``solver-``. It is possible to create multiple
-instances of the same solution plugin by appending a suffix, for
-example::
+Plugins allow for powerful additional functionality to be swapped in and
+out. There are two classes of plugin available; solution plugins which
+are prefixed by ``soln-`` and solver plugins which are prefixed by
+``solver-``. It is possible to create multiple instances of the same
+solution plugin by appending a suffix, for example::
 
     [soln-plugin-writer]
     ...
@@ -292,29 +305,29 @@ Sphere ``sphere(x0, r)``
 
 All region shapes also support rotation.  In 2D this is accomplished by
 passing a trailing `rot=angle` argument where `angle` is a rotation
-angle in degrees; for example ``box((-5, 2), (2, 0), rot=30)``.
-In 3D the syntax is `rot=(phi, theta, psi)` and corresponds to a
-sequence of Euler angles in the so-called *ZYX convention*.  Region
-expressions can also be added and subtracted together  arbitrarily.
-For example
+angle in degrees; for example ``box((-5, 2), (2, 0), rot=30)``.  In 3D
+the syntax is `rot=(phi, theta, psi)` and corresponds to a sequence of
+Euler angles in the so-called *ZYX convention*.  Region expressions can
+also be added and subtracted together  arbitrarily.  For example
 ``box((-10, -10, -10), (10, 10, 10)) - sphere((0, 0, 0), 3)`` will
 result in a cube-shaped region with a sphere cut out of the middle.
 
 Additional Information
 ----------------------
 
-The :ref:`INI<configuration-file>` file format is very versatile. A feature that
-can be useful in defining initial conditions is the substitution feature and
-this is demonstrated in the :ref:`soln-plugin-integrate` plugin example.
+The :ref:`INI<configuration-file>` file format is very versatile. A
+feature that can be useful in defining initial conditions is the
+substitution feature and this is demonstrated in the
+:ref:`soln-plugin-integrate` plugin example.
 
 To prevent situations where you have solutions files for unknown
-configurations, the contents of the ``.ini`` file are added as an attribute
-to ``.pyfrs`` files. These files use the HDF5 format and can be
-straightforwardly probed with tools such as h5dump.
+configurations, the contents of the ``.ini`` file are added as an
+attribute to ``.pyfrs`` files. These files use the HDF5 format and can
+be straightforwardly probed with tools such as h5dump.
 
-In several places within the ``.ini`` file expressions may be used. As well as
-the constant ``pi``, expressions containing the following functions are
-supported:
+In several places within the ``.ini`` file expressions may be used. As
+well as the constant ``pi``, expressions containing the following
+functions are supported:
 
 #. ``+, -, *, /`` --- basic arithmetic
 

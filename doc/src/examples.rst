@@ -4,11 +4,11 @@
 Examples
 ********
 
-Test cases are available in the
-`PyFR-Test-Cases <https://github.com/PyFR/PyFR-Test-Cases>`_ 
-repository. It is important to note, however, that these examples 
-are all relatively small 2D/3D simulations and, as such, are *not* 
-suitable for scalability or performance studies.
+Test cases are available in the `PyFR-Test-Cases
+<https://github.com/PyFR/PyFR-Test-Cases>`_ repository. It is important
+to note, however, that these examples are all relatively small 2D/3D
+simulations and, as such, are *not* suitable for scalability or
+performance studies.
 
 Euler Equations
 ===============
@@ -41,7 +41,7 @@ simulation on a structured mesh:
    converting it into an unstructured VTK file called
    ``euler-vortex-100.0.vtu``::
 
-        pyfr export euler-vortex.pyfrm euler-vortex-100.0.pyfrs euler-vortex-100.0.vtu
+        pyfr export volume euler-vortex.pyfrm euler-vortex-100.0.pyfrs euler-vortex-100.0.vtu
 
 #. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -81,7 +81,7 @@ simulation on a structured mesh:
    converting it into an unstructured VTK file called
    ``double-mach-reflection-0.20.vtu``::
 
-        pyfr export double-mach-reflection.pyfrm double-mach-reflection-0.20.pyfrs double-mach-reflection-0.20.vtu
+        pyfr export volume double-mach-reflection.pyfrm double-mach-reflection-0.20.pyfrs double-mach-reflection-0.20.vtu
 
 #. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -122,7 +122,7 @@ simulation on a mixed unstructured mesh:
    converting it into an unstructured VTK file called
    ``couette-flow-040.vtu``::
 
-        pyfr export couette-flow.pyfrm couette-flow-040.pyfrs couette-flow-040.vtu
+        pyfr export volume couette-flow.pyfrm couette-flow-040.pyfrs couette-flow-040.vtu
 
 #. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -160,7 +160,7 @@ flow simulation on a mixed unstructured mesh:
    converting it into an unstructured VTK file called
    ``inc-cylinder-75.00.vtu``::
 
-        pyfr export inc-cylinder.pyfrm inc-cylinder-75.00.pyfrs inc-cylinder-75.00.vtu
+        pyfr export volume inc-cylinder.pyfrm inc-cylinder-75.00.pyfrs inc-cylinder-75.00.vtu
 
 #. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -200,7 +200,7 @@ simulation on a structured mesh:
    converting it into an unstructured VTK file called
    ``viscous-shock-tube-1.00.vtu``::
 
-        pyfr export viscous-shock-tube.pyfrm viscous-shock-tube-1.00.pyfrs viscous-shock-tube-1.00.vtu
+        pyfr export volume viscous-shock-tube.pyfrm viscous-shock-tube-1.00.pyfrs viscous-shock-tube-1.00.vtu
 
 #. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -240,7 +240,7 @@ simulation with inflow turbulence:
    converting it into an unstructured VTK file called
    ``triangular-aerofoil-5.00.vtu``::
 
-        pyfr export triangular-aerofoil.pyfrm triangular-aerofoil-5.00.pyfrs triangular-aerofoil-5.00.vtu
+        pyfr export volume triangular-aerofoil.pyfrm triangular-aerofoil-5.00.pyfrs triangular-aerofoil-5.00.vtu
 
 #. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
@@ -286,7 +286,7 @@ Proceed with the following steps to run a serial 3D Taylor-Green simulation:
    converting it into an unstructured VTK file called
    ``taylor-green-5.00.vtu``::
 
-        pyfr export taylor-green.pyfrm taylor-green-5.00.pyfrs taylor-green-5.00.vtu
+        pyfr export volume taylor-green.pyfrm taylor-green-5.00.pyfrs taylor-green-5.00.vtu
 
 #. Visualise the unstructured VTK file in `Paraview
    <http://www.paraview.org/>`_
