@@ -199,7 +199,7 @@ class OpenMPGraph(base.Graph):
             self._runlist.append((krunargs, self.mpi_idxs[j]))
             i = j
 
-        if i != len(self.klist) - 1:
+        if self.klist[i:]:
             krunargs = self._make_runlist(i, len(self.klist))
             self._runlist.append((krunargs, []))
 
