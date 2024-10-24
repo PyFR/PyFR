@@ -4,12 +4,13 @@ import re
 
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.inifile import Inifile
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
 from pyfr.integrators.dual.pseudo.pseudocontrollers import (
     BaseDualPseudoController
 )
-from pyfr.util import memoize, subclass_where
+from pyfr.util import subclass_where
 
 
 class DualMultiPIntegrator(BaseDualPseudoIntegrator):

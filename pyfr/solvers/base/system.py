@@ -6,8 +6,9 @@ import statistics
 import numpy as np
 
 from pyfr.backends.base import NullKernel
+from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
-from pyfr.util import memoize, subclasses
+from pyfr.util import subclasses
 
 
 class BaseSystem:

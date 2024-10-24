@@ -3,10 +3,11 @@ from collections import defaultdict
 import numpy as np
 from rtree.index import Index, Property
 
+from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, get_start_end_csize, mpi
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
-from pyfr.util import memoize, subclass_where
+from pyfr.util import subclass_where
 
 
 class PointLocator:

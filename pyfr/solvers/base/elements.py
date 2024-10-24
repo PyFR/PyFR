@@ -3,9 +3,9 @@ from functools import cached_property, wraps
 import numpy as np
 
 from pyfr.nputil import fuzzysort, npeval
+from pyfr.cache import memoize
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import proj_l2
-from pyfr.util import memoize
 
 
 def inters_map(meth):
@@ -78,7 +78,7 @@ class BaseElements:
         # See if performing L2 projection
         ename = self.basis.name
         upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
-        qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or 
+        qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or
                 self.cfg.getint('soln-ics', 'quad-deg', 0))
         # Default to solution points if quad-pts are not specified
         qpts = self.cfg.get('soln-ics', f'quad-pts-{ename}', upts)

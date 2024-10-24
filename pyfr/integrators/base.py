@@ -6,9 +6,9 @@ import time
 
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
-from pyfr.util import memoize
 
 
 def _common_plugin_prop(attr):

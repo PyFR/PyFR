@@ -1,7 +1,7 @@
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
-from pyfr.util import memoize
 
 
 def _get_coefficients_from_txt(scheme):

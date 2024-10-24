@@ -1,7 +1,7 @@
 from itertools import zip_longest
 
+from pyfr.cache import memoize
 from pyfr.solvers.baseadvec import BaseAdvectionSystem
-from pyfr.util import memoize
 
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):

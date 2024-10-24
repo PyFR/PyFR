@@ -3,9 +3,9 @@ from weakref import WeakKeyDictionary
 from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
-from pyfr.backends.hip.compiler import SourceModule
+from pyfr.backends.hip.compiler import HIPCompilerModule
 from pyfr.backends.hip.generator import HIPKernelGenerator
-from pyfr.util import memoize
+from pyfr.cache import memoize
 
 
 def get_grid_for_block(block, nrow, ncol=1):
@@ -33,7 +33,8 @@ class HIPUnorderedMetaKernel(BaseUnorderedMetaKernel):
 class HIPKernelProvider(BaseKernelProvider):
     @memoize
     def _build_kernel(self, name, src, argtypes, argn=[]):
-        return SourceModule(self.backend, src).get_function(name, argtypes)
+        mod = HIPCompilerModule(self.backend, src)
+        return mod.get_function(name, argtypes)
 
     def _benchmark(self, kfunc, nbench=4, nwarmup=1):
         stream = self.backend.hip.create_stream()

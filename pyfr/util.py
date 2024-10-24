@@ -1,54 +1,12 @@
 from ctypes import c_void_p
-import functools as ft
 import hashlib
 import itertools as it
 import os
 import pickle
-import random
 import re
 import shutil
 
 from pyfr.ctypesutil import get_libc_function
-
-
-def memoize(origfn=None, maxsize=None):
-    def memoizefn(meth):
-        cattr = f'_memoize_cache@{meth.__name__}@{id(meth)}'
-
-        @ft.wraps(meth)
-        def newmeth(self, *args, **kwargs):
-            try:
-                cache = getattr(self, cattr)
-            except AttributeError:
-                setattr(self, cattr, cache := {})
-
-            if kwargs:
-                key = (args, tuple(kwargs.items()))
-            else:
-                key = args
-
-            try:
-                return cache[key]
-            except KeyError:
-                pass
-            except TypeError:
-                key = pickle.dumps((args, kwargs))
-
-                try:
-                    return cache[key]
-                except KeyError:
-                    pass
-
-            if maxsize and len(cache) == maxsize:
-                rmk = next(it.islice(cache, random.randrange(maxsize), None))
-                del cache[rmk]
-
-            res = cache[key] = meth(self, *args, **kwargs)
-            return res
-
-        return newmeth
-
-    return memoizefn(origfn) if origfn else memoizefn
 
 
 class silence:

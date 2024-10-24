@@ -1,5 +1,5 @@
+from pyfr.cache import memoize
 from pyfr.integrators.std.base import BaseStdIntegrator
-from pyfr.util import memoize
 
 
 class BaseStdStepper(BaseStdIntegrator):
