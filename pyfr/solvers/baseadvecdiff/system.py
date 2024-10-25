@@ -131,12 +131,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         ]
         for ks in zip_longest(*kgroup):
             # Flux-AA on; inputs to tdisf and tdivtpcorf are from quad pts
-            if k['eles/qpts']:
+            if k['eles/qptsu']:
                 subs=[
                     [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
                      (ks[4], 'b'), (ks[5], 'b')],
                     [(ks[6], 'out'), (ks[7], 'u')],
-                    [(ks[7], 'f'), (ks[8], 'b')],
+                    [(ks[5], 'out'), (ks[7], 'f'), (ks[8], 'b')],
                 ]
             # Gradient fusion on; tdisf_fused replaces tdisf and gradcoru_upts
             elif k['eles/tdisf_fused']:
