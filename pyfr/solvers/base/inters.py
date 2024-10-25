@@ -31,6 +31,7 @@ class BaseInters:
 
         # Kernel constants
         self.c = cfg.items_as('constants', float)
+        self.sgs = cfg.items_as('constants', float)
 
         # Kernels and MPI requests we provide
         self.kernels = {}
