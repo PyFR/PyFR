@@ -1,3 +1,4 @@
+from collections import defaultdict
 import functools as ft
 from pathlib import Path
 import shlex
@@ -57,7 +58,7 @@ def open_hdf5_a(path):
         return f
 
 
-def region_data(cfg, cfgsect, mesh):
+def region_data(cfg, cfgsect, mesh, *, rtype=None):
     comm, rank, root = get_comm_rank_root()
     region = cfg.get(cfgsect, 'region', '*')
 
@@ -71,15 +72,29 @@ def region_data(cfg, cfgsect, mesh):
     else:
         comm, rank, root = get_comm_rank_root()
 
-        # Parse the region expression and obtain the element set
+        # Parse the region expression
         rgn = parse_region_expr(region, mesh.raw.get('regions'))
-        eset = rgn.interior_eles(mesh)
+
+        # Obtain the element set
+        match rtype or cfg.get(cfgsect, 'region-type', 'volume'):
+            case 'volume':
+                eset = rgn.interior_eles(mesh)
+            case 'surface':
+                eset = defaultdict(list)
+                for (etype, fidx), eidxs in rgn.surface_faces(mesh).items():
+                    eset[etype].extend(eidxs)
+            case _:
+                raise ValueError('Invalid region type')
 
         # Ensure the region is not empty
         if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
             raise ValueError(f'Empty region {region}')
 
-        return {etype: np.unique(eidxs).astype(np.int32)
+        # If requested, expand the region
+        if nexpand := cfg.getint(cfgsect, 'region-expand', 0):
+            eset = rgn.expand(mesh, eset, nexpand)
+
+        return {etype: np.unique(eidxs).astype(int)
                 for etype, eidxs in sorted(eset.items())}
 
 
@@ -96,7 +111,7 @@ def surface_data(cfg, cfgsect, mesh):
     if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
         raise ValueError(f'Empty surface {surf}')
 
-    return {etype: np.unique(eidxs).astype(np.int32)
+    return {etype: np.unique(eidxs).astype(int)
             for etype, eidxs in sorted(eset.items())}
 
 

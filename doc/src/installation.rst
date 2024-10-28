@@ -107,6 +107,9 @@ Python packages:
 #. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
 #. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.0.1
 
+In addition an MPI library supporting version 4 of the MPI standard is
+required.
+
 .. _install cuda backend:
 
 CUDA Backend
