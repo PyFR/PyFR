@@ -523,7 +523,7 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
         # Handle the tavg group
         for k, v in basef['tavg'].items():
             # Copy over meatadata
-            if '_' in k:
+            if re.match(r'p\d+-\w+-', k):
                 basef.copy(v, outf, f'tavg/{k}')
             # For average data create empty datasets and copy attributes
             else:
@@ -598,8 +598,8 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
         # Create the tavg block
         cfgsect = self.stats.get('tavg', 'cfg-section')
         nstats.set('tavg', 'cfg-section', cfgsect)
-        self.stats.set('tavg', 'range', self.merged_range)
-        self.stats.set('tavg', 'merged-from', self.merged_from)
+        nstats.set('tavg', 'range', self.merged_range)
+        nstats.set('tavg', 'merged-from', self.merged_from)
 
         # If all files have full std stats then these can be writen
         if self.std_all:
