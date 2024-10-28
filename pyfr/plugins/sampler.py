@@ -1,4 +1,6 @@
 from argparse import FileType
+import csv
+import io
 from pathlib import Path
 import re
 
@@ -8,19 +10,19 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, DatasetAppender,
                                cli_external, init_csv, open_hdf5_a)
-from pyfr.readers.native import NativeReader
 from pyfr.points import PointLocator, PointSampler
+from pyfr.readers.native import NativeReader
 from pyfr.util import first, subclass_where
 
 
 def _read_pts(ptsf, ndims=None, skip=0):
-    def line_reader(f):
-        for l in f:
-            yield l.replace(',', ' ')
+    # Read the points
+    pts = ''.join(list(ptsf)[skip:])
 
-    # Read in the points
-    pts = np.loadtxt(line_reader(ptsf), skiprows=skip)
-    pts = np.atleast_2d(pts)
+    # Parse them
+    dialect = csv.Sniffer().sniff(pts)
+    pts = csv.reader(io.StringIO(pts), dialect=dialect)
+    pts = np.array([[float(f) for f in p] for p in pts if p])
 
     # Validate the dimensionality
     if ndims and pts.shape[1] != ndims:
