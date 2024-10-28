@@ -188,10 +188,11 @@ class PointLocator:
 
 
 class PointSampler:
-    def __init__(self, mesh, spts):
+    def __init__(self, mesh, spts, slocs=None):
+        locf = ['cidx', 'eidx', 'tloc']
         self.mesh = mesh
 
-        # If spts is a string then treat it as a named point set
+        # Named point set
         if isinstance(spts, str):
             comm, rank, root = get_comm_rank_root()
 
@@ -202,13 +203,14 @@ class PointSampler:
 
             sinfo = comm.bcast(sinfo, root=root)
 
-            pts, locs = sinfo['ploc'], sinfo[['cidx', 'eidx', 'tloc']]
-        # Otherwise, treat it as a list of points
+            self.pts, self.locs = sinfo['ploc'], sinfo[locf]
+        # Points with location data
+        elif slocs is not None:
+            self.pts, self.locs = spts, slocs[locf]
+        # Points without location data
         else:
-            pts = np.array(spts)
-            locs = PointLocator(mesh).locate(pts)[['cidx', 'eidx', 'tloc']]
-
-        self.pts, self.locs = pts, locs
+            self.pts = np.array(spts)
+            self.locs = PointLocator(mesh).locate(self.pts)[locf]
 
     def configure_with_intg_nvars(self, intg, nvars):
         # Get the solution bases from the system
