@@ -1,7 +1,7 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.points import PointSampler
+from pyfr.points import PointLocator, PointSampler
 from pyfr.polys import TriPolyBasis
 from pyfr.shapes import TriShape
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
@@ -10,21 +10,19 @@ from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 class VTKSTLWriter(BaseVTKWriter):
     type = 'stl'
 
-    def __init__(self, meshf, solnf, stlrgns, **kwargs):
+    def __init__(self, meshf, stlrgns, **kwargs):
         # Disable high-order output and (by default) subdivision
         kwargs['order'] = None
         kwargs.setdefault('divisor', 1)
 
-        super().__init__(meshf, solnf, **kwargs)
+        super().__init__(meshf, **kwargs)
 
         if self.ndims != 3:
             raise RuntimeError('STL export only supported for 3D grids')
 
-        mesh, soln = self.mesh, self.soln
-        comm, rank, root = get_comm_rank_root()
-
         # Read and merge the STL surfaces from the mesh
-        pts = np.vstack([mesh.raw[f'regions/stl/{s}'][:, 1:] for s in stlrgns])
+        pts = np.vstack([self.reader.mesh.raw[f'regions/stl/{s}'][:, 1:]
+                         for s in stlrgns])
 
         # Subdivide the mesh
         pts = self._subdivide_pts(pts.swapaxes(0, 1), self.divisor)
@@ -32,8 +30,20 @@ class VTKSTLWriter(BaseVTKWriter):
         # Determine the unique vertices
         ppts, pinv = np.unique(pts.reshape(-1, 3), axis=0, return_inverse=True)
 
-        # Create a configure a point sampler
-        sampler = PointSampler(mesh, ppts)
+        # Locate these vertices in the mesh
+        plocs = PointLocator(self.reader.mesh).locate(ppts)
+
+        self._stl_pts = (pts, pinv, ppts, plocs)
+
+    def _load_soln(self, *args, **kwargs):
+        super()._load_soln(*args, **kwargs)
+
+        mesh, soln = self.mesh, self.soln
+        pts, pinv, spts, slocs = self._stl_pts
+        comm, rank, root = get_comm_rank_root()
+
+        # Create and configure a point sampler
+        sampler = PointSampler(mesh, spts, slocs)
         sampler.configure_with_cfg_nvars(soln['config'],
                                          len(self._soln_fields))
 

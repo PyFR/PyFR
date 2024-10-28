@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 from argparse import ArgumentParser, FileType
+import csv
+import io
 from pathlib import Path
 import re
 
@@ -15,7 +17,8 @@ from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import (BasePartitioner, get_partitioner,
                                reconstruct_partitioning, write_partitioning)
 from pyfr.plugins import BaseCLIPlugin
-from pyfr.progress import ProgressBar, ProgressSequenceAction
+from pyfr.progress import (NullProgressSequence, ProgressBar,
+                           ProgressSequenceAction)
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import NativeReader
 from pyfr.readers.stl import read_stl
@@ -126,6 +129,7 @@ def main():
 
         ap_export_type.add_argument('meshf', help='input mesh file')
         ap_export_type.add_argument('solnf', help='input solution file')
+        ap_export_type.add_argument('outf', help='output file')
 
         if etype == 'boundary':
             ap_export_type.add_argument('eargs', nargs='+', metavar='boundary',
@@ -134,7 +138,8 @@ def main():
             ap_export_type.add_argument('eargs', nargs='+', metavar='stl',
                                         help='STL region to output')
 
-        ap_export_type.add_argument('outf', help='output file')
+        ap_export_type.add_argument('-b', '--batchfile', type=FileType('r'),
+                                    default='-', help='batch export file')
 
         ftypes = [c.name for c in subclasses(BaseWriter) if c.type == etype]
         ap_export_type.add_argument(
@@ -396,17 +401,34 @@ def process_export(args):
         k, v = e.split(':', 1)
         kwargs[k] = int(v) if re.match(r'\d+', v) else v
 
-    # Get writer instance by specified type or outf extension
+    # Obtain files to export from a batch file
+    if args.solnf == '-' and args.outf == '-':
+        if rank == root:
+            batch = args.batchfile.read()
+
+            dialect = csv.Sniffer().sniff(batch)
+            batch = csv.reader(io.StringIO(batch), dialect=dialect)
+            batch = comm.bcast([l for l in batch if l], root=root)
+        else:
+            batch = comm.bcast(None, root=root)
+    # Obtain files to export from the command line
+    else:
+        batch = [[args.solnf, args.outf]]
+
+    # Get writer instance by specified type or output file extension
     if args.ftype:
         writer = get_writer_by_name(args.ftype, args.etype, args.meshf,
-                                    args.solnf, *kargs, **kwargs)
-    else:
-        extn = Path(args.outf).suffix
-        writer = get_writer_by_extn(extn, args.etype, args.meshf, args.solnf,
                                     *kargs, **kwargs)
+    else:
+        extn = Path(batch[0][1]).suffix
+        writer = get_writer_by_extn(extn, args.etype, args.meshf, *kargs,
+                                    **kwargs)
 
-    # Write the output file
-    writer.write(args.outf)
+    # Process the files
+    progress = args.progress if rank == root else NullProgressSequence()
+    with progress.start_with_bar('Process solutions') as pbar:
+        for solnf, outf in pbar.start_with_iter(batch):
+            writer.process(solnf, outf)
 
 
 def _process_common(args, soln, cfg):

@@ -369,11 +369,12 @@ class BaseVTKWriter(BaseWriter):
         ]
     }
 
-    def __init__(self, meshf, solnf, *, prec='single', order=None,
+    def __init__(self, meshf, *, prec='single', order=None,
                  divisor=None, fields=[]):
-        super().__init__(meshf, solnf)
+        super().__init__(meshf)
 
         self.dtype = np.dtype(prec).type
+        self.fields = fields
 
         # Divisor for each type element
         self.etypes_div = defaultdict(lambda: self.divisor)
@@ -381,59 +382,14 @@ class BaseVTKWriter(BaseWriter):
         # Choose whether to output subdivided cells or high order VTK cells
         if order or divisor is None:
             self.ho_output = True
-            self.divisor = order or self.cfg.getint('solver', 'order')
+            self.divisor = order
             self.vtkfile_version = '2.1'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_ho
-
-            self.etypes_div['pyr'] += 2
         else:
             self.ho_output = False
             self.divisor = divisor
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
-
-        # Get the fields in the data set
-        dfields = self.stats.get('data', 'fields').split(',')
-
-        # Solutions need a separate processing pipeline to other data
-        if self.dataprefix == 'soln':
-            self._pre_proc_fields = self._pre_proc_fields_soln
-            self._post_proc_fields = self._post_proc_fields_soln
-            self._soln_fields = self.elementscls.privars(self.ndims, self.cfg)
-            self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
-            self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
-
-            # See if our solution contains gradient data
-            if len(dfields) == (1 + self.ndims)*len(self._soln_fields):
-                self._gradients = True
-
-                # Update list of solution fields
-                self._soln_fields.extend(f'{f}-{d}'
-                                         for f in list(self._soln_fields)
-                                         for d in range(self.ndims))
-
-                # Update the mapping of VTK variables to solution fields
-                for var, vfields in list(self._vtk_vars.items()):
-                    self._vtk_vars[f'grad {var}'] = nfields = []
-                    for f in vfields:
-                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
-            else:
-                self._gradients = False
-        # Otherwise we're dealing with simple scalar data
-        else:
-            self._pre_proc_fields = self._pre_proc_fields_scal
-            self._post_proc_fields = self._post_proc_fields_scal
-            self._soln_fields = dfields
-            self._vtk_vars = {k: [k] for k in self._soln_fields}
-            self.tcurr = None
-
-        # Handle field subsetting
-        if fields:
-            self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
-                              if f in fields}
-
-            if len(self._vtk_vars) != len(fields):
-                raise RuntimeError('Invalid field specification')
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -532,13 +488,69 @@ class BaseVTKWriter(BaseWriter):
         else:
             return attrs
 
-    def write(self, fname):
-        if Path(fname).suffix == '.vtu':
-            self.write_vtu(fname)
-        else:
-            self.write_pvtu(fname)
+    def _load_soln(self, *args, **kwargs):
+        super()._load_soln(*args, **kwargs)
 
-    def write_vtu(self, fname):
+        # Get the fields in the data set
+        dfields = self.stats.get('data', 'fields').split(',')
+
+        # Ensure a divisor has been set
+        if self.divisor is None:
+            self.divisor = self.cfg.getint('solver', 'order')
+
+            if self.ho_output:
+                self.etypes_div['pyr'] += 2
+
+        # Solutions need a separate processing pipeline to other data
+        if self.dataprefix == 'soln':
+            self._pre_proc_fields = self._pre_proc_fields_soln
+            self._post_proc_fields = self._post_proc_fields_soln
+            self._soln_fields = self.elementscls.privars(self.ndims, self.cfg)
+            self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
+            self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
+
+            # See if our solution contains gradient data
+            if len(dfields) == (1 + self.ndims)*len(self._soln_fields):
+                self._gradients = True
+
+                # Update list of solution fields
+                self._soln_fields.extend(f'{f}-{d}'
+                                         for f in list(self._soln_fields)
+                                         for d in range(self.ndims))
+
+                # Update the mapping of VTK variables to solution fields
+                for var, vfields in list(self._vtk_vars.items()):
+                    self._vtk_vars[f'grad {var}'] = nfields = []
+                    for f in vfields:
+                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
+            else:
+                self._gradients = False
+        # Otherwise we're dealing with simple scalar data
+        else:
+            self._pre_proc_fields = self._pre_proc_fields_scal
+            self._post_proc_fields = self._post_proc_fields_scal
+            self._soln_fields = dfields
+            self._vtk_vars = {k: [k] for k in self._soln_fields}
+            self.tcurr = None
+
+        # Handle field subsetting
+        if self.fields:
+            self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
+                              if f in self.fields}
+
+            if len(self._vtk_vars) != len(self.fields):
+                raise RuntimeError('Invalid field specification')
+
+    def process(self, solnf, outfname):
+        # Load the solution
+        self._load_soln(solnf)
+
+        if Path(outfname).suffix == '.vtu':
+            self._write_vtu(outfname)
+        else:
+            self._write_pvtu(outfname)
+
+    def _write_vtu(self, fname):
         comm, rank, root = get_comm_rank_root()
 
         fh = mpi.File.Open(comm, fname, mpi.MODE_CREATE | mpi.MODE_WRONLY)
@@ -603,7 +615,7 @@ class BaseVTKWriter(BaseWriter):
         # Wait for all ranks to finish writing
         fh.Close()
 
-    def write_pvtu(self, fname):
+    def _write_pvtu(self, fname):
         comm, rank, root = get_comm_rank_root()
         write_s = lambda s: fh.write(s.encode())
 

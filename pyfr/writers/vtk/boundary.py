@@ -2,6 +2,7 @@ from collections import defaultdict
 
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
@@ -17,17 +18,22 @@ class VTKBoundaryWriter(BaseVTKWriter):
     output_curved = True
     output_partition = True
 
-    def __init__(self, meshf, solnf, boundaries, **kwargs):
-        super().__init__(meshf, solnf, **kwargs)
+    def __init__(self, meshf, boundaries, **kwargs):
+        super().__init__(meshf, **kwargs)
+
+        self.boundaries = boundaries
 
         if self.ndims != 3:
             raise RuntimeError('Boundary export only supported for 3D grids')
+
+    def _load_soln(self, *args, **kwargs):
+        super()._load_soln(*args, **kwargs)
 
         ecount = defaultdict(int)
         self._surface_info = defaultdict(list)
 
         rmesh, smesh = self.reader.mesh, self.mesh
-        cidxs = [smesh.codec.index(f'bc/{b}') for b in boundaries]
+        cidxs = [smesh.codec.index(f'bc/{b}') for b in self.boundaries]
 
         for etype, einfo in self.reader.eles.items():
             # See which of our faces are on the selected boundaries
@@ -51,29 +57,37 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         self.einfo = list(ecount.items())
 
-    def _get_surface_info(self, etype, eoff, fidx):
+    @memoize
+    def _get_shape(self, etype, cfg):
+        nspts = len(self.mesh.spts[etype])
+        return subclass_where(BaseShape, name=etype)(nspts, cfg)
+
+    @memoize
+    def _itype_opmats(self, etype, fidx, cfg):
+        shape = self._get_shape(etype, cfg)
+
+        # Get the information about our face
+        itype, proj, norm = shape.faces[fidx]
+        ishapecls = subclass_where(BaseShape, name=itype)
+
+        # Obtain the visualisation points on this face
+        svpts = np.array(ishapecls.std_ele(self.etypes_div[itype]))
+        svpts = np.vstack(np.broadcast_arrays(*proj(*svpts.T))).T
+
+        if self.ho_output:
+            svpts = svpts[self._nodemaps[itype, len(svpts)]]
+
+        mesh_op = shape.sbasis.nodal_basis_at(svpts)
+        soln_op = shape.ubasis.nodal_basis_at(svpts)
+
+        return itype, mesh_op, soln_op
+
+    def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)
 
-        # Get the shape associated with our element type
-        shapecls = subclass_where(BaseShape, name=etype)
-        shape = shapecls(len(self.mesh.spts[etype]), self.cfg)
-
-        for e, f in zip(eoff, fidx):
+        for e, f in zip(eoffs, fidxs):
             if f not in info:
-                itype, proj, norm = shape.faces[f]
-                ishapecls = subclass_where(BaseShape, name=itype)
-
-                # Obtain the visualisation points on this face
-                svpts = np.array(ishapecls.std_ele(self.etypes_div[itype]))
-                svpts = np.vstack(np.broadcast_arrays(*proj(*svpts.T))).T
-
-                if self.ho_output:
-                    svpts = svpts[self._nodemaps[itype, len(svpts)]]
-
-                mesh_op = shape.sbasis.nodal_basis_at(svpts)
-                soln_op = shape.ubasis.nodal_basis_at(svpts)
-
-                info[f] = (itype, mesh_op, soln_op)
+                info[f] = self._itype_opmats(etype, f, self.cfg)
 
             idxs[f].append(e)
 
