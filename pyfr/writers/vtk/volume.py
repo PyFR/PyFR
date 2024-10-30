@@ -45,9 +45,6 @@ class VTKVolumeWriter(BaseVTKWriter):
         # Extract the partition number information
         part = self.soln[f'{etype}-parts']
 
-        # Dimensions
-        neles = spts.shape[1]
-
         # Generate the interpolation operator matrices
         mesh_vtu_op, soln_vtu_op = self._opmats(etype, self.cfg)
 

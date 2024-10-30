@@ -252,7 +252,7 @@ class EllipsoidRegion(BaseGeometricRegion):
     name = 'ellipsoid'
 
     def __init__(self, x0, a, b, c, **kwargs):
-        super().__init__(rdata=rdata, **kwargs)
+        super().__init__(**kwargs)
 
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])

@@ -56,7 +56,7 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
         else:
             gamma = self.consts['gamma']
             self.qinf['c'] = (gamma * self.qinf['p'] / self.qinf['rho'])**0.5
-            self._ridx = privarmap.index('rho')
+            self._ridx = privars.index('rho')
 
         self.qinf['M'] = np.array([self.qinf[k] / self.qinf['c']
                                    for k in 'uvw'[:ndims]])
