@@ -97,7 +97,7 @@ class BasePartitioner:
         conn.sort()
 
         # Eliminate duplicates
-        conn = conn[np.lexsort(conn.T)[::2]]
+        conn = conn[np.lexsort(conn.T[::-1])[::2]]
 
         # Stack all of the curved element arrays together
         ecurved = np.concatenate(ecurved)
@@ -187,9 +187,6 @@ class BasePartitioner:
     def _group_periodic_eles(cls, mesh, con, cdisps, elewts_fn):
         cdtype = [('l', np.int64), ('r', np.int64)]
         pmerge, pidx = {}, []
-
-        # Sort the global connectivity array
-        con = con[np.argsort(con[:, 0])]
 
         # View it as a structured array
         conv = con.view(cdtype).squeeze()
