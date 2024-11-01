@@ -561,7 +561,7 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
 
         # Copy over the region index data
         for k in self.idxs:
-            outf[k] = self.files[0][k]
+            outf[k] = self.files[0][0][k]
 
     def _prepare_files(self, filenames):
         files, twindows, std_all = [], [], True

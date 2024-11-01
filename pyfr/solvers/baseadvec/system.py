@@ -56,13 +56,11 @@ class BaseAdvectionSystem(BaseSystem):
 
         # Compute the transformed flux
         for l in k['eles/tdisf']:
-            ldeps = deps(l, 'eles/qptsu')
-            g2.add(l, deps=ldeps)
+            g2.add(l, deps=deps(l, 'eles/qptsu'))
 
         # Compute the transformed divergence of the partially corrected flux
         for l in k['eles/tdivtpcorf']:
-            ldeps = deps(l, 'eles/tdisf')
-            g2.add(l, deps=ldeps)
+            g2.add(l, deps=deps(l, 'eles/tdisf'))
 
         # Compute the common normal flux at our MPI interfaces
         g2.add_all(k['mpiint/scal_fpts_unpack'])
@@ -75,7 +73,9 @@ class BaseAdvectionSystem(BaseSystem):
             g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
 
         # Compute the transformed divergence of the corrected flux
-        g2.add_all(k['eles/tdivtconf'], deps=k['mpiint/comm_flux'])
+        for l in k['eles/tdivtconf']:
+            ldeps = deps(l, 'eles/tdivtpcorf') + k['mpiint/comm_flux']
+            g2.add(l, deps=ldeps)
 
         # Obtain the physical divergence of the corrected flux
         for l in k['eles/negdivconf']:
@@ -97,6 +97,10 @@ class BaseAdvectionSystem(BaseSystem):
     def _preproc_graphs(self, uinbank):
         m = self._mpireqs
         k, _ = self._get_kernels(uinbank, None)
+
+        # Short-circuit if entropy filtering is disabled
+        if 'eles/entropy_filter' not in k:
+            return ()
 
         def deps(dk, *names): return self._kdeps(k, dk, *names)
 

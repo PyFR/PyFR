@@ -21,7 +21,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
                                   [ixdtype]*2 + [np.uintp]*nv + [fpdtype]*nv)
-        kern.set_dims((ncolb, nrow), (128, 1))
+        kern.set_dims((ncolb + (-ncolb % 128), nrow), (128, 1))
         kern.set_args(ncolb, ldim, *arr)
 
         class AxnpbyKernel(OpenCLKernel):
