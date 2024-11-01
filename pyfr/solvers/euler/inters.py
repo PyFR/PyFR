@@ -7,7 +7,7 @@ class FluidIntIntersMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self._ef_enabled:
             self._be.pointwise.register('pyfr.solvers.euler.kernels.intcent')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
@@ -36,7 +36,7 @@ class FluidMPIIntersMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self._ef_enabled:
             self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicent')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
@@ -85,10 +85,8 @@ class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
             **self._external_vals
         )
 
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self._ef_enabled:
             self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
-            self._tplargs['e_func'] = self.cfg.get('solver-entropy-filter',
-                                                   'e-func', 'numerical')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],

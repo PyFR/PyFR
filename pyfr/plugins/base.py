@@ -61,7 +61,7 @@ def region_data(cfg, cfgsect, mesh, rallocs):
         if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
             raise ValueError(f'Empty region {region}')
 
-        return {etype: np.unique(eidxs)
+        return {etype: np.unique(eidxs).astype(np.int32)
                 for etype, eidxs in sorted(eset.items())}
 
 

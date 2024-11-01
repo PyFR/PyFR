@@ -137,8 +137,9 @@ class OpenMPGraph(base.Graph):
                     aidx = self.klist[j].arg_idx(aname)
                     aoff = self.klist[j].arg_off(aidx)
                     absz = self.klist[j].arg_blocksz(aidx)
+                    suboff = self.klist[j].subs_off(aidx)
 
-                    argsubs[j].append((aoff, allocsz))
+                    argsubs[j].append((aoff, allocsz + suboff))
                     argmasks[j] |= 1 << aidx
 
             allocsz += absz
@@ -198,7 +199,7 @@ class OpenMPGraph(base.Graph):
             self._runlist.append((krunargs, self.mpi_idxs[j]))
             i = j
 
-        if i != len(self.klist) - 1:
+        if self.klist[i:]:
             krunargs = self._make_runlist(i, len(self.klist))
             self._runlist.append((krunargs, []))
 
