@@ -44,6 +44,15 @@ Parameterised with
 
     ``*`` | ``shape(args, ...)`` | *string*
 
+#. ``region-type`` --- if to write all of the elements contained inside
+   the region or only those which are on its surface:
+
+    ``volume`` | ``surface``
+
+#. ``region-expand`` --- how many layers to grow the region by:
+
+    *int*
+
 Example::
 
     [soln-plugin-writer]
@@ -54,3 +63,5 @@ Example::
     post-action = echo "Wrote file {soln} at time {t} for mesh {mesh}."
     post-action-mode = blocking
     region = box((-5, -5, -5), (5, 5, 5))
+    region-type = volume
+    region-expand = 0

@@ -29,9 +29,9 @@ as::
 Cores vs. threads
 -----------------
 
-PyFR does not typically derive any benefit from SMT.  As such the
-number of OpenMP threads should be chosen to be equal to the number of
-physical cores.
+PyFR does not typically derive any benefit from SMT.  As such the number
+of OpenMP threads should be chosen to be equal to the number of physical
+cores.
 
 Loop Scheduling
 ---------------
@@ -50,20 +50,20 @@ MPI processes vs. OpenMP threads
 
 When using the OpenMP backend it is recommended to employ *one MPI rank
 per NUMA zone*.  For most systems each socket represents its own NUMA
-zone.  Thus, on a two socket system it is suggested to run PyFR with
-two MPI ranks, with each process being bound to a single socket.  The
-specifics of how to accomplish this depend on both the job scheduler
-and MPI distribution.
+zone.  Thus, on a two socket system it is suggested to run PyFR with two
+MPI ranks, with each process being bound to a single socket.  The
+specifics of how to accomplish this depend on both the job scheduler and
+MPI distribution.
 
 Asynchronous MPI progression
 ----------------------------
 
-The parallel scalability of the OpenMP backend depends *heavily* on
-MPI having support for asynchronous progression; that is to say the
-ability for non-blocking send and receive requests to complete
-*without* the need for the host application to make explicit calls into
-MPI routines.  A lack of support for asynchronous progression prevents
-PyFR from being able to overlap computation with communication.
+The parallel scalability of the OpenMP backend depends *heavily* on MPI
+having support for asynchronous progression; that is to say the ability
+for non-blocking send and receive requests to complete *without* the
+need for the host application to make explicit calls into MPI routines.
+A lack of support for asynchronous progression prevents PyFR from being
+able to overlap computation with communication.
 
 .. _perf cuda backend:
 
@@ -76,9 +76,9 @@ CUDA-aware MPI
 PyFR is capable of taking advantage of CUDA-aware MPI.  This enables
 CUDA device pointers to be directly to passed MPI routines.  Under the
 right circumstances this can result in improved performance for
-simulations which are near the strong scaling limit.  Assuming
-mpi4py has been built against an MPI distribution which is CUDA-aware
-this functionality can be enabled through the ``mpi-type`` key as::
+simulations which are near the strong scaling limit.  Assuming mpi4py
+has been built against an MPI distribution which is CUDA-aware this
+functionality can be enabled through the ``mpi-type`` key as::
 
         [backend-cuda]
         mpi-type = cuda-aware
@@ -91,12 +91,12 @@ HIP Backend
 HIP-aware MPI
 -------------
 
-PyFR is capable of taking advantage of HIP-aware MPI.  This enables
-HIP device pointers to be directly to passed MPI routines.  Under the
-right circumstances this can result in improved performance for
-simulations which are near the strong scaling limit.  Assuming
-mpi4py has been built against an MPI distribution which is HIP-aware
-this functionality can be enabled through the ``mpi-type`` key as::
+PyFR is capable of taking advantage of HIP-aware MPI.  This enables HIP
+device pointers to be directly to passed MPI routines.  Under the right
+circumstances this can result in improved performance for simulations
+which are near the strong scaling limit.  Assuming mpi4py has been built
+against an MPI distribution which is HIP-aware this functionality can be
+enabled through the ``mpi-type`` key as::
 
         [backend-hip]
         mpi-type = hip-aware
@@ -104,13 +104,13 @@ this functionality can be enabled through the ``mpi-type`` key as::
 Partitioning
 ============
 
-METIS vs SCOTCH
----------------
+METIS vs SCOTCH vs KaHIP
+------------------------
 
-The partitioning module in PyFR includes support for both METIS and
-SCOTCH.  Both usually result in high-quality decompositions.  However,
-for long running simulations on complex geometries it may be worth
-partitioning a grid with both and observing which decomposition
+The partitioning module in PyFR includes support for both METIS, SCOTCH,
+and KaHIP.  All three usually result in high-quality decompositions.
+However, for long running simulations on complex geometries it may be
+worth partitioning a grid with each and observing which decomposition
 performs best.
 
 .. _perf mixed grids:
@@ -189,24 +189,24 @@ included in all PyFR solution files.  This can be extracted as::
 
         h5dump -d /stats -b --output=stats.ini soln.pyfrs
 
-Note that the number of graphs depends on the system, and not all
-graphs initiate MPI requests.  The average amount of time each rank
-spends waiting for MPI requests per right hand side evaluation can be
-obtained by vertically summing all of the ``-median`` fields together.
+Note that the number of graphs depends on the system, and not all graphs
+initiate MPI requests.  The average amount of time each rank spends
+waiting for MPI requests per right hand side evaluation can be obtained
+by vertically summing all of the ``-median`` fields together.
 
-There exists an inverse relationship between the amount of
-computational work a rank has to perform and the amount of time it
-spends waiting for MPI requests to complete.  Hence, ranks which spend
-comparatively less time waiting than their peers are likely to be
-overloaded, whereas those which spend comparatively more time waiting
-are likely to be underloaded.  This information can then be used to
-explicitly re-weight the partitions and/or the per-element weights.
+There exists an inverse relationship between the amount of computational
+work a rank has to perform and the amount of time it spends waiting for
+MPI requests to complete.  Hence, ranks which spend comparatively less
+time waiting than their peers are likely to be overloaded, whereas those
+which spend comparatively more time waiting are likely to be
+underloaded.  This information can then be used to explicitly re-weight
+the partitions and/or the per-element weights.
 
 Scaling
 =======
 
-The general recommendation when running PyFR in parallel is to aim for
-a parallel efficiency of :math:`\epsilon \simeq 0.8` with the parallel
+The general recommendation when running PyFR in parallel is to aim for a
+parallel efficiency of :math:`\epsilon \simeq 0.8` with the parallel
 efficiency being defined as:
 
 .. math::
@@ -221,8 +221,8 @@ overall time-to-solution and efficient resource utilisation.
 Plugins
 =======
 
-A common source of performance issues is running plugins too
-frequently.  PyFR records the amount of time spent in plugins in the
+A common source of performance issues is running plugins too frequently.
+PyFR records the amount of time spent in plugins in the
 ``[solver-time-integrator]`` section of the ``/stats`` object which is
 included in all PyFR solution files.  This can be extracted as::
 
@@ -234,10 +234,10 @@ Examples include fetching the solution, computing its gradient, and
 computing its time derivative.  The *other* field accounts for time
 spent in unnamed plugins such as the progress bar.
 
-Given the time steps taken by PyFR are typically much smaller than
-those associated with the underlying physics there is seldom any
-benefit to running integration and/or time average accumulation plugins
-more frequently than once every 50 steps.  Further, when running with
+Given the time steps taken by PyFR are typically much smaller than those
+associated with the underlying physics there is seldom any benefit to
+running integration and/or time average accumulation plugins more
+frequently than once every 50 steps.  Further, when running with
 adaptive time stepping there is no need to run the NaN check plugin.
 For simulations with fixed time steps, it is not recommended to run the
 NaN check plugin more frequently than once every 10 steps.
@@ -247,10 +247,10 @@ Start-up Time
 
 The start-up time required by PyFR can be reduced by ensuring that
 Python is compiled from source with profile guided optimisations (PGO)
-which can be enabled by passing ``--enable-optimizations --with-lto``
-to the ``configure`` script.
+which can be enabled by passing ``--enable-optimizations --with-lto`` to
+the ``configure`` script.
 
 It is also important that NumPy be configured to use an optimised
-BLAS/LAPACK distribution.  Further details can be found in the
-`NumPy building from source <https://numpy.org/devdocs/user/building.html>`_
+BLAS/LAPACK distribution.  Further details can be found in the `NumPy
+building from source <https://numpy.org/devdocs/user/building.html>`_
 guide.

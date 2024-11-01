@@ -19,9 +19,9 @@ Contents:
    installation
    user_guide
    post_processing
-   developer_guide
    performance_tuning
    examples
+   developer_guide
 
 Indices and Tables
 ******************

@@ -13,23 +13,23 @@ Running PyFR
 
 PyFR |release| uses three distinct file formats:
 
-#. ``.ini`` --- configuration file
-#. ``.pyfrm`` --- mesh file
-#. ``.pyfrs`` --- solution file
+#. .ini --- configuration file
+#. .pyfrm --- mesh file
+#. .pyfrs --- solution file
 
 The following core commands are available from the ``pyfr`` program:
 
--  ``pyfr import`` --- convert a `Gmsh
-   <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR .pyfrm file.
-
-   Example::
+pyfr import
+   Convert a `Gmsh <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR
+   .pyfrm file.  Example::
 
         pyfr import mesh.msh mesh.pyfrm
 
--  ``pyfr partition`` --- handles mesh partitioning.
+pyfr partition
+   Handles mesh partitioning.
 
-   -  ``pyfr partition add`` --- adds a new partitioning to mesh.
-      Example::
+   pyfr partition add
+      Adds a new partitioning to mesh.  Example::
 
          pyfr partition add mesh.pyfrm 10 ten_parts
 
@@ -42,32 +42,34 @@ The following core commands are available from the ``pyfr`` program:
       Further details can be found in the
       :ref:`performance guide <perf mixed grids>`.
 
-   -  ``pyfr partition reconstruct`` --- reconstructs a partitioning
-      from a solution file.  Example::
+   pyfr partition reconstruct
+      Reconstructs a partitioning from a solution file.  Example::
 
          pyfr partition reconstruct mesh.pyfrm soln.pyfrm part_name
 
-   -  ``pyfr partition list`` --- lists partitionings in a mesh.
-      Example::
+   pyfr partition list
+      Lists partitionings in a mesh.  Example::
 
          pyfr partition list mesh.pyfrm
 
-   -  ``pyfr partition info`` --- shows information about a specific
-      partitioning in a mesh.  Example::
+   pyfr partition info
+      Shows information about a specific partitioning in a mesh.
+      Example::
 
          pyfr partition info mesh.pyfrm ten_parts
 
-   -  ``pyfr partition remove`` --- deletes a partitioning from a mesh.
-      Example::
+   pyfr partition remove
+      Deletes a partitioning from a mesh.  Example::
 
          pyfr partition remove mesh.pyfrm ten_parts
 
--  ``pyfr run`` --- start a new PyFR simulation. Example::
+pyfr run
+   Start a new PyFR simulation.  Example::
 
         pyfr run mesh.pyfrm configuration.ini
 
--  ``pyfr restart`` --- restart a PyFR simulation from an existing
-   solution file. Example::
+pyfr restart
+   Restart a PyFR simulation from an existing solution file.  Example::
 
         pyfr restart mesh.pyfrm solution.pyfrs
 
@@ -76,12 +78,14 @@ The following core commands are available from the ``pyfr`` program:
 
         pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
 
--  ``pyfr export`` --- convert a PyFR ``.pyfrs`` file into an
-   unstructured VTK ``.vtu`` or ``.pvtu`` file.
+pyfr export
+   Convert a PyFR ``.pyfrs`` file into an unstructured VTK ``.vtu`` or
+   ``.pvtu`` file.
    
-   -  ``pyfr export volume`` --- exports a volume grid.  If
-      ``--eopt=order:n`` is provided then PyFR elements are converted
-      where possible to high-order VTK elements.  Example::
+   pyfr export volume
+      Exports a volume grid.  If ``--eopt=order:n`` is provided then
+      PyFR elements are converted where possible to high-order VTK
+      elements.  Example::
 
         pyfr export --eopt=order:4 mesh.pyfrm solution.pyfrs solution.vtu
 
@@ -95,40 +99,53 @@ The following core commands are available from the ``pyfr`` program:
       are exported, where the order of the cells is equal to the order
       of the solution data in the file.
 
-      By default all of the fields in the solution file will be
-      exported. If only a specific field is desired this can be
+      Additionally, by default, all of the fields in the solution file
+      will be exported. If only a specific field is desired this can be
       specified with the ``-f`` flag; for example ``-f density -f
       velocity`` will only export   the *density* and *velocity* fields.
 
-   -  ``pyfr export boundary`` --- exports one of more boundaries.
-      Example::
+   pyfr export boundary
+      Exports one of more boundaries.  Example::
 
-        pyfr export boundary mesh.pyfrm solution.pyfrms lower_wall upper_wall solution.vtu
+        pyfr export boundary mesh.pyfrm solution.pyfrms solution.vtu lower_wall upper_wall
 
       Note that boundary export is only supported for 3D grids.
 
-   -  ``pyfr export stl`` --- exports one or more STL surfaces.
-      Example::
+   pyfr export stl
+      Exports one or more STL surfaces.  Example::
 
-        pyfr export boundary mesh.pyfrm solution.pyfrms teapot solution.vtu
+        pyfr export boundary mesh.pyfrm solution.pyfrms solution.vtu teapot
 
       The STL surfaces must have already been added to the mesh with
       ``pyfr region add``.
 
--  ``pyfr region`` --- handles STL region processing.
+   All of the export commands also support a *batch* processing mode
+   wherein the list of input solution files and output files are read in
+   from disk.  This option is activated by passing ``-`` for the
+   solution file and output file.  By default, the file is taken to be
+   *stdin* although this can be overridden with the ``--batchfile``
+   option.  Example::
 
-   -  ``pyfr region add`` --- adds an STL region to the mesh.
-      Example::
+        for f in *.pyfrs; do echo "$f ${f%.pyfrs}.vtu"; done | pyfr -p export volume mesh.pyfrm - -
+
+   This command will export each solution file in the current directory
+   to a VTU file.
+
+pyfr region
+   Handles STL region processing.
+
+   pyfr region add
+      Adds an STL region to the mesh.  Example::
 
          pyfr partition add mesh.pyfrm teapot.stl teapot
 
-   -  ``pyfr region list`` --- lists the STL regions in the mesh.
-      Example::
+   pyfr region list
+      Lists the STL regions in the mesh.  Example::
 
          pyfr partition list mesh.pyfrm
 
-   -  ``pyfr region remove`` --- removes an STL region from the mesh.
-      Example::
+   pyfr region remove
+      Removes an STL region from the mesh.  Example::
 
          pyfr region remove mesh.pyfrm teapot
 
@@ -272,10 +289,12 @@ Regions
 ^^^^^^^
 
 Certain plugins are capable of performing operations on a subset of the
-elements inside the domain. One means of constructing these element
-subsets is through parameterised regions. Note that an element is
-considered part of a region if *any* of its nodes are found to be
-contained within the region. Supported regions:
+elements inside the domain.  One means of constructing these element
+subsets is through parameterised regions.  Note that an element is
+considered part of a region if *any* of its shape points are found to be
+contained within the region.  A consequence of this is that a region may
+not strictly enclose a shape; this can be resolved through the
+`region-expand` directive. Supported regions:
 
 Rectangular cuboid ``box(x0, x1)``
   A rectangular cuboid defined by two diametrically opposed vertices.
@@ -303,14 +322,19 @@ Sphere ``sphere(x0, r)``
   A sphere centred at *x0* with a radius of *r*. Equivalent to
   ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
 
-All region shapes also support rotation.  In 2D this is accomplished by
-passing a trailing `rot=angle` argument where `angle` is a rotation
-angle in degrees; for example ``box((-5, 2), (2, 0), rot=30)``.  In 3D
-the syntax is `rot=(phi, theta, psi)` and corresponds to a sequence of
-Euler angles in the so-called *ZYX convention*.  Region expressions can
-also be added and subtracted together  arbitrarily.  For example
-``box((-10, -10, -10), (10, 10, 10)) - sphere((0, 0, 0), 3)`` will
-result in a cube-shaped region with a sphere cut out of the middle.
+STL ``stl('name')``
+  An STL region.  Note that the region *name* must have been already
+  added to the mesh file with ``pyfr region add``.  Only valid in 3D.
+  Additionally, region itself *must* be closed.
+
+All region also support rotation.  In 2D this is accomplished by passing
+a trailing `rot=angle` argument where `angle` is a rotation angle in
+degrees; for example ``box((-5, 2), (2, 0), rot=30)``.  In 3D the syntax
+is `rot=(phi, theta, psi)` and corresponds to a sequence of Euler angles
+in the so-called *ZYX convention*.  Region expressions can also be added
+and subtracted together  arbitrarily.  For example ``box((-10, -10,
+-10), (10, 10, 10)) - sphere((0, 0, 0), 3)`` will result in a
+cube-shaped region with a sphere cut out of the middle.
 
 Additional Information
 ----------------------
