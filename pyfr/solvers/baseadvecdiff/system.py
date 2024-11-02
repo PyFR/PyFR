@@ -54,11 +54,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1.commit()
 
         g2 = self.backend.graph()
-        g2.add_mpi_reqs(m['artvisc_fpts_send'] + m['artvisc_fpts_recv'])
+        g2.add_mpi_reqs(m['artvisc_fpts_recv'])
         g2.add_mpi_reqs(m['vect_fpts_recv'])
 
         # Compute the transformed gradient of the partially corrected solution
         g2.add_all(k['eles/tgradpcoru_upts'])
+        g2.add_mpi_reqs(m['artvisc_fpts_send'], deps=k['eles/tgradpcoru_upts'])
 
         # Compute the common solution at our MPI interfaces
         g2.add_all(k['mpiint/scal_fpts_unpack'])
