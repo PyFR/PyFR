@@ -8,7 +8,7 @@ import tempfile
 import uuid
 
 from platformdirs import user_cache_dir
-from pytools.prefork import call_capture_output
+from pytools.prefork import ExecError, call_capture_output
 
 from pyfr.ctypesutil import platform_libname
 from pyfr.util import digest, mv, rm
@@ -29,6 +29,10 @@ class OpenMPCompiler:
 
         # Get the compiler version string
         self.version = call_capture_output([self.cc, '-v'])
+
+        # Get the architecture flag to use
+        arch_opts = {"-mcpu", "-march"}
+        self.arch = self.cc_option(arch_opts, ["target"])
 
         # Get the base compiler command strig
         self.cmd = self.cc_cmd(None, None)
@@ -75,7 +79,7 @@ class OpenMPCompiler:
             '-shared',              # Create a shared library
             '-std=c11',             # Enable C11 support
             '-Ofast',               # Optimise, incl. -ffast-math
-            '-march=native',        # Use CPU-specific instructions
+            f'{self.arch}=native',  # Use CPU-specific instructions
             '-fopenmp',             # Enable OpenMP support
             '-fPIC',                # Generate position-independent code
             '-o', libname, srcname, # Library and source file names
@@ -84,6 +88,19 @@ class OpenMPCompiler:
 
         # Append any user-provided arguments and return
         return cmd + self.cflags
+
+    def cc_option(self, opts, helps=[]):
+        helps = [f'--help={h}' for h in helps] + ['--help']
+        for h in helps:
+            try:
+                sigint, stdout, stderr = call_capture_output([self.cc, h])
+            except ExecError:
+                continue
+            for k in opts:
+                if k in stdout.decode():
+                    return k
+        else:
+            raise KeyError(f'Options {opts} not supported by {self.cc}')
 
     @cached_property
     def cachedir(self):
