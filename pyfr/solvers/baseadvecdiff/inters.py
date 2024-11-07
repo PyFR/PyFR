@@ -1,3 +1,6 @@
+import numpy as np
+from pyfr.mpiutil import get_comm_rank_root, mpi
+
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
@@ -49,6 +52,10 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
         self._vect_rhs = be.xchg_matrix_for_view(self._vect_lhs)
         self._comm_lhs = self._scal_xchg_view(lhs, 'get_comm_fpts_for_inter')
         self._comm_rhs = be.xchg_matrix_for_view(self._comm_lhs)
+
+        # Generate constant matrices
+        self._rcpdjac_lhs = self._const_mat(lhs, 'get_rcpdjac_fpts_for_inter')
+        self._rcpdjac_rhs = be.matrix(self._rcpdjac_lhs.ioshape, dtype=be.fpdtype)
 
         # Additional kernel constants
         self.c |= cfg.items_as('solver-interfaces', float)
@@ -116,6 +123,14 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
                 )
         else:
             self._artvisc_lhs = self._artvisc_rhs = None
+
+    def get_exchange_info(self):
+        src_buf = self._rcpdjac_lhs.get()
+        recv_buf = np.empty(self._rcpdjac_lhs.ioshape, dtype=self._rcpdjac_lhs.dtype)
+        return self._rhsrank, src_buf, recv_buf
+        
+    def process_exchange_data(self, recv_buf):
+        self._rcpdjac_rhs.set(recv_buf)
 
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):

@@ -11,6 +11,7 @@ from pyfr.inifile import Inifile
 from pyfr.shapes import BaseShape
 from pyfr.util import memoize, subclasses
 
+from pyfr.mpiutil import get_comm_rank_root, mpi
 
 class BaseSystem:
     elementscls = None
@@ -26,6 +27,7 @@ class BaseSystem:
         self.mesh = mesh
         self.cfg = cfg
         self.nregs = nregs
+        self.rallocs = rallocs
 
         # Obtain a nonce to uniquely identify this system
         nonce = str(next(self._nonce_seq))
@@ -61,6 +63,9 @@ class BaseSystem:
         self._mpi_inters = self._load_mpi_inters(rallocs, mesh, elemap)
         self._bc_inters = self._load_bc_inters(rallocs, mesh, elemap)
         backend.commit()
+        
+        # Perform constant data exchange
+        self._exchange_interface_data()
 
     def commit(self):
         # Prepare the kernels and any associated MPI requests
@@ -336,3 +341,22 @@ class BaseSystem:
     def set_ele_entmin_int(self, entmin_int):
         for e, em in zip(self.eles_entmin_int, entmin_int):
             e.set(em)
+
+    def _exchange_interface_data(self):
+        # Get MPI info
+        comm, rank, root = get_comm_rank_root()
+        
+        # Collect exchange info from all MPI interfaces
+        exchange_info = [inters.get_exchange_info() for inters in self._mpi_inters]
+        
+        # Prepare MPI requests
+        reqs = []
+        for rhsrank, src_buf, recv_buf in exchange_info:
+            reqs.append(comm.Isendrecv(src_buf, rhsrank, recvbuf=recv_buf, source=rhsrank))
+            
+        # Wait for all exchanges to complete
+        mpi.Request.Waitall(reqs)
+        
+        # Process received data
+        for inters, (_, _, recv_buf) in zip(self._mpi_inters, exchange_info):
+            inters.process_exchange_data(recv_buf)

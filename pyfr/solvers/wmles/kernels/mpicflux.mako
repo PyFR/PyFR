@@ -15,7 +15,7 @@
               gradul='in view fpdtype_t[${str(ndims)}][${str(nvars)}]'
               gradur='in mpi fpdtype_t[${str(ndims)}][${str(nvars)}]'
               rcpdjacl='in fpdtype_t'
-              rcpdjacr='in mpi fpdtype_t'
+              rcpdjacr='in fpdtype_t'
               artviscl='in view fpdtype_t'
               artviscr='in mpi fpdtype_t'
               nl='in fpdtype_t[${str(ndims)}]'>
