@@ -4,7 +4,7 @@ import numpy as np
 from rtree.index import Index, Property
 
 from pyfr.cache import memoize
-from pyfr.mpiutil import get_comm_rank_root, get_start_end_csize, mpi
+from pyfr.mpiutil import autofree, get_comm_rank_root, get_start_end_csize, mpi
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
@@ -79,12 +79,8 @@ class PointLocator:
 
         sbuf = (x, mpi.BYTE) if x is not mpi.IN_PLACE else x
         rbuf = (y, mpi.BYTE)
-        op = mpi.Op.Create(op, commute=False)
 
-        try:
-            coll(sbuf, rbuf, op=op)
-        finally:
-            op.Free()
+        coll(sbuf, rbuf, op=autofree(mpi.Op.Create(op, commute=False)))
 
     def _find_closest_node(self, pts):
         comm, rank, root = get_comm_rank_root()

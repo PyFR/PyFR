@@ -5,7 +5,8 @@ import h5py
 import numpy as np
 
 from pyfr.inifile import Inifile
-from pyfr.mpiutil import Scatterer, SparseScatterer, get_comm_rank_root
+from pyfr.mpiutil import (Scatterer, SparseScatterer, autofree,
+                          get_comm_rank_root)
 from pyfr.nputil import iter_struct
 
 
@@ -323,8 +324,8 @@ class NativeReader:
         comm, rank, root = get_comm_rank_root()
 
         # Create a neighbourhood collective communicator
-        ncomm = comm.Create_dist_graph_adjacent(self.neighbours,
-                                                self.neighbours)
+        ncomm = autofree(comm.Create_dist_graph_adjacent(self.neighbours,
+                                                         self.neighbours))
 
         # Create a list of our unpaired faces
         unpaired = list(resid.values())

@@ -3,7 +3,7 @@ import time
 
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 
 
 class MatrixBase:
@@ -201,26 +201,15 @@ class ConstMatrix(MatrixBase):
 class XchgMatrix(Matrix):
     _base_tags = {'xchg'}
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self._reqs = []
-
-    def __del__(self):
-        for r in self._reqs:
-            r.free()
-
     def recvreq(self, pid, tag):
         comm, rank, root = get_comm_rank_root()
 
-        self._reqs.append(req := comm.Recv_init(self.hdata, pid, tag))
-        return req
+        return autofree(comm.Recv_init(self.hdata, pid, tag))
 
     def sendreq(self, pid, tag):
         comm, rank, root = get_comm_rank_root()
 
-        self._reqs.append(req := comm.Send_init(self.hdata, pid, tag))
-        return req
+        return autofree(comm.Send_init(self.hdata, pid, tag))
 
 
 class View:

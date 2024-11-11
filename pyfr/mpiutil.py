@@ -1,6 +1,7 @@
 import atexit
 import os
 import sys
+import weakref
 
 import numpy as np
 
@@ -62,6 +63,14 @@ def init_mpi():
     atexit.register(onexit)
 
 
+def autofree(obj):
+    def callfree(fromhandle, handle):
+        fromhandle(handle).free()
+
+    weakref.finalize(obj, callfree, obj.fromhandle, obj.handle)
+    return obj
+
+
 def get_comm_rank_root():
     from mpi4py import MPI
 
@@ -82,7 +91,7 @@ def get_local_rank():
     else:
         from mpi4py import MPI
 
-        return MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED).rank
+        return autofree(MPI.COMM_WORLD.Split_type(MPI.COMM_TYPE_SHARED)).rank
 
 
 def scal_coll(colfn, v, *args, **kwargs):
@@ -121,12 +130,8 @@ class AlltoallMixin:
             if svals.ndim > 1:
                 dtype = [('', dtype, svals.shape[1:])]
 
-            dtype = from_numpy_dtype(dtype).Commit()
-
-            try:
-                comm.Alltoallv((*sbuf, dtype), (*rbuf, dtype))
-            finally:
-                dtype.Free()
+            dtype = autofree(from_numpy_dtype(dtype).Commit())
+            comm.Alltoallv((*sbuf, dtype), (*rbuf, dtype))
 
     def _alltoallcv(self, comm, svals, scount, sdisps=None):
         # Exchange counts
