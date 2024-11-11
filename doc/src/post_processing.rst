@@ -21,7 +21,7 @@ prior to further processing.  While this is often a reasonable first
 approximation it is typically inadequate for moderate-order simulations.
 It may therefore be necessary to move the slider to two or three levels
 of subdivision.  Note, however, that ParaView subdivides *recursively*
-and hence a quadriteral subject to two levels of subdivision is broken
+and hence a quadrilateral subject to two levels of subdivision is broken
 down into 16 elements.  This is in contrast to PyFR where, when
 employing subdivision, ``--eopts=divisor:2`` results in each
 quadrilateral being divided into four elements.
@@ -33,7 +33,7 @@ Upon opening an exported file in ParaView one should *always* run the
 *Clean to Grid* filter.  This will eliminate duplicate vertices along
 the faces and edges between elements that arise as a consequence of the
 discontinuous nature of the FR approach.  For best results it is
-reccommended to set the *Point Data Weighting Strategy* to *Average by
+recommended to set the *Point Data Weighting Strategy* to *Average by
 Number*.  Running this filter will not only result in cleaner visuals
 but will also improve the performance of ParaView.
 
@@ -47,9 +47,9 @@ it into a larger number of linear elements.  Here, there are two primary
 parameters: *Chord Error* which controls the amount of permitted
 geometrical error and the unnamed *Field Error* list-box which controls
 the amount of permitted error in the field values themselves.  Although
-not obvious from the user interface, it is possible to provide a separate
-error tolerance for each field.  Secondary parameters include the
-*Maximum Number of Subdivisions* and *Merge Points* with the latter
+not obvious from the user interface, it is possible to provide a
+separate error tolerance for each field.  Secondary parameters include
+the *Maximum Number of Subdivisions* and *Merge Points* with the latter
 subsuming the functionality of *Clean to Grid*.  Note that this filter
 can be **extremely computationally expensive**, especially when tight
 error tolerances are chosen.
@@ -87,9 +87,9 @@ or *pvbatch* will be run with.   Furthermore, it is important that each
 of these ranks have a similar number of elements.  This is not usually
 an issue except when *pyfr export* is using a weighted partitioning or
 when the .pyfrs files are subset.  In the former case the solution is to
-add a uniform partitioning to the mesh and employ this for the
-export.  In the latter case the only robust solution is to use the
-*Redistribute Dataset* to rebalance the file.
+add a uniform partitioning to the mesh and employ this for the export.
+In the latter case the only robust solution is to use the *Redistribute
+Dataset* to rebalance the file.
 
 Boundary and STL Export
 -----------------------
