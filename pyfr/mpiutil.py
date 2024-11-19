@@ -112,8 +112,13 @@ def get_start_end_csize(comm, n):
 
 
 class AlltoallMixin:
-    def _count_to_disp(self, count):
+    @staticmethod
+    def _count_to_disp(count):
         return np.concatenate(([0], np.cumsum(count[:-1])))
+
+    @staticmethod
+    def _disp_to_count(disp, n):
+        return np.concatenate((disp[1:] - disp[:-1], [n - disp[-1]]))
 
     def _alltoallv(self, comm, sbuf, rbuf):
         svals = sbuf[0]
