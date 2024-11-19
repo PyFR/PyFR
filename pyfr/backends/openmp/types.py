@@ -227,13 +227,12 @@ class OpenMPGraph(base.Graph):
         # Do topological sort on kernels/groups to get run order
         ts = TopologicalSorter(self.dep_graph)
         self.run_order = tuple(ts.static_order())
-        # print(self.run_order)
 
         # Get MPI request idxs
         self.mpi_idxs = defaultdict(list)
         for req, deps in zip(self.mpi_reqs, self.mpi_req_deps):
             if deps:
-                ix = max([i for i, k in enumerate(self.run_order) if k in deps])
+                ix = max([i + 1 for i, k in enumerate(self.run_order) if k in deps])
                 self.mpi_idxs[ix].append(req)
 
         # Group kernels in runs separated by MPI requests
