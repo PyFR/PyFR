@@ -1,6 +1,7 @@
 from collections import defaultdict
 from ctypes import c_int
 from functools import cached_property
+from graphlib import TopologicalSorter
 
 import pyfr.backends.base as base
 from pyfr.backends.openmp.provider import OpenMPBlockKernelArgs, OpenMPKRunArgs
@@ -55,6 +56,10 @@ class OpenMPXchgMatrix(OpenMPMatrix, base.XchgMatrix): pass
 class OpenMPXchgView(base.XchgView): pass
 class OpenMPView(base.View): pass
 
+# Need a hashable wrapper for a list of kernels for the topological sort
+class OpenMPGroupNode:
+    def __init__(self, groups):
+        self.groups = groups
 
 class OpenMPGraph(base.Graph):
     needs_pdeps = False
@@ -63,10 +68,10 @@ class OpenMPGraph(base.Graph):
         super().__init__(backend)
 
         self.klist = []
-        self.kskip = set()
-        self.kins = {}
 
         self.mpi_idxs = defaultdict(list)
+
+        self.dep_graph = {}
 
     def _get_kranges(self):
         kranges, i = {}, 0
@@ -81,16 +86,30 @@ class OpenMPGraph(base.Graph):
         return max(self.klist[i].runargs.b.nblocks for i in idxs)
 
     def _make_runlist(self, start, stop):
+        # Helper function to handle meta kernels
+        def expand_kernels(obj):
+            if hasattr(obj, 'kernels'):
+                tmp = []
+                for k in obj.kernels:
+                    tmp.extend(expand_kernels(k))
+                return tmp
+            else:
+                return [obj.kernel.runargs]
+        
         rlist = []
 
         for i in range(start, stop):
-            if i in self.kins:
-                rlist.extend(self.kins[i])
-
-            if i not in self.kskip:
-                rlist.append(self.klist[i].runargs)
+            if isinstance(self.run_order[i], OpenMPGroupNode):
+                rlist.extend(self.run_order[i].groups)
+            else:
+                rlist.extend(expand_kernels(self.run_order[i]))
 
         return make_array(rlist)
+
+    def add(self, kern, deps=[], pdeps=[]):
+        super().add(kern, deps, pdeps)
+
+        self.dep_graph[kern] = list(deps)
 
     def add_mpi_req(self, req, deps=[]):
         super().add_mpi_req(req, deps)
@@ -180,16 +199,42 @@ class OpenMPGraph(base.Graph):
             rargs.b.subs = make_array(bsubs, type=c_int)
 
             groups.append(rargs)
-
-        # Arrange for the groupings to be inserted into the final run list
-        self.kins[max(self.knodes[k] for k in kerns) - 1] = groups
-
-        # Finally, prevent grouped being added to the final run list
+        
+        # Need hashable object for topological sort later
+        group_node = OpenMPGroupNode(groups)
+        # Get the dependencies of the group and remove grouped kernels from dependency graph
+        group_deps = set()
         for k in kerns:
-            self.kskip.update(kranges[k])
+            group_deps.update([dep for dep in self.dep_graph[k] if dep not in kerns])
+            del self.dep_graph[k]
+        # Iterate over all nodes in dependency graph and replace dependencies on grouped kernels
+        # with a dependency on the group
+        for node in self.dep_graph:
+            if not set(self.dep_graph[node]).isdisjoint(kerns):
+                self.dep_graph[node][:] = [dep for dep in self.dep_graph[node] if dep not in kerns]
+                self.dep_graph[node].append(group_node)
+        # Iterate over all MPI requests and do the same
+        for deps in self.mpi_req_deps:
+            if not set(deps).isdisjoint(kerns):
+                deps[:] = [dep for dep in deps if dep not in kerns]
+                deps.append(group_node)
+        self.dep_graph[group_node] = list(group_deps)
+            
 
     def commit(self):
         super().commit()
+
+        # Do topological sort on kernels/groups to get run order
+        ts = TopologicalSorter(self.dep_graph)
+        self.run_order = tuple(ts.static_order())
+        # print(self.run_order)
+
+        # Get MPI request idxs
+        self.mpi_idxs = defaultdict(list)
+        for req, deps in zip(self.mpi_reqs, self.mpi_req_deps):
+            if deps:
+                ix = max([i for i, k in enumerate(self.run_order) if k in deps])
+                self.mpi_idxs[ix].append(req)
 
         # Group kernels in runs separated by MPI requests
         self._runlist, i = [], 0
@@ -199,8 +244,8 @@ class OpenMPGraph(base.Graph):
             self._runlist.append((krunargs, self.mpi_idxs[j]))
             i = j
 
-        if self.klist[i:]:
-            krunargs = self._make_runlist(i, len(self.klist))
+        if self.run_order[i:]:
+            krunargs = self._make_runlist(i, len(self.run_order))
             self._runlist.append((krunargs, []))
 
     def run(self):
