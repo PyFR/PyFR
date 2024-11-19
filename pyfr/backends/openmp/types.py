@@ -69,8 +69,6 @@ class OpenMPGraph(base.Graph):
 
         self.klist = []
 
-        self.mpi_idxs = defaultdict(list)
-
         self.dep_graph = {}
 
     def _get_kranges(self):
@@ -110,14 +108,6 @@ class OpenMPGraph(base.Graph):
         super().add(kern, deps, pdeps)
 
         self.dep_graph[kern] = list(deps)
-
-    def add_mpi_req(self, req, deps=[]):
-        super().add_mpi_req(req, deps)
-
-        if deps:
-            ix = max(self.knodes[d] for d in deps)
-
-            self.mpi_idxs[ix].append(req)
 
     def _group_splits(self, kerns, kranges):
         nblocks = self._get_nblocks([ix for k in kerns for ix in kranges[k]])
@@ -229,18 +219,18 @@ class OpenMPGraph(base.Graph):
         self.run_order = tuple(ts.static_order())
 
         # Get MPI request idxs
-        self.mpi_idxs = defaultdict(list)
+        mpi_idxs = defaultdict(list)
         for req, deps in zip(self.mpi_reqs, self.mpi_req_deps):
             if deps:
                 ix = max([i + 1 for i, k in enumerate(self.run_order) if k in deps])
-                self.mpi_idxs[ix].append(req)
+                mpi_idxs[ix].append(req)
 
         # Group kernels in runs separated by MPI requests
         self._runlist, i = [], 0
 
-        for j in sorted(self.mpi_idxs):
+        for j in sorted(mpi_idxs):
             krunargs = self._make_runlist(i, j)
-            self._runlist.append((krunargs, self.mpi_idxs[j]))
+            self._runlist.append((krunargs, mpi_idxs[j]))
             i = j
 
         if self.run_order[i:]:
