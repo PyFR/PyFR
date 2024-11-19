@@ -31,7 +31,8 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         ershapes = {etype: (nvars, emap[etype].nupts) for etype in erdata}
 
         # Construct the solution writer
-        self._writer = NativeWriter(intg, basedir, basename, 'soln')
+        self._writer = NativeWriter.from_integrator(intg, basedir, basename,
+                                                    'soln')
         self._writer.set_shapes_eidxs(ershapes, erdata)
 
         # Asynchronous output options

@@ -13,27 +13,24 @@ from pyfr.util import file_path_gen, mv, subclass_where
 
 
 class NativeWriter:
-    def __init__(self, intg, basedir, basename, prefix, *, extn='.pyfrs'):
+    def __init__(self, mesh, cfg, fpdtype, basedir, basename, prefix, *,
+                 extn='.pyfrs', isrestart=False):
         comm, rank, root = get_comm_rank_root()
 
-        self.cfg = intg.cfg
+        self.cfg = cfg
+        self.prefix = prefix
+        self.fpdtype = fpdtype
 
         # Tally up how many elements of each type our partition has
-        self._ecounts = {etype: len(intg.system.mesh.eidxs.get(etype, []))
-                         for etype in intg.system.mesh.etypes}
-
-        # Data prefix
-        self.prefix = prefix
-
-        # Data type
-        self.fpdtype = intg.backend.fpdtype
+        self._ecounts = {etype: len(mesh.eidxs.get(etype, []))
+                         for etype in mesh.etypes}
 
         # Append the relevant extension
         if not basename.endswith(extn):
             basename += extn
 
         # Output counter (incremented each time write() is called)
-        self.fgen = file_path_gen(basedir, basename, intg.isrestart)
+        self.fgen = file_path_gen(basedir, basename, isrestart)
 
         # Temporary file name
         if rank == root:
@@ -45,6 +42,12 @@ class NativeWriter:
 
         # Current asynchronous writing operation (if any)
         self._awriter = None
+
+    @staticmethod
+    def from_integrator(intg, basedir, basename, prefix, *, extn='.pyfrs'):
+        return NativeWriter(intg.system.mesh, intg.cfg, intg.backend.fpdtype,
+                            basedir, basename, prefix=prefix,
+                            isrestart=intg.isrestart)
 
     def set_shapes_eidxs(self, shapes, eidxs):
         comm, rank, root = get_comm_rank_root()
