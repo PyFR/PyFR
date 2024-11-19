@@ -271,7 +271,7 @@ class SparseScatterer(AlltoallMixin):
         comm.Allgather(region, minmax)
 
         # Determine which rank, if any, has each of our desired indices
-        didx = np.array_split(bidx, np.searchsorted(bidx, minmax))[1::2]
+        didx = np.split(bidx, np.searchsorted(bidx, minmax))[1::2]
         dcount = np.array([len(s) for s in didx])
 
         # Exchange indices
@@ -281,7 +281,7 @@ class SparseScatterer(AlltoallMixin):
         # See which of these indices are present
         mask = np.isin(eidx, cidx, assume_unique=True)
         sidx = eidx[mask]
-        scount = np.array([m.sum() for m in np.array_split(mask, edisps[1:])])
+        scount = np.array([m.sum() for m in np.split(mask, edisps[1:])])
         sdisps = self._count_to_disp(scount)
 
         # Make a note of which indices we have

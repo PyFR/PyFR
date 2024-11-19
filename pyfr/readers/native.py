@@ -203,7 +203,7 @@ class NativeReader:
             # Read the neighbours data
             if size > 1:
                 ninfo = pinfo['neighbours']
-                ninfo = np.array_split(ninfo[()], ninfo.attrs['regions'][1:-1])
+                ninfo = np.split(ninfo[()], ninfo.attrs['regions'][1:-1])
             else:
                 ninfo = [[]]
         else:
@@ -219,7 +219,7 @@ class NativeReader:
 
         # Read our portion of the partitioning table
         peles = self.f[f'{ppath}/eles'][einfo[0]:einfo[-1]]
-        peles = np.array_split(peles, [i - einfo[0] for i in einfo[1:-1]])
+        peles = np.split(peles, [i - einfo[0] for i in einfo[1:-1]])
 
         # With this determine the indices associated with each element
         self.mesh.eidxs = {et: pe for et, pe in zip(etypes, peles) if pe.size}
@@ -253,7 +253,7 @@ class NativeReader:
         eoffs = np.cumsum([en.size for en in enodes])
 
         # Use this to split the nodes array back up
-        nodes = np.array_split(nodes['location'], eoffs[:-1])
+        nodes = np.split(nodes['location'], eoffs[:-1])
 
         # Reshape and add to the mesh
         for (etype, einfo), n in zip(self.eles.items(), nodes):

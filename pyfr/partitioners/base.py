@@ -275,7 +275,7 @@ class BasePartitioner:
 
         # With this, identify unique pairings
         pidx = np.searchsorted(vpcon[:, 1], np.arange(1, nparts))
-        for i, vpicon in enumerate(np.array_split(vpcon[:, 0], pidx)):
+        for i, vpicon in enumerate(np.split(vpcon[:, 0], pidx)):
             for j in iter_struct(np.unique(vpicon)):
                 if i != j:
                     neighbours[i].append(j)
@@ -302,12 +302,12 @@ class BasePartitioner:
 
         # Allocate the main partitioning array
         peidx = np.empty(len(vparts), dtype=np.int64)
-        for p in np.array_split(peidx, edisps):
+        for p in np.split(peidx, edisps):
             p[:] = np.arange(len(p))
 
         # Also note the type of each element in the partitioning array
         petype = np.empty(len(vparts), dtype=np.int8)
-        for i, p in enumerate(np.array_split(petype, edisps)):
+        for i, p in enumerate(np.split(petype, edisps)):
             p[:] = i
 
         # Sort by partition number, type, internal, and if curved or not
