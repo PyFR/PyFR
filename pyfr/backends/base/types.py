@@ -28,7 +28,8 @@ class MatrixBase:
 
             # Alignment requirement for the leading dimension
             ldmod = csubsz if 'align' in self.tags else 1
-            leaddim = csubsz if backend.blocks else ncol - (ncol % -ldmod)
+            blocked = backend.blocks and 'xchg' not in self.tags
+            leaddim = csubsz if blocked else ncol - (ncol % -ldmod)
 
             nblocks = (ncol - (ncol % -leaddim)) // leaddim
             datashape = [nblocks, nrow, leaddim]
@@ -198,6 +199,8 @@ class ConstMatrix(MatrixBase):
 
 
 class XchgMatrix(Matrix):
+    _base_tags = {'xchg'}
+
     def recvreq(self, pid, tag):
         comm, rank, root = get_comm_rank_root()
 

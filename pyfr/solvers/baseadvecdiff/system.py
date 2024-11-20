@@ -54,11 +54,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1.commit()
 
         g2 = self.backend.graph()
-        g2.add_mpi_reqs(m['artvisc_fpts_send'] + m['artvisc_fpts_recv'])
+        g2.add_mpi_reqs(m['artvisc_fpts_recv'])
         g2.add_mpi_reqs(m['vect_fpts_recv'])
 
         # Compute the transformed gradient of the partially corrected solution
         g2.add_all(k['eles/tgradpcoru_upts'])
+        g2.add_mpi_reqs(m['artvisc_fpts_send'], deps=k['eles/tgradpcoru_upts'])
 
         # Compute the common solution at our MPI interfaces
         g2.add_all(k['mpiint/scal_fpts_unpack'])
@@ -131,12 +132,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         ]
         for ks in zip_longest(*kgroup):
             # Flux-AA on; inputs to tdisf and tdivtpcorf are from quad pts
-            if k['eles/qpts']:
+            if k['eles/qptsu']:
                 subs=[
                     [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
                      (ks[4], 'b'), (ks[5], 'b')],
                     [(ks[6], 'out'), (ks[7], 'u')],
-                    [(ks[7], 'f'), (ks[8], 'b')],
+                    [(ks[5], 'out'), (ks[7], 'f'), (ks[8], 'b')],
                 ]
             # Gradient fusion on; tdisf_fused replaces tdisf and gradcoru_upts
             elif k['eles/tdisf_fused']:
