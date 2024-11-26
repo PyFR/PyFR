@@ -22,9 +22,12 @@ from pyfr.progress import (NullProgressSequence, ProgressBar,
 from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
 from pyfr.readers.native import NativeReader
 from pyfr.readers.stl import read_stl
+from pyfr.resamplers import (BaseInterpolator, NativeCloudResampler,
+                             get_interpolator)
 from pyfr.solvers import get_solver
-from pyfr.util import subclasses
+from pyfr.util import first, subclasses
 from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
+from pyfr.writers.native import NativeWriter
 
 
 def main():
@@ -186,6 +189,22 @@ def main():
     ap_region_remove.add_argument('mesh', help='input mesh file')
     ap_region_remove.add_argument('name', help='region name')
     ap_region_remove.set_defaults(process=process_region_remove)
+
+    # Resample command
+    ap_resample = sp.add_parser('resample', help='resample --help')
+    ap_resample.add_argument('srcmesh', help='source mesh file')
+    ap_resample.add_argument('srcsoln', help='source solution file')
+    ap_resample.add_argument('tgtmesh', help='target mesh file')
+    ap_resample.add_argument('tgtcfg', help='target config file')
+    ap_resample.add_argument('tgtsoln', help='target solution file')
+    itypes = [i.name for i in subclasses(BaseInterpolator, just_leaf=True)]
+    ap_resample.add_argument('-i', '--interpolator', choices=itypes,
+                             required=True, help='interpolator to use')
+    ap_resample.add_argument(
+        '--iopt', dest='iopts', action='append', default=[],
+        metavar='key:value', help='interpolator-specific option'
+    )
+    ap_resample.set_defaults(process=process_resample)
 
     # Run command
     ap_run = sp.add_parser('run', help='run --help')
@@ -429,6 +448,58 @@ def process_export(args):
     with progress.start_with_bar('Process solutions') as pbar:
         for solnf, outf in pbar.start_with_iter(batch):
             writer.process(solnf, outf)
+
+
+def process_resample(args):
+    # Manually initialise MPI
+    init_mpi()
+
+    comm, rank, root = get_comm_rank_root()
+    progress = args.progress if rank == root else NullProgressSequence()
+
+    with progress.start('Load source and target meshes'):
+        # Load the source mesh
+        sreader = NativeReader(args.srcmesh, construct_con=False)
+        smesh, ssoln = sreader.load_subset_mesh_soln(args.srcsoln)
+        fpdtype = ssoln[first(smesh.eidxs)].dtype
+
+        # Load the target mesh and config file
+        treader = NativeReader(args.tgtmesh, construct_con=False)
+        tcfg = Inifile.load(args.tgtcfg)
+
+    # Get the interpolator
+    opts = dict(s.split(':', 1) for s in args.iopts)
+    interp = get_interpolator(args.interpolator, smesh.ndims, opts)
+
+    # Perform the resampling
+    resampler = NativeCloudResampler(smesh, ssoln, interp, progress)
+    tsolns = resampler.sample_with_mesh_config(treader.mesh, tcfg)
+    tshapes = {k: v.shape[1:] for k, v in tsolns.items()}
+
+    # Get the output file path
+    tpath = Path(args.tgtsoln).absolute()
+
+    # Get the data field prefix
+    prefix = ssoln['stats'].get('data', 'prefix')
+
+    # Have the root rank prepare a stats record
+    if rank == root:
+        stats = Inifile()
+        stats.set('data', 'prefix', prefix)
+        stats.set('data', 'fields', ssoln['stats'].get('data', 'fields'))
+        stats.set('solver-time-integrator', 'tcurr',
+                  ssoln['stats'].get('solver-time-integrator', 'tcurr'))
+        metadata = {'config': tcfg.tostr(), 'stats': stats.tostr(),
+                    'mesh-uuid': treader.mesh.uuid}
+    else:
+        metadata = None
+
+    with progress.start('Write target solution'):
+        # Write out the new solution
+        writer = NativeWriter(treader.mesh, tcfg, fpdtype, tpath.parent,
+                              tpath.name, prefix)
+        writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs)
+        writer.write(tsolns, None, metadata)
 
 
 def _process_common(args, soln, cfg):

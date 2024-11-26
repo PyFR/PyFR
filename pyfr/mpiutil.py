@@ -1,4 +1,5 @@
 import atexit
+import math
 import os
 import sys
 import weakref
@@ -315,6 +316,88 @@ class SparseScatterer(AlltoallMixin):
                         (rvals, (rcount, rdisps)))
 
         return rvals
+
+
+class Sorter(AlltoallMixin):
+    def __init__(self, comm, keys, dtype=int):
+        self.comm = comm
+
+        # Locally sort our outbound keys
+        self.sidx = np.argsort(keys)
+        skeys = keys[self.sidx].astype(dtype)
+
+        # Determine the total size of the array
+        size = scal_coll(comm.Allreduce, len(keys))
+
+        start, end, csize = get_start_end_csize(comm, size)
+        self.cnt = end - start
+
+        # Determine what to send to each rank
+        sdisps = self._splitters(skeys, start)
+        scount = self._disp_to_count(sdisps, len(keys))
+        self.scountdisps = (scount, sdisps)
+
+        # Exchange the keys
+        rkeys, self.rcountdisps = self._alltoallcv(comm, skeys, scount,
+                                                   sdisps)
+
+        # Locally sort our inbound keys
+        self.ridx = np.argsort(rkeys)
+        self.keys = rkeys[self.ridx]
+
+    def _splitters(self, skeys, r):
+        # Determine the minimum and maximum values in the array
+        kmin = scal_coll(self.comm.Allreduce, skeys[0], op=mpi.MIN)
+        kmax = scal_coll(self.comm.Allreduce, skeys[-1], op=mpi.MAX)
+
+        # Compute the number of bits in the key space
+        W = math.ceil(np.log2(kmax - kmin + 1))
+
+        e, rt = 0, 0
+        q = np.empty(self.comm.size, dtype=int)
+
+        for i in range(W - 1, -1, -1):
+            # Compute and gather the probes
+            q[self.comm.rank] = e + 2**i
+            self.comm.Allgather(mpi.IN_PLACE, q)
+
+            # Obtain the global location of each probe
+            t = np.searchsorted(skeys, q)
+            self.comm.Reduce_scatter_block(mpi.IN_PLACE, t)
+
+            if t[0] <= r:
+                e, rt = e + 2**i, t[0]
+
+        q[self.comm.rank] = e
+        self.comm.Allgather(mpi.IN_PLACE, q)
+
+        # Count the occurances of each probe in skeys
+        ubnd = np.searchsorted(skeys, q, side='right')
+        lbnd = np.searchsorted(skeys, q, side='left')
+        ld = ubnd - lbnd
+
+        # Compute the global position of each probe
+        gd = np.zeros_like(ld)
+        self.comm.Exscan(ld, gd)
+
+        q[self.comm.rank] = r - rt
+        self.comm.Allgather(mpi.IN_PLACE, q)
+
+        return lbnd + np.maximum(0, np.minimum(ld, q - gd))
+
+    def __call__(self, svals):
+        # Locally sort our data
+        svals = svals[self.sidx]
+
+        # Allocate space for receiving the data
+        rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
+
+        # Perform the exchange
+        self._alltoallv(self.comm, (svals, self.scountdisps),
+                        (rvals, self.rcountdisps))
+
+        # Locally sort our received data
+        return rvals[self.ridx]
 
 
 class _MPI:

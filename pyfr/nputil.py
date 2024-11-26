@@ -56,6 +56,36 @@ def clean(origfn=None, tol=1e-10, ckwarg='clean'):
     return cleanfn(origfn) if origfn else cleanfn
 
 
+def morton_encode(ipts, imax, dtype=int):
+    # Allocate the codes
+    codes = np.zeros(len(ipts), dtype=dtype)
+
+    # Determine how many bits to use for each input dimension
+    ndims = ipts.shape[1]
+    obits = 8*codes.dtype.itemsize
+    ibits = obits // ndims
+    ishift = np.array([max(int(p).bit_length() - ibits, 0) for p in imax])
+
+    # Compute the masks and shifts
+    ops = [[(1 << j, (ndims - 1)*j + i) for j in range(ibits)]
+           for i in range(ndims)]
+
+    # Cache-block the arrays
+    n = max(1, len(codes) // 16384)
+    bipts = np.array_split(ipts, n)
+    bcodes = np.array_split(codes, n)
+
+    # Loop over each block
+    for ipt, code in zip(bipts, bcodes):
+        # Loop over each dimension
+        for p, pops in zip((ipt >> ishift).T, ops):
+            # Extract and interleave the bits
+            for mask, shift in pops:
+                code |= (p & mask) << shift
+
+    return codes
+
+
 _npeval_syms = {
     '__builtins__': {},
     'exp': np.exp, 'log': np.log,
