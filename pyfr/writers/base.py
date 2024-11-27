@@ -3,9 +3,9 @@ from pyfr.util import subclass_where
 
 
 class BaseWriter:
-    def __init__(self, meshf):
+    def __init__(self, meshf, pname=None):
         # Load the mesh
-        self.reader = NativeReader(meshf, construct_con=False)
+        self.reader = NativeReader(meshf, pname, construct_con=False)
 
         # Dimensions
         self.ndims = self.reader.mesh.ndims

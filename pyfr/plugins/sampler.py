@@ -204,6 +204,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         ap_add.add_argument('mesh', help='input mesh file')
         ap_add.add_argument('pts', type=FileType('r'),
                             help='input points file')
+        ap_add.add_argument('-P', '--pname', help='partitioning to use')
         ap_add.add_argument('name', nargs='?', help='point set name')
         ap_add.add_argument('-f', '--force', action='count',
                             help='overwrite existing point set')
@@ -234,6 +235,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         ap_sample = sp.add_parser('sample', help='sampler sample --help')
         ap_sample.add_argument('mesh', help='input mesh file')
         ap_sample.add_argument('soln', help='input solution file')
+        ap_sample.add_argument('-P', '--pname', help='partitioning to use')
         sample_opts = ap_sample.add_mutually_exclusive_group(required=True)
         sample_opts.add_argument('-n', '--name', help='point set')
         sample_opts.add_argument('-p', '--pts', type=FileType('r'),
@@ -256,7 +258,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         comm, rank, root = get_comm_rank_root()
 
         # Read the mesh
-        reader = NativeReader(args.mesh, construct_con=False)
+        reader = NativeReader(args.mesh, args.pname, construct_con=False)
         mesh = reader.mesh
 
         if rank == root:
@@ -339,7 +341,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         comm, rank, root = get_comm_rank_root()
 
         # Read the mesh and solution
-        reader = NativeReader(args.mesh, construct_con=False)
+        reader = NativeReader(args.mesh, args.pname, construct_con=False)
         mesh, soln = reader.load_subset_mesh_soln(args.soln)
 
         # Dimension and field names

@@ -369,9 +369,9 @@ class BaseVTKWriter(BaseWriter):
         ]
     }
 
-    def __init__(self, meshf, *, prec='single', order=None,
+    def __init__(self, meshf, pname=None, *, prec='single', order=None,
                  divisor=None, fields=[]):
-        super().__init__(meshf)
+        super().__init__(meshf, pname)
 
         self.dtype = np.dtype(prec).type
         self.fields = fields

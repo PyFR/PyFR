@@ -164,6 +164,8 @@ def main():
             '--eopt', dest='eopts', action='append', default=[],
             metavar='key:value', help='exporter-specific option'
         )
+        ap_export_type.add_argument('-P', '--pname',
+                                    help='partitioning to use')
         ap_export_type.set_defaults(etype=etype, process=process_export)
 
     # Region subcommand
@@ -204,6 +206,7 @@ def main():
         '--iopt', dest='iopts', action='append', default=[],
         metavar='key:value', help='interpolator-specific option'
     )
+    ap_resample.add_argument('-P', '--pname', help='partitioning to use')
     ap_resample.set_defaults(process=process_resample)
 
     # Run command
@@ -225,7 +228,7 @@ def main():
     for p in [ap_run, ap_restart]:
         p.add_argument('-b', '--backend', choices=backends, required=True,
                        help='backend to use')
-        p.add_argument('-p', '--pname', help='partitioning to use')
+        p.add_argument('-P', '--pname', help='partitioning to use')
 
     # Plugin commands
     for scls in subclasses(BaseCLIPlugin, just_leaf=True):
@@ -413,7 +416,8 @@ def process_export(args):
 
     # Common arguments
     kargs = [args.eargs] if 'eargs' in args else []
-    kwargs = {'fields': args.fields, 'prec': args.precision}
+    kwargs = {'fields': args.fields, 'prec': args.precision,
+              'pname': args.pname}
 
     # Process any exporter-specific options
     for e in args.eopts:
@@ -459,12 +463,12 @@ def process_resample(args):
 
     with progress.start('Load source and target meshes'):
         # Load the source mesh
-        sreader = NativeReader(args.srcmesh, construct_con=False)
+        sreader = NativeReader(args.srcmesh, args.pname, construct_con=False)
         smesh, ssoln = sreader.load_subset_mesh_soln(args.srcsoln)
         fpdtype = ssoln[first(smesh.eidxs)].dtype
 
         # Load the target mesh and config file
-        treader = NativeReader(args.tgtmesh, construct_con=False)
+        treader = NativeReader(args.tgtmesh, args.pname, construct_con=False)
         tcfg = Inifile.load(args.tgtcfg)
 
     # Get the interpolator
