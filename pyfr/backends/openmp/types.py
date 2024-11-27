@@ -1,7 +1,7 @@
 from collections import defaultdict
 from ctypes import c_int
 from functools import cached_property
-from graphlib import TopologicalSorter
+from graphlib import TopologicalSorter, CycleError
 
 import pyfr.backends.base as base
 from pyfr.backends.openmp.provider import OpenMPBlockKernelArgs, OpenMPKRunArgs
@@ -70,6 +70,7 @@ class OpenMPGraph(base.Graph):
         self.klist = []
 
         self.dep_graph = {}
+        self.pdeps = []
 
     def _get_kranges(self):
         kranges, i = {}, 0
@@ -108,6 +109,8 @@ class OpenMPGraph(base.Graph):
         super().add(kern, deps, pdeps)
 
         self.dep_graph[kern] = list(deps)
+        for pdep in pdeps:
+            self.pdeps.append([kern, pdep])
 
     def _group_splits(self, kerns, kranges):
         nblocks = self._get_nblocks([ix for k in kerns for ix in kranges[k]])
@@ -208,6 +211,12 @@ class OpenMPGraph(base.Graph):
             if not set(deps).isdisjoint(kerns):
                 deps[:] = [dep for dep in deps if dep not in kerns]
                 deps.append(group_node)
+        # Iterate over pdeps
+        for pdep in self.pdeps:
+            if pdep[0] in kerns:
+                pdep[0] = group_node
+            if pdep[1] in kerns:
+                pdep[1] = group_node
         self.dep_graph[group_node] = list(group_deps)
             
 
@@ -215,6 +224,14 @@ class OpenMPGraph(base.Graph):
         super().commit()
 
         # Do topological sort on kernels/groups to get run order
+        # Add in as many pdeps as possible without creating a cycle
+        for pdep in self.pdeps:
+            self.dep_graph[pdep[0]].append(pdep[1])
+            try:
+                ts = TopologicalSorter(self.dep_graph)
+                self.run_order = tuple(ts.static_order())
+            except CycleError:
+                self.dep_graph[pdep[0]].remove(pdep[1])
         ts = TopologicalSorter(self.dep_graph)
         self.run_order = tuple(ts.static_order())
 
