@@ -1,152 +1,245 @@
 import os
+import time
+import uuid
 
 import h5py
 import numpy as np
 
-from pyfr.mpiutil import get_comm_rank_root
-from pyfr.util import file_path_gen
-
-
-def write_pyfrms(path, data):
-    # Save to disk
-    with h5py.File(path, 'w', libver='latest') as f:
-        for k in filter(lambda k: isinstance(k, str), data):
-            f[k] = data[k]
-
-        for p, q in filter(lambda k: isinstance(k, tuple), data):
-            f[p].attrs[q] = data[p, q]
+from pyfr._version import __version__
+from pyfr.shapes import BaseShape
+from pyfr.mpiutil import Gatherer, get_comm_rank_root, mpi, scal_coll
+from pyfr.quadrules import get_quadrule
+from pyfr.util import file_path_gen, mv, subclass_where
 
 
 class NativeWriter:
-    def __init__(self, intg, basedir, basename, prefix, *, extn='.pyfrs'):
-        # Data prefix
-        self.prefix = prefix
+    def __init__(self, mesh, cfg, fpdtype, basedir, basename, prefix, *,
+                 extn='.pyfrs', isrestart=False):
+        comm, rank, root = get_comm_rank_root()
 
-        # Our physical rank
-        self.prank = intg.rallocs.prank
+        self.cfg = cfg
+        self.prefix = prefix
+        self.fpdtype = fpdtype
+
+        # Tally up how many elements of each type our partition has
+        self._ecounts = {etype: len(mesh.eidxs.get(etype, []))
+                         for etype in mesh.etypes}
 
         # Append the relevant extension
         if not basename.endswith(extn):
             basename += extn
 
         # Output counter (incremented each time write() is called)
-        self.fgen = file_path_gen(basedir, basename, intg.isrestart)
+        self.fgen = file_path_gen(basedir, basename, isrestart)
 
-        # MPI info
-        comm, rank, root = get_comm_rank_root()
-
-        # Parallel I/O
-        if (h5py.get_config().mpi and
-            'PYFR_FORCE_SERIAL_HDF5' not in os.environ):
-            self._write = self._write_parallel
-        # Serial I/O
-        else:
-            self._write = self._write_serial
-
-    def write(self, data, tcurr, metadata=None):
-        # Determine the output path
-        path = self.fgen.send(tcurr)
-
-        # Delegate to _write to do the actual outputting
-        self._write(path, data, metadata)
-
-        # Return the path
-        return path
-
-    def _prepare_data_info(self, data):
-        info = {}
-
-        for k, v in data.items():
-            info[f'{self.prefix}_{k}_p{self.prank}'] = (v.shape, v.dtype.str)
-
-        return info
-
-    def _write_parallel(self, path, data, metadata):
-        comm, rank, root = get_comm_rank_root()
-
-        info = self._prepare_data_info(data)
-
-        # If we are the root rank then process any metadata
+        # Temporary file name
         if rank == root:
-            data = dict(data)
+            tname = os.path.join(basedir, f'pyfr-{uuid.uuid4()}{extn}')
+        else:
+            tname = None
 
-            for k, v in metadata.items():
-                if isinstance(v, str):
-                    data[k] = np.array(v.encode(), dtype='S')
-                    info[k] = ((), data[k].dtype.str)
-                else:
-                    data[k] = v
-                    info[k] = (v.shape, v.dtype.str)
-        elif metadata:
-            raise ValueError('Metadata must be written by the root rank')
+        self.tname = comm.bcast(tname, root=root)
 
-        # Distribute the data info to all of the ranks
-        ginfo = comm.allgather(info)
+        # Current asynchronous writing operation (if any)
+        self._awriter = None
 
-        with h5py.File(path, 'w', driver='mpio', comm=comm) as f:
-            # Parallel HDF5 requires that data sets be created collectively
-            for minfo in ginfo:
-                for name, (shape, dtype) in minfo.items():
-                    f.create_dataset(name, shape, dtype=dtype)
+    @staticmethod
+    def from_integrator(intg, basedir, basename, prefix, *, extn='.pyfrs'):
+        return NativeWriter(intg.system.mesh, intg.cfg, intg.backend.fpdtype,
+                            basedir, basename, prefix=prefix,
+                            isrestart=intg.isrestart)
 
-            # Write out our local data
-            for name, dat in zip(info, data.values()):
-                fdata = f[name]
-
-                if dat.shape:
-                    nrows = len(dat)
-                    rowsz = dat.nbytes // nrows
-                    rstep = 2*1024**3 // rowsz
-
-                    if rstep == 0:
-                        raise IOError('Array is too large for parallel I/O')
-
-                    for ix in range(0, nrows, rstep):
-                        fdata[ix:ix + rstep] = dat[ix:ix + rstep]
-                else:
-                    fdata.write_direct(dat)
-
-        # Wait for everyone to finish writing
-        comm.barrier()
-
-    def _write_serial(self, path, data, metadata):
+    def set_shapes_eidxs(self, shapes, eidxs):
         comm, rank, root = get_comm_rank_root()
 
-        info = self._prepare_data_info(data)
+        # Prepare the element information
+        self._einfo = {}
+        for etype, ecount in self._ecounts.items():
+            # See if any ranks want to write elements of this type
+            eshape = comm.allgather(shapes.get(etype))
+            if any(eshape):
+                # Create a gatherer for this element type
+                idxs = eidxs.get(etype, [])
+                gatherer = Gatherer(comm, idxs)
 
-        if rank != root:
-            if metadata:
+                # Exchange counts and offsets
+                noff = comm.allgather((gatherer.cnt, gatherer.off))
+                noff = {i: j for i, j in enumerate(noff) if j}
+
+                # Determine the final shape of the element array
+                shape = (gatherer.tot, *next(es for es in eshape if es))
+
+                # Determine the polynomial order
+                ecls = subclass_where(BaseShape, name=etype)
+                order = ecls.order_from_npts(shape[2])
+
+                # See if the element is being subset
+                subset = comm.allreduce(len(idxs) != ecount, op=mpi.LOR)
+
+                # Also get the associated nodal points
+                rname = self.cfg.get(f'solver-elements-{etype}', 'soln-pts')
+                upts = get_quadrule(etype, rname, shape[2]).pts
+
+                ek = f'p{order}-{etype}'
+                self._einfo[ek] = (gatherer, subset, shape, etype, noff, upts)
+
+    def probe(self):
+        if self._awriter is not None and self._awriter.test():
+            self._awriter = None
+
+    def flush(self):
+        if self._awriter is not None:
+            self._awriter.wait()
+            self._awriter = None
+
+    def write(self, data, tcurr, metadata=None, timeout=0, callback=None):
+        async_ = bool(timeout)
+        comm, rank, root = get_comm_rank_root()
+
+        # Wait for any existing write operations to finish
+        if self._awriter is not None:
+            self._awriter.wait()
+            self._awriter = None
+
+        if metadata:
+            if rank != root:
                 raise ValueError('Metadata must be written by the root rank')
 
-            # Send the info about our data to the root rank
-            comm.gather(info, root=root)
+            metadata = dict(metadata, creator=f'pyfr {__version__}', version=1)
 
-            # Send the data itself
-            for v in data.values():
-                comm.Send(np.ascontiguousarray(v), root)
+            # Convert all strings to arrays
+            for k, v in metadata.items():
+                if isinstance(v, str):
+                    metadata[k] = np.array(v, dtype='S')
+
+        # Gather the solution data into contiguous arrays
+        gdata = {}
+        for ek, (gatherer, subset, shape, etype, *_) in self._einfo.items():
+            if etype in data:
+                dset = data[etype]
+            else:
+                dset = np.empty((0, *shape[1:]), dtype=self.fpdtype)
+
+            gdata[ek] = gatherer(dset)
+
+        # Delegate to _write to do the actual outputting
+        f, reqs = self._write(self.tname, gdata, metadata, async_=async_)
+
+        # Determine the final output path
+        path = self.fgen.send(tcurr)
+
+        def oncomplete():
+            # Close the file
+            f.Close()
+
+            # Have the root rank move it into place
+            if rank == root:
+                mv(self.tname, path)
+
+            # Fire off any user-provided callback
+            if callback is not None:
+                callback(path)
+
+        if async_:
+            self._awriter = _AsyncCompleter(reqs, timeout, oncomplete)
         else:
-            with h5py.File(path, 'w') as f:
-                # Collect info about what remote ranks want to write
-                ginfo = comm.gather({}, root=root)
+            oncomplete()
 
-                # Write the metadata
-                for k, v in metadata.items():
-                    if isinstance(v, str):
-                        f[k] = np.array(v.encode(), dtype='S')
-                    else:
-                        f[k] = v
+    def _prepare_file(self, path, metadata):
+        doffs = {}
 
-                # Write our local data
-                for k, v in zip(info, data.values()):
-                    f[k] = v
+        with h5py.File(path, 'w') as f:
+            # Write the metadata
+            for k, v in metadata.items():
+                f[k] = v
 
-                # Receive and write the remote data
-                for mrank, minfo in enumerate(ginfo):
-                    for k, (shape, dtype) in minfo.items():
-                        v = np.empty(shape, dtype=dtype)
-                        comm.Recv(v, mrank)
+            # Create the datasets
+            g = f.create_group(self.prefix)
+            for ek, (gatherer, subset, shape, *_) in self._einfo.items():
+                g.create_dataset(ek, shape, self.fpdtype)
+                g.create_dataset(f'{ek}-parts', shape[0:1], np.int32)
 
-                        f[k] = v
+                if subset:
+                    g.create_dataset(f'{ek}-idxs', shape[0:1], np.int64)
 
-        # Wait for the root rank to finish writing
-        comm.barrier()
+            # Add each elements nodal points as an attribute
+            for ek, (*_, upts) in self._einfo.items():
+                g[ek].attrs['pts'] = upts
+
+            # Obtain the offsets of these datasets
+            for k, v in g.items():
+                v[(-1,)*v.ndim] = 0
+                doffs[k] = v.id.get_offset()
+
+        return doffs
+
+    def _write(self, path, data, metadata, *, async_=True):
+        comm, rank, root = get_comm_rank_root()
+
+        # Have the root rank prepare the output file
+        if rank == root:
+            doffs = self._prepare_file(path, metadata)
+        else:
+            doffs = None
+
+        # Distrbute the offsets of each dataset
+        doffs = comm.bcast(doffs, root=root)
+
+        # Collectively open the file for writing
+        f = mpi.File.Open(comm, path, mpi.MODE_WRONLY)
+
+        # Track the active write requests
+        reqs = []
+
+        def write_off(k, v, n):
+            if len(v):
+                args = (doffs[k] + n*(v.nbytes // len(v)), v)
+                if async_:
+                    reqs.append(f.Iwrite_at(*args))
+                else:
+                    f.Write_at(*args)
+
+        # Write out our element data
+        for ek, (gatherer, subset, *_) in self._einfo.items():
+            write_off(ek, data[ek], gatherer.off)
+            write_off(f'{ek}-parts', gatherer.rsrc, gatherer.off)
+
+            # If the element has been subset then write the index data
+            if subset:
+                write_off(f'{ek}-idxs', gatherer.ridx, gatherer.off)
+
+        return f, reqs
+
+
+class _AsyncCompleter:
+    def __init__(self, reqs, timeout, callback):
+        self.reqs = reqs
+        self.timeout = timeout
+        self.callback = callback
+
+        self.done = False
+        self.start = time.time()
+
+    def _test_with_timeout(self, timeout):
+        comm, rank, root = get_comm_rank_root()
+
+        if not self.done:
+            if time.time() - self.start >= timeout:
+                mpi.Request.Waitall(self.reqs)
+
+            if mpi.Request.Testall(self.reqs):
+                self.done = True
+
+        # See if everyone is done
+        if scal_coll(comm.Allreduce, int(self.done), op=mpi.LAND):
+            self.callback()
+
+            return True
+        else:
+            return False
+
+    def test(self):
+        return self._test_with_timeout(self.timeout)
+
+    def wait(self):
+        return self._test_with_timeout(0.0)

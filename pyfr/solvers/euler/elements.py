@@ -4,22 +4,36 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements:
-    privarmap = {2: ['rho', 'u', 'v', 'p'],
-                 3: ['rho', 'u', 'v', 'w', 'p']}
+    @staticmethod
+    def privars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'u', 'v', 'p']
+        elif ndims == 3:
+            return ['rho', 'u', 'v', 'w', 'p']
 
-    convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
-                 3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+    @staticmethod
+    def convars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'rhou', 'rhov', 'E']
+        elif ndims == 3:
+            return ['rho', 'rhou', 'rhov', 'rhow', 'E']
 
-    dualcoeffs = convarmap
+    dualcoeffs = convars
 
-    visvarmap = {
-        2: [('density', ['rho']),
-            ('velocity', ['u', 'v']),
-            ('pressure', ['p'])],
-        3: [('density', ['rho']),
-            ('velocity', ['u', 'v', 'w']),
-            ('pressure', ['p'])]
-    }
+    @staticmethod
+    def visvars(ndims, cfg):
+        if ndims == 2:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v'],
+                'pressure': ['p']
+            }
+        elif ndims == 3:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v', 'w'],
+                'pressure': ['p']
+            }
 
     @staticmethod
     def pri_to_con(pris, cfg):
@@ -43,7 +57,7 @@ class BaseFluidElements:
 
         # Compute the pressure
         gamma = cfg.getfloat('constants', 'gamma')
-        p = (gamma - 1)*(E - 0.5*rho*sum(v*v for v in vs))
+        p = (gamma - 1)*(E - 0.5*rho*sum(v**2 for v in vs))
 
         return [rho, *vs, p]
 
@@ -59,10 +73,10 @@ class BaseFluidElements:
         diff_uvw = [(diff_rhov - v*diff_rho) / rho
                     for diff_rhov, v in zip(diff_rhouvw, uvw)]
 
-        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) - ρu⃗·∂u⃗)]
+        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) + ρu⃗·∂u⃗)]
         gamma = cfg.getfloat('constants', 'gamma')
-        diff_p = diff_E - 0.5*(np.einsum('ijk,ijk->jk', uvw,  diff_rhouvw) +
-                               np.einsum('ijk,ijk->jk', rhouvw, diff_uvw))
+        diff_p = diff_E - 0.5*(sum(u*dru for u, dru in zip(uvw, diff_rhouvw)) +
+                               sum(ru*du for ru, du in zip(rhouvw, diff_uvw)))
         diff_p *= gamma - 1
 
         return [diff_rho, *diff_uvw, diff_p]

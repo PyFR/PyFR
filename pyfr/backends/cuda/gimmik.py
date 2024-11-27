@@ -1,3 +1,5 @@
+from weakref import finalize
+
 from gimmik import CUDAMatMul
 import numpy as np
 
@@ -101,6 +103,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = kern, grid, block, dt = best_kern
+            finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
         params = kern.make_params(grid, block)
@@ -113,4 +116,4 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             def run(self, stream):
                 kern.exec_async(stream, params)
 
-        return MulKernel(mats=[b, out], dt=dt)
+        return MulKernel(mats=[a, b, out], dt=dt)

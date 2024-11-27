@@ -1,5 +1,5 @@
+from pyfr.cache import memoize
 from pyfr.integrators.std.base import BaseStdIntegrator
-from pyfr.util import memoize
 
 
 class BaseStdStepper(BaseStdIntegrator):
@@ -148,7 +148,8 @@ class StdRKVdH2RStepper(BaseStdStepper):
             'nvars': self.system.nvars, 'errest': rold is not None
         }
 
-        for dims, em in zip(self.system.ele_shapes, self.system.ele_banks):
+        for dims, em in zip(self.system.ele_shapes.values(),
+                            self.system.ele_banks):
             if rold is not None:
                 kern = self.backend.kernel(
                     'rkvdh2', tplargs=tplargs, dims=[dims[0], dims[2]],

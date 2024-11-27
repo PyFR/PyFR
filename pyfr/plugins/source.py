@@ -2,6 +2,7 @@ import math
 import re
 
 from pyfr.plugins.base import BaseSolverPlugin
+from pyfr.util import first
 
 
 class SourcePlugin(BaseSolverPlugin):
@@ -13,7 +14,7 @@ class SourcePlugin(BaseSolverPlugin):
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
 
-        convars = intg.system.elementscls.convarmap[self.ndims]
+        convars = first(intg.system.ele_map.values()).convars
 
         subs = self.cfg.items('constants')
         subs |= dict(x='ploc[0]', y='ploc[1]', z='ploc[2]')

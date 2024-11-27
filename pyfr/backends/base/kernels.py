@@ -2,7 +2,7 @@ import itertools as it
 import re
 import types
 
-from pyfr.util import memoize
+from pyfr.cache import memoize
 
 
 class Kernel:

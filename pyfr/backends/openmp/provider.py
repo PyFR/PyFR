@@ -6,8 +6,8 @@ from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.openmp.generator import OpenMPKernelGenerator
+from pyfr.cache import memoize
 from pyfr.nputil import npdtype_to_ctypestype
-from pyfr.util import memoize
 
 
 class OpenMPKernel(Kernel):

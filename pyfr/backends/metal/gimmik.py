@@ -1,3 +1,5 @@
+from weakref import finalize
+
 from gimmik import MetalMatMul
 import numpy as np
 
@@ -89,9 +91,10 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = kern, grid, tgrp, dt = best_kern
+            finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         class MulKernel(MetalKernel):
             def run(self, cbuf):
                 return kern(cbuf, grid, tgrp, b.data, out.data)
 
-        return MulKernel(mats=[b, out], dt=dt)
+        return MulKernel(mats=[a, b, out], dt=dt)

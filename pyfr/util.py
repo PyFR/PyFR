@@ -1,5 +1,4 @@
 from ctypes import c_void_p
-import functools as ft
 import hashlib
 import itertools as it
 import os
@@ -8,37 +7,6 @@ import re
 import shutil
 
 from pyfr.ctypesutil import get_libc_function
-
-
-def memoize(meth):
-    @ft.wraps(meth)
-    def newmeth(self, *args, **kwargs):
-        try:
-            cache = self._memoize_cache_
-        except AttributeError:
-            cache = self._memoize_cache_ = {}
-
-        if kwargs:
-            key = (meth, args, tuple(kwargs.items()))
-        else:
-            key = (meth, args)
-
-        try:
-            return cache[key]
-        except KeyError:
-            pass
-        except TypeError:
-            key = (meth, pickle.dumps((args, kwargs)))
-
-            try:
-                return cache[key]
-            except KeyError:
-                pass
-
-        res = cache[key] = meth(self, *args, **kwargs)
-        return res
-
-    return newmeth
 
 
 class silence:
@@ -112,6 +80,10 @@ def merge_intervals(ivals, tol=1e-5):
             mivals.append((cstart, cend))
 
     return mivals
+
+
+def first(v):
+    return next(iter(v))
 
 
 def subclasses(cls, just_leaf=False):

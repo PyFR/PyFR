@@ -4,19 +4,19 @@
 
 Time average quantities. Parameterised with
 
-1. ``nsteps`` --- accumulate the average every ``nsteps`` time steps:
+#. ``nsteps`` --- accumulate the average every ``nsteps`` time steps:
 
     *int*
 
-2. ``dt-out`` --- write to disk every ``dt-out`` time units:
+#. ``dt-out`` --- write to disk every ``dt-out`` time units:
 
     *float*
 
-3. ``tstart`` --- time at which to start accumulating average data:
+#. ``tstart`` --- time at which to start accumulating average data:
 
     *float*
 
-4. ``mode`` --- output file accumulation mode:
+#. ``mode`` --- output file accumulation mode:
 
     ``continuous`` | ``windowed``
 
@@ -27,7 +27,7 @@ Time average quantities. Parameterised with
     obtained using the windowed mode can be accumulated after-the-fact using
     the CLI.
 
-5. ``std-mode`` --- standard deviation reporting mode:
+#. ``std-mode`` --- standard deviation reporting mode:
 
     ``summary`` | ``all``
 
@@ -37,16 +37,16 @@ Time average quantities. Parameterised with
     default is ``summary`` with ``all`` doubling the size of the
     resulting files.
 
-6. ``basedir`` --- relative path to directory where outputs will be
+#. ``basedir`` --- relative path to directory where outputs will be
    written:
 
     *string*
 
-7. ``basename`` --- pattern of output names:
+#. ``basename`` --- pattern of output names:
 
     *string*
 
-8. ``precision`` --- output file number precision:
+#. ``precision`` --- output file number precision:
 
     ``single`` | ``double``
 
@@ -54,21 +54,29 @@ Time average quantities. Parameterised with
     with statistic accumulation *always* being performed in double
     precision.
 
-9. ``region`` --- region to be written, specified as either the
-   entire domain using ``*``, a combination of the geometric shapes
-   specified in :ref:`regions`, or a sub-region of elements that have
-   faces on a specific domain boundary via the name of the domain
-   boundary:
+#. ``region`` --- region to be averaged, specified as either the entire
+   domain using ``*``, a combination of the geometric shapes specified
+   in :ref:`regions`, or a sub-region of elements that have faces on a
+   specific domain boundary via the name of the domain boundary:
 
     ``*`` | ``shape(args, ...)`` | *string*
 
-10. ``avg``-*name* --- expression to time average, written as a
-    function of the primitive variables and gradients thereof;
-    multiple expressions, each with their own *name*, may be specified:
+#. ``region-type`` --- if to average all of the elements contained inside
+   the region or only those which are on its surface:
+
+    ``volume`` | ``surface``
+
+#. ``region-expand`` --- how many layers to grow the region by:
+
+    *int*
+
+#. ``avg``-*name* --- expression to time average, written as a function
+   of the primitive variables and gradients thereof; multiple
+   expressions, each with their own *name*, may be specified:
 
     *string*
 
-11. ``fun-avg``-*name* --- expression to compute at file output time,
+#. ``fun-avg``-*name* --- expression to compute at file output time,
     written as a function of any ordinary average terms; multiple
     expressions, each with their own *name*, may be specified:
 
@@ -96,10 +104,8 @@ Example::
 This plugin also exposes functionality via a CLI. The following
 functions are available
 
-1. ``pyfr tavg merge`` --- average together multiple time average
-   files into a single time average file. The averaging times are
-   read from the file and do not need to be evenly spaced in time.
-
-   Example::
+- ``pyfr tavg merge`` --- average together multiple time average files
+  into a single time average file. The averaging times are read from the
+  file and do not need to be evenly spaced in time.  Example::
 
     pyfr tavg merge avg-1.00.pyfrs avg-2.00.pyfrs avg-10.00.pyfrs merged_avg.pyfrs

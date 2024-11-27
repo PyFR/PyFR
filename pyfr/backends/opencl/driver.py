@@ -1,6 +1,6 @@
-from ctypes import (POINTER, byref, create_string_buffer, c_char, c_char_p,
-                    c_double, c_float, c_int, c_int32, c_int64, c_size_t,
-                    c_uint, c_uint64, c_ulong, c_void_p, sizeof)
+from ctypes import (POINTER, byref, cast, create_string_buffer, c_char,
+                    c_char_p, c_double, c_float, c_int, c_int32, c_int64,
+                    c_size_t, c_uint, c_uint64, c_ulong, c_void_p, sizeof)
 from uuid import UUID
 
 import numpy as np
@@ -53,17 +53,21 @@ class OpenCLWrappers(LibWrapper):
     DEVICE_LOCAL_MEM_SIZE = 0x1023
     DEVICE_MEM_BASE_ADDR_ALIGN = 0x1019
     DEVICE_NAME = 0x102b
+    DEVICE_VENDOR = 0x102c
     DEVICE_PARTITION_BY_AFFINITY_DOMAIN = 0x1088
     DEVICE_TYPE_ACCELERATOR = 0x8
     DEVICE_TYPE_ALL = 0xffffffff
     DEVICE_TYPE_CPU = 0x2
     DEVICE_TYPE_GPU = 0x4
     DEVICE_UUID = 0x106a
+    DRIVER_VERSION = 0x102d
     MAP_READ = 0x1
     MAP_WRITE = 0x2
     MEM_READ_WRITE = 0x1
     MEM_ALLOC_HOST_PTR = 0x10
     PLATFORM_NAME = 0x0902
+    PROGRAM_BINARY_SIZES = 0x1165
+    PROGRAM_BINARIES = 0x1166
     PROGRAM_BUILD_LOG = 0x1183
     PROFILING_COMMAND_START = 0x1282
     PROFILING_COMMAND_END = 0x1283
@@ -120,9 +124,14 @@ class OpenCLWrappers(LibWrapper):
          POINTER(c_void_p), POINTER(c_void_p)),
         (c_void_p, 'clCreateProgramWithSource', c_void_p, c_uint,
          POINTER(c_char_p), POINTER(c_size_t), POINTER(c_int)),
+        (c_void_p, 'clCreateProgramWithBinary', c_void_p, c_uint,
+         POINTER(c_void_p), POINTER(c_size_t), POINTER(c_char_p),
+         POINTER(c_int), POINTER(c_int)),
         (c_int, 'clReleaseProgram', c_void_p),
         (c_int, 'clBuildProgram', c_void_p, c_uint, POINTER(c_void_p),
          c_char_p, c_void_p, c_void_p),
+        (c_int, 'clGetProgramInfo', c_void_p, c_int, c_size_t, c_void_p,
+         POINTER(c_size_t)),
         (c_int, 'clGetProgramBuildInfo', c_void_p, c_void_p, c_uint, c_size_t,
          c_void_p, POINTER(c_size_t)),
         (c_void_p, 'clCreateKernel', c_void_p, c_char_p, POINTER(c_int)),
@@ -234,8 +243,12 @@ class OpenCLDevice(_OpenCLBase):
         super().__init__(lib, ptr)
 
         self.name = self._query_str('name')
+        self.vendor = self._query_str('vendor')
+
         self.local_mem_size = self._query_type(c_ulong, 'local_mem_size')
         self.mem_align = self._query_type(c_uint, 'mem_base_addr_align') // 8
+
+        self.driver_version = self._query_str('version', prefix='driver')
 
         self.extensions = set(self._query_str('extensions').split())
         self.has_fp64 = 'cl_khr_fp64' in self.extensions
@@ -262,16 +275,16 @@ class OpenCLDevice(_OpenCLBase):
 
         return [OpenCLDevice(lib, d) for d in subdevices]
 
-    def _query_type(self, type_t, param):
-        param = getattr(self.lib, f'DEVICE_{param.upper()}')
+    def _query_type(self, type_t, param, prefix='device'):
+        param = getattr(self.lib, f'{prefix.upper()}_{param.upper()}')
 
         v = type_t()
         self.lib.clGetDeviceInfo(self, param, sizeof(v), byref(v), None)
 
         return v.raw if hasattr(v, 'raw') else v.value
 
-    def _query_str(self, param):
-        param = getattr(self.lib, f'DEVICE_{param.upper()}')
+    def _query_str(self, param, prefix='device'):
+        param = getattr(self.lib, f'{prefix.upper()}_{param.upper()}')
 
         nbytes = c_size_t()
         self.lib.clGetDeviceInfo(self, param, 0, None, nbytes)
@@ -396,13 +409,25 @@ class OpenCLProgram(_OpenCLBase):
     _destroyfn = 'clReleaseProgram'
 
     def __init__(self, lib, ctx, dev, src, flags):
-        src = c_char_p(src.encode())
-        ptr = lib.clCreateProgramWithSource(ctx, 1, src, None)
+        devptr = c_void_p(dev._as_parameter_)
+
+        match src:
+            # Binary program
+            case bytes():
+                buf = c_char_p(src)
+                nbytes = c_size_t(len(src))
+                ptr = lib.clCreateProgramWithBinary(ctx, 1, devptr, nbytes,
+                                                    byref(buf), None)
+
+                flags = None
+            # Source program
+            case str():
+                buf = c_char_p(src.encode())
+                ptr = lib.clCreateProgramWithSource(ctx, 1, buf, None)
+
+                flags = c_char_p(' '.join(flags).encode())
 
         super().__init__(lib, ptr)
-
-        flags = c_char_p(' '.join(flags).encode())
-        devptr = c_void_p(dev._as_parameter_)
 
         try:
             lib.clBuildProgram(self, 1, devptr, flags, None, None)
@@ -420,6 +445,18 @@ class OpenCLProgram(_OpenCLBase):
     def get_kernel(self, name, argtypes):
         ptr = self.lib.clCreateKernel(self, name.encode())
         return OpenCLKernel(self.lib, ptr, argtypes)
+
+    def get_binary(self):
+        nbytes = c_size_t()
+        self.lib.clGetProgramInfo(self, self.lib.PROGRAM_BINARY_SIZES,
+                                  sizeof(nbytes), byref(nbytes), None)
+
+        buf = create_string_buffer(nbytes.value)
+        self.lib.clGetProgramInfo(self, self.lib.PROGRAM_BINARIES,
+                                  sizeof(c_void_p), byref(cast(buf, c_void_p)),
+                                  None)
+
+        return buf.raw
 
 
 class OpenCLKernel(_OpenCLWaitFor, _OpenCLBase):

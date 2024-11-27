@@ -3,62 +3,54 @@ from collections import defaultdict
 import re
 
 import numpy as np
+from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
-from pyfr.util import match_paired_paren, subclasses, subclass_where
+from pyfr.util import match_paired_paren, subclass_where
 
 
-def parse_region_expr(expr):
+def parse_region_expr(expr, rdata=None):
     # Geometric region
     if '(' in expr:
-        return ConstructiveRegion(expr)
+        return ConstructiveRegion(expr, rdata)
     # Boundary region
     else:
-        m = re.match(r'(\w+)(?:\s+\+(\d+))?$', expr)
-        return BoundaryRegion(m[1], nlayers=int(m[2] or 1))
+        return BoundaryRegion(expr)
 
 
 class BaseRegion:
-    def interior_eles(self, mesh, rallocs):
+    def interior_eles(self, mesh):
         pass
 
-    def surface_faces(self, mesh, rallocs, exclbcs=[]):
+    def surface_faces(self, mesh, exclbcs=[]):
+        comm, rank, root = get_comm_rank_root()
         sfaces = set()
 
         # Begin by assuming all faces of all elements are on the surface
-        for etype, eidxs in self.interior_eles(mesh, rallocs).items():
+        for etype, eidxs in self.interior_eles(mesh).items():
             nfaces = len(subclass_where(BaseShape, name=etype).faces)
             sfaces.update((etype, i, j) for i in eidxs for j in range(nfaces))
 
         # Eliminate any faces with internal connectivity
-        con = mesh[f'con_p{rallocs.prank}'].T
-        for l, r in con[['f0', 'f1', 'f2']].tolist():
+        for l, r in zip(*mesh.con):
             if l in sfaces and r in sfaces:
                 sfaces.difference_update([l, r])
 
         # Eliminate faces on specified boundaries
         for b in exclbcs:
-            if (f := f'bcon_{b}_p{rallocs.prank}') in mesh:
-                bcon = mesh[f][['f0', 'f1', 'f2']]
-                sfaces.difference_update(bcon.tolist())
+            sfaces.difference_update(mesh.bcon.get(b, set()))
 
-        comm, rank, root = get_comm_rank_root()
         reqs, bufs = [], []
 
         # Next, consider faces on partition boundaries
-        for p in rallocs.prankconn[rallocs.prank]:
-            con = mesh[f'con_p{rallocs.prank}p{p}']
-            con = con[['f0', 'f1', 'f2']].tolist()
-
+        for p, con in mesh.con_p.items():
             # See which of these faces are on the surface boundary
             sb = np.array([c in sfaces for c in con])
             rb = np.empty_like(sb)
 
             # Exchange this information with our neighbour
-            reqs.append(comm.Isend(sb, rallocs.pmrankmap[p]))
-            reqs.append(comm.Irecv(rb, rallocs.pmrankmap[p]))
-
+            reqs.append(comm.Isendrecv(sb, p, recvbuf=rb, source=p))
             bufs.append((con, sb, rb))
 
         # Wait for the exchanges to finish
@@ -76,73 +68,74 @@ class BaseRegion:
         # Sort and return
         return {k: sorted(v) for k, v in nsfaces.items()}
 
+    @staticmethod
+    def expand(mesh, eles, nlayers):
+        comm, rank, root = get_comm_rank_root()
+        eles = defaultdict(list, eles)
+
+        # Load our internal connectivity array
+        con = [(l[:2], r[:2]) for l, r in zip(*mesh.con)]
+
+        # Load our partition boundary connectivity arrays
+        pcon = {}
+        for p, pc in mesh.con_p.items():
+            pc = [(etype, eidx) for etype, eidx, fidx in pc]
+            pcon[p] = (pc, np.empty(len(pc), dtype=bool))
+
+        # Tag all elements in the set as belonging to the first layer
+        neles = {(k, j): 0 for k, v in eles.items() for j in v}
+
+        # Iteratively grow out the element set
+        for i in range(nlayers):
+            reqs = []
+
+            # Exchange information about recent updates to our set
+            for p, (pc, sb) in pcon.items():
+                sb[:] = [neles.get(c, -1) == i for c in pc]
+
+                # Start the send/recv requests
+                reqs.append(comm.Isendrecv_replace(sb, dest=p, source=p))
+
+            # Grow our element set by considering internal connectivity
+            for l, r in con:
+                if neles.get(l, -1) == i and r not in neles:
+                    neles[r] = i + 1
+                    eles[r[0]].append(r[1])
+                elif neles.get(r, -1) == i and l not in neles:
+                    neles[l] = i + 1
+                    eles[l[0]].append(l[1])
+
+            # Wait for the exchanges to finish
+            mpi.Request.Waitall(reqs)
+
+            # Grow our element set by considering adjacent partitions
+            for pc, rb in pcon.values():
+                for l, b in zip(pc, rb):
+                    if b and l not in neles:
+                        neles[l] = i + 1
+                        eles[l[0]].append(l[1])
+
+        return eles
+
 
 class BoundaryRegion(BaseRegion):
-    def __init__(self, bcname, nlayers=1):
+    def __init__(self, bcname):
         self.bcname = bcname
-        self.nlayers = nlayers
 
-    def interior_eles(self, mesh, rallocs):
-        bc = f'bcon_{self.bcname}_p{rallocs.prank}'
-        eset = defaultdict(list)
+    def interior_eles(self, mesh):
         comm, rank, root = get_comm_rank_root()
 
+        eset = defaultdict(list)
+
         # Ensure the boundary exists
-        bcranks = comm.gather(bc in mesh, root=root)
+        bcranks = comm.gather(self.bcname in mesh.bcon, root=root)
         if rank == root and not any(bcranks):
             raise ValueError(f'Boundary {self.bcname} does not exist')
 
         # Determine which of our elements are directly on the boundary
-        if bc in mesh:
-            for etype, eidx in mesh[bc][['f0', 'f1']]:
+        if self.bcname in mesh.bcon:
+            for etype, eidx, fidx in mesh.bcon[self.bcname]:
                 eset[etype].append(eidx)
-
-        # Handle the case where multiple layers have been requested
-        if self.nlayers > 1:
-            # Load our internal connectivity array
-            con = mesh[f'con_p{rallocs.prank}'].T
-            con = con[['f0', 'f1']].tolist()
-
-            # Load our partition boundary connectivity arrays
-            pcon = {}
-            for p in rallocs.prankconn[rallocs.prank]:
-                pc = mesh[f'con_p{rallocs.prank}p{p}']
-                pc = pc[['f0', 'f1']].tolist()
-                pcon[p] = (pc, *np.empty((2, len(pc)), dtype=bool))
-
-            # Tag all elements in the set as belonging to the first layer
-            neset = {(k, j): 0 for k, v in eset.items() for j in v}
-
-            # Iteratively grow out the element set
-            for i in range(self.nlayers - 1):
-                reqs = []
-
-                # Exchange information about recent updates to our set
-                for p, (pc, sb, rb) in pcon.items():
-                    sb[:] = [neset.get(c, -1) == i for c in pc]
-
-                    # Start the send/recv requests
-                    reqs.append(comm.Isend(sb, rallocs.pmrankmap[p]))
-                    reqs.append(comm.Irecv(rb, rallocs.pmrankmap[p]))
-
-                # Grow our element set by considering internal connectivity
-                for l, r in con:
-                    if neset.get(l, -1) == i and r not in neset:
-                        neset[r] = i + 1
-                        eset[r[0]].append(r[1])
-                    elif neset.get(r, -1) == i and l not in neset:
-                        neset[l] = i + 1
-                        eset[l[0]].append(l[1])
-
-                # Wait for the exchanges to finish
-                mpi.Request.Waitall(reqs)
-
-                # Grow our element set by considering adjacent partitions
-                for pc, sb, rb in pcon.values():
-                    for l, b in zip(pc, rb):
-                        if b and l not in neset:
-                            neset[l] = i + 1
-                            eset[l[0]].append(l[1])
 
         return {k: sorted(v) for k, v in eset.items()}
 
@@ -150,7 +143,7 @@ class BoundaryRegion(BaseRegion):
 class BaseGeometricRegion(BaseRegion):
     name = None
 
-    def __init__(self, rot=None):
+    def __init__(self, rdata=None, rot=None):
         match rot:
             case None:
                 self.rot = None
@@ -173,19 +166,16 @@ class BaseGeometricRegion(BaseRegion):
                 c, s = np.cos(theta), np.sin(theta)
                 self.rot = np.array([[c, -s], [s, c]])
 
-    def interior_eles(self, mesh, rallocs):
+    def interior_eles(self, mesh):
         eset = {}
 
-        for shape in subclasses(BaseShape, just_leaf=True):
-            f = f'spt_{shape.name}_p{rallocs.prank}'
-            if f not in mesh:
-                continue
+        for etype, spts in mesh.spts.items():
+            inside = self.pts_in_region(np.mean(spts, axis=0))
+            inside[~inside] = self.pts_in_region(spts[:, ~inside]).any(axis=0)
 
-            inside = self.pts_in_region(mesh[f])
-            if np.any(inside):
-                eset[shape.name] = np.any(inside, axis=0).nonzero()[0].tolist()
+            eset[etype] = inside.nonzero()[0].tolist()
 
-        return eset
+        return {k: sorted(v) for k, v in eset.items()}
 
     def pts_in_region(self, pts):
         if self.rot is not None:
@@ -197,8 +187,8 @@ class BaseGeometricRegion(BaseRegion):
 class BoxRegion(BaseGeometricRegion):
     name = 'box'
 
-    def __init__(self, x0, x1, rot=None):
-        super().__init__(rot=rot)
+    def __init__(self, x0, x1, **kwargs):
+        super().__init__(**kwargs)
 
         self.x0 = x0
         self.x1 = x1
@@ -216,8 +206,8 @@ class BoxRegion(BaseGeometricRegion):
 class ConicalFrustumRegion(BaseGeometricRegion):
     name = 'conical_frustum'
 
-    def __init__(self, x0, x1, r0, r1, rot=None):
-        super().__init__(rot=rot)
+    def __init__(self, x0, x1, r0, r1, **kwargs):
+        super().__init__(**kwargs)
 
         self.x0 = x0 = np.array(x0)
         self.x1 = x1 = np.array(x1)
@@ -247,22 +237,22 @@ class ConicalFrustumRegion(BaseGeometricRegion):
 class ConeRegion(ConicalFrustumRegion):
     name = 'cone'
 
-    def __init__(self, x0, x1, r, rot=None):
-        super().__init__(x0, x1, r, 0, rot=rot)
+    def __init__(self, x0, x1, r, **kwargs):
+        super().__init__(x0, x1, r, 0, **kwargs)
 
 
 class CylinderRegion(ConicalFrustumRegion):
     name = 'cylinder'
 
-    def __init__(self, x0, x1, r, rot=None):
-        super().__init__(x0, x1, r, r, rot=rot)
+    def __init__(self, x0, x1, r, **kwargs):
+        super().__init__(x0, x1, r, r, **kwargs)
 
 
 class EllipsoidRegion(BaseGeometricRegion):
     name = 'ellipsoid'
 
-    def __init__(self, x0, a, b, c, rot=None):
-        super().__init__(rot=rot)
+    def __init__(self, x0, a, b, c, **kwargs):
+        super().__init__(**kwargs)
 
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])
@@ -274,15 +264,90 @@ class EllipsoidRegion(BaseGeometricRegion):
 class SphereRegion(EllipsoidRegion):
     name = 'sphere'
 
-    def __init__(self, x0, r, rot=None):
-        super().__init__(x0, r, r, r, rot=rot)
+    def __init__(self, x0, r, **kwargs):
+        super().__init__(x0, r, r, r, **kwargs)
+
+
+class STLRegion(BaseGeometricRegion):
+    name = 'stl'
+
+    def __init__(self, name, rdata, **kwargs):
+        super().__init__(rdata=rdata, **kwargs)
+
+        stl = rdata[f'stl/{name}']
+        if not stl.attrs['closed']:
+            raise ValueError('STL region must be closed')
+
+        faces = stl[:, 1:].astype(float)
+
+        # Compute the global bounding box
+        self.x0 = faces.min(axis=(0, 1))
+        self.x1 = faces.max(axis=(0, 1))
+
+        # Compute the face direction vectors
+        fa, fb, fc = faces.swapaxes(0, 1)
+        e1, e2 = fb - fa, fc - fa
+
+        # Compute the associated normals
+        norms = np.cross(e1, e2)
+
+        # Prune faces which are parallel to the z-axis
+        valid = np.abs(norms[:, 2]) > 1e-6
+        faces, norms = faces[valid], norms[valid]
+        fa, e1, e2 = fa[valid], e1[valid], e2[valid]
+
+        # Compute the Barycentric and intersection point projection matrix
+        z = np.zeros(len(fa))
+        mat = (-1 / norms[:, 2])*np.array([
+            [-e2[:, 1], e2[:, 0], z],
+            [e1[:, 1], -e1[:, 0], z],
+            norms.T
+        ])
+
+        # Save the required face data
+        self.fa = fa.copy()
+        self.mat = np.moveaxis(mat, 2, 0).copy()
+
+        # Compute the per-face bounding box
+        tbox = np.hstack([faces.min(axis=1) - 1e-6,
+                            faces.max(axis=1) + 1e-6])
+
+        # Use this to construct an R-tree index
+        ins = ((i, p.tolist(), None) for i, p in enumerate(tbox))
+        props = Property(dimension=3, interleaved=True)
+        self.tri_idx = Index(ins, properties=props)
+
+    def _pts_in_region(self, pts):
+        inside = np.ones(pts.shape[:-1], dtype=bool)
+        finside = inside.reshape(-1)
+
+        # Exclude points outside the bounding box
+        for i, (l, u) in enumerate(zip(self.x0, self.x1)):
+            inside &= (l <= pts[..., i]) & (pts[..., i] <= u)
+
+        # Iterate through the remaining points
+        cidx = np.nonzero(finside)[0]
+        for i, ro in zip(cidx, pts.reshape(-1, 3)[cidx]):
+            crossings = 0
+
+            # Count how many times a ray cast in +z from this point
+            # itersects a face on our surface
+            tbox = [*ro, *ro[:2], self.x1[2]]
+            for j in self.tri_idx.intersection(tbox, objects=False):
+                u, v, t = np.dot(self.mat[j], (ro - self.fa[j]).T).tolist()
+                crossings += t >= 0 and u >= 0 and v >= 0 and (u + v) <= 1
+
+            finside[i] = (crossings % 2) == 1
+
+        return inside
 
 
 class ConstructiveRegion(BaseGeometricRegion):
-    def __init__(self, expr):
-        rexprs = []
+    def __init__(self, expr, rdata=None):
+        super().__init__()
 
         # Factor out the individual region expressions
+        rexprs = []
         self.expr = re.sub(
             r'(\w+)\((' + match_paired_paren('()') + r')\)',
             lambda m: rexprs.append(m.groups()) or f'r{len(rexprs) - 1}',
@@ -298,14 +363,24 @@ class ConstructiveRegion(BaseGeometricRegion):
         for name, args in rexprs:
             cls = subclass_where(BaseGeometricRegion, name=name)
 
-            # Handle special rotation arguments
-            args, hasrot = re.subn(r'rot\s*=\s*', '', args)
+            # Process keyword-only arguments
+            for k in ['rot']:
+                args = re.sub(fr'{k}\s*=\s*', f'(None, "{k}"), ', args)
 
-            largs = literal_eval(args)
-            if hasrot:
-                regions.append(cls(*largs[:-1], rot=largs[-1]))
-            else:
-                regions.append(cls(*largs))
+            # Evaluate the arguments
+            argit = iter(literal_eval(args + ','))
+
+            # Prepare the argument list
+            kargs, kwargs = [], {'rdata': rdata}
+            for arg in argit:
+                match arg:
+                    case (None, str()):
+                        kwargs[arg[1]] = next(argit)
+                    case _:
+                        kargs.append(arg)
+
+            # Construct the region
+            regions.append(cls(*kargs, **kwargs))
 
     def pts_in_region(self, pts):
         # Helper to translate + and - to their boolean algebra equivalents
