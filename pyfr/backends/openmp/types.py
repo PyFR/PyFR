@@ -226,7 +226,6 @@ class OpenMPGraph(base.Graph):
 
         # Do topological sort on kernels/groups to get run order
         # Add in as many pdeps as possible without creating a cycle
-        print(self.dep_graph)
         for pdep in self.pdeps:
             self.dep_graph[pdep[0]].append(pdep[1])
             try:
@@ -236,7 +235,6 @@ class OpenMPGraph(base.Graph):
                 self.dep_graph[pdep[0]].remove(pdep[1])
         ts = TopologicalSorter(self.dep_graph)
         self.run_order = tuple(ts.static_order())
-        print(self.dep_graph)
 
         # Get MPI request idxs
         mpi_idxs = defaultdict(list)
