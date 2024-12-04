@@ -182,7 +182,12 @@ class OpenMPGraph(base.Graph):
             groups.append(rargs)
 
         # Arrange for the groupings to be inserted into the final run list
-        self.kins[max(self.knodes[k] for k in kerns) - 1] = groups
+        group_deps = [dep for k in kerns for dep in self.kdeps[k]]
+        if group_deps:
+            max_dep_ind = max(self.knodes[dep] for dep in group_deps)
+            self.kins[min(self.knodes[k] for k in kerns if self.knodes[k] > max_dep_ind) - 1] = groups
+        else:
+            self.kins[min(self.knodes[k] for k in kerns) - 1] = groups
 
         # Finally, prevent grouped being added to the final run list
         for k in kerns:
