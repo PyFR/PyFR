@@ -5,8 +5,8 @@ import sys
 
 
 # Check Python version
-if sys.version_info < (3, 10):
-    sys.exit('Minimum Python version is 3.10')
+if sys.version_info < (3, 11):
+    sys.exit('Minimum Python version is 3.11')
 
 
 # PyFR version
@@ -133,7 +133,9 @@ console_scripts = [
 classifiers = [
     'License :: OSI Approved :: BSD License',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
     'Topic :: Scientific/Engineering'
 ]
 
@@ -157,7 +159,7 @@ setup(name='pyfr',
       packages=['pyfr'] + modules + tests,
       package_data=package_data,
       entry_points={'console_scripts': console_scripts},
-      python_requires='>=3.10',
+      python_requires='>=3.11',
       install_requires=install_requires,
       extras_require=extras_require,
       classifiers=classifiers)

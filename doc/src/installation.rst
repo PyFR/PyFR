@@ -32,7 +32,7 @@ below to setup the OpenMP backend on macOS:
 
 #. Make a venv and activate it::
 
-        python3.10 -m venv pyfr-venv
+        python3.12 -m venv pyfr-venv
         source pyfr-venv/bin/activate
 
 #. Install PyFR::
@@ -95,7 +95,7 @@ Python dependencies.
 Dependencies
 ------------
 
-PyFR |release| has a hard dependency on Python 3.10+ and the following
+PyFR |release| has a hard dependency on Python 3.11+ and the following
 Python packages:
 
 #. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.1.1
