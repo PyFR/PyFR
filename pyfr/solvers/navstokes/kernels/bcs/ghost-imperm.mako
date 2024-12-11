@@ -4,8 +4,6 @@
 <%include file='pyfr.solvers.euler.kernels.rsolvers.${rsolver}'/>
 <%include file='pyfr.solvers.navstokes.kernels.flux'/>
 
-<% tau = c['ldg-tau'] %>
-
 <%pyfr:macro name='bc_common_flux_state' params='ul, gradul, artviscl, nl, magnl'>
     // Viscous states
     fpdtype_t ur[${nvars}], gradur[${ndims}][${nvars}];
