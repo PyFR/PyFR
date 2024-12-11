@@ -112,7 +112,7 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
 
 class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-isot-wall'
-    cflux_state = 'ghost'
+    cflux_state = 'ghost-imperm'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
@@ -124,7 +124,7 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-adia-wall'
-    cflux_state = 'ghost'
+    cflux_state = 'ghost-imperm'
 
 
 class NavierStokesSlpAdiaWallBCInters(NavierStokesBaseBCInters):
