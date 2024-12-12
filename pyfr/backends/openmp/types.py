@@ -185,12 +185,13 @@ class OpenMPGraph(base.Graph):
         gdeps = []
         for k in kerns:
             gdeps = gdeps + [dep for dep in self.kdeps[k] if dep not in kerns]
-        gid = None
+ 
         if gdeps:
             lk = max(self.knodes[dep] for dep in gdeps)
             gid = min(self.knodes[k] for k in kerns if self.knodes[k] > lk) - 1
         else:
             gid = min(self.knodes[k] for k in kerns) - 1
+
         self.kins[gid] = groups
         
         # Sanity check that other dependencies haven't been violated
