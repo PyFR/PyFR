@@ -175,8 +175,6 @@ class BaseAdvectionElements(BaseElements):
                 self.m0 = None
             else:
                 self.m0 = self._be.const_matrix(self.basis.m0)
-        else:
-            self.entmin_int = None
 
     def get_entmin_int_fpts_for_inter(self, eidx, fidx):
         return (self.entmin_int.mid,), (fidx,), (eidx,)
