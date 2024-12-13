@@ -182,8 +182,8 @@ class OpenMPGraph(base.Graph):
             groups.append(rargs)
 
         # Arrange for the groupings to be inserted into the final run list
-        gdeps = [dep for k in kerns
-                        for dep in self.kdeps[k] if dep not in kerns]
+        gdeps = [dep for k in kerns 
+                 for dep in self.kdeps[k] if dep not in kerns]
         lk = max((self.knodes[dep] for dep in gdeps), default=-1)
         gid = min(self.knodes[k] for k in kerns if self.knodes[k] > lk) - 1
 
