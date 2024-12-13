@@ -182,7 +182,19 @@ class OpenMPGraph(base.Graph):
             groups.append(rargs)
 
         # Arrange for the groupings to be inserted into the final run list
-        self.kins[max(self.knodes[k] for k in kerns) - 1] = groups
+        gdeps = [dep for k in kerns 
+                 for dep in self.kdeps[k] if dep not in kerns]
+        lk = max((self.knodes[dep] for dep in gdeps), default=-1)
+        gid = min(self.knodes[k] for k in kerns if self.knodes[k] > lk) - 1
+
+        # Sanity check that other dependencies haven't been violated
+        for k in self.kdeps:
+            if k not in kerns:
+                for dep in self.kdeps[k]:
+                    if dep in kerns and self.knodes[k] < gid:
+                        raise RuntimeError('Graph grouping dependency error')
+
+        self.kins[gid] = groups
 
         # Finally, prevent grouped being added to the final run list
         for k in kerns:
