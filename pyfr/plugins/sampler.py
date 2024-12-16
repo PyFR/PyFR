@@ -234,7 +234,8 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         # Sample command
         ap_sample = sp.add_parser('sample', help='sampler sample --help')
         ap_sample.add_argument('mesh', help='input mesh file')
-        ap_sample.add_argument('soln', help='input solution file')
+        ap_sample.add_argument('solns', nargs = "*", help='input solution file')
+        ap_sample.add_argument('outf', help='output csv file')
         ap_sample.add_argument('-P', '--pname', help='partitioning to use')
         sample_opts = ap_sample.add_mutually_exclusive_group(required=True)
         sample_opts.add_argument('-n', '--name', help='point set')
@@ -246,7 +247,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             '-f', '--format',  choices=['conservative', 'primitive'],
              default='conservative', help='output format'
         )
-        ap_sample.add_argument('-s', '--sep', default='\t', help='separator')
+        ap_sample.add_argument('-s', '--sep', default=',', help='separator')
         ap_sample.set_defaults(process=cls.sample_cmd)
 
     @cli_external
@@ -342,67 +343,73 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
         # Read the mesh and solution
         reader = NativeReader(args.mesh, args.pname, construct_con=False)
-        mesh, soln = reader.load_subset_mesh_soln(args.soln)
 
-        # Dimension and field names
-        dims = 'xyz'[:mesh.ndims]
-        fields = soln['stats'].get('data', 'fields').split(',')
+        for fidx, sfile in enumerate(args.solns):
+            mesh, soln = reader.load_subset_mesh_soln(sfile)
 
-        # Read the sample points from a CSV file
-        if args.pts:
-            if rank == root:
-                pts = _read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
+            # Dimension and field names
+            dims = 'xyz'[:mesh.ndims]
+            fields = soln['stats'].get('data', 'fields').split(',')
+
+            # Read the sample points from a CSV file
+            if fidx == 0:
+                # Init the output file
+                outf = open(args.outf, 'w')
+                if args.pts:
+                    if rank == root:
+                        pts = _read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
+                    else:
+                        pts = None
+
+                    spts = pts = comm.bcast(pts, root=root)
+                # Obtain the pre-processed sample points from the mesh
+                else:
+                    spts = args.name
+
+                    if rank == root:
+                        pts = mesh.raw[f'plugin/sampler/{spts}']['ploc']
+
+            # Handle conversion from conservative to primitive variables
+            if args.format == 'primitive':
+                from pyfr.solvers.base import BaseSystem
+
+                if soln['stats'].get('data', 'prefix') != 'soln':
+                    raise ValueError('Primitive output only supported for '
+                                    'solution files')
+
+                # Obtain the system associated with the solution
+                systemcls = subclass_where(
+                    BaseSystem, name=soln['config'].get('solver', 'system')
+                )
+                elementscls = systemcls.elementscls
+                vmap = elementscls.privars(mesh.ndims, soln['config'])
+
+                # Solution data
+                if len(fields) == len(vmap):
+                    fields = list(vmap)
+                # Solution and gradient data
+                elif len(fields) == (1 + mesh.ndims)*len(vmap):
+                    fields = list(vmap)
+                    fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
+                else:
+                    raise ValueError('Invalid number of field variables')
+
+                process = _process_con_to_pri(elementscls, mesh.ndims,
+                                            soln['config'])
             else:
-                pts = None
+                process = None
 
-            spts = pts = comm.bcast(pts, root=root)
-        # Obtain the pre-processed sample points from the mesh
-        else:
-            spts = args.name
+            # Construct and configure the point sampler
+            sampler = PointSampler(mesh, spts)
+            sampler.configure_with_cfg_nvars(soln['config'], len(fields))
+
+            # Sample the solution
+            samps = sampler.sample([soln[etype] for etype in mesh.eidxs],
+                                process=process)
 
             if rank == root:
-                pts = mesh.raw[f'plugin/sampler/{spts}']['ploc']
+                if fidx == 0:
+                    print(*dims, *fields, sep=args.sep, file=outf)
 
-        # Handle conversion from conservative to primitive variables
-        if args.format == 'primitive':
-            from pyfr.solvers.base import BaseSystem
-
-            if soln['stats'].get('data', 'prefix') != 'soln':
-                raise ValueError('Primitive output only supported for '
-                                 'solution files')
-
-            # Obtain the system associated with the solution
-            systemcls = subclass_where(
-                BaseSystem, name=soln['config'].get('solver', 'system')
-            )
-            elementscls = systemcls.elementscls
-            vmap = elementscls.privars(mesh.ndims, soln['config'])
-
-            # Solution data
-            if len(fields) == len(vmap):
-                fields = list(vmap)
-            # Solution and gradient data
-            elif len(fields) == (1 + mesh.ndims)*len(vmap):
-                fields = list(vmap)
-                fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
-            else:
-                raise ValueError('Invalid number of field variables')
-
-            process = _process_con_to_pri(elementscls, mesh.ndims,
-                                          soln['config'])
-        else:
-            process = None
-
-        # Construct and configure the point sampler
-        sampler = PointSampler(mesh, spts)
-        sampler.configure_with_cfg_nvars(soln['config'], len(fields))
-
-        # Sample the solution
-        samps = sampler.sample([soln[etype] for etype in mesh.eidxs],
-                               process=process)
-
-        if rank == root:
-            print(*dims, *fields, sep=args.sep)
-
-            for ploc, samp in zip(pts, samps):
-                print(*ploc, *samp, sep=args.sep)
+                for ploc, samp in zip(pts, samps):
+                    print(*ploc, *samp, sep=args.sep, file=outf)
