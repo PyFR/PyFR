@@ -351,6 +351,9 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             dims = 'xyz'[:mesh.ndims]
             fields = soln['stats'].get('data', 'fields').split(',')
 
+            # Current time
+            tcurr = float(soln["stats"].items("solver-time-integrator")["tcurr"])
+
             # Read the sample points from a CSV file
             if fidx == 0:
                 # Init the output file
@@ -372,7 +375,6 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             # Handle conversion from conservative to primitive variables
             if args.format == 'primitive':
                 from pyfr.solvers.base import BaseSystem
-
                 if soln['stats'].get('data', 'prefix') != 'soln':
                     raise ValueError('Primitive output only supported for '
                                     'solution files')
@@ -409,7 +411,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
             if rank == root:
                 if fidx == 0:
-                    print(*dims, *fields, sep=args.sep, file=outf)
+                    print('t', *dims, *fields, sep=args.sep, file=outf)
 
                 for ploc, samp in zip(pts, samps):
-                    print(*ploc, *samp, sep=args.sep, file=outf)
+                    print(tcurr, *ploc, *samp, sep=args.sep, file=outf)
