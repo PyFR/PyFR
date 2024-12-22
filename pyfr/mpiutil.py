@@ -1,4 +1,5 @@
 import atexit
+import ctypes
 import math
 import os
 import sys
@@ -400,7 +401,26 @@ class Sorter(AlltoallMixin):
         return rvals[self.ridx]
 
 
+class _MPI_Funcs:
+    def __init__(self):
+        from mpi4py import MPI
+
+        self._lib = ctypes.CDLL(MPI.__file__)
+
+    def __getattr__(self, attr):
+        func = getattr(self._lib, f'MPI_{attr}')
+        return ctypes.cast(func, ctypes.c_void_p).value
+
+
 class _MPI:
+    def __init__(self):
+        self.funcs = _MPI_Funcs()
+
+    def addrof(self, obj):
+        from mpi4py import MPI
+
+        return MPI._addressof(obj)
+
     def __getattr__(self, attr):
         from mpi4py import MPI
 

@@ -3,8 +3,11 @@ from ctypes import c_int
 from functools import cached_property
 
 import pyfr.backends.base as base
-from pyfr.backends.openmp.provider import OpenMPBlockKernelArgs, OpenMPKRunArgs
+from pyfr.backends.openmp.provider import (OpenMPBlockKernelArgs,
+                                           OpenMPRegularRunArgs,
+                                           OpenMPKRunArgs)
 from pyfr.ctypesutil import make_array
+from pyfr.mpiutil import mpi
 
 
 class OpenMPMatrixBase(base.MatrixBase):
@@ -64,9 +67,7 @@ class OpenMPGraph(base.Graph):
 
         self.klist = []
         self.kskip = set()
-        self.kins = {}
-
-        self.mpi_idxs = defaultdict(list)
+        self.kins = defaultdict(list)
 
     def _get_kranges(self):
         kranges, i = {}, 0
@@ -80,25 +81,13 @@ class OpenMPGraph(base.Graph):
     def _get_nblocks(self, idxs):
         return max(self.klist[i].runargs.b.nblocks for i in idxs)
 
-    def _make_runlist(self, start, stop):
-        rlist = []
-
-        for i in range(start, stop):
-            if i in self.kins:
-                rlist.extend(self.kins[i])
-
-            if i not in self.kskip:
-                rlist.append(self.klist[i].runargs)
-
-        return make_array(rlist)
-
     def add_mpi_req(self, req, deps=[]):
         super().add_mpi_req(req, deps)
 
-        if deps:
-            ix = max(self.knodes[d] for d in deps)
+        rra = OpenMPRegularRunArgs(fun=mpi.funcs.Start, args=mpi.addrof(req))
+        kra = OpenMPKRunArgs(ktype=OpenMPKRunArgs.KTYPE_REGULAR, r=rra)
 
-            self.mpi_idxs[ix].append(req)
+        self.kins[len(self.klist)].append(kra)
 
     def _group_splits(self, kerns, kranges):
         nblocks = self._get_nblocks([ix for k in kerns for ix in kranges[k]])
@@ -182,7 +171,7 @@ class OpenMPGraph(base.Graph):
             groups.append(rargs)
 
         # Arrange for the groupings to be inserted into the final run list
-        gdeps = [dep for k in kerns 
+        gdeps = [dep for k in kerns
                  for dep in self.kdeps[k] if dep not in kerns]
         lk = max((self.knodes[dep] for dep in gdeps), default=-1)
         gid = min(self.knodes[k] for k in kerns if self.knodes[k] > lk) - 1
@@ -194,7 +183,7 @@ class OpenMPGraph(base.Graph):
                     if dep in kerns and self.knodes[k] < gid:
                         raise RuntimeError('Graph grouping dependency error')
 
-        self.kins[gid] = groups
+        self.kins[gid].extend(groups)
 
         # Finally, prevent grouped being added to the final run list
         for k in kerns:
@@ -203,27 +192,23 @@ class OpenMPGraph(base.Graph):
     def commit(self):
         super().commit()
 
-        # Group kernels in runs separated by MPI requests
-        self._runlist, i = [], 0
+        rlist = []
 
-        for j in sorted(self.mpi_idxs):
-            krunargs = self._make_runlist(i, j)
-            self._runlist.append((krunargs, self.mpi_idxs[j]))
-            i = j
+        for i, k in enumerate(self.klist):
+            if i in self.kins:
+                rlist.extend(self.kins[i])
 
-        if self.klist[i:]:
-            krunargs = self._make_runlist(i, len(self.klist))
-            self._runlist.append((krunargs, []))
+            if i not in self.kskip:
+                rlist.append(k.runargs)
+
+        self._runlist = make_array(rlist)
 
     def run(self):
         # Start all dependency-free MPI requests
         self._startall(self.mpi_root_reqs)
 
-        for krunargs, reqs in self._runlist:
-            if krunargs:
-                self.backend.krunner(len(krunargs), krunargs)
-
-            self._startall(reqs)
+        # Run the kernels (including MPI_Start requests)
+        self.backend.krunner(len(self._runlist), self._runlist)
 
         # Wait for all of the MPI requests to finish
         self._waitall(self.mpi_reqs)
