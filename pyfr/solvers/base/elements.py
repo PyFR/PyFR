@@ -2,8 +2,10 @@ from functools import cached_property, wraps
 
 import numpy as np
 
-from pyfr.nputil import npeval, fuzzysort
-from pyfr.util import memoize
+from pyfr.nputil import fuzzysort, npeval
+from pyfr.cache import memoize
+from pyfr.quadrules import get_quadrule
+from pyfr.shapes import proj_l2
 
 
 def inters_map(meth):
@@ -21,9 +23,6 @@ def inters_map(meth):
 
 
 class BaseElements:
-    privarmap = None
-    convarmap = None
-
     def __init__(self, basiscls, eles, cfg):
         self._be = None
 
@@ -34,15 +33,20 @@ class BaseElements:
         self.neles = neles = eles.shape[1]
         self.ndims = ndims = eles.shape[2]
 
+        # Field variables
+        self.convars = self.convars(ndims, cfg)
+        self.privars = self.privars(ndims, cfg)
+        self.dualcoeffs = self.dualcoeffs(ndims, cfg)
+
         # Kernels we provide
         self.kernels = {}
 
         # Check the dimensionality of the problem
-        if ndims != basiscls.ndims or ndims not in self.privarmap:
+        if ndims != basiscls.ndims:
             raise ValueError('Invalid element matrix dimensions')
 
         # Determine the number of dynamical variables
-        self.nvars = len(self.privarmap[ndims])
+        self.nvars = len(self.convars)
 
         # Instantiate the basis class
         self.basis = basis = basiscls(nspts, cfg)
@@ -50,15 +54,9 @@ class BaseElements:
         # See what kind of projection the basis is using
         self.antialias = basis.antialias
 
-        # If we need quadrature points or not
-        haveqpts = 'flux' in self.antialias
-
-        # Always do gradient fusion if flux anti-aliasing is off
-        self.grad_fusion = not haveqpts
-
         # Sizes
         self.nupts = basis.nupts
-        self.nqpts = basis.nqpts if haveqpts else None
+        self.nqpts = basis.nqpts if 'flux' in self.antialias else None
         self.nfpts = basis.nfpts
         self.nfacefpts = basis.nfacefpts
         self.nmpts = basis.nmpts
@@ -70,16 +68,6 @@ class BaseElements:
             self.get_vect_fpts_for_inter = self._get_vect_fpts_for_inter
             self.get_comm_fpts_for_inter = self._get_vect_fpts_for_inter
 
-    @staticmethod
-    def validate_formulation(form, intg, cfg):
-        pass
-
-    def pri_to_con(pris, cfg):
-        pass
-
-    def con_to_pri(cons, cfg):
-        pass
-
     def set_ics_from_cfg(self):
         # Bring simulation constants into scope
         vars = self.cfg.items_as('constants', float)
@@ -87,20 +75,37 @@ class BaseElements:
         if any(d in vars for d in 'xyz'):
             raise ValueError('Invalid constants (x, y, or z) in config file')
 
-        # Get the physical location of each solution point
-        coords = self.ploc_at_np('upts').swapaxes(0, 1)
-        vars |= dict(zip('xyz', coords))
+        # See if performing L2 projection
+        ename = self.basis.name
+        upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
+        qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or
+                self.cfg.getint('soln-ics', 'quad-deg', 0))
+        # Default to solution points if quad-pts are not specified
+        qpts = self.cfg.get('soln-ics', f'quad-pts-{ename}', upts)
+
+        # Get the physical location of each interpolation point
+        if qdeg:
+            qrule = get_quadrule(ename, qpts, qdeg=qdeg)
+            coords = self.ploc_at_np(qrule.pts)
+
+            # Compute projection operator
+            m8 = proj_l2(qrule, self.basis.ubasis)
+        else:
+            m8 = None
+            coords = self.ploc_at_np('upts')
+
+        vars |= dict(zip('xyz', coords.swapaxes(0, 1)))
 
         # Evaluate the ICs from the config file
         ics = [npeval(self.cfg.getexpr('soln-ics', dv), vars)
-               for dv in self.privarmap[self.ndims]]
+               for dv in self.privars]
 
         # Allocate
         self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
-            self.scal_upts[:, i, :] = v
+            self.scal_upts[:, i, :] = m8 @ v if m8 is not None else v
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -186,6 +191,9 @@ class BaseElements:
     def set_backend(self, backend, nscalupts, nonce, linoff):
         self._be = backend
 
+        # If we are doing gradient fusion
+        self.grad_fusion = not (self._be.blocks or 'flux' in self.antialias)
+
         if self.basis.order >= 2:
             self._linoff = linoff - linoff % -backend.csubsz
         else:
@@ -248,6 +256,7 @@ class BaseElements:
 
     def sliceat(fn):
         @memoize
+        @wraps(fn)
         def newfn(self, name, side=None):
             mat = fn(self, name)
 

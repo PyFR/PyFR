@@ -9,9 +9,8 @@ from pyfr.nputil import npeval
 from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, PostactionMixin,
                                RegionMixin, cli_external)
 from pyfr.progress import NullProgressBar
-from pyfr.readers import NativeReader
 from pyfr.writers.native import NativeWriter
-from pyfr.util import merge_intervals
+from pyfr.util import first, merge_intervals
 
 
 class TavgMixin:
@@ -47,6 +46,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
+        # Primitive variables
+        self.privars = first(intg.system.ele_map.values()).privars
+
         # Averaging mode
         self.mode = self.cfg.get(cfgsect, 'mode', 'windowed')
         if self.mode not in {'continuous', 'windowed'}:
@@ -58,7 +60,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             raise ValueError('Invalid standard deviation mode')
 
         # Expressions pre-processing
-        self._prepare_exprs()
+        nfields = self._prepare_exprs()
 
         # Output data type
         fpdtype = self.cfg.get(cfgsect, 'precision', 'single')
@@ -70,11 +72,22 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             raise ValueError('Invalid floating point data type')
 
         # Base output directory and file name
-        basedir = self.cfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
-        basename = self.cfg.get(self.cfgsect, 'basename')
+        basedir = self.cfg.getpath(cfgsect, 'basedir', '.', abs=True)
+        basename = self.cfg.get(cfgsect, 'basename')
+
+        # Get the element map and region data
+        emap, erdata = intg.system.ele_map, self._ele_region_data
+
+        # Figure out the shape of each element type in our region
+        ershapes = {etype: (nfields, emap[etype].nupts) for etype in erdata}
 
         # Construct the file writer
-        self._writer = NativeWriter(intg, basedir, basename, 'tavg')
+        self._writer = NativeWriter.from_integrator(intg, basedir, basename,
+                                                    'tavg')
+        self._writer.set_shapes_eidxs(ershapes, erdata)
+
+        # Asynchronous output options
+        self._async_timeout = self.cfg.getfloat(cfgsect, 'async-timeout', 60)
 
         # Gradient pre-processing
         self._init_gradients()
@@ -91,12 +104,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         self._started = False
 
         # Get the total number of solution points in the region
-        emap = intg.system.ele_map
-        ergn = self._ele_regions
-        if self.cfg.get(self.cfgsect, 'region') == '*':
-            tpts = sum(emap[e].neles*emap[e].nupts for i, e, r in ergn)
+        ergns = self._ele_regions
+        if self.cfg.get(cfgsect, 'region') == '*':
+            tpts = sum(emap[e].neles*emap[e].nupts for i, e, r in ergns)
         else:
-            tpts = sum(len(r)*emap[e].nupts for i, e, r in ergn)
+            tpts = sum(len(r)*emap[e].nupts for i, e, r in ergns)
 
         # Reduce
         self.tpts = comm.reduce(tpts, op=mpi.SUM, root=root)
@@ -128,14 +140,15 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             for k in cfg.items(cfgsect, prefix='fun-avg-'):
                 self.outfields.append(f'std-fun-{k[4:]}')
 
+        return len(self.outfields)
+
     def _init_gradients(self):
         # Determine what gradients, if any, are required
         gradpnames = set()
         for ex in self.aexprs:
             gradpnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', ex))
 
-        privarmap = self.elementscls.privarmap[self.ndims]
-        self._gradpinfo = [(pname, privarmap.index(pname))
+        self._gradpinfo = [(pname, self.privars.index(pname))
                            for pname in gradpnames]
 
     def _init_accumex(self, intg):
@@ -146,9 +159,6 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
     def _eval_acc_exprs(self, intg):
         exprs = []
-
-        # Get the primitive variable names
-        pnames = self.elementscls.privarmap[self.ndims]
 
         # Compute the gradients
         if self._gradpinfo:
@@ -162,7 +172,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             psolns = self.elementscls.con_to_pri(soln, self.cfg)
 
             # Prepare the substitutions dictionary
-            subs = dict(zip(pnames, psolns))
+            subs = dict(zip(self.privars, psolns))
 
             # Prepare any required gradients
             if self._gradpinfo:
@@ -259,10 +269,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
                 stats.set('tavg', f'max-std-fun-{fn}', fm)
                 stats.set('tavg', f'avg-std-fun-{fn}', fs / self.tpts)
 
-            return dict(intg.cfgmeta, stats=stats.tostr(),
-                        mesh_uuid=intg.mesh_uuid)
+            return {**intg.cfgmeta, 'stats': stats.tostr(),
+                    'mesh-uuid': intg.mesh_uuid}
 
-    def _write_avg(self, intg):
+    def _prepare_data(self, intg):
         accex, vaccex = self.accex, self.vaccex
         nacc, nfun = len(self.anames), len(self.fnames)
         tavg = []
@@ -315,18 +325,20 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         tavg = [np.vstack(list(avgs)) for avgs in zip(*tavg)]
 
         for (idx, etype, rgn), d in zip(self._ele_regions, tavg):
-            data[etype] = d.swapaxes(0, 1).astype(self.fpdtype)
+            data[etype] = d.transpose(2, 0, 1).astype(self.fpdtype)
 
         # Prepare the metadata
         metadata = self._prepare_meta(intg, std_max, std_sum)
 
-        # Write to disk and return the file name
-        return self._writer.write(data, intg.tcurr, metadata)
+        # Write to disk and return the writer callback
+        return data, metadata
 
     def __call__(self, intg):
         # If we are not supposed to be averaging yet then return
         if intg.tcurr < self.tstart:
             return
+
+        self._writer.probe()
 
         # If necessary, run the start-up routines
         if not self._started:
@@ -349,12 +361,17 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
             self.prevex = currex
 
             if dowrite:
-                # Write the file out to disk
-                solnfname = self._write_avg(intg)
+                # Prepare the data and metadata
+                data, metadata = self._prepare_data(intg)
 
-                # If a post-action has been registered then invoke it
-                self._invoke_postaction(intg, mesh=intg.system.mesh.fname,
-                                        soln=solnfname, t=intg.tcurr)
+                # Prepare a callback to kick off any postactions
+                callback = lambda fname, t=intg.tcurr: self._invoke_postaction(
+                    intg, mesh=intg.system.mesh.fname, soln=fname, t=t
+                )
+
+                # Write out the file
+                self._writer.write(data, intg.tcurr, metadata,
+                                   self._async_timeout, callback)
 
                 # Reset the accumulators
                 if self.mode == 'windowed':
@@ -365,6 +382,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
                     self.tstart_acc = intg.tcurr
 
                 self.tout_last = intg.tcurr
+
+    def finalise(self, intg):
+        super().finalise(intg)
+
+        self._writer.flush()
 
 
 class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
@@ -383,20 +405,23 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
     @cli_external
     def merge_cli(self, args):
         # Open all the solution files
-        with args.progress.start('Prepare files'):
-            self._prepare_files(args.solns)
+        with args.progress.start('Preprocess files'):
+            self._preprocess_files(args.solns)
 
-        # Initialise things needed for the merge
-        self._init_tavg_merge()
+            # Initialise things needed for the merge
+            self._init_tavg_merge()
 
-        with h5py.File(args.output, 'w') as outf:
+        with h5py.File(args.output, 'w', libver='latest') as outf:
+            with args.progress.start('Prepare output file'):
+                self._prepare_output_file(outf)
+
             # Merge the averages
             with args.progress.start_with_bar('Merge data') as pbar:
                 self._merge_data(outf, pbar)
 
             # Merge the metadata
             with args.progress.start('Merge metadata'):
-                self._merge_meta(outf)
+                self._merge_stats(outf)
 
     def _eval_fun_exprs(self, avars):
         subs = dict(zip(self.anames, avars))
@@ -415,8 +440,9 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
 
     def _init_tavg_merge(self):
         self.mapping = []
+        dshapes = {}
 
-        for i, (file, cfg, stats, dt) in enumerate(self.files):
+        for i, (f, cfg, stats, dt) in enumerate(self.files):
             fields = stats.get('data', 'fields').split(',')
             cfgsect = stats.get('tavg', 'cfg-section')
 
@@ -441,17 +467,13 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 self.fields = fields
                 self.cfgsect = cfgsect
                 self.region = cfg.get(cfgsect, 'region')
-                self.uuid = file['mesh_uuid']
+                self.uuid = f['mesh-uuid'][()].decode()
 
-                self.idxs = [k for k in file if re.search(r'_idxs_p\d+$', k)]
-                self.dkeys = [k for k in file
-                              if re.match(r'tavg_[^\W_]+_p\d+$', k)]
-
-                # Tally up the total number of degrees of freedom
                 self.tpts = 0
-                for k in self.dkeys:
-                    v = file[k]
-                    self.tpts += v.shape[0]*v.shape[2]
+                for k, v in f['tavg'].items():
+                    if re.match(r'p\d+-[a-z]+$', k):
+                        dshapes[f'tavg/{k}'] = v.shape
+                        self.tpts += v.shape[0]*v.shape[2]
 
                 # Build function avg expressions
                 c = cfg.items_as('constants', float)
@@ -467,7 +489,7 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                     self.fstd_max, self.fstd_sum = np.zeros((2, len(fnames)))
 
             # Check for compatibility of files
-            if self.uuid != file['mesh_uuid']:
+            if self.uuid != f['mesh-uuid'][()].decode():
                 raise RuntimeError('Average files computed on different '
                                    'meshes')
             if self.region != cfg.get(cfgsect, 'region'):
@@ -478,19 +500,52 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 if cfg.get(cfgsect, k) != self.cfg.get(self.cfgsect, k):
                     raise RuntimeError('Different average field definitions')
 
+        self.chunks = self._init_chunks(dshapes)
+
+    def _init_chunks(self, dshapes):
+        chunks = []
+
+        # Break each dataset up into ~1 GiB chunks
+        for k, v in dshapes.items():
+            n = -(1024**3 // -(8*v[1]*v[2]))
+            for i in range(0, v[0], n):
+                chunks.append((k, slice(i, i + n)))
+
+        return chunks
+
+    def _prepare_output_file(self, outf):
+        basef = self.files[0][0]
+
+        # Copy over all of the top level records except stats and tavg
+        for k, v in basef.items():
+            if k != 'stats' and k != 'tavg':
+                basef.copy(v, outf, k)
+
+        # Handle the tavg group
+        for k, v in basef['tavg'].items():
+            # Copy over meatadata
+            if re.match(r'p\d+-\w+-', k):
+                basef.copy(v, outf, f'tavg/{k}')
+            # For average data create empty datasets and copy attributes
+            else:
+                w = outf.create_dataset(f'tavg/{k}', v.shape, self.dtype)
+
+                for ak, av in v.attrs.items():
+                    w.attrs[ak] = av
+
     def _merge_data(self, outf, pbar=NullProgressBar()):
         file0, cfg, stats, dt = self.files[0]
         amap0, smap0 = self.mapping[0]
 
-        for key in pbar.start_with_iter(self.dkeys):
+        for k, s in pbar.start_with_iter(self.chunks):
             # Initialise accumulators
-            t, data = 0, file0[key].astype(np.float64)
+            t, data = 0, file0[k][s].swapaxes(0, 2).astype(np.float64)
             avg_acc = np.zeros_like(data[:, amap0])
             var_acc = np.zeros_like(data[:, smap0])
 
             # Average the averages
             for (file, *_, dt), (amap, smap) in zip(self.files, self.mapping):
-                data = file[key].astype(np.float64)
+                data = file[k][s].swapaxes(0, 2).astype(np.float64)
                 avg, std = data[:, amap], data[:, smap]
 
                 if self.std_all:
@@ -523,10 +578,13 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
             else:
                 outstack = (avg_acc,)
 
-            # Write out the data
-            outf[key] = np.hstack(outstack, dtype=self.dtype)
+            # Stack up the data
+            outstack = np.hstack(outstack, dtype=self.dtype).swapaxes(0, 2)
 
-    def _merge_meta(self, outf):
+            # Write out the data
+            outf[k][s] = outstack
+
+    def _merge_stats(self, outf):
         nstats = Inifile()
 
         # Create the data block
@@ -541,8 +599,8 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
         # Create the tavg block
         cfgsect = self.stats.get('tavg', 'cfg-section')
         nstats.set('tavg', 'cfg-section', cfgsect)
-        self.stats.set('tavg', 'range', self.merged_range)
-        self.stats.set('tavg', 'merged-from', self.merged_from)
+        nstats.set('tavg', 'range', self.merged_range)
+        nstats.set('tavg', 'merged-from', self.merged_from)
 
         # If all files have full std stats then these can be writen
         if self.std_all:
@@ -554,20 +612,15 @@ class TavgCLIPlugin(TavgMixin, BaseCLIPlugin):
                 nstats.set('tavg', f'avg-std-fun-{n}', sum / self.tpts)
                 nstats.set('tavg', f'max-std-fun-{n}', max)
 
-        # Write out the metadata
-        outf['config'] = self.cfg.tostr()
-        outf['stats'] = nstats.tostr()
-        outf['mesh_uuid'] = self.uuid
+        # Write out the new stats record
+        outf['stats'] = np.array(nstats.tostr().encode(), dtype='S')
 
-        # Copy over the region index data
-        for k in self.idxs:
-            outf[k] = self.files[0][k]
-
-    def _prepare_files(self, filenames):
+    def _preprocess_files(self, filenames):
         files, twindows, std_all = [], [], True
         for filename in filenames:
-            f = NativeReader(filename)
-            cfg, stats = Inifile(f['config']), Inifile(f['stats'])
+            f = h5py.File(filename, 'r')
+            cfg = Inifile(f['config'][()].decode())
+            stats = Inifile(f['stats'][()].decode())
             cfgsect = stats.get('tavg', 'cfg-section')
 
             twind = stats.getliteral('tavg', 'range')

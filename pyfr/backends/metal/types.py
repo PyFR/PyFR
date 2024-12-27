@@ -81,8 +81,6 @@ class MetalGraph(base.Graph):
     def commit(self):
         super().commit()
 
-        n = len(self.klist)
-
         # Group kernels in runs separated by MPI requests
         self._kerns, self._mreqs, i = [], [], 0
 
@@ -91,7 +89,7 @@ class MetalGraph(base.Graph):
             self._mreqs.append(self.mpi_idxs[j])
             i = j
 
-        if i != n - 1:
+        if self.klist[i:]:
             self._kerns.append(self.klist[i:])
 
     def run(self, queue):

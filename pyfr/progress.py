@@ -6,6 +6,19 @@ import sys
 import time
 
 
+def format_bytes(n, dps=2):
+    labels = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']
+
+    for l in labels:
+        if n < 1024 - 0.5*10**-dps:
+            break
+
+        if l != labels[-1]:
+            n /= 1024
+
+    return f'{n:.{dps}f} {l}' if l != 'B' else f'{n} B'
+
+
 def format_hms(delta):
     if delta is not None:
         hours, remainder = divmod(int(delta), 3600)
@@ -134,16 +147,15 @@ class ProgressSpinner:
         self._schar_cycle = it.cycle(seq + seq[-2:0:-1])
 
         self._last_wallt = 0
-        self._last_schar = None
+        self._last_nchar = 0
 
         self()
 
     def erase(self):
-        if self._last_schar:
-            n = len(self._last_schar)
-            sys.stderr.write(f'\x1b[{n}D\x1b[0K')
+        if self._last_nchar:
+            sys.stderr.write(f'\x1b[{self._last_nchar}D\x1b[0K')
 
-    def __call__(self):
+    def __call__(self, v=None):
         wallt = time.time()
 
         # If we have rendered recently then do not do so again
@@ -153,27 +165,35 @@ class ProgressSpinner:
         # Get the next spinner character
         c = next(self._schar_cycle)
 
+        # Append any additional progress values
+        if v is not None:
+            c = f'{c} {v}'
+
         self.erase()
         sys.stderr.write(c)
         sys.stderr.flush()
 
         # Update the last render time and output character
         self._last_wallt = wallt
-        self._last_schar = c
+        self._last_nchar = len(c)
 
-    def wrap_iterable(self, iter, n):
+    def wrap_file_lines(self, iter, n):
+        nb = 0
+
         for i, v in enumerate(iter):
             yield v
 
+            nb += len(v)
+
             if i % n == 0:
-                self()
+                self(format_bytes(nb))
 
 
 class NullProgressSpinner(ProgressSpinner):
     def __init__(self):
         pass
 
-    def __call__(self):
+    def __call__(self, v=None):
         pass
 
 

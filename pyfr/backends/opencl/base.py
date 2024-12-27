@@ -11,6 +11,7 @@ class OpenCLBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
+        from pyfr.backends.opencl.compiler import OpenCLCompiler
         from pyfr.backends.opencl.driver import OpenCL
 
         # Load and wrap OpenCL
@@ -47,6 +48,9 @@ class OpenCLBackend(BaseBackend):
         # Set the device
         self.cl.set_device(device)
 
+        # OpenCL compiler
+        self.compiler = OpenCLCompiler(self.cl)
+
         # Compute the alignment requirement for the context
         self.alignb = device.mem_align
 
@@ -55,7 +59,7 @@ class OpenCLBackend(BaseBackend):
         self.csubsz = self.soasz
 
         from pyfr.backends.opencl import (blasext, clblast, gimmik, packing,
-                                          provider, types)
+                                          provider, tinytc, types)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.OpenCLConstMatrix
@@ -78,6 +82,12 @@ class OpenCLBackend(BaseBackend):
         # Load CLBlast if available
         try:
             self._providers.append(clblast.OpenCLCLBlastKernels(self))
+        except OSError:
+            pass
+
+        # Load TinyTC if available
+        try:
+            self._providers.append(tinytc.OpenCLTinyTCKernels(self))
         except OSError:
             pass
 

@@ -28,28 +28,28 @@ class METISWrappers(LibWrapper):
     _status_noerr = 1
 
     # Constants
-    METIS_NOPTIONS = 40
-    METIS_OPTION_PTYPE = 0
-    METIS_OPTION_CTYPE = 2
-    METIS_OPTION_IPTYPE = 3
-    METIS_OPTION_RTYPE = 4
-    METIS_OPTION_NIPARTS = 6
-    METIS_OPTION_NITER = 7
-    METIS_OPTION_NCUTS = 8
-    METIS_OPTION_SEED = 9
-    METIS_OPTION_MINCONN = 11
-    METIS_OPTION_NSEPS = 16
-    METIS_OPTION_UFACTOR = 17
+    NOPTIONS = 40
+    OPTION_PTYPE = 0
+    OPTION_CTYPE = 2
+    OPTION_IPTYPE = 3
+    OPTION_RTYPE = 4
+    OPTION_NIPARTS = 6
+    OPTION_NITER = 7
+    OPTION_NCUTS = 8
+    OPTION_SEED = 9
+    OPTION_MINCONN = 11
+    OPTION_NSEPS = 16
+    OPTION_UFACTOR = 17
 
     def _load_library(self):
         lib = super()._load_library()
 
         # Attempt to determine the integer type used by METIS
-        opts = np.arange(0, self.METIS_NOPTIONS, dtype=np.int64)
+        opts = np.arange(0, self.NOPTIONS, dtype=np.int64)
         lib.METIS_SetDefaultOptions(opts.ctypes)
 
         # If the last element was set then assume 64-bit ints
-        if opts[-1] != self.METIS_NOPTIONS - 1:
+        if opts[-1] != self.NOPTIONS - 1:
             self.metis_int = metis_int = c_int64
             self.metis_int_np = metis_int_np = np.int64
         # Otherwise go with 32-bits
@@ -101,6 +101,7 @@ class METISWrappers(LibWrapper):
 
 class METISPartitioner(BasePartitioner):
     name = 'metis'
+    has_part_weights = True
     has_multiple_constraints = True
 
     # Integer options
@@ -144,12 +145,12 @@ class METISPartitioner(BasePartitioner):
         parts = np.empty(len(vtab) - 1, dtype=w.metis_int_np)
 
         # Allocate our options array
-        opts = np.empty(w.METIS_NOPTIONS, dtype=w.metis_int_np)
+        opts = np.empty(w.NOPTIONS, dtype=w.metis_int_np)
         w.METIS_SetDefaultOptions(opts.ctypes)
 
         # Process our options
         for k, v in self.opts.items():
-            opts[getattr(w, f'METIS_OPTION_{k.upper()}')] = v
+            opts[getattr(w, f'OPTION_{k.upper()}')] = v
 
         # Select the partitioning function
         if self.opts['ptype'] == self.enum_opts['ptype']['rb']:
@@ -173,4 +174,4 @@ class METISPartitioner(BasePartitioner):
         if np.max(parts) >= len(partwts):
             raise RuntimeError('Invalid partition number from METIS')
 
-        return parts
+        return parts.astype(np.int32)

@@ -1,7 +1,7 @@
 from itertools import zip_longest
 
+from pyfr.cache import memoize
 from pyfr.solvers.baseadvec import BaseAdvectionSystem
-from pyfr.util import memoize
 
 
 class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
@@ -51,14 +51,15 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         g1.add_all(k['eles/shocksensor'])
         g1.add_all(k['mpiint/artvisc_fpts_pack'], deps=k['eles/shocksensor'])
 
-        # Compute the transformed gradient of the partially corrected solution
-        g1.add_all(k['eles/tgradpcoru_upts'],
-                   deps=k['mpiint/scal_fpts_pack'] + k['eles/entropy_filter'])
         g1.commit()
 
         g2 = self.backend.graph()
-        g2.add_mpi_reqs(m['artvisc_fpts_send'] + m['artvisc_fpts_recv'])
+        g2.add_mpi_reqs(m['artvisc_fpts_recv'])
         g2.add_mpi_reqs(m['vect_fpts_recv'])
+
+        # Compute the transformed gradient of the partially corrected solution
+        g2.add_all(k['eles/tgradpcoru_upts'])
+        g2.add_mpi_reqs(m['artvisc_fpts_send'], deps=k['eles/tgradpcoru_upts'])
 
         # Compute the common solution at our MPI interfaces
         g2.add_all(k['mpiint/scal_fpts_unpack'])
@@ -71,7 +72,8 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g2.add(l, deps=deps(l, 'mpiint/ent_fpts_unpack'))
 
         # Compute the transformed gradient of the corrected solution
-        g2.add_all(k['eles/tgradcoru_upts'], deps=k['mpiint/con_u'])
+        for l in k['eles/tgradcoru_upts']:
+            g2.add(l, deps=deps(l, 'eles/tgradpcoru_upts') + k['mpiint/con_u'])
 
         # Obtain the physical gradients at the solution points
         for l in k['eles/gradcoru_upts']:
@@ -123,16 +125,35 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
             g2.add(l, deps=deps(l, 'eles/tdisf', 'eles/tdisf_fused'))
 
         kgroup = [
-            k['eles/tgradcoru_upts'], k['eles/gradcoru_upts'],
-            k['eles/tdisf_fused'], k['eles/gradcoru_fpts'],
-            k['eles/gradcoru_qpts'], k['eles/qptsu'],
-            k['eles/tdisf'], k['eles/tdivtpcorf']
+            k['eles/tgradpcoru_upts'], k['eles/tgradcoru_upts'],
+            k['eles/gradcoru_upts'], k['eles/tdisf_fused'],
+            k['eles/gradcoru_fpts'], k['eles/gradcoru_qpts'],
+            k['eles/qptsu'], k['eles/tdisf'], k['eles/tdivtpcorf']
         ]
         for ks in zip_longest(*kgroup):
-            self._group(g2, ks, subs=[
-                [(ks[5], 'out'), (ks[6], 'u')],
-                [(ks[2], 'f'), (ks[4], 'out'), (ks[6], 'f'), (ks[7], 'b')]
-            ])
+            # Flux-AA on; inputs to tdisf and tdivtpcorf are from quad pts
+            if k['eles/qptsu']:
+                subs = [
+                    [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
+                     (ks[4], 'b'), (ks[5], 'b')],
+                    [(ks[6], 'out'), (ks[7], 'u')],
+                    [(ks[5], 'out'), (ks[7], 'f'), (ks[8], 'b')],
+                ]
+            # Gradient fusion on; tdisf_fused replaces tdisf and gradcoru_upts
+            elif k['eles/tdisf_fused']:
+                subs = [
+                    [(ks[0], 'out'), (ks[1], 'out'),
+                     (ks[3], 'gradu'), (ks[4], 'b')],
+                    [(ks[3], 'f'), (ks[8], 'b')],
+                ]
+            # No flux-AA and no gradient fusion
+            else:
+                subs = [
+                    [(ks[0], 'out'), (ks[1], 'out'), (ks[2], 'gradu'),
+                     (ks[4], 'b'), (ks[7], 'f'), (ks[8], 'b')],
+                ]
+
+            self._group(g2, ks, subs=subs)
 
         g2.commit()
 

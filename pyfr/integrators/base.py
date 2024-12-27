@@ -6,19 +6,32 @@ import time
 
 import numpy as np
 
-from pyfr.inifile import Inifile
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.cache import memoize
+from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
-from pyfr.util import memoize
+
+
+def _common_plugin_prop(attr):
+    def wrapfn(fn):
+        @property
+        def newfn(self):
+            if not (p := getattr(self, attr)):
+                t, c = time.time(), self._plugin_wtimes['common', None]
+                p = fn(self)
+                self._plugin_wtimes['common', None] = c + time.time() - t
+                setattr(self, attr, p)
+
+            return p
+        return newfn
+    return wrapfn
 
 
 class BaseIntegrator:
-    def __init__(self, backend, rallocs, mesh, initsoln, cfg):
+    def __init__(self, backend, mesh, initsoln, cfg):
         self.backend = backend
-        self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
-        self.prevcfgs = {f: initsoln[f] for f in initsoln or []
+        self.prevcfgs = {f: initsoln[f].tostr() for f in initsoln or []
                          if f.startswith('config-')}
 
         # Start time
@@ -27,7 +40,7 @@ class BaseIntegrator:
 
         # Current time; defaults to tstart unless restarting
         if self.isrestart:
-            stats = Inifile(initsoln['stats'])
+            stats = initsoln['stats']
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
         else:
             self.tcurr = self.tstart
@@ -45,7 +58,7 @@ class BaseIntegrator:
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
-        self.mesh_uuid = mesh['mesh_uuid']
+        self.mesh_uuid = mesh.uuid
 
         self._invalidate_caches()
 
@@ -56,7 +69,12 @@ class BaseIntegrator:
         self._plugin_wtimes = defaultdict(lambda: 0)
 
         # Abort computation
-        self.abort = False
+        self._abort = False
+        self._abort_reason = ''
+
+    def plugin_abort(self, reason):
+        self._abort = True
+        self._abort_reason = self._abort_reason or reason
 
     def _get_plugins(self, initsoln):
         plugins = []
@@ -87,20 +105,30 @@ class BaseIntegrator:
         return plugins
 
     def _run_plugins(self):
+        wtimes = self._plugin_wtimes
+
         self.backend.wait()
 
         # Fire off the plugins and tally up the runtime
         for plugin in self.plugins:
             tstart = time.time()
+            tcommon = wtimes['common', None]
 
             plugin(self)
 
+            dt = time.time() - tstart - wtimes['common', None] + tcommon
+
             pname = getattr(plugin, 'name', 'other')
             psuffix = getattr(plugin, 'suffix', None)
-            self._plugin_wtimes[pname, psuffix] += time.time() - tstart
+            wtimes[pname, psuffix] += dt
 
         # Abort if plugins request it
         self._check_abort()
+
+    def _finalise_plugins(self):
+        for plugin in self.plugins:
+            if (finalise := getattr(plugin, 'finalise', None)):
+                finalise(self)
 
     @staticmethod
     def get_plugin_data_prefix(name, suffix):
@@ -140,16 +168,14 @@ class BaseIntegrator:
         for t in self.tlist:
             self.advance_to(t)
 
+        self._finalise_plugins()
+
     @property
     def nsteps(self):
         return self.nacptsteps + self.nrjctsteps
 
     def collect_stats(self, stats):
         wtime = time.time() - self._wstart
-
-        # Rank allocation
-        stats.set('backend', 'rank-allocation',
-                  ','.join(str(r) for r in self.rallocs.mprankmap))
 
         # Simulation and wall clock times
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
@@ -194,10 +220,12 @@ class BaseIntegrator:
 
     def _check_abort(self):
         comm, rank, root = get_comm_rank_root()
-        if comm.allreduce(self.abort, op=mpi.LOR):
-            # Ensure that the callbacks registered in atexit
-            # are called only once if stopping the computation
-            sys.exit(1)
+
+        if scal_coll(comm.Allreduce, int(self._abort), op=mpi.LOR):
+            self._finalise_plugins()
+
+            reason = self._abort_reason
+            sys.exit(comm.allreduce(reason, op=lambda x, y: x or y))
 
 
 class BaseCommon:

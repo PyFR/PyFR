@@ -1,6 +1,7 @@
 import ctypes
 import ctypes.util
 import os
+from pathlib import Path
 import sys
 
 
@@ -60,8 +61,7 @@ def load_library(name, mode=ctypes.DEFAULT_MODE):
     # Check our search paths
     for sd in platform_libdirs():
         try:
-            return ctypes.CDLL(os.path.abspath(os.path.join(sd, lname)),
-                               mode=mode)
+            return ctypes.CDLL(Path(sd, lname).absolute(), mode=mode)
         except OSError:
             pass
 

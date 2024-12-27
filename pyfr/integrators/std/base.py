@@ -1,12 +1,12 @@
-from pyfr.integrators.base import BaseIntegrator
+from pyfr.integrators.base import BaseIntegrator, _common_plugin_prop
 from pyfr.integrators.base import BaseCommon
 
 
 class BaseStdIntegrator(BaseCommon, BaseIntegrator):
     formulation = 'std'
 
-    def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
-        super().__init__(backend, rallocs, mesh, initsoln, cfg)
+    def __init__(self, backend, systemcls, mesh, initsoln, cfg):
+        super().__init__(backend, mesh, initsoln, cfg)
 
         # Sanity checks
         if self.controller_needs_errest and not self.stepper_has_errest:
@@ -16,8 +16,8 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self.nregs = self.stepper_nregs
 
         # Construct the relevant system
-        self.system = systemcls(backend, rallocs, mesh, initsoln,
-                                nregs=self.nregs, cfg=cfg)
+        self.system = systemcls(backend, mesh, initsoln, nregs=self.nregs,
+                                cfg=cfg)
 
         # Event handlers for advance_to
         self.plugins = self._get_plugins(initsoln)
@@ -29,46 +29,35 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
 
-        # Pre-process solution if necessary
-        self.system.preproc(self.tcurr,
-                            self.system.ele_scal_upts(self._idxcurr))
+        # Pre-process solution
+        self.system.preproc(self.tcurr, self._idxcurr)
 
         # Global degree of freedom count
         self._gndofs = self._get_gndofs()
 
-    @property
+    @_common_plugin_prop('_curr_soln')
     def soln(self):
-        if not self._curr_soln:
-            self.system.postproc(self._idxcurr)
-            self._curr_soln = self.system.ele_scal_upts(self._idxcurr)
+        self.system.postproc(self._idxcurr)
+        return self.system.ele_scal_upts(self._idxcurr)
 
-        return self._curr_soln
-
-    @property
+    @_common_plugin_prop('_curr_grad_soln')
     def grad_soln(self):
-        system = self.system
+        self.system.postproc(self._idxcurr)
+        self.system.compute_grads(self.tcurr, self._idxcurr)
+        return [e.get() for e in self.system.eles_vect_upts]
 
-        if not self._curr_grad_soln:
-            system.postproc(self._idxcurr)
-            system.compute_grads(self.tcurr, self._idxcurr)
-            self._curr_grad_soln = [e.get() for e in system.eles_vect_upts]
-
-        return self._curr_grad_soln
-
-    @property
+    @_common_plugin_prop('_curr_dt_soln')
     def dt_soln(self):
-        system = self.system
+        soln = self.soln
 
-        if not self._curr_dt_soln:
-            copy = self.soln
-            system.rhs(self.tcurr, self._idxcurr, self._idxcurr)
-            self._curr_dt_soln = system.ele_scal_upts(self._idxcurr)
+        self.system.rhs(self.tcurr, self._idxcurr, self._idxcurr)
+        dt_soln = self.system.ele_scal_upts(self._idxcurr)
 
-            # Reset current register with original contents
-            for c, e in zip(copy, system.ele_banks):
-                e[self._idxcurr].set(c)
+        # Reset current register with original contents
+        for e, s in zip(self.system.ele_banks, soln):
+            e[self._idxcurr].set(s)
 
-        return self._curr_dt_soln
+        return dt_soln
 
     @property
     def controller_needs_errest(self):

@@ -98,12 +98,10 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
             artviscl=self._artvisc_lhs, **self._external_vals
         )
 
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self._ef_enabled:
             self._be.pointwise.register(
                 'pyfr.solvers.navstokes.kernels.bccent'
             )
-            self._tplargs['e_func'] = self.cfg.get('solver-entropy-filter',
-                                                   'e-func', 'numerical')
 
             self.kernels['comm_entropy'] = lambda: self._be.kernel(
                 'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
@@ -114,7 +112,7 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
 
 class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-isot-wall'
-    cflux_state = 'ghost'
+    cflux_state = 'ghost-imperm'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
@@ -126,7 +124,7 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
 
 class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-adia-wall'
-    cflux_state = 'ghost'
+    cflux_state = 'ghost-imperm'
 
 
 class NavierStokesSlpAdiaWallBCInters(NavierStokesBaseBCInters):

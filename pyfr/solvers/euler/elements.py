@@ -4,22 +4,36 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseFluidElements:
-    privarmap = {2: ['rho', 'u', 'v', 'p'],
-                 3: ['rho', 'u', 'v', 'w', 'p']}
+    @staticmethod
+    def privars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'u', 'v', 'p']
+        elif ndims == 3:
+            return ['rho', 'u', 'v', 'w', 'p']
 
-    convarmap = {2: ['rho', 'rhou', 'rhov', 'E'],
-                 3: ['rho', 'rhou', 'rhov', 'rhow', 'E']}
+    @staticmethod
+    def convars(ndims, cfg):
+        if ndims == 2:
+            return ['rho', 'rhou', 'rhov', 'E']
+        elif ndims == 3:
+            return ['rho', 'rhou', 'rhov', 'rhow', 'E']
 
-    dualcoeffs = convarmap
+    dualcoeffs = convars
 
-    visvarmap = {
-        2: [('density', ['rho']),
-            ('velocity', ['u', 'v']),
-            ('pressure', ['p'])],
-        3: [('density', ['rho']),
-            ('velocity', ['u', 'v', 'w']),
-            ('pressure', ['p'])]
-    }
+    @staticmethod
+    def visvars(ndims, cfg):
+        if ndims == 2:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v'],
+                'pressure': ['p']
+            }
+        elif ndims == 3:
+            return {
+                'density': ['rho'],
+                'velocity': ['u', 'v', 'w'],
+                'pressure': ['p']
+            }
 
     @staticmethod
     def pri_to_con(pris, cfg):
@@ -43,7 +57,7 @@ class BaseFluidElements:
 
         # Compute the pressure
         gamma = cfg.getfloat('constants', 'gamma')
-        p = (gamma - 1)*(E - 0.5*rho*sum(v*v for v in vs))
+        p = (gamma - 1)*(E - 0.5*rho*sum(v**2 for v in vs))
 
         return [rho, *vs, p]
 
@@ -59,10 +73,10 @@ class BaseFluidElements:
         diff_uvw = [(diff_rhov - v*diff_rho) / rho
                     for diff_rhov, v in zip(diff_rhouvw, uvw)]
 
-        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) - ρu⃗·∂u⃗)]
+        # Pressure gradient: ∂p = (γ - 1)·[∂E - 1/2*(u⃗·∂(ρu⃗) + ρu⃗·∂u⃗)]
         gamma = cfg.getfloat('constants', 'gamma')
-        diff_p = diff_E - 0.5*(np.einsum('ijk,ijk->jk', uvw,  diff_rhouvw) +
-                               np.einsum('ijk,ijk->jk', rhouvw, diff_uvw))
+        diff_p = diff_E - 0.5*(sum(u*dru for u, dru in zip(uvw, diff_rhouvw)) +
+                               sum(ru*du for ru, du in zip(rhouvw, diff_uvw)))
         diff_p *= gamma - 1
 
         return [diff_rho, *diff_uvw, diff_p]
@@ -96,28 +110,23 @@ class BaseFluidElements:
             )
 
             # Template arguments
+            fpts_in_upts = self.basis.fpts_in_upts
+            self.nefpts = self.nupts if fpts_in_upts else self.nupts + self.nfpts
+            ub = self.basis.ubasis
+            meanwts = ub.invvdm[:, 0] / np.sum(ub.invvdm[:, 0])
             eftplargs = {
-                'ndims': self.ndims,
-                'nupts': self.nupts,
-                'nfpts': self.nfpts,
-                'nvars': self.nvars,
-                'nfaces': self.nfaces,
+                'ndims': self.ndims, 'nupts': self.nupts,
+                'nfpts': self.nfpts, 'nefpts': self.nefpts,
+                'nvars': self.nvars, 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
-                'order': self.basis.order
+                'order': self.basis.order, 'fpts_in_upts': fpts_in_upts,
+                'meanwts': meanwts
             }
 
             # Check to see if running anti-aliasing
             if self.antialias:
                 raise ValueError('Entropy filter not compatible with '
                                  'anti-aliasing.')
-
-            # Check to see if running collocated solution/flux points
-            m0 = self.basis.m0
-            mrowsum = np.max(np.abs(np.sum(m0, axis=1) - 1.0))
-            if np.min(m0) < -1e-8 or mrowsum > 1e-8:
-                raise ValueError('Entropy filter requires flux points to be a '
-                                 'subset of solution points or a convex '
-                                 'combination thereof.')
 
             # Minimum density/pressure constraints
             eftplargs['d_min'] = self.cfg.getfloat('solver-entropy-filter',
@@ -134,11 +143,12 @@ class BaseFluidElements:
                                                    'f-tol', 1e-4)
             eftplargs['niters'] = self.cfg.getfloat('solver-entropy-filter',
                                                     'niters', 2)
-            efunc = self.cfg.get('solver-entropy-filter', 'e-func',
-                                 'physical')
-            eftplargs['e_func'] = efunc
-            if efunc not in {'numerical', 'physical'}:
-                raise ValueError(f'Unknown entropy functional: {efunc}')
+
+            # Use linearised constraints/limiting kernel approach from
+            # Ching et al. (doi:10.1016/j.jcp.2024.112881)
+            form = self.cfg.get('solver-entropy-filter', 'formulation',
+                                'nonlinear')
+            eftplargs['linearise'] = form == 'linearised'
 
             # Precompute basis orders for filter
             ubdegs = self.basis.ubasis.degrees
@@ -148,14 +158,15 @@ class BaseFluidElements:
             # Compute local entropy bounds
             self.kernels['local_entropy'] = lambda uin: self._be.kernel(
                 'entropylocal', tplargs=eftplargs, dims=[self.neles],
-                u=self.scal_upts[uin], entmin_int=self.entmin_int
+                u=self.scal_upts[uin], entmin_int=self.entmin_int,
+                m0=self.m0
             )
 
             # Apply entropy filter
             self.kernels['entropy_filter'] = lambda uin: self._be.kernel(
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
-                vdm=self.vdm, invvdm=self.invvdm
+                vdm=self.vdm_ef, invvdm=self.invvdm, m0=self.m0
             )
 
 

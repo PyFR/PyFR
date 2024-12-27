@@ -5,7 +5,16 @@ from pyfr.solvers.base import BaseInters
 from pyfr.nputil import npeval
 
 
-class BaseAdvectionIntInters(BaseInters):
+class BaseAdvectionIntersMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._ef_enabled = (self.cfg.get('solver', 'shock-capturing') == 
+                            'entropy-filter' and
+                            self.cfg.getint('solver', 'order'))
+
+
+class BaseAdvectionIntInters(BaseAdvectionIntersMixin, BaseInters):
     def __init__(self, be, lhs, rhs, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
 
@@ -17,7 +26,7 @@ class BaseAdvectionIntInters(BaseInters):
         self._scal_rhs = self._scal_view(rhs, 'get_scal_fpts_for_inter')
 
         # Generate the additional view matrices for entropy filtering
-        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self._ef_enabled:
             self._entmin_lhs = self._view(
                 lhs, 'get_entmin_int_fpts_for_inter', with_perm=False
             )
@@ -36,14 +45,13 @@ class BaseAdvectionIntInters(BaseInters):
         self._perm = self._get_perm_for_view(lhs, 'get_scal_fpts_for_inter')
 
 
-class BaseAdvectionMPIInters(BaseInters):
+class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
     # Starting tag used for MPI
     BASE_MPI_TAG = 2314
 
-    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
+    def __init__(self, be, lhs, rhsrank, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
         self._rhsrank = rhsrank
-        self._rallocs = rallocs
 
         # Name our interface so we can match kernels to MPI requests
         self.name = 'p{rhsrank}'
@@ -74,7 +82,7 @@ class BaseAdvectionMPIInters(BaseInters):
             self._rhsrank, scal_fpts_tag
         )
 
-        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self._ef_enabled:
             self._entmin_lhs = self._xchg_view(
                 lhs, 'get_entmin_int_fpts_for_inter', with_perm=False
             )
@@ -98,7 +106,7 @@ class BaseAdvectionMPIInters(BaseInters):
             self._entmin_lhs = self._entmin_rhs = None
 
 
-class BaseAdvectionBCInters(BaseInters):
+class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
     type = None
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
@@ -117,7 +125,7 @@ class BaseAdvectionBCInters(BaseInters):
         # Make the simulation time available inside kernels
         self._set_external('t', 'scalar fpdtype_t')
 
-        if cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self._ef_enabled:
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
         else:
             self._entmin_lhs = None

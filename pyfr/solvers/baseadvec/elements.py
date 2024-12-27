@@ -1,6 +1,7 @@
 from pyfr.backends.base import NullKernel
 from pyfr.solvers.base import BaseElements
 
+import numpy as np
 
 class BaseAdvectionElements(BaseElements):
     def __init__(self, *kargs, **kwargs):
@@ -148,14 +149,32 @@ class BaseAdvectionElements(BaseElements):
             # Allocate one minimum entropy value per interface
             self.nfaces = len(self.nfacefpts)
             ext = nonce + 'entmin_int'
+
+            # Set values to -inf for pre-proc filter to enforce positivity
+            entmin_int = np.full((self.nfaces, self.neles),
+                                 -self._be.fpdtype_max)
             self.entmin_int = self._be.matrix((self.nfaces, self.neles),
-                                              tags=tags, extent=ext)
+                                              tags=tags, extent=ext,
+                                              initval=entmin_int)
 
             # Setup nodal/modal operator matrices
-            self.vdm = self._be.const_matrix(self.basis.ubasis.vdm.T)
-            self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
-        else:
-            self.entmin_int = None
+            form = self.cfg.get('solver-entropy-filter', 'formulation',
+                                'nonlinear')
+            if form == 'linearised':
+                self.invvdm = self.vdm_ef = None
+            elif form == 'nonlinear':
+                self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
+                vdmu = self.basis.ubasis.vdm.T
+                vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
+                vdm = vdmu if self.basis.fpts_in_upts else np.vstack((vdmu, vdmf))
+                self.vdm_ef = self._be.const_matrix(vdm)
+            else:
+                raise ValueError('Invalid entropy filter formulation.')
+
+            if self.basis.fpts_in_upts:
+                self.m0 = None
+            else:
+                self.m0 = self._be.const_matrix(self.basis.m0)
 
     def get_entmin_int_fpts_for_inter(self, eidx, fidx):
         return (self.entmin_int.mid,), (fidx,), (eidx,)

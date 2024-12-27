@@ -1,6 +1,5 @@
 import numpy as np
 from pyfr.mpiutil import get_comm_rank_root, mpi
-
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
@@ -41,11 +40,13 @@ class BaseAdvectionDiffusionIntInters(BaseAdvectionIntInters):
 
 
 class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
-    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
-        super().__init__(be, lhs, rhsrank, rallocs, elemap, cfg)
+    def __init__(self, be, lhs, rhsrank, elemap, cfg):
+        super().__init__(be, lhs, rhsrank, elemap, cfg)
 
-        lhsprank = rallocs.prank
-        rhsprank = rallocs.mprankmap[rhsrank]
+        comm, rank, root = get_comm_rank_root()
+
+        lhsprank = rank
+        rhsprank = rhsrank
 
         # Generate second set of view matrices
         self._vect_lhs = self._vect_xchg_view(lhs, 'get_vect_fpts_for_inter')

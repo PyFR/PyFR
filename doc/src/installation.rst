@@ -19,27 +19,27 @@ It is assumed that the Xcode Command Line Tools and
 `Homebrew <https://brew.sh/>`_ are already installed. Follow the steps
 below to setup the OpenMP backend on macOS:
 
-1. Install MPI::
+#. Install MPI::
 
         brew install mpi4py
 
-2. Download and install libxsmm and set the library path::
+#. Download and install libxsmm and set the library path::
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
 
-3. Make a venv and activate it::
+#. Make a venv and activate it::
 
-        python3.10 -m venv pyfr-venv
+        python3.12 -m venv pyfr-venv
         source pyfr-venv/bin/activate
 
-4. Install PyFR::
+#. Install PyFR::
 
         pip install pyfr
 
-5. Add the following to your :ref:`configuration-file`::
+#. Add the following to your :ref:`configuration-file`::
 
         [backend-openmp]
         cc = gcc-13
@@ -52,24 +52,24 @@ Ubuntu
 
 Follow the steps below to setup the OpenMP backend on Ubuntu:
 
-1. Install Python and MPI::
+#. Install Python and MPI::
 
         sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
         pip3 install virtualenv
 
-2. Download and install libxsmm and set the library path::
+#. Download and install libxsmm and set the library path::
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
         make -j4 STATIC=0 BLAS=0
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
 
-3. Make a virtualenv and activate it::
+#. Make a virtualenv and activate it::
 
         python3 -m virtualenv pyfr-venv
         source pyfr-venv/bin/activate
 
-4. Install PyFR::
+#. Install PyFR::
 
         pip install pyfr
 
@@ -95,20 +95,20 @@ Python dependencies.
 Dependencies
 ------------
 
-PyFR |release| has a hard dependency on Python 3.10+ and the following
+PyFR |release| has a hard dependency on Python 3.11+ and the following
 Python packages:
 
-1. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.1.1
-2. `h5py <https://www.h5py.org/>`_ >= 2.10
-3. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
-4. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 3.0
-5. `numpy <https://www.numpy.org/>`_ >= 1.26.4
-6. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
-7. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
-8. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.0.1
+#. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.1.1
+#. `h5py <https://www.h5py.org/>`_ >= 2.10
+#. `mako <https://www.makotemplates.org/>`_ >= 1.0.0
+#. `mpi4py <https://mpi4py.readthedocs.io/en/stable/>`_ >= 4.0
+#. `numpy <https://www.numpy.org/>`_ >= 1.26.4
+#. `platformdirs <https://pypi.org/project/platformdirs/>`_ >= 2.2.0
+#. `pytools <https://pypi.python.org/pypi/pytools>`_ >= 2016.2.1
+#. `rtree <https://pypi.org/project/Rtree/>`_ >= 1.0.1
 
-Note that due to a bug in NumPy, PyFR is not compatible with 32-bit
-Python distributions.
+In addition an MPI library supporting version 4 of the MPI standard is
+required.
 
 .. _install cuda backend:
 
@@ -118,7 +118,7 @@ CUDA Backend
 The CUDA backend targets NVIDIA GPUs with a compute capability of 3.0
 or greater. The backend requires:
 
-1. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 11.4
+#. `CUDA <https://developer.nvidia.com/cuda-downloads>`_ >= 11.4
 
 HIP Backend
 ^^^^^^^^^^^
@@ -126,8 +126,8 @@ HIP Backend
 The HIP backend targets AMD GPUs which are supported by the ROCm stack.
 The backend requires:
 
-1. `ROCm <https://docs.amd.com/>`_ >= 6.0.0
-2. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >=
+#. `ROCm <https://docs.amd.com/>`_ >= 6.0.0
+#. `rocBLAS <https://github.com/ROCmSoftwarePlatform/rocBLAS>`_ >=
    4.0.0
 
 Metal Backend
@@ -135,7 +135,7 @@ Metal Backend
 
 The Metal backend targets Apple silicon GPUs. The backend requires:
 
-1. `pyobjc-framework-Metal <https://pyobjc.readthedocs.io/en/latest>`_ >= 9.0
+#. `pyobjc-framework-Metal <https://pyobjc.readthedocs.io/en/latest>`_ >= 9.0
 
 OpenCL Backend
 ^^^^^^^^^^^^^^
@@ -143,8 +143,10 @@ OpenCL Backend
 The OpenCL backend targets a range of accelerators including GPUs from
 AMD, Intel, and NVIDIA. The backend requires:
 
-1. OpenCL >= 2.1
-2. Optionally `CLBlast <https://github.com/CNugteren/CLBlast>`_
+#. OpenCL >= 2.1
+#. Optionally `CLBlast <https://github.com/CNugteren/CLBlast>`_
+#. Optionally `TinyTC <https://intel.github.io/tiny-tensor-compiler/>`_
+   >= 0.3.1
 
 Note that when running on NVIDIA GPUs the OpenCL backend may terminate
 with a segmentation fault after the simulation has finished.  This is
@@ -161,8 +163,8 @@ OpenMP Backend
 The OpenMP backend targets multi-core x86-64 and ARM CPUs. The backend
 requires:
 
-1. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
-2. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
+#. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
+#. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
    bf5313db8bf2edfc127bb715c36353e610ce7c04 in the ``main`` branch
    compiled as a shared library (STATIC=0) with BLAS=0.
 
@@ -177,8 +179,9 @@ Parallel
 To partition meshes for running in parallel it is also necessary to
 have one of the following partitioners installed:
 
-1. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.2
-2. `SCOTCH <http://www.labri.fr/perso/pelegrin/scotch/>`_ >= 7.0
+#. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.2
+#. `SCOTCH <https://www.labri.fr/perso/pelegrin/scotch/>`_ >= 7.0
+#. `KaHIP <https://kahip.github.io/>`_ >= 3.10
 
 In order for PyFR to find these libraries they must be located in a
 directory which is on the library search path.  Alternatively, the

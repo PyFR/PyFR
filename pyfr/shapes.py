@@ -16,7 +16,7 @@ def _proj_pts(projector, pts):
 
 
 @clean
-def _proj_l2(qrule, basis):
+def proj_l2(qrule, basis):
     return basis.vdm.T @ (qrule.wts*basis.ortho_basis_at(qrule.pts))
 
 
@@ -47,8 +47,8 @@ class BaseShape:
         self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
 
         if nspts:
-            self.nsptsord = nsptord = self.order_from_nspts(nspts)
-            self.sbasis = get_polybasis(self.name, nsptord, self.spts)
+            self.nsptsord = nsptord = self.order_from_npts(nspts)
+            self.sbasis = get_polybasis(self.name, nsptord + 1, self.spts)
 
             # Basis for free-stream metric
             # We need p-th order pseudo grid points, which includes
@@ -61,18 +61,18 @@ class BaseShape:
                                         self.mpts)
 
     @classmethod
-    def nspts_from_order(cls, sptord):
-        return int(np.polyval(cls.npts_coeffs, sptord)) // cls.npts_cdenom
+    def npts_from_order(cls, sptord):
+        return int(np.polyval(cls.npts_coeffs, sptord + 1)) // cls.npts_cdenom
 
     @classmethod
-    def order_from_nspts(cls, nspts):
+    def order_from_npts(cls, nspts):
         # Obtain the coefficients for the poly: P(n) - nspts = 0
         coeffs = list(cls.npts_coeffs)
         coeffs[-1] -= cls.npts_cdenom*int(nspts)
 
         # Iterate
-        for n in range(1, 15):
-            if np.polyval(coeffs, n) == 0:
+        for n in range(15):
+            if np.polyval(coeffs, n + 1) == 0:
                 return n
         else:
             raise ValueError('Invalid number of shape points')
@@ -106,7 +106,7 @@ class BaseShape:
         m = self.gbasis_at(self.upts)
 
         if 'surf-flux' in self.antialias:
-            fp = [_proj_l2(self._iqrules[kind], self.facebases[kind])
+            fp = [proj_l2(self._iqrules[kind], self.facebases[kind])
                   for kind, proj, norm in self.faces]
 
             m = m @ block_diag(fp)
@@ -129,7 +129,7 @@ class BaseShape:
 
     @cached_property
     def m8(self):
-        return _proj_l2(self._eqrule, self.ubasis)
+        return proj_l2(self._eqrule, self.ubasis)
 
     @property
     def m9(self):
@@ -268,7 +268,7 @@ class BaseShape:
 
     @cached_property
     def spts(self):
-        return self.std_ele(self.nsptsord - 1)
+        return self.std_ele(self.nsptsord)
 
     @cached_property
     def linspts(self):
@@ -330,6 +330,10 @@ class TensorProdShape:
     def std_ele(cls, sptord):
         pts1d = np.linspace(-1, 1, sptord + 1)
         return [p[::-1] for p in it.product(pts1d, repeat=cls.ndims)]
+
+    @classmethod
+    def valid_spt(cls, pt, tol=1e-9):
+        return all(abs(p) < 1 + tol for p in pt)
 
 
 class QuadShape(TensorProdShape, BaseShape):
@@ -440,6 +444,13 @@ class TriShape(BaseShape):
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
 
+    @classmethod
+    def valid_spt(cls, spt, tol=1e-9):
+        x, y = spt
+
+        return (x + tol > -1 and x - tol < -y and
+                y + tol > -1 and y - tol < 1)
+
 
 class TetShape(BaseShape):
     name = 'tet'
@@ -471,6 +482,14 @@ class TetShape(BaseShape):
                 for i, r in enumerate(pts1d)
                 for j, q in enumerate(pts1d[:(sptord + 1 - i)])
                 for p in pts1d[:(sptord + 1 - i - j)]]
+
+    @classmethod
+    def valid_spt(spt, tol=1e-9):
+        x, y, z = spt
+
+        return (x + tol > -1 and x - tol < -1 - y - z and
+                y + tol > -1 and y - tol < -z and
+                z + tol > -1 and z - tol < 1)
 
 
 class PriShape(BaseShape):
@@ -511,6 +530,10 @@ class PriShape(BaseShape):
                 for r in pts1d
                 for i, q in enumerate(pts1d)
                 for p in pts1d[:(sptord + 1 - i)]]
+
+    @classmethod
+    def valid_spt(cls, spt, tol=1e-9):
+        return abs(spt[2]) < 1 + tol and TriShape.valid_spt(spt[:2], tol=tol)
 
 
 class PyrShape(BaseShape):
@@ -558,3 +581,12 @@ class PyrShape(BaseShape):
                 for i, r in enumerate(pts1d[::2])
                 for q in pts1d[i:npts1d - i:2]
                 for p in pts1d[i:npts1d - i:2]]
+
+    @classmethod
+    def valid_spt(cls, spt, tol=1e-9):
+        x, y, z = spt
+        u = (1 - z) / 2
+
+        return (x + tol > -u and x - tol < u and
+                y + tol > -u and y - tol < u and
+                z + tol > -1 and z - tol < 1)

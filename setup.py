@@ -5,8 +5,8 @@ import sys
 
 
 # Check Python version
-if sys.version_info < (3, 10):
-    sys.exit('Minimum Python version is 3.10')
+if sys.version_info < (3, 11):
+    sys.exit('Minimum Python version is 3.11')
 
 
 # PyFR version
@@ -64,7 +64,8 @@ modules = [
     'pyfr.solvers.navstokes',
     'pyfr.solvers.navstokes.kernels',
     'pyfr.solvers.navstokes.kernels.bcs',
-    'pyfr.writers'
+    'pyfr.writers',
+    'pyfr.writers.vtk'
 ]
 
 # Tests
@@ -111,7 +112,7 @@ install_requires = [
     'gimmik >= 3.2.1',
     'h5py >= 2.10',
     'mako >= 1.0.0',
-    'mpi4py >= 3.1.0',
+    'mpi4py >= 4.0.0',
     'numpy >= 1.26.4',
     'platformdirs >= 2.2.0',
     'pytools >= 2016.2.1',
@@ -132,7 +133,9 @@ console_scripts = [
 classifiers = [
     'License :: OSI Approved :: BSD License',
     'Programming Language :: Python',
-    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
     'Topic :: Scientific/Engineering'
 ]
 
@@ -156,7 +159,7 @@ setup(name='pyfr',
       packages=['pyfr'] + modules + tests,
       package_data=package_data,
       entry_points={'console_scripts': console_scripts},
-      python_requires='>=3.10',
+      python_requires='>=3.11',
       install_requires=install_requires,
       extras_require=extras_require,
       classifiers=classifiers)

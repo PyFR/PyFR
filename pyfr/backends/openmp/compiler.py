@@ -1,17 +1,16 @@
 from ctypes import CDLL
-from functools import cached_property
 import itertools as it
 import os
+from pathlib import Path
 import platform
 import shlex
 import tempfile
-import uuid
 
-from platformdirs import user_cache_dir
 from pytools.prefork import call_capture_output
 
+from pyfr.cache import ObjectCache
 from pyfr.ctypesutil import platform_libname
-from pyfr.util import digest, mv, rm
+from pyfr.util import digest, rm
 
 
 class OpenMPCompiler:
@@ -33,6 +32,9 @@ class OpenMPCompiler:
         # Get the base compiler command strig
         self.cmd = self.cc_cmd(None, None)
 
+        # Get the cache
+        self.cache = ObjectCache('omp')
+
     def build(self, src):
         # Compute a digest of the current processor, compiler, and source
         ckey = digest(self.proc, self.version, self.cmd, src)
@@ -41,27 +43,23 @@ class OpenMPCompiler:
         mod = self._cache_loadlib(ckey)
 
         # Otherwise, we need to compile the kernel
-        if not mod:
+        if mod is None:
             # Create a scratch directory
             tmpidx = next(self._dir_seq)
-            tmpdir = tempfile.mkdtemp(prefix=f'pyfr-{tmpidx}-')
+            tmpdir = Path(tempfile.mkdtemp(prefix=f'pyfr-{tmpidx}-'))
 
             try:
-                # Compile and link the source into a shared library
+                # Temporary source and library names
                 cname, lname = 'tmp.c', platform_libname('tmp')
 
                 # Write the source code out
-                with open(os.path.join(tmpdir, cname), 'w') as f:
-                    f.write(src)
+                (tmpdir / cname).write_bytes(src.encode())
 
                 # Invoke the compiler
                 call_capture_output(self.cc_cmd(cname, lname), cwd=tmpdir)
 
-                # Determine the fully qualified library name
-                lpath = os.path.join(tmpdir, lname)
-
-                # Add it to the cache and load
-                mod = self._cache_set_and_loadlib(ckey, lpath)
+                # Add it to the cache and load it
+                mod = self._cache_set_and_loadlib(ckey, tmpdir / lname)
             finally:
                 # Unless we're debugging delete the scratch directory
                 if 'PYFR_DEBUG_OMP_KEEP_LIBS' not in os.environ:
@@ -85,50 +83,22 @@ class OpenMPCompiler:
         # Append any user-provided arguments and return
         return cmd + self.cflags
 
-    @cached_property
-    def cachedir(self):
-        return os.environ.get('PYFR_OMP_CACHE_DIR',
-                              user_cache_dir('pyfr', 'pyfr'))
-
     def _cache_loadlib(self, ckey):
-        # If caching is disabled then return
-        if 'PYFR_DEBUG_OMP_DISABLE_CACHE' in os.environ:
-            return
-        # Otherwise, check the cache
-        else:
-            # Determine the cached library name
-            clname = platform_libname(ckey)
-
-            # Attempt to load the library
+        if path := self.cache.get_path(platform_libname(ckey)):
             try:
-                return CDLL(os.path.join(self.cachedir, clname))
+                return CDLL(path)
             except OSError:
                 return
 
     def _cache_set_and_loadlib(self, ckey, lpath):
-        # If caching is disabled then just load the library as-is
-        if 'PYFR_DEBUG_OMP_DISABLE_CACHE' in os.environ:
-            return CDLL(lpath)
-        # Otherwise, move the library into the cache and load
+        ckey = platform_libname(ckey)
+
+        # Attempt to add the item to the cache and load
+        if cpath := self.cache.set_with_path(ckey, lpath):
+            return CDLL(cpath)
+        # Otherwise, load from the current temporary path
         else:
-            # Determine the cached library name and path
-            clname = platform_libname(ckey)
-            clpath = os.path.join(self.cachedir, clname)
-            ctpath = os.path.join(self.cachedir, str(uuid.uuid4()))
-
-            try:
-                # Ensure the cache directory exists
-                os.makedirs(self.cachedir, exist_ok=True)
-
-                # Perform a two-phase move to get the library in place
-                mv(lpath, ctpath)
-                mv(ctpath, clpath)
-            # If an exception is raised, load from the original path
-            except OSError:
-                return CDLL(lpath)
-            # Otherwise, load from the cache dir
-            else:
-                return CDLL(clpath)
+            return CDLL(lpath)
 
 
 class OpenMPCompilerModule:

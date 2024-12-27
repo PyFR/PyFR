@@ -7,8 +7,8 @@ from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.metal.util import call_
 from pyfr.backends.metal.generator import MetalKernelGenerator
+from pyfr.cache import memoize
 from pyfr.nputil import npdtype_to_ctypestype
-from pyfr.util import memoize
 
 
 class MetalKernel(Kernel):
@@ -75,7 +75,7 @@ class MetalKernelProvider(BaseKernelProvider):
         # Fetch the function
         func = call_(lib, 'newFunctionWith', name=name)
         if func is None:
-            raise KeyError('Unable to load function {name}')
+            raise KeyError(f'Unable to load function {name}')
 
         # Create the pipeline descriptor
         desc = MTLComputePipelineDescriptor.alloc().init()

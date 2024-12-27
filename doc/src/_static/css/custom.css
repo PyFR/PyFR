@@ -1,24 +1,31 @@
+section {
+    text-align: justify;
+}
+
 .wy-side-nav-search, .wy-nav-top {
     background: #94b24d;
 }
 
-.rst-content .section ol li > *, .rst-content .section ul li > * {
+.rst-content section ol li > *, .rst-content .section ul li > * {
     margin-bottom: 0px;
     margin-top: 0px;
 }
 
-.rst-content .section ol li > ol, .rst-content .section ol li > ul, .rst-content .section ul li > ol, .rst-content .section ul li > ul {
+.rst-content section ol li > ol, .rst-content .section ol li > ul, .rst-content .section ul li > ol, .rst-content .section ul li > ul {
     margin-bottom: 0px;
     margin-top: 0px;
 }
 
-.rst-content .section ol li > p, .rst-content .section ol li > p:last-child, .rst-content .section ul li > p, .rst-content .section ul li > p:last-child {
-    margin-bottom: 6px;
-    margin-top: 6px;
+.rst-content section ol li > p, .rst-content .section ol li > p:last-child, .rst-content .section ul li > p, .rst-content .section ul li > p:last-child, .rst-content section ul li > ul {
+    margin-bottom: 6px !important;
+    margin-top: 6px !important;
+}
+
+.rst-content h2, .rst-content h3, .rst-content h4 {
+    margin-bottom: 8px;
 }
 
 p {
-    margin: 0 0 24px;
     margin-top: 0px;
     margin-right: 0px;
     margin-bottom: 12px;
