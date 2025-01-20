@@ -105,7 +105,7 @@ class BaseCloudResampler(AlltoallMixin):
 
         # Normalise our points and compute their Morton codes
         fact = 2**21 if len(pmin) == 3 else 2**32
-        ipts = (fact*((pts - pmin) / (pmax - pmin).max())).astype(int)
+        ipts = (fact*((pts - pmin) / (pmax - pmin).max())).astype(np.uint64)
         keys = morton_encode(ipts, [fact]*len(pmin))
 
         # Use these codes to sort our points
@@ -130,7 +130,7 @@ class BaseCloudResampler(AlltoallMixin):
         bl = int(keys.max()).bit_length()
 
         # With this break our points up into their top-level orthants
-        sidx = np.searchsorted(keys, np.arange(2**nb) << (bl - nb))
+        sidx = np.searchsorted(keys, np.arange(1, 2**nb) << (bl - nb))
 
         # Allocate global bounding box array
         bboxes = np.full((comm.size, 2**nb, 2, self.ndims), np.nan)
@@ -188,9 +188,12 @@ class BaseCloudResampler(AlltoallMixin):
     def _distribute_tgt_pts(self, pts):
         comm, rank, root = get_comm_rank_root()
 
-        # Assign each point to a rank
-        tranks = [next(self.bbox_tree.nearest((*p, *p), 1)) for p in pts]
-        tranks = np.array(tranks)
+        if comm.size > 1:
+            # Assign each point to a rank
+            tranks = [next(self.bbox_tree.nearest((*p, *p), 1)) for p in pts]
+            tranks = np.array(tranks)
+        else:
+            tranks = np.zeros(len(pts), dtype=int)
 
         # Sort the points according to their rank
         tidx = np.argsort(tranks)

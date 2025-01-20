@@ -56,14 +56,14 @@ def clean(origfn=None, tol=1e-10, ckwarg='clean'):
     return cleanfn(origfn) if origfn else cleanfn
 
 
-def morton_encode(ipts, imax, dtype=int):
+def morton_encode(ipts, imax, dtype=np.uint64):
     # Allocate the codes
     codes = np.zeros(len(ipts), dtype=dtype)
 
     # Determine how many bits to use for each input dimension
     ndims = ipts.shape[1]
     obits = 8*codes.dtype.itemsize
-    ibits = obits // ndims
+    ibits = dtype(obits // ndims)
     ishift = np.array([max(int(p).bit_length() - ibits, 0) for p in imax])
 
     # Compute the masks and shifts
