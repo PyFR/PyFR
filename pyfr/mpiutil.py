@@ -320,12 +320,18 @@ class SparseScatterer(AlltoallMixin):
 
 
 class Sorter(AlltoallMixin):
-    def __init__(self, comm, keys, dtype=int):
+    typemap = {
+        np.int8: np.uint8, np.int16: np.uint16,
+        np.int32: np.uint32, np.int64: np.uint64,
+        np.float32: np.int32, np.float64: np.int64
+    }
+
+    def __init__(self, comm, keys):
         self.comm = comm
 
         # Locally sort our outbound keys
         self.sidx = np.argsort(keys)
-        skeys = keys[self.sidx].astype(dtype)
+        skeys = keys[self.sidx]
 
         # Determine the total size of the array
         size = scal_coll(comm.Allreduce, len(keys))
@@ -346,16 +352,38 @@ class Sorter(AlltoallMixin):
         self.ridx = np.argsort(rkeys)
         self.keys = rkeys[self.ridx]
 
+    def _transform_keys(self, skeys):
+        dtype = skeys.dtype
+
+        if np.issubdtype(dtype, np.unsignedinteger):
+            return skeys
+        elif np.issubdtype(dtype, np.signedinteger):
+            udtype = self.typemap[dtype]
+            return skeys.view(udtype) ^ udtype(np.iinfo(dtype).max + 1)
+        elif np.issubdtype(dtype, np.floating):
+            shift = 8*dtype.itemsize - 1
+            idtype = self.typemap[dtype]
+            udtype = self.typemap[idtype]
+
+            mask = (skeys.view(idtype) >> shift).view(udtype)
+            mask |= udtype(1 << shift)
+            return skeys.view(udtype) ^ mask
+        else:
+            raise ValueError('Unsupported dtype')
+
     def _splitters(self, skeys, r):
+        # Transform the keys so they're unsigned integers
+        skeys = self._transform_keys(skeys)
+
         # Determine the minimum and maximum values in the array
-        kmin = scal_coll(self.comm.Allreduce, skeys[0], op=mpi.MIN)
-        kmax = scal_coll(self.comm.Allreduce, skeys[-1], op=mpi.MAX)
+        kmin = self.comm.allreduce(int(skeys[0]), op=mpi.MIN)
+        kmax = self.comm.allreduce(int(skeys[-1]), op=mpi.MAX)
 
         # Compute the number of bits in the key space
-        W = math.ceil(np.log2(kmax - kmin + 1))
+        W = math.ceil(math.log2(kmax - kmin + 1))
 
         e, rt = 0, 0
-        q = np.empty(self.comm.size, dtype=int)
+        q = np.empty(self.comm.size, dtype=skeys.dtype)
 
         for i in range(W - 1, -1, -1):
             # Compute and gather the probes
@@ -384,7 +412,7 @@ class Sorter(AlltoallMixin):
         q[self.comm.rank] = r - rt
         self.comm.Allgather(mpi.IN_PLACE, q)
 
-        return lbnd + np.maximum(0, np.minimum(ld, q - gd))
+        return lbnd + np.maximum(0, np.minimum(ld, q.astype(int) - gd))
 
     def __call__(self, svals):
         # Locally sort our data
