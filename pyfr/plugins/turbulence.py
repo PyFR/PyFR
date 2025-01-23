@@ -70,7 +70,7 @@ class TurbulencePlugin(BaseSolverPlugin):
             gamma = self.cfg.getfloat('constants', 'gamma')
             avgrho = self.cfg.getfloat(cfgsect, 'avg-rho')
             avgmach = self.cfg.getfloat(cfgsect, 'avg-mach')
-            beta2 = avgrho*(gamma - 1)*avgmach**2
+            beta2 = (avgrho/avgu)*(gamma - 1)*avgmach**2
         else:
             beta2 = 0
 
