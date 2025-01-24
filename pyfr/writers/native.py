@@ -123,7 +123,7 @@ class NativeWriter:
             gdata[ek] = gatherer(dset)
 
         # Delegate to _write to do the actual outputting
-        f, reqs = self._write(self.tname, gdata, metadata, async_=async_)
+        f, bufs, reqs = self._write(self.tname, gdata, metadata, async_=async_)
 
         # Determine the final output path
         path = self.fgen.send(tcurr)
@@ -141,7 +141,7 @@ class NativeWriter:
                 callback(path)
 
         if async_:
-            self._awriter = _AsyncCompleter(reqs, timeout, oncomplete)
+            self._awriter = _AsyncCompleter(bufs, reqs, timeout, oncomplete)
         else:
             oncomplete()
 
@@ -188,13 +188,14 @@ class NativeWriter:
         # Collectively open the file for writing
         f = mpi.File.Open(comm, path, mpi.MODE_WRONLY)
 
-        # Track the active write requests
-        reqs = []
+        # Track the buffers being written and their associated MPI requests
+        bufs, reqs = [], []
 
         def write_off(k, v, n):
             if len(v):
                 args = (doffs[k] + n*(v.nbytes // len(v)), v)
                 if async_:
+                    bufs.append(v)
                     reqs.append(f.Iwrite_at(*args))
                 else:
                     f.Write_at(*args)
@@ -208,11 +209,12 @@ class NativeWriter:
             if subset:
                 write_off(f'{ek}-idxs', gatherer.ridx, gatherer.off)
 
-        return f, reqs
+        return f, bufs, reqs
 
 
 class _AsyncCompleter:
-    def __init__(self, reqs, timeout, callback):
+    def __init__(self, bufs, reqs, timeout, callback):
+        self.bufs = bufs
         self.reqs = reqs
         self.timeout = timeout
         self.callback = callback
