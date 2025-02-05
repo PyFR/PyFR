@@ -90,6 +90,11 @@ class BaseReader:
                 for etype, einfo in eles.items():
                     f[f'eles/{etype}'] = einfo
 
+                    # Also write out the reference shape points
+                    shape = subclass_where(BaseShape, name=etype)
+                    order = shape.order_from_npts(einfo['nodes'].shape[1])
+                    f[f'eles/{etype}'].attrs['pts'] = shape.std_ele(order)
+
                 # Write out the periodic boundary information
                 for pname, pidx in pmap.items():
                     f[f'periodic/{pname}'] = pidx
