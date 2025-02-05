@@ -226,7 +226,7 @@ class BaseSystem:
             if ((ui is None and fo is None) or
                 (ui is not None and ui == uinbank) or
                 (fo is not None and fo == foutbank)):
-                kernels[kn] = k
+                kernels[kn].extend(k)
 
         # Obtain the bind method for kernels which take runtime arguments
         binders = [k.bind for k in it.chain(*kernels.values())
