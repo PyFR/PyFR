@@ -24,8 +24,14 @@
                  + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
                 / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
 
-    // Roe average sound speed
-    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*nv*nv));
+    // Roe average kinetic energy
+    fpdtype_t ql = ${pyfr.dot('vl[{i}]', i=ndims)};
+    fpdtype_t qr = ${pyfr.dot('vr[{i}]', i=ndims)};
+    fpdtype_t qq = (ul[0]*ql + ur[0]*qr)
+                 / ((sqrt(ul[0]) + sqrt(ur[0]))*(sqrt(ul[0]) + sqrt(ur[0])));
+
+    // Roe average speed of sound
+    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*qq));
 
     // Estimate the left and right wave speed, sl and sr
     fpdtype_t sl = nv - a;
