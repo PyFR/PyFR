@@ -16,6 +16,9 @@
     fpdtype_t nvl = ${pyfr.dot('n[{i}]', 'vl[{i}]', i=ndims)};
     fpdtype_t nvr = ${pyfr.dot('n[{i}]', 'vr[{i}]', i=ndims)};
 
+    fpdtype_t al = sqrt(${c['gamma']}*pl/ul[0]);
+    fpdtype_t ar = sqrt(${c['gamma']}*pr/ur[0]);
+
     // Compute the Roe-averaged velocity
     fpdtype_t nv = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)
                  / (sqrt(ul[0]) + sqrt(ur[0]));
@@ -36,8 +39,8 @@
     fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*qq));
 
     // Estimate the left and right wave speed, sl and sr
-    fpdtype_t sl = nv - a;
-    fpdtype_t sr = nv + a;
+    fpdtype_t sl = min(nv - a, nvl - ar);
+    fpdtype_t sr = max(nv + a, nvr + ar);
     fpdtype_t rcpsrsl = 1/(sr - sl);
 
     // Output
