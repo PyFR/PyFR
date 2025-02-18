@@ -6,6 +6,7 @@
     fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
     fpdtype_t vl[${ndims}], vr[${ndims}];
     fpdtype_t pl, pr, nf_fl, nf_fr, nf_fsl, nf_fsr;
+    fpdtype_t va[${ndims}];
     fpdtype_t usl[${nvars}], usr[${nvars}];
 
     ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
@@ -24,12 +25,13 @@
                  + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
                 / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
 
-    // Roe average kinetic energy
-    fpdtype_t ql = ${pyfr.dot('vl[{i}]', i=ndims)};
-    fpdtype_t qr = ${pyfr.dot('vr[{i}]', i=ndims)};
-    fpdtype_t qq = (ul[0]*ql + ur[0]*qr)
-                 / ((sqrt(ul[0]) + sqrt(ur[0]))*(sqrt(ul[0]) + sqrt(ur[0])));
+    fpdtype_t inv_rar = 1 / (sqrt(ul[0]) + sqrt(ur[0]));
+% for i in range(ndims):
+    va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0])) * inv_rar;
+% endfor
 
+    fpdtype_t qq = ${pyfr.dot('va[{i}]', i=ndims)};
+    
     // Roe average speed of sound
     fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*qq));
 
