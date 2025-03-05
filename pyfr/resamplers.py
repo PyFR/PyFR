@@ -237,7 +237,7 @@ class BaseCloudResampler(AlltoallMixin):
                 solns[i] = self.interp(p, spts[:nn], dists[:nn],
                                        self.solns[idxs[:nn]])
 
-        self._exchange_fringe_pts(fpreqs)
+        self._exchange_fringe_pts(fpreqs, nn)
 
         # Process the deferred points
         for i in deferred:
@@ -254,7 +254,7 @@ class BaseCloudResampler(AlltoallMixin):
         # Return the interpolated solution values
         return solns
 
-    def _exchange_fringe_pts(self, frboxes):
+    def _exchange_fringe_pts(self, frboxes, nn):
         comm, rank, root = get_comm_rank_root()
 
         # Tally up how many requests we have for each rank
@@ -278,7 +278,7 @@ class BaseCloudResampler(AlltoallMixin):
                 p, bmin, bmax = np.array_split(bb, self.ndims)
 
                 # Find our points nearest to p
-                idxs = np.array(list(self.pts_tree.nearest(p, self.nn)))
+                idxs = np.array(list(self.pts_tree.nearest(p, nn)))
                 qpts = self.pts[idxs]
 
                 # Loop over those which are inside the provided bounding box
