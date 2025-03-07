@@ -22,6 +22,7 @@ Contents:
    performance_tuning
    examples
    developer_guide
+   file_format
 
 Indices and Tables
 ******************

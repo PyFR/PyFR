@@ -56,7 +56,7 @@ inheritance_edge_attrs = dict(
 
 # The names of modules to mock and hence avoid import.
 autodoc_mock_imports = ['h5py', 'mpi4py', 'gimmik', 'numpy', 'mako',
-                        'platformdirs', 'rtree']
+                        'platformdirs', 'rtree', 'pyfr.mpiutil']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -72,7 +72,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'PyFR'
-copyright = u'2013–2024, Imperial College London'
+copyright = u'2013–2025, Imperial College London'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

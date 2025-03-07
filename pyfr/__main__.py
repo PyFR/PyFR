@@ -284,8 +284,10 @@ def process_partition_add(args):
         etypes = list(mesh['eles'])
 
         # Partition weights
-        if ':' in args.np:
-            pwts = [int(w) for w in args.np.split(':')]
+        if ':' in args.np or '*' in args.np:
+            def psub(m): return ':'.join([m[1]]*int(m[2]))
+            pwts = re.sub(r'(\d+)\*(\d+)', psub, args.np)
+            pwts = [int(w) for w in pwts.split(':')]
         else:
             pwts = [1]*int(args.np)
 
