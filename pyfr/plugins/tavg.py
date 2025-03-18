@@ -113,6 +113,13 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         # Reduce
         self.tpts = comm.reduce(tpts, op=mpi.SUM, root=root)
 
+        # Check if we are restarting and not before when tavg begins
+        if intg.isrestart and intg.tcurr >= self.tstart:
+            self.tout_last = intg.tcurr
+            self.init_tout_last = False
+        else:
+            self.init_tout_last = True
+
     def _prepare_exprs(self):
         cfg, cfgsect = self.cfg, self.cfgsect
         c = self.cfg.items_as('constants', float)
@@ -152,7 +159,11 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
                            for pname in gradpnames]
 
     def _init_accumex(self, intg):
-        self.tstart_acc = self.prevt = self.tout_last = intg.tcurr
+        self.tstart_acc = self.prevt = intg.tcurr
+        if self.init_tout_last:
+            self.tout_last = intg.tcurr
+        else:
+            self.init_tout_last = True
         self.prevex = self._eval_acc_exprs(intg)
         self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
         self.vaccex = [np.zeros_like(a) for a in self.accex]
