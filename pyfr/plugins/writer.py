@@ -52,7 +52,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         self.fpdtype = intg.backend.fpdtype
 
         # Register our output times with the integrator
-        intg.call_plugin_dt(self.tstart, self.dt_out)
+        intg.call_plugin_dt(intg.tcurr, self.dt_out)
 
         # If we're not restarting then make sure we write out the initial
         # solution when we are called for the first time
