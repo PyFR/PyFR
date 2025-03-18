@@ -98,7 +98,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # Register our output times with the integrator
-        intg.call_plugin_dt(self.dtout)
+        intg.call_plugin_dt(self.tstart, self.dtout)
 
         # Mark ourselves as not currently averaging
         self._started = False
