@@ -1,4 +1,11 @@
+import contextlib
+import ctypes
+import errno
+import fcntl
 import os
+import struct
+import sys
+import threading
 import time
 import uuid
 
@@ -6,13 +13,23 @@ import h5py
 import numpy as np
 
 from pyfr._version import __version__
-from pyfr.shapes import BaseShape
+from pyfr.ctypesutil import get_libc_function
 from pyfr.mpiutil import Gatherer, get_comm_rank_root, mpi, scal_coll
 from pyfr.quadrules import get_quadrule
+from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, mv, subclass_where
 
 
 class NativeWriter:
+    # Lustre constants
+    LL_IOC_GROUP_LOCK = 0x4008669e
+    LL_GROUP = 0x1412
+    LL_IOC_LOV_SETSTRIPE = 0x4008669a
+    LOV_USER_MAGIC_V1 = 0x0bd10bd0
+    LOV_USER_MAGIC_V3 = 0x0bd30bd0
+    MAGIC_LUSTRE = 0x0bd00bd0
+    O_LOV_DELAY_CREATE = 0x1002100
+
     def __init__(self, mesh, cfg, fpdtype, basedir, basename, prefix, *,
                  extn='.pyfrs', isrestart=False):
         comm, rank, root = get_comm_rank_root()
@@ -40,6 +57,9 @@ class NativeWriter:
 
         self.tname = comm.bcast(tname, root=root)
 
+        # If we are on a Lustre filesystem
+        self.on_lustre_fs = self._on_lustre_fs(basedir)
+
         # Current asynchronous writing operation (if any)
         self._awriter = None
 
@@ -48,6 +68,66 @@ class NativeWriter:
         return NativeWriter(intg.system.mesh, intg.cfg, intg.backend.fpdtype,
                             basedir, basename, prefix=prefix,
                             isrestart=intg.isrestart)
+
+    @classmethod
+    def _on_lustre_fs(cls, basedir):
+        if sys.platform == 'linux' and 'PYFR_DISABLE_LUSTRE' not in os.environ:
+            buf = (ctypes.c_int * 128)()
+            get_libc_function('statfs')(basedir.encode(), buf)
+            return buf[0] == cls.MAGIC_LUSTRE
+        else:
+            return False
+
+    @contextlib.contextmanager
+    def _create_file(self, path):
+        if self.on_lustre_fs:
+            # Lustre pool name
+            pool = None
+
+            # Stripe size, count, and offset
+            ssize = 128*1024**2
+            scount = 2**16 - 1
+            soff = 2**16 - 1
+
+            magic = self.LOV_USER_MAGIC_V3 if pool else self.LOV_USER_MAGIC_V1
+            flags = (os.O_CREAT | os.O_EXCL | os.O_WRONLY
+                     | self.O_LOV_DELAY_CREATE)
+
+            try:
+                # Create the file with the special delay-create flag
+                try:
+                    fd = os.open(path, flags)
+                except OSError as e:
+                    if e.errno == errno.EEXIST:
+                        os.remove(path)
+                        fd = os.open(path, flags)
+                    else:
+                        raise
+
+                # Issue an ioctl to set the stripe parameters
+                try:
+                    arg = struct.pack('=IIQQIHH', magic, 1, 0, 0, ssize,
+                                      scount, soff)
+                    if pool:
+                        arg += pool.ljust(16, '\0').encode()
+
+                    fcntl.ioctl(fd, self.LL_IOC_LOV_SETSTRIPE, arg)
+                finally:
+                    os.close(fd)
+            except (IOError, OSError):
+                pass
+
+        with h5py.File(path, 'w', libver='latest') as f:
+            yield f
+
+    def _open_file(self, path):
+        f = open(path, 'r+b')
+
+        # If we are on a Lustre file system then take a group lock
+        if self.on_lustre_fs:
+            fcntl.ioctl(f.fileno(), self.LL_IOC_GROUP_LOCK, self.LL_GROUP)
+
+        return f
 
     def set_shapes_eidxs(self, shapes, eidxs):
         comm, rank, root = get_comm_rank_root()
@@ -123,14 +203,14 @@ class NativeWriter:
             gdata[ek] = gatherer(dset)
 
         # Delegate to _write to do the actual outputting
-        f, bufs, reqs = self._write(self.tname, gdata, metadata, async_=async_)
+        f, th = self._write(self.tname, gdata, metadata, async_=async_)
 
         # Determine the final output path
         path = self.fgen.send(tcurr)
 
         def oncomplete():
             # Close the file
-            f.Close()
+            f.close()
 
             # Have the root rank move it into place
             if rank == root:
@@ -141,14 +221,14 @@ class NativeWriter:
                 callback(path)
 
         if async_:
-            self._awriter = _AsyncCompleter(bufs, reqs, timeout, oncomplete)
+            self._awriter = _AsyncCompleter(th, timeout, oncomplete)
         else:
             oncomplete()
 
     def _prepare_file(self, path, metadata):
         doffs = {}
 
-        with h5py.File(path, 'w') as f:
+        with self._create_file(path) as f:
             # Write the metadata
             for k, v in metadata.items():
                 f[k] = v
@@ -185,37 +265,37 @@ class NativeWriter:
         # Distrbute the offsets of each dataset
         doffs = comm.bcast(doffs, root=root)
 
-        # Collectively open the file for writing
-        f = mpi.File.Open(comm, path, mpi.MODE_WRONLY)
+        # Open the file for writing
+        f = self._open_file(path)
 
-        # Track the buffers being written and their associated MPI requests
-        bufs, reqs = [], []
-
+        # Helper function for writing arrays at offsets
         def write_off(k, v, n):
             if len(v):
-                args = (doffs[k] + n*(v.nbytes // len(v)), v)
-                if async_:
-                    bufs.append(v)
-                    reqs.append(f.Iwrite_at(*args))
-                else:
-                    f.Write_at(*args)
+                f.seek(doffs[k] + n*(v.nbytes // len(v)))
+                v.tofile(f)
 
-        # Write out our element data
-        for ek, (gatherer, subset, *_) in self._einfo.items():
-            write_off(ek, data[ek], gatherer.off)
-            write_off(f'{ek}-parts', gatherer.rsrc, gatherer.off)
+        # Main writing function
+        def write(einfo):
+            for ek, (gatherer, subset, *_) in einfo.items():
+                write_off(ek, data[ek], gatherer.off)
+                write_off(f'{ek}-parts', gatherer.rsrc, gatherer.off)
 
-            # If the element has been subset then write the index data
-            if subset:
-                write_off(f'{ek}-idxs', gatherer.ridx, gatherer.off)
+                # If the element has been subset then write the index data
+                if subset:
+                    write_off(f'{ek}-idxs', gatherer.ridx, gatherer.off)
 
-        return f, bufs, reqs
+        if async_:
+            th = threading.Thread(target=write, args=(self._einfo,))
+            th.start()
+            return f, th
+        else:
+            write(self._einfo)
+            return f, None
 
 
 class _AsyncCompleter:
-    def __init__(self, bufs, reqs, timeout, callback):
-        self.bufs = bufs
-        self.reqs = reqs
+    def __init__(self, th, timeout, callback):
+        self.th = th
         self.timeout = timeout
         self.callback = callback
 
@@ -227,10 +307,9 @@ class _AsyncCompleter:
 
         if not self.done:
             if time.time() - self.start >= timeout:
-                mpi.Request.Waitall(self.reqs)
+                self.th.join()
 
-            if mpi.Request.Testall(self.reqs):
-                self.done = True
+            self.done = not self.th.is_alive()
 
         # See if everyone is done
         if scal_coll(comm.Allreduce, int(self.done), op=mpi.LAND):
