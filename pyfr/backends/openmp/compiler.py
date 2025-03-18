@@ -27,7 +27,7 @@ class OpenMPCompiler:
         self.proc = platform.processor()
 
         # Get the compiler version string
-        self.version = call_capture_output([self.cc, '-v'])
+        self.version = call_capture_output([self.cc, '-v'])[1]
 
         # Get the base compiler command strig
         self.cmd = self.cc_cmd(None, None)

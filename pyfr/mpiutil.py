@@ -196,9 +196,6 @@ class Scatterer(BaseGathererScatterer):
         self.cnt = len(ridx)
 
     def __call__(self, dset, didxs=(...,)):
-        rcount, rdisps = self.acountdisps
-        scount, sdisps = self.bcountdisps
-
         # Read the data
         svals = dset[self.start:self.end, *didxs][self.sidx]
 
@@ -206,8 +203,8 @@ class Scatterer(BaseGathererScatterer):
         rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
 
         # Perform the exchange
-        self._alltoallv(self.comm, (svals, (scount, sdisps)),
-                        (rvals, (rcount, rdisps)))
+        self._alltoallv(self.comm, (svals, self.bcountdisps),
+                        (rvals, self.acountdisps))
 
         # Unpack the data
         return rvals[self.rinv]
@@ -238,9 +235,6 @@ class Gatherer(BaseGathererScatterer):
         self.off = self.off if comm.rank else 0
 
     def __call__(self, dset):
-        scount, sdisps = self.acountdisps
-        rcount, rdisps = self.bcountdisps
-
         # Sort the data we are going to be sending
         svals = np.ascontiguousarray(dset[self.sinv])
 
@@ -248,8 +242,8 @@ class Gatherer(BaseGathererScatterer):
         rvals = np.empty((self.cnt, *dset.shape[1:]), dtype=dset.dtype)
 
         # Perform the exchange
-        self._alltoallv(self.comm, (svals, (scount, sdisps)),
-                        (rvals, (rcount, rdisps)))
+        self._alltoallv(self.comm, (svals, self.acountdisps),
+                        (rvals, self.bcountdisps))
 
         # Sort our received data
         return rvals[self.rinv]
@@ -303,9 +297,6 @@ class SparseScatterer(AlltoallMixin):
         self.cnt = self.rcountdisps[0].sum()
 
     def __call__(self, dset, didxs=(...,)):
-        scount, sdisps = self.scountdisps
-        rcount, rdisps = self.rcountdisps
-
         # Read and appropriately reorder our send data
         svals = dset[self.start:self.end, *didxs][self.sidx]
 
@@ -313,17 +304,17 @@ class SparseScatterer(AlltoallMixin):
         rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
 
         # Perform the exchange
-        self._alltoallv(self.comm, (svals, (scount, sdisps)),
-                        (rvals, (rcount, rdisps)))
+        self._alltoallv(self.comm, (svals, self.scountdisps),
+                        (rvals, self.rcountdisps))
 
         return rvals
 
 
 class Sorter(AlltoallMixin):
     typemap = {
-        np.int8: np.uint8, np.int16: np.uint16,
-        np.int32: np.uint32, np.int64: np.uint64,
-        np.float32: np.int32, np.float64: np.int64
+        'int8': np.uint8, 'int16': np.uint16,
+        'int32': np.uint32, 'int64': np.uint64,
+        'float32': np.int32, 'float64': np.int64
     }
 
     def __init__(self, comm, keys):
@@ -336,11 +327,11 @@ class Sorter(AlltoallMixin):
         # Determine the total size of the array
         size = scal_coll(comm.Allreduce, len(keys))
 
-        start, end, csize = get_start_end_csize(comm, size)
-        self.cnt = end - start
+        self.start, end, csize = get_start_end_csize(comm, size)
+        self.cnt = end - self.start
 
         # Determine what to send to each rank
-        sdisps = self._splitters(skeys, start)
+        sdisps = self._splitters(skeys, self.start)
         scount = self._disp_to_count(sdisps, len(keys))
         self.scountdisps = (scount, sdisps)
 
@@ -358,12 +349,12 @@ class Sorter(AlltoallMixin):
         if np.issubdtype(dtype, np.unsignedinteger):
             return skeys
         elif np.issubdtype(dtype, np.signedinteger):
-            udtype = self.typemap[dtype]
+            udtype = self.typemap[dtype.name]
             return skeys.view(udtype) ^ udtype(np.iinfo(dtype).max + 1)
         elif np.issubdtype(dtype, np.floating):
             shift = 8*dtype.itemsize - 1
-            idtype = self.typemap[dtype]
-            udtype = self.typemap[idtype]
+            idtype = self.typemap[dtype.name]
+            udtype = self.typemap[np.dtype(idtype).name]
 
             mask = (skeys.view(idtype) >> shift).view(udtype)
             mask |= udtype(1 << shift)
@@ -382,7 +373,7 @@ class Sorter(AlltoallMixin):
         # Compute the number of bits in the key space
         W = math.ceil(math.log2(kmax - kmin + 1))
 
-        e, rt = 0, 0
+        e, rt = kmin, 0
         q = np.empty(self.comm.size, dtype=skeys.dtype)
 
         for i in range(W - 1, -1, -1):
@@ -427,6 +418,16 @@ class Sorter(AlltoallMixin):
 
         # Locally sort our received data
         return rvals[self.ridx]
+
+    @property
+    def argidx(self):
+        svals = self.start + np.argsort(self.ridx)
+        rvals = np.empty(len(self.sidx), dtype=svals.dtype)
+
+        self._alltoallv(self.comm, (svals, self.rcountdisps),
+                        (rvals, self.scountdisps))
+
+        return rvals[np.argsort(self.sidx)]
 
 
 class _MPI_Funcs:
