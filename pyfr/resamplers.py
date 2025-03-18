@@ -61,11 +61,12 @@ class IDWInterpolator(BaseInterpolator):
         self.rho = rho or ndims + 1
         self.eps = 10*np.finfo(float).eps
 
-    def __call__(self, p, spts, sdists, svals):
-        if sdists[ix := sdists.argmin()] < self.eps:
+    def __call__(self, p, spts, svals):
+        dists = np.linalg.norm(p - spts, axis=1)
+        if dists[ix := dists.argmin()] < self.eps:
             return svals[ix]
         else:
-            swts = sdists**-self.rho
+            swts = dists**-self.rho
             swts /= swts.sum()
 
             return swts @ svals
@@ -86,8 +87,10 @@ class BaseCloudResampler(AlltoallMixin):
             # Index the points
             self.pts_tree = self._compute_pts_tree(self.pts)
 
-            # Index the bounding boxes
-            self.bbox_tree = self._compute_bbox_tree(keys, self.pts)
+            # Index the bounding boxes (inclusives and exclusive of ourself)
+            self.ibbox_tree, self.ebbox_tree = self._compute_bbox_trees(
+                keys, self.pts
+            )
 
         # Track what points we have sent to other ranks
         comm, rank, root = get_comm_rank_root()
@@ -115,12 +118,11 @@ class BaseCloudResampler(AlltoallMixin):
         return sorter.keys, sorter(pts), sorter(solns)
 
     def _compute_pts_tree(self, pts):
-        ins = ((i, (*p, *p), None) for i, p in enumerate(pts))
         props = Property(dimension=self.ndims, index_capacity=25,
                          leaf_capacity=25)
-        return Index(ins, properties=props)
+        return Index((np.arange(len(pts)), pts, pts), properties=props)
 
-    def _compute_bbox_tree(self, keys, pts):
+    def _compute_bbox_trees(self, keys, pts):
         comm, rank, root = get_comm_rank_root()
 
         # Number of bits to use for bounding box construction
@@ -143,13 +145,18 @@ class BaseCloudResampler(AlltoallMixin):
         # Exchange
         comm.Allgather(mpi.IN_PLACE, bboxes)
 
-        # Insert the bounding boxes into an R-tree index and return
-        ins = [(i, (*bmin, *bmax), None)
-               for i, ibboxes in enumerate(bboxes)
-               for bmin, bmax in ibboxes if not np.isnan(bmin[0])]
+        # Construct bounding box trees inclusive and exclusive of our rank
+        trees = []
         props = Property(dimension=self.ndims, index_capacity=25,
                          leaf_capacity=25)
-        return Index(ins, properties=props)
+
+        for i in (None, comm.rank):
+            ins = [(j, (*bmin, *bmax), None)
+                   for j, jbboxes in enumerate(bboxes) if j != i
+                   for bmin, bmax in jbboxes if not np.isnan(bmin[0])]
+            trees.append(Index(ins, properties=props))
+
+        return trees
 
     def sample_with_mesh_config(self, mesh, cfg):
         pts, sidxs = [], []
@@ -190,8 +197,7 @@ class BaseCloudResampler(AlltoallMixin):
 
         if comm.size > 1:
             # Assign each point to a rank
-            tranks = [next(self.bbox_tree.nearest((*p, *p), 1)) for p in pts]
-            tranks = np.array(tranks)
+            tranks = self.ibbox_tree.nearest_v(pts, pts, 1, strict=True)[0]
         else:
             tranks = np.zeros(len(pts), dtype=int)
 
@@ -212,42 +218,40 @@ class BaseCloudResampler(AlltoallMixin):
         solns = np.empty((len(pts), self.nvars))
 
         irank, nn = {rank}, self.interp.n
-        deferred = []
+        deferred, off = [], 0
         fpreqs = [[] for i in range(comm.size)]
 
-        for i, p in enumerate(pts):
-            # Query the indices of the nearest points to p
-            idxs = list(self.pts_tree.nearest(p.tolist(), nn))
-            spts = self.pts[idxs]
+        # Determine the nearest points to each sample point
+        nidxs, _, ndists = self.pts_tree.nearest_v(pts, pts, nn,
+                                                   strict=True,
+                                                   return_max_dists=True)
 
-            # Compute their distances from p
-            dists = np.linalg.norm(p - spts, axis=1)
+        # Compute the associated bounding boxes
+        pmins, pmaxs = pts - ndists[:, None], pts + ndists[:, None]
 
-            # Obtain the associated bounding box
-            dmax = dists.max()
-            bbox = [*(p - dmax), *(p + dmax)]
+        # Determine which ranks intersect with these bounding boxes
+        iranks, icounts = self.ebbox_tree.intersection_v(pmins, pmaxs)
 
-            # If this intersects with any other ranks box then defer it
-            if isect := (set(self.bbox_tree.intersection(bbox)) - irank):
+        for i, (p, count) in enumerate(zip(pts, icounts)):
+            # If any other ranks intersect then defer
+            if count:
                 deferred.append(i)
-                for j in isect:
-                    fpreqs[j].append([*p, *bbox])
-            # Otherwise, perform the interpolation
+                for j in np.unique(iranks[off:off + count]):
+                    fpreqs[j].append([*p, ndists[i]])
+
+                off += count
+            # Otherwise perform the interpolation
             else:
-                solns[i] = self.interp(p, spts[:nn], dists[:nn],
-                                       self.solns[idxs[:nn]])
+                idxs = nidxs[i*nn:(i + 1)*nn]
+                solns[i] = self.interp(p, self.pts[idxs], self.solns[idxs])
 
         self._exchange_fringe_pts(fpreqs, nn)
 
         # Process the deferred points
-        for i in deferred:
-            p = pts[i]
-
-            idxs = list(self.pts_tree.nearest(p.tolist(), nn))[:nn]
-            spts = self.pts[idxs]
-            dists = np.linalg.norm(p - spts, axis=1)
-
-            solns[i] = self.interp(p, spts, dists, self.solns[idxs])
+        dpts = pts[deferred]
+        didxs = self.pts_tree.nearest_v(dpts, dpts, nn, strict=True)[0]
+        for i, p, idxs in zip(deferred, dpts, didxs.reshape(-1, nn)):
+            solns[i] = self.interp(p, self.pts[idxs], self.solns[idxs])
 
         comm.barrier()
 
@@ -262,7 +266,7 @@ class BaseCloudResampler(AlltoallMixin):
         if scount.any():
             sbuf = np.vstack([fr for fr in frboxes if fr])
         else:
-            sbuf = np.empty((0, 3*self.ndims))
+            sbuf = np.empty((0, self.ndims + 1))
 
         # Exchange the requests
         rdata, (_, rdisps) = self._alltoallcv(comm, sbuf, scount)
@@ -273,20 +277,15 @@ class BaseCloudResampler(AlltoallMixin):
         for i, ibboxes in enumerate(np.split(rdata, rdisps[1:])):
             fcnt = len(fidxs)
 
-            # Loop over point request sent by this rank
-            for bb in ibboxes:
-                p, bmin, bmax = np.array_split(bb, self.ndims)
+            # Identify nearby points on our rank
+            pts, ndists = ibboxes[:, :self.ndims], ibboxes[:, self.ndims]
+            idxs, _ = self.pts_tree.nearest_v(pts, pts, nn, max_dists=ndists,
+                                              strict=True)
+            idxs = set(np.unique(idxs).tolist())
 
-                # Find our points nearest to p
-                idxs = np.array(list(self.pts_tree.nearest(p, nn)))
-                qpts = self.pts[idxs]
-
-                # Loop over those which are inside the provided bounding box
-                for j in idxs[((bmin <= qpts) & (bmax >= qpts)).all(axis=1)]:
-                    # Ensure we've not already sent this point over
-                    if j not in self._fringe_idxs[i]:
-                        self._fringe_idxs[i].add(j)
-                        fidxs.append(j)
+            # Exclude points that have already been sent over
+            fidxs.extend(idxs - self._fringe_idxs[i])
+            self._fringe_idxs[i].update(idxs)
 
             # Tally up how many points we are sending to this rank
             fcount.append(len(fidxs) - fcnt)

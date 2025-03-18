@@ -116,7 +116,7 @@ install_requires = [
     'numpy >= 1.26.4',
     'platformdirs >= 2.2.0',
     'pytools >= 2016.2.1',
-    'rtree >= 1.0.1'
+    'rtree >= 1.4.0'
 ]
 
 # Soft dependencies

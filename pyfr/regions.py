@@ -308,14 +308,13 @@ class STLRegion(BaseGeometricRegion):
         self.fa = fa.copy()
         self.mat = np.moveaxis(mat, 2, 0).copy()
 
-        # Compute the per-face bounding box
-        tbox = np.hstack([faces.min(axis=1) - 1e-6,
-                            faces.max(axis=1) + 1e-6])
+        # Compute the per-face bounding boxes
+        fmins = faces.min(axis=1) - 1e-6
+        fmaxs = faces.max(axis=1) + 1e-6
 
         # Use this to construct an R-tree index
-        ins = ((i, p.tolist(), None) for i, p in enumerate(tbox))
-        props = Property(dimension=3, interleaved=True)
-        self.tri_idx = Index(ins, properties=props)
+        self.tri_idx = Index((np.arange(len(faces)), fmins, fmaxs),
+                             properties=Property(dimension=3))
 
     def _pts_in_region(self, pts):
         inside = np.ones(pts.shape[:-1], dtype=bool)
