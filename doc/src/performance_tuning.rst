@@ -118,10 +118,10 @@ performs best.
 Mixed grids
 -----------
 
-When running PyFR in parallel on mixed element grids it is necessary
-to take some additional care when partitioning the grid.  A good domain
+When running PyFR in parallel on mixed element grids it is necessary to
+take additional care when partitioning the grid.  A good domain
 decomposition is one where each partition contains the same amount of
-computational work.  For grids with a single element type the amount of
+computational work.  For grids with a single element type, the amount of
 computational work is very well approximated by the number of elements
 assigned to a partition.  Thus the goal is simply to ensure that all of
 the partitions have roughly the same number of elements.  However, when
@@ -131,11 +131,11 @@ of another.
 
 There are two main solutions to this problem.  The first is to require
 that each partition contain the same number of elements of each type.
-For example, if partitioning a mesh with 500 quadrilaterals and
-1,500 triangles into two parts, then a sensible goal is to aim for
-each domain to have 250 quadrilaterals and 750 triangles.  Irrespective
-of what the relative performance differential between the element types
-is, both partitions will have near identical amounts of work.  In PyFR
+For example, if partitioning a mesh with 500 quadrilaterals and 1,500
+triangles into two parts, then a sensible goal would be to aim for each
+domain to have 250 quadrilaterals and 750 triangles.  Irrespective of
+what the relative performance differential between the element types is,
+both partitions will have nearly identical amounts of work.  In PyFR
 this is known as the *balanced* approach and can be requested via::
 
     pyfr partition add -e balanced ...
@@ -143,13 +143,13 @@ this is known as the *balanced* approach and can be requested via::
 This approach typically works well when the number of partitions is
 small.  However, for larger partition counts it can become difficult to
 achieve such a balance whilst simultaneously minimising communication
-volume.  Thus, in order to obtain a good decomposition a secondary
-approach is required in which each type of element in the domain is
-assigned a *weight*.  Element types which are more computationally
-intensive are assigned a larger weight than those that are less
-intensive.  Through this mechanism the total cost of each partition can
-remain balanced.  Unfortunately, the relative cost of different element
-types depends on a variety of factors, including:
+volume.  Thus, to obtain a good decomposition a secondary approach is
+required in which each type of element in the domain is assigned a
+*weight*.  Element types which are more computationally intensive are
+assigned a larger weight than those that are less intensive.  Through
+this mechanism the total cost of each partition can remain balanced.
+Unfortunately, the relative cost of different element types depends on a
+variety of factors, including:
 
  - The polynomial order.
  - If anti-aliasing is enabled in the simulation, and if so, to what
@@ -164,12 +164,12 @@ can be specified as::
         pyfr partition add -e quad:3 -e tri:2 ...
 
 If precise profiling data is not available regarding the performance of
-each element type in a given configuration a helpful rule of thumb is
-to under-weight the dominant element type in the domain.  For example,
-if a domain is 90% tetrahedra and 10% prisms then, absent any
-additional information about the relative performance of tetrahedra and
-prisms, a safe choice is to assume the prisms are appreciably *more*
-expensive than the tetrahedra.
+each element type in a given configuration a helpful rule of thumb is to
+under-weight the dominant element type in the domain.  For example, if a
+domain is 90% tetrahedra and 10% prisms then, absent any additional
+information about the relative performance of tetrahedra and prisms, a
+safe choice is to assume the prisms are considerably *more* expensive
+than the tetrahedra.
 
 Detecting load imbalances
 -------------------------
