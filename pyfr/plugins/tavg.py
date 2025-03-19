@@ -116,9 +116,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         # Check if we are restarting and not before when tavg begins
         if intg.isrestart and intg.tcurr >= self.tstart:
             self.tout_last = intg.tcurr
-            self.init_tout_last = False
         else:
-            self.init_tout_last = True
+            self.tout_last = None
 
     def _prepare_exprs(self):
         cfg, cfgsect = self.cfg, self.cfgsect
@@ -161,10 +160,9 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
     def _init_accumex(self, intg):
         self.tstart_acc = self.prevt = intg.tcurr
 
-        if self.init_tout_last:
+        # Don't change tout_last if we are restarting past tstart
+        if self._started or self.tout_last is None:
             self.tout_last = intg.tcurr
-        else:
-            self.init_tout_last = True
 
         self.prevex = self._eval_acc_exprs(intg)
         self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
