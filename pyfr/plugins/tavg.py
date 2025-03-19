@@ -98,7 +98,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # Register our output times with the integrator
-        intg.call_plugin_dt(self.dtout)
+        intg.call_plugin_dt(self.tstart, self.dtout)
 
         # Mark ourselves as not currently averaging
         self._started = False
@@ -112,6 +112,12 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
         # Reduce
         self.tpts = comm.reduce(tpts, op=mpi.SUM, root=root)
+
+        # Check if we are restarting and not before when tavg begins
+        if intg.isrestart and intg.tcurr >= self.tstart:
+            self.tout_last = intg.tcurr
+        else:
+            self.tout_last = None
 
     def _prepare_exprs(self):
         cfg, cfgsect = self.cfg, self.cfgsect
@@ -152,7 +158,12 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
                            for pname in gradpnames]
 
     def _init_accumex(self, intg):
-        self.tstart_acc = self.prevt = self.tout_last = intg.tcurr
+        self.tstart_acc = self.prevt = intg.tcurr
+
+        # Don't change tout_last if we are restarting past tstart
+        if self._started or self.tout_last is None:
+            self.tout_last = intg.tcurr
+
         self.prevex = self._eval_acc_exprs(intg)
         self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
         self.vaccex = [np.zeros_like(a) for a in self.accex]

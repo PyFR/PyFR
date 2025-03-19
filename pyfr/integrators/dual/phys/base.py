@@ -54,13 +54,17 @@ class BaseDualIntegrator(BaseIntegrator):
 
         return dt_soln
 
-    def call_plugin_dt(self, dt):
+    def call_plugin_dt(self, tstart, dt):
         rem = math.fmod(dt, self._dt)
         tol = 5.0*self.dtmin
         if rem > tol and (self._dt - rem) > tol:
             raise ValueError('Plugin call times must be multiples of dt')
+        
+        rem_tstart = math.fmod(tstart, self._dt)
+        if rem_tstart > tol and (self._dt - rem_tstart) > tol:
+            raise ValueError('Plugin start times must be multiples of dt')
 
-        super().call_plugin_dt(dt)
+        super().call_plugin_dt(tstart, dt)
 
     def collect_stats(self, stats):
         super().collect_stats(stats)

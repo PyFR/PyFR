@@ -137,9 +137,10 @@ class BaseIntegrator:
         else:
             return f'plugins/{name}'
 
-    def call_plugin_dt(self, dt):
+    def call_plugin_dt(self, tstart, dt):
         ta = self.tlist
-        tb = deque(np.arange(self.tcurr, self.tend, dt).tolist())
+        tbegin = tstart if tstart > self.tcurr else self.tcurr
+        tb = deque(np.arange(tbegin, self.tend, dt).tolist())
 
         self.tlist = tlist = deque()
 
