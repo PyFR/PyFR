@@ -160,10 +160,12 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
     def _init_accumex(self, intg):
         self.tstart_acc = self.prevt = intg.tcurr
+
         if self.init_tout_last:
             self.tout_last = intg.tcurr
         else:
             self.init_tout_last = True
+
         self.prevex = self._eval_acc_exprs(intg)
         self.accex = [np.zeros_like(p, dtype=np.float64) for p in self.prevex]
         self.vaccex = [np.zeros_like(a) for a in self.accex]
