@@ -179,7 +179,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
     def get_vort_structs(self, intg):
         ls, avgu = self.ls, self.avgu
-        props = Property(dimension=3, interleaved=True)
+        props = Property(dimension=3)
         eventdtype = self.eventdtype
         vortstructs = {}
 

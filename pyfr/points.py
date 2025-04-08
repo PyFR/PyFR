@@ -67,15 +67,14 @@ class PointLocator:
             p = np.frombuffer(pmem, dtype=dtype)
             q = np.frombuffer(qmem, dtype=dtype)
 
-            mask = p[fields[0]] < q[fields[0]]
-            for i, f in enumerate(fields[1:], start=1):
-                fmask = p[f] < q[f]
-                for g in fields[:i]:
-                    fmask &= p[g] == q[g]
+            lmask = p[fields[0]] < q[fields[0]]
+            emask = p[fields[0]] == q[fields[0]]
 
-                mask |= fmask
+            for f in fields[1:]:
+                lmask |= emask & p[f] < q[f]
+                emask &= p[f] == q[f]
 
-            q[mask] = p[mask]
+            q[lmask] = p[lmask]
 
         sbuf = (x, mpi.BYTE) if x is not mpi.IN_PLACE else x
         rbuf = (y, mpi.BYTE)

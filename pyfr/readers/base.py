@@ -178,7 +178,7 @@ class NodalMeshAssembler:
         fnmap = self._petype_fnmap[petype][pftype]
 
         # Element, face, and first-order node count
-        neles, nfaces, nnodes = len(foeles), len(fnums), len(fnmap[0])
+        nfaces, nnodes = len(fnums), len(fnmap[0])
 
         # Extract the first-order nodes
         nodes = np.sort(foeles[:, fnmap]).reshape(-1, nnodes)

@@ -37,7 +37,7 @@ class BaseInterpolator:
             elif k in cls.float_opts:
                 kwargs[k] = float(v)
             elif k in cls.enum_opts:
-                kwargs[k] = self.enum_opts[k][v]
+                kwargs[k] = cls.enum_opts[k][v]
             else:
                 raise ValueError('Invalid option')
 
@@ -217,7 +217,7 @@ class BaseCloudResampler(AlltoallMixin):
         # Allocate the interpolated solution array
         solns = np.empty((len(pts), self.nvars))
 
-        irank, nn = {rank}, self.interp.n
+        nn = self.interp.n
         deferred, off = [], 0
         fpreqs = [[] for i in range(comm.size)]
 
