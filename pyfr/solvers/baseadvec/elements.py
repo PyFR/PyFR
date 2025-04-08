@@ -169,7 +169,7 @@ class BaseAdvectionElements(BaseElements):
 
                 if not self.basis.fpts_in_upts:
                     vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
-                    vdm_em = np.vstack([vdm_ef, vdmf])
+                    vdm_ef = np.vstack([vdm_ef, vdmf])
 
                 self.vdm_ef = self._be.const_matrix(vdm_ef)
             else:

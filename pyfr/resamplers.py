@@ -161,6 +161,9 @@ class BaseCloudResampler(AlltoallMixin):
     def sample_with_mesh_config(self, mesh, cfg):
         pts, sidxs = [], []
 
+        # Numeric data type
+        dtype = np.dtype(cfg.get('backend', 'precision', 'double')).type
+
         # Interpolate the shape points to the solution points
         for etype in mesh.eidxs:
             op = _ploc_op(etype, len(mesh.spts[etype]), cfg)
@@ -171,7 +174,7 @@ class BaseCloudResampler(AlltoallMixin):
             sidxs.append(len(plocs) + (sidxs[-1] if sidxs else 0))
 
         # Sample the solution at these solution points
-        solns = self.sample_with_pts(np.vstack(pts))
+        solns = self.sample_with_pts(np.vstack(pts), dtype)
         solns = np.split(solns, sidxs[:-1])
 
         # Reshape these solutions into their canonical forms
@@ -182,12 +185,12 @@ class BaseCloudResampler(AlltoallMixin):
 
         return esolns
 
-    def sample_with_pts(self, tpts):
+    def sample_with_pts(self, tpts, dtype):
         with self.progress.start('Distribute target points'):
             tpts, tcountdisp, tidx = self._distribute_tgt_pts(tpts)
 
         with self.progress.start('Sample target points'):
-            tsolns = self._sample_tgt_points(tpts)
+            tsolns = self._sample_tgt_points(tpts, dtype)
 
         with self.progress.start('Distribute target samples'):
             return self._distribute_tgt_samples(tsolns, tcountdisp, tidx)
@@ -215,7 +218,7 @@ class BaseCloudResampler(AlltoallMixin):
         comm, rank, root = get_comm_rank_root()
 
         # Allocate the interpolated solution array
-        solns = np.empty((len(pts), self.nvars))
+        solns = np.empty((len(pts), self.nvars), dtype=dtype)
 
         nn = self.interp.n
         deferred, off = [], 0
