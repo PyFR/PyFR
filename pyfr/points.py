@@ -93,7 +93,7 @@ class PointLocator:
                     properties=Property(dimension=self.mesh.ndims))
 
         # Query the index to find our closest node
-        nearest = idx.nearest_v(pts, pts, 1, strict=True)[0]
+        nearest = idx.nearest_v(pts, pts, strict=True)[0]
 
         buf = np.empty(len(pts), dtype=[('dist', float), ('idx', int)])
         buf['dist'] = np.linalg.norm(pts - nodes[nearest], axis=1)

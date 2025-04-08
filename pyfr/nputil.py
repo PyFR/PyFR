@@ -63,8 +63,9 @@ def morton_encode(ipts, imax, dtype=np.uint64):
     # Determine how many bits to use for each input dimension
     ndims = ipts.shape[1]
     obits = 8*codes.dtype.itemsize
-    ibits = dtype(obits // ndims)
-    ishift = np.array([max(int(p).bit_length() - ibits, 0) for p in imax])
+    ibits = obits // ndims
+    ishift = np.array([max(int(p).bit_length() - ibits, 0) for p in imax],
+                      dtype=dtype)
 
     # Compute the masks and shifts
     ops = [[(1 << j, (ndims - 1)*j + i) for j in range(ibits)]

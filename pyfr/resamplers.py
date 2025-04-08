@@ -197,7 +197,7 @@ class BaseCloudResampler(AlltoallMixin):
 
         if comm.size > 1:
             # Assign each point to a rank
-            tranks = self.ibbox_tree.nearest_v(pts, pts, 1, strict=True)[0]
+            tranks = self.ibbox_tree.nearest_v(pts, pts, strict=True)[0]
         else:
             tranks = np.zeros(len(pts), dtype=int)
 
@@ -222,7 +222,7 @@ class BaseCloudResampler(AlltoallMixin):
         fpreqs = [[] for i in range(comm.size)]
 
         # Determine the nearest points to each sample point
-        nidxs, _, ndists = self.pts_tree.nearest_v(pts, pts, nn,
+        nidxs, _, ndists = self.pts_tree.nearest_v(pts, pts, num_results=nn,
                                                    strict=True,
                                                    return_max_dists=True)
 
@@ -249,7 +249,8 @@ class BaseCloudResampler(AlltoallMixin):
 
         # Process the deferred points
         dpts = pts[deferred]
-        didxs = self.pts_tree.nearest_v(dpts, dpts, nn, strict=True)[0]
+        didxs, _ = self.pts_tree.nearest_v(dpts, dpts, num_results=nn,
+                                           strict=True)
         for i, p, idxs in zip(deferred, dpts, didxs.reshape(-1, nn)):
             solns[i] = self.interp(p, self.pts[idxs], self.solns[idxs])
 
@@ -279,8 +280,8 @@ class BaseCloudResampler(AlltoallMixin):
 
             # Identify nearby points on our rank
             pts, ndists = ibboxes[:, :self.ndims], ibboxes[:, self.ndims]
-            idxs, _ = self.pts_tree.nearest_v(pts, pts, nn, max_dists=ndists,
-                                              strict=True)
+            idxs, _ = self.pts_tree.nearest_v(pts, pts, num_results=nn,
+                                              max_dists=ndists, strict=True)
             idxs = set(np.unique(idxs).tolist())
 
             # Exclude points that have already been sent over
