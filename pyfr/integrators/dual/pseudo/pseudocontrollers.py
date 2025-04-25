@@ -110,14 +110,14 @@ class DualPIPseudoController(BaseDualPseudoController):
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
+        dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 1.0)
         dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
 
-        if dtau_maxf < 1:
-            raise ValueError('Invalid pseudo-dt-max-mult')
+        if dtau_minf > 1 or dtau_maxf < 1:
+            raise ValueError('Invalid pseudo-dt-min-mult, pseudo-dt-max-mult')
 
         # Limits for the local pseudo-time-step size
-        tplargs['dtau_min'] = self._dtau
-        
+        self.dtau_min = dtau_minf * self._dtau
         self.dtau_max = dtau_maxf * self._dtau
 
         # Register a kernel to compute local error
@@ -150,7 +150,7 @@ class DualPIPseudoController(BaseDualPseudoController):
         for k, idx in self.pintgkernels:
             if k == 'localerrest':
                 for kk in self.pintgkernels[k, idx]:
-                    kk.bind(dtau_max=self.dtau_max)
+                    kk.bind(dtau_min=self.dtau_min, dtau_max=self.dtau_max)
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])

@@ -149,6 +149,12 @@ Parameterises the time-integration scheme used by the solver with
 
                *float*
 
+            - ``pseudo-dt-min-mult`` --- minimum permissible
+              local pseudo time-step given as a
+              multiplier of ``pseudo-dt`` (suitable range 0.001-1.0)
+
+               *float*
+
 Example::
 
     [solver-time-integrator]
