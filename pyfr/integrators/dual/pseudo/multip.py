@@ -46,7 +46,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
         self.npmgcycles = 0
 
         # Multigrid pseudo-time steps
-        dtau = cfg.getfloat(sect, 'pseudo-dt')
+        self.dtau = cfg.getfloat(sect, 'pseudo-dt')
         self.dtauf = cfg.getfloat(mgsect, 'pseudo-dt-fact', 1.0)
 
         self._maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
@@ -76,7 +76,7 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
                 mcfg = Inifile(cfg.tostr())
                 mcfg.set('solver', 'order', l)
-                mcfg.set(sect, 'pseudo-dt', dtau*self.dtauf**(order - l))
+                mcfg.set(sect, 'pseudo-dt', self.dtau*self.dtauf**(order - l))
 
                 for s in cfg.sections():
                     if (m := re.match(f'solver-(.*)-mg-p{l}$', s)):
@@ -281,13 +281,17 @@ class DualMultiPIntegrator(BaseDualPseudoIntegrator):
 
         return self.pintg._aux_regidx
 
+    def adjust_dtau(self, dt):
+        for l in self.levels:
+            self.pintgs[l].adjust_dtau(dt)
+
     def pseudo_advance(self, tcurr):
         # Multigrid levels and step counts
         cycle, cstepsf = self.cycle, self.csteps
 
         # Set time step and current stepper coefficients for all levels
         for l in self.levels:
-            self.pintgs[l]._dt = self._dt
+            self.pintgs[l].dt = self.dt
             self.pintgs[l].stepper_coeffs = self.stepper_coeffs
 
         self.tcurr = tcurr

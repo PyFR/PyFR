@@ -14,12 +14,12 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self.backend = backend
         self.isrestart = initsoln is not None
         self.cfg = cfg
-        self._dt = dt
+        self.dt = dt
 
         sect = 'solver-time-integrator'
 
         self._dtaumin = 1.0e-12
-        self._dtau = cfg.getfloat(sect, 'pseudo-dt')
+        self.dtau = cfg.getfloat(sect, 'pseudo-dt')
 
         self.maxniters = cfg.getint(sect, 'pseudo-niters-max', 0)
         self.minniters = cfg.getint(sect, 'pseudo-niters-min', 0)
@@ -98,7 +98,7 @@ class BaseDualPseudoIntegrator(BaseCommon):
 
     def init_stage(self, currstg, stepper_coeffs, dt):
         self.stepper_coeffs = stepper_coeffs
-        self._dt = dt
+        self.dt = dt
 
         svals = [0, 1 / dt, *stepper_coeffs[:-1]]
         sregs = [self._source_regidx, *self._stepper_regidx,

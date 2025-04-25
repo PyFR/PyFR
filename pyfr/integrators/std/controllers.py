@@ -68,13 +68,13 @@ class StdNoneController(BaseStdController):
 
         while self.tcurr < t:
             # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt), self.dtmin)
+            self.adjust_dt(t)
 
             # Take the step
-            idxcurr = self.step(self.tcurr, dt)
+            idxcurr = self.step(self.tcurr, self.dt)
 
             # We are not adaptive, so accept every step
-            self._accept_step(dt, idxcurr)
+            self._accept_step(self.dt, idxcurr)
 
 
 class StdPIController(BaseStdController):
@@ -85,9 +85,6 @@ class StdPIController(BaseStdController):
         super().__init__(*args, **kwargs)
 
         sect = 'solver-time-integrator'
-
-        # Maximum time step
-        self.dtmax = self.cfg.getfloat(sect, 'dt-max', 1e2)
 
         # Error tolerances
         self._atol = self.cfg.getfloat(sect, 'atol')
@@ -174,25 +171,27 @@ class StdPIController(BaseStdController):
         expb = self._beta / sord
 
         while self.tcurr < t:
-            # Decide on the time step
-            dt = max(min(t - self.tcurr, self._dt, self.dtmax), self.dtmin)
+            # Adjust current time step per target t
+            self.adjust_dt(t)
+
+            self.dt = max(self.dt, self.dtmin)
 
             # Take the step
-            idxcurr, idxprev, idxerr = self.step(self.tcurr, dt)
+            idxcurr, idxprev, idxerr = self.step(self.tcurr, self.dt)
 
             # Estimate the error
             err = self._errest(idxcurr, idxprev, idxerr)
 
-            # Determine time step adjustment factor
-            fac = err**-expa * self._errprev**expb
-            fac = min(maxf, max(minf, saff*fac))
-
-            # Compute the size of the next step
-            self._dt = fac*dt
-
             # Decide if to accept or reject the step
             if err < 1.0:
                 self._errprev = err
-                self._accept_step(dt, idxcurr, err=err)
+                self._accept_step(self.dt, idxcurr, err=err)
             else:
-                self._reject_step(dt, idxprev, err=err)
+                self._reject_step(self.dt, idxprev, err=err)
+
+            # Adjust time step per PI controller
+            fac = err**-expa * self._errprev**expb
+            fac = min(maxf, max(minf, saff*fac))
+
+            # Compute the next time step
+            self.dt_fallback = fac*self.dt

@@ -37,7 +37,7 @@ class BaseDualPseudoStepper(BaseDualPseudoIntegrator):
         self.system.rhs(t, uin, fout)
 
         # Registers and coefficients
-        vals = [self.stepper_coeffs[-1], -1/self._dt, 1]
+        vals = [self.stepper_coeffs[-1], -1/self.dt, 1]
         regs = [fout, self._idxcurr, self._source_regidx]
 
         # Physical stepper source addition -∇·f - dQ/dt
@@ -66,7 +66,7 @@ class DualEulerPseudoStepper(BaseDualPseudoStepper):
             r0, r1 = r1, r0
 
         rhs(t, r0, r1)
-        add(0, r1, 1, r0, self._dtau, r1)
+        add(0, r1, 1, r0, self.dtau, r1)
 
         return r1, r0
 
@@ -86,7 +86,7 @@ class DualTVDRK3PseudoStepper(BaseDualPseudoStepper):
 
         add = self._add
         rhs = self._rhs_with_dts
-        dtau = self._dtau
+        dtau = self.dtau
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
@@ -130,7 +130,7 @@ class DualRK4PseudoStepper(BaseDualPseudoStepper):
 
         add = self._add
         rhs = self._rhs_with_dts
-        dtau = self._dtau
+        dtau = self.dtau
 
         # Get the bank indices for pseudo-registers (n+1,m; n+1,m+1; rhs),
         # where m = pseudo-time and n = real-time
@@ -189,7 +189,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
         self._nstages = len(self.b)
 
         # Allocate storage for the local pseudo time-step field
-        self.dtau_upts = [self.backend.matrix(shape, np.ones(shape)*self._dtau,
+        self.dtau_upts = [self.backend.matrix(shape, np.ones(shape)*self.dtau,
                                               tags={'align'})
                           for shape in self.system.ele_shapes.values()]
 
