@@ -175,7 +175,7 @@ class BaseIntegrator:
     def call_plugin_dt(self, tstart, dt):
         ta = self.tlist
         tbegin = tstart if tstart > self.tcurr else self.tcurr
-        tb = deque(np.arange(tbegin, self.tend, dt).tolist())
+        tb = deque(np.arange(self.tend - dt, self.tcurr, -dt).tolist()[::-1])
 
         self.tlist = tlist = deque()
 
