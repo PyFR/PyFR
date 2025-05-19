@@ -1,7 +1,8 @@
+import numpy as np
+
 from pyfr.backends.base import NullKernel
 from pyfr.solvers.base import BaseElements
 
-import numpy as np
 
 class BaseAdvectionElements(BaseElements):
     def __init__(self, *kargs, **kwargs):
@@ -164,10 +165,13 @@ class BaseAdvectionElements(BaseElements):
                 self.invvdm = self.vdm_ef = None
             elif form == 'nonlinear':
                 self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
-                vdmu = self.basis.ubasis.vdm.T
-                vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
-                vdm = vdmu if self.basis.fpts_in_upts else np.vstack((vdmu, vdmf))
-                self.vdm_ef = self._be.const_matrix(vdm)
+                vdm_ef = self.basis.ubasis.vdm.T
+
+                if not self.basis.fpts_in_upts:
+                    vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
+                    vdm_ef = np.vstack([vdm_ef, vdmf])
+
+                self.vdm_ef = self._be.const_matrix(vdm_ef)
             else:
                 raise ValueError('Invalid entropy filter formulation.')
 

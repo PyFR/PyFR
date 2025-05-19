@@ -37,7 +37,7 @@ class BaseInterpolator:
             elif k in cls.float_opts:
                 kwargs[k] = float(v)
             elif k in cls.enum_opts:
-                kwargs[k] = self.enum_opts[k][v]
+                kwargs[k] = cls.enum_opts[k][v]
             else:
                 raise ValueError('Invalid option')
 
@@ -161,6 +161,9 @@ class BaseCloudResampler(AlltoallMixin):
     def sample_with_mesh_config(self, mesh, cfg):
         pts, sidxs = [], []
 
+        # Numeric data type
+        dtype = np.dtype(cfg.get('backend', 'precision', 'double')).type
+
         # Interpolate the shape points to the solution points
         for etype in mesh.eidxs:
             op = _ploc_op(etype, len(mesh.spts[etype]), cfg)
@@ -171,7 +174,7 @@ class BaseCloudResampler(AlltoallMixin):
             sidxs.append(len(plocs) + (sidxs[-1] if sidxs else 0))
 
         # Sample the solution at these solution points
-        solns = self.sample_with_pts(np.vstack(pts))
+        solns = self.sample_with_pts(np.vstack(pts), dtype)
         solns = np.split(solns, sidxs[:-1])
 
         # Reshape these solutions into their canonical forms
@@ -182,12 +185,12 @@ class BaseCloudResampler(AlltoallMixin):
 
         return esolns
 
-    def sample_with_pts(self, tpts):
+    def sample_with_pts(self, tpts, dtype):
         with self.progress.start('Distribute target points'):
             tpts, tcountdisp, tidx = self._distribute_tgt_pts(tpts)
 
         with self.progress.start('Sample target points'):
-            tsolns = self._sample_tgt_points(tpts)
+            tsolns = self._sample_tgt_points(tpts, dtype)
 
         with self.progress.start('Distribute target samples'):
             return self._distribute_tgt_samples(tsolns, tcountdisp, tidx)
@@ -197,7 +200,7 @@ class BaseCloudResampler(AlltoallMixin):
 
         if comm.size > 1:
             # Assign each point to a rank
-            tranks = self.ibbox_tree.nearest_v(pts, pts, 1, strict=True)[0]
+            tranks = self.ibbox_tree.nearest_v(pts, pts, strict=True)[0]
         else:
             tranks = np.zeros(len(pts), dtype=int)
 
@@ -215,14 +218,14 @@ class BaseCloudResampler(AlltoallMixin):
         comm, rank, root = get_comm_rank_root()
 
         # Allocate the interpolated solution array
-        solns = np.empty((len(pts), self.nvars))
+        solns = np.empty((len(pts), self.nvars), dtype=dtype)
 
-        irank, nn = {rank}, self.interp.n
+        nn = self.interp.n
         deferred, off = [], 0
         fpreqs = [[] for i in range(comm.size)]
 
         # Determine the nearest points to each sample point
-        nidxs, _, ndists = self.pts_tree.nearest_v(pts, pts, nn,
+        nidxs, _, ndists = self.pts_tree.nearest_v(pts, pts, num_results=nn,
                                                    strict=True,
                                                    return_max_dists=True)
 
@@ -249,7 +252,8 @@ class BaseCloudResampler(AlltoallMixin):
 
         # Process the deferred points
         dpts = pts[deferred]
-        didxs = self.pts_tree.nearest_v(dpts, dpts, nn, strict=True)[0]
+        didxs, _ = self.pts_tree.nearest_v(dpts, dpts, num_results=nn,
+                                           strict=True)
         for i, p, idxs in zip(deferred, dpts, didxs.reshape(-1, nn)):
             solns[i] = self.interp(p, self.pts[idxs], self.solns[idxs])
 
@@ -279,8 +283,8 @@ class BaseCloudResampler(AlltoallMixin):
 
             # Identify nearby points on our rank
             pts, ndists = ibboxes[:, :self.ndims], ibboxes[:, self.ndims]
-            idxs, _ = self.pts_tree.nearest_v(pts, pts, nn, max_dists=ndists,
-                                              strict=True)
+            idxs, _ = self.pts_tree.nearest_v(pts, pts, num_results=nn,
+                                              max_dists=ndists, strict=True)
             idxs = set(np.unique(idxs).tolist())
 
             # Exclude points that have already been sent over

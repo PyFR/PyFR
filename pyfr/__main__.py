@@ -467,7 +467,6 @@ def process_resample(args):
         # Load the source mesh
         sreader = NativeReader(args.srcmesh, args.pname, construct_con=False)
         smesh, ssoln = sreader.load_subset_mesh_soln(args.srcsoln)
-        fpdtype = ssoln[first(smesh.eidxs)].dtype
 
         # Load the target mesh and config file
         treader = NativeReader(args.tgtmesh, args.pname, construct_con=False)
@@ -479,8 +478,9 @@ def process_resample(args):
 
     # Perform the resampling
     resampler = NativeCloudResampler(smesh, ssoln, interp, progress)
-    tsolns = resampler.sample_with_mesh_config(treader.mesh, tcfg)
-    tshapes = {k: v.shape[1:] for k, v in tsolns.items()}
+    tsoln = resampler.sample_with_mesh_config(treader.mesh, tcfg)
+    tshapes = {k: v.shape[1:] for k, v in tsoln.items()}
+    fpdtype = first(tsoln.values()).dtype
 
     # Get the output file path
     tpath = Path(args.tgtsoln).absolute()
@@ -505,7 +505,7 @@ def process_resample(args):
         writer = NativeWriter(treader.mesh, tcfg, fpdtype, tpath.parent,
                               tpath.name, prefix)
         writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs)
-        writer.write(tsolns, None, metadata)
+        writer.write(tsoln, None, metadata)
 
 
 def _process_common(args, soln, cfg):

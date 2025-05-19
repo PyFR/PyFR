@@ -180,7 +180,7 @@ class BaseShape:
     @cached_property
     def _iqrules(self):
         return {kind: self._get_qrule('interfaces', kind, flags='s')
-                for kind in {k for k, p, n in self.faces}}
+                for kind, proj, norm in self.faces}
 
     @property
     def qpts(self):

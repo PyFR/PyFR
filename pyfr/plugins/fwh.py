@@ -34,7 +34,6 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
         self.nobvs = len(self.obsv_pts)
 
         # Initialise data file
-        ndims = self.ndims
         if rank == root:
             header = ','.join(['t', 'x', 'y', 'z'][:self.ndims + 1] + ['mag'])
             self.outf = init_csv(self.cfg, cfgsect, header)
@@ -48,7 +47,7 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
 
         self.qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts)
                      for k in privars}
-        self.uinf = np.array([[self.qinf[k]] for k in 'uvw'[:ndims]])
+        self.uinf = np.array([[self.qinf[k]] for k in 'uvw'[:self.ndims]])
 
         if self.incomp:
             self.qinf['rho'] = self.cfg.getfloat(cfgsect, 'rho')
@@ -59,7 +58,7 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
             self._ridx = privars.index('rho')
 
         self.qinf['M'] = np.array([self.qinf[k] / self.qinf['c']
-                                   for k in 'uvw'[:ndims]])
+                                   for k in 'uvw'[:self.ndims]])
         Minf = np.linalg.norm(self.qinf['M'])
         if Minf >= 1:
             raise ValueError('FWH farfield Mach number greater than 1')

@@ -14,9 +14,9 @@ vfile = open('pyfr/_version.py').read()
 vsrch = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", vfile, re.M)
 
 if vsrch:
-    version = vsrch.group(1)
+    version = vsrch[1]
 else:
-    print('Unable to find a version string in pyfr/_version.py')
+    sys.exit('Unable to find a version string in pyfr/_version.py')
 
 # Modules
 modules = [
@@ -113,7 +113,7 @@ install_requires = [
     'h5py >= 2.10',
     'mako >= 1.0.0',
     'mpi4py >= 4.0.0',
-    'numpy >= 1.26.4',
+    'numpy >= 2.2.5',
     'platformdirs >= 2.2.0',
     'pytools >= 2016.2.1',
     'rtree >= 1.4.0'
@@ -147,19 +147,21 @@ grids containing various element types. It is also designed to target a
 range of hardware platforms via use of an in-built domain specific
 language derived from the Mako templating engine.'''
 
-setup(name='pyfr',
-      version=version,
-      description='Flux Reconstruction in Python',
-      long_description=long_description,
-      author='Imperial College London',
-      author_email='info@pyfr.org',
-      url='http://www.pyfr.org/',
-      license='BSD',
-      keywords='Math',
-      packages=['pyfr'] + modules + tests,
-      package_data=package_data,
-      entry_points={'console_scripts': console_scripts},
-      python_requires='>=3.11',
-      install_requires=install_requires,
-      extras_require=extras_require,
-      classifiers=classifiers)
+setup(
+    name='pyfr',
+    version=version,
+    description='Flux Reconstruction in Python',
+    long_description=long_description,
+    author='PyFR development team',
+    author_email='info@pyfr.org',
+    url='https://www.pyfr.org/',
+    license='BSD',
+    keywords='Math',
+    packages=['pyfr'] + modules + tests,
+    package_data=package_data,
+    entry_points={'console_scripts': console_scripts},
+    python_requires='>=3.11',
+    install_requires=install_requires,
+    extras_require=extras_require,
+    classifiers=classifiers
+)

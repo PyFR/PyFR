@@ -8,9 +8,9 @@ import h5py
 import numpy as np
 from pytools import prefork
 
+from pyfr.cache import memoize
 from pyfr.inifile import NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.cache import memoize
 from pyfr.quadrules import get_quadrule
 from pyfr.regions import parse_region_expr
 
