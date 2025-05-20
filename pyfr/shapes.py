@@ -484,7 +484,7 @@ class TetShape(BaseShape):
                 for p in pts1d[:(sptord + 1 - i - j)]]
 
     @classmethod
-    def valid_spt(spt, tol=1e-9):
+    def valid_spt(cls, spt, tol=1e-9):
         x, y, z = spt
 
         return (x + tol > -1 and x - tol < -1 - y - z and
