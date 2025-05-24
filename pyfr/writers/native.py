@@ -1,4 +1,3 @@
-import contextlib
 import ctypes
 import errno
 import fcntl
@@ -27,7 +26,6 @@ class NativeWriter:
     LL_IOC_LOV_SETSTRIPE = 0x4008669a
     LOV_USER_MAGIC_V1 = 0x0bd10bd0
     LOV_USER_MAGIC_V3 = 0x0bd30bd0
-    MAGIC_LUSTRE = 0x0bd00bd0
     O_LOV_DELAY_CREATE = 0x1002100
 
     def __init__(self, mesh, cfg, fpdtype, basedir, basename, prefix, *,
@@ -57,8 +55,8 @@ class NativeWriter:
 
         self.tname = comm.bcast(tname, root=root)
 
-        # If we are on a Lustre filesystem
-        self.on_lustre_fs = self._on_lustre_fs(basedir)
+        # Query the file system type
+        self.fstype = self._get_fstype(basedir)
 
         # Current asynchronous writing operation (if any)
         self._awriter = None
@@ -69,18 +67,25 @@ class NativeWriter:
                             basedir, basename, prefix=prefix,
                             isrestart=intg.isrestart)
 
-    @classmethod
-    def _on_lustre_fs(cls, basedir):
-        if sys.platform == 'linux' and 'PYFR_DISABLE_LUSTRE' not in os.environ:
-            buf = (ctypes.c_int * 128)()
-            get_libc_function('statfs')(basedir.encode(), buf)
-            return buf[0] == cls.MAGIC_LUSTRE
-        else:
-            return False
+    @staticmethod
+    def _get_fstype(basedir):
+        if sys.platform == 'linux':
+            fstypes = {
+                0x00006969: 'nfs',
+                0x0bd00bd0: 'lustre'
+            }
 
-    @contextlib.contextmanager
+            buf = (ctypes.c_int * 128)()
+            get_libc_function('statfs')(str(basedir).encode(), buf)
+
+            return fstypes.get(buf[0], None)
+
+        return None
+
     def _create_file(self, path):
-        if self.on_lustre_fs:
+        comm, rank, root = get_comm_rank_root()
+
+        if self.fstype == 'lustre' and rank == root:
             # Lustre pool name
             pool = None
 
@@ -116,15 +121,15 @@ class NativeWriter:
                     os.close(fd)
             except (IOError, OSError):
                 pass
-
-        with h5py.File(path, 'w', libver='latest') as f:
-            yield f
+        elif self.fstype == 'nfs':
+            open(path, 'a').close()
+            comm.barrier()
 
     def _open_file(self, path):
         f = open(path, 'r+b')
 
         # If we are on a Lustre file system then take a group lock
-        if self.on_lustre_fs:
+        if self.fstype == 'lustre':
             fcntl.ioctl(f.fileno(), self.LL_IOC_GROUP_LOCK, self.LL_GROUP)
 
         return f
@@ -203,15 +208,12 @@ class NativeWriter:
             gdata[ek] = gatherer(dset)
 
         # Delegate to _write to do the actual outputting
-        f, th = self._write(self.tname, gdata, metadata, async_=async_)
+        th = self._write(self.tname, gdata, metadata, async_=async_)
 
         # Determine the final output path
         path = self.fgen.send(tcurr)
 
         def oncomplete():
-            # Close the file
-            f.close()
-
             # Have the root rank move it into place
             if rank == root:
                 mv(self.tname, path)
@@ -226,46 +228,47 @@ class NativeWriter:
             oncomplete()
 
     def _prepare_file(self, path, metadata):
-        doffs = {}
-
-        with self._create_file(path) as f:
-            # Write the metadata
-            for k, v in metadata.items():
-                f[k] = v
-
-            # Create the datasets
-            g = f.create_group(self.prefix)
-            for ek, (gatherer, subset, shape, *_) in self._einfo.items():
-                g.create_dataset(ek, shape, self.fpdtype)
-                g.create_dataset(f'{ek}-parts', shape[0:1], np.int32)
-
-                if subset:
-                    g.create_dataset(f'{ek}-idxs', shape[0:1], np.int64)
-
-            # Add each elements nodal points as an attribute
-            for ek, (*_, upts) in self._einfo.items():
-                g[ek].attrs['pts'] = upts
-
-            # Obtain the offsets of these datasets
-            for k, v in g.items():
-                v[(-1,)*v.ndim] = 0
-                doffs[k] = v.id.get_offset()
-
-        return doffs
-
-    def _write(self, path, data, metadata, *, async_=True):
         comm, rank, root = get_comm_rank_root()
 
-        # Have the root rank prepare the output file
+        # Perform any pre-creation activities
+        self._create_file(path)
+
+        # Have the root rank lay down the structure of the file
         if rank == root:
-            doffs = self._prepare_file(path, metadata)
+            doffs = {}
+
+            with h5py.File(path, 'w', libver='latest') as f:
+                # Write the metadata
+                for k, v in metadata.items():
+                    f[k] = v
+
+                # Create the datasets
+                g = f.create_group(self.prefix)
+                for ek, (gatherer, subset, shape, *_) in self._einfo.items():
+                    g.create_dataset(ek, shape, self.fpdtype)
+                    g.create_dataset(f'{ek}-parts', shape[0:1], np.int32)
+
+                    if subset:
+                        g.create_dataset(f'{ek}-idxs', shape[0:1], np.int64)
+
+                # Add each elements nodal points as an attribute
+                for ek, (*_, upts) in self._einfo.items():
+                    g[ek].attrs['pts'] = upts
+
+                # Obtain the offsets of these datasets
+                for k, v in g.items():
+                    v[(-1,)*v.ndim] = 0
+                    doffs[k] = v.id.get_offset()
+
+            return comm.bcast(doffs, root=root)
         else:
-            doffs = None
+            return comm.bcast(None, root=root)
 
-        # Distrbute the offsets of each dataset
-        doffs = comm.bcast(doffs, root=root)
+    def _write(self, path, data, metadata, *, async_=True):
+        # Prepare the output file
+        doffs = self._prepare_file(path, metadata)
 
-        # Open the file for writing
+        # Open it for writing
         f = self._open_file(path)
 
         # Helper function for writing arrays at offsets
@@ -284,13 +287,16 @@ class NativeWriter:
                 if subset:
                     write_off(f'{ek}-idxs', gatherer.ridx, gatherer.off)
 
+            # Close the file
+            f.close()
+
         if async_:
             th = threading.Thread(target=write, args=(self._einfo,))
             th.start()
-            return f, th
+            return th
         else:
             write(self._einfo)
-            return f, None
+            return None
 
 
 class _AsyncCompleter:
