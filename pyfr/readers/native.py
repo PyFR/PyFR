@@ -100,7 +100,11 @@ class NativeReader:
                     continue
                 # If the element is partially subset use a sparse scatterer
                 elif (ei := f'{ek}-idxs') in f:
-                    idxs = self.mesh.eidxs[etype]
+                    try:
+                        idxs = self.mesh.eidxs[etype]
+                    except KeyError:
+                        idxs = np.empty(0, dtype=int)
+
                     escatter = SparseScatterer(comm, f[ei], idxs)
                     subset[etype] = escatter.ridx
                 # Complete element present so reuse the elements scatterer

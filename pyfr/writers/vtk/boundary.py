@@ -41,7 +41,13 @@ class VTKBoundaryWriter(BaseVTKWriter):
             eoff, fidx = mask.nonzero()
 
             # Handle the case where the solution is subset
-            if smesh.subset:
+            if smesh.subset and eoff.any():
+                # Ensure this element type is present in the subset
+                if etype not in smesh.eidxs:
+                    raise ValueError('Output boundaries not present in subset '
+                                     'solution')
+
+                # Ensure all of the required element numbers are present
                 eidxs = rmesh.eidxs[etype]
                 beidx = eidxs[mask.any(axis=1)]
                 if not np.isin(beidx, smesh.eidxs[etype]).all():
