@@ -20,6 +20,23 @@ def _ploc_op(etype, nspts, cfg):
     return basis.sbasis.nodal_basis_at(basis.upts)
 
 
+def str_group(gpts, nsplit):
+    def recursive_tile(pts, depth=0):
+        if depth == pts.shape[1]:
+            return [pts]
+
+        sidx = np.argsort(pts[:, depth])
+        groups = []
+
+        # Recurse in the next dimension
+        for chunk in np.array_split(pts[sidx], nsplit):
+            groups.extend(recursive_tile(chunk, depth + 1))
+
+        return groups
+
+    return recursive_tile(gpts)
+
+
 class BaseInterpolator:
     name = None
 
@@ -89,7 +106,7 @@ class BaseCloudResampler(AlltoallMixin):
 
             # Index the bounding boxes (inclusives and exclusive of ourself)
             self.ibbox_tree, self.ebbox_tree = self._compute_bbox_trees(
-                keys, self.pts
+                self.pts
             )
 
         # Track what points we have sent to other ranks
@@ -122,23 +139,17 @@ class BaseCloudResampler(AlltoallMixin):
                          leaf_capacity=25)
         return Index((np.arange(len(pts)), pts, pts), properties=props)
 
-    def _compute_bbox_trees(self, keys, pts):
+    def _compute_bbox_trees(self, pts):
         comm, rank, root = get_comm_rank_root()
 
-        # Number of bits to use for bounding box construction
-        nb = 2*self.ndims + 1
-
-        # Obtain the maximum bit length of our Morton codes
-        bl = int(keys.max()).bit_length()
-
-        # With this break our points up into their top-level orthants
-        sidx = np.searchsorted(keys, np.arange(1, 2**nb) << (bl - nb))
+        # Number of splits along each dimension
+        ns = 14
 
         # Allocate global bounding box array
-        bboxes = np.full((comm.size, 2**nb, 2, self.ndims), np.nan)
+        bboxes = np.full((comm.size, ns**self.ndims, 2, self.ndims), np.nan)
 
         # Fill out our portion of the array
-        for i, spts in enumerate(np.split(pts, sidx)):
+        for i, spts in enumerate(str_group(pts, ns)):
             if len(spts):
                 bboxes[rank, i] = spts.min(axis=0), spts.max(axis=0)
 
@@ -199,8 +210,15 @@ class BaseCloudResampler(AlltoallMixin):
         comm, rank, root = get_comm_rank_root()
 
         if comm.size > 1:
-            # Assign each point to a rank
-            tranks = self.ibbox_tree.nearest_v(pts, pts, strict=True)[0]
+            # Attempt to assign points to ranks
+            tranks, resid = self._compute_initial_tgt_dist(pts)
+
+            # Exchange residual information between ranks
+            rranks = self._compute_resid_ranks(resid)
+
+            # Assign residual points to the rank with the nearest point
+            for i, (r, _) in rranks.items():
+                tranks[i] = r
         else:
             tranks = np.zeros(len(pts), dtype=int)
 
@@ -214,7 +232,66 @@ class BaseCloudResampler(AlltoallMixin):
 
         return *rbuf, np.argsort(tidx)
 
-    def _sample_tgt_points(self, pts):
+    def _compute_initial_tgt_dist(self, pts):
+        comm, rank, root = get_comm_rank_root()
+
+        tranks, off = np.full(len(pts), -1, dtype=int), 0
+
+        # See which ranks, if any, have a claim to each point
+        iranks, icounts = self.ibbox_tree.intersection_v(pts, pts)
+
+        # Residual list for target points claimed by multiple ranks
+        resid = [[] for i in range(comm.size)]
+
+        for i, (p, c) in enumerate(zip(pts, icounts)):
+            # No boxes directly intersect so find the rank with the nearest
+            if c == 0:
+                tranks[i] = next(self.ibbox_tree.nearest(p, 1))
+            # Ideal case of a single-box intersection
+            elif c == 1:
+                tranks[i] = iranks[off]
+            # Multiple intersecting boxes
+            else:
+                uranks = set(iranks[off:off + c].tolist())
+
+                # All boxes belong to the same rank so assign
+                if len(uranks) == 1:
+                    tranks[i] = iranks[off]
+                # Multiple distinct ranks; defer
+                else:
+                    for r in uranks:
+                        resid[r].append((i, p.tolist()))
+
+            off += c
+
+        return tranks, resid
+
+    def _compute_resid_ranks(self, resid):
+        comm, rank, root = get_comm_rank_root()
+        rranks, rdists = {}, []
+
+        # Exchange residual points between ranks
+        for rresid in comm.alltoall([[p for i, p in r] for r in resid]):
+            if rresid:
+                # Identify our closest points
+                rpts = np.array(rresid)
+                _, _, dists = self.pts_tree.nearest_v(
+                    rpts, rpts, strict=True, return_max_dists=True
+                )
+
+                rdists.append(dists.tolist())
+            else:
+                rdists.append([])
+
+        # Exchange distance information and reduce
+        for r, (re, rd) in enumerate(zip(resid, comm.alltoall(rdists))):
+            for (i, _), d in zip(re, rd):
+                if (rd := rranks.get(i, None)) is None or d < rd[1]:
+                    rranks[i] = (r, d)
+
+        return rranks
+
+    def _sample_tgt_points(self, pts, dtype):
         comm, rank, root = get_comm_rank_root()
 
         # Allocate the interpolated solution array
