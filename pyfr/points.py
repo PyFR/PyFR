@@ -15,24 +15,20 @@ class PointLocator:
         self.mesh = mesh
         self.fine_order = fine_order
 
-    def locate(self, pts):
+    def _reduce_elocs(self, npts, elocator):
         comm, rank, root = get_comm_rank_root()
 
         # Allocate the location buffer
         dtype = [('dist', float), ('cidx', np.int16), ('eidx', np.int64),
                  ('tloc', float, self.mesh.ndims)]
-        locs = np.zeros(len(pts), dtype=dtype)
+        locs = np.zeros(npts, dtype=dtype)
         locs['dist'] = np.inf
-
-        # Find the nearest node to each query point
-        nearest = self._find_closest_node(pts)
 
         # Reduce over each of our element types
         for etype, eidxs in self.mesh.eidxs.items():
             cidx = self.mesh.codec.index(f'eles/{etype}')
 
-            eclosest = self._find_closest_element(etype, pts, nearest)
-            for i, (dist, eidx, tloc) in eclosest.items():
+            for i, (dist, eidx, tloc) in elocator(etype).items():
                 l = locs[i]
 
                 if dist < l['dist']:
@@ -42,7 +38,36 @@ class PointLocator:
         # Reduce
         self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=3)
 
-        # Validate
+        return locs
+
+    def _locate_nnode(self, pts):
+        # Find the nearest node to each query point
+        nearest = self._find_closest_node(pts)
+
+        # Callback to identify the nearest elements to these nodes
+        def elocator(etype):
+            return self._find_closest_element_nnode(etype, pts, nearest)
+
+        return self._reduce_elocs(len(pts), elocator)
+
+    def _locate_bbox(self, pts):
+        def elocator(etype):
+            return self._find_closest_element_bbox(etype, pts)
+
+        return self._reduce_elocs(len(pts), elocator)
+
+    def locate(self, pts):
+        comm, rank, root = get_comm_rank_root()
+
+        # Attempt to locate points using a nearest node approach
+        locs = self._locate_nnode(pts)
+
+        # In extreme cases this approach can leave some valid points
+        # un-located; for these we try a bounding box approach
+        if np.any(infp := np.isinf(locs['dist'])):
+            locs[infp] = self._locate_bbox(pts[infp])
+
+        # Have the root rank perform a final round of validation
         if rank == root:
             for i, l in enumerate(locs):
                 if l['dist'] == np.inf:
@@ -103,8 +128,7 @@ class PointLocator:
 
         return buf
 
-    def _find_closest_element(self, etype, pts, nearest):
-        spts = self.mesh.spts[etype]
+    def _find_closest_element_nnode(self, etype, pts, nearest):
         nodes = self.mesh.spts_nodes[etype]
 
         # See which of our elements contain the nearest node
@@ -121,6 +145,27 @@ class PointLocator:
             for ei in neles.get(ni, []):
                 pidx.append(i)
                 sidx.append(ei)
+
+        return self._find_closest_element(etype, pts, pidx, sidx)
+
+    def _find_closest_element_bbox(self, etype, pts):
+        spts = self.mesh.spts[etype]
+
+        # Compute the bounding boxes
+        smin, smax = spts.min(axis=0), spts.max(axis=0)
+
+        # Insert these boxes into a spatial index
+        idx = Index((np.arange(len(smin)), smin, smax),
+                    properties=Property(dimension=self.mesh.ndims))
+
+        # Query the index to find intersecting elements
+        sidx, icounts = idx.intersection_v(pts, pts)
+        pidx = np.repeat(np.arange(len(pts)), icounts.astype(int)).tolist()
+
+        return self._find_closest_element(etype, pts, pidx, sidx.tolist())
+
+    def _find_closest_element(self, etype, pts, pidx, sidx):
+        spts = self.mesh.spts[etype]
 
         # Obtain the closest location inside each of these elements
         dists, tlocs = self._compute_tlocs(etype, spts[:, sidx], pts[pidx])
@@ -139,17 +184,18 @@ class PointLocator:
 
     def _initial_tlocs(self, etype, spts, plocs):
         shape, basis = self._get_shape_basis(etype, len(spts))
+        tpts = np.array(shape.std_ele(self.fine_order))
 
         # Obtain a fine sampling of points inside each element
-        fop = basis.nodal_basis_at(shape.std_ele(self.fine_order))
+        fop = basis.nodal_basis_at(tpts)
         fpts = fop @ spts.reshape(len(spts), -1)
         fpts = fpts.reshape(len(fop), *spts.shape[1:])
 
         # Find the closest fine sample point to each query point
         dists = np.linalg.norm(fpts - plocs, axis=2)
-        amins = np.unravel_index(dists.argmin(axis=0), fpts.shape[:2])
 
-        return fpts[amins]
+        # Return this sample point in transformed space
+        return tpts[dists.argmin(axis=0)]
 
     def _compute_tlocs(self, etype, spts, plocs):
         shape, basis = self._get_shape_basis(etype, len(spts))
