@@ -247,10 +247,10 @@ Start-up Time
 
 The start-up time required by PyFR can be reduced by ensuring that
 Python is compiled from source with profile guided optimisations (PGO)
-which can be enabled by passing ``--enable-optimizations --with-lto`` to
-the ``configure`` script.
+which can be enabled by passing ``--enable-optimizations --with-lto``
+to the ``configure`` script.
 
 It is also important that NumPy be configured to use an optimised
 BLAS/LAPACK distribution.  Further details can be found in the `NumPy
-building from source <https://numpy.org/devdocs/user/building.html>`_
+building from source <https://numpy.org/doc/stable/building/index.html>`_
 guide.

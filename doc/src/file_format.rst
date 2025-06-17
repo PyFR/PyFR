@@ -51,7 +51,7 @@ distinct element type present in the mesh is given its own dataset.
 Hence, in the above example we see that the mesh in question has 196
 ``quad`` elements and 3231 ``tri`` elements.
 
-Inspecting the structure of the ``eles/quad`` dataset we find::
+Inspecting the structure of the ``/eles/quad`` dataset we find::
 
    DATASET "/eles/quad" {
       DATATYPE  H5T_COMPOUND {
@@ -158,6 +158,25 @@ quickest, followed by the y-axis, and then finally the z-axis.
 Higher-order elements are always of the Lagrange type and correspond to
 equi-spaced subdivisions of the first-order standard elements.
 
+For convenience the shape points are also stored in the ``pts``
+attribute of each element. In our mesh, for ``/eles/quad`` we find::
+
+   ATTRIBUTE "pts" {
+      DATATYPE  H5T_IEEE_F64LE
+      DATASPACE  SIMPLE { ( 9, 2 ) / ( 9, 2 ) }
+      DATA {
+      (0,0): -1, -1,
+      (1,0): 0, -1,
+      (2,0): 1, -1,
+      (3,0): -1, 0,
+      (4,0): 0, 0,
+      (5,0): 1, 0,
+      (6,0): -1, 1,
+      (7,0): 0, 1,
+      (8,0): 1, 1
+      }
+   }
+
 Face numbering
 ~~~~~~~~~~~~~~
 
@@ -247,6 +266,40 @@ Just by looking at this array we conclude that partitions 0 and 2 only
 have a single neighbouring partition, whilst partition 1 has two
 neighbours.
 
+Periodic interfaces
+~~~~~~~~~~~~~~~~~~~
+
+For meshes which contain periodic boundaries, information about these
+boundaries is stored in the ``/periodic`` group. In order to showcase
+this we need to first switch to a mesh with periodic boundaries. Thus,
+for this section we will consider the 2D Euler vortex test case.
+Inspecting the structure of this mesh we find::
+
+   /periodic                Group
+   /periodic/0              Dataset {20, 2}
+   /periodic/1              Dataset {20, 2}
+
+This tells us that our mesh has two periodic boundaries which are named
+``0`` and ``1``, respectively.  The names, in general, are entirely
+arbitrary. The entries in these datasets describe which faces in the
+mesh are paired together. In this mesh we observe that each of our two
+periodic boundaries pair together 20 faces.
+
+Inspecting the structure of ``0`` we find::
+
+   DATASET "/periodic/0" {
+      DATATYPE  H5T_COMPOUND {
+         H5T_STD_I16LE "cidx";
+         H5T_STD_I64LE "off";
+      }
+      DATASPACE  SIMPLE { ( 20, 2 ) / ( 20, 2 ) }
+   }
+
+Here, the ``cidx`` and ``off`` members have the same meaning as in the
+elements arrays.
+
+Note that this data is not currently used by the solver.
+
 Solution Format
 ---------------
 
@@ -270,10 +323,15 @@ identical meanings to those in the mesh file format. When opening a
 solution it is important to check that the UUID matches that of the
 associated mesh.
 
+The ``/config`` dataset contains the INI file which was used to generate
+the solution. In instances where a simulation has been restarted from a
+different config file the full history is available in the
+``/config-<n>`` datasets with ``/config-0`` corresponding to the
+initial INI file.
+
 To obtain the path to the solution data it is necessary to consult the
-``/stats`` dataset. This is a serialised INI file which contains
-information about the solution. Of interest to us is the ``[data]``
-section::
+``/stats`` dataset. This is an INI file which contains information
+about the solution. Of interest to us is the ``[data]`` section::
 
    [data]
    fields = p,u,v
