@@ -21,6 +21,9 @@ class MetalGiMMiKKernels(MetalKernelProvider):
         # Number of benchmarking runs
         self.nbench = backend.cfg.getint('backend-metal', 'gimmik-nbench', 40)
 
+        # Improvement factor for a kernel to be considered superior
+        self.ifac = backend.cfg.getfloat('backend-metal', 'gimmik-ifac', 0.95)
+
         # Kernel cache
         self._mul_kerns = {}
 
@@ -82,7 +85,7 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < best_kern[-1]:
+                    if best_kern is None or dt < self.ifac*best_kern[-1]:
                         best_kern = kern, grid, tgrp, dt
 
                     sdata = {'runtime': dt}
