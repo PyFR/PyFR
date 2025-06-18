@@ -21,6 +21,9 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
         # Number of benchmarking runs
         self.nbench = backend.cfg.getint('backend-opencl', 'gimmik-nbench', 5)
 
+        # Improvement factor for a kernel to be considered superior
+        self.ifac = backend.cfg.getfloat('backend-opencl', 'gimmik-ifac', 0.95)
+
         # Kernel cache
         self._mul_kerns = {}
 
@@ -90,7 +93,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < best_kern[-1]:
+                    if best_kern is None or dt < self.ifac*best_kern[-1]:
                         best_kern = kern, gs, ls, dt
 
                     sdata = {'runtime': dt}

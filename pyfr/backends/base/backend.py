@@ -198,7 +198,7 @@ class BaseBackend:
                     continue
 
                 # Evaluate this kernel compared to the best seen so far
-                if best_kern is None or kern.dt < best_kern.dt:
+                if best_kern is None or kern.dt < 0.95*best_kern.dt:
                     best_kern = kern
 
                     # If there is no benchmark data then short circut

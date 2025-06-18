@@ -17,6 +17,9 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         # Number of benchmarking runs
         self.nbench = backend.cfg.getint('backend-cuda', 'gimmik-nbench', 5)
 
+        # Improvement factor for a kernel to be considered superior
+        self.ifac = backend.cfg.getfloat('backend-cuda', 'gimmik-ifac', 0.95)
+
         # Kernel cache
         self._mul_kerns = {}
 
@@ -87,7 +90,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < best_kern[-1]:
+                    if best_kern is None or dt < self.ifac*best_kern[-1]:
                         best_kern = kern, meta['grid'], meta['block'], dt
 
                     kdata = {
