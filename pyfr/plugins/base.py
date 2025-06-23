@@ -95,7 +95,8 @@ def region_data(cfg, cfgsect, mesh, *, rtype=None):
             eset = rgn.expand(mesh, eset, nexpand)
 
         return {etype: np.unique(eidxs).astype(int)
-                for etype, eidxs in sorted(eset.items())}
+                for etype, eidxs in sorted(eset.items())
+                if len(eidxs)}
 
 
 def surface_data(cfg, cfgsect, mesh):
@@ -112,7 +113,8 @@ def surface_data(cfg, cfgsect, mesh):
         raise ValueError(f'Empty surface {surf}')
 
     return {etype: np.unique(eidxs).astype(int)
-            for etype, eidxs in sorted(eset.items())}
+            for etype, eidxs in sorted(eset.items())
+            if len(eidxs)}
 
 
 class BasePlugin:
