@@ -159,9 +159,6 @@ class CUDACUBLASLtKernels(CUDAKernelProvider):
         # Maximum number of algorithms to test
         self.nkerns = backend.cfg.getint('backend-cuda', 'cublas-nkerns', 512)
 
-        # Improvement factor for a kernel to be considered superior
-        self.ifac = backend.cfg.getfloat('backend-cuda', 'cublas-ifac', 0.95)
-
         # GEMM cache
         self._mul_cache = {}
 
@@ -209,6 +206,8 @@ class CUDACUBLASLtKernels(CUDAKernelProvider):
         try:
             desc, dt = self._mul_cache[ckey]
         except KeyError:
+            ifac = self.backend.autotune_ifac
+
             # Create matrix layouts
             a_desc = CUBLASLtMatrixLayout(self, A, dtype)
             b_desc = CUBLASLtMatrixLayout(self, B, dtype)
@@ -251,7 +250,7 @@ class CUDACUBLASLtKernels(CUDAKernelProvider):
                 except CUBLASLtStatusNotSupported:
                     continue
 
-                if best_kern is None or dt < self.ifac*best_kern[-1]:
+                if best_kern is None or dt < ifac*best_kern[-1]:
                     best_kern = desc, dt
 
             # Restore the output matrix

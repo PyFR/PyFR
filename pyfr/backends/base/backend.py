@@ -50,6 +50,9 @@ class BaseBackend:
                 raise ValueError('Backend memory model must be either normal '
                                  'or large')
 
+        # Autotuning improvement factor
+        self.autotune_ifac = cfg.getfloat('backend', 'autotune-ifac', 0.95)
+
         # Allocated matrices
         self.mats = WeakValueDictionary()
         self._mat_counter = count()
@@ -191,6 +194,8 @@ class BaseBackend:
             # See if it can potentially provide the requested kernel
             kern_meth = getattr(prov, name, None)
             if kern_meth:
+                ifac = self.autotune_ifac
+
                 try:
                     # Ask the provider for the kernel
                     kern = kern_meth(*args, **kwargs)
@@ -198,7 +203,7 @@ class BaseBackend:
                     continue
 
                 # Evaluate this kernel compared to the best seen so far
-                if best_kern is None or kern.dt < 0.95*best_kern.dt:
+                if best_kern is None or kern.dt < ifac*best_kern.dt:
                     best_kern = kern
 
                     # If there is no benchmark data then short circut
