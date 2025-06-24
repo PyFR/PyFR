@@ -248,6 +248,7 @@ class SurfaceMixin:
 
             if not isinstance(eidxs, slice):
                 ele_surface_data[f'{etype}_f{face}_idxs'] = eidxs
+
         return ele_surface, ele_surface_data
 
     @memoize

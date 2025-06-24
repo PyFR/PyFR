@@ -17,9 +17,6 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         # Number of benchmarking runs
         self.nbench = backend.cfg.getint('backend-hip', 'gimmik-nbench', 5)
 
-        # Improvement factor for a kernel to be considered superior
-        self.ifac = backend.cfg.getfloat('backend-hip', 'gimmik-ifac', 0.95)
-
         # Kernel cache
         self._mul_kerns = {}
 
@@ -56,6 +53,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         try:
             kern, grid, block, dt = self._mul_kerns[ckey]
         except KeyError:
+            ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
             kdata = None
             best_kern = None
@@ -85,7 +83,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < self.ifac*best_kern[-1]:
+                    if best_kern is None or dt < ifac*best_kern[-1]:
                         best_kern = kern, meta['grid'], meta['block'], dt
 
                     kdata = {

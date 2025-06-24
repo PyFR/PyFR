@@ -70,9 +70,6 @@ class HIPRocBLASKernels(HIPKernelProvider):
         # Maximum number of solution indices to try
         self.nkerns = backend.cfg.getint('backend-hip', 'rocblas-nkerns', 2048)
 
-        # Improvement factor for a kernel to be considered superior
-        self.ifac = backend.cfg.getfloat('backend-hip', 'rocblas-ifac', 0.95)
-
     def __del__(self):
         try:
             if self._handle:
@@ -123,6 +120,8 @@ class HIPRocBLASKernels(HIPKernelProvider):
         try:
             algo, dt = self._mul_cache[ckey]
         except KeyError:
+            ifac = self.backend.autotune_ifac
+
             def get_solutions(sidx):
                 size_ct = c_int(len(sidx) if sidx is not None else 0)
                 w.rocblas_gemm_ex_get_solutions(
@@ -145,7 +144,7 @@ class HIPRocBLASKernels(HIPKernelProvider):
             # Benchmark suggested algorithms
             for algo in sidx:
                 dt = self._benchmark(gemm)
-                if best_kern is None or dt < self.ifac*best_kern[-1]:
+                if best_kern is None or dt < ifac*best_kern[-1]:
                     best_kern = algo, dt
 
             # Restore the output matrix
