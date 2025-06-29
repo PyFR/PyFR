@@ -13,7 +13,7 @@ import numpy as np
 
 from pyfr._version import __version__
 from pyfr.ctypesutil import get_libc_function
-from pyfr.mpiutil import Gatherer, get_comm_rank_root, mpi, scal_coll
+from pyfr.mpiutil import Gatherer, autofree, get_comm_rank_root, mpi, scal_coll
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, mv, subclass_where
@@ -27,6 +27,9 @@ class NativeWriter:
     LOV_USER_MAGIC_V1 = 0x0bd10bd0
     LOV_USER_MAGIC_V3 = 0x0bd30bd0
     O_LOV_DELAY_CREATE = 0x1002100
+
+    # Lock to serialise writes across all instances
+    _lock = threading.Lock()
 
     def __init__(self, mesh, cfg, fpdtype, basedir, basename, prefix, *,
                  extn='.pyfrs', isrestart=False):
@@ -57,6 +60,15 @@ class NativeWriter:
 
         # Query the file system type
         self.fstype = self._get_fstype(basedir)
+
+        # Determine if to perform serial or parallel writes
+        if self.fstype == 'lustre':
+            self._get_writefn = self._get_writefn_parallel
+        else:
+            self._get_writefn = self._get_writefn_serial
+
+            # Private communicator for serial writes
+            self._scomm = autofree(comm.Dup())
 
         # Current asynchronous writing operation (if any)
         self._awriter = None
@@ -121,9 +133,6 @@ class NativeWriter:
                     os.close(fd)
             except (IOError, OSError):
                 pass
-        elif self.fstype == 'nfs':
-            open(path, 'a').close()
-            comm.barrier()
 
     def _open_file(self, path):
         f = open(path, 'r+b')
@@ -207,8 +216,18 @@ class NativeWriter:
 
             gdata[ek] = gatherer(dset)
 
-        # Delegate to _write to do the actual outputting
-        th = self._write(self.tname, gdata, metadata, async_=async_)
+        # Prepare the output file
+        doffs = self._prepare_file(self.tname, metadata)
+
+        # Obtain the relevant low-level writer function
+        wfn = self._get_writefn(self.tname, gdata, doffs)
+
+        # Perform the file writing
+        if async_:
+            th = threading.Thread(target=wfn)
+            th.start()
+        else:
+            wfn()
 
         # Determine the final output path
         path = self.fgen.send(tcurr)
@@ -226,6 +245,87 @@ class NativeWriter:
             self._awriter = _AsyncCompleter(th, timeout, oncomplete)
         else:
             oncomplete()
+
+    def _iter_bufs(self, data, callback):
+        for ek, (gatherer, subset, *_) in self._einfo.items():
+            callback(ek, data[ek], gatherer.off)
+            callback(f'{ek}-parts', gatherer.rsrc, gatherer.off)
+
+            # If the element has been subset then write the index data
+            if subset:
+                callback(f'{ek}-idxs', gatherer.ridx, gatherer.off)
+
+    def _get_writefn_parallel(self, path, data, doffs):
+        # Open the file for writing
+        f = self._open_file(path)
+
+        # Callback to write out individual arrays at offsets
+        def write_off(k, v, n):
+            if len(v):
+                f.seek(doffs[k] + n*(v.nbytes // len(v)))
+                v.tofile(f)
+
+        # Main writing function
+        def write():
+            with self._lock:
+                self._iter_bufs(data, write_off)
+
+                # Close the file
+                f.close()
+
+        return write
+
+    def _get_writefn_serial(self, path, data, doffs):
+        comm, rank, root = get_comm_rank_root()
+        wbufs = []
+
+        # Helper function for extracting data about buffers
+        def add_buf(k, v, n):
+            if len(v):
+                wbufs.append((doffs[k] + n*(v.nbytes // len(v)), v.nbytes, v))
+
+        # Determine what buffers we need to write
+        self._iter_bufs(data, add_buf)
+
+        # Sort our buffers by their offset
+        wbufs.sort()
+
+        # Collate this data to the root rank
+        bufs = comm.gather([(off, nb) for off, nb, _ in wbufs], root=root)
+
+        if rank == root:
+            # Open the file for writing
+            f = self._open_file(path)
+
+            # Prepare the final buffer list
+            iwbufs = (b for _, _, b in wbufs)
+            bufs = [(*rbinfo, r)
+                    for r, rbufs in enumerate(bufs)
+                    for rbinfo in rbufs]
+
+            def write():
+                with self._lock:
+                    # Write the buffers to the file in order
+                    for off, nb, r in sorted(bufs):
+                        if r == root:
+                            b = next(iwbufs)
+                        else:
+                            b = np.empty(nb, dtype=np.uint8)
+                            self._scomm.Recv(b, r)
+
+                        f.seek(off)
+                        b.tofile(f)
+
+        else:
+            def write():
+                with self._lock:
+                    # Send each of our buffers to the root rank for writing
+                    for _, _, b in wbufs:
+                        self._scomm.Send(
+                            np.ascontiguousarray(b.view(np.uint8)), root
+                        )
+
+        return write
 
     def _prepare_file(self, path, metadata):
         comm, rank, root = get_comm_rank_root()
@@ -263,40 +363,6 @@ class NativeWriter:
             return comm.bcast(doffs, root=root)
         else:
             return comm.bcast(None, root=root)
-
-    def _write(self, path, data, metadata, *, async_=True):
-        # Prepare the output file
-        doffs = self._prepare_file(path, metadata)
-
-        # Open it for writing
-        f = self._open_file(path)
-
-        # Helper function for writing arrays at offsets
-        def write_off(k, v, n):
-            if len(v):
-                f.seek(doffs[k] + n*(v.nbytes // len(v)))
-                v.tofile(f)
-
-        # Main writing function
-        def write(einfo):
-            for ek, (gatherer, subset, *_) in einfo.items():
-                write_off(ek, data[ek], gatherer.off)
-                write_off(f'{ek}-parts', gatherer.rsrc, gatherer.off)
-
-                # If the element has been subset then write the index data
-                if subset:
-                    write_off(f'{ek}-idxs', gatherer.ridx, gatherer.off)
-
-            # Close the file
-            f.close()
-
-        if async_:
-            th = threading.Thread(target=write, args=(self._einfo,))
-            th.start()
-            return th
-        else:
-            write(self._einfo)
-            return None
 
 
 class _AsyncCompleter:
