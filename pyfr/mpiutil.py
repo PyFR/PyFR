@@ -21,8 +21,8 @@ def init_mpi():
     # Work around issues with UCX-derived MPI libraries
     os.environ['UCX_MEMTYPE_CACHE'] = 'n'
 
-    # Manually initialise MPI
-    MPI.Init()
+    # Manually initialise MPI with thread support
+    MPI.Init_thread()
 
     # Prevent mpi4py from calling MPI_Finalize
     mpi4py.rc.finalize = False

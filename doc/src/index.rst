@@ -23,6 +23,7 @@ Contents:
    examples
    developer_guide
    file_format
+   io
 
 Indices and Tables
 ******************
