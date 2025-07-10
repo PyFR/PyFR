@@ -9,6 +9,7 @@ from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclasses
+from pyfr.mpiutil import get_comm_rank_root, mpi
 
 
 class BaseSystem:
@@ -153,16 +154,29 @@ class BaseSystem:
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
 
+        # Iterate over all BCs (including ones not on this rank)
         bc_inters = []
-        for bname, interarr in mesh.bcon.items():
+        bcnames = [s[9:] for s in self.cfg.sections() if s[:9] == 'soln-bcs-']
+        for bname in bcnames:
             # Determine the config file section
             cfgsect = f'soln-bcs-{bname}'
 
-            # Instantiate
+            # Get class
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
-            bciface = bcclass(self.backend, interarr, elemap, cfgsect,
-                                self.cfg)
-            bc_inters.append(bciface)
+
+            # Check if requires an MPI communicator
+            bccomm = None
+            if bcclass.req_mpi_comm:
+                comm, rank, root = get_comm_rank_root()
+                bccomm = comm.Split(1 if bname in mesh.bcon else mpi.UNDEFINED)
+
+            # Instantiate BC
+            if bname in mesh.bcon:
+                bciface = bcclass(self.backend, mesh.bcon[bname], 
+                                  elemap, cfgsect, self.cfg)
+                if bciface.req_mpi_comm:
+                    bciface.set_comm(bccomm)
+                bc_inters.append(bciface)
 
         return bc_inters
 
