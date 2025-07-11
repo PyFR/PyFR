@@ -63,7 +63,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         nfields = self._prepare_exprs()
 
         # Output data type
-        fpdtype = self.cfg.get(cfgsect, 'precision', 'single')
+        fpdtype = self.cfg.get('backend', 'precision', 'single')
         if fpdtype == 'single':
             self.fpdtype = np.float32
         elif fpdtype == 'double':
