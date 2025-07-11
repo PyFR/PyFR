@@ -82,10 +82,8 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         ershapes = {etype: (nfields, emap[etype].nupts) for etype in erdata}
 
         # Construct the file writer
-        self._writer = NativeWriter(intg.system.mesh, intg.cfg, 
-                                    self.fpdtype, basedir, basename, 
-                                    prefix='tavg',
-                                    isrestart=intg.isrestart)
+        self._writer = NativeWriter.from_integrator(intg, basedir, basename,
+                                                'tavg', fpdtype=self.fpdtype)
         self._writer.set_shapes_eidxs(ershapes, erdata)
 
         # Asynchronous output options
