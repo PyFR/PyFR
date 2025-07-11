@@ -63,7 +63,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         nfields = self._prepare_exprs()
 
         # Output data type
-        fpdtype = self.cfg.get('backend', 'precision', 'single')
+        fpdtype = self.cfg.get(cfgsect, 'precision', 'single')
         if fpdtype == 'single':
             self.fpdtype = np.float32
         elif fpdtype == 'double':
@@ -82,8 +82,10 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         ershapes = {etype: (nfields, emap[etype].nupts) for etype in erdata}
 
         # Construct the file writer
-        self._writer = NativeWriter.from_integrator(intg, basedir, basename,
-                                                    'tavg')
+        self._writer = NativeWriter(intg.system.mesh, intg.cfg, 
+                                    self.fpdtype, basedir, basename, 
+                                    prefix='tavg',
+                                    isrestart=intg.isrestart)
         self._writer.set_shapes_eidxs(ershapes, erdata)
 
         # Asynchronous output options
