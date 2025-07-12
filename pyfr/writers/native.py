@@ -76,7 +76,7 @@ class NativeWriter:
     @staticmethod
     def from_integrator(intg, basedir, basename, prefix, *, extn='.pyfrs',
                         fpdtype=None):
-        _ftype = intg.backend.fpdtype if fpdtype is None else fpdtype
+        _ftype = fpdtype or intg.backend.fpdtype
         return NativeWriter(intg.system.mesh, intg.cfg, _ftype,
                             basedir, basename, prefix=prefix,
                             isrestart=intg.isrestart)
