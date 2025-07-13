@@ -74,10 +74,11 @@ class NativeWriter:
         self._awriter = None
 
     @staticmethod
-    def from_integrator(intg, basedir, basename, prefix, *, extn='.pyfrs'):
-        return NativeWriter(intg.system.mesh, intg.cfg, intg.backend.fpdtype,
-                            basedir, basename, prefix=prefix,
-                            isrestart=intg.isrestart)
+    def from_integrator(intg, basedir, basename, prefix, *, extn='.pyfrs',
+                        fpdtype=None):
+        _ftype = fpdtype or intg.backend.fpdtype
+        return NativeWriter(intg.system.mesh, intg.cfg, _ftype, basedir, 
+                            basename, prefix=prefix, isrestart=intg.isrestart)
 
     @staticmethod
     def _get_fstype(basedir):
