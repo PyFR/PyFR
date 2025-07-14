@@ -12,8 +12,6 @@ def _get_inter_objs(interside, getter, elemap):
 
 
 class BaseInters:
-    req_mpi_comm = False
-
     def __init__(self, be, lhs, elemap, cfg):
         self._be = be
         self.elemap = elemap

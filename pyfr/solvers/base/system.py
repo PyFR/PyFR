@@ -9,7 +9,7 @@ from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclasses
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 
 
 class BaseSystem:
@@ -26,7 +26,6 @@ class BaseSystem:
         self.mesh = mesh
         self.cfg = cfg
         self.nregs = nregs
-        self.rt_externs = {}
 
         # Conservative and physical variable names
         convars = self.elementscls.convars(mesh.ndims, cfg)
@@ -156,26 +155,23 @@ class BaseSystem:
 
         # Iterate over all BCs (including ones not on this rank)
         bc_inters = []
-        bcnames = [s[9:] for s in self.cfg.sections() if s[:9] == 'soln-bcs-']
+        bcnames = [s[3:] for s in mesh.codec if s[:3] == 'bc/']
         for bname in bcnames:
             # Determine the config file section
             cfgsect = f'soln-bcs-{bname}'
 
-            # Get class
-            bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
+            # Construct MPI communicator for this BC
+            comm, rank, root = get_comm_rank_root()
+            localbc = bname in mesh.bcon
+            bccomm = autofree(comm.Split(1 if localbc else mpi.UNDEFINED))
 
-            # Check if requires an MPI communicator
-            bccomm = None
-            if bcclass.req_mpi_comm:
-                comm, rank, root = get_comm_rank_root()
-                bccomm = comm.Split(1 if bname in mesh.bcon else mpi.UNDEFINED)
+            if localbc:
+                # Get class
+                bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
-            # Instantiate BC
-            if bname in mesh.bcon:
-                bciface = bcclass(self.backend, mesh.bcon[bname], 
-                                  elemap, cfgsect, self.cfg)
-                if bciface.req_mpi_comm:
-                    bciface.set_comm(bccomm)
+                # Instantiate BC
+                bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
+                                  cfgsect, self.cfg, bccomm)
                 bc_inters.append(bciface)
 
         return bc_inters
@@ -277,7 +273,7 @@ class BaseSystem:
             b.prepare(self, t, bckerns[b.name])
 
         for b in binders:
-            b(**self.rt_externs)
+            b(t=t)
 
     def _rhs_graphs(self, uinbank, foutbank):
         pass
@@ -358,6 +354,3 @@ class BaseSystem:
     def set_ele_entmin_int(self, entmin_int):
         for e, em in zip(self.eles_entmin_int, entmin_int):
             e.set(em)
-    
-    def update_rt_extern(self, key, value):
-        self.rt_externs[key] = value

@@ -109,7 +109,7 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
 class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
     type = None
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfg)
 
         self.cfgsect = cfgsect
