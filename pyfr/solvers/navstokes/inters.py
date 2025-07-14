@@ -115,7 +115,7 @@ class NavierStokesNoSlpIsotWallBCInters(NavierStokesBaseBCInters):
     cflux_state = 'ghost-imperm'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c['cpTw'], = self._eval_opts(['cpTw'])
         self.c |= self._exp_opts('uvw'[:self.ndims], lhs,
@@ -126,16 +126,10 @@ class NavierStokesNoSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'no-slp-adia-wall'
     cflux_state = 'ghost-imperm'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
-
 
 class NavierStokesSlpAdiaWallBCInters(NavierStokesBaseBCInters):
     type = 'slp-adia-wall'
     cflux_state = None
-
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
 
 class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
@@ -143,7 +137,7 @@ class NavierStokesCharRiemInvBCInters(NavierStokesBaseBCInters):
     cflux_state = 'ghost'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
@@ -155,7 +149,7 @@ class NavierStokesSupInflowBCInters(NavierStokesBaseBCInters):
     cflux_state = 'ghost'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
@@ -166,16 +160,13 @@ class NavierStokesSupOutflowBCInters(NavierStokesBaseBCInters):
     type = 'sup-out-fn'
     cflux_state = 'ghost'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
-
 
 class NavierStokesSubInflowFrvBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-frv'
     cflux_state = 'ghost'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
             ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs,
@@ -187,8 +178,8 @@ class NavierStokesSubInflowFtpttangBCInters(NavierStokesBaseBCInters):
     type = 'sub-in-ftpttang'
     cflux_state = 'ghost'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         gamma = self.cfg.getfloat('constants', 'gamma')
 
@@ -215,6 +206,6 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
     cflux_state = 'ghost'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(['p'], lhs)

@@ -56,7 +56,7 @@ class ACEulerInflowBCInters(ACEulerBaseBCInters):
     type = 'ac-in-fv'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts('uvw'[:self.ndims], lhs)
 
@@ -65,7 +65,7 @@ class ACEulerOutflowBCInters(ACEulerBaseBCInters):
     type = 'ac-out-fp'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts('p', lhs)
 
@@ -73,15 +73,12 @@ class ACEulerOutflowBCInters(ACEulerBaseBCInters):
 class ACEulerSlpWallBCInters(ACEulerBaseBCInters):
     type = 'slp-wall'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
-
 
 class ACEulerCharRiemInvBCInters(ACEulerBaseBCInters):
     type = 'ac-char-riem-inv'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c['niters'] = cfg.getint(cfgsect, 'niters', 4)
         self.c['bc-ac-zeta'] = cfg.getfloat(cfgsect, 'ac-zeta')

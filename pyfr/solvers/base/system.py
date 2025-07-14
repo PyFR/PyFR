@@ -7,9 +7,9 @@ import numpy as np
 
 from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
+from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
 from pyfr.util import subclasses
-from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 
 
 class BaseSystem:
@@ -153,15 +153,19 @@ class BaseSystem:
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
 
+        comm, rank, root = get_comm_rank_root()
+
         # Iterate over all BCs (including ones not on this rank)
         bc_inters = []
-        bcnames = [s[3:] for s in mesh.codec if s[:3] == 'bc/']
-        for bname in bcnames:
+        for c in mesh.codec:
+            if not c.startswith('bc/'):
+                continue
+
             # Determine the config file section
+            bname = c.removeprefix('bc/')
             cfgsect = f'soln-bcs-{bname}'
 
             # Construct MPI communicator for this BC
-            comm, rank, root = get_comm_rank_root()
             localbc = bname in mesh.bcon
             bccomm = autofree(comm.Split(1 if localbc else mpi.UNDEFINED))
 
