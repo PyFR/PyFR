@@ -99,7 +99,7 @@ class EulerSupInflowBCInters(EulerBaseBCInters):
     type = 'sup-in-fa'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self.c |= self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
@@ -110,12 +110,15 @@ class EulerSupOutflowBCInters(EulerBaseBCInters):
     type = 'sup-out-fn'
     cflux_state = 'ghost'
 
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
+
 
 class EulerCharRiemInvBCInters(EulerBaseBCInters):
     type = 'char-riem-inv'
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self.c |= self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
@@ -124,3 +127,6 @@ class EulerCharRiemInvBCInters(EulerBaseBCInters):
 
 class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
     type = 'slp-adia-wall'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)

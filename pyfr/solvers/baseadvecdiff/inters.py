@@ -118,8 +118,8 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
 
 
 class BaseAdvectionDiffusionBCInters(BaseAdvectionBCInters):
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         # Additional view matrices
         self._vect_lhs = self._vect_view(lhs, 'get_vect_fpts_for_inter')

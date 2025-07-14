@@ -85,7 +85,7 @@ class ACNavierStokesNoSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'no-slp-wall'
     cflux_state = 'ghost'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self.c |= self._exp_opts('uvw'[:self.ndims], lhs,
@@ -96,12 +96,15 @@ class ACNavierStokesSlpWallBCInters(ACNavierStokesBaseBCInters):
     type = 'slp-wall'
     cflux_state = None
 
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg)
+
 
 class ACNavierStokesInflowBCInters(ACNavierStokesBaseBCInters):
     type = 'ac-in-fv'
     cflux_state = 'ghost'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self.c |= self._exp_opts('uvw'[:self.ndims], lhs)
@@ -111,7 +114,7 @@ class ACNavierStokesOutflowBCInters(ACNavierStokesBaseBCInters):
     type = 'ac-out-fp'
     cflux_state = 'ghost'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self.c |= self._exp_opts('p', lhs)
@@ -121,7 +124,7 @@ class ACNavierStokesCharRiemInvBCInters(ACNavierStokesBaseBCInters):
     type = 'ac-char-riem-inv'
     cflux_state = 'ghost'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg)
 
         self.c['niters'] = cfg.getint(cfgsect, 'niters', 4)
