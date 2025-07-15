@@ -161,16 +161,14 @@ class BaseSystem:
             if not c.startswith('bc/'):
                 continue
 
-            # Determine the config file section
-            bname = c.removeprefix('bc/')
-            cfgsect = f'soln-bcs-{bname}'
-
             # Construct MPI communicator for this BC
+            bname = c.removeprefix('bc/')
             localbc = bname in mesh.bcon
             bccomm = autofree(comm.Split(1 if localbc else mpi.UNDEFINED))
 
             if localbc:
                 # Get class
+                cfgsect = f'soln-bcs-{bname}'
                 bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
                 # Instantiate BC
