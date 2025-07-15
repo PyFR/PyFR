@@ -620,26 +620,31 @@ class BaseVTKWriter(BaseWriter):
         write_s = lambda s: fh.write(s.encode())
 
         # Have each rank write out its own VTU file
-        with open(f'{fname[:-5]}_p{rank}.vtu', 'wb') as fh:
-            write_s('<?xml version="1.0" ?>\n<VTKFile '
-                    'byte_order="LittleEndian" type="UnstructuredGrid" '
-                    f'version="{self.vtkfile_version}" '
-                    'header_type="UInt64">\n<UnstructuredGrid>\n')
+        if self.einfo:
+            with open(f'{fname[:-5]}_p{rank}.vtu', 'wb') as fh:
+                write_s('<?xml version="1.0" ?>\n<VTKFile '
+                        'byte_order="LittleEndian" type="UnstructuredGrid" '
+                        f'version="{self.vtkfile_version}" '
+                        'header_type="UInt64">\n<UnstructuredGrid>\n')
 
-            # Running byte-offset for appended data
-            off = 0
+                # Running byte-offset for appended data
+                off = 0
 
-            # Write out the array headers
-            for etype, neles in self.einfo:
-                off = self._write_serial_header(write_s, etype, neles, off)
+                # Write out the array headers
+                for etype, neles in self.einfo:
+                    off = self._write_serial_header(write_s, etype, neles, off)
 
-            write_s('</UnstructuredGrid>\n<AppendedData encoding="raw">\n_')
+                write_s('</UnstructuredGrid>\n'
+                        '<AppendedData encoding="raw">\n_')
 
-            # Followed by the data
-            for etype, *_ in self.einfo:
-                self._write_data(lambda b: fh.write(b), etype)
+                # Followed by the data
+                for etype, *_ in self.einfo:
+                    self._write_data(lambda b: fh.write(b), etype)
 
-            write_s('\n</AppendedData>\n</VTKFile>')
+                write_s('\n</AppendedData>\n</VTKFile>')
+
+        # Inform the root rank if we wrote a file or not
+        fidx = comm.gather(bool(self.einfo), root=root)
 
         # Also have the root rank write out the PVTU file itself
         if rank == root:
@@ -656,9 +661,10 @@ class BaseVTKWriter(BaseWriter):
                 self._write_parallel_header(write_s)
 
                 # Constitutent pieces
-                for r in range(comm.size):
-                    bname = Path(f'{fname[:-5]}_p{r}.vtu').name
-                    write_s(f'<Piece Source="{bname}"/>\n')
+                for r, w in enumerate(fidx):
+                    if w:
+                        bname = Path(f'{fname[:-5]}_p{r}.vtu').name
+                        write_s(f'<Piece Source="{bname}"/>\n')
 
                 write_s('</PUnstructuredGrid>\n</VTKFile>\n')
 
