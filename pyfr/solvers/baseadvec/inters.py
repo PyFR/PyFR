@@ -54,7 +54,7 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
         self._rhsrank = rhsrank
 
         # Name our interface so we can match kernels to MPI requests
-        self.name = 'p{rhsrank}'
+        self.name = f'p{rhsrank}'
 
         # MPI request tag counter
         self._mpi_tag_counter = it.count(self.BASE_MPI_TAG)
