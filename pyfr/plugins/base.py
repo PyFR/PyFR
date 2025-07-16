@@ -236,9 +236,6 @@ class RegionMixin:
 
 
 class SurfaceMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
     def _surf_region(self, intg):
         # Parse the region
         sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh)
