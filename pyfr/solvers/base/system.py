@@ -174,9 +174,11 @@ class BaseSystem:
 
         def tag_kern(pname, prov, kern):
             if pname == 'eles':
-                self._ktags[kern] = f'e-{prov.basis.name}'
+                self._ktags[kern] = f'eles/{prov.basis.name}'
             elif pname == 'mpiint':
-                self._ktags[kern] = f'i-{prov.name}'
+                self._ktags[kern] = f'mpiint/{prov.name}'
+            elif pname == 'bcint':
+                self._ktags[kern] = f'bcint/{prov.name}'
 
         provnames = ['eles', 'iint', 'mpiint', 'bcint']
         provlists = [eles, iint, mpiint, bcint]
@@ -228,11 +230,20 @@ class BaseSystem:
                 (fo is not None and fo == foutbank)):
                 kernels[kn].extend(k)
 
-        # Obtain the bind method for kernels which take runtime arguments
-        binders = [k.bind for k in it.chain(*kernels.values())
-                   if hasattr(k, 'bind')]
+        # Handle kernels which have arguments that can be bound at runtime
+        binders, bckerns = [], defaultdict(dict)
+        for kn, kerns in kernels.items():
+            for k in kerns:
+                if bind := getattr(k, 'bind', None):
+                    binders.append(bind)
 
-        return kernels, binders
+                if kn.startswith('bcint/'):
+                    bcname = self._ktags[k].removeprefix('bcint/')
+                    bkname = kn.removeprefix('bcint/')
+
+                    bckerns[bcname][bkname] = k
+
+        return kernels, binders, bckerns
 
     def _kdeps(self, kdict, kern, *dnames):
         deps = []
@@ -245,10 +256,10 @@ class BaseSystem:
         return deps
 
     def _prepare_kernels(self, t, uinbank, foutbank):
-        _, binders = self._get_kernels(uinbank, foutbank)
+        _, binders, bckerns = self._get_kernels(uinbank, foutbank)
 
         for b in self._bc_inters:
-            b.prepare(t)
+            b.prepare(self, t, bckerns[b.name])
 
         for b in binders:
             b(t=t)

@@ -94,7 +94,8 @@ class CUDAPointwiseKernelProvider(CUDAKernelProvider,
             if rtargs:
                 def bind(self, **kwargs):
                     for i, k in rtargs:
-                        params.set_arg(i, kwargs[k])
+                        if k in kwargs:
+                            params.set_arg(i, kwargs[k])
 
                     # Notify any graphs we're in about our new parameters
                     for graph, gnode in self.gnodes.items():

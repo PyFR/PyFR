@@ -102,7 +102,8 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
             if rtargs:
                 def bind(self, **kwargs):
                     for i, k in rtargs:
-                        fun.set_arg(i, kwargs[k])
+                        if k in kwargs:
+                            fun.set_arg(i, kwargs[k])
 
             def run(self, queue, wait_for=None, ret_evt=False):
                 return fun.exec_async(queue, wait_for, ret_evt)
