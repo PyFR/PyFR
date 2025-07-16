@@ -272,7 +272,7 @@ class BaseSystem:
         _, binders, bckerns = self._get_kernels(uinbank, foutbank)
 
         for b in self._bc_inters:
-            b.prepare(self, t, bckerns[b.name])
+            b.prepare(self, uinbank, t, bckerns[b.name])
 
         for b in binders:
             b(t=t)
