@@ -111,7 +111,9 @@ class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
 
     def __init__(self, be, lhs, elemap, cfgsect, cfg):
         super().__init__(be, lhs, elemap, cfg)
+
         self.cfgsect = cfgsect
+        self.name = cfgsect.removeprefix('soln-bcs-')
 
         # For BC interfaces, which only have an LHS state, we take the
         # permutation which results in an optimal memory access pattern

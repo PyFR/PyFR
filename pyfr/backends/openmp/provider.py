@@ -185,6 +185,7 @@ class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
             if rtargs:
                 def bind(self, **kwargs):
                     for i, k in rtargs:
-                        self.kernel.set_arg(i, kwargs[k])
+                        if k in kwargs:
+                            self.kernel.set_arg(i, kwargs[k])
 
         return PointwiseKernel(argm, argv, kernel=fun)

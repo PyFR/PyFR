@@ -157,7 +157,8 @@ class MetalPointwiseKernelProvider(MetalKernelProvider,
             if rtargs:
                 def bind(self, **kwargs):
                     for i, k in rtargs:
-                        kargs[i] = kwargs[k]
+                        if k in kwargs:
+                            kargs[i] = kwargs[k]
 
             def run(self, cbuf):
                 fun(cbuf, grid, tgrp, *kargs)

@@ -8,7 +8,7 @@ class BaseAdvectionSystem(BaseSystem):
     @memoize
     def _rhs_graphs(self, uinbank, foutbank):
         m = self._mpireqs
-        k, _ = self._get_kernels(uinbank, foutbank)
+        k, *_ = self._get_kernels(uinbank, foutbank)
 
         def deps(dk, *names): return self._kdeps(k, dk, *names)
 
@@ -96,7 +96,7 @@ class BaseAdvectionSystem(BaseSystem):
     @memoize
     def _preproc_graphs(self, uinbank):
         m = self._mpireqs
-        k, _ = self._get_kernels(uinbank, None)
+        k, *_ = self._get_kernels(uinbank, None)
 
         # Short-circuit if entropy filtering is disabled
         if 'eles/entropy_filter' not in k:
@@ -141,6 +141,6 @@ class BaseAdvectionSystem(BaseSystem):
             return g1,
 
     def postproc(self, uinbank):
-        k, _ = self._get_kernels(uinbank, None)
+        k, *_ = self._get_kernels(uinbank, None)
 
         self.backend.run_kernels(k['eles/entropy_filter'])

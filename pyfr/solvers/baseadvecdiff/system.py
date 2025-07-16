@@ -8,7 +8,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
     @memoize
     def _rhs_graphs(self, uinbank, foutbank):
         m = self._mpireqs
-        k, _ = self._get_kernels(uinbank, foutbank)
+        k, *_ = self._get_kernels(uinbank, foutbank)
 
         def deps(dk, *names): return self._kdeps(k, dk, *names)
 
@@ -185,7 +185,7 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
     @memoize
     def _compute_grads_graph(self, uinbank):
         m = self._mpireqs
-        k, _ = self._get_kernels(uinbank, None)
+        k, *_ = self._get_kernels(uinbank, None)
 
         def deps(dk, *names): return self._kdeps(k, dk, *names)
 

@@ -86,7 +86,8 @@ class HIPPointwiseKernelProvider(HIPKernelProvider,
             if rtargs:
                 def bind(self, **kwargs):
                     for i, k in rtargs:
-                        params.set_arg(i, kwargs[k])
+                        if k in kwargs:
+                            params.set_arg(i, kwargs[k])
 
             def add_to_graph(self, graph, deps):
                 pass

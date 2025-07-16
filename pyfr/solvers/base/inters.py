@@ -42,7 +42,7 @@ class BaseInters:
         self._external_args = {}
         self._external_vals = {}
 
-    def prepare(self, t):
+    def prepare(self, system, t, kerns):
         pass
 
     def _set_external(self, name, spec, value=None):
