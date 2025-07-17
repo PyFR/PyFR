@@ -65,8 +65,23 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
                     raise ValueError('Invalid file format')
 
         # Set interpolation matrices and quadrature weights
-        self._surf_init(intg.system, intg.system.ele_map, suffix, 
-                        morigin if self._mcomp else None)
+        self._surf_init(intg.system, intg.system.ele_map, suffix)
+        
+        rfpts = defaultdict(list)
+
+        # Get the flux points position of the given face and element
+        # indices relative to the moment origin
+        if bcname in mesh.bcon and self._mcomp:
+            for etype, eidx, fidx in mesh.bcon[bcname]:
+                eles = intg.system.ele_map[etype]
+                itype, proj, _ = eles.basis.faces[fidx]
+                ppts, _ = self._surf_quad(itype, proj, flags='s')
+                
+                ploc = eles.ploc_at_np(ppts)[..., eidx]
+                rfpt = ploc - morigin
+                rfpts[etype, fidx].append(rfpt)
+        
+        self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
 
     @property
     def _header(self):

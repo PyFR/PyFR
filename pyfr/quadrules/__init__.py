@@ -109,7 +109,7 @@ def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):
 
 
 class SurfaceMixin:
-    def _surf_init(self, system, elemap, bcname, morigin=None):
+    def _surf_init(self, system, elemap, bcname):
         # Underlying elements class
         elementscls = system.elementscls
         # Get the mesh and elements
@@ -122,11 +122,9 @@ class SurfaceMixin:
 
         # If we have the boundary then process the interface
         if bcname in mesh.bcon:
-            # Element indices, associated face normals and relative flux
-            # points position with respect to the moments origin
+            # Element indices and associated face normals
             eidxs = defaultdict(list)
             norms = defaultdict(list)
-            rfpts = defaultdict(list)
 
             for etype, eidx, fidx in mesh.bcon[bcname]:
                 eles = elemap[etype]
@@ -157,18 +155,10 @@ class SurfaceMixin:
                     # Product to give J^-T at the solution points
                     rcpjact[etype] = smat*rcpdjac
 
-                # Get the flux points position of the given face and element
-                # indices relative to the moment origin
-                if morigin:
-                    ploc = eles.ploc_at_np(ppts)[..., eidx]
-                    rfpt = ploc - morigin
-                    rfpts[etype, fidx].append(rfpt)
-
             self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
             self._norms = {k: np.array(v) for k, v in norms.items()}
-            self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
-            self._rcpjact = {k: rcpjact[k[0]][..., v]
-                                    for k, v in self._eidxs.items()}
+            self._rcpjact = {k: rcpjact[k[0]][..., v] 
+                             for k, v in self._eidxs.items()}
 
     @memoize
     def _surf_quad(self, itype, proj, flags=''):
@@ -187,4 +177,5 @@ class SurfaceMixin:
 
         # Project its points onto the provided surface
         pts = np.atleast_2d(q.pts.T)
+
         return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts
