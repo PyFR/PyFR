@@ -1,47 +1,6 @@
-from pyfr.plugins.base import SurfaceMixin
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
-
-class BCIntersSurfaceMixin(SurfaceMixin):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    # Setup integrating over boundary
-    def _init_surface_integration(self, system, elemap, bcname):
-        # Underlying elements class
-        self.elementscls = system.elementscls
-        # Get the mesh and elements
-        mesh = system.mesh
-        # Interpolation matrices and quadrature weights
-        self._m0 = m0 = {}
-        self._qwts = qwts = defaultdict(list)
-        # Element indices, associated face normals and relative flux
-        # points position with respect to the moments origin
-        eidxs = defaultdict(list)
-        norms = defaultdict(list)
-        rfpts = defaultdict(list)
-
-        for etype, eidx, fidx in mesh.bcon[bcname]:
-            eles = elemap[etype]
-            itype, proj, norm = eles.basis.faces[fidx]
-
-            ppts, pwts = self._surf_quad(itype, proj, flags='s')
-            nppts = len(ppts)
-
-            # Get phyical normals
-            pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
-
-            eidxs[etype, fidx].append(eidx)
-            norms[etype, fidx].append(pnorm)
-
-            if (etype, fidx) not in m0:
-                m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
-                qwts[etype, fidx] = pwts
-
-        self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
-        self._norms = {k: np.array(v) for k, v in norms.items()}
-        self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
 
 
 class FluidIntIntersMixin:

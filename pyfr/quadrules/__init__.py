@@ -102,3 +102,85 @@ def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):
             ndim = ndims[eletype]
 
         return StoredQuadRule(rule, npts, qdeg, flags)
+
+
+class SurfaceMixin:
+    def _surf_init(self, system, elemap, bcname, morigin=None):
+        # Underlying elements class
+        elementscls = system.elementscls
+        # Get the mesh and elements
+        mesh = system.mesh
+        # Interpolation matrices and quadrature weights
+        self._m0 = m0 = {}
+        self._qwts = qwts = defaultdict(list)
+        self._m4 = m4 = {}
+        rcpjact = {}
+
+        # If we have the boundary then process the interface
+        if bcname in mesh.bcon:
+            # Element indices, associated face normals and relative flux
+            # points position with respect to the moments origin
+            eidxs = defaultdict(list)
+            norms = defaultdict(list)
+            rfpts = defaultdict(list)
+
+            for etype, eidx, fidx in mesh.bcon[bcname]:
+                eles = elemap[etype]
+                itype, proj, norm = eles.basis.faces[fidx]
+
+                ppts, pwts = self._surf_quad(itype, proj, flags='s')
+                nppts = len(ppts)
+
+                # Get phyical normals
+                pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
+
+                eidxs[etype, fidx].append(eidx)
+                norms[etype, fidx].append(pnorm)
+
+                if (etype, fidx) not in m0:
+                    m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
+                    qwts[etype, fidx] = pwts
+                
+                if etype not in m4:
+                    m4[etype] = eles.basis.m4
+
+                    # Get the smats at the solution points
+                    smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
+
+                    # Get |J|^-1 at the solution points
+                    rcpdjac = eles.rcpdjac_at_np('upts')
+
+                    # Product to give J^-T at the solution points
+                    rcpjact[etype] = smat*rcpdjac
+
+                # Get the flux points position of the given face and element
+                # indices relative to the moment origin
+                if morigin:
+                    ploc = eles.ploc_at_np(ppts)[..., eidx]
+                    rfpt = ploc - morigin
+                    rfpts[etype, fidx].append(rfpt)
+
+            self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
+            self._norms = {k: np.array(v) for k, v in norms.items()}
+            self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
+            self._rcpjact = {k: rcpjact[k[0]][..., v]
+                                    for k, v in self._eidxs.items()}
+
+    @memoize
+    def _surf_quad(self, itype, proj, flags=''):
+        # Obtain quadrature info
+        rname = self.cfg.get(f'solver-interfaces-{itype}', 'flux-pts')
+
+        # Quadrature rule (default to that of the solution points)
+        qrule = self.cfg.get(self.cfgsect, f'quad-pts-{itype}', rname)
+        try:
+            qdeg = self.cfg.getint(self.cfgsect, f'quad-deg-{itype}')
+        except NoOptionError:
+            qdeg = self.cfg.getint(self.cfgsect, 'quad-deg')
+
+        # Get the quadrature rule
+        q = get_quadrule(itype, qrule, qdeg=qdeg, flags=flags)
+
+        # Project its points onto the provided surface
+        pts = np.atleast_2d(q.pts.T)
+        return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts

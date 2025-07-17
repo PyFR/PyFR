@@ -4,7 +4,7 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BaseSolnPlugin, SurfaceMixin, init_csv
+from pyfr.plugins.base import BaseSolnPlugin, SurfaceRegionMixin, init_csv
 from pyfr.util import first
 
 
@@ -14,7 +14,7 @@ FWHSurfParams = namedtuple(
 )
 
 
-class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
+class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
     name = 'fwh'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']

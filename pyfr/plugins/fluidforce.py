@@ -3,8 +3,9 @@ from collections import defaultdict
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import (BaseSolnPlugin, DatasetAppender, SurfaceMixin,
+from pyfr.plugins.base import (BaseSolnPlugin, DatasetAppender,
                                init_csv, open_hdf5_a)
+from pyfr.quadrules import SurfaceMixin
 
 
 class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
@@ -63,65 +64,9 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
                 case _:
                     raise ValueError('Invalid file format')
 
-        # Interpolation matrices and quadrature weights
-        self._m0 = m0 = {}
-        self._qwts = qwts = defaultdict(list)
-
-        if self._viscous:
-            self._m4 = m4 = {}
-            rcpjact = {}
-
-        # If we have the boundary then process the interface
-        if suffix in mesh.bcon:
-            # Element indices, associated face normals and relative flux
-            # points position with respect to the moments origin
-            eidxs = defaultdict(list)
-            norms = defaultdict(list)
-            rfpts = defaultdict(list)
-
-            for etype, eidx, fidx in mesh.bcon[suffix]:
-                eles = elemap[etype]
-                itype, proj, norm = eles.basis.faces[fidx]
-
-                ppts, pwts = self._surf_quad(itype, proj, flags='s')
-                nppts = len(ppts)
-
-                # Get phyical normals
-                pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
-
-                eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(pnorm)
-
-                if (etype, fidx) not in m0:
-                    m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
-                    qwts[etype, fidx] = pwts
-
-                if self._viscous and etype not in m4:
-                    m4[etype] = eles.basis.m4
-
-                    # Get the smats at the solution points
-                    smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                    # Get |J|^-1 at the solution points
-                    rcpdjac = eles.rcpdjac_at_np('upts')
-
-                    # Product to give J^-T at the solution points
-                    rcpjact[etype] = smat*rcpdjac
-
-                # Get the flux points position of the given face and element
-                # indices relative to the moment origin
-                if self._mcomp:
-                    ploc = eles.ploc_at_np(ppts)[..., eidx]
-                    rfpt = ploc - morigin
-                    rfpts[etype, fidx].append(rfpt)
-
-            self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
-            self._norms = {k: np.array(v) for k, v in norms.items()}
-            self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
-
-            if self._viscous:
-                self._rcpjact = {k: rcpjact[k[0]][..., v]
-                                 for k, v in self._eidxs.items()}
+        # Set interpolation matrices and quadrature weights
+        self._surf_init(intg.system, intg.system.ele_map, suffix, 
+                        morigin if self._mcomp else None)
 
     @property
     def _header(self):
