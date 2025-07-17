@@ -1,7 +1,11 @@
+from collections import defaultdict
 from importlib.resources import files
 import re
 
 import numpy as np
+
+from pyfr.cache import memoize
+from pyfr.inifile import NoOptionError
 
 
 class BaseTabulatedQuadRule:
