@@ -71,8 +71,8 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
 
         # Get the flux points position of the given face and element
         # indices relative to the moment origin
-        if bcname in mesh.bcon and self._mcomp:
-            for etype, eidx, fidx in mesh.bcon[bcname]:
+        if suffix in mesh.bcon and self._mcomp:
+            for etype, eidx, fidx in mesh.bcon[suffix]:
                 eles = intg.system.ele_map[etype]
                 itype, proj, _ = eles.basis.faces[fidx]
                 ppts, _ = self._surf_quad(itype, proj, flags='s')
