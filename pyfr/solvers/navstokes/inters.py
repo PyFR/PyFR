@@ -4,7 +4,8 @@ from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
 from pyfr.solvers.euler.inters import (FluidIntIntersMixin,
-                                       FluidMPIIntersMixin)
+                                       FluidMPIIntersMixin,
+                                       MassFlowBCMixin)
 
 
 class TplargsMixin:
@@ -209,3 +210,7 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(['p'], lhs)
+
+class NavierStokesCharRiemInvMassFlowBCInters(MassFlowBCMixin, 
+                                              NavierStokesBaseBCInters):
+    type = 'char-riem-inv-mass-flow'
