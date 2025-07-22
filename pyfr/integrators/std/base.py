@@ -62,11 +62,3 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
     @property
     def controller_needs_errest(self):
         pass
-
-    @property
-    def entmin(self):
-        return self.system.get_ele_entmin_int()
-
-    @entmin.setter
-    def entmin(self, value):
-        self.system.set_ele_entmin_int(value)
