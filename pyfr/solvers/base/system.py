@@ -336,7 +336,3 @@ class BaseSystem:
         subs = [sub for sub in subs if len(sub) > 1]
 
         g.group(kerns, subs)
-
-    def set_ele_entmin_int(self, entmin_int):
-        for e, em in zip(self.eles_entmin_int, entmin_int):
-            e.set(em)
