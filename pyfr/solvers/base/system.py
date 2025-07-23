@@ -327,9 +327,6 @@ class BaseSystem:
     def ele_scal_upts(self, idx):
         return [eb[idx].get() for eb in self.ele_banks]
 
-    def get_ele_entmin_int(self):
-        return [e.get() for e in self.eles_entmin_int]
-
     def _group(self, g, kerns, subs=[]):
         # Eliminate non-existent kernels
         kerns = [k for k in kerns if k is not None]
