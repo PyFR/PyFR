@@ -5,6 +5,7 @@ import numpy as np
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
 from pyfr.plugins.base import BaseSolnPlugin, SurfaceRegionMixin, init_csv
+from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.util import first
 
 
@@ -12,6 +13,59 @@ FWHSurfParams = namedtuple(
     'FWHSurfParams',
     ('eidxs', 'm0', 'nda', 'r_tilde_vec',  'r_star_inv', 'r_star_tilde_vec')
 )
+
+
+class FWHIntegrator(SurfaceIntegrator):
+    def __init__(self, cfg, cfgsect, ndims, obsv_pts, qinf, elemap, surf_list):
+        self.cfg = cfg
+        self.cfgsect = cfgsect
+        self.ndims = ndims
+        self.obsv_pts = obsv_pts
+        self.qinf = qinf
+
+        Minf = np.linalg.norm(self.qinf['M'])
+        if Minf >= 1:
+            raise ValueError('FWH farfield Mach number greater than 1')
+
+        self._surf_init(elemap, surf_list)
+
+        self.surf = {}
+        for etype, fidx in self._eidxs.keys():
+            for i, eidx in enumerate(self._eidxs[etype, fidx]):
+                m0 = self._m0[etype, fidx]
+                qwts = self._qwts[etype, fidx]
+                pnorm = self._norms[etype, fidx][i]
+                ploc = self._locs[etype, fidx][i]
+
+                nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
+                nds = nds.reshape(self.ndims, -1)
+                dist = self._distances(ploc, Minf)
+
+                self.surf[etype, fidx] = FWHSurfParams(eidx, m0, nds, *dist)
+    
+    def _distances(self, spts, Minf):
+        surf_pts = spts.transpose(0, 2, 1).reshape(-1, self.ndims)
+
+        gamma_inv = (1 - Minf**2)**0.5
+        gamma = 1 / gamma_inv
+
+        r_o = self.obsv_pts[None] - surf_pts[:, None]
+        d = np.linalg.norm(r_o, axis=-1)
+        r_o_hat = r_o / d[..., None]
+
+        m_r = r_o_hat @ self.qinf['M']
+
+        r_star_vec = r_o*np.hypot(gamma_inv, m_r)[..., None]
+        r_star_inv = 1 / np.linalg.norm(r_star_vec, axis=-1)
+
+        r_grad_fac = (np.einsum('ij,k->ijk', m_r, self.qinf['M'])
+                      + r_o_hat*gamma_inv**2)
+        r_snorm = r_star_inv*d
+
+        r_star_tilde_vec = r_snorm[..., None]*r_grad_fac
+        r_tilde_vec = (r_star_tilde_vec - self.qinf['M'])*gamma**2
+
+        return r_tilde_vec, r_star_inv, r_star_tilde_vec
 
 
 class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
@@ -59,31 +113,16 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
 
         self.qinf['M'] = np.array([self.qinf[k] / self.qinf['c']
                                    for k in 'uvw'[:self.ndims]])
-        Minf = np.linalg.norm(self.qinf['M'])
-        if Minf >= 1:
-            raise ValueError('FWH farfield Mach number greater than 1')
 
         # Initialise surface data
         ele_map = intg.system.ele_map
         self.emap = {k: i for i, k in enumerate(ele_map)}
         self.ele_surface, _ = self._surf_region(intg)
+
         surf_list = [(s[1], s[3], s[2]) for s in self.ele_surface]
-        self._surf_init(ele_map, surf_list)
-        
-        # Get ops and components of the surface
-        self.surf = {}
-        for etype, fidx in self._eidxs.keys():
-            for i, eidx in enumerate(self._eidxs[etype, fidx]):
-                m0 = self._m0[etype, fidx]
-                qwts = self._qwts[etype, fidx]
-                pnorm = self._norms[etype, fidx][i]
-                ploc = self._locs[etype, fidx][i]
-
-                nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
-                nds = nds.reshape(self.ndims, -1)
-                dist = self._distances(ploc, Minf)
-
-                self.surf[etype, fidx] = FWHSurfParams(eidx, m0, nds, *dist)
+        self.fwh_int = FWHIntegrator(self.cfg, self.cfgsect, self.ndims,
+                                     self.obsv_pts, self.qinf, ele_map,
+                                     surf_list)
 
         # Get boundary type info
         sname = self.cfg.get(cfgsect, 'surface')
@@ -91,30 +130,6 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             self.bctype = self.cfg.get(f'soln-bcs-{sname}', 'type')
         else:
             self.bctype = None
-
-    def _distances(self, spts, Minf):
-        surf_pts = spts.transpose(0, 2, 1).reshape(-1, self.ndims)
-
-        gamma_inv = (1 - Minf**2)**0.5
-        gamma = 1 / gamma_inv
-
-        r_o = self.obsv_pts[None] - surf_pts[:, None]
-        d = np.linalg.norm(r_o, axis=-1)
-        r_o_hat = r_o / d[..., None]
-
-        m_r = r_o_hat @ self.qinf['M']
-
-        r_star_vec = r_o*np.hypot(gamma_inv, m_r)[..., None]
-        r_star_inv = 1 / np.linalg.norm(r_star_vec, axis=-1)
-
-        r_grad_fac = (np.einsum('ij,k->ijk', m_r, self.qinf['M'])
-                      + r_o_hat*gamma_inv**2)
-        r_snorm = r_star_inv*d
-
-        r_star_tilde_vec = r_snorm[..., None]*r_grad_fac
-        r_tilde_vec = (r_star_tilde_vec - self.qinf['M'])*gamma**2
-
-        return r_tilde_vec, r_star_inv, r_star_tilde_vec
 
     def _enforce_noslip_bc(self, pris):
         vmag = np.sum(pris[self._vidx]**2, axis=0)
@@ -134,7 +149,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         dt_soln = intg.dt_soln
 
         # Accumulate FWH contribution from each surface part
-        for (etype, fidx), param in self.surf.items():
+        for (etype, fidx), param in self.fwh_int.surf.items():
             soln = intg.soln[self.emap[etype]][..., param.eidxs]
             soln_t = dt_soln[self.emap[etype]][..., param.eidxs]
 

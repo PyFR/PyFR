@@ -9,7 +9,6 @@ import numpy as np
 from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.quadrules import SurfaceMixin
 from pyfr.regions import parse_region_expr
 
 
@@ -233,7 +232,7 @@ class RegionMixin:
             self._ele_region_data[etype] = geidxs
 
 
-class SurfaceRegionMixin(SurfaceMixin):
+class SurfaceRegionMixin:
     def _surf_region(self, intg):
         # Parse the region
         sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh)
