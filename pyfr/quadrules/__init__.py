@@ -109,12 +109,10 @@ def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):
 
 
 class SurfaceMixin:
-    def _surf_init(self, elemap, surf_list, quad_flags=''):
+    def _surf_init(self, elemap, surf_list, flags=''):
         # Interpolation matrices and quadrature weights
         self._m0 = m0 = {}
         self._qwts = qwts = defaultdict(list)
-        self._m4 = m4 = {}
-        rcpjact = {}
 
         # Element indices and associated face normals
         eidxs = defaultdict(list)
@@ -125,7 +123,7 @@ class SurfaceMixin:
             eles = elemap[etype]
             itype, proj, norm = eles.basis.faces[fidx]
 
-            ppts, pwts = self._surf_quad(itype, proj, flags=quad_flags)
+            ppts, pwts = self._surf_quad(itype, proj, flags=flags)
             nppts = len(ppts)
 
             # Get phyical normals
@@ -139,24 +137,10 @@ class SurfaceMixin:
             if (etype, fidx) not in m0:
                 m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
                 qwts[etype, fidx] = pwts
-            
-            if etype not in m4:
-                m4[etype] = eles.basis.m4
-
-                # Get the smats at the solution points
-                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                # Get |J|^-1 at the solution points
-                rcpdjac = eles.rcpdjac_at_np('upts')
-
-                # Product to give J^-T at the solution points
-                rcpjact[etype] = smat*rcpdjac
 
         self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
         self._norms = {k: np.array(v) for k, v in norms.items()}
         self._locs = {k: np.array(v) for k, v in locs.items()}
-        self._rcpjact = {k: rcpjact[k[0]][..., v] 
-                        for k, v in self._eidxs.items()}
 
     @memoize
     def _surf_quad(self, itype, proj, flags=''):

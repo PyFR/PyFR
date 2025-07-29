@@ -68,23 +68,41 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         surf_list = []
         if suffix in mesh.bcon:
             surf_list = mesh.bcon[suffix]
-        self._surf_init(intg.system.ele_map, surf_list, 's')
+        self._surf_init(intg.system.ele_map, surf_list, flags='s')
         
-        rfpts = defaultdict(list)
+        if self._viscous:
+            self._m4 = m4 = {}
+            rcpjact = {}
 
-        # Get the flux points position of the given face and element
-        # indices relative to the moment origin
-        if suffix in mesh.bcon and self._mcomp:
-            for etype, eidx, fidx in mesh.bcon[suffix]:
-                eles = intg.system.ele_map[etype]
-                itype, proj, _ = eles.basis.faces[fidx]
-                ppts, _ = self._surf_quad(itype, proj, flags='s')
-                
-                ploc = eles.ploc_at_np(ppts)[..., eidx]
-                rfpt = ploc - morigin
-                rfpts[etype, fidx].append(rfpt)
+        if suffix in mesh.bcon:
+            rfpts = defaultdict(list)
+            for etype, fidx in self._eidxs.keys():
+                for i, eidx in enumerate(self._eidxs[etype, fidx]):
+                    eles = intg.system.ele_map[etype]
+
+                    if self._viscous and etype not in m4:
+                        m4[etype] = eles.basis.m4
+
+                        # Get the smats at the solution points
+                        smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
+
+                        # Get |J|^-1 at the solution points
+                        rcpdjac = eles.rcpdjac_at_np('upts')
+
+                        # Product to give J^-T at the solution points
+                        rcpjact[etype] = smat*rcpdjac
+
+                    # Get the flux points position of the given face and 
+                    # element indices relative to the moment origin
+                    if self._mcomp:
+                        ploc = self._locs[etype, fidx][i]
+                        rfpt = ploc - morigin
+                        rfpts[etype, fidx].append(rfpt)
         
-        self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
+            self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
+            if self._viscous:
+                self._rcpjact = {k: rcpjact[k[0]][..., v] 
+                            for k, v in self._eidxs.items()}
 
     @property
     def _header(self):
