@@ -81,7 +81,7 @@ pyfr restart
 pyfr export
    Convert a PyFR ``.pyfrs`` file into an unstructured VTK ``.vtu`` or
    ``.pvtu`` file.
-   
+
    pyfr export volume
       Exports a volume grid.  If ``--eopt=order:n`` is provided then
       PyFR elements are converted where possible to high-order VTK
@@ -114,7 +114,7 @@ pyfr export
    pyfr export stl
       Exports one or more STL surfaces.  Example::
 
-        pyfr export boundary mesh.pyfrm solution.pyfrms solution.vtu teapot
+        pyfr export stl mesh.pyfrm solution.pyfrms solution.vtu teapot
 
       The STL surfaces must have already been added to the mesh with
       ``pyfr region add``.
@@ -137,12 +137,12 @@ pyfr region
    pyfr region add
       Adds an STL region to the mesh.  Example::
 
-         pyfr partition add mesh.pyfrm teapot.stl teapot
+         pyfr region add mesh.pyfrm teapot.stl teapot
 
    pyfr region list
       Lists the STL regions in the mesh.  Example::
 
-         pyfr partition list mesh.pyfrm
+         pyfr region list mesh.pyfrm
 
    pyfr region remove
       Removes an STL region from the mesh.  Example::
