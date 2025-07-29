@@ -67,7 +67,23 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         ele_map = intg.system.ele_map
         self.emap = {k: i for i, k in enumerate(ele_map)}
         self.ele_surface, _ = self._surf_region(intg)
-        self._init_surf(ele_map, Minf)
+        surf_list = [(s[1], s[3], s[2]) for s in self.ele_surface]
+        self._surf_init(ele_map, surf_list)
+        
+        # Get ops and components of the surface
+        self.surf = {}
+        for etype, fidx in self._eidxs.keys():
+            for i, eidx in enumerate(self._eidxs[etype, fidx]):
+                m0 = self._m0[etype, fidx]
+                qwts = self._qwts[etype, fidx]
+                pnorm = self._norms[etype, fidx][i]
+                ploc = self._locs[etype, fidx][i]
+
+                nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
+                nds = nds.reshape(self.ndims, -1)
+                dist = self._distances(ploc, Minf)
+
+                self.surf[etype, fidx] = FWHSurfParams(eidx, m0, nds, *dist)
 
         # Get boundary type info
         sname = self.cfg.get(cfgsect, 'surface')
@@ -75,30 +91,6 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             self.bctype = self.cfg.get(f'soln-bcs-{sname}', 'type')
         else:
             self.bctype = None
-
-    def _init_surf(self, ele_map, Minf):
-        self.surf = {}
-        for doff, etype, fidx, eidxs in self.ele_surface:
-            eles = ele_map[etype]
-
-            # Get face operators
-            itype, proj, norm = eles.basis.faces[fidx]
-
-            # Create a quadrature on suface
-            qpts, qwts = self._surf_quad(itype, proj)
-            norm = np.array([norm for x in qpts])
-
-            # Get physical location, transformations, and normals
-            ploc = eles.ploc_at_np(qpts)[..., eidxs]
-            pnorm = eles.pnorm_at(qpts, norm)[:, eidxs]
-
-            # Get ops and components of the surface
-            m0 = eles.basis.ubasis.nodal_basis_at(qpts)
-            nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
-            nds = nds.reshape(self.ndims, -1)
-            dist = self._distances(ploc, Minf)
-
-            self.surf[etype, fidx] = FWHSurfParams(eidxs, m0, nds, *dist)
 
     def _distances(self, spts, Minf):
         surf_pts = spts.transpose(0, 2, 1).reshape(-1, self.ndims)

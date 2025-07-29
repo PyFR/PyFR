@@ -65,7 +65,10 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
                     raise ValueError('Invalid file format')
 
         # Set interpolation matrices and quadrature weights
-        self._surf_init(intg.system, intg.system.ele_map, suffix)
+        surf_list = []
+        if suffix in mesh.bcon:
+            surf_list = mesh.bcon[suffix]
+        self._surf_init(intg.system.ele_map, surf_list, 's')
         
         rfpts = defaultdict(list)
 

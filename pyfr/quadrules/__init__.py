@@ -109,56 +109,54 @@ def get_quadrule(eletype, rule=None, npts=None, qdeg=None, flags=None):
 
 
 class SurfaceMixin:
-    def _surf_init(self, system, elemap, bcname):
-        # Underlying elements class
-        elementscls = system.elementscls
-        # Get the mesh and elements
-        mesh = system.mesh
+    def _surf_init(self, elemap, surf_list, quad_flags=''):
         # Interpolation matrices and quadrature weights
         self._m0 = m0 = {}
         self._qwts = qwts = defaultdict(list)
         self._m4 = m4 = {}
         rcpjact = {}
 
-        # If we have the boundary then process the interface
-        if bcname in mesh.bcon:
-            # Element indices and associated face normals
-            eidxs = defaultdict(list)
-            norms = defaultdict(list)
+        # Element indices and associated face normals
+        eidxs = defaultdict(list)
+        norms = defaultdict(list)
+        locs = defaultdict(list)
 
-            for etype, eidx, fidx in mesh.bcon[bcname]:
-                eles = elemap[etype]
-                itype, proj, norm = eles.basis.faces[fidx]
+        for etype, eidx, fidx in surf_list:
+            eles = elemap[etype]
+            itype, proj, norm = eles.basis.faces[fidx]
 
-                ppts, pwts = self._surf_quad(itype, proj, flags='s')
-                nppts = len(ppts)
+            ppts, pwts = self._surf_quad(itype, proj, flags=quad_flags)
+            nppts = len(ppts)
 
-                # Get phyical normals
-                pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
+            # Get phyical normals
+            ploc = eles.ploc_at_np(ppts)[..., eidx]
+            pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
 
-                eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(pnorm)
+            eidxs[etype, fidx].append(eidx)
+            norms[etype, fidx].append(pnorm)
+            locs[etype, fidx].append(ploc)
 
-                if (etype, fidx) not in m0:
-                    m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
-                    qwts[etype, fidx] = pwts
-                
-                if etype not in m4:
-                    m4[etype] = eles.basis.m4
+            if (etype, fidx) not in m0:
+                m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
+                qwts[etype, fidx] = pwts
+            
+            if etype not in m4:
+                m4[etype] = eles.basis.m4
 
-                    # Get the smats at the solution points
-                    smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
+                # Get the smats at the solution points
+                smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
 
-                    # Get |J|^-1 at the solution points
-                    rcpdjac = eles.rcpdjac_at_np('upts')
+                # Get |J|^-1 at the solution points
+                rcpdjac = eles.rcpdjac_at_np('upts')
 
-                    # Product to give J^-T at the solution points
-                    rcpjact[etype] = smat*rcpdjac
+                # Product to give J^-T at the solution points
+                rcpjact[etype] = smat*rcpdjac
 
-            self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
-            self._norms = {k: np.array(v) for k, v in norms.items()}
-            self._rcpjact = {k: rcpjact[k[0]][..., v] 
-                             for k, v in self._eidxs.items()}
+        self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
+        self._norms = {k: np.array(v) for k, v in norms.items()}
+        self._locs = {k: np.array(v) for k, v in locs.items()}
+        self._rcpjact = {k: rcpjact[k[0]][..., v] 
+                        for k, v in self._eidxs.items()}
 
     @memoize
     def _surf_quad(self, itype, proj, flags=''):
