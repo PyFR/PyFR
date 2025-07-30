@@ -20,7 +20,7 @@ class SurfaceIntegrator:
         norms = defaultdict(list)
         locs = defaultdict(list)
 
-        for etype, eidx, fidx in surf_list:
+        for etype, fidx, eidx in surf_list:
             eles = elemap[etype]
             itype, proj, norm = eles.basis.faces[fidx]
 

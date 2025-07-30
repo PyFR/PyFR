@@ -79,8 +79,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.t_last = -np.inf
         self.dt = self.cfg.getfloat(cfgsect, 'dt')
-        self.obsv_pts = obsv_pts = np.array(self.cfg.getliteral(self.cfgsect,
-                                            'observer-pts'))
+        obsv_pts = np.array(self.cfg.getliteral(self.cfgsect, 'observer-pts'))
         self.nobvs = len(obsv_pts)
 
         # Initialise data file
@@ -95,8 +94,8 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         self._pidx = privars.index('p')
         self.consts = self.cfg.items_as('constants', float)
 
-        self.qinf = qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), 
-                                      self.consts) for k in privars}
+        qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts) 
+                for k in privars}
         self.uinf = np.array([[qinf[k]] for k in 'uvw'[:self.ndims]])
 
         if self.incomp:
@@ -114,9 +113,9 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         self.emap = {k: i for i, k in enumerate(ele_map)}
         ele_surf, _ = self._surf_region(intg)
 
-        surf_list = [(etype, eidx, fidx) for _, etype, fidx, eidx in ele_surf]
+        surfs = [(etype, fidx, eidxs) for _, etype, fidx, eidxs in ele_surf]
         self.fwh_int = FWHIntegrator(self.cfg, cfgsect, self.ndims, obsv_pts,
-                                     qinf, ele_map, surf_list)
+                                     qinf, ele_map, surfs)
 
         # Get boundary type info
         sname = self.cfg.get(cfgsect, 'surface')
@@ -137,7 +136,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
 
     def _fwh_solve(self, intg):
         o_vals = np.zeros(self.nobvs)
-        ci = 1 / self.qinf['c']
+        ci = 1 / self.fwh_int.qinf['c']
 
         # Query dt_soln to prevent MPI deadlock
         dt_soln = intg.dt_soln
@@ -156,9 +155,9 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             if str(self.bctype).startswith('no-slp'):
                 self._apply_wall_bc(pris)
 
-            p = pris[self._pidx] - self.qinf['p']
+            p = pris[self._pidx] - self.fwh_int.qinf['p']
             u = pris[self._vidx] - self.uinf
-            d_inf = self.qinf['rho']
+            d_inf = self.fwh_int.qinf['rho']
             d_tot = d_inf + p*ci**2
 
             mom = d_tot*(u + self.uinf)
@@ -171,14 +170,15 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             u_t = pris_t[self._vidx]
             p_t = pris_t[self._pidx]
 
-            d_tot_t = p_t / self.qinf['c']**2
+            d_tot_t = p_t / self.fwh_int.qinf['c']**2
             mom_t = d_tot_t*(u + self.uinf) + d_tot*u_t
             mom_t_n = np.sum(param.nda*mom_t, axis=0, keepdims=True)
 
             # Monopole
             q = np.sum(param.nda*(mom + drift), axis=0, keepdims=True).T
             q_t = mom_t_n.T
-            acc = (1 - param.r_tilde_vec @ self.qinf['M'])*q_t*param.r_star_inv
+            acc = 1 - param.r_tilde_vec @ self.fwh_int.qinf['M']
+            acc *= q_t*param.r_star_inv
             acc -= q*param.r_star_inv**2*(
                 param.r_star_tilde_vec @ self.uinf.reshape(-1)
             )
@@ -214,7 +214,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             else:
                 comm.Reduce(mpi.IN_PLACE, o_vals, op=mpi.SUM, root=root)
 
-                for x, p in zip(self.obsv_pts, o_vals):
+                for x, p in zip(self.fwh_int.obsv_pts, o_vals):
                     print(intg.tcurr, *x, p, sep=',', file=self.outf)
 
                 # Flush to disk

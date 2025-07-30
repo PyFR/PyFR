@@ -10,8 +10,10 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 
 class FluidForceIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, system, suffix, viscous, morigin):
-        super().__init__(cfg, cfgsect, system.ele_map,
-                         system.mesh.bcon.get(suffix, []), flags='s')
+        surf_list = system.mesh.bcon.get(suffix, [])
+        surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in surf_list]
+        
+        super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
 
         if viscous:
             self.m4 = m4 = {}
