@@ -171,6 +171,9 @@ class BaseShape:
         if self.cfg.hasopt(sect, 'quad-deg'):
             kwargs['qdeg'] = self.cfg.getint(sect, 'quad-deg')
 
+        if self.cfg.hasopt(sect, 'quad-npts'):
+            kwargs['npts'] = self.cfg.getint(sect, 'quad-npts')
+
         return get_quadrule(kind, **kwargs)
 
     @cached_property
