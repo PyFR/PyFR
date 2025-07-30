@@ -8,7 +8,9 @@ from pyfr.quadrules import get_quadrule
 
 
 class SurfaceIntegrator:
-    def _surf_init(self, elemap, surf_list, flags=''):
+    def __init__(self, cfg, cfgsect, elemap, surf_list, flags=''):
+        self.cfg, self.cfgsect = cfg, cfgsect
+
         # Interpolation matrices and quadrature weights
         self.m0 = m0 = {}
         self.qwts = qwts = defaultdict(list)

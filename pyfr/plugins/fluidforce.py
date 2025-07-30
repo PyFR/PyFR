@@ -10,16 +10,14 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 
 class FluidForceIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, system, suffix, viscous, morigin):
-        self.cfg, self.cfgsect = cfg, cfgsect
-        mesh = system.mesh
-
-        self._surf_init(system.ele_map, mesh.bcon.get(suffix, []), flags='s')
+        super().__init__(cfg, cfgsect, system.ele_map,
+                         system.mesh.bcon.get(suffix, []), flags='s')
 
         if viscous:
             self.m4 = m4 = {}
             rcpjact = {}
 
-        if suffix in mesh.bcon:
+        if suffix in system.mesh.bcon:
             rfpts = defaultdict(list)
             for etype, fidx in self.eidxs:
                 for i, eidx in enumerate(self.eidxs[etype, fidx]):

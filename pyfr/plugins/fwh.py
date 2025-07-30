@@ -17,14 +17,13 @@ FWHSurfParams = namedtuple(
 
 class FWHIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, ndims, obsv_pts, qinf, elemap, surf_list):
-        self.cfg, self.cfgsect = cfg, cfgsect
+        super().__init__(cfg, cfgsect, elemap, surf_list)
+
         self.ndims, self.obsv_pts, self.qinf = ndims, obsv_pts, qinf
 
         Minf = np.linalg.norm(self.qinf['M'])
         if Minf >= 1:
             raise ValueError('FWH farfield Mach number greater than 1')
-
-        self._surf_init(elemap, surf_list)
 
         self.surf = {}
         for etype, fidx in self.eidxs:
