@@ -10,8 +10,8 @@ from pyfr.quadrules import get_quadrule
 class SurfaceIntegrator:
     def _surf_init(self, elemap, surf_list, flags=''):
         # Interpolation matrices and quadrature weights
-        self._m0 = m0 = {}
-        self._qwts = qwts = defaultdict(list)
+        self.m0 = m0 = {}
+        self.qwts = qwts = defaultdict(list)
 
         # Element indices and associated face normals
         eidxs = defaultdict(list)
@@ -37,9 +37,9 @@ class SurfaceIntegrator:
                 m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
                 qwts[etype, fidx] = pwts
 
-        self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
-        self._norms = {k: np.array(v) for k, v in norms.items()}
-        self._locs = {k: np.array(v) for k, v in locs.items()}
+        self.eidxs = {k: np.array(v) for k, v in eidxs.items()}
+        self.norms = {k: np.array(v) for k, v in norms.items()}
+        self.locs = {k: np.array(v) for k, v in locs.items()}
 
     @memoize
     def _surf_quad(self, itype, proj, flags=''):

@@ -17,11 +17,8 @@ FWHSurfParams = namedtuple(
 
 class FWHIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, ndims, obsv_pts, qinf, elemap, surf_list):
-        self.cfg = cfg
-        self.cfgsect = cfgsect
-        self.ndims = ndims
-        self.obsv_pts = obsv_pts
-        self.qinf = qinf
+        self.cfg, self.cfgsect = cfg, cfgsect
+        self.ndims, self.obsv_pts, self.qinf = ndims, obsv_pts, qinf
 
         Minf = np.linalg.norm(self.qinf['M'])
         if Minf >= 1:
@@ -30,12 +27,12 @@ class FWHIntegrator(SurfaceIntegrator):
         self._surf_init(elemap, surf_list)
 
         self.surf = {}
-        for etype, fidx in self._eidxs.keys():
-            for i, eidx in enumerate(self._eidxs[etype, fidx]):
-                m0 = self._m0[etype, fidx]
-                qwts = self._qwts[etype, fidx]
-                pnorm = self._norms[etype, fidx][i]
-                ploc = self._locs[etype, fidx][i]
+        for etype, fidx in self.eidxs:
+            for i, eidx in enumerate(self.eidxs[etype, fidx]):
+                m0 = self.m0[etype, fidx]
+                qwts = self.qwts[etype, fidx]
+                pnorm = self.norms[etype, fidx][i]
+                ploc = self.locs[etype, fidx][i]
 
                 nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
                 nds = nds.reshape(self.ndims, -1)
@@ -83,9 +80,9 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.t_last = -np.inf
         self.dt = self.cfg.getfloat(cfgsect, 'dt')
-        self.obsv_pts = np.array(self.cfg.getliteral(self.cfgsect,
-                                                     'observer-pts'))
-        self.nobvs = len(self.obsv_pts)
+        self.obsv_pts = obsv_pts = np.array(self.cfg.getliteral(self.cfgsect,
+                                            'observer-pts'))
+        self.nobvs = len(obsv_pts)
 
         # Initialise data file
         if rank == root:
@@ -99,30 +96,28 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         self._pidx = privars.index('p')
         self.consts = self.cfg.items_as('constants', float)
 
-        self.qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts)
-                     for k in privars}
-        self.uinf = np.array([[self.qinf[k]] for k in 'uvw'[:self.ndims]])
+        self.qinf = qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), 
+                                      self.consts) for k in privars}
+        self.uinf = np.array([[qinf[k]] for k in 'uvw'[:self.ndims]])
 
         if self.incomp:
-            self.qinf['rho'] = self.cfg.getfloat(cfgsect, 'rho')
-            self.qinf['c'] = self.cfg.getfloat(cfgsect, 'c')
+            qinf['rho'] = self.cfg.getfloat(cfgsect, 'rho')
+            qinf['c'] = self.cfg.getfloat(cfgsect, 'c')
         else:
             gamma = self.consts['gamma']
-            self.qinf['c'] = (gamma * self.qinf['p'] / self.qinf['rho'])**0.5
+            qinf['c'] = (gamma * qinf['p'] / qinf['rho'])**0.5
             self._ridx = privars.index('rho')
 
-        self.qinf['M'] = np.array([self.qinf[k] / self.qinf['c']
-                                   for k in 'uvw'[:self.ndims]])
+        qinf['M'] = np.array([qinf[k] / qinf['c'] for k in 'uvw'[:self.ndims]])
 
         # Initialise surface data
         ele_map = intg.system.ele_map
         self.emap = {k: i for i, k in enumerate(ele_map)}
-        self.ele_surface, _ = self._surf_region(intg)
+        ele_surf, _ = self._surf_region(intg)
 
-        surf_list = [(s[1], s[3], s[2]) for s in self.ele_surface]
-        self.fwh_int = FWHIntegrator(self.cfg, self.cfgsect, self.ndims,
-                                     self.obsv_pts, self.qinf, ele_map,
-                                     surf_list)
+        surf_list = [(etype, eidx, fidx) for _, etype, fidx, eidx in ele_surf]
+        self.fwh_int = FWHIntegrator(self.cfg, cfgsect, self.ndims, obsv_pts,
+                                     qinf, ele_map, surf_list)
 
         # Get boundary type info
         sname = self.cfg.get(cfgsect, 'surface')
