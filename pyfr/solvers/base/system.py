@@ -7,6 +7,7 @@ import numpy as np
 
 from pyfr.backends.base import NullKernel
 from pyfr.cache import memoize
+from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
 from pyfr.util import subclasses
 
@@ -152,16 +153,28 @@ class BaseSystem:
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
 
-        bc_inters = []
-        for bname, interarr in mesh.bcon.items():
-            # Determine the config file section
-            cfgsect = f'soln-bcs-{bname}'
+        comm, rank, root = get_comm_rank_root()
 
-            # Instantiate
-            bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
-            bciface = bcclass(self.backend, interarr, elemap, cfgsect,
-                                self.cfg)
-            bc_inters.append(bciface)
+        # Iterate over all BCs (including ones not on this rank)
+        bc_inters = []
+        for c in mesh.codec:
+            if not c.startswith('bc/'):
+                continue
+
+            # Construct MPI communicator for this BC
+            bname = c.removeprefix('bc/')
+            localbc = bname in mesh.bcon
+            bccomm = autofree(comm.Split(1 if localbc else mpi.UNDEFINED))
+
+            if localbc:
+                # Get class
+                cfgsect = f'soln-bcs-{bname}'
+                bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
+
+                # Instantiate BC
+                bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
+                                  cfgsect, self.cfg, bccomm)
+                bc_inters.append(bciface)
 
         return bc_inters
 
@@ -259,7 +272,7 @@ class BaseSystem:
         _, binders, bckerns = self._get_kernels(uinbank, foutbank)
 
         for b in self._bc_inters:
-            b.prepare(self, t, bckerns[b.name])
+            b.prepare(self, uinbank, t, bckerns[b.name])
 
         for b in binders:
             b(t=t)

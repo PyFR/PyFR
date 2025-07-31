@@ -3,11 +3,54 @@ from collections import defaultdict
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import (BaseSolnPlugin, DatasetAppender, SurfaceMixin,
+from pyfr.plugins.base import (BaseSolnPlugin, DatasetAppender,
                                init_csv, open_hdf5_a)
+from pyfr.quadrules.surface import SurfaceIntegrator
 
 
-class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
+class FluidForceIntegrator(SurfaceIntegrator):
+    def __init__(self, cfg, cfgsect, system, bcname, viscous, morigin):
+        surf_list = system.mesh.bcon.get(bcname, [])
+        surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in surf_list]
+        
+        super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
+
+        if viscous:
+            self.m4 = m4 = {}
+            rcpjact = {}
+
+        if surf_list:
+            rfpts = defaultdict(list)
+            for etype, fidx in self.eidxs:
+                for i, eidx in enumerate(self.eidxs[etype, fidx]):
+                    eles = system.ele_map[etype]
+
+                    if viscous and etype not in m4:
+                        m4[etype] = eles.basis.m4
+
+                        # Get the smats at the solution points
+                        smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
+
+                        # Get |J|^-1 at the solution points
+                        rcpdjac = eles.rcpdjac_at_np('upts')
+
+                        # Product to give J^-T at the solution points
+                        rcpjact[etype] = smat*rcpdjac
+
+                    # Get the flux points position of the given face and 
+                    # element indices relative to the moment origin
+                    if morigin is not None:
+                        ploc = self.locs[etype, fidx][i]
+                        rfpt = ploc - morigin
+                        rfpts[etype, fidx].append(rfpt)
+        
+            self.rfpts = {k: np.array(v) for k, v in rfpts.items()}
+            if viscous:
+                self.rcpjact = {k: rcpjact[k[0]][..., v]
+                                for k, v in self.eidxs.items()}
+
+
+class FluidForcePlugin(BaseSolnPlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
@@ -37,6 +80,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         self.elementscls = intg.system.elementscls
 
         # Moments
+        morigin = None
         mcomp = 3 if self.ndims == 3 else 1
         self._mcomp = mcomp if self.cfg.hasopt(cfgsect, 'morigin') else 0
         if self._mcomp:
@@ -63,65 +107,9 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
                 case _:
                     raise ValueError('Invalid file format')
 
-        # Interpolation matrices and quadrature weights
-        self._m0 = m0 = {}
-        self._qwts = qwts = defaultdict(list)
-
-        if self._viscous:
-            self._m4 = m4 = {}
-            rcpjact = {}
-
-        # If we have the boundary then process the interface
-        if suffix in mesh.bcon:
-            # Element indices, associated face normals and relative flux
-            # points position with respect to the moments origin
-            eidxs = defaultdict(list)
-            norms = defaultdict(list)
-            rfpts = defaultdict(list)
-
-            for etype, eidx, fidx in mesh.bcon[suffix]:
-                eles = elemap[etype]
-                itype, proj, norm = eles.basis.faces[fidx]
-
-                ppts, pwts = self._surf_quad(itype, proj, flags='s')
-                nppts = len(ppts)
-
-                # Get phyical normals
-                pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
-
-                eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(pnorm)
-
-                if (etype, fidx) not in m0:
-                    m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
-                    qwts[etype, fidx] = pwts
-
-                if self._viscous and etype not in m4:
-                    m4[etype] = eles.basis.m4
-
-                    # Get the smats at the solution points
-                    smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                    # Get |J|^-1 at the solution points
-                    rcpdjac = eles.rcpdjac_at_np('upts')
-
-                    # Product to give J^-T at the solution points
-                    rcpjact[etype] = smat*rcpdjac
-
-                # Get the flux points position of the given face and element
-                # indices relative to the moment origin
-                if self._mcomp:
-                    ploc = eles.ploc_at_np(ppts)[..., eidx]
-                    rfpt = ploc - morigin
-                    rfpts[etype, fidx].append(rfpt)
-
-            self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
-            self._norms = {k: np.array(v) for k, v in norms.items()}
-            self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
-
-            if self._viscous:
-                self._rcpjact = {k: rcpjact[k[0]][..., v]
-                                 for k, v in self._eidxs.items()}
+        # Set interpolation matrices and quadrature weights
+        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
+                                           suffix, self._viscous, morigin)
 
     @property
     def _header(self):
@@ -180,13 +168,13 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         # Force and moment vectors
         fm = np.zeros((2 if self._viscous else 1, ndims + mcomp))
 
-        for etype, fidx in self._m0:
+        for etype, fidx in self.ff_int.m0:
             # Get the interpolation operator
-            m0 = self._m0[etype, fidx]
+            m0 = self.ff_int.m0[etype, fidx]
             nfpts, nupts = m0.shape
 
             # Extract the relevant elements from the solution
-            uupts = solns[etype][..., self._eidxs[etype, fidx]]
+            uupts = solns[etype][..., self.ff_int.eidxs[etype, fidx]]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
@@ -198,16 +186,16 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
             p = self.elementscls.con_to_pri(ufpts, self.cfg)[pidx]
 
             # Get the quadrature weights and normal vectors
-            qwts = self._qwts[etype, fidx]
-            norms = self._norms[etype, fidx]
+            qwts = self.ff_int.qwts[etype, fidx]
+            norms = self.ff_int.norms[etype, fidx]
 
             # Do the quadrature
             fm[0, :ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
 
             if self._viscous:
                 # Get operator and J^-T matrix
-                m4 = self._m4[etype]
-                rcpjact = self._rcpjact[etype, fidx]
+                m4 = self.ff_int.m4[etype]
+                rcpjact = self.ff_int.rcpjact[etype, fidx]
 
                 # Transformed gradient at solution points
                 tduupts = m4 @ uupts.reshape(nupts, -1)
@@ -233,7 +221,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
 
             if self._mcomp:
                 # Get the flux points positions relative to the moment origin
-                rfpts = self._rfpts[etype, fidx]
+                rfpts = self.ff_int.rfpts[etype, fidx]
 
                 # Do the cross product with the normal vectors
                 rcn = np.atleast_3d(np.cross(rfpts, norms))

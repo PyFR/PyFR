@@ -4,7 +4,8 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BaseSolnPlugin, SurfaceMixin, init_csv
+from pyfr.plugins.base import BaseSolnPlugin, SurfaceRegionMixin, init_csv
+from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.util import first
 
 
@@ -14,92 +15,30 @@ FWHSurfParams = namedtuple(
 )
 
 
-class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
-    name = 'fwh'
-    systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
-    formulations = ['dual', 'std']
-    dimensions = [2, 3]
+class FWHIntegrator(SurfaceIntegrator):
+    def __init__(self, cfg, cfgsect, ndims, obsv_pts, qinf, elemap, surf_list):
+        super().__init__(cfg, cfgsect, elemap, surf_list)
 
-    def __init__(self, intg, cfgsect, suffix=None, *args, **kwargs):
-        super().__init__(intg, cfgsect, suffix)
-        comm, rank, root = get_comm_rank_root()
+        self.ndims, self.obsv_pts, self.qinf = ndims, obsv_pts, qinf
 
-        self.elementscls = intg.system.elementscls
-
-        self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
-        self.t_last = -np.inf
-        self.dt = self.cfg.getfloat(cfgsect, 'dt')
-        self.obsv_pts = np.array(self.cfg.getliteral(self.cfgsect,
-                                                     'observer-pts'))
-        self.nobvs = len(self.obsv_pts)
-
-        # Initialise data file
-        if rank == root:
-            header = ','.join(['t', 'x', 'y', 'z'][:self.ndims + 1] + ['mag'])
-            self.outf = init_csv(self.cfg, cfgsect, header)
-
-        # Far field conditions
-        self.incomp = intg.system.name in {'ac-euler', 'ac-navier-stokes'}
-        privars = first(intg.system.ele_map.values()).privars
-        self._vidx = [x in 'uvw' for x in privars]
-        self._pidx = privars.index('p')
-        self.consts = self.cfg.items_as('constants', float)
-
-        self.qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts)
-                     for k in privars}
-        self.uinf = np.array([[self.qinf[k]] for k in 'uvw'[:self.ndims]])
-
-        if self.incomp:
-            self.qinf['rho'] = self.cfg.getfloat(cfgsect, 'rho')
-            self.qinf['c'] = self.cfg.getfloat(cfgsect, 'c')
-        else:
-            gamma = self.consts['gamma']
-            self.qinf['c'] = (gamma * self.qinf['p'] / self.qinf['rho'])**0.5
-            self._ridx = privars.index('rho')
-
-        self.qinf['M'] = np.array([self.qinf[k] / self.qinf['c']
-                                   for k in 'uvw'[:self.ndims]])
         Minf = np.linalg.norm(self.qinf['M'])
         if Minf >= 1:
             raise ValueError('FWH farfield Mach number greater than 1')
 
-        # Initialise surface data
-        ele_map = intg.system.ele_map
-        self.emap = {k: i for i, k in enumerate(ele_map)}
-        self.ele_surface, _ = self._surf_region(intg)
-        self._init_surf(ele_map, Minf)
-
-        # Get boundary type info
-        sname = self.cfg.get(cfgsect, 'surface')
-        if '(' not in sname:
-            self.bctype = self.cfg.get(f'soln-bcs-{sname}', 'type')
-        else:
-            self.bctype = None
-
-    def _init_surf(self, ele_map, Minf):
         self.surf = {}
-        for doff, etype, fidx, eidxs in self.ele_surface:
-            eles = ele_map[etype]
+        for etype, fidx in self.eidxs:
+            for i, eidx in enumerate(self.eidxs[etype, fidx]):
+                m0 = self.m0[etype, fidx]
+                qwts = self.qwts[etype, fidx]
+                pnorm = self.norms[etype, fidx][i]
+                ploc = self.locs[etype, fidx][i]
 
-            # Get face operators
-            itype, proj, norm = eles.basis.faces[fidx]
+                nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
+                nds = nds.reshape(self.ndims, -1)
+                dist = self._distances(ploc, Minf)
 
-            # Create a quadrature on suface
-            qpts, qwts = self._surf_quad(itype, proj)
-            norm = np.array([norm for x in qpts])
-
-            # Get physical location, transformations, and normals
-            ploc = eles.ploc_at_np(qpts)[..., eidxs]
-            pnorm = eles.pnorm_at(qpts, norm)[:, eidxs]
-
-            # Get ops and components of the surface
-            m0 = eles.basis.ubasis.nodal_basis_at(qpts)
-            nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
-            nds = nds.reshape(self.ndims, -1)
-            dist = self._distances(ploc, Minf)
-
-            self.surf[etype, fidx] = FWHSurfParams(eidxs, m0, nds, *dist)
-
+                self.surf[etype, fidx] = FWHSurfParams(eidx, m0, nds, *dist)
+    
     def _distances(self, spts, Minf):
         surf_pts = spts.transpose(0, 2, 1).reshape(-1, self.ndims)
 
@@ -124,6 +63,67 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
 
         return r_tilde_vec, r_star_inv, r_star_tilde_vec
 
+
+class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
+    name = 'fwh'
+    systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
+    formulations = ['dual', 'std']
+    dimensions = [2, 3]
+
+    def __init__(self, intg, cfgsect, suffix=None, *args, **kwargs):
+        super().__init__(intg, cfgsect, suffix)
+        comm, rank, root = get_comm_rank_root()
+
+        self.elementscls = intg.system.elementscls
+
+        self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
+        self.t_last = -np.inf
+        self.dt = self.cfg.getfloat(cfgsect, 'dt')
+        obsv_pts = np.array(self.cfg.getliteral(self.cfgsect, 'observer-pts'))
+        self.nobvs = len(obsv_pts)
+
+        # Initialise data file
+        if rank == root:
+            header = ','.join(['t', 'x', 'y', 'z'][:self.ndims + 1] + ['mag'])
+            self.outf = init_csv(self.cfg, cfgsect, header)
+
+        # Far field conditions
+        self.incomp = intg.system.name in {'ac-euler', 'ac-navier-stokes'}
+        privars = first(intg.system.ele_map.values()).privars
+        self._vidx = [x in 'uvw' for x in privars]
+        self._pidx = privars.index('p')
+        self.consts = self.cfg.items_as('constants', float)
+
+        qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts) 
+                for k in privars}
+        self.uinf = np.array([[qinf[k]] for k in 'uvw'[:self.ndims]])
+
+        if self.incomp:
+            qinf['rho'] = self.cfg.getfloat(cfgsect, 'rho')
+            qinf['c'] = self.cfg.getfloat(cfgsect, 'c')
+        else:
+            gamma = self.consts['gamma']
+            qinf['c'] = (gamma * qinf['p'] / qinf['rho'])**0.5
+            self._ridx = privars.index('rho')
+
+        qinf['M'] = np.array([qinf[k] / qinf['c'] for k in 'uvw'[:self.ndims]])
+
+        # Initialise surface data
+        ele_map = intg.system.ele_map
+        self.emap = {k: i for i, k in enumerate(ele_map)}
+        ele_surf, _ = self._surf_region(intg)
+
+        surfs = [(etype, fidx, eidxs) for _, etype, fidx, eidxs in ele_surf]
+        self.fwh_int = FWHIntegrator(self.cfg, cfgsect, self.ndims, obsv_pts,
+                                     qinf, ele_map, surfs)
+
+        # Get boundary type info
+        sname = self.cfg.get(cfgsect, 'surface')
+        if '(' not in sname:
+            self.bctype = self.cfg.get(f'soln-bcs-{sname}', 'type')
+        else:
+            self.bctype = None
+
     def _enforce_noslip_bc(self, pris):
         vmag = np.sum(pris[self._vidx]**2, axis=0)
         pris[self._vidx] = 0
@@ -136,13 +136,13 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
 
     def _fwh_solve(self, intg):
         o_vals = np.zeros(self.nobvs)
-        ci = 1 / self.qinf['c']
+        ci = 1 / self.fwh_int.qinf['c']
 
         # Query dt_soln to prevent MPI deadlock
         dt_soln = intg.dt_soln
 
         # Accumulate FWH contribution from each surface part
-        for (etype, fidx), param in self.surf.items():
+        for (etype, fidx), param in self.fwh_int.surf.items():
             soln = intg.soln[self.emap[etype]][..., param.eidxs]
             soln_t = dt_soln[self.emap[etype]][..., param.eidxs]
 
@@ -155,9 +155,9 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
             if str(self.bctype).startswith('no-slp'):
                 self._apply_wall_bc(pris)
 
-            p = pris[self._pidx] - self.qinf['p']
+            p = pris[self._pidx] - self.fwh_int.qinf['p']
             u = pris[self._vidx] - self.uinf
-            d_inf = self.qinf['rho']
+            d_inf = self.fwh_int.qinf['rho']
             d_tot = d_inf + p*ci**2
 
             mom = d_tot*(u + self.uinf)
@@ -170,14 +170,15 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
             u_t = pris_t[self._vidx]
             p_t = pris_t[self._pidx]
 
-            d_tot_t = p_t / self.qinf['c']**2
+            d_tot_t = p_t / self.fwh_int.qinf['c']**2
             mom_t = d_tot_t*(u + self.uinf) + d_tot*u_t
             mom_t_n = np.sum(param.nda*mom_t, axis=0, keepdims=True)
 
             # Monopole
             q = np.sum(param.nda*(mom + drift), axis=0, keepdims=True).T
             q_t = mom_t_n.T
-            acc = (1 - param.r_tilde_vec @ self.qinf['M'])*q_t*param.r_star_inv
+            acc = 1 - param.r_tilde_vec @ self.fwh_int.qinf['M']
+            acc *= q_t*param.r_star_inv
             acc -= q*param.r_star_inv**2*(
                 param.r_star_tilde_vec @ self.uinf.reshape(-1)
             )
@@ -213,7 +214,7 @@ class FWHPlugin(SurfaceMixin, BaseSolnPlugin):
             else:
                 comm.Reduce(mpi.IN_PLACE, o_vals, op=mpi.SUM, root=root)
 
-                for x, p in zip(self.obsv_pts, o_vals):
+                for x, p in zip(self.fwh_int.obsv_pts, o_vals):
                     print(intg.tcurr, *x, p, sep=',', file=self.outf)
 
                 # Flush to disk

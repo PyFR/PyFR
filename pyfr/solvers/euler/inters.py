@@ -98,8 +98,8 @@ class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
 class EulerSupInflowBCInters(EulerBaseBCInters):
     type = 'sup-in-fa'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
@@ -114,8 +114,8 @@ class EulerSupOutflowBCInters(EulerBaseBCInters):
 class EulerCharRiemInvBCInters(EulerBaseBCInters):
     type = 'char-riem-inv'
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
-        super().__init__(be, lhs, elemap, cfgsect, cfg)
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
             ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs

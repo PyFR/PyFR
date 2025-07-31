@@ -8,10 +8,7 @@ import h5py
 import numpy as np
 from pytools import prefork
 
-from pyfr.cache import memoize
-from pyfr.inifile import NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.quadrules import get_quadrule
 from pyfr.regions import parse_region_expr
 
 
@@ -235,7 +232,7 @@ class RegionMixin:
             self._ele_region_data[etype] = geidxs
 
 
-class SurfaceMixin:
+class SurfaceRegionMixin:
     def _surf_region(self, intg):
         # Parse the region
         sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh)
@@ -250,25 +247,6 @@ class SurfaceMixin:
                 ele_surface_data[f'{etype}_f{face}_idxs'] = eidxs
 
         return ele_surface, ele_surface_data
-
-    @memoize
-    def _surf_quad(self, itype, proj, flags=''):
-        # Obtain quadrature info
-        rname = self.cfg.get(f'solver-interfaces-{itype}', 'flux-pts')
-
-        # Quadrature rule (default to that of the solution points)
-        qrule = self.cfg.get(self.cfgsect, f'quad-pts-{itype}', rname)
-        try:
-            qdeg = self.cfg.getint(self.cfgsect, f'quad-deg-{itype}')
-        except NoOptionError:
-            qdeg = self.cfg.getint(self.cfgsect, 'quad-deg')
-
-        # Get the quadrature rule
-        q = get_quadrule(itype, qrule, qdeg=qdeg, flags=flags)
-
-        # Project its points onto the provided surface
-        pts = np.atleast_2d(q.pts.T)
-        return np.vstack(np.broadcast_arrays(*proj(*pts))).T, q.wts
 
 
 class DatasetAppender:
