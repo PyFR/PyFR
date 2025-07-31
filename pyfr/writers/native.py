@@ -264,7 +264,7 @@ class NativeWriter:
         def write_off(k, v, n):
             if len(v):
                 f.seek(doffs[k] + n*(v.nbytes // len(v)))
-                v.tofile(f)
+                f.write(memoryview(np.ascontiguousarray(v)))
 
         # Main writing function
         def write():
@@ -315,7 +315,7 @@ class NativeWriter:
                             self._scomm.Recv(b, r)
 
                         f.seek(off)
-                        b.tofile(f)
+                        f.write(memoryview(np.ascontiguousarray(b)))
 
         else:
             def write():
