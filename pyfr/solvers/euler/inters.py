@@ -1,6 +1,6 @@
 from pyfr.mpiutil import mpi
 from pyfr.plugins.base import init_csv
-from pyfr.quadrules import SurfaceMixin
+from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
@@ -131,7 +131,7 @@ class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
     type = 'slp-adia-wall'
 
 
-class MassFlowBCMixin(SurfaceMixin):
+class MassFlowBCMixin:
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
@@ -140,41 +140,38 @@ class MassFlowBCMixin(SurfaceMixin):
         )
 
         self.target_mfr = self.cfg.getfloat(cfgsect, 'mass-flow-rate')
-        # When to start the mass flow controller
-        self.tstart = self.cfg.getfloat(cfgsect, 'tstart', 0.0)
-        # Start p value
+        self.tstart = self.cfg.getfloat(cfgsect, 'tstart')
         self.p = self.cfg.getfloat(cfgsect, 'p')
         self.bcname = cfgsect.removeprefix('soln-bcs-')
-        # Mass flow average
-        self.mf_avg = 0.0
-        self.mf_alpha = 0.4
-        # Parameter to control the strength of the controller
+        self.alpha = self.cfg.getfloat(cfgsect, 'alpha')
         self.eta = self.cfg.getfloat(cfgsect, 'eta')
-        # Frequency that mf.csv should be updated
         self.nsteps = self.cfg.getint(cfgsect, 'nsteps', 100)
         self.nflush = self.cfg.getint(cfgsect, 'nflush', 10)
 
         self._set_external('var_p', 'scalar fpdtype_t')
-        self.tprev = -1.0
+        self.tprev = None
         self.nstep_counter = 0
         self.nflush_counter = 0
-        self.init = False
-        self.elemap_copy = elemap
+        self.mf_avg = 0.0
+        
+        surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in lhs]
+        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
         if self.bccomm.rank == 0:
             self.outf = init_csv(self.cfg, self.cfgsect, 't,mf,pbc')
 
     def calculate_mass_flow(self, solns):
         ndims, nvars = self.ndims, self.nvars
-        fm = np.zeros((ndims))
+        fm = np.zeros(ndims)
+
         # Get the sizes for the area calculation
-        for etype, fidx in self._m0:
+        for etype, fidx in self.mf_int.m0:
             # Get the interpolation operator
-            m0 = self._m0[etype, fidx]
+            m0 = self.mf_int.m0[etype, fidx]
             nfpts, nupts = m0.shape
 
             # Extract the relevant elements from the solution
-            uupts = solns[etype][..., self._eidxs[etype, fidx]]
+            uupts = solns[etype][..., self.mf_int.eidxs[etype, fidx]]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
@@ -182,64 +179,44 @@ class MassFlowBCMixin(SurfaceMixin):
             ufpts = ufpts.swapaxes(0, 1)
 
             # Get the quadrature weights and normal vectors
-            qwts = self._qwts[etype, fidx]
-            norms = self._norms[etype, fidx]
+            qwts = self.mf_int.qwts[etype, fidx]
+            norms = self.mf_int.norms[etype, fidx]
 
             # Do the quadrature for each dimension
-            # RhoU = ufpts[1], RhoV = ufpts[2], RhoW = ufpts[2]
-            for i in range(0, ndims):
-                rhoVel = ufpts[1 + i]
-                fm[i] += np.einsum('i...,ij,ji', qwts, rhoVel, norms[:,:,i])
-        self.bccomm.Allreduce(mpi.IN_PLACE, fm, op=mpi.SUM)
-        return sum(fm)
-    
-    def update_mf(self, solns):
-        mf = self.calculate_mass_flow(solns)
-        self.mf_avg = self.mf_alpha * mf + (1.0 - self.mf_alpha) * self.mf_avg
+            for i, _ufpts in enumerate(ufpts[1:ndims+1]):
+                fm[i] += np.einsum('i...,ij,ji', qwts, _ufpts, norms[:,:,i])
 
-    def update_p(self, dt):
-        self.p += dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
-    
-    def bind_p(self, kerns):
+        self.bccomm.Allreduce(mpi.IN_PLACE, fm, op=mpi.SUM)
+        return fm.sum().astype(float)
+
+    def prepare(self, system, ubank, t, kerns):
+        if t >= self.tstart and not self.tprev:
+            # First update to begin history
+            solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
+            self.mf_avg = self.calculate_mass_flow(solns)
+            self.tprev = t
+        elif t >= self.tstart and self.nstep_counter % self.nsteps == 0:
+            solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
+            mf = self.calculate_mass_flow(solns)
+            self.mf_avg = self.alpha * mf + (1.0 - self.alpha) * self.mf_avg
+
+            dt = (t - self.tprev)
+            self.p += dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
+            self.tprev = t
+
+            # Output mass flow and pressure at BC
+            if self.bccomm.rank == 0:
+                print(f'{t},{self.mf_avg},{self.p}', file=self.outf)
+
+            self.nflush_counter = self.nflush_counter + 1
+        
+        # Bind p to kernels
         for k in kerns:
             kerns[k].bind(var_p=self.p)
 
-    def prepare(self, system, ubank, t, kerns):
-        # Check if first prepare call
-        if not self.init:
-            self._surf_init(system, self.elemap_copy, self.bcname)
-            del self.elemap_copy
-            self.init = True
-
-        # Check if past tstart
-        if t < self.tstart:
-            self.bind_p(kerns)
-            return
-
-        if self.nstep_counter % self.nsteps == 0:
-            solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
-            # First update to begin history
-            if self.tprev < 0.0:
-                self.tprev = t
-                self.mf_avg = self.calculate_mass_flow(solns)
-                self.bind_p(kerns)
-                return
-
-            self.update_mf(solns)
-            self.update_p(t - self.tprev)
-            self.tprev = t
-
-            # Output mass flow and pressure at outflow
-            if self.bccomm.rank == 0:
-                print(f'{t},{self.mf_avg},{self.p}', 
-                      file=self.outf)
-            self.nflush_counter = self.nflush_counter + 1
-        self.bind_p(kerns)
-
         # Flush to file
-        if self.nflush_counter % self.nflush == 0:
-            if self.bccomm.rank == 0:
-                self.outf.flush()
+        if self.nflush_counter % self.nflush == 0 and self.bccomm.rank == 0:
+            self.outf.flush()
         self.nstep_counter = self.nstep_counter + 1
 
 

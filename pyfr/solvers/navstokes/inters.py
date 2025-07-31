@@ -211,6 +211,7 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
 
         self.c |= self._exp_opts(['p'], lhs)
 
+
 class NavierStokesCharRiemInvMassFlowBCInters(MassFlowBCMixin, 
                                               NavierStokesBaseBCInters):
     type = 'char-riem-inv-mass-flow'
