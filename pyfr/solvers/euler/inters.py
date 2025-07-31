@@ -162,7 +162,7 @@ class MassFlowBCMixin:
 
     def calculate_mass_flow(self, solns):
         ndims, nvars = self.ndims, self.nvars
-        fm = np.zeros(ndims)
+        mf = 0.0
 
         # Get the sizes for the area calculation
         for etype, fidx in self.mf_int.m0:
@@ -172,22 +172,24 @@ class MassFlowBCMixin:
 
             # Extract the relevant elements from the solution
             uupts = solns[etype][..., self.mf_int.eidxs[etype, fidx]]
+            # Remove unused variables
+            uupts = uupts[:,1:-1,:]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nvars, -1)
+            ufpts = ufpts.reshape(nfpts, nvars-2, -1)
             ufpts = ufpts.swapaxes(0, 1)
 
             # Get the quadrature weights and normal vectors
             qwts = self.mf_int.qwts[etype, fidx]
-            norms = self.mf_int.norms[etype, fidx]
+            norms = np.rollaxis(self.mf_int.norms[etype, fidx], 2)
 
             # Do the quadrature for each dimension
-            for i, _ufpts in enumerate(ufpts[1:ndims+1]):
-                fm[i] += np.einsum('i...,ij,ji', qwts, _ufpts, norms[:,:,i])
+            for _ufpts, _norms in zip(ufpts, norms):
+                mf += np.einsum('i...,ij,ji', qwts, _ufpts, _norms)
 
-        self.bccomm.Allreduce(mpi.IN_PLACE, fm, op=mpi.SUM)
-        return fm.sum().astype(float)
+        self.bccomm.allreduce(mf, op=mpi.SUM)
+        return float(mf)
 
     def prepare(self, system, ubank, t, kerns):
         if t >= self.tstart and not self.tprev:
@@ -201,23 +203,25 @@ class MassFlowBCMixin:
             self.mf_avg = self.alpha * mf + (1.0 - self.alpha) * self.mf_avg
 
             dt = (t - self.tprev)
-            self.p += dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
-            self.tprev = t
+            if dt > 0.0:
+                self.p += dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
+                self.tprev = t
 
             # Output mass flow and pressure at BC
             if self.bccomm.rank == 0:
                 print(f'{t},{self.mf_avg},{self.p}', file=self.outf)
 
-            self.nflush_counter = self.nflush_counter + 1
+            self.nflush_counter += 1
         
         # Bind p to kernels
-        for k in kerns:
-            kerns[k].bind(var_p=self.p)
+        for k in kerns.values():
+            k.bind(var_p=self.p)
 
         # Flush to file
         if self.nflush_counter % self.nflush == 0 and self.bccomm.rank == 0:
             self.outf.flush()
-        self.nstep_counter = self.nstep_counter + 1
+        
+        self.nstep_counter += 1
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
