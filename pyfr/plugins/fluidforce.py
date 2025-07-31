@@ -9,8 +9,8 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 
 
 class FluidForceIntegrator(SurfaceIntegrator):
-    def __init__(self, cfg, cfgsect, system, suffix, viscous, morigin):
-        surf_list = system.mesh.bcon.get(suffix, [])
+    def __init__(self, cfg, cfgsect, system, bcname, viscous, morigin):
+        surf_list = system.mesh.bcon.get(bcname, [])
         surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in surf_list]
         
         super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
@@ -19,7 +19,7 @@ class FluidForceIntegrator(SurfaceIntegrator):
             self.m4 = m4 = {}
             rcpjact = {}
 
-        if suffix in system.mesh.bcon:
+        if surf_list:
             rfpts = defaultdict(list)
             for etype, fidx in self.eidxs:
                 for i, eidx in enumerate(self.eidxs[etype, fidx]):
