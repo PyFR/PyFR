@@ -18,9 +18,6 @@ def init_mpi():
 
         enable_prefork()
 
-    # Work around issues with UCX-derived MPI libraries
-    os.environ['UCX_MEMTYPE_CACHE'] = 'n'
-
     # Manually initialise MPI with thread support
     MPI.Init_thread()
 
