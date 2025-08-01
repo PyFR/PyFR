@@ -1,4 +1,4 @@
-from pyfr.mpiutil import mpi
+from pyfr.mpiutil import mpi, scal_coll
 from pyfr.plugins.base import init_csv
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
@@ -141,18 +141,24 @@ class MassFlowBCMixin:
 
         self.target_mfr = cfg.getfloat(cfgsect, 'mass-flow-rate')
         self.tstart = cfg.getfloat(cfgsect, 'tstart')
-        self.p = cfg.getfloat(cfgsect, 'p')
+        self.p0 = cfg.getfloat(cfgsect, 'p')
         self.bcname = cfgsect.removeprefix('soln-bcs-')
         self.alpha = cfg.getfloat(cfgsect, 'alpha')
         self.eta = cfg.getfloat(cfgsect, 'eta')
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
         self.nflush = cfg.getint(cfgsect, 'nflush', 10)
 
-        self._set_external('var_p', 'scalar fpdtype_t')
+        self._set_external('p0', 'scalar fpdtype_t')
+        self._set_external('p1', 'scalar fpdtype_t')
+        self._set_external('t0', 'scalar fpdtype_t')
+        self._set_external('t1', 'scalar fpdtype_t')
         self.tprev = None
         self.nstep_counter = 0
         self.nflush_counter = 0
         self.mf_avg = 0.0
+        self.p1 = self.p0
+        self.t0 = 0.0
+        self.t1 = 1.0
         
         surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
@@ -189,8 +195,8 @@ class MassFlowBCMixin:
             for _ufpts, _norms in zip(ufpts, norms):
                 mf += np.einsum('i...,ij,ji', qwts, _ufpts, _norms)
 
-        self.bccomm.allreduce(mf, op=mpi.SUM)
-        return float(mf)
+        mf = scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
+        return mf
 
     def prepare(self, system, ubank, t, kerns):
         if t >= self.tstart and not self.tprev:
@@ -204,19 +210,24 @@ class MassFlowBCMixin:
             self.mf_avg = self.alpha * mf + (1.0 - self.alpha) * self.mf_avg
 
             dt = (t - self.tprev)
-            if dt > 0.0:
-                self.p += dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
-                self.tprev = t
+            # Set p0 to current p
+            self.p0 += ((t - self.t0) / (self.t1 - self.t0)) * (self.p1 - self.p0)
+            # Next target p
+            self.p1 = self.p0 + dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
+            self.t0 = t
+            # Estimated time of next update
+            self.t1 = t + (t - self.tprev)
+            self.tprev = t
 
             # Output mass flow and pressure at BC
             if self.writecsv and self.bccomm.rank == 0:
-                print(f'{t},{self.mf_avg},{self.p}', file=self.outf)
+                print(f'{t},{self.mf_avg},{self.p1}', file=self.outf)
 
             self.nflush_counter += 1
         
         # Bind p to kernels
         for k in kerns.values():
-            k.bind(var_p=self.p)
+            k.bind(p0=self.p0, p1=self.p1, t0=self.t0, t1=self.t1)
 
         # Flush to file
         if (self.writecsv and self.nflush_counter % self.nflush == 0 
