@@ -139,14 +139,14 @@ class MassFlowBCMixin:
             ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs
         )
 
-        self.target_mfr = self.cfg.getfloat(cfgsect, 'mass-flow-rate')
-        self.tstart = self.cfg.getfloat(cfgsect, 'tstart')
-        self.p = self.cfg.getfloat(cfgsect, 'p')
+        self.target_mfr = cfg.getfloat(cfgsect, 'mass-flow-rate')
+        self.tstart = cfg.getfloat(cfgsect, 'tstart')
+        self.p = cfg.getfloat(cfgsect, 'p')
         self.bcname = cfgsect.removeprefix('soln-bcs-')
-        self.alpha = self.cfg.getfloat(cfgsect, 'alpha')
-        self.eta = self.cfg.getfloat(cfgsect, 'eta')
-        self.nsteps = self.cfg.getint(cfgsect, 'nsteps', 100)
-        self.nflush = self.cfg.getint(cfgsect, 'nflush', 10)
+        self.alpha = cfg.getfloat(cfgsect, 'alpha')
+        self.eta = cfg.getfloat(cfgsect, 'eta')
+        self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
+        self.nflush = cfg.getint(cfgsect, 'nflush', 10)
 
         self._set_external('var_p', 'scalar fpdtype_t')
         self.tprev = None
@@ -157,8 +157,9 @@ class MassFlowBCMixin:
         surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
-        if self.bccomm.rank == 0:
-            self.outf = init_csv(self.cfg, self.cfgsect, 't,mf,pbc')
+        self.writecsv = cfg.hasopt(cfgsect, 'file')
+        if self.writecsv and bccomm.rank == 0:
+            self.outf = init_csv(cfg, cfgsect, 't,mf,pbc')
 
     def calculate_mass_flow(self, solns):
         ndims, nvars = self.ndims, self.nvars
@@ -173,7 +174,7 @@ class MassFlowBCMixin:
             # Extract the relevant elements from the solution
             uupts = solns[etype][..., self.mf_int.eidxs[etype, fidx]]
             # Remove unused variables
-            uupts = uupts[:,1:-1,:]
+            uupts = uupts[:,1:-1]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
@@ -208,7 +209,7 @@ class MassFlowBCMixin:
                 self.tprev = t
 
             # Output mass flow and pressure at BC
-            if self.bccomm.rank == 0:
+            if self.writecsv and self.bccomm.rank == 0:
                 print(f'{t},{self.mf_avg},{self.p}', file=self.outf)
 
             self.nflush_counter += 1
@@ -218,7 +219,8 @@ class MassFlowBCMixin:
             k.bind(var_p=self.p)
 
         # Flush to file
-        if self.nflush_counter % self.nflush == 0 and self.bccomm.rank == 0:
+        if (self.writecsv and self.nflush_counter % self.nflush == 0 
+            and self.bccomm.rank == 0):
             self.outf.flush()
         
         self.nstep_counter += 1
