@@ -37,7 +37,7 @@ class ResidualPlugin(BaseSolnPlugin):
             header = ['t'] + first(intg.system.ele_map.values()).convars
 
             # Open
-            self.csv = init_csv(self.cfg, cfgsect, ','.join(header), nflush=1)
+            self.csv = init_csv(self.cfg, cfgsect, ','.join(header))
 
     def __call__(self, intg):
         # If an output is due this step
@@ -64,4 +64,4 @@ class ResidualPlugin(BaseSolnPlugin):
                 resid = (r**(1 / self._lp_exp) for r in resid)
 
                 # Write
-                self.csv.print(intg.tcurr, *resid, sep=',')
+                self.csv.write(intg.tcurr, *resid)

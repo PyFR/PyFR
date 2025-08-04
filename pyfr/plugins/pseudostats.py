@@ -23,9 +23,7 @@ class PseudoStatsPlugin(BaseSolnPlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            nflush = self.cfg.getint(self.cfgsect, 'flushsteps', 500)
-            self.csv = init_csv(self.cfg, cfgsect, 'n,t,i,' + fvars, 
-                                nflush=nflush)
+            self.csv = init_csv(self.cfg, cfgsect, 'n,t,i,' + fvars)
         else:
             self.csv = None
 
@@ -42,7 +40,7 @@ class PseudoStatsPlugin(BaseSolnPlugin):
         # If we're the root rank then output
         if self.outf:
             for s in self.stats:
-                self.csv.print(*s, sep=',')
+                self.csv.write(*s)
 
         # Reset the stats
         self.stats = []

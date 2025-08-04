@@ -1,7 +1,7 @@
 
 
-class CSVWrapper:
-    def __init__(self, fname, header=None, nflush=100):
+class CSVWriter:
+    def __init__(self, fname, *, header=None, nflush=100):
         # Append the '.csv' extension
         if not fname.endswith('.csv'):
             fname += '.csv'
@@ -16,8 +16,8 @@ class CSVWrapper:
         self.nprint = 0
         self.nflush = nflush
     
-    def print(self, *args, **kwargs):
-        print(*args, **kwargs, file=self.outf)
+    def write(self, *args):
+        print(*args, sep=',', file=self.outf)
 
         # Check if flush needed
         self.nprint += 1

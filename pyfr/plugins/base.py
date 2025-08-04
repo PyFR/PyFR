@@ -10,7 +10,7 @@ from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.regions import parse_region_expr
-from pyfr.writers.csv import CSVWrapper
+from pyfr.writers.csv import CSVWriter
 
 
 def cli_external(meth):
@@ -21,14 +21,14 @@ def cli_external(meth):
     return classmethod(newmeth)
 
 
-def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header', 
-             nflush=100):
+def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
     # Determine the file path
     fname = cfg.get(cfgsect, filekey)
 
-    _header = header if cfg.getbool(cfgsect, headerkey, True) else None
+    header = header if cfg.getbool(cfgsect, headerkey, True) else None
+    nflush = cfg.getint(cfgsect, 'flushsteps', 10)
 
-    return CSVWrapper(fname, _header, nflush=nflush)
+    return CSVWriter(fname, header=header, nflush=nflush)
 
 
 def open_hdf5_a(path):
