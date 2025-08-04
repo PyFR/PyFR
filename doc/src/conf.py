@@ -132,7 +132,6 @@ html_favicon = "../fig/pyfr_favicon.png"
 html_theme_options = {
     'analytics_anonymize_ip': False,
     'logo_only': True,
-    'display_version': False,
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
     'vcs_pageview_mode': '',
@@ -218,7 +217,7 @@ latex_elements = {
 #'pointsize': '10pt',
 
 # Additional stuff for the LaTeX preamble.
-'preamble': '\setcounter{secnumdepth}{4}',
+'preamble': r'\setcounter{secnumdepth}{4}',
 }
 
 # Grouping the document tree into LaTeX files. List of tuples
