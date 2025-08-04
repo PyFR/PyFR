@@ -141,7 +141,6 @@ class MassFlowBCMixin:
 
         self.target_mfr = cfg.getfloat(cfgsect, 'mass-flow-rate')
         self.tstart = cfg.getfloat(cfgsect, 'tstart')
-        self.p0 = cfg.getfloat(cfgsect, 'p')
         self.bcname = cfgsect.removeprefix('soln-bcs-')
         self.alpha = cfg.getfloat(cfgsect, 'alpha')
         self.eta = cfg.getfloat(cfgsect, 'eta')
@@ -152,13 +151,25 @@ class MassFlowBCMixin:
         self._set_external('p1', 'scalar fpdtype_t')
         self._set_external('t0', 'scalar fpdtype_t')
         self._set_external('t1', 'scalar fpdtype_t')
-        self.tprev = None
+
+        # Check if using values from restart
+        if cfg.hasopt(cfgsect, 't0'):
+            self.p0 = cfg.getfloat(cfgsect, 'p0')
+            self.p1 = cfg.getfloat(cfgsect, 'p1')
+            self.t0 = cfg.getfloat(cfgsect, 't0')
+            self.t1 = cfg.getfloat(cfgsect, 't1')
+            self.mf_avg = cfg.getfloat(cfgsect, 'mf_avg')
+            self.tprev = cfg.getfloat(cfgsect, 'tprev')
+        else:
+            self.p0 = cfg.getfloat(cfgsect, 'p')
+            self.p1 = self.p0
+            self.t0 = 0.0
+            self.t1 = 1.0
+            self.mf_avg = 0.0
+            self.tprev = None
+
         self.nstep_counter = 0
         self.nflush_counter = 0
-        self.mf_avg = 0.0
-        self.p1 = self.p0
-        self.t0 = 0.0
-        self.t1 = 1.0
         
         surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
@@ -214,6 +225,14 @@ class MassFlowBCMixin:
             # Estimated time of next update
             self.t1 = t + (t - self.tprev)
             self.tprev = t
+
+            # Update values in cfg in case of restart
+            self.cfg.set(self.cfgsect, 'p0', self.p0)
+            self.cfg.set(self.cfgsect, 'p1', self.p1)
+            self.cfg.set(self.cfgsect, 't0', self.t0)
+            self.cfg.set(self.cfgsect, 't1', self.t1)
+            self.cfg.set(self.cfgsect, 'mf_avg', self.mf_avg)
+            self.cfg.set(self.cfgsect, 'tprev', self.tprev)
 
             # Output mass flow and pressure at BC
             if self.writecsv and self.bccomm.rank == 0:
