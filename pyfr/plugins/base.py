@@ -10,6 +10,7 @@ from pytools import prefork
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.regions import parse_region_expr
+from pyfr.writers.csv import CSVWrapper
 
 
 def cli_external(meth):
@@ -20,23 +21,14 @@ def cli_external(meth):
     return classmethod(newmeth)
 
 
-def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header'):
+def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header', 
+             nflush=100):
     # Determine the file path
     fname = cfg.get(cfgsect, filekey)
 
-    # Append the '.csv' extension
-    if not fname.endswith('.csv'):
-        fname += '.csv'
+    _header = header if cfg.getbool(cfgsect, headerkey, True) else None
 
-    # Open for appending
-    outf = open(fname, 'a')
-
-    # Output a header if required
-    if outf.tell() == 0 and cfg.getbool(cfgsect, headerkey, True):
-        print(header, file=outf)
-
-    # Return the file
-    return outf
+    return CSVWrapper(fname, _header, nflush=nflush)
 
 
 def open_hdf5_a(path):
