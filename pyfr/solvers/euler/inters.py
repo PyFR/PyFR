@@ -171,29 +171,25 @@ class MassFlowBCMixin:
         ndims, nvars = self.ndims, self.nvars
         mf = 0.0
 
-        # Get the sizes for the area calculation
         for etype, fidx in self.mf_int.m0:
             # Get the interpolation operator
             m0 = self.mf_int.m0[etype, fidx]
             nfpts, nupts = m0.shape
 
-            # Extract the relevant elements from the solution
-            uupts = solns[etype][..., self.mf_int.eidxs[etype, fidx]]
-            # Remove unused variables
-            uupts = uupts[:,1:-1]
+            # Extract the relevant elements and variables from the solution
+            uupts = solns[etype][..., self.mf_int.eidxs[etype, fidx]][:,1:-1]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nvars-2, -1)
+            ufpts = ufpts.reshape(nfpts, ndims, -1)
             ufpts = ufpts.swapaxes(0, 1)
 
             # Get the quadrature weights and normal vectors
             qwts = self.mf_int.qwts[etype, fidx]
             norms = np.rollaxis(self.mf_int.norms[etype, fidx], 2)
 
-            # Do the quadrature for each dimension
-            for _ufpts, _norms in zip(ufpts, norms):
-                mf += np.einsum('i...,ij,ji', qwts, _ufpts, _norms)
+            # Do the quadrature
+            mf += np.einsum('i,hij,hji', qwts, ufpts, norms)
 
         mf = scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
         return mf
