@@ -22,12 +22,12 @@ def cli_external(meth):
 
 
 def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header', 
-             nflush=None):
+             nflush=10):
     # Determine the file path
     fname = cfg.get(cfgsect, filekey)
 
     header = header if cfg.getbool(cfgsect, headerkey, True) else None
-    nflush = cfg.getint(cfgsect, 'flushsteps', nflush or 10)
+    nflush = cfg.getint(cfgsect, 'flushsteps', nflush)
 
     return CSVStream(fname, header=header, nflush=nflush)
 
