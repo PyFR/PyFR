@@ -71,7 +71,7 @@ class IntegratePlugin(BaseSolnPlugin):
             header = ['t', *self.cfg.items(cfgsect, prefix='int-')]
 
             # Open
-            self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
+            self.csv = init_csv(self.cfg, cfgsect, ','.join(header), nflush=1)
 
         # Prepare the per element-type info list
         self.eleinfo = eleinfo = []
@@ -223,7 +223,4 @@ class IntegratePlugin(BaseSolnPlugin):
                 iintex = (self._post_func(i) for i in iintex)
 
                 # Write
-                print(intg.tcurr, *iintex, sep=',', file=self.outf)
-
-                # Flush to disk
-                self.outf.flush()
+                self.csv(intg.tcurr, *iintex)

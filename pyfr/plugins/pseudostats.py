@@ -12,8 +12,6 @@ class PseudoStatsPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)
 
-        self.flushsteps = self.cfg.getint(self.cfgsect, 'flushsteps', 500)
-
         self.count = 0
         self.stats = []
         self.tprev = intg.tcurr
@@ -25,9 +23,10 @@ class PseudoStatsPlugin(BaseSolnPlugin):
 
         # The root rank needs to open the output file
         if rank == root:
-            self.outf = init_csv(self.cfg, cfgsect, 'n,t,i,' + fvars)
+            header = 'n,t,i,' + fvars
+            self.csv = init_csv(self.cfg, cfgsect, header, nflush=500)
         else:
-            self.outf = None
+            self.csv = None
 
     def __call__(self, intg):
         # Process the sequence of pseudo-residuals
@@ -42,11 +41,7 @@ class PseudoStatsPlugin(BaseSolnPlugin):
         # If we're the root rank then output
         if self.outf:
             for s in self.stats:
-                print(*s, sep=',', file=self.outf)
-
-            # Periodically flush to disk
-            if intg.nacptsteps % self.flushsteps == 0:
-                self.outf.flush()
+                self.csv(*s)
 
         # Reset the stats
         self.stats = []
