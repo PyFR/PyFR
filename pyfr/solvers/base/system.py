@@ -154,7 +154,7 @@ class BaseSystem:
 
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
-        bc_inters, bc_prefns = [], []
+        bc_inters, bc_prefns = [], {}
 
         # Iterate over all boundaries in the mesh
         for c in mesh.codec:
@@ -180,7 +180,7 @@ class BaseSystem:
 
             # Allow the boundary to return a preparation callback
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
-                bc_prefns.append(pfn)
+                bc_prefns[bname] = pfn
 
         return bc_inters, bc_prefns
 
@@ -277,8 +277,8 @@ class BaseSystem:
     def _prepare_kernels(self, t, uinbank, foutbank):
         _, binders, bckerns = self._get_kernels(uinbank, foutbank)
 
-        for bfn in self._bc_prefns:
-            bfn(self, uinbank, t, bckerns[b.name])
+        for b, bfn in self._bc_prefns.items():
+            bfn(self, uinbank, t, bckerns[b])
 
         for b in binders:
             b(t=t)
