@@ -1,9 +1,9 @@
 from pyfr.mpiutil import mpi, scal_coll
-from pyfr.plugins.base import init_csv
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
+from pyfr.writers.csv import CSVStream
 
 import numpy as np
 
@@ -145,7 +145,6 @@ class MassFlowBCMixin:
         self.alpha = cfg.getfloat(cfgsect, 'alpha')
         self.eta = cfg.getfloat(cfgsect, 'eta')
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
-        self.nflush = cfg.getint(cfgsect, 'nflush', 10)
 
         self._set_external('p0', 'scalar fpdtype_t')
         self._set_external('p1', 'scalar fpdtype_t')
@@ -169,14 +168,15 @@ class MassFlowBCMixin:
             self.tprev = None
 
         self.nstep_counter = 0
-        self.nflush_counter = 0
         
         surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
-        self.writecsv = cfg.hasopt(cfgsect, 'file')
-        if self.writecsv and bccomm.rank == 0:
-            self.outf = init_csv(cfg, cfgsect, 't,mf,pbc')
+        self.csv = None
+        if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
+            fname = cfg.get(cfgsect, 'file')
+            nflush = cfg.getint(cfgsect, 'flushsteps', 10)
+            self.csv = CSVStream(fname, header='t,mf,pbc', nflush=nflush)
 
     def calculate_mass_flow(self, solns):
         ndims, nvars = self.ndims, self.nvars
@@ -197,13 +197,16 @@ class MassFlowBCMixin:
 
             # Get the quadrature weights and normal vectors
             qwts = self.mf_int.qwts[etype, fidx]
-            norms = np.rollaxis(self.mf_int.norms[etype, fidx], 2)
+            norms = self.mf_int.norms[etype, fidx]
 
             # Do the quadrature
-            mf += np.einsum('i,hij,hji', qwts, ufpts, norms)
+            mf += np.einsum('i,hij,jih', qwts, ufpts, norms)
 
-        mf = scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
-        return mf
+        return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
+    
+    @classmethod
+    def preparefn(cls, bciface, mesh, elemap):
+        return lambda s, u, t, k : bciface.prepare(s, u, t, k)
 
     def prepare(self, system, ubank, t, kerns):
         if t >= self.tstart and not self.tprev:
@@ -235,19 +238,12 @@ class MassFlowBCMixin:
             self.cfg.set(self.cfgsect, 'tprev', self.tprev)
 
             # Output mass flow and pressure at BC
-            if self.writecsv and self.bccomm.rank == 0:
-                print(f'{t},{self.mf_avg},{self.p1}', file=self.outf)
-
-            self.nflush_counter += 1
+            if self.csv:
+                self.csv(t, self.mf_avg, self.p1)
         
         # Bind p to kernels
         for k in kerns.values():
             k.bind(p0=self.p0, p1=self.p1, t0=self.t0, t1=self.t1)
-
-        # Flush to file
-        if (self.writecsv and self.nflush_counter % self.nflush == 0 
-            and self.bccomm.rank == 0):
-            self.outf.flush()
         
         self.nstep_counter += 1
 
