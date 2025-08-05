@@ -1,6 +1,6 @@
 
 
-class CSVWriter:
+class CSVStream:
     def __init__(self, fname, *, header=None, nflush=100):
         # Append the '.csv' extension
         if not fname.endswith('.csv'):
@@ -16,7 +16,7 @@ class CSVWriter:
         self.nprint = 0
         self.nflush = nflush
     
-    def write(self, *args):
+    def __call__(self, *args):
         print(*args, sep=',', file=self.outf)
 
         # Check if flush needed

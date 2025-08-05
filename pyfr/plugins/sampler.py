@@ -110,12 +110,13 @@ class SamplerPlugin(BaseSolnPlugin):
                     raise ValueError('Invalid file format')
 
     def _init_csv(self, intg):
-        self.csv = init_csv(self.cfg, self.cfgsect, self._header(intg))
+        self.csv = init_csv(self.cfg, self.cfgsect, self._header(intg),
+                            nflush=len(self.psampler.pts))
         self._write = self._write_csv
 
     def _write_csv(self, t, samps):
         for ploc, samp in zip(self.psampler.pts, samps):
-            self.csv.write(t, *ploc, *samp)
+            self.csv(t, *ploc, *samp)
 
     def _init_hdf5(self, intg):
         outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))

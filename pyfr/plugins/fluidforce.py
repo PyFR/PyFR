@@ -124,11 +124,11 @@ class FluidForcePlugin(BaseSolnPlugin):
         return ','.join(header)
 
     def _init_csv(self):
-        self.csv = init_csv(self.cfg, self.cfgsect, self._header)
+        self.csv = init_csv(self.cfg, self.cfgsect, self._header, nflush=1)
         self._write = self._write_csv
 
     def _write_csv(self, t, forces):
-        self.csv.write(t, *forces.ravel())
+        self.csv(t, *forces.ravel())
 
     def _init_hdf5(self):
         outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))

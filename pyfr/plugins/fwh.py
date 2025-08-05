@@ -85,7 +85,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         # Initialise data file
         if rank == root:
             header = ','.join(['t', 'x', 'y', 'z'][:self.ndims + 1] + ['mag'])
-            self.csv = init_csv(self.cfg, cfgsect, header)
+            self.csv = init_csv(self.cfg, cfgsect, header, nflush=self.nobvs)
 
         # Far field conditions
         self.incomp = intg.system.name in {'ac-euler', 'ac-navier-stokes'}
@@ -215,4 +215,4 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
                 comm.Reduce(mpi.IN_PLACE, o_vals, op=mpi.SUM, root=root)
 
                 for x, p in zip(self.fwh_int.obsv_pts, o_vals):
-                    self.csv.write(intg.tcurr, *x, p)
+                    self.csv(intg.tcurr, *x, p)
