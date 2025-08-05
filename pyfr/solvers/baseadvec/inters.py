@@ -9,7 +9,7 @@ class BaseAdvectionIntersMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._ef_enabled = (self.cfg.get('solver', 'shock-capturing') == 
+        self._ef_enabled = (self.cfg.get('solver', 'shock-capturing') ==
                             'entropy-filter' and
                             self.cfg.getint('solver', 'order'))
 
@@ -132,6 +132,10 @@ class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
         else:
             self._entmin_lhs = None
+
+    @classmethod
+    def preparefn(cls, bciface, mesh, elemap):
+        pass
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be

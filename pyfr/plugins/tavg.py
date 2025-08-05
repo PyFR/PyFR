@@ -83,7 +83,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
 
         # Construct the file writer
         self._writer = NativeWriter.from_integrator(intg, basedir, basename,
-                                                    'tavg', 
+                                                    'tavg',
                                                     fpdtype=self.fpdtype)
         self._writer.set_shapes_eidxs(ershapes, erdata)
 

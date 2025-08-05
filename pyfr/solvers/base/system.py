@@ -69,7 +69,7 @@ class BaseSystem:
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
-        self._bc_inters = self._load_bc_inters(mesh, elemap)
+        self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap)
         backend.commit()
 
     def commit(self):
@@ -150,33 +150,39 @@ class BaseSystem:
         return mpi_inters
 
     def _load_bc_inters(self, mesh, elemap):
-        bccls = self.bbcinterscls
-        bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
-
         comm, rank, root = get_comm_rank_root()
 
-        # Iterate over all BCs (including ones not on this rank)
-        bc_inters = []
+        bccls = self.bbcinterscls
+        bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
+        bc_inters, bc_prefns = [], []
+
+        # Iterate over all boundaries in the mesh
         for c in mesh.codec:
             if not c.startswith('bc/'):
                 continue
 
-            # Construct MPI communicator for this BC
+            # Construct an MPI communicator for this boundary
             bname = c.removeprefix('bc/')
             localbc = bname in mesh.bcon
             bccomm = autofree(comm.Split(1 if localbc else mpi.UNDEFINED))
 
-            if localbc:
-                # Get class
-                cfgsect = f'soln-bcs-{bname}'
-                bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
+            # Get the class
+            cfgsect = f'soln-bcs-{bname}'
+            bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
-                # Instantiate BC
+            # If we have this boundary then create an instance
+            if localbc:
                 bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
                                   cfgsect, self.cfg, bccomm)
                 bc_inters.append(bciface)
+            else:
+                bciface = None
 
-        return bc_inters
+            # Allow the boundary to return a preparation callback
+            if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
+                bc_prefns.append(pfn)
+
+        return bc_inters, bc_prefns
 
     def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
@@ -271,8 +277,8 @@ class BaseSystem:
     def _prepare_kernels(self, t, uinbank, foutbank):
         _, binders, bckerns = self._get_kernels(uinbank, foutbank)
 
-        for b in self._bc_inters:
-            b.prepare(self, uinbank, t, bckerns[b.name])
+        for bfn in self._bc_prefns:
+            bfn(self, uinbank, t, bckerns[b.name])
 
         for b in binders:
             b(t=t)
