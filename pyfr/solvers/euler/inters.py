@@ -140,46 +140,40 @@ class MassFlowBCMixin:
         )
 
         self.target_mfr = cfg.getfloat(cfgsect, 'mass-flow-rate')
-        self.tstart = cfg.getfloat(cfgsect, 'tstart')
+        self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.bcname = cfgsect.removeprefix('soln-bcs-')
         self.alpha = cfg.getfloat(cfgsect, 'alpha')
         self.eta = cfg.getfloat(cfgsect, 'eta')
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
 
-        self._set_external('p0', 'scalar fpdtype_t')
-        self._set_external('p1', 'scalar fpdtype_t')
-        self._set_external('t0', 'scalar fpdtype_t')
-        self._set_external('t1', 'scalar fpdtype_t')
+        self._set_external('ic', 'scalar fpdtype_t')
+        self._set_external('im', 'scalar fpdtype_t')
 
         # Check if using values from restart
-        if cfg.hasopt(cfgsect, 't0'):
-            self.p0 = cfg.getfloat(cfgsect, 'p0')
-            self.p1 = cfg.getfloat(cfgsect, 'p1')
-            self.t0 = cfg.getfloat(cfgsect, 't0')
-            self.t1 = cfg.getfloat(cfgsect, 't1')
-            self.mf_avg = cfg.getfloat(cfgsect, 'mf_avg')
+        if cfg.hasopt(cfgsect, 'interp-c'):
+            self.interp_c = cfg.getfloat(cfgsect, 'interp-c')
+            self.interp_m = cfg.getfloat(cfgsect, 'interp-m')
+            self.mf_avg = cfg.getfloat(cfgsect, 'mf-avg')
             self.tprev = cfg.getfloat(cfgsect, 'tprev')
         else:
-            self.p0 = cfg.getfloat(cfgsect, 'p')
-            self.p1 = self.p0
-            self.t0 = 0.0
-            self.t1 = 1.0
+            self.interp_c = cfg.getfloat(cfgsect, 'p')
+            self.interp_m = 0.0
             self.mf_avg = 0.0
             self.tprev = None
 
         self.nstep_counter = 0
         
-        surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in lhs]
+        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
-        self.csv = None
         if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
             fname = cfg.get(cfgsect, 'file')
             nflush = cfg.getint(cfgsect, 'flushsteps', 10)
             self.csv = CSVStream(fname, header='t,mf,pbc', nflush=nflush)
+        else:
+            self.csv = None
 
     def calculate_mass_flow(self, solns):
-        ndims, nvars = self.ndims, self.nvars
         mf = 0.0
 
         for etype, fidx in self.mf_int.m0:
@@ -188,25 +182,27 @@ class MassFlowBCMixin:
             nfpts, nupts = m0.shape
 
             # Extract the relevant elements and variables from the solution
-            uupts = solns[etype][..., self.mf_int.eidxs[etype, fidx]][:,1:-1]
+            uupts = solns[etype][:, 1:-1, self.mf_int.eidxs[etype, fidx]]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, ndims, -1)
-            ufpts = ufpts.swapaxes(0, 1)
+            ufpts = ufpts.reshape(nfpts, self.ndims, -1)
 
             # Get the quadrature weights and normal vectors
             qwts = self.mf_int.qwts[etype, fidx]
             norms = self.mf_int.norms[etype, fidx]
 
             # Do the quadrature
-            mf += np.einsum('i,hij,jih', qwts, ufpts, norms)
+            mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
     
     @classmethod
     def preparefn(cls, bciface, mesh, elemap):
-        return lambda s, u, t, k : bciface.prepare(s, u, t, k)
+        if bciface:
+            return bciface.prepare
+        else:
+            return None
 
     def prepare(self, system, ubank, t, kerns):
         if t >= self.tstart and not self.tprev:
@@ -220,30 +216,29 @@ class MassFlowBCMixin:
             self.mf_avg = self.alpha * mf + (1.0 - self.alpha) * self.mf_avg
 
             dt = (t - self.tprev)
-            # Set p0 to current p
-            self.p0 += ((t - self.t0) / (self.t1 - self.t0)) * (self.p1 - self.p0)
+            # Current p
+            p0 = self.interp_m * t + self.interp_c
             # Next target p
-            self.p1 = self.p0 + dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
-            self.t0 = t
-            # Estimated time of next update
-            self.t1 = t + (t - self.tprev)
+            p1 = p0 + dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
+            # Update interpolation
+            self.interp_m = (p1 - p0) / dt
+            self.interp_c = p0 - self.interp_m * t
+
             self.tprev = t
 
             # Update values in cfg in case of restart
-            self.cfg.set(self.cfgsect, 'p0', self.p0)
-            self.cfg.set(self.cfgsect, 'p1', self.p1)
-            self.cfg.set(self.cfgsect, 't0', self.t0)
-            self.cfg.set(self.cfgsect, 't1', self.t1)
-            self.cfg.set(self.cfgsect, 'mf_avg', self.mf_avg)
+            self.cfg.set(self.cfgsect, 'interp-c', self.interp_c)
+            self.cfg.set(self.cfgsect, 'interp-m', self.interp_m)
+            self.cfg.set(self.cfgsect, 'mf-avg', self.mf_avg)
             self.cfg.set(self.cfgsect, 'tprev', self.tprev)
 
             # Output mass flow and pressure at BC
             if self.csv:
-                self.csv(t, self.mf_avg, self.p1)
+                self.csv(t, self.mf_avg, p1)
         
-        # Bind p to kernels
+        # Bind interpolation to kernels
         for k in kerns.values():
-            k.bind(p0=self.p0, p1=self.p1, t0=self.t0, t1=self.t1)
+            k.bind(ic=self.interp_c, im=self.interp_m)
         
         self.nstep_counter += 1
 
