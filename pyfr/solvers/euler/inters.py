@@ -220,8 +220,10 @@ class MassFlowBCMixin:
 
                 # Current p
                 p0 = self.interp_m * t + self.interp_c
+
                 # Next target p
                 p1 = p0 + dt * self.eta * (1 - self.target_mfr / self.mf_avg)
+
                 # Update interpolation
                 self.interp_m = (p1 - p0) / dt
                 self.interp_c = p0 - self.interp_m * t
