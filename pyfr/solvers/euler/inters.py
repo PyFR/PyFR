@@ -205,36 +205,36 @@ class MassFlowBCMixin:
             return None
 
     def prepare(self, system, ubank, t, kerns):
-        if t >= self.tstart and not self.tprev:
-            # First update to begin history
-            solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
-            self.mf_avg = self.calculate_mass_flow(solns)
-            self.tprev = t
-        elif t >= self.tstart and self.nstep_counter % self.nsteps == 0:
+        update = self.nstep_counter % self.nsteps == 0
+        if (update or not self.tprev) and t >= self.tstart:
             solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
             mf = self.calculate_mass_flow(solns)
-            self.mf_avg = self.alpha * mf + (1.0 - self.alpha) * self.mf_avg
+            
+            if not self.tprev:
+                self.mf_avg = mf
+                self.tprev = t
+            else:
+                self.mf_avg = self.alpha * mf + (1 - self.alpha) * self.mf_avg
+                dt = (t - self.tprev)
+                self.tprev = t
 
-            dt = (t - self.tprev)
-            # Current p
-            p0 = self.interp_m * t + self.interp_c
-            # Next target p
-            p1 = p0 + dt * self.eta * (1.0 - self.target_mfr / self.mf_avg)
-            # Update interpolation
-            self.interp_m = (p1 - p0) / dt
-            self.interp_c = p0 - self.interp_m * t
+                # Current p
+                p0 = self.interp_m * t + self.interp_c
+                # Next target p
+                p1 = p0 + dt * self.eta * (1 - self.target_mfr / self.mf_avg)
+                # Update interpolation
+                self.interp_m = (p1 - p0) / dt
+                self.interp_c = p0 - self.interp_m * t
 
-            self.tprev = t
+                # Update values in cfg in case of restart
+                self.cfg.set(self.cfgsect, 'interp-c', self.interp_c)
+                self.cfg.set(self.cfgsect, 'interp-m', self.interp_m)
+                self.cfg.set(self.cfgsect, 'mf-avg', self.mf_avg)
+                self.cfg.set(self.cfgsect, 'tprev', self.tprev)
 
-            # Update values in cfg in case of restart
-            self.cfg.set(self.cfgsect, 'interp-c', self.interp_c)
-            self.cfg.set(self.cfgsect, 'interp-m', self.interp_m)
-            self.cfg.set(self.cfgsect, 'mf-avg', self.mf_avg)
-            self.cfg.set(self.cfgsect, 'tprev', self.tprev)
-
-            # Output mass flow and pressure at BC
-            if self.csv:
-                self.csv(t, self.mf_avg, p1)
+                # Output mass flow and pressure at BC
+                if self.csv:
+                    self.csv(t, self.mf_avg, p1)
         
         # Bind interpolation to kernels
         for k in kerns.values():
