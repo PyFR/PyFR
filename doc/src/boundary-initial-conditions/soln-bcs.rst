@@ -139,6 +139,15 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
       
+        - ``quad-deg-{etype}`` --- degree of quadrature rule for mass flow
+          integration (optional).
+
+           *int*
+
+        - ``quad-pts-{etype}`` --- name of quadrature rule (optional).
+
+           *string*
+
         - ``file`` --- name of a CSV file to output staticstics to (optional).
 
            *string*
