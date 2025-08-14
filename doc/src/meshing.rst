@@ -26,6 +26,8 @@ the following guidelines must be followed:
 * Periodic boundary conditions can be defined by assigning one of the
   boundaries a physical name of "periodic-*name*-l" and the other a
   physical name of "periodic-*name*-r" where *name* is an arbitrary
-  identifier.  Note that only translational peridocity is currently
+  identifier. Note that only translational peridocity is currently
   supported.
-* Curved elements are supported up to quintic order.
+* Curved elements are supported up to quartic order. Such elements must
+  be *complete* Lagrange elements as opposed to *incomplete* serendipity
+  elements.
