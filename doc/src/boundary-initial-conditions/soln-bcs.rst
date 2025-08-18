@@ -137,7 +137,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
         - ``tstart`` --- start time of the mass flow controller, before this
           time ``p`` will remain fixed.
 
-           *float* | *string*
+           *float*
       
         - ``quad-deg-{etype}`` --- degree of quadrature rule for mass flow
           integration (optional).
