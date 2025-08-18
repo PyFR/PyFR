@@ -139,12 +139,10 @@ class MassFlowBCMixin:
             ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs
         )
 
-        self.target_mfr = cfg.getfloat(cfgsect, 'mass-flow-rate')
         self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
-        self.bcname = cfgsect.removeprefix('soln-bcs-')
-        self.alpha = cfg.getfloat(cfgsect, 'alpha')
-        self.eta = cfg.getfloat(cfgsect, 'eta')
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
+        opts = self._eval_opts(['mass-flow-rate', 'alpha', 'eta', 'p'])
+        self.target_mfr, self.alpha, self.eta, p = opts
 
         self._set_external('ic', 'scalar fpdtype_t')
         self._set_external('im', 'scalar fpdtype_t')
@@ -156,7 +154,7 @@ class MassFlowBCMixin:
             self.mf_avg = cfg.getfloat(cfgsect, 'mf-avg')
             self.tprev = cfg.getfloat(cfgsect, 'tprev')
         else:
-            self.interp_c = cfg.getfloat(cfgsect, 'p')
+            self.interp_c = p
             self.interp_m = 0.0
             self.mf_avg = 0.0
             self.tprev = None
