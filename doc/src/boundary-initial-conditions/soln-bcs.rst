@@ -112,22 +112,22 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
         - ``p`` --- initial static pressure, the controller will vary this to
           target a mass flow rate.
 
-           *float*
+           *float* | *string*
       
         - ``mass-flow-rate`` --- target mass flow rate across the boundary.
 
-           *float*
+           *float* | *string*
       
         - ``alpha`` --- parameter between 0 and 1 for the exponentially
           weighted moving average of the mass flow rate.
 
-           *float*
+           *float* | *string*
       
         - ``eta`` --- parameter greater than 0 controlling the strength of the
           controller. The appropriate strength is problem specific and varies
           depending on if the simulation has been nondimensionalised.
 
-           *float*
+           *float* | *string*
       
         - ``nsteps`` --- number of Runge-Kutta steps between activations of the
           controller. Typically between 10 and 500.
@@ -137,7 +137,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
         - ``tstart`` --- start time of the mass flow controller, before this
           time ``p`` will remain fixed.
 
-           *float*
+           *float* | *string*
       
         - ``quad-deg-{etype}`` --- degree of quadrature rule for mass flow
           integration (optional).
