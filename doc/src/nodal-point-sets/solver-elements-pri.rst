@@ -5,19 +5,24 @@
 Parameterises the prismatic elements, or if -mg-p\ *order* is suffixed
 the prismatic elements at multi-p level *order*, with
 
-1. ``soln-pts`` --- location of the solution points in a prismatic
+#. ``soln-pts`` --- location of the solution points in a prismatic
    element:
 
     ``alpha-opt~gauss-legendre-lobatto`` |
     ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto``
 
-2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
+#. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    prismatic element:
 
     *int*
 
-3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
+#. ``quad-npts`` --- number of points of the quadrature rule for
+   anti-aliasing in a prismatic element:
+
+    *int*
+
+#. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    prismatic element:
 
     ``williams-shunn~gauss-legendre`` |

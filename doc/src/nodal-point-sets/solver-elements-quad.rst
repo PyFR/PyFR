@@ -5,17 +5,22 @@
 Parameterises the quadrilateral elements, or if -mg-p\ *order* is
 suffixed the quadrilateral elements at multi-p level *order*, with
 
-1. ``soln-pts`` --- location of the solution points in a quadrilateral
+#. ``soln-pts`` --- location of the solution points in a quadrilateral
    element:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
-2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
+#. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    quadrilateral element:
 
     *int*
 
-3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
+#. ``quad-npts`` --- number of points of the quadrature rule for
+   anti-aliasing in a quadrilateral element:
+
+    *int*
+
+#. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    quadrilateral element:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto`` |

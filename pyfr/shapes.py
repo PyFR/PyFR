@@ -171,6 +171,25 @@ class BaseShape:
         if self.cfg.hasopt(sect, 'quad-deg'):
             kwargs['qdeg'] = self.cfg.getint(sect, 'quad-deg')
 
+        if self.cfg.hasopt(sect, 'quad-npts'):
+            kwargs['npts'] = self.cfg.getint(sect, 'quad-npts')
+
+        # If nothing has been provided then pick a sensible default
+        if not {'rule', 'qdeg', 'npts'}.intersection(kwargs):
+            match kind:
+                case 'quad':
+                    kwargs['rule'] = 'gauss-legendre'
+                    kwargs['npts'] = (self.order + 2)**2
+                case 'hex':
+                    kwargs['rule'] = 'gauss-legendre'
+                    kwargs['npts'] = (self.order + 2)**3
+                case 'tet':
+                    kwargs['qdeg'] = 2*self.order + 1
+                case 'line' | 'pyr' | 'tri':
+                    kwargs['qdeg'] = 2*(self.order + 1)
+                case 'pri':
+                    kwargs['qdeg'] = 2*(self.order + 2)
+
         return get_quadrule(kind, **kwargs)
 
     @cached_property
