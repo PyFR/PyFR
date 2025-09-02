@@ -192,19 +192,10 @@ class FluidForcePlugin(BaseSolnPlugin):
             fm[0, :ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
 
             if self._viscous:
-                # Get operator and J^-T matrix
-                m4 = self.ff_int.m4[etype]
-                rcpjact = self.ff_int.rcpjact[etype, fidx]
+                # Corrected gradients at upts
+                duupts = intg.grad_soln[etype][..., self.ff_int.eidxs[etype, fidx]]
 
-                # Transformed gradient at solution points
-                tduupts = m4 @ uupts.reshape(nupts, -1)
-                tduupts = tduupts.reshape(ndims, nupts, nvars, -1)
-
-                # Physical gradient at solution points
-                duupts = np.einsum('ijkl,jkml->ikml', rcpjact, tduupts)
-                duupts = duupts.reshape(ndims, nupts, -1)
-
-                # Interpolate gradient to flux points
+                # Interpolate those gradient to flux points
                 dufpts = np.array([m0 @ du for du in duupts])
                 dufpts = dufpts.reshape(ndims, nfpts, nvars, -1)
                 dufpts = dufpts.swapaxes(1, 2)
