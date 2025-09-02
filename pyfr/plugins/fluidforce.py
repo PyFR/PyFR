@@ -194,6 +194,7 @@ class FluidForcePlugin(BaseSolnPlugin):
             if self._viscous:
                 # Corrected gradients at upts
                 duupts = intg.grad_soln[etype][..., self.ff_int.eidxs[etype, fidx]]
+                duupts = duupts.reshape(ndims, nupts, -1)
 
                 # Interpolate those gradient to flux points
                 dufpts = np.array([m0 @ du for du in duupts])
