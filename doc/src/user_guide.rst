@@ -20,7 +20,7 @@ PyFR |release| uses three distinct file formats:
 The following core commands are available from the ``pyfr`` program:
 
 pyfr import
-   Convert a `Gmsh <http:http://geuz.org/gmsh/>`_ .msh file into a PyFR
+   Convert a `Gmsh <https://gmsh.info/>`_ .msh file into a PyFR
    .pyfrm file.  Example::
 
         pyfr import mesh.msh mesh.pyfrm
@@ -160,7 +160,7 @@ Configuration File (.ini)
 =========================
 
 The .ini configuration file parameterises the simulation. It is written
-in the `INI <http://en.wikipedia.org/wiki/INI_file>`_ format.
+in the `INI <https://en.wikipedia.org/wiki/INI_file>`_ format.
 Parameters are grouped into sections. The roles of each section and
 their associated parameters are described below. Note that both ``;``
 and ``#`` may be used as comment characters.  Additionally, all
