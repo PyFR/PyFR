@@ -8,7 +8,7 @@ Importing Meshes
 ^^^^^^^^^^^^^^^^
 
 PyFR is capable of importing meshes in the Gmsh .msh format;
-specifically versions 2.8 and 4.1 of the ASCII format with the latter
+specifically versions 2.2 and 4.1 of the ASCII format with the latter
 being recommended. Although these files can include partitioning
 information this is ignored by PyFR. In order to be imported by PyFR
 the following guidelines must be followed:
