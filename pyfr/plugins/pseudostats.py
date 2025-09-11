@@ -39,7 +39,7 @@ class PseudoStatsPlugin(BaseSolnPlugin):
         self.tprev = intg.tcurr
 
         # If we're the root rank then output
-        if self.outf:
+        if self.csv:
             for s in self.stats:
                 self.csv(*s)
 
