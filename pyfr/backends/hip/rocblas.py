@@ -143,9 +143,13 @@ class HIPRocBLASKernels(HIPKernelProvider):
 
             # Benchmark suggested algorithms
             for algo in sidx:
-                dt = self._benchmark(gemm)
-                if best_kern is None or dt < ifac*best_kern[-1]:
-                    best_kern = algo, dt
+                try:
+                    dt = self._benchmark(gemm)
+                    if best_kern is None or dt < ifac*best_kern[-1]:
+                        best_kern = algo, dt
+                # In the case of invalid values raised by rocblas
+                except RocBLASInvalidValue:
+                    pass
 
             # Restore the output matrix
             getattr(out, 'parent', out).set(out_np)
