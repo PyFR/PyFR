@@ -150,6 +150,10 @@ class HIPRocBLASKernels(HIPKernelProvider):
                 # In the case of invalid values raised by rocblas
                 except RocBLASInvalidValue:
                     pass
+            
+            # If all tests fail
+            if best_kern is None:
+                raise RuntimeError('Unable to obtain a kernel')
 
             # Restore the output matrix
             getattr(out, 'parent', out).set(out_np)
