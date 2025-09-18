@@ -151,12 +151,12 @@ class HIPRocBLASKernels(HIPKernelProvider):
                 except RocBLASInvalidValue:
                     pass
             
+            # Restore the output matrix
+            getattr(out, 'parent', out).set(out_np)
+            
             # If all tests fail
             if best_kern is None:
                 raise RuntimeError('Unable to obtain a kernel')
-
-            # Restore the output matrix
-            getattr(out, 'parent', out).set(out_np)
 
             # Update the cache
             self._mul_cache[ckey] = algo, dt = best_kern
