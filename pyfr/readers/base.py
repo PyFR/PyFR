@@ -403,7 +403,7 @@ class NodalMeshAssembler:
 
             # Use this to determine which elements are linear
             num = np.max(np.abs(eles - leles), axis=0)
-            den = np.max(eles, axis=0) - np.min(eles, axis=0)
+            den = np.ptp(eles, axis=0)
             lin = np.all(num / den < lintol, axis=1)
 
             # Snap the nodes associated with linear elements

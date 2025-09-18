@@ -88,11 +88,8 @@ class FluidForcePlugin(BaseSolnPlugin):
             if len(morigin) != self.ndims:
                 raise ValueError(f'morigin must have {self.ndims} components')
 
-        # Get the mesh and elements
-        mesh, elemap = intg.system.mesh, intg.system.ele_map
-
         # See which ranks have the boundary
-        bcranks = comm.gather(suffix in mesh.bcon, root=root)
+        bcranks = comm.gather(suffix in intg.system.mesh.bcon, root=root)
 
         # The root rank needs to open the output file
         if rank == root:
