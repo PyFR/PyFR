@@ -67,11 +67,8 @@ class FluidForcePlugin(BaseSolnPlugin):
             if len(morigin) != self.ndims:
                 raise ValueError(f'morigin must have {self.ndims} components')
 
-        # Get the mesh and elements
-        mesh = intg.system.mesh
-
         # See which ranks have the boundary
-        bcranks = comm.gather(suffix in mesh.bcon, root=root)
+        bcranks = comm.gather(suffix in intg.system.mesh.bcon, root=root)
 
         # The root rank needs to open the output file
         if rank == root:
@@ -140,6 +137,7 @@ class FluidForcePlugin(BaseSolnPlugin):
 
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
+        cgrads = dict(zip(intg.system.ele_types, intg.grad_soln))
         ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
 
         # Force and moment vectors
@@ -171,7 +169,7 @@ class FluidForcePlugin(BaseSolnPlugin):
 
             if self._viscous:
                 # Corrected gradients at solution points
-                duupts = intg.grad_soln[etype][..., self.ff_int.eidxs[etype, fidx]]
+                duupts = cgrads[etype][..., self.ff_int.eidxs[etype, fidx]]
                 duupts = duupts.reshape(ndims, nupts, -1)
 
                 # Interpolate gradient to flux points
