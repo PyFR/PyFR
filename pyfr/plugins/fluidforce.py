@@ -137,7 +137,8 @@ class FluidForcePlugin(BaseSolnPlugin):
 
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
-        cgrads = dict(zip(intg.system.ele_types, intg.grad_soln))
+        if self._viscous: # Corrected solution gradients indexed by element type
+            cgrads = dict(zip(intg.system.ele_types, intg.grad_soln))
         ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
 
         # Force and moment vectors
