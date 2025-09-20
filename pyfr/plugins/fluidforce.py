@@ -15,19 +15,14 @@ class FluidForceIntegrator(SurfaceIntegrator):
 
         super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
 
-        if surf_list:
-            rfpts = defaultdict(list)
-            for etype, fidx in self.eidxs:
-                for i, eidx in enumerate(self.eidxs[etype, fidx]):
-                    # Get the flux points position of the given face and
-                    # element indices relative to the moment origin
-                    if morigin is not None:
-                        ploc = self.locs[etype, fidx][i]
-                        rfpt = ploc - morigin
-                        rfpts[etype, fidx].append(rfpt)
-
-            self.rfpts = {k: np.array(v) for k, v in rfpts.items()}
-
+        if surf_list and morigin is not None:
+            self.rfpts = {
+                (etype, fidx): np.array([
+                    self.locs[etype, fidx][i] - morigin
+                    for i, _ in enumerate(self.eidxs[etype, fidx])
+                ])
+                for etype, fidx in self.eidxs
+            }
 
 class FluidForcePlugin(BaseSolnPlugin):
     name = 'fluidforce'
@@ -137,7 +132,8 @@ class FluidForcePlugin(BaseSolnPlugin):
 
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
-        if self._viscous: # Corrected solution gradients indexed by element type
+        # Corrected solution gradients indexed by element type
+        if self._viscous:
             cgrads = dict(zip(intg.system.ele_types, intg.grad_soln))
         ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
 
