@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
@@ -17,11 +15,8 @@ class FluidForceIntegrator(SurfaceIntegrator):
 
         if surf_list and morigin is not None:
             self.rfpts = {
-                (etype, fidx): np.array([
-                    self.locs[etype, fidx][i] - morigin
-                    for i, _ in enumerate(self.eidxs[etype, fidx])
-                ])
-                for etype, fidx in self.eidxs
+                (etype, fidx): self.locs[etype, fidx] - morigin
+                for etype, fidx in self.locs
             }
 
 class FluidForcePlugin(BaseSolnPlugin):
@@ -79,7 +74,8 @@ class FluidForcePlugin(BaseSolnPlugin):
                     raise ValueError('Invalid file format')
 
         # Set interpolation matrices and quadrature weights
-        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system, suffix, morigin)
+        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
+                                           suffix, morigin)
 
     @property
     def _header(self):
