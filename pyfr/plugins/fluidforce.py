@@ -14,10 +14,7 @@ class FluidForceIntegrator(SurfaceIntegrator):
         super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
 
         if surf_list and morigin is not None:
-            self.rfpts = {
-                (etype, fidx): self.locs[etype, fidx] - morigin
-                for etype, fidx in self.locs
-            }
+            self.rfpts = {k: loc - morigin for k, loc in self.locs.items()}
 
 class FluidForcePlugin(BaseSolnPlugin):
     name = 'fluidforce'
