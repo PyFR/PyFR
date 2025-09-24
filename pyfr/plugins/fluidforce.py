@@ -16,6 +16,7 @@ class FluidForceIntegrator(SurfaceIntegrator):
         if surf_list and morigin is not None:
             self.rfpts = {k: loc - morigin for k, loc in self.locs.items()}
 
+
 class FluidForcePlugin(BaseSolnPlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
@@ -123,19 +124,20 @@ class FluidForcePlugin(BaseSolnPlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
+        ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
+        pidx = 0 if self._ac else -1
+
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
+
         # Corrected solution gradients indexed by element type
         if self._viscous:
-            cgrads = dict(zip(intg.system.ele_types, intg.grad_soln))
-        ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
+            grads = dict(zip(intg.system.ele_types, intg.grad_soln))
 
         # Force and moment vectors
         fm = np.zeros((2 if self._viscous else 1, ndims + mcomp))
 
-        for etype, fidx in self.ff_int.m0:
-            # Get the interpolation operator
-            m0 = self.ff_int.m0[etype, fidx]
+        for (etype, fidx), m0 in self.ff_int.m0.items():
             nfpts, nupts = m0.shape
 
             # Extract the relevant elements from the solution
@@ -147,7 +149,6 @@ class FluidForcePlugin(BaseSolnPlugin):
             ufpts = ufpts.swapaxes(0, 1)
 
             # Compute the pressure
-            pidx = 0 if self._ac else -1
             p = self.elementscls.con_to_pri(ufpts, self.cfg)[pidx]
 
             # Get the quadrature weights and normal vectors
@@ -159,7 +160,7 @@ class FluidForcePlugin(BaseSolnPlugin):
 
             if self._viscous:
                 # Corrected gradients at solution points
-                duupts = cgrads[etype][..., self.ff_int.eidxs[etype, fidx]]
+                duupts = grads[etype][..., self.ff_int.eidxs[etype, fidx]]
                 duupts = duupts.reshape(ndims, nupts, -1)
 
                 # Interpolate gradient to flux points
