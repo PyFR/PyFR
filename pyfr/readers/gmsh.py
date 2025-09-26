@@ -318,12 +318,12 @@ class GmshReader(BaseReader):
         npts, *ents = (int(i) for i in next(mshit).split())
 
         # Skip over the point entities
-        for i in range(npts):
+        for _ in range(npts):
             next(mshit)
 
         # Iterate through the curves, surfaces, and volume entities
         for ndim, nent in enumerate(ents, start=1):
-            for j in range(nent):
+            for _ in range(nent):
                 ent = next(mshit).split()
                 etag, enphys = int(ent[0]), int(ent[7])
 
@@ -341,25 +341,23 @@ class GmshReader(BaseReader):
         self._read_nodes_impl(mshit)
 
     def _read_nodes_impl_v2(self, mshit):
-        nodemap = {}
-
-        # Read in the nodes as a dict
-        for l in msh_section(mshit, 'Nodes'):
-            nv = l.split()
-            nodemap[int(nv[0])] = nv[1:]
+        n = int(next(mshit))
+        nbuf = np.loadtxt(mshit, dtype='i8,3f8', max_rows=n)
 
         # Determine the minimum and maximum node numbers
-        ixl, ixu = min(nodemap), max(nodemap)
+        ixl, ixu = nbuf['f0'].min(), nbuf['f0'].max()
 
-        # Pack them into a dense array
+        # Allocate a dense array for the nodes
         self._nodepts = nodepts = np.empty((ixu - ixl + 1, 3))
         nodepts.fill(np.nan)
 
-        for k, nv in nodemap.items():
-            nodepts[k - ixl] = nv
+        nodepts[nbuf['f0'] - ixl] = nbuf['f1']
 
         # Save the starting node offset
         self._nodeoff = ixl
+
+        if next(mshit) != '$EndNodes\n':
+            raise ValueError('Expected $EndNodes')
 
     def _read_nodes_impl_v41(self, mshit):
         # Entity count, node count, minimum and maximum node numbers
@@ -368,12 +366,10 @@ class GmshReader(BaseReader):
         self._nodepts = nodepts = np.empty((ixu - ixl + 1, 3))
         nodepts.fill(np.nan)
 
-        for i in range(ne):
+        for _ in range(ne):
             nen = int(next(mshit).split()[-1])
-            nix = [int(next(mshit)) for _ in range(nen)]
-
-            for j in nix:
-                nodepts[j - ixl] = next(mshit).split()
+            nix = np.loadtxt(mshit, dtype=np.int64, max_rows=nen)
+            nodepts[nix - ixl] = np.loadtxt(mshit, max_rows=nen)
 
         # Save the starting node offset
         self._nodeoff = ixl
@@ -409,7 +405,7 @@ class GmshReader(BaseReader):
         # Block and total element count
         nb, ne = (int(i) for i in next(mshit).split()[:2])
 
-        for i in range(nb):
+        for _ in range(nb):
             edim, etag, etype, ecount = (int(j) for j in next(mshit).split())
 
             if etype not in self._etype_map:
@@ -422,9 +418,8 @@ class GmshReader(BaseReader):
             epent = self._tagpents[edim, etag]
 
             # Allocate space for, and read in, these elements
-            enodes = np.empty((ecount, nnodes), dtype=np.int64)
-            for j in range(ecount):
-                enodes[j] = next(mshit).split()[1:]
+            enodes = np.loadtxt(mshit, dtype=np.int64, max_rows=ecount,
+                                usecols=range(1, nnodes + 1))
 
             elenodes[etype, epent].append(enodes)
 

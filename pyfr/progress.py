@@ -196,6 +196,9 @@ class NullProgressSpinner(ProgressSpinner):
     def __call__(self, v=None):
         pass
 
+    def wrap_file_lines(self, iter, n):
+        yield from iter
+
 
 class ProgressSequence:
     def __init__(self, *, prefix=''):
