@@ -225,9 +225,11 @@ def dexpand(context, name, /, *args, **kwargs):
 
     # Ensure correct counts
     if nparams_pos + nparams_kw != len(mparams):
-        raise ValueError(f'Expected {len(mparams)} parameters')
+        emps = f'Expected {len(mparams)} parameters in {name}'
+        raise ValueError(emps)
     if ndparams_pos != len(mdparams):
-        raise ValueError(f'Expected {len(mdparams)} dynamic parameters')
+        emsg = f'Expected {len(mdparams)} dynamic parameters in {name}'
+        raise ValueError(emsg)
 
     # Split positional args between params and dparams
     params = args[:nparams_pos]
