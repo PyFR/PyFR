@@ -243,46 +243,50 @@ def dexpand(context, name, /, *args, **kwargs):
         raise ValueError(f'Dmacro "{name}" not defined')
 
     dmacro_info = context['_dmacros'][name]
-    params = dmacro_info['params']
-    externs = dmacro_info['externs']
-    dparams = dmacro_info['dparams']
+    mparams = dmacro_info['params']
+    mexterns = dmacro_info['externs']
+    mdparams = dmacro_info['dparams']
     template_callable = dmacro_info['template_callable']
 
-    # Parse arguments (C params first, then Python data params)
-    all_params = params + dparams
-    all_args = dict(zip(all_params, args))
-    for k, v in kwargs.items():
-        if k in all_args:
-            raise ValueError(f'Duplicate parameter {k} in dmacro {name}')
-        all_args[k] = v
+    # Validate argument count
+    # C params can come from args or kwargs, Python data must be positional
+    num_c_provided = len(kwargs)  # kwargs go to C params
+    num_py_provided = 0
 
-    # Validate all parameters provided
-    if sorted(all_params) != sorted(all_args.keys()):
-        raise ValueError(f'Inconsistent parameter list in dmacro {name}')
+    # Count how many positional args are for C params vs Python data
+    # Python data params come after we've satisfied C params
+    if len(args) <= len(mparams) - num_c_provided:
+        # All positional args are C params
+        num_c_provided += len(args)
+    else:
+        # Some positional args are C params, rest are Python data
+        num_c_provided += len(mparams) - len(kwargs)
+        num_py_provided = len(args) - (len(mparams) - len(kwargs))
 
-    # Separate C variable substitutions from Python data
-    c_subs = {k: all_args[k] for k in params}
-    py_data = {k: all_args[k] for k in dparams}
+    if num_c_provided != len(mparams):
+        raise ValueError(f'Expected {len(mparams)} C parameters in dmacro {name}')
+    if num_py_provided != len(mdparams):
+        raise ValueError(f'Expected {len(mdparams)} data parameters in dmacro {name}')
+
+    # Split positional args between C params and Python data
+    c_positional_count = len(mparams) - len(kwargs)
+    params = args[:c_positional_count]
+    dparams = args[c_positional_count:]
+
+    # Build Python data dict for template callable
+    py_data = dict(zip(mdparams, dparams))
 
     # Call template callable with Python data and capture output
     body = capture(context, template_callable, **py_data)
 
-    # Suffix local variable declarations to avoid conflicts
-    lvars = _locals(body)
-    if lvars:
-        body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
+    # Create temporary macro and delegate to expand() for processing
+    # Pass both positional C params and any kwargs (e.g., off=1)
+    temp_name = f'_dmacro_temp_{id(body)}'
+    context['_macros'][temp_name] = (mparams, mexterns, body)
+    result = expand(context, temp_name, *params, **kwargs)
+    del context['_macros'][temp_name]
 
-    # Validate external variables are available
-    for extrn in externs:
-        if (extrn not in context['_extrns'].keys() and
-            re.search(rf'\b{extrn}\b', body)):
-            raise ValueError(f'Missing external {extrn} in {name}')
-
-    # Perform string substitution for C variables
-    for pname, pval in c_subs.items():
-        body = re.sub(rf'\b{pname}\b', str(pval), body)
-
-    return f'{{\n{body}\n}}'
+    return result
 
 
 def alias(context, name, func):
