@@ -188,7 +188,7 @@ def dmacro(context, name, params, externs=''):
     if name in context['_dmacros']:
         raise RuntimeError(f'Attempt to redefine dmacro "{name}"')
 
-    # Parse C parameters and external variables
+    # Split up the parameter and external variable list
     params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
@@ -202,12 +202,12 @@ def dmacro(context, name, params, externs=''):
             raise ValueError(f'Invalid param "{p}" in dmacro "{name}"')
 
     # Store for later expansion
-    context['_dmacros'][name] = {
-        'params': params,
-        'externs': externs,
-        'dparams': dparams,
-        'template_callable': context['caller'].body
-    }
+    context['_dmacros'][name] = (
+        params,
+        externs,
+        dparams,
+        context['caller'].body
+    )
 
     return ''
 
@@ -215,10 +215,7 @@ def dmacro(context, name, params, externs=''):
 def dexpand(context, name, /, *args, **kwargs):
 
     dmacro_info = context['_dmacros'][name]
-    mparams = dmacro_info['params']
-    mexterns = dmacro_info['externs']
-    mdparams = dmacro_info['dparams']
-    template_callable = dmacro_info['template_callable']
+    mparams, mexterns, mdparams, macro_callable = dmacro_info
 
     # Validate argument count
     # Params can use args or kwargs; dparams must be positional
@@ -236,14 +233,13 @@ def dexpand(context, name, /, *args, **kwargs):
     params = args[:nparams_pos]
     dparams = args[nparams_pos:]
 
-    # Build Python data dict for template callable
+    # Build Python data dict for macro callable
     py_data = dict(zip(mdparams, dparams))
 
-    # Call template callable with Python data and capture output
-    body = capture(context, template_callable, **py_data)
+    # Call macro callable with Python data and capture output
+    body = capture(context, macro_callable, **py_data)
 
-    # Create temporary macro and delegate to expand() for processing
-    # Pass both positional C params and any kwargs (e.g., off=1)
+    # Store temporary macro and delegate to expand() for processing
     temp_name = f'_dmacro_temp_{id(body)}'
     context['_macros'][temp_name] = (mparams, mexterns, body)
     result = expand(context, temp_name, *params, **kwargs)
