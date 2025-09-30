@@ -184,21 +184,7 @@ def kernel(context, name, ndim, **kwargs):
 
 @supports_caller
 def dmacro(context, name, params, externs=''):
-    """
-    Define a dynamic macro with Python data parameters.
 
-    Unlike regular macros where Python executes at definition time, dmacros
-    allow Python data to be passed at expansion time. This enables reusable
-    constructs that accept runtime Python data (e.g., numpy arrays) while
-    supporting C variable string substitution.
-
-    Syntax: <%pyfr:dmacro name='...' params='c_vars' args='py_vars'>
-
-    Args:
-        name: Macro name
-        params: Comma-separated C variable names (string substitution)
-        externs: Comma-separated external variable names
-    """
     if name in context['_dmacros']:
         raise RuntimeError(f'Attempt to redefine dmacro "{name}"')
 
@@ -227,20 +213,6 @@ def dmacro(context, name, params, externs=''):
 
 
 def dexpand(context, name, /, *args, **kwargs):
-    """
-    Expand a dynamic macro with Python data and C variable substitution.
-
-    Retrieves the dmacro, calls its template callable with Python data,
-    then performs string substitution for C variables.
-
-    Args:
-        name: Dmacro name
-        *args: C param values followed by Python data values (positional)
-        **kwargs: C param and Python data values (named)
-    """
-    # Retrieve the dmacro definition
-    if '_dmacros' not in context.keys() or name not in context['_dmacros']:
-        raise ValueError(f'Dmacro "{name}" not defined')
 
     dmacro_info = context['_dmacros'][name]
     mparams = dmacro_info['params']
@@ -249,29 +221,20 @@ def dexpand(context, name, /, *args, **kwargs):
     template_callable = dmacro_info['template_callable']
 
     # Validate argument count
-    # C params can come from args or kwargs, Python data must be positional
-    num_c_provided = len(kwargs)  # kwargs go to C params
-    num_py_provided = 0
+    # Params can use args or kwargs; dparams must be positional
+    nparams_kw = len(kwargs)
+    nparams_pos = len(mparams) - nparams_kw
+    ndparams_pos = len(args) - nparams_pos
 
-    # Count how many positional args are for C params vs Python data
-    # Python data params come after we've satisfied C params
-    if len(args) <= len(mparams) - num_c_provided:
-        # All positional args are C params
-        num_c_provided += len(args)
-    else:
-        # Some positional args are C params, rest are Python data
-        num_c_provided += len(mparams) - len(kwargs)
-        num_py_provided = len(args) - (len(mparams) - len(kwargs))
+    # Ensure correct counts
+    if nparams_pos + nparams_kw != len(mparams):
+        raise ValueError(f'Expected {len(mparams)} parameters')
+    if ndparams_pos != len(mdparams):
+        raise ValueError(f'Expected {len(mdparams)} dynamic parameters')
 
-    if num_c_provided != len(mparams):
-        raise ValueError(f'Expected {len(mparams)} C parameters in dmacro {name}')
-    if num_py_provided != len(mdparams):
-        raise ValueError(f'Expected {len(mdparams)} data parameters in dmacro {name}')
-
-    # Split positional args between C params and Python data
-    c_positional_count = len(mparams) - len(kwargs)
-    params = args[:c_positional_count]
-    dparams = args[c_positional_count:]
+    # Split positional args between params and dparams
+    params = args[:nparams_pos]
+    dparams = args[nparams_pos:]
 
     # Build Python data dict for template callable
     py_data = dict(zip(mdparams, dparams))
