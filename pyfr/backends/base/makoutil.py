@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+import inspect
 import itertools as it
 import re
 
@@ -179,6 +180,109 @@ def kernel(context, name, ndim, **kwargs):
 
     # Render and return the complete kernel
     return kern.render()
+
+
+@supports_caller
+def dmacro(context, name, params, externs=''):
+    """
+    Define a dynamic macro with Python data parameters.
+
+    Unlike regular macros where Python executes at definition time, dmacros
+    allow Python data to be passed at expansion time. This enables reusable
+    constructs that accept runtime Python data (e.g., numpy arrays) while
+    supporting C variable string substitution.
+
+    Syntax: <%pyfr:dmacro name='...' params='c_vars' args='py_vars'>
+
+    Args:
+        name: Macro name
+        params: Comma-separated C variable names (string substitution)
+        externs: Comma-separated external variable names
+    """
+    if name in context['_dmacros']:
+        raise RuntimeError(f'Attempt to redefine dmacro "{name}"')
+
+    # Parse C parameters and external variables
+    params = [p.strip() for p in params.split(',')]
+    externs = [e.strip() for e in externs.split(',')] if externs else []
+
+    # Extract Python data parameters from caller signature
+    sig = inspect.signature(context['caller'].body).parameters
+    dparams = [p.name for p in sig.values()]
+
+    # Validate all parameter names
+    for p in it.chain(params, externs, dparams):
+        if not re.match(r'[A-Za-z_]\w*$', p):
+            raise ValueError(f'Invalid param "{p}" in dmacro "{name}"')
+
+    # Store for later expansion
+    context['_dmacros'][name] = {
+        'params': params,
+        'externs': externs,
+        'dparams': dparams,
+        'template_callable': context['caller'].body
+    }
+
+    return ''
+
+
+def dexpand(context, name, /, *args, **kwargs):
+    """
+    Expand a dynamic macro with Python data and C variable substitution.
+
+    Retrieves the dmacro, calls its template callable with Python data,
+    then performs string substitution for C variables.
+
+    Args:
+        name: Dmacro name
+        *args: C param values followed by Python data values (positional)
+        **kwargs: C param and Python data values (named)
+    """
+    # Retrieve the dmacro definition
+    if '_dmacros' not in context.keys() or name not in context['_dmacros']:
+        raise ValueError(f'Dmacro "{name}" not defined')
+
+    dmacro_info = context['_dmacros'][name]
+    params = dmacro_info['params']
+    externs = dmacro_info['externs']
+    dparams = dmacro_info['dparams']
+    template_callable = dmacro_info['template_callable']
+
+    # Parse arguments (C params first, then Python data params)
+    all_params = params + dparams
+    all_args = dict(zip(all_params, args))
+    for k, v in kwargs.items():
+        if k in all_args:
+            raise ValueError(f'Duplicate parameter {k} in dmacro {name}')
+        all_args[k] = v
+
+    # Validate all parameters provided
+    if sorted(all_params) != sorted(all_args.keys()):
+        raise ValueError(f'Inconsistent parameter list in dmacro {name}')
+
+    # Separate C variable substitutions from Python data
+    c_subs = {k: all_args[k] for k in params}
+    py_data = {k: all_args[k] for k in dparams}
+
+    # Call template callable with Python data and capture output
+    body = capture(context, template_callable, **py_data)
+
+    # Suffix local variable declarations to avoid conflicts
+    lvars = _locals(body)
+    if lvars:
+        body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
+
+    # Validate external variables are available
+    for extrn in externs:
+        if (extrn not in context['_extrns'].keys() and
+            re.search(rf'\b{extrn}\b', body)):
+            raise ValueError(f'Missing external {extrn} in {name}')
+
+    # Perform string substitution for C variables
+    for pname, pval in c_subs.items():
+        body = re.sub(rf'\b{pname}\b', str(pval), body)
+
+    return f'{{\n{body}\n}}'
 
 
 def alias(context, name, func):
