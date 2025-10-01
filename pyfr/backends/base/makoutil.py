@@ -2,8 +2,9 @@ from collections.abc import Iterable
 import inspect
 import itertools as it
 import re
+from collections import namedtuple
 
-from mako.runtime import supports_caller, capture, Undefined
+from mako.runtime import Undefined, supports_caller, capture
 import numpy as np
 
 import pyfr.nputil as nputil
@@ -106,10 +107,11 @@ def macro(context, name, params, externs=''):
     # Validate all parameter names
     for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid param "{p}" in dmacro "{name}"')
+            raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
+    Macro = namedtuple('Macro', ['params', 'externs', 'dparams', 'caller'])
     # Store for later capture
-    context['_macros'][name] = (
+    context['_macros'][name] = Macro(
         params,
         externs,
         dparams,
@@ -121,8 +123,10 @@ def macro(context, name, params, externs=''):
 
 def expand(context, name, /, *args, **kwargs):
 
-    macro_info = context['_macros'][name]
-    mparams, mexterns, mdparams, macro_callable = macro_info
+    mparams = context['_macros'][name].params
+    mexterns = context['_macros'][name].externs
+    mdparams = context['_macros'][name].dparams
+    macro_callable = context['_macros'][name].caller
 
     # Validate argument count
     # Params can use args or kwargs; dparams must be positional
@@ -132,29 +136,28 @@ def expand(context, name, /, *args, **kwargs):
 
     # Ensure correct counts
     if nparams_pos + nparams_kw != len(mparams):
-        emps = f'Expected {len(mparams)} parameters in {name}'
-        raise ValueError(emps)
+        raise ValueError(f'Expected {len(mparams)} parameters in "{name}"')
     if ndparams_pos != len(mdparams):
-        emsg = f'Expected {len(mdparams)} dynamic parameters in {name}'
-        raise ValueError(emsg)
+        raise ValueError(f'Expected {len(mdparams)} dynamic parameters '
+                         f'in "{name}"')
 
     # Split positional args between params and dparams
     params = dict(zip(mparams, args[:nparams_pos]))
     for k, v in kwargs.items():
         if k in params:
-            raise ValueError(f'Duplicate macro parameter {k} in {name}')
+            raise ValueError(f'Duplicate macro parameter "{k}" in "{name}"')
 
         params[k] = v
 
     # Check all python data is defined
     dparams = dict(zip(mdparams, args[nparams_pos:]))
     for k, v in dparams.items():
-        if type(v) == Undefined:
-            raise ValueError(f'Undefined data parameter {k} passed to {name}')
+        if isinstance(v, Undefined):
+            raise ValueError(f'Undefined data parameter "{k}" passed to "{name}"')
 
     # Ensure all parameters have been passed
     if sorted(mparams) != sorted(params):
-        raise ValueError(f'Inconsistent macro parameter list in {name}')
+        raise ValueError(f'Inconsistent macro parameter list in "{name}"')
 
     # Call macro callable with any Python data and capture output
     body = capture(context, macro_callable, **dparams)
@@ -170,7 +173,7 @@ def expand(context, name, /, *args, **kwargs):
     for extrn in mexterns:
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
-            raise ValueError(f'Missing external {extrn} in {name}')
+            raise ValueError(f'Missing external "{extrn}" in "{name}"')
 
     # Rename local parameters
     for lname, subst in params.items():
