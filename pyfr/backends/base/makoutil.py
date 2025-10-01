@@ -3,7 +3,7 @@ import inspect
 import itertools as it
 import re
 
-from mako.runtime import supports_caller, capture
+from mako.runtime import supports_caller, capture, Undefined
 import numpy as np
 
 import pyfr.nputil as nputil
@@ -138,7 +138,7 @@ def expand(context, name, /, *args, **kwargs):
         emsg = f'Expected {len(mdparams)} dynamic parameters in {name}'
         raise ValueError(emsg)
 
-    # Parse the parameter list
+    # Split positional args between params and dparams
     params = dict(zip(mparams, args[:nparams_pos]))
     for k, v in kwargs.items():
         if k in params:
@@ -146,8 +146,11 @@ def expand(context, name, /, *args, **kwargs):
 
         params[k] = v
 
-    # Split positional args between params and dparams
+    # Check all python data is defined
     dparams = dict(zip(mdparams, args[nparams_pos:]))
+    for k, v in dparams.items():
+        if type(v) == Undefined:
+            raise ValueError(f'Undefined data parameter {k} passed to {name}')
 
     # Ensure all parameters have been passed
     if sorted(mparams) != sorted(params):
