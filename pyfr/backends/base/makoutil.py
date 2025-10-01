@@ -90,6 +90,9 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
+Macro = namedtuple('Macro', ['params', 'externs', 'dparams', 'caller'])
+
+
 @supports_caller
 def macro(context, name, params, externs=''):
     # Check we have not already been defined
@@ -109,24 +112,20 @@ def macro(context, name, params, externs=''):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
-    Macro = namedtuple('Macro', ['params', 'externs', 'dparams', 'caller'])
     # Store for later capture
-    context['_macros'][name] = Macro(
-        params,
-        externs,
-        dparams,
-        context['caller'].body
-    )
+    context['_macros'][name] = Macro(params, externs, dparams,
+                                     context['caller'].body)
 
     return ''
 
 
 def expand(context, name, /, *args, **kwargs):
 
-    mparams = context['_macros'][name].params
-    mexterns = context['_macros'][name].externs
-    mdparams = context['_macros'][name].dparams
-    macro_callable = context['_macros'][name].caller
+    macinfo = context['_macros'][name]
+    mparams = macinfo.params
+    mexterns = macinfo.externs
+    mdparams = macinfo.dparams
+    mcaller = macinfo.caller
 
     # Validate argument count
     # Params can use args or kwargs; dparams must be positional
@@ -160,7 +159,7 @@ def expand(context, name, /, *args, **kwargs):
         raise ValueError(f'Inconsistent macro parameter list in "{name}"')
 
     # Call macro callable with any Python data and capture output
-    body = capture(context, macro_callable, **dparams)
+    body = capture(context, mcaller, **dparams)
 
     # Identify any local variable declarations
     lvars = _locals(body)
