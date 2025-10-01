@@ -120,7 +120,6 @@ def macro(context, name, params, externs=''):
 
 
 def expand(context, name, /, *args, **kwargs):
-
     macrodef = context['_macros'][name]
     mparams = macrodef.params
     mexterns = macrodef.externs
