@@ -1,10 +1,10 @@
+from collections import namedtuple
 from collections.abc import Iterable
 import inspect
 import itertools as it
 import re
-from collections import namedtuple
 
-from mako.runtime import Undefined, supports_caller, capture
+from mako.runtime import Undefined, capture, supports_caller
 import numpy as np
 
 import pyfr.nputil as nputil
@@ -121,11 +121,11 @@ def macro(context, name, params, externs=''):
 
 def expand(context, name, /, *args, **kwargs):
 
-    macinfo = context['_macros'][name]
-    mparams = macinfo.params
-    mexterns = macinfo.externs
-    mdparams = macinfo.dparams
-    mcaller = macinfo.caller
+    macrodef = context['_macros'][name]
+    mparams = macrodef.params
+    mexterns = macrodef.externs
+    mdparams = macrodef.dparams
+    mcaller = macrodef.caller
 
     # Validate argument count
     # Params can use args or kwargs; dparams must be positional
