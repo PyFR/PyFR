@@ -74,9 +74,6 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Macro definitions
         tplargs['_macros'] = {}
 
-        # Dynamic macro definitions
-        tplargs['_dmacros'] = {}
-
         # External kernel arguments dictionary
         tplargs['_extrns'] = extrns
 
