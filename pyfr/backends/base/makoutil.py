@@ -99,13 +99,62 @@ def macro(context, name, params, externs=''):
     params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
-    # Ensure no invalid characters in params/extern variables
+    # Extract Python data parameters from caller signature
+    sig = inspect.signature(context['caller'].body).parameters
+    dparams = [p.name for p in sig.values()]
+
+    # Validate all parameter names
     for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid param "{p}" in macro "{name}"')
+            raise ValueError(f'Invalid param "{p}" in dmacro "{name}"')
 
-    # Capture the function body
-    body = capture(context, context['caller'].body)
+    # Store for later capture
+    context['_macros'][name] = (
+        params,
+        externs,
+        dparams,
+        context['caller'].body
+    )
+
+    return ''
+
+
+def expand(context, name, /, *args, **kwargs):
+
+    macro_info = context['_macros'][name]
+    mparams, mexterns, mdparams, macro_callable = macro_info
+
+    # Validate argument count
+    # Params can use args or kwargs; dparams must be positional
+    nparams_kw = len(kwargs)
+    nparams_pos = len(mparams) - nparams_kw
+    ndparams_pos = len(args) - nparams_pos
+
+    # Ensure correct counts
+    if nparams_pos + nparams_kw != len(mparams):
+        emps = f'Expected {len(mparams)} parameters in {name}'
+        raise ValueError(emps)
+    if ndparams_pos != len(mdparams):
+        emsg = f'Expected {len(mdparams)} dynamic parameters in {name}'
+        raise ValueError(emsg)
+
+    # Parse the parameter list
+    params = dict(zip(mparams, args[:nparams_pos]))
+    for k, v in kwargs.items():
+        if k in params:
+            raise ValueError(f'Duplicate macro parameter {k} in {name}')
+
+        params[k] = v
+
+    # Split positional args between params and dparams
+    dparams = dict(zip(mdparams, args[nparams_pos:]))
+
+    # Ensure all parameters have been passed
+    if sorted(mparams) != sorted(params):
+        raise ValueError(f'Inconsistent macro parameter list in {name}')
+
+    # Call macro callable with any Python data and capture output
+    body = capture(context, macro_callable, **dparams)
 
     # Identify any local variable declarations
     lvars = _locals(body)
@@ -113,32 +162,6 @@ def macro(context, name, params, externs=''):
     # Suffix these variables by a '_'
     if lvars:
         body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
-
-    # Save
-    context['_macros'][name] = (params, externs, body)
-
-    return ''
-
-
-def expand(context, name, /, *args, **kwargs):
-    # Get the macro parameter list and the body
-    mparams, mexterns, body = context['_macros'][name]
-
-    # Ensure an appropriate number of arguments have been passed
-    if len(mparams) != len(args) + len(kwargs):
-        raise ValueError(f'Inconsistent macro parameter list in {name}')
-
-    # Parse the parameter list
-    params = dict(zip(mparams, args))
-    for k, v in kwargs.items():
-        if k in params:
-            raise ValueError(f'Duplicate macro parameter {k} in {name}')
-
-        params[k] = v
-
-    # Ensure all parameters have been passed
-    if sorted(mparams) != sorted(params):
-        raise ValueError(f'Inconsistent macro parameter list in {name}')
 
     # Ensure all (used) external parameters have been passed to the kernel
     for extrn in mexterns:
@@ -180,74 +203,6 @@ def kernel(context, name, ndim, **kwargs):
 
     # Render and return the complete kernel
     return kern.render()
-
-
-@supports_caller
-def dmacro(context, name, params, externs=''):
-
-    if name in context['_dmacros']:
-        raise RuntimeError(f'Attempt to redefine dmacro "{name}"')
-
-    # Split up the parameter and external variable list
-    params = [p.strip() for p in params.split(',')]
-    externs = [e.strip() for e in externs.split(',')] if externs else []
-
-    # Extract Python data parameters from caller signature
-    sig = inspect.signature(context['caller'].body).parameters
-    dparams = [p.name for p in sig.values()]
-
-    # Validate all parameter names
-    for p in it.chain(params, externs, dparams):
-        if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid param "{p}" in dmacro "{name}"')
-
-    # Store for later expansion
-    context['_dmacros'][name] = (
-        params,
-        externs,
-        dparams,
-        context['caller'].body
-    )
-
-    return ''
-
-
-def dexpand(context, name, /, *args, **kwargs):
-
-    dmacro_info = context['_dmacros'][name]
-    mparams, mexterns, mdparams, macro_callable = dmacro_info
-
-    # Validate argument count
-    # Params can use args or kwargs; dparams must be positional
-    nparams_kw = len(kwargs)
-    nparams_pos = len(mparams) - nparams_kw
-    ndparams_pos = len(args) - nparams_pos
-
-    # Ensure correct counts
-    if nparams_pos + nparams_kw != len(mparams):
-        emps = f'Expected {len(mparams)} parameters in {name}'
-        raise ValueError(emps)
-    if ndparams_pos != len(mdparams):
-        emsg = f'Expected {len(mdparams)} dynamic parameters in {name}'
-        raise ValueError(emsg)
-
-    # Split positional args between params and dparams
-    params = args[:nparams_pos]
-    dparams = args[nparams_pos:]
-
-    # Build Python data dict for macro callable
-    py_data = dict(zip(mdparams, dparams))
-
-    # Call macro callable with Python data and capture output
-    body = capture(context, macro_callable, **py_data)
-
-    # Store temporary macro and delegate to expand() for processing
-    temp_name = f'_dmacro_temp_{id(body)}'
-    context['_macros'][temp_name] = (mparams, mexterns, body)
-    result = expand(context, temp_name, *params, **kwargs)
-    del context['_macros'][temp_name]
-
-    return result
 
 
 def alias(context, name, func):
