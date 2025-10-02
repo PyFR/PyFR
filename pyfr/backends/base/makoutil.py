@@ -91,37 +91,6 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-def _extract_macro_body(source, name, context, visited=None):
-    # Extract the body of a macro from template source.
-    # Matches: <%pyfr:macro name='name' ...>BODY</%pyfr:macro>
-    pattern = rf'<%pyfr:macro\s+name=[\'"]({name})[\'"].*?>(.*?)</%pyfr:macro>'
-
-    if visited is None:
-        visited = set()
-
-    match = re.search(pattern, source, re.DOTALL)
-    if match:
-        return match.group(2)
-
-    # The macro might be in an included file - search recursively
-    # Look for <%include file='...'/>  in the source
-    includes = re.findall(r'<%include\s+file=[\'"]([^\'"]+)[\'"]', source)
-
-    for inc in includes:
-        if inc in visited:
-            continue
-        visited.add(inc)
-
-        tpl = context.lookup.get_template(inc)
-        # Recursively search this include and its includes
-        try:
-            return _extract_macro_body(tpl.source, name, context, visited)
-        except RuntimeError:
-            continue
-
-    raise RuntimeError(f'Could not find macro "{name}" in template source')
-
-
 Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller'])
 
 
@@ -153,8 +122,8 @@ def macro(context, name, params, externs=''):
         # Need to recreate macro with args='...'
         template = context._with_template
 
-        # Extract the macro body from the template source
-        macrostr = _extract_macro_body(template.source, name, context)
+        # Extract the raw macro body text
+        macrostr = context.lookup.get_raw_macro(template.source, name)
 
         # Extract namespace directives (but NOT includes, to avoid re-registering macros)
         namespaces = re.findall(r'<%namespace[^>]+/>', template.source)
