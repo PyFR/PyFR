@@ -1,6 +1,5 @@
 from collections import namedtuple
 from collections.abc import Iterable
-import inspect
 import itertools as it
 import re
 
