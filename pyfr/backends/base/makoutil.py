@@ -5,6 +5,7 @@ import itertools as it
 import re
 
 from mako.runtime import Undefined, capture, supports_caller
+from mako.template import Template
 import numpy as np
 
 import pyfr.nputil as nputil
@@ -90,7 +91,30 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-Macro = namedtuple('Macro', ['params', 'externs', 'dparams', 'caller'])
+def _extract_macro_body(template_source, macro_name, context):
+    # Extract the body of a macro from template source.
+    # Matches: <%pyfr:macro name='macro_name' ...>BODY</%pyfr:macro>
+    pattern = rf'<%pyfr:macro\s+name=[\'"]({macro_name})[\'"].*?>(.*?)</%pyfr:macro>'
+
+    match = re.search(pattern, template_source, re.DOTALL)
+    if match:
+        return match.group(2)
+
+    # The macro might be in an included file
+    # Look for <%include file='...'/>  in the source
+    includes = re.findall(r'<%include\s+file=[\'"]([^\'"]+)[\'"]', template_source)
+
+    for include_name in includes:
+        included_tpl = context.lookup.get_template(include_name)
+        match = re.search(pattern, included_tpl.source, re.DOTALL)
+        if match:
+            return match.group(2)
+
+    raise RuntimeError(f'Could not find macro "{macro_name}" in template source')
+
+
+Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller',
+                             'template'])
 
 
 @supports_caller
@@ -100,21 +124,38 @@ def macro(context, name, params, externs=''):
         raise RuntimeError(f'Attempt to redefine macro "{name}"')
 
     # Split up the parameter and external variable list
-    params = [p.strip() for p in params.split(',')]
+    pyparams = [p.strip().removeprefix('py:') for p in params.split(',')
+                if p.strip().startswith('py:')]
+    params = [p.strip() for p in params.split(',')
+              if not p.strip().startswith('py:')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
-    # Extract Python data parameters from caller signature
-    sig = inspect.signature(context['caller'].body).parameters
-    dparams = [p.name for p in sig.values()]
-
     # Validate all parameter names
-    for p in it.chain(params, externs):
+    for p in it.chain(params, pyparams, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
-    # Store for later capture
-    context['_macros'][name] = Macro(params, externs, dparams,
-                                     context['caller'].body)
+    # If there are Python params, we need to create a callable with the proper signature
+    if pyparams:
+        # Get the template source
+        template = context._with_template
+
+        # Extract the macro body from the template source
+        macrostr = _extract_macro_body(template.source, name, context)
+
+        # Create a new template with a <%def> that has the pyparams signature
+        tempstr = f'''<%def name="body({', '.join(pyparams)})">
+{macrostr}
+</%def>'''
+
+        # Store the template itself, not the callable
+        # Then in expand(), render it with the proper context
+        context['_macros'][name] = Macro(params, externs, pyparams,
+                                         None, Template(tempstr))
+    else:
+        # No Python params, use the original callable
+        context['_macros'][name] = Macro(params, externs, pyparams,
+                                         context['caller'].body, None)
 
     return ''
 
@@ -123,42 +164,79 @@ def expand(context, name, /, *args, **kwargs):
     macrodef = context['_macros'][name]
     mparams = macrodef.params
     mexterns = macrodef.externs
-    mdparams = macrodef.dparams
+    mpyparams = macrodef.pyparams
     mcaller = macrodef.caller
+    mtemplate = macrodef.template
 
-    # Validate argument count
-    # Params can use args or kwargs; dparams must be positional
-    nparams_kw = len(kwargs)
-    nparams_pos = len(mparams) - nparams_kw
-    ndparams_pos = len(args) - nparams_pos
+    # Separate kwargs into C params and Python data params
+    paramskw = {}
+    pyparamskw = {}
 
-    # Ensure correct counts
-    if nparams_pos + nparams_kw != len(mparams):
-        raise ValueError(f'Expected {len(mparams)} parameters in "{name}"')
-    if ndparams_pos != len(mdparams):
-        raise ValueError(f'Expected {len(mdparams)} dynamic parameters '
+    for k, v in kwargs.items():
+        if k in mpyparams:
+            pyparamskw[k] = v
+        elif k in mparams:
+            paramskw[k] = v
+        else:
+            raise ValueError(f'Unknown parameter "{k}" in macro "{name}"')
+
+    # Build params dict from positional args and kwargs
+    # Positional args fill in params first, then any remaining go to pyparams
+    nparamspos = len(mparams) - len(paramskw)
+    params = dict(zip(mparams, args[:nparamspos]))
+    params.update(paramskw)
+
+    # Check we got all params
+    if len(params) != len(mparams):
+        raise ValueError(f'Incomplete or duplicate parameters in "{name}"')
+
+    # Build pyparams dict: remaining positional args + kwargs
+    # Positional args fill in mpyparams in order
+    pyparamspos = args[nparamspos:]
+    pyparams = {}
+
+    # Fill in positional pyparams first (in order from mpyparams)
+    posidx = 0
+    for pyparam in mpyparams:
+        if pyparam in pyparamskw:
+            # Provided as keyword arg
+            pyparams[pyparam] = pyparamskw[pyparam]
+        elif posidx < len(pyparamspos):
+            # Provided as positional arg
+            pyparams[pyparam] = pyparamspos[posidx]
+            posidx += 1
+
+    # Check we got all pyparams
+    if len(pyparams) != len(mpyparams):
+        raise ValueError(f'Incomplete or duplicate Python data parameters '
                          f'in "{name}"')
 
-    # Split positional args between params and dparams
-    params = dict(zip(mparams, args[:nparams_pos]))
-    for k, v in kwargs.items():
-        if k in params:
-            raise ValueError(f'Duplicate macro parameter "{k}" in "{name}"')
-
-        params[k] = v
-
     # Check all python data is defined
-    dparams = dict(zip(mdparams, args[nparams_pos:]))
-    for k, v in dparams.items():
+    for k, v in pyparams.items():
         if isinstance(v, Undefined):
-            raise ValueError(f'Undefined data parameter "{k}" passed to "{name}"')
-
-    # Ensure all parameters have been passed
-    if sorted(mparams) != sorted(params):
-        raise ValueError(f'Inconsistent macro parameter list in "{name}"')
+            raise ValueError(f'Undefined Python data parameter "{k}" '
+                             f'passed to "{name}"')
 
     # Call macro callable with any Python data and capture output
-    body = capture(context, mcaller, **dparams)
+    if mtemplate:
+        # Render the template's body def with the pyparams
+        # The template has a <%def name="body(...)"> that we need to call
+        from mako.runtime import Context
+        from io import StringIO
+
+        # Create a buffer and context for rendering
+        # Pass all the original context variables so the macro body can access
+        # things like fpdtype, math functions, etc.
+        buf = StringIO()
+        context_data = {k: context.get(k) for k in context.keys()}
+        render_context = Context(buf, **context_data)
+
+        # Call the render_body function with the context and pyparams as arguments
+        mtemplate.module.render_body(render_context, **pyparams)
+        body = buf.getvalue()
+    else:
+        # Original callable
+        body = capture(context, mcaller, **pyparams)
 
     # Identify any local variable declarations
     lvars = _locals(body)
