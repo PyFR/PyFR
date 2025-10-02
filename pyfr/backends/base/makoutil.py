@@ -122,8 +122,13 @@ def macro(context, name, params, externs=''):
         # Need to recreate macro with args='...'
         template = context._with_template
 
+        # Debug: Verify what we have access to
+        print(f"\nDEBUG: Finding macro '{name}'", flush=True)
+        print(f"DEBUG: template.uri = {template.uri}", flush=True)
+        print(f"DEBUG: First 300 chars of template.source:\n{template.source[:300]}", flush=True)
+
         # Extract the raw macro body text
-        macrostr = context.lookup.get_raw_macro(template.source, name)
+        rawbody = context.lookup.get_raw_macro(template.source, name)
 
         # Extract namespace directives (but NOT includes, to avoid re-registering macros)
         namespaces = re.findall(r'<%namespace[^>]+/>', template.source)
@@ -133,15 +138,15 @@ def macro(context, name, params, externs=''):
         psrt = ','.join(params)
         esrt = ','.join(externs)
         astr = ', '.join(pyparams)
-        newmacro = f'''{header}
+        mstring = f'''{header}
 
 <%pyfr:macro name='{name}' params='{psrt}' externs='{esrt}' args='{astr}'>
-{macrostr}
+{rawbody}
 </%pyfr:macro>'''
 
         # Render the new template - this will call macro()
         # again with sigargs populated
-        new_template = Template(newmacro, lookup=context.lookup)
+        new_template = Template(mstring, lookup=context.lookup)
         new_template.render_context(context)
 
         # After rendering, the macro should be registered by the above render
