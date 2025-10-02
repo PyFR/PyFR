@@ -122,12 +122,8 @@ def macro(context, name, params, externs=''):
         # Need to recreate macro with args='...'
         template = context._with_template
 
-        # Debug: Verify what we have access to
-        print(f"\nDEBUG: Finding macro '{name}'", flush=True)
-        print(f"DEBUG: template.uri = {template.uri}", flush=True)
-        print(f"DEBUG: First 300 chars of template.source:\n{template.source[:300]}", flush=True)
-
-        # Extract the raw macro body text
+        # Extract the raw macro body text by searching from the top-level
+        # template down through the include tree
         rawbody = context.lookup.get_raw_macro(template.source, name)
 
         # Extract namespace directives (but NOT includes, to avoid re-registering macros)
