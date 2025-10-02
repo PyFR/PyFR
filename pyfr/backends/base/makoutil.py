@@ -90,24 +90,33 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-def _extract_macro_body(template_source, macro_name, context):
+def _extract_macro_body(template_source, macro_name, context, visited=None):
     # Extract the body of a macro from template source.
     # Matches: <%pyfr:macro name='macro_name' ...>BODY</%pyfr:macro>
     pattern = rf'<%pyfr:macro\s+name=[\'"]({macro_name})[\'"].*?>(.*?)</%pyfr:macro>'
+
+    if visited is None:
+        visited = set()
 
     match = re.search(pattern, template_source, re.DOTALL)
     if match:
         return match.group(2)
 
-    # The macro might be in an included file
+    # The macro might be in an included file - search recursively
     # Look for <%include file='...'/>  in the source
     includes = re.findall(r'<%include\s+file=[\'"]([^\'"]+)[\'"]', template_source)
 
     for include_name in includes:
+        if include_name in visited:
+            continue
+        visited.add(include_name)
+
         included_tpl = context.lookup.get_template(include_name)
-        match = re.search(pattern, included_tpl.source, re.DOTALL)
-        if match:
-            return match.group(2)
+        # Recursively search this include and its includes
+        try:
+            return _extract_macro_body(included_tpl.source, macro_name, context, visited)
+        except RuntimeError:
+            continue
 
     raise RuntimeError(f'Could not find macro "{macro_name}" in template source')
 
@@ -134,7 +143,8 @@ def macro(context, name, params, externs=''):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
-    # If there are Python params, we need to create a callable with the proper signature
+    # If there are Python params, we need to create a callable
+    # with the proper signature
     if pyparams:
         # Get the template source
         template = context._with_template
@@ -143,7 +153,9 @@ def macro(context, name, params, externs=''):
         macrostr = _extract_macro_body(template.source, name, context)
 
         # Create a new template with a <%def> that has the pyparams signature
-        tempstr = f'''<%def name="body({', '.join(pyparams)})">
+        # Include the pyfr namespace so nested macros can call pyfr.expand()
+        tempstr = f'''<%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
+<%def name="body({', '.join(pyparams)})">
 {macrostr}
 </%def>'''
 
@@ -219,20 +231,13 @@ def expand(context, name, /, *args, **kwargs):
     # Call macro callable with any Python data and capture output
     if mtemplate:
         # Render the template's body def with the pyparams
-        # The template has a <%def name="body(...)"> that we need to call
-        from mako.runtime import Context
-        from io import StringIO
-
-        # Create a buffer and context for rendering
-        # Pass all the original context variables so the macro body can access
-        # things like fpdtype, math functions, etc.
-        buf = StringIO()
-        context_data = {k: context.get(k) for k in context.keys()}
-        render_context = Context(buf, **context_data)
-
-        # Call the render_body function with the context and pyparams as arguments
-        mtemplate.module.render_body(render_context, **pyparams)
-        body = buf.getvalue()
+        # Use the existing context so namespaces and everything is available
+        context._push_buffer()
+        try:
+            # Call the render_body function with the context and pyparams
+            mtemplate.module.render_body(context, **pyparams)
+        finally:
+            body = context._pop_buffer().getvalue()
     else:
         # Original callable
         body = capture(context, mcaller, **pyparams)
