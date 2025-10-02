@@ -1,5 +1,6 @@
 from collections import namedtuple
 from collections.abc import Iterable
+import inspect
 import itertools as it
 import re
 
@@ -90,84 +91,104 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-def _extract_macro_body(template_source, macro_name, context, visited=None):
+def _extract_macro_body(source, name, context, visited=None):
     # Extract the body of a macro from template source.
-    # Matches: <%pyfr:macro name='macro_name' ...>BODY</%pyfr:macro>
-    pattern = rf'<%pyfr:macro\s+name=[\'"]({macro_name})[\'"].*?>(.*?)</%pyfr:macro>'
+    # Matches: <%pyfr:macro name='name' ...>BODY</%pyfr:macro>
+    pattern = rf'<%pyfr:macro\s+name=[\'"]({name})[\'"].*?>(.*?)</%pyfr:macro>'
 
     if visited is None:
         visited = set()
 
-    match = re.search(pattern, template_source, re.DOTALL)
+    match = re.search(pattern, source, re.DOTALL)
     if match:
         return match.group(2)
 
     # The macro might be in an included file - search recursively
     # Look for <%include file='...'/>  in the source
-    includes = re.findall(r'<%include\s+file=[\'"]([^\'"]+)[\'"]', template_source)
+    includes = re.findall(r'<%include\s+file=[\'"]([^\'"]+)[\'"]', source)
 
-    for include_name in includes:
-        if include_name in visited:
+    for inc in includes:
+        if inc in visited:
             continue
-        visited.add(include_name)
+        visited.add(inc)
 
-        included_tpl = context.lookup.get_template(include_name)
+        tpl = context.lookup.get_template(inc)
         # Recursively search this include and its includes
         try:
-            return _extract_macro_body(included_tpl.source, macro_name, context, visited)
+            return _extract_macro_body(tpl.source, name, context, visited)
         except RuntimeError:
             continue
 
-    raise RuntimeError(f'Could not find macro "{macro_name}" in template source')
+    raise RuntimeError(f'Could not find macro "{name}" in template source')
 
 
-Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller',
-                             'template'])
+Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller'])
 
 
 @supports_caller
 def macro(context, name, params, externs=''):
-    # Check we have not already been defined
+    # Check if already registered - if so, skip
     if name in context['_macros']:
-        raise RuntimeError(f'Attempt to redefine macro "{name}"')
+        return ''
 
-    # Split up the parameter and external variable list
+    # Parse params to separate params from py:params
     pyparams = [p.strip().removeprefix('py:') for p in params.split(',')
                 if p.strip().startswith('py:')]
     params = [p.strip() for p in params.split(',')
               if not p.strip().startswith('py:')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
-    # Validate all parameter names
-    for p in it.chain(params, pyparams, externs):
+    # Validate all user created parameter names
+    for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
-    # If there are Python params, we need to create a callable
-    # with the proper signature
-    if pyparams:
-        # Get the template source
+    # Check if callable has arguments
+    sig = inspect.signature(context['caller'].body)
+    sigargs = list(sig.parameters.keys())
+
+    # Determine what to do based on pyparams and callable signature
+    if pyparams and not sigargs:
+        # First pass: pyparams exist but callable has no args yet
+        # Need to recreate macro with args='...'
         template = context._with_template
 
         # Extract the macro body from the template source
         macrostr = _extract_macro_body(template.source, name, context)
 
-        # Create a new template with a <%def> that has the pyparams signature
-        # Include the pyfr namespace so nested macros can call pyfr.expand()
-        tempstr = f'''<%namespace module='pyfr.backends.base.makoutil' name='pyfr'/>
-<%def name="body({', '.join(pyparams)})">
+        # Extract namespace directives (but NOT includes, to avoid re-registering macros)
+        namespaces = re.findall(r'<%namespace[^>]+/>', template.source)
+        header = '\n'.join(namespaces)
+
+        # Recreate the macro with args='...'
+        psrt = ','.join(params)
+        esrt = ','.join(externs)
+        astr = ', '.join(pyparams)
+        newmacro = f'''{header}
+
+<%pyfr:macro name='{name}' params='{psrt}' externs='{esrt}' args='{astr}'>
 {macrostr}
-</%def>'''
+</%pyfr:macro>'''
 
-        # Store the template itself, not the callable
-        # Then in expand(), render it with the proper context
-        context['_macros'][name] = Macro(params, externs, pyparams,
-                                         None, Template(tempstr))
-    else:
-        # No Python params, use the original callable
-        context['_macros'][name] = Macro(params, externs, pyparams,
-                                         context['caller'].body, None)
+        # Render the new template - this will call macro()
+        # again with sigargs populated
+        new_template = Template(newmacro, lookup=context.lookup)
+        new_template.render_context(context)
 
+        # After rendering, the macro should be registered by the above render
+        if name not in context['_macros']:
+            raise ValueError(f'Macro "{name}" failed to re-render')
+
+        return ''
+
+    # If we get here, either:
+    # - Second pass (pyparams + sigargs): use signature args
+    # - No pyparams used: just save normally
+    if sigargs:
+        pyparams = sigargs
+
+    context['_macros'][name] = Macro(params, externs, pyparams,
+                                     context['caller'].body)
     return ''
 
 
@@ -177,7 +198,6 @@ def expand(context, name, /, *args, **kwargs):
     mexterns = macrodef.externs
     mpyparams = macrodef.pyparams
     mcaller = macrodef.caller
-    mtemplate = macrodef.template
 
     # Separate kwargs into C params and Python data params
     paramskw = {}
@@ -228,19 +248,8 @@ def expand(context, name, /, *args, **kwargs):
             raise ValueError(f'Undefined Python data parameter "{k}" '
                              f'passed to "{name}"')
 
-    # Call macro callable with any Python data and capture output
-    if mtemplate:
-        # Render the template's body def with the pyparams
-        # Use the existing context so namespaces and everything is available
-        context._push_buffer()
-        try:
-            # Call the render_body function with the context and pyparams
-            mtemplate.module.render_body(context, **pyparams)
-        finally:
-            body = context._pop_buffer().getvalue()
-    else:
-        # Original callable
-        body = capture(context, mcaller, **pyparams)
+    # Call macro callable with Python data
+    body = capture(context, mcaller, **pyparams)
 
     # Identify any local variable declarations
     lvars = _locals(body)
