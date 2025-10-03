@@ -113,8 +113,7 @@ def macro(context, name, params, externs=''):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
     # Check if callable has arguments
-    sig = inspect.signature(context['caller'].body)
-    sigargs = list(sig.parameters.keys())
+    sigargs = list(inspect.signature(context['caller'].body).parameters.keys())
 
     # Determine what to do based on pyparams and callable signature
     if pyparams and not sigargs:
