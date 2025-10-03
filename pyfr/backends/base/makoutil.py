@@ -94,13 +94,7 @@ def _locals(body):
 Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller'])
 
 
-@supports_caller
-def macro(context, name, params, externs=''):
-    # Check if already registered - if so, skip
-    if name in context['_macros']:
-        return ''
-
-    # Parse params to separate params from py:params
+def _parse_macro_params(params, externs):
     pyparams = [p.strip().removeprefix('py:') for p in params.split(',')
                 if p.strip().startswith('py:')]
     params = [p.strip() for p in params.split(',')
@@ -110,7 +104,25 @@ def macro(context, name, params, externs=''):
     # Validate all user created parameter names
     for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid param "{p}" in macro "{name}"')
+            raise ValueError(f'Invalid parameter name "{p}"')
+
+    return params, pyparams, externs
+
+
+@supports_caller
+def macro(context, name, params, externs=''):
+    # Parse params to separate params from py:params
+    params, pyparams, externs = _parse_macro_params(params, externs)
+
+    # Check if already registered
+    if name in context['_macros']:
+        # Verify it's the same macro definition to catch accidental duplicates
+        existing = context['_macros'][name]
+        if (existing.params != params or existing.externs != externs or
+            existing.pyparams != pyparams):
+            raise ValueError(f'Duplicate macro "{name}" '
+                             'with different signature')
+        return ''
 
     # Check if callable has arguments
     sigargs = list(signature(context['caller'].body).parameters.keys())
@@ -121,13 +133,9 @@ def macro(context, name, params, externs=''):
         # Need to recreate macro with args='...'
         template = context._with_template
 
-        # Extract the raw macro body text by searching from the top-level
-        # template down through the include tree
-        rawbody = context.lookup._get_raw_macro(template.source, name)
-
-        # Extract namespace directives (but NOT includes, to avoid re-registering macros)
-        namespaces = re.findall(r'<%namespace[^>]+/>', template.source)
-        header = '\n'.join(namespaces)
+        # Extract the namespace header and raw macro body from the file where
+        # the macro is defined
+        header, rawbody = context.lookup._get_raw_macro(template.source, name)
 
         # Recreate the macro with args='...'
         psrt = ','.join(params)
@@ -161,14 +169,8 @@ def macro(context, name, params, externs=''):
     return ''
 
 
-def expand(context, name, /, *args, **kwargs):
-    macrodef = context['_macros'][name]
-    mparams = macrodef.params
-    mexterns = macrodef.externs
-    mpyparams = macrodef.pyparams
-    mcaller = macrodef.caller
-
-    # Separate kwargs into C params and Python data params
+def _parse_expand_args(name, mparams, mpyparams, args, kwargs):
+    # Separate kwargs into params and Python data params
     paramskw = {}
     pyparamskw = {}
 
@@ -216,6 +218,20 @@ def expand(context, name, /, *args, **kwargs):
         if isinstance(v, Undefined):
             raise ValueError(f'Undefined Python data parameter "{k}" '
                              f'passed to "{name}"')
+
+    return params, pyparams
+
+
+def expand(context, name, /, *args, **kwargs):
+    macrodef = context['_macros'][name]
+    mparams = macrodef.params
+    mexterns = macrodef.externs
+    mpyparams = macrodef.pyparams
+    mcaller = macrodef.caller
+
+    # Parse arguments
+    params, pyparams = _parse_expand_args(name, mparams, mpyparams,
+                                          args, kwargs)
 
     # Call macro callable with Python data
     body = capture(context, mcaller, **pyparams)
