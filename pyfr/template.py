@@ -1,3 +1,4 @@
+import hashlib
 import pkgutil
 import re
 
@@ -32,8 +33,11 @@ class DottedTemplateLookup(TemplateLookup):
         # Decode bytes to string
         src = src.decode('utf-8')
 
-        # Move py:params into args attribute if macro definition
-        src = self._format_marco_def(src)
+        # Extract macro IDs and inject registration code
+        src = self._inject_macro_id_registration(src)
+
+        # Transform py:params into args attribute
+        src = self._format_macro_def(src)
 
         # Subclass Template to support implicit arguments
         class DefaultTemplate(Template):
@@ -42,7 +46,32 @@ class DottedTemplateLookup(TemplateLookup):
 
         return DefaultTemplate(src, lookup=self)
 
-    def _format_marco_def(self, source):
+    def _inject_macro_id_registration(self, source):
+        # Extract macro definitions and compute their IDs
+        ids = self._extract_macro_ids(source)
+
+        # Generate preamble code to register IDs when template is rendered
+        preamble = '<%\n'
+        for name, macid in ids.items():
+            preamble += f'_macro_ids.setdefault("{name}", set()).add("{macid}")\n'
+        preamble += '%>\n'
+
+        return preamble + source
+
+    def _extract_macro_ids(self, source):
+        # Extract macro definitions and compute their IDs
+        pattern = r'(<%pyfr:macro\s+name=[\'"]([^\'"]+)[\'"].*?>.*?</%pyfr:macro>)'
+        ids = {}
+
+        for match in re.finditer(pattern, source, re.DOTALL):
+            macro = match.group(1)
+            name = match.group(2)
+            macroid = hashlib.md5(macro.strip().encode()).hexdigest()
+            ids[name] = macroid
+
+        return ids
+
+    def _format_macro_def(self, source):
         # Transform py:params into args attribute for <%pyfr:macro> tags
         pattern = r'(<%pyfr:macro\s+name=[\'"][^\'"]+[\'"]\s+params=[\'"])([^\'"]+)([\'"](?:\s+externs=[\'"][^\'"]*[\'"])?(?:\s+\w+=[\'"][^\'"]*[\'"])*\s*>)'
 

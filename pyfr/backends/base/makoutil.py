@@ -96,6 +96,10 @@ Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller'])
 
 @supports_caller
 def macro(context, name, params, externs=''):
+    # Check for multiple definitions of macro name
+    if len(context['_macro_ids'][name]) > 1:
+        raise ValueError(f'Attempt to redefine macro "{name}"')
+
     # Parse and validate params/externs
     params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
@@ -107,13 +111,9 @@ def macro(context, name, params, externs=''):
     # Extract pyparams from callable signature
     pyparams = list(signature(context['caller'].body).parameters.keys())
 
-    # Check for duplicate with different signature
+    # Check for existing registration
     if name in context['_macros']:
-        existing = context['_macros'][name]
-        if (existing.params != params or existing.externs != externs or
-            existing.pyparams != pyparams):
-            raise ValueError(
-                f'Duplicate macro "{name}" with different signature')
+        # Already registered, just return (allow identical reuse)
         return ''
 
     # Register the macro

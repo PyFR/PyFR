@@ -71,8 +71,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Backend-specfic generator classes
         tplargs['_kernel_generator'] = self.kernel_generator_cls
 
-        # Macro definitions
+        # Macro definitions and IDs
         tplargs['_macros'] = {}
+        tplargs['_macro_ids'] = {}
 
         # External kernel arguments dictionary
         tplargs['_extrns'] = extrns
