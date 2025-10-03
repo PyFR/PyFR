@@ -35,7 +35,7 @@ class DottedTemplateLookup(TemplateLookup):
 
         return DefaultTemplate(src, lookup=self)
 
-    def get_raw_macro(self, source, name):
+    def _get_raw_macro(self, source, name):
         """
         Search for a macro and extract its raw body text from template source
         and its includes.

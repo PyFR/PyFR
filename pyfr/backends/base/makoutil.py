@@ -124,7 +124,7 @@ def macro(context, name, params, externs=''):
 
         # Extract the raw macro body text by searching from the top-level
         # template down through the include tree
-        rawbody = context.lookup.get_raw_macro(template.source, name)
+        rawbody = context.lookup._get_raw_macro(template.source, name)
 
         # Extract namespace directives (but NOT includes, to avoid re-registering macros)
         namespaces = re.findall(r'<%namespace[^>]+/>', template.source)
@@ -141,7 +141,7 @@ def macro(context, name, params, externs=''):
 </%pyfr:macro>'''
 
         # Render the new template - this will call macro()
-        # again with sigargs populated
+        # again with args populated
         new_template = Template(mstring, lookup=context.lookup)
         new_template.render_context(context)
 
