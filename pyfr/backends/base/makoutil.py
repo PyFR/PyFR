@@ -94,76 +94,29 @@ def _locals(body):
 Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller'])
 
 
-def _parse_macro_params(params, externs):
-    pyparams = [p.strip().removeprefix('py:') for p in params.split(',')
-                if p.strip().startswith('py:')]
-    params = [p.strip() for p in params.split(',')
-              if not p.strip().startswith('py:')]
+@supports_caller
+def macro(context, name, params, externs=''):
+    # Parse and validate params/externs
+    params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
-    # Validate all user created parameter names
     for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid parameter name "{p}"')
 
-    return params, pyparams, externs
+    # Extract pyparams from callable signature
+    pyparams = list(signature(context['caller'].body).parameters.keys())
 
-
-@supports_caller
-def macro(context, name, params, externs=''):
-    # Parse params to separate params from py:params
-    params, pyparams, externs = _parse_macro_params(params, externs)
-
-    # Check if already registered
+    # Check for duplicate with different signature
     if name in context['_macros']:
-        # Verify it's the same macro definition to catch accidental duplicates
         existing = context['_macros'][name]
         if (existing.params != params or existing.externs != externs or
             existing.pyparams != pyparams):
-            raise ValueError(f'Duplicate macro "{name}" '
-                             'with different signature')
+            raise ValueError(
+                f'Duplicate macro "{name}" with different signature')
         return ''
 
-    # Check if callable has arguments
-    sigargs = list(signature(context['caller'].body).parameters.keys())
-
-    # Determine what to do based on pyparams and callable signature
-    if pyparams and not sigargs:
-        # First pass: pyparams exist but callable has no args yet
-        # Need to recreate macro with args='...'
-        template = context._with_template
-
-        # Extract the namespace header and raw macro body from the file where
-        # the macro is defined
-        header, rawbody = context.lookup._get_raw_macro(template.source, name)
-
-        # Recreate the macro with args='...'
-        psrt = ','.join(params)
-        esrt = ','.join(externs)
-        astr = ', '.join(pyparams)
-        mstring = f'''{header}
-
-<%pyfr:macro name='{name}' params='{psrt}' externs='{esrt}' args='{astr}'>
-{rawbody}
-</%pyfr:macro>'''
-
-        # Render the new template - this will call macro()
-        # again with args populated
-        new_template = Template(mstring, lookup=context.lookup)
-        new_template.render_context(context)
-
-        # After rendering, the macro should be registered by the above render
-        if name not in context['_macros']:
-            raise ValueError(f'Macro "{name}" failed to re-render')
-
-        return ''
-
-    # If we get here, either:
-    # - Second pass (pyparams + sigargs): use signature args
-    # - No pyparams used: just save normally
-    if sigargs:
-        pyparams = sigargs
-
+    # Register the macro
     context['_macros'][name] = Macro(params, externs, pyparams,
                                      context['caller'].body)
     return ''
@@ -212,6 +165,12 @@ def _parse_expand_args(name, mparams, mpyparams, args, kwargs):
     if len(pyparams) != len(mpyparams):
         raise ValueError(f'Incomplete or duplicate Python data parameters '
                          f'in "{name}"')
+
+    # Check no extra positional args were provided
+    if posidx < len(pyparamspos):
+        raise ValueError(f'Too many positional arguments in "{name}": '
+                         f'expected {len(mparams) + len(mpyparams)}, '
+                         f'got {len(args)}')
 
     # Check all python data is defined
     for k, v in pyparams.items():

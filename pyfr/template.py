@@ -29,6 +29,12 @@ class DottedTemplateLookup(TemplateLookup):
         if not src:
             raise RuntimeError(f'Template "{name}" not found')
 
+        # Decode bytes to string
+        src = src.decode('utf-8')
+
+        # Move py:params into args attribute if macro definition
+        src = self._format_marco_def(src)
+
         # Subclass Template to support implicit arguments
         class DefaultTemplate(Template):
             def render(iself, *args, **kwargs):
@@ -36,28 +42,25 @@ class DottedTemplateLookup(TemplateLookup):
 
         return DefaultTemplate(src, lookup=self)
 
-    def _get_raw_macro(self, source, name):
-        # Search for macro and extract namespace header and body text
-        # Returns (namespace_header, macro_body) or (None, None) if not found
-        pattern = rf'<%pyfr:macro\s+name=[\'"]({name})[\'"].*?>(.*?)</%pyfr:macro>'
+    def _format_marco_def(self, source):
+        # Transform py:params into args attribute for <%pyfr:macro> tags
+        pattern = r'(<%pyfr:macro\s+name=[\'"][^\'"]+[\'"]\s+params=[\'"])([^\'"]+)([\'"](?:\s+externs=[\'"][^\'"]*[\'"])?(?:\s+\w+=[\'"][^\'"]*[\'"])*\s*>)'
 
-        def search_source(src):
-            # Check if macro is in this source
-            match = re.search(pattern, src, re.DOTALL)
-            if match:
-                # Extract namespace directives from this source
-                namespaces = re.findall(r'<%namespace[^>]+/>', src)
-                header = '\n'.join(namespaces)
-                return header, match.group(2)
+        def inject_args(match):
+            prefix = match.group(1)
+            params = [p.strip() for p in match.group(2).split(',')]
+            suffix = match.group(3)
 
-            # Search includes recursively
-            includes = re.findall(r'<%include\s+file=[\'"]([^\'"]+)[\'"]', src)
-            for inc in includes:
-                inc_tpl = self.get_template(inc)
-                result = search_source(inc_tpl.source)
-                if result[0] is not None:
-                    return result
+            # Partition params into regular and py: prefixed
+            pyparams = [p[3:] for p in params if p.startswith('py:')]
+            params = [p for p in params if not p.startswith('py:')]
 
-            return None, None
+            if not pyparams:
+                return match.group(0)
 
-        return search_source(source)
+            pstr = ', '.join(params)
+            astr = ', '.join(pyparams)
+
+            return f"{prefix}{pstr}' args='{astr}{suffix}"
+
+        return re.sub(pattern, inject_args, source)
