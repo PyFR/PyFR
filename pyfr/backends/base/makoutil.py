@@ -1,9 +1,9 @@
 from collections import namedtuple
 from collections.abc import Iterable
-import inspect
 import itertools as it
 import re
 
+from inspect import signature
 from mako.runtime import Undefined, capture, supports_caller
 from mako.template import Template
 import numpy as np
@@ -113,7 +113,7 @@ def macro(context, name, params, externs=''):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
     # Check if callable has arguments
-    sigargs = list(inspect.signature(context['caller'].body).parameters.keys())
+    sigargs = list(signature(context['caller'].body).parameters.keys())
 
     # Determine what to do based on pyparams and callable signature
     if pyparams and not sigargs:
