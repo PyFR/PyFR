@@ -27,7 +27,7 @@ below to setup the OpenMP backend on macOS:
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
-        make -j4 STATIC=0 BLAS=0
+        make -j4
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
 
 #. Make a venv and activate it::
@@ -61,7 +61,7 @@ Follow the steps below to setup the OpenMP backend on Ubuntu:
 
         git clone https://github.com/libxsmm/libxsmm.git
         cd libxsmm
-        make -j4 STATIC=0 BLAS=0
+        make -j4
         export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
 
 #. Make a virtualenv and activate it::
@@ -165,8 +165,7 @@ requires:
 
 #. GCC >= 12.0 or another C compiler with OpenMP 5.1 support
 #. `libxsmm <https://github.com/hfp/libxsmm>`_ >= commit
-   bf5313db8bf2edfc127bb715c36353e610ce7c04 in the ``main`` branch
-   compiled as a shared library (STATIC=0) with BLAS=0.
+   5424ec5e122172ec263ef0cc6473d44b8be16fb2 in the ``main`` branch.
 
 In order for PyFR to find libxsmm it must be located in a directory
 which is on the library search path.  Alternatively, the path can be
