@@ -1,4 +1,5 @@
 import pkgutil
+import re
 
 from mako.lookup import TemplateLookup
 from mako.template import Template
@@ -36,19 +37,6 @@ class DottedTemplateLookup(TemplateLookup):
         return DefaultTemplate(src, lookup=self)
 
     def _get_raw_macro(self, source, name):
-        """
-        Search for a macro and extract its raw body text from template source
-        and its includes.
-
-        Args:
-            source: The template source text to search
-            name: Name of the macro to find
-
-        Returns:
-            The macro body text, or None if not found
-        """
-        import re
-
         pattern = rf'<%pyfr:macro\s+name=[\'"]({name})[\'"].*?>(.*?)</%pyfr:macro>'
 
         def search_source(src):
