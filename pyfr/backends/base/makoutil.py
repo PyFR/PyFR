@@ -91,7 +91,7 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-Macro = namedtuple('Macro', ['params', 'externs', 'pyparams', 'caller'])
+Macro = namedtuple('Macro', ['params', 'externs', 'pysig', 'caller'])
 
 
 @supports_caller
@@ -108,8 +108,8 @@ def macro(context, name, params, externs=''):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid parameter name "{p}"')
 
-    # Extract pyparams from callable signature
-    pyparams = list(signature(context['caller'].body).parameters.keys())
+    # Extract signature from callable
+    pysig = signature(context['caller'].body)
 
     # Check for existing registration
     if name in context['_macros']:
@@ -117,12 +117,14 @@ def macro(context, name, params, externs=''):
         return ''
 
     # Register the macro
-    context['_macros'][name] = Macro(params, externs, pyparams,
+    context['_macros'][name] = Macro(params, externs, pysig,
                                      context['caller'].body)
     return ''
 
 
-def _parse_expand_args(name, mparams, mpyparams, args, kwargs):
+def _parse_expand_args(name, mparams, mpysig, args, kwargs):
+    mpyparams = list(mpysig.parameters.keys())
+
     # Separate kwargs into params and Python data params
     paramskw = {}
     pyparamskw = {}
@@ -145,32 +147,13 @@ def _parse_expand_args(name, mparams, mpyparams, args, kwargs):
     if len(params) != len(mparams):
         raise ValueError(f'Incomplete or duplicate parameters in "{name}"')
 
-    # Build pyparams dict: remaining positional args + kwargs
-    # Positional args fill in mpyparams in order
+    # Parse pyparams
     pyparamspos = args[nparamspos:]
-    pyparams = {}
-
-    # Fill in positional pyparams first (in order from mpyparams)
-    posidx = 0
-    for pyparam in mpyparams:
-        if pyparam in pyparamskw:
-            # Provided as keyword arg
-            pyparams[pyparam] = pyparamskw[pyparam]
-        elif posidx < len(pyparamspos):
-            # Provided as positional arg
-            pyparams[pyparam] = pyparamspos[posidx]
-            posidx += 1
-
-    # Check we got all pyparams
-    if len(pyparams) != len(mpyparams):
-        raise ValueError(f'Incomplete or duplicate Python data parameters '
-                         f'in "{name}"')
-
-    # Check no extra positional args were provided
-    if posidx < len(pyparamspos):
-        raise ValueError(f'Too many positional arguments in "{name}": '
-                         f'expected {len(mparams) + len(mpyparams)}, '
-                         f'got {len(args)}')
+    try:
+        bound = mpysig.bind(*pyparamspos, **pyparamskw)
+        pyparams = dict(bound.arguments)
+    except TypeError as e:
+        raise ValueError(f'Invalid Python data parameters in "{name}": {e}')
 
     # Check all python data is defined
     for k, v in pyparams.items():
@@ -185,11 +168,11 @@ def expand(context, name, /, *args, **kwargs):
     macrodef = context['_macros'][name]
     mparams = macrodef.params
     mexterns = macrodef.externs
-    mpyparams = macrodef.pyparams
+    mpysig = macrodef.pysig
     mcaller = macrodef.caller
 
     # Parse arguments
-    params, pyparams = _parse_expand_args(name, mparams, mpyparams,
+    params, pyparams = _parse_expand_args(name, mparams, mpysig,
                                           args, kwargs)
 
     # Call macro callable with Python data
