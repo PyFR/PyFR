@@ -91,7 +91,7 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-Macro = namedtuple('Macro', ['params', 'externs', 'pysig', 'caller'])
+Macro = namedtuple('Macro', ['params', 'externs', 'argsig', 'caller'])
 
 
 @supports_caller
@@ -108,8 +108,8 @@ def macro(context, name, params, externs=''):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid parameter name "{p}"')
 
-    # Extract signature from callable
-    pysig = signature(context['caller'].body)
+    # Extract signature from callable for python variables
+    argsig = signature(context['caller'].body)
 
     # Check for existing registration
     if name in context['_macros']:
@@ -117,20 +117,20 @@ def macro(context, name, params, externs=''):
         return ''
 
     # Register the macro
-    context['_macros'][name] = Macro(params, externs, pysig,
+    context['_macros'][name] = Macro(params, externs, argsig,
                                      context['caller'].body)
     return ''
 
 
-def _parse_expand_args(name, mparams, mpysig, args, kwargs):
-    mpyparams = list(mpysig.parameters.keys())
+def _parse_expand_args(name, mparams, margsig, args, kwargs):
+    margs = list(margsig.parameters.keys())
 
     # Separate kwargs into params and Python data params
     paramskw = {}
     pyparamskw = {}
 
     for k, v in kwargs.items():
-        if k in mpyparams:
+        if k in margs:
             pyparamskw[k] = v
         elif k in mparams:
             paramskw[k] = v
@@ -150,7 +150,7 @@ def _parse_expand_args(name, mparams, mpysig, args, kwargs):
     # Parse pyparams
     pyparamspos = args[nparamspos:]
     try:
-        bound = mpysig.bind(*pyparamspos, **pyparamskw)
+        bound = margsig.bind(*pyparamspos, **pyparamskw)
         pyparams = dict(bound.arguments)
     except TypeError as e:
         raise ValueError(f'Invalid Python data parameters in "{name}": {e}')
@@ -168,11 +168,11 @@ def expand(context, name, /, *args, **kwargs):
     macrodef = context['_macros'][name]
     mparams = macrodef.params
     mexterns = macrodef.externs
-    mpysig = macrodef.pysig
+    margsig = macrodef.argsig
     mcaller = macrodef.caller
 
     # Parse arguments
-    params, pyparams = _parse_expand_args(name, mparams, mpysig,
+    params, pyparams = _parse_expand_args(name, mparams, margsig,
                                           args, kwargs)
 
     # Call macro callable with Python data
