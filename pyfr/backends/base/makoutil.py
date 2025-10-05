@@ -100,6 +100,11 @@ def macro(context, name, params, externs=''):
     if len(context['_macro_ids'][name]) > 1:
         raise ValueError(f'Attempt to redefine macro "{name}"')
 
+    # Check for existing registration
+    if name in context['_macros']:
+        # Already registered, just return (allow multiple includes)
+        return ''
+
     # Parse and validate params/externs
     params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
@@ -110,11 +115,6 @@ def macro(context, name, params, externs=''):
 
     # Extract signature from callable for python variables
     argsig = signature(context['caller'].body)
-
-    # Check for existing registration
-    if name in context['_macros']:
-        # Already registered, just return (allow identical reuse)
-        return ''
 
     # Register the macro
     context['_macros'][name] = Macro(params, externs, argsig,
