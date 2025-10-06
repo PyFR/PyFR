@@ -742,7 +742,7 @@ cannot be invoked directly from within PyFR, but can be embedded into
 PyFR-Mako kernels. PyFR-Mako macros can be viewed as building blocks
 for PyFR-mako kernels. They are opened with a header of the form::
 
-    <%pyfr:macro name='macro-name' params='[parameter-name, ...]'>
+    <%pyfr:macro name='macro-name' params='param1, param2, ..., py:arg1, ...'>
 
 where
 
@@ -750,7 +750,7 @@ where
 
     *string*
 
-2. ``parameter-name`` --- name of parameter
+2. ``param1, param2, ..., py:arg1, ...`` --- macro parameter/argument names
 
     *string*
 
@@ -758,10 +758,16 @@ and are closed with a footer of the form::
 
     </%pyfr:macro>
 
+Macro params can be either regular parameters (source code variables) or
+Python arguments (when prefixed with ``py:``). Python arguments receive Python
+objects that can be accessed during template rendering. All parameters prefixed
+with ``py:`` must be accessed in the macro body within the usual ``${}``
+expression *without the py: prefix*.
+
 PyFR-Mako macros are embedded within a kernel using an expression of
 the following form::
 
-        ${pyfr.expand('macro-name', ['parameter-name', ...])};
+        ${pyfr.expand('macro-name', 'value1', ..., data1, ..., param2='value2', ..., arg1=value, ...)};
 
 where
 
@@ -769,9 +775,21 @@ where
 
     *string*
 
-2. ``parameter-name`` --- name of parameter
+2. ``'value1', ...`` --- positional values for regular parameters
 
     *string*
+
+3. ``data1, ...`` --- positional Python data
+
+    *Python object*
+
+4. ``param2='value2', ...`` --- keyword arguments for regular parameter
+
+    *string* or *compilable*
+
+5. ``arg1=value, ...`` --- keyword arguments for Python arguments
+
+    *Python object*
 
 Syntax
 ------
