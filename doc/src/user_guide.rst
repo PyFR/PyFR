@@ -87,13 +87,13 @@ pyfr export
       PyFR elements are converted where possible to high-order VTK
       elements.  Example::
 
-        pyfr export --eopt=order:4 mesh.pyfrm solution.pyfrs solution.vtu
+        pyfr export volume --eopt=order:4 mesh.pyfrm solution.pyfrs solution.vtu
 
       If a ``--eopt=divisor:n`` flag is provided with an integer
       argument then elements are subdivided into linear VTK cells.
       Example::
 
-        pyfr export --eopt=divisor:4 mesh.pyfrm solution.pyfrs solution.vtu
+        pyfr export volume --eopt=divisor:4 mesh.pyfrm solution.pyfrs solution.vtu
 
       By default elements are converted to high-order VTK cells which
       are exported, where the order of the cells is equal to the order
@@ -107,14 +107,14 @@ pyfr export
    pyfr export boundary
       Exports one of more boundaries.  Example::
 
-        pyfr export boundary mesh.pyfrm solution.pyfrms solution.vtu lower_wall upper_wall
+        pyfr export boundary mesh.pyfrm solution.pyfrs solution.vtu lower_wall upper_wall
 
       Note that boundary export is only supported for 3D grids.
 
    pyfr export stl
       Exports one or more STL surfaces.  Example::
 
-        pyfr export stl mesh.pyfrm solution.pyfrms solution.vtu teapot
+        pyfr export stl mesh.pyfrm solution.pyfrs solution.vtu teapot
 
       The STL surfaces must have already been added to the mesh with
       ``pyfr region add``.
