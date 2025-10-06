@@ -1,5 +1,6 @@
 from collections import namedtuple
 from collections.abc import Iterable
+import hashlib
 from inspect import signature
 import itertools as it
 import re
@@ -90,17 +91,67 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-Macro = namedtuple('Macro', ['params', 'externs', 'argsig', 'caller'])
+Macro = namedtuple('Macro', ['params', 'externs', 'argsig', 'caller', 'id'])
+
+
+def mfiltid(source):
+    apattern = r'(\w+)=[\'"]([^\'"]*)[\'"]'
+
+    def add_id(match):
+        # Compute hash of the entire macro definition
+        macid = hashlib.sha256(match[0].encode('utf-8')).hexdigest()
+
+        # Extract and update attributes from the opening tag
+        attrs = dict(re.findall(apattern, match[1]))
+        attrs['id'] = macid
+
+        # Reconstruct the opening tag and append the body
+        attrstr = ' '.join(f'{k}="{v}"' for k, v in attrs.items())
+        return f'<%pyfr:macro {attrstr}>{match[2]}'
+
+    mpattern = r'(<%pyfr:macro\s+[^>]+>)(.*?</%pyfr:macro>)'
+    return re.sub(mpattern, add_id, source, flags=re.DOTALL)
+
+
+def mfiltargs(source):
+    apattern = r'(\w+)=[\'"]([^\'"]*)[\'"]'
+
+    def add_args(match):
+        # Extract all attributes from the opening tag
+        attrs = dict(re.findall(apattern, match[0]))
+
+        # Nothing to do if no params
+        if 'params' not in attrs:
+            return match[0]
+
+        # Parse the params attribute
+        params = [p.strip() for p in attrs['params'].split(',')]
+
+        # Partition params into regular and py: prefixed
+        pyparams = [p[3:] for p in params if p.startswith('py:')]
+        params = [p for p in params if not p.startswith('py:')]
+
+        # Update the params
+        attrs['params'] = ', '.join(params)
+        if pyparams:
+            attrs['args'] = ', '.join(pyparams)
+
+        # Reconstruct the opening tag
+        attrstr = ' '.join(f'{k}="{v}"' for k, v in attrs.items())
+        return f'<%pyfr:macro {attrstr}>'
+
+    # Match just the opening tag
+    mpattern = r'<%pyfr:macro\s+[^>]+>'
+    return re.sub(mpattern, add_args, source)
 
 
 @supports_caller
-def macro(context, name, params, externs=''):
-    # Check for multiple definitions of macro name
-    if len(context['_macro_ids'][name]) > 1:
-        raise ValueError(f'Attempt to redefine macro "{name}"')
-
-    # Check for existing registration
+def macro(context, name, params, externs='', id=''):
+    # Check for existing registration and multiple definitions
     if name in context['_macros']:
+        # Check for multiple definitions of macro name
+        if context['_macros'][name].id != id:
+            raise ValueError(f'Attempt to redefine macro "{name}"')
         # Already registered, just return (allow multiple includes)
         return ''
 
@@ -115,9 +166,9 @@ def macro(context, name, params, externs=''):
     # Extract signature from callable for python variables
     argsig = signature(context['caller'].body)
 
-    # Register the macro
+    # Register the macro with an empty ids set
     context['_macros'][name] = Macro(params, externs, argsig,
-                                     context['caller'].body)
+                                     context['caller'].body, id)
     return ''
 
 
