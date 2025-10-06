@@ -33,7 +33,7 @@ class DottedTemplateLookup(TemplateLookup):
             raise RuntimeError(f'Template "{name}" not found')
 
         # Decode bytes to string
-        src = src.decode('utf-8')
+        src = src.decode()
 
         # Apply all filters to source
         for filter in self._filters:
