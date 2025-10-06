@@ -1,11 +1,10 @@
 from collections import namedtuple
 from collections.abc import Iterable
+from inspect import signature
 import itertools as it
 import re
 
-from inspect import signature
 from mako.runtime import Undefined, capture, supports_caller
-from mako.template import Template
 import numpy as np
 
 import pyfr.nputil as nputil
