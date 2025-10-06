@@ -159,9 +159,10 @@ def macro(context, name, params, externs='', id=''):
     params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
+    # Ensure no invalid characters in params/extern variables
     for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid parameter name "{p}"')
+            raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
     # Extract signature from callable for python variables
     argsig = signature(context['caller'].body)
