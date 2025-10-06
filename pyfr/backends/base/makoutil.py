@@ -125,31 +125,25 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
     margs = list(margsig.parameters.keys())
 
     # Separate kwargs into params and Python data params
-    paramskw = {}
-    pyparamskw = {}
+    if unknown := set(kwargs) - set(mparams) - set(margs):
+        unknown = unknown.pop()
+        raise ValueError(f'Unknown parameter "{unknown}" in macro "{name}"')
 
-    for k, v in kwargs.items():
-        if k in margs:
-            pyparamskw[k] = v
-        elif k in mparams:
-            paramskw[k] = v
-        else:
-            raise ValueError(f'Unknown parameter "{k}" in macro "{name}"')
+    paramskw = {k: v for k, v in kwargs.items() if k in mparams}
+    pyparamskw = {k: v for k, v in kwargs.items() if k in margs}
 
     # Build params dict from positional args and kwargs
     # Positional args fill in params first, then any remaining go to pyparams
     nparamspos = len(mparams) - len(paramskw)
-    params = dict(zip(mparams, args[:nparamspos]))
-    params.update(paramskw)
+    params = dict(paramskw, **dict(zip(mparams, args[:nparamspos])))
 
     # Check we got all params
     if len(params) != len(mparams):
         raise ValueError(f'Incomplete or duplicate parameters in "{name}"')
 
     # Parse pyparams
-    pyparamspos = args[nparamspos:]
     try:
-        bound = margsig.bind(*pyparamspos, **pyparamskw)
+        bound = margsig.bind(*args[nparamspos:], **pyparamskw)
         pyparams = dict(bound.arguments)
     except TypeError as e:
         raise ValueError(f'Invalid Python data parameters in "{name}": {e}')
