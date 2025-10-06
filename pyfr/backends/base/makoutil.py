@@ -97,9 +97,6 @@ def mfilttag(source):
     apattern = r'(\w+)=[\'"]([^\'"]*)[\'"]'
 
     def process_tag(match):
-        # Compute hash of the entire macro definition
-        macid = util.digest(match[0])
-
         # Extract all attributes from the opening tag
         attrs = dict(re.findall(apattern, match[1]))
 
@@ -114,14 +111,14 @@ def mfilttag(source):
                 attrs['args'] = ', '.join(pyparams)
 
         # Add the ID attribute
-        attrs['id'] = macid
+        attrs['id'] = util.digest(match[0])
 
         # Reconstruct the opening tag and append the body
         attrstr = ' '.join(f'{k}="{v}"' for k, v in attrs.items())
         return f'<%pyfr:macro {attrstr}>{match[2]}'
 
     mpattern = r'(<%pyfr:macro\s+[^>]+>)(.*?</%pyfr:macro>)'
-    return re.sub(mpattern, process_tag, source, flags=re.DOTALL)
+    return re.sub(mpattern, process_tag, source, flags=re.S)
 
 
 @supports_caller
@@ -143,7 +140,7 @@ def macro(context, name, params, externs='', id=''):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
-    # Extract signature from callable for python variables
+    # Extract signature from callable for Python variables
     argsig = signature(context['caller'].body)
 
     # Register the macro with an empty ids set
@@ -166,7 +163,7 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
     # Build params dict from positional args and kwargs
     # Positional args fill in params first, then any remaining go to pyparams
     nparamspos = len(mparams) - len(paramskw)
-    params = dict(paramskw, **dict(zip(mparams, args[:nparamspos])))
+    params = dict(zip(mparams, args[:nparamspos]), **paramskw)
 
     # Check we got all params
     if len(params) != len(mparams):
@@ -179,7 +176,7 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
     except TypeError as e:
         raise ValueError(f'Invalid Python data parameters in "{name}": {e}')
 
-    # Check all python data is defined
+    # Check all Python data is defined
     for k, v in pyparams.items():
         if isinstance(v, Undefined):
             raise ValueError(f'Undefined Python data parameter "{k}" '

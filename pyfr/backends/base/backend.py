@@ -77,8 +77,8 @@ class BaseBackend:
 
         lookup = DottedTemplateLookup(pkg, dfltargs)
 
-        # Register source filters
-        lookup.add_filter(mfilttag)
+        # Add source filters
+        lookup.filters.append(mfilttag)
 
         return lookup
 

@@ -8,10 +8,7 @@ class DottedTemplateLookup(TemplateLookup):
     def __init__(self, pkg, dfltargs):
         self.dfltpkg = pkg
         self.dfltargs = dfltargs
-        self._filters = []
-
-    def add_filter(self, func):
-        self._filters.append(func)
+        self.filters = []
 
     def adjust_uri(self, uri, relto):
         return uri
@@ -36,7 +33,7 @@ class DottedTemplateLookup(TemplateLookup):
         src = src.decode()
 
         # Apply all filters to source
-        for filter in self._filters:
+        for filter in self.filters:
             src = filter(src)
 
         # Subclass Template to support implicit arguments
