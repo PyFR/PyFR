@@ -7,7 +7,7 @@ from weakref import WeakKeyDictionary, WeakValueDictionary
 import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
-from pyfr.backends.base.makoutil import mfiltargs, mfiltid
+from pyfr.backends.base.makoutil import mfilttag
 from pyfr.template import DottedTemplateLookup
 
 
@@ -78,8 +78,7 @@ class BaseBackend:
         lookup = DottedTemplateLookup(pkg, dfltargs)
 
         # Register source filters
-        lookup.add_filter(mfiltargs)
-        lookup.add_filter(mfiltid)
+        lookup.add_filter(mfilttag)
 
         return lookup
 

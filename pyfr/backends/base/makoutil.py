@@ -1,6 +1,5 @@
 from collections import namedtuple
 from collections.abc import Iterable
-import hashlib
 from inspect import signature
 import itertools as it
 import re
@@ -94,15 +93,27 @@ def _locals(body):
 Macro = namedtuple('Macro', ['params', 'externs', 'argsig', 'caller', 'id'])
 
 
-def mfiltid(source):
+def mfilttag(source):
     apattern = r'(\w+)=[\'"]([^\'"]*)[\'"]'
 
-    def add_id(match):
+    def process_tag(match):
         # Compute hash of the entire macro definition
-        macid = hashlib.sha256(match[0].encode('utf-8')).hexdigest()
+        macid = util.digest(match[0])
 
-        # Extract and update attributes from the opening tag
+        # Extract all attributes from the opening tag
         attrs = dict(re.findall(apattern, match[1]))
+
+        # Process params if they exist
+        if 'params' in attrs:
+            params = [p.strip() for p in attrs['params'].split(',')]
+            pyparams = [p[3:] for p in params if p.startswith('py:')]
+            params = [p for p in params if not p.startswith('py:')]
+
+            attrs['params'] = ', '.join(params)
+            if pyparams:
+                attrs['args'] = ', '.join(pyparams)
+
+        # Add the ID attribute
         attrs['id'] = macid
 
         # Reconstruct the opening tag and append the body
@@ -110,39 +121,7 @@ def mfiltid(source):
         return f'<%pyfr:macro {attrstr}>{match[2]}'
 
     mpattern = r'(<%pyfr:macro\s+[^>]+>)(.*?</%pyfr:macro>)'
-    return re.sub(mpattern, add_id, source, flags=re.DOTALL)
-
-
-def mfiltargs(source):
-    apattern = r'(\w+)=[\'"]([^\'"]*)[\'"]'
-
-    def add_args(match):
-        # Extract all attributes from the opening tag
-        attrs = dict(re.findall(apattern, match[0]))
-
-        # Nothing to do if no params
-        if 'params' not in attrs:
-            return match[0]
-
-        # Parse the params attribute
-        params = [p.strip() for p in attrs['params'].split(',')]
-
-        # Partition params into regular and py: prefixed
-        pyparams = [p[3:] for p in params if p.startswith('py:')]
-        params = [p for p in params if not p.startswith('py:')]
-
-        # Update the params
-        attrs['params'] = ', '.join(params)
-        if pyparams:
-            attrs['args'] = ', '.join(pyparams)
-
-        # Reconstruct the opening tag
-        attrstr = ' '.join(f'{k}="{v}"' for k, v in attrs.items())
-        return f'<%pyfr:macro {attrstr}>'
-
-    # Match just the opening tag
-    mpattern = r'<%pyfr:macro\s+[^>]+>'
-    return re.sub(mpattern, add_args, source)
+    return re.sub(mpattern, process_tag, source, flags=re.DOTALL)
 
 
 @supports_caller
@@ -210,18 +189,14 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
 
 
 def expand(context, name, /, *args, **kwargs):
-    macrodef = context['_macros'][name]
-    mparams = macrodef.params
-    mexterns = macrodef.externs
-    margsig = macrodef.argsig
-    mcaller = macrodef.caller
+    mdef = context['_macros'][name]
 
     # Parse arguments
-    params, pyparams = _parse_expand_args(name, mparams, margsig,
+    params, pyparams = _parse_expand_args(name, mdef.params, mdef.argsig,
                                           args, kwargs)
 
     # Call macro callable with Python data
-    body = capture(context, mcaller, **pyparams)
+    body = capture(context, mdef.caller, **pyparams)
 
     # Identify any local variable declarations
     lvars = _locals(body)
@@ -231,7 +206,7 @@ def expand(context, name, /, *args, **kwargs):
         body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
 
     # Ensure all (used) external parameters have been passed to the kernel
-    for extrn in mexterns:
+    for extrn in mdef.externs:
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
             raise ValueError(f'Missing external "{extrn}" in "{name}"')
