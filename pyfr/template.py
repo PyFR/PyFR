@@ -72,24 +72,36 @@ class DottedTemplateLookup(TemplateLookup):
         return ids
 
     def _format_macro_def(self, source):
-        # Transform py:params into args attribute for <%pyfr:macro> tags
-        pattern = r'(<%pyfr:macro\s+name=[\'"][^\'"]+[\'"]\s+params=[\'"])([^\'"]+)([\'"](?:\s+externs=[\'"][^\'"]*[\'"])?(?:\s+\w+=[\'"][^\'"]*[\'"])*\s*>)'
+        # Pattern to extract individual attributes
+        apattern = r'(\w+)=[\'"]([^\'"]*)[\'"]'
 
         def inject_args(match):
-            prefix = match.group(1)
-            params = [p.strip() for p in match.group(2).split(',')]
-            suffix = match.group(3)
+            macro = match[0]
+
+            # Extract all attributes from the macro definition
+            attrs = dict(re.findall(apattern, macro))
+
+            # Check if params attribute exists
+            if 'params' not in attrs:
+                return macro
+
+            # Parse the params attribute
+            params = [p.strip() for p in attrs['params'].split(',')]
 
             # Partition params into regular and py: prefixed
             pyparams = [p[3:] for p in params if p.startswith('py:')]
             params = [p for p in params if not p.startswith('py:')]
 
             if not pyparams:
-                return match.group(0)
+                return macro
 
-            pstr = ', '.join(params)
-            astr = ', '.join(pyparams)
+            # Update the params and create args
+            attrs['params'] = ', '.join(params)
+            attrs['args'] = ', '.join(pyparams)
 
-            return f"{prefix}{pstr}' args='{astr}{suffix}"
+            # Reconstruct the macro definition
+            attrstr = ' '.join(f'{k}="{v}"' for k, v in attrs.items())
+            return f'<%pyfr:macro {attrstr}>'
 
-        return re.sub(pattern, inject_args, source)
+        mpattern = r'<%pyfr:macro\s+[^>]+>'
+        return re.sub(mpattern, inject_args, source)
