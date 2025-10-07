@@ -199,11 +199,6 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
     except TypeError as e:
         raise MacroError(name, f'Invalid Python data parameters: {e}')
 
-    # Check all Python data is defined
-    for k, v in pyparams.items():
-        if isinstance(v, Undefined):
-            raise MacroError(name, f'Undefined Python data parameter "{k}"')
-
     return params, pyparams
 
 
