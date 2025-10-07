@@ -30,16 +30,16 @@ class BaseDualIntegrator(BaseIntegrator):
     def pseudostepinfo(self):
         return self.pseudointegrator.pseudostepinfo
 
-    @_common_plugin_prop('_curr_soln')
+    @_common_plugin_prop('_curr_soln', edim=2)
     def soln(self):
         return self.system.ele_scal_upts(self.pseudointegrator._idxcurr)
 
-    @_common_plugin_prop('_curr_grad_soln')
+    @_common_plugin_prop('_curr_grad_soln', edim=3)
     def grad_soln(self):
         self.system.compute_grads(self.tcurr, self.pseudointegrator._idxcurr)
         return [e.get() for e in self.system.eles_vect_upts]
 
-    @_common_plugin_prop('_curr_dt_soln')
+    @_common_plugin_prop('_curr_dt_soln', edim=2)
     def dt_soln(self):
         soln = self.soln
 
