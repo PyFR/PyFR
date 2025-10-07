@@ -1,8 +1,10 @@
+from collections import namedtuple
 from collections.abc import Iterable
+from inspect import signature
 import itertools as it
 import re
 
-from mako.runtime import supports_caller, capture
+from mako.runtime import Undefined, capture, supports_caller
 import numpy as np
 
 import pyfr.nputil as nputil
@@ -88,13 +90,48 @@ def _locals(body):
     return [lv for lv in lvars if lv != 'if']
 
 
-@supports_caller
-def macro(context, name, params, externs=''):
-    # Check we have not already been defined
-    if name in context['_macros']:
-        raise RuntimeError(f'Attempt to redefine macro "{name}"')
+Macro = namedtuple('Macro', ['params', 'externs', 'argsig', 'caller', 'id'])
 
-    # Split up the parameter and external variable list
+
+def mfilttag(source):
+    apattern = r'(\w+)=[\'"]([^\'"]*)[\'"]'
+
+    def process_tag(match):
+        # Extract all attributes from the opening tag
+        attrs = dict(re.findall(apattern, match[1]))
+
+        # Process params if they exist
+        if 'params' in attrs:
+            params = [p.strip() for p in attrs['params'].split(',')]
+            pyparams = [p[3:] for p in params if p.startswith('py:')]
+            params = [p for p in params if not p.startswith('py:')]
+
+            attrs['params'] = ', '.join(params)
+            if pyparams:
+                attrs['args'] = ', '.join(pyparams)
+
+        # Add the ID attribute
+        attrs['id'] = util.digest(match[0])
+
+        # Reconstruct the opening tag and append the body
+        attrstr = ' '.join(f'{k}="{v}"' for k, v in attrs.items())
+        return f'<%pyfr:macro {attrstr}>{match[2]}'
+
+    mpattern = r'(<%pyfr:macro\s+[^>]+>)(.*?</%pyfr:macro>)'
+    return re.sub(mpattern, process_tag, source, flags=re.S)
+
+
+@supports_caller
+def macro(context, name, params, externs='', id=''):
+    # Check for existing registration and multiple definitions
+    if name in context['_macros']:
+        # Check for multiple definitions of macro name
+        if context['_macros'][name].id != id:
+            raise ValueError(f'Attempt to redefine macro "{name}"')
+        # Already registered, just return (allow multiple includes)
+        return ''
+
+    # Parse and validate params/externs
     params = [p.strip() for p in params.split(',')]
     externs = [e.strip() for e in externs.split(',')] if externs else []
 
@@ -103,8 +140,60 @@ def macro(context, name, params, externs=''):
         if not re.match(r'[A-Za-z_]\w*$', p):
             raise ValueError(f'Invalid param "{p}" in macro "{name}"')
 
-    # Capture the function body
-    body = capture(context, context['caller'].body)
+    # Extract signature from callable for Python variables
+    argsig = signature(context['caller'].body)
+
+    # Register the macro with an empty ids set
+    context['_macros'][name] = Macro(params, externs, argsig,
+                                     context['caller'].body, id)
+    return ''
+
+
+def _parse_expand_args(name, mparams, margsig, args, kwargs):
+    margs = list(margsig.parameters.keys())
+
+    # Separate kwargs into params and Python data params
+    if unknown := set(kwargs) - set(mparams) - set(margs):
+        unknown = unknown.pop()
+        raise ValueError(f'Unknown parameter "{unknown}" in macro "{name}"')
+
+    paramskw = {k: v for k, v in kwargs.items() if k in mparams}
+    pyparamskw = {k: v for k, v in kwargs.items() if k in margs}
+
+    # Build params dict from positional args and kwargs
+    # Positional args fill in params first, then any remaining go to pyparams
+    nparamspos = len(mparams) - len(paramskw)
+    params = dict(zip(mparams, args[:nparamspos]), **paramskw)
+
+    # Check we got all params
+    if len(params) != len(mparams):
+        raise ValueError(f'Incomplete or duplicate parameters in "{name}"')
+
+    # Parse pyparams
+    try:
+        bound = margsig.bind(*args[nparamspos:], **pyparamskw)
+        pyparams = dict(bound.arguments)
+    except TypeError as e:
+        raise ValueError(f'Invalid Python data parameters in "{name}": {e}')
+
+    # Check all Python data is defined
+    for k, v in pyparams.items():
+        if isinstance(v, Undefined):
+            raise ValueError(f'Undefined Python data parameter "{k}" '
+                             f'passed to "{name}"')
+
+    return params, pyparams
+
+
+def expand(context, name, /, *args, **kwargs):
+    mdef = context['_macros'][name]
+
+    # Parse arguments
+    params, pyparams = _parse_expand_args(name, mdef.params, mdef.argsig,
+                                          args, kwargs)
+
+    # Call macro callable with Python data
+    body = capture(context, mdef.caller, **pyparams)
 
     # Identify any local variable declarations
     lvars = _locals(body)
@@ -113,37 +202,11 @@ def macro(context, name, params, externs=''):
     if lvars:
         body = re.sub(r'\b({0})\b'.format('|'.join(lvars)), r'\1_', body)
 
-    # Save
-    context['_macros'][name] = (params, externs, body)
-
-    return ''
-
-
-def expand(context, name, /, *args, **kwargs):
-    # Get the macro parameter list and the body
-    mparams, mexterns, body = context['_macros'][name]
-
-    # Ensure an appropriate number of arguments have been passed
-    if len(mparams) != len(args) + len(kwargs):
-        raise ValueError(f'Inconsistent macro parameter list in {name}')
-
-    # Parse the parameter list
-    params = dict(zip(mparams, args))
-    for k, v in kwargs.items():
-        if k in params:
-            raise ValueError(f'Duplicate macro parameter {k} in {name}')
-
-        params[k] = v
-
-    # Ensure all parameters have been passed
-    if sorted(mparams) != sorted(params):
-        raise ValueError(f'Inconsistent macro parameter list in {name}')
-
     # Ensure all (used) external parameters have been passed to the kernel
-    for extrn in mexterns:
+    for extrn in mdef.externs:
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
-            raise ValueError(f'Missing external {extrn} in {name}')
+            raise ValueError(f'Missing external "{extrn}" in "{name}"')
 
     # Rename local parameters
     for lname, subst in params.items():

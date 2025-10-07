@@ -8,6 +8,7 @@ class DottedTemplateLookup(TemplateLookup):
     def __init__(self, pkg, dfltargs):
         self.dfltpkg = pkg
         self.dfltargs = dfltargs
+        self.filters = []
 
     def adjust_uri(self, uri, relto):
         return uri
@@ -27,6 +28,13 @@ class DottedTemplateLookup(TemplateLookup):
         src = pkgutil.get_data(pkg, f'{basename}.mako')
         if not src:
             raise RuntimeError(f'Template "{name}" not found')
+
+        # Decode bytes to string
+        src = src.decode()
+
+        # Apply all filters to source
+        for filter in self.filters:
+            src = filter(src)
 
         # Subclass Template to support implicit arguments
         class DefaultTemplate(Template):

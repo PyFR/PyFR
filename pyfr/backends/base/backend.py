@@ -7,6 +7,7 @@ from weakref import WeakKeyDictionary, WeakValueDictionary
 import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
+from pyfr.backends.base.makoutil import mfilttag
 from pyfr.template import DottedTemplateLookup
 
 
@@ -74,7 +75,12 @@ class BaseBackend:
             'soasz': self.soasz, 'math': math
         }
 
-        return DottedTemplateLookup(pkg, dfltargs)
+        lookup = DottedTemplateLookup(pkg, dfltargs)
+
+        # Add source filters
+        lookup.filters.append(mfilttag)
+
+        return lookup
 
     def malloc(self, obj, extent):
         # If no extent has been specified then autocommit
