@@ -41,4 +41,4 @@ class DottedTemplateLookup(TemplateLookup):
             def render(iself, *args, **kwargs):
                 return super().render(*args, **self.dfltargs, **kwargs)
 
-        return DefaultTemplate(src, lookup=self)
+        return DefaultTemplate(src, lookup=self, strict_undefined=True)

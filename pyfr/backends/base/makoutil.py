@@ -11,6 +11,29 @@ import pyfr.nputil as nputil
 import pyfr.util as util
 
 
+class MacroError(Exception):
+    def __init__(self, mname, error):
+        if isinstance(error, MacroError):
+            self.path = [mname, *error.path]
+            self.error = error.error
+        else:
+            self.path = [mname]
+            self.error = error
+        super().__init__(mname)
+
+
+class KernelError(Exception):
+    def __init__(self, kname, error):
+        if isinstance(error, MacroError):
+            path = ' -> '.join(it.chain([kname], error.path))
+            msg = str(error.error)
+        else:
+            path = kname
+            msg = str(error)
+
+        super().__init__(f'\n  {path}: {msg}')
+
+
 def ndrange(context, *args):
     return util.ndrange(*args)
 
@@ -155,7 +178,7 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
     # Separate kwargs into params and Python data params
     if unknown := set(kwargs) - set(mparams) - set(margs):
         unknown = unknown.pop()
-        raise ValueError(f'Unknown parameter "{unknown}" in macro "{name}"')
+        raise MacroError(name, f'Unknown parameter "{unknown}"')
 
     paramskw = {k: v for k, v in kwargs.items() if k in mparams}
     pyparamskw = {k: v for k, v in kwargs.items() if k in margs}
@@ -167,20 +190,19 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
 
     # Check we got all params
     if len(params) != len(mparams):
-        raise ValueError(f'Incomplete or duplicate parameters in "{name}"')
+        raise MacroError(name, 'Incomplete or duplicate parameters')
 
     # Parse pyparams
     try:
         bound = margsig.bind(*args[nparamspos:], **pyparamskw)
         pyparams = dict(bound.arguments)
     except TypeError as e:
-        raise ValueError(f'Invalid Python data parameters in "{name}": {e}')
+        raise MacroError(name, f'Invalid Python data parameters: {e}')
 
     # Check all Python data is defined
     for k, v in pyparams.items():
         if isinstance(v, Undefined):
-            raise ValueError(f'Undefined Python data parameter "{k}" '
-                             f'passed to "{name}"')
+            raise MacroError(name, f'Undefined Python data parameter "{k}"')
 
     return params, pyparams
 
@@ -193,7 +215,10 @@ def expand(context, name, /, *args, **kwargs):
                                           args, kwargs)
 
     # Call macro callable with Python data
-    body = capture(context, mdef.caller, **pyparams)
+    try:
+        body = capture(context, mdef.caller, **pyparams)
+    except Exception as e:
+        raise MacroError(name, e) from e
 
     # Identify any local variable declarations
     lvars = _locals(body)
@@ -206,7 +231,7 @@ def expand(context, name, /, *args, **kwargs):
     for extrn in mdef.externs:
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
-            raise ValueError(f'Missing external "{extrn}" in "{name}"')
+            raise MacroError(name, f'Missing external "{extrn}"')
 
     # Rename local parameters
     for lname, subst in params.items():
@@ -228,7 +253,10 @@ def kernel(context, name, ndim, **kwargs):
     kwargs = dict(kwargs, **extrns)
 
     # Capture the kernel body
-    body = capture(context, context['caller'].body)
+    try:
+        body = capture(context, context['caller'].body)
+    except Exception as e:
+        raise KernelError(name, e) from e
 
     # Get the generator class and data types
     kerngen = context['_kernel_generator']
