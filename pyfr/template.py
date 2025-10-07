@@ -35,13 +35,10 @@ class DottedTemplateLookup(TemplateLookup):
         if not src:
             raise RuntimeError(f'Template "{name}" not found')
 
-        # Decode bytes to string for preprocessing
-        src = src.decode()
-
         # Subclass Template to support implicit arguments
         class DefaultTemplate(Template):
             def render(iself, *args, **kwargs):
                 return super().render(*args, **self.dfltargs, **kwargs)
 
-        return DefaultTemplate(src, lookup=self,
+        return DefaultTemplate(src.decode(), lookup=self,
                                preprocessor=self._apply_filters)
