@@ -4,7 +4,7 @@ from inspect import signature
 import itertools as it
 import re
 
-from mako.runtime import Undefined, capture, supports_caller
+from mako.runtime import capture, supports_caller
 import numpy as np
 
 import pyfr.nputil as nputil
@@ -19,6 +19,7 @@ class MacroError(Exception):
         else:
             self.path = [mname]
             self.error = error
+
         super().__init__(mname)
 
 
