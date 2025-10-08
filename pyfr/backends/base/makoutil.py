@@ -154,8 +154,8 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
 
     # Separate kwargs into params and Python data params
     if unknown := set(kwargs) - set(mparams) - set(margs):
-        raise ExceptionGroup(f'In macro: {name}',
-                           [ValueError(f'Unknown param "{unknown.pop()}"')])
+        errs = [ValueError(f'Unknown parameter "{u}"') for u in unknown]
+        raise ExceptionGroup(f'In macro: {name}', errs)
 
     paramskw = {k: v for k, v in kwargs.items() if k in mparams}
     pyparamskw = {k: v for k, v in kwargs.items() if k in margs}
@@ -168,7 +168,7 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
     # Check we got all params
     if len(params) != len(mparams):
         raise ExceptionGroup(f'In macro: {name}',
-                           [ValueError('Incomplete or duplicate parameters')])
+                             [ValueError('Incomplete or duplicate params')])
 
     # Parse pyparams
     try:
@@ -205,7 +205,7 @@ def expand(context, name, /, *args, **kwargs):
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
             raise ExceptionGroup(f'In macro: {name}',
-                               [ValueError(f'Missing external "{extrn}"')])
+                                 [ValueError(f'Missing external "{extrn}"')])
 
     # Rename local parameters
     for lname, subst in params.items():
