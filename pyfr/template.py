@@ -10,6 +10,12 @@ class DottedTemplateLookup(TemplateLookup):
         self.dfltargs = dfltargs
         self.filters = []
 
+    def _apply_filters(self, src):
+        for filter in self.filters:
+            src = filter(src)
+
+        return src
+
     def adjust_uri(self, uri, relto):
         return uri
 
@@ -29,16 +35,11 @@ class DottedTemplateLookup(TemplateLookup):
         if not src:
             raise RuntimeError(f'Template "{name}" not found')
 
-        # Decode bytes to string
-        src = src.decode()
-
-        # Apply all filters to source
-        for filter in self.filters:
-            src = filter(src)
-
         # Subclass Template to support implicit arguments
         class DefaultTemplate(Template):
             def render(iself, *args, **kwargs):
                 return super().render(*args, **self.dfltargs, **kwargs)
 
-        return DefaultTemplate(src, lookup=self, strict_undefined=True)
+        return DefaultTemplate(src.decode(), lookup=self,
+                               preprocessor=self._apply_filters,
+                               strict_undefined=True)
