@@ -4,7 +4,7 @@ from inspect import signature
 import itertools as it
 import re
 
-from mako.runtime import Undefined, capture, supports_caller
+from mako.runtime import capture, supports_caller
 import numpy as np
 
 import pyfr.nputil as nputil
@@ -154,8 +154,8 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
 
     # Separate kwargs into params and Python data params
     if unknown := set(kwargs) - set(mparams) - set(margs):
-        unknown = unknown.pop()
-        raise ValueError(f'Unknown parameter "{unknown}" in macro "{name}"')
+        errs = [ValueError(f'Unknown parameter "{u}"') for u in unknown]
+        raise ExceptionGroup(f'In macro: {name}', errs)
 
     paramskw = {k: v for k, v in kwargs.items() if k in mparams}
     pyparamskw = {k: v for k, v in kwargs.items() if k in margs}
@@ -167,20 +167,15 @@ def _parse_expand_args(name, mparams, margsig, args, kwargs):
 
     # Check we got all params
     if len(params) != len(mparams):
-        raise ValueError(f'Incomplete or duplicate parameters in "{name}"')
+        raise ExceptionGroup(f'In macro: {name}',
+                             [ValueError('Incomplete or duplicate params')])
 
     # Parse pyparams
     try:
         bound = margsig.bind(*args[nparamspos:], **pyparamskw)
         pyparams = dict(bound.arguments)
     except TypeError as e:
-        raise ValueError(f'Invalid Python data parameters in "{name}": {e}')
-
-    # Check all Python data is defined
-    for k, v in pyparams.items():
-        if isinstance(v, Undefined):
-            raise ValueError(f'Undefined Python data parameter "{k}" '
-                             f'passed to "{name}"')
+        raise ExceptionGroup(f'In macro: {name}', [e])
 
     return params, pyparams
 
@@ -193,7 +188,10 @@ def expand(context, name, /, *args, **kwargs):
                                           args, kwargs)
 
     # Call macro callable with Python data
-    body = capture(context, mdef.caller, **pyparams)
+    try:
+        body = capture(context, mdef.caller, **pyparams)
+    except Exception as e:
+        raise ExceptionGroup(f'In macro: {name}', [e]) from None
 
     # Identify any local variable declarations
     lvars = _locals(body)
@@ -206,7 +204,8 @@ def expand(context, name, /, *args, **kwargs):
     for extrn in mdef.externs:
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
-            raise ValueError(f'Missing external "{extrn}" in "{name}"')
+            raise ExceptionGroup(f'In macro: {name}',
+                                 [ValueError(f'Missing external "{extrn}"')])
 
     # Rename local parameters
     for lname, subst in params.items():
@@ -228,7 +227,10 @@ def kernel(context, name, ndim, **kwargs):
     kwargs = dict(kwargs, **extrns)
 
     # Capture the kernel body
-    body = capture(context, context['caller'].body)
+    try:
+        body = capture(context, context['caller'].body)
+    except Exception as e:
+        raise ExceptionGroup(f'In kernel: {name}', [e]) from None
 
     # Get the generator class and data types
     kerngen = context['_kernel_generator']

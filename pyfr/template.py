@@ -41,4 +41,5 @@ class DottedTemplateLookup(TemplateLookup):
                 return super().render(*args, **self.dfltargs, **kwargs)
 
         return DefaultTemplate(src.decode(), lookup=self,
-                               preprocessor=self._apply_filters)
+                               preprocessor=self._apply_filters,
+                               strict_undefined=True)
