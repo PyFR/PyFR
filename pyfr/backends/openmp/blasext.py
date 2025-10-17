@@ -62,6 +62,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
 
         tplargs = dict(norm=norm, ncola=ncola, method=method)
 
+        tplargs['dt_type'] = None
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
 

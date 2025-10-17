@@ -78,6 +78,7 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         tplargs = dict(norm=norm, method=method)
 
+        tplargs['dt_type'] = None
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
 
