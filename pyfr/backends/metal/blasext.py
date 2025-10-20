@@ -74,9 +74,9 @@ class MetalBlasExtKernels(MetalKernelProvider):
         reduced_host = reduced_host.reshape(ncola, -1)
 
         # Template arguments
-        tplargs = dict(blocksz=tgrp[0], ncola=ncola, norm=norm, method=method)
+        tplargs = dict(blocksz=tgrp[0], ncola=ncola, norm=norm, method=method,
+                       dt_type=None)
 
-        tplargs['dt_type'] = None
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
 

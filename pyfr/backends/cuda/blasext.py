@@ -76,9 +76,8 @@ class CUDABlasExtKernels(CUDAKernelProvider):
         # Empty result buffer on the host
         reduced_host = cuda.pagelocked_empty((ncola, grid[0]), fpdtype)
 
-        tplargs = dict(norm=norm, method=method)
+        tplargs = dict(norm=norm, method=method, dt_type=None)
 
-        tplargs['dt_type'] = None
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
 
