@@ -76,7 +76,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         # Empty result buffer on the host
         reduced_host = hip.pagelocked_empty((ncola, grid[0]), fpdtype)
 
-        tplargs = dict(norm=norm, blocksz=block[0], method=method)
+        tplargs = dict(norm=norm, blocksz=block[0], method=method, dt_type=None)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'

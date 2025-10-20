@@ -60,7 +60,7 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
         nblocks, nrow, *_, fpdtype = rs[0].traits
         ncola = rs[0].ioshape[-2]
 
-        tplargs = dict(norm=norm, ncola=ncola, method=method)
+        tplargs = dict(norm=norm, ncola=ncola, method=method, dt_type=None)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
