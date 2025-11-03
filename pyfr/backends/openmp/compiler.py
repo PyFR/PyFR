@@ -29,7 +29,7 @@ class OpenMPCompiler:
         # Get the compiler version string
         self.version = call_capture_output([self.cc, '-v'])[1]
 
-        # Get the base compiler command strig
+        # Get the base compiler command string
         self.cmd = self.cc_cmd(None, None)
 
         # Get the cache
