@@ -96,7 +96,7 @@ class PointLocator:
             emask = p[fields[0]] == q[fields[0]]
 
             for f in fields[1:]:
-                lmask |= emask & p[f] < q[f]
+                lmask |= emask & (p[f] < q[f])
                 emask &= p[f] == q[f]
 
             q[lmask] = p[lmask]
