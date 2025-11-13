@@ -248,6 +248,8 @@ class _AscentRenderer:
     v_filter = ['qcriterion', 'vorticity']
 
     def __init__(self, adapter, isrestart):
+        comm, rank, root = get_comm_rank_root()
+
         # Set order for subdivision
         sorder = adapter.scfg.getint('solver', 'order')
         divisor = adapter.acfg.getint(adapter.cfgsect, 'division', sorder)
@@ -278,11 +280,13 @@ class _AscentRenderer:
         # Generate a Conduit node for the mesh
         self.mesh_n = ConduitNode(self.conduit)
 
+        # Determine our domain ID offset
+        doff = comm.exscan(len(adapter.region_data)) or 0
+
         # Build the Conduit blueprint mesh for the regions
         self._ele_regions_lin = []
-        for etype, eidxs in adapter.region_data.items():
-            # Build the conduit blueprint mesh for the regions
-            self._build_blueprint(adapter, etype, eidxs, divisor)
+        for i, (etype, eidxs) in enumerate(adapter.region_data.items()):
+            self._build_blueprint(adapter, doff + i, etype, eidxs, divisor)
 
         # Initalise Ascent and the open an instance
         self._init_ascent(adapter)
@@ -291,11 +295,9 @@ class _AscentRenderer:
         if getattr(self, 'ascent_ptr', None):
             self.lib.ascent_close(self.ascent_ptr)
 
-    def _build_blueprint(self, adapter, etype, rgn, divisor):
-        comm, rank, root = get_comm_rank_root()
-
+    def _build_blueprint(self, adapter, domid, etype, rgn, divisor):
         mesh_n = self.mesh_n
-        d_str = f'domain_{rank}_{etype}'
+        d_str = f'domain_{domid}'
         e_str = f'{d_str}/topologies/mesh/elements'
 
         eidx = adapter.etypes.index(etype)
@@ -305,7 +307,7 @@ class _AscentRenderer:
         xd = xd[..., rgn].transpose(1, 2, 0)
         ndims, neles, nsvpts = xd.shape
 
-        mesh_n[f'{d_str}/state/domain_id'] = rank
+        mesh_n[f'{d_str}/state/domain_id'] = domid
         mesh_n[f'{d_str}/state/config/keyword'] = 'Config'
         mesh_n[f'{d_str}/state/config/data'] = adapter.scfg.tostr()
         mesh_n[f'{d_str}/state/mesh_uuid/keyword'] = 'Mesh_UUID'
