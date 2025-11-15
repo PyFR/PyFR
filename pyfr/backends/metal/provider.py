@@ -84,9 +84,9 @@ class MetalKernelProvider(BaseKernelProvider):
 
         # Obtain the corresponding compute pipeline
         cpsf, err = call_(self.backend.dev, 'newComputePipelineStateWith',
-                     descriptor=desc, error=None)
-        if cpsf is None:
-            raise RuntimeError('Unable to create compute pipeline state')
+                          descriptor=desc, error=None)
+        if err is not None:
+            raise ValueError(f'Pipeline creation error: {err}')
 
         # Classify the arguments as either pointers or scalars
         pargs, sargs = [], []

@@ -121,7 +121,7 @@ install_requires = [
 
 # Soft dependencies
 extras_require = {
-    'metal': ['pyobjc-framework-Metal >= 9.0']
+    'metal': ['pyobjc-framework-Metal >= 12.0']
 }
 
 # Scripts
