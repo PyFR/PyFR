@@ -83,7 +83,7 @@ class MetalKernelProvider(BaseKernelProvider):
         desc.setThreadGroupSizeIsMultipleOfThreadExecutionWidth_(True)
 
         # Obtain the corresponding compute pipeline
-        cpsf = call_(self.backend.dev, 'newComputePipelineStateWith',
+        cpsf, err = call_(self.backend.dev, 'newComputePipelineStateWith',
                      descriptor=desc, error=None)
         if cpsf is None:
             raise RuntimeError('Unable to create compute pipeline state')
