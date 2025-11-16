@@ -1,12 +1,12 @@
-from ctypes import c_float, c_int32, c_int64, c_ulong, sizeof
+from ctypes import sizeof
 
 import numpy as np
 
 from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
-from pyfr.backends.metal.util import call_
 from pyfr.backends.metal.generator import MetalKernelGenerator
+from pyfr.backends.metal.util import call_
 from pyfr.cache import memoize
 from pyfr.nputil import npdtype_to_ctypestype
 
@@ -31,9 +31,6 @@ class MetalUnorderedMetaKernel(_MetalMetaKernel, BaseUnorderedMetaKernel): pass
 
 
 class MetalKernelProvider(BaseKernelProvider):
-    typemap = [c_float, c_int32, c_int64, c_ulong]
-    typemap = {k: (k(), sizeof(k)) for k in typemap}
-
     def _benchmark(self, kfunc, nbench=40, nwarmup=25):
         cbuf_warmup = self.backend.queue.commandBuffer()
         cbuf_bench = self.backend.queue.commandBuffer()
@@ -102,7 +99,6 @@ class MetalKernelProvider(BaseKernelProvider):
             cce.setComputePipelineState_(cpsf)
 
             for i in pargs:
-                buf, off = args[i]
                 cce.setBuffer_offset_atIndex_(*args[i], i)
 
             for i, val, sz in sargs:
