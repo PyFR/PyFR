@@ -514,9 +514,19 @@ class _AscentRenderer:
                 # Replace - with _ for vectors and sections
                 key = k.replace('_', '/').replace('-', '_')
                 self.scenes[f'{path}/{key}'] = v
+                print(f'{path}/{key}' + f'    {v}')
 
         gen = file_path_gen(self.basedir, opts['image-name'], self.isrestart)
         self._image_paths.append((f'scenes/{path}/image_name', gen))
+
+    def _time_dep_options(self, adapter):
+        for k in adapter.acfg.items(adapter.cfgsect, prefix='time-dep-'):
+            opt = k.removeprefix('time-dep-')
+            s_name = opt.removeprefix('scene-').split('-')[0]
+            opt = opt.removeprefix(f'scene-{s_name}-')
+            r_name = opt.removeprefix('render-').split('-')[0]
+            opt = opt.removeprefix(f'render-{r_name}-').replace('_', '/').replace('-', '_')
+            self._add_scene[f'scenes/s_{s_name}/renders/r_{r_name}/{opt}'] = adapter.acfg.geteval(adapter.cfgsect, k, subs={'t': adapter.tcurr})
 
     def render(self, adapter):
         comm, rank, root = get_comm_rank_root()
@@ -524,6 +534,9 @@ class _AscentRenderer:
         # Set file names
         for path, gen in self._image_paths:
             self._add_scene[path] = gen.send(adapter.tcurr)
+
+        # Update time dependent options
+        self._time_dep_options(adapter)
 
         # Set field expressions
         self._eval_exprs(adapter)
