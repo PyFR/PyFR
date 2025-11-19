@@ -35,7 +35,7 @@ class PointLocator:
                     l['dist'], l['tloc'] = dist, tloc
                     l['cidx'], l['eidx'] = cidx, eidxs[eidx]
 
-        # Reduce
+        # Reduce over all ranks
         self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=3)
 
         return locs
@@ -57,22 +57,19 @@ class PointLocator:
         return self._reduce_elocs(len(pts), elocator)
 
     def locate(self, pts):
-        comm, rank, root = get_comm_rank_root()
-
-        # Attempt to locate points using a nearest node approach
-        locs = self._locate_nnode(pts)
+        # Attempt to locate points using a bounding box approach
+        locs = self._locate_bbox(pts)
 
         # In extreme cases this approach can leave some valid points
-        # un-located; for these we try a bounding box approach
+        # un-located; for these we try a nearest node approach
         if np.any(infp := np.isinf(locs['dist'])):
-            locs[infp] = self._locate_bbox(pts[infp])
+            locs[infp] = self._locate_nnode(pts[infp])
 
-        # Have the root rank perform a final round of validation
-        if rank == root:
-            for i, l in enumerate(locs):
-                if l['dist'] == np.inf:
-                    ploc = ', '.join(str(p) for p in pts[i])
-                    raise ValueError(f'Unable to locate point ({ploc})')
+        # Validate
+        for i, l in enumerate(locs):
+            if l['dist'] == np.inf:
+                ploc = ', '.join(str(p) for p in pts[i])
+                raise ValueError(f'Unable to locate point ({ploc})')
 
         return locs
 
@@ -106,7 +103,8 @@ class PointLocator:
 
         coll(sbuf, rbuf, op=autofree(mpi.Op.Create(op, commute=False)))
 
-    def _find_closest_node(self, pts):
+    @memoize
+    def _get_nodes_off_tree(self):
         comm, rank, root = get_comm_rank_root()
 
         # Read our portion of the nodes table
@@ -114,15 +112,37 @@ class PointLocator:
         nodes = self.mesh.raw['nodes'][start:end]['location']
 
         # Insert these points into a spatial index
-        idx = Index((np.arange(len(nodes)), nodes, nodes),
-                    properties=Property(dimension=self.mesh.ndims))
+        tree = Index((np.arange(len(nodes)), nodes, nodes),
+                     properties=Property(dimension=self.mesh.ndims))
 
-        # Query the index to find our closest node
-        nearest = idx.nearest_v(pts, pts, strict=True)[0]
+        return nodes, start, tree
+
+    @memoize
+    def _get_bbox_tree(self, etype, *, scale=1.05):
+        spts = self.mesh.spts[etype]
+
+        # Compute the bounding boxes
+        smin, smax = spts.min(axis=0), spts.max(axis=0)
+
+        # Expand by the scale factor to better account for strong curvature
+        expand = (0.5*(scale - 1))*(smin + smax)
+        smin -= expand
+        smax += expand
+
+        # Insert these boxes into a spatial index
+        return Index((np.arange(len(smin)), smin, smax),
+                     properties=Property(dimension=self.mesh.ndims))
+
+    def _find_closest_node(self, pts):
+        comm, rank, root = get_comm_rank_root()
+
+        # Query the node index to find our closest node
+        nodes, off, tree = self._get_nodes_off_tree()
+        nearest = tree.nearest_v(pts, pts, strict=True)[0]
 
         buf = np.empty(len(pts), dtype=[('dist', float), ('idx', int)])
         buf['dist'] = np.linalg.norm(pts - nodes[nearest], axis=1)
-        buf['idx'] = nearest + start
+        buf['idx'] = nearest + off
 
         self._minloc(comm.Allreduce, mpi.IN_PLACE, buf)
 
@@ -149,17 +169,10 @@ class PointLocator:
         return self._find_closest_element(etype, pts, pidx, sidx)
 
     def _find_closest_element_bbox(self, etype, pts):
-        spts = self.mesh.spts[etype]
-
-        # Compute the bounding boxes
-        smin, smax = spts.min(axis=0), spts.max(axis=0)
-
-        # Insert these boxes into a spatial index
-        idx = Index((np.arange(len(smin)), smin, smax),
-                    properties=Property(dimension=self.mesh.ndims))
-
         # Query the index to find intersecting elements
-        sidx, icounts = idx.intersection_v(pts, pts)
+        tree = self._get_bbox_tree(etype)
+        sidx, icounts = tree.intersection_v(pts, pts)
+
         pidx = np.repeat(np.arange(len(pts)), icounts.astype(int)).tolist()
 
         return self._find_closest_element(etype, pts, pidx, sidx.tolist())
