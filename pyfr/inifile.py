@@ -104,13 +104,6 @@ class Inifile:
 
     def getliteral(self, section, option, default=_sentinel):
         return literal_eval(self.get(section, option, default))
-    
-    def geteval(self, section, option, subs={}, default=_sentinel):
-        expr = self.get(section, option, default)
-        if subs:
-            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
-                          lambda m: str(subs[m[1]]), expr)
-        return eval(expr)
 
     def items(self, section, prefix=''):
         return self.items_as(section, lambda v: v, prefix=prefix)

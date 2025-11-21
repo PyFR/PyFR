@@ -262,6 +262,7 @@ class _AscentRenderer:
                                             abs=True)
         self.isrestart = isrestart
         self._image_paths = []
+        self._time_dep_opts = {}
 
         # Expressions to plot and configs
         self._exprs = []
@@ -513,20 +514,19 @@ class _AscentRenderer:
             if k != 'image-name':
                 # Replace - with _ for vectors and sections
                 key = k.replace('_', '/').replace('-', '_')
-                self.scenes[f'{path}/{key}'] = v
-                print(f'{path}/{key}' + f'    {v}')
+                if isinstance(v, str):
+                    self._time_dep_opts[f'scenes/{path}/{key}'] = v
+                else:
+                    self.scenes[f'{path}/{key}'] = v
 
         gen = file_path_gen(self.basedir, opts['image-name'], self.isrestart)
         self._image_paths.append((f'scenes/{path}/image_name', gen))
 
     def _time_dep_options(self, adapter):
-        for k in adapter.acfg.items(adapter.cfgsect, prefix='time-dep-'):
-            opt = k.removeprefix('time-dep-')
-            s_name = opt.removeprefix('scene-').split('-')[0]
-            opt = opt.removeprefix(f'scene-{s_name}-')
-            r_name = opt.removeprefix('render-').split('-')[0]
-            opt = opt.removeprefix(f'render-{r_name}-').replace('_', '/').replace('-', '_')
-            self._add_scene[f'scenes/s_{s_name}/renders/r_{r_name}/{opt}'] = adapter.acfg.geteval(adapter.cfgsect, k, subs={'t': adapter.tcurr})
+        subs = {'t': adapter.tcurr}
+        for path, val in self._time_dep_opts.items():
+            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)), lambda m: str(subs[m[1]]), val)
+            self._add_scene[path] = eval(expr)
 
     def render(self, adapter):
         comm, rank, root = get_comm_rank_root()
