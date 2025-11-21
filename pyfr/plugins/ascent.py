@@ -522,12 +522,6 @@ class _AscentRenderer:
         gen = file_path_gen(self.basedir, opts['image-name'], self.isrestart)
         self._image_paths.append((f'scenes/{path}/image_name', gen))
 
-    def _time_dep_options(self, adapter):
-        subs = {'t': adapter.tcurr}
-        for path, val in self._time_dep_opts.items():
-            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)), lambda m: str(subs[m[1]]), val)
-            self._add_scene[path] = eval(expr)
-
     def render(self, adapter):
         comm, rank, root = get_comm_rank_root()
 
@@ -536,7 +530,11 @@ class _AscentRenderer:
             self._add_scene[path] = gen.send(adapter.tcurr)
 
         # Update time dependent options
-        self._time_dep_options(adapter)
+        subs = {'t': adapter.tcurr}
+        for path, val in self._time_dep_opts.items():
+            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
+                          lambda m: str(subs[m[1]]), val)
+            self._add_scene[path] = eval(expr)
 
         # Set field expressions
         self._eval_exprs(adapter)
