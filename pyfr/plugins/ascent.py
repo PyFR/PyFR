@@ -530,11 +530,9 @@ class _AscentRenderer:
             self._add_scene[path] = gen.send(adapter.tcurr)
 
         # Update time dependent options
-        subs = {'t': adapter.tcurr}
+        subs = dict(t=adapter.tcurr)
         for path, val in self._time_dep_opts.items():
-            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
-                          lambda m: str(subs[m[1]]), val)
-            self._add_scene[path] = eval(expr)
+            self._add_scene[path] = npeval(val, subs)
 
         # Set field expressions
         self._eval_exprs(adapter)
