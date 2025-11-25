@@ -113,10 +113,10 @@ install_requires = [
     'h5py >= 2.10',
     'mako >= 1.0.0',
     'mpi4py >= 4.0.0',
-    'numpy >= 2.2.5',
+    'numpy >= 2.3.5',
     'platformdirs >= 2.2.0',
     'pytools >= 2016.2.1',
-    'rtree >= 1.4.0'
+    'rtree >= 1.4.1'
 ]
 
 # Soft dependencies
@@ -136,6 +136,7 @@ classifiers = [
     'Programming Language :: Python :: 3.11',
     'Programming Language :: Python :: 3.12',
     'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
     'Topic :: Scientific/Engineering'
 ]
 
