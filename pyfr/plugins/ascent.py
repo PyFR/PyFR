@@ -91,7 +91,7 @@ class ConduitNode:
                 fn = getattr(self.lib,
                              f'conduit_node_set_path_{value.dtype}_ptr')
                 fn(self, key, value.ctypes.data, value.size)
-            case list():
+            case list() | tuple():
                 value = np.array(value, dtype=float)
                 self.lib.conduit_node_set_path_float64_ptr(self, key,
                                                            value.ctypes.data,
