@@ -91,7 +91,7 @@ class ConduitNode:
                 fn = getattr(self.lib,
                              f'conduit_node_set_path_{value.dtype}_ptr')
                 fn(self, key, value.ctypes.data, value.size)
-            case list() | tuple():
+            case list():
                 value = np.array(value, dtype=float)
                 self.lib.conduit_node_set_path_float64_ptr(self, key,
                                                            value.ctypes.data,
@@ -514,7 +514,8 @@ class _AscentRenderer:
             if k != 'image-name':
                 # Replace - with _ for vectors and sections
                 key = k.replace('_', '/').replace('-', '_')
-                if isinstance(v, str):
+                if isinstance(v, str) or (isinstance(v, list) and
+                   np.any([isinstance(_v, str) for _v in v])):
                     self._time_dep_opts[f'scenes/{path}/{key}'] = v
                 else:
                     self.scenes[f'{path}/{key}'] = v
@@ -532,7 +533,11 @@ class _AscentRenderer:
         # Update time dependent options
         subs = dict(t=adapter.tcurr)
         for path, val in self._time_dep_opts.items():
-            self._add_scene[path] = npeval(val, subs)
+            if isinstance(val, list):
+                v = [npeval(e, subs) if isinstance(e, str) else e for e in val]
+            else:
+                v = npeval(val, subs)
+            self._add_scene[path] = v
 
         # Set field expressions
         self._eval_exprs(adapter)
