@@ -32,6 +32,11 @@ class BaseOrderedMetaKernel(Kernel):
 
         self.kernels = list(kernels)
 
+    def bind(self, **kwargs):
+        for k in self.kernels:
+            if bind := getattr(k, 'bind', None):
+                bind(**kwargs)
+
     def run(self, *args):
         for k in self.kernels:
             k.run(*args)
@@ -49,6 +54,11 @@ class BaseUnorderedMetaKernel(Kernel):
 
             if len(self.splits) != len(self.kernels) - 1:
                 raise ValueError('Invalid split points')
+
+    def bind(self, **kwargs):
+        for k in self.kernels:
+            if bind := getattr(k, 'bind', None):
+                bind(**kwargs)
 
     def run(self, *args):
         for k in self.kernels:
