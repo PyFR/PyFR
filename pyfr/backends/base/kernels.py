@@ -31,11 +31,10 @@ class BaseMetaKernel(Kernel):
 
         self.kernels = list(kernels)
 
-        # Collect child kernels that have bind methods
-        self._bkerns = [k for k in self.kernels if hasattr(k, 'bind')]
+        bkerns = [k for k in self.kernels if hasattr(k, 'bind')]
 
-        # Only define bind if there are bindable children
-        if self._bkerns:
+        if bkerns:
+            self._bkerns = bkerns
             self.bind = self._bind
 
     def _bind(self, **kwargs):
