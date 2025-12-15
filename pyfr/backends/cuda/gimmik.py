@@ -94,7 +94,8 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                     kdata = {
                         'runtime': dt,
                         'registers': kern.nreg,
-                        'local_mem': kern.local_mem
+                        'local_mem': kern.local_mem,
+                        'shared_mem': kern.shared_mem
                     }
             except StopIteration:
                 pass
