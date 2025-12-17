@@ -5,8 +5,6 @@
 <%include file='pyfr.solvers.baseadvec.kernels.smats'/>
 <%include file='pyfr.solvers.baseadvecdiff.kernels.transform_grad'/>
 
-<% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
-
 <% gradu = 'gradu' if 'fused' in ktype else 'f' %>
 <% smats = 'smats_l' if 'linear' in ktype else 'smats' %>
 <% rcpdjac = 'rcpdjac_l' if 'linear' in ktype else 'rcpdjac' %>
