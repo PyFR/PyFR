@@ -14,8 +14,6 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if self.basis.fpts_in_upts:
             bufs |= {'comm_fpts'}
-            # For grad_fusion, interfaces read directly from _grad_upts
-            # For cache blocking, gradcoru_fpts copies to _vect_fpts
             if self.grad_fusion:
                 bufs -= {'vect_fpts'}
 
@@ -24,9 +22,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
     def set_backend(self, backend, nscalupts, nonce, linoff):
         super().set_backend(backend, nscalupts, nonce, linoff)
 
-        # For GLL, override the interface method set in base __init__
-        # - grad_fusion: read directly from _grad_upts
-        # - cache blocking: gradcoru_fpts copies to _vect_fpts
+        # Ensure we point to the correct gradient array
         if self.basis.fpts_in_upts:
             if self.grad_fusion:
                 self.get_vect_fpts_for_inter = self._get_grad_upts_for_inter
@@ -100,8 +96,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             return self._be.unordered_meta_kernel(muls)
 
-        # Skip gradcoru_fpts only for GLL + grad_fusion (direct read from _grad_upts)
-        # All other cases need it: normal interp, or M0 copy for cache blocking GLL
+        # Elid the interpolation if possible
         if not (self.basis.fpts_in_upts and self.grad_fusion):
             kernels['gradcoru_fpts'] = gradcoru_fpts
 
