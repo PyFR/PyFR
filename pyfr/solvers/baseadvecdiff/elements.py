@@ -1,4 +1,5 @@
 from pyfr.polys import get_polybasis
+from pyfr.solvers.base.elements import inters_map
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
@@ -96,7 +97,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             return self._be.unordered_meta_kernel(muls)
 
-        # Elid the interpolation if possible
+        # Elide the interpolation if possible
         if not (self.basis.fpts_in_upts and self.grad_fusion):
             kernels['gradcoru_fpts'] = gradcoru_fpts
 
@@ -158,6 +159,12 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             self.artvisc = None
         else:
             raise ValueError('Invalid shock capturing scheme')
+
+    @inters_map
+    def _get_grad_upts_for_inter(self, eidx, fidx):
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        fmap = self.basis.fpts_map_upts[rmap]
+        return self._grad_upts.mid, fmap, self.nupts
 
     def get_artvisc_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]
