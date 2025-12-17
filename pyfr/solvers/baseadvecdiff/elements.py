@@ -14,12 +14,24 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if self.basis.fpts_in_upts:
             bufs |= {'comm_fpts'}
-            bufs -= {'vect_fpts'}
+            # For grad_fusion, interfaces read directly from _grad_upts
+            # For cache blocking, gradcoru_fpts copies to _vect_fpts
+            if self.grad_fusion:
+                bufs -= {'vect_fpts'}
 
         return bufs
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         super().set_backend(backend, nscalupts, nonce, linoff)
+
+        # For GLL, override the interface method set in base __init__
+        # - grad_fusion: read directly from _grad_upts
+        # - cache blocking: gradcoru_fpts copies to _vect_fpts
+        if self.basis.fpts_in_upts:
+            if self.grad_fusion:
+                self.get_vect_fpts_for_inter = self._get_grad_upts_for_inter
+            else:
+                self.get_vect_fpts_for_inter = self._get_vect_fpts_for_inter
 
         kernel, kernels = self._be.kernel, self.kernels
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
@@ -88,7 +100,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             return self._be.unordered_meta_kernel(muls)
 
-        if not self.basis.fpts_in_upts:
+        # Skip gradcoru_fpts only for GLL + grad_fusion (direct read from _grad_upts)
+        # All other cases need it: normal interp, or M0 copy for cache blocking GLL
+        if not (self.basis.fpts_in_upts and self.grad_fusion):
             kernels['gradcoru_fpts'] = gradcoru_fpts
 
         if 'flux' in self.antialias and self.basis.order > 0:
