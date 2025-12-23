@@ -146,7 +146,7 @@ class StdPIController(BaseStdController):
             comm.Allreduce(mpi.IN_PLACE, err, op=mpi.SUM)
 
             # Normalise
-            err = math.sqrt(float(err) / self._gndofs)
+            err = math.sqrt(float(err[0]) / self._gndofs)
         # Uniform norm
         else:
             # Reduce locally (element types + field variables)
@@ -156,7 +156,7 @@ class StdPIController(BaseStdController):
             comm.Allreduce(mpi.IN_PLACE, err, op=mpi.MAX)
 
             # Normalise
-            err = math.sqrt(float(err))
+            err = math.sqrt(float(err[0]))
 
         return err if not math.isnan(err) else 100
 
