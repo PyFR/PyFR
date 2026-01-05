@@ -259,6 +259,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, TavgMixin, BaseSolnPlugin):
         intg.collect_stats(stats)
 
         # Reduce our standard deviations across ranks
+        intg.cfg.update_root()
         if rank != root:
             comm.Reduce(std_max, None, op=mpi.MAX, root=root)
             comm.Reduce(std_sum, None, op=mpi.SUM, root=root)

@@ -227,10 +227,10 @@ class MassFlowBCMixin:
                 self.interp_c = p0 - self.interp_m * t
 
                 # Update values in cfg in case of restart
-                self.cfg.set(self.cfgsect, 'interp-c', self.interp_c)
-                self.cfg.set(self.cfgsect, 'interp-m', self.interp_m)
-                self.cfg.set(self.cfgsect, 'mf-avg', self.mf_avg)
-                self.cfg.set(self.cfgsect, 'tprev', self.tprev)
+                self.cfg.set(self.cfgsect, 'interp-c', self.interp_c, True)
+                self.cfg.set(self.cfgsect, 'interp-m', self.interp_m, True)
+                self.cfg.set(self.cfgsect, 'mf-avg', self.mf_avg, True)
+                self.cfg.set(self.cfgsect, 'tprev', self.tprev, True)
 
                 # Output mass flow and pressure at BC
                 if self.csv:
