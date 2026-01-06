@@ -1,11 +1,8 @@
 from ast import literal_eval
-from collections import defaultdict
 from configparser import ConfigParser, NoSectionError, NoOptionError
 import io
 import os
 import re
-
-from pyfr.mpiutil import get_comm_rank_root
 
 
 def _ensure_float(m):
@@ -25,9 +22,6 @@ class Inifile:
 
         if inistr:
             cp.read_string(inistr)
-        
-        # Holds changes only made on certain ranks
-        self._edits = defaultdict(dict)
 
     @staticmethod
     def load(file):
@@ -36,7 +30,7 @@ class Inifile:
 
         return Inifile(file.read())
 
-    def set(self, section, option, value, update_root=False):
+    def set(self, section, option, value):
         value = str(value)
 
         try:
@@ -44,10 +38,6 @@ class Inifile:
         except NoSectionError:
             self._cp.add_section(section)
             self._cp.set(section, option, value)
-        
-        if update_root:
-            self._edits[section][option] = value
-            # self._edits.append({'section': section, 'option': option, 'value': value})
 
     def hasopt(self, section, option):
         return self._cp.has_option(section, option)
@@ -150,13 +140,3 @@ class Inifile:
         buf = io.StringIO()
         self._cp.write(buf)
         return buf.getvalue()
-    
-    def update_root(self):
-        comm, rank, root = get_comm_rank_root()
-        alledits = comm.gather(self._edits)
-        if rank == root:
-            for edits in alledits:
-                for section in edits:
-                    for option in edits[section]:
-                        self.set(section, option, edits[section][option])
-        self._edits = defaultdict(dict)
