@@ -69,7 +69,7 @@ class BaseSystem:
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
-        self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap)
+        self._bc_inters, self._bc_prefns, self._bc_serialise = self._load_bc_inters(mesh, elemap, initsoln)
         backend.commit()
 
     def commit(self):
@@ -149,12 +149,12 @@ class BaseSystem:
 
         return mpi_inters
 
-    def _load_bc_inters(self, mesh, elemap):
+    def _load_bc_inters(self, mesh, elemap, initsoln):
         comm, rank, root = get_comm_rank_root()
 
         bccls = self.bbcinterscls
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
-        bc_inters, bc_prefns = [], {}
+        bc_inters, bc_prefns, bc_serialise = [], {}, {}
 
         # Iterate over all boundaries in the mesh
         for c in mesh.codec:
@@ -170,10 +170,17 @@ class BaseSystem:
             cfgsect = f'soln-bcs-{bname}'
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
+            # Check if there is serialised data for this boundary in initsoln
+            sdata = {}
+            if initsoln is not None:
+                for f in initsoln:
+                    if f.startswith(f'intg/system/{bname}/'):
+                        sdata[f.split('/')[3]] = initsoln[f]
+
             # If we have this boundary then create an instance
             if localbc:
                 bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
-                                  cfgsect, self.cfg, bccomm)
+                                  cfgsect, self.cfg, bccomm, **sdata)
                 bc_inters.append(bciface)
             else:
                 bciface = None
@@ -181,8 +188,11 @@ class BaseSystem:
             # Allow the boundary to return a preparation callback
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
                 bc_prefns[bname] = pfn
+            
+            if (sfn := bcclass.serialisefn(bciface)):
+                bc_serialise[bname] = sfn
 
-        return bc_inters, bc_prefns
+        return bc_inters, bc_prefns, bc_serialise
 
     def _gen_kernels(self, nregs, eles, iint, mpiint, bcint):
         self._kernels = kernels = defaultdict(list)
@@ -355,3 +365,9 @@ class BaseSystem:
         subs = [sub for sub in subs if len(sub) > 1]
 
         g.group(kerns, subs)
+    
+    def serialise(self):
+        sdata = {}
+        for bname, sfn in self._bc_serialise.items():
+            sdata |= {f'system/{bname}/{k}': v for k, v in sfn().items()}
+        return sdata

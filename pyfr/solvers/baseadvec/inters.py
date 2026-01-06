@@ -136,6 +136,10 @@ class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
     @classmethod
     def preparefn(cls, bciface, mesh, elemap):
         pass
+    
+    @classmethod
+    def serialisefn(cls, bciface):
+        pass
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be

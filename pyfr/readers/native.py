@@ -82,6 +82,20 @@ class NativeReader:
             soln = comm.bcast(soln, root=root)
             soln = {k: Inifile(v) for k, v in soln.items()}
 
+            # Read serialised data
+            sdata = {}
+            if rank == root:
+                snames = []
+                def svisit(name):
+                    if name.startswith('plugins') or name.startswith('intg'):
+                        snames.append(name)
+                f.visit(svisit)
+                for sname in snames:
+                    if not isinstance(f[sname], h5py.Group):
+                        sdata |= {sname: f[sname][()]}
+            sdata = comm.bcast(sdata, root=root)
+            soln |= sdata
+
             # Obtain the polynomial order
             order = soln['config'].getint('solver', 'order')
 

@@ -74,6 +74,10 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         else:
             metadata = None
 
+        intgdata = intg.serialise()
+        if rank == root:
+            metadata |= {f'intg/{k}': v for k, v in intgdata.items()}
+
         # Fetch data from other plugins and add it to metadata with ad-hoc keys
         for csh in intg.plugins:
             try:

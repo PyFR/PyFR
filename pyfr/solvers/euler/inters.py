@@ -1,4 +1,4 @@
-from pyfr.mpiutil import mpi, scal_coll
+from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
@@ -132,7 +132,7 @@ class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
 
 
 class MassFlowBCMixin:
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm, **kwargs):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
@@ -148,11 +148,11 @@ class MassFlowBCMixin:
         self._set_external('im', 'scalar fpdtype_t')
 
         # Check if using values from restart
-        if cfg.hasopt(cfgsect, 'interp-c'):
-            self.interp_c = cfg.getfloat(cfgsect, 'interp-c')
-            self.interp_m = cfg.getfloat(cfgsect, 'interp-m')
-            self.mf_avg = cfg.getfloat(cfgsect, 'mf-avg')
-            self.tprev = cfg.getfloat(cfgsect, 'tprev')
+        if 'tprev' in kwargs:
+            self.interp_c = kwargs['interp_c']
+            self.interp_m = kwargs['interp_m']
+            self.mf_avg = kwargs['mf_avg']
+            self.tprev = kwargs['tprev']
         else:
             self.interp_c = p
             self.interp_m = 0.0
@@ -226,12 +226,6 @@ class MassFlowBCMixin:
                 self.interp_m = (p1 - p0) / dt
                 self.interp_c = p0 - self.interp_m * t
 
-                # Update values in cfg in case of restart
-                self.cfg.set(self.cfgsect, 'interp-c', self.interp_c)
-                self.cfg.set(self.cfgsect, 'interp-m', self.interp_m)
-                self.cfg.set(self.cfgsect, 'mf-avg', self.mf_avg)
-                self.cfg.set(self.cfgsect, 'tprev', self.tprev)
-
                 # Output mass flow and pressure at BC
                 if self.csv:
                     self.csv(t, self.mf_avg, p1)
@@ -241,6 +235,39 @@ class MassFlowBCMixin:
             k.bind(ic=self.interp_c, im=self.interp_m)
         
         self.nstep_counter += 1
+    
+    @classmethod
+    def serialisefn(cls, bciface):
+        if bciface:
+            return bciface.serialise
+        else:
+            def serialise():
+                comm, rank, root = get_comm_rank_root()
+                sdataArr = comm.gather(None, root=root)
+                if rank == root:
+                    for sdata in sdataArr:
+                        if sdata:
+                            return sdata
+                return {}
+            return serialise
+    
+    def serialise(self):
+        data = {}
+        if self.tprev is not None:
+            data = {
+                'interp_c': self.interp_c,
+                'interp_m': self.interp_m,
+                'mf_avg': self.mf_avg,
+                'tprev': self.tprev
+            }
+
+        comm, rank, root = get_comm_rank_root()
+        sdataArr = comm.gather(data, root=root)
+        if rank == root:
+            for sdata in sdataArr:
+                if sdata:
+                    return sdata
+        return {}
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
