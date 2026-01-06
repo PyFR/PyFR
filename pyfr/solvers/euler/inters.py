@@ -1,9 +1,10 @@
-from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
+from pyfr.mpiutil import mpi, scal_coll
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
 from pyfr.writers.csv import CSVStream
+from pyfr.writers.serialise import Serialiser
 
 import numpy as np
 
@@ -238,20 +239,10 @@ class MassFlowBCMixin:
     
     @classmethod
     def serialisefn(cls, bciface):
-        if bciface:
-            return bciface.serialise
-        else:
-            def serialise():
-                comm, rank, root = get_comm_rank_root()
-                sdataArr = comm.gather(None, root=root)
-                if rank == root:
-                    for sdata in sdataArr:
-                        if sdata:
-                            return sdata
-                return {}
-            return serialise
+        datafn = bciface.sdata if bciface else None
+        return Serialiser.serialisefn(datafn)
     
-    def serialise(self):
+    def sdata(self):
         data = {}
         if self.tprev is not None:
             data = {
@@ -260,14 +251,7 @@ class MassFlowBCMixin:
                 'mf_avg': self.mf_avg,
                 'tprev': self.tprev
             }
-
-        comm, rank, root = get_comm_rank_root()
-        sdataArr = comm.gather(data, root=root)
-        if rank == root:
-            for sdata in sdataArr:
-                if sdata:
-                    return sdata
-        return {}
+        return data
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
