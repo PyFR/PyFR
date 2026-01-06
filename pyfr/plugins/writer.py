@@ -68,7 +68,6 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         intg.collect_stats(stats)
 
         # If we are the root rank then prepare the metadata
-        intg.cfg.update_root()
         if rank == root:
             metadata = {**intg.cfgmeta, 'stats': stats.tostr(),
                         'mesh-uuid': intg.mesh_uuid}
