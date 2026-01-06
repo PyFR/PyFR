@@ -376,7 +376,7 @@ For ``/soln/p3-tri`` we find::
    }
 
 The ``-parts`` suffixed array contains the MPI rank number that was
-responsible for each element type.
+responsible for each element.
 
 Subset solutions
 ~~~~~~~~~~~~~~~~
