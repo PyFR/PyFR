@@ -85,14 +85,11 @@ class NativeReader:
             # Read serialised data
             sdata = {}
             if rank == root:
-                snames = []
                 def svisit(name):
-                    if name.startswith('plugins') or name.startswith('intg'):
-                        snames.append(name)
+                    if name.startswith(('sdata')):
+                        if not isinstance(f[name], h5py.Group):
+                            sdata.update({name: f[name][()]})
                 f.visit(svisit)
-                for sname in snames:
-                    if not isinstance(f[sname], h5py.Group):
-                        sdata |= {sname: f[sname][()]}
             sdata = comm.bcast(sdata, root=root)
             soln |= sdata
 

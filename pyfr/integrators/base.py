@@ -270,6 +270,3 @@ class BaseCommon:
 
     def _add(self, *args, subdims=None):
         self._addv(args[::2], args[1::2], subdims=subdims)
-    
-    def serialise(self):
-        return self.system.serialise()

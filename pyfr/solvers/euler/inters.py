@@ -133,7 +133,7 @@ class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
 
 
 class MassFlowBCMixin:
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm, **kwargs):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm, sdata=None):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
@@ -149,11 +149,11 @@ class MassFlowBCMixin:
         self._set_external('im', 'scalar fpdtype_t')
 
         # Check if using values from restart
-        if 'tprev' in kwargs:
-            self.interp_c = kwargs['interp_c']
-            self.interp_m = kwargs['interp_m']
-            self.mf_avg = kwargs['mf_avg']
-            self.tprev = kwargs['tprev']
+        if sdata is not None and len(sdata) == 4:
+            self.interp_c = sdata[0]
+            self.interp_m = sdata[1]
+            self.mf_avg = sdata[2]
+            self.tprev = sdata[3]
         else:
             self.interp_c = p
             self.interp_m = 0.0
@@ -240,18 +240,12 @@ class MassFlowBCMixin:
     @classmethod
     def serialisefn(cls, bciface):
         datafn = bciface.sdata if bciface else None
-        return Serialiser.serialisefn(datafn)
+        return datafn
     
     def sdata(self):
-        data = {}
         if self.tprev is not None:
-            data = {
-                'interp_c': self.interp_c,
-                'interp_m': self.interp_m,
-                'mf_avg': self.mf_avg,
-                'tprev': self.tprev
-            }
-        return data
+            return [self.interp_c, self.interp_m, self.mf_avg, self.tprev]
+        return [self.interp_c, self.interp_m, self.mf_avg]
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
