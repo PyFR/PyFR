@@ -182,12 +182,9 @@ class BaseSystem:
 
             # If we have this boundary then create an instance
             if localbc:
-                if sdata is not None:
-                    bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
-                                      cfgsect, self.cfg, bccomm, sdata=sdata)
-                else:
-                    bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
-                                      cfgsect, self.cfg, bccomm)
+                bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
+                                  cfgsect, self.cfg, bccomm)
+                bciface.restore(sdata)
                 bc_inters.append(bciface)
             else:
                 bciface = None
@@ -196,7 +193,7 @@ class BaseSystem:
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
                 bc_prefns[bname] = pfn
             
-            if  hasattr(bcclass, 'serialisefn'):
+            if hasattr(bcclass, 'serialisefn'):
                 self.serialiser.register_sdata(f'bc/{bname}', bcclass.serialisefn(bciface))
 
         return bc_inters, bc_prefns
