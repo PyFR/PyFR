@@ -147,8 +147,18 @@ class MassFlowBCMixin:
 
         self._set_external('ic', 'scalar fpdtype_t')
         self._set_external('im', 'scalar fpdtype_t')
+        
+        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
+        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
-        # Check if using values from restart
+        if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
+            fname = cfg.get(cfgsect, 'file')
+            nflush = cfg.getint(cfgsect, 'flushsteps', 10)
+            self.csv = CSVStream(fname, header='t,mf,pbc', nflush=nflush)
+        else:
+            self.csv = None
+
+    def restore(self, sdata):
         if sdata is not None and len(sdata) == 5:
             self.interp_c = sdata[0]
             self.interp_m = sdata[1]
@@ -161,16 +171,6 @@ class MassFlowBCMixin:
             self.mf_avg = 0.0
             self.tprev = None
             self.nstep_counter = 0
-        
-        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
-        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
-
-        if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
-            fname = cfg.get(cfgsect, 'file')
-            nflush = cfg.getint(cfgsect, 'flushsteps', 10)
-            self.csv = CSVStream(fname, header='t,mf,pbc', nflush=nflush)
-        else:
-            self.csv = None
 
     def calculate_mass_flow(self, solns):
         mf = 0.0
