@@ -149,18 +149,18 @@ class MassFlowBCMixin:
         self._set_external('im', 'scalar fpdtype_t')
 
         # Check if using values from restart
-        if sdata is not None and len(sdata) == 4:
+        if sdata is not None and len(sdata) == 5:
             self.interp_c = sdata[0]
             self.interp_m = sdata[1]
             self.mf_avg = sdata[2]
             self.tprev = sdata[3]
+            self.nstep_counter = sdata[4]
         else:
             self.interp_c = p
             self.interp_m = 0.0
             self.mf_avg = 0.0
             self.tprev = None
-
-        self.nstep_counter = 0
+            self.nstep_counter = 0
 
         surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
@@ -244,8 +244,9 @@ class MassFlowBCMixin:
     
     def sdata(self):
         if self.tprev is not None:
-            return [self.interp_c, self.interp_m, self.mf_avg, self.tprev]
-        return [self.interp_c, self.interp_m, self.mf_avg]
+            return [self.interp_c, self.interp_m, self.mf_avg, self.tprev, 
+                    self.nstep_counter]
+        return [self.interp_c, self.interp_m, self.mf_avg, self.nstep_counter]
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
