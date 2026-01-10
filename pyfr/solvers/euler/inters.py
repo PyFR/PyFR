@@ -158,7 +158,7 @@ class MassFlowBCMixin:
         else:
             self.csv = None
 
-    def restore(self, sdata):
+    def setup(self, sdata):
         if sdata is not None and len(sdata) == 5:
             self.interp_c = sdata[0]
             self.interp_m = sdata[1]

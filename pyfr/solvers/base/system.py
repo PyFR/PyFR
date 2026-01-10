@@ -184,7 +184,7 @@ class BaseSystem:
             if localbc:
                 bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
                                   cfgsect, self.cfg, bccomm)
-                bciface.restore(sdata)
+                bciface.setup(sdata)
                 bc_inters.append(bciface)
             else:
                 bciface = None
