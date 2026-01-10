@@ -8,7 +8,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 1. ``type`` --- type of boundary condition:
 
     ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
-    ``char-riem-inv-mass-flow`` | ```no-slp-adia-wall`` | 
+    ``char-riem-inv-mass-flow`` | ``no-slp-adia-wall`` |
     ``no-slp-isot-wall`` | ``no-slp-wall`` | ``slp-adia-wall`` | ``slp-wall`` |
     ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
     ``sup-out-fn``

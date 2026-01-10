@@ -59,7 +59,7 @@ class BaseDualIntegrator(BaseIntegrator):
         tol = 5.0*self.dtmin
         if rem > tol and (self._dt - rem) > tol:
             raise ValueError('Plugin call times must be multiples of dt')
-        
+
         rem_tstart = math.fmod(tstart, self._dt)
         if rem_tstart > tol and (self._dt - rem_tstart) > tol:
             raise ValueError('Plugin start times must be multiples of dt')

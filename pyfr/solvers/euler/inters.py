@@ -160,7 +160,7 @@ class MassFlowBCMixin:
             self.tprev = None
 
         self.nstep_counter = 0
-        
+
         surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
@@ -194,7 +194,7 @@ class MassFlowBCMixin:
             mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
-    
+
     @classmethod
     def preparefn(cls, bciface, mesh, elemap):
         if bciface:
@@ -207,7 +207,7 @@ class MassFlowBCMixin:
         if (update or not self.tprev) and t >= self.tstart:
             solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
             mf = self.calculate_mass_flow(solns)
-            
+
             if not self.tprev:
                 self.mf_avg = mf
                 self.tprev = t
@@ -235,11 +235,11 @@ class MassFlowBCMixin:
                 # Output mass flow and pressure at BC
                 if self.csv:
                     self.csv(t, self.mf_avg, p1)
-        
+
         # Bind interpolation to kernels
         for k in kerns.values():
             k.bind(ic=self.interp_c, im=self.interp_m)
-        
+
         self.nstep_counter += 1
 
 

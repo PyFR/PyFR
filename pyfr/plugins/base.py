@@ -21,7 +21,7 @@ def cli_external(meth):
     return classmethod(newmeth)
 
 
-def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header', 
+def init_csv(cfg, cfgsect, header, *, filekey='file', headerkey='header',
              nflush=10):
     # Determine the file path
     fname = cfg.get(cfgsect, filekey)

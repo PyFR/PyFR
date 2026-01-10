@@ -12,10 +12,10 @@ class CSVStream:
         # Output a header if required
         if self.outf.tell() == 0 and header:
             print(header, file=self.outf)
-        
+
         self.nprint = 0
         self.nflush = nflush
-    
+
     def __call__(self, *args):
         print(*args, sep=',', file=self.outf)
 
