@@ -239,12 +239,11 @@ class MassFlowBCMixin:
     
     @classmethod
     def serialisefn(cls, bciface):
-        datafn = bciface.sdata if bciface else None
-        return datafn
+        return bciface.sdata if bciface else None
     
     def sdata(self):
-        return [self.interp_c, self.interp_m, self.mf_avg, 
-                self.tprev if self.tprev else 0, self.nstep_counter]
+        return [self.interp_c, self.interp_m, self.mf_avg, self.tprev or 0,
+                self.nstep_counter]
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
