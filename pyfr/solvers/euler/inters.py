@@ -133,7 +133,7 @@ class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
 
 
 class MassFlowBCMixin:
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm, sdata=None):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
         self.c |= self._exp_opts(
@@ -142,8 +142,8 @@ class MassFlowBCMixin:
 
         self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
-        opts = self._eval_opts(['mass-flow-rate', 'alpha', 'eta', 'p'])
-        self.target_mfr, self.alpha, self.eta, p = opts
+        opts = self._eval_opts(['mass-flow-rate', 'alpha', 'eta'])
+        self.target_mfr, self.alpha, self.eta = opts
 
         self._set_external('ic', 'scalar fpdtype_t')
         self._set_external('im', 'scalar fpdtype_t')
@@ -159,14 +159,14 @@ class MassFlowBCMixin:
             self.csv = None
 
     def setup(self, sdata):
-        if sdata is not None and len(sdata) == 5:
+        if sdata is not None and sdata[4] != 0:
             self.interp_c = sdata[0]
             self.interp_m = sdata[1]
             self.mf_avg = sdata[2]
             self.tprev = sdata[3]
             self.nstep_counter = sdata[4]
         else:
-            self.interp_c = p
+            self.interp_c = self._eval_opts(['p'])[0]
             self.interp_m = 0.0
             self.mf_avg = 0.0
             self.tprev = None
@@ -243,10 +243,8 @@ class MassFlowBCMixin:
         return datafn
     
     def sdata(self):
-        if self.tprev is not None:
-            return [self.interp_c, self.interp_m, self.mf_avg, self.tprev, 
-                    self.nstep_counter]
-        return [self.interp_c, self.interp_m, self.mf_avg, self.nstep_counter]
+        return [self.interp_c, self.interp_m, self.mf_avg, 
+                self.tprev if self.tprev else 0, self.nstep_counter]
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):

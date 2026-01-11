@@ -86,7 +86,7 @@ class NativeReader:
             sdata = {}
             if rank == root:
                 def svisit(name):
-                    if name.startswith(('sdata')):
+                    if name.startswith(('plugins', 'bcs')):
                         if not isinstance(f[name], h5py.Group):
                             sdata.update({name: f[name][()]})
                 f.visit(svisit)
