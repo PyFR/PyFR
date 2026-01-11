@@ -1,5 +1,6 @@
 from pyfr.mpiutil import get_comm_rank_root, mpi
 
+
 class Serialiser:
     def __init__(self):
         self._serialfns = {}
@@ -14,10 +15,7 @@ class Serialiser:
             fn = lambda: comm.recv(source=sendrank)
         elif sender:
             comm.send(rank, root)
-            def _send():
-                comm.send(datafn(), root)
-                return {}
-            fn = _send
+            fn = lambda: comm.send(datafn(), root)
         
         return fn
 

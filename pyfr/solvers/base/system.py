@@ -174,10 +174,9 @@ class BaseSystem:
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
             # Check if there is serialised data for this boundary in initsoln
-            try:
-                sdata = initsoln[f'bcs/{bname}']
-            except (TypeError, KeyError):
-                sdata = None
+            sdata = None
+            if initsoln:
+                sdata = initsoln.get(f'bcs/{bname}')
 
             # If we have this boundary then create an instance
             if localbc:
