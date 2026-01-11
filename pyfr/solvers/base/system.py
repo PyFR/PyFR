@@ -174,11 +174,10 @@ class BaseSystem:
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
             # Check if there is serialised data for this boundary in initsoln
-            sdata = None
-            if initsoln is not None:
-                for f in initsoln:
-                    if f.startswith(f'sdata/bc/{bname}'):
-                        sdata = initsoln[f]
+            try:
+                sdata = initsoln[f'bcs/{bname}']
+            except (TypeError, KeyError):
+                sdata = None
 
             # If we have this boundary then create an instance
             if localbc:
@@ -193,8 +192,8 @@ class BaseSystem:
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
                 bc_prefns[bname] = pfn
             
-            if hasattr(bcclass, 'serialisefn'):
-                self.serialiser.register_sdata(f'bc/{bname}', bcclass.serialisefn(bciface))
+            if (sfn := getattr(bcclass, 'serialisefn', None)):
+                self.serialiser.register_sdata(f'bcs/{bname}', bcclass.serialisefn(bciface))
 
         return bc_inters, bc_prefns
 
