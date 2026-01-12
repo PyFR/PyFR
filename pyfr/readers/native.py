@@ -88,7 +88,7 @@ class NativeReader:
                 def svisit(name):
                     if name.startswith(('plugins', 'bcs')):
                         if not isinstance(f[name], h5py.Group):
-                            sdata.update({name: f[name][()]})
+                            sdata[name] = f[name][()]
                 f.visit(svisit)
             sdata = comm.bcast(sdata, root=root)
             soln |= sdata
