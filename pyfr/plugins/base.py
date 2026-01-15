@@ -149,6 +149,9 @@ class BasePlugin:
     def finalise(self, intg):
         pass
 
+    def setup(self, sdata):
+        pass
+
 
 class BaseSolnPlugin(BasePlugin):
     prefix = 'soln'
