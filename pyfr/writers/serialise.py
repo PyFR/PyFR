@@ -9,15 +9,14 @@ class Serialiser:
         comm, rank, root = get_comm_rank_root()
         sender = comm.exscan(1 if datafn else 0) == 0 and datafn
 
-        fn = datafn
         if rank == root and not datafn:
             sendrank = comm.recv()
-            fn = lambda: comm.recv(source=sendrank)
+            return lambda: comm.recv(source=sendrank)
         elif sender:
             comm.send(rank, root)
-            fn = lambda: comm.send(datafn(), root)
-        
-        return fn
+            return lambda: comm.send(datafn(), root)
+        else:
+            return None
 
     def register_sdata(self, prefix, datafn):
         sfn = self.serialisefn(datafn)
