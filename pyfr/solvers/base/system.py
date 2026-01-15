@@ -191,8 +191,7 @@ class BaseSystem:
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
                 bc_prefns[bname] = pfn
             
-            if (sfn := getattr(bcclass, 'serialisefn', None)):
-                self.serialiser.register_sdata(f'bcs/{bname}', bcclass.serialisefn(bciface))
+            bcclass.serialisefn(bciface, f'bcs/{bname}', self.serialiser)
 
         return bc_inters, bc_prefns
 

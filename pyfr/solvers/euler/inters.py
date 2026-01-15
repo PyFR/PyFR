@@ -238,8 +238,8 @@ class MassFlowBCMixin:
         self.nstep_counter += 1
     
     @classmethod
-    def serialisefn(cls, bciface):
-        return bciface.sdata if bciface else None
+    def serialisefn(cls, bciface, prefix, srl):
+        srl.register_sdata(prefix, bciface.sdata if bciface else None)
     
     def sdata(self):
         return [self.interp_c, self.interp_m, self.mf_avg, self.tprev or 0,
