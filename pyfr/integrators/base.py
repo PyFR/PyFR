@@ -92,13 +92,15 @@ class BaseIntegrator:
                     args += (suffix, )
 
                 sdata = None
+                prefix = self.get_plugin_data_prefix(name, suffix)
                 if initsoln:
-                    prefix = self.get_plugin_data_prefix(name, suffix)
                     sdata = initsoln.get(prefix)
 
                 # Instantiate
-                plugins.append(get_plugin(*args))
-                plugins[-1].setup(sdata)
+                plugin = get_plugin(*args)
+                plugin.setup(sdata)
+                plugin.serialisefn(prefix, self.system.serialiser)
+                plugins.append(plugin)
 
         return plugins
 

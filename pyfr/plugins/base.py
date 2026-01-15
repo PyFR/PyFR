@@ -142,9 +142,8 @@ class BasePlugin:
     def __call__(self, intg):
         pass
 
-    def register_sdata(self, intg, datafn):
-        prefix = intg.get_plugin_data_prefix(self.name, self.suffix)
-        intg.system.serialiser.register_sdata(prefix, datafn)
+    def serialisefn(self, prefix, serialiser):
+        pass
 
     def finalise(self, intg):
         pass

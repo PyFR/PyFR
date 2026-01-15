@@ -91,3 +91,7 @@ class BaseInters:
     
     def setup(self, sdata):
         pass
+
+    @classmethod
+    def serialisefn(cls, iface, prefix, srl):
+        pass
