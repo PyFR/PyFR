@@ -91,16 +91,14 @@ class BaseIntegrator:
                 if ptype == 'soln':
                     args += (suffix, )
 
-                data = {}
-                if initsoln is not None:
-                    # Get the plugin data stored in the solution, if any
+                sdata = None
+                if initsoln:
                     prefix = self.get_plugin_data_prefix(name, suffix)
-                    for f in initsoln:
-                        if f.startswith(f'{prefix}/'):
-                            data[f.split('/')[2]] = initsoln[f]
+                    sdata = initsoln.get(prefix)
 
                 # Instantiate
-                plugins.append(get_plugin(*args, **data))
+                plugins.append(get_plugin(*args))
+                plugins[-1].setup(sdata)
 
         return plugins
 
