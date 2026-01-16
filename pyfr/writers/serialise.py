@@ -16,7 +16,7 @@ class Serialiser:
             comm.send(rank, root)
             return lambda: comm.send(datafn(), root)
         else:
-            return None
+            return datafn
 
     def register_sdata(self, prefix, datafn):
         if (sfn := self.serialisefn(datafn)):
