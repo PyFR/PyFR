@@ -159,12 +159,12 @@ class MassFlowBCMixin:
             self.csv = None
 
     def setup(self, sdata):
-        if sdata is not None and sdata[4] != 0:
-            self.interp_c = sdata[0]
-            self.interp_m = sdata[1]
-            self.mf_avg = sdata[2]
-            self.tprev = sdata[3]
-            self.nstep_counter = int(sdata[4])
+        if sdata is not None and sdata[0][4] != 0:
+            self.interp_c = sdata[0][0]
+            self.interp_m = sdata[0][1]
+            self.mf_avg = sdata[0][2]
+            self.tprev = sdata[0][3]
+            self.nstep_counter = sdata[0][4]
         else:
             self.interp_c = self._eval_opts(['p'])[0]
             self.interp_m = 0.0
@@ -242,8 +242,9 @@ class MassFlowBCMixin:
         srl.register_sdata(prefix, bciface._sdata if bciface else None)
     
     def _sdata(self):
-        return [self.interp_c, self.interp_m, self.mf_avg, self.tprev or 0,
-                self.nstep_counter]
+        return np.array([(self.interp_c, self.interp_m, self.mf_avg,
+                          self.tprev or 0, self.nstep_counter)],
+                          dtype='f8,f8,f8,f8,i8')
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
