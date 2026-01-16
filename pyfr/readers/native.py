@@ -90,8 +90,7 @@ class NativeReader:
                         if not isinstance(f[name], h5py.Group):
                             sdata[name] = f[name][()]
                 f.visit(svisit)
-            sdata = comm.bcast(sdata, root=root)
-            soln |= sdata
+            soln |= comm.bcast(sdata, root=root)
 
             # Obtain the polynomial order
             order = soln['config'].getint('solver', 'order')

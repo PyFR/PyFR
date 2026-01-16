@@ -19,8 +19,7 @@ class Serialiser:
             return None
 
     def register_sdata(self, prefix, datafn):
-        sfn = self.serialisefn(datafn)
-        if sfn is not None:
+        if (sfn := self.serialisefn(datafn)):
             self._serialfns[prefix] = sfn
     
     def serialise(self):

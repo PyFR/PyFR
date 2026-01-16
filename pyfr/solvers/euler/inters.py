@@ -164,7 +164,7 @@ class MassFlowBCMixin:
             self.interp_m = sdata[1]
             self.mf_avg = sdata[2]
             self.tprev = sdata[3]
-            self.nstep_counter = sdata[4]
+            self.nstep_counter = int(sdata[4])
         else:
             self.interp_c = self._eval_opts(['p'])[0]
             self.interp_m = 0.0
@@ -239,9 +239,9 @@ class MassFlowBCMixin:
     
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
-        srl.register_sdata(prefix, bciface.sdata if bciface else None)
+        srl.register_sdata(prefix, bciface._sdata if bciface else None)
     
-    def sdata(self):
+    def _sdata(self):
         return [self.interp_c, self.interp_m, self.mf_avg, self.tprev or 0,
                 self.nstep_counter]
 
