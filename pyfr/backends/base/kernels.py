@@ -25,6 +25,7 @@ class Kernel:
 class NullKernel(Kernel):
     pass
 
+
 class BaseMetaKernel(Kernel):
     def __init__(self, kernels):
         super().__init__()
