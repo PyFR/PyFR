@@ -132,7 +132,7 @@ class NativeWriter:
                     fcntl.ioctl(fd, self.LL_IOC_LOV_SETSTRIPE, arg)
                 finally:
                     os.close(fd)
-            except (IOError, OSError):
+            except OSError:
                 pass
 
     def _open_file(self, path):

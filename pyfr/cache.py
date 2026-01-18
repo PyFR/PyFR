@@ -73,7 +73,7 @@ class ObjectCache:
     def get_bytes(self, k):
         try:
             return self.get_path(k).read_bytes()
-        except (AttributeError, IOError):
+        except (AttributeError, OSError):
             return None
 
     def set_with_bytes(self, k, bytes):
