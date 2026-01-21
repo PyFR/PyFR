@@ -3,7 +3,6 @@ from configparser import NoOptionError
 
 from pyfr.integrators.base import BaseCommon
 from pyfr.util import first
-from pyfr.writers.serialise import Serialiser
 
 
 class BaseDualPseudoIntegrator(BaseCommon):
@@ -45,9 +44,6 @@ class BaseDualPseudoIntegrator(BaseCommon):
         # Determine the amount of temp storage required in total
         self.nregs = (self.pseudo_stepper_nregs + self.stepper_nregs +
                       self.stage_nregs + source_nregs + self.aux_nregs)
-
-        # Saving serialised data to checkpoint files
-        self.serialiser = Serialiser()
 
         # Construct the relevant system
         self.system = systemcls(backend, mesh, initsoln, self.nregs, cfg,

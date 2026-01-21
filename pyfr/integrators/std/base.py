@@ -1,6 +1,5 @@
 from pyfr.integrators.base import BaseIntegrator, _common_plugin_prop
 from pyfr.integrators.base import BaseCommon
-from pyfr.writers.serialise import Serialiser
 
 
 class BaseStdIntegrator(BaseCommon, BaseIntegrator):
@@ -15,9 +14,6 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
 
         # Determine the amount of temp storage required by this method
         self.nregs = self.stepper_nregs
-
-        # Saving serialised data to checkpoint files
-        self.serialiser = Serialiser()
 
         # Construct the relevant system
         self.system = systemcls(backend, mesh, initsoln, self.nregs, cfg,
