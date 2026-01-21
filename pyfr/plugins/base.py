@@ -145,10 +145,7 @@ class BasePlugin:
     def finalise(self, intg):
         pass
 
-    def setup(self, sdata):
-        pass
-
-    def set_serialiser(self, serialiser):
+    def setup(self, sdata, serialiser):
         pass
 
     def get_serialiser_prefix(self):

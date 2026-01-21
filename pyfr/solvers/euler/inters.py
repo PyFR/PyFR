@@ -4,7 +4,6 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
 from pyfr.writers.csv import CSVStream
-from pyfr.writers.serialise import Serialiser
 
 import numpy as np
 
