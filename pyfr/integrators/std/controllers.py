@@ -116,7 +116,7 @@ class StdPIController(BaseStdController):
         if not self._minfac < 1 <= self._maxfac:
             raise ValueError('Invalid max-fact, min-fact')
 
-        self._setup(initsoln)
+        self._init_dt_err(initsoln)
 
     @property
     def controller_needs_errest(self):
@@ -197,7 +197,7 @@ class StdPIController(BaseStdController):
                 self._reject_step(dt, idxprev, err=err)
 
     # Get current dt and estimate of previous error from soln file
-    def _setup(self, initsoln):
+    def _init_dt_err(self, initsoln):
         sdata = initsoln.get('intg/pi') if initsoln else None
         self._dt = sdata[0] if sdata is not None else self._dt
         self._errprev = sdata[1] if sdata is not None else 1.0

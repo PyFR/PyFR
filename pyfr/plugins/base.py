@@ -142,14 +142,20 @@ class BasePlugin:
     def __call__(self, intg):
         pass
 
-    def serialisefn(self, prefix, serialiser):
-        pass
-
     def finalise(self, intg):
         pass
 
     def setup(self, sdata):
         pass
+
+    def set_serialiser(self, serialiser):
+        pass
+
+    def get_serialiser_prefix(self):
+        if self.suffix:
+            return f'plugins/{self.name}-{self.suffix}'
+        else:
+            return f'plugins/{self.name}'
 
 
 class BaseSolnPlugin(BasePlugin):

@@ -9,6 +9,7 @@ import numpy as np
 from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
+from pyfr.writers.serialise import Serialiser
 
 
 def _common_plugin_prop(attr):
@@ -72,6 +73,9 @@ class BaseIntegrator:
         self._abort = False
         self._abort_reason = ''
 
+        # Saving serialised data to checkpoint files
+        self.serialiser = Serialiser()
+
     def plugin_abort(self, reason):
         self._abort = True
         self._abort_reason = self._abort_reason or reason
@@ -91,15 +95,12 @@ class BaseIntegrator:
                 if ptype == 'soln':
                     args += (suffix, )
 
-                sdata = None
-                prefix = self.get_plugin_data_prefix(name, suffix)
-                if initsoln:
-                    sdata = initsoln.get(prefix)
-
                 # Instantiate
                 plugin = get_plugin(*args)
+                sprefix = plugin.get_serialiser_prefix()
+                sdata = initsoln.get(sprefix) if initsoln else None
                 plugin.setup(sdata)
-                plugin.serialisefn(prefix, self.serialiser)
+                plugin.set_serialiser(self.serialiser)
                 plugins.append(plugin)
 
         return plugins
@@ -129,13 +130,6 @@ class BaseIntegrator:
         for plugin in self.plugins:
             if (finalise := getattr(plugin, 'finalise', None)):
                 finalise(self)
-
-    @staticmethod
-    def get_plugin_data_prefix(name, suffix):
-        if suffix:
-            return f'plugins/{name}-{suffix}'
-        else:
-            return f'plugins/{name}'
 
     def call_plugin_dt(self, tstart, dt):
         ta = self.tlist
