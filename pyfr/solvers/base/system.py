@@ -10,7 +10,6 @@ from pyfr.cache import memoize
 from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
 from pyfr.util import subclasses
-from pyfr.writers.serialise import Serialiser
 
 
 class BaseSystem:
@@ -22,7 +21,7 @@ class BaseSystem:
     # Nonce sequence
     _nonce_seq = it.count()
 
-    def __init__(self, backend, mesh, initsoln, nregs, cfg):
+    def __init__(self, backend, mesh, initsoln, nregs, cfg, serialiser):
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
@@ -67,12 +66,12 @@ class BaseSystem:
         if hasattr(eles[0], 'entmin_int'):
             self.eles_entmin_int = [e.entmin_int for e in eles]
 
-        self.serialiser = Serialiser()
-
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
-        self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap, initsoln)
+        self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap,
+                                                                initsoln,
+                                                                serialiser)
         backend.commit()
 
     def commit(self):
@@ -152,7 +151,7 @@ class BaseSystem:
 
         return mpi_inters
 
-    def _load_bc_inters(self, mesh, elemap, initsoln):
+    def _load_bc_inters(self, mesh, elemap, initsoln, serialiser):
         comm, rank, root = get_comm_rank_root()
 
         bccls = self.bbcinterscls
@@ -189,7 +188,7 @@ class BaseSystem:
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
                 bc_prefns[bname] = pfn
             
-            bcclass.serialisefn(bciface, f'bcs/{bname}', self.serialiser)
+            bcclass.serialisefn(bciface, f'bcs/{bname}', serialiser)
 
         return bc_inters, bc_prefns
 

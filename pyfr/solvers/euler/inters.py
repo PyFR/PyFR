@@ -239,7 +239,7 @@ class MassFlowBCMixin:
     
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
-        srl.register_sdata(prefix, bciface._sdata if bciface else None)
+        srl.register(prefix, bciface._sdata if bciface else None)
     
     def _sdata(self):
         return np.array([(self.interp_c, self.interp_m, self.mf_avg,

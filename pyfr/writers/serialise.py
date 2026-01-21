@@ -5,21 +5,20 @@ class Serialiser:
     def __init__(self):
         self._serialfns = {}
 
-    def serialisefn(self, datafn):
+    def register(self, prefix, datafn):
         comm, rank, root = get_comm_rank_root()
         sender = comm.exscan(1 if datafn else 0) == 0 and datafn
 
         if rank == root and not datafn:
             sendrank = comm.recv()
-            return lambda: comm.recv(source=sendrank)
+            sfn = lambda: comm.recv(source=sendrank)
         elif sender:
             comm.send(rank, root)
-            return lambda: comm.send(datafn(), root)
+            sfn = lambda: comm.send(datafn(), root)
         else:
-            return datafn
-
-    def register_sdata(self, prefix, datafn):
-        if (sfn := self.serialisefn(datafn)):
+            sfn = datafn
+        
+        if sfn:
             self._serialfns[prefix] = sfn
     
     def serialise(self):
