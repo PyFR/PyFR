@@ -99,8 +99,7 @@ class BaseIntegrator:
                 plugin = get_plugin(*args)
                 sprefix = plugin.get_serialiser_prefix()
                 sdata = initsoln.get(sprefix) if initsoln else None
-                plugin.setup(sdata)
-                plugin.set_serialiser(self.serialiser)
+                plugin.setup(sdata, self.serialiser)
                 plugins.append(plugin)
 
         return plugins
