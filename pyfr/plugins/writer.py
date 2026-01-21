@@ -75,7 +75,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             metadata = None
 
         # Fetch serialised data from plugins and other components to add to metadata
-        sdata = intg.system.serialiser.serialise()
+        sdata = intg.serialiser.serialise()
         if rank == root:
             metadata |= sdata
 

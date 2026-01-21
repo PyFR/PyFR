@@ -3,6 +3,7 @@ from configparser import NoOptionError
 
 from pyfr.integrators.base import BaseCommon
 from pyfr.util import first
+from pyfr.writers.serialise import Serialiser
 
 
 class BaseDualPseudoIntegrator(BaseCommon):
@@ -45,9 +46,12 @@ class BaseDualPseudoIntegrator(BaseCommon):
         self.nregs = (self.pseudo_stepper_nregs + self.stepper_nregs +
                       self.stage_nregs + source_nregs + self.aux_nregs)
 
+        # Saving serialised data to checkpoint files
+        self.serialiser = Serialiser()
+
         # Construct the relevant system
-        self.system = systemcls(backend, mesh, initsoln, nregs=self.nregs,
-                                cfg=cfg)
+        self.system = systemcls(backend, mesh, initsoln, self.nregs, cfg,
+                                self.serialiser)
 
         # Register index list and current index
         self._regidx = list(range(self.nregs))

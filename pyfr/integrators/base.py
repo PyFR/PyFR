@@ -99,7 +99,7 @@ class BaseIntegrator:
                 # Instantiate
                 plugin = get_plugin(*args)
                 plugin.setup(sdata)
-                plugin.serialisefn(prefix, self.system.serialiser)
+                plugin.serialisefn(prefix, self.serialiser)
                 plugins.append(plugin)
 
         return plugins
