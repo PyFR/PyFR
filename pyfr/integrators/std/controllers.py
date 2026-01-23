@@ -199,8 +199,10 @@ class StdPIController(BaseStdController):
     # Get current dt and estimate of previous error from soln file
     def _init_dt_err(self, initsoln):
         sdata = initsoln.get('intg/pi') if initsoln else None
-        self._errprev = sdata[1] if sdata is not None else 1.0
+
         if sdata is not None:
-            self._dt = sdata[0]
+            self._dt, self._errprev = sdata
+        else:
+            self._errprev = 1.0
 
         self.serialiser.register('intg/pi', lambda: [self._dt, self._errprev])
