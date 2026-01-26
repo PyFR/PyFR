@@ -196,7 +196,6 @@ class StdPIController(BaseStdController):
             else:
                 self._reject_step(dt, idxprev, err=err)
 
-    # Get current dt and estimate of previous error from soln file
     def _init_dt_err(self, initsoln):
         sdata = initsoln.get('intg/pi') if initsoln else None
 

@@ -235,12 +235,11 @@ class MassFlowBCMixin:
     
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
-        srl.register(prefix, bciface._sdata if bciface else None)
-    
-    def _sdata(self):
-        return np.void((self.interp_c, self.interp_m, self.mf_avg,
-                        self.tprev or 0, self.nstep_counter),
-                        dtype='f8,f8,f8,f8,i8')
+        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m, 
+                               bciface.mf_avg, bciface.tprev or 0, 
+                               bciface.nstep_counter), 
+                              dtype='f8,f8,f8,f8,i8')
+        srl.register(prefix, sfn if bciface else None)
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
