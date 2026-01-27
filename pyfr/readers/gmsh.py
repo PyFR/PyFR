@@ -419,7 +419,7 @@ class GmshReader(BaseReader):
 
             # Allocate space for, and read in, these elements
             enodes = np.loadtxt(mshit, dtype=np.int64, max_rows=ecount,
-                                usecols=range(1, nnodes + 1))
+                                usecols=range(1, nnodes + 1), ndmin=2)
 
             elenodes[etype, epent].append(enodes)
 
