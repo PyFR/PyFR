@@ -138,10 +138,6 @@ class NativeWriter:
     def _open_file(self, path):
         f = open(path, 'r+b')
 
-        # If we are on a Lustre file system then take a group lock
-        if self.fstype == 'lustre':
-            fcntl.ioctl(f.fileno(), self.LL_IOC_GROUP_LOCK, self.LL_GROUP)
-
         return f
 
     def set_shapes_eidxs(self, shapes, eidxs):
