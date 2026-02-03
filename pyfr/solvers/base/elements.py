@@ -308,7 +308,7 @@ class BaseElements:
     @cached_property
     def mean_wts(self):
         wts = self.basis.ubasis.invvdm[:, 0, None]/self.rcpdjac_at_np('upts')
-        wts = wts/np.sum(wts, axis=0)
+        wts /= np.sum(wts, axis=0)
 
         return self._be.const_matrix(wts, tags={'align'})
 
