@@ -100,35 +100,16 @@
     // Check if solution is within bounds
     ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
 
+    // Compute mean quantities
+    fpdtype_t uavg[${nvars}];
+    % for vidx in range(nvars):
+    uavg[${vidx}] = ${pyfr.dot('mean_wts[{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
+    % endfor
+
     // Filter if out of bounds
+    % if not linearise:
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
-        // Compute mean quantities
-        fpdtype_t uavg[${nvars}];
-        % for vidx in range(nvars):
-        uavg[${vidx}] = ${pyfr.dot('mean_wts[{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
-        % endfor
-
-        % if linearise:
-        fpdtype_t davg, pavg, eavg;
-        ${pyfr.expand('compute_entropy', 'uavg', 'davg', 'pavg', 'eavg')};
-
-        // Apply density, pressure, and entropy limiting sequentially
-        fpdtype_t alpha;
-        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('e', f'entmin - {e_tol}')]:
-        if (${fvar}min < ${bound}) 
-        {
-            alpha = (${fvar}min - (${bound}))/(${fvar}min - ${fvar}avg);
-            alpha = fmin(fmax(alpha, 0.0), 1.0);
-
-            % for uidx, vidx in pyfr.ndrange(nupts, 1 if fvar == 'd' else nvars):
-            u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
-            % endfor
-
-            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
-        }
-        % endfor
-        % else:
         // Compute modal basis
         fpdtype_t umodes[${nupts}][${nvars}];
         for (int uidx = 0; uidx < ${nupts}; uidx++)
@@ -202,7 +183,30 @@
 
         // Calculate minimum entropy from filtered solution
         ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
-        % endif
+    }
+    % endif
+
+    // Apply linearised limiting (also needed for non-linear formulation to account for mass defect correction)
+    if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
+    {
+        fpdtype_t davg, pavg, eavg;
+        ${pyfr.expand('compute_entropy', 'uavg', 'davg', 'pavg', 'eavg')};
+
+        // Apply density, pressure, and entropy limiting sequentially
+        fpdtype_t alpha;
+        % for (fvar, bound) in [('d', d_min), ('p', p_min), ('e', f'entmin - {e_tol}')]:
+        if (${fvar}min < ${bound}) 
+        {
+            alpha = (${fvar}min - (${bound}))/(${fvar}min - ${fvar}avg);
+            alpha = fmin(fmax(alpha, 0.0), 1.0);
+
+            % for uidx, vidx in pyfr.ndrange(nupts, 1 if fvar == 'd' else nvars):
+            u[${uidx}][${vidx}] += alpha*(uavg[${vidx}] - u[${uidx}][${vidx}]);
+            % endfor
+
+            ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
+        }
+        % endfor
     }
 
     // Set new minimum entropy within element for next stage
