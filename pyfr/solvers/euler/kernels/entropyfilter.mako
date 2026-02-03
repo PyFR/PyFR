@@ -104,7 +104,7 @@
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
         // Compute mean quantities
-        fpdtype_t uavg[${nvars}] = {0};
+        fpdtype_t uavg[${nvars}];
         % for vidx in range(nvars):
         uavg[${vidx}] = ${pyfr.dot('mean_wts[{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
         % endfor
