@@ -89,7 +89,8 @@
               entmin_int='inout fpdtype_t[${str(nfaces)}]'
               vdm='in broadcast fpdtype_t[${str(nefpts)}][${str(nupts)}]'
               invvdm='in broadcast fpdtype_t[${str(nupts)}][${str(nupts)}]'
-              m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'>
+              m0='in broadcast fpdtype_t[${str(nfpts)}][${str(nupts)}]'
+              mean_wts='in fpdtype_t[${str(nupts)}]'>
     fpdtype_t dmin, pmin, emin;
 
     // Compute minimum entropy from current and adjacent elements
@@ -102,14 +103,14 @@
     // Filter if out of bounds
     if (dmin < ${d_min} || pmin < ${p_min} || emin < entmin - ${e_tol})
     {
-        % if linearise:
         // Compute mean quantities
-        fpdtype_t uavg[${nvars}], davg, pavg, eavg;
+        fpdtype_t uavg[${nvars}] = {0};
         % for vidx in range(nvars):
-        uavg[${vidx}] = ${' + '.join(f'{jx}*u[{j}][{vidx}]'
-                                     for j, jx in enumerate(meanwts) if jx != 0)};
+        uavg[${vidx}] = ${pyfr.dot('mean_wts[{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
         % endfor
 
+        % if linearise:
+        fpdtype_t davg, pavg, eavg;
         ${pyfr.expand('compute_entropy', 'uavg', 'davg', 'pavg', 'eavg')};
 
         // Apply density, pressure, and entropy limiting sequentially
@@ -188,6 +189,16 @@
 
         // Filter full solution with bounds-preserving f value
         ${pyfr.expand('apply_filter_full', 'umodes', 'vdm', 'u', 'f')};
+
+        // Account for mass defect in reference-space filtering
+        fpdtype_t duavg[${nvars}] = {0};
+        % for vidx in range(nvars):
+        duavg[${vidx}] = uavg[${vidx}] - ${pyfr.dot('mean_wts[{k}]', f'u[{{k}}][{vidx}]', k=nupts)};
+        % endfor
+
+        %for uidx, vidx in pyfr.ndrange(nupts, nvars):
+        u[${uidx}][${vidx}] += duavg[${vidx}];
+        % endfor
 
         // Calculate minimum entropy from filtered solution
         ${pyfr.expand('get_minima', 'u', 'm0', 'dmin', 'pmin', 'emin')};
