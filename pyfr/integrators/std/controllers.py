@@ -81,8 +81,8 @@ class StdPIController(BaseStdController):
     controller_name = 'pi'
     controller_has_variable_dt = True
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, backend, systemcls, mesh, initsoln, cfg):
+        super().__init__(backend, systemcls, mesh, initsoln, cfg)
 
         sect = 'solver-time-integrator'
 
@@ -108,9 +108,6 @@ class StdPIController(BaseStdController):
         self._alpha = self.cfg.getfloat(sect, 'pi-alpha', 0.58)
         self._beta = self.cfg.getfloat(sect, 'pi-beta', 0.42)
 
-        # Estimate of previous error
-        self._errprev = 1.0
-
         # Step size adjustment factors
         self._saffac = self.cfg.getfloat(sect, 'safety-fact', 0.8)
         self._maxfac = self.cfg.getfloat(sect, 'max-fact', 2.5)
@@ -118,6 +115,8 @@ class StdPIController(BaseStdController):
 
         if not self._minfac < 1 <= self._maxfac:
             raise ValueError('Invalid max-fact, min-fact')
+
+        self._init_dt_err(initsoln)
 
     @property
     def controller_needs_errest(self):
@@ -196,3 +195,13 @@ class StdPIController(BaseStdController):
                 self._accept_step(dt, idxcurr, err=err)
             else:
                 self._reject_step(dt, idxprev, err=err)
+
+    def _init_dt_err(self, initsoln):
+        sdata = initsoln.get('intg/pi') if initsoln else None
+
+        if sdata is not None:
+            self._dt, self._errprev = sdata
+        else:
+            self._errprev = 1.0
+
+        self.serialiser.register('intg/pi', lambda: [self._dt, self._errprev])

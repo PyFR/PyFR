@@ -21,7 +21,7 @@ class BaseSystem:
     # Nonce sequence
     _nonce_seq = it.count()
 
-    def __init__(self, backend, mesh, initsoln, nregs, cfg):
+    def __init__(self, backend, mesh, initsoln, nregs, cfg, serialiser):
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
@@ -69,7 +69,9 @@ class BaseSystem:
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
-        self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap)
+        self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap,
+                                                                initsoln,
+                                                                serialiser)
         backend.commit()
 
     def commit(self):
@@ -149,7 +151,7 @@ class BaseSystem:
 
         return mpi_inters
 
-    def _load_bc_inters(self, mesh, elemap):
+    def _load_bc_inters(self, mesh, elemap, initsoln, serialiser):
         comm, rank, root = get_comm_rank_root()
 
         bccls = self.bbcinterscls
@@ -170,10 +172,14 @@ class BaseSystem:
             cfgsect = f'soln-bcs-{bname}'
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
+            # Check if there is serialised data for this boundary in initsoln
+            sdata = initsoln.get(f'bcs/{bname}') if initsoln else None
+
             # If we have this boundary then create an instance
             if localbc:
                 bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
                                   cfgsect, self.cfg, bccomm)
+                bciface.setup(sdata)
                 bc_inters.append(bciface)
             else:
                 bciface = None
@@ -181,6 +187,8 @@ class BaseSystem:
             # Allow the boundary to return a preparation callback
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
                 bc_prefns[bname] = pfn
+            
+            bcclass.serialisefn(bciface, f'bcs/{bname}', serialiser)
 
         return bc_inters, bc_prefns
 

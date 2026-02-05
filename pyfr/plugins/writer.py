@@ -74,16 +74,10 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         else:
             metadata = None
 
-        # Fetch data from other plugins and add it to metadata with ad-hoc keys
-        for csh in intg.plugins:
-            try:
-                prefix = intg.get_plugin_data_prefix(csh.name, csh.suffix)
-                pdata = csh.serialise(intg)
-            except AttributeError:
-                pdata = {}
-
-            if rank == root:
-                metadata |= {f'{prefix}/{k}': v for k, v in pdata.items()}
+        # Fetch serialised data from plugins and other components to add to metadata
+        sdata = intg.serialiser.serialise()
+        if rank == root:
+            metadata |= sdata
 
         return metadata
 
