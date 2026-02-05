@@ -4,7 +4,10 @@
 <%pyfr:kernel name='localerrest' ndim='2'
               err='in fpdtype_t[${str(nvars)}]'
               errprev='inout fpdtype_t[${str(nvars)}]'
-              dtau_upts='inout fpdtype_t[${str(nvars)}]'>
+              dtau_upts='inout fpdtype_t[${str(nvars)}]'
+              dtau_min='scalar fpdtype_t'
+              dtau_max='scalar fpdtype_t'
+              dtau_fieldf='scalar fpdtype_t'>
     fpdtype_t ferr, gerr, ufac, vfac;
 
 % for i in range(nvars):
@@ -12,10 +15,10 @@
     gerr = errprev[${i}];
     ufac = ${pyfr.polyfit(lambda x: x**-expa, 1e-6, 10, 8, 'ferr')}
          * ${pyfr.polyfit(lambda x: x**expb, 1e-6, 10, 8, 'gerr')};
-    vfac = min(${maxf}, max(${minf}, ${saff}*ufac));
+    vfac = dtau_fieldf*min(${maxf}, max(${minf}, ${saff}*ufac));
 
     // Compute the size of the next step
-    dtau_upts[${i}] = min(max(vfac*dtau_upts[${i}], ${dtau_min}), ${dtau_max});
+    dtau_upts[${i}] = min(max(vfac*dtau_upts[${i}], dtau_min), dtau_max);
     errprev[${i}] = ferr;
 % endfor
 </%pyfr:kernel>

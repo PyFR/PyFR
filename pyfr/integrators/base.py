@@ -54,7 +54,7 @@ class BaseIntegrator:
         self.nacptchain = 0
 
         # Current and minimum time steps
-        self._dt = cfg.getfloat('solver-time-integrator', 'dt')
+        self.dt = cfg.getfloat('solver-time-integrator', 'dt')
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
@@ -71,6 +71,41 @@ class BaseIntegrator:
         # Abort computation
         self._abort = False
         self._abort_reason = ''
+
+        # Smoothly step to target time in the last near_t steps
+        self.aminf = self.cfg.getfloat('solver-time-integrator', 
+                                          'dt-adjust-min-fact', 0.9)
+        self.amaxf = self.cfg.getfloat('solver-time-integrator', 
+                                          'dt-adjust-max-fact', 1.001)
+        self.dt_fallback = cfg.getfloat('solver-time-integrator', 'dt')
+        self.dt_near = None
+
+    def adjust_dt(self, t):
+        # Time difference to traverse 
+        t_diff = t - self.tcurr
+
+        # Estimate steps to reach t upon taking self.dt_fallback steps
+        est_nsteps = t_diff / self.dt_fallback
+        est_nsteps_roundup = -(est_nsteps // -self.amaxf)
+
+        if est_nsteps_roundup == 1:
+            # Exactly reach t
+            self.dt = t_diff
+            self.dt_near = None
+
+        elif (est_nsteps - 1) / (est_nsteps_roundup - 1) < self.aminf:
+            # Modify step to the approaching t
+
+            dt_near = t_diff / est_nsteps_roundup
+
+            if (self.dt_near is None 
+                or not self.aminf < (self.dt_near/dt_near) < self.amaxf): 
+                self.dt_near = dt_near
+
+            self.dt = self.dt_near
+        else:
+            # Reset step if far from t
+            self.dt = self.dt_fallback
 
     def plugin_abort(self, reason):
         self._abort = True
@@ -140,7 +175,7 @@ class BaseIntegrator:
     def call_plugin_dt(self, tstart, dt):
         ta = self.tlist
         tbegin = tstart if tstart > self.tcurr else self.tcurr
-        tb = deque(np.arange(tbegin, self.tend, dt).tolist())
+        tb = deque(np.arange(self.tend - dt, self.tcurr, -dt).tolist()[::-1])
 
         self.tlist = tlist = deque()
 

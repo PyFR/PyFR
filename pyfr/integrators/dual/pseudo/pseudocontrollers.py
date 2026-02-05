@@ -8,6 +8,9 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self._dt_dtau_ratio = self.dt / self.dtau
+        self._dtau_fieldf = 1.0
+
         # Ensure the system is compatible with our formulation
         self.system.elementscls.validate_formulation(self)
 
@@ -62,6 +65,8 @@ class BaseDualPseudoController(BaseDualPseudoIntegrator):
     def _update_pseudostepinfo(self, niters, resid):
         self.pseudostepinfo.append((self.ntotiters, niters, resid))
 
+    def adjust_dtau(self, dt):
+        self.dtau = dt / self._dt_dtau_ratio
 
 class DualNonePseudoController(BaseDualPseudoController):
     pseudo_controller_name = 'none'
@@ -75,7 +80,7 @@ class DualNonePseudoController(BaseDualPseudoController):
             self._idxcurr, self._idxprev = self.step(self.tcurr)
 
             # Convergence monitoring
-            if self.convmon(i, self.minniters, self._dtau):
+            if self.convmon(i, self.minniters, self.dtau):
                 break
 
 
@@ -106,18 +111,19 @@ class DualPIPseudoController(BaseDualPseudoController):
         tplargs['maxf'] = self.cfg.getfloat(sect, 'max-fact', 1.01)
         tplargs['minf'] = self.cfg.getfloat(sect, 'min-fact', 0.98)
         tplargs['saff'] = self.cfg.getfloat(sect, 'safety-fact', 0.8)
-        tplargs['dtau_maxf'] = self.cfg.getfloat(sect, 'pseudo-dt-max-mult',
-                                                 3.0)
 
         if not tplargs['minf'] < 1 <= tplargs['maxf']:
             raise ValueError('Invalid pseudo max-fact, min-fact')
 
-        if tplargs['dtau_maxf'] < 1:
-            raise ValueError('Invalid pseudo-dt-max-mult')
+        dtau_minf = self.cfg.getfloat(sect, 'pseudo-dt-min-mult', 1.0)
+        dtau_maxf = self.cfg.getfloat(sect, 'pseudo-dt-max-mult', 3.0)
+
+        if dtau_minf > 1 or dtau_maxf < 1:
+            raise ValueError('Invalid pseudo-dt-min-mult, pseudo-dt-max-mult')
 
         # Limits for the local pseudo-time-step size
-        tplargs['dtau_min'] = self._dtau
-        tplargs['dtau_max'] = tplargs['dtau_maxf'] * self._dtau
+        self.dtau_min = dtau_minf * self.dtau
+        self.dtau_max = dtau_maxf * self.dtau
 
         # Register a kernel to compute local error
         self.backend.pointwise.register(
@@ -141,7 +147,28 @@ class DualPIPseudoController(BaseDualPseudoController):
                     )
                 )
 
+        self.bind_dtau()
+
         self.backend.commit()
+
+    def adjust_dtau(self, dt):
+        old_dtau = self.dtau
+        self.dtau = dt / self._dt_dtau_ratio
+
+        ratio = self.dtau / old_dtau
+        self.dtau_min *= ratio
+        self.dtau_max *= ratio
+        self._dtau_fieldf = ratio
+        self.bind_dtau()
+
+    def bind_dtau(self):
+        for k, idx in self.pintgkernels:
+            if k == 'localerrest':
+                for kk in self.pintgkernels[k, idx]:
+                    kk.bind(
+                        dtau_min=self.dtau_min, dtau_max=self.dtau_max,
+                        dtau_fieldf=self._dtau_fieldf                        
+                        )
 
     def localerrest(self, errbank):
         self.backend.run_kernels(self.pintgkernels['localerrest', errbank])
@@ -152,6 +179,12 @@ class DualPIPseudoController(BaseDualPseudoController):
         for i in range(self.maxniters):
             # Take the step
             self._idxcurr, self._idxprev, self._idxerr = self.step(self.tcurr)
+
+            # Reset dtau field factor after the first iteration
+            if i == 0:
+                self._dtau_fieldf = 1.0
+                self.bind_dtau()
+
             self.localerrest(self._idxerr)
 
             if self.convmon(i, self.minniters):

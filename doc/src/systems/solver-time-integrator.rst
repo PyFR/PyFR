@@ -149,6 +149,26 @@ Parameterises the time-integration scheme used by the solver with
 
                *float*
 
+            - ``pseudo-dt-min-mult`` --- minimum permissible
+              local pseudo time-step given as a
+              multiplier of ``pseudo-dt`` (suitable range 0.001-1.0)
+
+               *float*
+
+2. ``dt-adjust-min-fact`` --- minimum allowed factor by which the 
+   time-step modified by controller can be further changed to 
+   satisfy the constraints set by the target time
+   (suitable range 0.5-0.99)
+
+    *float*
+
+3. ``dt-adjust-max-fact`` --- maximum allowed factor by which the 
+   time-step modified by controller can be further changed to 
+   satisfy the constraints set by the target time
+    (suitable range 1.0-1.1)
+
+    *float*
+
 Example::
 
     [solver-time-integrator]
@@ -164,3 +184,5 @@ Example::
     safety-fact = 0.9
     min-fact = 0.3
     max-fact = 2.5
+    dt-adjust-min-fact = 0.99
+    dt-adjust-max-fact = 1.01
