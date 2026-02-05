@@ -232,12 +232,12 @@ class MassFlowBCMixin:
             k.bind(ic=self.interp_c, im=self.interp_m)
 
         self.nstep_counter += 1
-    
+
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
-        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m, 
-                               bciface.mf_avg, bciface.tprev or 0, 
-                               bciface.nstep_counter), 
+        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m,
+                               bciface.mf_avg, bciface.tprev or 0,
+                               bciface.nstep_counter),
                               dtype='f8,f8,f8,f8,i8')
         srl.register(prefix, sfn if bciface else None)
 
