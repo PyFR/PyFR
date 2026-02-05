@@ -262,6 +262,7 @@ class _AscentRenderer:
                                             abs=True)
         self.isrestart = isrestart
         self._image_paths = []
+        self._time_dep_opts = {}
 
         # Expressions to plot and configs
         self._exprs = []
@@ -513,7 +514,11 @@ class _AscentRenderer:
             if k != 'image-name':
                 # Replace - with _ for vectors and sections
                 key = k.replace('_', '/').replace('-', '_')
-                self.scenes[f'{path}/{key}'] = v
+                if isinstance(v, str) or (isinstance(v, list) and
+                   np.any([isinstance(_v, str) for _v in v])):
+                    self._time_dep_opts[f'scenes/{path}/{key}'] = v
+                else:
+                    self.scenes[f'{path}/{key}'] = v
 
         gen = file_path_gen(self.basedir, opts['image-name'], self.isrestart)
         self._image_paths.append((f'scenes/{path}/image_name', gen))
@@ -524,6 +529,15 @@ class _AscentRenderer:
         # Set file names
         for path, gen in self._image_paths:
             self._add_scene[path] = gen.send(adapter.tcurr)
+
+        # Update time dependent options
+        subs = dict(t=adapter.tcurr)
+        for path, val in self._time_dep_opts.items():
+            if isinstance(val, list):
+                v = [npeval(e, subs) if isinstance(e, str) else e for e in val]
+            else:
+                v = npeval(val, subs)
+            self._add_scene[path] = v
 
         # Set field expressions
         self._eval_exprs(adapter)
