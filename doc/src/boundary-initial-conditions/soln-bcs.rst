@@ -8,7 +8,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 1. ``type`` --- type of boundary condition:
 
     ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
-    ``char-riem-inv-mass-flow`` | ```no-slp-adia-wall`` | 
+    ``char-riem-inv-mass-flow`` | ``no-slp-adia-wall`` |
     ``no-slp-isot-wall`` | ``no-slp-wall`` | ``slp-adia-wall`` | ``slp-wall`` |
     ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
     ``sup-out-fn``
@@ -123,9 +123,9 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
       
-        - ``eta`` --- parameter greater than 0 controlling the strength of the
-          controller. The appropriate strength is problem specific and varies
-          depending on if the simulation has been nondimensionalised.
+        - ``eta`` --- parameter greater than 0 setting the strength of the controller.
+          The appropriate strength is problem specific, and varies depending on if the
+          simulation has been non-dimensionalised.
 
            *float* | *string*
       
@@ -135,7 +135,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
            *int*
 
         - ``tstart`` --- start time of the mass flow controller, before this
-          time ``p`` will remain fixed.
+          time the Riemann invariant remains fixed.
 
            *float*
       
@@ -148,7 +148,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *string*
 
-        - ``file`` --- name of a CSV file to output staticstics to (optional).
+        - ``file`` --- name of a CSV file to output statistics to (optional).
 
            *string*
       

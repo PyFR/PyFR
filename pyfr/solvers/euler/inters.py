@@ -141,26 +141,12 @@ class MassFlowBCMixin:
 
         self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
-        opts = self._eval_opts(['mass-flow-rate', 'alpha', 'eta', 'p'])
-        self.target_mfr, self.alpha, self.eta, p = opts
+        opts = self._eval_opts(['mass-flow-rate', 'alpha', 'eta'])
+        self.target_mfr, self.alpha, self.eta = opts
 
         self._set_external('ic', 'scalar fpdtype_t')
         self._set_external('im', 'scalar fpdtype_t')
 
-        # Check if using values from restart
-        if cfg.hasopt(cfgsect, 'interp-c'):
-            self.interp_c = cfg.getfloat(cfgsect, 'interp-c')
-            self.interp_m = cfg.getfloat(cfgsect, 'interp-m')
-            self.mf_avg = cfg.getfloat(cfgsect, 'mf-avg')
-            self.tprev = cfg.getfloat(cfgsect, 'tprev')
-        else:
-            self.interp_c = p
-            self.interp_m = 0.0
-            self.mf_avg = 0.0
-            self.tprev = None
-
-        self.nstep_counter = 0
-        
         surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
@@ -170,6 +156,17 @@ class MassFlowBCMixin:
             self.csv = CSVStream(fname, header='t,mf,pbc', nflush=nflush)
         else:
             self.csv = None
+
+    def setup(self, sdata):
+        if sdata is not None and sdata[4] != 0:
+            (self.interp_c, self.interp_m, 
+            self.mf_avg, self.tprev, self.nstep_counter) = sdata
+        else:
+            self.interp_c = self._eval_opts(['p'])[0]
+            self.interp_m = 0.0
+            self.mf_avg = 0.0
+            self.tprev = None
+            self.nstep_counter = 0
 
     def calculate_mass_flow(self, solns):
         mf = 0.0
@@ -194,7 +191,7 @@ class MassFlowBCMixin:
             mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
-    
+
     @classmethod
     def preparefn(cls, bciface, mesh, elemap):
         if bciface:
@@ -207,7 +204,7 @@ class MassFlowBCMixin:
         if (update or not self.tprev) and t >= self.tstart:
             solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
             mf = self.calculate_mass_flow(solns)
-            
+
             if not self.tprev:
                 self.mf_avg = mf
                 self.tprev = t
@@ -226,21 +223,23 @@ class MassFlowBCMixin:
                 self.interp_m = (p1 - p0) / dt
                 self.interp_c = p0 - self.interp_m * t
 
-                # Update values in cfg in case of restart
-                self.cfg.set(self.cfgsect, 'interp-c', self.interp_c)
-                self.cfg.set(self.cfgsect, 'interp-m', self.interp_m)
-                self.cfg.set(self.cfgsect, 'mf-avg', self.mf_avg)
-                self.cfg.set(self.cfgsect, 'tprev', self.tprev)
-
                 # Output mass flow and pressure at BC
                 if self.csv:
                     self.csv(t, self.mf_avg, p1)
-        
+
         # Bind interpolation to kernels
         for k in kerns.values():
             k.bind(ic=self.interp_c, im=self.interp_m)
-        
+
         self.nstep_counter += 1
+
+    @classmethod
+    def serialisefn(cls, bciface, prefix, srl):
+        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m,
+                               bciface.mf_avg, bciface.tprev or 0,
+                               bciface.nstep_counter),
+                              dtype='f8,f8,f8,f8,i8')
+        srl.register(prefix, sfn if bciface else None)
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):

@@ -16,8 +16,8 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         self.nregs = self.stepper_nregs
 
         # Construct the relevant system
-        self.system = systemcls(backend, mesh, initsoln, nregs=self.nregs,
-                                cfg=cfg)
+        self.system = systemcls(backend, mesh, initsoln, self.nregs, cfg,
+                                self.serialiser)
 
         # Event handlers for advance_to
         self.plugins = self._get_plugins(initsoln)

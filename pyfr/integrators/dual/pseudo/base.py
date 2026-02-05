@@ -46,8 +46,8 @@ class BaseDualPseudoIntegrator(BaseCommon):
                       self.stage_nregs + source_nregs + self.aux_nregs)
 
         # Construct the relevant system
-        self.system = systemcls(backend, mesh, initsoln, nregs=self.nregs,
-                                cfg=cfg)
+        self.system = systemcls(backend, mesh, initsoln, self.nregs, cfg,
+                                self.serialiser)
 
         # Register index list and current index
         self._regidx = list(range(self.nregs))

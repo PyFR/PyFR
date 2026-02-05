@@ -77,7 +77,7 @@ class NativeWriter:
     def from_integrator(intg, basedir, basename, prefix, *, extn='.pyfrs',
                         fpdtype=None):
         _ftype = fpdtype or intg.backend.fpdtype
-        return NativeWriter(intg.system.mesh, intg.cfg, _ftype, basedir, 
+        return NativeWriter(intg.system.mesh, intg.cfg, _ftype, basedir,
                             basename, prefix=prefix, isrestart=intg.isrestart)
 
     @staticmethod
@@ -132,15 +132,11 @@ class NativeWriter:
                     fcntl.ioctl(fd, self.LL_IOC_LOV_SETSTRIPE, arg)
                 finally:
                     os.close(fd)
-            except (IOError, OSError):
+            except OSError:
                 pass
 
     def _open_file(self, path):
         f = open(path, 'r+b')
-
-        # If we are on a Lustre file system then take a group lock
-        if self.fstype == 'lustre':
-            fcntl.ioctl(f.fileno(), self.LL_IOC_GROUP_LOCK, self.LL_GROUP)
 
         return f
 

@@ -38,7 +38,7 @@ class FWHIntegrator(SurfaceIntegrator):
                 dist = self._distances(ploc, Minf)
 
                 self.surf[etype, fidx] = FWHSurfParams(eidx, m0, nds, *dist)
-    
+
     def _distances(self, spts, Minf):
         surf_pts = spts.transpose(0, 2, 1).reshape(-1, self.ndims)
 
@@ -94,7 +94,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
         self._pidx = privars.index('p')
         self.consts = self.cfg.items_as('constants', float)
 
-        qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts) 
+        qinf = {k: npeval(self.cfg.getexpr(cfgsect, k), self.consts)
                 for k in privars}
         self.uinf = np.array([[qinf[k]] for k in 'uvw'[:self.ndims]])
 
