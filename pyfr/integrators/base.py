@@ -6,10 +6,10 @@ import time
 
 import numpy as np
 
-from pyfr.inifile import Inifile
-from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.cache import memoize
+from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
-from pyfr.util import memoize
+from pyfr.writers.serialise import Serialiser
 
 
 def _common_plugin_prop(attr):
@@ -28,12 +28,11 @@ def _common_plugin_prop(attr):
 
 
 class BaseIntegrator:
-    def __init__(self, backend, rallocs, mesh, initsoln, cfg):
+    def __init__(self, backend, mesh, initsoln, cfg):
         self.backend = backend
-        self.rallocs = rallocs
         self.isrestart = initsoln is not None
         self.cfg = cfg
-        self.prevcfgs = {f: initsoln[f] for f in initsoln or []
+        self.prevcfgs = {f: initsoln[f].tostr() for f in initsoln or []
                          if f.startswith('config-')}
 
         # Start time
@@ -42,7 +41,7 @@ class BaseIntegrator:
 
         # Current time; defaults to tstart unless restarting
         if self.isrestart:
-            stats = Inifile(initsoln['stats'])
+            stats = initsoln['stats']
             self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
         else:
             self.tcurr = self.tstart
@@ -60,7 +59,7 @@ class BaseIntegrator:
         self.dtmin = cfg.getfloat('solver-time-integrator', 'dt-min', 1e-12)
 
         # Extract the UUID of the mesh (to be saved with solutions)
-        self.mesh_uuid = mesh['mesh_uuid']
+        self.mesh_uuid = mesh.uuid
 
         self._invalidate_caches()
 
@@ -71,7 +70,15 @@ class BaseIntegrator:
         self._plugin_wtimes = defaultdict(lambda: 0)
 
         # Abort computation
-        self.abort = False
+        self._abort = False
+        self._abort_reason = ''
+
+        # Saving serialised data to checkpoint files
+        self.serialiser = Serialiser()
+
+    def plugin_abort(self, reason):
+        self._abort = True
+        self._abort_reason = self._abort_reason or reason
 
     def _get_plugins(self, initsoln):
         plugins = []
@@ -88,16 +95,12 @@ class BaseIntegrator:
                 if ptype == 'soln':
                     args += (suffix, )
 
-                data = {}
-                if initsoln is not None:
-                    # Get the plugin data stored in the solution, if any
-                    prefix = self.get_plugin_data_prefix(name, suffix)
-                    for f in initsoln:
-                        if f.startswith(f'{prefix}/'):
-                            data[f.split('/')[2]] = initsoln[f]
-
                 # Instantiate
-                plugins.append(get_plugin(*args, **data))
+                plugin = get_plugin(*args)
+                sprefix = plugin.get_serialiser_prefix()
+                sdata = initsoln.get(sprefix) if initsoln else None
+                plugin.setup(sdata, self.serialiser)
+                plugins.append(plugin)
 
         return plugins
 
@@ -122,16 +125,15 @@ class BaseIntegrator:
         # Abort if plugins request it
         self._check_abort()
 
-    @staticmethod
-    def get_plugin_data_prefix(name, suffix):
-        if suffix:
-            return f'plugins/{name}-{suffix}'
-        else:
-            return f'plugins/{name}'
+    def _finalise_plugins(self):
+        for plugin in self.plugins:
+            if (finalise := getattr(plugin, 'finalise', None)):
+                finalise(self)
 
-    def call_plugin_dt(self, dt):
+    def call_plugin_dt(self, tstart, dt):
         ta = self.tlist
-        tb = deque(np.arange(self.tcurr, self.tend, dt).tolist())
+        tbegin = tstart if tstart > self.tcurr else self.tcurr
+        tb = deque(np.arange(tbegin, self.tend, dt).tolist())
 
         self.tlist = tlist = deque()
 
@@ -160,16 +162,14 @@ class BaseIntegrator:
         for t in self.tlist:
             self.advance_to(t)
 
+        self._finalise_plugins()
+
     @property
     def nsteps(self):
         return self.nacptsteps + self.nrjctsteps
 
     def collect_stats(self, stats):
         wtime = time.time() - self._wstart
-
-        # Rank allocation
-        stats.set('backend', 'rank-allocation',
-                  ','.join(str(r) for r in self.rallocs.mprankmap))
 
         # Simulation and wall clock times
         stats.set('solver-time-integrator', 'tcurr', self.tcurr)
@@ -214,10 +214,12 @@ class BaseIntegrator:
 
     def _check_abort(self):
         comm, rank, root = get_comm_rank_root()
-        if comm.allreduce(self.abort, op=mpi.LOR):
-            # Ensure that the callbacks registered in atexit
-            # are called only once if stopping the computation
-            sys.exit(1)
+
+        if scal_coll(comm.Allreduce, int(self._abort), op=mpi.LOR):
+            self._finalise_plugins()
+
+            reason = self._abort_reason
+            sys.exit(comm.allreduce(reason, op=lambda x, y: x or y))
 
 
 class BaseCommon:

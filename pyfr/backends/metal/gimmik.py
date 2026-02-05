@@ -1,3 +1,5 @@
+from weakref import finalize
+
 from gimmik import MetalMatMul
 import numpy as np
 
@@ -54,6 +56,7 @@ class MetalGiMMiKKernels(MetalKernelProvider):
         try:
             kern, grid, tgrp, dt = self._mul_kerns[ckey]
         except KeyError:
+            ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
             best_kern = None
             sdata = None
@@ -80,7 +83,7 @@ class MetalGiMMiKKernels(MetalKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < best_kern[-1]:
+                    if best_kern is None or dt < ifac*best_kern[-1]:
                         best_kern = kern, grid, tgrp, dt
 
                     sdata = {'runtime': dt}
@@ -89,9 +92,10 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = kern, grid, tgrp, dt = best_kern
+            finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         class MulKernel(MetalKernel):
             def run(self, cbuf):
                 return kern(cbuf, grid, tgrp, b.data, out.data)
 
-        return MulKernel(mats=[b, out], dt=dt)
+        return MulKernel(mats=[a, b, out], dt=dt)

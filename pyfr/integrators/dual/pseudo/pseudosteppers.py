@@ -1,7 +1,7 @@
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.integrators.dual.pseudo.base import BaseDualPseudoIntegrator
-from pyfr.util import memoize
 
 
 def _get_coefficients_from_txt(scheme):
@@ -191,7 +191,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
         # Allocate storage for the local pseudo time-step field
         self.dtau_upts = [self.backend.matrix(shape, np.ones(shape)*self._dtau,
                                               tags={'align'})
-                          for shape in self.system.ele_shapes]
+                          for shape in self.system.ele_shapes.values()]
 
         # Register a pointwise kernel for the low-storage stepper
         self.backend.pointwise.register(
@@ -205,7 +205,7 @@ class DualEmbeddedPairPseudoStepper(BaseDualPseudoStepper):
                    'nstages': self._nstages, 'nvars': self.system.nvars,
                    'errest': rerr is not None}
 
-        for dims, em, dtaum in zip(self.system.ele_shapes,
+        for dims, em, dtaum in zip(self.system.ele_shapes.values(),
                                    self.system.ele_banks, self.dtau_upts):
             kern = self.backend.kernel(
                 'rkvdh2pseudo', tplargs=tplargs, dims=[dims[0], dims[2]],

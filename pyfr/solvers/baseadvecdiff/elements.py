@@ -1,4 +1,5 @@
 from pyfr.polys import get_polybasis
+from pyfr.solvers.base.elements import inters_map
 from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
@@ -14,12 +15,20 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         if self.basis.fpts_in_upts:
             bufs |= {'comm_fpts'}
-            bufs -= {'vect_fpts'}
+            if self.grad_fusion:
+                bufs -= {'vect_fpts'}
 
         return bufs
 
     def set_backend(self, backend, nscalupts, nonce, linoff):
         super().set_backend(backend, nscalupts, nonce, linoff)
+
+        # Ensure we point to the correct gradient array
+        if self.basis.fpts_in_upts:
+            if self.grad_fusion:
+                self.get_vect_fpts_for_inter = self._get_grad_upts_for_inter
+            else:
+                self.get_vect_fpts_for_inter = self._get_vect_fpts_for_inter
 
         kernel, kernels = self._be.kernel, self.kernels
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
@@ -88,7 +97,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             return self._be.unordered_meta_kernel(muls)
 
-        if not self.basis.fpts_in_upts:
+        # Elide the interpolation if possible
+        if not (self.basis.fpts_in_upts and self.grad_fusion):
             kernels['gradcoru_fpts'] = gradcoru_fpts
 
         if 'flux' in self.antialias and self.basis.order > 0:
@@ -115,7 +125,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             self._be.pointwise.register(f'{kprefix}.shocksensor')
 
             # Obtain the scalar variable to be used for shock sensing
-            shockvar = self.convarmap[self.ndims].index(self.shockvar)
+            shockvar = self.convars.index(self.shockvar)
 
             # Obtain the name, degrees, and order of our solution basis
             ubname = self.basis.ubasis.name
@@ -149,6 +159,12 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
             self.artvisc = None
         else:
             raise ValueError('Invalid shock capturing scheme')
+
+    @inters_map
+    def _get_grad_upts_for_inter(self, eidx, fidx):
+        rmap = self._srtd_face_fpts[fidx][eidx]
+        fmap = self.basis.fpts_map_upts[rmap]
+        return self._grad_upts.mid, fmap, self.nupts
 
     def get_artvisc_fpts_for_inter(self, eidx, fidx):
         nfp = self.nfacefpts[fidx]

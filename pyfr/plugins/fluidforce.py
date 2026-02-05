@@ -1,12 +1,23 @@
-from collections import defaultdict
-
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BaseSolnPlugin, SurfaceMixin, init_csv
+from pyfr.plugins.base import (BaseSolnPlugin, DatasetAppender,
+                               init_csv, open_hdf5_a)
+from pyfr.quadrules.surface import SurfaceIntegrator
 
 
-class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
+class FluidForceIntegrator(SurfaceIntegrator):
+    def __init__(self, cfg, cfgsect, system, bcname, morigin):
+        surf_list = system.mesh.bcon.get(bcname, [])
+        surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in surf_list]
+
+        super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
+
+        if surf_list and morigin is not None:
+            self.rfpts = {k: loc - morigin for k, loc in self.locs.items()}
+
+
+class FluidForcePlugin(BaseSolnPlugin):
     name = 'fluidforce'
     systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
     formulations = ['dual', 'std']
@@ -35,10 +46,8 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         # Underlying elements class
         self.elementscls = intg.system.elementscls
 
-        # Boundary to integrate over
-        bc = f'bcon_{suffix}_p{intg.rallocs.prank}'
-
         # Moments
+        morigin = None
         mcomp = 3 if self.ndims == 3 else 1
         self._mcomp = mcomp if self.cfg.hasopt(cfgsect, 'morigin') else 0
         if self._mcomp:
@@ -46,88 +55,66 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
             if len(morigin) != self.ndims:
                 raise ValueError(f'morigin must have {self.ndims} components')
 
-        # Get the mesh and elements
-        mesh, elemap = intg.system.mesh, intg.system.ele_map
-
         # See which ranks have the boundary
-        bcranks = comm.gather(bc in mesh, root=root)
+        bcranks = comm.gather(suffix in intg.system.mesh.bcon, root=root)
 
         # The root rank needs to open the output file
         if rank == root:
             if not any(bcranks):
                 raise RuntimeError(f'Boundary {suffix} does not exist')
 
-            # CSV header
-            header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
-            if self._mcomp:
-                header += ['mpx', 'mpy', 'mpz'][3 - mcomp:]
-            if self._viscous:
-                header += ['vx', 'vy', 'vz'][:self.ndims]
-                if self._mcomp:
-                    header += ['mvx', 'mvy', 'mvz'][3 - mcomp:]
+            match self.cfg.get(cfgsect, 'file-format', 'csv'):
+                case 'csv':
+                    self._init_csv()
+                case 'hdf5':
+                    self._init_hdf5()
+                case _:
+                    raise ValueError('Invalid file format')
 
-            # Open
-            self.outf = init_csv(self.cfg, cfgsect, ','.join(header))
+        # Set interpolation matrices and quadrature weights
+        self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
+                                           suffix, morigin)
 
-        # Interpolation matrices and quadrature weights
-        self._m0 = m0 = {}
-        self._qwts = qwts = defaultdict(list)
-
+    @property
+    def _header(self):
+        header = ['t', 'px', 'py', 'pz'][:self.ndims + 1]
+        if self._mcomp:
+            header += ['mpx', 'mpy', 'mpz'][3 - self._mcomp:]
         if self._viscous:
-            self._m4 = m4 = {}
-            rcpjact = {}
+            header += ['vx', 'vy', 'vz'][:self.ndims]
+            if self._mcomp:
+                header += ['mvx', 'mvy', 'mvz'][3 - self._mcomp:]
 
-        # If we have the boundary then process the interface
-        if bc in mesh:
-            # Element indices, associated face normals and relative flux
-            # points position with respect to the moments origin
-            eidxs = defaultdict(list)
-            norms = defaultdict(list)
-            rfpts = defaultdict(list)
+        return ','.join(header)
 
-            for etype, eidx, fidx, flags in mesh[bc].tolist():
-                eles = elemap[etype]
-                itype, proj, norm = eles.basis.faces[fidx]
+    def _init_csv(self):
+        self.csv = init_csv(self.cfg, self.cfgsect, self._header, nflush=1)
+        self._write = self._write_csv
 
-                ppts, pwts = self._surf_quad(itype, proj, flags='s')
-                nppts = len(ppts)
+    def _write_csv(self, t, forces):
+        self.csv(t, *forces.ravel())
 
-                # Get phyical normals
-                pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
+    def _init_hdf5(self):
+        outf = open_hdf5_a(self.cfg.get(self.cfgsect, 'file'))
+        nvars = 1 + (2 if self._viscous else 1)*(self.ndims + self._mcomp)
 
-                eidxs[etype, fidx].append(eidx)
-                norms[etype, fidx].append(pnorm)
+        dset = self.cfg.get(self.cfgsect, 'file-dataset')
+        if dset in outf:
+            ff = outf[dset]
 
-                if (etype, fidx) not in m0:
-                    m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
-                    qwts[etype, fidx] = pwts
+            if ff.shape[1] != nvars:
+                raise ValueError('Invalid dataset')
+        else:
+            ff = outf.create_dataset(dset, (0, nvars), float,
+                                     chunks=(128, nvars),
+                                     maxshape=(None, nvars))
+            ff.dims[1].label = self._header
 
-                if self._viscous and etype not in m4:
-                    m4[etype] = eles.basis.m4
+        self._forces = DatasetAppender(ff)
+        self._write = self._write_hdf5
 
-                    # Get the smats at the solution points
-                    smat = eles.smat_at_np('upts').transpose(2, 0, 1, 3)
-
-                    # Get |J|^-1 at the solution points
-                    rcpdjac = eles.rcpdjac_at_np('upts')
-
-                    # Product to give J^-T at the solution points
-                    rcpjact[etype] = smat*rcpdjac
-
-                # Get the flux points position of the given face and element
-                # indices relative to the moment origin
-                if self._mcomp:
-                    ploc = eles.ploc_at_np(ppts)[..., eidx]
-                    rfpt = ploc - morigin
-                    rfpts[etype, fidx].append(rfpt)
-
-            self._eidxs = {k: np.array(v) for k, v in eidxs.items()}
-            self._norms = {k: np.array(v) for k, v in norms.items()}
-            self._rfpts = {k: np.array(v) for k, v in rfpts.items()}
-
-            if self._viscous:
-                self._rcpjact = {k: rcpjact[k[0]][..., v]
-                                 for k, v in self._eidxs.items()}
+    def _write_hdf5(self, t, forces):
+        self._forces(np.concatenate(([t], forces.ravel())))
 
     def __call__(self, intg):
         # Return if no output is due
@@ -137,20 +124,24 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
+        ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
+        pidx = 0 if self._ac else -1
+
         # Solution matrices indexed by element type
         solns = dict(zip(intg.system.ele_types, intg.soln))
-        ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
+
+        # Corrected solution gradients indexed by element type
+        if self._viscous:
+            grads = dict(zip(intg.system.ele_types, intg.grad_soln))
 
         # Force and moment vectors
         fm = np.zeros((2 if self._viscous else 1, ndims + mcomp))
 
-        for etype, fidx in self._m0:
-            # Get the interpolation operator
-            m0 = self._m0[etype, fidx]
+        for (etype, fidx), m0 in self.ff_int.m0.items():
             nfpts, nupts = m0.shape
 
             # Extract the relevant elements from the solution
-            uupts = solns[etype][..., self._eidxs[etype, fidx]]
+            uupts = solns[etype][..., self.ff_int.eidxs[etype, fidx]]
 
             # Interpolate to the face
             ufpts = m0 @ uupts.reshape(nupts, -1)
@@ -158,27 +149,18 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
             ufpts = ufpts.swapaxes(0, 1)
 
             # Compute the pressure
-            pidx = 0 if self._ac else -1
             p = self.elementscls.con_to_pri(ufpts, self.cfg)[pidx]
 
             # Get the quadrature weights and normal vectors
-            qwts = self._qwts[etype, fidx]
-            norms = self._norms[etype, fidx]
+            qwts = self.ff_int.qwts[etype, fidx]
+            norms = self.ff_int.norms[etype, fidx]
 
             # Do the quadrature
             fm[0, :ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
 
             if self._viscous:
-                # Get operator and J^-T matrix
-                m4 = self._m4[etype]
-                rcpjact = self._rcpjact[etype, fidx]
-
-                # Transformed gradient at solution points
-                tduupts = m4 @ uupts.reshape(nupts, -1)
-                tduupts = tduupts.reshape(ndims, nupts, nvars, -1)
-
-                # Physical gradient at solution points
-                duupts = np.einsum('ijkl,jkml->ikml', rcpjact, tduupts)
+                # Corrected gradients at solution points
+                duupts = grads[etype][..., self.ff_int.eidxs[etype, fidx]]
                 duupts = duupts.reshape(ndims, nupts, -1)
 
                 # Interpolate gradient to flux points
@@ -197,7 +179,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
 
             if self._mcomp:
                 # Get the flux points positions relative to the moment origin
-                rfpts = self._rfpts[etype, fidx]
+                rfpts = self.ff_int.rfpts[etype, fidx]
 
                 # Do the cross product with the normal vectors
                 rcn = np.atleast_3d(np.cross(rfpts, norms))
@@ -221,11 +203,7 @@ class FluidForcePlugin(SurfaceMixin, BaseSolnPlugin):
         else:
             comm.Reduce(mpi.IN_PLACE, fm, op=mpi.SUM, root=root)
 
-            # Write
-            print(intg.tcurr, *fm.ravel(), sep=',', file=self.outf)
-
-            # Flush to disk
-            self.outf.flush()
+            self._write(intg.tcurr, fm)
 
     def stress_tensor(self, u, du):
         c = self._constants

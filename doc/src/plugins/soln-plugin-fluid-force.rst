@@ -3,32 +3,42 @@
 *******************************
 
 Periodically integrates the pressure and viscous stress on the boundary
-labelled ``name`` and writes out the resulting force and moment (if requested)
-vectors to a CSV file. Parameterised with
+labelled ``name`` and writes out the resulting force and moment (if
+requested) vectors to a CSV or HDF5 file.  Parameterised with
 
-1. ``nsteps`` --- integrate every ``nsteps``:
+#. ``nsteps`` --- integrate every ``nsteps``:
 
     *int*
 
-2. ``file`` --- output file path; should the file already exist it
+#. ``file`` --- output file path; should the file already exist it
    will be appended to:
 
     *string*
 
-3. ``header`` --- if to output a header row or not:
+#. ``file-format`` --- output file type (defaults to CSV):
+
+    ``csv`` | ``hdf5``
+
+#. ``file-header`` --- for CSV output if to write a header row or not:
 
     *boolean*
 
-4. ``morigin`` --- origin used to compute moments (optional):
+#. ``file-dataset`` --- for HDF5 output where in the HDF5 to write the
+   data:
+
+    *string*
+
+#. ``morigin`` --- origin used to compute moments (optional):
 
     ``(x, y, [z])``
 
-5. ``quad-deg-{etype}`` --- degree of quadrature rule for fluid force
-   integration, optionally this can be specified for different element types:
+#. ``quad-deg-{etype}`` --- degree of quadrature rule for fluid force
+   integration, optionally this can be specified for different element
+   types:
 
     *int*
 
-6. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
+#. ``quad-pts-{etype}`` --- name of quadrature rule (optional):
 
     *string*
 
@@ -36,7 +46,7 @@ Example::
 
     [soln-plugin-fluidforce-wing]
     nsteps = 10
-    file = wing-forces.csv
-    header = true
+    file = wing-forces.h5
+    file-dataset = /forces
     quad-deg = 6
     morigin = (0.0, 0.0, 0.5)

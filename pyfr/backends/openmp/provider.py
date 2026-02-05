@@ -6,8 +6,8 @@ from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.openmp.generator import OpenMPKernelGenerator
+from pyfr.cache import memoize
 from pyfr.nputil import npdtype_to_ctypestype
-from pyfr.util import memoize
 
 
 class OpenMPKernel(Kernel):
@@ -185,6 +185,7 @@ class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
             if rtargs:
                 def bind(self, **kwargs):
                     for i, k in rtargs:
-                        self.kernel.set_arg(i, kwargs[k])
+                        if k in kwargs:
+                            self.kernel.set_arg(i, kwargs[k])
 
         return PointwiseKernel(argm, argv, kernel=fun)

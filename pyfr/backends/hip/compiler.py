@@ -1,8 +1,10 @@
 from ctypes import (POINTER, create_string_buffer, c_char_p, c_int, c_size_t,
                     c_void_p)
 
+from pyfr.cache import ObjectCache
 from pyfr.ctypesutil import LibWrapper
 from pyfr.nputil import npdtype_to_ctypestype
+from pyfr.util import digest
 
 
 # Possible HIPRTC exception types
@@ -90,7 +92,29 @@ class HIPRTC:
         return code.raw
 
 
-class SourceModule:
+class HIPCompiler:
+    def __init__(self, hip):
+        self.hiprtc = HIPRTC()
+        self.cache = ObjectCache('hip')
+
+        # Query the HIP runtime version
+        version = c_int()
+        hip.lib.hipRuntimeGetVersion(version)
+        self.version = version.value
+
+    def build(self, name, src, flags=[]):
+        ckey = digest(self.version, name, src, flags)
+
+        code = self.cache.get_bytes(ckey)
+        if code is None:
+            code = self.hiprtc.compile(name, src, flags)
+
+            self.cache.set_with_bytes(ckey, code)
+
+        return code
+
+
+class HIPCompilerModule:
     def __init__(self, backend, src):
         # Prepare the source code
         src = f'extern "C"\n{{\n{src}\n}}'
@@ -102,7 +126,7 @@ class SourceModule:
         flags = [f'--gpu-architecture={arch}', '-munsafe-fp-atomics']
 
         # Compile
-        code = backend.hiprtc.compile('kernel', src, flags)
+        code = backend.compiler.build('kernel', src, flags)
 
         # Load it as a module
         self.mod = backend.hip.load_module(code)

@@ -6,18 +6,19 @@ from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
 
 
 class CUDAPackingKernels(CUDAKernelProvider):
-    def pack(self, mv):
-        cuda = self.backend.cuda
-        ixdtype = self.backend.ixdtype
+    def _extract_args(self, xmv):
+        if isinstance(xmv, self.backend.xchg_view_cls):
+            return xmv.xchgmat, xmv.view
+        else:
+            return xmv, None
 
-        # An exchange view is simply a regular view plus an exchange matrix
-        m, v = mv.xchgmat, mv.view
-
+    def _packing_kern(self, type, v, xm):
         # Render the kernel template
-        src = self.backend.lookup.get_template('pack').render()
+        src = self.backend.lookup.get_template('packing').render()
 
         # Build
-        kern = self._build_kernel('pack_view', src, [ixdtype]*3 + [np.uintp]*4)
+        kern = self._build_kernel(f'{type}_view', src,
+                                  [self.backend.ixdtype]*3 + [np.uintp]*4)
 
         # Compute the grid and thread-block size
         block = (128, 1, 1)
@@ -26,43 +27,86 @@ class CUDAPackingKernels(CUDAKernelProvider):
         # Set the arguments
         params = kern.make_params(grid, block)
         params.set_args(v.n, v.nvrow, v.nvcol, v.basedata, v.mapping,
-                        v.rstrides or 0, m)
+                        v.rstrides or 0, xm)
 
-        # If MPI is CUDA aware then we just need to pack the buffer
-        if self.backend.mpitype == 'cuda-aware':
-            class PackXchgViewKernel(CUDAKernel):
-                def add_to_graph(self, graph, deps):
-                    return graph.graph.add_kernel(params, deps)
+        return kern, params
 
-                def run(self, stream):
-                    kern.exec_async(stream, params)
-        # Otherwise, we need to both pack the buffer and copy it back
-        else:
-            class PackXchgViewKernel(CUDAKernel):
-                def add_to_graph(self, graph, deps):
-                    gpack = graph.graph.add_kernel(params, deps)
-                    return graph.graph.add_memcpy(
-                        m.hdata, m.data, m.nbytes, [gpack]
-                    )
-
-                def run(self, stream):
-                    kern.exec_async(stream, params)
-                    cuda.memcpy(m.hdata, m.data, m.nbytes, stream)
-
-        return PackXchgViewKernel(mats=[mv])
-
-    def unpack(self, mv):
+    def pack(self, xmv):
         cuda = self.backend.cuda
+        xm, v = self._extract_args(xmv)
 
-        if self.backend.mpitype == 'cuda-aware':
-            return NullKernel()
+        # If we have a view then obtain a view-packing kernel
+        if v:
+            kern, params = self._packing_kern('pack', v, xm)
+
+        # When copy elision is requested just pack the buffer
+        if xm.elide_copy:
+            # If we have been passed a view then pack it
+            if v:
+                class PackKernel(CUDAKernel):
+                    def add_to_graph(self, graph, deps):
+                        return graph.graph.add_kernel(params, deps)
+
+                    def run(self, stream):
+                        kern.exec_async(stream, params)
+            # Otherwise, there is nothing to do
+            else:
+                return NullKernel()
+        # Otherwise, we need to potentially pack the buffer and copy it back
         else:
-            class UnpackXchgMatrixKernel(CUDAKernel):
+            class PackKernel(CUDAKernel):
                 def add_to_graph(self, graph, deps):
-                    return graph.graph.add_memcpy(mv.data, mv.hdata, mv.nbytes,
+                    if v:
+                        deps = [graph.graph.add_kernel(params, deps)]
+
+                    return graph.graph.add_memcpy(xm.hdata, xm.data, xm.nbytes,
                                                   deps)
 
                 def run(self, stream):
-                    cuda.memcpy(mv.data, mv.hdata, mv.nbytes, stream)
+                    if v:
+                        kern.exec_async(stream, params)
 
-            return UnpackXchgMatrixKernel(mats=[mv])
+                    cuda.memcpy(xm.hdata, xm.data, xm.nbytes, stream)
+
+        return PackKernel(mats=[xmv])
+
+    def unpack(self, xmv):
+        cuda = self.backend.cuda
+        xm, v = self._extract_args(xmv)
+
+        # If we have a view then obtain a view-unpacking kernel
+        if v:
+            kern, params = self._packing_kern('unpack', v, xm)
+
+        # When copy elision is requested there is no need to copy the buffer
+        if xm.elide_copy:
+            # If we have been passed a view then unpack it
+            if v:
+                class UnpackKernel(CUDAKernel):
+                    def add_to_graph(self, graph, deps):
+                        return graph.graph.add_kernel(params, deps)
+
+                    def run(self, stream):
+                        kern.exec_async(stream, params)
+            # Otherwise, there is nothing to do
+            else:
+                return NullKernel()
+        # Otherwise, we need to copy the host buffer and potentially unpack
+        else:
+            class UnpackKernel(CUDAKernel):
+                def add_to_graph(self, graph, deps):
+                    gcopy = graph.graph.add_memcpy(xm.data, xm.hdata,
+                                                   xm.nbytes, deps)
+
+                    if v:
+                        return graph.graph.add_kernel(params, [gcopy])
+                    else:
+                        return gcopy
+
+                def run(self, stream):
+                    cuda.memcpy(xm.data, xm.hdata, xm.nbytes, stream)
+
+                    if v:
+                        kern.exec_async(stream, params)
+
+        return UnpackKernel(mats=[xmv])

@@ -11,12 +11,11 @@ class HIPBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        from pyfr.backends.hip.compiler import HIPRTC
+        from pyfr.backends.hip.compiler import HIPCompiler
         from pyfr.backends.hip.driver import HIP
 
-        # Load and wrap HIP and HIPRTC
+        # Load and wrap HIP
         self.hip = HIP()
-        self.hiprtc = HIPRTC()
 
         # Get the desired HIP device
         devid = cfg.get('backend-hip', 'device-id', 'local-rank')
@@ -39,6 +38,9 @@ class HIPBackend(BaseBackend):
 
         # Set the device
         self.hip.set_device(devid)
+
+        # HIP compiler
+        self.compiler = HIPCompiler(self.hip)
 
         # Get its properties
         self.props = self.hip.device_properties(devid)

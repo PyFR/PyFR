@@ -29,3 +29,24 @@ void pack_view(const struct kargs *restrict args)
     % endif
     }
 }
+
+void unpack_view(const struct kargs *restrict args)
+{
+    ixdtype_t n = args->n;
+    ixdtype_t *vix = args->vix, *vrstri = args->vrstri;
+    fpdtype_t *v = args->v, *pmat = args->pmat;
+
+    #pragma omp simd
+    for (ixdtype_t i = 0; i < n; i++)
+    {
+    % if nrv == 1:
+    % for c in range(ncv):
+        v[vix[i] + SOA_SZ*${c}] = pmat[${c}*n + i];
+    % endfor
+    % else:
+    % for r, c in pyfr.ndrange(nrv, ncv):
+        v[vix[i] + vrstri[i]*${r} + SOA_SZ*${c}] = pmat[${r*ncv + c}*n + i];
+    % endfor
+    % endif
+    }
+}

@@ -193,7 +193,7 @@ class GmshReader(BaseReader):
     }
 
     def __init__(self, msh, progress):
-        self.progress = progress
+        super().__init__(progress)
 
         if isinstance(msh, str):
             msh = open(msh)
@@ -203,7 +203,7 @@ class GmshReader(BaseReader):
             mshit = iter(msh)
 
             # Have our spinner flashed every 10,000 lines
-            mshit = pspinner.wrap_iterable(mshit, 10000)
+            mshit = pspinner.wrap_file_lines(mshit, 10000)
 
             # Section readers
             sect_map = {
@@ -234,6 +234,10 @@ class GmshReader(BaseReader):
                             break
                     else:
                         raise ValueError(f'Expected $End{sect}')
+
+        # Account for any starting node offsets
+        for k, v in self._elenodes.items():
+            v -= self._nodeoff
 
     def _read_mesh_format(self, mshit):
         ver, ftype, dsize = next(mshit).split()
@@ -314,12 +318,12 @@ class GmshReader(BaseReader):
         npts, *ents = (int(i) for i in next(mshit).split())
 
         # Skip over the point entities
-        for i in range(npts):
+        for _ in range(npts):
             next(mshit)
 
         # Iterate through the curves, surfaces, and volume entities
         for ndim, nent in enumerate(ents, start=1):
-            for j in range(nent):
+            for _ in range(nent):
                 ent = next(mshit).split()
                 etag, enphys = int(ent[0]), int(ent[7])
 
@@ -337,30 +341,38 @@ class GmshReader(BaseReader):
         self._read_nodes_impl(mshit)
 
     def _read_nodes_impl_v2(self, mshit):
-        nodemap = {}
+        n = int(next(mshit))
+        nbuf = np.loadtxt(mshit, dtype='i8,3f8', max_rows=n)
 
-        # Read in the nodes as a dict
-        for l in msh_section(mshit, 'Nodes'):
-            nv = l.split()
-            nodemap[int(nv[0])] = nv[1:]
+        # Determine the minimum and maximum node numbers
+        ixl, ixu = nbuf['f0'].min(), nbuf['f0'].max()
 
-        # Pack them into a dense array
-        self._nodepts = nodepts = np.empty((max(nodemap) + 1, 3))
-        for k, nv in nodemap.items():
-            nodepts[k] = [float(x) for x in nv]
+        # Allocate a dense array for the nodes
+        self._nodepts = nodepts = np.empty((ixu - ixl + 1, 3))
+        nodepts.fill(np.nan)
+
+        nodepts[nbuf['f0'] - ixl] = nbuf['f1']
+
+        # Save the starting node offset
+        self._nodeoff = ixl
+
+        if next(mshit) != '$EndNodes\n':
+            raise ValueError('Expected $EndNodes')
 
     def _read_nodes_impl_v41(self, mshit):
         # Entity count, node count, minimum and maximum node numbers
         ne, nn, ixl, ixu = (int(i) for i in next(mshit).split())
 
-        self._nodepts = nodepts = np.empty((ixu + 1, 3))
+        self._nodepts = nodepts = np.empty((ixu - ixl + 1, 3))
+        nodepts.fill(np.nan)
 
-        for i in range(ne):
+        for _ in range(ne):
             nen = int(next(mshit).split()[-1])
-            nix = [int(next(mshit)[:-1]) for _ in range(nen)]
+            nix = np.loadtxt(mshit, dtype=np.int64, max_rows=nen)
+            nodepts[nix - ixl] = np.loadtxt(mshit, max_rows=nen)
 
-            for j in nix:
-                nodepts[j] = [float(x) for x in next(mshit).split()]
+        # Save the starting node offset
+        self._nodeoff = ixl
 
         if next(mshit) != '$EndNodes\n':
             raise ValueError('Expected $EndNodes')
@@ -393,37 +405,36 @@ class GmshReader(BaseReader):
         # Block and total element count
         nb, ne = (int(i) for i in next(mshit).split()[:2])
 
-        for i in range(nb):
+        for _ in range(nb):
             edim, etag, etype, ecount = (int(j) for j in next(mshit).split())
 
             if etype not in self._etype_map:
                 raise ValueError(f'Unsupported element type {etype}')
 
-            # Physical entity type (used for BCs)
-            epent = self._tagpents.get((edim, etag), -1)
-            append = elenodes[etype, epent].append
+            # Determine the number of nodes associated with each element
+            nnodes = self._etype_map[etype][1]
 
-            for j in range(ecount):
-                append([int(k) for k in next(mshit).split()[1:]])
+            # Lookup the physical entity type
+            epent = self._tagpents[edim, etag]
 
-        if ne != sum(len(v) for v in elenodes.values()):
+            # Allocate space for, and read in, these elements
+            enodes = np.loadtxt(mshit, dtype=np.int64, max_rows=ecount,
+                                usecols=range(1, nnodes + 1), ndmin=2)
+
+            elenodes[etype, epent].append(enodes)
+
+        if ne != sum(len(vv) for v in elenodes.values() for vv in v):
             raise ValueError('Invalid element count')
 
         if next(mshit) != '$EndElements\n':
             raise ValueError('Expected $EndElements')
 
-        self._elenodes = {k: np.array(v) for k, v in elenodes.items()}
+        self._elenodes = {k: np.vstack(v) for k, v in elenodes.items()}
 
-    def _to_raw_pyfrm(self, lintol):
+    def _to_raw_mesh(self, lintol):
         # Assemble a nodal mesh
         maps = self._etype_map, self._petype_fnmap, self._nodemaps
         pents = self._felespent, self._bfacespents, self._pfacespents
         mesh = NodalMeshAssembler(self._nodepts, self._elenodes, pents, maps)
 
-        with self.progress.start_with_spinner('Processing connectivity') as p:
-            pyfrm = mesh.get_connectivity(p)
-
-        with self.progress.start('Processing shape points'):
-            pyfrm |= mesh.get_shape_points(lintol)
-
-        return pyfrm
+        return mesh.get_eles(lintol, self.progress)

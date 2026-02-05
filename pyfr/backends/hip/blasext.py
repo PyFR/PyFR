@@ -48,7 +48,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
 
         class CopyKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
-                pass
+                return graph.graph.add_memcpy(dst, src, dst.nbytes, deps)
 
             def run(self, stream):
                 hip.memcpy(dst, src, dst.nbytes, stream)
@@ -76,7 +76,7 @@ class HIPBlasExtKernels(HIPKernelProvider):
         # Empty result buffer on the host
         reduced_host = hip.pagelocked_empty((ncola, grid[0]), fpdtype)
 
-        tplargs = dict(norm=norm, blocksz=block[0], method=method)
+        tplargs = dict(norm=norm, blocksz=block[0], method=method, dt_type=None)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'

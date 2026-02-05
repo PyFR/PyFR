@@ -1,5 +1,6 @@
 from ctypes import (POINTER, byref, c_int, c_double, c_float, c_uint32,
                     c_void_p)
+import os
 
 import numpy as np
 
@@ -42,6 +43,12 @@ class RocBLASWrappers(LibWrapper):
         (c_int, 'rocblas_create_handle', POINTER(c_void_p)),
         (c_int, 'rocblas_destroy_handle', c_void_p),
         (c_int, 'rocblas_set_stream', c_void_p, c_void_p),
+        (c_int, 'rocblas_dgemm', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_double), c_void_p, c_int),
+        (c_int, 'rocblas_sgemm', c_void_p, c_int, c_int, c_int, c_int, c_int,
+         POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
+         POINTER(c_float), c_void_p, c_int),
         (c_int, 'rocblas_gemm_ex_get_solutions', c_void_p, c_int, c_int, c_int,
          c_int, c_int, c_void_p, c_void_p, c_int, c_int, c_void_p,
          c_int, c_int, c_void_p, c_void_p, c_int, c_int, c_void_p,
@@ -56,6 +63,11 @@ class RocBLASWrappers(LibWrapper):
 class HIPRocBLASKernels(HIPKernelProvider):
     def __init__(self, backend):
         super().__init__(backend)
+
+        self._cstream = backend.hip.create_stream()
+
+        # Ensure memory can be allocated in captured streams
+        os.environ['ROCBLAS_STREAM_ORDER_ALLOC'] = '1'
 
         # Load and wrap rocBLAS
         self._wrappers = RocBLASWrappers()
@@ -73,12 +85,14 @@ class HIPRocBLASKernels(HIPKernelProvider):
     def __del__(self):
         try:
             if self._handle:
+                self._wrappers.rocblas_set_stream(self._handle, self._cstream)
                 self._wrappers.rocblas_destroy_handle(self._handle)
         except AttributeError:
             pass
 
     def mul(self, a, b, out, alpha=1.0, beta=0.0):
         h, w = self._handle, self._wrappers
+        cstream = self._cstream
 
         # Ensure the matrices are compatible
         if a.nrow != out.nrow or a.ncol != b.nrow or b.ncol != out.ncol:
@@ -104,22 +118,31 @@ class HIPRocBLASKernels(HIPKernelProvider):
         # α and β factors for C = α*(A*B) + β*C
         if a.dtype == np.float64:
             rtype = w.DATATYPE_F64_R
+            gemm_fn = w.rocblas_dgemm
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
         else:
             rtype = w.DATATYPE_F32_R
+            gemm_fn = w.rocblas_sgemm
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
-        def gemm(stream):
+        def gemm(stream, algo):
             w.rocblas_set_stream(h, stream)
-            w.rocblas_gemm_ex(
-                h, opA, opB, m, n, k, byref(alpha_ct), A, rtype, A.leaddim, B,
-                rtype, B.leaddim, byref(beta_ct), C, rtype, C.leaddim, C,
-                rtype, C.leaddim, rtype, w.GEMM_ALGO_SOLUTION_INDEX, algo, 0
-            )
+            if algo is None:
+                gemm_fn(h, opA, opB, m, n, k, byref(alpha_ct), A, A.leaddim, B,
+                        B.leaddim, byref(beta_ct), C, C.leaddim)
+            else:
+                w.rocblas_gemm_ex(
+                    h, opA, opB, m, n, k, byref(alpha_ct), A, rtype, A.leaddim,
+                    B, rtype, B.leaddim, byref(beta_ct), C, rtype, C.leaddim,
+                    C, rtype, C.leaddim, rtype, w.GEMM_ALGO_SOLUTION_INDEX,
+                    algo, 0
+                )
 
         try:
             algo, dt = self._mul_cache[ckey]
         except KeyError:
+            ifac = self.backend.autotune_ifac
+
             def get_solutions(sidx):
                 size_ct = c_int(len(sidx) if sidx is not None else 0)
                 w.rocblas_gemm_ex_get_solutions(
@@ -130,19 +153,22 @@ class HIPRocBLASKernels(HIPKernelProvider):
                 )
                 return size_ct.value
 
-            # Get applicable gemm algorithm solution indices
-            sidx = (c_int * min(get_solutions(None), self.nkerns))()
+            # Get applicable gemm_ex algorithm solution indices
+            sidx = (c_int * min(get_solutions(None), self.nkerns - 1))()
             get_solutions(sidx)
 
             # Save a copy of the contents of the output matrix
             out_np = getattr(out, 'parent', out).get()
 
             best_kern = None
-            # Benchmark suggested algorithms
-            for algo in sidx:
-                dt = self._benchmark(gemm)
-                if best_kern is None or dt < best_kern[-1]:
-                    best_kern = algo, dt
+            for algo in [None, *sidx]:
+                try:
+                    dt = self._benchmark(lambda s: gemm(s, algo))
+                    if best_kern is None or dt < ifac*best_kern[-1]:
+                        best_kern = algo, dt
+                # In the case of invalid values raised by rocblas
+                except RocBLASInvalidValue:
+                    pass
 
             # Restore the output matrix
             getattr(out, 'parent', out).set(out_np)
@@ -152,9 +178,15 @@ class HIPRocBLASKernels(HIPKernelProvider):
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
-                pass
+                # Capture the execution of rocBLAS to obtain a graph
+                cstream.begin_capture()
+                self.run(cstream)
+                gnode = cstream.end_capture()
+
+                # Embed this graph in our main graph
+                return graph.graph.add_graph(gnode, deps)
 
             def run(self, stream):
-                gemm(stream)
+                gemm(stream, algo)
 
         return MulKernel(mats=[a, b, out], dt=dt)

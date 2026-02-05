@@ -2,33 +2,40 @@ from pyfr.solvers.baseadvec import BaseAdvectionElements
 
 
 class BaseACFluidElements:
-    privarmap = {2: ['p', 'u', 'v'],
-                 3: ['p', 'u', 'v', 'w']}
+    @staticmethod
+    def privars(ndims, cfg):
+        return ['p', 'u', 'v'] if ndims == 2 else ['p', 'u', 'v', 'w']
 
-    convarmap = {2: ['p', 'u', 'v'],
-                 3: ['p', 'u', 'v', 'w']}
+    convars = privars
 
-    dualcoeffs = {2: ['u', 'v'],
-                  3: ['u', 'v', 'w']}
+    @staticmethod
+    def dualcoeffs(ndims, cfg):
+        return ['u', 'v'] if ndims == 2 else ['u', 'v', 'w']
 
-    visvarmap = {
-        2: [('velocity', ['u', 'v']),
-            ('pressure', ['p'])],
-        3: [('velocity', ['u', 'v', 'w']),
-            ('pressure', ['p'])]
-    }
+    @staticmethod
+    def visvars(ndims, cfg):
+        if ndims == 2:
+            return {
+                'velocity': ['u', 'v'],
+                'pressure': ['p']
+            }
+        elif ndims == 3:
+            return {
+                'velocity': ['u', 'v', 'w'],
+                'pressure': ['p']
+            }
 
     @staticmethod
     def pri_to_con(pris, cfg):
-        return pris
+        return list(pris)
 
     @staticmethod
     def con_to_pri(convs, cfg):
-        return convs
+        return list(convs)
 
     @staticmethod
     def diff_con_to_pri(cons, diff_cons, cfg):
-        return diff_cons
+        return list(diff_cons)
 
     @staticmethod
     def validate_formulation(controller):

@@ -5,20 +5,25 @@
 Parameterises the pyramidal elements, or if -mg-p\ *order* is suffixed
 the pyramidal elements at multi-p level *order*, with
 
-1. ``soln-pts`` --- location of the solution points in a pyramidal
+#. ``soln-pts`` --- location of the solution points in a pyramidal
    element:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
-2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
+#. ``quad-deg`` --- degree of quadrature rule for anti-aliasing in a
    pyramidal element:
 
     *int*
 
-3. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
+#. ``quad-npts`` --- number of points of the quadrature rule for
+   anti-aliasing in a pyramidal element:
+
+    *int*
+
+#. ``quad-pts`` --- name of quadrature rule for anti-aliasing in a
    pyramidal element:
 
-    ``witherden-vincent``
+    ``witherden`` | ``witherden-vincent``
 
 Example::
 

@@ -11,12 +11,11 @@ class CUDABackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        from pyfr.backends.cuda.compiler import NVRTC
+        from pyfr.backends.cuda.compiler import CUDACompiler
         from pyfr.backends.cuda.driver import CUDA, CUDAError
 
-        # Load and wrap CUDA and NVRTC
+        # Load and wrap CUDA
         self.cuda = CUDA()
-        self.nvrtc = NVRTC()
 
         # Get the desired CUDA device
         devid = cfg.get('backend-cuda', 'device-id', 'local-rank')
@@ -46,6 +45,9 @@ class CUDABackend(BaseBackend):
                 raise RuntimeError(f'Unable to find CUDA device {devid}')
         else:
             self.cuda.set_device(int(devid))
+
+        # CUDA Compiler
+        self.compiler = CUDACompiler(self.cuda)
 
         # Take the required alignment to be 128 bytes
         self.alignb = 128

@@ -2,7 +2,7 @@ import itertools as it
 import re
 import types
 
-from pyfr.util import memoize
+from pyfr.cache import memoize
 
 
 class Kernel:
@@ -26,22 +26,34 @@ class NullKernel(Kernel):
     pass
 
 
-class BaseOrderedMetaKernel(Kernel):
+class BaseMetaKernel(Kernel):
     def __init__(self, kernels):
         super().__init__()
 
         self.kernels = list(kernels)
+
+        bkerns = [k for k in self.kernels if hasattr(k, 'bind')]
+
+        if bkerns:
+            self._bkerns = bkerns
+            self.bind = self._bind
+
+    def _bind(self, **kwargs):
+        for k in self._bkerns:
+            k.bind(**kwargs)
 
     def run(self, *args):
         for k in self.kernels:
             k.run(*args)
 
 
-class BaseUnorderedMetaKernel(Kernel):
-    def __init__(self, kernels, splits):
-        super().__init__()
+class BaseOrderedMetaKernel(BaseMetaKernel):
+    pass
 
-        self.kernels = list(kernels)
+
+class BaseUnorderedMetaKernel(BaseMetaKernel):
+    def __init__(self, kernels, splits):
+        super().__init__(kernels)
 
         if splits is not None:
             self.splits = list(splits)
@@ -49,10 +61,6 @@ class BaseUnorderedMetaKernel(Kernel):
 
             if len(self.splits) != len(self.kernels) - 1:
                 raise ValueError('Invalid split points')
-
-    def run(self, *args):
-        for k in self.kernels:
-            k.run(*args)
 
 
 class BaseKernelProvider:

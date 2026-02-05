@@ -1,3 +1,5 @@
+from weakref import finalize
+
 from gimmik import CUDAMatMul
 import numpy as np
 
@@ -51,6 +53,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
         try:
             kern, grid, block, dt = self._mul_kerns[ckey]
         except KeyError:
+            ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
             kdata = None
             best_kern = None
@@ -85,13 +88,14 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < best_kern[-1]:
+                    if best_kern is None or dt < ifac*best_kern[-1]:
                         best_kern = kern, meta['grid'], meta['block'], dt
 
                     kdata = {
                         'runtime': dt,
                         'registers': kern.nreg,
-                        'local_mem': kern.local_mem
+                        'local_mem': kern.local_mem,
+                        'shared_mem': kern.shared_mem
                     }
             except StopIteration:
                 pass
@@ -101,6 +105,7 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = kern, grid, block, dt = best_kern
+            finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
         params = kern.make_params(grid, block)
@@ -113,4 +118,4 @@ class CUDAGiMMiKKernels(CUDAKernelProvider):
             def run(self, stream):
                 kern.exec_async(stream, params)
 
-        return MulKernel(mats=[b, out], dt=dt)
+        return MulKernel(mats=[a, b, out], dt=dt)

@@ -1,3 +1,5 @@
+from weakref import finalize
+
 from gimmik import OpenCLMatMul
 import numpy as np
 
@@ -57,6 +59,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             # Clone the kernel so it gets its own set of arguments
             kern = kern.clone()
         except KeyError:
+            ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
             local_mem_size = self.backend.cl.dev.local_mem_size
             best_kern = None
@@ -88,7 +91,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < best_kern[-1]:
+                    if best_kern is None or dt < ifac*best_kern[-1]:
                         best_kern = kern, gs, ls, dt
 
                     sdata = {'runtime': dt}
@@ -100,6 +103,7 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = kern, gs, ls, dt = best_kern
+            finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
         kern.set_dims(gs, ls)
@@ -109,4 +113,4 @@ class OpenCLGiMMiKKernels(OpenCLKernelProvider):
             def run(self, queue, wait_for=None, ret_evt=False):
                 return kern.exec_async(queue, wait_for, ret_evt)
 
-        return MulKernel(mats=[b, out], dt=dt)
+        return MulKernel(mats=[a, b, out], dt=dt)

@@ -60,8 +60,9 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
         super().__init__(backend, dtype, ioshape, initval, extent, aliases,
                          tags)
 
-        # If MPI is CUDA-aware then simply annotate our device buffer
-        if backend.mpitype == 'cuda-aware':
+        # If MPI is CUDA-aware then we can elide copies to/from a host buffer
+        self.elide_copy = backend.mpitype == 'cuda-aware'
+        if self.elide_copy:
             class HostData:
                 __array_interface__ = {
                     'version': 3,

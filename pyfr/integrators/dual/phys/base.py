@@ -7,13 +7,13 @@ from pyfr.integrators.dual.pseudo import get_pseudo_integrator
 class BaseDualIntegrator(BaseIntegrator):
     formulation = 'dual'
 
-    def __init__(self, backend, systemcls, rallocs, mesh, initsoln, cfg):
-        super().__init__(backend, rallocs, mesh, initsoln, cfg)
+    def __init__(self, backend, systemcls, mesh, initsoln, cfg):
+        super().__init__(backend, mesh, initsoln, cfg)
 
         # Get the pseudo-integrator
         self.pseudointegrator = get_pseudo_integrator(
-            backend, systemcls, rallocs, mesh, initsoln, cfg,
-            self.stepper_nregs, self.stage_nregs, self._dt
+            backend, systemcls, mesh, initsoln, cfg, self.stepper_nregs,
+            self.stage_nregs, self._dt
         )
 
         # Event handlers for advance_to
@@ -54,13 +54,17 @@ class BaseDualIntegrator(BaseIntegrator):
 
         return dt_soln
 
-    def call_plugin_dt(self, dt):
+    def call_plugin_dt(self, tstart, dt):
         rem = math.fmod(dt, self._dt)
         tol = 5.0*self.dtmin
         if rem > tol and (self._dt - rem) > tol:
             raise ValueError('Plugin call times must be multiples of dt')
 
-        super().call_plugin_dt(dt)
+        rem_tstart = math.fmod(tstart, self._dt)
+        if rem_tstart > tol and (self._dt - rem_tstart) > tol:
+            raise ValueError('Plugin start times must be multiples of dt')
+
+        super().call_plugin_dt(tstart, dt)
 
     def collect_stats(self, stats):
         super().collect_stats(stats)

@@ -7,6 +7,7 @@ from weakref import WeakKeyDictionary, WeakValueDictionary
 import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
+from pyfr.backends.base.makoutil import mfilttag
 from pyfr.template import DottedTemplateLookup
 
 
@@ -50,6 +51,9 @@ class BaseBackend:
                 raise ValueError('Backend memory model must be either normal '
                                  'or large')
 
+        # Autotuning improvement factor
+        self.autotune_ifac = cfg.getfloat('backend', 'autotune-ifac', 0.95)
+
         # Allocated matrices
         self.mats = WeakValueDictionary()
         self._mat_counter = count()
@@ -71,7 +75,12 @@ class BaseBackend:
             'soasz': self.soasz, 'math': math
         }
 
-        return DottedTemplateLookup(pkg, dfltargs)
+        lookup = DottedTemplateLookup(pkg, dfltargs)
+
+        # Add source filters
+        lookup.filters.append(mfilttag)
+
+        return lookup
 
     def malloc(self, obj, extent):
         # If no extent has been specified then autocommit
@@ -191,6 +200,8 @@ class BaseBackend:
             # See if it can potentially provide the requested kernel
             kern_meth = getattr(prov, name, None)
             if kern_meth:
+                ifac = self.autotune_ifac
+
                 try:
                     # Ask the provider for the kernel
                     kern = kern_meth(*args, **kwargs)
@@ -198,7 +209,7 @@ class BaseBackend:
                     continue
 
                 # Evaluate this kernel compared to the best seen so far
-                if best_kern is None or kern.dt < best_kern.dt:
+                if best_kern is None or kern.dt < ifac*best_kern.dt:
                     best_kern = kern
 
                     # If there is no benchmark data then short circut

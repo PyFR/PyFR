@@ -1,15 +1,15 @@
 import itertools as it
 import math
 
-from pyfr.solvers.base import BaseInters
 from pyfr.nputil import npeval
+from pyfr.solvers.base import BaseInters
 
 
 class BaseAdvectionIntersMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self._ef_enabled = (self.cfg.get('solver', 'shock-capturing') == 
+        self._ef_enabled = (self.cfg.get('solver', 'shock-capturing') ==
                             'entropy-filter' and
                             self.cfg.getint('solver', 'order'))
 
@@ -49,13 +49,12 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
     # Starting tag used for MPI
     BASE_MPI_TAG = 2314
 
-    def __init__(self, be, lhs, rhsrank, rallocs, elemap, cfg):
+    def __init__(self, be, lhs, rhsrank, elemap, cfg):
         super().__init__(be, lhs, elemap, cfg)
         self._rhsrank = rhsrank
-        self._rallocs = rallocs
 
         # Name our interface so we can match kernels to MPI requests
-        self.name = 'p{rhsrank}'
+        self.name = f'p{rhsrank}'
 
         # MPI request tag counter
         self._mpi_tag_counter = it.count(self.BASE_MPI_TAG)
@@ -110,9 +109,12 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
 class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
     type = None
 
-    def __init__(self, be, lhs, elemap, cfgsect, cfg):
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfg)
+
         self.cfgsect = cfgsect
+        self.bccomm = bccomm
+        self.name = cfgsect.removeprefix('soln-bcs-')
 
         # For BC interfaces, which only have an LHS state, we take the
         # permutation which results in an optimal memory access pattern
@@ -130,6 +132,10 @@ class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
         else:
             self._entmin_lhs = None
+
+    @classmethod
+    def preparefn(cls, bciface, mesh, elemap):
+        pass
 
     def _eval_opts(self, opts, default=None):
         # Boundary conditions, much like initial conditions, can be

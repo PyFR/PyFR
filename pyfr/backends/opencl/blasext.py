@@ -65,7 +65,7 @@ class OpenCLBlasExtKernels(OpenCLKernelProvider):
         # Corresponding device memory allocation
         reduced_dev = cl.mem_alloc(reduced_host.nbytes)
 
-        tplargs = dict(norm=norm, method=method)
+        tplargs = dict(norm=norm, method=method, dt_type=None)
 
         if method == 'resid':
             tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'

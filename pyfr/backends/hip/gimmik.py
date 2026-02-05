@@ -1,3 +1,5 @@
+from weakref import finalize
+
 from gimmik import HIPMatMul
 import numpy as np
 
@@ -51,6 +53,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
         try:
             kern, grid, block, dt = self._mul_kerns[ckey]
         except KeyError:
+            ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
             kdata = None
             best_kern = None
@@ -80,7 +83,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                         nbench=self.nbench
                     )
 
-                    if best_kern is None or dt < best_kern[-1]:
+                    if best_kern is None or dt < ifac*best_kern[-1]:
                         best_kern = kern, meta['grid'], meta['block'], dt
 
                     kdata = {
@@ -96,6 +99,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
             # Update the cache
             self._mul_kerns[ckey] = kern, grid, block, dt = best_kern
+            finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
         params = kern.make_params(grid, block)
@@ -103,9 +107,9 @@ class HIPGiMMiKKernels(HIPKernelProvider):
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):
-                pass
+                return graph.graph.add_kernel(params, deps)
 
             def run(self, stream):
                 kern.exec_async(stream, params)
 
-        return MulKernel(mats=[b, out], dt=dt)
+        return MulKernel(mats=[a, b, out], dt=dt)

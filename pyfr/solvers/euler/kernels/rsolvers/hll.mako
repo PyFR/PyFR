@@ -6,6 +6,7 @@
     fpdtype_t fl[${ndims}][${nvars}], fr[${ndims}][${nvars}];
     fpdtype_t vl[${ndims}], vr[${ndims}];
     fpdtype_t pl, pr;
+    fpdtype_t va[${ndims}];
     fpdtype_t nf_sub, nf_fl, nf_fr;
 
     ${pyfr.expand('inviscid_flux', 'ul', 'fl', 'pl', 'vl')};
@@ -14,6 +15,9 @@
     // Get the normal left and right velocities
     fpdtype_t nvl = ${pyfr.dot('n[{i}]', 'vl[{i}]', i=ndims)};
     fpdtype_t nvr = ${pyfr.dot('n[{i}]', 'vr[{i}]', i=ndims)};
+
+    fpdtype_t al = sqrt(${c['gamma']}*pl/ul[0]);
+    fpdtype_t ar = sqrt(${c['gamma']}*pr/ur[0]);
 
     // Compute the Roe-averaged velocity
     fpdtype_t nv = (sqrt(ul[0])*nvl + sqrt(ur[0])*nvr)
@@ -24,12 +28,19 @@
                  + sqrt(ur[0])*(pl + ul[${ndims + 1}]))
                 / (sqrt(ul[0])*ur[0] + sqrt(ur[0])*ul[0]);
 
-    // Roe average sound speed
-    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*nv*nv));
+    fpdtype_t inv_rar = 1 / (sqrt(ul[0]) + sqrt(ur[0]));
+% for i in range(ndims):
+    va[${i}] = (vl[${i}]*sqrt(ul[0]) + vr[${i}]*sqrt(ur[0])) * inv_rar;
+% endfor
+
+    fpdtype_t qq = ${pyfr.dot('va[{i}]', i=ndims)};
+
+    // Roe average speed of sound
+    fpdtype_t a = sqrt(${c['gamma'] - 1}*(H - 0.5*qq));
 
     // Estimate the left and right wave speed, sl and sr
-    fpdtype_t sl = nv - a;
-    fpdtype_t sr = nv + a;
+    fpdtype_t sl = min(nv - a, nvl - ar);
+    fpdtype_t sr = max(nv + a, nvr + ar);
     fpdtype_t rcpsrsl = 1/(sr - sl);
 
     // Output

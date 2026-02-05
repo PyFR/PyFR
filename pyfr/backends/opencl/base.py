@@ -11,6 +11,7 @@ class OpenCLBackend(BaseBackend):
     def __init__(self, cfg):
         super().__init__(cfg)
 
+        from pyfr.backends.opencl.compiler import OpenCLCompiler
         from pyfr.backends.opencl.driver import OpenCL
 
         # Load and wrap OpenCL
@@ -46,6 +47,9 @@ class OpenCLBackend(BaseBackend):
 
         # Set the device
         self.cl.set_device(device)
+
+        # OpenCL compiler
+        self.compiler = OpenCLCompiler(self.cl)
 
         # Compute the alignment requirement for the context
         self.alignb = device.mem_align

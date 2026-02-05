@@ -5,17 +5,22 @@
 Parameterises the quadrilateral interfaces, or if -mg-p\ *order* is
 suffixed the quadrilateral interfaces at multi-p level *order*, with
 
-1. ``flux-pts`` --- location of the flux points on a quadrilateral
+#. ``flux-pts`` --- location of the flux points on a quadrilateral
    interface:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
-2. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
+#. ``quad-deg`` --- degree of quadrature rule for anti-aliasing on a
    quadrilateral interface:
 
     *int*
 
-3. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
+#. ``quad-npts`` --- number of points of the quadrature rule for
+   anti-aliasing on a quadrilateral interface:
+
+    *int*
+
+#. ``quad-pts`` --- name of quadrature rule for anti-aliasing on a
    quadrilateral interface:
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
