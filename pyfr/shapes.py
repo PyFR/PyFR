@@ -335,7 +335,7 @@ class BaseShape:
 
     @cached_property
     def fpts_in_upts(self):
-        return np.all(np.count_nonzero(self.m0, axis=1) == 1)
+        return self.order > 0 and np.all(np.count_nonzero(self.m0, axis=1) == 1)
 
     @cached_property
     def fpts_map_upts(self):
