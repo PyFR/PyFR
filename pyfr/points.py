@@ -125,7 +125,7 @@ class PointLocator:
         smin, smax = spts.min(axis=0), spts.max(axis=0)
 
         # Expand by the scale factor to better account for strong curvature
-        expand = (0.5*(scale - 1))*(smin + smax)
+        expand = (0.5*(scale - 1))*(smax - smin)
         smin -= expand
         smax += expand
 
