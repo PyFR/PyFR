@@ -1,5 +1,7 @@
 import math
 
+import numpy as np
+
 from pyfr.integrators.base import BaseIntegrator, _common_plugin_prop
 from pyfr.integrators.dual.pseudo import get_pseudo_integrator
 
@@ -41,7 +43,7 @@ class BaseDualIntegrator(BaseIntegrator):
 
     @_common_plugin_prop('_curr_dt_soln')
     def dt_soln(self):
-        soln = self.soln
+        soln = [np.require(s, requirements='O') for s in self.soln]
 
         idx = self.pseudointegrator._idxcurr
         self.system.rhs(self.tcurr, idx, idx)
