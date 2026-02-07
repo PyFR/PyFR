@@ -11,6 +11,7 @@ from pyfr.plugins.residual import ResidualPlugin
 from pyfr.plugins.sampler import SamplerCLIPlugin, SamplerPlugin
 from pyfr.plugins.source import SourcePlugin
 from pyfr.plugins.tavg import TavgCLIPlugin, TavgPlugin
+from pyfr.plugins.stop import StopPlugin
 from pyfr.plugins.turbulence import TurbulencePlugin
 from pyfr.plugins.writer import WriterPlugin
 from pyfr.util import subclass_where
