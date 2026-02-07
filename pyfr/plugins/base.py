@@ -179,10 +179,9 @@ class BaseSolverPlugin(BasePlugin):
         intg.system._kernel_callbacks.append(self._extern_callback)
 
     def _extern_callback(self, kern):
-        if bind := getattr(kern, 'bind', None):
-            if bind not in self._extern_binders:
-                self._extern_binders.append(bind)
-                bind(**self._extern_values)
+        if kern.bind not in self._extern_binders:
+            self._extern_binders.append(kern.bind)
+            kern.bind(**self._extern_values)
 
     def _update_extern_values(self):
         pass

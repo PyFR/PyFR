@@ -243,10 +243,10 @@ class BaseSystem:
 
                         tag_kern(pn, p, kern)
 
-        for kerns in kernels.values():
-            for k in kerns:
-                for cb in self._kernel_callbacks:
-                    cb(k)
+        bindable = [k for ks in kernels.values() for k in ks if k.rtnames]
+        for cb in self._kernel_callbacks:
+            for k in bindable:
+                cb(k)
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
@@ -269,8 +269,8 @@ class BaseSystem:
         binders, bckerns = [], defaultdict(dict)
         for kn, kerns in kernels.items():
             for k in kerns:
-                if bind := getattr(k, 'bind', None):
-                    binders.append(bind)
+                if k.rtnames:
+                    binders.append(k.bind)
 
                 if kn.startswith('bcint/'):
                     bcname = self._ktags[k].removeprefix('bcint/')
