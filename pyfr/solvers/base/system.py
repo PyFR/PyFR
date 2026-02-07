@@ -27,6 +27,9 @@ class BaseSystem:
         self.cfg = cfg
         self.nregs = nregs
 
+        # Plugin kernel-creation callbacks
+        self._kernel_callbacks = []
+
         # Conservative and physical variable names
         convars = self.elementscls.convars(mesh.ndims, cfg)
         privars = self.elementscls.privars(mesh.ndims, cfg)
@@ -239,6 +242,11 @@ class BaseSystem:
                         kernels[f'{pn}/{kn}', None, None].append(kern)
 
                         tag_kern(pn, p, kern)
+
+        for kerns in kernels.values():
+            for k in kerns:
+                for cb in self._kernel_callbacks:
+                    cb(k)
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
