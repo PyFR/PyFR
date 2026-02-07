@@ -162,6 +162,36 @@ class BaseSolnPlugin(BasePlugin):
 class BaseSolverPlugin(BasePlugin):
     prefix = 'solver'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        # Runtime extern binding
+        self._extern_values = {}
+        self._extern_binders = []
+
+    def _register_externs(self, intg, names, spec='scalar fpdtype_t'):
+        self._update_extern_values()
+
+        for eles in intg.system.ele_map.values():
+            for name in names:
+                eles._set_external(name, spec)
+
+        intg.system._kernel_callbacks.append(self._extern_callback)
+
+    def _extern_callback(self, kern):
+        if bind := getattr(kern, 'bind', None):
+            if bind not in self._extern_binders:
+                self._extern_binders.append(bind)
+                bind(**self._extern_values)
+
+    def _update_extern_values(self):
+        pass
+
+    def _bind_externs(self):
+        self._update_extern_values()
+        for b in self._extern_binders:
+            b(**self._extern_values)
+
 
 class BaseCLIPlugin:
     name = None
