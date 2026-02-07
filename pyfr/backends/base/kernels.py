@@ -188,11 +188,8 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
             # Process the argument list
             argb, argm, argv = self._build_arglst(dims, argn, argt, kwargs)
 
-            # Instantiate and annotate with runtime-bindable arg names
-            kern = self._instantiate_kernel(dims, fun, argb, argm, argv)
-            kern.rtnames = frozenset(k for k in argb if isinstance(k, str))
-
-            return kern
+            # Return a Kernel subclass instance
+            return self._instantiate_kernel(dims, fun, argb, argm, argv)
 
         # Attach the module to the method as an attribute
         kernel_meth._mod = mod

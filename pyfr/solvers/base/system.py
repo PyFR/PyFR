@@ -244,9 +244,10 @@ class BaseSystem:
                         tag_kern(pn, p, kern)
 
         bindable = [k for ks in kernels.values() for k in ks if k.rtnames]
-        for cb in self._kernel_callbacks:
+        for cb_names, cb in self._kernel_callbacks:
             for k in bindable:
-                cb(k)
+                if k.rtnames & cb_names:
+                    cb(k)
 
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
