@@ -11,14 +11,21 @@ from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins import get_plugin
 from pyfr.writers.serialise import Serialiser
 
+from pyfr.readers.native import NativeReader, _MeshInterconnector
 
-def _common_plugin_prop(attr):
+
+def _common_plugin_prop(attr, *, edim):
     def wrapfn(fn):
         @property
         def newfn(self):
             if not (p := getattr(self, attr)):
                 t, c = time.time(), self._plugin_wtimes['common', None]
                 p = fn(self)
+
+                # Relocate if necessary, if self.needs_reloc is True
+                if self.needs_reloc:
+                    p = self.relocate_plugin_ary(p, edim=edim)
+
                 self._plugin_wtimes['common', None] = c + time.time() - t
                 setattr(self, attr, p)
 
@@ -68,6 +75,7 @@ class BaseIntegrator:
 
         # Record the total amount of time spent in each plugin
         self._plugin_wtimes = defaultdict(lambda: 0)
+        self.needs_reloc = cfg.hasopt('plugins-base', 'partition')
 
         # Abort computation
         self._abort = False
@@ -80,7 +88,34 @@ class BaseIntegrator:
         self._abort = True
         self._abort_reason = self._abort_reason or reason
 
+    def initialise_plugin_partition(self):
+
+        # If partition name given for the plugin, use this partitioning instead
+        if self.needs_reloc:
+            pname = self.cfg.get('plugins-base', 'partition')
+
+            self._plugins_mesh = NativeReader(self.system.mesh.fname, pname,
+                                     construct_con=False).mesh
+        
+            self._plugins_intercon = _MeshInterconnector(self.system.mesh.eidxs, 
+                                                self._plugins_mesh.eidxs)
+
+        else:
+            self._plugins_mesh = self.system.mesh
+            self._plugins_intercon = None
+
+    def relocate_plugin_ary(self, ary, edim):
+        if self._plugins_intercon:
+            ary = {e: s for e, s in zip(self._plugins_mesh.etypes, ary)}
+            ary_dict = self._plugins_intercon.relocate(ary, edim=edim)
+            ary = list(ary_dict.values())
+
+        return ary
+
     def _get_plugins(self, initsoln):
+
+        self.initialise_plugin_partition()
+
         plugins = []
 
         for s in self.cfg.sections():
