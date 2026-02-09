@@ -100,7 +100,7 @@ class OpenCLPointwiseKernelProvider(OpenCLKernelProvider,
 
         class PointwiseKernel(OpenCLKernel):
             if rtargs:
-                rtnames = frozenset(k for _, k in rtargs)
+                rtnames = tuple(k for _, k in rtargs)
 
                 def bind(self, **kwargs):
                     for i, k in rtargs:

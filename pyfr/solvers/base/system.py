@@ -77,6 +77,14 @@ class BaseSystem:
                                                                 serialiser)
         backend.commit()
 
+    def register_kernel_callback(self, names, callback):
+        # Check for extern name clashes with other plugins
+        for cb_names, _ in self._kernel_callbacks:
+            if clash := [n for n in names if n in cb_names]:
+                raise ValueError(f'Extern name clash: {clash}')
+
+        self._kernel_callbacks.append((tuple(names), callback))
+
     def commit(self):
         # Prepare the kernels and any associated MPI requests
         self._gen_kernels(self.nregs, self.ele_map.values(), self._int_inters,
@@ -246,7 +254,7 @@ class BaseSystem:
         bindable = [k for ks in kernels.values() for k in ks if k.rtnames]
         for cb_names, cb in self._kernel_callbacks:
             for k in bindable:
-                if k.rtnames & cb_names:
+                if any(name in cb_names for name in k.rtnames):
                     cb(k)
 
     def _gen_mpireqs(self, mpiint):
