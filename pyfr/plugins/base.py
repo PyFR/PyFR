@@ -172,18 +172,11 @@ class BaseSolverPlugin(BasePlugin):
     def _register_externs(self, intg, names, spec='scalar fpdtype_t'):
         self._update_extern_values()
 
-        names = frozenset(names)
-
-        # Check for extern name clashes with other plugins
-        for cb_names, _ in intg.system._kernel_callbacks:
-            if clash := names & cb_names:
-                raise ValueError(f'Extern name clash: {clash}')
-
         for eles in intg.system.ele_map.values():
             for name in names:
-                eles._set_external(name, spec)
+                eles.set_external(name, spec)
 
-        intg.system._kernel_callbacks.append((names, self._extern_callback))
+        intg.system.register_kernel_callback(names, self._extern_callback)
 
     def _extern_callback(self, kern):
         if kern.bind not in self._extern_binders:
