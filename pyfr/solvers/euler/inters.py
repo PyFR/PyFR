@@ -278,12 +278,12 @@ class NIRFBCMixin:
 
         if motion == 'free':
             for p in params:
-                self._set_external(_to_extern(p), 'scalar fpdtype_t')
+                self.set_external(_to_extern(p), 'scalar fpdtype_t')
 
             # Rotation matrix externs: R(-θ) for lab-to-body transform
             for i in range(3):
                 for j in range(3):
-                    self._set_external(f'nirf_R{i}{j}', 'scalar fpdtype_t')
+                    self.set_external(f'nirf_R{i}{j}', 'scalar fpdtype_t')
 
     def _exp_opts(self, opts, lhs, default={}):
         exprs = super()._exp_opts(opts, lhs, default)
@@ -339,7 +339,7 @@ class NIRFBCMixin:
         if 'ploc' not in self._external_args:
             spec = f'in fpdtype_t[{self.ndims}]'
             value = self._const_mat(lhs, 'get_ploc_for_inter')
-            self._set_external('ploc', spec, value=value)
+            self.set_external('ploc', spec, value=value)
 
         return exprs
 
