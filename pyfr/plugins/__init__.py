@@ -6,6 +6,7 @@ from pyfr.plugins.fluidforce import FluidForcePlugin
 from pyfr.plugins.fwh import FWHPlugin
 from pyfr.plugins.integrate import IntegratePlugin
 from pyfr.plugins.nancheck import NaNCheckPlugin
+from pyfr.plugins.nirf import NIRFPlugin
 from pyfr.plugins.pseudostats import PseudoStatsPlugin
 from pyfr.plugins.residual import ResidualPlugin
 from pyfr.plugins.sampler import SamplerCLIPlugin, SamplerPlugin
