@@ -58,9 +58,9 @@
     fpdtype_t euler_z = ${frame_alpha_x_expr}*ry - ${frame_alpha_y_expr}*rx;
 
 ## Total momentum source
-    fpdtype_t Sx = rho*(cent_x + cori_x + euler_x) - rho*${frame_accel_x_expr};
-    fpdtype_t Sy = rho*(cent_y + cori_y + euler_y) - rho*${frame_accel_y_expr};
-    fpdtype_t Sz = rho*(cent_z + cori_z + euler_z) - rho*${frame_accel_z_expr};
+    fpdtype_t Sx = -rho*(cent_x + cori_x + euler_x) - rho*${frame_accel_x_expr};
+    fpdtype_t Sy = -rho*(cent_y + cori_y + euler_y) - rho*${frame_accel_y_expr};
+    fpdtype_t Sz = -rho*(cent_z + cori_z + euler_z) - rho*${frame_accel_z_expr};
 
 ## Add to source array
     src[1] += Sx;
