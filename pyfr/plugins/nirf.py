@@ -76,7 +76,7 @@ class NIRFPlugin(BaseSolverPlugin):
     formulations = ['dual', 'std']
     dimensions = [2, 3]
 
-    def __init__(self, intg, cfgsect, **kwargs):
+    def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
 
         self._intg = intg
@@ -89,7 +89,7 @@ class NIRFPlugin(BaseSolverPlugin):
         if self._motion == 'prescribed':
             self._init_prescribed(cfgsect, subs)
         elif self._motion == 'free':
-            self._init_free(intg, cfgsect, **kwargs)
+            self._init_free(intg, cfgsect)
         else:
             raise ValueError(f"Invalid NIRF motion type: {self._motion}")
 
@@ -403,13 +403,24 @@ class NIRFPlugin(BaseSolverPlugin):
                               force[0], force[1], force[2],
                               moment[0], moment[1], moment[2])
 
-    def serialise(self, _intg):
+    def setup(self, sdata, serialiser):
         if self._motion != 'free':
-            return {}
+            return
 
-        def to_serial(v):
-            return float(v) if np.isscalar(v) else v.tolist()
+        if sdata is not None:
+            sdata = np.asarray(sdata, dtype=float)
+            ndims = self.ndims
+            self._fomega = sdata[0:3].copy()
+            self._falpha = sdata[3:6].copy()
+            self._ftheta = sdata[6:9].copy()
+            self._fvelo = sdata[9:9 + ndims].copy()
+            self._faccel = sdata[9 + ndims:9 + 2*ndims].copy()
+            self._fdx = sdata[9 + 2*ndims:9 + 3*ndims].copy()
+            self._update_extern_values()
 
-        return {name: to_serial(getattr(self, f'_{name}'))
-                for name in ['fomega', 'falpha', 'fvelo', 'faccel',
-                              'ftheta', 'fdx']}
+        serialiser.register(self.get_serialiser_prefix(),
+                            self._serialise_data)
+
+    def _serialise_data(self):
+        return np.concatenate([self._fomega, self._falpha, self._ftheta,
+                               self._fvelo, self._faccel, self._fdx])
