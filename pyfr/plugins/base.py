@@ -183,14 +183,6 @@ class BaseSolverPlugin(BasePlugin):
             self._extern_binders.append(kern.bind)
             kern.bind(**self._extern_values)
 
-    def _update_extern_values(self):
-        pass
-
-    def _bind_externs(self):
-        self._update_extern_values()
-        for b in self._extern_binders:
-            b(**self._extern_values)
-
 
 class BaseCLIPlugin:
     name = None
