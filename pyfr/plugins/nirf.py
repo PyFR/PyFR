@@ -338,7 +338,7 @@ class NIRFPlugin(BaseSolverPlugin):
 
         if self._viscorr == 'sutherland':
             cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0)/rho**2)
-            Trat = cpT/c['cpTref']
+            Trat = np.maximum(cpT/c['cpTref'], 1e-10)
             mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
 
         return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
