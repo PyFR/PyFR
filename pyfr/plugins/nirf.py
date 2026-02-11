@@ -418,6 +418,7 @@ class NIRFPlugin(BaseSolverPlugin):
             self._fvelo = sdata[9:9 + ndims].copy()
             self._faccel = sdata[9 + ndims:9 + 2*ndims].copy()
             self._fdx = sdata[9 + 2*ndims:9 + 3*ndims].copy()
+            self.tode_last = sdata[9 + 3*ndims]
             self._update_extern_values()
 
         serialiser.register(self.get_serialiser_prefix(),
@@ -425,4 +426,5 @@ class NIRFPlugin(BaseSolverPlugin):
 
     def _serialise_data(self):
         return np.concatenate([self._fomega, self._falpha, self._ftheta,
-                               self._fvelo, self._faccel, self._fdx])
+                               self._fvelo, self._faccel, self._fdx,
+                               [self.tode_last]])
