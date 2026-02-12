@@ -21,8 +21,6 @@ from pyfr.util import file_path_gen, mv, subclass_where
 
 class NativeWriter:
     # Lustre constants
-    LL_IOC_GROUP_LOCK = 0x4008669e
-    LL_GROUP = 0x1412
     LL_IOC_LOV_SETSTRIPE = 0x4008669a
     LOV_USER_MAGIC_V1 = 0x0bd10bd0
     LOV_USER_MAGIC_V3 = 0x0bd30bd0
@@ -134,11 +132,6 @@ class NativeWriter:
                     os.close(fd)
             except OSError:
                 pass
-
-    def _open_file(self, path):
-        f = open(path, 'r+b')
-
-        return f
 
     def set_shapes_eidxs(self, shapes, eidxs):
         comm, rank, root = get_comm_rank_root()
@@ -254,21 +247,29 @@ class NativeWriter:
 
     def _get_writefn_parallel(self, path, data, doffs):
         # Open the file for writing
-        f = self._open_file(path)
+        fd = os.open(path, os.O_WRONLY)
 
         # Callback to write out individual arrays at offsets
         def write_off(k, v, n):
             if len(v):
-                f.seek(doffs[k] + n*(v.nbytes // len(v)))
-                f.write(memoryview(np.ascontiguousarray(v)))
+                view = memoryview(np.ascontiguousarray(v))
+                off = doffs[k] + n*(v.nbytes // len(v))
+
+                ix = 0
+                while ix < len(view):
+                    nb = os.pwrite(fd, view[ix:], off + ix)
+                    if nb == 0:
+                        raise OSError('Unable to write data')
+
+                    ix += nb
 
         # Main writing function
         def write():
             with self._lock:
-                self._iter_bufs(data, write_off)
-
-                # Close the file
-                f.close()
+                try:
+                    self._iter_bufs(data, write_off)
+                finally:
+                    os.close(fd)
 
         return write
 
@@ -292,7 +293,7 @@ class NativeWriter:
 
         if rank == root:
             # Open the file for writing
-            f = self._open_file(path)
+            f = open(path, 'r+b')
 
             # Prepare the final buffer list
             iwbufs = (b for _, _, b in wbufs)
@@ -302,17 +303,19 @@ class NativeWriter:
 
             def write():
                 with self._lock:
-                    # Write the buffers to the file in order
-                    for off, nb, r in sorted(bufs):
-                        if r == root:
-                            b = next(iwbufs)
-                        else:
-                            b = np.empty(nb, dtype=np.uint8)
-                            self._scomm.Recv(b, r)
+                    try:
+                        # Write the buffers to the file in order
+                        for off, nb, r in sorted(bufs):
+                            if r == root:
+                                b = next(iwbufs)
+                            else:
+                                b = np.empty(nb, dtype=np.uint8)
+                                self._scomm.Recv(b, r)
 
-                        f.seek(off)
-                        f.write(memoryview(np.ascontiguousarray(b)))
-
+                            f.seek(off)
+                            f.write(memoryview(np.ascontiguousarray(b)))
+                    finally:
+                        f.close()
         else:
             def write():
                 with self._lock:
