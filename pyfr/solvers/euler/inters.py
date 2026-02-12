@@ -244,3 +244,142 @@ class MassFlowBCMixin:
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
     type = 'char-riem-inv-mass-flow'
+
+
+class PressureBCMixin:
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        self.c |= self._exp_opts(
+            ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs
+        )
+
+        self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
+        self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
+        opts = self._eval_opts(['target-pressure', 'alpha', 'eta'])
+        self.target_pressure, self.alpha, self.eta = opts
+
+        self.gamma = cfg.getfloat('constants', 'gamma')
+
+        self._set_external('ic', 'scalar fpdtype_t')
+        self._set_external('im', 'scalar fpdtype_t')
+
+        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
+        self.p_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
+
+        if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
+            fname = cfg.get(cfgsect, 'file')
+            nflush = cfg.getint(cfgsect, 'flushsteps', 10)
+            self.csv = CSVStream(fname, header='t,p_avg,p_riem',
+                                 nflush=nflush)
+        else:
+            self.csv = None
+
+    def setup(self, sdata):
+        if sdata is not None and sdata[4] != 0:
+            (self.interp_c, self.interp_m,
+             self.p_avg, self.tprev, self.nstep_counter) = sdata
+        else:
+            self.interp_c = self.target_pressure
+            self.interp_m = 0.0
+            self.p_avg = 0.0
+            self.tprev = None
+            self.nstep_counter = 0
+
+    def calculate_pressure(self, solns):
+        p_num = 0.0
+        area = 0.0
+        gmo = self.gamma - 1.0
+
+        for etype, fidx in self.p_int.m0:
+            # Get the interpolation operator
+            m0 = self.p_int.m0[etype, fidx]
+            nfpts, nupts = m0.shape
+
+            # Extract all conserved variables for the relevant elements
+            eidxs = self.p_int.eidxs[etype, fidx]
+            uupts = solns[etype][:, :, eidxs]
+
+            # Interpolate to the face
+            nv = uupts.shape[1]
+            ufpts = m0 @ uupts.reshape(nupts, -1)
+            ufpts = ufpts.reshape(nfpts, nv, -1)
+
+            # Compute static pressure at each face point:
+            # p = (gamma - 1)*(E - 0.5*rho*|u|^2)
+            rho = ufpts[:, 0, :]
+            rhou = ufpts[:, 1:-1, :]
+            E = ufpts[:, -1, :]
+            ke = 0.5 * np.einsum('ihj,ihj->ij', rhou, rhou) / rho
+            p_fpts = gmo * (E - ke)
+
+            # Get the quadrature weights and normal vectors
+            qwts = self.p_int.qwts[etype, fidx]
+            norms = self.p_int.norms[etype, fidx]
+
+            # Compute normal magnitudes (surface area weights)
+            nmag = np.sqrt(np.einsum('jih,jih->ji', norms, norms))
+
+            # Integrate p*dS and dS
+            p_num += np.einsum('i,ij,ji', qwts, p_fpts, nmag)
+            area += np.einsum('i,ji->', qwts, nmag)
+
+        # Allreduce across MPI ranks
+        p_num = scal_coll(self.bccomm.Allreduce, p_num, op=mpi.SUM)
+        area = scal_coll(self.bccomm.Allreduce, area, op=mpi.SUM)
+
+        return p_num / area
+
+    @classmethod
+    def preparefn(cls, bciface, mesh, elemap):
+        if bciface:
+            return bciface.prepare
+        else:
+            return None
+
+    def prepare(self, system, ubank, t, kerns):
+        update = self.nstep_counter % self.nsteps == 0
+        if (update or not self.tprev) and t >= self.tstart:
+            solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
+            p_meas = self.calculate_pressure(solns)
+
+            if not self.tprev:
+                self.p_avg = p_meas
+                self.tprev = t
+            else:
+                self.p_avg = (self.alpha * p_meas
+                              + (1 - self.alpha) * self.p_avg)
+                dt = t - self.tprev
+                self.tprev = t
+
+                # Current Riemann invariant pressure
+                p0 = self.interp_m * t + self.interp_c
+
+                # Adjust towards target pressure
+                p1 = p0 + dt * self.eta * (self.target_pressure - self.p_avg)
+
+                # Update interpolation coefficients
+                self.interp_m = (p1 - p0) / dt
+                self.interp_c = p0 - self.interp_m * t
+
+                # Output measured pressure and Riemann pressure
+                if self.csv:
+                    self.csv(t, self.p_avg, p1)
+
+        # Bind interpolation to kernels
+        for k in kerns.values():
+            k.bind(ic=self.interp_c, im=self.interp_m)
+
+        self.nstep_counter += 1
+
+    @classmethod
+    def serialisefn(cls, bciface, prefix, srl):
+        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m,
+                               bciface.p_avg, bciface.tprev or 0,
+                               bciface.nstep_counter),
+                              dtype='f8,f8,f8,f8,i8')
+        srl.register(prefix, sfn if bciface else None)
+
+
+class EulerCharRiemInvPressureBCInters(PressureBCMixin, EulerBaseBCInters):
+    type = 'char-riem-inv-pressure'
