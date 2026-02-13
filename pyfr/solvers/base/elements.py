@@ -305,6 +305,13 @@ class BaseElements:
     def rcpdjac_at(self, name):
         return self._be.const_matrix(self.rcpdjac_at_np(name), tags={'align'})
 
+    @cached_property
+    def mean_wts(self):
+        wts = self.basis.ubasis.invvdm[:, 0, None]/self.rcpdjac_at_np('upts')
+        wts /= np.sum(wts, axis=0)
+
+        return self._be.const_matrix(wts, tags={'align'})
+
     @memoize
     def ploc_at_np(self, name):
         pt = getattr(self.basis, name) if isinstance(name, str) else name
