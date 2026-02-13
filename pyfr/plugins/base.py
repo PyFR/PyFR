@@ -179,9 +179,11 @@ class BaseSolverPlugin(BasePlugin):
         intg.system.register_kernel_callback(names, self._extern_callback)
 
     def _extern_callback(self, kern):
-        if kern.bind not in self._extern_binders:
-            self._extern_binders.append(kern.bind)
-            kern.bind(**self._extern_values)
+        self._extern_binders.append(kern.bind)
+
+    def _bind_externs(self):
+        for b in self._extern_binders:
+            b(**self._extern_values)
 
 
 class BaseCLIPlugin:
