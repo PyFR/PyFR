@@ -232,6 +232,14 @@ class NIRFPlugin(BaseSolverPlugin):
         self._tplargs = {_to_tplkey(p): _to_extern(p) for p in params}
         self._tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
 
+        # Create a broadcast matrix for R(-θ) and inject into NIRF BC inters
+        self._nirf_R = intg.backend.matrix((3, 3), initval=np.eye(3))
+        for bc in intg.system._bc_inters:
+            # HACK: Need better identifier
+            if any(c.__name__ == 'NIRFBCMixin' for c in type(bc).__mro__):
+                bc.set_external('nirf_R', 'in broadcast fpdtype_t[3][3]',
+                                value=self._nirf_R)
+
         self._register_externs(intg, [_to_extern(p) for p in params])
 
     def _update_extern_values(self):
@@ -246,7 +254,7 @@ class NIRFPlugin(BaseSolverPlugin):
             ev[f'frame_accel_{c}'] = self._faccel[i]
             ev[f'frame_velo_{c}'] = self._fvelo[i]
 
-        # R(-θ) = R(θ)^T
+        # R(-θ) = R(θ)^T for inertial-to-body transform
         angle = np.linalg.norm(self._ftheta)
         if angle < 1e-14:
             R = np.eye(3)
@@ -257,11 +265,7 @@ class NIRFPlugin(BaseSolverPlugin):
                           [-k[1], k[0], 0]])
             R = np.eye(3) + np.sin(angle)*K + (1 - np.cos(angle))*(K @ K)
 
-        # R(-θ) = R(θ)^T for inertial-to-body transform
-        Rinv = R.T
-        for i in range(3):
-            for j in range(3):
-                ev[f'nirf_R{i}{j}'] = float(Rinv[i, j])
+        self._nirf_R.set(R.T)
 
     def _compute_forces(self, intg):
         comm, rank, root = get_comm_rank_root()
