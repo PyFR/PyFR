@@ -384,8 +384,7 @@ class NIRFPlugin(BaseSolverPlugin):
         self._solve_rigid_body_ode(force, moment, ode_dt)
         self.tode_last = intg.tcurr
         self._update_extern_values()
-        for b in self._extern_binders:
-            b(**self._extern_values)
+        self.bind_externs()
 
         self._ode_count += 1
         if self._csv and self._ode_count % self._ode_nout == 0:
