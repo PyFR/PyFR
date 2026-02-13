@@ -27,6 +27,10 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
         # Commit the sytem
         self.system.commit()
 
+        # Initial extern binding for plugins
+        for p in self.plugins:
+            p.bind_externs()
+
         # Register index list and current index
         self._regidx = list(range(self.nregs))
         self._idxcurr = 0
