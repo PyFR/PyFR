@@ -7,7 +7,7 @@ from pyfr.plugins.base import BaseSolverPlugin, init_csv
 from pyfr.quadrules.surface import SurfaceIntegrator
 
 # TODO: Add output options for prescribed
-
+# TODO: viscous stress not just for nav-stokes but only no-slp
 
 def nirf_src_params(ndims):
     comps = 'xyz'[:ndims]
