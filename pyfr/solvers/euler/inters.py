@@ -280,11 +280,6 @@ class NIRFBCMixin:
             for p in params:
                 self.set_external(_to_extern(p), 'scalar fpdtype_t')
 
-            # Rotation matrix externs: R(-θ) for lab-to-body transform
-            for i in range(3):
-                for j in range(3):
-                    self.set_external(f'nirf_R{i}{j}', 'scalar fpdtype_t')
-
     def _exp_opts(self, opts, lhs, default={}):
         exprs = super()._exp_opts(opts, lhs, default)
 
@@ -314,7 +309,7 @@ class NIRFBCMixin:
         # Step 2: rotate to body frame using R(-θ) matrix
         if motion == 'free':
             u_body = [
-                ' + '.join(f'({u_rel[j]})*nirf_R{i}{j}'
+                ' + '.join(f'({u_rel[j]})*nirf_R[{i}][{j}]'
                            for j in range(self.ndims))
                 for i in range(self.ndims)
             ]
