@@ -148,6 +148,9 @@ class BasePlugin:
     def setup(self, sdata, serialiser):
         pass
 
+    def bind_externs(self):
+        pass
+
     def get_serialiser_prefix(self):
         if self.suffix:
             return f'plugins/{self.name}-{self.suffix}'
@@ -181,7 +184,7 @@ class BaseSolverPlugin(BasePlugin):
     def _extern_callback(self, kern):
         self._extern_binders.append(kern.bind)
 
-    def _bind_externs(self):
+    def bind_externs(self):
         for b in self._extern_binders:
             b(**self._extern_values)
 
