@@ -409,20 +409,25 @@ class NIRFPlugin(BaseSolverPlugin):
                               force[0], force[1], force[2],
                               moment[0], moment[1], moment[2])
 
+    _sdata_dtype = np.dtype([
+        ('omega', 'f8', 3), ('alpha', 'f8', 3), ('theta', 'f8', 3),
+        ('velo', 'f8', 3), ('accel', 'f8', 3), ('dx', 'f8', 3),
+        ('tode_last', 'f8')
+    ])
+
     def setup(self, sdata, serialiser):
         if self._motion != 'free':
             return
 
         if sdata is not None:
-            sdata = np.asarray(sdata, dtype=float)
             ndims = self.ndims
-            self._fomega = sdata[0:3].copy()
-            self._falpha = sdata[3:6].copy()
-            self._ftheta = sdata[6:9].copy()
-            self._fvelo = sdata[9:12][:ndims].copy()
-            self._faccel = sdata[12:15][:ndims].copy()
-            self._fdx = sdata[15:18][:ndims].copy()
-            self.tode_last = sdata[18]
+            self._fomega = np.array(sdata['omega'])
+            self._falpha = np.array(sdata['alpha'])
+            self._ftheta = np.array(sdata['theta'])
+            self._fvelo = np.array(sdata['velo'])[:ndims].copy()
+            self._faccel = np.array(sdata['accel'])[:ndims].copy()
+            self._fdx = np.array(sdata['dx'])[:ndims].copy()
+            self.tode_last = float(sdata['tode_last'])
             self._update_extern_values()
 
         serialiser.register(self.get_serialiser_prefix(),
@@ -430,8 +435,10 @@ class NIRFPlugin(BaseSolverPlugin):
 
     def _serialise_data(self):
         pad = 3 - self.ndims
-        return np.concatenate([self._fomega, self._falpha, self._ftheta,
-                               self._fvelo, np.zeros(pad),
-                               self._faccel, np.zeros(pad),
-                               self._fdx, np.zeros(pad),
-                               [self.tode_last]])
+        return np.void((
+            self._fomega, self._falpha, self._ftheta,
+            np.pad(self._fvelo, (0, pad)),
+            np.pad(self._faccel, (0, pad)),
+            np.pad(self._fdx, (0, pad)),
+            self.tode_last
+        ), dtype=self._sdata_dtype)
