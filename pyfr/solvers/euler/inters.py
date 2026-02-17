@@ -132,17 +132,6 @@ class EulerSlpAdiaWallBCInters(EulerBaseBCInters):
 
 
 class ControlledBCMixin:
-    """Base mixin for controlled outflow BCs (e.g. mass-flow or pressure).
-
-    Subclasses must define:
-        _target_opts   -- list of config option names [target, alpha, eta]
-        _csv_header    -- CSV header string
-        _default_interp_c() -- initial Riemann invariant pressure
-        _measure(solns)     -- measure the controlled quantity from solution
-        _correction(p0, dt) -- compute updated Riemann pressure p1
-    and may optionally override _init_extra(cfg, cfgsect).
-    """
-
     def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
         super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
 
