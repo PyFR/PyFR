@@ -126,7 +126,7 @@ class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
         self._pnorm_lhs = self._const_mat(lhs, 'get_pnorms_for_inter')
 
         # Make the simulation time available inside kernels
-        self._set_external('t', 'scalar fpdtype_t')
+        self.set_external('t', 'scalar fpdtype_t')
 
         if self._ef_enabled:
             self._entmin_lhs = self._view(lhs, 'get_entmin_bc_fpts_for_inter')
@@ -170,6 +170,6 @@ class BaseAdvectionBCInters(BaseAdvectionIntersMixin, BaseInters):
             spec = f'in fpdtype_t[{self.ndims}]'
             value = self._const_mat(lhs, 'get_ploc_for_inter')
 
-            self._set_external('ploc', spec, value=value)
+            self.set_external('ploc', spec, value=value)
 
         return exprs
