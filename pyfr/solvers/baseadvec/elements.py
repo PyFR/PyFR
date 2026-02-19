@@ -21,6 +21,7 @@ class BaseAdvectionElements(BaseElements):
 
         self._ploc_in_src_macros = False
         self._soln_in_src_macros = False
+        self._needs_soln_copy = False
 
     @property
     def has_src_macros(self):
@@ -102,7 +103,7 @@ class BaseAdvectionElements(BaseElements):
         )
 
         def copy_soln(uin):
-            if self._soln_in_src_macros:
+            if self._soln_in_src_macros or self._needs_soln_copy:
                 return self._be.kernel('copy', self._scal_upts_cpy,
                                        self.scal_upts[uin])
             else:
