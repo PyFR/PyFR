@@ -20,7 +20,6 @@ class BaseAdvectionElements(BaseElements):
         }
 
         self._ploc_in_src_macros = False
-        self._soln_in_src_macros = False
         self._needs_soln_copy = False
 
     @property
@@ -36,7 +35,7 @@ class BaseAdvectionElements(BaseElements):
 
     def add_src_macro(self, mod, name, tplargs, ploc=False, soln=False):
         self._ploc_in_src_macros |= ploc
-        self._soln_in_src_macros |= soln
+        self._needs_soln_copy |= soln
 
         for m, n in self._srctplargs['src_macros']:
             if m == mod or n == name:
@@ -103,7 +102,7 @@ class BaseAdvectionElements(BaseElements):
         )
 
         def copy_soln(uin):
-            if self._soln_in_src_macros or self._needs_soln_copy:
+            if self._needs_soln_copy:
                 return self._be.kernel('copy', self._scal_upts_cpy,
                                        self.scal_upts[uin])
             else:
@@ -117,7 +116,7 @@ class BaseAdvectionElements(BaseElements):
             dims=[self.nupts, self.neles], extrns=self._external_args,
             tdivtconf=self.scal_upts[fout], rcpdjac=self.rcpdjac_at('upts'),
             ploc=self.ploc_at('upts') if self._ploc_in_src_macros else None,
-            u=self._scal_upts_cpy if self._soln_in_src_macros else None,
+            u=self._scal_upts_cpy if self._needs_soln_copy else None,
             **self._external_vals
         )
 
