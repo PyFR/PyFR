@@ -3,6 +3,7 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
+from pyfr.solvers.euler.elements import BaseFluidElements
 from pyfr.writers.csv import CSVStream
 
 import numpy as np
@@ -145,13 +146,13 @@ class ControlledBCMixin:
         opts = self._eval_opts(self._target_opts)
         self.target, self.alpha, self.eta = opts
 
-        self._init_extra(cfg, cfgsect)
-
         self._set_external('ic', 'scalar fpdtype_t')
         self._set_external('im', 'scalar fpdtype_t')
 
         surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
         self.surf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
+
+        self._init_extra(cfg, cfgsect)
 
         if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
             fname = cfg.get(cfgsect, 'file')
@@ -163,6 +164,23 @@ class ControlledBCMixin:
 
     def _init_extra(self, cfg, cfgsect):
         pass
+
+    def _interp_face(self, solns):
+        for etype, fidx in self.surf_int.m0:
+            m0 = self.surf_int.m0[etype, fidx]
+            nfpts, nupts = m0.shape
+
+            eidxs = self.surf_int.eidxs[etype, fidx]
+            uupts = solns[etype][:, :, eidxs]
+
+            nv = uupts.shape[1]
+            ufpts = m0 @ uupts.reshape(nupts, -1)
+            ufpts = ufpts.reshape(nfpts, nv, -1).swapaxes(0, 1)
+
+            qwts = self.surf_int.qwts[etype, fidx]
+            norms = self.surf_int.norms[etype, fidx]
+
+            yield ufpts, qwts, norms
 
     def setup(self, sdata):
         if sdata is not None and sdata[4] != 0:
@@ -192,8 +210,8 @@ class ControlledBCMixin:
                 self.meas_avg = meas
                 self.tprev = t
             else:
-                self.meas_avg = (self.alpha * meas
-                                 + (1 - self.alpha) * self.meas_avg)
+                a = self.alpha
+                self.meas_avg = a*meas + (1 - a)*self.meas_avg
                 dt = t - self.tprev
                 self.tprev = t
 
@@ -236,23 +254,8 @@ class MassFlowBCMixin(ControlledBCMixin):
     def _measure(self, solns):
         mf = 0.0
 
-        for etype, fidx in self.surf_int.m0:
-            m0 = self.surf_int.m0[etype, fidx]
-            nfpts, nupts = m0.shape
-
-            # Extract momentum variables for the relevant elements
-            uupts = solns[etype][:, 1:-1, self.surf_int.eidxs[etype, fidx]]
-
-            # Interpolate to the face
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, self.ndims, -1)
-
-            # Get the quadrature weights and normal vectors
-            qwts = self.surf_int.qwts[etype, fidx]
-            norms = self.surf_int.norms[etype, fidx]
-
-            # Integrate rho*u.n over the face
-            mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
+        for ufpts, qwts, norms in self._interp_face(solns):
+            mf += np.einsum('i,hij,jih', qwts, ufpts[1:-1], norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
 
@@ -269,52 +272,28 @@ class PressureBCMixin(ControlledBCMixin):
     _csv_header = 't,p_avg,p_riem'
 
     def _init_extra(self, cfg, cfgsect):
-        self.gamma = cfg.getfloat('constants', 'gamma')
+        area = 0.0
+        for etype, fidx in self.surf_int.m0:
+            qwts = self.surf_int.qwts[etype, fidx]
+            norms = self.surf_int.norms[etype, fidx]
+            nmag = np.sqrt(np.einsum('jih,jih->ji', norms, norms))
+            area += np.einsum('i,ji->', qwts, nmag)
+        self.area = scal_coll(self.bccomm.Allreduce, area, op=mpi.SUM)
 
     def _default_interp_c(self):
         return self.target
 
     def _measure(self, solns):
         p_num = 0.0
-        area = 0.0
-        gmo = self.gamma - 1.0
 
-        for etype, fidx in self.surf_int.m0:
-            m0 = self.surf_int.m0[etype, fidx]
-            nfpts, nupts = m0.shape
-
-            # Extract all conserved variables for the relevant elements
-            eidxs = self.surf_int.eidxs[etype, fidx]
-            uupts = solns[etype][:, :, eidxs]
-
-            # Interpolate to the face
-            nv = uupts.shape[1]
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nv, -1)
-
-            # Compute static pressure: p = (gamma - 1)*(E - 0.5*rho*|u|^2)
-            rho = ufpts[:, 0, :]
-            rhou = ufpts[:, 1:-1, :]
-            E = ufpts[:, -1, :]
-            ke = 0.5 * np.einsum('ihj,ihj->ij', rhou, rhou) / rho
-            p_fpts = gmo * (E - ke)
-
-            # Get the quadrature weights and normal vectors
-            qwts = self.surf_int.qwts[etype, fidx]
-            norms = self.surf_int.norms[etype, fidx]
-
-            # Compute normal magnitudes (surface area weights)
+        for ufpts, qwts, norms in self._interp_face(solns):
+            p = BaseFluidElements.con_to_pri(ufpts, self.cfg)[-1]
             nmag = np.sqrt(np.einsum('jih,jih->ji', norms, norms))
+            p_num += np.einsum('i,ij,ji', qwts, p, nmag)
 
-            # Integrate p*dS and dS
-            p_num += np.einsum('i,ij,ji', qwts, p_fpts, nmag)
-            area += np.einsum('i,ji->', qwts, nmag)
-
-        # Allreduce across MPI ranks
         p_num = scal_coll(self.bccomm.Allreduce, p_num, op=mpi.SUM)
-        area = scal_coll(self.bccomm.Allreduce, area, op=mpi.SUM)
 
-        return p_num / area
+        return p_num / self.area
 
     def _correction(self, p0, dt):
         return p0 + dt * self.eta * (self.target - self.meas_avg)
