@@ -255,9 +255,9 @@ class TurbulencePlugin(BaseSolverPlugin):
                                     dtype=np.uint32)
             )
 
-            eles._set_external('tinit', f'in broadcast-col fpdtype_t[{nvmx}]',
+            eles.set_external('tinit', f'in broadcast-col fpdtype_t[{nvmx}]',
                                value=vs.tinit)
-            eles._set_external('state', f'in broadcast-col uint32_t[{nvmx}]',
+            eles.set_external('state', f'in broadcast-col uint32_t[{nvmx}]',
                                value=vs.state)
 
         return vortstructs

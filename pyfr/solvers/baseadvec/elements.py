@@ -48,7 +48,7 @@ class BaseAdvectionElements(BaseElements):
         self._srctplargs['src_macros'].append((mod, name))
         self._srctplargs |= tplargs
 
-    def _set_external(self, name, spec, value=None):
+    def set_external(self, name, spec, value=None):
         self._external_args[name] = spec
 
         if value is not None:
