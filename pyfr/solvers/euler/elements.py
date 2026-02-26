@@ -112,15 +112,12 @@ class BaseFluidElements:
             # Template arguments
             fpts_in_upts = self.basis.fpts_in_upts
             self.nefpts = self.nupts if fpts_in_upts else self.nupts + self.nfpts
-            ub = self.basis.ubasis
-            meanwts = ub.invvdm[:, 0] / np.sum(ub.invvdm[:, 0])
             eftplargs = {
                 'ndims': self.ndims, 'nupts': self.nupts,
                 'nfpts': self.nfpts, 'nefpts': self.nefpts,
                 'nvars': self.nvars, 'nfaces': self.nfaces,
                 'c': self.cfg.items_as('constants', float),
-                'order': self.basis.order, 'fpts_in_upts': fpts_in_upts,
-                'meanwts': meanwts
+                'order': self.basis.order, 'fpts_in_upts': fpts_in_upts
             }
 
             # Check to see if running anti-aliasing
@@ -166,7 +163,8 @@ class BaseFluidElements:
             self.kernels['entropy_filter'] = lambda uin: self._be.kernel(
                 'entropyfilter', tplargs=eftplargs, dims=[self.neles],
                 u=self.scal_upts[uin], entmin_int=self.entmin_int,
-                vdm=self.vdm_ef, invvdm=self.invvdm, m0=self.m0
+                vdm=self.vdm_ef, invvdm=self.invvdm, m0=self.m0,
+                mean_wts=self.mean_wts
             )
 
 
