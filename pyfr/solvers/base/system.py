@@ -172,14 +172,14 @@ class BaseSystem:
             cfgsect = f'soln-bcs-{bname}'
             bcclass = bcmap[self.cfg.get(cfgsect, 'type')]
 
-            # Check if there is serialised data for this boundary in initsoln
-            sdata = initsoln.get(f'bcs/{bname}') if initsoln else None
+            prefix, state_prefix = f'bcs/{bname}', f'bcs/{bname}/state'
+            soln = initsoln or {}
 
             # If we have this boundary then create an instance
             if localbc:
                 bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
                                   cfgsect, self.cfg, bccomm)
-                bciface.setup(sdata)
+                bciface.setup(soln.get(prefix), soln.get(state_prefix))
                 bc_inters.append(bciface)
             else:
                 bciface = None
@@ -187,8 +187,8 @@ class BaseSystem:
             # Allow the boundary to return a preparation callback
             if (pfn := bcclass.preparefn(bciface, mesh, elemap)):
                 bc_prefns[bname] = pfn
-            
-            bcclass.serialisefn(bciface, f'bcs/{bname}', serialiser)
+
+            bcclass.serialisefn(bciface, prefix, state_prefix, serialiser)
 
         return bc_inters, bc_prefns
 
