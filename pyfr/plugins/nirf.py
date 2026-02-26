@@ -8,6 +8,7 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 
 # TODO: Add output options for prescribed
 # TODO: viscous stress not just for nav-stokes but only no-slp
+# TODO: rename frame-origin
 
 def nirf_src_params(ndims):
     comps = 'xyz'[:ndims]
@@ -33,6 +34,46 @@ def _to_tplkey(p):
 
 def _to_extern(p):
     return p.replace('-', '_')
+
+
+def _euler_to_quat(phi, theta, psi):
+    cp, sp = np.cos(phi / 2), np.sin(phi / 2)
+    ct, st = np.cos(theta / 2), np.sin(theta / 2)
+    cs, ss = np.cos(psi / 2), np.sin(psi / 2)
+
+    return np.array([cp*ct*cs + sp*st*ss,
+                     cp*ct*ss - sp*st*cs,
+                     cp*st*cs + sp*ct*ss,
+                     sp*ct*cs - cp*st*ss])
+
+
+def _quat_to_euler(q):
+    w, x, y, z = q
+    phi = np.arctan2(2*(w*z + x*y), 1 - 2*(y*y + z*z))
+    theta = np.arcsin(np.clip(2*(w*y - z*x), -1, 1))
+    psi = np.arctan2(2*(w*x + y*z), 1 - 2*(x*x + y*y))
+
+    return phi, theta, psi
+
+
+def _quat_to_rotmat(q):
+    w, x, y, z = q
+
+    return np.array([
+        [1 - 2*(y*y + z*z), 2*(x*y - w*z), 2*(x*z + w*y)],
+        [2*(x*y + w*z), 1 - 2*(x*x + z*z), 2*(y*z - w*x)],
+        [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x*x + y*y)]
+    ])
+
+
+def _quat_mult(q, r):
+    w1, x1, y1, z1 = q
+    w2, x2, y2, z2 = r
+
+    return np.array([w1*w2 - x1*x2 - y1*y2 - z1*z2,
+                     w1*x2 + x1*w2 + y1*z2 - z1*y2,
+                     w1*y2 - x1*z2 + y1*w2 + z1*x2,
+                     w1*z2 + x1*y2 - y1*x2 + z1*w2])
 
 
 class NIRFForceIntegrator(SurfaceIntegrator):
@@ -122,6 +163,30 @@ class NIRFPlugin(BaseSolverPlugin):
                          for p in params}
         self._tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
 
+    def _parse_rot0(self, cfgsect):
+        has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
+        has_quat = self.cfg.hasopt(cfgsect, 'frame-rot0-quat')
+
+        if has_euler and has_quat:
+            raise ValueError('Specify frame-rot0-euler or frame-rot0-quat, '
+                             'not both')
+
+        if has_euler:
+            rot = self.cfg.getliteral(cfgsect, 'frame-rot0-euler')
+            if self.ndims == 2:
+                phi = np.deg2rad(float(rot))
+                return _euler_to_quat(phi, 0, 0)
+            else:
+                phi, theta, psi = [np.deg2rad(a) for a in rot]
+                return _euler_to_quat(phi, theta, psi)
+        elif has_quat:
+            q = np.array(self.cfg.getliteral(cfgsect, 'frame-rot0-quat'),
+                         dtype=float)
+            q /= np.linalg.norm(q)
+            return q
+        else:
+            return np.array([1.0, 0.0, 0.0, 0.0])
+
     def _parse_dof(self, cfgsect):
         if self.ndims == 2:
             all_dof = {'x', 'y', 'rz'}
@@ -141,7 +206,7 @@ class NIRFPlugin(BaseSolverPlugin):
         self._trans_mask = np.array([c in self._free_dof for c in comps])
         self._rot_mask = np.array([f'r{c}' in self._free_dof for c in 'xyz'])
 
-    def _init_free(self, intg, cfgsect, **kwargs):
+    def _init_free(self, intg, cfgsect):
         comm, rank, root = get_comm_rank_root()
 
         self._parse_dof(cfgsect)
@@ -168,29 +233,22 @@ class NIRFPlugin(BaseSolverPlugin):
 
         self._elementscls = intg.system.elementscls
 
-        comps = 'xyz'[:self.ndims]
-        if intg.isrestart and kwargs:
-            self._fomega = np.array(kwargs['fomega'])
-            self._falpha = np.array(kwargs['falpha'])
-            self._ftheta = np.array(kwargs.get('ftheta', np.zeros(3)))
-            self._fvelo = np.array(kwargs['fvelo'])
-            self._faccel = np.array(kwargs['faccel'])
-            self._fdx = np.array(kwargs.get('fdx', np.zeros(self.ndims)))
-        else:
-            self._fomega = np.array([
-                self.cfg.getfloat(cfgsect, f'frame-omega0-{c}', 0.0)
-                for c in 'xyz'])
-            self._ftheta = np.array([
-                self.cfg.getfloat(cfgsect, f'frame-theta0-{c}', 0.0)
-                for c in 'xyz'])
-            self._falpha = np.zeros(3)
-            self._fvelo = np.array([
-                self.cfg.getfloat(cfgsect, f'frame-velo0-{c}', 0.0)
-                for c in comps])
-            self._fdx = np.array([
-                self.cfg.getfloat(cfgsect, f'frame-dx0-{c}', 0.0)
-                for c in comps])
-            self._faccel = np.zeros(self.ndims)
+        self._fdx = np.array([
+            self.cfg.getfloat(cfgsect, f'frame-dx0-{c}', 0.0)
+            for c in comps])
+        self._fvelo = np.array([
+            self.cfg.getfloat(cfgsect, f'frame-velo0-{c}', 0.0)
+            for c in comps])
+        self._faccel = np.array([
+            self.cfg.getfloat(cfgsect, f'frame-accel0-{c}', 0.0)
+            for c in comps])
+        self._fquat = self._parse_rot0(cfgsect)
+        self._fomega = np.array([
+            self.cfg.getfloat(cfgsect, f'frame-omega0-{c}', 0.0)
+            for c in 'xyz'])
+        self._falpha = np.array([
+            self.cfg.getfloat(cfgsect, f'frame-alpha0-{c}', 0.0)
+            for c in 'xyz'])
 
         bcranks = comm.gather(self._bcname in intg.system.mesh.bcon, root=root)
         if rank == root and not any(bcranks):
@@ -213,12 +271,12 @@ class NIRFPlugin(BaseSolverPlugin):
 
         if rank == root and self.cfg.hasopt(cfgsect, 'file'):
             if self.ndims == 2:
-                header = ('t,theta,omega,omega_dot,'
+                header = ('t,phi,omega,omega_dot,'
                           'dx,dy,accel_x,accel_y,'
                           'velo_x,velo_y,'
                           'fx,fy,mz')
             else:
-                header = ('t,theta_x,theta_y,theta_z,'
+                header = ('t,phi,theta,psi,'
                           'omega_x,omega_y,omega_z,'
                           'omega_dot_x,omega_dot_y,omega_dot_z,'
                           'dx,dy,dz,accel_x,accel_y,accel_z,'
@@ -255,16 +313,7 @@ class NIRFPlugin(BaseSolverPlugin):
             ev[f'frame_velo_{c}'] = self._fvelo[i]
 
         # R(-θ) = R(θ)^T for inertial-to-body transform
-        angle = np.linalg.norm(self._ftheta)
-        if angle < 1e-14:
-            R = np.eye(3)
-        else:
-            k = self._ftheta / angle
-            K = np.array([[0, -k[2], k[1]],
-                          [k[2], 0, -k[0]],
-                          [-k[1], k[0], 0]])
-            R = np.eye(3) + np.sin(angle)*K + (1 - np.cos(angle))*(K @ K)
-
+        R = _quat_to_rotmat(self._fquat)
         self._nirf_R.set(R.T)
 
     def _compute_forces(self, intg):
@@ -363,7 +412,11 @@ class NIRFPlugin(BaseSolverPlugin):
         fomega_new = self._fomega + 0.5*dt*(self._falpha + falpha_new)
         fvelo_new = self._fvelo + 0.5*dt*(self._faccel + faccel_new)
 
-        self._ftheta += 0.5*dt*(self._fomega + fomega_new)
+        omega_avg = 0.5*(self._fomega + fomega_new)
+        dqdt = 0.5*_quat_mult(self._fquat, np.array([0, *omega_avg]))
+        self._fquat += dt*dqdt
+        self._fquat /= np.linalg.norm(self._fquat)
+
         self._fdx += 0.5*dt*(self._fvelo + fvelo_new)
 
         self._fomega = fomega_new
@@ -390,8 +443,12 @@ class NIRFPlugin(BaseSolverPlugin):
         if self._csv and self._ode_count % self._ode_nout == 0:
             _, rank, root = get_comm_rank_root()
             if rank == root:
+                phi, theta, psi = _quat_to_euler(self._fquat)
+                phi, theta, psi = (np.rad2deg(phi), np.rad2deg(theta),
+                                   np.rad2deg(psi))
+
                 if self.ndims == 2:
-                    self._csv(intg.tcurr, self._ftheta[2],
+                    self._csv(intg.tcurr, phi,
                               self._fomega[2], self._falpha[2],
                               self._fdx[0], self._fdx[1],
                               self._faccel[0], self._faccel[1],
@@ -399,7 +456,7 @@ class NIRFPlugin(BaseSolverPlugin):
                               force[0], force[1], moment[0])
                 else:
                     self._csv(intg.tcurr,
-                              self._ftheta[0], self._ftheta[1], self._ftheta[2],
+                              phi, theta, psi,
                               self._fomega[0], self._fomega[1], self._fomega[2],
                               self._falpha[0], self._falpha[1], self._falpha[2],
                               self._fdx[0], self._fdx[1], self._fdx[2],
@@ -409,8 +466,8 @@ class NIRFPlugin(BaseSolverPlugin):
                               moment[0], moment[1], moment[2])
 
     _sdata_dtype = np.dtype([
-        ('omega', 'f8', 3), ('alpha', 'f8', 3), ('theta', 'f8', 3),
-        ('velo', 'f8', 3), ('accel', 'f8', 3), ('dx', 'f8', 3),
+        ('dx', 'f8', 3), ('velo', 'f8', 3), ('accel', 'f8', 3),
+        ('quat', 'f8', 4), ('omega', 'f8', 3), ('alpha', 'f8', 3),
         ('tode_last', 'f8')
     ])
 
@@ -420,12 +477,12 @@ class NIRFPlugin(BaseSolverPlugin):
 
         if sdata is not None:
             ndims = self.ndims
-            self._fomega = np.array(sdata['omega'])
-            self._falpha = np.array(sdata['alpha'])
-            self._ftheta = np.array(sdata['theta'])
+            self._fdx = np.array(sdata['dx'])[:ndims].copy()
             self._fvelo = np.array(sdata['velo'])[:ndims].copy()
             self._faccel = np.array(sdata['accel'])[:ndims].copy()
-            self._fdx = np.array(sdata['dx'])[:ndims].copy()
+            self._fquat = np.array(sdata['quat'])
+            self._fomega = np.array(sdata['omega'])
+            self._falpha = np.array(sdata['alpha'])
             self.tode_last = float(sdata['tode_last'])
             self._update_extern_values()
 
@@ -435,9 +492,9 @@ class NIRFPlugin(BaseSolverPlugin):
     def _serialise_data(self):
         pad = 3 - self.ndims
         return np.void((
-            self._fomega, self._falpha, self._ftheta,
+            np.pad(self._fdx, (0, pad)),
             np.pad(self._fvelo, (0, pad)),
             np.pad(self._faccel, (0, pad)),
-            np.pad(self._fdx, (0, pad)),
+            self._fquat, self._fomega, self._falpha,
             self.tode_last
         ), dtype=self._sdata_dtype)
