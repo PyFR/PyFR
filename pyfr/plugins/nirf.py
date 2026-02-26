@@ -8,7 +8,7 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 
 # TODO: Add output options for prescribed
 # TODO: viscous stress not just for nav-stokes but only no-slp
-# TODO: rename frame-origin
+# TODO: rename user-facing config keys (frame-origin -> center-of-rotation, etc.)
 
 def nirf_src_params(ndims):
     comps = 'xyz'[:ndims]
@@ -24,8 +24,8 @@ def nirf_bc_params(ndims):
 
 
 def nirf_origin_tplargs(cfg, cfgsect, ndims):
-    return {f'frame_origin_{c}': cfg.getfloat(cfgsect, f'frame-origin-{c}', 0.0)
-            for c in 'xyz'[:ndims]}
+    origin = cfg.getliteral(cfgsect, 'frame-origin', (0.,) * ndims)
+    return {f'frame_origin_{c}': v for c, v in zip('xyz'[:ndims], origin)}
 
 
 def _to_tplkey(p):
@@ -218,10 +218,8 @@ class NIRFPlugin(BaseSolverPlugin):
             self._inertia = np.array(
                 self.cfg.getliteral(cfgsect, 'inertia')).reshape(3, 3)
 
-        comps = 'xyz'[:self.ndims]
-        self._fx0 = np.array([
-            self.cfg.getfloat(cfgsect, f'frame-origin-{c}')
-            for c in comps])
+        self._fx0 = np.array(self.cfg.getliteral(cfgsect, 'frame-origin'),
+                             dtype=float)
 
         self._bcname = self.cfg.get(cfgsect, 'boundary')
         self._viscous = 'navier-stokes' in intg.system.name
