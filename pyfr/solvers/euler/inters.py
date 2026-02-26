@@ -157,10 +157,10 @@ class MassFlowBCMixin:
         else:
             self.csv = None
 
-    def setup(self, sdata):
-        if sdata is not None and sdata[4] != 0:
-            (self.interp_c, self.interp_m, 
-            self.mf_avg, self.tprev, self.nstep_counter) = sdata
+    def setup(self, sdata, state_sdata):
+        if state_sdata is not None and state_sdata[4] != 0:
+            (self.interp_c, self.interp_m,
+             self.mf_avg, self.tprev, self.nstep_counter) = state_sdata
         else:
             self.interp_c = self._eval_opts(['p'])[0]
             self.interp_m = 0.0
@@ -234,12 +234,12 @@ class MassFlowBCMixin:
         self.nstep_counter += 1
 
     @classmethod
-    def serialisefn(cls, bciface, prefix, srl):
+    def serialisefn(cls, bciface, prefix, state_prefix, srl):
         sfn = lambda: np.void((bciface.interp_c, bciface.interp_m,
                                bciface.mf_avg, bciface.tprev or 0,
                                bciface.nstep_counter),
                               dtype='f8,f8,f8,f8,i8')
-        srl.register(prefix, sfn if bciface else None)
+        srl.register(state_prefix, sfn if bciface else None)
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):

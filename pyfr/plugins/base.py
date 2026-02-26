@@ -145,14 +145,19 @@ class BasePlugin:
     def finalise(self, intg):
         pass
 
-    def setup(self, sdata, serialiser):
+    def setup(self, sdata, state_sdata, serialiser):
         pass
 
-    def get_serialiser_prefix(self):
+    @property
+    def serialiser_prefix(self):
         if self.suffix:
             return f'plugins/{self.name}-{self.suffix}'
         else:
             return f'plugins/{self.name}'
+
+    @property
+    def state_prefix(self):
+        return f'{self.serialiser_prefix}/state'
 
 
 class BaseSolnPlugin(BasePlugin):

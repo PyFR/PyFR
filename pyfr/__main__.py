@@ -525,10 +525,11 @@ def _process_common(args, soln, cfg):
     # If we do not have a config file then take it from the solution
     if cfg is None:
         cfg = soln['config']
-    # Remove stale serialised data from soln
+    # Remove stale serialised data from soln, keeping durable /state entries
     elif soln:
-        soln = {k: v for k, v in soln.items() 
-                if not k.startswith(('plugins', 'bcs', 'intg'))}
+        prefixes = ('plugins', 'bcs', 'intg')
+        soln = {k: v for k, v in soln.items()
+                if not k.startswith(prefixes) or k.endswith('/state')}
 
     # Create a backend
     backend = get_backend(args.backend, cfg)

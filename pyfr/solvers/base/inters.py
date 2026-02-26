@@ -89,9 +89,9 @@ class BaseInters:
     def _vect_xchg_view(self, inter, meth):
         return self._xchg_view(inter, meth, (self.ndims, self.nvars))
     
-    def setup(self, sdata):
+    def setup(self, sdata, state_sdata):
         pass
 
     @classmethod
-    def serialisefn(cls, iface, prefix, srl):
+    def serialisefn(cls, iface, prefix, state_prefix, srl):
         pass
