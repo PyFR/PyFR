@@ -233,22 +233,26 @@ class NIRFPlugin(BaseSolverPlugin):
 
         self._elementscls = intg.system.elementscls
 
-        self._fdx = np.array([
-            self.cfg.getfloat(cfgsect, f'frame-dx0-{c}', 0.0)
-            for c in comps])
-        self._fvelo = np.array([
-            self.cfg.getfloat(cfgsect, f'frame-velo0-{c}', 0.0)
-            for c in comps])
-        self._faccel = np.array([
-            self.cfg.getfloat(cfgsect, f'frame-accel0-{c}', 0.0)
-            for c in comps])
+        zeros_nd = (0.,) * self.ndims
+
+        self._fdx = np.array(self.cfg.getliteral(cfgsect, 'frame-dx0', zeros_nd), dtype=float)
+        self._fvelo = np.array(self.cfg.getliteral(cfgsect, 'frame-velo0', zeros_nd), dtype=float)
+        self._faccel = np.array(self.cfg.getliteral(cfgsect, 'frame-accel0', zeros_nd), dtype=float)
         self._fquat = self._parse_rot0(cfgsect)
-        self._fomega = np.array([
-            self.cfg.getfloat(cfgsect, f'frame-omega0-{c}', 0.0)
-            for c in 'xyz'])
-        self._falpha = np.array([
-            self.cfg.getfloat(cfgsect, f'frame-alpha0-{c}', 0.0)
-            for c in 'xyz'])
+
+        omega0 = self.cfg.getliteral(cfgsect, 'frame-omega0',
+                                     0. if self.ndims == 2 else (0., 0., 0.))
+        alpha0 = self.cfg.getliteral(cfgsect, 'frame-alpha0',
+                                     0. if self.ndims == 2 else (0., 0., 0.))
+
+        if self.ndims == 2:
+            if not np.isscalar(omega0) or not np.isscalar(alpha0):
+                raise ValueError('frame-omega0/alpha0 must be a scalar in 2D')
+            self._fomega = np.array([0., 0., omega0])
+            self._falpha = np.array([0., 0., alpha0])
+        else:
+            self._fomega = np.array(omega0, dtype=float)
+            self._falpha = np.array(alpha0, dtype=float)
 
         bcranks = comm.gather(self._bcname in intg.system.mesh.bcon, root=root)
         if rank == root and not any(bcranks):
