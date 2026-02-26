@@ -161,7 +161,7 @@ class MassFlowBCMixin:
 
     def setup(self, sdata):
         if sdata is not None and sdata[4] != 0:
-            (self.interp_c, self.interp_m, 
+            (self.interp_c, self.interp_m,
             self.mf_avg, self.tprev, self.nstep_counter) = sdata
         else:
             self.interp_c = self._eval_opts(['p'])[0]
@@ -296,10 +296,9 @@ class NIRFBCMixin:
                 return _to_extern(name)
             return self.cfg.getexpr(sect, name, '0.0', subs=subs)
 
-        comps = 'xyz'[:self.ndims]
         fomega = [get_param(f'frame-omega-{c}') for c in 'xyz']
+        fvelo = [get_param(f'frame-velo-{c}') for c in 'xyz'[:self.ndims]]
         fx0 = self.cfg.getliteral(sect, 'frame-origin', (0.0,) * self.ndims)
-        fvelo = [get_param(f'frame-velo-{c}') for c in comps]
 
         # Step 1: inertial freestream minus frame translation
         u_inertial = [exprs.get(c) for c in 'uvw'[:self.ndims]]
