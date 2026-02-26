@@ -298,8 +298,7 @@ class NIRFBCMixin:
 
         comps = 'xyz'[:self.ndims]
         fomega = [get_param(f'frame-omega-{c}') for c in 'xyz']
-        fx0 = [self.cfg.getfloat(sect, f'frame-origin-{c}', 0.0)
-               for c in comps]
+        fx0 = self.cfg.getliteral(sect, 'frame-origin', (0.0,) * self.ndims)
         fvelo = [get_param(f'frame-velo-{c}') for c in comps]
 
         # Step 1: inertial freestream minus frame translation
