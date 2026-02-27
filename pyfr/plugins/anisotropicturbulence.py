@@ -49,12 +49,10 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
 
         self.nmvxinit = 6
         self.nvmxtol = 0.1
-
         self.tstart = intg.tstart
         self.tbegin = intg.tcurr
         self.tnext = intg.tcurr
         self.tend = intg.tend
-
         self.seed = 42
 
         self.eventdtype = [('tinit', fdptype), ('state', np.uint32),
@@ -66,9 +64,8 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
 
         if ls_array.ndim == 0 :
             self.mode = 'isotropic'
-            ls = float(ls_array)
-            self.l_ref = np.ones(3)*ls
-            self.l_tensor = np.ones((3,3))*ls
+            self.l_ref = np.ones(3)*float(ls_array)
+            self.l_tensor = np.ones((3,3))*float(ls_array)
         elif ls_array.ndim == 1 and ls_array.size == 3 :
             self.mode = 'partial_anisotropic'
             self.l_ref = ls_array
@@ -81,33 +78,33 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
             raise ValueError("Invalid format for 'turbulence-length-scale'."
                              "Must be scalar, 3-vector, or 3x3 matrix.") 
 
-        # xi_min_max (paper recommends 0.4)
-        xi_min_max = self.cfg.getfloat(cfgsect, 'xi-min-max', 0.4)
+        xi_min_max = self.cfg.getfloat(cfgsect, 'xi-min-max', 0.4) # xi_min_max (Giangaspero (2022) recommends 0.4)
         
-        # Avoid divide-by-zero
         lref = np.asarray(self.l_ref, dtype=np.float64)
         if np.any(lref <= 0):
             raise ValueError("Reference length scales l_ref must be > 0.")
         
-        # Ensure l_tensor is (3,3) for unified handling
-        Lij = np.asarray(self.l_tensor, dtype=np.float64)
+        Lij = np.asarray(self.l_tensor, dtype=np.float64) # Ensure l_tensor is (3,3) for unified handling
         if Lij.shape != (3, 3):
             # your code currently fills l_tensor even for isotropic/partial modes,
             # but keep a guard anyway
             Lij = np.ones((3, 3)) * float(np.mean(lref))
 
-        # xi_max[i,j] = max(l_ij / l_ref_i, xi_min_max)
+        # (Giangaspero (2022) xi_max[i,j] = max(l_ij / l_ref_i, xi_min_max) 
         xi_max = Lij / lref[:, None]
         self.xi_max = xi_max = np.maximum(xi_max, xi_min_max)
-
-        print(xi_max, flush=True)
-        
-        # 2. Build Reynolds stress tensor
-        ti = self.cfg.getfloat(cfgsect, 'turbulence-intensity', None)
+     
+        # 2. Reynolds stress tensor
+        ti_raw = self.cfg.get(cfgsect, 'turbulence-intensity', None)
+        if ti_raw is not None and str(ti_raw).lower() != 'none':
+            ti = float(ti_raw)
+        else:
+            ti = None
+            
         rs = self.cfg.getliteral(cfgsect, 'reynolds-stress', None)      
         self.avgu = avgu = self.cfg.getfloat(cfgsect, 'avg-u')
         
-        if rs is not None :
+        if rs is not None : # Giangaspero (2022)
             r_tensor = np.array(rs, dtype=np.float64)
             if r_tensor.shape != (3, 3) :
                 raise ValueError("'reynolds-stress' must be a 3x3 matrix "
@@ -128,6 +125,8 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
         except np.linalg.LinAlgError:
             raise ValueError("Reynolds stress tensor must be positive definite.")
         
+        st_correction = 1.0 / math.sqrt(2.0) # Correction factor for integration of source term
+        
         beta3_tensor = L*norm_factor
         beta1_vector = -0.5/(sigma*self.l_ref)**2
         
@@ -136,7 +135,7 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
             gamma = self.cfg.getfloat('constants', 'gamma')
             avgrho = self.cfg.getfloat(cfgsect, 'avg-rho')
             avgmach = self.cfg.getfloat(cfgsect, 'avg-mach')
-            beta2 = avgrho*(gamma - 1)*avgmach**2
+            beta2 = avgrho * (gamma - 1) * avgmach**2 * st_correction
         else:
             beta2 = 0
 

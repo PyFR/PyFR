@@ -4,7 +4,7 @@ from pyfr.partitioners.metis import METISPartitioner
 from pyfr.partitioners.reconstruct import reconstruct_partitioning
 from pyfr.partitioners.scotch import SCOTCHPartitioner
 from pyfr.util import subclass_where
-
+from pyfr.partitioners.manual import ManualPartitioner
 
 def get_partitioner(name, *args, **kwargs):
     return subclass_where(BasePartitioner, name=name)(*args, **kwargs)
