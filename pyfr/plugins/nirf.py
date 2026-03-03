@@ -12,7 +12,7 @@ Config section: [solver-plugin-nirf]
 -------------------------------------
 Common options (both modes)
   motion           str    'prescribed' or 'free'.  Default: 'prescribed'.
-  frame-origin     tuple  Centre of rotation / pivot point as a length-ndims
+  center-of-rot    tuple  Centre of rotation / pivot point as a length-ndims
                           float tuple, e.g. (0.0, 0.5).  Default: (0,)*ndims.
 
 Prescribed-mode options
@@ -81,7 +81,6 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 
 # TODO: Add output options for prescribed
 # TODO: viscous stress not just for nav-stokes but only no-slp
-# TODO: rename user-facing config keys (frame-origin -> center-of-rotation, etc.)
 # TODO: add support for multiple boundary names
 
 def nirf_src_params(ndims):
@@ -98,7 +97,7 @@ def nirf_bc_params(ndims):
 
 
 def nirf_origin_tplargs(cfg, cfgsect, ndims):
-    origin = cfg.getliteral(cfgsect, 'frame-origin', (0.,) * ndims)
+    origin = cfg.getliteral(cfgsect, 'center-of-rot', (0.,) * ndims)
     return {f'frame_origin_{c}': v for c, v in zip('xyz'[:ndims], origin)}
 
 
@@ -290,7 +289,7 @@ class NIRFPlugin(BaseSolverPlugin):
             self._inertia = np.array(
                 self.cfg.getliteral(cfgsect, 'inertia')).reshape(3, 3)
 
-        self._fx0 = np.array(self.cfg.getliteral(cfgsect, 'frame-origin'),
+        self._fx0 = np.array(self.cfg.getliteral(cfgsect, 'center-of-rot'),
                              dtype=float)
 
         self._bcname = self.cfg.get(cfgsect, 'boundary')
