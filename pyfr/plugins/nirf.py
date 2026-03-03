@@ -1,3 +1,76 @@
+"""Non-Inertial Reference Frame (NIRF) plugin.
+
+Simulates flow in a non-inertial (accelerating/rotating) reference frame by
+adding fictitious body-force source terms to the governing equations.  Two
+modes are available:
+
+  prescribed — frame motion is specified analytically as C expressions.
+  free       — frame motion is computed by integrating the rigid-body ODE
+               driven by aerodynamic forces on a designated boundary.
+
+Config section: [solver-plugin-nirf]
+-------------------------------------
+Common options (both modes)
+  motion           str    'prescribed' or 'free'.  Default: 'prescribed'.
+  frame-origin     tuple  Centre of rotation / pivot point as a length-ndims
+                          float tuple, e.g. (0.0, 0.5).  Default: (0,)*ndims.
+
+Prescribed-mode options
+  All motion parameters are C expressions evaluated at each solver step.
+  Constant values (plain floats) require no derivative.  If a value is a
+  time-varying expression, the corresponding *derivative* key must also be
+  supplied so the source term is correct.
+
+  frame-omega-{x,y,z}   expr   Angular velocity (rad/s) about each axis.
+                                Default: 0.0.
+  frame-alpha-{x,y,z}   expr   Angular acceleration (rad/s²) about each axis.
+                                Default: 0.0.  Must be provided explicitly
+                                when the corresponding frame-omega-* is a
+                                non-constant expression.
+  frame-velo-{x[,y,z]}  expr   Translational velocity (m/s) along each
+                                dimension.  Default: 0.0.
+  frame-accel-{x[,y,z]} expr   Translational acceleration (m/s²).
+                                Default: 0.0.  Must be provided explicitly
+                                when the corresponding frame-velo-* is a
+                                non-constant expression.
+
+Free-mode options
+  mass             float  Body mass.  Required.
+  inertia          float  2-D: scalar moment of inertia about z.
+                   tuple  3-D: 3×3 inertia tensor as a flat 9-element tuple.
+                          Required.
+  boundary         str    Name of the body-surface boundary used to compute
+                          aerodynamic forces/moments.  Required.
+  dof              str    Comma-separated list of active degrees of freedom.
+                          2-D: any subset of {x, y, rz}.
+                          3-D: any subset of {x, y, z, rx, ry, rz}.
+                          Default: all DOF for the current dimensionality.
+
+  Initial conditions (applied only on a fresh start, not on restart):
+  frame-dx0        tuple  Initial frame displacement.  Default: (0,)*ndims.
+  frame-velo0      tuple  Initial translational velocity (m/s).
+                          Default: (0,)*ndims.
+  frame-accel0     tuple  Initial translational acceleration.
+                          Default: (0,)*ndims.
+  frame-rot0-euler float  2-D: initial rotation angle in radians (roll).
+                   tuple  3-D: (phi, theta, psi) Euler angles in radians.
+                          Mutually exclusive with frame-rot0-quat.
+  frame-rot0-quat  tuple  Initial orientation as a (w, x, y, z) quaternion.
+                          Automatically normalised.
+                          Mutually exclusive with frame-rot0-euler.
+  frame-omega0     float  2-D: initial angular velocity (rad/s) about z.
+                   tuple  3-D: (wx, wy, wz) initial angular velocity.
+                          Default: 0.0 / (0, 0, 0).
+  frame-alpha0     float  2-D: initial angular acceleration (rad/s²) about z.
+                   tuple  3-D: (ax, ay, az).  Default: 0.0 / (0, 0, 0).
+
+  ODE / output options:
+  dt-ode           float  ODE sub-step size (s).  Default: solver dt.
+  ode-nout         int    Write CSV output every N ODE steps.  Default: 1.
+  file             str    Path for CSV output.  Optional.
+
+"""
+
 import math
 
 import numpy as np
@@ -9,6 +82,7 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 # TODO: Add output options for prescribed
 # TODO: viscous stress not just for nav-stokes but only no-slp
 # TODO: rename user-facing config keys (frame-origin -> center-of-rotation, etc.)
+# TODO: add support for multiple boundary names
 
 def nirf_src_params(ndims):
     comps = 'xyz'[:ndims]
@@ -174,11 +248,9 @@ class NIRFPlugin(BaseSolverPlugin):
         if has_euler:
             rot = self.cfg.getliteral(cfgsect, 'frame-rot0-euler')
             if self.ndims == 2:
-                phi = np.deg2rad(float(rot))
-                return _euler_to_quat(phi, 0, 0)
+                return _euler_to_quat(float(rot), 0, 0)
             else:
-                phi, theta, psi = [np.deg2rad(a) for a in rot]
-                return _euler_to_quat(phi, theta, psi)
+                return _euler_to_quat(*rot)
         elif has_quat:
             q = np.array(self.cfg.getliteral(cfgsect, 'frame-rot0-quat'),
                          dtype=float)
