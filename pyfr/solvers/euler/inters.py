@@ -298,7 +298,7 @@ class NIRFBCMixin:
 
         fomega = [get_param(f'frame-omega-{c}') for c in 'xyz']
         fvelo = [get_param(f'frame-velo-{c}') for c in 'xyz'[:self.ndims]]
-        fx0 = self.cfg.getliteral(sect, 'frame-origin', (0.0,) * self.ndims)
+        fx0 = self.cfg.getliteral(sect, 'center-of-rot', (0.0,) * self.ndims)
 
         # Step 1: inertial freestream minus frame translation
         u_inertial = [exprs.get(c) for c in 'uvw'[:self.ndims]]
