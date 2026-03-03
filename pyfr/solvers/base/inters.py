@@ -112,7 +112,7 @@ class BaseInters:
         return self._xchg_view(inter, meth, (self.ndims, self.nvars))
 
 
-    def setup(self, sdata):
+    def setup(self, sdata, prevcfg):
         pass
 
     @classmethod

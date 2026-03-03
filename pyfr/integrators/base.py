@@ -127,6 +127,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
             self.triggers.restore(initsoln.state)
 
         plugins = []
+        prevcfg = initsoln.config if initsoln else None
 
         for s in self.cfg.sections():
             if (m := re.match('(soln|solver)-plugin-(.+?)(?:-(.+))?$', s)):
@@ -144,7 +145,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
                 plugin = get_plugin(*args)
                 sprefix = plugin.sprefix
                 sdata = initsoln.state.get(sprefix) if initsoln else None
-                plugin.setup(sdata, self.serialiser)
+                plugin.setup(sdata, prevcfg, self.serialiser)
                 plugins.append(plugin)
 
         # Validate plugin trigger references
