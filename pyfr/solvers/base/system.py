@@ -174,12 +174,13 @@ class BaseSystem:
 
             # Check if there is serialised data for this boundary in initsoln
             sdata = initsoln.get(f'bcs/{bname}') if initsoln else None
+            prevcfg = initsoln.get('config') if initsoln else None
 
             # If we have this boundary then create an instance
             if localbc:
                 bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
                                   cfgsect, self.cfg, bccomm)
-                bciface.setup(sdata)
+                bciface.setup(sdata, prevcfg)
                 bc_inters.append(bciface)
             else:
                 bciface = None
