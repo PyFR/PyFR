@@ -577,9 +577,6 @@ def _process_common(args, soln, cfg):
     # If we do not have a config file then take it from the solution
     if cfg is None:
         cfg = soln.config
-    # Remove stale serialised data from soln if using a different config
-    elif soln:
-        soln.state.clear()
 
     # Create a backend
     backend = get_backend(args.backend, cfg)

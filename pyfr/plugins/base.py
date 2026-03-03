@@ -168,7 +168,7 @@ class BasePlugin:
     def finalise(self, intg):
         pass
 
-    def setup(self, sdata, serialiser):
+    def setup(self, sdata, prevcfg, serialiser):
         pass
 
 
