@@ -4,69 +4,70 @@ Simulates flow in a non-inertial (accelerating/rotating) reference frame by
 adding fictitious body-force source terms to the governing equations.  Two
 modes are available:
 
-  prescribed — frame motion is specified analytically as C expressions.
+  prescribed — frame motion is specified analytically as expressions in t.
   free       — frame motion is computed by integrating the rigid-body ODE
                driven by aerodynamic forces on a designated boundary.
+
+Both modes serialise kinematic state (displacement, velocity, orientation,
+angular velocity) on checkpoint, so a prescribed run can be restarted in free
+mode without any loss of continuity.
 
 Config section: [solver-plugin-nirf]
 -------------------------------------
 Common options (both modes)
   motion           str    'prescribed' or 'free'.  Default: 'prescribed'.
-  center-of-rot    tuple  Centre of rotation / pivot point as a length-ndims
-                          float tuple, e.g. (0.0, 0.5).  Default: (0,)*ndims.
+  center-of-rot    tuple  Centre of rotation / pivot point, length-ndims float
+                          tuple, e.g. (0.0, 0.5).  Default: (0,)*ndims.
+
+  Initial conditions (fresh start only; overridden by serialised state on
+  restart):
+  frame-rot0-euler float  2-D: initial rotation angle in radians.
+                   tuple  3-D: (phi, theta, psi) ZYX Euler angles in radians.
+                          Mutually exclusive with frame-rot0-quat.
+  frame-rot0-quat  tuple  Initial orientation as (w, x, y, z) quaternion.
+                          Automatically normalised.
+                          Mutually exclusive with frame-rot0-euler.
+  frame-dx0        tuple  Initial frame displacement (m).  Default: (0,)*ndims.
 
 Prescribed-mode options
-  All motion parameters are C expressions evaluated at each solver step.
-  Constant values (plain floats) require no derivative.  If a value is a
-  time-varying expression, the corresponding *derivative* key must also be
-  supplied so the source term is correct.
+  All motion parameters can be expressions of t.
+  Derivative expressions (alpha, accel) must be consistent with their integrals
+  (omega, velo) — verified by finite-difference check at initialisation. For 2D
+  rotation, all rotation is in [z].
 
-  frame-omega-{x,y,z}   expr   Angular velocity (rad/s) about each axis.
-                                Default: 0.0.
-  frame-alpha-{x,y,z}   expr   Angular acceleration (rad/s²) about each axis.
-                                Default: 0.0.  Must be provided explicitly
-                                when the corresponding frame-omega-* is a
-                                non-constant expression.
-  frame-velo-{x[,y,z]}  expr   Translational velocity (m/s) along each
-                                dimension.  Default: 0.0.
-  frame-accel-{x[,y,z]} expr   Translational acceleration (m/s²).
-                                Default: 0.0.  Must be provided explicitly
-                                when the corresponding frame-velo-* is a
-                                non-constant expression.
+  frame-omega-{x,y,z}      expr  Angular velocity (rad/s).  Default: 0.0.
+  frame-alpha-{x,y,z}      expr  Angular acceleration (rad/s²).  Default: 0.0.
+                                  Required when frame-omega-* is non-constant.
+  frame-velo-{x,y[,z]}     expr  Translational velocity (m/s).  Default: 0.0.
+  frame-accel-{x,y[,z]}    expr  Translational acceleration (m/s²).
+                                  Default: 0.0.  Required when frame-velo-* is
+                                  non-constant.
 
 Free-mode options
   mass             float  Body mass.  Required.
   inertia          float  2-D: scalar moment of inertia about z.
                    tuple  3-D: 3×3 inertia tensor as a flat 9-element tuple.
                           Required.
-  boundary         str    Name of the body-surface boundary used to compute
-                          aerodynamic forces/moments.  Required.
-  dof              str    Comma-separated list of active degrees of freedom.
+  boundary         str    Name of the body-surface boundary for force
+                          integration.  Required.
+  dof              str    Comma-separated active degrees of freedom.
                           2-D: any subset of {x, y, rz}.
                           3-D: any subset of {x, y, z, rx, ry, rz}.
                           Default: all DOF for the current dimensionality.
 
-  Initial conditions (applied only on a fresh start, not on restart):
-  frame-dx0        tuple  Initial frame displacement.  Default: (0,)*ndims.
+  Additional initial conditions (fresh start only):
   frame-velo0      tuple  Initial translational velocity (m/s).
                           Default: (0,)*ndims.
-  frame-accel0     tuple  Initial translational acceleration.
+  frame-accel0     tuple  Initial translational acceleration (m/s²).
                           Default: (0,)*ndims.
-  frame-rot0-euler float  2-D: initial rotation angle in radians (roll).
-                   tuple  3-D: (phi, theta, psi) Euler angles in radians.
-                          Mutually exclusive with frame-rot0-quat.
-  frame-rot0-quat  tuple  Initial orientation as a (w, x, y, z) quaternion.
-                          Automatically normalised.
-                          Mutually exclusive with frame-rot0-euler.
   frame-omega0     float  2-D: initial angular velocity (rad/s) about z.
-                   tuple  3-D: (wx, wy, wz) initial angular velocity.
-                          Default: 0.0 / (0, 0, 0).
+                   tuple  3-D: (wx, wy, wz).  Default: 0.0 / (0, 0, 0).
   frame-alpha0     float  2-D: initial angular acceleration (rad/s²) about z.
                    tuple  3-D: (ax, ay, az).  Default: 0.0 / (0, 0, 0).
 
-  ODE / output options:
-  dt-ode           float  ODE sub-step size (s).  Default: solver dt.
+  Output options (free mode only):
   ode-nout         int    Write CSV output every N ODE steps.  Default: 1.
+  dt-ode           float  ODE sub-step size (s).  Default: solver dt.
   file             str    Path for CSV output.  Optional.
 
 """
@@ -79,9 +80,16 @@ from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.base import BaseSolverPlugin, init_csv
 from pyfr.quadrules.surface import SurfaceIntegrator
 
-# TODO: Add output options for prescribed
 # TODO: viscous stress not just for nav-stokes but only no-slp
 # TODO: add support for multiple boundary names
+
+# Python-side math namespace for evaluating getexpr strings
+_PYMATH = {name: getattr(math, name) for name in dir(math) if not name.startswith('_')}
+
+
+def _eval_expr(expr, t):
+    return eval(expr, _PYMATH, {'t': t})
+
 
 def nirf_src_params(ndims):
     comps = 'xyz'[:ndims]
@@ -202,8 +210,10 @@ class NIRFPlugin(BaseSolverPlugin):
 
         if self._motion == 'prescribed':
             self._init_prescribed(cfgsect, subs)
+            self._call = self._call_prescribed
         elif self._motion == 'free':
             self._init_free(intg, cfgsect)
+            self._call = self._call_free
         else:
             raise ValueError(f"Invalid NIRF motion type: {self._motion}")
 
@@ -212,29 +222,52 @@ class NIRFPlugin(BaseSolverPlugin):
             eles.add_src_macro('pyfr.plugins.kernels.nirf', macro,
                                self._tplargs, ploc=True, soln=True)
 
-    def _validate_prescribed_cfg(self, cfgsect):
-        def is_const(key):
-            try:
-                float(self.cfg.get(cfgsect, key, '0.0'))
-                return True
-            except ValueError:
-                return False
+    def _validate_prescribed_cfg(self, cfgsect, subs):
+        eps = 1e-7
+        t_ref = 1.0
 
         pairs = [(f'frame-omega-{c}', f'frame-alpha-{c}') for c in 'xyz']
         pairs += [(f'frame-velo-{c}', f'frame-accel-{c}')
                   for c in 'xyz'[:self.ndims]]
 
-        for val, deriv in pairs:
-            if not is_const(val) and not self.cfg.hasopt(cfgsect, deriv):
-                raise ValueError(f'Incorrect {deriv} for {val} expression')
+        for val_key, deriv_key in pairs:
+            val_expr = self.cfg.getexpr(cfgsect, val_key, '0.0', subs=subs)
+            deriv_expr = self.cfg.getexpr(cfgsect, deriv_key, '0.0', subs=subs)
+
+            fd = (_eval_expr(val_expr, t_ref + eps)
+                  - _eval_expr(val_expr, t_ref)) / eps
+            provided = _eval_expr(deriv_expr, t_ref)
+
+            if not np.isclose(fd, provided, rtol=1e-3, atol=1e-6):
+                raise ValueError(
+                    f'{deriv_key} ({provided:.6g}) does not match '
+                    f'd/dt({val_key}) ({fd:.6g})'
+                )
 
     def _init_prescribed(self, cfgsect, subs):
-        self._validate_prescribed_cfg(cfgsect)
+        self._validate_prescribed_cfg(cfgsect, subs)
 
+        comps = 'xyz'[:self.ndims]
         params = nirf_src_params(self.ndims)
         self._tplargs = {_to_tplkey(p): self.cfg.getexpr(cfgsect, p, '0.0', subs=subs)
                          for p in params}
         self._tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
+
+        self._velo_exprs = [self.cfg.getexpr(cfgsect, f'frame-velo-{c}', '0.0', subs=subs)
+                            for c in comps]
+
+        t0 = self._intg.tcurr
+        self._fquat = self._parse_rot0(cfgsect)
+        zeros_nd = (0.,) * self.ndims
+        self._fdx = np.array(self.cfg.getliteral(cfgsect, 'frame-dx0', zeros_nd), dtype=float)
+        self._fomega = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-omega-{c}')], t0)
+                                 for c in 'xyz'])
+        self._fvelo = np.array([_eval_expr(e, t0) for e in self._velo_exprs])
+        self._falpha = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-alpha-{c}')], t0)
+                                 for c in 'xyz'])
+        self._faccel = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-accel-{c}')], t0)
+                                 for c in comps])
+        self.tode_last = t0
 
     def _parse_rot0(self, cfgsect):
         has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
@@ -277,20 +310,9 @@ class NIRFPlugin(BaseSolverPlugin):
         self._trans_mask = np.array([c in self._free_dof for c in comps])
         self._rot_mask = np.array([f'r{c}' in self._free_dof for c in 'xyz'])
 
-    def _init_free(self, intg, cfgsect):
+    def _init_force_integrator(self, cfgsect):
+        intg = self._intg
         comm, rank, root = get_comm_rank_root()
-
-        self._parse_dof(cfgsect)
-
-        self._mass = self.cfg.getfloat(cfgsect, 'mass')
-        if self.ndims == 2:
-            self._inertia = self.cfg.getfloat(cfgsect, 'inertia')
-        else:
-            self._inertia = np.array(
-                self.cfg.getliteral(cfgsect, 'inertia')).reshape(3, 3)
-
-        self._fx0 = np.array(self.cfg.getliteral(cfgsect, 'center-of-rot'),
-                             dtype=float)
 
         self._bcname = self.cfg.get(cfgsect, 'boundary')
         self._viscous = 'navier-stokes' in intg.system.name
@@ -301,6 +323,26 @@ class NIRFPlugin(BaseSolverPlugin):
                                          'none')
 
         self._elementscls = intg.system.elementscls
+
+        fx0 = np.array(self.cfg.getliteral(cfgsect, 'center-of-rot',
+                                           (0.,) * self.ndims), dtype=float)
+
+        bcranks = comm.gather(self._bcname in intg.system.mesh.bcon, root=root)
+        if rank == root and not any(bcranks):
+            raise RuntimeError(f'Boundary {self._bcname} does not exist')
+
+        self._ff_int = NIRFForceIntegrator(
+            self.cfg, cfgsect, intg.system, self._bcname, fx0, self._viscous)
+
+    def _init_free(self, intg, cfgsect):
+        self._parse_dof(cfgsect)
+
+        self._mass = self.cfg.getfloat(cfgsect, 'mass')
+        if self.ndims == 2:
+            self._inertia = self.cfg.getfloat(cfgsect, 'inertia')
+        else:
+            self._inertia = np.array(
+                self.cfg.getliteral(cfgsect, 'inertia')).reshape(3, 3)
 
         zeros_nd = (0.,) * self.ndims
 
@@ -323,41 +365,16 @@ class NIRFPlugin(BaseSolverPlugin):
             self._fomega = np.array(omega0, dtype=float)
             self._falpha = np.array(alpha0, dtype=float)
 
-        bcranks = comm.gather(self._bcname in intg.system.mesh.bcon, root=root)
-        if rank == root and not any(bcranks):
-            raise RuntimeError(f'Boundary {self._bcname} does not exist')
-
-        self._ff_int = NIRFForceIntegrator(
-            self.cfg, cfgsect, intg.system, self._bcname, self._fx0,
-            self._viscous)
+        self._init_force_integrator(cfgsect)
 
         if self.cfg.hasopt(cfgsect, 'dt-ode'):
             self.dt_ode = self.cfg.getfloat(cfgsect, 'dt-ode')
         else:
             self.dt_ode = None
         self.tode_last = intg.tcurr
-        self._ode_nout = self.cfg.getint(cfgsect, 'ode-nout', 1)
-        self._ode_count = 0
 
         if self.dt_ode is not None:
             intg.call_plugin_dt(intg.tcurr, self.dt_ode)
-
-        if rank == root and self.cfg.hasopt(cfgsect, 'file'):
-            if self.ndims == 2:
-                header = ('t,phi,omega,omega_dot,'
-                          'dx,dy,accel_x,accel_y,'
-                          'velo_x,velo_y,'
-                          'fx,fy,mz')
-            else:
-                header = ('t,phi,theta,psi,'
-                          'omega_x,omega_y,omega_z,'
-                          'omega_dot_x,omega_dot_y,omega_dot_z,'
-                          'dx,dy,dz,accel_x,accel_y,accel_z,'
-                          'velo_x,velo_y,velo_z,'
-                          'fx,fy,fz,mx,my,mz')
-            self._csv = init_csv(self.cfg, cfgsect, header)
-        else:
-            self._csv = None
 
         params = nirf_src_params(self.ndims)
         self._tplargs = {_to_tplkey(p): _to_extern(p) for p in params}
@@ -372,6 +389,24 @@ class NIRFPlugin(BaseSolverPlugin):
                                 value=self._nirf_R)
 
         self._register_externs(intg, [_to_extern(p) for p in params])
+
+        _, rank, root = get_comm_rank_root()
+        self._ode_nout = self.cfg.getint(cfgsect, 'ode-nout', 1)
+        self._ode_count = 0
+
+        if rank == root and self.cfg.hasopt(cfgsect, 'file'):
+            if self.ndims == 2:
+                header = ('t,phi,omega,omega_dot,dx,dy,'
+                          'accel_x,accel_y,velo_x,velo_y,fx,fy,mz')
+            else:
+                header = ('t,phi,theta,psi,'
+                          'omega_x,omega_y,omega_z,'
+                          'omega_dot_x,omega_dot_y,omega_dot_z,'
+                          'dx,dy,dz,accel_x,accel_y,accel_z,'
+                          'velo_x,velo_y,velo_z,fx,fy,fz,mx,my,mz')
+            self._csv = init_csv(self.cfg, cfgsect, header)
+        else:
+            self._csv = None
 
     def _update_extern_values(self):
         comps = 'xyz'[:self.ndims]
@@ -498,9 +533,34 @@ class NIRFPlugin(BaseSolverPlugin):
         self._faccel = faccel_new
 
     def __call__(self, intg):
-        if self._motion != 'free':
-            return
+        self._call(intg)
 
+    def _call_prescribed(self, intg):
+        t = intg.tcurr
+        dt = t - self.tode_last
+
+        fomega_new = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-omega-{c}')], t)
+                               for c in 'xyz'])
+        fvelo_new = np.array([_eval_expr(e, t) for e in self._velo_exprs])
+
+        # Heun's: advance orientation (quaternion kinematics) and displacement
+        omega_avg = 0.5*(self._fomega + fomega_new)
+        dqdt = 0.5*_quat_mult(self._fquat, np.array([0, *omega_avg]))
+        self._fquat = self._fquat + dt*dqdt
+        self._fquat /= np.linalg.norm(self._fquat)
+
+        self._fdx += 0.5*dt*(self._fvelo + fvelo_new)
+
+        self._fomega = fomega_new
+        self._fvelo = fvelo_new
+        self._falpha = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-alpha-{c}')], t)
+                                 for c in 'xyz'])
+        self._faccel = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-accel-{c}')], t)
+                                 for c in 'xyz'[:self.ndims]])
+
+        self.tode_last = t
+
+    def _call_free(self, intg):
         if self.dt_ode is not None:
             if intg.tcurr - self.tode_last < self.dt_ode - self.tol:
                 return
@@ -513,30 +573,37 @@ class NIRFPlugin(BaseSolverPlugin):
         self.bind_externs()
 
         self._ode_count += 1
-        if self._csv and self._ode_count % self._ode_nout == 0:
-            _, rank, root = get_comm_rank_root()
-            if rank == root:
-                phi, theta, psi = _quat_to_euler(self._fquat)
-                phi, theta, psi = (np.rad2deg(phi), np.rad2deg(theta),
-                                   np.rad2deg(psi))
+        if self._ode_count % self._ode_nout == 0:
+            self._write_csv(intg, force, moment)
 
-                if self.ndims == 2:
-                    self._csv(intg.tcurr, phi,
-                              self._fomega[2], self._falpha[2],
-                              self._fdx[0], self._fdx[1],
-                              self._faccel[0], self._faccel[1],
-                              self._fvelo[0], self._fvelo[1],
-                              force[0], force[1], moment[0])
-                else:
-                    self._csv(intg.tcurr,
-                              phi, theta, psi,
-                              self._fomega[0], self._fomega[1], self._fomega[2],
-                              self._falpha[0], self._falpha[1], self._falpha[2],
-                              self._fdx[0], self._fdx[1], self._fdx[2],
-                              self._faccel[0], self._faccel[1], self._faccel[2],
-                              self._fvelo[0], self._fvelo[1], self._fvelo[2],
-                              force[0], force[1], force[2],
-                              moment[0], moment[1], moment[2])
+    def _write_csv(self, intg, force, moment):
+        if not self._csv:
+            return
+
+        _, rank, root = get_comm_rank_root()
+        if rank != root:
+            return
+
+        phi, theta, psi = _quat_to_euler(self._fquat)
+
+        if self.ndims == 2:
+            args = [intg.tcurr, phi,
+                    self._fomega[2], self._falpha[2],
+                    self._fdx[0], self._fdx[1],
+                    self._faccel[0], self._faccel[1],
+                    self._fvelo[0], self._fvelo[1],
+                    force[0], force[1], moment[0]]
+        else:
+            args = [intg.tcurr, phi, theta, psi,
+                    self._fomega[0], self._fomega[1], self._fomega[2],
+                    self._falpha[0], self._falpha[1], self._falpha[2],
+                    self._fdx[0], self._fdx[1], self._fdx[2],
+                    self._faccel[0], self._faccel[1], self._faccel[2],
+                    self._fvelo[0], self._fvelo[1], self._fvelo[2],
+                    force[0], force[1], force[2],
+                    moment[0], moment[1], moment[2]]
+
+        self._csv(*args)
 
     _sdata_dtype = np.dtype([
         ('dx', 'f8', 3), ('velo', 'f8', 3), ('accel', 'f8', 3),
@@ -545,9 +612,6 @@ class NIRFPlugin(BaseSolverPlugin):
     ])
 
     def setup(self, sdata, serialiser):
-        if self._motion != 'free':
-            return
-
         if sdata is not None:
             ndims = self.ndims
             self._fdx = np.array(sdata['dx'])[:ndims].copy()
@@ -557,7 +621,8 @@ class NIRFPlugin(BaseSolverPlugin):
             self._fomega = np.array(sdata['omega'])
             self._falpha = np.array(sdata['alpha'])
             self.tode_last = float(sdata['tode_last'])
-            self._update_extern_values()
+            if self._motion == 'free':
+                self._update_extern_values()
 
         serialiser.register(self.get_serialiser_prefix(),
                             self._serialise_data)
