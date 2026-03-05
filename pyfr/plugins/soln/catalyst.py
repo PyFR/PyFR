@@ -74,7 +74,7 @@
 # ===============
 # VTK (as of 6.1.0-RC1) has unguarded MPI_Comm_free calls that fire
 # after MPI_Finalize, causing an abort at shutdown.  Two source patches
-# are required:
+# are required to remove miss-timed MPI_Finalize error messages:
 #
 # 1. VTK/Parallel/MPI/vtkMPICommunicator.cxx — destructor (~line 646):
 #
@@ -198,19 +198,14 @@ class _CatalystProcessor:
         sorder = cfg.getint('solver', 'order')
         divisor = cfg.getint(cfgsect, 'division', sorder)
 
-        script = cfg.getpath(cfgsect, 'script', abs=True)
-
-        # Load Conduit and Catalyst
         self.conduit = _load_conduit()
         self.lib = CatalystWrappers()
 
-        # Field naming: visvars gives the same names/structure as VTK output
         self._elementscls = system.elementscls
         self._pnames = system.elementscls.privars(system.ndims, cfg)
         self._vvars = system.elementscls.visvars(system.ndims, cfg)
         self._scfg = cfg
 
-        # Execute node: topology/coordinates built once; fields updated per step
         self.exec_n = ConduitNode(self.conduit)
         self.exec_n['catalyst/channels/mesh/type'] = 'multimesh'
 
@@ -220,51 +215,43 @@ class _CatalystProcessor:
         self._ele_regions = []
         self._coord_bufs = []
         for i, (etype, eidxs) in enumerate(rdata.items()):
-            self._build_blueprint(intg, doff + i, etype, eidxs, divisor)
+            self._build_blueprint(intg, doff + i, etype, eidxs,
+                                  divisor)
 
-        # Initialize Catalyst with the coprocessing script and MPI communicator
         init_n = ConduitNode(self.conduit)
-        init_n['catalyst/scripts/script0/filename'] = script
+        init_n['catalyst/scripts/script0/filename'] = str(
+            cfg.getpath(cfgsect, 'script', abs=True))
         init_n['catalyst/mpi_comm'] = comm.py2f()
-
         init_n['catalyst_load/implementation'] = 'paraview'
-
         self.lib.catalyst_initialize(init_n)
 
     def finalise(self):
         if lib := getattr(self, 'lib', None):
             self.lib = None
-            fin_n = ConduitNode(self.conduit)
-            # See "VTK MPI Patches" in the header for required source patches.
-            lib.catalyst_finalize(fin_n)
+            lib.catalyst_finalize(ConduitNode(self.conduit))
 
     def __del__(self):
         self.finalise()
 
     def _build_blueprint(self, intg, domid, etype, rgn, divisor):
         exec_n = self.exec_n
-        d_str = f'domain_{domid}'
-        pfx = f'catalyst/channels/mesh/data/{d_str}'
+        pfx = f'catalyst/channels/mesh/data/domain_{domid}'
         e_str = f'{pfx}/topologies/mesh/elements'
-
-        cfg = intg.cfg
         system = intg.system
-        ndims = system.ndims
 
-        # Solution operator and physical vertex positions
         eles = system.ele_map[etype]
         shapecls = subclass_where(BaseShape, name=etype)
-        shape = shapecls(eles.nspts, cfg)
+        shape = shapecls(eles.nspts, intg.cfg)
 
         svpts = shape.std_ele(divisor)
         soln_op = shape.ubasis.nodal_basis_at(svpts).astype(
             system.backend.fpdtype)
-        xd = eles.ploc_at_np(svpts)  # (nsvpts, ndims, neles)
+        xd = eles.ploc_at_np(svpts)
 
-        eidx = system.ele_types.index(etype)
-        self._ele_regions.append((pfx, eidx, rgn, soln_op))
+        self._ele_regions.append(
+            (pfx, system.ele_types.index(etype), rgn, soln_op))
 
-        xd = xd[..., rgn].transpose(1, 2, 0)  # (ndims, neles_rgn, nsvpts)
+        xd = xd[..., rgn].transpose(1, 2, 0)
         ndims_d, neles, nsvpts = xd.shape
 
         exec_n[f'{pfx}/state/domain_id'] = domid
@@ -302,7 +289,6 @@ class _CatalystProcessor:
         else:
             exec_n[f'{e_str}/shape'] = self.bp_emap[etype]
 
-        # Initialize field metadata (values filled per execute call)
         for vname in self._vvars:
             fname = vname.title()
             exec_n[f'{pfx}/fields/{fname}/association'] = 'vertex'
@@ -319,35 +305,33 @@ class _CatalystProcessor:
         exec_n['catalyst/state/timestep'] = intg.nacptsteps
         exec_n['catalyst/state/time'] = float(intg.tcurr)
 
+        # Keep AoS field arrays alive across all element types until
+        # after catalyst_execute (set_aos uses external pointers)
+        field_bufs = []
+
         for pfx, eidx, rgn, soln_op in self._ele_regions:
             exec_n[f'{pfx}/state/time'] = intg.tcurr
             exec_n[f'{pfx}/state/cycle'] = intg.nacptsteps
 
-            # Subset solution, interpolate to subdivided points
-            csolns = soln[eidx][..., rgn].swapaxes(0, 1)  # (nspts, nvars, neles_rgn)
-            csolns = soln_op @ csolns                       # (nsvpts, nvars, neles_rgn)
+            csolns = soln[eidx][..., rgn].swapaxes(0, 1)
+            csolns = soln_op @ csolns
 
-            # Convert conservative → primitive variables
             psolns = elementscls.con_to_pri(csolns, self._scfg)
             psolns_d = dict(zip(self._pnames, psolns))
 
-            field_bufs = []
             for vname, vcomps in self._vvars.items():
                 fname = vname.title()
+                fpath = f'{pfx}/fields/{fname}/values'
                 if len(vcomps) == 1:
-                    exec_n[f'{pfx}/fields/{fname}/values'] = psolns_d[vcomps[0]].T
+                    exec_n[fpath] = psolns_d[vcomps[0]].T
                 else:
                     vbuf = np.ascontiguousarray(
-                        np.stack([psolns_d[c].T for c in vcomps], axis=-1)
-                        .reshape(-1, len(vcomps)))
+                        np.stack([psolns_d[c].T for c in vcomps],
+                                 axis=-1).reshape(-1, len(vcomps)))
                     field_bufs.append(vbuf)
-                    exec_n.set_aos(f'{pfx}/fields/{fname}/values', 'xyz', vbuf)
+                    exec_n.set_aos(fpath, 'xyz', vbuf)
 
         self.lib.catalyst_execute(exec_n)
-
-        # catalyst_execute should be collectively synchronising, but barrier
-        # here matches Ascent's behaviour and guards against implementations
-        # that do not guarantee this
         comm.barrier()
 
 
