@@ -48,9 +48,10 @@
 #
 # Creating Pipeline Scripts
 # =========================
-# Scripts are generated from ParaView's GUI via
-# Catalyst > Define Exports > Export Catalyst Script.  The generated
-# script must be modified for in-situ use with PyFR:
+# Scripts are generated from ParaView's GUI via:
+# File > Save Catalyst Script
+#
+# The generated script must be modified for in-situ use with PyFR:
 #
 #   1. Replace the file reader with a TrivialProducer.  The
 #      registrationName must be 'mesh' to match the channel name
@@ -96,13 +97,15 @@
 #
 # Rebuild and reinstall ParaView after applying these patches.
 
+import ctypes
 from ctypes import RTLD_GLOBAL, c_int, c_void_p
 import os
+from pathlib import Path
 
 import numpy as np
 
 from pyfr.conduit import ConduitError, ConduitNode, ConduitWrappers
-from pyfr.ctypesutil import LibWrapper
+from pyfr.ctypesutil import LibWrapper, platform_libdirs, platform_libname
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.common import region_data
 from pyfr.plugins.soln.base import BaseSolnPlugin
@@ -114,12 +117,31 @@ from pyfr.writers.vtk.shapes import get_vtk_shape
 class CatalystError(Exception): pass
 
 
+def _load_catalyst_lib():
+    lpath = os.environ.get('PYFR_CATALYST_LIBRARY_PATH')
+    if lpath:
+        return ctypes.PyDLL(lpath, mode=RTLD_GLOBAL)
+
+    lname = platform_libname('catalyst')
+    for sd in platform_libdirs():
+        try:
+            return ctypes.PyDLL(str(Path(sd, lname).absolute()),
+                                mode=RTLD_GLOBAL)
+        except OSError:
+            pass
+
+    return ctypes.PyDLL(lname, mode=RTLD_GLOBAL)
+
+
 class CatalystConduitWrappers(LibWrapper):
     _libname = 'catalyst'
     _errtype = c_void_p
     _mode = RTLD_GLOBAL
     _functions = [(ret, f'catalyst_{fn}', *args)
                   for ret, fn, *args in ConduitWrappers._functions]
+
+    def _load_library(self):
+        return _load_catalyst_lib()
 
     def _transname(self, fname):
         return fname.removeprefix('catalyst_')
@@ -161,23 +183,7 @@ class CatalystWrappers(LibWrapper):
         return status
 
     def _load_library(self):
-        import ctypes
-        from pathlib import Path
-        from pyfr.ctypesutil import platform_libdirs, platform_libname
-
-        name = self._libname
-        lpath = os.environ.get(f'PYFR_{name.upper()}_LIBRARY_PATH')
-        if lpath:
-            return ctypes.PyDLL(lpath, mode=self._mode)
-
-        lname = platform_libname(name)
-        for sd in platform_libdirs():
-            try:
-                return ctypes.PyDLL(Path(sd, lname).absolute(), mode=self._mode)
-            except OSError:
-                pass
-
-        return ctypes.PyDLL(lname, mode=self._mode)
+        return _load_catalyst_lib()
 
 
 class _CatalystProcessor:
