@@ -157,7 +157,7 @@ class MassFlowBCMixin:
         else:
             self.csv = None
 
-    def setup(self, sdata):
+    def setup(self, sdata, prevcfg):
         if sdata is not None and sdata[4] != 0:
             (self.interp_c, self.interp_m, 
             self.mf_avg, self.tprev, self.nstep_counter) = sdata
