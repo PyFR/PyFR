@@ -6,7 +6,7 @@
 Post Processing
 ***************
 
-The following sections contain best pratices for post processing a
+The following sections contain best practices for post processing a
 simulation using ParaView.
 
 High-Order Export

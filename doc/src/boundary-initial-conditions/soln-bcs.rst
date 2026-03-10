@@ -278,7 +278,7 @@ Example::
 
 Simple periodic boundary conditions are supported; however, their
 behaviour is not controlled through the ``.ini`` file, instead it is
-handled at the mesh generation stage. Two faces may be taged with
+handled at the mesh generation stage. Two faces may be tagged with
 ``periodic_x_l`` and ``periodic_x_r``, where ``x`` is a unique
 identifier for the pair of boundaries. Currently, only periodicity in a
 single cardinal direction is supported, for example, the planes
