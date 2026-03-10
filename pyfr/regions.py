@@ -268,6 +268,28 @@ class SphereRegion(EllipsoidRegion):
         super().__init__(x0, r, r, r, **kwargs)
 
 
+class PlaneRegion(BaseGeometricRegion):
+    name = 'plane'
+
+    def __init__(self, x0, n, **kwargs):
+        super().__init__(**kwargs)
+
+        self.x0 = np.array(x0)
+        self.n = np.array(n, dtype=float)
+        self.n /= np.linalg.norm(self.n)
+
+    def _pts_in_region(self, pts):
+        dist = (pts - self.x0) @ self.n
+
+        # Shape points: detect straddle points
+        if dist.ndim == 2:
+            straddle = dist.min(axis=0) * dist.max(axis=0) <= 0
+            return np.broadcast_to(straddle, dist.shape).copy()
+
+        # Centroids: return false
+        return np.zeros(dist.shape, dtype=bool)
+
+
 class STLRegion(BaseGeometricRegion):
     name = 'stl'
 
