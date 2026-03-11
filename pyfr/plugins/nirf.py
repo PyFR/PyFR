@@ -407,6 +407,8 @@ class NIRFPlugin(BaseSolverPlugin):
         dof_str = self.cfg.get(cfgsect, 'dof', None)
         if dof_str is None:
             self._free_dof = all_dof
+        elif dof_str.strip().lower() in ('', 'none'):
+            self._free_dof = set()
         else:
             self._free_dof = {s.strip() for s in dof_str.split(',')}
             invalid = self._free_dof - all_dof
