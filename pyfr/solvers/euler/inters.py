@@ -253,9 +253,6 @@ class NIRFBCMixin:
 
     Transforms inertial-frame velocities to body-frame:
         u_body = R(-θ) · (u_inertial - V₀) - Ω×r_body
-
-    For prescribed mode (no rotation, θ=0), R=I and this simplifies to:
-        u_body = u_inertial - V₀ - Ω×r
     """
     nirf_section = 'solver-plugin-nirf'
 
@@ -312,14 +309,11 @@ class NIRFBCMixin:
         u_rel = [f'({ui}) - ({vi})' for ui, vi in zip(u_inertial, fvelo)]
 
         # Step 2: rotate to body frame using R(-θ) matrix
-        if motion == 'free':
-            u_body = [
-                ' + '.join(f'({u_rel[j]})*nirf_R[{i}][{j}]'
-                           for j in range(self.ndims))
-                for i in range(self.ndims)
-            ]
-        else:
-            u_body = u_rel
+        u_body = [
+            ' + '.join(f'({u_rel[j]})*nirf_R[{i}][{j}]'
+                       for j in range(self.ndims))
+            for i in range(self.ndims)
+        ]
 
         # Step 3: subtract Ω×r (body coords)
         # Position relative to frame origin
