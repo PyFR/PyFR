@@ -229,14 +229,26 @@ class NIRFPlugin(BaseSolverPlugin):
         def ev(exprs, t):
             return np.array([_eval_expr(e, t) for e in exprs])
 
-        def richardson(exprs, t, h=1e-3):
-            fp = ev(exprs, t + h)
-            fm = ev(exprs, t - h)
-            fph = ev(exprs, t + h / 2)
-            fmh = ev(exprs, t - h / 2)
+        def _rich(f, t, h):
+            fp = f(t + h)
+            fm = f(t - h)
+            fph = f(t + h / 2)
+            fmh = f(t - h / 2)
             d1 = (fp - fm) / (2 * h)
             d2 = (fph - fmh) / h
             return (4 * d2 - d1) / 3
+
+        def converged_fd(f, t):
+            h = 1e-4
+            prev = _rich(f, t, h)
+            for _ in range(20):
+                h /= 2
+                curr = _rich(f, t, h)
+                scale = max(np.max(np.abs(curr)), 1.0)
+                if np.max(np.abs(curr - prev)) / scale < 1e-8:
+                    return curr
+                prev = curr
+            return curr
 
         def check(dname, fname, fd, given):
             denom = max(np.max(np.abs(given)),
@@ -270,10 +282,12 @@ class NIRFPlugin(BaseSolverPlugin):
         t = 1.0
 
         # loc -> velo -> accel
+        fd_velo = converged_fd(lambda s: ev(loc, s), t)
         check('frame-velo', 'frame-loc',
-              richardson(loc, t), ev(velo, t))
+              fd_velo, ev(velo, t))
+        fd_accel = converged_fd(lambda s: ev(velo, s), t)
         check('frame-accel', 'frame-velo',
-              richardson(velo, t), ev(accel, t))
+              fd_accel, ev(accel, t))
 
         # rot -> omega via quaternion kinematics
         def quat_at(t):
@@ -282,15 +296,7 @@ class NIRFPlugin(BaseSolverPlugin):
                 return _euler_to_quat(phi, 0, 0)
             return _euler_to_quat(*ev(rot, t)[::-1])
 
-        h = 1e-3
-        qp = quat_at(t + h)
-        qm = quat_at(t - h)
-        qph = quat_at(t + h / 2)
-        qmh = quat_at(t - h / 2)
-        d1 = (qp - qm) / (2 * h)
-        d2 = (qph - qmh) / h
-        dqdt_fd = (4 * d2 - d1) / 3
-
+        dqdt_fd = converged_fd(quat_at, t)
         q0 = quat_at(t)
         w = ev(omega, t)
         dqdt_an = 0.5 * _quat_mult(q0, np.r_[0, w])
@@ -298,8 +304,9 @@ class NIRFPlugin(BaseSolverPlugin):
               dqdt_fd, dqdt_an)
 
         # omega -> alpha
+        fd_alpha = converged_fd(lambda s: ev(omega, s), t)
         check('frame-alpha', 'frame-omega',
-              richardson(omega, t), ev(alpha, t))
+              fd_alpha, ev(alpha, t))
 
     def _init_prescribed(self, cfgsect, subs):
         self._validate_prescribed_cfg(cfgsect, subs)
