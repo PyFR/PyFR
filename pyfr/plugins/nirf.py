@@ -118,6 +118,7 @@ def _to_extern(p):
     return p.replace('-', '_')
 
 
+# ZYX intrinsic: phi=Z, theta=Y, psi=X
 def _euler_to_quat(phi, theta, psi):
     cp, sp = np.cos(phi / 2), np.sin(phi / 2)
     ct, st = np.cos(theta / 2), np.sin(theta / 2)
@@ -279,7 +280,7 @@ class NIRFPlugin(BaseSolverPlugin):
             if self.ndims == 2:
                 phi = _eval_expr(rot[0], t)
                 return _euler_to_quat(phi, 0, 0)
-            return _euler_to_quat(*ev(rot, t))
+            return _euler_to_quat(*ev(rot, t)[::-1])
 
         h = 1e-3
         qp = quat_at(t + h)
@@ -337,7 +338,7 @@ class NIRFPlugin(BaseSolverPlugin):
             if self.ndims == 2:
                 return _euler_to_quat(float(rot), 0, 0)
             else:
-                return _euler_to_quat(*rot)
+                return _euler_to_quat(*rot[::-1])
         elif has_quat:
             q = np.array(self.cfg.getliteral(cfgsect, 'frame-rot0-quat'),
                          dtype=float)
@@ -606,7 +607,7 @@ class NIRFPlugin(BaseSolverPlugin):
         if self.ndims == 2:
             self._fquat = _euler_to_quat(_eval_expr(self._rot_exprs[0], t), 0, 0)
         else:
-            self._fquat = _euler_to_quat(*[_eval_expr(e, t) for e in self._rot_exprs])
+            self._fquat = _euler_to_quat(*[_eval_expr(e, t) for e in self._rot_exprs[::-1]])
         self.tode_last = t
 
     def _call_prescribed(self, intg):
