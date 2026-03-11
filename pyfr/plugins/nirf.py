@@ -8,7 +8,7 @@ modes are available:
   free       — frame motion is computed by integrating the rigid-body ODE
                driven by aerodynamic forces on a designated boundary.
 
-Both modes serialise kinematic state (displacement, velocity, orientation,
+Both modes serialise kinematic state (location, velocity, orientation,
 angular velocity) on checkpoint, so a prescribed run can be restarted in free
 mode without any loss of continuity.
 
@@ -19,29 +19,20 @@ Common options (both modes)
   center-of-rot    tuple  Centre of rotation / pivot point, length-ndims float
                           tuple, e.g. (0.0, 0.5).  Default: (0,)*ndims.
 
-  Initial conditions (fresh start only; overridden by serialised state on
-  restart):
-  frame-rot0-euler float  2-D: initial rotation angle in radians.
-                   tuple  3-D: (phi, theta, psi) ZYX Euler angles in radians.
-                          Mutually exclusive with frame-rot0-quat.
-  frame-rot0-quat  tuple  Initial orientation as (w, x, y, z) quaternion.
-                          Automatically normalised.
-                          Mutually exclusive with frame-rot0-euler.
-  frame-dx0        tuple  Initial frame displacement (m).  Default: (0,)*ndims.
-
 Prescribed-mode options
-  All motion parameters can be expressions of t.
-  Derivative expressions (alpha, accel) must be consistent with their integrals
-  (omega, velo) — verified by finite-difference check at initialisation. For 2D
-  rotation, all rotation is in [z].
+  All motion parameters can be expressions of t.  The user must provide the
+  complete kinematic stack: loc → velo → accel for translation, and
+  rot → omega → alpha for rotation.
 
-  frame-omega-{x,y,z}      expr  Angular velocity (rad/s).  Default: 0.0.
-  frame-alpha-{x,y,z}      expr  Angular acceleration (rad/s²).  Default: 0.0.
-                                  Required when frame-omega-* is non-constant.
+  frame-loc-{x,y[,z]}      expr  Frame position (m).  Default: 0.0.
   frame-velo-{x,y[,z]}     expr  Translational velocity (m/s).  Default: 0.0.
   frame-accel-{x,y[,z]}    expr  Translational acceleration (m/s²).
-                                  Default: 0.0.  Required when frame-velo-* is
-                                  non-constant.
+                                  Default: 0.0.
+  frame-rot-z               expr  2-D: rotation angle about z (rad).
+                                  Default: 0.0.
+  frame-rot-{x,y,z}        expr  3-D: ZYX Euler angles (rad).  Default: 0.0.
+  frame-omega-{x,y,z}      expr  Angular velocity (rad/s).  Default: 0.0.
+  frame-alpha-{x,y,z}      expr  Angular acceleration (rad/s²).  Default: 0.0.
 
 Free-mode options
   mass             float  Body mass.  Required.
@@ -55,11 +46,18 @@ Free-mode options
                           3-D: any subset of {x, y, z, rx, ry, rz}.
                           Default: all DOF for the current dimensionality.
 
-  Additional initial conditions (fresh start only):
+  Initial conditions:
+  frame-loc0       tuple  Initial frame position (m).  Default: (0,)*ndims.
   frame-velo0      tuple  Initial translational velocity (m/s).
                           Default: (0,)*ndims.
   frame-accel0     tuple  Initial translational acceleration (m/s²).
                           Default: (0,)*ndims.
+  frame-rot0-euler float  2-D: initial rotation angle in radians.
+                   tuple  3-D: (phi, theta, psi) ZYX Euler angles in radians.
+                          Mutually exclusive with frame-rot0-quat.
+  frame-rot0-quat  tuple  Initial orientation as (w, x, y, z) quaternion.
+                          Automatically normalised.
+                          Mutually exclusive with frame-rot0-euler.
   frame-omega0     float  2-D: initial angular velocity (rad/s) about z.
                    tuple  3-D: (wx, wy, wz).  Default: 0.0 / (0, 0, 0).
   frame-alpha0     float  2-D: initial angular acceleration (rad/s²) about z.
@@ -84,7 +82,9 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 # TODO: add support for multiple boundary names
 
 # Python-side math namespace for evaluating getexpr strings
-_PYMATH = {name: getattr(math, name) for name in dir(math) if not name.startswith('_')}
+_PYMATH = {name: getattr(math, name)
+           for name in dir(math)
+           if not name.startswith('_')}
 
 
 def _eval_expr(expr, t):
@@ -101,6 +101,7 @@ def nirf_src_params(ndims):
 def nirf_bc_params(ndims):
     comps = 'xyz'[:ndims]
     return ([f'frame-omega-{c}' for c in 'xyz'] +
+            [f'frame-loc-{c}' for c in comps] +
             [f'frame-velo-{c}' for c in comps])
 
 
@@ -122,10 +123,8 @@ def _euler_to_quat(phi, theta, psi):
     ct, st = np.cos(theta / 2), np.sin(theta / 2)
     cs, ss = np.cos(psi / 2), np.sin(psi / 2)
 
-    return np.array([cp*ct*cs + sp*st*ss,
-                     cp*ct*ss - sp*st*cs,
-                     cp*st*cs + sp*ct*ss,
-                     sp*ct*cs - cp*st*ss])
+    return np.array([cp*ct*cs + sp*st*ss, cp*ct*ss - sp*st*cs,
+                     cp*st*cs + sp*ct*ss, sp*ct*cs - cp*st*ss])
 
 
 def _quat_to_euler(q):
@@ -223,51 +222,107 @@ class NIRFPlugin(BaseSolverPlugin):
                                self._tplargs, ploc=True, soln=True)
 
     def _validate_prescribed_cfg(self, cfgsect, subs):
-        eps = 1e-7
-        t_ref = 1.0
+        comps = 'xyz'[:self.ndims]
+        ge = self.cfg.getexpr
 
-        pairs = [(f'frame-omega-{c}', f'frame-alpha-{c}') for c in 'xyz']
-        pairs += [(f'frame-velo-{c}', f'frame-accel-{c}')
-                  for c in 'xyz'[:self.ndims]]
+        def ev(exprs, t):
+            return np.array([_eval_expr(e, t) for e in exprs])
 
-        for val_key, deriv_key in pairs:
-            val_expr = self.cfg.getexpr(cfgsect, val_key, '0.0', subs=subs)
-            deriv_expr = self.cfg.getexpr(cfgsect, deriv_key, '0.0', subs=subs)
+        def richardson(exprs, t, h=1e-3):
+            fp = ev(exprs, t + h)
+            fm = ev(exprs, t - h)
+            fph = ev(exprs, t + h / 2)
+            fmh = ev(exprs, t - h / 2)
+            d1 = (fp - fm) / (2 * h)
+            d2 = (fph - fmh) / h
+            return (4 * d2 - d1) / 3
 
-            fd = (_eval_expr(val_expr, t_ref + eps)
-                  - _eval_expr(val_expr, t_ref)) / eps
-            provided = _eval_expr(deriv_expr, t_ref)
-
-            if not np.isclose(fd, provided, rtol=1e-3, atol=1e-6):
+        def check(dname, fname, fd, given):
+            denom = max(np.max(np.abs(given)),
+                        np.max(np.abs(fd)), 1.0)
+            err = np.max(np.abs(fd - given)) / denom
+            if err > 1e-6:
                 raise ValueError(
-                    f'{deriv_key} ({provided:.6g}) does not match '
-                    f'd/dt({val_key}) ({fd:.6g})'
+                    f'{dname} is not the derivative '
+                    f'of {fname}; numerical={fd}, '
+                    f'specified={given}'
                 )
+
+        s = subs
+        loc = [ge(cfgsect, f'frame-loc-{c}', '0.0', subs=s)
+               for c in comps]
+        velo = [ge(cfgsect, f'frame-velo-{c}', '0.0', subs=s)
+                for c in comps]
+        accel = [ge(cfgsect, f'frame-accel-{c}', '0.0', subs=s)
+                 for c in comps]
+        omega = [ge(cfgsect, f'frame-omega-{c}', '0.0', subs=s)
+                 for c in 'xyz']
+        alpha = [ge(cfgsect, f'frame-alpha-{c}', '0.0', subs=s)
+                 for c in 'xyz']
+
+        if self.ndims == 2:
+            rot = [ge(cfgsect, 'frame-rot-z', '0.0', subs=s)]
+        else:
+            rot = [ge(cfgsect, f'frame-rot-{c}', '0.0', subs=s)
+                   for c in 'xyz']
+
+        t = 1.0
+
+        # loc -> velo -> accel
+        check('frame-velo', 'frame-loc',
+              richardson(loc, t), ev(velo, t))
+        check('frame-accel', 'frame-velo',
+              richardson(velo, t), ev(accel, t))
+
+        # rot -> omega via quaternion kinematics
+        def quat_at(t):
+            if self.ndims == 2:
+                phi = _eval_expr(rot[0], t)
+                return _euler_to_quat(phi, 0, 0)
+            return _euler_to_quat(*ev(rot, t))
+
+        h = 1e-3
+        qp = quat_at(t + h)
+        qm = quat_at(t - h)
+        qph = quat_at(t + h / 2)
+        qmh = quat_at(t - h / 2)
+        d1 = (qp - qm) / (2 * h)
+        d2 = (qph - qmh) / h
+        dqdt_fd = (4 * d2 - d1) / 3
+
+        q0 = quat_at(t)
+        w = ev(omega, t)
+        dqdt_an = 0.5 * _quat_mult(q0, np.r_[0, w])
+        check('frame-omega', 'frame-rot',
+              dqdt_fd, dqdt_an)
+
+        # omega -> alpha
+        check('frame-alpha', 'frame-omega',
+              richardson(omega, t), ev(alpha, t))
 
     def _init_prescribed(self, cfgsect, subs):
         self._validate_prescribed_cfg(cfgsect, subs)
 
         comps = 'xyz'[:self.ndims]
+
+        # Source term params (omega, alpha, accel)
         params = nirf_src_params(self.ndims)
         self._tplargs = {_to_tplkey(p): self.cfg.getexpr(cfgsect, p, '0.0', subs=subs)
                          for p in params}
         self._tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
 
+        # Prescribed expressions for direct evaluation
+        self._loc_exprs = [self.cfg.getexpr(cfgsect, f'frame-loc-{c}', '0.0', subs=subs)
+                           for c in comps]
         self._velo_exprs = [self.cfg.getexpr(cfgsect, f'frame-velo-{c}', '0.0', subs=subs)
                             for c in comps]
+        if self.ndims == 2:
+            self._rot_exprs = [self.cfg.getexpr(cfgsect, 'frame-rot-z', '0.0', subs=subs)]
+        else:
+            self._rot_exprs = [self.cfg.getexpr(cfgsect, f'frame-rot-{c}', '0.0', subs=subs)
+                               for c in 'xyz']
 
-        t0 = self._intg.tcurr
-        self._fquat = self._parse_rot0(cfgsect)
-        zeros_nd = (0.,) * self.ndims
-        self._fdx = np.array(self.cfg.getliteral(cfgsect, 'frame-dx0', zeros_nd), dtype=float)
-        self._fomega = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-omega-{c}')], t0)
-                                 for c in 'xyz'])
-        self._fvelo = np.array([_eval_expr(e, t0) for e in self._velo_exprs])
-        self._falpha = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-alpha-{c}')], t0)
-                                 for c in 'xyz'])
-        self._faccel = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-accel-{c}')], t0)
-                                 for c in comps])
-        self.tode_last = t0
+        self._eval_prescribed(self._intg.tcurr)
 
     def _parse_rot0(self, cfgsect):
         has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
@@ -346,7 +401,7 @@ class NIRFPlugin(BaseSolverPlugin):
 
         zeros_nd = (0.,) * self.ndims
 
-        self._fdx = np.array(self.cfg.getliteral(cfgsect, 'frame-dx0', zeros_nd), dtype=float)
+        self._floc = np.array(self.cfg.getliteral(cfgsect, 'frame-loc0', zeros_nd), dtype=float)
         self._fvelo = np.array(self.cfg.getliteral(cfgsect, 'frame-velo0', zeros_nd), dtype=float)
         self._faccel = np.array(self.cfg.getliteral(cfgsect, 'frame-accel0', zeros_nd), dtype=float)
         self._fquat = self._parse_rot0(cfgsect)
@@ -396,14 +451,16 @@ class NIRFPlugin(BaseSolverPlugin):
 
         if rank == root and self.cfg.hasopt(cfgsect, 'file'):
             if self.ndims == 2:
-                header = ('t,phi,omega,omega_dot,dx,dy,'
-                          'accel_x,accel_y,velo_x,velo_y,fx,fy,mz')
+                header = ('t,phi,omega,omega_dot,loc_x,loc_y,'
+                          'velo_x,velo_y,accel_x,accel_y,fx,fy,mz')
             else:
                 header = ('t,phi,theta,psi,'
                           'omega_x,omega_y,omega_z,'
                           'omega_dot_x,omega_dot_y,omega_dot_z,'
-                          'dx,dy,dz,accel_x,accel_y,accel_z,'
-                          'velo_x,velo_y,velo_z,fx,fy,fz,mx,my,mz')
+                          'loc_x,loc_y,loc_z,'
+                          'velo_x,velo_y,velo_z,'
+                          'accel_x,accel_y,accel_z,'
+                          'fx,fy,fz,mx,my,mz')
             self._csv = init_csv(self.cfg, cfgsect, header)
         else:
             self._csv = None
@@ -417,8 +474,9 @@ class NIRFPlugin(BaseSolverPlugin):
             ev[f'frame_alpha_{c}'] = self._falpha[i]
 
         for i, c in enumerate(comps):
-            ev[f'frame_accel_{c}'] = self._faccel[i]
+            ev[f'frame_loc_{c}'] = self._floc[i]
             ev[f'frame_velo_{c}'] = self._fvelo[i]
+            ev[f'frame_accel_{c}'] = self._faccel[i]
 
         # R(-θ) = R(θ)^T for inertial-to-body transform
         R = _quat_to_rotmat(self._fquat)
@@ -525,7 +583,7 @@ class NIRFPlugin(BaseSolverPlugin):
         self._fquat += dt*dqdt
         self._fquat /= np.linalg.norm(self._fquat)
 
-        self._fdx += 0.5*dt*(self._fvelo + fvelo_new)
+        self._floc += 0.5*dt*(self._fvelo + fvelo_new)
 
         self._fomega = fomega_new
         self._falpha = falpha_new
@@ -535,30 +593,24 @@ class NIRFPlugin(BaseSolverPlugin):
     def __call__(self, intg):
         self._call(intg)
 
-    def _call_prescribed(self, intg):
-        t = intg.tcurr
-        dt = t - self.tode_last
-
-        fomega_new = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-omega-{c}')], t)
-                               for c in 'xyz'])
-        fvelo_new = np.array([_eval_expr(e, t) for e in self._velo_exprs])
-
-        # Heun's: advance orientation (quaternion kinematics) and displacement
-        omega_avg = 0.5*(self._fomega + fomega_new)
-        dqdt = 0.5*_quat_mult(self._fquat, np.array([0, *omega_avg]))
-        self._fquat = self._fquat + dt*dqdt
-        self._fquat /= np.linalg.norm(self._fquat)
-
-        self._fdx += 0.5*dt*(self._fvelo + fvelo_new)
-
-        self._fomega = fomega_new
-        self._fvelo = fvelo_new
+    def _eval_prescribed(self, t):
+        comps = 'xyz'[:self.ndims]
+        self._floc = np.array([_eval_expr(e, t) for e in self._loc_exprs])
+        self._fvelo = np.array([_eval_expr(e, t) for e in self._velo_exprs])
+        self._faccel = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-accel-{c}')], t)
+                                 for c in comps])
+        self._fomega = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-omega-{c}')], t)
+                                 for c in 'xyz'])
         self._falpha = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-alpha-{c}')], t)
                                  for c in 'xyz'])
-        self._faccel = np.array([_eval_expr(self._tplargs[_to_tplkey(f'frame-accel-{c}')], t)
-                                 for c in 'xyz'[:self.ndims]])
-
+        if self.ndims == 2:
+            self._fquat = _euler_to_quat(_eval_expr(self._rot_exprs[0], t), 0, 0)
+        else:
+            self._fquat = _euler_to_quat(*[_eval_expr(e, t) for e in self._rot_exprs])
         self.tode_last = t
+
+    def _call_prescribed(self, intg):
+        self._eval_prescribed(intg.tcurr)
 
     def _call_free(self, intg):
         if self.dt_ode is not None:
@@ -589,24 +641,24 @@ class NIRFPlugin(BaseSolverPlugin):
         if self.ndims == 2:
             args = [intg.tcurr, phi,
                     self._fomega[2], self._falpha[2],
-                    self._fdx[0], self._fdx[1],
-                    self._faccel[0], self._faccel[1],
+                    self._floc[0], self._floc[1],
                     self._fvelo[0], self._fvelo[1],
+                    self._faccel[0], self._faccel[1],
                     force[0], force[1], moment[0]]
         else:
             args = [intg.tcurr, phi, theta, psi,
                     self._fomega[0], self._fomega[1], self._fomega[2],
                     self._falpha[0], self._falpha[1], self._falpha[2],
-                    self._fdx[0], self._fdx[1], self._fdx[2],
-                    self._faccel[0], self._faccel[1], self._faccel[2],
+                    self._floc[0], self._floc[1], self._floc[2],
                     self._fvelo[0], self._fvelo[1], self._fvelo[2],
+                    self._faccel[0], self._faccel[1], self._faccel[2],
                     force[0], force[1], force[2],
                     moment[0], moment[1], moment[2]]
 
         self._csv(*args)
 
     _sdata_dtype = np.dtype([
-        ('dx', 'f8', 3), ('velo', 'f8', 3), ('accel', 'f8', 3),
+        ('loc', 'f8', 3), ('velo', 'f8', 3), ('accel', 'f8', 3),
         ('quat', 'f8', 4), ('omega', 'f8', 3), ('alpha', 'f8', 3),
         ('tode_last', 'f8')
     ])
@@ -614,7 +666,7 @@ class NIRFPlugin(BaseSolverPlugin):
     def setup(self, sdata, serialiser):
         if sdata is not None:
             ndims = self.ndims
-            self._fdx = np.array(sdata['dx'])[:ndims].copy()
+            self._floc = np.array(sdata['loc'])[:ndims].copy()
             self._fvelo = np.array(sdata['velo'])[:ndims].copy()
             self._faccel = np.array(sdata['accel'])[:ndims].copy()
             self._fquat = np.array(sdata['quat'])
@@ -630,7 +682,7 @@ class NIRFPlugin(BaseSolverPlugin):
     def _serialise_data(self):
         pad = 3 - self.ndims
         return np.void((
-            np.pad(self._fdx, (0, pad)),
+            np.pad(self._floc, (0, pad)),
             np.pad(self._fvelo, (0, pad)),
             np.pad(self._faccel, (0, pad)),
             self._fquat, self._fomega, self._falpha,

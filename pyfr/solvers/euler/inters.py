@@ -297,8 +297,15 @@ class NIRFBCMixin:
             return self.cfg.getexpr(sect, name, '0.0', subs=subs)
 
         fomega = [get_param(f'frame-omega-{c}') for c in 'xyz']
+        floc = [get_param(f'frame-loc-{c}') for c in 'xyz'[:self.ndims]]
         fvelo = [get_param(f'frame-velo-{c}') for c in 'xyz'[:self.ndims]]
         fx0 = self.cfg.getliteral(sect, 'center-of-rot', (0.0,) * self.ndims)
+
+        # Transform position: x means body-frame coordinate (ploc - floc)
+        for k in exprs:
+            for i in range(self.ndims):
+                exprs[k] = exprs[k].replace(
+                    f'ploc[{i}]', f'(ploc[{i}] - ({floc[i]}))')
 
         # Step 1: inertial freestream minus frame translation
         u_inertial = [exprs.get(c) for c in 'uvw'[:self.ndims]]
