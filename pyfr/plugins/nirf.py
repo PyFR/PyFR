@@ -215,7 +215,13 @@ class NIRFPlugin(BaseSolverPlugin):
             self._init_free(intg, cfgsect)
             self._call = self._call_free
         else:
-            raise ValueError(f"Invalid NIRF motion type: {self._motion}")
+            raise ValueError(
+                f"Invalid NIRF motion type: {self._motion}"
+            )
+
+        # Transform ICs from lab frame to body frame (fresh start)
+        if not intg.isrestart:
+            self._transform_ics(intg, cfgsect)
 
         macro = f'nirf_source_{self.ndims}d'
         for eles in intg.system.ele_map.values():
@@ -308,6 +314,43 @@ class NIRFPlugin(BaseSolverPlugin):
         check('frame-alpha', 'frame-omega',
               fd_alpha, ev(alpha, t))
 
+    def _transform_ics(self, intg, cfgsect):
+        ndims = self.ndims
+        cor = np.array(self.cfg.getliteral(
+            cfgsect, 'center-of-rot', (0.,) * ndims
+        ))
+
+        Rt = _quat_to_rotmat(self._fquat).T
+        omega = self._fomega
+        velo = self._fvelo
+
+        solns = intg.system.ele_scal_upts(0)
+        for s, ploc in zip(solns, intg.system.ele_ploc_upts):
+            rho = s[:, 0, :]
+            u_lab = s[:, 1:1 + ndims, :] / rho[:, None, :]
+
+            # Pad to 3D for cross product and rotation
+            nupts, neles = ploc.shape[0], ploc.shape[-1]
+            r3 = np.zeros((nupts, 3, neles))
+            r3[:, :ndims, :] = ploc - cor[None, :, None]
+
+            u3 = np.zeros_like(r3)
+            u3[:, :ndims, :] = u_lab - velo[None, :, None]
+
+            # u_body = R^T*(u_lab - V_frame) - Ω×r
+            ub = np.einsum('ij,ajk->aik', Rt, u3)
+            ub -= np.cross(omega, r3.transpose(0, 2, 1)).transpose(0, 2, 1)
+
+            # Update momentum and correct energy for KE change
+            ke_old = 0.5 * rho * np.sum(u_lab**2, axis=1)
+            ke_new = 0.5 * rho * np.sum(ub[:, :ndims, :]**2, axis=1)
+            s[:, 1:1 + ndims, :] = rho[:, None, :] * ub[:, :ndims, :]
+            s[:, -1, :] += ke_new - ke_old
+
+        # Write transformed solution back to backend
+        for eb, s in zip(intg.system.ele_banks, solns):
+            eb[0].set(s)
+
     def _init_prescribed(self, cfgsect, subs):
         self._validate_prescribed_cfg(cfgsect, subs)
 
@@ -331,6 +374,7 @@ class NIRFPlugin(BaseSolverPlugin):
                                for c in 'xyz']
 
         self._eval_prescribed(self._intg.tcurr)
+        self._init_nirf_R()
 
     def _parse_rot0(self, cfgsect):
         has_euler = self.cfg.hasopt(cfgsect, 'frame-rot0-euler')
@@ -443,14 +487,7 @@ class NIRFPlugin(BaseSolverPlugin):
         self._tplargs = {_to_tplkey(p): _to_extern(p) for p in params}
         self._tplargs |= nirf_origin_tplargs(self.cfg, cfgsect, self.ndims)
 
-        # Create a broadcast matrix for R(-θ) and inject into NIRF BC inters
-        self._nirf_R = intg.backend.matrix((3, 3), initval=np.eye(3))
-        for bc in intg.system._bc_inters:
-            # HACK: Need better identifier
-            if any(c.__name__ == 'NIRFBCMixin' for c in type(bc).__mro__):
-                bc.set_external('nirf_R', 'in broadcast fpdtype_t[3][3]',
-                                value=self._nirf_R)
-
+        self._init_nirf_R()
         self._register_externs(intg, [_to_extern(p) for p in params])
 
         _, rank, root = get_comm_rank_root()
@@ -486,7 +523,24 @@ class NIRFPlugin(BaseSolverPlugin):
             ev[f'frame_velo_{c}'] = self._fvelo[i]
             ev[f'frame_accel_{c}'] = self._faccel[i]
 
-        # R(-θ) = R(θ)^T for inertial-to-body transform
+        self._update_nirf_R()
+
+    def _init_nirf_R(self):
+        intg = self._intg
+        R0 = _quat_to_rotmat(self._fquat).T
+        self._nirf_R = intg.backend.matrix(
+            (3, 3), initval=R0
+        )
+        for bc in intg.system._bc_inters:
+            if any(c.__name__ == 'NIRFBCMixin'
+                   for c in type(bc).__mro__):
+                bc.set_external(
+                    'nirf_R',
+                    'in broadcast fpdtype_t[3][3]',
+                    value=self._nirf_R
+                )
+
+    def _update_nirf_R(self):
         R = _quat_to_rotmat(self._fquat)
         self._nirf_R.set(R.T)
 
@@ -600,6 +654,7 @@ class NIRFPlugin(BaseSolverPlugin):
 
     def __call__(self, intg):
         self._call(intg)
+        self._update_nirf_R()
 
     def _eval_prescribed(self, t):
         comps = 'xyz'[:self.ndims]
