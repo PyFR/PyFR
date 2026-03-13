@@ -192,7 +192,7 @@ Ascent
 ^^^^^^
 
 To run the :ref:`soln-plugin-ascent` plugin, MPI, VTK-m, and Conduit are required.
-VTK-m is a supplimentary VTK library, and Conduit is a library that implements
+VTK-m is a supplementary VTK library, and Conduit is a library that implements
 the data classes used in Ascent. Detailed information on compilation and installation
 of `Conduit <https://llnl-conduit.readthedocs.io>`_ and `Ascent <https://ascent.readthedocs.io>`_ can
 be found in the respective documentation. Ascent must be version >=0.9.0.

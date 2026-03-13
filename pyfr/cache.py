@@ -99,9 +99,15 @@ class ObjectCache:
         return None
 
     def _prune_cache(self, maxsize):
-        files = {f: f.stat() for f in self.cachedir.iterdir() if f.is_file()}
-        csize = sum(fs.st_size for fs in files.values())
+        files = {}
+        for f in self.cachedir.iterdir():
+            try:
+                if f.is_file():
+                    files[f] = f.stat()
+            except FileNotFoundError:
+                pass
 
+        csize = sum(fs.st_size for fs in files.values())
         if csize > maxsize:
             for f, fs in sorted(files.items(), key=lambda f: f[1].st_atime):
                 f.unlink(missing_ok=True)

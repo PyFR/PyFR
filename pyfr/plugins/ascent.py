@@ -487,13 +487,13 @@ class _AscentRenderer:
 
             # Prepare any required gradients
             if self._gradpinfo:
-                grads = np.moveaxis(grad_soln[idx], 2, 0)[..., rgn]
+                cgrads = np.rollaxis(grad_soln[idx], 2)[..., rgn]
 
                 # Interpolate the gradients to the points
-                grad_soln = soln_op @ grad_soln
+                cgrads = soln_op @ cgrads
 
                 # Transform from conservative to primitive gradients
-                pgrads = elementscls.grad_con_to_pri(soln, grads, adapter.scfg)
+                pgrads = elementscls.grad_con_to_pri(csolns, cgrads, adapter.scfg)
 
                 # Add them to the substitutions dictionary
                 for pname, idx in self._gradpinfo:

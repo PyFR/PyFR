@@ -79,6 +79,7 @@ def get_comm_rank_root():
 
 def get_local_rank():
     envs = [
+        'MPI_LOCALRANKID',
         'MV2_COMM_WORLD_LOCAL_RANK',
         'OMPI_COMM_WORLD_LOCAL_RANK',
         'SLURM_LOCALID'

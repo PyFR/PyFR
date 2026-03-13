@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.integrators.base import BaseIntegrator, _common_plugin_prop
 from pyfr.integrators.base import BaseCommon
 
@@ -48,7 +50,7 @@ class BaseStdIntegrator(BaseCommon, BaseIntegrator):
 
     @_common_plugin_prop('_curr_dt_soln')
     def dt_soln(self):
-        soln = self.soln
+        soln = [np.require(s, requirements='O') for s in self.soln]
 
         self.system.rhs(self.tcurr, self._idxcurr, self._idxcurr)
         dt_soln = self.system.ele_scal_upts(self._idxcurr)
