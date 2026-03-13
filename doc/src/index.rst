@@ -4,7 +4,7 @@
 PyFR
 ####
 
-.. _website: http://www.pyfr.org/
+.. _website: https://www.pyfr.org/
 .. _forum: https://pyfr.discourse.group/
 
 PyFR |release| is an open-source flow solver that uses the high-order

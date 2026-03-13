@@ -187,7 +187,7 @@ Systems
 -------
 
 These sections setup and control the physical system being solved, as
-well as charateristics of the spatial and temporal schemes to be used.
+well as characteristics of the spatial and temporal schemes to be used.
 
 .. toctree::
    :maxdepth: 3

@@ -23,7 +23,7 @@ simulation on a structured mesh:
 
         cd PyFR-Test-Cases/2d-euler-vortex
 
-#. Run pyfr to convert the `Gmsh <http:http://geuz.org/gmsh/>`_
+#. Run pyfr to convert the `Gmsh <https://gmsh.info/>`_
    mesh file into a PyFR mesh file called ``euler-vortex.pyfrm``::
 
         pyfr import euler-vortex.msh euler-vortex.pyfrm
@@ -64,8 +64,8 @@ simulation on a structured mesh:
 
         cd PyFR-Test-Cases/2d-double-mach-reflection
 
-#. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file file and run pyfr to covert it into a PyFR mesh file
+#. Unzip the `Gmsh <https://gmsh.info/>`_
+   mesh file and run pyfr to convert it into a PyFR mesh file
    called ``double-mach-reflection.pyfrm``::
 
         unxz double-mach-reflection.msh.xz
@@ -107,7 +107,7 @@ simulation on a mixed unstructured mesh:
 
         cd PyFR-Test-Cases/2d-couette-flow
 
-#. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+#. Run pyfr to convert the `Gmsh <https://gmsh.info/>`_
    mesh file into a PyFR mesh file called ``couette-flow.pyfrm``::
 
         pyfr import couette-flow.msh couette-flow.pyfrm
@@ -145,7 +145,7 @@ flow simulation on a mixed unstructured mesh:
 
         cd PyFR-Test-Cases/2d-inc-cylinder
         
-#. Run pyfr to covert the `Gmsh <http:http://geuz.org/gmsh/>`_
+#. Run pyfr to convert the `Gmsh <https://gmsh.info/>`_
    mesh file into a PyFR mesh file called ``inc-cylinder.pyfrm``::
 
         pyfr import inc-cylinder.msh inc-cylinder.pyfrm
@@ -183,8 +183,8 @@ simulation on a structured mesh:
 
         cd PyFR-Test-Cases/2d-viscous-shock-tube
 
-#. Unzip the the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file and run pyfr to covert it into a PyFR mesh file
+#. Unzip the the `Gmsh <https://gmsh.info/>`_
+   mesh file and run pyfr to convert it into a PyFR mesh file
    called ``viscous-shock-tube.pyfrm``::
 
         unxz viscous-shock-tube.msh.xz
@@ -223,8 +223,8 @@ simulation with inflow turbulence:
 
         cd PyFR-Test-Cases/3d-triangular-aerofoil
 
-#. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file file and run pyfr to covert it into a PyFR mesh file called
+#. Unzip the `Gmsh <https://gmsh.info/>`_
+   mesh file and run pyfr to convert it into a PyFR mesh file called
    ``triangular-aerofoil.pyfrm``::
 
         unxz triangular-aerofoil.msh.xz
@@ -269,8 +269,8 @@ Proceed with the following steps to run a serial 3D Taylor-Green simulation:
 
         cd PyFR-Test-Cases/3d-taylor-green
 
-#. Unzip the `Gmsh <http:http://geuz.org/gmsh/>`_
-   mesh file file and run pyfr to covert it into a PyFR mesh file called
+#. Unzip the `Gmsh <https://gmsh.info/>`_
+   mesh file and run pyfr to convert it into a PyFR mesh file called
    ``taylor-green.pyfrm``::
 
         unxz taylor-green.msh.xz

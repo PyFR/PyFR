@@ -153,7 +153,7 @@ class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
             pris = np.reshape(pris, (self.nvars, -1))
 
             if str(self.bctype).startswith('no-slp'):
-                self._apply_wall_bc(pris)
+                self._enforce_noslip_bc(pris)
 
             p = pris[self._pidx] - self.fwh_int.qinf['p']
             u = pris[self._vidx] - self.uinf
