@@ -217,24 +217,39 @@ class RegionMixin:
     def __init__(self, intg, *args, **kwargs):
         super().__init__(intg, *args, **kwargs)
 
+        # If partition name given for the plugin, use this partitioning instead
+        if intg.needs_reloc:
+            self._ele_types = (list(intg._plugins_mesh.eidxs) if intg._plugins_mesh.eidxs else [])
+        else:
+            self._ele_types = intg.system.ele_types
+
+        comm, rank, root = get_comm_rank_root()
+        emap = intg.system.ele_map
+
+        nupts = {e: emap[e].nupts if e in emap else 0 for e in intg._plugins_mesh.etypes}
+        self.nupts = {e: comm.allreduce(nupts[e], op=mpi.MAX) for e in nupts}
+        
+        self.neles = {e: len(intg._plugins_mesh.eidxs[e]) if e in intg._plugins_mesh.eidxs else 0 
+                        for e in intg._plugins_mesh.etypes}
+
         # Parse the region
-        ridxs = region_data(self.cfg, self.cfgsect, intg.system.mesh)
+        ridxs = region_data(self.cfg, self.cfgsect, intg._plugins_mesh)
 
         # Generate the appropriate metadata arrays
         self._ele_regions, self._ele_region_data = [], {}
         for etype, eidxs in ridxs.items():
-            doff = intg.system.ele_types.index(etype)
+            doff = self._ele_types.index(etype)
             self._ele_regions.append((doff, etype, eidxs))
 
             # Obtain the global element numbers
-            geidxs = intg.system.mesh.eidxs[etype][eidxs]
+            geidxs = intg._plugins_mesh.eidxs[etype][eidxs]
             self._ele_region_data[etype] = geidxs
 
 
 class SurfaceRegionMixin:
     def _surf_region(self, intg):
         # Parse the region
-        sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh)
+        sidxs = surface_data(intg.cfg, self.cfgsect, intg._plugins_mesh)
 
         # Generate the appropriate metadata arrays
         ele_surface, ele_surface_data = [], {}

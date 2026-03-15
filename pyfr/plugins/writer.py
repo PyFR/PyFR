@@ -28,7 +28,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
 
         # Figure out the shape of each element type in our region
         nvars = self.nvars + self._write_grads*(self.nvars*self.ndims)
-        ershapes = {etype: (nvars, emap[etype].nupts) for etype in erdata}
+        ershapes = {etype: (nvars, self.nupts[etype]) for etype in erdata}
 
         # Construct the solution writer
         self._writer = NativeWriter.from_integrator(intg, basedir, basename,
