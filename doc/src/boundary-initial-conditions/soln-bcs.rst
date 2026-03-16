@@ -8,7 +8,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 1. ``type`` --- type of boundary condition:
 
     ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
-    ``char-riem-inv-mass-flow`` | ``no-slp-adia-wall`` |
+    ``char-riem-inv-mass-flow`` | ``char-riem-inv-pressure`` | ``no-slp-adia-wall`` |
     ``no-slp-isot-wall`` | ``no-slp-wall`` | ``slp-adia-wall`` | ``slp-wall`` |
     ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
     ``sup-out-fn``
@@ -152,6 +152,69 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *string*
       
+        - ``flushsteps`` --- frequency to flush output to the CSV file
+          (optional).
+
+           *int*
+
+    ``char-riem-inv-pressure`` only works with ``euler`` | ``navier-stokes``
+    and requires
+
+        - ``rho`` --- density
+
+           *float* | *string*
+
+        - ``u`` --- x-velocity
+
+           *float* | *string*
+
+        - ``v`` --- y-velocity
+
+           *float* | *string*
+
+        - ``w`` --- z-velocity
+
+           *float* | *string*
+
+        - ``target-pressure`` --- target area-averaged static pressure on the
+          boundary. Also used as the initial Riemann invariant pressure.
+
+           *float* | *string*
+
+        - ``alpha`` --- parameter between 0 and 1 for the exponentially
+          weighted moving average of the pressure.
+
+           *float* | *string*
+
+        - ``eta`` --- parameter greater than 0 setting the strength of the controller.
+          The appropriate strength is problem specific, and varies depending on if the
+          simulation has been non-dimensionalised.
+
+           *float* | *string*
+
+        - ``nsteps`` --- number of Runge-Kutta steps between activations of the
+          controller. Typically between 10 and 500.
+
+           *int*
+
+        - ``tstart`` --- start time of the pressure controller, before this
+          time the Riemann invariant remains fixed.
+
+           *float*
+
+        - ``quad-deg-{etype}`` --- degree of quadrature rule for pressure
+          integration (optional).
+
+           *int*
+
+        - ``quad-pts-{etype}`` --- name of quadrature rule (optional).
+
+           *string*
+
+        - ``file`` --- name of a CSV file to output statistics to (optional).
+
+           *string*
+
         - ``flushsteps`` --- frequency to flush output to the CSV file
           (optional).
 
