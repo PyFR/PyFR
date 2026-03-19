@@ -115,5 +115,10 @@ class VTKBoundaryWriter(BaseVTKWriter):
             curved.append(self.mesh.spts_curved[etype][idxs])
             part.append(self.soln[f'{etype}-parts'][idxs])
 
-        return (np.hstack(vspts), np.dstack(vsoln),
-                np.hstack(curved), np.hstack(part))
+        vpts = np.hstack(vspts)
+        vsoln = np.dstack(vsoln)
+
+        # Run postproc plugins
+        vpts, vsoln = self._run_postprocs(vpts, vsoln)
+
+        return vpts, vsoln, np.hstack(curved), np.hstack(part)

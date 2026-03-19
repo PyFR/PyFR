@@ -110,33 +110,38 @@ def surface_data(cfg, cfgsect, mesh):
 class BasePlugin:
     name = None
     systems = None
+    dimensions = None
+
+    def __init__(self, cfg, cfgsect, ndims):
+        self.cfg = cfg
+        self.cfgsect = cfgsect
+        self.ndims = ndims
+
+        # Check that we support this particular system
+        system = cfg.get('solver', 'system')
+        if not ('*' in self.systems or system in self.systems):
+            raise RuntimeError(f'System {system} not supported by '
+                               f'plugin {self.name}')
+
+        # Check that we support dimensionality of simulation
+        if ndims not in self.dimensions:
+            raise RuntimeError(f'Dimensionality of {ndims} not '
+                               f'supported by plugin {self.name}')
+
+
+class InSituMixin:
     formulations = None
 
     def __init__(self, intg, cfgsect, suffix=None):
-        self.cfg = intg.cfg
-        self.cfgsect = cfgsect
+        super().__init__(intg.cfg, cfgsect, intg.system.ndims)
 
         self.suffix = suffix
-
-        self.ndims = intg.system.ndims
         self.nvars = intg.system.nvars
-
-        # Tolerance for time comparisons
         self.tol = 5*intg.dtmin
-
-        # Check that we support this particular system
-        if not ('*' in self.systems or intg.system.name in self.systems):
-            raise RuntimeError(f'System {intg.system.name} not supported by '
-                               f'plugin {self.name}')
 
         # Check that we support this particular integrator formulation
         if intg.formulation not in self.formulations:
             raise RuntimeError(f'Formulation {intg.formulation} not '
-                               f'supported by plugin {self.name}')
-
-        # Check that we support dimensionality of simulation
-        if intg.system.ndims not in self.dimensions:
-            raise RuntimeError(f'Dimensionality of {intg.system.ndims} not '
                                f'supported by plugin {self.name}')
 
     def __call__(self, intg):
@@ -155,11 +160,11 @@ class BasePlugin:
             return f'plugins/{self.name}'
 
 
-class BaseSolnPlugin(BasePlugin):
+class BaseSolnPlugin(InSituMixin, BasePlugin):
     prefix = 'soln'
 
 
-class BaseSolverPlugin(BasePlugin):
+class BaseSolverPlugin(InSituMixin, BasePlugin):
     prefix = 'solver'
 
 
@@ -246,6 +251,22 @@ class SurfaceRegionMixin:
                 ele_surface_data[f'{etype}_f{face}_idxs'] = eidxs
 
         return ele_surface, ele_surface_data
+
+
+class BasePostProcPlugin(BasePlugin):
+    prefix = 'postproc'
+    export_types = None
+    needs_gradients = False
+
+    def __init__(self, ndims, cfg):
+        cfgsect = f'postproc-plugin-{self.name}'
+        super().__init__(cfg, cfgsect, ndims)
+
+    def fields(self):
+        return {}
+
+    def compute(self, pris, grad_pris, ploc):
+        return {}
 
 
 class DatasetAppender:

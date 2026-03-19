@@ -61,4 +61,7 @@ class VTKVolumeWriter(BaseVTKWriter):
         # Interpolate the solution to the vis points
         vsoln = interpolate_pts(soln_vtu_op, soln)
 
+        # Run postproc plugins
+        vpts, vsoln = self._run_postprocs(vpts, vsoln)
+
         return vpts, vsoln, curved, part

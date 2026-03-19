@@ -370,11 +370,12 @@ class BaseVTKWriter(BaseWriter):
     }
 
     def __init__(self, meshf, pname=None, *, prec='single', order=None,
-                 divisor=None, fields=[]):
-        super().__init__(meshf, pname)
+                 divisor=None, fields=[], pp_plugins=[], cfg=None):
+        super().__init__(meshf, pname, cfg=cfg)
 
         self.dtype = np.dtype(prec).type
         self.fields = fields
+        self._pp_plugin_names = pp_plugins
 
         # Divisor for each type element
         self.etypes_div = defaultdict(lambda: self.divisor)
@@ -390,6 +391,37 @@ class BaseVTKWriter(BaseWriter):
             self.divisor = divisor
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
+
+    def _run_postprocs(self, vpts, vsoln):
+        if not self.pp_plugins:
+            return vpts, vsoln
+
+        npri = len(self.elementscls.privars(self.ndims, self.cfg))
+        pris = [vsoln[:, i, :] for i in range(npri)]
+        ploc = vpts.transpose(2, 0, 1)
+
+        grad_pris = None
+        if self._gradients:
+            grad_pris = []
+            for i in range(npri):
+                comps = [vsoln[:, npri + i*self.ndims + d, :]
+                         for d in range(self.ndims)]
+                grad_pris.append(np.stack(comps))
+
+        extras = []
+        for pp in self.pp_plugins:
+            if pp.needs_gradients and not self._gradients:
+                raise RuntimeError(f'Postproc {pp.name} requires '
+                                   f'gradient data in the solution')
+
+            for components in pp.compute(pris, grad_pris, ploc).values():
+                for arr in components:
+                    extras.append(arr[:, np.newaxis, :])
+
+        if extras:
+            vsoln = np.concatenate([vsoln, *extras], axis=1)
+
+        return vpts, vsoln
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -533,6 +565,19 @@ class BaseVTKWriter(BaseWriter):
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
 
+        # Instantiate postproc plugins
+        from pyfr.plugins import get_plugin
+
+        self.pp_plugins = [get_plugin('postproc', name, self.ndims, self.cfg)
+                           for name in self._pp_plugin_names]
+
+        # Collect postproc field names
+        pp_vtk_vars = {}
+        for pp in self.pp_plugins:
+            for fname, fvars in pp.fields().items():
+                pp_vtk_vars[fname] = fvars
+                self._soln_fields.extend(fvars)
+
         # Handle field subsetting
         if self.fields:
             self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
@@ -540,6 +585,9 @@ class BaseVTKWriter(BaseWriter):
 
             if len(self._vtk_vars) != len(self.fields):
                 raise RuntimeError('Invalid field specification')
+
+        # Merge postproc fields
+        self._vtk_vars.update(pp_vtk_vars)
 
     def process(self, solnf, outfname):
         # Load the solution

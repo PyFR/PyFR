@@ -156,6 +156,16 @@ def main():
             'all fields are output'
         )
         ap_export_type.add_argument(
+            '--postproc', dest='postprocs', action='append',
+            default=[], metavar='PLUGIN',
+            help='postproc plugin(s) to run; may be repeated or '
+            'comma-separated'
+        )
+        ap_export_type.add_argument(
+            '--cfg', dest='ppcfg', type=FileType('r'), default=None,
+            help='postproc config file with [postproc-plugin-name] sections'
+        )
+        ap_export_type.add_argument(
             '-p', '--precision', choices=['single', 'double'],
             default='single', help='output number precision; defaults to '
             'single'
@@ -418,8 +428,15 @@ def process_export(args):
 
     # Common arguments
     kargs = [args.eargs] if 'eargs' in args else []
+
+    # Flatten comma-separated postproc names
+    postprocs = [p for arg in (args.postprocs or []) for p in arg.split(',')]
+
+    # Load user-supplied config if provided; otherwise solution config is used
+    cfg = Inifile.load(args.ppcfg) if args.ppcfg else None
+
     kwargs = {'fields': args.fields, 'prec': args.precision,
-              'pname': args.pname}
+              'pname': args.pname, 'pp_plugins': postprocs, 'cfg': cfg}
 
     # Process any exporter-specific options
     for e in args.eopts:
