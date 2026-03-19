@@ -10,9 +10,9 @@ class MachPostProc(BasePostProcPlugin):
     def fields(self):
         return {'mach': ['Ma']}
 
-    def compute(self, pris, grad_pris, ploc):
-        rho, p = pris[0], pris[-1]
-        vs = pris[1:-1]
+    def compute(self, data):
+        rho, p = data.pris[0], data.pris[-1]
+        vs = data.pris[1:-1]
 
         gamma = self.cfg.getfloat('constants', 'gamma')
 
@@ -35,21 +35,19 @@ class VorticityPostProc(BasePostProcPlugin):
         else:
             return {'vorticity': ['omega_z']}
 
-    def compute(self, pris, grad_pris, ploc):
-        # grad_pris[i] shape: (ndims, npts, neles)
-        # velocity is at indices 1, 2, (3) for all systems
-        du = grad_pris[1]
-        dv = grad_pris[2]
+    def compute(self, data):
+        du = data.grad_pris[1]
+        dv = data.grad_pris[2]
 
         if self.ndims == 3:
-            dw = grad_pris[3]
+            dw = data.grad_pris[3]
 
-            omega_x = dw[1] - dv[2]  # dw/dy - dv/dz
-            omega_y = du[2] - dw[0]  # du/dz - dw/dx
-            omega_z = dv[0] - du[1]  # dv/dx - du/dy
+            omega_x = dw[1] - dv[2]
+            omega_y = du[2] - dw[0]
+            omega_z = dv[0] - du[1]
 
             return {'vorticity': [omega_x, omega_y, omega_z]}
         else:
-            omega_z = dv[0] - du[1]  # dv/dx - du/dy
+            omega_z = dv[0] - du[1]
 
             return {'vorticity': [omega_z]}

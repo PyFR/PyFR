@@ -1,4 +1,4 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +7,10 @@ from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
+
+PostProcData = namedtuple('PostProcData',
+                          ['pris', 'grad_pris', 'ploc', 'normals'],
+                          defaults=[None, None])
 
 
 def interpolate_pts(op, pts):
@@ -392,7 +396,7 @@ class BaseVTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
-    def _run_postprocs(self, vpts, vsoln):
+    def _run_postprocs(self, vpts, vsoln, normals=None):
         if not self.pp_plugins:
             return vpts, vsoln
 
@@ -408,13 +412,19 @@ class BaseVTKWriter(BaseWriter):
                          for d in range(self.ndims)]
                 grad_pris.append(np.stack(comps))
 
+        data = PostProcData(pris=pris, grad_pris=grad_pris,
+                            ploc=ploc, normals=normals)
+
         extras = []
         for pp in self.pp_plugins:
             if pp.needs_gradients and not self._gradients:
                 raise RuntimeError(f'Postproc {pp.name} requires '
                                    f'gradient data in the solution')
+            if pp.needs_normals and normals is None:
+                raise RuntimeError(f'Postproc {pp.name} requires '
+                                   f'surface normals (boundary export)')
 
-            for components in pp.compute(pris, grad_pris, ploc).values():
+            for components in pp.compute(data).values():
                 for arr in components:
                     extras.append(arr[:, np.newaxis, :])
 
@@ -568,8 +578,15 @@ class BaseVTKWriter(BaseWriter):
         # Instantiate postproc plugins
         from pyfr.plugins import get_plugin
 
-        self.pp_plugins = [get_plugin('postproc', name, self.ndims, self.cfg)
-                           for name in self._pp_plugin_names]
+        self.pp_plugins = []
+        for name in self._pp_plugin_names:
+            pp = get_plugin('postproc', name, self.ndims, self.cfg)
+
+            if not ('*' in pp.export_types or self.type in pp.export_types):
+                raise RuntimeError(f'Postproc {pp.name} does not support '
+                                   f'{self.type} export')
+
+            self.pp_plugins.append(pp)
 
         # Collect postproc field names
         pp_vtk_vars = {}

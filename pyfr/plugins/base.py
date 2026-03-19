@@ -257,6 +257,7 @@ class BasePostProcPlugin(BasePlugin):
     prefix = 'postproc'
     export_types = None
     needs_gradients = False
+    needs_normals = False
 
     def __init__(self, ndims, cfg):
         cfgsect = f'postproc-plugin-{self.name}'
@@ -265,7 +266,7 @@ class BasePostProcPlugin(BasePlugin):
     def fields(self):
         return {}
 
-    def compute(self, pris, grad_pris, ploc):
+    def compute(self, data):
         return {}
 
 

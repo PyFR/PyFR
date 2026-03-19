@@ -1,6 +1,10 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import numpy as np
+
+FaceInfo = namedtuple('FaceInfo',
+                      ['etype', 'mesh_op', 'soln_op',
+                       'jac_op', 'norm', 'idxs'])
 
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
@@ -57,9 +61,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 eoff = _search(smesh.eidxs[etype], eidxs[eoff])
 
             # Obtain the associated surface info
-            for stype, *info in self._get_surface_info(etype, eoff, fidx):
-                ecount[stype] += len(info[-1])
-                self._surface_info[stype].append((etype, *info))
+            for stype, finfo in self._get_surface_info(etype, eoff, fidx):
+                ecount[stype] += len(finfo.idxs)
+                self._surface_info[stype].append(finfo)
 
         self.einfo = list(ecount.items())
 
@@ -86,7 +90,10 @@ class VTKBoundaryWriter(BaseVTKWriter):
         mesh_op = shape.sbasis.nodal_basis_at(svpts)
         soln_op = shape.ubasis.nodal_basis_at(svpts)
 
-        return itype, mesh_op, soln_op
+        # Jacobian operator for normal computation
+        jac_op = np.rollaxis(shape.sbasis.jac_nodal_basis_at(svpts), 2)
+
+        return itype, mesh_op, soln_op, jac_op, norm
 
     def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)
@@ -97,28 +104,79 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
             idxs[f].append(e)
 
-        return [(*info[f], idxs[f]) for f in info]
+        return [(info[f][0],
+                 FaceInfo(etype=etype, mesh_op=info[f][1],
+                          soln_op=info[f][2], jac_op=info[f][3],
+                          norm=info[f][4], idxs=idxs[f]))
+                for f in info]
 
     def _prepare_pts(self, itype):
-        vspts, vsoln, curved, part = [], [], [], []
+        vspts, vsoln, curved, part, vnorms = [], [], [], [], []
+        needs_normals = any(pp.needs_normals for pp in self.pp_plugins)
 
-        for etype, mesh_op, soln_op, idxs in self._surface_info[itype]:
-            spts = self.mesh.spts[etype][:, idxs]
-            soln = self.soln[etype][..., idxs]
+        for fi in self._surface_info[itype]:
+            spts = self.mesh.spts[fi.etype][:, fi.idxs]
+            soln = self.soln[fi.etype][..., fi.idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
 
             # Pre-process the solution
             soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
-            vspts.append(interpolate_pts(mesh_op, spts))
-            vsoln.append(interpolate_pts(soln_op, soln))
-            curved.append(self.mesh.spts_curved[etype][idxs])
-            part.append(self.soln[f'{etype}-parts'][idxs])
+            vspts.append(interpolate_pts(fi.mesh_op, spts))
+            vsoln.append(interpolate_pts(fi.soln_op, soln))
+            curved.append(self.mesh.spts_curved[fi.etype][fi.idxs])
+            part.append(self.soln[f'{fi.etype}-parts'][fi.idxs])
+
+            if needs_normals:
+                vnorms.append(self._compute_normals(fi.jac_op, spts, fi.norm))
 
         vpts = np.hstack(vspts)
         vsoln = np.dstack(vsoln)
+        normals = np.hstack(vnorms) if vnorms else None
 
         # Run postproc plugins
-        vpts, vsoln = self._run_postprocs(vpts, vsoln)
+        vpts, vsoln = self._run_postprocs(vpts, vsoln, normals=normals)
 
         return vpts, vsoln, np.hstack(curved), np.hstack(part)
+
+    def _compute_normals(self, jac_op, spts, ref_norm):
+        ndims = self.ndims
+        nspts, neles = spts.shape[0], spts.shape[1]
+
+        # Compute Jacobian at vis points
+        jac = jac_op.reshape(-1, nspts) @ spts.reshape(nspts, -1)
+        nsvpts = jac.shape[0] // ndims
+        jac = jac.reshape(nsvpts, ndims, ndims, neles)
+        jac = jac.transpose(1, 2, 0, 3)  # (ndims, ndims, nsvpts, neles)
+
+        # Compute smats
+        smats = np.empty((ndims, nsvpts, ndims, neles))
+
+        if ndims == 2:
+            a, b = jac[0, 0], jac[1, 0]
+            c, d = jac[0, 1], jac[1, 1]
+            smats[0, :, 0], smats[0, :, 1] = d, -b
+            smats[1, :, 0], smats[1, :, 1] = -c, a
+        else:
+            a, b, c = jac[0, 0], jac[1, 0], jac[2, 0]
+            d, e, f = jac[0, 1], jac[1, 1], jac[2, 1]
+            g, h, k = jac[0, 2], jac[1, 2], jac[2, 2]
+            smats[0, :, 0] = e*k - f*h
+            smats[0, :, 1] = f*g - d*k
+            smats[0, :, 2] = d*h - e*g
+            smats[1, :, 0] = c*h - b*k
+            smats[1, :, 1] = a*k - c*g
+            smats[1, :, 2] = b*g - a*h
+            smats[2, :, 0] = b*f - c*e
+            smats[2, :, 1] = c*d - a*f
+            smats[2, :, 2] = a*e - b*d
+
+        # Physical normal: pnorm = S^T . n_ref
+        ref_norm = np.array(ref_norm, dtype=float)
+        pnorm = np.einsum('ijkl,k->ijl', smats, ref_norm)
+
+        # Normalize
+        mag = np.sqrt(np.einsum('ijk,ijk->jk', pnorm, pnorm))
+        pnorm /= mag[np.newaxis]
+
+        return pnorm  # (ndims, nsvpts, neles)
