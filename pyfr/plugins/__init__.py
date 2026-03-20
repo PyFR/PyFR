@@ -5,8 +5,8 @@ from pyfr.plugins.dtstats import DtStatsPlugin
 from pyfr.plugins.fluidforce import FluidForcePlugin
 from pyfr.plugins.fwh import FWHPlugin
 from pyfr.plugins.integrate import IntegratePlugin
-from pyfr.plugins.flow import MachPostProc, VorticityPostProc
-from pyfr.plugins.surface import CfPostProc, CpPostProc, YPlusPostProc
+from pyfr.plugins.flow import CpPostProc, MachPostProc, VorticityPostProc
+from pyfr.plugins.surface import CfPostProc, YPlusPostProc
 from pyfr.plugins.nancheck import NaNCheckPlugin
 from pyfr.plugins.pseudostats import PseudoStatsPlugin
 from pyfr.plugins.residual import ResidualPlugin

@@ -22,7 +22,7 @@ class BaseWriter:
         self.cfg = self.soln['config']
         if self._ppcfg:
             for sect in self._ppcfg.sections():
-                for k, v in self._ppcfg.items(sect):
+                for k, v in self._ppcfg.items(sect).items():
                     self.cfg.set(sect, k, v)
 
         self.stats = self.soln['stats']

@@ -6,7 +6,7 @@ from pyfr.plugins.base import BasePostProcPlugin
 class CfPostProc(BasePostProcPlugin):
     name = 'cf'
     systems = ['navier-stokes']
-    dimensions = [2, 3]
+    dimensions = [3]
     export_types = ['boundary']
     needs_gradients = True
     needs_normals = True
@@ -43,31 +43,10 @@ class CfPostProc(BasePostProcPlugin):
         return {'cf': [cf]}
 
 
-class CpPostProc(BasePostProcPlugin):
-    name = 'cp'
-    systems = ['euler', 'navier-stokes']
-    dimensions = [2, 3]
-    export_types = ['boundary']
-
-    def fields(self):
-        return {'cp': ['Cp']}
-
-    def compute(self, data):
-        p = data.pris[-1]
-
-        rho_inf = self.cfg.getfloat(self.cfgsect, 'rho-inf')
-        u_inf = self.cfg.getfloat(self.cfgsect, 'u-inf')
-        p_inf = self.cfg.getfloat(self.cfgsect, 'p-inf')
-
-        q_inf = 0.5 * rho_inf * u_inf**2
-
-        return {'cp': [(p - p_inf) / q_inf]}
-
-
 class YPlusPostProc(BasePostProcPlugin):
     name = 'yplus'
     systems = ['navier-stokes']
-    dimensions = [2, 3]
+    dimensions = [3]
     export_types = ['boundary']
     needs_gradients = True
     needs_normals = True
