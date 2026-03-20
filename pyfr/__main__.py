@@ -430,7 +430,7 @@ def process_export(args):
     kargs = [args.eargs] if 'eargs' in args else []
 
     # Flatten comma-separated postproc names
-    postprocs = [p for arg in (args.postprocs or []) for p in arg.split(',')]
+    postprocs = [p for arg in args.postprocs for p in arg.split(',')]
 
     # Load postproc config if provided (merged into solution config)
     ppcfg = Inifile.load(args.ppcfg) if args.ppcfg else None

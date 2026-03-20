@@ -9,7 +9,7 @@ FaceInfo = namedtuple('FaceInfo',
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
-from pyfr.writers.vtk.base import (BaseVTKWriter, _BoundaryPostProcAdapter,
+from pyfr.writers.vtk.base import (BaseVTKWriter, BoundaryPostProcAdapter,
                                    interpolate_pts)
 
 
@@ -98,7 +98,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         for e, f in zip(eoffs, fidxs):
             if f not in info:
-                info[f] = self._itype_opmats(etype, f, self.cfg)
+                itype, mesh_op, soln_op, svpts, norm = \
+                    self._itype_opmats(etype, f, self.cfg)
+                info[f] = (itype, mesh_op, soln_op, svpts, norm)
 
             idxs[f].append(e)
 
@@ -124,7 +126,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
             # Run postproc plugins per-batch with full shape context
             if self.pp_plugins:
-                adapter = _BoundaryPostProcAdapter(
+                adapter = BoundaryPostProcAdapter(
                     self, face_vpts, face_vsoln,
                     self._get_shape(fi.etype, self.cfg), spts,
                     fi.fidx, fi.svpts, fi.norm

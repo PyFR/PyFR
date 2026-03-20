@@ -4,7 +4,7 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.points import PointLocator, PointSampler
 from pyfr.polys import TriPolyBasis
 from pyfr.shapes import TriShape
-from pyfr.writers.vtk.base import (BaseVTKWriter, _STLPostProcAdapter,
+from pyfr.writers.vtk.base import (BaseVTKWriter, STLPostProcAdapter,
                                    interpolate_pts)
 
 
@@ -69,9 +69,7 @@ class VTKSTLWriter(BaseVTKWriter):
         vpts, vsoln = self._stl_info
 
         if self.pp_plugins:
-            adapter = _STLPostProcAdapter(
-                self, vpts, vsoln, None, None
-            )
+            adapter = STLPostProcAdapter(self, vpts, vsoln, None, None)
             vsoln = self._run_postprocs(adapter, vsoln)
 
         return vpts, vsoln, None, None

@@ -17,30 +17,10 @@ class CfPostProc(BasePostProcPlugin):
     def compute(self, data):
         rho_inf = self.cfg.getfloat(self.cfgsect, 'rho-inf')
         u_inf = self.cfg.getfloat(self.cfgsect, 'u-inf')
-        mu = self.cfg.getfloat('constants', 'mu')
 
         q_inf = 0.5 * rho_inf * u_inf**2
 
-        ndims = self.ndims
-        normals = data.normals
-
-        # Velocity gradient tensor: grad_vel[i][d] = du_i/dx_d
-        grad_vel = np.stack([data.grad_pris[1 + i] for i in range(ndims)])
-
-        # Stress tensor: tau_ij = mu * (du_i/dx_j + du_j/dx_i)
-        # Wall shear: tau_w = tau . n - (n . tau . n) * n
-        tau_n = mu * np.einsum('ijkl,jkl->ikl',
-                               grad_vel + grad_vel.swapaxes(0, 1), normals)
-
-        # Remove normal component
-        nn = np.einsum('ikl,ikl->kl', tau_n, normals)
-        tau_wall = tau_n - nn[np.newaxis] * normals
-
-        # Cf = |tau_wall| / q_inf
-        tau_mag = np.sqrt(np.einsum('ikl,ikl->kl', tau_wall, tau_wall))
-        cf = tau_mag / q_inf
-
-        return {'cf': [cf]}
+        return {'cf': [data.tau_wall / q_inf]}
 
 
 class YPlusPostProc(BasePostProcPlugin):
@@ -56,20 +36,9 @@ class YPlusPostProc(BasePostProcPlugin):
 
     def compute(self, data):
         mu = self.cfg.getfloat('constants', 'mu')
-        ndims = self.ndims
-        normals = data.normals
         rho_wall = data.pris[0]
 
-        # Wall shear stress
-        grad_vel = np.stack([data.grad_pris[1 + i] for i in range(ndims)])
-        tau_n = mu * np.einsum('ijkl,jkl->ikl',
-                               grad_vel + grad_vel.swapaxes(0, 1), normals)
-        nn = np.einsum('ikl,ikl->kl', tau_n, normals)
-        tau_wall = tau_n - nn[np.newaxis] * normals
-        tau_mag = np.sqrt(np.einsum('ikl,ikl->kl', tau_wall, tau_wall))
-
-        u_tau = np.sqrt(tau_mag / rho_wall)
+        u_tau = np.sqrt(data.tau_wall / rho_wall)
         nu = mu / rho_wall
-        y = data.wall_dist
 
-        return {'yplus': [y * u_tau / nu]}
+        return {'yplus': [data.wall_dist * u_tau / nu]}

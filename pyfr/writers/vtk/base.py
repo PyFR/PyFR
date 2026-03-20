@@ -10,7 +10,7 @@ from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
 
-class _BasePostProcAdapter:
+class BasePostProcAdapter:
     def __init__(self, writer, vpts, vsoln, shape, spts):
         self._vpts = vpts
         self._vsoln = vsoln
@@ -63,15 +63,15 @@ class _BasePostProcAdapter:
         return self._vpts.transpose(2, 0, 1)
 
 
-class _VolumePostProcAdapter(_BasePostProcAdapter):
+class VolumePostProcAdapter(BasePostProcAdapter):
     pass
 
 
-class _STLPostProcAdapter(_BasePostProcAdapter):
+class STLPostProcAdapter(BasePostProcAdapter):
     pass
 
 
-class _BoundaryPostProcAdapter(_BasePostProcAdapter):
+class BoundaryPostProcAdapter(BasePostProcAdapter):
     def __init__(self, writer, vpts, vsoln, shape, spts, fidx, svpts,
                  face_norm):
         super().__init__(writer, vpts, vsoln, shape, spts)
@@ -86,20 +86,31 @@ class _BoundaryPostProcAdapter(_BasePostProcAdapter):
 
     @cached_property
     def pnorm(self):
-        nsvpts = len(self._svpts)
-        norm_tiled = np.tile(np.array(self._face_norm, dtype=float),
-                             (nsvpts, 1))
-
-        # pnorm_at returns (nsvpts, neles, ndims)
+        norm_tiled = np.tile(self._face_norm, (len(self._svpts), 1))
         pn = self._eles.pnorm_at(self._svpts, norm_tiled)
 
-        # Transpose to (ndims, nsvpts, neles)
         return pn.transpose(2, 0, 1)
 
     @cached_property
     def normals(self):
         mag = np.sqrt(np.einsum('ijk,ijk->jk', self.pnorm, self.pnorm))
-        return self.pnorm / mag[np.newaxis]
+        return self.pnorm / mag[None]
+
+    @cached_property
+    def tau_wall(self):
+        mu = self._cfg.getfloat('constants', 'mu')
+        normals = self.normals
+
+        # Traction vector: tau_n = mu * (du_i/dx_j + du_j/dx_i) * n_j
+        grad_vel = np.stack(self.grad_pris[1:self.ndims + 1])
+        tau_n = mu * np.einsum('ijkl,jkl->ikl',
+                               grad_vel + grad_vel.swapaxes(0, 1), normals)
+
+        # Wall shear magnitude: |tau_t| = sqrt(|tau_n|^2 - (tau_n . n)^2)
+        tau_nn = np.einsum('ikl,ikl->kl', tau_n, tau_n)
+        tau_nn2 = np.einsum('ikl,ikl->kl', tau_n, normals)**2
+
+        return np.sqrt(tau_nn - tau_nn2)
 
     @cached_property
     def wall_dist(self):
@@ -108,29 +119,29 @@ class _BoundaryPostProcAdapter(_BasePostProcAdapter):
         # constrained coordinate(s)
         itype, proj, norm = self._shape.faces[self._fidx]
         norm_arr = np.array(norm, dtype=float)
-        upts = np.array(self._shape.upts)
+        upts = self._shape.upts
 
         # Face point in ref space (any point on the face)
         face_pt = np.array(proj(*([0]*(self._shape.ndims - 1))))
 
         # Project each upt onto face: move along ref normal to face plane
         t = (face_pt - upts) @ norm_arr / np.dot(norm_arr, norm_arr)
-        upts_on_face = upts + t[:, np.newaxis] * norm_arr
+        upts_on_face = upts + t[:, None] * norm_arr
 
         # Physical positions at solution points and their face projections
         upt_op = self._shape.sbasis.nodal_basis_at(upts)
         face_op = self._shape.sbasis.nodal_basis_at(upts_on_face)
 
-        x_upt = interpolate_pts(upt_op, self._spts)    # (nupts, neles, ndims)
-        x_face = interpolate_pts(face_op, self._spts)   # (nupts, neles, ndims)
+        x_upt = interpolate_pts(upt_op, self._spts)
+        x_face = interpolate_pts(face_op, self._spts)
 
-        # Exact distance through curved mapping
+        # Distance through curved mapping per solution point
         diff = x_upt - x_face
-        dist = np.sqrt(np.einsum('ijk,ijk->ij', diff, diff))  # (nupts, neles)
+        dist = np.sqrt(np.einsum('ijk,ijk->ij', diff, diff))
 
-        # Smallest non-zero → first interior solution point
+        # Minimum non-zero distance per element
         dist = np.where(dist > 1e-10, dist, np.inf)
-        wdist = dist.min(axis=0)  # (neles,)
+        wdist = dist.min(axis=0)
 
         return np.broadcast_to(wdist, (self._vpts.shape[0], len(wdist)))
 
@@ -528,7 +539,7 @@ class BaseVTKWriter(BaseWriter):
 
             for components in pp.compute(adapter).values():
                 for arr in components:
-                    extras.append(arr[:, np.newaxis, :])
+                    extras.append(arr[:, None, :])
 
         if extras:
             vsoln = np.concatenate([vsoln, *extras], axis=1)
@@ -680,15 +691,10 @@ class BaseVTKWriter(BaseWriter):
         # Instantiate postproc plugins
         from pyfr.plugins import get_plugin
 
-        self.pp_plugins = []
-        for name in self._pp_plugin_names:
-            pp = get_plugin('postproc', name, self.ndims, self.cfg)
-
-            if not ('*' in pp.export_types or self.type in pp.export_types):
-                raise RuntimeError(f'Postproc {pp.name} does not support '
-                                   f'{self.type} export')
-
-            self.pp_plugins.append(pp)
+        self.pp_plugins = [
+            get_plugin('postproc', name, self.ndims, self.cfg, self.type)
+            for name in self._pp_plugin_names
+        ]
 
         # Collect postproc field names
         pp_vtk_vars = {}

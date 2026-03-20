@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.plugins.base import BasePostProcPlugin
 
 
@@ -11,13 +13,11 @@ class MachPostProc(BasePostProcPlugin):
         return {'mach': ['Ma']}
 
     def compute(self, data):
-        rho, p = data.pris[0], data.pris[-1]
-        vs = data.pris[1:-1]
+        rho, *vs, p = data.pris
 
         gamma = self.cfg.getfloat('constants', 'gamma')
-
-        vmag = sum(v**2 for v in vs)**0.5
-        c = (gamma * p / rho)**0.5
+        vmag = np.sqrt(sum(v**2 for v in vs))
+        c = np.sqrt(gamma * p / rho)
 
         return {'mach': [vmag / c]}
 

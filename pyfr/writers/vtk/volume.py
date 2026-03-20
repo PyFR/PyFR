@@ -3,7 +3,7 @@ import numpy as np
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
-from pyfr.writers.vtk.base import (BaseVTKWriter, _VolumePostProcAdapter,
+from pyfr.writers.vtk.base import (BaseVTKWriter, VolumePostProcAdapter,
                                    interpolate_pts)
 
 
@@ -65,9 +65,7 @@ class VTKVolumeWriter(BaseVTKWriter):
         # Run postproc plugins
         if self.pp_plugins:
             shape = subclass_where(BaseShape, name=etype)(len(spts), self.cfg)
-            adapter = _VolumePostProcAdapter(
-                self, vpts, vsoln, shape, spts
-            )
+            adapter = VolumePostProcAdapter(self, vpts, vsoln, shape, spts)
             vsoln = self._run_postprocs(adapter, vsoln)
 
         return vpts, vsoln, curved, part
