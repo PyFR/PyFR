@@ -9,8 +9,8 @@ FaceInfo = namedtuple('FaceInfo',
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
-from pyfr.writers.vtk.base import (BaseVTKWriter, BoundaryPostProcAdapter,
-                                   interpolate_pts)
+from pyfr.postproc.adapters import BoundaryPostProcAdapter
+from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 
 
 def _search(a, v):
@@ -126,9 +126,11 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
             # Run postproc plugins per-batch with full shape context
             if self.pp_plugins:
+                pris, grad_pris = self._extract_pris(face_vsoln)
+                ploc = face_vpts.transpose(2, 0, 1)
+                shape = self._get_shape(fi.etype, self.cfg)
                 adapter = BoundaryPostProcAdapter(
-                    self, face_vpts, face_vsoln,
-                    self._get_shape(fi.etype, self.cfg), spts,
+                    self, pris, grad_pris, ploc, shape, spts,
                     fi.fidx, fi.svpts, fi.norm
                 )
                 face_vsoln = self._run_postprocs(adapter, face_vsoln)

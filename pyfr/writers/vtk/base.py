@@ -1,5 +1,4 @@
 from collections import defaultdict
-from functools import cached_property
 from pathlib import Path
 
 import numpy as np
@@ -8,142 +7,6 @@ from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
-
-
-class BasePostProcAdapter:
-    def __init__(self, writer, vpts, vsoln, shape, spts):
-        self._vpts = vpts
-        self._vsoln = vsoln
-        self._shape = shape
-        self._spts = spts
-        self._cfg = writer.cfg
-        self._soln = writer.soln
-        self._elementscls = writer.elementscls
-        self._gradients = writer._gradients
-
-    @property
-    def ndims(self):
-        return self._shape.ndims
-
-    @property
-    def cfg(self):
-        return self._cfg
-
-    @property
-    def soln(self):
-        return self._soln
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @property
-    def spts(self):
-        return self._spts
-
-    @cached_property
-    def pris(self):
-        npri = len(self._elementscls.privars(self.ndims, self._cfg))
-        return [self._vsoln[:, i, :] for i in range(npri)]
-
-    @cached_property
-    def grad_pris(self):
-        if not self._gradients:
-            return None
-        npri = len(self._elementscls.privars(self.ndims, self._cfg))
-        result = []
-        for i in range(npri):
-            comps = [self._vsoln[:, npri + i*self.ndims + d, :]
-                     for d in range(self.ndims)]
-            result.append(np.stack(comps))
-        return result
-
-    @cached_property
-    def ploc(self):
-        return self._vpts.transpose(2, 0, 1)
-
-
-class VolumePostProcAdapter(BasePostProcAdapter):
-    pass
-
-
-class STLPostProcAdapter(BasePostProcAdapter):
-    pass
-
-
-class BoundaryPostProcAdapter(BasePostProcAdapter):
-    def __init__(self, writer, vpts, vsoln, shape, spts, fidx, svpts,
-                 face_norm):
-        super().__init__(writer, vpts, vsoln, shape, spts)
-
-        self._fidx = fidx
-        self._svpts = svpts
-        self._face_norm = face_norm
-
-    @cached_property
-    def _eles(self):
-        return self._elementscls(type(self._shape), self._spts, self._cfg)
-
-    @cached_property
-    def pnorm(self):
-        norm_tiled = np.tile(self._face_norm, (len(self._svpts), 1))
-        pn = self._eles.pnorm_at(self._svpts, norm_tiled)
-
-        return pn.transpose(2, 0, 1)
-
-    @cached_property
-    def normals(self):
-        mag = np.sqrt(np.einsum('ijk,ijk->jk', self.pnorm, self.pnorm))
-        return self.pnorm / mag[None]
-
-    @cached_property
-    def tau_wall(self):
-        mu = self._cfg.getfloat('constants', 'mu')
-        normals = self.normals
-
-        # Traction vector: tau_n = mu * (du_i/dx_j + du_j/dx_i) * n_j
-        grad_vel = np.stack(self.grad_pris[1:self.ndims + 1])
-        tau_n = mu * np.einsum('ijkl,jkl->ikl',
-                               grad_vel + grad_vel.swapaxes(0, 1), normals)
-
-        # Wall shear magnitude: |tau_t| = sqrt(|tau_n|^2 - (tau_n . n)^2)
-        tau_nn = np.einsum('ikl,ikl->kl', tau_n, tau_n)
-        tau_nn2 = np.einsum('ikl,ikl->kl', tau_n, normals)**2
-
-        return np.sqrt(tau_nn - tau_nn2)
-
-    @cached_property
-    def wall_dist(self):
-        # Project each solution point onto the face along the ref normal
-        # Face is a hyperplane in ref space; project by replacing the
-        # constrained coordinate(s)
-        itype, proj, norm = self._shape.faces[self._fidx]
-        norm_arr = np.array(norm, dtype=float)
-        upts = self._shape.upts
-
-        # Face point in ref space (any point on the face)
-        face_pt = np.array(proj(*([0]*(self._shape.ndims - 1))))
-
-        # Project each upt onto face: move along ref normal to face plane
-        t = (face_pt - upts) @ norm_arr / np.dot(norm_arr, norm_arr)
-        upts_on_face = upts + t[:, None] * norm_arr
-
-        # Physical positions at solution points and their face projections
-        upt_op = self._shape.sbasis.nodal_basis_at(upts)
-        face_op = self._shape.sbasis.nodal_basis_at(upts_on_face)
-
-        x_upt = interpolate_pts(upt_op, self._spts)
-        x_face = interpolate_pts(face_op, self._spts)
-
-        # Distance through curved mapping per solution point
-        diff = x_upt - x_face
-        dist = np.sqrt(np.einsum('ijk,ijk->ij', diff, diff))
-
-        # Minimum non-zero distance per element
-        dist = np.where(dist > 1e-10, dist, np.inf)
-        wdist = dist.min(axis=0)
-
-        return np.broadcast_to(wdist, (self._vpts.shape[0], len(wdist)))
 
 
 def interpolate_pts(op, pts):
@@ -528,6 +391,20 @@ class BaseVTKWriter(BaseWriter):
             self.divisor = divisor
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
+
+    def _extract_pris(self, vsoln):
+        nvars = len(self.elementscls.privars(self.ndims, self.cfg))
+        pris = [vsoln[:, i, :] for i in range(nvars)]
+
+        grad_pris = None
+        if self._gradients:
+            grad_pris = []
+            for i in range(nvars):
+                comps = [vsoln[:, nvars + i*self.ndims + d, :]
+                         for d in range(self.ndims)]
+                grad_pris.append(np.stack(comps))
+
+        return pris, grad_pris
 
     def _run_postprocs(self, adapter, vsoln):
         extras = []

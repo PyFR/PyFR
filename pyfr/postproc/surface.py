@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyfr.plugins.base import BasePostProcPlugin
+from pyfr.postproc.base import BasePostProcPlugin
 
 
 class CfPostProc(BasePostProcPlugin):
