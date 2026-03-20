@@ -9,7 +9,8 @@ FaceInfo = namedtuple('FaceInfo',
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
-from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+from pyfr.writers.vtk.base import (BaseVTKWriter, _BoundaryPostProcAdapter,
+                                   interpolate_pts)
 
 
 def _search(a, v):
@@ -111,8 +112,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 for f in info]
 
     def _prepare_pts(self, itype):
-        vspts, vsoln, curved, part, vnorms = [], [], [], [], []
-        needs_normals = any(pp.needs_normals for pp in self.pp_plugins)
+        vspts, vsoln, curved, part = [], [], [], []
 
         for fi in self._surface_info[itype]:
             spts = self.mesh.spts[fi.etype][:, fi.idxs]
@@ -122,61 +122,23 @@ class VTKBoundaryWriter(BaseVTKWriter):
             # Pre-process the solution
             soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
-            vspts.append(interpolate_pts(fi.mesh_op, spts))
-            vsoln.append(interpolate_pts(fi.soln_op, soln))
+            face_vpts = interpolate_pts(fi.mesh_op, spts)
+            face_vsoln = interpolate_pts(fi.soln_op, soln)
+
+            # Run postproc plugins per-batch with full shape context
+            if self.pp_plugins:
+                adapter = _BoundaryPostProcAdapter(
+                    face_vpts, face_vsoln,
+                    self._get_shape(fi.etype, self.cfg), spts,
+                    fi.norm, fi.jac_op,
+                    self.cfg, self.elementscls, self._gradients
+                )
+                face_vsoln = self._run_postprocs(adapter, face_vsoln)
+
+            vspts.append(face_vpts)
+            vsoln.append(face_vsoln)
             curved.append(self.mesh.spts_curved[fi.etype][fi.idxs])
             part.append(self.soln[f'{fi.etype}-parts'][fi.idxs])
 
-            if needs_normals:
-                vnorms.append(self._compute_normals(fi.jac_op, spts, fi.norm))
-
-        vpts = np.hstack(vspts)
-        vsoln = np.dstack(vsoln)
-        normals = np.hstack(vnorms) if vnorms else None
-
-        # Run postproc plugins
-        vpts, vsoln = self._run_postprocs(vpts, vsoln, normals=normals)
-
-        return vpts, vsoln, np.hstack(curved), np.hstack(part)
-
-    def _compute_normals(self, jac_op, spts, ref_norm):
-        ndims = self.ndims
-        nspts, neles = spts.shape[0], spts.shape[1]
-
-        # Compute Jacobian at vis points
-        jac = jac_op.reshape(-1, nspts) @ spts.reshape(nspts, -1)
-        nsvpts = jac.shape[0] // ndims
-        jac = jac.reshape(nsvpts, ndims, ndims, neles)
-        jac = jac.transpose(1, 2, 0, 3)  # (ndims, ndims, nsvpts, neles)
-
-        # Compute smats
-        smats = np.empty((ndims, nsvpts, ndims, neles))
-
-        if ndims == 2:
-            a, b = jac[0, 0], jac[1, 0]
-            c, d = jac[0, 1], jac[1, 1]
-            smats[0, :, 0], smats[0, :, 1] = d, -b
-            smats[1, :, 0], smats[1, :, 1] = -c, a
-        else:
-            a, b, c = jac[0, 0], jac[1, 0], jac[2, 0]
-            d, e, f = jac[0, 1], jac[1, 1], jac[2, 1]
-            g, h, k = jac[0, 2], jac[1, 2], jac[2, 2]
-            smats[0, :, 0] = e*k - f*h
-            smats[0, :, 1] = f*g - d*k
-            smats[0, :, 2] = d*h - e*g
-            smats[1, :, 0] = c*h - b*k
-            smats[1, :, 1] = a*k - c*g
-            smats[1, :, 2] = b*g - a*h
-            smats[2, :, 0] = b*f - c*e
-            smats[2, :, 1] = c*d - a*f
-            smats[2, :, 2] = a*e - b*d
-
-        # Physical normal: pnorm = S^T . n_ref
-        ref_norm = np.array(ref_norm, dtype=float)
-        pnorm = np.einsum('ijkl,k->ijl', smats, ref_norm)
-
-        # Normalize
-        mag = np.sqrt(np.einsum('ijk,ijk->jk', pnorm, pnorm))
-        pnorm /= mag[np.newaxis]
-
-        return pnorm  # (ndims, nsvpts, neles)
+        return (np.hstack(vspts), np.dstack(vsoln),
+                np.hstack(curved), np.hstack(part))

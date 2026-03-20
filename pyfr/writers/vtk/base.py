@@ -1,4 +1,5 @@
-from collections import defaultdict, namedtuple
+from collections import defaultdict
+from functools import cached_property
 from pathlib import Path
 
 import numpy as np
@@ -8,9 +9,111 @@ from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
 
-PostProcData = namedtuple('PostProcData',
-                          ['pris', 'grad_pris', 'ploc', 'normals'],
-                          defaults=[None, None])
+
+class _BasePostProcAdapter:
+    def __init__(self, vpts, vsoln, shape, spts, cfg, elementscls, gradients):
+        self._vpts = vpts
+        self._vsoln = vsoln
+        self._shape = shape
+        self._spts = spts
+        self._cfg = cfg
+        self._elementscls = elementscls
+        self._gradients = gradients
+
+    @property
+    def ndims(self):
+        return self._shape.ndims
+
+    @property
+    def cfg(self):
+        return self._cfg
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @property
+    def spts(self):
+        return self._spts
+
+    @cached_property
+    def pris(self):
+        npri = len(self._elementscls.privars(self.ndims, self._cfg))
+        return [self._vsoln[:, i, :] for i in range(npri)]
+
+    @cached_property
+    def grad_pris(self):
+        if not self._gradients:
+            return None
+        npri = len(self._elementscls.privars(self.ndims, self._cfg))
+        result = []
+        for i in range(npri):
+            comps = [self._vsoln[:, npri + i*self.ndims + d, :]
+                     for d in range(self.ndims)]
+            result.append(np.stack(comps))
+        return result
+
+    @cached_property
+    def ploc(self):
+        return self._vpts.transpose(2, 0, 1)
+
+
+class _VolumePostProcAdapter(_BasePostProcAdapter):
+    @property
+    def pnorm(self):
+        raise RuntimeError('Normals not available for volume export')
+
+    @property
+    def normals(self):
+        raise RuntimeError('Normals not available for volume export')
+
+
+class _BoundaryPostProcAdapter(_BasePostProcAdapter):
+    def __init__(self, vpts, vsoln, shape, spts, face_norm, jac_op,
+                 cfg, elementscls, gradients):
+        super().__init__(vpts, vsoln, shape, spts, cfg, elementscls,
+                         gradients)
+        self._face_norm = face_norm
+        self._jac_op = jac_op
+
+    @cached_property
+    def pnorm(self):
+        ndims = self.ndims
+        nspts, neles = self._spts.shape[0], self._spts.shape[1]
+
+        jac = self._jac_op.reshape(-1, nspts) @ self._spts.reshape(nspts, -1)
+        nsvpts = jac.shape[0] // ndims
+        jac = jac.reshape(nsvpts, ndims, ndims, neles)
+        jac = jac.transpose(1, 2, 0, 3)
+
+        smats = np.empty((ndims, nsvpts, ndims, neles))
+
+        if ndims == 2:
+            a, b = jac[0, 0], jac[1, 0]
+            c, d = jac[0, 1], jac[1, 1]
+            smats[0, :, 0], smats[0, :, 1] = d, -b
+            smats[1, :, 0], smats[1, :, 1] = -c, a
+        else:
+            a, b, c = jac[0, 0], jac[1, 0], jac[2, 0]
+            d, e, f = jac[0, 1], jac[1, 1], jac[2, 1]
+            g, h, k = jac[0, 2], jac[1, 2], jac[2, 2]
+            smats[0, :, 0] = e*k - f*h
+            smats[0, :, 1] = f*g - d*k
+            smats[0, :, 2] = d*h - e*g
+            smats[1, :, 0] = c*h - b*k
+            smats[1, :, 1] = a*k - c*g
+            smats[1, :, 2] = b*g - a*h
+            smats[2, :, 0] = b*f - c*e
+            smats[2, :, 1] = c*d - a*f
+            smats[2, :, 2] = a*e - b*d
+
+        ref_norm = np.array(self._face_norm, dtype=float)
+        return np.einsum('ijkl,k->ijl', smats, ref_norm)
+
+    @cached_property
+    def normals(self):
+        mag = np.sqrt(np.einsum('ijk,ijk->jk', self.pnorm, self.pnorm))
+        return self.pnorm / mag[np.newaxis]
 
 
 def interpolate_pts(op, pts):
@@ -396,42 +499,22 @@ class BaseVTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
-    def _run_postprocs(self, vpts, vsoln, normals=None):
-        if not self.pp_plugins:
-            return vpts, vsoln
-
-        npri = len(self.elementscls.privars(self.ndims, self.cfg))
-        pris = [vsoln[:, i, :] for i in range(npri)]
-        ploc = vpts.transpose(2, 0, 1)
-
-        grad_pris = None
-        if self._gradients:
-            grad_pris = []
-            for i in range(npri):
-                comps = [vsoln[:, npri + i*self.ndims + d, :]
-                         for d in range(self.ndims)]
-                grad_pris.append(np.stack(comps))
-
-        data = PostProcData(pris=pris, grad_pris=grad_pris,
-                            ploc=ploc, normals=normals)
-
+    def _run_postprocs(self, adapter, vsoln):
         extras = []
+
         for pp in self.pp_plugins:
             if pp.needs_gradients and not self._gradients:
                 raise RuntimeError(f'Postproc {pp.name} requires '
                                    f'gradient data in the solution')
-            if pp.needs_normals and normals is None:
-                raise RuntimeError(f'Postproc {pp.name} requires '
-                                   f'surface normals (boundary export)')
 
-            for components in pp.compute(data).values():
+            for components in pp.compute(adapter).values():
                 for arr in components:
                     extras.append(arr[:, np.newaxis, :])
 
         if extras:
             vsoln = np.concatenate([vsoln, *extras], axis=1)
 
-        return vpts, vsoln
+        return vsoln
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
