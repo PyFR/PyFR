@@ -13,6 +13,8 @@ from pyfr.plugins.source import SourcePlugin
 from pyfr.plugins.tavg import TavgCLIPlugin, TavgPlugin
 from pyfr.plugins.turbulence import TurbulencePlugin
 from pyfr.plugins.writer import WriterPlugin
+from pyfr.postproc.flow import CpPostProc, MachPostProc, VorticityPostProc
+from pyfr.postproc.surface import CfPostProc, YPlusPostProc
 from pyfr.util import subclass_where
 
 

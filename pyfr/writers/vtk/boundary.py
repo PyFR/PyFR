@@ -1,10 +1,15 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import numpy as np
+
+FaceInfo = namedtuple('FaceInfo',
+                      ['etype', 'fidx', 'mesh_op', 'soln_op',
+                       'svpts', 'norm', 'idxs'])
 
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
+from pyfr.postproc.adapters import BoundaryPostProcAdapter
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 
 
@@ -57,9 +62,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 eoff = _search(smesh.eidxs[etype], eidxs[eoff])
 
             # Obtain the associated surface info
-            for stype, *info in self._get_surface_info(etype, eoff, fidx):
-                ecount[stype] += len(info[-1])
-                self._surface_info[stype].append((etype, *info))
+            for stype, finfo in self._get_surface_info(etype, eoff, fidx):
+                ecount[stype] += len(finfo.idxs)
+                self._surface_info[stype].append(finfo)
 
         self.einfo = list(ecount.items())
 
@@ -86,34 +91,54 @@ class VTKBoundaryWriter(BaseVTKWriter):
         mesh_op = shape.sbasis.nodal_basis_at(svpts)
         soln_op = shape.ubasis.nodal_basis_at(svpts)
 
-        return itype, mesh_op, soln_op
+        return itype, mesh_op, soln_op, svpts, norm
 
     def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)
 
         for e, f in zip(eoffs, fidxs):
             if f not in info:
-                info[f] = self._itype_opmats(etype, f, self.cfg)
+                itype, mesh_op, soln_op, svpts, norm = \
+                    self._itype_opmats(etype, f, self.cfg)
+                info[f] = (itype, mesh_op, soln_op, svpts, norm)
 
             idxs[f].append(e)
 
-        return [(*info[f], idxs[f]) for f in info]
+        return [(info[f][0],
+                 FaceInfo(etype=etype, fidx=f, mesh_op=info[f][1],
+                          soln_op=info[f][2], svpts=info[f][3],
+                          norm=info[f][4], idxs=idxs[f]))
+                for f in info]
 
     def _prepare_pts(self, itype):
         vspts, vsoln, curved, part = [], [], [], []
 
-        for etype, mesh_op, soln_op, idxs in self._surface_info[itype]:
-            spts = self.mesh.spts[etype][:, idxs]
-            soln = self.soln[etype][..., idxs]
+        for fi in self._surface_info[itype]:
+            spts = self.mesh.spts[fi.etype][:, fi.idxs]
+            soln = self.soln[fi.etype][..., fi.idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
 
             # Pre-process the solution
             soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
-            vspts.append(interpolate_pts(mesh_op, spts))
-            vsoln.append(interpolate_pts(soln_op, soln))
-            curved.append(self.mesh.spts_curved[etype][idxs])
-            part.append(self.soln[f'{etype}-parts'][idxs])
+            face_vpts = interpolate_pts(fi.mesh_op, spts)
+            face_vsoln = interpolate_pts(fi.soln_op, soln)
+
+            # Run postproc plugins per-batch with full shape context
+            if self.pp_plugins:
+                pris, grad_pris = self._extract_pris(face_vsoln)
+                ploc = face_vpts.transpose(2, 0, 1)
+                shape = self._get_shape(fi.etype, self.cfg)
+                adapter = BoundaryPostProcAdapter(
+                    self, pris, grad_pris, ploc, shape, spts,
+                    fi.fidx, fi.svpts, fi.norm
+                )
+                face_vsoln = self._run_postprocs(adapter, face_vsoln)
+
+            vspts.append(face_vpts)
+            vsoln.append(face_vsoln)
+            curved.append(self.mesh.spts_curved[fi.etype][fi.idxs])
+            part.append(self.soln[f'{fi.etype}-parts'][fi.idxs])
 
         return (np.hstack(vspts), np.dstack(vsoln),
                 np.hstack(curved), np.hstack(part))
