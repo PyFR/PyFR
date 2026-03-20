@@ -69,51 +69,67 @@ class _VolumePostProcAdapter(_BasePostProcAdapter):
 
 
 class _BoundaryPostProcAdapter(_BasePostProcAdapter):
-    def __init__(self, vpts, vsoln, shape, spts, face_norm, jac_op,
+    def __init__(self, vpts, vsoln, shape, spts, fidx, svpts, face_norm,
                  cfg, elementscls, gradients):
         super().__init__(vpts, vsoln, shape, spts, cfg, elementscls,
                          gradients)
+        self._fidx = fidx
+        self._svpts = svpts
         self._face_norm = face_norm
-        self._jac_op = jac_op
+
+    @cached_property
+    def _eles(self):
+        return self._elementscls(type(self._shape), self._spts, self._cfg)
 
     @cached_property
     def pnorm(self):
-        ndims = self.ndims
-        nspts, neles = self._spts.shape[0], self._spts.shape[1]
+        nsvpts = len(self._svpts)
+        norm_tiled = np.tile(np.array(self._face_norm, dtype=float),
+                             (nsvpts, 1))
 
-        jac = self._jac_op.reshape(-1, nspts) @ self._spts.reshape(nspts, -1)
-        nsvpts = jac.shape[0] // ndims
-        jac = jac.reshape(nsvpts, ndims, ndims, neles)
-        jac = jac.transpose(1, 2, 0, 3)
+        # pnorm_at returns (nsvpts, neles, ndims)
+        pn = self._eles.pnorm_at(self._svpts, norm_tiled)
 
-        smats = np.empty((ndims, nsvpts, ndims, neles))
-
-        if ndims == 2:
-            a, b = jac[0, 0], jac[1, 0]
-            c, d = jac[0, 1], jac[1, 1]
-            smats[0, :, 0], smats[0, :, 1] = d, -b
-            smats[1, :, 0], smats[1, :, 1] = -c, a
-        else:
-            a, b, c = jac[0, 0], jac[1, 0], jac[2, 0]
-            d, e, f = jac[0, 1], jac[1, 1], jac[2, 1]
-            g, h, k = jac[0, 2], jac[1, 2], jac[2, 2]
-            smats[0, :, 0] = e*k - f*h
-            smats[0, :, 1] = f*g - d*k
-            smats[0, :, 2] = d*h - e*g
-            smats[1, :, 0] = c*h - b*k
-            smats[1, :, 1] = a*k - c*g
-            smats[1, :, 2] = b*g - a*h
-            smats[2, :, 0] = b*f - c*e
-            smats[2, :, 1] = c*d - a*f
-            smats[2, :, 2] = a*e - b*d
-
-        ref_norm = np.array(self._face_norm, dtype=float)
-        return np.einsum('ijkl,k->ijl', smats, ref_norm)
+        # Transpose to (ndims, nsvpts, neles)
+        return pn.transpose(2, 0, 1)
 
     @cached_property
     def normals(self):
         mag = np.sqrt(np.einsum('ijk,ijk->jk', self.pnorm, self.pnorm))
         return self.pnorm / mag[np.newaxis]
+
+    @cached_property
+    def wall_dist(self):
+        # Project each solution point onto the face along the ref normal
+        # Face is a hyperplane in ref space; project by replacing the
+        # constrained coordinate(s)
+        itype, proj, norm = self._shape.faces[self._fidx]
+        norm_arr = np.array(norm, dtype=float)
+        upts = np.array(self._shape.upts)
+
+        # Face point in ref space (any point on the face)
+        face_pt = np.array(proj(*([0]*(self._shape.ndims - 1))))
+
+        # Project each upt onto face: move along ref normal to face plane
+        t = (face_pt - upts) @ norm_arr / np.dot(norm_arr, norm_arr)
+        upts_on_face = upts + t[:, np.newaxis] * norm_arr
+
+        # Physical positions at solution points and their face projections
+        upt_op = self._shape.sbasis.nodal_basis_at(upts)
+        face_op = self._shape.sbasis.nodal_basis_at(upts_on_face)
+
+        x_upt = interpolate_pts(upt_op, self._spts)    # (nupts, neles, ndims)
+        x_face = interpolate_pts(face_op, self._spts)   # (nupts, neles, ndims)
+
+        # Exact distance through curved mapping
+        diff = x_upt - x_face
+        dist = np.sqrt(np.einsum('ijk,ijk->ij', diff, diff))  # (nupts, neles)
+
+        # Smallest non-zero → first interior solution point
+        dist = np.where(dist > 1e-10, dist, np.inf)
+        wdist = dist.min(axis=0)  # (neles,)
+
+        return np.broadcast_to(wdist, (self._vpts.shape[0], len(wdist)))
 
 
 def interpolate_pts(op, pts):

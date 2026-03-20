@@ -3,8 +3,8 @@ from collections import defaultdict, namedtuple
 import numpy as np
 
 FaceInfo = namedtuple('FaceInfo',
-                      ['etype', 'mesh_op', 'soln_op',
-                       'jac_op', 'norm', 'idxs'])
+                      ['etype', 'fidx', 'mesh_op', 'soln_op',
+                       'svpts', 'norm', 'idxs'])
 
 from pyfr.cache import memoize
 from pyfr.shapes import BaseShape
@@ -91,10 +91,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         mesh_op = shape.sbasis.nodal_basis_at(svpts)
         soln_op = shape.ubasis.nodal_basis_at(svpts)
 
-        # Jacobian operator for normal computation
-        jac_op = np.rollaxis(shape.sbasis.jac_nodal_basis_at(svpts), 2)
-
-        return itype, mesh_op, soln_op, jac_op, norm
+        return itype, mesh_op, soln_op, svpts, norm
 
     def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)
@@ -106,8 +103,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
             idxs[f].append(e)
 
         return [(info[f][0],
-                 FaceInfo(etype=etype, mesh_op=info[f][1],
-                          soln_op=info[f][2], jac_op=info[f][3],
+                 FaceInfo(etype=etype, fidx=f, mesh_op=info[f][1],
+                          soln_op=info[f][2], svpts=info[f][3],
                           norm=info[f][4], idxs=idxs[f]))
                 for f in info]
 
@@ -130,7 +127,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 adapter = _BoundaryPostProcAdapter(
                     face_vpts, face_vsoln,
                     self._get_shape(fi.etype, self.cfg), spts,
-                    fi.norm, fi.jac_op,
+                    fi.fidx, fi.svpts, fi.norm,
                     self.cfg, self.elementscls, self._gradients
                 )
                 face_vsoln = self._run_postprocs(adapter, face_vsoln)

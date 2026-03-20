@@ -62,3 +62,35 @@ class CpPostProc(BasePostProcPlugin):
         q_inf = 0.5 * rho_inf * u_inf**2
 
         return {'cp': [(p - p_inf) / q_inf]}
+
+
+class YPlusPostProc(BasePostProcPlugin):
+    name = 'yplus'
+    systems = ['navier-stokes']
+    dimensions = [2, 3]
+    export_types = ['boundary']
+    needs_gradients = True
+    needs_normals = True
+
+    def fields(self):
+        return {'yplus': ['y+']}
+
+    def compute(self, data):
+        mu = self.cfg.getfloat('constants', 'mu')
+        ndims = self.ndims
+        normals = data.normals
+        rho_wall = data.pris[0]
+
+        # Wall shear stress
+        grad_vel = np.stack([data.grad_pris[1 + i] for i in range(ndims)])
+        tau_n = mu * np.einsum('ijkl,jkl->ikl',
+                               grad_vel + grad_vel.swapaxes(0, 1), normals)
+        nn = np.einsum('ikl,ikl->kl', tau_n, normals)
+        tau_wall = tau_n - nn[np.newaxis] * normals
+        tau_mag = np.sqrt(np.einsum('ikl,ikl->kl', tau_wall, tau_wall))
+
+        u_tau = np.sqrt(tau_mag / rho_wall)
+        nu = mu / rho_wall
+        y = data.wall_dist
+
+        return {'yplus': [y * u_tau / nu]}
