@@ -125,10 +125,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
             # Run postproc plugins per-batch with full shape context
             if self.pp_plugins:
                 adapter = _BoundaryPostProcAdapter(
-                    face_vpts, face_vsoln,
+                    self, face_vpts, face_vsoln,
                     self._get_shape(fi.etype, self.cfg), spts,
-                    fi.fidx, fi.svpts, fi.norm,
-                    self.cfg, self.elementscls, self._gradients
+                    fi.fidx, fi.svpts, fi.norm
                 )
                 face_vsoln = self._run_postprocs(adapter, face_vsoln)
 

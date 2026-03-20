@@ -66,8 +66,7 @@ class VTKVolumeWriter(BaseVTKWriter):
         if self.pp_plugins:
             shape = subclass_where(BaseShape, name=etype)(len(spts), self.cfg)
             adapter = _VolumePostProcAdapter(
-                vpts, vsoln, shape, spts, self.cfg,
-                self.elementscls, self._gradients
+                self, vpts, vsoln, shape, spts
             )
             vsoln = self._run_postprocs(adapter, vsoln)
 

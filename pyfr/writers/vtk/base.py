@@ -11,14 +11,15 @@ from pyfr.writers import BaseWriter
 
 
 class _BasePostProcAdapter:
-    def __init__(self, vpts, vsoln, shape, spts, cfg, elementscls, gradients):
+    def __init__(self, writer, vpts, vsoln, shape, spts):
         self._vpts = vpts
         self._vsoln = vsoln
         self._shape = shape
         self._spts = spts
-        self._cfg = cfg
-        self._elementscls = elementscls
-        self._gradients = gradients
+        self._cfg = writer.cfg
+        self._soln = writer.soln
+        self._elementscls = writer.elementscls
+        self._gradients = writer._gradients
 
     @property
     def ndims(self):
@@ -27,6 +28,10 @@ class _BasePostProcAdapter:
     @property
     def cfg(self):
         return self._cfg
+
+    @property
+    def soln(self):
+        return self._soln
 
     @property
     def shape(self):
@@ -69,10 +74,10 @@ class _VolumePostProcAdapter(_BasePostProcAdapter):
 
 
 class _BoundaryPostProcAdapter(_BasePostProcAdapter):
-    def __init__(self, vpts, vsoln, shape, spts, fidx, svpts, face_norm,
-                 cfg, elementscls, gradients):
-        super().__init__(vpts, vsoln, shape, spts, cfg, elementscls,
-                         gradients)
+    def __init__(self, writer, vpts, vsoln, shape, spts, fidx, svpts,
+                 face_norm):
+        super().__init__(writer, vpts, vsoln, shape, spts)
+
         self._fidx = fidx
         self._svpts = svpts
         self._face_norm = face_norm
