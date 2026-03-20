@@ -432,11 +432,11 @@ def process_export(args):
     # Flatten comma-separated postproc names
     postprocs = [p for arg in (args.postprocs or []) for p in arg.split(',')]
 
-    # Load user-supplied config if provided; otherwise solution config is used
-    cfg = Inifile.load(args.ppcfg) if args.ppcfg else None
+    # Load postproc config if provided (merged into solution config)
+    ppcfg = Inifile.load(args.ppcfg) if args.ppcfg else None
 
     kwargs = {'fields': args.fields, 'prec': args.precision,
-              'pname': args.pname, 'pp_plugins': postprocs, 'cfg': cfg}
+              'pname': args.pname, 'pp_plugins': postprocs, 'ppcfg': ppcfg}
 
     # Process any exporter-specific options
     for e in args.eopts:

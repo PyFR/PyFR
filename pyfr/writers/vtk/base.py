@@ -64,13 +64,11 @@ class _BasePostProcAdapter:
 
 
 class _VolumePostProcAdapter(_BasePostProcAdapter):
-    @property
-    def pnorm(self):
-        raise RuntimeError('Normals not available for volume export')
+    pass
 
-    @property
-    def normals(self):
-        raise RuntimeError('Normals not available for volume export')
+
+class _STLPostProcAdapter(_BasePostProcAdapter):
+    pass
 
 
 class _BoundaryPostProcAdapter(_BasePostProcAdapter):
@@ -498,8 +496,8 @@ class BaseVTKWriter(BaseWriter):
     }
 
     def __init__(self, meshf, pname=None, *, prec='single', order=None,
-                 divisor=None, fields=[], pp_plugins=[], cfg=None):
-        super().__init__(meshf, pname, cfg=cfg)
+                 divisor=None, fields=[], pp_plugins=[], ppcfg=None):
+        super().__init__(meshf, pname, cfg=ppcfg)
 
         self.dtype = np.dtype(prec).type
         self.fields = fields

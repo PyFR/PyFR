@@ -10,17 +10,20 @@ class BaseWriter:
         # Dimensions
         self.ndims = self.reader.mesh.ndims
 
-        # User-supplied config (if any)
-        self.cfg = cfg
+        # Additional postproc config sections to merge (if any)
+        self._ppcfg = cfg
 
     def _load_soln(self, solnf):
         from pyfr.solvers.base import BaseSystem
 
         self.mesh, self.soln = self.reader.load_subset_mesh_soln(solnf)
 
-        # Use solution config if no config was provided
-        if self.cfg is None:
-            self.cfg = self.soln['config']
+        # Always use solution config, merge in any user-supplied sections
+        self.cfg = self.soln['config']
+        if self._ppcfg:
+            for sect in self._ppcfg.sections():
+                for k, v in self._ppcfg.items(sect):
+                    self.cfg.set(sect, k, v)
 
         self.stats = self.soln['stats']
 
