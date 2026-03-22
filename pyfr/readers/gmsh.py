@@ -368,8 +368,9 @@ class GmshReader(BaseReader):
 
         for _ in range(ne):
             nen = int(next(mshit).split()[-1])
-            nix = np.loadtxt(mshit, dtype=np.int64, max_rows=nen)
-            nodepts[nix - ixl] = np.loadtxt(mshit, max_rows=nen)
+            if nen > 0:
+                nix = np.loadtxt(mshit, dtype=np.int64, max_rows=nen)
+                nodepts[nix - ixl] = np.loadtxt(mshit, max_rows=nen)
 
         # Save the starting node offset
         self._nodeoff = ixl

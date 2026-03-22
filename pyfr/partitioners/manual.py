@@ -1,49 +1,48 @@
 """
 pyfr/partitioners/manual.py
 
-Assigns each specified region to a separate partition, and automatically 
-partitions the remaining elements using METIS.
-If the number of regions == nparts, the partitioning is handled purely 
-manually without METIS.
+Assigns each specified region to a dedicated partition and uses METIS to
+auto-partition the remaining elements. If the number of regions equals
+nparts, all elements are assigned manually with no METIS step.
 
-Element assignment is determined based on the element's centroid.
-This ensures that elements at adjacent box boundaries do not overlap 
-and are divided cleanly.
+Element membership is determined by each element's centroid, so adjacent
+region boundaries never overlap -- elements are split cleanly at the boundary.
 
 Usage
 -----
-# [Mode 1] regions: Specify region expressions directly
-#   1 region -> partition 0, remaining 3 partitions handled by METIS
+# [Mode 1] regions: explicitly specify region expressions
+#   1 region -> partition 0, remaining 3 partitions via METIS
 pyfr partition add mesh.pyfrm 4 myname -p manual \\
     --popt 'regions:box((0,0,0),(0.1,0.03,0.0075))'
 
-#   4 regions -> partitions 0~3, no METIS (pure manual)
+#   4 regions -> partitions 0-3, no METIS (pure manual)
 pyfr partition add mesh.pyfrm 4 myname -p manual \\
     --popt 'regions:box((0,0,-0.015),(0.1,0.03,-0.0075));box((0,0,-0.0075),(0.1,0.03,0));box((0,0,0),(0.1,0.03,0.0075));box((0,0,0.0075),(0.1,0.03,0.015))'
 
-# [Mode 2] split_axis: Divide into nparts equally based on centroid quantiles
-#   Divide into 4 along the z-axis (each partition has roughly equal element counts)
+# [Mode 2] split_axis: equally split mesh into nparts along a coordinate axis
+#   Split into 4 equal parts along z (each partition gets ~equal element count)
 pyfr partition add mesh.pyfrm 4 myname -p manual \\
     --popt split_axis:z
 
-#   Divide into 8 along the x-axis
+#   Split into 8 equal parts along x
 pyfr partition add mesh.pyfrm 8 myname -p manual \\
     --popt split_axis:x
 
 Rules (regions mode)
-------------------
-- Use ';' to separate region expressions in the 'regions' option.
-- First region -> partition 0, second -> partition 1, etc.
-- If number of regions < nparts: Remaining elements -> METIS (partitions N to nparts-1).
-- If number of regions == nparts: Pure manual.
-- If number of regions > nparts: Raises an error.
-- Centroid-based assignment ensures no overlaps at boundaries.
+--------------------
+- Separate multiple region expressions with ";" in the regions option
+- 1st region -> partition 0, 2nd -> partition 1, ...
+- n_regions < nparts : remaining elements -> METIS partitions N~(nparts-1)
+- n_regions == nparts: pure manual, no METIS (all elements must be covered)
+- n_regions > nparts : error
+- Centroid-based membership means no overlap at region boundaries
+- If overlap does occur, a warning is printed and the first region wins
 
 Rules (split_axis mode)
----------------------
-- Equally divides the mesh into nparts quantiles based on the specified centroid axis.
-- Ensures each partition has a nearly identical number of elements.
-- Cannot be used simultaneously with the 'regions' option.
+-----------------------
+- Splits elements equally using quantile boundaries of centroid coordinates
+- Each partition receives approximately the same number of elements
+- Cannot be used together with the regions option
 """
 
 import numpy as np
@@ -66,23 +65,24 @@ class ManualPartitioner(BasePartitioner):
         self._regions_str  = opts.pop('regions', None)
         self._split_axis   = opts.pop('split_axis', None)
 
-        # Cannot use both options simultaneously
+        # Cannot use both options at the same time
         if self._regions_str and self._split_axis:
             raise ValueError(
                 'Cannot use both "regions" and "split_axis" at the same time.'
             )
 
         if not self._regions_str and not self._split_axis:
-            raise ValueError(
-                'ManualPartitioner requires either:\n'
-                '  --popt \'regions:box(...)\'\n'
-                '  --popt split_axis:x  (or y, z)'
+            # Raise OSError so the auto-selector in __main__.py skips this partitioner
+            # (the auto-selection loop only catches OSError)
+            raise OSError(
+                'ManualPartitioner requires either --popt regions:... '
+                'or --popt split_axis:x/y/z'
             )
 
         if len(partwts) < 2:
             raise ValueError('ManualPartitioner requires at least 2 partitions')
 
-        # Regions mode: Parse expressions
+        # regions mode: parse expressions
         if self._regions_str:
             self._region_exprs = [r.strip() for r in self._regions_str.split(';')
                                   if r.strip()]
@@ -109,7 +109,7 @@ class ManualPartitioner(BasePartitioner):
         if progress is None:
             progress = NullProgressSequence()
 
-        # 1. Global connectivity ------------------------------------------
+        # 1. Global connectivity -----------------------------------------
         with progress.start('Construct global connectivity array'):
             con, ecurved, edisps, cdisps = self.construct_global_con(mesh)
 
@@ -121,12 +121,12 @@ class ManualPartitioner(BasePartitioner):
             pmcon, exwts, pmerge = self._group_periodic_eles(
                 mesh, con, cdisps, elewts_fn)
 
-        # 3. Construct dual graph -----------------------------------------
+        # 3. Construct dual graph -------------------------------------------
         with progress.start('Construct graph'):
             full_graph, vemap = self._construct_graph(pmcon, elewts_fn,
                                                       exwts=exwts)
 
-        # 4. Compute centroids --------------------------------------------
+        # 4. Compute centroids ------------------------------------------------
         with progress.start('Compute element centroids'):
             all_nodes    = mesh['nodes']['location'][()]
             centroids    = []
@@ -135,7 +135,7 @@ class ManualPartitioner(BasePartitioner):
                 centroids.append(all_nodes[nidxs].mean(axis=1))
             all_centroids = np.vstack(centroids)   # (total_eles, ndim)
 
-        # 5. Calculate partition assignments (vparts_v) -------------------
+        # 5. Compute vparts_v ------------------------------------------------
         if self._split_axis:
             vparts_v = self._assign_by_split_axis(
                 all_centroids, vemap, progress)
@@ -144,7 +144,7 @@ class ManualPartitioner(BasePartitioner):
                 all_centroids, total_eles, edisps, vemap,
                 full_graph, mesh, progress, parse_region_expr)
 
-        # 6. Ungroup periodic elements ------------------------------------
+        # 6. Ungroup periodic elements ------------------------------------------
         with progress.start('Ungroup periodic elements'):
             vparts = self._ungroup_periodic_eles(pmerge, vemap, vparts_v)
 
@@ -156,7 +156,7 @@ class ManualPartitioner(BasePartitioner):
                 f'{len(unique_parts)}: {unique_parts.tolist()}.'
             )
 
-        # 8. Construct canonical partitioning structure -------------------
+        # 8. Build canonical partitioning -----------------------------
         with progress.start('Construct partitioning'):
             pinfo = self.construct_partitioning(
                 mesh, ecurved, edisps, con, vparts)
@@ -164,7 +164,7 @@ class ManualPartitioner(BasePartitioner):
         return pinfo
 
     # ------------------------------------------------------------------
-    # split_axis mode: Equal division based on centroid quantiles
+    # split_axis mode: equal split by centroid quantile
     # ------------------------------------------------------------------
     def _assign_by_split_axis(self, all_centroids, vemap, progress):
         axis_idx = {'x': 0, 'y': 1, 'z': 2}[self._split_axis]
@@ -174,22 +174,22 @@ class ManualPartitioner(BasePartitioner):
                 f'Split axis={self._split_axis}, {nparts} equal parts '
                 f'(quantile-based)'):
 
-            # Use centroid axis values based on total_eles
-            # (Using vemap directly might omit elements from periodic merging)
+            # Use all total_eles centroids (not vemap) so periodically merged
+            # elements are not excluded from the count
             cvals_all = all_centroids[:, axis_idx]   # (total_eles,)
 
-            # Calculate internal boundaries (nparts-1): e.g., 25%, 50%, 75%
-            quantiles  = np.linspace(0, 100, nparts + 1)[1:-1]
+            # Inner boundaries (nparts-1): e.g. 25%, 50%, 75%
+            quantiles        = np.linspace(0, 100, nparts + 1)[1:-1]
             inner_boundaries = np.percentile(cvals_all, quantiles)
 
-            # Assign partition numbers to all elements
+            # Assign partition index to every element
             vparts_full = np.searchsorted(inner_boundaries, cvals_all,
                                           side='right').astype(np.int32)
 
-            # Boundaries for display purposes (including +-inf)
+            # Boundaries for display (with +-inf at ends)
             boundaries = np.concatenate(([-np.inf], inner_boundaries, [np.inf]))
 
-            # Print element distribution info
+            # Print element counts per partition
             for p in range(nparts):
                 n    = int((vparts_full == p).sum())
                 lo_s = f'{boundaries[p]:.6f}'   if np.isfinite(boundaries[p])   else '-inf'
@@ -198,13 +198,13 @@ class ManualPartitioner(BasePartitioner):
                       f'{n} elements  '
                       f'({self._split_axis}=[{lo_s}, {hi_s}])')
 
-            # Map back via vemap (reflecting periodic merging)
+            # Convert to vemap-based array (accounts for periodic merge)
             vparts_v = vparts_full[vemap]
 
         return vparts_v
 
     # ------------------------------------------------------------------
-    # regions mode: Centroid-based region identification + METIS
+    # regions mode: centroid-based region assignment + METIS
     # ------------------------------------------------------------------
     def _assign_by_regions(self, all_centroids, total_eles, edisps, vemap,
                            full_graph, mesh, progress, parse_region_expr):
@@ -228,7 +228,7 @@ class ManualPartitioner(BasePartitioner):
                 )
             masks_v.append(mask_v)
 
-        # Overlap warnings
+        # Overlap warning
         for i in range(len(masks_v)):
             for j in range(i + 1, len(masks_v)):
                 n_overlap = int((masks_v[i] & masks_v[j]).sum())
@@ -241,7 +241,7 @@ class ManualPartitioner(BasePartitioner):
                         f'Assigning to region {i} (first region wins).'
                     )
 
-        # Assign partition numbers
+        # Assign partition indices
         vparts_v = np.full(len(vemap), -1, dtype=np.int32)
         for part_id, mask_v in enumerate(masks_v):
             vparts_v[(vparts_v == -1) & mask_v] = part_id

@@ -108,13 +108,27 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
             r_tensor = np.array(rs, dtype=np.float64)
             if r_tensor.shape != (3, 3) :
                 raise ValueError("'reynolds-stress' must be a 3x3 matrix "
-                                "((Rxx, Rxy, Rxz), (Ryx, Ryy, Ryz), (Rzx, Rzy, Rzz)).") 
-            self.r_tensor = 0.5*(r_tensor + r_tensor.T)           
+                                "((Rxx, Rxy, Rxz), (Ryx, Ryy, Ryz), (Rzx, Rzy, Rzz)).")
+            self.r_tensor = 0.5*(r_tensor + r_tensor.T)
+
+            # reference-scale: convert non-dimensional R_ij to physical units
+            ref_scale = self.cfg.get(cfgsect, 'reference-scale', 'none')
+            ref_scale = ref_scale.strip().lower()
+            if ref_scale == 'utau':
+                utau = self.cfg.getfloat(cfgsect, 'utau')
+                self.r_tensor *= utau**2
+            elif ref_scale == 'avgu':
+                self.r_tensor *= avgu**2
+            elif ref_scale != 'none':
+                raise ValueError(
+                    f"Unknown reference-scale '{ref_scale}'. "
+                    "Use 'utau', 'avgu', or 'none'."
+                )
         elif ti is not None :
             self.r_tensor = np.eye(3)*(0.01*ti*self.avgu)**2
         else :
             raise ValueError("Either 'turbulence-intensity' or 'reynolds-stress' must be set.")
-        
+
         # 3. Normalization & Cholesky decomposition
         sigma = self.cfg.getfloat(cfgsect, 'sigma')   
         gc = (2.0*sigma/(math.erf(1.0/sigma)*math.pi**0.5))**0.5
@@ -125,7 +139,8 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
         except np.linalg.LinAlgError:
             raise ValueError("Reynolds stress tensor must be positive definite.")
         
-        st_correction = 1.0 / math.sqrt(2.0) # Correction factor for integration of source term
+        #st_correction = 1.0 / math.sqrt(2.0) # Correction factor for integration of source term
+        print("[Plugin] Correction OFF", flush=True) # Customized Check
         
         beta3_tensor = L*norm_factor
         beta1_vector = -0.5/(sigma*self.l_ref)**2
@@ -135,7 +150,7 @@ class AnisotropicTurbulencePlugin(BaseSolverPlugin):
             gamma = self.cfg.getfloat('constants', 'gamma')
             avgrho = self.cfg.getfloat(cfgsect, 'avg-rho')
             avgmach = self.cfg.getfloat(cfgsect, 'avg-mach')
-            beta2 = avgrho * (gamma - 1) * avgmach**2 * st_correction
+            beta2 = avgrho * (gamma - 1) * avgmach**2 #* st_correction
         else:
             beta2 = 0
 

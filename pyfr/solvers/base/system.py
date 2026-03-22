@@ -123,6 +123,12 @@ class BaseSystem:
             for etype, ele in elemap.items():
                 soln = initsoln[etype][:, smap, :]
                 ele.set_ics_from_soln(soln, solncfg)
+        elif self.cfg.get('soln-ics', 'type', 'expression') == 'cgns':
+            from pyfr.readers.cgns_ic import CGNSICReader
+            cgns_path = self.cfg.getpath('soln-ics', 'cgns-file', abs=True)
+            cgns_reader = CGNSICReader(cgns_path)
+            for ele in eles:
+                ele.set_ics_from_cgns(cgns_reader)
         else:
             for ele in eles:
                 ele.set_ics_from_cfg()
