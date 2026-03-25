@@ -131,9 +131,11 @@ class MassFlowBCMixin:
             self.csv = None
 
     def setup(self, sdata, prevcfg):
-        if sdata is not None and sdata[4] != 0:
-            (self.interp_c, self.interp_m, 
-            self.mf_avg, self.tprev, self.nstep_counter) = sdata
+        sect_eq = self.cfg.sect_eq(prevcfg, self.cfgsect)
+
+        if sdata is not None and sdata[4] != 0 and sect_eq:
+            (self.interp_c, self.interp_m,
+             self.mf_avg, self.tprev, self.nstep_counter) = sdata
         else:
             self.interp_c = self._eval_opts(['p'])[0]
             self.interp_m = 0.0
