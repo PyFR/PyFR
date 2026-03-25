@@ -138,7 +138,7 @@ class Inifile:
         except NoSectionError:
             return {k: (v, None) for k, v in sitems.items()}
 
-        # Return {key: (self_val, other_val)} for keys that differ
+        # Return {key: (self_val, other_val)} for options that differ
         return {k: (sitems.get(k), oitems.get(k))
                 for k in sitems.items() ^ oitems.items()}
 

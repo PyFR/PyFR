@@ -135,8 +135,8 @@ class MassFlowBCMixin:
                    and self.cfg.sect_eq(prevcfg, self.cfgsect))
 
         if sdata is not None and sdata[4] != 0 and sect_eq:
-            self.interp_c, self.interp_m = sdata[0], sdata[1]
-            self.mf_avg, self.tprev = sdata[2], sdata[3]
+            self.interp_c, self.interp_m = sdata[:2]
+            self.mf_avg, self.tprev = sdata[2:4]
             self.nstep_counter = sdata[4]
         else:
             self.interp_c = self._eval_opts(['p'])[0]
