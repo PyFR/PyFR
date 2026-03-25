@@ -122,9 +122,6 @@ class Inifile:
         self._cp.remove_option(section, option)
 
     def sect_eq(self, other, section):
-        if other is None:
-            return False
-
         try:
             sitems = dict(self._cp.items(section))
             oitems = dict(other._cp.items(section))
@@ -133,11 +130,6 @@ class Inifile:
             return False
 
     def sect_diff(self, other, section):
-        # No previous config, everything is new
-        if other is None:
-            return {k: (v, None)
-                    for k, v in self._cp.items(section)}
-
         sitems = dict(self._cp.items(section))
 
         # Section missing from other, everything is new
