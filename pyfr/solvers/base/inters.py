@@ -42,7 +42,7 @@ class BaseInters:
         self._external_args = {}
         self._external_vals = {}
 
-    def _set_external(self, name, spec, value=None):
+    def set_external(self, name, spec, value=None):
         self._external_args[name] = spec
 
         if value is not None:

@@ -7,6 +7,7 @@ from pyfr.cache import memoize
 
 class Kernel:
     compound = False
+    rtnames = ()
 
     def __init__(self, mats=[], views=[], misc=[], dt=float('nan')):
         self.mats = mats

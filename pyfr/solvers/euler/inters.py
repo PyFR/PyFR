@@ -144,8 +144,8 @@ class MassFlowBCMixin:
         opts = self._eval_opts(['mass-flow-rate', 'alpha', 'eta'])
         self.target_mfr, self.alpha, self.eta = opts
 
-        self._set_external('ic', 'scalar fpdtype_t')
-        self._set_external('im', 'scalar fpdtype_t')
+        self.set_external('ic', 'scalar fpdtype_t')
+        self.set_external('im', 'scalar fpdtype_t')
 
         surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)

@@ -27,6 +27,9 @@ class BaseSystem:
         self.cfg = cfg
         self.nregs = nregs
 
+        # Plugin kernel-creation callbacks
+        self._kernel_callbacks = []
+
         # Conservative and physical variable names
         convars = self.elementscls.convars(mesh.ndims, cfg)
         privars = self.elementscls.privars(mesh.ndims, cfg)
@@ -73,6 +76,14 @@ class BaseSystem:
                                                                 initsoln,
                                                                 serialiser)
         backend.commit()
+
+    def register_kernel_callback(self, names, callback):
+        # Check for extern name clashes with other plugins
+        for cb_names, _ in self._kernel_callbacks:
+            if clash := [n for n in names if n in cb_names]:
+                raise ValueError(f'Extern name clash: {clash}')
+
+        self._kernel_callbacks.append((tuple(names), callback))
 
     def commit(self):
         # Prepare the kernels and any associated MPI requests
@@ -240,6 +251,12 @@ class BaseSystem:
 
                         tag_kern(pn, p, kern)
 
+        bindable = [k for ks in kernels.values() for k in ks if k.rtnames]
+        for cb_names, cb in self._kernel_callbacks:
+            for k in bindable:
+                if any(name in cb_names for name in k.rtnames):
+                    cb(k)
+
     def _gen_mpireqs(self, mpiint):
         self._mpireqs = mpireqs = defaultdict(list)
 
@@ -261,8 +278,8 @@ class BaseSystem:
         binders, bckerns = [], defaultdict(dict)
         for kn, kerns in kernels.items():
             for k in kerns:
-                if bind := getattr(k, 'bind', None):
-                    binders.append(bind)
+                if k.rtnames:
+                    binders.append(k.bind)
 
                 if kn.startswith('bcint/'):
                     bcname = self._ktags[k].removeprefix('bcint/')
