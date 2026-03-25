@@ -169,6 +169,9 @@ class BaseSolverPlugin(BasePlugin):
         self._extern_values = {}
         self._extern_binders = []
 
+    def _update_extern_values(self):
+        pass
+
     def _register_externs(self, intg, names, spec='scalar fpdtype_t'):
         self._update_extern_values()
 
