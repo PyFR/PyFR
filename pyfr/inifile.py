@@ -140,7 +140,7 @@ class Inifile:
 
         # Return {key: (self_val, other_val)} for options that differ
         return {k: (sitems.get(k), oitems.get(k))
-                for k in sitems.items() ^ oitems.items()}
+                for k, _ in sitems.items() ^ oitems.items()}
 
     def sections(self):
         return self._cp.sections()
