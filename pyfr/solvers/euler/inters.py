@@ -3,7 +3,6 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
-from pyfr.solvers.euler.elements import BaseFluidElements
 from pyfr.writers.csv import CSVStream
 
 import numpy as np
@@ -184,8 +183,9 @@ class ControlledBCMixin:
 
     def setup(self, sdata):
         if sdata is not None and sdata[4] != 0:
-            (self.interp_c, self.interp_m,
-             self.meas_avg, self.tprev, self.nstep_counter) = sdata
+            self.interp_c, self.interp_m = sdata[:2]
+            self.meas_avg, self.tprev = sdata[2:4]
+            self.nstep_counter = sdata[4]
         else:
             self.interp_c = self._default_interp_c()
             self.interp_m = 0.0
@@ -201,6 +201,9 @@ class ControlledBCMixin:
             return None
 
     def prepare(self, system, ubank, t, kerns):
+        if not hasattr(self, 'elementscls'):
+            self.elementscls = system.elementscls
+
         update = self.nstep_counter % self.nsteps == 0
         if (update or not self.tprev) and t >= self.tstart:
             solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
@@ -287,7 +290,7 @@ class PressureBCMixin(ControlledBCMixin):
         p_num = 0.0
 
         for ufpts, qwts, norms in self._interp_face(solns):
-            p = BaseFluidElements.con_to_pri(ufpts, self.cfg)[-1]
+            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
             nmag = np.sqrt(np.einsum('jih,jih->ji', norms, norms))
             p_num += np.einsum('i,ij,ji', qwts, p, nmag)
 
