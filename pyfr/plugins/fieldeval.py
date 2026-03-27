@@ -54,7 +54,7 @@ class BackendFieldReducer:
             )
 
         # Register the fieldeval kernel
-        backend.pointwise.register('pyfr.plugins.kernels.fieldeval')
+        backend.pointwise.register('pyfr.plugins.soln.kernels.fieldeval')
 
         # Element banks and gradient banks
         self._ele_banks = intg.system.ele_banks

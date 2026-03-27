@@ -121,7 +121,7 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
         backend = self.backend
 
         # Register our kernel template
-        backend.pointwise.register('pyfr.plugins.kernels.fluidforce')
+        backend.pointwise.register('pyfr.plugins.soln.kernels.fluidforce')
 
         # Precompute per-face data and upload to device
         fi = self.ff_int
