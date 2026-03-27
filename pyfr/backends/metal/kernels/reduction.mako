@@ -24,7 +24,6 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
 % endif
     int tid = threadIdx.x;
     ixdtype_t i = ixdtype_t(blockIdx.x)*${blocksz} + tid;
-    ixdtype_t nblocks = (ncolb + ${blocksz} - 1) / ${blocksz};
 
     fpdtype_t acc[${nexprs}] = ${pyfr.array(str(init_val), i=nexprs)};
     threadgroup fpdtype_t sdata[${nexprs}][${blocksz // 8}];
@@ -78,8 +77,8 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
                 % endif
                 }
 
-                // Copy to global memory
-                reduced[nblocks*(e*${ncola} + ixdtype_t(blockIdx.y)) + blockIdx.x] = acc_e;
+                // Atomically update global result
+                atomic_${rop}_fpdtype(&reduced[e*${ncola} + ixdtype_t(blockIdx.y)], acc_e);
             }
         }
     }

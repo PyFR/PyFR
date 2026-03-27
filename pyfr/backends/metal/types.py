@@ -24,15 +24,8 @@ class MetalMatrixBase(base.MatrixBase):
         del self._initval
 
     def _get(self):
-        # Ensure the host buffer is in sync with the device
-        cbuf = self.backend.new_command_buffer()
-        blit = cbuf.blitCommandEncoder()
-        blit.synchronizeResource_(self.basedata)
-        blit.endEncoding()
-        cbuf.commit()
-        cbuf.waitUntilCompleted()
-
-        self.backend.last_cbuf = None
+        # Ensure all GPU work has completed
+        self.backend.wait()
 
         # Unpack
         return self._unpack(self.hdata).copy()
@@ -43,9 +36,6 @@ class MetalMatrixBase(base.MatrixBase):
 
         # Update the host buffer contents
         self.hdata[:] = self._pack(ary).flat
-
-        # Inform Metal about the update
-        self.basedata.didModifyRange_((self.offset, self.nbytes))
 
 
 class MetalMatrixSlice(base.MatrixSlice):

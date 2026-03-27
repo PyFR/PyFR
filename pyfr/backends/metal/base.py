@@ -104,8 +104,18 @@ class MetalBackend(BaseBackend):
         return mi._replace(free=free, total=total)
 
     def _malloc_impl(self, nbytes):
-        from Metal import MTLResourceStorageModeManaged
+        from Metal import MTLResourceStorageModeShared, NSMakeRange
 
         # Allocate the device buffer
-        return call_(self.dev, 'newBufferWith', length=nbytes,
-                     options=MTLResourceStorageModeManaged)
+        buf = call_(self.dev, 'newBufferWith', length=nbytes,
+                    options=MTLResourceStorageModeShared)
+
+        # Zero the buffer
+        cbuf = self.new_command_buffer()
+        blit = cbuf.blitCommandEncoder()
+        blit.fillBuffer_range_value_(buf, NSMakeRange(0, nbytes), 0)
+        blit.endEncoding()
+        cbuf.commit()
+        cbuf.waitUntilCompleted()
+
+        return buf

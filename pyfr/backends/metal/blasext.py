@@ -69,7 +69,7 @@ class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
         return ZeroKernel(mats=[m])
 
     def _reduction(self, fvvar, vvars, svars, tplargs):
-        from Metal import MTLResourceStorageModeManaged
+        from Metal import MTLResourceStorageModeShared
 
         ixdtype = self.backend.ixdtype
         nrow, _, ldim, fpdtype = fvvar.traits[1:]
@@ -81,15 +81,15 @@ class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
         tgrp = (blocksz, 1, 1)
         grid = (ncolb - ncolb % -tgrp[0], ncola, 1)
 
-        # Temporary buffer size requirements
-        bufsz = fvvar.itemsize*nexprs*ncola*(grid[0] // tgrp[0])
+        # Result buffer (nexprs*ncola with atomic reduction)
+        bufsz = fvvar.itemsize*nexprs*ncola
 
-        # Allocate the temporary buffer and map it on the host
+        # Allocate the result buffer and map it on the host
         reduced_dev = call_(self.backend.dev, 'newBufferWith', length=bufsz,
-                            options=MTLResourceStorageModeManaged)
+                            options=MTLResourceStorageModeShared)
         reduced_host = reduced_dev.contents().as_buffer(bufsz)
         reduced_host = np.frombuffer(reduced_host, dtype=fpdtype)
-        reduced_host = reduced_host.reshape(nexprs, ncola, -1)
+        reduced_host = reduced_host.reshape(nexprs, ncola)
 
         # Add backend-specific template arguments
         tplargs['ncola'] = ncola
@@ -112,22 +112,21 @@ class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
         kargs.extend(v.data for v in vvars.values())
         kargs.extend([None]*len(svars))
 
-        # Reduction type
+        # Reduction type and initialisation value
         reducer = np.max if tplargs['rop'] == 'max' else np.sum
+        init_val = tplargs['init_val']
 
         class ReductionKernel(MetalKernel):
             @property
             def retval(self):
-                return reducer(reduced_host, axis=(1, 2))
+                return reducer(reduced_host, axis=1)
 
             if svars:
                 def bind(self, *consts):
                     kargs[coff:coff + nconsts] = consts
 
             def run(self, cbuf):
+                reduced_host.fill(init_val)
                 rkern(cbuf, grid, tgrp, *kargs)
-                blit = cbuf.blitCommandEncoder()
-                blit.synchronizeResource_(reduced_dev)
-                blit.endEncoding()
 
         return ReductionKernel(mats=vvars.values())
