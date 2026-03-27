@@ -2,6 +2,8 @@ import itertools as it
 import re
 import types
 
+import numpy as np
+
 from pyfr.cache import memoize
 
 
@@ -96,7 +98,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
 
         # Check the kernel exists in the template
         if name not in argspecs:
-            raise ValueError(f'Kernel "{name}" not defined in template')
+            raise ValueError(f'Kernel {name!r} not defined in template')
 
         # Extract the metadata for the kernel
         ndim, argn, argt = argspecs[name]
@@ -116,6 +118,9 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         # Possible view types
         viewtypes = (self.backend.view_cls, self.backend.xchg_view_cls)
 
+        # Scalar types which can be resolved at runtime
+        scaltypes = (self.backend.fpdtype, self.backend.ixdtype)
+
         # Matrices and views this kernel operates on
         argmats, argviews = {}, {}
 
@@ -128,7 +133,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                 ka = argdict[aname]
             except KeyError:
                 # Allow scalar arguments to be resolved at runtime
-                if len(atypes) == 1 and atypes[0] == self.backend.fpdtype:
+                if len(atypes) == 1 and atypes[0] in scaltypes:
                     ka = aname
                 else:
                     raise
@@ -152,7 +157,10 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
                     view = ka.view
 
                 arglst += [view.basedata, view.mapping]
-                arglst += [view.rstrides] if len(atypes) == 3 else []
+                if len(atypes) == 3 and atypes[2] == np.uintp:
+                    arglst.append(view.rstrides)
+                elif len(atypes) == 3:
+                    arglst.append(view.rstrides_val)
             # Other; let the backend handle it
             else:
                 arglst.append(ka)
@@ -170,7 +178,7 @@ class BasePointwiseKernelProvider(BaseKernelProvider):
         if hasattr(self, name):
             # Same name different module
             if getattr(self, name)._mod != mod:
-                raise RuntimeError(f'Attempt to re-register "{name}" with a '
+                raise RuntimeError(f'Attempt to re-register {name!r} with a '
                                    'different module')
             # Otherwise (since we're already registered) return
             else:

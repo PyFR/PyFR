@@ -11,6 +11,10 @@ import pyfr.nputil as nputil
 import pyfr.util as util
 
 
+def carray(context, vals):
+    return '{ ' + ', '.join(map(str, vals)) + ' }'
+
+
 def ndrange(context, *args):
     return util.ndrange(*args)
 
@@ -31,6 +35,23 @@ def dot(context, a_, b_=None, /, **kwargs):
     nd = nd if isinstance(nd, Iterable) else [nd]
 
     return '(' + ' + '.join(ab.format(**{ix: i}) for i in range(*nd)) + ')'
+
+
+def axnpby_expr(context, k, idx, start=0, *, nv, in_scale_idxs=(),
+                out_scale=None, in_name='_in', out_name='_out'):
+    terms = []
+    for l in range(start, nv):
+        coef, val = f'a{l}', f'x{l}[{idx}]'
+        if l in in_scale_idxs:
+            terms.append(f'({coef})*{in_name}[{k}]*({val})')
+        else:
+            terms.append(f'({coef})*({val})')
+
+    if terms:
+        expr = '(' + ' + '.join(terms) + ')'
+        return f'{out_name}[{k}]*({expr})' if out_scale else expr
+    else:
+        return '0'
 
 
 def array(context, expr_, vals_={}, /, **kwargs):
@@ -130,7 +151,8 @@ def macro(context, name, params, externs='', id=''):
     if name in context['_macros']:
         # Check for multiple definitions of macro name
         if context['_macros'][name].id != id:
-            raise ValueError(f'Attempt to redefine macro "{name}"')
+            raise ValueError(f'Attempt to redefine macro {name!r}')
+
         # Already registered, just return (allow multiple includes)
         return ''
 
@@ -141,7 +163,7 @@ def macro(context, name, params, externs='', id=''):
     # Ensure no invalid characters in params/extern variables
     for p in it.chain(params, externs):
         if not re.match(r'[A-Za-z_]\w*$', p):
-            raise ValueError(f'Invalid param "{p}" in macro "{name}"')
+            raise ValueError(f'Invalid param {p!r} in macro {name!r}')
 
     # Extract signature from callable for Python variables
     argsig = signature(context['caller'].body)
@@ -153,11 +175,11 @@ def macro(context, name, params, externs='', id=''):
 
 
 def _parse_expand_args(name, mparams, margsig, args, kwargs):
-    margs = list(margsig.parameters.keys())
+    margs = list(margsig.parameters)
 
     # Separate kwargs into params and Python data params
     if unknown := set(kwargs) - set(mparams) - set(margs):
-        errs = [ValueError(f'Unknown parameter "{u}"') for u in unknown]
+        errs = [ValueError(f'Unknown parameter {u!r}') for u in unknown]
         raise ExceptionGroup(f'In macro: {name}', errs)
 
     paramskw = {k: v for k, v in kwargs.items() if k in mparams}
@@ -208,13 +230,20 @@ def expand(context, name, /, *args, **kwargs):
         if (extrn not in context['_extrns'] and
             re.search(rf'\b{extrn}\b', body)):
             raise ExceptionGroup(f'In macro: {name}',
-                                 [ValueError(f'Missing external "{extrn}"')])
+                                 [ValueError(f'Missing external {extrn!r}')])
 
     # Rename local parameters
     for lname, subst in params.items():
         body = re.sub(rf'\b{lname}\b', str(subst), body)
 
     return f'{{\n{body}\n}}'
+
+
+@supports_caller
+def fp_precise(context):
+    body = capture(context, context['caller'].body)
+
+    return '{\nPYFR_FP_PRECISE_BEGIN\n' + body + '\n}'
 
 
 @supports_caller

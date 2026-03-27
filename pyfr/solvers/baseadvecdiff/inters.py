@@ -73,13 +73,13 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
                 'pack', self._vect_lhs
             )
             self.mpireqs['vect_fpts_send'] = lambda: self._vect_lhs.sendreq(
-                self._rhsrank, vect_fpts_tag
+                comm, self._rhsrank, vect_fpts_tag
             )
 
         # If we need to recv gradients from the RHS
         if self.c['ldg-beta'] != 0.5:
             self.mpireqs['vect_fpts_recv'] = lambda: self._vect_rhs.recvreq(
-                self._rhsrank, vect_fpts_tag
+                comm, self._rhsrank, vect_fpts_tag
             )
             self.kernels['vect_fpts_unpack'] = lambda: be.kernel(
                 'unpack', self._vect_rhs
@@ -101,14 +101,14 @@ class BaseAdvectionDiffusionMPIInters(BaseAdvectionMPIInters):
                     'pack', av_lhs
                 )
                 self.mpireqs['artvisc_fpts_send'] = lambda: av_lhs.sendreq(
-                    self._rhsrank, artvisc_fpts_tag
+                    comm, self._rhsrank, artvisc_fpts_tag
                 )
 
             # If we need to recv artificial viscosity from the RHS
             if self.c['ldg-beta'] != 0.5:
                 av_rhs = self._artvisc_rhs
                 self.mpireqs['artvisc_fpts_recv'] = lambda: av_rhs.recvreq(
-                    self._rhsrank, artvisc_fpts_tag
+                    comm, self._rhsrank, artvisc_fpts_tag
                 )
                 self.kernels['artvisc_fpts_unpack'] = lambda: be.kernel(
                     'unpack', av_rhs

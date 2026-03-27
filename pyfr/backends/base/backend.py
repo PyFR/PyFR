@@ -26,6 +26,7 @@ def recordmat(fn):
 
 class BaseBackend:
     name = None
+    has_double = True
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -38,8 +39,8 @@ class BaseBackend:
 
         # Convert to a NumPy data type
         self.fpdtype = np.dtype(prec).type
-        self.fpdtype_eps = np.finfo(self.fpdtype).eps
-        self.fpdtype_max = np.finfo(self.fpdtype).max
+        self.fpdtype_eps = float(np.finfo(self.fpdtype).eps)
+        self.fpdtype_max = float(np.finfo(self.fpdtype).max)
 
         # Memory model
         match cfg.get('backend', 'memory-model', 'normal'):
@@ -97,7 +98,7 @@ class BaseBackend:
         else:
             # Check that the extent has not already been committed
             if extent in self._comm_extents:
-                raise ValueError(f'Extent "{extent}" has already been '
+                raise ValueError(f'Extent {extent!r} has already been '
                                  'allocated')
 
             # Append
@@ -183,11 +184,11 @@ class BaseBackend:
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol*view.n), tags=tags)
 
-    def view(self, matmap, rmap, cmap, rstridemap=None, vshape=(), tags=set()):
+    def view(self, matmap, rmap, cmap, rstridemap=1, vshape=(), tags=set()):
         return self.view_cls(self, matmap, rmap, cmap, rstridemap, vshape,
                              tags)
 
-    def xchg_view(self, matmap, rmap, cmap, rstridemap=None, vshape=(),
+    def xchg_view(self, matmap, rmap, cmap, rstridemap=1, vshape=(),
                   tags=set()):
         return self.xchg_view_cls(self, matmap, rmap, cmap, rstridemap,
                                   vshape, tags)
@@ -217,7 +218,7 @@ class BaseBackend:
                         return best_kern
 
         if best_kern is None:
-            raise KeyError(f'Kernel "{name}" has no providers')
+            raise KeyError(f'Kernel {name!r} has no providers')
 
         return best_kern
 

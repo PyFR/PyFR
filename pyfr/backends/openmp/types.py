@@ -135,9 +135,7 @@ class OpenMPGraph(base.Graph):
 
         return allocsz, argsubs, argmasks
 
-    def group(self, kerns, subs=[]):
-        super().group(kerns, subs)
-
+    def _group(self, kerns, subs):
         kranges = self._get_kranges()
 
         # Handle split kernels

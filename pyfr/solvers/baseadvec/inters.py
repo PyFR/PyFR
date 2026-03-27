@@ -1,6 +1,7 @@
 import itertools as it
 import math
 
+from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
 from pyfr.solvers.base import BaseInters
 
@@ -56,6 +57,9 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
         # Name our interface so we can match kernels to MPI requests
         self.name = f'p{rhsrank}'
 
+        # MPI communicator
+        comm, rank, root = get_comm_rank_root()
+
         # MPI request tag counter
         self._mpi_tag_counter = it.count(self.BASE_MPI_TAG)
 
@@ -76,10 +80,10 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
         # Associated MPI requests
         scal_fpts_tag = next(self._mpi_tag_counter)
         self.mpireqs['scal_fpts_send'] = lambda: self._scal_lhs.sendreq(
-            self._rhsrank, scal_fpts_tag
+            comm, self._rhsrank, scal_fpts_tag
         )
         self.mpireqs['scal_fpts_recv'] = lambda: self._scal_rhs.recvreq(
-            self._rhsrank, scal_fpts_tag
+            comm, self._rhsrank, scal_fpts_tag
         )
 
         if self._ef_enabled:
@@ -97,10 +101,10 @@ class BaseAdvectionMPIInters(BaseAdvectionIntersMixin, BaseInters):
 
             ent_fpts_tag = next(self._mpi_tag_counter)
             self.mpireqs['ent_fpts_send'] = lambda: self._entmin_lhs.sendreq(
-                self._rhsrank, ent_fpts_tag
+                comm, self._rhsrank, ent_fpts_tag
             )
             self.mpireqs['ent_fpts_recv'] = lambda: self._entmin_rhs.recvreq(
-                self._rhsrank, ent_fpts_tag
+                comm, self._rhsrank, ent_fpts_tag
             )
         else:
             self._entmin_lhs = self._entmin_rhs = None
