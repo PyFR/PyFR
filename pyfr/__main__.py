@@ -16,11 +16,10 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import (BasePartitioner, get_partitioner,
                                reconstruct_partitioning, write_partitioning)
-from pyfr.plugins import BaseCLIPlugin
-from pyfr.plugins.base import BasePlugin
+from pyfr.plugins import BaseCLIPlugin, BasePlugin
 from pyfr.progress import (NullProgressSequence, ProgressBar,
                            ProgressSequenceAction, format_dofs)
-from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
+from pyfr.readers import BaseReader, get_reader_by_extn, get_reader_by_name
 from pyfr.readers.native import NativeReader
 from pyfr.readers.stl import read_stl
 from pyfr.resamplers import (BaseInterpolator, NativeCloudResampler,
@@ -473,6 +472,10 @@ def process_resample(args):
         treader = NativeReader(args.tgtmesh, args.pname, construct_con=False)
         tcfg = Inifile.load(args.tgtcfg)
 
+    # Ensure the source is a solution file
+    if ssoln.stats.get('data', 'prefix') != 'soln':
+        raise RuntimeError('Resampling is only supported for solution files')
+
     # Get the interpolator
     opts = dict(s.split(':', 1) for s in args.iopts)
     interp = get_interpolator(args.interpolator, smesh.ndims, opts)
@@ -486,16 +489,12 @@ def process_resample(args):
     # Get the output file path
     tpath = Path(args.tgtsoln).absolute()
 
-    # Get the data field prefix
-    prefix = ssoln['stats'].get('data', 'prefix')
-
     # Have the root rank prepare a stats record
     if rank == root:
         stats = Inifile()
-        stats.set('data', 'prefix', prefix)
-        stats.set('data', 'fields', ssoln['stats'].get('data', 'fields'))
+        stats.set('data', 'prefix', 'soln')
         stats.set('solver-time-integrator', 'tcurr',
-                  ssoln['stats'].get('solver-time-integrator', 'tcurr'))
+                  ssoln.stats.get('solver-time-integrator', 'tcurr'))
         metadata = {'config': tcfg.tostr(), 'stats': stats.tostr(),
                     'mesh-uuid': treader.mesh.uuid}
     else:
@@ -504,9 +503,11 @@ def process_resample(args):
     with progress.start('Write target solution'):
         # Write out the new solution
         writer = NativeWriter(treader.mesh, tcfg, fpdtype, tpath.parent,
-                              tpath.name, prefix)
-        writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs)
-        writer.write(tsoln, None, metadata)
+                              tpath.name, 'soln')
+        writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs,
+                                {'soln': ssoln.fields})
+        writer.write({k: {'soln': v} for k, v in tsoln.items()},
+                     None, metadata)
 
 
 class _ProgressBarPlugin(BasePlugin):
@@ -548,11 +549,10 @@ def _process_common(args, soln, cfg):
 
     # If we do not have a config file then take it from the solution
     if cfg is None:
-        cfg = soln['config']
-    # Remove stale serialised data from soln
+        cfg = soln.config
+    # Remove stale serialised data from soln if using a different config
     elif soln:
-        soln = {k: v for k, v in soln.items() 
-                if not k.startswith(('plugins', 'bcs', 'intg'))}
+        soln.state.clear()
 
     # Create a backend
     backend = get_backend(args.backend, cfg)
