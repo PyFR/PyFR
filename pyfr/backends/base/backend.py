@@ -6,7 +6,7 @@ from weakref import WeakSet, WeakValueDictionary
 
 import numpy as np
 
-from pyfr.backends.base.kernels import NotSuitableError
+from pyfr.backends.base.provider import NotSuitableError
 from pyfr.backends.base.makoutil import mfilttag
 from pyfr.backends.base.types import Extent, StorageRegion
 from pyfr.template import DottedTemplateLookup

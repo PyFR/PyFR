@@ -41,7 +41,7 @@ def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
     # Iterate over subdivision points (same bary coords for all tris)
     for s, P, r in zip(smoothed, flat_pts, bary):
         # Phong-interpolated normal at P
-        N = sum(ri*ni for ri, ni in zip(r, tri_norms))
+        N = np.einsum('k,knj->nj', r, tri_norms)
         N /= np.linalg.norm(N, axis=1, keepdims=True)
 
         # Per-vertex C1 target points Q and projections Qp (eqs 2, 3, 8)

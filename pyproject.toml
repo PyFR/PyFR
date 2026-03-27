@@ -49,6 +49,7 @@ version = {attr = "pyfr._version.__version__"}
 include = ["pyfr*"]
 
 [tool.setuptools.package-data]
+"pyfr.backends.base.kernels" = ["*.mako"]
 "pyfr.backends.cuda.kernels" = ["*.mako"]
 "pyfr.backends.hip.kernels" = ["*.mako"]
 "pyfr.backends.metal.kernels" = ["*.mako"]
