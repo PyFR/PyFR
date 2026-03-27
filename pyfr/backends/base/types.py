@@ -7,7 +7,37 @@ import numpy as np
 from pyfr.mpiutil import autofree, mpi
 
 
-class MatrixBase:
+class _StorageBase:
+    @property
+    def storage_root(self):
+        return self._storage_root
+
+    def same_storage(self, other):
+        return self.storage_root is other.storage_root
+
+
+class Extent(_StorageBase):
+    def __init__(self, name=None):
+        self.name = name
+        self.offset = 0
+        self.nbytes = 0
+        self.basedata = None
+        self._pending = []
+        self._storage_root = self
+
+    def reserve(self, obj, nbytes):
+        self._pending.append((obj, self.nbytes))
+        self.nbytes += nbytes
+
+    def commit(self, alloc_fn):
+        self.basedata = alloc_fn(self.nbytes)
+        for obj, offset in self._pending:
+            obj.onalloc(self.basedata, offset)
+            obj._storage_root = self
+        self._pending.clear()
+
+
+class MatrixBase(_StorageBase):
     _base_tags = set()
 
     def __init__(self, backend, dtype, ioshape, initval, extent, tags):
@@ -136,7 +166,7 @@ class Matrix(MatrixBase):
         pass
 
 
-class MatrixSlice:
+class MatrixSlice(_StorageBase):
     def __init__(self, backend, mat, ra, rb, ca, cb):
         self.backend = backend
         self.parent = mat
@@ -182,6 +212,33 @@ class MatrixSlice:
 
         return self.parent.offset + _offset*self.itemsize
 
+    @property
+    def storage_root(self):
+        return self.parent.storage_root
+
+
+class StorageRegion(_StorageBase):
+    def __init__(self, parent, offset, nbytes):
+        offset, nbytes = int(offset), int(nbytes)
+        if offset < 0 or nbytes < 0 or offset + nbytes > parent.nbytes:
+            raise ValueError('Invalid storage region')
+
+        self.parent = parent
+        self.nbytes = nbytes
+        self.rel_offset = offset
+
+    @property
+    def basedata(self):
+        return self.parent.basedata
+
+    @property
+    def offset(self):
+        return self.parent.offset + self.rel_offset
+
+    @property
+    def storage_root(self):
+        return self.parent.storage_root
+
 
 class ConstMatrix(MatrixBase):
     _base_tags = {'const'}
@@ -210,6 +267,7 @@ class View:
         self._mats = [backend.mats[i] for i in np.unique(matmap)]
 
         # Extract the base allocation and data type
+        self.storage_root = self._mats[0].storage_root
         self.basedata = self._mats[0].basedata
         self.refdtype = self._mats[0].dtype
 
@@ -220,9 +278,9 @@ class View:
         if any(not isinstance(m, mattypes) for m in self._mats):
             raise TypeError('Incompatible matrix type for view')
 
-        if any(m.basedata != self.basedata for m in self._mats):
+        if any(not m.same_storage(self._mats[0]) for m in self._mats):
             raise TypeError('All viewed matrices must belong to the same '
-                            'allocation extent')
+                            'storage object')
 
         if any(m.dtype != self.refdtype for m in self._mats):
             raise TypeError('Mixed data types are not supported')

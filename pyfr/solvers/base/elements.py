@@ -116,11 +116,13 @@ class BaseElements:
                for dv in self.privars]
 
         # Allocate
-        self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
+        scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
-            self.scal_upts[:, i, :] = m8 @ v if m8 is not None else v
+            scal_upts[:, i, :] = m8 @ v if m8 is not None else v
+
+        return scal_upts
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -133,8 +135,8 @@ class BaseElements:
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
 
         # Apply and reshape
-        self.scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
-        self.scal_upts = self.scal_upts.reshape(nupts, nvars, neles)
+        scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
+        return scal_upts.reshape(nupts, nvars, neles)
 
     @cached_property
     def plocfpts(self):
@@ -209,7 +211,7 @@ class BaseElements:
         else:
             return klist[0]
 
-    def set_backend(self, backend, nscalupts, nonce, linoff):
+    def set_backend(self, backend, nonce, linoff):
         self._be = backend
 
         # If we are doing gradient fusion
@@ -257,10 +259,13 @@ class BaseElements:
         elif hasattr(self, '_vect_upts'):
             self._grad_upts = self._vect_upts
 
-        # Allocate the storage required by the time integrator
-        self.scal_upts = [backend.matrix(self.scal_upts.shape,
-                                         self.scal_upts, tags={'align'})
-                          for i in range(sum(nscalupts))]
+        self.scal_upts = []
+
+    def alloc_bank(self, extent, ic=None):
+        shape = (self.nupts, self.nvars, self.neles)
+        m = self._be.matrix(shape, ic, extent=extent, tags={'align'})
+        self.scal_upts.append(m)
+        return m
 
     @memoize
     def opmat(self, expr):

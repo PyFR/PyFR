@@ -1,41 +1,45 @@
 class BaseRegister:
-    pass
+    extent = None
 
 
 class ScalarRegister(BaseRegister):
     vector = False
     dynamic = False
 
-    def __init__(self, *, n=1, rhs=True):
+    def __init__(self, *, n=1, rhs=True, extent=None):
         self.n = n
         self.rhs = rhs
+        self.extent = extent
 
 
 class DynamicScalarRegister(BaseRegister):
     vector = False
     dynamic = True
 
-    def __init__(self, *, rhs=True):
+    def __init__(self, *, rhs=True, extent=None):
         self.n = 'dyn'
         self.rhs = rhs
+        self.extent = extent
 
 
 class VectorRegister(BaseRegister):
     vector = True
     dynamic = False
 
-    def __init__(self, *, n, rhs=True):
+    def __init__(self, *, n, rhs=True, extent=None):
         self.n = n
         self.rhs = rhs
+        self.extent = extent
 
 
 class DynamicVectorRegister(BaseRegister):
     vector = True
     dynamic = True
 
-    def __init__(self, *, rhs=True):
+    def __init__(self, *, rhs=True, extent=None):
         self.n = 'dyn'
         self.rhs = rhs
+        self.extent = extent
 
 
 class RegisterMeta(type):

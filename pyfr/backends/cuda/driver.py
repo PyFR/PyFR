@@ -149,6 +149,7 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuDevicePrimaryCtxRetain', POINTER(c_void_p), c_int),
         (c_int, 'cuDevicePrimaryCtxRelease', c_int),
         (c_int, 'cuCtxSetCurrent', c_void_p),
+        (c_int, 'cuMemGetInfo_v2', POINTER(c_size_t), POINTER(c_size_t)),
         (c_int, 'cuMemAlloc_v2', POINTER(c_void_p), c_size_t),
         (c_int, 'cuMemFree_v2', c_void_p),
         (c_int, 'cuMemAllocHost_v2', POINTER(c_void_p), c_size_t),
@@ -511,6 +512,11 @@ class CUDA:
         lib.cuDeviceGetAttribute(minor, lib.COMPUTE_CAPABILITY_MINOR, dev)
 
         return major.value, minor.value
+
+    def mem_info(self):
+        free, total = c_size_t(), c_size_t()
+        self.lib.cuMemGetInfo(free, total)
+        return free.value, total.value
 
     def mem_alloc(self, nbytes):
         return CUDADevAlloc(self, nbytes)

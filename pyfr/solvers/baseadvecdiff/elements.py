@@ -20,8 +20,8 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
         return bufs
 
-    def set_backend(self, backend, nscalupts, nonce, linoff):
-        super().set_backend(backend, nscalupts, nonce, linoff)
+    def set_backend(self, backend, nonce, linoff):
+        super().set_backend(backend, nonce, linoff)
 
         # Ensure we point to the correct gradient array
         if self.basis.fpts_in_upts:

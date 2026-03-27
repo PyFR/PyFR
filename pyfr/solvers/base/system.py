@@ -25,11 +25,10 @@ class BaseSystem:
     _extra_kern_parts = {}
     _extra_mpi_parts = []
 
-    def __init__(self, backend, mesh, initsoln, nregs, cfg, serialiser):
+    def __init__(self, backend, mesh, initsoln, registers, cfg, serialiser):
         self.backend = backend
         self.mesh = mesh
         self.cfg = cfg
-        self.nrhs, self.nother = nregs
 
         # Plugin kernel-creation callbacks
         self._kernel_callbacks = []
@@ -51,14 +50,13 @@ class BaseSystem:
         self.nonce = nonce = str(next(self._nonce_seq))
 
         # Load the elements
-        eles, elemap = self._load_eles(mesh, initsoln, nregs, nonce)
+        eles, elemap, ics = self._load_eles(mesh, initsoln, nonce)
         backend.commit()
 
         # Retain the element map; this may be deleted by clients
         self.ele_map = elemap
 
-        # Get the banks, types, num DOFs and shapes of the elements
-        self.ele_banks = [e.scal_upts for e in eles]
+        # Get the types, num DOFs and shapes of the elements
         self.ele_types = list(elemap)
         self.ele_ndofs = [e.neles*e.nupts*e.nvars for e in eles]
         self.ele_shapes = {etype: (e.nupts, e.nvars, e.neles)
@@ -71,13 +69,40 @@ class BaseSystem:
         if hasattr(eles[0], '_grad_upts'):
             self.eles_vect_upts = [e._grad_upts for e in eles]
 
+        # Allocate register banks (RHS first, then non-RHS)
+        self._alloc_register_banks(registers, eles, ics)
+
         # Load the interfaces
         self._int_inters = self._load_int_inters(mesh, elemap)
         self._mpi_inters = self._load_mpi_inters(mesh, elemap)
         self._bc_inters, self._bc_prefns = self._load_bc_inters(mesh, elemap,
                                                                 initsoln,
                                                                 serialiser)
-        backend.commit()
+
+    def _alloc_register_banks(self, registers, eles, ics):
+        self.ele_banks = [[] for _ in eles]
+        self.nrhs = 0
+
+        # Allocate RHS banks first (with initial conditions), then non-RHS
+        for rhs in [True, False]:
+            for r in registers:
+                if r.rhs != rhs or r.dynamic or not r.n:
+                    continue
+
+                if rhs:
+                    self.nrhs += r.n
+
+                for eidx, (ele, ic) in enumerate(zip(eles, ics)):
+                    extent = r.extent or f'bank_{id(ele)}'
+
+                    for _ in range(r.n):
+                        m = ele.alloc_bank(extent, ic=ic if rhs else None)
+                        self.ele_banks[eidx].append(m)
+
+        self.nother = sum(
+            r.n for r in registers
+            if not r.rhs and not r.dynamic and r.n
+        )
 
     def register_kernel_callback(self, names, callback):
         # Check for extern name clashes with other plugins
@@ -197,7 +222,7 @@ class BaseSystem:
         # Observed input/output bank numbers
         self._rhs_uin_fout = set()
 
-    def _load_eles(self, mesh, initsoln, nregs, nonce):
+    def _load_eles(self, mesh, initsoln, nonce):
         basismap = {b.name: b for b in subclasses(BaseShape, just_leaf=True)}
 
         # Load the elements
@@ -206,23 +231,21 @@ class BaseSystem:
 
         eles = list(elemap.values())
 
-        # Set the initial conditions
+        # Compute the initial conditions
         if initsoln:
-            # Process the solution
-            for etype, ele in elemap.items():
-                ele.set_ics_from_soln(initsoln.data[etype], initsoln.config)
+            ics = [ele.set_ics_from_soln(initsoln.data[et], initsoln.config)
+                   for et, ele in elemap.items()]
         else:
-            for ele in eles:
-                ele.set_ics_from_cfg()
+            ics = [ele.set_ics_from_cfg() for ele in eles]
 
         # Allocate these elements on the backend
         for etype, ele in elemap.items():
             curved = mesh.spts_curved[etype]
             linoff = np.max(*np.nonzero(curved), initial=-1) + 1
 
-            ele.set_backend(self.backend, nregs, nonce, linoff)
+            ele.set_backend(self.backend, nonce, linoff)
 
-        return eles, elemap
+        return eles, elemap, ics
 
     def _load_int_inters(self, mesh, elemap):
         int_inters = self.intinterscls(self.backend, *mesh.con, elemap,

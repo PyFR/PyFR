@@ -19,7 +19,7 @@ class BaseExplicitIntegrator(BaseIntegrator):
                                 'error-estimation-based controllers')
 
         # Construct the relevant system
-        self.system = systemcls(backend, mesh, initsoln, self._nregs, cfg,
+        self.system = systemcls(backend, mesh, initsoln, self._registers, cfg,
                                 self.serialiser,
                                 needs_cfl=self.controller_needs_cfl)
 

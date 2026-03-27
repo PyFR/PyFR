@@ -103,6 +103,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipGetDevicePropertiesR0600', c_void_p, c_int),
         (c_int, 'hipSetDevice', c_int),
         (c_int, 'hipDeviceGetUuid', 16*c_char, c_int),
+        (c_int, 'hipMemGetInfo', POINTER(c_size_t), POINTER(c_size_t)),
         (c_int, 'hipMalloc', POINTER(c_void_p), c_size_t),
         (c_int, 'hipFree', c_void_p),
         (c_int, 'hipHostMalloc', POINTER(c_void_p), c_size_t, c_uint),
@@ -425,6 +426,11 @@ class HIP:
 
     def set_device(self, devid):
         self.lib.hipSetDevice(devid)
+
+    def mem_info(self):
+        free, total = c_size_t(), c_size_t()
+        self.lib.hipMemGetInfo(free, total)
+        return free.value, total.value
 
     def mem_alloc(self, nbytes):
         return HIPDevAlloc(self, nbytes)

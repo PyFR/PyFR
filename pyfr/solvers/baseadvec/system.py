@@ -8,9 +8,9 @@ from pyfr.solvers.baseadvec.entfilter import EntropyFilter
 class BaseAdvectionSystem(BaseSystem):
     _shock_capturing_modes = {'none', 'entropy-filter'}
 
-    def __init__(self, backend, mesh, initsoln, nregs, cfg, serialiser,
+    def __init__(self, backend, mesh, initsoln, registers, cfg, serialiser,
                  *, needs_cfl=False):
-        super().__init__(backend, mesh, initsoln, nregs, cfg, serialiser)
+        super().__init__(backend, mesh, initsoln, registers, cfg, serialiser)
         self._needs_cfl = needs_cfl
 
         if needs_cfl:

@@ -18,7 +18,7 @@ class BaseImplicitIntegrator(BaseIntegrator):
                             'implicit time stepping')
 
         # Construct the relevant system
-        self.system = systemcls(backend, mesh, initsoln, self._nregs, cfg,
+        self.system = systemcls(backend, mesh, initsoln, self._registers, cfg,
                                 self.serialiser,
                                 needs_cfl=self.controller_needs_cfl)
 
@@ -28,6 +28,9 @@ class BaseImplicitIntegrator(BaseIntegrator):
         # Event handlers for advance_to
         self.plugins = self._get_plugins(initsoln)
 
+        # Hook for subclasses to modify extents before commit
+        self._pre_commit()
+
         # Commit the system
         self.system.commit()
 
@@ -36,6 +39,9 @@ class BaseImplicitIntegrator(BaseIntegrator):
 
         # Global degree of freedom count
         self.gndofs = self._get_gndofs()
+
+    def _pre_commit(self):
+        pass
 
     @_common_plugin_prop('_curr_soln')
     def soln(self):

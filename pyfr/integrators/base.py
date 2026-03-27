@@ -358,11 +358,11 @@ class BaseIntegrator(metaclass=RegisterMeta):
 
         # Backend memory
         comm, _, _ = get_comm_rank_root()
-        mem_stats = comm.allgather(self.backend.memory_stats())
+        mem_info = comm.allgather(self.backend.memory_info())
         stats.set('backend-memory', 'current',
-                  ','.join(str(m[0]) for m in mem_stats))
+                  ','.join(str(m.current) for m in mem_info))
         stats.set('backend-memory', 'peak',
-                  ','.join(str(m[1]) for m in mem_stats))
+                  ','.join(str(m.peak) for m in mem_info))
 
     @property
     def cfgmeta(self):
@@ -431,9 +431,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
             raise ValueError('Dynamic scalar register must be 0 or 1')
 
         if reg.vector:
-            new_reg = VectorRegister(n=n, rhs=reg.rhs)
+            new_reg = VectorRegister(n=n, rhs=reg.rhs, extent=reg.extent)
         else:
-            new_reg = ScalarRegister(n=n, rhs=reg.rhs)
+            new_reg = ScalarRegister(n=n, rhs=reg.rhs, extent=reg.extent)
 
         self._registers[new_reg] = self._registers.pop(reg)
 

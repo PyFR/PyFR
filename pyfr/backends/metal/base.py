@@ -98,8 +98,10 @@ class MetalBackend(BaseBackend):
             self.last_cbuf = None
 
     def memory_info(self):
+        mi = super().memory_info()
         total = self.dev.recommendedMaxWorkingSetSize()
-        return total - self.dev.currentAllocatedSize(), total
+        free = total - self.dev.currentAllocatedSize()
+        return mi._replace(free=free, total=total)
 
     def _malloc_impl(self, nbytes):
         from Metal import MTLResourceStorageModeManaged

@@ -50,6 +50,7 @@ class OpenCLWrappers(LibWrapper):
     BUFFER_CREATE_TYPE_REGION = 0x1220
     DEVICE_AFFINITY_DOMAIN_NEXT_PARTITIONABLE = 0x20
     DEVICE_EXTENSIONS = 0x1030
+    DEVICE_GLOBAL_MEM_SIZE = 0x101f
     DEVICE_LOCAL_MEM_SIZE = 0x1023
     DEVICE_MEM_BASE_ADDR_ALIGN = 0x1019
     DEVICE_NAME = 0x102b
@@ -245,6 +246,7 @@ class OpenCLDevice(_OpenCLBase):
         self.name = self._query_str('name')
         self.vendor = self._query_str('vendor')
 
+        self.global_mem_size = self._query_type(c_ulong, 'global_mem_size')
         self.local_mem_size = self._query_type(c_ulong, 'local_mem_size')
         self.mem_align = self._query_type(c_uint, 'mem_base_addr_align') // 8
 

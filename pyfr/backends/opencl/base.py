@@ -135,6 +135,11 @@ class OpenCLBackend(BaseBackend):
     def wait(self):
         self.queue.finish()
 
+    def memory_info(self):
+        mi = super().memory_info()
+        total = self.cl.dev.global_mem_size
+        return mi._replace(free=total - mi.current, total=total)
+
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer
         buf = self.cl.mem_alloc(nbytes)

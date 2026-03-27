@@ -1,14 +1,18 @@
-from collections import defaultdict
+from collections import namedtuple
 from functools import cached_property, wraps
 from itertools import count
 import math
-from weakref import WeakKeyDictionary, WeakValueDictionary
+from weakref import WeakSet, WeakValueDictionary
 
 import numpy as np
 
 from pyfr.backends.base.kernels import NotSuitableError
 from pyfr.backends.base.makoutil import mfilttag
+from pyfr.backends.base.types import Extent, StorageRegion
 from pyfr.template import DottedTemplateLookup
+
+
+MemoryInfo = namedtuple('MemoryInfo', ['current', 'peak', 'free', 'total'])
 
 
 def recordmat(fn):
@@ -60,15 +64,14 @@ class BaseBackend:
         self._mat_counter = count()
 
         # Extents
-        self._pend_extents = defaultdict(list)
-        self._comm_extents = set()
+        self._extents = {}
+        self._all_extents = WeakSet()
 
-        # Mapping from backend objects to memory extents
-        self._obj_extents = WeakKeyDictionary()
-
-        # Memory tracking
-        self._mem_current = 0
+        # Peak memory tracking
         self._mem_peak = 0
+
+    def _extent_alloc_bytes(self, nbytes):
+        return nbytes - (nbytes % -self.alignb)
 
     @cached_property
     def lookup(self):
@@ -87,67 +90,43 @@ class BaseBackend:
         return lookup
 
     def malloc(self, obj, extent):
-        # If no extent has been specified then autocommit
-        if extent is None:
-            # Perform the allocation
-            data = self._malloc_checked(obj.nbytes)
-
-            # Fire the callback
-            obj.onalloc(data, 0)
-
-            # Retain a (weak) reference to the allocated extent
-            self._obj_extents[obj] = data
-        # Otherwise defer the allocation
-        else:
-            # Check that the extent has not already been committed
-            if extent in self._comm_extents:
-                raise ValueError(f'Extent {extent!r} has already been '
-                                 'allocated')
-
-            # Append
-            self._pend_extents[extent].append(obj)
+        match extent:
+            case None:
+                ext = Extent()
+                ext.reserve(obj, self._extent_alloc_bytes(obj.nbytes))
+                ext.commit(self._malloc_checked)
+                self._track_extent(ext)
+            case str() as name:
+                ext = self._extents.setdefault(name, Extent(name))
+                ext.reserve(obj, self._extent_alloc_bytes(obj.nbytes))
+            case storage:
+                obj.onalloc(storage.basedata, storage.offset)
+                obj._storage_root = storage.storage_root
 
     def commit(self):
-        for reqs in self._pend_extents.values():
-            # Determine the required allocation size
-            sz = sum(obj.nbytes - (obj.nbytes % -self.alignb) for obj in reqs)
-
-            # Perform the allocation
-            data = self._malloc_checked(sz)
-
-            offset = 0
-            for obj in reqs:
-                # Fire the objects allocation callback
-                obj.onalloc(data, offset)
-
-                # Retain a (weak) reference to the allocated extent
-                self._obj_extents[obj] = data
-
-                # Increment the offset
-                offset += obj.nbytes - (obj.nbytes % -self.alignb)
-
-        # Mark the extents as committed and clear
-        self._comm_extents.update(self._pend_extents)
-        self._pend_extents.clear()
+        for ext in self._extents.values():
+            ext.commit(self._malloc_checked)
+            self._track_extent(ext)
+        self._extents.clear()
 
     def _malloc_checked(self, nbytes):
         if self.ixdtype == np.int32 and nbytes > 4*2**31 - 1:
             raise RuntimeError('Allocation too large for normal backend '
                                'memory-model')
 
-        self._mem_current += nbytes
-        self._mem_peak = max(self._mem_peak, self._mem_current)
-
         return self._malloc_impl(nbytes)
 
     def _malloc_impl(self, nbytes):
         pass
 
-    def memory_stats(self):
-        return self._mem_current, self._mem_peak
+    def _track_extent(self, ext):
+        self._all_extents.add(ext)
+        mem = sum(e.nbytes for e in self._all_extents)
+        self._mem_peak = max(self._mem_peak, mem)
 
     def memory_info(self):
-        return None, None
+        mem = sum(e.nbytes for e in self._all_extents)
+        return MemoryInfo(mem, self._mem_peak, None, None)
 
     @recordmat
     def const_matrix(self, initval, dtype=None, tags=set()):
@@ -167,6 +146,9 @@ class BaseBackend:
                dtype=None):
         dtype = dtype or self.fpdtype
         return self.matrix_cls(self, dtype, ioshape, initval, extent, tags)
+
+    def storage_view(self, parent, offset, nbytes):
+        return StorageRegion(parent, offset, nbytes)
 
     @recordmat
     def matrix_slice(self, mat, ra, rb, ca, cb):
