@@ -160,13 +160,13 @@ def _quat_mult(q, r):
 
 class NIRFForceIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, system, bcname, morigin, viscous):
-        surf_list = system.mesh.bcon.get(bcname, [])
-        surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in surf_list]
+        con = system.mesh.bcon.get(bcname)
 
-        super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
+        super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
-        if surf_list and morigin is not None:
-            self.rfpts = {k: loc - morigin for k, loc in self.locs.items()}
+        if con is not None and morigin is not None:
+            self.rfpts = {k: loc - morigin[:, None, None]
+                         for k, loc in self.locs.items()}
 
         # Set up m4 and rcpjact for local gradient computation
         if viscous:
@@ -567,14 +567,16 @@ class NIRFPlugin(BaseSolverPlugin):
             p = self._elementscls.con_to_pri(ufpts, self.cfg)[-1]
 
             qwts = self._ff_int.qwts[etype, fidx]
-            norms = self._ff_int.norms[etype, fidx]
+
+            # Reorient to (nfpts, neles, ndims) for einsums: i,j,k
+            norms = self._ff_int.norms[etype, fidx].transpose(1, 2, 0)
+            rfpts = self._ff_int.rfpts[etype, fidx].transpose(1, 2, 0)
 
             # Pressure force and moment
-            fm[0, :ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
+            fm[0, :ndims] += np.einsum('i,ij,ijk', qwts, p, norms)
 
-            rfpts = self._ff_int.rfpts[etype, fidx]
             rcn = np.atleast_3d(np.cross(rfpts, norms))
-            fm[0, ndims:] += np.einsum('i...,ij,jik->k', qwts, p, rcn)
+            fm[0, ndims:] += np.einsum('i,ij,ijk->k', qwts, p, rcn)
 
             if self._viscous:
                 m4 = self._ff_int.m4[etype]
@@ -589,14 +591,14 @@ class NIRFPlugin(BaseSolverPlugin):
                 dufpts = np.array([m0 @ du for du in duupts])
                 dufpts = dufpts.reshape(ndims, nfpts, nvars, -1).swapaxes(1, 2)
 
-                vis = self._stress_tensor(ufpts, dufpts)
+                vis = self._stress_tensor(ufpts, dufpts).transpose(2, 3, 0, 1)
 
                 # Viscous force and moment
-                fm[1, :ndims] += np.einsum('i...,klij,jil', qwts, vis, norms)
+                fm[1, :ndims] += np.einsum('i,ijdk,ijk', qwts, vis, norms)
 
-                viscf = np.einsum('ijkl,lkj->lki', vis, norms)
+                viscf = np.einsum('ijdk,ijk->ijd', vis, norms)
                 rcf = np.atleast_3d(np.cross(rfpts, viscf))
-                fm[1, ndims:] += np.einsum('i,jik->k', qwts, rcf)
+                fm[1, ndims:] += np.einsum('i,ijk->k', qwts, rcf)
 
         if rank != root:
             comm.Reduce(fm, None, op=mpi.SUM, root=root)
@@ -684,7 +686,7 @@ class NIRFPlugin(BaseSolverPlugin):
                 return
 
         force, moment = self._compute_forces(intg)
-        ode_dt = intg.tcurr - self.tode_last if self.dt_ode else intg._dt
+        ode_dt = intg.tcurr - self.tode_last if self.dt_ode else intg.dt
         self._solve_rigid_body_ode(force, moment, ode_dt)
         self.tode_last = intg.tcurr
         self._update_extern_values()
@@ -742,7 +744,7 @@ class NIRFPlugin(BaseSolverPlugin):
             if self._motion == 'free':
                 self._update_extern_values()
 
-        serialiser.register(self.get_serialiser_prefix(),
+        serialiser.register(self.sprefix,
                             self._serialise_data)
 
     def _serialise_data(self):
