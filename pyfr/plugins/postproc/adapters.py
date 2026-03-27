@@ -9,6 +9,7 @@ from pyfr.util import subclass_where
 class BasePostProcAdapter:
     def __init__(self, ctx, vsoln, vpts, etype, spts, has_grads=False):
         self.cfg = ctx.cfg
+        self.soln = ctx.soln
         self.elementscls = ctx.elementscls
         self.etype = etype
         self.spts = spts
