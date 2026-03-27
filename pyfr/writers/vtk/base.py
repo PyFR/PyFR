@@ -401,7 +401,11 @@ class BaseVTKWriter(BaseWriter):
 
             pp.process(adapter)
 
-        return adapter.fields
+        fields = {}
+        for fname, arrs in adapter.fields.items():
+            fields[fname] = np.dstack(arrs).astype(adapter.dtype)
+
+        return fields
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
