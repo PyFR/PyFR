@@ -66,8 +66,8 @@ class FWHIntegrator(SurfaceIntegrator):
 
 class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
     name = 'fwh'
-    systems = ['euler', 'navier-stokes']
-    dimensions = [2, 3]
+    systems = 'euler|navier-stokes'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix=None, *args, **kwargs):
         super().__init__(intg, cfgsect, suffix)

@@ -1,3 +1,4 @@
+import re
 import shlex
 
 import numpy as np
@@ -24,12 +25,12 @@ class InSituMixin:
         self.tol = 5*intg.dtmin
 
         # Check that we support this particular system
-        if not ('*' in self.systems or intg.system.name in self.systems):
+        if not re.fullmatch(self.systems, intg.system.name):
             raise RuntimeError(f'System {intg.system.name} not supported by '
                                f'plugin {self.name}')
 
         # Check that we support dimensionality of simulation
-        if intg.system.ndims not in self.dimensions:
+        if not re.fullmatch(self.dimensions, str(intg.system.ndims)):
             raise RuntimeError(f'Dimensionality of {intg.system.ndims} not '
                                f'supported by plugin {self.name}')
 
