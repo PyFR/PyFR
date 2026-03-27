@@ -464,11 +464,24 @@ class BaseVTKWriter(BaseWriter):
         if self.output_curved:
             attrs.append(('Curved', 'UInt8', '1'))
 
-        if self.output_partition:
-            attrs.append(('Partition', 'Int32', '1'))
+        cell_fields, point_fields = self._extra_field_lists(etype)
+
+        # Extra fields as cell data
+        for fname in cell_fields:
+            adtype, _, acomps, _ = self._field_info(fname, etype,
+                                                    dtype, dsize)
+            attrs.append((fname.replace('-', ' ').title(), adtype,
+                          str(acomps)))
 
         for fname, varnames in vvars.items():
             attrs.append((fname.title(), dtype, str(len(varnames))))
+
+        # Extra fields as point data
+        for fname in point_fields:
+            adtype, _, acomps, _ = self._field_info(fname, etype,
+                                                    dtype, dsize)
+            attrs.append((fname.replace('-', ' ').title(), adtype,
+                          str(acomps)))
 
         if etype and neles:
             npts, ncells, nnodes = self._get_npts_ncells_nnodes(etype, neles)
@@ -479,10 +492,19 @@ class BaseVTKWriter(BaseWriter):
             if self.output_curved:
                 sizes.append(ncells)
 
-            if self.output_partition:
-                sizes.append(4*ncells)
+            # Extra cell field sizes
+            for fname in cell_fields:
+                _, asize, _, _ = self._field_info(fname, etype,
+                                                  dtype, dsize)
+                sizes.append(asize*ncells)
 
             sizes.extend(len(varnames)*nb for varnames in vvars.values())
+
+            # Extra point field sizes
+            for fname in point_fields:
+                _, asize, _, _ = self._field_info(fname, etype,
+                                                  dtype, dsize)
+                sizes.append(asize*npts)
 
             return tuple((*a, s) for a, s in zip(attrs, sizes))
         else:
@@ -491,8 +513,13 @@ class BaseVTKWriter(BaseWriter):
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
 
-        # Get the fields in the data set
-        dfields = self.stats.get('data', 'fields').split(',')
+        # Get extra fields from solution data
+        etype = next(k for k in self.soln.data if k in self.mesh.eidxs)
+        self._extra_etype = etype
+
+        aux = self.soln.aux.get(etype, {})
+        self._extra_fields = list(aux)
+        self._extra_shapes = {n: v.shape[1:] for n, v in aux.items()}
 
         # Ensure a divisor has been set
         if self.divisor is None:
@@ -510,8 +537,15 @@ class BaseVTKWriter(BaseWriter):
             self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
 
             # See if our solution contains gradient data
-            if len(dfields) == (1 + self.ndims)*len(self._soln_fields):
-                self._gradients = True
+            self._gradients = bool(self.soln.grad_data)
+            if self._gradients:
+                # Stack gradient data into solution data
+                for et in list(self.soln.data):
+                    g = self.soln.grad_data[et].transpose(1, 2, 0, 3)
+                    g = g.reshape(g.shape[0], -1, g.shape[3])
+                    self.soln.data[et] = np.concatenate(
+                        [self.soln.data[et], g], axis=1
+                    )
 
                 # Update list of solution fields
                 self._soln_fields.extend(f'{f}-{d}'
@@ -523,13 +557,11 @@ class BaseVTKWriter(BaseWriter):
                     self._vtk_vars[f'grad {var}'] = nfields = []
                     for f in vfields:
                         nfields.extend(f'{f}-{d}' for d in range(self.ndims))
-            else:
-                self._gradients = False
-        # Otherwise we're dealing with simple scalar data
+        # Otherwise we're dealing with simple scalar data (e.g., tavg)
         else:
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
-            self._soln_fields = dfields
+            self._soln_fields = self.soln.fields
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
 
@@ -688,8 +720,37 @@ class BaseVTKWriter(BaseWriter):
         else:
             return ''
 
+    def _vtk_dtype(self, dtype):
+        if np.issubdtype(dtype, np.integer):
+            return 'Int32'
+        return 'Float32' if np.dtype(dtype) == np.float32 else 'Float64'
+
+    def _extra_point_shapes(self, etype):
+        nupts = self.soln.data[etype].shape[2]
+        return {(nupts,)}
+
+    def _extra_field_lists(self, etype=None):
+        etype = etype or self._extra_etype
+        pshapes = self._extra_point_shapes(etype)
+        pfields = [n for n in self._extra_fields
+                   if self._extra_shapes[n] in pshapes]
+        cfields = [n for n in self._extra_fields if n not in pfields]
+        return cfields, pfields
+
+    def _field_info(self, name, etype, fdtype, fdsize):
+        etype = etype or self._extra_etype
+        shape = self._extra_shapes.get(name, ())
+        pshapes = self._extra_point_shapes(etype)
+        is_point = shape in pshapes
+        ncomps = 1 if is_point else int(np.prod(shape)) if shape else 1
+
+        adtype = self.soln.aux[etype][name].dtype
+        vtype = self._vtk_dtype(adtype)
+        return vtype, adtype.itemsize*ncomps, ncomps, is_point
+
     def _write_serial_header(self, write_s, etype, neles, off):
-        ncelld = self.output_curved + self.output_partition
+        cell_fields, _ = self._extra_field_lists(etype)
+        ncelld = self.output_curved + len(cell_fields)
         npts, ncells = self._get_npts_ncells_nnodes(etype, neles)[:2]
 
         write_s(f'<Piece NumberOfPoints="{npts}" '
@@ -718,7 +779,8 @@ class BaseVTKWriter(BaseWriter):
         return off
 
     def _write_parallel_header(self, write_s):
-        ncelld = self.output_curved + self.output_partition
+        cell_fields, _ = self._extra_field_lists()
+        ncelld = self.output_curved + len(cell_fields)
         write_s('<PPoints>\n')
 
         # Write VTK DataArray headers
@@ -745,7 +807,7 @@ class BaseVTKWriter(BaseWriter):
                 '</DataArray>\n</FieldData>\n')
 
     def _write_data(self, write, etype):
-        vpts, vsoln, curved, part = self._prepare_pts(etype)
+        vpts, vsoln, curved, cellf, pointf = self._prepare_pts(etype)
         nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
 
         # Write element node locations to file
@@ -784,15 +846,21 @@ class BaseVTKWriter(BaseWriter):
             vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
             self._write_darray(vtu_curved, write, np.uint8)
 
-        # VTU cell partition numbers
-        if self.output_partition:
-            vtu_part = np.repeat(part, len(vtu_typ) // neles)
-            self._write_darray(vtu_part, write, np.int32)
-
+        # Extra cell fields
+        ncells_per_ele = len(vtu_typ) // neles
+        for fname, data in cellf.items():
+            vtu_aux = data.reshape(neles, -1)
+            vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
+            self._write_darray(vtu_aux, write, data.dtype)
 
         # Process and write out the various fields
         for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
             self._write_darray(arr.T, write, self.dtype)
+
+        # Extra point fields
+        for fname, data in pointf.items():
+            vtu_aux = data.reshape(nsvpts, neles, -1)
+            self._write_darray(vtu_aux.swapaxes(0, 1), write, data.dtype)
 
 
 def get_subdiv(name, n):

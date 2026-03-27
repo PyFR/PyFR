@@ -147,7 +147,7 @@ class MassFlowBCMixin:
         self.set_external('ic', 'scalar fpdtype_t')
         self.set_external('im', 'scalar fpdtype_t')
 
-        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
+        surf_list = [(etype, fidx, eidxs) for etype, fidx, eidxs in lhs.items()]
         self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
 
         if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:

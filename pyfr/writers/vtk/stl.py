@@ -44,11 +44,11 @@ class VTKSTLWriter(BaseVTKWriter):
 
         # Create and configure a point sampler
         sampler = PointSampler(mesh, spts, slocs)
-        sampler.configure_with_cfg_nvars(soln['config'],
+        sampler.configure_with_cfg_nvars(soln.config,
                                          len(self._soln_fields))
 
         # Perform the sampling
-        samps = sampler.sample([soln[etype] for etype in mesh.eidxs])
+        samps = sampler.sample([soln.data[etype] for etype in mesh.eidxs])
 
         # If we are the root rank then write out the triangle list
         if rank == root:

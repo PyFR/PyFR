@@ -16,7 +16,6 @@ def _search(a, v):
 class VTKBoundaryWriter(BaseVTKWriter):
     type = 'boundary'
     output_curved = True
-    output_partition = True
 
     def __init__(self, meshf, boundaries, **kwargs):
         super().__init__(meshf, **kwargs)
@@ -100,11 +99,12 @@ class VTKBoundaryWriter(BaseVTKWriter):
         return [(*info[f], idxs[f]) for f in info]
 
     def _prepare_pts(self, itype):
-        vspts, vsoln, curved, part = [], [], [], []
+        vspts, vsoln, curved = [], [], []
+        cellf, pointf = {}, {}
 
         for etype, mesh_op, soln_op, idxs in self._surface_info[itype]:
             spts = self.mesh.spts[etype][:, idxs]
-            soln = self.soln[etype][..., idxs]
+            soln = self.soln.data[etype][..., idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
 
             # Pre-process the solution
@@ -113,7 +113,20 @@ class VTKBoundaryWriter(BaseVTKWriter):
             vspts.append(interpolate_pts(mesh_op, spts))
             vsoln.append(interpolate_pts(soln_op, soln))
             curved.append(self.mesh.spts_curved[etype][idxs])
-            part.append(self.soln[f'{etype}-parts'][idxs])
+
+            # Extract extra fields
+            for fname, arr in self.soln.aux.get(etype, {}).items():
+                data = arr[idxs]
+                if data.shape[1:] == (soln.shape[2],):
+                    pointf.setdefault(fname, []).append(
+                        interpolate_pts(soln_op, data.swapaxes(0, 1))
+                    )
+                else:
+                    cellf.setdefault(fname, []).append(data)
+
+        # Concatenate extra fields
+        cellf = {k: np.hstack(v) for k, v in cellf.items() if v}
+        pointf = {k: np.hstack(v) for k, v in pointf.items() if v}
 
         return (np.hstack(vspts), np.dstack(vsoln),
-                np.hstack(curved), np.hstack(part))
+                np.hstack(curved), cellf, pointf)

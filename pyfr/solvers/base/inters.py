@@ -5,10 +5,15 @@ from pyfr.util import first
 
 def _get_inter_objs(interside, getter, elemap):
     # Map from element type to view mat getter
-    emap = {type: getattr(ele, getter) for type, ele in elemap.items()}
+    emap = {etype: getattr(ele, getter) for etype, ele in elemap.items()}
 
-    # Get the data from the interface
-    return [emap[type](eidx, fidx) for type, eidx, fidx in interside]
+    # Get the data from the interface using items() for Connectivity objects
+    # Call getter for each element index in the eidxs array
+    objs = []
+    for etype, fidx, eidxs in interside.items():
+        for eidx in eidxs:
+            objs.append(emap[etype](eidx, fidx))
+    return objs
 
 
 class BaseInters:
@@ -25,8 +30,8 @@ class BaseInters:
         self.ninters = len(lhs)
 
         # Compute the total number of interface flux points
-        self.ninterfpts = sum(elemap[etype].nfacefpts[fidx]
-                              for etype, eidx, fidx in lhs)
+        self.ninterfpts = sum(elemap[etype].nfacefpts[fidx]*len(eidxs)
+                              for etype, fidx, eidxs in lhs.items())
 
         # By default do not permute any of the interface arrays
         self._perm = Ellipsis
