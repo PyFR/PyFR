@@ -143,6 +143,16 @@ pyfr export
       The STL surfaces must have already been added to the mesh with
       ``pyfr region add``.
 
+      If an ``--eopt=subdiv:spherigon`` flag is provided then the STL
+      mesh will be smoothed using C1 spherigon interpolation.  This
+      uses angle-weighted vertex normals to lift subdivided points
+      onto curved tangent planes, yielding a smoother surface.  By
+      default, linear subdivision is used.  Example:
+
+      .. code-block:: shell
+
+          pyfr export stl --eopt=divisor:4 --eopt=subdiv:spherigon mesh.pyfrm solution.pyfrs solution.vtu teapot
+
    All of the export commands also support a *batch* processing mode
    wherein the list of input solution files and output files are read in
    from disk.  This option is activated by passing ``-`` for the
