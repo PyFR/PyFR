@@ -268,26 +268,8 @@ kernel provider. PyFR |release| has various types of kernel provider. A
 Riemann solvers and flux functions etc. These point-wise kernels are
 specified using an in-built platform-independent templating language
 derived from `Mako <http://www.makotemplates.org/>`_, henceforth
-referred to as `PyFR-Mako`_. There are four types of `System`_ available
+referred to as `PyFR-Mako`_. There are two types of `System`_ available
 in PyFR |release|:
-
-.. toggle-header::
-    :header: *ACEulerSystem* **Click to show**
-
-    .. autoclass:: pyfr.solvers.aceuler.system.ACEulerSystem
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *ACNavierStokesSystem* **Click to show**
-
-    .. autoclass:: pyfr.solvers.acnavstokes.system.ACNavierStokesSystem
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
 
 .. toggle-header::
     :header: *EulerSystem* **Click to show**
@@ -313,8 +295,6 @@ Types of `System`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.solvers.navstokes.system
                          pyfr.solvers.euler.system
-                         pyfr.solvers.acnavstokes.system
-                         pyfr.solvers.aceuler.system
     :top-classes: pyfr.solvers.base.system.BaseSystem
     :parts: 1
 
@@ -324,25 +304,7 @@ Elements
 --------
 
 An `Elements`_ holds information/data for a group of elements. There are
-four types of `Elements`_ available in PyFR |release|:
-
-.. toggle-header::
-    :header: *ACEulerElements* **Click to show**
-
-    .. autoclass:: pyfr.solvers.aceuler.elements.ACEulerElements
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *ACNavierStokesElements* **Click to show**
-
-    .. autoclass:: pyfr.solvers.acnavstokes.elements.ACNavierStokesElements
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
+two types of `Elements`_ available in PyFR |release|:
 
 .. toggle-header::
     :header: *EulerElements* **Click to show**
@@ -368,8 +330,6 @@ Types of `Elements`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.solvers.navstokes.elements
                          pyfr.solvers.euler.elements
-                         pyfr.solvers.acnavstokes.elements
-                         pyfr.solvers.aceuler.elements
     :top-classes: pyfr.solvers.base.elements.BaseElements
     :parts: 1
 
@@ -379,44 +339,8 @@ Interfaces
 ----------
 
 An `Interfaces`_ holds information/data for a group of interfaces. There
-are eight types of (non-boundary) `Interfaces`_ available in PyFR
+are four types of (non-boundary) `Interfaces`_ available in PyFR
 |release|:
-
-.. toggle-header::
-    :header: *ACEulerIntInters* **Click to show**
-
-    .. autoclass:: pyfr.solvers.aceuler.inters.ACEulerIntInters
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *ACEulerMPIInters* **Click to show**
-
-    .. autoclass:: pyfr.solvers.aceuler.inters.ACEulerMPIInters
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *ACNavierStokesIntInters* **Click to show**
-
-    .. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *ACNavierStokesMPIInters* **Click to show**
-
-    .. autoclass:: pyfr.solvers.acnavstokes.inters.ACNavierStokesMPIInters
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
 
 .. toggle-header::
     :header: *EulerIntInters* **Click to show**
@@ -463,10 +387,6 @@ inheritance diagram:
                          pyfr.solvers.navstokes.inters.NavierStokesIntInters
                          pyfr.solvers.euler.inters.EulerMPIInters
                          pyfr.solvers.euler.inters.EulerIntInters
-                         pyfr.solvers.acnavstokes.inters.ACNavierStokesMPIInters
-                         pyfr.solvers.acnavstokes.inters.ACNavierStokesIntInters
-                         pyfr.solvers.aceuler.inters.ACEulerMPIInters
-                         pyfr.solvers.aceuler.inters.ACEulerIntInters
     :top-classes: pyfr.solvers.base.inters.BaseInters
     :parts: 1
 

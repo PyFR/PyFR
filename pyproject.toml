@@ -66,11 +66,6 @@ include = ["pyfr*"]
     "tet/*.txt",
     "tri/*.txt",
 ]
-"pyfr.solvers.aceuler.kernels" = ["*.mako"]
-"pyfr.solvers.aceuler.kernels.bcs" = ["*.mako"]
-"pyfr.solvers.aceuler.kernels.rsolvers" = ["*.mako"]
-"pyfr.solvers.acnavstokes.kernels" = ["*.mako"]
-"pyfr.solvers.acnavstokes.kernels.bcs" = ["*.mako"]
 "pyfr.solvers.baseadvec.kernels" = ["*.mako"]
 "pyfr.solvers.baseadvecdiff.kernels" = ["*.mako"]
 "pyfr.solvers.euler.kernels" = ["*.mako"]

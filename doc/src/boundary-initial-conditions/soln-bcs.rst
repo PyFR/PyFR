@@ -7,65 +7,11 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
 1. ``type`` --- type of boundary condition:
 
-    ``ac-char-riem-inv`` | ``ac-in-fv`` | ``ac-out-fp`` | ``char-riem-inv`` |
-    ``char-riem-inv-mass-flow`` | ``no-slp-adia-wall`` |
-    ``no-slp-isot-wall`` | ``no-slp-wall`` | ``slp-adia-wall`` | ``slp-wall`` |
-    ``sub-in-frv`` | ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` |
-    ``sup-out-fn``
+    ``char-riem-inv`` | ``char-riem-inv-mass-flow`` | ``no-slp-adia-wall`` |
+    ``no-slp-isot-wall`` | ``slp-adia-wall`` | ``sub-in-frv`` |
+    ``sub-in-ftpttang`` | ``sub-out-fp`` | ``sup-in-fa`` | ``sup-out-fn``
 
     where
-
-    ``ac-char-riem-inv`` only works with ``ac-euler`` |
-    ``ac-navier-stokes`` and requires
-
-        - ``ac-zeta`` --- artificial compressibility factor for boundary
-          (increasing ``ac-zeta`` makes the boundary less reflective
-          allowing larger deviation from the target state)
-
-           *float*
-
-        - ``niters`` --- number of Newton iterations
-
-           *int*
-
-        - ``p`` --- pressure
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-
-    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-    ``ac-out-fp`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``p`` --- pressure
-
-           *float* | *string*
 
     ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
     requires
@@ -178,23 +124,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float*
 
-    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
-
-        - ``u`` --- x-velocity of wall
-
-           *float*
-
-        - ``v`` --- y-velocity of wall
-
-           *float*
-
-        - ``w`` --- z-velocity of wall
-
-           *float*
-
     ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
-
-    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
 
     ``sub-in-frv`` only works with ``navier-stokes`` and
     requires

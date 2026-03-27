@@ -10,22 +10,22 @@ Parameterises space (x, y, [z]) dependent initial conditions with
     *string*
 
 2. ``u`` --- initial x-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+   ``navier-stokes``:
 
     *string*
 
 3. ``v`` --- initial y-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+   ``navier-stokes``:
 
     *string*
 
 4. ``w`` --- initial z-velocity distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+   ``navier-stokes``:
 
     *string*
 
 5. ``p`` --- initial static pressure distribution for ``euler`` |
-   ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``:
+   ``navier-stokes``:
 
     *string*
 

@@ -6,7 +6,7 @@ Parameterises the solver with
 
 1. ``system`` --- governing system:
 
-    ``euler`` | ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``
+    ``euler`` | ``navier-stokes``
 
     where
 

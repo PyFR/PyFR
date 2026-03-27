@@ -13,26 +13,17 @@ Sets constants used in the simulation
 
     *float*
 
-3. ``nu`` --- kinematic viscosity for ``ac-navier-stokes``:
+3. ``Pr`` --- Prandtl number for ``navier-stokes``:
 
     *float*
 
-4. ``Pr`` --- Prandtl number for ``navier-stokes``:
-
-    *float*
-
-5. ``cpTref`` --- product of specific heat at constant pressure and
+4. ``cpTref`` --- product of specific heat at constant pressure and
    reference temperature for ``navier-stokes`` with Sutherland's Law:
 
    *float*
 
-6. ``cpTs`` --- product of specific heat at constant pressure and
+5. ``cpTs`` --- product of specific heat at constant pressure and
    Sutherland temperature for ``navier-stokes`` with Sutherland's Law:
-
-   *float*
-
-7. ``ac-zeta`` --- artificial compressibility factor for ``ac-euler`` |
-   ``ac-navier-stokes``
 
    *float*
 

@@ -29,26 +29,6 @@ source terms with
 
     *string*
 
-6. ``p`` --- pressure source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-7. ``u`` --- x-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-8. ``v`` --- y-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-9. ``w`` --- w-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
 Example::
 
     [solver-plugin-source]
