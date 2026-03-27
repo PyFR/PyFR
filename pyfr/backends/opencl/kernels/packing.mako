@@ -3,8 +3,8 @@
 __kernel void
 pack_view(ixdtype_t n, ixdtype_t nrv, ixdtype_t ncv,
           __global const fpdtype_t* restrict v,
-          __global const int* restrict vix,
-          __global const int* restrict vrstri,
+          __global const ixdtype_t* restrict vix,
+          __global const ixdtype_t* restrict vrstri,
           __global fpdtype_t* restrict pmat)
 {
     ixdtype_t i = get_global_id(0);
@@ -23,8 +23,8 @@ pack_view(ixdtype_t n, ixdtype_t nrv, ixdtype_t ncv,
 __kernel void
 unpack_view(ixdtype_t n, ixdtype_t nrv, ixdtype_t ncv,
             __global fpdtype_t* restrict v,
-            __global const int* restrict vix,
-            __global const int* restrict vrstri,
+            __global const ixdtype_t* restrict vix,
+            __global const ixdtype_t* restrict vrstri,
             __global const fpdtype_t* restrict pmat)
 {
     ixdtype_t i = get_global_id(0);
