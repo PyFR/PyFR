@@ -1,7 +1,9 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BaseSolnPlugin, PublishMixin, init_csv
+from pyfr.plugins.common import init_csv
+from pyfr.plugins.mixins import PublishMixin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.util import first
 
 

@@ -1,7 +1,7 @@
 import math
 import re
 
-from pyfr.plugins.base import BaseSolverPlugin
+from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.util import first
 
 

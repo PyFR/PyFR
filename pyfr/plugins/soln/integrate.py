@@ -1,6 +1,7 @@
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import (BackendMixin, BaseSolnPlugin, PublishMixin,
-                               init_csv)
+from pyfr.plugins.common import init_csv
+from pyfr.plugins.mixins import BackendMixin, PublishMixin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.plugins.fieldeval import BackendFieldReducer
 
 
