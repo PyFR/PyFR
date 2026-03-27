@@ -14,7 +14,7 @@ class BasePostProcAdapter:
         self.etype = etype
         self.spts = spts
         self.ploc = vpts.transpose(2, 0, 1)
-        self.ndims = self.ploc.shape[0]
+        self.ndims = ctx.ndims
         self.dtype = ctx.dtype
         self.has_grads = has_grads
         self.fields = {}
