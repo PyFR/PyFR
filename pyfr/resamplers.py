@@ -408,12 +408,12 @@ class NativeCloudResampler(BaseCloudResampler):
 
         for etype in mesh.eidxs:
             # Interpolate the shape points to the solution points
-            op = _ploc_op(etype, len(mesh.spts[etype]), soln['config'])
+            op = _ploc_op(etype, len(mesh.spts[etype]), soln.config)
             ploc = op @ mesh.spts[etype].reshape(op.shape[1], -1)
             pts.append(ploc.reshape(-1, mesh.ndims))
 
             # Extract the solution at the solution points
-            supts = soln[etype].swapaxes(1, 2)
+            supts = soln.data[etype].swapaxes(1, 2)
             solns.append(supts.reshape(-1, supts.shape[2]))
 
         return np.vstack(pts), np.vstack(solns)
