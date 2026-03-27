@@ -2,7 +2,6 @@ import re
 from math import prod
 
 from pyfr.backends.base.generator import BaseKernelGenerator
-from pyfr.util import ndrange
 
 
 class OpenMPKernelGenerator(BaseKernelGenerator):

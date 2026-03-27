@@ -6,7 +6,6 @@ import numpy as np
 from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.shapes import BaseShape
 from pyfr.util import match_paired_paren, subclass_where
 
 

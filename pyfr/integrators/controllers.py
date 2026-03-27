@@ -1,7 +1,5 @@
 import math
 
-import numpy as np
-
 from pyfr.integrators.base import kernel_getter
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 

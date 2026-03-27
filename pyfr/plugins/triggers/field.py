@@ -1,5 +1,3 @@
-import numpy as np
-
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 from pyfr.plugins.fieldeval import BackendFieldReducer
 from pyfr.plugins.triggers.base import BaseTriggerSource

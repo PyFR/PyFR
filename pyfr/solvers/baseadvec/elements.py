@@ -1,6 +1,5 @@
 from pyfr.backends.base import NullKernel
 from pyfr.solvers.base import BaseElements
-from pyfr.solvers.base.elements import ExportableField
 
 
 class BaseAdvectionElements(BaseElements):

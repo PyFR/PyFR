@@ -1,6 +1,5 @@
 from pyfr.solvers.base.elements import ExportableField, inters_map
 from pyfr.solvers.baseadvec import BaseAdvectionElements
-from pyfr.solvers.base.elements import ExportableField
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
