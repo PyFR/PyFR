@@ -550,18 +550,39 @@ class OpenCL(_OpenCLWaitFor):
 
         return np.array(alloc, copy=False)
 
+    def _get_zero_kernel(self):
+        try:
+            return self._zero_kernel
+        except AttributeError:
+            src = r'''
+            __kernel void zero_u32(__global uint *buf, ulong nbytes)
+            {
+                ulong gid = get_global_id(0), gsz = get_global_size(0);
+
+                for (ulong i = gid; i < nbytes / 4; i += gsz)
+                    buf[i] = 0;
+            }
+            '''
+
+            self._zero_kernel = kern = self.program(src).get_kernel(
+                'zero_u32', [c_uint64, c_uint64]
+            )
+            return kern
+
     def zero(self, dst, nbytes, queue=None, wait_for=None, ret_evt=False):
-        evt_ptr = c_void_p() if ret_evt else None
-        wait_for = self._make_wait_for(wait_for)
-        z = c_char(0)
+        ls = 256
+        gs = (min(1 << 20, max(ls, nbytes - nbytes % -ls)),)
 
-        self.lib.clEnqueueFillBuffer(queue or self.qdflt, dst, byref(z), 1, 0,
-                                     nbytes, *wait_for, evt_ptr)
+        kern = self._get_zero_kernel()
+        kern.set_dims(gs, (ls,))
+        kern.set_args(dst, nbytes)
 
-        if queue is None:
-            self.qdflt.finish()
+        queue = queue or self.qdflt
+        evt = kern.exec_async(queue, wait_for, ret_evt)
+        if queue is self.qdflt and not ret_evt:
+            queue.finish()
         elif ret_evt:
-            return OpenCLEvent(self.lib, evt_ptr)
+            return evt
 
     def memcpy(self, queue, dst, src, nbytes, blocking=False, wait_for=None,
                ret_evt=False):
