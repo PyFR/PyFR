@@ -103,7 +103,7 @@ class NewtonSolver(BaseKrylovSolver):
         return 0, self._calc_rnorm(self._newton_resid)
 
     def _newton_iterate(self, t, u_reg, f_reg, gamma_dt, residual_fn,
-                        initial_guess_fn):
+                        initial_guess_fn, precond):
         # Helper function to compute the residual norm
         def calc_rnorm():
             self._rhs(t, u_reg, f_reg)
@@ -136,13 +136,17 @@ class NewtonSolver(BaseKrylovSolver):
             if rnorm < tol:
                 break
 
+            self._compute_precond(t, u_reg, gamma_dt, self._rhs,
+                                  f_reg, self._jfnk_temp,
+                                  eps_scales=self._scales)
+
             # Scale the residual vector for the Krylov solver
             self._add(1, self._newton_resid, out_scale=self._inv_scales)
 
             if self._linesearch:
                 niters, nprecond = self._krylov_solve(
                     matvec, self._newton_resid, self._newton_delta,
-                    None, accumulate=False
+                    precond, accumulate=False
                 )
                 alpha, rnorm = self._line_search(t, u_reg, f_reg,
                                                  self._newton_delta,
@@ -153,7 +157,7 @@ class NewtonSolver(BaseKrylovSolver):
                           in_scale=self._scales, in_scale_idxs=(1,))
             else:
                 niters, nprecond = self._krylov_solve(
-                    matvec, self._newton_resid, u_reg, None,
+                    matvec, self._newton_resid, u_reg, precond,
                     accumulate=True, accumulate_scale=self._scales
                 )
                 rnorm = None
@@ -171,6 +175,15 @@ class NewtonSolver(BaseKrylovSolver):
                             initial_guess_fn, gamma_dt):
         comm, rank, root = get_comm_rank_root()
 
+        # Scaled preconditioner: M̃⁻¹ = S⁻¹ M⁻¹ S
+        if self._precond != 'none':
+            def precond(in_reg, out_reg):
+                self._apply_precond(in_reg, out_reg,
+                                    in_scale=self._scales,
+                                    out_scale=self._inv_scales)
+        else:
+            precond = None
+
         for i in range(self._tol_controller.max_retries + 1):
             # Determine and broadcast the optimal Krylov tolerance
             if rank == root:
@@ -182,7 +195,8 @@ class NewtonSolver(BaseKrylovSolver):
             self._krylov_rtol = comm.bcast(krylov_tol, root=root)
 
             *stats, rnorm, tol = self._newton_iterate(
-                t, u_reg, f_reg, gamma_dt, residual_fn, initial_guess_fn
+                t, u_reg, f_reg, gamma_dt, residual_fn, initial_guess_fn,
+                precond
             )
 
             # Have the root rank update the tolerance controller
