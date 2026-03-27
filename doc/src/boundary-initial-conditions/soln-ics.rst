@@ -4,41 +4,40 @@
 
 Parameterises space (x, y, [z]) dependent initial conditions with
 
-1. ``rho`` --- initial density distribution for ``euler`` |
-   ``navier-stokes``:
+#. ``rho`` --- initial density distribution:
 
     *string*
 
-2. ``u`` --- initial x-velocity distribution for ``euler`` |
-   ``navier-stokes``:
+#. ``u`` --- initial x-velocity distribution:
 
     *string*
 
-3. ``v`` --- initial y-velocity distribution for ``euler`` |
-   ``navier-stokes``:
+#. ``v`` --- initial y-velocity distribution:
 
     *string*
 
-4. ``w`` --- initial z-velocity distribution for ``euler`` |
-   ``navier-stokes``:
+#. ``w`` --- initial z-velocity distribution:
 
     *string*
 
-5. ``p`` --- initial static pressure distribution for ``euler`` |
-   ``navier-stokes``:
+#. ``p`` --- initial static pressure distribution:
 
     *string*
 
-6. ``quad-deg-{etype}`` --- degree of quadrature rule to perform L2 projection (optional):
+6. ``quad-deg-{etype}`` --- degree of quadrature rule to perform L2
+   projection (optional):
 
     *int*
 
-7. ``quad-pts-{etype}`` --- name of quadrature rule to perform L2 projection (optional):
+7. ``quad-pts-{etype}`` --- name of quadrature rule to perform L2
+   projection (optional):
 
     *string*
 
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [soln-ics]
     rho = 1.0

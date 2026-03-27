@@ -34,7 +34,9 @@ Parameterises the solver with
 
     ``flux`` | ``surf-flux`` | ``flux, surf-flux``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver]
     system = navier-stokes

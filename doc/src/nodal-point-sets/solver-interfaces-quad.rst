@@ -1,9 +1,8 @@
-****************************************
-[solver-interfaces-quad{-mg-p\ *order*}]
-****************************************
+************************
+[solver-interfaces-quad]
+************************
 
-Parameterises the quadrilateral interfaces, or if -mg-p\ *order* is
-suffixed the quadrilateral interfaces at multi-p level *order*, with
+Parameterises the quadrilateral interfaces, with
 
 #. ``flux-pts`` --- location of the flux points on a quadrilateral
    interface:
@@ -26,7 +25,9 @@ suffixed the quadrilateral interfaces at multi-p level *order*, with
     ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
     ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-interfaces-quad]
     flux-pts = gauss-legendre

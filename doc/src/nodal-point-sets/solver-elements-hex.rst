@@ -1,9 +1,8 @@
-*************************************
-[solver-elements-hex{-mg-p\ *order*}]
-*************************************
+*********************
+[solver-elements-hex]
+*********************
 
-Parameterises the hexahedral elements, or if -mg-p\ *order* is suffixed
-the hexahedral elements at multi-p level *order*, with
+Parameterises the hexahedral elements, with
 
 #. ``soln-pts`` --- location of the solution points in a hexahedral
    element:
@@ -26,7 +25,9 @@ the hexahedral elements at multi-p level *order*, with
     ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
     ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-elements-hex]
     soln-pts = gauss-legendre

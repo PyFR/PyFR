@@ -16,7 +16,9 @@ Parameterises the interfaces with
 
     *float*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-interfaces]
     riemann-solver = rusanov

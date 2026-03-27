@@ -1,5 +1,3 @@
-.. highlight:: Python
-
 ***************
 Developer Guide
 ***************
@@ -24,8 +22,8 @@ Controller
 
 A `Controller`_ acts to advance the simulation in time. Specifically, a
 `Controller`_ has a method named :code:`advance_to` which advances a
-`System`_ to a specified time. There are three types of physical-time
-`Controller`_ available in PyFR |release|:
+`System`_ to a specified time. There are two types of `Controller`_
+available in PyFR |release|:
 
 .. toggle-header::
     :header: *StdNoneController* **Click to show**
@@ -45,52 +43,11 @@ A `Controller`_ acts to advance the simulation in time. Specifically, a
         :inherited-members:
         :private-members:
 
-.. toggle-header::
-    :header: *DualNoneController* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.phys.controllers.DualNoneController
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
 |
 
-Types of physical-time `Controller`_ are related via the following
-inheritance diagram:
+Types of `Controller`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.std.controllers
-                         pyfr.integrators.dual.phys.controllers
-    :parts: 1
-
-|
-
-There are two types of pseudo-time `Controller`_ available in PyFR |release|:
-
-.. toggle-header::
-    :header: *DualNonePseudoController* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualNonePseudoController
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *DualPIPseudoController* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudocontrollers.DualPIPseudoController
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-|
-
-Types of pseudo-time `Controller`_ are related via the following
-inheritance diagram:
-
-.. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudocontrollers
     :parts: 1
 
 |
@@ -100,9 +57,8 @@ Stepper
 
 A `Stepper`_ acts to advance the simulation by a single time-step.
 Specifically, a `Stepper`_ has a method named :code:`step` which
-advances a `System`_ by a single time-step. There are eight types of
+advances a `System`_ by a single time-step. There are five types of
 `Stepper`_ available in PyFR |release|:
-
 
 .. toggle-header::
     :header: *StdEulerStepper* **Click to show**
@@ -149,103 +105,11 @@ advances a `System`_ by a single time-step. There are eight types of
         :inherited-members:
         :private-members:
 
-.. toggle-header::
-    :header: *DualBackwardEulerStepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.phys.steppers.DualBackwardEulerStepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *SDIRK33Stepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.phys.steppers.SDIRK33Stepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *SDIRK43Stepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.phys.steppers.SDIRK43Stepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
 |
 
 Types of `Stepper`_ are related via the following inheritance diagram:
 
 .. inheritance-diagram:: pyfr.integrators.std.steppers
-                         pyfr.integrators.dual.phys.steppers
-    :parts: 1
-
-|
-
-PseudoStepper
--------------
-
-A `PseudoStepper`_ acts to advance the simulation by a single pseudo-time-step.
-They are used to converge implicit `Stepper`_ time-steps via a dual
-time-stepping formulation. There are five types of `PseudoStepper`_ available
-in PyFR |release|:
-
-.. toggle-header::
-    :header: *DualRK4PseudoStepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK4PseudoStepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *DualTVDRK3PseudoStepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualTVDRK3PseudoStepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *DualEulerPseudoStepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualEulerPseudoStepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *DualRK34PseudoStepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK34PseudoStepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-.. toggle-header::
-    :header: *DualRK45PseudoStepper* **Click to show**
-
-    .. autoclass:: pyfr.integrators.dual.pseudo.pseudosteppers.DualRK45PseudoStepper
-        :members:
-        :undoc-members:
-        :inherited-members:
-        :private-members:
-
-|
-
-Types of `PseudoStepper`_ are related via the following inheritance
-diagram:
-
-.. inheritance-diagram:: pyfr.integrators.dual.pseudo.pseudosteppers
-    :top-classes: pyfr.integrators.dual.pseudo.base.BaseDualPseudoIntegrator
     :parts: 1
 
 |
@@ -613,14 +477,14 @@ Types of `Kernel Generator`_ are related via the following inheritance diagram:
 PyFR-Mako
 =========
 
-.. highlight:: none
-
 PyFR-Mako Kernels
 -----------------
 
 PyFR-Mako kernels are specifications of point-wise functionality that
 can be invoked directly from within PyFR. They are opened with a header
-of the form::
+of the form:
+
+.. code-block:: none
 
     <%pyfr:kernel name='kernel-name' ndim='data-dimensionality' [argument-name='argument-intent argument-attribute argument-data-type' ...]>
 
@@ -650,9 +514,11 @@ where
 
     *string*
 
-and are closed with a footer of the form::
+and are closed with a footer of the form:
 
-     </%pyfr:kernel>
+.. code-block:: none
+
+    </%pyfr:kernel>
 
 PyFR-Mako Macros
 ----------------
@@ -660,7 +526,9 @@ PyFR-Mako Macros
 PyFR-Mako macros are specifications of point-wise functionality that
 cannot be invoked directly from within PyFR, but can be embedded into
 PyFR-Mako kernels. PyFR-Mako macros can be viewed as building blocks
-for PyFR-mako kernels. They are opened with a header of the form::
+for PyFR-mako kernels. They are opened with a header of the form:
+
+.. code-block:: none
 
     <%pyfr:macro name='macro-name' params='param1, param2, ..., py:arg1, ...'>
 
@@ -674,7 +542,9 @@ where
 
     *string*
 
-and are closed with a footer of the form::
+and are closed with a footer of the form:
+
+.. code-block:: none
 
     </%pyfr:macro>
 
@@ -685,9 +555,11 @@ with ``py:`` must be accessed in the macro body within the usual ``${}``
 expression *without the py: prefix*.
 
 PyFR-Mako macros are embedded within a kernel using an expression of
-the following form::
+the following form:
 
-        ${pyfr.expand('macro-name', 'value1', ..., data1, ..., param2='value2', ..., arg1=value, ...)};
+.. code-block:: none
+
+    ${pyfr.expand('macro-name', 'value1', ..., data1, ..., param2='value2', ..., arg1=value, ...)};
 
 where
 
@@ -747,9 +619,11 @@ specification. A Python expression :code:`expression` prescribed thus
 :code:`${expression}` is substituted for the result when the PyFR-Mako
 kernel specification is interpreted at runtime.
 
-Example::
+Example:
 
-        E = s[${ndims - 1}]
+.. code-block:: none
+
+    E = s[${ndims - 1}]
 
 Conditionals
 ^^^^^^^^^^^^
@@ -760,14 +634,16 @@ closed with :code:`% endif`. Note that such conditionals are evaluated
 when the PyFR-Mako kernel specification is interpreted at runtime, they
 are not embedded into the low-level kernel.
 
-Example::
+Example:
 
-        % if ndims == 2:
-            fout[0][1] += t_xx;     fout[1][1] += t_xy;
-            fout[0][2] += t_xy;     fout[1][2] += t_yy;
-            fout[0][3] += u*t_xx + v*t_xy + ${-c['mu']*c['gamma']/c['Pr']}*T_x;
-            fout[1][3] += u*t_xy + v*t_yy + ${-c['mu']*c['gamma']/c['Pr']}*T_y;
-        % endif
+.. code-block:: none
+
+    % if ndims == 2:
+        fout[0][1] += t_xx;     fout[1][1] += t_xy;
+        fout[0][2] += t_xy;     fout[1][2] += t_yy;
+        fout[0][3] += u*t_xx + v*t_xy + ${-c['mu']*c['gamma']/c['Pr']}*T_x;
+        fout[1][3] += u*t_xy + v*t_yy + ${-c['mu']*c['gamma']/c['Pr']}*T_y;
+    % endif
 
 Loops
 ^^^^^
@@ -778,9 +654,11 @@ endfor`. Note that such loops are unrolled when the PyFR-Mako kernel
 specification is interpreted at runtime, they are not embedded into the
 low-level kernel.
 
-Example::
+Example:
 
-        % for i in range(ndims):
-            rhov[${i}] = s[${i + 1}];
-            v[${i}] = invrho*rhov[${i}];
-        % endfor
+.. code-block:: none
+
+    % for i in range(ndims):
+        rhov[${i}] = s[${i + 1}];
+        v[${i}] = invrho*rhov[${i}];
+    % endfor

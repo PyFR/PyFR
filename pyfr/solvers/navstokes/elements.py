@@ -58,10 +58,7 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         }
 
         # Helpers
-        tdisf = []
-        c, l = 'curved', 'linear'
         r, s = self.mesh_regions, self._slice_mat
-        av = self.artvisc_fpts
 
         # Mode-dependent setup
         if self.grad_fusion:

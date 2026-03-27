@@ -42,7 +42,17 @@ requested) vectors to a CSV or HDF5 file.  Parameterised with
 
     *string*
 
-Example::
+#. ``publish-as`` --- expose computed force components under a name
+   for use by triggers (optional):
+
+    *string*
+
+    Published fields: ``px``, ``py`` (pressure forces), ``vx``, ``vy``
+    (viscous forces), and the *z* components in 3D.
+
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-fluidforce-wing]
     nsteps = 10

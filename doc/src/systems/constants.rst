@@ -4,25 +4,24 @@
 
 Sets constants used in the simulation
 
-1. ``gamma`` --- ratio of specific heats for ``euler`` |
-   ``navier-stokes``:
+#. ``gamma`` --- ratio of specific heats:
 
     *float*
 
-2. ``mu`` --- dynamic viscosity for ``navier-stokes``:
+#. ``mu`` --- dynamic viscosity for ``navier-stokes``:
 
     *float*
 
-3. ``Pr`` --- Prandtl number for ``navier-stokes``:
+#. ``Pr`` --- Prandtl number for ``navier-stokes``:
 
     *float*
 
-4. ``cpTref`` --- product of specific heat at constant pressure and
+#. ``cpTref`` --- product of specific heat at constant pressure and
    reference temperature for ``navier-stokes`` with Sutherland's Law:
 
    *float*
 
-5. ``cpTs`` --- product of specific heat at constant pressure and
+#. ``cpTs`` --- product of specific heat at constant pressure and
    Sutherland temperature for ``navier-stokes`` with Sutherland's Law:
 
    *float*
@@ -30,7 +29,9 @@ Sets constants used in the simulation
 Other constant may be set by the user which can then be used throughout the
 ``.ini`` file.
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [constants]
     ; PyFR Constants
