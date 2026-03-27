@@ -10,8 +10,7 @@ from pyfr.mpiutil import autofree, mpi
 class MatrixBase:
     _base_tags = set()
 
-    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
-                 tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         self.backend = backend
         self.tags = self._base_tags | tags
 
@@ -67,14 +66,8 @@ class MatrixBase:
         else:
             self._initval = None
 
-        # Alias or allocate ourself
-        if aliases:
-            if extent is not None:
-                raise ValueError('Aliased matrices can not have an extent')
-
-            backend.alias(self, aliases)
-        else:
-            backend.malloc(self, extent)
+        # Allocate ourself
+        backend.malloc(self, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value
@@ -194,8 +187,7 @@ class ConstMatrix(MatrixBase):
     _base_tags = {'const'}
 
     def __init__(self, backend, dtype, initval, tags):
-        super().__init__(backend, dtype, initval.shape, initval,
-                         None, None, tags)
+        super().__init__(backend, dtype, initval.shape, initval, None, tags)
 
 
 class XchgMatrix(Matrix):

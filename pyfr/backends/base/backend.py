@@ -59,13 +59,16 @@ class BaseBackend:
         self.mats = WeakValueDictionary()
         self._mat_counter = count()
 
-        # Aliases and extents
-        self._pend_aliases = {}
+        # Extents
         self._pend_extents = defaultdict(list)
         self._comm_extents = set()
 
         # Mapping from backend objects to memory extents
         self._obj_extents = WeakKeyDictionary()
+
+        # Memory tracking
+        self._mem_current = 0
+        self._mem_peak = 0
 
     @cached_property
     def lookup(self):
@@ -104,18 +107,6 @@ class BaseBackend:
             # Append
             self._pend_extents[extent].append(obj)
 
-            # Permit obj to be aliased
-            self._pend_aliases[obj] = []
-
-    def alias(self, obj, aobj):
-        if obj.nbytes > aobj.nbytes:
-            raise ValueError('Object too large to alias')
-
-        try:
-            obj.onalloc(self._obj_extents[aobj], aobj.offset)
-        except KeyError:
-            self._pend_aliases[aobj].append(obj)
-
     def commit(self):
         for reqs in self._pend_extents.values():
             # Determine the required allocation size
@@ -126,19 +117,17 @@ class BaseBackend:
 
             offset = 0
             for obj in reqs:
-                for aobj in [obj] + self._pend_aliases[obj]:
-                    # Fire the objects allocation callback
-                    aobj.onalloc(data, offset)
+                # Fire the objects allocation callback
+                obj.onalloc(data, offset)
 
-                    # Retain a (weak) reference to the allocated extent
-                    self._obj_extents[aobj] = data
+                # Retain a (weak) reference to the allocated extent
+                self._obj_extents[obj] = data
 
                 # Increment the offset
                 offset += obj.nbytes - (obj.nbytes % -self.alignb)
 
         # Mark the extents as committed and clear
         self._comm_extents.update(self._pend_extents)
-        self._pend_aliases.clear()
         self._pend_extents.clear()
 
     def _malloc_checked(self, nbytes):
@@ -146,10 +135,16 @@ class BaseBackend:
             raise RuntimeError('Allocation too large for normal backend '
                                'memory-model')
 
+        self._mem_current += nbytes
+        self._mem_peak = max(self._mem_peak, self._mem_current)
+
         return self._malloc_impl(nbytes)
 
     def _malloc_impl(self, nbytes):
         pass
+
+    def memory_stats(self):
+        return self._mem_current, self._mem_peak
 
     @recordmat
     def const_matrix(self, initval, dtype=None, tags=set()):
@@ -165,21 +160,19 @@ class BaseBackend:
         return self.const_matrix_cls(self, dtype, initval, tags)
 
     @recordmat
-    def matrix(self, ioshape, initval=None, extent=None, aliases=None,
-               tags=set(), dtype=None):
+    def matrix(self, ioshape, initval=None, extent=None, tags=set(),
+               dtype=None):
         dtype = dtype or self.fpdtype
-        return self.matrix_cls(self, dtype, ioshape, initval, extent, aliases,
-                               tags)
+        return self.matrix_cls(self, dtype, ioshape, initval, extent, tags)
 
     @recordmat
     def matrix_slice(self, mat, ra, rb, ca, cb):
         return self.matrix_slice_cls(self, mat, ra, rb, ca, cb)
 
     @recordmat
-    def xchg_matrix(self, ioshape, initval=None, extent=None, aliases=None,
-                    tags=set()):
+    def xchg_matrix(self, ioshape, initval=None, extent=None, tags=set()):
         return self.xchg_matrix_cls(self, self.fpdtype, ioshape, initval,
-                                    extent, aliases, tags)
+                                    extent, tags)
 
     def xchg_matrix_for_view(self, view, tags=set()):
         return self.xchg_matrix((view.nvrow, view.nvcol*view.n), tags=tags)
