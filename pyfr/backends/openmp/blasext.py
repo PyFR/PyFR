@@ -1,22 +1,34 @@
 import numpy as np
 
+from pyfr.backends.base.blasext import BaseBlasExtKernels
 from pyfr.backends.openmp.provider import OpenMPKernel, OpenMPKernelProvider
 
 
-class OpenMPBlasExtKernels(OpenMPKernelProvider):
-    def axnpby(self, *arr, subdims=None):
-        if any(arr[0].traits != x.traits for x in arr[1:]):
-            raise ValueError('Incompatible matrix types')
+class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
+    pvar_idx = '_k'
 
-        nv = len(arr)
-        ixdtype = self.backend.ixdtype
+    def batched_inv(self, m):
+        neles = m.ioshape[-1]
+        datashape = m.datashape
+        nsoa, soasz = datashape[2], datashape[4]
+
+        class BatchedInvKernel(OpenMPKernel):
+            def run(self):
+                data_view = m.data.reshape(datashape)
+                for b, blk in enumerate(data_view):
+                    for c, chunk in enumerate(blk.swapaxes(0, 1)):
+                        chunk = chunk[:, :, :min(soasz, neles - (b*nsoa + c)*soasz)]
+                        inv = np.linalg.inv(chunk.transpose(2, 0, 1))
+                        chunk[:] = inv.transpose(1, 2, 0)
+
+        return BatchedInvKernel(mats=[m])
+
+    def _axnpby(self, arr, tplargs):
+        nv, ixdtype = tplargs['nv'], self.backend.ixdtype
         nblocks, nrow, *_, fpdtype = arr[0].traits
-        ncola = arr[0].ioshape[-2]
 
         # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(
-            subdims=subdims or range(ncola), ncola=ncola, nv=nv
-        )
+        src = self.backend.lookup.get_template('axnpby').render(**tplargs)
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
@@ -39,61 +51,76 @@ class OpenMPBlasExtKernels(OpenMPKernelProvider):
             raise ValueError('Incompatible matrix types')
 
         # Render the kernel template
-        ksrc = self.backend.lookup.get_template('par-memcpy').render()
+        ksrc = self.backend.lookup.get_template('par-memop').render(op='copy')
 
         dbbytes, sbbytes = dst.blocksz*dst.itemsize, src.blocksz*src.itemsize
         bnbytes = src.nrow*src.leaddim*src.itemsize
         nblocks = src.nblocks
 
         # Build the kernel
-        kern = self._build_kernel('par_memcpy', ksrc,
+        kern = self._build_kernel('par_copy', ksrc,
                                   [np.uintp]*2 + [ixdtype]*4)
         kern.set_args(dst, src, dbbytes, sbbytes, bnbytes, nblocks)
 
         return OpenMPKernel(mats=[dst, src], kernel=kern)
 
-    def reduction(self, *rs, method, norm, dt_mat=None):
-        if any(r.traits != rs[0].traits for r in rs[1:]):
-            raise ValueError('Incompatible matrix types')
-
+    def zero(self, m):
         ixdtype = self.backend.ixdtype
-        nblocks, nrow, *_, fpdtype = rs[0].traits
-        ncola = rs[0].ioshape[-2]
 
-        tplargs = dict(norm=norm, ncola=ncola, method=method, dt_type=None)
+        # Render the kernel template
+        ksrc = self.backend.lookup.get_template('par-memop').render(op='zero')
 
-        if method == 'resid':
-            tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
+        dbbytes = m.blocksz*m.itemsize
+        bnbytes = m.nrow*m.leaddim*m.itemsize
+        nblocks = m.nblocks
+
+        # Build the kernel
+        kern = self._build_kernel('par_zero', ksrc,
+                                  [np.uintp] + [ixdtype]*3)
+        kern.set_args(m, dbbytes, bnbytes, nblocks)
+
+        return OpenMPKernel(mats=[m], kernel=kern)
+
+    def _reduction(self, fvvar, vvars, svars, tplargs):
+        ixdtype = self.backend.ixdtype
+        nblocks, nrow, *_, fpdtype = fvvar.traits
+        ncola = fvvar.ioshape[-2]
+        pvars = tplargs['pvars']
+
+        # Add backend-specific template arguments
+        tplargs['ncola'] = ncola
 
         # Render the reduction kernel template
         src = self.backend.lookup.get_template('reduction').render(**tplargs)
 
         # Array for the reduced data
-        reduced = np.zeros(ncola, dtype=fpdtype)
+        reduced = np.zeros(tplargs['nexprs'], dtype=fpdtype)
 
-        regs = list(rs) + [dt_mat] if dt_mat else rs
+        # Allocate 2D array for pvars (npvars by ncola)
+        pvarr = np.array(list(pvars.values()), dtype=fpdtype) if pvars else None
 
-        # Argument types for reduction kernel
-        if method == 'errest':
-            argt = [ixdtype]*2 + [np.uintp]*4 + [fpdtype]*2
-        elif method == 'resid' and dt_mat:
-            argt = [ixdtype]*2 + [np.uintp]*4 + [fpdtype]
-        else:
-            argt = [ixdtype]*2 + [np.uintp]*3 + [fpdtype]
+        # Argument types: ints, pointers (vvars, pvars), scalars (svars)
+        nptr = 1 + len(vvars) + bool(pvars)
+        argt = [ixdtype]*2 + [np.uintp]*nptr + [fpdtype]*len(svars)
 
-        # Build
+        # Build and set arguments
         rkern = self._build_kernel('reduction', src, argt)
-        rkern.set_args(nrow, nblocks, reduced.ctypes.data, *regs)
+        args = [nrow, nblocks, reduced.ctypes.data, *vvars.values()]
+        if pvars:
+            args.append(pvarr.ctypes.data)
+        rkern.set_args(*args)
 
-        # Runtime argument offset
-        facoff = argt.index(fpdtype)
+        # Runtime argument offset for svars
+        facoff = len(args)
 
         class ReductionKernel(OpenMPKernel):
             @property
             def retval(self):
                 return reduced
 
-            def bind(self, *facs):
-                self.kernel.set_args(*facs, start=facoff)
+            if svars:
+                def bind(self, *consts):
+                    self.kernel.set_args(*consts, start=facoff)
 
-        return ReductionKernel(mats=regs, kernel=rkern)
+        return ReductionKernel(mats=vvars.values(), misc=[pvarr] if pvars else [],
+                               kernel=rkern)

@@ -41,8 +41,11 @@ class OpenCLBackend(BaseBackend):
         else:
             raise ValueError('No suitable OpenCL device found')
 
-        # Determine if the device supports double precision arithmetic
-        if self.fpdtype == np.float64 and not device.has_fp64:
+        # Record if the device has double precision support
+        self.has_double = device.has_fp64
+
+        # Check that the device supports double precision arithmetic
+        if self.fpdtype == np.float64 and not self.has_double:
             raise ValueError('Device does not support double precision')
 
         # Set the device
@@ -97,6 +100,19 @@ class OpenCLBackend(BaseBackend):
         # Queues (in and out of order)
         self.queue = self.cl.queue(out_of_order=True)
 
+        # Bounce buffer for device-to-host transfers
+        self._xfer_buf = None
+
+    def xfer_buf(self, shape, dtype):
+        nbytes = np.prod(shape)*np.dtype(dtype).itemsize
+
+        # Reallocate if the current buffer is too small
+        if self._xfer_buf is None or self._xfer_buf.nbytes < nbytes:
+            self._xfer_buf = self.cl.pagelocked_empty((nbytes,), np.uint8)
+
+        # Return a view of the correct shape and dtype
+        return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
+
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the command queue
         for k in kernels:
@@ -119,11 +135,16 @@ class OpenCLBackend(BaseBackend):
     def wait(self):
         self.queue.finish()
 
+    def memory_info(self):
+        mi = super().memory_info()
+        total = self.cl.dev.global_mem_size
+        return mi._replace(free=total - mi.current, total=total)
+
     def _malloc_impl(self, nbytes):
         # Allocate the device buffer
         buf = self.cl.mem_alloc(nbytes)
 
         # Zero the buffer
-        self.cl.zero(buf, 0, nbytes)
+        self.cl.zero(buf, nbytes)
 
         return buf

@@ -2,12 +2,27 @@ from ast import literal_eval
 from configparser import ConfigParser, NoSectionError, NoOptionError
 import io
 import os
+from pathlib import Path
 import re
 
 
 def _ensure_float(m):
     m = m[0]
     return m if any(c in m for c in '.eE') else m + '.'
+
+
+def process_expr(expr, subs={}):
+    if not re.match(r'[A-Za-z0-9_ \t\n\r.,+\-*/%()]+$', expr):
+        raise ValueError('Invalid characters in expression')
+
+    if subs:
+        expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
+                      lambda m: str(subs[m[1]]), expr)
+
+    expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?![^[]*\])',
+                  _ensure_float, expr)
+
+    return f'({expr})'
 
 
 _sentinel = object()
@@ -62,32 +77,15 @@ class Inifile:
 
     def getpath(self, section, option, default=_sentinel, vars=None,
                 abs=False):
-        path = self.get(section, option, default, vars)
-        path = os.path.expanduser(path)
+        path = Path(self.get(section, option, default, vars)).expanduser()
 
         if abs:
-            path = os.path.abspath(path)
+            path = path.absolute()
 
         return path
 
     def getexpr(self, section, option, default=_sentinel, subs={}):
-        expr = self.get(section, option, default)
-
-        # Ensure the expression does not contain invalid characters
-        if not re.match(r'[A-Za-z0-9_ \t\n\r.,+\-*/%()]+$', expr):
-            raise ValueError('Invalid characters in expression')
-
-        # Substitute variables
-        if subs:
-            expr = re.sub(r'\b({0})\b'.format('|'.join(subs)),
-                          lambda m: str(subs[m[1]]), expr)
-
-        # Convert integers not inside [] to floats
-        expr = re.sub(r'\b((\d+\.?\d*)|(\.\d+))([eE][+-]?\d+)?(?![^[]*\])',
-                      _ensure_float, expr)
-
-        # Encase in parenthesis
-        return f'({expr})'
+        return process_expr(self.get(section, option, default), subs)
 
     _bool_states = {'1': True, 'yes': True, 'true': True, 'on': True,
                     '0': False, 'no': False, 'false': False, 'off': False}

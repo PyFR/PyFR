@@ -1,5 +1,6 @@
+***********
 File Format
-===========
+***********
 
 The PyFR mesh and solution file formats are based around HDF5. All
 arrays are stored using little-endian byte-ordering. Floating point data
@@ -10,37 +11,41 @@ Certain records are stored as serialised INI files.
 For this tutorial we will make use of the 2D incompressible cylinder
 test case which ships with PyFR. This is a mixed element case containing
 quadratically curved elements and a range of boundaries. We begin by
-importing the mesh and adding a partitioning::
+importing the mesh and adding a partitioning:
 
-   $ pyfr import inc-cylinder.msh inc-cylinder.pyfrm
-   $ pyfr partition add inc-cylinder.pyfrm 3 -equad:2 -etri:1 -pmetis
+.. code-block:: shell
+
+    $ pyfr import inc-cylinder.msh inc-cylinder.pyfrm
+    $ pyfr partition add inc-cylinder.pyfrm 3 -equad:2 -etri:1 -pmetis
 
 Mesh Format
------------
+===========
 
-Inspecting the structure of our mesh we find::
+Inspecting the structure of our mesh we find:
 
-   /                        Group
-   /codec                   Dataset {12}
-   /creator                 Dataset {SCALAR}
-   /eles                    Group
-   /eles/quad               Dataset {196}
-   /eles/tri                Dataset {3231}
-   /mesh-uuid               Dataset {SCALAR}
-   /nodes                   Dataset {7345}
-   /partitionings           Group
-   /partitionings/1         Group
-   /partitionings/1/eles    Dataset {3427}
-   /partitionings/3         Group
-   /partitionings/3/eles    Dataset {3427}
-   /partitionings/3/neighbours Dataset {4}
-   /version                 Dataset {SCALAR}
+.. code-block:: none
+
+    /                        Group
+    /codec                   Dataset {12}
+    /creator                 Dataset {SCALAR}
+    /eles                    Group
+    /eles/quad               Dataset {196}
+    /eles/tri                Dataset {3231}
+    /mesh-uuid               Dataset {SCALAR}
+    /nodes                   Dataset {7345}
+    /partitionings           Group
+    /partitionings/1         Group
+    /partitionings/1/eles    Dataset {3427}
+    /partitionings/3         Group
+    /partitionings/3/eles    Dataset {3427}
+    /partitionings/3/neighbours Dataset {4}
+    /version                 Dataset {SCALAR}
 
 The ``/creator`` dataset is a string corresponding to the program which
 created the file. This is usually ``pyfr vX.Y.Z`` where X, Y, and Z,
 correspond to the major, minor, and patch versions. The ``/version`` is
 an integer which contains the specific revision of the format; currently
-it is required to be 1. The ``/mesh-uuid`` is a hex-encoded unique
+it is required to be 2. The ``/mesh-uuid`` is a hex-encoded unique
 identifier which is derived from hashing the nodes and elements of a
 mesh. Whenever a solution is written the ``/mesh-uuid`` from the current
 mesh is copied over. As such it can be used to check that a solution is
@@ -51,23 +56,26 @@ distinct element type present in the mesh is given its own dataset.
 Hence, in the above example we see that the mesh in question has 196
 ``quad`` elements and 3231 ``tri`` elements.
 
-Inspecting the structure of the ``/eles/quad`` dataset we find::
+Inspecting the structure of the ``/eles/quad`` dataset we find:
 
-   DATASET "/eles/quad" {
-      DATATYPE  H5T_COMPOUND {
-         H5T_ARRAY { (9) H5T_STD_I64LE } "nodes";
-         H5T_ENUM {
-            H5T_STD_I8LE;
-            "FALSE"            0;
-            "TRUE"             1;
-         } "curved";
-         H5T_ARRAY { (4) H5T_COMPOUND {
-            H5T_STD_I16LE "cidx";
-            H5T_STD_I64LE "off";
-         } } "faces";
-      }
-      DATASPACE  SIMPLE { ( 196 ) / ( 196 ) }
-   }
+.. code-block:: none
+
+    DATASET "/eles/quad" {
+       DATATYPE  H5T_COMPOUND {
+          H5T_ARRAY { (9) H5T_STD_I64LE } "nodes";
+          H5T_ENUM {
+             H5T_STD_I8LE;
+             "FALSE"            0;
+             "TRUE"             1;
+          } "curved";
+          H5T_ARRAY { (4) H5T_COMPOUND {
+             H5T_STD_I16LE "cidx";
+             H5T_STD_I64LE "off";
+          } } "faces";
+          H5T_STD_U8LE "colour";
+       }
+       DATASPACE  SIMPLE { ( 196 ) / ( 196 ) }
+    }
 
 The ``nodes`` field defines the *node numbers* which specify the shape
 points of each quad. Each node number is an index into the ``/nodes``
@@ -82,23 +90,25 @@ element; in the above case it is four. Each element of this array is
 made up of two pieces of information: a ``cidx`` number and an ``off``.
 The ``cidx`` field is an entry into the ``/codec`` array and is used to
 determine *what* the face is connected to. Inspecting the ``/codec``
-array for our mesh we find::
+array for our mesh we find:
 
-   DATASET "/codec" {
-      DATATYPE  H5T_STRING {
-         STRSIZE 11;
-         STRPAD H5T_STR_NULLPAD;
-         CSET H5T_CSET_ASCII;
-         CTYPE H5T_C_S1;
-      }
-      DATASPACE  SIMPLE { ( 12 ) / ( 12 ) }
-      DATA {
-      (0): "eles/tri\000\000\000", "eles/tri/0\000", "eles/tri/1\000",
-      (3): "eles/tri/2\000", "eles/quad\000\000", "eles/quad/0", "eles/quad/1",
-      (7): "eles/quad/2", "eles/quad/3", "bc/wall\000\000\000\000",
-      (10): "bc/inlet\000\000\000", "bc/outlet\000\000"
-      }
-   }
+.. code-block:: none
+
+    DATASET "/codec" {
+       DATATYPE  H5T_STRING {
+          STRSIZE 11;
+          STRPAD H5T_STR_NULLPAD;
+          CSET H5T_CSET_ASCII;
+          CTYPE H5T_C_S1;
+       }
+       DATASPACE  SIMPLE { ( 12 ) / ( 12 ) }
+       DATA {
+       (0): "eles/tri\000\000\000", "eles/tri/0\000", "eles/tri/1\000",
+       (3): "eles/tri/2\000", "eles/quad\000\000", "eles/quad/0", "eles/quad/1",
+       (7): "eles/quad/2", "eles/quad/3", "bc/wall\000\000\000\000",
+       (10): "bc/inlet\000\000\000", "bc/outlet\000\000"
+       }
+    }
 
 This is always an array of null-padded strings. From this we see that
 ``/codec[1] = "eles/tri/0"`` and thus a ``cidx`` value of 1 corresponds
@@ -108,17 +118,21 @@ means that face 0 of quad 98 is connected to face 2 of triangle 334.
 Correspondingly, ``/eles/tri[334].faces[2] = (5, 98)`` with
 ``/codec[5] = "eles/quad/0"``. When the ``cidx`` is that of a boundary
 the ``off`` field is unnecessary and is guaranteed to be -1. Boundary
-names are, in general, arbitrary.
+names are, in general, arbitrary. The ``colour`` field is used for
+element colouring in implicit solvers and contains a small integer
+indicating which colour group the element belongs to.
 
-Inspecting the ``/nodes`` array we have::
+Inspecting the ``/nodes`` array we have:
 
-   DATASET "/nodes" {
-      DATATYPE  H5T_COMPOUND {
-         H5T_ARRAY { (2) H5T_IEEE_F64LE } "location";
-         H5T_STD_U16LE "valency";
-      }
-      DATASPACE  SIMPLE { ( 7345 ) / ( 7345 ) }
-   }
+.. code-block:: none
+
+    DATASET "/nodes" {
+       DATATYPE  H5T_COMPOUND {
+          H5T_ARRAY { (2) H5T_IEEE_F64LE } "location";
+          H5T_STD_U16LE "valency";
+       }
+       DATASPACE  SIMPLE { ( 7345 ) / ( 7345 ) }
+    }
 
 Here, each record consists of two fields: a ``location`` array which
 gives the position of the node in space, and a ``valency`` number which
@@ -127,7 +141,7 @@ array is equal to the number of spatial dimensions in the mesh; in our
 case this is two.
 
 Node ordering
-~~~~~~~~~~~~~
+-------------
 
 All nodes are specified with regards to a standard element. These
 elements are:
@@ -137,7 +151,7 @@ elements are:
 +=========================+============================================+
 | Tri                     | (-1, -1), (1, -1), (-1, 1)                 |
 +-------------------------+--------------------------------------------+
-| Quad                    | (-1, -1), (1, -1), (-1, 1), (-1, -1)       |
+| Quad                    | (-1, -1), (1, -1), (-1, 1), (1, 1)         |
 +-------------------------+--------------------------------------------+
 | Hex                     | (-1, -1, -1), ( 1, -1,-1), (-1, 1, -1), (  |
 |                         | 1, 1, -1), (-1, -1, 1), ( 1, -1, 1), (-1,  |
@@ -159,26 +173,28 @@ Higher-order elements are always of the Lagrange type and correspond to
 equi-spaced subdivisions of the first-order standard elements.
 
 For convenience the shape points are also stored in the ``pts``
-attribute of each element. In our mesh, for ``/eles/quad`` we find::
+attribute of each element. In our mesh, for ``/eles/quad`` we find:
 
-   ATTRIBUTE "pts" {
-      DATATYPE  H5T_IEEE_F64LE
-      DATASPACE  SIMPLE { ( 9, 2 ) / ( 9, 2 ) }
-      DATA {
-      (0,0): -1, -1,
-      (1,0): 0, -1,
-      (2,0): 1, -1,
-      (3,0): -1, 0,
-      (4,0): 0, 0,
-      (5,0): 1, 0,
-      (6,0): -1, 1,
-      (7,0): 0, 1,
-      (8,0): 1, 1
-      }
-   }
+.. code-block:: none
+
+    ATTRIBUTE "pts" {
+       DATATYPE  H5T_IEEE_F64LE
+       DATASPACE  SIMPLE { ( 9, 2 ) / ( 9, 2 ) }
+       DATA {
+       (0,0): -1, -1,
+       (1,0): 0, -1,
+       (2,0): 1, -1,
+       (3,0): -1, 0,
+       (4,0): 0, 0,
+       (5,0): 1, 0,
+       (6,0): -1, 1,
+       (7,0): 0, 1,
+       (8,0): 1, 1
+       }
+    }
 
 Face numbering
-~~~~~~~~~~~~~~
+--------------
 
 Face numbering is established through consideration of the
 outward-facing normal vector for each face of a standard element in a
@@ -206,7 +222,7 @@ right-hand coordinate system.
 +-----------------------------------+-----------------------------------+
 
 Partitioning
-~~~~~~~~~~~~
+------------
 
 Every mesh contains one of more named *partitionings*. These are used to
 specify how elements of a mesh should be distributed between MPI ranks.
@@ -219,17 +235,19 @@ of elements in the mesh. To interpret these element numbers it is
 necessary to consult the ``regions`` attribute. This is a two
 dimensional dataset where the number of rows is equal to the number of
 partitions and the number of columns is equal to the number of distinct
-element types plus one. For ``/partitionings/3/eles`` we have::
+element types plus one. For ``/partitionings/3/eles`` we have:
 
-   ATTRIBUTE "regions" {
-      DATATYPE  H5T_STD_I64LE
-      DATASPACE  SIMPLE { ( 3, 3 ) / ( 3, 3 ) }
-      DATA {
-      (0,0): 0, 0, 1207,
-      (1,0): 1207, 1207, 2415,
-      (2,0): 2415, 2611, 3427
-      }
-   }
+.. code-block:: none
+
+    ATTRIBUTE "regions" {
+       DATATYPE  H5T_STD_I64LE
+       DATASPACE  SIMPLE { ( 3, 3 ) / ( 3, 3 ) }
+       DATA {
+       (0,0): 0, 0, 1207,
+       (1,0): 1207, 1207, 2415,
+       (2,0): 2415, 2611, 3427
+       }
+    }
 
 The numbers correspond to offsets in the ``eles`` array. To use this
 array we begin by alphabetically sorting the element types in our mesh.
@@ -250,15 +268,17 @@ necessary to consult the ``regions`` attribute. This is a one
 dimensional array of offsets whose length is equal to the number of
 partitions plus one. The connectivity information for partition ``p`` is
 between ``neighbours.regions[p]`` and ``neighbours.regions[p+1]``. For
-``/partitionings/3/neighbours`` we have::
+``/partitionings/3/neighbours`` we have:
 
-   ATTRIBUTE "regions" {
-      DATATYPE  H5T_STD_I64LE
-      DATASPACE  SIMPLE { ( 4 ) / ( 4 ) }
-      DATA {
-      (0): 0, 1, 3, 4
-      }
-   }
+.. code-block:: none
+
+    ATTRIBUTE "regions" {
+       DATATYPE  H5T_STD_I64LE
+       DATASPACE  SIMPLE { ( 4 ) / ( 4 ) }
+       DATA {
+       (0): 0, 1, 3, 4
+       }
+    }
 
 The connectivity for partition 0 is hence given by ``neighbours[0:1]``
 while the connectivity for partition 1 is given by ``neighbours[1:3]``.
@@ -267,17 +287,19 @@ have a single neighbouring partition, whilst partition 1 has two
 neighbours.
 
 Periodic interfaces
-~~~~~~~~~~~~~~~~~~~
+-------------------
 
 For meshes which contain periodic boundaries, information about these
 boundaries is stored in the ``/periodic`` group. In order to showcase
 this we need to first switch to a mesh with periodic boundaries. Thus,
 for this section we will consider the 2D Euler vortex test case.
-Inspecting the structure of this mesh we find::
+Inspecting the structure of this mesh we find:
 
-   /periodic                Group
-   /periodic/0              Dataset {20, 2}
-   /periodic/1              Dataset {20, 2}
+.. code-block:: none
+
+    /periodic                Group
+    /periodic/0              Dataset {20, 2}
+    /periodic/1              Dataset {20, 2}
 
 This tells us that our mesh has two periodic boundaries which are named
 ``0`` and ``1``, respectively.  The names, in general, are entirely
@@ -285,15 +307,17 @@ arbitrary. The entries in these datasets describe which faces in the
 mesh are paired together. In this mesh we observe that each of our two
 periodic boundaries pair together 20 faces.
 
-Inspecting the structure of ``0`` we find::
+Inspecting the structure of ``0`` we find:
 
-   DATASET "/periodic/0" {
-      DATATYPE  H5T_COMPOUND {
-         H5T_STD_I16LE "cidx";
-         H5T_STD_I64LE "off";
-      }
-      DATASPACE  SIMPLE { ( 20, 2 ) / ( 20, 2 ) }
-   }
+.. code-block:: none
+
+    DATASET "/periodic/0" {
+       DATATYPE  H5T_COMPOUND {
+          H5T_STD_I16LE "cidx";
+          H5T_STD_I64LE "off";
+       }
+       DATASPACE  SIMPLE { ( 20, 2 ) / ( 20, 2 ) }
+    }
 
 Here, the ``cidx`` and ``off`` members have the same meaning as in the
 elements arrays.
@@ -301,22 +325,22 @@ elements arrays.
 Note that this data is not currently used by the solver.
 
 Solution Format
----------------
+===============
 
-The general structure of a solution file is::
+The general structure of a solution file is:
 
-   /                        Group
-   /config                  Dataset {SCALAR}
-   /config-0                Dataset {SCALAR}
-   /creator                 Dataset {SCALAR}
-   /mesh-uuid               Dataset {SCALAR}
-   /soln                    Group
-   /soln/p3-quad            Dataset {196, 3, 16}
-   /soln/p3-quad-parts      Dataset {196}
-   /soln/p3-tri             Dataset {3231, 3, 10}
-   /soln/p3-tri-parts       Dataset {3231}
-   /stats                   Dataset {SCALAR}
-   /version                 Dataset {SCALAR}
+.. code-block:: none
+
+    /                        Group
+    /config                  Dataset {SCALAR}
+    /config-0                Dataset {SCALAR}
+    /creator                 Dataset {SCALAR}
+    /mesh-uuid               Dataset {SCALAR}
+    /soln                    Group
+    /soln/p3-quad            Dataset {196}
+    /soln/p3-tri             Dataset {3231}
+    /stats                   Dataset {SCALAR}
+    /version                 Dataset {SCALAR}
 
 The ``/creator``, ``/mesh-uuid``, and ``/version`` datasets have
 identical meanings to those in the mesh file format. When opening a
@@ -331,55 +355,61 @@ initial INI file.
 
 To obtain the path to the solution data it is necessary to consult the
 ``/stats`` dataset. This is an INI file which contains information
-about the solution. Of interest to us is the ``[data]`` section::
+about the solution. Of interest to us is the ``[data]`` section:
 
-   [data]
-   fields = p,u,v
-   prefix = soln
+.. code-block:: ini
 
-Here, the ``fields`` key contains the names of the field variables in
-the solution. As this particular case corresponds to incompressible
-Navier–Stokes equations there are 3 field variables: pressure and two
-velocities denoted by *p*, *u*, and *v*, respectively. Note that the
-solution may contain more fields than expected. This can happen if the
-user has requested that gradient data also be output. Applications
-should *not* depend on the ordering of field variables. The ``prefix``
-key tells us which group contains the solution data itself. Usually, the
-prefix is either *soln* for solutions or *tavg* for time-average data.
+    [data]
+    prefix = soln
 
-All solution data arrays have three dimensions: the first corresponding
-to the number of elements in the array, the second to the number of
-field variables, and the third to the number of solution points. In our
-above example ``/soln/p3-tri`` has a length of 3231 since there are 3231
-triangular elements in our mesh. The ``p3`` prefix indicates that each
-of these triangles contains a third order solution polynomial which, in
-turn, leads to 10 solution points. The locations of the solution points
-can be determined in one of two ways. The first is to parse the
-``/config`` dataset and the second is to inspect the ``pts`` attribute.
-For ``/soln/p3-tri`` we find::
+The ``prefix`` key tells us which group contains the solution data
+itself. Usually, the prefix is either *soln* for solutions or *tavg* for
+time-average data.
 
-   ATTRIBUTE "pts" {
-      DATATYPE  H5T_IEEE_F64LE
-      DATASPACE  SIMPLE { ( 10, 2 ) / ( 10, 2 ) }
-      DATA {
-      (0,0): -0.333333, -0.333333,
-      (1,0): -0.888872, 0.777744,
-      (2,0): 0.777744, -0.888872,
-      (3,0): -0.888872, -0.888872,
-      (4,0): 0.268421, -0.408933,
-      (5,0): -0.859489, -0.408933,
-      (6,0): -0.408933, -0.859489,
-      (7,0): 0.268421, -0.859489,
-      (8,0): -0.859489, 0.268421,
-      (9,0): -0.408933, 0.268421
-      }
-   }
+Solution data is stored using HDF5 compound types. The compound dtype
+names and shapes define the field layout, and the dataset itself has
+one entry per element. In our above example ``/soln/p3-tri`` has a
+length of 3231 since there are 3231 triangular elements in our mesh.
+The ``p3`` prefix indicates that each of these triangles contains a
+third order solution polynomial which, in turn, leads to 10 solution
+points. The locations of the solution points can be determined in one
+of two ways. The first is to parse the ``/config`` dataset and the
+second is to inspect the ``pts`` attribute. For ``/soln/p3-tri`` we
+find:
 
-The ``-parts`` suffixed array contains the MPI rank number that was
-responsible for each element.
+.. code-block:: none
+
+    ATTRIBUTE "pts" {
+       DATATYPE  H5T_IEEE_F64LE
+       DATASPACE  SIMPLE { ( 10, 2 ) / ( 10, 2 ) }
+       DATA {
+       (0,0): -0.333333, -0.333333,
+       (1,0): -0.888872, 0.777744,
+       (2,0): 0.777744, -0.888872,
+       (3,0): -0.888872, -0.888872,
+       (4,0): 0.268421, -0.408933,
+       (5,0): -0.859489, -0.408933,
+       (6,0): -0.408933, -0.859489,
+       (7,0): 0.268421, -0.859489,
+       (8,0): -0.859489, 0.268421,
+       (9,0): -0.408933, 0.268421
+       }
+    }
+
+Field discovery is automatic via the compound dtype which contains
+nested sub-compounds for each field group:
+
+- Solution fields are grouped under ``soln`` (e.g., ``soln.rho``,
+  ``soln.rhou``)
+- Gradient fields, if present, are grouped under ``grad``
+- Auxiliary data are grouped under ``aux`` (e.g., ``aux.part-id``,
+  ``aux.ef-filter``)
+
+The ``aux.part-id`` field contains the MPI rank number responsible for
+each element.
 
 Subset solutions
-~~~~~~~~~~~~~~~~
+----------------
 
 It is permissible for solutions to be subset. If a particular element
 type is subset then there will be an ``-idxs`` suffixed array in the

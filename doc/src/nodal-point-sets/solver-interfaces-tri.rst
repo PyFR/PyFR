@@ -1,9 +1,8 @@
-***************************************
-[solver-interfaces-tri{-mg-p\ *order*}]
-***************************************
+***********************
+[solver-interfaces-tri]
+***********************
 
-Parameterises the triangular interfaces, or if -mg-p\ *order* is
-suffixed the triangular interfaces at multi-p level *order*, with
+Parameterises the triangular interfaces, with
 
 #. ``flux-pts`` --- location of the flux points on a triangular
    interface:
@@ -25,7 +24,9 @@ suffixed the triangular interfaces at multi-p level *order*, with
 
     ``williams-shunn`` | ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-interfaces-tri]
     flux-pts = williams-shunn

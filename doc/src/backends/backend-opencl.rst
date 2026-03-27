@@ -31,7 +31,9 @@ Parameterises the OpenCL backend with
 
      *int*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [backend-opencl]
     platform-id = 0
