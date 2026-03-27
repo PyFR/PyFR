@@ -222,7 +222,8 @@ class _CUDABase:
     def __del__(self):
         if self._destroyfn:
             try:
-                getattr(self.cuda.lib, self._destroyfn)(self)
+                if self.cuda.ctx:
+                    getattr(self.cuda.lib, self._destroyfn)(self)
             except AttributeError:
                 pass
 
@@ -478,6 +479,7 @@ class CUDA:
     def __del__(self):
         if getattr(self, 'ctx', None):
             self.lib.cuDevicePrimaryCtxRelease(self.dev)
+            self.ctx = None
 
     def device_count(self):
         count = c_int()
