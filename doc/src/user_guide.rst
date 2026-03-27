@@ -181,6 +181,30 @@ pyfr region
 
           pyfr region remove mesh.pyfrm teapot
 
+pyfr upgrade
+   Upgrade a mesh (``.pyfrm``) or solution (``.pyfrs``) file from an
+   older format version to the latest.  Example:
+
+   .. code-block:: shell
+
+       pyfr upgrade old-mesh.pyfrm new-mesh.pyfrm
+
+   If no output file is given the upgrade is performed in-place:
+
+   .. code-block:: shell
+
+       pyfr upgrade mesh.pyfrm
+
+   The upgrade is atomic; a temporary file is written first and only
+   renamed on success.  Currently the following upgrades are supported:
+
+   - **Mesh v1 to v2** --- adds element colouring data.
+   - **Solution v1 to v2** --- converts flat solution arrays to the
+     compound dtype format with field groups and per-element partition
+     IDs.
+
+   If the file is already at the latest version an error is raised.
+
 pyfr mesh
    Analyse mesh quality.  Example:
 

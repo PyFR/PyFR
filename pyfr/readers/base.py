@@ -8,7 +8,7 @@ import numpy as np
 from pyfr._version import __version__
 from pyfr.nputil import iter_struct, fuzzysort
 from pyfr.polys import get_polybasis
-from pyfr.progress import NullProgressSequence
+from pyfr.progress import NullProgressSequence, NullProgressSpinner
 from pyfr.shapes import BaseShape
 from pyfr.util import digest, first, subclass_where
 
@@ -301,7 +301,8 @@ class NodalMeshAssembler:
 
                     cconn[lcidx][loff] = cidx, -1
 
-    def _compute_element_coloring(self, eles, codec, spinner):
+    @staticmethod
+    def compute_element_colouring(eles, codec, spinner=NullProgressSpinner()):
         # Maximum number of colours
         max_colours = max(einfo['faces'].shape[-1] for einfo in eles.values()) + 1
 
@@ -398,7 +399,7 @@ class NodalMeshAssembler:
 
         # Compute element colouring
         with progress.start_with_spinner('Colouring elements') as spinner:
-            self._compute_element_coloring(eles, codec, spinner)
+            self.compute_element_colouring(eles, codec, spinner)
 
         # Apply linearisation
         with progress.start_with_spinner('Linearising elements') as spinner:

@@ -4,6 +4,7 @@ import csv
 import io
 from pathlib import Path
 import re
+import uuid
 
 import h5py
 import mpi4py.rc
@@ -28,6 +29,7 @@ from pyfr.solvers import get_solver
 from pyfr.util import first, subclasses
 from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
 from pyfr.writers.native import NativeWriter
+from pyfr.writers.upgrade import upgrade
 
 
 def main():
@@ -192,6 +194,14 @@ def main():
     ap_region_remove.add_argument('name', help='region name')
     ap_region_remove.set_defaults(process=process_region_remove)
 
+    # Upgrade command
+    ap_upgrade = sp.add_parser('upgrade', help='upgrade --help')
+    ap_upgrade.add_argument('inf', metavar='in', type=Path,
+                            help='input mesh or solution file')
+    ap_upgrade.add_argument('outf', metavar='out', nargs='?', default=None,
+                            type=Path, help='output file (default: in-place)')
+    ap_upgrade.set_defaults(process=process_upgrade)
+
     # Resample command
     ap_resample = sp.add_parser('resample', help='resample --help')
     ap_resample.add_argument('srcmesh', help='source mesh file')
@@ -254,6 +264,21 @@ def process_import(args):
 
     # Write out the mesh
     reader.write(args.outmesh, args.lintol)
+
+
+def process_upgrade(args):
+    outf = args.outf or args.inf
+
+    with h5py.File(args.inf, 'r') as src:
+        tmp = outf.parent / f'pyfr-{uuid.uuid4()}{outf.suffix}'
+        try:
+            with h5py.File(tmp, 'w', libver='latest') as dst:
+                upgrade(src, dst)
+
+            tmp.rename(outf)
+        except:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 def process_partition_list(args):
