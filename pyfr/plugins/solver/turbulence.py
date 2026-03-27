@@ -277,7 +277,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         # Register the turbulence source macro for this element type
         eles.add_src_macro(
-            'pyfr.plugins.kernels.turbulence', 'turbulence',
+            'pyfr.plugins.solver.kernels.turbulence', 'turbulence',
             self.macro_params | {'nvmax': nvmax}, ploc=True, soln=True
         )
 

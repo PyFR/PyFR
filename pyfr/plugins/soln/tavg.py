@@ -153,7 +153,7 @@ class TavgPlugin(PostactionMixin, RegionMixin, BackendMixin, TavgMixin,
         backend, emap = self.backend, intg.system.ele_map
 
         # Register the tavg kernel module
-        backend.pointwise.register('pyfr.plugins.kernels.tavg')
+        backend.pointwise.register('pyfr.plugins.soln.kernels.tavg')
 
         # Compile expressions to C-style
         cexprs = [compile_expr(e, self.privars, self.ndims)
