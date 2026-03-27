@@ -59,8 +59,8 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
         # Helpers
         tdisf = []
         c, l = 'curved', 'linear'
-        r, s = self._mesh_regions, self._slice_mat
-        av = self.artvisc
+        r, s = self.mesh_regions, self._slice_mat
+        av = self.artvisc_fpts
 
         # Gradient + flux kernel fusion
         if self.grad_fusion:

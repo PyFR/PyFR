@@ -1,6 +1,6 @@
-from pyfr.polys import get_polybasis
-from pyfr.solvers.base.elements import inters_map
+from pyfr.solvers.base.elements import ExportableField, inters_map
 from pyfr.solvers.baseadvec import BaseAdvectionElements
+from pyfr.solvers.base.elements import ExportableField
 
 
 class BaseAdvectionDiffusionElements(BaseAdvectionElements):
@@ -26,9 +26,9 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         # Ensure we point to the correct gradient array
         if self.basis.fpts_in_upts:
             if self.grad_fusion:
-                self.get_vect_fpts_for_inter = self._get_grad_upts_for_inter
+                self.get_vect_fpts_for_inters = self._get_grad_upts_for_inters
             else:
-                self.get_vect_fpts_for_inter = self._get_vect_fpts_for_inter
+                self.get_vect_fpts_for_inters = self._get_vect_fpts_for_inters
 
         kernel, kernels = self._be.kernel, self.kernels
         kprefix = 'pyfr.solvers.baseadvecdiff.kernels'
@@ -38,7 +38,7 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
         self._be.pointwise.register(f'{kprefix}.gradcoru')
 
         # Mesh regions
-        regions = self._mesh_regions
+        regions = self.mesh_regions
 
         if abs(self.cfg.getfloat('solver-interfaces', 'ldg-beta')) == 0.5:
             kernels['copy_fpts'] = lambda: kernel(
@@ -116,56 +116,24 @@ class BaseAdvectionDiffusionElements(BaseAdvectionElements):
 
             kernels['gradcoru_qpts'] = gradcoru_qpts
 
-        # Shock capturing
+        # Artificial viscosity defaults; populated by ArtificialViscosity
+        self.artvisc_fpts = None
+        self.vtx_view = None
+        self.vtx_views = {}
+
+        # Register exportable AV field with lazy getter (must be here
+        # so plugins can discover it before commit)
         shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
         if shock_capturing == 'artificial-viscosity':
-            tags = {'align'}
-
-            # Register the kernels
-            self._be.pointwise.register(f'{kprefix}.shocksensor')
-
-            # Obtain the scalar variable to be used for shock sensing
-            shockvar = self.convars.index(self.shockvar)
-
-            # Obtain the name, degrees, and order of our solution basis
-            ubname = self.basis.ubasis.name
-            ubdegs = self.basis.ubasis.degrees
-            uborder = self.basis.ubasis.order
-
-            # Obtain the degrees of a basis whose order is one lower
-            lubdegs = get_polybasis(ubname, max(0, uborder - 1)).degrees
-
-            # Compute the intersection
-            ind_modes = [d not in lubdegs for d in ubdegs]
-
-            # Template arguments
-            tplargs_artvisc = dict(
-                nvars=self.nvars, nupts=self.nupts, svar=shockvar,
-                c=self.cfg.items_as('solver-artificial-viscosity', float),
-                order=self.basis.order, ind_modes=ind_modes,
-                invvdm=self.basis.ubasis.invvdm.T
-            )
-
-            # Allocate space for the artificial viscosity vector
-            self.artvisc = self._be.matrix((1, self.neles),
-                                           extent=nonce + 'artvisc', tags=tags)
-
-            # Apply the sensor to estimate the required artificial viscosity
-            kernels['shocksensor'] = lambda uin: kernel(
-                'shocksensor', tplargs=tplargs_artvisc, dims=[self.neles],
-                u=self.scal_upts[uin], artvisc=self.artvisc
-            )
-        elif shock_capturing in {'entropy-filter', 'none'}:
-            self.artvisc = None
-        else:
-            raise ValueError('Invalid shock capturing scheme')
+            nverts = len(self.basis.linspts)
+            self.export_fields.append(ExportableField(
+                name='artvisc', shape=(nverts,),
+                getter=lambda: self.artvisc_vtx_fn()
+            ))
 
     @inters_map
-    def _get_grad_upts_for_inter(self, eidx, fidx):
-        rmap = self._srtd_face_fpts[fidx][eidx]
+    def _get_grad_upts_for_inters(self, eidxs, fidx):
+        rmap = self.srtd_face_fpts[fidx][eidxs]
         fmap = self.basis.fpts_map_upts[rmap]
         return self._grad_upts.mid, fmap, self.nupts
 
-    def get_artvisc_fpts_for_inter(self, eidx, fidx):
-        nfp = self.nfacefpts[fidx]
-        return (self.artvisc.mid,)*nfp, (0,)*nfp, (eidx,)*nfp

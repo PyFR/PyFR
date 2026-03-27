@@ -191,7 +191,7 @@ class EulerElements(BaseFluidElements, BaseAdvectionElements):
         # Helpers
         tdisf = []
         c, l = 'curved', 'linear'
-        r, s = self._mesh_regions, self._slice_mat
+        r, s = self.mesh_regions, self._slice_mat
         slicedk = self._make_sliced_kernel
 
         if c in r and 'flux' not in self.antialias:

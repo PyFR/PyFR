@@ -1,7 +1,6 @@
-import numpy as np
-
 from pyfr.backends.base import NullKernel
 from pyfr.solvers.base import BaseElements
+from pyfr.solvers.base.elements import ExportableField
 
 
 class BaseAdvectionElements(BaseElements):
@@ -128,46 +127,3 @@ class BaseAdvectionElements(BaseElements):
             **self._external_vals
         )
 
-        shock_capturing = self.cfg.get('solver', 'shock-capturing', 'none')
-        if shock_capturing == 'entropy-filter':
-            tags = {'align'}
-
-            # Allocate one minimum entropy value per interface
-            self.nfaces = len(self.nfacefpts)
-            ext = nonce + 'entmin_int'
-
-            # Set values to -inf for pre-proc filter to enforce positivity
-            entmin_int = np.full((self.nfaces, self.neles),
-                                 -self._be.fpdtype_max)
-            self.entmin_int = self._be.matrix((self.nfaces, self.neles),
-                                              tags=tags, extent=ext,
-                                              initval=entmin_int)
-
-            # Setup nodal/modal operator matrices
-            form = self.cfg.get('solver-entropy-filter', 'formulation',
-                                'nonlinear')
-            if form == 'linearised':
-                self.invvdm = self.vdm_ef = None
-            elif form == 'nonlinear':
-                self.invvdm = self._be.const_matrix(self.basis.ubasis.invvdm.T)
-                vdm_ef = self.basis.ubasis.vdm.T
-
-                if not self.basis.fpts_in_upts:
-                    vdmf = self.basis.ubasis.vdm_at(self.basis.fpts).T
-                    vdm_ef = np.vstack([vdm_ef, vdmf])
-
-                self.vdm_ef = self._be.const_matrix(vdm_ef)
-            else:
-                raise ValueError('Invalid entropy filter formulation.')
-
-            if self.basis.fpts_in_upts:
-                self.m0 = None
-            else:
-                self.m0 = self._be.const_matrix(self.basis.m0)
-
-    def get_entmin_int_fpts_for_inter(self, eidx, fidx):
-        return (self.entmin_int.mid,), (fidx,), (eidx,)
-
-    def get_entmin_bc_fpts_for_inter(self, eidx, fidx):
-        nfp = self.nfacefpts[fidx]
-        return (self.entmin_int.mid,)*nfp, (fidx,)*nfp, (eidx,)*nfp
