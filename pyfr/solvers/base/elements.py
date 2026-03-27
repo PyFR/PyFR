@@ -107,6 +107,38 @@ class BaseElements:
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
             self.scal_upts[:, i, :] = m8 @ v if m8 is not None else v
 
+    def set_ics_from_cgns(self, cgns_reader):
+        """Set initial conditions from CGNS cell-centred data.
+
+        Interpolates CGNS primitive fields to solution points via
+        nearest-neighbour lookup, then converts to conservative form.
+        """
+        # Get solution point physical coordinates: (nupts, ndims, neles)
+        coords = self.ploc_at_np('upts')
+        nupts, ndims, neles = coords.shape
+
+        # Reshape to (nupts*neles, 3) for KDTree query
+        pts = coords.swapaxes(1, 2).reshape(-1, ndims)
+
+        # Get gamma for possible conservative→primitive conversion
+        gamma = self.cfg.getfloat('constants', 'gamma')
+
+        # Interpolate CGNS data to query points
+        prim = cgns_reader.get_primitives(pts, gamma=gamma)
+
+        # Build IC arrays: each (nupts, neles)
+        ics = []
+        for dv in self.privars:
+            if dv not in prim:
+                raise KeyError(f'CGNS IC missing field: {dv}')
+            arr = prim[dv].reshape(nupts, neles)
+            ics.append(arr)
+
+        # Allocate and convert primitive → conservative
+        self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
+        for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
+            self.scal_upts[:, i, :] = v
+
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
         solnb = self.basis.__class__(None, solncfg)
