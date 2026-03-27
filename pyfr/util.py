@@ -126,8 +126,8 @@ def digest(*args, hash='sha256'):
 
 
 def rm(path):
-    if os.path.isfile(path) or os.path.islink(path):
-        os.remove(path)
+    if path.is_file() or path.is_symlink():
+        path.unlink()
     else:
         shutil.rmtree(path)
 
@@ -164,7 +164,7 @@ def file_path_gen(basedir, basename, restore=False):
         t = yield
 
         for n in it.count(ns):
-            t = yield os.path.join(basedir, basename.format(t=t, n=n))
+            t = yield basedir / basename.format(t=t, n=n)
 
     gen = g()
     next(gen)

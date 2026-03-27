@@ -135,6 +135,51 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
     return srtdidx
 
 
+def _batched_fuzzysort_rec(coords, perm, dim, s, e, ndims, tol):
+    neles = perm.shape[0]
+    group = perm[:, s:e]
+    vals = np.take_along_axis(coords[:, dim, :], group, axis=1)
+
+    sub = np.argsort(vals, axis=1, kind='stable')
+    perm[:, s:e] = np.take_along_axis(group, sub, axis=1)
+
+    if dim + 1 >= ndims:
+        return np.zeros(neles, dtype=bool)
+
+    # Find tolerance-based group boundaries from the first element
+    sorted_vals = np.take_along_axis(vals, sub, axis=1)
+    ref_gaps = np.diff(sorted_vals[0]) >= tol
+
+    # Tag elements that have different group boundaries
+    bad = np.any((np.diff(sorted_vals, axis=1) >= tol) != ref_gaps, axis=1)
+
+    # Recursively sub-sort group by the next dimension
+    prev = 0
+    for b in [*(np.flatnonzero(ref_gaps) + 1), e - s]:
+        if b - prev > 1:
+            bad |= _batched_fuzzysort_rec(coords, perm, dim + 1,
+                                          s + prev, s + b, ndims, tol)
+        prev = b
+
+    return bad
+
+
+def batched_fuzzysort(coords, tol=1e-6):
+    neles, ndims, nfp = coords.shape
+
+    if nfp <= 1:
+        return np.zeros((neles, 1), dtype=int)
+
+    perm = np.tile(np.arange(nfp), (neles, 1))
+    bad = _batched_fuzzysort_rec(coords, perm, 0, 0, nfp, ndims, tol)
+
+    # Handle pathological elements
+    for bi in np.flatnonzero(bad):
+        perm[bi] = fuzzysort(coords[bi], list(range(nfp)), tol=tol)
+
+    return perm
+
+
 def iter_struct(arr, n=1000, axis=0):
     for c in np.array_split(arr, -(arr.shape[axis] // -n) or 1, axis=axis):
         yield from c.tolist()
