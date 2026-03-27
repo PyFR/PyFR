@@ -1,0 +1,90 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyfr"
+dynamic = ["version"]
+description = "Flux Reconstruction in Python"
+readme = "README.md"
+license = "BSD-3-Clause"
+requires-python = ">=3.11"
+authors = [
+    {name = "PyFR development team", email = "info@pyfr.org"}
+]
+keywords = ["Math"]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering",
+]
+
+dependencies = [
+    "gimmik >= 3.2.1",
+    "h5py >= 2.10",
+    "mako >= 1.0.0",
+    "mpi4py >= 4.0.0",
+    "numpy >= 2.4.2",
+    "platformdirs >= 2.2.0",
+    "pytools >= 2016.2.1",
+    "rtree >= 1.4.1",
+]
+
+[project.optional-dependencies]
+metal = ["pyobjc-framework-Metal >= 12.0"]
+
+[project.urls]
+Homepage = "https://www.pyfr.org/"
+
+[project.scripts]
+pyfr = "pyfr.__main__:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "pyfr._version.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["pyfr*"]
+
+[tool.setuptools.package-data]
+"pyfr.backends.cuda.kernels" = ["*.mako"]
+"pyfr.backends.hip.kernels" = ["*.mako"]
+"pyfr.backends.metal.kernels" = ["*.mako"]
+"pyfr.backends.opencl.kernels" = ["*.mako"]
+"pyfr.backends.openmp.kernels" = ["*.mako"]
+"pyfr.integrators.std.kernels" = ["*.mako"]
+"pyfr.integrators.dual.pseudo.kernels" = ["*.mako"]
+"pyfr.plugins.kernels" = ["*.mako"]
+"pyfr.quadrules" = [
+    "hex/*.txt",
+    "line/*.txt",
+    "pri/*.txt",
+    "pyr/*.txt",
+    "quad/*.txt",
+    "tet/*.txt",
+    "tri/*.txt",
+]
+"pyfr.solvers.aceuler.kernels" = ["*.mako"]
+"pyfr.solvers.aceuler.kernels.bcs" = ["*.mako"]
+"pyfr.solvers.aceuler.kernels.rsolvers" = ["*.mako"]
+"pyfr.solvers.acnavstokes.kernels" = ["*.mako"]
+"pyfr.solvers.acnavstokes.kernels.bcs" = ["*.mako"]
+"pyfr.solvers.baseadvec.kernels" = ["*.mako"]
+"pyfr.solvers.baseadvecdiff.kernels" = ["*.mako"]
+"pyfr.solvers.euler.kernels" = ["*.mako"]
+"pyfr.solvers.euler.kernels.bcs" = ["*.mako"]
+"pyfr.solvers.euler.kernels.rsolvers" = ["*.mako"]
+"pyfr.solvers.navstokes.kernels" = ["*.mako"]
+"pyfr.solvers.navstokes.kernels.bcs" = ["*.mako"]
+"pyfr.tests" = ["*.npz"]
+
+[tool.ruff]
+line-length = 79
+
+[tool.ruff.lint]
+ignore = ["E741", "E402"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
