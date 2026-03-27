@@ -14,6 +14,10 @@ class GMRESMixin(BaseKrylovSolver):
 
         self._gmres_nmax = cfg.getint(sect, 'krylov-max-iter', 10)
 
+        # Restart size; 0 means no restart (single cycle of nmax)
+        m = cfg.getint(sect, 'gmres-restart', 0)
+        self._gmres_m = min(m, self._gmres_nmax) if m else self._gmres_nmax
+
         # Arnoldi method
         match cfg.get(sect, 'gmres-arnoldi', 'cgs').lower():
             case 'cgs':
@@ -24,7 +28,7 @@ class GMRESMixin(BaseKrylovSolver):
                 raise ValueError('Invalid Arnoldi method: must be mgs or cgs')
 
         # Size the storage for the Krylov vectors
-        self._size_register(self._krylov, self._gmres_nmax + 1)
+        self._size_register(self._krylov, self._gmres_m + 1)
 
         super().__init__(backend, systemcls, mesh, initsoln, cfg)
 
@@ -34,9 +38,9 @@ class GMRESMixin(BaseKrylovSolver):
                                                          initsoln)
 
         # Allocate storage for the Arnoldi process
-        self._H = np.empty((self._gmres_nmax + 1, self._gmres_nmax))
-        self._cs, self._sn = np.empty((2, self._gmres_nmax))
-        self._beta = np.empty(self._gmres_nmax + 1)
+        self._H = np.empty((self._gmres_m + 1, self._gmres_m))
+        self._cs, self._sn = np.empty((2, self._gmres_m))
+        self._beta = np.empty(self._gmres_m + 1)
 
     def _reset_gmres_arrays(self):
         self._H.fill(0)
@@ -76,60 +80,78 @@ class GMRESMixin(BaseKrylovSolver):
 
     def _krylov_solve(self, matvec, residual, out_reg, precond_apply=None,
                       accumulate=True, accumulate_scale=()):
-        v = self._krylov
+        v, m, nmax = self._krylov, self._gmres_m, self._gmres_nmax
 
-        self._reset_gmres_arrays()
+        niters = nprecond = 0
 
-        # Compute initial residual norm
-        self._beta[0] = r0_norm = self._norm2(residual)
-
-        # Normalize residual to get first Krylov vector
+        # Compute initial residual norm and first Krylov vector
+        r0_norm = self._norm2(residual)
         self._add(0, v[0], -1/r0_norm, residual)
+        restart_r_norm = r0_norm
 
-        # Arnoldi process with incremental Givens rotations
-        for j, w_reg in enumerate(v[1:]):
-            # Right preconditioning: w = A * M^{-1} * v[j]
+        while niters < nmax:
+            self._reset_gmres_arrays()
+            self._beta[0] = restart_r_norm
+
+            budget = min(m, nmax - niters)
+
+            # Arnoldi process with incremental Givens rotations
+            for j, w_reg in enumerate(v[1:budget + 1]):
+                # Right preconditioning: w = A * M^{-1} * v[j]
+                if precond_apply:
+                    precond_apply(v[j], self._precond_temp)
+                    matvec(self._precond_temp, w_reg)
+                else:
+                    matvec(v[j], w_reg)
+
+                # Arnoldi orthogonalization
+                self._arnoldi(w_reg, v, self._H, j)
+
+                # Compute h_{j+1,j} = ||w||
+                self._H[j + 1, j] = h_jp1_j = self._norm2(w_reg)
+
+                # Apply Givens rotations
+                self._apply_givens(self._H, self._beta, self._cs, self._sn, j)
+
+                # Check for convergence or breakdown
+                err = abs(self._beta[j + 1]) / r0_norm
+                if err < self._krylov_rtol or h_jp1_j < self._breakdown_tol:
+                    break
+
+                # Normalize to get v_{j+1} = w / h_{j+1,j}
+                if j < budget - 1:
+                    self._add(1/h_jp1_j, v[j + 1])
+
+            niters += j + 1
             if precond_apply:
-                precond_apply(v[j], self._precond_temp)
-                matvec(self._precond_temp, w_reg)
+                nprecond += j + 2
+
+            # Backward substitution to solve for y
+            y = np.linalg.solve(self._H[:j + 1, :j + 1], self._beta[:j + 1])
+
+            # Compute solution update; first cycle honours the
+            # caller's accumulate flag, subsequent cycles always add
+            first = niters == j + 1
+            acc = int(accumulate) if first else 1
+
+            if precond_apply:
+                self._addv([0, *y.tolist()], [self._precond_temp, *v[:j + 1]])
+                precond_apply(self._precond_temp, v[0])
+                self._add(acc, out_reg, 1, v[0], in_scale=accumulate_scale,
+                          in_scale_idxs=(1,) if accumulate_scale else ())
             else:
-                matvec(v[j], w_reg)
+                sidxs = tuple(range(1, j + 2)) if accumulate_scale else ()
+                self._addv([acc, *y.tolist()], [out_reg, *v[:j + 1]],
+                           in_scale=accumulate_scale, in_scale_idxs=sidxs)
 
-            # Arnoldi orthogonalization
-            self._arnoldi(w_reg, v, self._H, j)
-
-            # Compute h_{j+1,j} = ||w||
-            self._H[j + 1, j] = h_jp1_j = self._norm2(w_reg)
-
-            # Apply Givens rotations
-            self._apply_givens(self._H, self._beta, self._cs, self._sn, j)
-
-            # Check for convergence
-            err = abs(self._beta[j + 1]) / r0_norm
-            if err < self._krylov_rtol:
+            if (err < self._krylov_rtol or h_jp1_j < self._breakdown_tol or
+                    niters >= nmax):
                 break
 
-            # Check for breakdown
-            if h_jp1_j < self._breakdown_tol:
-                break
+            # Restart: recover residual direction from the Arnoldi
+            # relation r_m = beta[j+1] * v_{j+1} / h_{j+1,j}
+            restart_r_norm = abs(self._beta[j + 1])
+            s = np.copysign(1 / h_jp1_j, self._beta[j + 1])
+            self._add(0, v[0], s, v[j + 1])
 
-            # Normalize to get v_{j+1} = w / h_{j+1,j}
-            if j < self._gmres_nmax - 1:
-                self._add(1/h_jp1_j, v[j + 1])
-
-        # Backward substitution to solve for y
-        y = np.linalg.solve(self._H[:j + 1, :j + 1], self._beta[:j + 1])
-
-        # Compute solution update
-        if precond_apply:
-            self._addv([0, *y.tolist()], [self._precond_temp, *v[:j + 1]])
-            precond_apply(self._precond_temp, v[0])
-            self._add(int(accumulate), out_reg, 1, v[0],
-                      in_scale=accumulate_scale,
-                      in_scale_idxs=(1,) if accumulate_scale else ())
-        else:
-            sidxs = tuple(range(1, j + 2)) if accumulate_scale else ()
-            self._addv([int(accumulate), *y.tolist()], [out_reg, *v[:j + 1]],
-                       in_scale=accumulate_scale, in_scale_idxs=sidxs)
-
-        return j + 1, (j + 2) if precond_apply else 0
+        return niters, nprecond

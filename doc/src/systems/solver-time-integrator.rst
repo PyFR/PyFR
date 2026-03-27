@@ -369,6 +369,15 @@ Krylov Solver Options
     Classical Gram-Schmidt (``cgs``) or Modified Gram-Schmidt
     (``mgs``). Default is ``cgs``.
 
+#. ``gmres-restart`` --- GMRES restart size
+
+    *int* (default: 0)
+
+    When set to a positive integer *m*, GMRES restarts every *m*
+    iterations.  Total iterations are still bounded by
+    ``krylov-max-iter``.  When 0 (default), no restart is
+    performed.
+
 Newton Solver Options
 ---------------------
 
