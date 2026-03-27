@@ -1,18 +1,22 @@
-from pyfr.plugins.ascent import AscentPlugin
-from pyfr.plugins.base import (BaseCLIPlugin, BasePlugin, BaseSolnPlugin,
-                               BaseSolverPlugin)
-from pyfr.plugins.mesh import MeshCLIPlugin
-from pyfr.plugins.dtstats import DtStatsPlugin
-from pyfr.plugins.fluidforce import FluidForcePlugin
-from pyfr.plugins.fwh import FWHPlugin
-from pyfr.plugins.integrate import IntegratePlugin
-from pyfr.plugins.nancheck import NaNCheckPlugin
-from pyfr.plugins.residual import ResidualPlugin
-from pyfr.plugins.sampler import SamplerCLIPlugin, SamplerPlugin
-from pyfr.plugins.source import SourcePlugin
-from pyfr.plugins.tavg import TavgCLIPlugin, TavgPlugin
-from pyfr.plugins.turbulence import TurbulencePlugin
-from pyfr.plugins.writer import WriterPlugin
+from pyfr.plugins.base import BaseCLIPlugin, BasePlugin
+from pyfr.plugins.cli.ascent import AscentCLIPlugin
+from pyfr.plugins.cli.mesh import MeshCLIPlugin
+from pyfr.plugins.cli.sampler import SamplerCLIPlugin
+from pyfr.plugins.cli.tavg import TavgCLIPlugin
+from pyfr.plugins.soln.ascent import AscentPlugin
+from pyfr.plugins.soln.base import BaseSolnPlugin
+from pyfr.plugins.soln.dtstats import DtStatsPlugin
+from pyfr.plugins.soln.fluidforce import FluidForcePlugin
+from pyfr.plugins.soln.fwh import FWHPlugin
+from pyfr.plugins.soln.integrate import IntegratePlugin
+from pyfr.plugins.soln.nancheck import NaNCheckPlugin
+from pyfr.plugins.soln.residual import ResidualPlugin
+from pyfr.plugins.soln.sampler import SamplerPlugin
+from pyfr.plugins.soln.tavg import TavgPlugin
+from pyfr.plugins.soln.writer import WriterPlugin
+from pyfr.plugins.solver.base import BaseSolverPlugin
+from pyfr.plugins.solver.source import SourcePlugin
+from pyfr.plugins.solver.turbulence import TurbulencePlugin
 from pyfr.util import subclass_where
 
 

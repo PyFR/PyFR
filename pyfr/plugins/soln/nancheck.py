@@ -2,7 +2,7 @@ import math
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
-from pyfr.plugins.base import BaseSolnPlugin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 
 
 class NaNCheckPlugin(BaseSolnPlugin):
