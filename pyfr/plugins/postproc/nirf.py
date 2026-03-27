@@ -13,6 +13,7 @@ class NIRFPostProc(BasePostProcPlugin):
     export_types = '.*'
 
     def process(self, data):
+        ndims = data.ndims
         cfg = data.soln.config
         sect = 'solver-plugin-nirf'
 
@@ -20,15 +21,13 @@ class NIRFPostProc(BasePostProcPlugin):
         if sdata is None:
             return
 
-        fquat = np.array(sdata['quat'])
-        fomega = np.array(sdata['omega'])
-        fvelo = np.array(sdata['velo'])
-        floc = np.array(sdata['loc'])
-        fx0_cfg = literal_eval(cfg.get(sect, 'center-of-rot'))
-        ndims = len(fx0_cfg)
+        fquat = sdata['quat']
+        fomega = sdata['omega']
+        fvelo = sdata['velo']
+        floc = sdata['loc']
 
         fx0 = np.zeros(3)
-        fx0[:ndims] = fx0_cfg
+        fx0[:ndims] = literal_eval(cfg.get(sect, 'center-of-rot'))
 
         R = _quat_to_rotmat(fquat)
 
