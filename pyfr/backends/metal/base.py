@@ -7,11 +7,13 @@ from pyfr.backends.metal.util import call_
 class MetalBackend(BaseBackend):
     name = 'metal'
     blocks = False
+    has_double = False
 
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        from Metal import MTLCreateSystemDefaultDevice
+        from Metal import (MTLCommandBufferDescriptor,
+                           MTLCreateSystemDefaultDevice)
 
         # Get the default device
         self.dev = MTLCreateSystemDefaultDevice()
@@ -27,8 +29,11 @@ class MetalBackend(BaseBackend):
         self.soasz = 32
         self.csubsz = self.soasz
 
-        from pyfr.backends.metal import (blasext, gimmik, mps, packing,
-                                         provider, types)
+        from pyfr.backends.metal import (blasext, compiler, gimmik, mps,
+                                         packing, provider, types)
+
+        # Create the compiler
+        self.compiler = compiler.MetalCompiler(self)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.MetalConstMatrix
@@ -52,14 +57,20 @@ class MetalBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
-        # Create a command queue
+        # Create a command queue and buffer descriptor
         self.queue = self.dev.newCommandQueue()
 
         # Track the last command buffer to the queue
         self.last_cbuf = None
 
+        self._cbuf_desc = MTLCommandBufferDescriptor.alloc().init()
+        self._cbuf_desc.setRetainedReferences_(False)
+
+    def new_command_buffer(self):
+        return self.queue.commandBufferWithDescriptor_(self._cbuf_desc)
+
     def run_kernels(self, kernels, wait=False):
-        cbuf = self.queue.commandBuffer()
+        cbuf = self.new_command_buffer()
 
         for k in kernels:
             k.run(cbuf)

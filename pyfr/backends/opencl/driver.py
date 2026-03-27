@@ -548,11 +548,18 @@ class OpenCL(_OpenCLWaitFor):
 
         return np.array(alloc, copy=False)
 
-    def zero(self, dst, off, nbytes):
+    def zero(self, dst, nbytes, queue=None, wait_for=None, ret_evt=False):
+        evt_ptr = c_void_p() if ret_evt else None
+        wait_for = self._make_wait_for(wait_for)
         z = c_char(0)
-        self.lib.clEnqueueFillBuffer(self.qdflt, dst, byref(z), 1, off,
-                                     nbytes, 0, None, None)
-        self.qdflt.finish()
+
+        self.lib.clEnqueueFillBuffer(queue or self.qdflt, dst, byref(z), 1, 0,
+                                     nbytes, *wait_for, evt_ptr)
+
+        if queue is None:
+            self.qdflt.finish()
+        elif ret_evt:
+            return OpenCLEvent(self.lib, evt_ptr)
 
     def memcpy(self, queue, dst, src, nbytes, blocking=False, wait_for=None,
                ret_evt=False):

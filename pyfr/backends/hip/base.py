@@ -1,5 +1,7 @@
 import re
 
+import numpy as np
+
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
 
@@ -49,7 +51,7 @@ class HIPBackend(BaseBackend):
         self.alignb = 128
 
         # Take the SoA size to be the warp size of the device
-        self.soasz = self.props['warp_size']
+        self.soasz = int(self.props['warp_size'])
         self.csubsz = self.soasz
 
         # Get the MPI runtime type
@@ -84,6 +86,19 @@ class HIPBackend(BaseBackend):
 
         # Create a stream to run kernels on
         self._stream = self.hip.create_stream()
+
+        # Bounce buffer for device-to-host transfers
+        self._xfer_buf = None
+
+    def xfer_buf(self, shape, dtype):
+        nbytes = np.prod(shape)*np.dtype(dtype).itemsize
+
+        # Reallocate if the current buffer is too small
+        if self._xfer_buf is None or self._xfer_buf.nbytes < nbytes:
+            self._xfer_buf = self.hip.pagelocked_empty((nbytes,), np.uint8)
+
+        # Return a view of the correct shape and dtype
+        return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
 
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the HIP stream
