@@ -1,6 +1,7 @@
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.plugins.postproc.adapters import VolumePostProcAdapter
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
@@ -71,6 +72,12 @@ class VTKVolumeWriter(BaseVTKWriter):
 
         # Interpolate the solution to the vis points
         vsoln = interpolate_pts(soln_vtu_op, soln)
+
+        # Run postproc plugins
+        if self.pp_plugins:
+            adapter = VolumePostProcAdapter(self, vsoln, vpts, etype, spts,
+                                           has_grads=self._gradients)
+            vsoln = self._run_postprocs(adapter, vsoln)
 
         # Extract extra fields
         for fname, data in self.soln.aux.get(etype, {}).items():
