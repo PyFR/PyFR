@@ -1,3 +1,6 @@
+import itertools as it
+from math import comb
+
 import numpy as np
 from rtree.index import Index, Property
 
@@ -7,8 +10,9 @@ from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
 
-def get_interpolator(name, ndims, opts):
-    return subclass_where(BaseInterpolator, name=name).from_opts(ndims, opts)
+def get_interpolator(name, ndims, opts, order=None):
+    return subclass_where(BaseInterpolator, name=name).from_opts(ndims, opts,
+                                                                 order=order)
 
 
 def _ploc_op(etype, nspts, cfg):
@@ -46,7 +50,10 @@ class BaseInterpolator:
     dflt_opts = {}
 
     @classmethod
-    def from_opts(cls, ndims, opts={}):
+    def from_opts(cls, ndims, opts={}, *, order=None):
+        # Normalise hyphens to underscores in user-supplied keys
+        opts = {k.replace('-', '_'): v for k, v in opts.items()}
+
         kwargs = {}
         for k, v in dict(cls.dflt_opts, **opts).items():
             if k in cls.int_opts:
@@ -57,6 +64,9 @@ class BaseInterpolator:
                 kwargs[k] = cls.enum_opts[k][v]
             else:
                 raise ValueError('Invalid option')
+
+        if order is not None:
+            kwargs['order'] = order
 
         return cls(ndims, **kwargs)
 
@@ -73,7 +83,7 @@ class IDWInterpolator(BaseInterpolator):
     # Default options
     dflt_opts = {'n': 0, 'rho': 0}
 
-    def __init__(self, ndims, *, n=0, rho=0):
+    def __init__(self, ndims, *, order=None, n=0, rho=0):
         self.n = n or 2**ndims
         self.rho = rho or ndims + 1
         self.eps = 10*np.finfo(float).eps
@@ -89,6 +99,274 @@ class IDWInterpolator(BaseInterpolator):
             return swts @ svals
 
 
+class WENOInterpolator(BaseInterpolator):
+    name = 'weno'
+
+    int_opts = {'n', 'degree', 'sub_degree', 'nsub', 'sub_n'}
+    float_opts = {'rho', 'q', 'ct', 'cond', 'dir_bias', 'gamma0'}
+    enum_opts = {'mode': {'wenoz': 'wenoz', 'teno': 'teno'}}
+    dflt_opts = {'n': 0, 'degree': 0, 'sub_degree': 0, 'nsub': 0,
+                 'sub_n': 0, 'rho': 0, 'q': 4, 'ct': 1.0e-3,
+                 'cond': 1.0e8, 'dir_bias': 2.5, 'gamma0': 0.85,
+                 'mode': 'wenoz'}
+
+    def __init__(self, ndims, *, order=None, n=0, degree=0, sub_degree=0,
+                 nsub=0, sub_n=0, rho=0, q=4, ct=1.0e-3, cond=1.0e8,
+                 dir_bias=2.5, gamma0=0.85, mode='wenoz'):
+        # Auto-derive degree from the source polynomial order
+        if not degree:
+            degree = min(order, 3) if order else 2
+
+        if not sub_degree:
+            sub_degree = max(degree - 1, 1)
+
+        # Auto-derive the stencil size to be ~3x overdetermined
+        nterms = comb(ndims + degree, degree)
+        if not n:
+            n = max(3*nterms, 24 if ndims == 2 else 48)
+
+        self.n = n
+        self.q = q
+        self.ct = ct
+        self.cond = cond
+        self.dir_bias = dir_bias
+        self.gamma0 = gamma0
+        self.eps = 10*np.finfo(float).eps
+
+        # Keep an IDW fallback for exact hits and rejected stencils
+        self._idw = IDWInterpolator(ndims, n=self.n, rho=rho or ndims + 1)
+
+        # Precompute the polynomial bases used by the central and side fits
+        cpowers = self._monomial_powers(ndims, degree)
+        cexp = np.array(cpowers, dtype=int)
+        self._central_power_data = (cpowers, cexp, cexp.sum(axis=1))
+
+        spowers = self._monomial_powers(ndims, min(sub_degree, degree))
+        sexp = np.array(spowers, dtype=int)
+        self._sub_power_data = (spowers, sexp, sexp.sum(axis=1))
+
+        nsub = nsub or 2**ndims
+        self._sub_nterms = len(self._sub_power_data[0])
+
+        # Use an overdetermined directional fit when enough points are present
+        self.sub_n = sub_n or max(2*self._sub_nterms, self._sub_nterms + 3)
+        self._directions = self._direction_vectors(ndims, nsub)
+
+        # Select the appropriate nonlinear weighting
+        if mode == 'teno':
+            self._weights = self._teno_weights
+        else:
+            self._weights = self._wenoz_weights
+
+    def __call__(self, p, spts, svals):
+        dists = np.linalg.norm(p - spts, axis=1)
+        if dists[ix := dists.argmin()] < self.eps:
+            return svals[ix]
+
+        order = np.argsort(dists)
+        spts, svals, dists = spts[order], svals[order], dists[order]
+        scale = max(dists.max(), 1.0e-14)
+
+        # First attempt to build a central fit
+        central = self._fit_central_stencil(p, spts, svals, scale)
+        cands = [central] if central is not None else []
+
+        # Then attempt to build directional substencils
+        for direction in self._directions:
+            idx = self._select_directional_stencil(spts, p, direction)
+            if idx is None:
+                continue
+
+            fit = self._fit_sub_stencil(p, spts[idx], svals[idx], scale)
+            if fit is not None:
+                cands.append(fit)
+
+        # If every polynomial stencil is rejected then revert to IDW
+        if not cands:
+            return self._idw(p, spts, svals)
+        # If there is only one candidate fit then return it
+        elif len(cands) == 1:
+            return cands[0][0]
+        # Otherwise combine the candidate fits with WENO-Z or TENO weights
+        else:
+            betas = np.array([c[1] for c in cands])
+            vals = np.vstack([c[0] for c in cands])
+
+            weights = self._nonlinear_weights(betas, central is not None)
+            return weights @ vals
+
+    @staticmethod
+    def _monomial_powers(ndims, degree):
+        powers = [p for p in it.product(range(degree + 1), repeat=ndims)
+                  if sum(p) <= degree]
+        powers.sort(key=lambda p: (sum(p), p))
+
+        return powers
+
+    @staticmethod
+    def _monomial_matrix(pts, power_data):
+        _, exponents, _ = power_data
+
+        # Each column is one monomial evaluated at every sample point
+        vdm = np.ones((len(pts), len(exponents)))
+        for i, exp in enumerate(exponents.T):
+            vdm *= pts[:, i:i + 1]**exp
+
+        return vdm
+
+    @staticmethod
+    def _wendland_c2(r):
+        # Compactly supported C2 kernel: psi(r) = (1-r)_+^4 (4r + 1)
+        return np.clip(1 - r, 0.0, None)**4*(4*r + 1)
+
+    @staticmethod
+    def _direction_vectors(ndims, nsub):
+        # In 2D use evenly spaced angular substencils
+        if ndims == 2:
+            ang = np.linspace(0.0, 2*np.pi, nsub, endpoint=False)
+            return np.column_stack([np.cos(ang), np.sin(ang)])
+        # In higher dimensions use axis-balanced corner directions
+        else:
+            dirs = np.array(list(it.product((-1.0, 1.0), repeat=ndims)))
+            dirs /= np.linalg.norm(dirs, axis=1)[:, None]
+
+            return dirs[:nsub]
+
+    def _select_directional_stencil(self, spts, p, direction):
+        vecs = spts - p
+        dists = np.linalg.norm(vecs, axis=1)
+        if not np.any(nz := dists > 0):
+            return None
+
+        unit = np.zeros_like(vecs)
+        unit[nz] = vecs[nz] / dists[nz, None]
+        align = unit @ direction
+
+        # Penalise misaligned points by up to (1 + 2*dir_bias)
+        score = dists*(1 + self.dir_bias*(1 - align))
+
+        # Seed the stencil with the nearest points for robustness
+        ncore = min(max(self._sub_nterms - 1, 2), len(dists))
+        if ncore < len(dists):
+            nearest = np.argpartition(dists, ncore - 1)[:ncore]
+            nearest = nearest[np.argsort(dists[nearest])]
+        else:
+            nearest = np.argsort(dists)
+
+        picks = nearest.tolist()
+        seen = set(picks)
+
+        # Then extend it with points aligned with the current direction
+        ncand = min(len(score), self.sub_n + len(seen))
+        if ncand < len(score):
+            cand = np.argpartition(score, ncand - 1)[:ncand]
+            cand = cand[np.argsort(score[cand])]
+        else:
+            cand = np.argsort(score)
+
+        for ix in cand:
+            if ix not in seen:
+                picks.append(int(ix))
+                seen.add(int(ix))
+
+            if len(picks) >= self.sub_n:
+                break
+
+        if len(picks) < self._sub_nterms:
+            return None
+        else:
+            return np.array(picks, dtype=int)
+
+    def _fit_stencil_data(self, p, spts, svals, power_data, scale):
+        _, _, orders = power_data
+        if len(spts) < len(orders):
+            return None
+
+        # Work in a local scaled coordinate system to improve conditioning
+        x = (spts - p) / scale
+        radii = np.linalg.norm(x, axis=1)
+        rmax = max(radii.max(), 1e-14)
+
+        weights = self._wendland_c2(radii / rmax)
+        weights = np.maximum(weights, 1e-12)
+
+        # The compact weights taper distant points without a hard cutoff
+        vdm = self._monomial_matrix(x, power_data)
+        sqrtw = np.sqrt(weights)
+        amat = sqrtw[:, None]*vdm
+        rhs = sqrtw[:, None]*svals
+
+        # A single SVD gives both the condition estimate and the solve
+        u, sval, vh = np.linalg.svd(amat, full_matrices=False)
+
+        if sval[0] > self.cond*sval[-1]:
+            return None
+
+        coeffs = vh.T @ ((u.T @ rhs) / sval[:, None])
+        fit = vdm @ coeffs
+
+        # Weighted variance and residual, aggregated across all nvars
+        wsum = weights.sum()
+        mean = (weights[:, None]*svals).sum(axis=0) / wsum
+        var = (weights*np.sum((svals - mean)**2, axis=1)).sum() / wsum
+        resid = (weights*np.sum((fit - svals)**2, axis=1)).sum() / wsum
+
+        # Higher-order coefficient energy, weighted by total order
+        coeff_var = np.sum((orders[1:, None]*coeffs[1:])**2)
+
+        # Blend residual and higher-order energy into one smoothness beta
+        beta = resid / (var + 1e-14)
+        beta += 1e-2*coeff_var / (np.sum(coeffs[0]**2) + 1)
+
+        return coeffs[0], float(beta)
+
+    def _fit_central_stencil(self, p, spts, svals, scale):
+        return self._fit_stencil_data(p, spts, svals, self._central_power_data,
+                                      scale)
+
+    def _fit_sub_stencil(self, p, spts, svals, scale):
+        return self._fit_stencil_data(p, spts, svals, self._sub_power_data,
+                                      scale)
+
+    def _linear_weights(self, ncands):
+        if ncands == 1:
+            return np.array([1.0])
+
+        # Bias the linear weights toward the central stencil
+        gamma = np.full(ncands, (1.0 - self.gamma0) / (ncands - 1))
+        gamma[0] = self.gamma0
+
+        return gamma
+
+    def _wenoz_weights(self, betas, gamma, eps=1.0e-14):
+        # Tau measures how different the candidate smoothness values are
+        tau = np.max(np.abs(betas - betas.mean()))
+        alpha = gamma*(1 + (tau / (betas + eps))**self.q)
+        return alpha / alpha.sum()
+
+    def _teno_weights(self, betas, gamma, eps=1.0e-14):
+        tau = np.max(np.abs(betas - betas.mean()))
+        alpha = gamma*(1 + (tau / (betas + eps))**self.q)
+        chi = alpha / alpha.sum()
+
+        # TENO hard-rejects candidates whose normalized weight is too small
+        mask = chi > self.ct
+        if not np.any(mask):
+            mask[np.argmin(betas)] = True
+
+        weights = gamma*mask
+        return weights / weights.sum()
+
+    def _nonlinear_weights(self, betas, has_central):
+        # Without a central fit we fall back to uniform linear weights
+        if has_central:
+            gamma = self._linear_weights(len(betas))
+        else:
+            gamma = np.full(len(betas), 1 / len(betas))
+
+        return self._weights(betas, gamma)
+
+
 class BaseCloudResampler(AlltoallMixin):
     def __init__(self, pts, solns, interp, progress):
         self.ndims = pts.shape[1]
@@ -97,8 +375,7 @@ class BaseCloudResampler(AlltoallMixin):
         self.progress = progress
 
         with progress.start('Distribute source points/solutions'):
-            keys, self.pts, self.solns = self._distribute_src_points(pts,
-                                                                     solns)
+            self.pts, self.solns = self._distribute_src_points(pts, solns)
 
         with progress.start('Index source points'):
             # Index the points
@@ -132,7 +409,7 @@ class BaseCloudResampler(AlltoallMixin):
         sorter = Sorter(comm, keys)
 
         # With this redistribute our points and solutions
-        return sorter.keys, sorter(pts), sorter(solns)
+        return sorter(pts), sorter(solns)
 
     def _compute_pts_tree(self, pts):
         props = Property(dimension=self.ndims, index_capacity=25,

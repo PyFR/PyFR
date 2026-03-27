@@ -211,7 +211,7 @@ def main():
     ap_resample.add_argument('tgtsoln', help='target solution file')
     itypes = [i.name for i in subclasses(BaseInterpolator, just_leaf=True)]
     ap_resample.add_argument('-i', '--interpolator', choices=itypes,
-                             required=True, help='interpolator to use')
+                             default='weno', help='interpolator to use')
     ap_resample.add_argument(
         '--iopt', dest='iopts', action='append', default=[],
         metavar='key:value', help='interpolator-specific option'
@@ -501,9 +501,11 @@ def process_resample(args):
     if ssoln.stats.get('data', 'prefix') != 'soln':
         raise RuntimeError('Resampling is only supported for solution files')
 
-    # Get the interpolator
+    # Get the interpolator, auto-configuring from source order
+    order = ssoln.config.getint('solver', 'order')
     opts = dict(s.split(':', 1) for s in args.iopts)
-    interp = get_interpolator(args.interpolator, smesh.ndims, opts)
+    interp = get_interpolator(args.interpolator, smesh.ndims, opts,
+                              order=order)
 
     # Perform the resampling
     resampler = NativeCloudResampler(smesh, ssoln, interp, progress)

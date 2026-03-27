@@ -205,6 +205,92 @@ pyfr upgrade
 
    If the file is already at the latest version an error is raised.
 
+pyfr resample
+   Resample a solution from one mesh onto another using point cloud
+   interpolation.  This is useful for initialising a simulation on a
+   new mesh from an existing solution, including across different
+   element types and polynomial orders.  Example:
+
+   .. code-block:: shell
+
+       pyfr resample src.pyfrm src.pyfrs tgt.pyfrm tgt.ini tgt.pyfrs
+
+   By default the ``weno`` (point cloud WENO) interpolator is used.
+   The polynomial degree and stencil size are automatically derived
+   from the source solution order: the central degree is set to
+   min(*p*, 3) where *p* is the source polynomial order, and the
+   stencil size is chosen to keep the least-squares system roughly
+   3x overdetermined.  These defaults can be overridden with the
+   ``--iopt`` flag.  For example, to use TENO mode with a quartic
+   central fit:
+
+   .. code-block:: shell
+
+       pyfr resample src.pyfrm src.pyfrs tgt.pyfrm tgt.ini tgt.pyfrs \
+           --iopt mode:teno --iopt degree:4
+
+   The ``-i`` flag selects the interpolation method (default:
+   ``weno``).  The available interpolators are:
+
+   ``idw``
+      Inverse distance weighting.
+
+   ``weno``
+      Point cloud WENO interpolation.  Multiple overlapping polynomial
+      stencils are fitted and combined with nonlinear WENO-Z or TENO
+      weights to suppress oscillations near discontinuities.
+
+   Options for ``idw``:
+
+   ``n``
+      Number of nearest neighbours (default: 2\ :sup:`ndims`).
+
+   ``rho``
+      Distance exponent (default: ndims + 1).
+
+   Options for ``weno``:
+
+   ``degree``
+      Central stencil polynomial degree (default: auto from source
+      order, capped at 3).
+
+   ``sub-degree``
+      Directional sub-stencil polynomial degree (default: degree - 1,
+      minimum 1).
+
+   ``n``
+      Number of nearest neighbours (default: auto, at least
+      3x the number of monomial terms).
+
+   ``nsub``
+      Number of directional sub-stencils (default: 2\ :sup:`ndims`).
+
+   ``mode``
+      Nonlinear weighting scheme; ``wenoz`` (default) or ``teno``.
+
+   ``q``
+      WENO weight exponent (default: 4).
+
+   ``gamma0``
+      Ideal weight for the central stencil (default: 0.85).
+
+   ``ct``
+      TENO cut-off threshold (default: 1.0e-3).
+
+   ``cond``
+      Condition number threshold for rejecting stencils
+      (default: 1.0e8).
+
+   ``dir-bias``
+      Directional bias factor for sub-stencil selection
+      (default: 2.5).
+
+   ``rho``
+      IDW fallback distance exponent (default: ndims + 1).
+
+   If the mesh has been partitioned, a partitioning can be specified
+   with the ``-P`` flag.
+
 pyfr mesh
    Analyse mesh quality.  Example:
 
@@ -255,8 +341,8 @@ pyfr mesh
    ``--json``
       Output results as JSON for scripting.
 
-The ``run``, ``restart``, and ``export`` commands can be run in
-parallel. To do so prefix ``pyfr`` with ``mpiexec -n <cores/devices>``.
+The ``run``, ``restart``, ``resample``, and ``export`` commands can be
+run in parallel. To do so prefix ``pyfr`` with ``mpiexec -n <cores/devices>``.
 Note that there must exist a partitioning in the mesh with an
 appropriate number of parts.
 
