@@ -358,11 +358,6 @@ class BaseSystem:
         for graph in self._compute_grads_graph(uinbank):
             self.backend.run_graph(graph)
 
-    def filt(self, uinoutbank):
-        kkey = ('eles/modal_filter', uinoutbank, None)
-
-        self.backend.run_kernels(self._kernels[kkey])
-
     def evalsrcmacros(self, uinoutbank):
         kkey = ('eles/evalsrcmacros', uinoutbank, None)
 

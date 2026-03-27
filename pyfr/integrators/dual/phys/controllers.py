@@ -5,9 +5,6 @@ class BaseDualController(BaseDualIntegrator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Solution filtering frequency
-        self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
-
         # Fire off any event handlers if not restarting
         if not self.isrestart:
             self._run_plugins()
@@ -16,10 +13,6 @@ class BaseDualController(BaseDualIntegrator):
         self.tcurr += self._dt
         self.nacptsteps += 1
         self.nacptchain += 1
-
-        # Filter
-        if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
-            self.pseudointegrator.system.filt(idxcurr)
 
         self._invalidate_caches()
 

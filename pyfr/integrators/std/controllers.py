@@ -13,9 +13,6 @@ class BaseStdController(BaseStdIntegrator):
         # Ensure the system is compatible with our formulation/controller
         self.system.elementscls.validate_formulation(self)
 
-        # Solution filtering frequency
-        self._fnsteps = self.cfg.getint('soln-filter', 'nsteps', '0')
-
         # Stats on the most recent step
         self.stepinfo = []
 
@@ -30,10 +27,6 @@ class BaseStdController(BaseStdIntegrator):
         self.stepinfo.append((dt, 'accept', err))
 
         self._idxcurr = idxcurr
-
-        # Filter
-        if self._fnsteps and self.nacptsteps % self._fnsteps == 0:
-            self.system.filt(idxcurr)
 
         self._invalidate_caches()
 
