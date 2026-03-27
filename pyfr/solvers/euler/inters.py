@@ -306,7 +306,7 @@ class NIRFBCMixin:
         # Register ploc for Ω×r
         if 'ploc' not in self._external_args:
             spec = f'in fpdtype_t[{self.ndims}]'
-            value = self._const_mat(lhs, 'get_ploc_for_inter')
+            value = self._const_mat(lhs, 'get_ploc_for_inters')
             self.set_external('ploc', spec, value=value)
 
         return exprs
