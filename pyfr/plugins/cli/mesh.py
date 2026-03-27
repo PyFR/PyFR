@@ -6,7 +6,8 @@ import numpy as np
 
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi, mpi
-from pyfr.plugins.base import BaseCLIPlugin, cli_external
+from pyfr.plugins.base import BaseCLIPlugin
+from pyfr.plugins.common import cli_external
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where, subclasses, tty

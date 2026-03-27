@@ -4,7 +4,9 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BaseSolnPlugin, SurfaceRegionMixin, init_csv
+from pyfr.plugins.common import init_csv
+from pyfr.plugins.mixins import SurfaceRegionMixin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.util import first
 

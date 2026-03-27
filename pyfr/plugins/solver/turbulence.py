@@ -5,7 +5,7 @@ import numpy as np
 from numpy.core.records import fromrecords
 from rtree.index import Index, Property
 
-from pyfr.plugins.base import BaseSolverPlugin
+from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.regions import BoxRegion
 
 
