@@ -20,8 +20,8 @@ class FluidForceIntegrator(SurfaceIntegrator):
 
 class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
     name = 'fluidforce'
-    systems = ['euler', 'navier-stokes']
-    dimensions = [2, 3]
+    systems = 'euler|navier-stokes'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

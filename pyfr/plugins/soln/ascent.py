@@ -533,8 +533,8 @@ class _AscentRenderer:
 
 class AscentPlugin(BaseSolnPlugin):
     name = 'ascent'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)

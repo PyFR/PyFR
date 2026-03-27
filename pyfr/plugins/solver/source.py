@@ -7,8 +7,8 @@ from pyfr.util import first
 
 class SourcePlugin(BaseSolverPlugin):
     name = 'source'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)

@@ -39,8 +39,8 @@ def pcg32rxs_m_xs(seed):
 
 class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
-    systems = ['navier-stokes']
-    dimensions = [3]
+    systems = 'navier-stokes'
+    dimensions = '3'
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
