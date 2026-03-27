@@ -146,6 +146,9 @@ class BaseBackend:
     def memory_stats(self):
         return self._mem_current, self._mem_peak
 
+    def memory_info(self):
+        return None, None
+
     @recordmat
     def const_matrix(self, initval, dtype=None, tags=set()):
         dtype = dtype or self.fpdtype

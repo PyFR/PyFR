@@ -97,6 +97,10 @@ class MetalBackend(BaseBackend):
             self.last_cbuf.waitUntilCompleted()
             self.last_cbuf = None
 
+    def memory_info(self):
+        total = self.dev.recommendedMaxWorkingSetSize()
+        return total - self.dev.currentAllocatedSize(), total
+
     def _malloc_impl(self, nbytes):
         from Metal import MTLResourceStorageModeManaged
 

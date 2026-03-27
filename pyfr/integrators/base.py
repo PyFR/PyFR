@@ -356,6 +356,14 @@ class BaseIntegrator(metaclass=RegisterMeta):
                     stats.set('backend-wait-times', f'rhs-graph-{i}-{k}',
                               ','.join(f'{v[j]:.3g}' for v in ms))
 
+        # Backend memory
+        comm, _, _ = get_comm_rank_root()
+        mem_stats = comm.allgather(self.backend.memory_stats())
+        stats.set('backend-memory', 'current',
+                  ','.join(str(m[0]) for m in mem_stats))
+        stats.set('backend-memory', 'peak',
+                  ','.join(str(m[1]) for m in mem_stats))
+
     @property
     def cfgmeta(self):
         cfg = self.cfg.tostr()
