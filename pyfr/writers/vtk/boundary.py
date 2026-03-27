@@ -1,12 +1,17 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.plugins.postproc.adapters import (BoundaryPostProcAdapter,
+                                            GradBoundaryPostProcAdapter)
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import first, subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+
+
+FaceInfo = namedtuple('FaceInfo', ['etype', 'fidx', 'svpts', 'norm'])
 
 
 def _search(a, v):
@@ -91,7 +96,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
-        return itype, mesh_op, soln_op, lin_op
+        return itype, mesh_op, soln_op, lin_op, fidx, svpts, norm
 
     def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)
@@ -103,6 +108,13 @@ class VTKBoundaryWriter(BaseVTKWriter):
             idxs[f].append(e)
 
         return [(*info[f], idxs[f]) for f in info]
+
+    def _make_adapter(self, face_vsoln, face_vpts, spts, finfo):
+        AdapterCls = (GradBoundaryPostProcAdapter if self._gradients
+                      else BoundaryPostProcAdapter)
+
+        return AdapterCls(self, face_vsoln, face_vpts, spts, finfo,
+                          has_grads=self._gradients)
 
     def _extra_point_shapes(self, key):
         if key in self._surface_info:
@@ -133,7 +145,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
         cellf, pointf = defaultdict(list), defaultdict(list)
 
         pshapes = self._extra_point_shapes(itype)
-        for etype, mesh_op, soln_op, lin_op, idxs in self._surface_info[itype]:
+        for etype, mesh_op, soln_op, lin_op, fidx, svpts, norm, idxs \
+                in self._surface_info[itype]:
             spts = self.mesh.spts[etype][:, idxs]
             soln = self.soln.data[etype][..., idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
@@ -141,8 +154,18 @@ class VTKBoundaryWriter(BaseVTKWriter):
             # Pre-process the solution
             soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
-            vspts.append(interpolate_pts(mesh_op, spts))
-            vsoln.append(interpolate_pts(soln_op, soln))
+            face_vpts = interpolate_pts(mesh_op, spts)
+            face_vsoln = interpolate_pts(soln_op, soln)
+
+            # Run postproc plugins
+            if self.pp_plugins:
+                finfo = FaceInfo(etype, fidx, svpts, norm)
+                adapter = self._make_adapter(face_vsoln, face_vpts,
+                                             spts, finfo)
+                face_vsoln = self._run_postprocs(adapter, face_vsoln)
+
+            vspts.append(face_vpts)
+            vsoln.append(face_vsoln)
             curved.append(self.mesh.spts_curved[etype][idxs])
 
             # Extract extra fields

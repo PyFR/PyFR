@@ -166,6 +166,14 @@ def main():
             '--eopt', dest='eopts', action='append', default=[],
             metavar='key:value', help='exporter-specific option'
         )
+        ap_export_type.add_argument(
+            '--postproc', dest='pp_plugins', action='append', default=[],
+            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
+        )
+        ap_export_type.add_argument(
+            '--cfg', dest='pp_cfg', type=FileType('r'),
+            help='config file for postprocessing plugins'
+        )
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
         ap_export_type.set_defaults(etype=etype, process=process_export)
@@ -443,8 +451,10 @@ def process_export(args):
 
     # Common arguments
     kargs = [args.eargs] if 'eargs' in args else []
+    pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else None
     kwargs = {'fields': args.fields, 'prec': args.precision,
-              'pname': args.pname}
+              'pname': args.pname, 'pp_plugins': args.pp_plugins,
+              'pp_cfg': pp_cfg}
 
     # Process any exporter-specific options
     for e in args.eopts:
