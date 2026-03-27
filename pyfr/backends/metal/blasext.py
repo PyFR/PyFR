@@ -73,7 +73,7 @@ class MetalBlasExtKernels(BaseBlasExtKernels, MetalKernelProvider):
 
         ixdtype = self.backend.ixdtype
         nrow, _, ldim, fpdtype = fvvar.traits[1:]
-        ncola, ncolb = fvvar.ioshape[1:]
+        ncola, ncolb = fvvar.ioshape[-2:]
         nexprs = tplargs['nexprs']
 
         # Reduction threadgroup and grid dimensions

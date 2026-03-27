@@ -65,7 +65,7 @@ class OpenCLBlasExtKernels(BaseBlasExtKernels, OpenCLKernelProvider):
         cl = self.backend.cl
         ixdtype = self.backend.ixdtype
         nrow, _, ldim, fpdtype = fvvar.traits[1:]
-        ncola, ncolb = fvvar.ioshape[1:]
+        ncola, ncolb = fvvar.ioshape[-2:]
         nexprs = tplargs['nexprs']
 
         # Reduction workgroup dimensions
