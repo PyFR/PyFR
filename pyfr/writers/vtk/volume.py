@@ -75,7 +75,7 @@ class VTKVolumeWriter(BaseVTKWriter):
         # Extract extra fields
         for fname, data in self.soln.aux.get(etype, {}).items():
             shape = data.shape[1:]
-            if shape == (soln.shape[2],):
+            if shape == (soln.shape[0],):
                 pointf[fname] = interpolate_pts(soln_vtu_op,
                                                 data.swapaxes(0, 1))
             elif shape in self._extra_point_shapes(etype):

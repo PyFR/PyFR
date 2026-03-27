@@ -24,9 +24,8 @@ class BaseVTKWriter(BaseWriter):
     # Type of export (volume/boundary/STL)
     type = None
 
-    # If to output curvature or partition number data
+    # If to output curvature data
     output_curved = False
-    output_partition = False
 
     # VTK high-order types
     _vtk_types_ho = {'tri': 69, 'quad': 70, 'tet': 71, 'pri': 73, 'hex': 72}
@@ -468,8 +467,7 @@ class BaseVTKWriter(BaseWriter):
 
         # Extra fields as cell data
         for fname in cell_fields:
-            adtype, _, acomps, _ = self._field_info(fname, etype,
-                                                    dtype, dsize)
+            adtype, _, acomps = self._field_info(fname, etype)
             attrs.append((fname.replace('-', ' ').title(), adtype,
                           str(acomps)))
 
@@ -478,8 +476,7 @@ class BaseVTKWriter(BaseWriter):
 
         # Extra fields as point data
         for fname in point_fields:
-            adtype, _, acomps, _ = self._field_info(fname, etype,
-                                                    dtype, dsize)
+            adtype, _, acomps = self._field_info(fname, etype)
             attrs.append((fname.replace('-', ' ').title(), adtype,
                           str(acomps)))
 
@@ -494,16 +491,14 @@ class BaseVTKWriter(BaseWriter):
 
             # Extra cell field sizes
             for fname in cell_fields:
-                _, asize, _, _ = self._field_info(fname, etype,
-                                                  dtype, dsize)
+                _, asize, _ = self._field_info(fname, etype)
                 sizes.append(asize*ncells)
 
             sizes.extend(len(varnames)*nb for varnames in vvars.values())
 
             # Extra point field sizes
             for fname in point_fields:
-                _, asize, _, _ = self._field_info(fname, etype,
-                                                  dtype, dsize)
+                _, asize, _ = self._field_info(fname, etype)
                 sizes.append(asize*npts)
 
             return tuple((*a, s) for a, s in zip(attrs, sizes))
@@ -517,9 +512,7 @@ class BaseVTKWriter(BaseWriter):
         etype = next(k for k in self.soln.data if k in self.mesh.eidxs)
         self._extra_etype = etype
 
-        aux = self.soln.aux.get(etype, {})
-        self._extra_fields = list(aux)
-        self._extra_shapes = {n: v.shape[1:] for n, v in aux.items()}
+        self._extra_fields = list(self.soln.aux.get(etype, {}))
 
         # Ensure a divisor has been set
         if self.divisor is None:
@@ -720,33 +713,46 @@ class BaseVTKWriter(BaseWriter):
         else:
             return ''
 
+    _vtk_dtypes = {
+        np.int32: 'Int32', np.int64: 'Int64',
+        np.uint8: 'UInt8', np.uint32: 'UInt32',
+        np.float32: 'Float32', np.float64: 'Float64'
+    }
+
     def _vtk_dtype(self, dtype):
-        if np.issubdtype(dtype, np.integer):
-            return 'Int32'
-        return 'Float32' if np.dtype(dtype) == np.float32 else 'Float64'
+        return self._vtk_dtypes[np.dtype(dtype).type]
 
     def _extra_point_shapes(self, etype):
-        nupts = self.soln.data[etype].shape[2]
+        # Shapes that identify per-point (as opposed to per-cell) aux data
+        nupts = self.soln.data[etype].shape[0]
         return {(nupts,)}
 
+    def _resolve_etype(self, etype):
+        return etype or self._extra_etype
+
     def _extra_field_lists(self, etype=None):
-        etype = etype or self._extra_etype
+        # Classify aux fields as point data or cell data by shape
+        etype = self._resolve_etype(etype)
+        aux = self.soln.aux.get(etype, {})
         pshapes = self._extra_point_shapes(etype)
         pfields = [n for n in self._extra_fields
-                   if self._extra_shapes[n] in pshapes]
+                   if aux[n].shape[1:] in pshapes]
         cfields = [n for n in self._extra_fields if n not in pfields]
         return cfields, pfields
 
-    def _field_info(self, name, etype, fdtype, fdsize):
-        etype = etype or self._extra_etype
-        shape = self._extra_shapes.get(name, ())
-        pshapes = self._extra_point_shapes(etype)
-        is_point = shape in pshapes
-        ncomps = 1 if is_point else int(np.prod(shape)) if shape else 1
+    def _field_info(self, name, etype):
+        # VTK type, byte size, and component count for an aux field
+        etype = self._resolve_etype(etype)
+        aux = self.soln.aux[etype]
+        shape = aux[name].shape[1:]
 
-        adtype = self.soln.aux[etype][name].dtype
+        # Point fields have one component; cell fields flatten extra dims
+        pshapes = self._extra_point_shapes(etype)
+        ncomps = 1 if shape in pshapes else int(np.prod(shape))
+
+        adtype = aux[name].dtype
         vtype = self._vtk_dtype(adtype)
-        return vtype, adtype.itemsize*ncomps, ncomps, is_point
+        return vtype, adtype.itemsize*ncomps, ncomps
 
     def _write_serial_header(self, write_s, etype, neles, off):
         cell_fields, _ = self._extra_field_lists(etype)
