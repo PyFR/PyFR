@@ -77,7 +77,8 @@ class VTKVolumeWriter(BaseVTKWriter):
         if self.pp_plugins:
             adapter = VolumePostProcAdapter(self, vsoln, vpts, etype, spts,
                                            has_grads=self._gradients)
-            vsoln = self._run_postprocs(adapter, vsoln)
+            for fname, arrs in self._run_postprocs(adapter).items():
+                pointf[fname] = np.dstack(arrs).astype(self.dtype)
 
         # Extract extra fields
         for fname, data in self.soln.aux.get(etype, {}).items():
