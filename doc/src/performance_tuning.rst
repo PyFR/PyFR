@@ -1,5 +1,3 @@
-.. highlight:: none
-
 ******************
 Performance Tuning
 ******************
@@ -21,10 +19,12 @@ When running on an AVX-512 capable CPU Clang and GCC will, by default,
 only make use of 256-bit vectors.  Given that the kernels in PyFR
 benefit meaningfully from longer vectors it is desirable to override
 this behaviour.  This can be accomplished through the ``cflags`` key
-as::
+as:
 
-        [backend-openmp]
-        cflags = -mprefer-vector-width=512
+.. code-block:: ini
+
+    [backend-openmp]
+    cflags = -mprefer-vector-width=512
 
 Cores vs. threads
 -----------------
@@ -40,10 +40,12 @@ By default PyFR employs static scheduling for loops, with work being
 split evenly across cores.  For systems with a single type of core this
 is usually the right choice.  However, on heterogeneous systems it
 typically results in load imbalance.  Here, it can be beneficial to
-experiment with the *guided* and *dynamic* loop schedules as::
+experiment with the *guided* and *dynamic* loop schedules as:
 
-        [backend-openmp]
-        schedule = dynamic, 5
+.. code-block:: ini
+
+    [backend-openmp]
+    schedule = dynamic, 5
 
 MPI processes vs. OpenMP threads
 --------------------------------
@@ -78,10 +80,12 @@ CUDA device pointers to be directly to passed MPI routines.  Under the
 right circumstances this can result in improved performance for
 simulations which are near the strong scaling limit.  Assuming mpi4py
 has been built against an MPI distribution which is CUDA-aware this
-functionality can be enabled through the ``mpi-type`` key as::
+functionality can be enabled through the ``mpi-type`` key as:
 
-        [backend-cuda]
-        mpi-type = cuda-aware
+.. code-block:: ini
+
+    [backend-cuda]
+    mpi-type = cuda-aware
 
 .. _perf hip backend:
 
@@ -96,22 +100,74 @@ device pointers to be directly to passed MPI routines.  Under the right
 circumstances this can result in improved performance for simulations
 which are near the strong scaling limit.  Assuming mpi4py has been built
 against an MPI distribution which is HIP-aware this functionality can be
-enabled through the ``mpi-type`` key as::
+enabled through the ``mpi-type`` key as:
 
-        [backend-hip]
-        mpi-type = hip-aware
+.. code-block:: ini
+
+    [backend-hip]
+    mpi-type = hip-aware
 
 Partitioning
 ============
 
-METIS vs SCOTCH vs KaHIP
-------------------------
+Partitioner comparison
+----------------------
 
-The partitioning module in PyFR includes support for both METIS, SCOTCH,
-and KaHIP.  All three usually result in high-quality decompositions.
-However, for long running simulations on complex geometries it may be
-worth partitioning a grid with each and observing which decomposition
-performs best.
+PyFR includes support for four graph partitioners.  The following table
+summarises their capabilities:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 12 15 15 15 25
+
+   * - Partitioner
+     - Speed
+     - Element weights
+     - Balanced (``-e balanced``)
+     - Partition weights
+     - External library
+   * - METIS
+     - Fast
+     - Yes
+     - Yes
+     - Yes
+     - `METIS <https://github.com/KarypisLab/METIS>`_
+   * - SCOTCH
+     - Very fast
+     - Yes
+     - No
+     - Yes
+     - `SCOTCH <https://gitlab.inria.fr/scotch/scotch>`_
+   * - KaHIP
+     - Reasonable
+     - No
+     - No
+     - No
+     - `KaHIP <https://github.com/KaHIP/KaHIP>`_
+   * - Baseline
+     - Slow
+     - Yes
+     - Yes
+     - Yes
+     - None
+
+METIS is the recommended default.  It is fast, produces high-quality
+decompositions, and supports both element weights and balanced
+partitioning.  SCOTCH is often the fastest option and typically
+produces comparable results; however, it does not support balanced
+partitioning.  KaHIP can be useful for obtaining an alternative
+decomposition but lacks support for element weights and partition
+weights.
+
+The baseline partitioner requires no external libraries and is suitable
+for situations where installing a third-party partitioner is
+impractical.  It supports all features, including balanced partitioning
+for mixed grids.  However, it is substantially slower than the
+alternatives---especially for large partition counts---and the resulting
+decompositions may have a somewhat higher edge cut.  The balanced mode
+(``-e balanced``) works best with moderate partition counts (up to
+approximately 16 parts); for larger counts element weights should be
+used instead.
 
 .. _perf mixed grids:
 
@@ -136,7 +192,9 @@ triangles into two parts, then a sensible goal would be to aim for each
 domain to have 250 quadrilaterals and 750 triangles.  Irrespective of
 what the relative performance differential between the element types is,
 both partitions will have nearly identical amounts of work.  In PyFR
-this is known as the *balanced* approach and can be requested via::
+this is known as the *balanced* approach and can be requested via:
+
+.. code-block:: shell
 
     pyfr partition add -e balanced ...
 
@@ -159,9 +217,11 @@ variety of factors, including:
 Weights can be specified when partitioning the mesh as
 ``-e shape:weight``.  For example, if on a particular system a
 quadrilateral is found to be 50% more expensive than a triangle this
-can be specified as::
+can be specified as:
 
-        pyfr partition add -e quad:3 -e tri:2 ...
+.. code-block:: shell
+
+    pyfr partition add -e quad:3 -e tri:2 ...
 
 If precise profiling data is not available regarding the performance of
 each element type in a given configuration a helpful rule of thumb is to
@@ -178,16 +238,20 @@ PyFR includes code for monitoring the amount of time each rank spends
 waiting for MPI transfers to complete.  This can be used, among other
 things, to detect load imbalances.  Such imbalances are typically
 observed on mixed-element grids with an incorrect weighting factor.
-Wait time tracking can be enabled as::
+Wait time tracking can be enabled as:
 
-        [backend]
-        collect-wait-times = true
+.. code-block:: ini
+
+    [backend]
+    collect-wait-times = true
 
 with the resulting statistics being recorded in the
 ``[backend-wait-times]`` section of the ``/stats`` object which is
-included in all PyFR solution files.  This can be extracted as::
+included in all PyFR solution files.  This can be extracted as:
 
-        h5dump -d /stats -b --output=stats.ini soln.pyfrs
+.. code-block:: shell
+
+    h5dump -d /stats -b --output=stats.ini soln.pyfrs
 
 Note that the number of graphs depends on the system, and not all graphs
 initiate MPI requests.  The average amount of time each rank spends
@@ -224,7 +288,9 @@ Plugins
 A common source of performance issues is running plugins too frequently.
 PyFR records the amount of time spent in plugins in the
 ``[solver-time-integrator]`` section of the ``/stats`` object which is
-included in all PyFR solution files.  This can be extracted as::
+included in all PyFR solution files.  This can be extracted as:
+
+.. code-block:: shell
 
     h5dump -d /stats -b --output=stats.ini soln.pyfrs
 

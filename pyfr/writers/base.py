@@ -16,8 +16,8 @@ class BaseWriter:
         self.mesh, self.soln = self.reader.load_subset_mesh_soln(solnf)
 
         # Load the configuration and stats files
-        self.cfg = self.soln['config']
-        self.stats = self.soln['stats']
+        self.cfg = self.soln.config
+        self.stats = self.soln.stats
 
         # Data file prefix
         self.dataprefix = self.stats.get('data', 'prefix')

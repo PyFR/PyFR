@@ -1,5 +1,3 @@
-.. highlight:: none
-
 .. _ParaViewPar: https://docs.paraview.org/en/latest/ReferenceManual/parallelDataVisualization.html
 
 ***************
@@ -107,7 +105,9 @@ is recommended to start with the following filter pipeline:
 To reduce the computational cost associated with exporting boundary data
 it is recommended to use *regions*.  For example, if our ultimate goal
 is to analyse data on a boundary called *wall* then we can configure our
-solution writer as::
+solution writer as:
+
+.. code-block:: ini
 
     [soln-plugin-writer]
     ...
@@ -117,7 +117,9 @@ solution writer as::
 which will output the solution and gradient data for the elements on our
 boundary.  Then, we can pass this subset solution file to ``pyfr export
 boundary``.  Alternatively, if our goal is to export an STL region
-called *rgn* then we can configure our solution writer as::
+called *rgn* then we can configure our solution writer as:
+
+.. code-block:: ini
 
     [soln-plugin-writer]
     ...

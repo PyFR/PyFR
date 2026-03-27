@@ -1,23 +1,19 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BaseSolnPlugin, init_csv
+from pyfr.plugins.base import BaseSolnPlugin, PublishMixin, init_csv
 from pyfr.util import first
 
 
-class ResidualPlugin(BaseSolnPlugin):
+class ResidualPlugin(PublishMixin, BaseSolnPlugin):
     name = 'residual'
     systems = ['*']
-    formulations = ['std', 'dual']
     dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
 
         comm, rank, root = get_comm_rank_root()
-
-        # Output frequency
-        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
 
         # Norm used on residual
         self.lp = self.cfg.getfloat(cfgsect, 'norm', 2)
@@ -32,36 +28,43 @@ class ResidualPlugin(BaseSolnPlugin):
             self._np_op = np.add
             self._mpi_op = mpi.SUM
 
+        self._convars = first(intg.system.ele_map.values()).convars
+
         # The root rank needs to open the output file
         if rank == root:
-            header = ['t'] + first(intg.system.ele_map.values()).convars
+            header = ['t'] + self._convars
 
             # Open
             self.csv = init_csv(self.cfg, cfgsect, ','.join(header), nflush=1)
 
     def __call__(self, intg):
-        # If an output is due this step
-        if intg.nacptsteps % self.nsteps == 0 and intg.nacptsteps:
-            # MPI info
-            comm, rank, root = get_comm_rank_root()
+        # Skip the initial step where dt_soln is not yet meaningful
+        if not intg.nacptsteps:
+            return
 
-            # Compute the norms of du/dt
-            norms = []
-            for dudt in intg.dt_soln:
-                dudt = dudt.swapaxes(0, 1).reshape(self.nvars, -1)
-                norms.append(np.linalg.norm(dudt, axis=1, ord=self.lp))
+        # MPI info
+        comm, rank, root = get_comm_rank_root()
 
-            # Reduce over each element type in our domain
-            resid = self._np_op.reduce([n**self._lp_exp for n in norms])
+        # Compute the norms of du/dt
+        norms = []
+        for dudt in intg.dt_soln:
+            dudt = dudt.swapaxes(0, 1).reshape(self.nvars, -1)
+            norms.append(np.linalg.norm(dudt, axis=1, ord=self.lp))
 
-            # Reduce over all domains and, if we are the root rank, output
-            if rank != root:
-                comm.Reduce(resid, None, op=self._mpi_op, root=root)
-            else:
-                comm.Reduce(mpi.IN_PLACE, resid, op=self._mpi_op, root=root)
+        # Reduce over each element type in our domain
+        resid = self._np_op.reduce([n**self._lp_exp for n in norms])
 
-                # Post process
-                resid = (r**(1 / self._lp_exp) for r in resid)
+        # Reduce over all domains and, if we are the root rank, output
+        if rank != root:
+            comm.Reduce(resid, None, op=self._mpi_op, root=root)
+        else:
+            comm.Reduce(mpi.IN_PLACE, resid, op=self._mpi_op, root=root)
 
-                # Write
-                self.csv(intg.tcurr, *resid)
+            # Post process
+            resid = [r**(1 / self._lp_exp) for r in resid]
+
+            # Write
+            self.csv(intg.tcurr, *resid)
+
+            # Publish residual norms
+            self._publish(intg, **dict(zip(self._convars, resid)))

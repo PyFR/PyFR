@@ -1,9 +1,8 @@
-*************************************
-[solver-elements-tet{-mg-p\ *order*}]
-*************************************
+*********************
+[solver-elements-tet]
+*********************
 
-Parameterises the tetrahedral elements, or if -mg-p\ *order* is suffixed
-the tetrahedral elements at multi-p level *order*, with
+Parameterises the tetrahedral elements, with
 
 #. ``soln-pts`` --- location of the solution points in a tetrahedral
    element:
@@ -25,7 +24,9 @@ the tetrahedral elements at multi-p level *order*, with
 
     ``shunn-ham`` | ``witherden`` | ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-elements-tet]
     soln-pts = shunn-ham

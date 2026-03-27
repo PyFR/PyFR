@@ -15,60 +15,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
     where
 
-    ``ac-char-riem-inv`` only works with ``ac-euler`` |
-    ``ac-navier-stokes`` and requires
-
-        - ``ac-zeta`` --- artificial compressibility factor for boundary
-          (increasing ``ac-zeta`` makes the boundary less reflective
-          allowing larger deviation from the target state)
-
-           *float*
-
-        - ``niters`` --- number of Newton iterations
-
-           *int*
-
-        - ``p`` --- pressure
-
-           *float* | *string*
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-
-    ``ac-in-fv`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``u`` --- x-velocity
-
-           *float* | *string*
-
-        - ``v`` --- y-velocity
-
-           *float* | *string*
-
-        - ``w`` --- z-velocity
-
-           *float* | *string*
-
-    ``ac-out-fp`` only works with ``ac-euler`` | ``ac-navier-stokes`` and
-    requires
-
-        - ``p`` --- pressure
-
-           *float* | *string*
-
-    ``char-riem-inv`` only works with ``euler`` | ``navier-stokes`` and
-    requires
+    ``char-riem-inv`` requires
 
         - ``rho`` --- density
 
@@ -89,9 +36,8 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
         - ``p`` --- static pressure
 
            *float* | *string*
-      
-    ``char-riem-inv-mass-flow`` only works with ``euler`` | ``navier-stokes`` 
-    and requires
+
+    ``char-riem-inv-mass-flow`` requires
 
         - ``rho`` --- density
 
@@ -113,22 +59,22 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
           target a mass flow rate.
 
            *float* | *string*
-      
+
         - ``mass-flow-rate`` --- target mass flow rate across the boundary.
 
            *float* | *string*
-      
+
         - ``alpha`` --- parameter between 0 and 1 for the exponentially
           weighted moving average of the mass flow rate.
 
            *float* | *string*
-      
-        - ``eta`` --- parameter greater than 0 setting the strength of the controller.
-          The appropriate strength is problem specific, and varies depending on if the
-          simulation has been non-dimensionalised.
+
+        - ``eta`` --- parameter greater than 0 controlling the strength of the
+          controller. The appropriate strength is problem specific and varies
+          depending on if the simulation has been nondimensionalised.
 
            *float* | *string*
-      
+
         - ``nsteps`` --- number of Runge-Kutta steps between activations of the
           controller. Typically between 10 and 500.
 
@@ -138,7 +84,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
           time the Riemann invariant remains fixed.
 
            *float*
-      
+
         - ``quad-deg-{etype}`` --- degree of quadrature rule for mass flow
           integration (optional).
 
@@ -151,15 +97,15 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
         - ``file`` --- name of a CSV file to output statistics to (optional).
 
            *string*
-      
+
         - ``flushsteps`` --- frequency to flush output to the CSV file
           (optional).
 
            *int*
 
-    ``no-slp-adia-wall`` only works with ``navier-stokes``
+    ``no-slp-adia-wall`` has no parameters
 
-    ``no-slp-isot-wall`` only works with ``navier-stokes`` and requires
+    ``no-slp-isot-wall`` requires
 
         - ``u`` --- x-velocity of wall
 
@@ -178,23 +124,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float*
 
-    ``no-slp-wall`` only works with ``ac-navier-stokes`` and requires
-
-        - ``u`` --- x-velocity of wall
-
-           *float*
-
-        - ``v`` --- y-velocity of wall
-
-           *float*
-
-        - ``w`` --- z-velocity of wall
-
-           *float*
-
-    ``slp-adia-wall`` only works with ``euler`` | ``navier-stokes``
-
-    ``slp-wall`` only works with ``ac-euler`` | ``ac-navier-stokes``
+    ``slp-adia-wall`` has no parameters
 
     ``sub-in-frv`` only works with ``navier-stokes`` and
     requires
@@ -244,8 +174,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
 
-    ``sup-in-fa`` only works with ``euler`` | ``navier-stokes`` and
-    requires
+    ``sup-in-fa`` requires
 
         - ``rho`` --- density
 
@@ -267,9 +196,11 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
 
-    ``sup-out-fn`` only works with ``euler`` | ``navier-stokes``
+    ``sup-out-fn`` has no parameters
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [soln-bcs-bcwallupper]
     type = no-slp-isot-wall

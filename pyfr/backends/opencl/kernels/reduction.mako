@@ -4,49 +4,50 @@
 __kernel void
 reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
           __global fpdtype_t* restrict reduced,
-          __global const fpdtype_t* restrict rcurr,
-          __global const fpdtype_t* restrict rold,
-% if method == 'errest':
-          __global const fpdtype_t* restrict rerr, fpdtype_t atol, fpdtype_t rtol)
-% elif method == 'resid' and dt_type == 'matrix':
-          __global const fpdtype_t* restrict dt_mat, fpdtype_t dt_fac)
-% elif method == 'resid':
-          fpdtype_t dt_fac)
-% endif
+% for v in vvars:
+          __global fpdtype_t* restrict ${v}${',' if not loop.last or svars else ')'}
+% endfor
+% for s in svars:
+           fpdtype_t ${s}${')' if loop.last else ','}
+% endfor
 {
+% for name, values in pvars.items():
+    const fpdtype_t _pv_${name}[] = ${pyfr.carray(values)};
+% endfor
     ixdtype_t i = get_global_id(0), tid = get_local_id(0);
     ixdtype_t gdim = get_num_groups(0), bid = get_group_id(0);
     ixdtype_t ncola = get_num_groups(1), k = get_group_id(1);
 
-    fpdtype_t r, acc = 0;
+% for ei in range(nexprs):
+    fpdtype_t acc_${ei} = ${init_val};
+% endfor
 
     if (i < ncolb)
     {
         for (ixdtype_t j = 0; j < nrow; j++)
         {
             ixdtype_t idx = j*ldim + SOA_IX(i, k, ncola);
-        % if method == 'errest':
-            r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
-        % elif method == 'resid':
-            r = (rcurr[idx] - rold[idx])/(dt_fac${'*dt_mat[idx]' if dt_type == 'matrix' else ''});
-        % endif
-
-        % if norm == 'uniform':
-            acc = max(r*r, acc);
-        % else:
-            acc += r*r;
-        % endif
+% for ei in range(nexprs):
+  % if rop == 'max':
+            acc_${ei} = max(acc_${ei}, ${exprs[ei]});
+  % else:
+            acc_${ei} += ${exprs[ei]};
+  % endif
+% endfor
         }
     }
 
-    // Perform the reduction inside of our work group
-% if norm == 'uniform':
-    acc = work_group_reduce_max(acc);
-% else:
-    acc = work_group_reduce_add(acc);
-% endif
+<%
+    rop_fn = 'max' if rop == 'max' else 'add'
+%>
+% for ei in range(nexprs):
+    acc_${ei} = work_group_reduce_${rop_fn}(acc_${ei});
+% endfor
 
-    // Copy to global memory
     if (tid == 0)
-        reduced[k*gdim + bid] = acc;
+    {
+% for ei in range(nexprs):
+        reduced[${ei}*ncola*gdim + k*gdim + bid] = acc_${ei};
+% endfor
+    }
 }

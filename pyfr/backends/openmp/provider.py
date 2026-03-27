@@ -76,16 +76,16 @@ class OpenMPKRunArgs(Structure):
 
 
 class OpenMPKernelFunction:
-    def __init__(self, backend, fun, argcls, argnames):
+    def __init__(self, backend, fun, argcls, argidxs={}):
         self.krunner = backend.krunner
         self.fun = fun
         self.kargs = argcls()
 
         # Blocking info
-        self.argnames = list(argnames)
-        self.argsizes = [None]*len(argnames)
+        self._argidxs = argidxs
+        self.argsizes = [None]*len(argcls._fields_)
         self.nblocks = None
-        self.subs_offsets = [0]*len(argnames)
+        self.subs_offsets = [0]*len(argcls._fields_)
 
     @cached_property
     def runargs(self):
@@ -105,8 +105,11 @@ class OpenMPKernelFunction:
     def arg_off(self, i):
         return getattr(self.kargs.__class__, f'arg{i}').offset
 
+    def set_argidxs(self, arg_idxs):
+        self._argidxs = arg_idxs
+
     def arg_idx(self, name):
-        return self.argnames.index(name)
+        return self._argidxs[name]
 
     def arg_blocksz(self, i):
         return self.argsizes[i]
@@ -148,7 +151,8 @@ class OpenMPKernelProvider(BaseKernelProvider):
 
     @memoize
     def _build_library(self, src):
-        return self.backend.compiler.build(src)
+        fast_math = 'PYFR_DISABLE_FAST_MATH' not in src
+        return self.backend.compiler.build(src, fast_math=fast_math)
 
     def _build_function(self, name, src, argtypes, restype=None):
         lib = self._build_library(src)
@@ -159,9 +163,10 @@ class OpenMPKernelProvider(BaseKernelProvider):
         lib = self._build_library(src)
         fun = lib.function(name)
 
-        return OpenMPKernelFunction(self.backend, fun,
-                                    self._get_arg_cls(tuple(argtypes)),
-                                    argnames)
+        argidxs = {n: i for i, n in enumerate(argnames)}
+        return OpenMPKernelFunction(
+            self.backend, fun, self._get_arg_cls(tuple(argtypes)), argidxs
+        )
 
 
 class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
@@ -171,8 +176,9 @@ class OpenMPPointwiseKernelProvider(OpenMPKernelProvider,
     def _instantiate_kernel(self, dims, fun, arglst, argm, argv):
         rtargs = []
 
-        # Set the number of blocks
+        # Set the number of blocks and argument index mapping
         fun.set_nblocks(-(-dims[-1] // self.backend.csubsz))
+        fun.set_argidxs({n: i for n, (i, _) in argm.items()})
 
         # Process the arguments
         for i, k in enumerate(arglst):

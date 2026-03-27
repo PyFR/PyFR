@@ -7,9 +7,11 @@ import re
 import h5py
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
-from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, DatasetAppender,
-                               cli_external, init_csv, open_hdf5_a)
+from pyfr.plugins.base import (BackendMixin, BaseCLIPlugin, BaseSolnPlugin,
+                               DatasetAppender, cli_external, init_csv,
+                               open_hdf5_a)
 from pyfr.points import PointLocator, PointSampler
 from pyfr.readers.native import NativeReader
 from pyfr.util import first, subclass_where
@@ -31,7 +33,7 @@ def _read_pts(ptsf, ndims=None, skip=0):
     return pts
 
 
-def _process_con_to_pri(elementscls, ndims, cfg):
+def _process_con_to_pri(elementscls, ndims, cfg, *, has_grads=False):
     nvars = len(elementscls.convars(ndims, cfg))
     con_to_pri = elementscls.con_to_pri
     diff_con_to_pri = elementscls.diff_con_to_pri
@@ -44,7 +46,7 @@ def _process_con_to_pri(elementscls, ndims, cfg):
             psamps = con_to_pri(samps[:nvars], cfg)
 
             # Also convert any gradient data
-            if len(samps) == (1 + ndims)*nvars:
+            if has_grads:
                 diff_con = samps[nvars:].reshape(nvars, ndims, -1)
                 diff_pri = diff_con_to_pri(samps[:nvars], diff_con, cfg)
 
@@ -57,10 +59,9 @@ def _process_con_to_pri(elementscls, ndims, cfg):
     return process
 
 
-class SamplerPlugin(BaseSolnPlugin):
+class SamplerPlugin(BackendMixin, BaseSolnPlugin):
     name = 'sampler'
     systems = ['*']
-    formulations = ['dual', 'std']
     dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix):
@@ -69,21 +70,8 @@ class SamplerPlugin(BaseSolnPlugin):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # Underlying elements class
-        self.elementscls = intg.system.elementscls
-
-        # Output frequency
-        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
-
-        # Output format
+        # Output format and gradient sampling
         self.fmt = self.cfg.get(cfgsect, 'format', 'primitive')
-        if self.fmt == 'primitive':
-            self._process = _process_con_to_pri(self.elementscls, self.ndims,
-                                                self.cfg)
-        else:
-            self._process = None
-
-        # Decide if gradients should be sampled or not
         self._sample_grads = self.cfg.getbool(cfgsect, 'sample-gradients',
                                               False)
 
@@ -92,12 +80,16 @@ class SamplerPlugin(BaseSolnPlugin):
         if ',' in spts:
             spts = self.cfg.getliteral(self.cfgsect, 'samp-pts')
 
-        # Determine the number of variables per sample
+        # Number of output variables per sample
         self.nsvars = (1 + self.ndims*self._sample_grads)*self.nvars
 
-        # Construct and configure the point sampler
+        # Construct and configure the point sampler (for location + MPI)
         self.psampler = PointSampler(intg.system.mesh, spts)
         self.psampler.configure_with_intg_nvars(intg, self.nsvars)
+
+        # Initialise backend and kernel infrastructure
+        self._init_backend(intg)
+        self._init_kernels(intg)
 
         # Have the root rank open the output file
         if rank == root:
@@ -108,6 +100,65 @@ class SamplerPlugin(BaseSolnPlugin):
                     self._init_hdf5(intg)
                 case _:
                     raise ValueError('Invalid file format')
+
+    def _init_kernels(self, intg):
+        backend = self.backend
+
+        # Register our kernel template
+        backend.pointwise.register('pyfr.plugins.kernels.sample')
+
+        # Common template arguments
+        self._tplargs_common = {
+            'ndims': self.ndims, 'nvars': self.nvars, 'nsvars': self.nsvars,
+            'has_grads': self._sample_grads,
+            'primitive': self.fmt == 'primitive',
+            'c': self.cfg.items_as('constants', float),
+            'eos_mod': self._eos_mod
+        }
+
+        # Build per-element-type data structures
+        self._edata = []
+        for et, (eidxs, wts, smap) in self.psampler.etype_pinfo().items():
+            npts = len(eidxs)
+            nupts = intg.system.ele_map[intg.system.ele_types[et]].nupts
+
+            # Gradient view (bank-independent, so created once here)
+            if self._sample_grads:
+                gradu = self._make_view(self._grad_banks[et], eidxs,
+                                        (self.ndims*nupts, self.nvars))
+            else:
+                gradu = None
+
+            self._edata.append({
+                'idx': et,
+                'eidxs': eidxs,
+                'nupts': nupts,
+                'wts': backend.const_matrix(wts.T, tags={'align'}),
+                'out': backend.matrix((self.nsvars, npts), tags={'align'}),
+                'gradu': gradu,
+                'map': smap,
+            })
+
+    @memoize
+    def _get_kerns(self, uidx):
+        kerns = []
+
+        for ed in self._edata:
+            eidxs = ed['eidxs']
+            nupts = ed['nupts']
+
+            tplargs = {**self._tplargs_common, 'nupts': nupts}
+
+            # Solution view into scal_upts[uidx]
+            u = self._make_view(self._ele_banks[ed['idx']][uidx], eidxs,
+                                (nupts, self.nvars))
+
+            kerns.append(self.backend.pointwise.sample(
+                tplargs=tplargs, dims=[len(eidxs)],
+                u=u, gradu=ed['gradu'], wts=ed['wts'], out=ed['out']
+            ))
+
+        return kerns
 
     def _init_csv(self, intg):
         self.csv = init_csv(self.cfg, self.cfgsect, self._header(intg),
@@ -168,24 +219,20 @@ class SamplerPlugin(BaseSolnPlugin):
         return ','.join(colnames)
 
     def __call__(self, intg):
-        # Return if no output is due
-        if intg.nacptsteps % self.nsteps:
-            return
-
-        # Fetch the solution
-        soln = list(intg.soln)
-
-        # If requested also fetch solution gradients
+        # Compute gradients on device if needed
         if self._sample_grads:
-            for i, g in enumerate(intg.grad_soln):
-                g = g.transpose(1, 2, 0, 3)
-                g = g.reshape(len(g), self.ndims*self.nvars, -1)
-                soln[i] = np.hstack([soln[i], g])
+            intg.compute_grads()
 
-        # Perform the sampling
-        samps = self.psampler.sample(soln, process=self._process)
+        # Run sampling kernels on device
+        self.backend.run_kernels(self._get_kerns(intg.idxcurr))
 
-        # If we're the root rank then output
+        # Collect results from device
+        samples = np.empty((self.psampler.pcount, self.nsvars))
+        for ed in self._edata:
+            samples[ed['map']] = ed['out'].get().T
+
+        # Gather to root rank and output
+        samps = self.psampler.gather(samples)
         if samps is not None:
             self._write(intg.tcurr, samps)
 
@@ -344,7 +391,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
         # Dimension and field names
         dims = 'xyz'[:mesh.ndims]
-        fields = soln['stats'].get('data', 'fields').split(',')
+        fields = soln.fields
 
         # Read the sample points from a CSV file
         if args.pts:
@@ -361,43 +408,54 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             if rank == root:
                 pts = mesh.raw[f'plugin/sampler/{spts}']['ploc']
 
+        # Determine if gradient data is present
+        has_grads = bool(soln.grad_data)
+
+        # If gradients exist, stack them into the solution data
+        sdata = []
+        for etype in mesh.eidxs:
+            d = soln.data[etype]
+            if has_grads:
+                g = soln.grad_data[etype].transpose(1, 2, 0, 3)
+                g = g.reshape(g.shape[0], -1, g.shape[3])
+                d = np.concatenate([d, g], axis=1)
+
+            sdata.append(d)
+
         # Handle conversion from conservative to primitive variables
         if args.format == 'primitive':
             from pyfr.solvers.base import BaseSystem
 
-            if soln['stats'].get('data', 'prefix') != 'soln':
+            if soln.stats.get('data', 'prefix') != 'soln':
                 raise ValueError('Primitive output only supported for '
                                  'solution files')
 
             # Obtain the system associated with the solution
             systemcls = subclass_where(
-                BaseSystem, name=soln['config'].get('solver', 'system')
+                BaseSystem, name=soln.config.get('solver', 'system')
             )
             elementscls = systemcls.elementscls
-            vmap = elementscls.privars(mesh.ndims, soln['config'])
+            vmap = elementscls.privars(mesh.ndims, soln.config)
 
-            # Solution data
-            if len(fields) == len(vmap):
-                fields = list(vmap)
-            # Solution and gradient data
-            elif len(fields) == (1 + mesh.ndims)*len(vmap):
-                fields = list(vmap)
+            fields = list(vmap)
+            if has_grads:
                 fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
-            else:
-                raise ValueError('Invalid number of field variables')
 
             process = _process_con_to_pri(elementscls, mesh.ndims,
-                                          soln['config'])
+                                          soln.config, has_grads=has_grads)
         else:
             process = None
+            if has_grads:
+                fields = list(fields)
+                fields.extend(f'grad_{v}_{d}'
+                              for v in soln.fields for d in dims)
 
         # Construct and configure the point sampler
         sampler = PointSampler(mesh, spts)
-        sampler.configure_with_cfg_nvars(soln['config'], len(fields))
+        sampler.configure_with_cfg_nvars(soln.config, len(fields))
 
         # Sample the solution
-        samps = sampler.sample([soln[etype] for etype in mesh.eidxs],
-                               process=process)
+        samps = sampler.sample(sdata, process=process)
 
         if rank == root:
             print(*dims, *fields, sep=args.sep)

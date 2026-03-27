@@ -1,5 +1,3 @@
-from collections import defaultdict
-
 import numpy as np
 
 from pyfr.cache import memoize
@@ -8,40 +6,29 @@ from pyfr.quadrules import get_quadrule
 
 
 class SurfaceIntegrator:
-    def __init__(self, cfg, cfgsect, elemap, surf_list, flags=''):
+    def __init__(self, cfg, cfgsect, elemap, con, flags=''):
         self.cfg, self.cfgsect = cfg, cfgsect
 
-        # Interpolation matrices and quadrature weights
-        self.m0 = m0 = {}
-        self.qwts = qwts = defaultdict(list)
+        self.m0, self.qwts = {}, {}
+        self.eidxs, self.norms, self.locs = {}, {}, {}
 
-        # Element indices and associated face normals
-        eidxs = defaultdict(list)
-        norms = defaultdict(list)
-        locs = defaultdict(list)
+        if con is None:
+            return
 
-        for etype, fidx, eidx in surf_list:
+        for etype, fidx, eidxs in con.items():
             eles = elemap[etype]
             itype, proj, norm = eles.basis.faces[fidx]
-
             ppts, pwts = self._surf_quad(itype, proj, flags=flags)
             nppts = len(ppts)
 
-            # Get phyical normals
-            ploc = eles.ploc_at_np(ppts)[..., eidx]
-            pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidx]
+            ploc = eles.ploc_at_np(ppts)[..., eidxs]
+            pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidxs]
 
-            eidxs[etype, fidx].append(eidx)
-            norms[etype, fidx].append(pnorm)
-            locs[etype, fidx].append(ploc)
-
-            if (etype, fidx) not in m0:
-                m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
-                qwts[etype, fidx] = pwts
-
-        self.eidxs = {k: np.array(v) for k, v in eidxs.items()}
-        self.norms = {k: np.array(v) for k, v in norms.items()}
-        self.locs = {k: np.array(v) for k, v in locs.items()}
+            self.m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
+            self.qwts[etype, fidx] = pwts
+            self.eidxs[etype, fidx] = eidxs
+            self.norms[etype, fidx] = pnorm.transpose(1, 0, 2)
+            self.locs[etype, fidx] = ploc.transpose(1, 0, 2)
 
     @memoize
     def _surf_quad(self, itype, proj, flags=''):

@@ -7,6 +7,8 @@ import weakref
 
 import numpy as np
 
+from pyfr.cache import memoize
+
 
 def init_mpi():
     import mpi4py.rc
@@ -111,32 +113,61 @@ def get_start_end_csize(comm, n):
     return min(rank*csize, n), min((rank + 1)*csize, n), csize
 
 
+class AlltoallFuture:
+    def __init__(self, parent, svals, rvals, req, rinv=Ellipsis):
+        self._parent = parent
+        self._svals = svals
+        self._rvals = rvals
+        self._req = req
+        self._rinv = rinv
+
+    def test(self):
+        return self._req.Test()
+
+    def wait(self):
+        self._req.Wait()
+        return self._rvals[self._rinv]
+
+
 class AlltoallMixin:
     @staticmethod
     def _count_to_disp(count):
-        return np.concatenate(([0], np.cumsum(count[:-1])))
+        disp = np.empty(len(count), dtype=count.dtype)
+        disp[0] = 0
+        np.cumsum(count[:-1], out=disp[1:])
+        return disp
 
     @staticmethod
     def _disp_to_count(disp, n):
-        return np.concatenate((disp[1:] - disp[:-1], [n - disp[-1]]))
+        return np.diff(disp, append=n)
+
+    @memoize
+    def _get_mpi_dtype(self, np_dtype, shape):
+        if np_dtype.names is None and not shape:
+            return None
+
+        from mpi4py.util.dtlib import from_numpy_dtype
+
+        dtype = np_dtype
+        if shape:
+            dtype = [('', dtype, shape)]
+
+        return autofree(from_numpy_dtype(dtype).Commit())
+
+    def _alltoallv_bufs(self, sbuf, rbuf):
+        svals = sbuf[0]
+        dtype = self._get_mpi_dtype(svals.dtype, svals.shape[1:])
+
+        if dtype is None:
+            return sbuf, rbuf
+        else:
+            return (*sbuf, dtype), (*rbuf, dtype)
 
     def _alltoallv(self, comm, sbuf, rbuf):
-        svals = sbuf[0]
+        return comm.Alltoallv(*self._alltoallv_bufs(sbuf, rbuf))
 
-        # If we are dealing with scalar data then call Alltoallv directly
-        if svals.dtype.names is None and svals.ndim == 1:
-            comm.Alltoallv(sbuf, rbuf)
-        # Else, we need to create a suitable derived datatype
-        else:
-            from mpi4py.util.dtlib import from_numpy_dtype
-
-            dtype = svals.dtype
-
-            if svals.ndim > 1:
-                dtype = [('', dtype, svals.shape[1:])]
-
-            dtype = autofree(from_numpy_dtype(dtype).Commit())
-            comm.Alltoallv((*sbuf, dtype), (*rbuf, dtype))
+    def _alltoallv_init(self, comm, sbuf, rbuf):
+        return comm.Alltoallv_init(*self._alltoallv_bufs(sbuf, rbuf))
 
     def _alltoallcv(self, comm, svals, scount, sdisps=None):
         # Exchange counts
@@ -153,6 +184,34 @@ class AlltoallMixin:
         self._alltoallv(comm, (svals, (scount, sdisps)), rbuf)
 
         return rbuf
+
+
+class AlltoallFuture:
+    def __init__(self, parent, nsend, nrecv, shape, dtype, scountdisps,
+                 rcountdisps, rinv):
+        self._parent = parent
+        self._rinv = rinv
+
+        # Preallocate send and receive buffers
+        self._svals = np.empty((nsend, *shape), dtype=dtype)
+        self._rvals = np.empty((nrecv, *shape), dtype=dtype)
+
+        # Create persistent request
+        sbuf = (self._svals, scountdisps)
+        rbuf = (self._rvals, rcountdisps)
+        self._req = autofree(parent._alltoallv_init(parent.comm, sbuf, rbuf))
+
+    def start(self, dset):
+        self._parent._prepare_sendbuf(dset, self._svals)
+        self._req.Start()
+        return self
+
+    def test(self):
+        return self._req.Test()
+
+    def wait(self):
+        self._req.Wait()
+        return self._rvals[self._rinv]
 
 
 class BaseGathererScatterer(AlltoallMixin):
@@ -193,19 +252,15 @@ class Scatterer(BaseGathererScatterer):
         # Save the receive count
         self.cnt = len(ridx)
 
-    def __call__(self, dset, didxs=(...,)):
-        # Read the data
-        svals = dset[self.start:self.end, *didxs][self.sidx]
+    def _prepare_sendbuf(self, dset, out):
+        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out)
 
-        # Allocate space for receiving the data
-        rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
+    def future(self, shape, dtype):
+        return AlltoallFuture(self, len(self.sidx), self.cnt, shape, dtype,
+                              self.bcountdisps, self.acountdisps, self.rinv)
 
-        # Perform the exchange
-        self._alltoallv(self.comm, (svals, self.bcountdisps),
-                        (rvals, self.acountdisps))
-
-        # Unpack the data
-        return rvals[self.rinv]
+    def __call__(self, dset):
+        return self.future(dset.shape[1:], dset.dtype).start(dset).wait()
 
 
 class Gatherer(BaseGathererScatterer):
@@ -232,19 +287,15 @@ class Gatherer(BaseGathererScatterer):
         self.off = scal_coll(comm.Exscan, cnt, op=mpi.SUM)
         self.off = self.off if comm.rank else 0
 
+    def _prepare_sendbuf(self, dset, out):
+        np.take(dset, self.sinv, axis=0, out=out)
+
+    def future(self, shape, dtype):
+        return AlltoallFuture(self, len(self.sinv), self.cnt, shape, dtype,
+                              self.acountdisps, self.bcountdisps, self.rinv)
+
     def __call__(self, dset):
-        # Sort the data we are going to be sending
-        svals = np.ascontiguousarray(dset[self.sinv])
-
-        # Allocate space for the data we will receive
-        rvals = np.empty((self.cnt, *dset.shape[1:]), dtype=dset.dtype)
-
-        # Perform the exchange
-        self._alltoallv(self.comm, (svals, self.acountdisps),
-                        (rvals, self.bcountdisps))
-
-        # Sort our received data
-        return rvals[self.rinv]
+        return self.future(dset.shape[1:], dset.dtype).start(dset).wait()
 
 
 class SparseScatterer(AlltoallMixin):
@@ -270,12 +321,11 @@ class SparseScatterer(AlltoallMixin):
         comm.Allgather(region, minmax)
 
         # Determine which rank, if any, has each of our desired indices
-        didx = np.split(bidx, np.searchsorted(bidx, minmax))[1::2]
-        dcount = np.array([len(s) for s in didx])
+        sp = np.searchsorted(bidx, minmax)
+        dcount = sp[1::2] - sp[::2]
 
         # Exchange indices
-        eidx, (ecount, edisps) = self._alltoallcv(comm, np.concatenate(didx),
-                                                  dcount)
+        eidx, (_, edisps) = self._alltoallcv(comm, bidx, dcount, sp[::2])
 
         # See which of these indices are present
         mask = np.isin(eidx, cidx, assume_unique=True)
@@ -294,18 +344,15 @@ class SparseScatterer(AlltoallMixin):
         self.ridx = ainv[np.searchsorted(bidx, ridx)]
         self.cnt = self.rcountdisps[0].sum()
 
-    def __call__(self, dset, didxs=(...,)):
-        # Read and appropriately reorder our send data
-        svals = dset[self.start:self.end, *didxs][self.sidx]
+    def _prepare_sendbuf(self, dset, out):
+        np.take(dset[self.start:self.end], self.sidx, axis=0, out=out)
 
-        # Allocate space for receiving the data
-        rvals = np.empty((self.cnt, *svals.shape[1:]), dtype=svals.dtype)
+    def future(self, shape, dtype):
+        return AlltoallFuture(self, len(self.sidx), self.cnt, shape, dtype,
+                              self.scountdisps, self.rcountdisps, ...)
 
-        # Perform the exchange
-        self._alltoallv(self.comm, (svals, self.scountdisps),
-                        (rvals, self.rcountdisps))
-
-        return rvals
+    def __call__(self, dset):
+        return self.future(dset.shape[1:], dset.dtype).start(dset).wait()
 
 
 class Sorter(AlltoallMixin):
@@ -389,7 +436,7 @@ class Sorter(AlltoallMixin):
         q[self.comm.rank] = e
         self.comm.Allgather(mpi.IN_PLACE, q)
 
-        # Count the occurances of each probe in skeys
+        # Count the occurrences of each probe in skeys
         ubnd = np.searchsorted(skeys, q, side='right')
         lbnd = np.searchsorted(skeys, q, side='left')
         ld = ubnd - lbnd
