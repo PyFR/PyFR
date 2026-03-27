@@ -56,7 +56,7 @@ class SamplerPlugin(BackendMixin, BaseSolnPlugin):
         backend = self.backend
 
         # Register our kernel template
-        backend.pointwise.register('pyfr.plugins.kernels.sample')
+        backend.pointwise.register('pyfr.plugins.soln.kernels.sample')
 
         # Common template arguments
         self._tplargs_common = {
