@@ -3,7 +3,7 @@ import math
 import time
 
 from pyfr.integrators.implicit.krylov import BaseKrylovSolver
-from pyfr.integrators.registers import ScalarRegister
+from pyfr.integrators.registers import DynamicScalarRegister, ScalarRegister
 from pyfr.mpiutil import get_comm_rank_root
 
 
@@ -18,6 +18,7 @@ class NewtonDivergenceError(Exception):
 class NewtonSolver(BaseKrylovSolver):
     _newton_resid = ScalarRegister(rhs=False)
     _jfnk_temp = ScalarRegister()
+    _newton_delta = DynamicScalarRegister(rhs=False)
 
     def __init__(self, backend, systemcls, mesh, initsoln, cfg):
         sect = 'solver-time-integrator'
@@ -53,6 +54,14 @@ class NewtonSolver(BaseKrylovSolver):
         self._scales = tuple(a / min_atol for a in self._newton_atols)
         self._inv_scales = tuple(min_atol / a for a in self._newton_atols)
 
+        # Configure the line search
+        self._linesearch = b('linesearch', False)
+        if self._linesearch:
+            self._linesearch_maxiter = i('linesearch-max-iter', 5)
+            self._linesearch_fact = f('linesearch-fact', 0.5)
+            self._linesearch_c1 = f('linesearch-c1', 1e-4)
+            self._size_register(self._newton_delta, 1)
+
         super().__init__(backend, systemcls, mesh, initsoln, cfg)
 
     def _calc_rnorm(self, r):
@@ -66,6 +75,32 @@ class NewtonSolver(BaseKrylovSolver):
         self._add(0, result, 1, v_s, -gamma_dt/eps, self._jfnk_temp,
                   gamma_dt/eps, f, in_scale=self._scales, in_scale_idxs=(1,),
                   out_scale=self._inv_scales)
+
+    def _line_search(self, t, u_reg, f_reg, delta_reg, residual_fn, rnorm_old):
+        alpha = 1.0
+
+        for _ in range(self._linesearch_maxiter):
+            self._add(0, self._jfnk_temp, 1, u_reg, alpha, delta_reg,
+                      in_scale=self._scales, in_scale_idxs=(2,))
+
+            self._rhs(t, self._jfnk_temp, f_reg)
+            residual_fn(self._jfnk_temp, f_reg, self._newton_resid)
+            rnorm_new = self._calc_rnorm(self._newton_resid)
+
+            if rnorm_new <= (1 - self._linesearch_c1*alpha)*rnorm_old:
+                break
+
+            alpha *= self._linesearch_fact
+
+        # Apply the update
+        self._add(1, u_reg, alpha, delta_reg, in_scale=self._scales,
+                  in_scale_idxs=(1,))
+
+        # Recompute the residual
+        self._rhs(t, u_reg, f_reg)
+        residual_fn(u_reg, f_reg, self._newton_resid)
+
+        return 0, self._calc_rnorm(self._newton_resid)
 
     def _newton_iterate(self, t, u_reg, f_reg, gamma_dt, residual_fn,
                         initial_guess_fn):
@@ -104,11 +139,24 @@ class NewtonSolver(BaseKrylovSolver):
             # Scale the residual vector for the Krylov solver
             self._add(1, self._newton_resid, out_scale=self._inv_scales)
 
-            niters, nprecond = self._krylov_solve(
-                matvec, self._newton_resid, u_reg, None,
-                accumulate=True, accumulate_scale=self._scales
-            )
-            rnorm = None
+            if self._linesearch:
+                niters, nprecond = self._krylov_solve(
+                    matvec, self._newton_resid, self._newton_delta,
+                    None, accumulate=False
+                )
+                alpha, rnorm = self._line_search(t, u_reg, f_reg,
+                                                 self._newton_delta,
+                                                 residual_fn, rnorm)
+
+                # Accumulate the update to the solution
+                self._add(1, u_reg, alpha, self._newton_delta,
+                          in_scale=self._scales, in_scale_idxs=(1,))
+            else:
+                niters, nprecond = self._krylov_solve(
+                    matvec, self._newton_resid, u_reg, None,
+                    accumulate=True, accumulate_scale=self._scales
+                )
+                rnorm = None
 
             krylov_total += niters
             precond_total += nprecond
