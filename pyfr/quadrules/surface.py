@@ -22,7 +22,8 @@ class SurfaceIntegrator:
             nppts = len(ppts)
 
             ploc = eles.ploc_at_np(ppts)[..., eidxs]
-            pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidxs]
+            # HACK: swapaxes so pnorm matches ploc layout (nfpts, ndims, neles)
+            pnorm = eles.pnorm_at(ppts, [norm]*nppts)[:, eidxs].swapaxes(1, 2)
 
             self.m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
             self.qwts[etype, fidx] = pwts
