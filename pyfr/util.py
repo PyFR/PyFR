@@ -5,8 +5,19 @@ import os
 import pickle
 import re
 import shutil
+import sys
 
 from pyfr.ctypesutil import get_libc_function
+
+
+class tty:
+    _active = sys.stdout.isatty()
+    bold = '\033[1m' if _active else ''
+    rev = '\033[7m' if _active else ''
+    green = '\033[32m' if _active else ''
+    red = '\033[31m' if _active else ''
+    cyan = '\033[36m' if _active else ''
+    reset = '\033[0m' if _active else ''
 
 
 class silence:
