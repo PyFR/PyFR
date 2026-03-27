@@ -163,7 +163,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 adapter = self._make_adapter(face_vsoln, face_vpts,
                                              spts, finfo)
                 for fname, arrs in self._run_postprocs(adapter).items():
-                    pointf[fname].append(np.dstack(arrs).astype(self.dtype))
+                    pointf[fname].append(arrs)
 
             vspts.append(face_vpts)
             vsoln.append(face_vsoln)
