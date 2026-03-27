@@ -7,8 +7,8 @@ from pyfr.plugins.fieldeval import BackendFieldReducer
 
 class IntegratePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
     name = 'integrate'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)

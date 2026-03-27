@@ -12,8 +12,8 @@ from pyfr.util import first
 
 class SamplerPlugin(BackendMixin, BaseSolnPlugin):
     name = 'sampler'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
