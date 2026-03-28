@@ -1,16 +1,46 @@
-from collections import deque
+from bisect import insort
+from collections import defaultdict, deque
 import time
 
 import numpy as np
 
-from pyfr.mpiutil import autofree, get_comm_rank_root, mpi
+from pyfr.mpiutil import autofree, mpi
 
 
-class MatrixBase:
+class _StorageBase:
+    @property
+    def storage_root(self):
+        return self._storage_root
+
+    def same_storage(self, other):
+        return self.storage_root is other.storage_root
+
+
+class Extent(_StorageBase):
+    def __init__(self, name=None):
+        self.name = name
+        self.offset = 0
+        self.nbytes = 0
+        self.basedata = None
+        self._pending = []
+        self._storage_root = self
+
+    def reserve(self, obj, nbytes):
+        self._pending.append((obj, self.nbytes))
+        self.nbytes += nbytes
+
+    def commit(self, alloc_fn):
+        self.basedata = alloc_fn(self.nbytes)
+        for obj, offset in self._pending:
+            obj.onalloc(self.basedata, offset)
+            obj._storage_root = self
+        self._pending.clear()
+
+
+class MatrixBase(_StorageBase):
     _base_tags = set()
 
-    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
-                 tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         self.backend = backend
         self.tags = self._base_tags | tags
 
@@ -66,14 +96,8 @@ class MatrixBase:
         else:
             self._initval = None
 
-        # Alias or allocate ourself
-        if aliases:
-            if extent is not None:
-                raise ValueError('Aliased matrices can not have an extent')
-
-            backend.alias(self, aliases)
-        else:
-            backend.malloc(self, extent)
+        # Allocate ourself
+        backend.malloc(self, extent)
 
     def get(self):
         # If we are yet to be allocated use our initial value
@@ -89,7 +113,7 @@ class MatrixBase:
     def _get(self):
         pass
 
-    def _pack(self, ary):
+    def _pack(self, ary, out=None):
         # Convert from SoA to [blocked] AoSoA packing
         n, k, csubsz = ary.shape[-1], self.backend.soasz, self.backend.csubsz
 
@@ -100,6 +124,10 @@ class MatrixBase:
             ary = ary.reshape(ary.shape[:-1] + (-1, k)).swapaxes(-2, -3)
 
         ary = ary.reshape(self.nrow, -1, self.leaddim).swapaxes(0, 1)
+
+        if out is not None:
+            out.reshape(ary.shape)[:] = ary
+            return out
 
         return np.ascontiguousarray(ary, dtype=self.dtype)
 
@@ -123,11 +151,6 @@ class MatrixBase:
 
 
 class Matrix(MatrixBase):
-    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
-                 tags):
-        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
-                         tags)
-
     def set(self, ary):
         if ary.shape != self.ioshape:
             raise ValueError('Invalid matrix shape')
@@ -143,7 +166,7 @@ class Matrix(MatrixBase):
         pass
 
 
-class MatrixSlice:
+class MatrixSlice(_StorageBase):
     def __init__(self, backend, mat, ra, rb, ca, cb):
         self.backend = backend
         self.parent = mat
@@ -189,26 +212,48 @@ class MatrixSlice:
 
         return self.parent.offset + _offset*self.itemsize
 
+    @property
+    def storage_root(self):
+        return self.parent.storage_root
+
+
+class StorageRegion(_StorageBase):
+    def __init__(self, parent, offset, nbytes):
+        offset, nbytes = int(offset), int(nbytes)
+        if offset < 0 or nbytes < 0 or offset + nbytes > parent.nbytes:
+            raise ValueError('Invalid storage region')
+
+        self.parent = parent
+        self.nbytes = nbytes
+        self.rel_offset = offset
+
+    @property
+    def basedata(self):
+        return self.parent.basedata
+
+    @property
+    def offset(self):
+        return self.parent.offset + self.rel_offset
+
+    @property
+    def storage_root(self):
+        return self.parent.storage_root
+
 
 class ConstMatrix(MatrixBase):
     _base_tags = {'const'}
 
     def __init__(self, backend, dtype, initval, tags):
-        super().__init__(backend, dtype, initval.shape, initval,
-                         None, None, tags)
+        super().__init__(backend, dtype, initval.shape, initval, None, tags)
 
 
 class XchgMatrix(Matrix):
     _base_tags = {'xchg'}
 
-    def recvreq(self, pid, tag):
-        comm, rank, root = get_comm_rank_root()
-
+    def recvreq(self, comm, pid, tag):
         return autofree(comm.Recv_init(self.hdata, pid, tag))
 
-    def sendreq(self, pid, tag):
-        comm, rank, root = get_comm_rank_root()
-
+    def sendreq(self, comm, pid, tag):
         return autofree(comm.Send_init(self.hdata, pid, tag))
 
 
@@ -217,12 +262,12 @@ class View:
         self.n = len(matmap)
         self.nvrow = vshape[-2] if len(vshape) == 2 else 1
         self.nvcol = vshape[-1] if len(vshape) >= 1 else 1
-        self.rstrides = None
 
         # Get the different matrices which we map onto
         self._mats = [backend.mats[i] for i in np.unique(matmap)]
 
         # Extract the base allocation and data type
+        self.storage_root = self._mats[0].storage_root
         self.basedata = self._mats[0].basedata
         self.refdtype = self._mats[0].dtype
 
@@ -233,9 +278,9 @@ class View:
         if any(not isinstance(m, mattypes) for m in self._mats):
             raise TypeError('Incompatible matrix type for view')
 
-        if any(m.basedata != self.basedata for m in self._mats):
+        if any(not m.same_storage(self._mats[0]) for m in self._mats):
             raise TypeError('All viewed matrices must belong to the same '
-                            'allocation extent')
+                            'storage object')
 
         if any(m.dtype != self.refdtype for m in self._mats):
             raise TypeError('Mixed data types are not supported')
@@ -267,8 +312,12 @@ class View:
         # Row strides
         if self.nvrow > 1:
             rstrides = (rstridemap*leaddim)[None, :]
+            self.rstrides_val = int(rstrides.flat[0])
             self.rstrides = backend.const_matrix(rstrides, dtype=ixdtype,
                                                  tags=tags)
+        else:
+            self.rstrides_val = 0
+            self.rstrides = None
 
 
 class XchgView:
@@ -284,11 +333,11 @@ class XchgView:
         # Now create an exchange matrix to pack the view into
         self.xchgmat = backend.xchg_matrix((nvrow, nvcol*n), tags=tags)
 
-    def recvreq(self, pid, tag):
-        return self.xchgmat.recvreq(pid, tag)
+    def recvreq(self, comm, pid, tag):
+        return self.xchgmat.recvreq(comm, pid, tag)
 
-    def sendreq(self, pid, tag):
-        return self.xchgmat.sendreq(pid, tag)
+    def sendreq(self, comm, pid, tag):
+        return self.xchgmat.sendreq(comm, pid, tag)
 
 
 class Graph:
@@ -296,13 +345,22 @@ class Graph:
         self.backend = backend
         self.committed = False
 
-        # Kernels and their dependencies
-        self.knodes = {}
+        # Pending kernels and dependencies (buffered until commit)
+        self._pkerns = []
         self.kdeps = {}
-        self.depk = set()
+        self.kpdeps = {}
 
-        # Grouped kernels
-        self.groupk = set()
+        # Pending MPI requests
+        self._pmpi = []
+
+        # Pending groups
+        self._pgroups = []
+
+        # Resolved state (populated during commit)
+        self.knodes = {}
+        self.depk = set()
+        self.mpi_reqs = []
+        self.mpi_req_deps = []
 
         # MPI wrappers
         self._startall = mpi.Prequest.Startall
@@ -322,29 +380,20 @@ class Graph:
         else:
             self._waitall = mpi.Prequest.Waitall
 
-        # MPI requests along with their associated dependencies
-        self.mpi_reqs = []
-        self.mpi_req_deps = []
+    def _alldeps(self, k):
+        yield from self.kdeps.get(k, [])
+        yield from self.kpdeps.get(k, [])
 
     def add(self, kern, deps=[], pdeps=[]):
         if self.committed:
             raise RuntimeError('Can not add nodes to a committed graph')
 
-        if kern in self.knodes:
+        if kern in self.kdeps:
             raise RuntimeError('Can only add a kernel to a graph once')
 
-        # Handle priority-enforcing (false) dependencies
-        adeps = [*deps, *pdeps] if self.needs_pdeps else deps
-
-        # Resolve the dependency list
-        rdeps = [self.knodes[d] for d in adeps]
-
-        # Ask the kernel to add itself
-        self.knodes[kern] = kern.add_to_graph(self, rdeps)
-
-        # Note our dependencies
+        self._pkerns.append(kern)
         self.kdeps[kern] = list(deps)
-        self.depk.update(deps)
+        self.kpdeps[kern] = list(pdeps)
 
     def add_all(self, kerns, deps=[], pdeps=[]):
         for k in kerns:
@@ -354,57 +403,128 @@ class Graph:
         if self.committed:
             raise RuntimeError('Can not add nodes to a committed graph')
 
-        if req in self.mpi_reqs:
-            raise ValueError('Can only add an MPI request to a graph once')
-
-        # Add the request
-        self.mpi_reqs.append(req)
-        self.mpi_req_deps.append(deps)
-
-        # Note any dependencies
-        self.depk.update(deps)
+        self._pmpi.append((req, list(deps)))
 
     def add_mpi_reqs(self, reqs, deps=[]):
         for r in reqs:
             self.add_mpi_req(r, deps)
 
-    def _iter_deps(self, kern):
-        for d in self.kdeps[kern]:
-            yield d
-            yield from self._iter_deps(d)
-
     def group(self, kerns, subs=[]):
         if self.committed:
             raise RuntimeError('Can not group kernels in a committed graph')
 
-        klist = list(kerns)
-        kset = set(klist)
+        self._pgroups.append((list(kerns), list(subs)))
 
-        # Ensure kernels are only in a single group
-        if not self.groupk.isdisjoint(kset):
-            raise ValueError('Kernels can only be in one group')
+    def _build_dag(self):
+        # Collapse groups: map each kernel to its group head
+        groups = [kerns for kerns, _ in self._pgroups]
+        grouped = {}
+        for g in groups:
+            grouped |= dict.fromkeys(g, g[0])
 
-        # Validate the dependencies of the grouping
-        for i, k in enumerate(klist):
-            for d in self.kdeps[k]:
-                if d in klist[i + 1:]:
-                    raise ValueError('Inconsistent kernel grouping order')
+        to_super = lambda k: grouped.get(k, k)
+        gmembers = {g[0]: g for g in groups}
 
-                if d not in kset and not kset.isdisjoint(self._iter_deps(d)):
-                    raise ValueError('Kernel grouping violates dependencies')
+        # Super-node set: ungrouped kernels + group heads
+        snodes = [k for k in self.kdeps if k not in grouped or grouped[k] == k]
 
-        # Ensure the substitutions are consistent with the grouping
-        if any(k not in klist for s in subs for k, v in s):
-            raise ValueError('Invalid kernels in substitution list')
+        # Build adjacency list and in-degree counts using only hard
+        # dependencies; pseudo-deps are handled via priority ordering
+        succs, indeg = defaultdict(list), {}
+        for sn in snodes:
+            seen = {sn}
+            for sk in gmembers.get(sn, [sn]):
+                for d in self.kdeps.get(sk, []):
+                    if (dsn := to_super(d)) not in seen:
+                        seen.add(dsn)
+                        succs[dsn].append(sn)
+            indeg[sn] = len(seen) - 1
 
-        # Mark these kernels as being grouped
-        self.groupk.update(kerns)
+        return snodes, succs, indeg, gmembers, to_super
+
+    def _mpi_urgent(self, gmembers, to_super):
+        # Walk backwards from MPI send dependencies to find urgent nodes
+        urgent = {to_super(d) for _, deps in self._pmpi for d in deps}
+        stack = list(urgent)
+        while stack:
+            sn = stack.pop()
+            for sk in gmembers.get(sn, [sn]):
+                for d in self.kdeps.get(sk, []):
+                    if (dsn := to_super(d)) not in urgent:
+                        urgent.add(dsn)
+                        stack.append(dsn)
+
+        return urgent
+
+    def _topo_sort(self):
+        snodes, succs, indeg, gmembers, to_super = self._build_dag()
+        urgent = self._mpi_urgent(gmembers, to_super)
+
+        # Priority key: urgent nodes first, then insertion order
+        orig = {k: i for i, k in enumerate(self._pkerns)}
+        for head, members in gmembers.items():
+            orig[head] = min(orig[m] for m in members)
+        key = lambda k: (k not in urgent, orig[k])
+
+        # Kahn's algorithm with priority ordering; processing one node
+        # at a time gives better interleaving than batch-based approaches
+        # since newly-ready urgent nodes are inserted immediately
+        ready = sorted((sn for sn in snodes if not indeg[sn]), key=key)
+        result = []
+        while ready:
+            sn = ready.pop(0)
+            result.extend(gmembers.get(sn, [sn]))
+            for s in succs[sn]:
+                indeg[s] -= 1
+                if not indeg[s]:
+                    insort(ready, s, key=key)
+
+        return result
+
+    def _add_mpi_req(self, req, deps):
+        self.mpi_reqs.append(req)
+        self.mpi_req_deps.append(deps)
+
+    def _group(self, kerns, subs):
+        pass
+
+    def _commit(self):
+        pass
 
     def commit(self):
-        mreqs, mdeps = self.mpi_reqs, self.mpi_req_deps
-
         self.committed = True
-        self.mpi_root_reqs = [r for r, d in zip(mreqs, mdeps) if not d]
+
+        # Topologically sort all pending kernels
+        sorted_kerns = self._topo_sort()
+        kern_pos = {k: i for i, k in enumerate(sorted_kerns)}
+
+        # Partition MPI requests into root receives and dep-gated sends
+        self.mpi_root_reqs = []
+        mpi_at = defaultdict(list)
+        for req, deps in self._pmpi:
+            if deps:
+                mpi_at[max(kern_pos[d] for d in deps)].append((req, deps))
+            else:
+                self.mpi_root_reqs.append(req)
+                self._add_mpi_req(req, deps)
+
+        # Replay kernel adds in sorted order, interleaving MPI sends
+        for i, kern in enumerate(sorted_kerns):
+            ad = [d for d in self._alldeps(kern) if d in self.knodes]
+            self.knodes[kern] = kern.add_to_graph(
+                self, [self.knodes[d] for d in ad]
+            )
+            self.depk.update(ad)
+
+            # Insert MPI sends whose deps are now satisfied
+            for req, deps in mpi_at.get(i, []):
+                self._add_mpi_req(req, deps)
+
+        # Replay groups (after all kernels are added)
+        for kerns, subs in self._pgroups:
+            self._group(kerns, subs)
+
+        self._commit()
 
     def run(self, *args):
         pass

@@ -1,26 +1,26 @@
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import (BaseSolnPlugin, DatasetAppender,
-                               init_csv, open_hdf5_a)
+from pyfr.plugins.base import (BackendMixin, BaseSolnPlugin, DatasetAppender,
+                               PublishMixin, init_csv, open_hdf5_a)
 from pyfr.quadrules.surface import SurfaceIntegrator
 
 
 class FluidForceIntegrator(SurfaceIntegrator):
     def __init__(self, cfg, cfgsect, system, bcname, morigin):
-        surf_list = system.mesh.bcon.get(bcname, [])
-        surf_list = [(etype, fidx, eidxs) for etype, eidxs, fidx in surf_list]
+        con = system.mesh.bcon.get(bcname)
 
-        super().__init__(cfg, cfgsect, system.ele_map, surf_list, flags='s')
+        super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
-        if surf_list and morigin is not None:
-            self.rfpts = {k: loc - morigin for k, loc in self.locs.items()}
+        if self.locs and morigin is not None:
+            self.rfpts = {k: loc - morigin[:, None, None]
+                         for k, loc in self.locs.items()}
 
 
-class FluidForcePlugin(BaseSolnPlugin):
+class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
     name = 'fluidforce'
-    systems = ['ac-euler', 'ac-navier-stokes', 'euler', 'navier-stokes']
-    formulations = ['dual', 'std']
+    systems = ['euler', 'navier-stokes']
     dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix):
@@ -28,23 +28,14 @@ class FluidForcePlugin(BaseSolnPlugin):
 
         comm, rank, root = get_comm_rank_root()
 
-        # Output frequency
-        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
-
         # Check if we need to compute viscous force
         self._viscous = 'navier-stokes' in intg.system.name
-
-        # Check if the system is incompressible
-        self._ac = intg.system.name.startswith('ac')
 
         # Viscous correction
         self._viscorr = self.cfg.get('solver', 'viscosity-correction', 'none')
 
         # Constant variables
         self._constants = self.cfg.items_as('constants', float)
-
-        # Underlying elements class
-        self.elementscls = intg.system.elementscls
 
         # Moments
         morigin = None
@@ -74,6 +65,16 @@ class FluidForcePlugin(BaseSolnPlugin):
         # Set interpolation matrices and quadrature weights
         self.ff_int = FluidForceIntegrator(self.cfg, cfgsect, intg.system,
                                            suffix, morigin)
+
+        # Initialise backend infrastructure
+        self._init_backend(intg)
+
+        # Number of output components per element
+        ncomp = self.ndims + self._mcomp
+        self._nout = (2 if self._viscous else 1)*ncomp
+
+        # Initialise GPU kernel infrastructure
+        self._init_kernels(intg)
 
     @property
     def _header(self):
@@ -116,86 +117,94 @@ class FluidForcePlugin(BaseSolnPlugin):
     def _write_hdf5(self, t, forces):
         self._forces(np.concatenate(([t], forces.ravel())))
 
-    def __call__(self, intg):
-        # Return if no output is due
-        if intg.nacptsteps % self.nsteps:
-            return
+    def _init_kernels(self, intg):
+        backend = self.backend
 
+        # Register our kernel template
+        backend.pointwise.register('pyfr.plugins.kernels.fluidforce')
+
+        # Precompute per-face data and upload to device
+        fi = self.ff_int
+        self._efaces = []
+
+        for (etype, fidx), m0 in fi.m0.items():
+            nfpts, nupts = m0.shape
+            eidxs = fi.eidxs[etype, fidx]
+            neles = len(eidxs)
+
+            # Weighted normals: qwts * norms → (nfpts, ndims, neles)
+            qwts, norms = fi.qwts[etype, fidx], fi.norms[etype, fidx]
+            wnorms = (qwts[None, :, None]*norms).transpose(1, 0, 2)
+
+            # Moment arm positions at face points
+            if self._mcomp:
+                rfpts = fi.rfpts[etype, fidx].transpose(1, 0, 2)
+                rfpts_mat = backend.const_matrix(rfpts, tags={'align'})
+            else:
+                rfpts_mat = None
+
+            self._efaces.append({
+                'idx': self._etype_map[etype],
+                'eidxs': eidxs,
+                'm0': m0, 'nupts': nupts, 'nfpts': nfpts,
+                'wnorms': backend.const_matrix(wnorms, tags={'align'}),
+                'rfpts': rfpts_mat,
+                'pf': backend.matrix((self._nout, neles), tags={'align'}),
+            })
+
+    @memoize
+    def _get_kerns(self, uidx):
+        kerns = []
+
+        for ef in self._efaces:
+            eidxs = ef['eidxs']
+            nupts, nfpts = ef['nupts'], ef['nfpts']
+
+            tplargs = {
+                'ndims': self.ndims, 'nvars': self.nvars,
+                'nupts': nupts, 'nfpts': nfpts, 'nout': self._nout,
+                'viscous': self._viscous, 'visc_corr': self._viscorr,
+                'mcomp': self._mcomp, 'c': self._constants,
+                'm0': ef['m0'],
+            }
+
+            # Solution view into scal_upts[uidx]
+            u = self._make_view(self._ele_banks[ef['idx']][uidx], eidxs,
+                                (nupts, self.nvars))
+
+            # Gradient view (bank-independent)
+            if self._viscous:
+                gradu = self._make_view(self._grad_banks[ef['idx']], eidxs,
+                                        (self.ndims*nupts, self.nvars))
+            else:
+                gradu = None
+
+            kerns.append(self.backend.pointwise.fluidforce(
+                tplargs=tplargs, dims=[len(eidxs)],
+                u=u, gradu=gradu, wnorms=ef['wnorms'],
+                rfpts=ef['rfpts'], pf=ef['pf']
+            ))
+
+        return kerns
+
+    def __call__(self, intg):
         # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        ndims, nvars, mcomp = self.ndims, self.nvars, self._mcomp
-        pidx = 0 if self._ac else -1
-
-        # Solution matrices indexed by element type
-        solns = dict(zip(intg.system.ele_types, intg.soln))
-
-        # Corrected solution gradients indexed by element type
+        # Compute gradients on device if viscous
         if self._viscous:
-            grads = dict(zip(intg.system.ele_types, intg.grad_soln))
+            intg.compute_grads()
 
-        # Force and moment vectors
-        fm = np.zeros((2 if self._viscous else 1, ndims + mcomp))
+        # Launch all force kernels
+        self.backend.run_kernels(self._get_kerns(intg.idxcurr))
 
-        for (etype, fidx), m0 in self.ff_int.m0.items():
-            nfpts, nupts = m0.shape
+        # Collect per-element results and sum
+        fm = np.zeros(self._nout)
 
-            # Extract the relevant elements from the solution
-            uupts = solns[etype][..., self.ff_int.eidxs[etype, fidx]]
+        for ef in self._efaces:
+            fm += ef['pf'].get().sum(axis=-1)
 
-            # Interpolate to the face
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nvars, -1)
-            ufpts = ufpts.swapaxes(0, 1)
-
-            # Compute the pressure
-            p = self.elementscls.con_to_pri(ufpts, self.cfg)[pidx]
-
-            # Get the quadrature weights and normal vectors
-            qwts = self.ff_int.qwts[etype, fidx]
-            norms = self.ff_int.norms[etype, fidx]
-
-            # Do the quadrature
-            fm[0, :ndims] += np.einsum('i...,ij,jik', qwts, p, norms)
-
-            if self._viscous:
-                # Corrected gradients at solution points
-                duupts = grads[etype][..., self.ff_int.eidxs[etype, fidx]]
-                duupts = duupts.reshape(ndims, nupts, -1)
-
-                # Interpolate gradient to flux points
-                dufpts = np.array([m0 @ du for du in duupts])
-                dufpts = dufpts.reshape(ndims, nfpts, nvars, -1)
-                dufpts = dufpts.swapaxes(1, 2)
-
-                # Viscous stress
-                if self._ac:
-                    vis = self.ac_stress_tensor(dufpts)
-                else:
-                    vis = self.stress_tensor(ufpts, dufpts)
-
-                # Do the quadrature
-                fm[1, :ndims] += np.einsum('i...,klij,jil', qwts, vis, norms)
-
-            if self._mcomp:
-                # Get the flux points positions relative to the moment origin
-                rfpts = self.ff_int.rfpts[etype, fidx]
-
-                # Do the cross product with the normal vectors
-                rcn = np.atleast_3d(np.cross(rfpts, norms))
-
-                # Pressure force moments
-                fm[0, ndims:] += np.einsum('i...,ij,jik->k', qwts, p, rcn)
-
-                if self._viscous:
-                    # Normal viscous force at each flux point
-                    viscf = np.einsum('ijkl,lkj->lki', vis, norms)
-
-                    # Normal viscous force moments at each flux point
-                    rcf = np.atleast_3d(np.cross(rfpts, viscf))
-
-                    # Do the quadrature
-                    fm[1, ndims:] += np.einsum('i,jik->k', qwts, rcf)
+        fm = fm.reshape(-1, self.ndims + self._mcomp)
 
         # Reduce and output if we're the root rank
         if rank != root:
@@ -205,33 +214,11 @@ class FluidForcePlugin(BaseSolnPlugin):
 
             self._write(intg.tcurr, fm)
 
-    def stress_tensor(self, u, du):
-        c = self._constants
+            # Publish force components
+            pn = ['px', 'py', 'pz'][:self.ndims]
+            pvals = dict(zip(pn, fm[0]))
+            if self._viscous:
+                vn = ['vx', 'vy', 'vz'][:self.ndims]
+                pvals.update(zip(vn, fm[-1]))
 
-        # Density, energy
-        rho, E = u[0], u[-1]
-
-        # Gradient of density and momentum
-        gradrho, gradrhou = du[:, 0], du[:, 1:-1]
-
-        # Gradient of velocity
-        gradu = (gradrhou - gradrho[:, None]*u[None, 1:-1]/rho) / rho
-
-        # Bulk tensor
-        bulk = np.eye(self.ndims)[:, :, None, None]*np.trace(gradu)
-
-        # Viscosity
-        mu = c['mu']
-
-        if self._viscorr == 'sutherland':
-            cpT = c['gamma']*(E/rho - 0.5*np.sum(u[1:-1]**2, axis=0)/rho**2)
-            Trat = cpT/c['cpTref']
-            mu *= (c['cpTref'] + c['cpTs'])*Trat**1.5 / (cpT + c['cpTs'])
-
-        return -mu*(gradu + gradu.swapaxes(0, 1) - 2/3*bulk)
-
-    def ac_stress_tensor(self, du):
-        # Gradient of velocity and kinematic viscosity
-        gradu, nu = du[:, 1:], self._constants['nu']
-
-        return -nu*(gradu + gradu.swapaxes(0, 1))
+            self._publish(intg, **pvals)

@@ -1,5 +1,3 @@
-.. highlight:: none
-
 ####
 PyFR
 ####
@@ -11,10 +9,9 @@ PyFR |release| is an open-source flow solver that uses the high-order
 flux reconstruction method. For more information on the PyFR project
 visit our website_, or to ask a question visit our forum_.
 
-Contents:
-
 .. toctree::
    :maxdepth: 3
+   :caption: Contents
 
    installation
    user_guide

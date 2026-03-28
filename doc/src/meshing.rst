@@ -1,11 +1,9 @@
-.. highlight:: none
-
 *******
 Meshing
 *******
 
 Importing Meshes
-^^^^^^^^^^^^^^^^
+================
 
 PyFR is capable of importing meshes in the Gmsh .msh format;
 specifically versions 2.2 and 4.1 of the ASCII format with the latter

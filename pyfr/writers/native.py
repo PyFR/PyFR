@@ -16,7 +16,7 @@ from pyfr.ctypesutil import get_libc_function
 from pyfr.mpiutil import Gatherer, autofree, get_comm_rank_root, mpi, scal_coll
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import BaseShape
-from pyfr.util import file_path_gen, mv, subclass_where
+from pyfr.util import file_path_gen, first, mv, subclass_where
 
 
 class NativeWriter:
@@ -50,7 +50,7 @@ class NativeWriter:
 
         # Temporary file name
         if rank == root:
-            tname = os.path.join(basedir, f'pyfr-{uuid.uuid4()}{extn}')
+            tname = basedir / f'pyfr-{uuid.uuid4()}{extn}'
         else:
             tname = None
 
@@ -76,7 +76,8 @@ class NativeWriter:
                         fpdtype=None):
         _ftype = fpdtype or intg.backend.fpdtype
         return NativeWriter(intg.system.mesh, intg.cfg, _ftype, basedir,
-                            basename, prefix=prefix, isrestart=intg.isrestart)
+                            basename, prefix, extn=extn,
+                            isrestart=intg.isrestart)
 
     @staticmethod
     def _get_fstype(basedir):
@@ -133,11 +134,13 @@ class NativeWriter:
             except OSError:
                 pass
 
-    def set_shapes_eidxs(self, shapes, eidxs):
+    def set_shapes_eidxs(self, shapes, eidxs, field_groups,
+                         aux_fields=None, *, ndims=0):
         comm, rank, root = get_comm_rank_root()
 
         # Prepare the element information
         self._einfo = {}
+        self._futures = {}
         for etype, ecount in self._ecounts.items():
             # See if any ranks want to write elements of this type
             eshape = comm.allgather(shapes.get(etype))
@@ -145,10 +148,6 @@ class NativeWriter:
                 # Create a gatherer for this element type
                 idxs = eidxs.get(etype, [])
                 gatherer = Gatherer(comm, idxs)
-
-                # Exchange counts and offsets
-                noff = comm.allgather((gatherer.cnt, gatherer.off))
-                noff = {i: j for i, j in enumerate(noff) if j}
 
                 # Determine the final shape of the element array
                 shape = (gatherer.tot, *next(es for es in eshape if es))
@@ -164,8 +163,35 @@ class NativeWriter:
                 rname = self.cfg.get(f'solver-elements-{etype}', 'soln-pts')
                 upts = get_quadrule(etype, rname, shape[2]).pts
 
+                # Build nested compound dtype for this element type
+                aux = aux_fields.get(etype, []) if aux_fields else []
+                dtype = self._build_dtype(field_groups, shape[2], ndims,
+                                          aux)
+
                 ek = f'p{order}-{etype}'
-                self._einfo[ek] = (gatherer, subset, shape, etype, noff, upts)
+                self._einfo[ek] = (gatherer, subset, etype, dtype,
+                                   shape[0], upts)
+
+                # Create a persistent future for this element type
+                self._futures[ek] = gatherer.future((), dtype)
+
+    def _build_dtype(self, field_groups, nupts, ndims, aux):
+        groups = []
+
+        # Data field groups
+        for gname, fnames in field_groups.items():
+            fshape = (ndims, nupts) if gname == 'grad' else (nupts,)
+            groups.append((gname, [(f, self.fpdtype, fshape)
+                                   for f in fnames]))
+
+        # Auxiliary group
+        afields = [('part-id', np.int64)]
+        for name, shape, dtype in aux:
+            dtype = dtype or self.fpdtype
+            afields.append((name, dtype, shape) if shape else (name, dtype))
+        groups.append(('aux', afields))
+
+        return np.dtype(groups)
 
     def probe(self):
         if self._awriter is not None and self._awriter.test():
@@ -176,7 +202,24 @@ class NativeWriter:
             self._awriter.wait()
             self._awriter = None
 
-    def write(self, data, tcurr, metadata=None, timeout=0, callback=None):
+    def _pack_element_data(self, data, aux, dtype, rank):
+        neles = len(first(data.values()))
+        arr = np.empty(neles, dtype=dtype)
+
+        # Data field groups
+        for gname, gdata in data.items():
+            for fname, fdata in zip(dtype[gname].names, gdata.swapaxes(0, 1)):
+                arr[gname][fname] = fdata
+
+        # Auxiliary group
+        arr['aux']['part-id'] = rank
+        for name, adata in aux.items():
+            arr['aux'][name] = adata
+
+        return arr
+
+    def write(self, data, tcurr, metadata=None, timeout=0, callback=None,
+              aux=None):
         async_ = bool(timeout)
         comm, rank, root = get_comm_rank_root()
 
@@ -189,25 +232,31 @@ class NativeWriter:
             if rank != root:
                 raise ValueError('Metadata must be written by the root rank')
 
-            metadata = dict(metadata, creator=f'pyfr {__version__}', version=1)
+            metadata = dict(metadata, creator=f'pyfr {__version__}', version=2)
 
             # Convert all strings to arrays
             for k, v in metadata.items():
                 if isinstance(v, str):
                     metadata[k] = np.array(v, dtype='S')
 
-        # Gather the solution data into contiguous arrays
-        gdata = {}
-        for ek, (gatherer, subset, shape, etype, *_) in self._einfo.items():
-            if etype in data:
-                dset = data[etype]
-            else:
-                dset = np.empty((0, *shape[1:]), dtype=self.fpdtype)
+        # Pack and gather the solution data into contiguous arrays
+        futures = {}
+        for ek, (_, _, etype, dtype, *_) in self._einfo.items():
+            soln = data.get(etype)
 
-            gdata[ek] = gatherer(dset)
+            if soln is not None:
+                eaux = aux.get(etype, {}) if aux else {}
+                arr = self._pack_element_data(soln, eaux, dtype, rank)
+            else:
+                arr = np.empty(0, dtype=dtype)
+
+            futures[ek] = self._futures[ek].start(arr)
 
         # Prepare the output file
         doffs = self._prepare_file(self.tname, metadata)
+
+        # Wait for gathers to complete
+        gdata = {ek: f.wait() for ek, f in futures.items()}
 
         # Obtain the relevant low-level writer function
         wfn = self._get_writefn(self.tname, gdata, doffs)
@@ -239,7 +288,6 @@ class NativeWriter:
     def _iter_bufs(self, data, callback):
         for ek, (gatherer, subset, *_) in self._einfo.items():
             callback(ek, data[ek], gatherer.off)
-            callback(f'{ek}-parts', gatherer.rsrc, gatherer.off)
 
             # If the element has been subset then write the index data
             if subset:
@@ -344,16 +392,13 @@ class NativeWriter:
 
                 # Create the datasets
                 g = f.create_group(self.prefix)
-                for ek, (gatherer, subset, shape, *_) in self._einfo.items():
-                    g.create_dataset(ek, shape, self.fpdtype)
-                    g.create_dataset(f'{ek}-parts', shape[0:1], np.int32)
+                for ek, einfo in self._einfo.items():
+                    _, subset, _, dtype, neles, upts = einfo
+                    g.create_dataset(ek, (neles,), dtype)
+                    g[ek].attrs['pts'] = upts
 
                     if subset:
-                        g.create_dataset(f'{ek}-idxs', shape[0:1], np.int64)
-
-                # Add each elements nodal points as an attribute
-                for ek, (*_, upts) in self._einfo.items():
-                    g[ek].attrs['pts'] = upts
+                        g.create_dataset(f'{ek}-idxs', (neles,), np.int64)
 
                 # Obtain the offsets of these datasets
                 for k, v in g.items():
@@ -372,13 +417,13 @@ class _AsyncCompleter:
         self.callback = callback
 
         self.done = False
-        self.start = time.time()
+        self.start = time.monotonic()
 
     def _test_with_timeout(self, timeout):
         comm, rank, root = get_comm_rank_root()
 
         if not self.done:
-            if time.time() - self.start >= timeout:
+            if time.monotonic() - self.start >= timeout:
                 self.th.join()
 
             self.done = not self.th.is_alive()

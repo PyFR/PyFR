@@ -1,24 +1,35 @@
+from dataclasses import dataclass
 from functools import cached_property, wraps
 
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.nputil import fuzzysort, npeval
+from pyfr.nputil import batched_fuzzysort, npeval
 from pyfr.quadrules import get_quadrule
 from pyfr.shapes import proj_l2
 
 
+@dataclass
+class ExportableField:
+    name: str
+    shape: tuple
+    getter: callable
+    dtype: type = None
+
+
 def inters_map(meth):
     @wraps(meth)
-    def newmeth(self, eidx, fidx):
+    def newmeth(self, eidxs, fidx):
         nfp = self.nfacefpts[fidx]
-        cmap = (eidx,)*nfp
+        n = len(eidxs)
+        cmap = np.repeat(eidxs, nfp)
 
-        match meth(self, eidx, fidx):
+        match meth(self, eidxs, fidx):
             case [mid, rmap]:
-                return (mid,)*nfp, rmap, cmap
+                return np.full(n*nfp, mid), rmap.ravel(), cmap
             case [mid, rmap, lda]:
-                return (mid,)*nfp, rmap, cmap, (lda,)*nfp
+                return (np.full(n*nfp, mid), rmap.ravel(),
+                        cmap, np.full(n*nfp, lda))
     return newmeth
 
 
@@ -41,6 +52,9 @@ class BaseElements:
         # Kernels we provide
         self.kernels = {}
 
+        # Exportable fields
+        self.export_fields = []
+
         # Check the dimensionality of the problem
         if ndims != basiscls.ndims:
             raise ValueError('Invalid element matrix dimensions')
@@ -50,6 +64,7 @@ class BaseElements:
 
         # Instantiate the basis class
         self.basis = basis = basiscls(nspts, cfg)
+        self.name = basis.name
 
         # See what kind of projection the basis is using
         self.antialias = basis.antialias
@@ -62,11 +77,11 @@ class BaseElements:
         self.nmpts = basis.nmpts
 
         if self.basis.fpts_in_upts:
-            self.get_vect_fpts_for_inter = self._get_vect_upts_for_inter
-            self.get_comm_fpts_for_inter = self._get_comm_fpts_for_inter
+            self.get_vect_fpts_for_inters = self._get_vect_upts_for_inters
+            self.get_comm_fpts_for_inters = self._get_comm_fpts_for_inters
         else:
-            self.get_vect_fpts_for_inter = self._get_vect_fpts_for_inter
-            self.get_comm_fpts_for_inter = self._get_vect_fpts_for_inter
+            self.get_vect_fpts_for_inters = self._get_vect_fpts_for_inters
+            self.get_comm_fpts_for_inters = self._get_vect_fpts_for_inters
 
     def set_ics_from_cfg(self):
         # Bring simulation constants into scope
@@ -101,11 +116,13 @@ class BaseElements:
                for dv in self.privars]
 
         # Allocate
-        self.scal_upts = np.empty((self.nupts, self.nvars, self.neles))
+        scal_upts = np.empty((self.nupts, self.nvars, self.neles))
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
-            self.scal_upts[:, i, :] = m8 @ v if m8 is not None else v
+            scal_upts[:, i, :] = m8 @ v if m8 is not None else v
+
+        return scal_upts
 
     def set_ics_from_soln(self, solnmat, solncfg):
         # Recreate the existing solution basis
@@ -118,8 +135,8 @@ class BaseElements:
         nupts, neles, nvars = self.nupts, self.neles, self.nvars
 
         # Apply and reshape
-        self.scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
-        self.scal_upts = self.scal_upts.reshape(nupts, nvars, neles)
+        scal_upts = interp @ solnmat.reshape(solnb.nupts, -1)
+        return scal_upts.reshape(nupts, nvars, neles)
 
     @cached_property
     def plocfpts(self):
@@ -138,18 +155,24 @@ class BaseElements:
                                tags={'align'})
 
     @cached_property
-    def _srtd_face_fpts(self):
-        plocfpts = self.plocfpts.transpose(1, 2, 0)
+    def srtd_face_fpts(self):
+        plocfpts = self.plocfpts
+        sffpts = []
 
-        return [[np.array(fuzzysort(pts.tolist(), ffpts)) for pts in plocfpts]
-                for ffpts in self.basis.facefpts]
+        for ffpts in self.basis.facefpts:
+            ffpts = np.asarray(ffpts)
+            coords = plocfpts[ffpts].transpose(1, 2, 0)
+            perm = batched_fuzzysort(coords)
+            sffpts.append(ffpts[perm])
+
+        return sffpts
 
     def _scratch_bufs(self):
         pass
 
     @property
-    def _mesh_regions(self):
-        off = self._linoff
+    def mesh_regions(self):
+        off = self.linoff
 
         # No curved elements
         if off == 0:
@@ -165,7 +188,7 @@ class BaseElements:
         if mat is None:
             return None
 
-        off = self._linoff
+        off = self.linoff
 
         # Handle stacked matrices
         if len(mat.ioshape) >= 3:
@@ -184,20 +207,20 @@ class BaseElements:
         klist = list(kseq)
 
         if len(klist) > 1:
-            return self._be.unordered_meta_kernel(klist, [self._linoff])
+            return self._be.unordered_meta_kernel(klist, [self.linoff])
         else:
             return klist[0]
 
-    def set_backend(self, backend, nscalupts, nonce, linoff):
+    def set_backend(self, backend, nonce, linoff):
         self._be = backend
 
         # If we are doing gradient fusion
         self.grad_fusion = not (self._be.blocks or 'flux' in self.antialias)
 
         if self.basis.order >= 2:
-            self._linoff = linoff - linoff % -backend.csubsz
+            self.linoff = linoff - linoff % -backend.csubsz
         else:
-            self._linoff = self.neles
+            self.linoff = self.neles
 
         # Sizes
         ndims, nvars, neles = self.ndims, self.nvars, self.neles
@@ -236,18 +259,13 @@ class BaseElements:
         elif hasattr(self, '_vect_upts'):
             self._grad_upts = self._vect_upts
 
-        # Allocate the storage required by the time integrator
-        self.scal_upts = [backend.matrix(self.scal_upts.shape,
-                                         self.scal_upts, tags={'align'})
-                          for i in range(nscalupts)]
+        self.scal_upts = []
 
-        # Find/allocate space for a solution-sized scalar
-        tags = self.scal_upts[0].tags
-        nbytes = self.scal_upts[0].nbytes
-        ioshape = self.scal_upts[0].ioshape
-        aliases = next((m for m in abufs if m.nbytes >= nbytes), None)
-        self._scal_upts_temp = backend.matrix(ioshape, aliases=aliases,
-                                              tags=tags)
+    def alloc_bank(self, extent, ic=None):
+        shape = (self.nupts, self.nvars, self.neles)
+        m = self._be.matrix(shape, ic, extent=extent, tags={'align'})
+        self.scal_upts.append(m)
+        return m
 
     @memoize
     def opmat(self, expr):
@@ -281,7 +299,7 @@ class BaseElements:
 
     @memoize
     def curved_smat_at(self, name):
-        smat = self.smat_at_np(name)[..., :self._linoff]
+        smat = self.smat_at_np(name)[..., :self.linoff]
         return self._be.const_matrix(smat, tags={'align'})
 
     @memoize
@@ -421,29 +439,27 @@ class BaseElements:
         fpts_idx = self.basis.facefpts[fidx]
         return self._pnorm_fpts[fpts_idx, eidx]
 
-    def get_pnorms_for_inter(self, eidx, fidx):
-        fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self._pnorm_fpts[fpts_idx, eidx]
+    def get_pnorms_for_inters(self, eidxs, fidx):
+        fpts_idx = self.srtd_face_fpts[fidx][eidxs]
+        pn = self._pnorm_fpts[fpts_idx, eidxs[:, None]]
+        return pn.reshape(-1, self.ndims),
 
     @inters_map
-    def get_scal_fpts_for_inter(self, eidx, fidx):
-        return self._scal_fpts.mid, self._srtd_face_fpts[fidx][eidx]
-
-    @inters_map
-    def _get_vect_fpts_for_inter(self, eidx, fidx):
-        rmap = self._srtd_face_fpts[fidx][eidx]
+    def _get_vect_fpts_for_inters(self, eidxs, fidx):
+        rmap = self.srtd_face_fpts[fidx][eidxs]
         return self._vect_fpts.mid, rmap, self.nfpts
 
     @inters_map
-    def _get_vect_upts_for_inter(self, eidx, fidx):
-        rmap = self._srtd_face_fpts[fidx][eidx]
+    def _get_vect_upts_for_inters(self, eidxs, fidx):
+        rmap = self.srtd_face_fpts[fidx][eidxs]
         fmap = self.basis.fpts_map_upts[rmap]
         return self._vect_upts.mid, fmap, self.nupts
 
     @inters_map
-    def _get_comm_fpts_for_inter(self, eidx, fidx):
-        return self._comm_fpts.mid, self._srtd_face_fpts[fidx][eidx]
+    def _get_comm_fpts_for_inters(self, eidxs, fidx):
+        return self._comm_fpts.mid, self.srtd_face_fpts[fidx][eidxs]
 
-    def get_ploc_for_inter(self, eidx, fidx):
-        fpts_idx = self._srtd_face_fpts[fidx][eidx]
-        return self.plocfpts[fpts_idx, eidx]
+    def get_ploc_for_inters(self, eidxs, fidx):
+        fpts_idx = self.srtd_face_fpts[fidx][eidxs]
+        ploc = self.plocfpts[fpts_idx, eidxs[:, None]]
+        return ploc.reshape(-1, self.ndims),

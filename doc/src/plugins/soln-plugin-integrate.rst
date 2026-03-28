@@ -34,7 +34,7 @@ Integrate quantities over the compuational domain. Parameterised with:
 
 #. ``region`` --- region to integrate, specified as either the
    entire domain using ``*`` or a combination of the geometric shapes
-   specified in :ref:`regions`:
+   specified in :ref:`user_guide:regions`:
 
     ``*`` | ``shape(args, ...)``
 
@@ -45,7 +45,17 @@ Integrate quantities over the compuational domain. Parameterised with:
 
     *string*
 
-Example::
+#. ``publish-as`` --- expose computed integral values under a name
+   for use by triggers (optional):
+
+    *string*
+
+    Published fields correspond to the ``int-`` names defined in the
+    section.
+
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-integrate]
     nsteps = 50

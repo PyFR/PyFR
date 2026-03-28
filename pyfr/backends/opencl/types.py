@@ -30,21 +30,21 @@ class OpenCLMatrixBase(_OpenCLMatrixCommon, base.MatrixBase):
         del self._initval
 
     def _get(self):
-        # Allocate an empty buffer
-        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
+        # Get a pinned bounce buffer from the backend
+        buf = self.backend.xfer_buf((self.nrow, self.leaddim), self.dtype)
 
-        # Copy
+        # Copy from device
         self.backend.queue.barrier()
         self.backend.cl.memcpy(self.backend.queue, buf, self.data, self.nbytes,
                                blocking=True)
 
-        # Unpack
-        return self._unpack(buf)
+        # Unpack and ensure we return owned data (not a view of the buffer)
+        return np.require(self._unpack(buf), requirements='O')
 
     def _set(self, ary):
-        buf = self._pack(ary)
-
-        # Copy
+        # Pack into a pinned bounce buffer and copy to device
+        buf = self.backend.xfer_buf((self.nrow, self.leaddim), self.dtype)
+        self._pack(ary, out=buf)
         self.backend.queue.barrier()
         self.backend.cl.memcpy(self.backend.queue, self.data, buf, self.nbytes,
                                blocking=True)
@@ -67,10 +67,8 @@ class OpenCLXchgView(base.XchgView): pass
 
 
 class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
-    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
-                 tags):
-        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
-                         tags)
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
+        super().__init__(backend, dtype, ioshape, initval, extent, tags)
 
         # Allocate an empty buffer on the host for MPI to send/recv from
         shape = (self.nrow, self.ncol)
@@ -78,11 +76,7 @@ class OpenCLXchgMatrix(OpenCLMatrix, base.XchgMatrix):
 
 
 class OpenCLGraph(base.Graph):
-    needs_pdeps = True
-
-    def commit(self):
-        super().commit()
-
+    def _commit(self):
         # Map from kernels to event table locations
         evtidxs = {}
 
@@ -93,7 +87,7 @@ class OpenCLGraph(base.Graph):
             evtidxs[k] = i
 
             # Resolve the event indices of kernels we depend on
-            wait_evts = [evtidxs[dep] for dep in self.kdeps[k]] or None
+            wait_evts = [evtidxs[dep] for dep in self._alldeps(k)] or None
 
             klist.append((k, wait_evts, k in self.depk))
 

@@ -33,7 +33,7 @@ class DottedTemplateLookup(TemplateLookup):
         # Attempt to load the template
         src = pkgutil.get_data(pkg, f'{basename}.mako')
         if not src:
-            raise RuntimeError(f'Template "{name}" not found')
+            raise RuntimeError(f'Template {name!r} not found')
 
         # Subclass Template to support implicit arguments
         class DefaultTemplate(Template):

@@ -6,7 +6,7 @@ Parameterises the solver with
 
 1. ``system`` --- governing system:
 
-    ``euler`` | ``navier-stokes`` | ``ac-euler`` | ``ac-navier-stokes``
+    ``euler`` | ``navier-stokes``
 
     where
 
@@ -34,7 +34,9 @@ Parameterises the solver with
 
     ``flux`` | ``surf-flux`` | ``flux, surf-flux``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver]
     system = navier-stokes

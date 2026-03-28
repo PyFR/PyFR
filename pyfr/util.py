@@ -5,8 +5,19 @@ import os
 import pickle
 import re
 import shutil
+import sys
 
 from pyfr.ctypesutil import get_libc_function
+
+
+class tty:
+    _active = sys.stdout.isatty()
+    bold = '\033[1m' if _active else ''
+    rev = '\033[7m' if _active else ''
+    green = '\033[32m' if _active else ''
+    red = '\033[31m' if _active else ''
+    cyan = '\033[36m' if _active else ''
+    reset = '\033[0m' if _active else ''
 
 
 class silence:
@@ -126,8 +137,8 @@ def digest(*args, hash='sha256'):
 
 
 def rm(path):
-    if os.path.isfile(path) or os.path.islink(path):
-        os.remove(path)
+    if path.is_file() or path.is_symlink():
+        path.unlink()
     else:
         shutil.rmtree(path)
 
@@ -164,7 +175,7 @@ def file_path_gen(basedir, basename, restore=False):
         t = yield
 
         for n in it.count(ns):
-            t = yield os.path.join(basedir, basename.format(t=t, n=n))
+            t = yield basedir / basename.format(t=t, n=n)
 
     gen = g()
     next(gen)
