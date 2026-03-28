@@ -51,7 +51,7 @@ class HIPBackend(BaseBackend):
         self.alignb = 128
 
         # Take the SoA size to be the warp size of the device
-        self.soasz = int(self.props['warp_size'])
+        self.soasz = self.props['warp_size']
         self.csubsz = self.soasz
 
         # Get the MPI runtime type

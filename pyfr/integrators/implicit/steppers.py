@@ -167,9 +167,9 @@ class TRBDF2Stepper(BaseSDIRKStepper):
     stepper_name = 'trbdf2'
     stepper_order = 2
 
-    _gamma = 2 - 2**0.5  # 2 - sqrt(2) ≈ 0.5858
-    _d = _gamma / 2      # (2 - sqrt(2)) / 2 ≈ 0.2929
-    _w = 2**0.5 / 4      # sqrt(2) / 4 ≈ 0.3536
+    _gamma = 2 - 2**0.5
+    _d = _gamma / 2
+    _w = 2**0.5 / 4
 
     A = [[0, 0, 0],
          [_d, _d, 0],

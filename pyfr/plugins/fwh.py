@@ -27,21 +27,19 @@ class FWHIntegrator(SurfaceIntegrator):
 
         self.surf = {}
         for etype, fidx in self.eidxs:
-            for i, eidx in enumerate(self.eidxs[etype, fidx]):
-                m0 = self.m0[etype, fidx]
-                qwts = self.qwts[etype, fidx]
-                pnorm = self.norms[etype, fidx][i]
-                ploc = self.locs[etype, fidx][i]
+            eidxs = self.eidxs[etype, fidx]
+            m0 = self.m0[etype, fidx]
+            qwts = self.qwts[etype, fidx]
+            norms = self.norms[etype, fidx]
+            locs = self.locs[etype, fidx]
 
-                nds = qwts[:, None]*pnorm.transpose(2, 0, 1)
-                nds = nds.reshape(self.ndims, -1)
-                dist = self._distances(ploc, Minf)
+            nda = (qwts[None, :, None]*norms).reshape(ndims, -1)
+            spts = locs.reshape(ndims, -1).T
+            dist = self._distances(spts, Minf)
 
-                self.surf[etype, fidx] = FWHSurfParams(eidx, m0, nds, *dist)
+            self.surf[etype, fidx] = FWHSurfParams(eidxs, m0, nda, *dist)
 
-    def _distances(self, spts, Minf):
-        surf_pts = spts.transpose(0, 2, 1).reshape(-1, self.ndims)
-
+    def _distances(self, surf_pts, Minf):
         gamma_inv = (1 - Minf**2)**0.5
         gamma = 1 / gamma_inv
 

@@ -16,9 +16,8 @@ class ThroughputLimitMixin:
 
     def _init_tput_limit(self, sect, initsoln):
         self._tput_limit = self.cfg.getbool(sect, 'tput-limit', True)
-        self.dt_update_interval = self.cfg.getint(
-            sect, 'dt-update-interval', 100
-        )
+        self.dt_update_interval = self.cfg.getint(sect, 'dt-update-interval',
+                                                  100)
         self._growth_fact = self.cfg.getfloat(sect, 'growth-fact', 1.2)
 
         self._wtime_window = np.empty(self.dt_update_interval)

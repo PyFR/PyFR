@@ -428,12 +428,13 @@ class Graph:
         # Super-node set: ungrouped kernels + group heads
         snodes = [k for k in self.kdeps if k not in grouped or grouped[k] == k]
 
-        # Build adjacency list and in-degree counts
+        # Build adjacency list and in-degree counts using only hard
+        # dependencies; pseudo-deps are handled via priority ordering
         succs, indeg = defaultdict(list), {}
         for sn in snodes:
             seen = {sn}
             for sk in gmembers.get(sn, [sn]):
-                for d in self._alldeps(sk):
+                for d in self.kdeps.get(sk, []):
                     if (dsn := to_super(d)) not in seen:
                         seen.add(dsn)
                         succs[dsn].append(sn)
@@ -448,7 +449,7 @@ class Graph:
         while stack:
             sn = stack.pop()
             for sk in gmembers.get(sn, [sn]):
-                for d in self._alldeps(sk):
+                for d in self.kdeps.get(sk, []):
                     if (dsn := to_super(d)) not in urgent:
                         urgent.add(dsn)
                         stack.append(dsn)
@@ -509,7 +510,7 @@ class Graph:
 
         # Replay kernel adds in sorted order, interleaving MPI sends
         for i, kern in enumerate(sorted_kerns):
-            ad = list(self._alldeps(kern))
+            ad = [d for d in self._alldeps(kern) if d in self.knodes]
             self.knodes[kern] = kern.add_to_graph(
                 self, [self.knodes[d] for d in ad]
             )

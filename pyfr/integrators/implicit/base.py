@@ -1,5 +1,5 @@
-
-from pyfr.integrators.base import BaseIntegrator, _common_plugin_prop, kernel_getter
+from pyfr.integrators.base import (BaseIntegrator, _common_plugin_prop,
+                                   kernel_getter)
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
 
 
@@ -93,7 +93,8 @@ class BaseImplicitIntegrator(BaseIntegrator):
         self.backend.run_kernels(kerns, wait=True)
 
         # Reduce over element types and ranks and return
-        return scal_coll(comm.Allreduce, sum(float(k.retval[0]) for k in kerns))
+        result = sum(float(k.retval[0]) for k in kerns)
+        return scal_coll(comm.Allreduce, result)
 
     @kernel_getter
     def _get_dot_kerns(self, emats, a, b):

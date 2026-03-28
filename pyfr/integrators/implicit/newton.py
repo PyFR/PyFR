@@ -202,8 +202,7 @@ class NewtonSolver(BaseKrylovSolver):
             # Have the root rank update the tolerance controller
             if rank == root:
                 wall_time = time.perf_counter() - t_start
-                self._tol_controller.update(wall_time, gamma_dt,
-                                            rnorm < tol)
+                self._tol_controller.update(wall_time, gamma_dt, rnorm < tol)
 
             if rnorm < tol or i == self._tol_controller.max_retries:
                 break

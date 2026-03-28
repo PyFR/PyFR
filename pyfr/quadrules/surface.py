@@ -27,7 +27,7 @@ class SurfaceIntegrator:
             self.m0[etype, fidx] = eles.basis.ubasis.nodal_basis_at(ppts)
             self.qwts[etype, fidx] = pwts
             self.eidxs[etype, fidx] = eidxs
-            self.norms[etype, fidx] = pnorm.transpose(1, 0, 2)
+            self.norms[etype, fidx] = pnorm.transpose(2, 0, 1)
             self.locs[etype, fidx] = ploc.transpose(1, 0, 2)
 
     @memoize

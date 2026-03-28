@@ -97,7 +97,7 @@ class ConduitNode:
                                                            value.ctypes.data,
                                                            value.size)
             case _:
-                ValueError('ConduitNode: __setitem__ type not supported')
+                raise ValueError('ConduitNode: __setitem__ type not supported')
 
     def append(self):
         ptr = self.lib.conduit_node_append(self)
@@ -523,7 +523,7 @@ class _AscentRenderer:
 
         # Set file names
         for path, gen in self._image_paths:
-            self._add_scene[path] = gen.send(adapter.tcurr)
+            self._add_scene[path] = str(gen.send(adapter.tcurr))
 
         # Set field expressions
         self._eval_exprs(adapter)

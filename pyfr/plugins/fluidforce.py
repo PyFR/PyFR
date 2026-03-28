@@ -14,7 +14,8 @@ class FluidForceIntegrator(SurfaceIntegrator):
         super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
         if self.locs and morigin is not None:
-            self.rfpts = {k: loc - morigin for k, loc in self.locs.items()}
+            self.rfpts = {k: loc - morigin[:, None, None]
+                          for k, loc in self.locs.items()}
 
 
 class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
@@ -133,22 +134,21 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
 
             # Weighted normals: qwts * norms → (nfpts, ndims, neles)
             qwts, norms = fi.qwts[etype, fidx], fi.norms[etype, fidx]
-            wnorms = (qwts[None, :, None]*norms).transpose(1, 2, 0)
+            wnorms = (qwts[None, :, None]*norms).transpose(1, 0, 2)
 
             # Moment arm positions at face points
             if self._mcomp:
-                rfpts = fi.rfpts[etype, fidx].transpose(1, 2, 0)
+                rfpts = fi.rfpts[etype, fidx].transpose(1, 0, 2)
                 rfpts_mat = backend.const_matrix(rfpts, tags={'align'})
             else:
                 rfpts_mat = None
 
             self._efaces.append({
-                'idx': self._etype_map[etype],
-                'eidxs': eidxs,
-                'm0': m0, 'nupts': nupts, 'nfpts': nfpts,
+                'idx': self._etype_map[etype], 'eidxs': eidxs, 'm0': m0,
+                'nupts': nupts, 'nfpts': nfpts,
                 'wnorms': backend.const_matrix(wnorms, tags={'align'}),
                 'rfpts': rfpts_mat,
-                'pf': backend.matrix((self._nout, neles), tags={'align'}),
+                'pf': backend.matrix((self._nout, neles), tags={'align'})
             })
 
     @memoize
@@ -160,11 +160,10 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
             nupts, nfpts = ef['nupts'], ef['nfpts']
 
             tplargs = {
-                'ndims': self.ndims, 'nvars': self.nvars,
-                'nupts': nupts, 'nfpts': nfpts, 'nout': self._nout,
-                'viscous': self._viscous, 'visc_corr': self._viscorr,
-                'mcomp': self._mcomp, 'c': self._constants,
-                'm0': ef['m0'],
+                'ndims': self.ndims, 'nvars': self.nvars, 'nupts': nupts,
+                'nfpts': nfpts, 'nout': self._nout, 'viscous': self._viscous,
+                'visc_corr': self._viscorr, 'mcomp': self._mcomp,
+                'c': self._constants, 'm0': ef['m0']
             }
 
             # Solution view into scal_upts[uidx]
@@ -179,9 +178,8 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
                 gradu = None
 
             kerns.append(self.backend.pointwise.fluidforce(
-                tplargs=tplargs, dims=[len(eidxs)],
-                u=u, gradu=gradu, wnorms=ef['wnorms'],
-                rfpts=ef['rfpts'], pf=ef['pf']
+                tplargs=tplargs, dims=[len(eidxs)], u=u, gradu=gradu,
+                wnorms=ef['wnorms'], rfpts=ef['rfpts'], pf=ef['pf']
             ))
 
         return kerns
