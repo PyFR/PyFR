@@ -161,7 +161,7 @@ class MassFlowBCMixin:
             norms = self.mf_int.norms[etype, fidx]
 
             # Do the quadrature
-            mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
+            mf += np.einsum('i,ihj,hij', qwts, ufpts, norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
 

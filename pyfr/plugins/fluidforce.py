@@ -14,7 +14,8 @@ class FluidForceIntegrator(SurfaceIntegrator):
         super().__init__(cfg, cfgsect, system.ele_map, con, flags='s')
 
         if self.locs and morigin is not None:
-            self.rfpts = {k: loc - morigin for k, loc in self.locs.items()}
+            self.rfpts = {k: loc - morigin[:, None, None]
+                         for k, loc in self.locs.items()}
 
 
 class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
@@ -133,11 +134,11 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
 
             # Weighted normals: qwts * norms → (nfpts, ndims, neles)
             qwts, norms = fi.qwts[etype, fidx], fi.norms[etype, fidx]
-            wnorms = (qwts[None, :, None]*norms).transpose(1, 2, 0)
+            wnorms = (qwts[None, :, None]*norms).transpose(1, 0, 2)
 
             # Moment arm positions at face points
             if self._mcomp:
-                rfpts = fi.rfpts[etype, fidx].transpose(1, 2, 0)
+                rfpts = fi.rfpts[etype, fidx].transpose(1, 0, 2)
                 rfpts_mat = backend.const_matrix(rfpts, tags={'align'})
             else:
                 rfpts_mat = None

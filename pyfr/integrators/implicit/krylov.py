@@ -3,6 +3,7 @@ from pyfr.cache import memoize
 from pyfr.integrators.base import kernel_getter
 from pyfr.integrators.implicit.base import BaseImplicitIntegrator
 from pyfr.integrators.registers import ScalarRegister
+from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.util import ndrange
 
 
@@ -110,15 +111,21 @@ class BaseKrylovSolver(BaseImplicitIntegrator):
         if self._precond == 'none' or self._precond_computed:
             return
 
+        comm, _, _ = get_comm_rank_root()
+
         eps = self._krylov_eps
         nvars = self.system.nvars
 
         # Default to uniform scaling if not provided
         eps_scales = eps_scales or (1,)*nvars
 
-        # Find max nupts and number of colours
-        max_nupts = max(s[0] for s in self.system.ele_shapes.values())
+        # Determine the maximum upt count across all element types
+        maxnupts = max(s[0] for s in self.system.ele_shapes.values())
+        maxnupts = comm.allreduce(maxnupts, op=mpi.MAX)
+
+        # Determine the number of colours in the mesh
         ncolours = max(c.max() for c in self.system.mesh.colours.values()) + 1
+        ncolours = comm.allreduce(ncolours, op=mpi.MAX)
 
         # Copy u to up (up will be perturbed, u stays untouched)
         self._add(0, up_reg, 1, u_reg)
@@ -131,7 +138,7 @@ class BaseKrylovSolver(BaseImplicitIntegrator):
         prev = [(-1, -1) for _ in kern_info]
 
         for colour in range(ncolours):
-            for i, k in ndrange(max_nupts, nvars):
+            for i, k in ndrange(maxnupts, nvars):
                 cidx = i*nvars + k
 
                 perturb_kerns, extract_kerns = [], []
