@@ -93,6 +93,25 @@ def merge_intervals(ivals, tol=1e-5):
     return mivals
 
 
+class DisjointSet:
+    def __init__(self):
+        self._parent = {}
+
+    def find(self, i):
+        p = self._parent
+        while (pi := p.get(i)) is not None and pi != i:
+            p[i] = i = p.get(pi, pi)
+
+        return i
+
+    def union(self, i, j):
+        if (ri := self.find(i)) != (rj := self.find(j)):
+            self._parent[rj] = ri
+
+    def merges(self):
+        return {i: r for i in self._parent if (r := self.find(i)) != i}
+
+
 def first(v):
     return next(iter(v))
 
