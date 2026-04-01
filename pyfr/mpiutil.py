@@ -113,22 +113,6 @@ def get_start_end_csize(comm, n):
     return min(rank*csize, n), min((rank + 1)*csize, n), csize
 
 
-class AlltoallFuture:
-    def __init__(self, parent, svals, rvals, req, rinv=Ellipsis):
-        self._parent = parent
-        self._svals = svals
-        self._rvals = rvals
-        self._req = req
-        self._rinv = rinv
-
-    def test(self):
-        return self._req.Test()
-
-    def wait(self):
-        self._req.Wait()
-        return self._rvals[self._rinv]
-
-
 class AlltoallMixin:
     @staticmethod
     def _count_to_disp(count):

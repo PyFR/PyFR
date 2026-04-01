@@ -18,11 +18,11 @@ class DtStatsPlugin(BaseSolnPlugin):
 
         # The root rank needs to open the output file(s)
         if rank == root:
-            # Step file: unified format for explicit and implicit
+            # Step file
             header = 'n,t,dt,action,wtime,error'
             self.step_csv = init_csv(self.cfg, cfgsect, header)
 
-            # Stage file: optional, for implicit integrators only
+            # Stage file; optional, for implicit integrators only
             if (intg.formulation == 'implicit' and
                 self.cfg.hasopt(cfgsect, 'stage-file')):
                 header = ('n,stage,newton_iters,krylov_iters,precond_apps,'
@@ -37,10 +37,11 @@ class DtStatsPlugin(BaseSolnPlugin):
                 if self.stage_csv and info.stages:
                     for s in info.stages:
                         self.stage_csv(i, *s)
-                err = info.err if info.err is not None else ''
-                self.step_csv(i, self.tprev, info.dt, info.action,
-                              info.wtime, err)
 
-        # Update step count and time (all ranks)
+                err = info.err or ''
+                self.step_csv(i, self.tprev, info.dt, info.action, info.wtime,
+                              err)
+
+        # Update step count and time
         self.count += len(intg.stepinfo)
         self.tprev = intg.tcurr
