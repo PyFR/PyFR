@@ -22,8 +22,12 @@ def _upgrade_mesh_v1_to_v2(src, dst):
 
     dst['version'] = 2
 
-    # Read element datasets
-    eles = {etype: src[f'eles/{etype}'][:] for etype in src['eles']}
+    # Read element datasets, adding a colour field for the colouring routine
+    eles = {}
+    for etype, edset in src['eles'].items():
+        dtype = np.dtype(edset.dtype.descr + [('colour', np.uint8)])
+        eles[etype] = new = np.empty(len(edset), dtype=dtype)
+        new[list(edset.dtype.names)] = edset[:]
 
     # Compute element colouring
     NodalMeshAssembler.compute_element_colouring(eles, codec)
