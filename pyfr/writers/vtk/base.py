@@ -4,7 +4,6 @@ from pathlib import Path
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.postproc import get_postproc_plugin
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
@@ -583,9 +582,11 @@ class BaseVTKWriter(BaseWriter):
             self.tcurr = None
 
         # Instantiate postproc plugins
+        from pyfr.plugins import get_plugin
+
         cfg = self._pp_cfg or self.cfg
         self.pp_plugins = [
-            get_postproc_plugin(name, self.ndims, cfg, self.type)
+            get_plugin('postproc', name, self.ndims, cfg, self.type)
             for name in self._pp_plugin_names
         ]
 
