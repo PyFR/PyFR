@@ -195,9 +195,9 @@ class NIRFForceIntegrator(SurfaceIntegrator):
 
 class NIRFPlugin(BaseSolverPlugin):
     name = 'nirf'
-    systems = ['euler', 'navier-stokes']
-    formulations = ['dual', 'std']
-    dimensions = [2, 3]
+    systems = 'euler|navier-stokes'
+    formulations = 'dual|std'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
