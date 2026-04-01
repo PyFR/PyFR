@@ -29,8 +29,8 @@ inline void atomic_${op}_fpdtype(${aspace} fpdtype_t* addr, fpdtype_t val)
 inline void atomic_sum_fpdtype(${aspace} fpdtype_t* addr, fpdtype_t val)
 {
     union { float f; uint u; } e, d;
-    e.u = atomic_load_explicit(
-        (${aspace} atomic_uint*) addr, memory_order_relaxed);
+    e.u = atomic_load_explicit((${aspace} atomic_uint*) addr,
+                               memory_order_relaxed);
     do {
         d.f = e.f + val;
     } while (!atomic_compare_exchange_weak_explicit(

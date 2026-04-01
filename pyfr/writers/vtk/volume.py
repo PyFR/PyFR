@@ -28,6 +28,7 @@ class VTKVolumeWriter(BaseVTKWriter):
     def _opmats(self, etype, cfg):
         # Shape
         shapecls = subclass_where(BaseShape, name=etype)
+
         # Sub divison points inside of a standard element
         svpts = shapecls.std_ele(self.etypes_div[etype])
         nsvpts = len(svpts)

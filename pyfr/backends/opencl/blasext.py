@@ -56,8 +56,8 @@ class OpenCLBlasExtKernels(BaseBlasExtKernels, OpenCLKernelProvider):
 
         class ZeroKernel(OpenCLKernel):
             def run(self, queue, wait_for=None, ret_evt=False):
-                return cl.zero(m, m.nbytes, queue,
-                               wait_for=wait_for, ret_evt=ret_evt)
+                return cl.zero(m, m.nbytes, queue, wait_for=wait_for,
+                               ret_evt=ret_evt)
 
         return ZeroKernel(mats=[m])
 

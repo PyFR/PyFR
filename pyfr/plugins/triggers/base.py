@@ -15,7 +15,6 @@ _cmp_ops = {
 }
 
 
-
 class BaseTriggerSource:
     name = None
     collective = False

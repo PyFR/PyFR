@@ -96,6 +96,7 @@ class HIPBlasExtKernels(BaseBlasExtKernels, HIPKernelProvider):
         init_host.fill(tplargs['init_val'])
 
         # Add backend-specific template arguments
+        tplargs['blocksz'] = block[0]
         tplargs['ncola'] = ncola
 
         # Get the kernel template
