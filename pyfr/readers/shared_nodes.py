@@ -3,7 +3,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from pyfr.mpiutil import AlltoallMixin, get_comm_rank_root
+from pyfr.mpiutil import (AlltoallMixin, DistributedDirectory,
+                          get_comm_rank_root)
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 
@@ -64,37 +65,17 @@ class SharedNodesFinder(AlltoallMixin):
     def _rendezvous_exchange(self, bnodes):
         comm = self.comm
 
-        # Send nodes to their home ranks
-        rnodes, rranks = self._send_to_home_ranks(bnodes)
+        # Send nodes to their home ranks via distributed directory
+        dd = DistributedDirectory(comm, bnodes)
 
         # Aggregate and build response buffers
-        if rnodes.size == 0:
+        if dd.keys.size == 0:
             rdata = np.empty(0, dtype=int)
             rcounts = np.zeros(comm.size, dtype=np.int32)
         else:
-            rdata, rcounts = self._build_responses(rnodes, rranks)
+            rdata, rcounts = self._build_responses(dd.keys, dd.ranks)
 
         return self._alltoallcv(comm, rdata, rcounts)[0]
-
-    def _send_to_home_ranks(self, bnodes):
-        comm = self.comm
-
-        # Hash each node to assign it to a home rank
-        hranks = (2654435761*bnodes % comm.size).astype(np.int32)
-
-        # Sort by home rank
-        sidx = np.argsort(hranks)
-        snodes = bnodes[sidx]
-        shomes = hranks[sidx]
-
-        # Compute send counts/displacements and exchange
-        scounts = np.bincount(shomes, minlength=comm.size).astype(np.int32)
-        rnodes, (rcounts, _) = self._alltoallcv(comm, snodes, scounts)
-
-        # Reconstruct source ranks from counts
-        rranks = np.repeat(np.arange(comm.size, dtype=np.int32), rcounts)
-
-        return rnodes, rranks
 
     def _build_responses(self, rnodes, rranks):
         order = np.argsort(rnodes)

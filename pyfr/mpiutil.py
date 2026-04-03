@@ -103,6 +103,11 @@ def scal_coll(colfn, v, *args, **kwargs):
     return dtype(v[0])
 
 
+def home_rank(gidxs, size):
+    h = np.uint64(2654435761)*np.asarray(gidxs).view(np.uint64)
+    return (h % size).astype(np.int32)
+
+
 def get_start_end_csize(comm, n):
     rank, size = comm.rank, comm.size
 
@@ -168,6 +173,51 @@ class AlltoallMixin:
         self._alltoallv(comm, (svals, (scount, sdisps)), rbuf)
 
         return rbuf
+
+
+class DistributedDirectory(AlltoallMixin):
+    def __init__(self, comm, keys):
+        self.comm = comm
+
+        keys = np.asarray(keys, dtype=int)
+
+        # Send each key to its home rank
+        home = home_rank(keys, comm.size)
+        sord = np.argsort(home)
+        scounts = np.bincount(home, minlength=comm.size)
+
+        recv, (rcounts, _) = self._alltoallcv(comm, keys[sord], scounts)
+
+        # Reconstruct source ranks from receive counts
+        ranks = np.repeat(np.arange(comm.size, dtype=np.int32), rcounts)
+
+        # Store sorted for searchsorted in lookup
+        sord = np.argsort(recv)
+        self.keys = recv[sord]
+        self.ranks = ranks[sord]
+
+    def lookup(self, keys):
+        comm = self.comm
+
+        keys = np.asarray(keys, dtype=int)
+
+        # Route query keys to their home ranks
+        home = home_rank(keys, comm.size)
+        sord = np.argsort(home)
+        scounts = np.bincount(home, minlength=comm.size)
+
+        recv, (rcounts, _) = self._alltoallcv(comm, keys[sord], scounts)
+
+        # Look up owner ranks in the sorted table
+        ans = self.ranks[np.searchsorted(self.keys, recv)]
+
+        # Send answers back; rcounts mirrors the forward counts
+        ret, _ = self._alltoallcv(comm, ans, rcounts)
+
+        # Unshuffle from home-rank order back to caller order
+        result = np.empty_like(keys)
+        result[sord] = ret
+        return result
 
 
 class AlltoallFuture:
