@@ -104,6 +104,10 @@ class CUDABackend(BaseBackend):
         # Return a view of the correct shape and dtype
         return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
 
+    @property
+    def platform_id(self):
+        return self.cuda.device_name()
+
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the CUDA stream
         for k in kernels:

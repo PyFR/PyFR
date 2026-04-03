@@ -18,7 +18,6 @@ class BaseBlasExtKernels:
 
         return self._axnpby(arr, tplargs)
 
-
     def reduction(self, rop, expr, vvars, svars=[], pvars={}):
         # Ensure all matrices are compatible
         fvvar = first(vvars.values())

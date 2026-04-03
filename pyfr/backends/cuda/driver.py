@@ -145,6 +145,7 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuDeviceGet', POINTER(c_int), c_int),
         (c_int, 'cuDeviceGetCount', POINTER(c_int)),
         (c_int, 'cuDeviceGetAttribute', POINTER(c_int), c_int, c_int),
+        (c_int, 'cuDeviceGetName', c_char_p, c_int, c_int),
         (c_int, 'cuDeviceGetUuid_v2', 16*c_char, c_int),
         (c_int, 'cuDevicePrimaryCtxRetain', POINTER(c_void_p), c_int),
         (c_int, 'cuDevicePrimaryCtxRelease', c_int),
@@ -505,6 +506,11 @@ class CUDA:
         self.lib.cuDevicePrimaryCtxRetain(self.ctx, dev)
         self.lib.cuCtxSetCurrent(self.ctx)
         self.dev = dev.value
+
+    def device_name(self):
+        buf = create_string_buffer(256)
+        self.lib.cuDeviceGetName(buf, 256, self.dev)
+        return buf.value.decode()
 
     def compute_capability(self):
         dev, lib = self.dev, self.lib

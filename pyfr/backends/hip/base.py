@@ -100,6 +100,10 @@ class HIPBackend(BaseBackend):
         # Return a view of the correct shape and dtype
         return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
 
+    @property
+    def platform_id(self):
+        return self.props['name']
+
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the HIP stream
         for k in kernels:

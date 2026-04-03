@@ -66,6 +66,10 @@ class MetalBackend(BaseBackend):
         self._cbuf_desc = MTLCommandBufferDescriptor.alloc().init()
         self._cbuf_desc.setRetainedReferences_(False)
 
+    @property
+    def platform_id(self):
+        return str(self.dev.name())
+
     def new_command_buffer(self):
         return self.queue.commandBufferWithDescriptor_(self._cbuf_desc)
 

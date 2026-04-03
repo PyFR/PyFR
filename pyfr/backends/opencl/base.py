@@ -113,6 +113,10 @@ class OpenCLBackend(BaseBackend):
         # Return a view of the correct shape and dtype
         return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
 
+    @property
+    def platform_id(self):
+        return self.cl.dev.name
+
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the command queue
         for k in kernels:

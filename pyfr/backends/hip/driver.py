@@ -414,6 +414,7 @@ class HIP:
         self.lib.hipGetDeviceProperties(buf, devid)
 
         return {
+            'name': cast(buf, c_char_p).value.decode(),
             'gcn_arch_name': cast(buf[1160:], c_char_p).value.decode(),
             'warp_size': cast(buf[308:], POINTER(c_int)).contents.value
         }
