@@ -16,11 +16,11 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
           uint2 threadIdx [[thread_position_in_threadgroup]],
           uint2 blockIdx [[threadgroup_position_in_grid]])
 {
-% for name, values in pvars.items():
-    const fpdtype_t _pv_${name}[] = ${pyfr.carray(values)};
-% endfor
 % if pvars:
     #define VARIDX blockIdx.y
+% for i, name in enumerate(pvars):
+    const fpdtype_t *_pv_${name} = _pv + ${i*ncola};
+% endfor
 % endif
     int tid = threadIdx.x;
     ixdtype_t i = ixdtype_t(blockIdx.x)*${blocksz} + tid;

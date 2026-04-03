@@ -85,7 +85,6 @@ class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
         ixdtype = self.backend.ixdtype
         nblocks, nrow, *_, fpdtype = fvvar.traits
         ncola = fvvar.ioshape[-2]
-        pvars = tplargs['pvars']
 
         # Add backend-specific template arguments
         tplargs['ncola'] = ncola
@@ -96,18 +95,12 @@ class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
         # Array for the reduced data
         reduced = np.zeros(tplargs['nexprs'], dtype=fpdtype)
 
-        # Allocate 2D array for pvars (npvars by ncola)
-        pvarr = np.array(list(pvars.values()), dtype=fpdtype) if pvars else None
-
-        # Argument types: ints, pointers (vvars, pvars), scalars (svars)
-        nptr = 1 + len(vvars) + bool(pvars)
-        argt = [ixdtype]*2 + [np.uintp]*nptr + [fpdtype]*len(svars)
+        # Argument types: ints, pointers (vvars), scalars (svars)
+        argt = [ixdtype]*2 + [np.uintp]*(1 + len(vvars)) + [fpdtype]*len(svars)
 
         # Build and set arguments
         rkern = self._build_kernel('reduction', src, argt)
         args = [nrow, nblocks, reduced.ctypes.data, *vvars.values()]
-        if pvars:
-            args.append(pvarr.ctypes.data)
         rkern.set_args(*args)
 
         # Runtime argument offset for svars
@@ -122,5 +115,4 @@ class OpenMPBlasExtKernels(BaseBlasExtKernels, OpenMPKernelProvider):
                 def bind(self, *consts):
                     self.kernel.set_args(*consts, start=facoff)
 
-        return ReductionKernel(mats=vvars.values(), misc=[pvarr] if pvars else [],
-                               kernel=rkern)
+        return ReductionKernel(mats=vvars.values(), kernel=rkern)

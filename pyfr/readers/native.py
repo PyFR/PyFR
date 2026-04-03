@@ -8,6 +8,7 @@ from numpy.lib.recfunctions import structured_to_unstructured as s2u
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import (Scatterer, SparseScatterer, autofree,
                           get_comm_rank_root)
+from pyfr.readers.shared_nodes import SharedNodesFinder
 
 
 @dataclass
@@ -78,7 +79,6 @@ class Connectivity:
 
 
 class NativeReader:
-
     def __init__(self, fname, pname=None, *, construct_con=True):
         self.f = h5py.File(fname, 'r')
         self.mesh = Mesh(fname=fname, raw=self.f)
@@ -526,8 +526,6 @@ class NativeReader:
             self.mesh.con_p[nrank] = Connectivity(cidxs, eidxs, cidxmap)
 
     def _construct_shared_nodes(self):
-        from pyfr.readers.shared_nodes import SharedNodesFinder
-
         snf = SharedNodesFinder(self.eles, self.mesh.node_idxs,
                                 self.mesh.node_valency)
         self.mesh.shared_nodes = snf.compute()

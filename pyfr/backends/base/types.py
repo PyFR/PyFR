@@ -58,7 +58,7 @@ class MatrixBase(_StorageBase):
 
             # Alignment requirement for the leading dimension
             ldmod = csubsz if 'align' in self.tags else 1
-            blocked = backend.blocks and 'xchg' not in self.tags
+            blocked = backend.blocks and not self.tags & {'xchg', 'noblock'}
             leaddim = csubsz if blocked else ncol - (ncol % -ldmod)
 
             nblocks = (ncol - (ncol % -leaddim)) // leaddim

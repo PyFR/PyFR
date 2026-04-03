@@ -1,11 +1,11 @@
 import re
 
+import numpy as np
+
 from pyfr.util import first
 
 
 class BaseBlasExtKernels:
-    pvar_idx = None
-
     def axnpby(self, *arr, in_scale=(), in_scale_idxs=(), out_scale=()):
         if any(arr[0].traits != x.traits for x in arr[1:]):
             raise ValueError('Incompatible matrix types')
@@ -28,11 +28,15 @@ class BaseBlasExtKernels:
         vnames = '|'.join(map(re.escape, vvars))
         exprs = [re.sub(rf'\b({vnames})\b', r'\1[idx]', e) for e in expr]
 
-        # Substitute pvars with indexed access if pvar_idx is set
-        if pvars and self.pvar_idx:
+        # Handle pvars
+        if pvars:
             pnames = '|'.join(map(re.escape, pvars))
             exprs = [re.sub(rf'\b({pnames})\b', rf'_pv_\1[{self.pvar_idx}]', e)
                      for e in exprs]
+
+            parr = np.array(list(pvars.values()), dtype=fvvar.dtype)
+            parr = self.backend.const_matrix(parr, tags={'noblock'})
+            vvars = {**vvars, '_pv': parr}
 
         # Common template arguments
         init_val = 0 if rop == 'sum' else -self.backend.fpdtype_max

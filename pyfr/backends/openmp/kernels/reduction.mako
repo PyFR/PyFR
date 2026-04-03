@@ -6,9 +6,6 @@ struct kargs
     ixdtype_t nrow, nblocks;
     fpdtype_t *reduced;
     fpdtype_t ${', '.join(f'*{v}' for v in vvars)};
-% if pvars:
-    fpdtype_t (*_pv)[${ncola}];
-% endif
 % if svars:
     fpdtype_t ${', '.join(svars)};
 % endif
@@ -19,11 +16,8 @@ void reduction(const struct kargs *restrict args)
     ixdtype_t nrow = args->nrow, nblocks = args->nblocks;
     fpdtype_t *reduced = args->reduced;
     fpdtype_t ${', '.join(f'*{v} = args->{v}' for v in vvars)};
-% if pvars:
-    const fpdtype_t (*_pv)[${ncola}] = args->_pv;
-% endif
 % for i, name in enumerate(pvars):
-#define _pv_${name} _pv[${i}]
+    const fpdtype_t *_pv_${name} = _pv + ${i}*${ncola};
 % endfor
 % if svars:
     fpdtype_t ${', '.join(f'{s} = args->{s}' for s in svars)};
@@ -64,9 +58,6 @@ void reduction(const struct kargs *restrict args)
         }
     }
     #undef X_IDX_AOSOA
-% for name in pvars:
-#undef _pv_${name}
-% endfor
 
     // Copy
 % for i in range(nexprs):

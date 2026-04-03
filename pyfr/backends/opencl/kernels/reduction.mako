@@ -11,12 +11,12 @@ reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
            fpdtype_t ${s}${')' if loop.last else ','}
 % endfor
 {
-% for name, values in pvars.items():
-    const fpdtype_t _pv_${name}[] = ${pyfr.carray(values)};
-% endfor
     ixdtype_t i = get_global_id(0), tid = get_local_id(0);
     ixdtype_t gdim = get_num_groups(0), bid = get_group_id(0);
     ixdtype_t ncola = get_num_groups(1), k = get_group_id(1);
+% for i, name in enumerate(pvars):
+    const __global fpdtype_t *_pv_${name} = _pv + ${i}*ncola;
+% endfor
 
 % for ei in range(nexprs):
     fpdtype_t acc_${ei} = ${init_val};
