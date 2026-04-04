@@ -43,11 +43,11 @@ class BaseShape:
         if self.antialias - {'flux', 'surf-flux'}:
             raise ValueError('Invalid anti-alias options')
 
-        self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
+        self.ubasis = get_polybasis(self.name, self.order, self.upts)
 
         if nspts:
             self.nsptsord = nsptord = self.order_from_npts(nspts)
-            self.sbasis = get_polybasis(self.name, nsptord + 1, self.spts)
+            self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
             # Basis for free-stream metric
             # We need p-th order pseudo grid points, which includes
@@ -56,7 +56,7 @@ class BaseShape:
             # on the both adjacent cells.
             # Ref. 1 JCP 281, 28-54, Sec 4.2
             # Ref. 2 JSC 26(3), 301-327, Definition 1
-            self.mbasis = get_polybasis(self.name, max(self.order + 1, 2),
+            self.mbasis = get_polybasis(self.name, max(self.order, 1),
                                         self.mpts)
 
     @classmethod
@@ -285,7 +285,7 @@ class BaseShape:
 
             pts = get_quadrule(kind, rule, npts).pts
 
-            fb[kind] = get_polybasis(kind, self.order + 1, pts)
+            fb[kind] = get_polybasis(kind, self.order, pts)
 
         return fb
 

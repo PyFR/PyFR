@@ -44,7 +44,7 @@ class VTKVolumeWriter(BaseVTKWriter):
 
         # Linear basis for vertex data
         linspts = shapecls.std_ele(1)
-        lbasis = get_polybasis(etype, 2, linspts)
+        lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
         return mesh_op, soln_op, lin_op

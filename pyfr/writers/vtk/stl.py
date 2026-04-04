@@ -197,7 +197,7 @@ class VTKSTLWriter(BaseVTKWriter):
         return pts, svars, None, {}, pointf
 
     def _subdivide_pts(self, stl, order, subdiv):
-        basis = TriPolyBasis(2, TriShape.std_ele(1))
+        basis = TriPolyBasis(1, TriShape.std_ele(1))
         op = basis.nodal_basis_at(TriShape.std_ele(order))
 
         # Flat linear subdivision

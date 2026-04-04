@@ -88,7 +88,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         # Linear basis for P1 vertex data
         linspts = subclass_where(BaseShape, name=etype).std_ele(1)
-        lbasis = get_polybasis(etype, 2, linspts)
+        lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
         return itype, mesh_op, soln_op, lin_op
