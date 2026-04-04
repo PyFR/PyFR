@@ -35,11 +35,11 @@ class BaseAdvectionSystem(BaseSystem):
             b.scal_lhs = lhs
         self.register_mpi_exchange('scal_fpts', mpi_v)
 
-        if shock_capturing == 'entropy-filter':
-            self._ef = EntropyFilter(
-                self.backend, self.cfg, self,
-                self._int_inters, self._mpi_inters, self._bc_inters
-            )
+        if (shock_capturing == 'entropy-filter' and
+            self.cfg.getint('solver', 'order') > 0):
+            self._ef = EntropyFilter(self.backend, self.cfg, self,
+                                     self._int_inters, self._mpi_inters,
+                                     self._bc_inters)
         else:
             self._ef = None
 
