@@ -77,7 +77,7 @@ class PointLocator:
     def _get_shape_basis(self, etype, nspts):
         shape = subclass_where(BaseShape, name=etype)
         order = shape.order_from_npts(nspts)
-        basis = get_polybasis(etype, order + 1, shape.std_ele(order))
+        basis = get_polybasis(etype, order, shape.std_ele(order))
 
         return shape, basis
 
@@ -334,9 +334,29 @@ class PointSampler:
             # Form the reordering list
             self._ptsinv = np.argsort([i for pr in ptsrank for i in pr])
 
-    def sample(self, solns, process=None):
+    def gather(self, samples):
         comm, rank, root = get_comm_rank_root()
 
+        if rank == root:
+            comm.Gatherv(samples, self._ptsrecv, root=root)
+            return self._ptsbuf[self._ptsinv]
+        else:
+            comm.Gatherv(samples, None, root=root)
+            return None
+
+    def etype_pinfo(self):
+        etype_flat = defaultdict(list)
+        for et, ei, idxs, ops in self.pinfo:
+            if np.ndim(idxs) == 0:
+                etype_flat[et].append((ei, ops[0], idxs))
+            else:
+                for idx, op in zip(idxs, ops):
+                    etype_flat[et].append((ei, op, idx))
+
+        return {et: tuple(map(np.array, zip(*recs)))
+                for et, recs in etype_flat.items()}
+
+    def sample(self, solns, process=None):
         # Perform the sampling
         samples = np.empty((self.pcount, self.nvars))
         for et, ei, idxs, ops in self.pinfo:
@@ -347,9 +367,4 @@ class PointSampler:
             samples = np.ascontiguousarray(process(samples))
 
         # Gather to the root rank and return
-        if rank == root:
-            comm.Gatherv(samples, self._ptsrecv, root=root)
-            return self._ptsbuf[self._ptsinv]
-        else:
-            comm.Gatherv(samples, None, root=root)
-            return None
+        return self.gather(samples)

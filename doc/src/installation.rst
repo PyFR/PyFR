@@ -1,5 +1,3 @@
-.. highlight:: none
-
 ************
 Installation
 ************
@@ -19,30 +17,40 @@ It is assumed that the Xcode Command Line Tools and
 `Homebrew <https://brew.sh/>`_ are already installed. Follow the steps
 below to setup the OpenMP backend on macOS:
 
-#. Install MPI::
+#. Install MPI:
 
-        brew install mpi4py
+   .. code-block:: shell
 
-#. Download and install libxsmm and set the library path::
+       brew install mpi4py
 
-        git clone https://github.com/libxsmm/libxsmm.git
-        cd libxsmm
-        make -j4
-        export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
+#. Download and install libxsmm and set the library path:
 
-#. Make a venv and activate it::
+   .. code-block:: shell
 
-        python3.12 -m venv pyfr-venv
-        source pyfr-venv/bin/activate
+       git clone https://github.com/libxsmm/libxsmm.git
+       cd libxsmm
+       make -j4
+       export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.dylib
 
-#. Install PyFR::
+#. Make a venv and activate it:
 
-        pip install pyfr
+   .. code-block:: shell
 
-#. Add the following to your :ref:`configuration-file`::
+       python3.12 -m venv pyfr-venv
+       source pyfr-venv/bin/activate
 
-        [backend-openmp]
-        cc = gcc-13
+#. Install PyFR:
+
+   .. code-block:: shell
+
+       pip install pyfr
+
+#. Add the following to your :ref:`configuration-file`:
+
+   .. code-block:: ini
+
+       [backend-openmp]
+       cc = gcc-13
 
 Note the version of the compiler which must support the ``openmp``
 flag. This has been tested on macOS 13.6.2 with an Apple M1 Max.
@@ -52,26 +60,34 @@ Ubuntu
 
 Follow the steps below to setup the OpenMP backend on Ubuntu:
 
-#. Install Python and MPI::
+#. Install Python and MPI:
 
-        sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
-        pip3 install virtualenv
+   .. code-block:: shell
 
-#. Download and install libxsmm and set the library path::
+       sudo apt install python3 python3-pip libopenmpi-dev openmpi-bin
+       pip3 install virtualenv
 
-        git clone https://github.com/libxsmm/libxsmm.git
-        cd libxsmm
-        make -j4
-        export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
+#. Download and install libxsmm and set the library path:
 
-#. Make a virtualenv and activate it::
+   .. code-block:: shell
 
-        python3 -m virtualenv pyfr-venv
-        source pyfr-venv/bin/activate
+       git clone https://github.com/libxsmm/libxsmm.git
+       cd libxsmm
+       make -j4
+       export PYFR_XSMM_LIBRARY_PATH=`pwd`/lib/libxsmm.so
 
-#. Install PyFR::
+#. Make a virtualenv and activate it:
 
-        pip install pyfr
+   .. code-block:: shell
+
+       python3 -m virtualenv pyfr-venv
+       source pyfr-venv/bin/activate
+
+#. Install PyFR:
+
+   .. code-block:: shell
+
+       pip install pyfr
 
 This has been tested on Ubuntu 22.04.
 
@@ -83,7 +99,9 @@ Compiling from source
 PyFR can be obtained
 `here <https://github.com/PyFR/PyFR/tree/master>`_.  To install the
 software from source, use the provided ``setup.py`` installer or add
-the root PyFR directory to ``PYTHONPATH`` using::
+the root PyFR directory to ``PYTHONPATH`` using:
+
+.. code-block:: shell
 
     user@computer ~/PyFR$ export PYTHONPATH=.:$PYTHONPATH
 
@@ -148,12 +166,14 @@ AMD, Intel, and NVIDIA. The backend requires:
 #. Optionally `TinyTC <https://intel.github.io/tiny-tensor-compiler/>`_
    >= 0.3.1
 
-Note that when running on NVIDIA GPUs the OpenCL backend may terminate
-with a segmentation fault after the simulation has finished.  This is
-due to a long-standing bug in how the NVIDIA OpenCL implementation
-handles sub-buffers.  As it occurs during the termination phase—after
-all data has been written out to disk—the issue does *not* impact the
-functionality or correctness of PyFR.
+.. note::
+
+   When running on NVIDIA GPUs the OpenCL backend may terminate with a
+   segmentation fault after the simulation has finished.  This is due
+   to a long-standing bug in how the NVIDIA OpenCL implementation
+   handles sub-buffers.  As it occurs during the termination phase ---
+   after all data has been written out to disk --- the issue does *not*
+   impact the functionality or correctness of PyFR.
 
 .. _install openmp backend:
 
@@ -180,13 +200,14 @@ have one of the following partitioners installed:
 
 #. `METIS <http://glaros.dtc.umn.edu/gkhome/views/metis>`_ >= 5.2
 #. `SCOTCH <https://www.labri.fr/perso/pelegrin/scotch/>`_ >= 7.0
-#. `KaHIP <https://kahip.github.io/>`_ >= 3.10
+#. `KaHIP <https://kahip.github.io/>`_ >= 3.24
 
 In order for PyFR to find these libraries they must be located in a
 directory which is on the library search path.  Alternatively, the
 paths can be specified explicitly by exporting environment
-variables e.g. ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so`` and/or
-``PYFR_SCOTCH_LIBRARY_PATH=/path/to/libscotch.so``.
+variables e.g. ``PYFR_METIS_LIBRARY_PATH=/path/to/libmetis.so``,
+``PYFR_SCOTCH_LIBRARY_PATH=/path/to/libscotch.so``, and/or
+``PYFR_KAHIP_LIBRARY_PATH=/path/to/libkahip.so``.
 
 Ascent
 ^^^^^^
@@ -199,7 +220,9 @@ be found in the respective documentation. Ascent must be version >=0.9.0.
 When compiling Ascent a renderer must be selected to be compiled, currently
 PyFR only supports the VTK-h option that comes with Ascent. The paths to the
 libraries may need to be set as an environment variable. For example, on linux
-you will need::
+you will need:
+
+.. code-block:: shell
 
     PYFR_CONDUIT_LIBRARY_PATH=/path/to/libconduit.so
     PYFR_ASCENT_MPI_LIBRARY_PATH=/path/to/libascent_mpi.so

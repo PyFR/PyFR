@@ -1,5 +1,5 @@
-from ctypes import (POINTER, byref, c_int, c_double, c_float, c_uint32,
-                    c_void_p)
+from ctypes import (POINTER, byref, c_int, c_int64, c_double, c_float,
+                    c_uint32, c_void_p)
 import os
 
 import numpy as np
@@ -43,12 +43,12 @@ class RocBLASWrappers(LibWrapper):
         (c_int, 'rocblas_create_handle', POINTER(c_void_p)),
         (c_int, 'rocblas_destroy_handle', c_void_p),
         (c_int, 'rocblas_set_stream', c_void_p, c_void_p),
-        (c_int, 'rocblas_dgemm', c_void_p, c_int, c_int, c_int, c_int, c_int,
-         POINTER(c_double), c_void_p, c_int, c_void_p, c_int,
-         POINTER(c_double), c_void_p, c_int),
-        (c_int, 'rocblas_sgemm', c_void_p, c_int, c_int, c_int, c_int, c_int,
-         POINTER(c_float), c_void_p, c_int, c_void_p, c_int,
-         POINTER(c_float), c_void_p, c_int),
+        (c_int, 'rocblas_dgemm_64', c_void_p, c_int, c_int, c_int64, c_int64,
+         c_int64, POINTER(c_double), c_void_p, c_int64, c_void_p, c_int64,
+         POINTER(c_double), c_void_p, c_int64),
+        (c_int, 'rocblas_sgemm_64', c_void_p, c_int, c_int, c_int64, c_int64,
+         c_int64, POINTER(c_float), c_void_p, c_int64, c_void_p, c_int64,
+         POINTER(c_float), c_void_p, c_int64),
         (c_int, 'rocblas_gemm_ex_get_solutions', c_void_p, c_int, c_int, c_int,
          c_int, c_int, c_void_p, c_void_p, c_int, c_int, c_void_p,
          c_int, c_int, c_void_p, c_void_p, c_int, c_int, c_void_p,
@@ -108,21 +108,17 @@ class HIPRocBLASKernels(HIPKernelProvider):
         # Cache key
         ckey = (A.dtype, alpha, beta, m, n, k, A.leaddim, B.leaddim, C.leaddim)
 
-        # Size checks
-        if any(sz > 2**31 - 1 for sz in ckey[3:]):
-            raise ValueError('Matrices too large for rocBLAS')
-
         # Do not transpose either A or B
         opA = opB = w.OPERATION_NONE
 
         # α and β factors for C = α*(A*B) + β*C
         if a.dtype == np.float64:
             rtype = w.DATATYPE_F64_R
-            gemm_fn = w.rocblas_dgemm
+            gemm_fn = w.rocblas_dgemm_64
             alpha_ct, beta_ct = c_double(alpha), c_double(beta)
         else:
             rtype = w.DATATYPE_F32_R
-            gemm_fn = w.rocblas_sgemm
+            gemm_fn = w.rocblas_sgemm_64
             alpha_ct, beta_ct = c_float(alpha), c_float(beta)
 
         def gemm(stream, algo):
@@ -143,25 +139,29 @@ class HIPRocBLASKernels(HIPKernelProvider):
         except KeyError:
             ifac = self.backend.autotune_ifac
 
-            def get_solutions(sidx):
-                size_ct = c_int(len(sidx) if sidx is not None else 0)
-                w.rocblas_gemm_ex_get_solutions(
-                    h, opA, opB, m, n, k, byref(alpha_ct), A, rtype, A.leaddim,
-                    B, rtype, B.leaddim, byref(beta_ct), C, rtype, C.leaddim,
-                    C, rtype, C.leaddim, rtype, w.GEMM_ALGO_SOLUTION_INDEX, 0,
-                    sidx, byref(size_ct)
-                )
-                return size_ct.value
+            # Check if sizes fit in 32-bit for gemm_ex autotuning
+            if all(sz <= 2**31 - 1 for sz in ckey[3:]):
+                def get_solutions(sidx):
+                    size_ct = c_int(len(sidx) if sidx is not None else 0)
+                    w.rocblas_gemm_ex_get_solutions(
+                        h, opA, opB, m, n, k, byref(alpha_ct), A, rtype,
+                        A.leaddim, B, rtype, B.leaddim, byref(beta_ct), C,
+                        rtype, C.leaddim, C, rtype, C.leaddim, rtype,
+                        w.GEMM_ALGO_SOLUTION_INDEX, 0, sidx, byref(size_ct)
+                    )
+                    return size_ct.value
 
-            # Get applicable gemm_ex algorithm solution indices
-            sidx = (c_int * min(get_solutions(None), self.nkerns - 1))()
-            get_solutions(sidx)
+                sidx = (c_int * min(get_solutions(None), self.nkerns - 1))()
+                get_solutions(sidx)
+                candidates = [None, *sidx]
+            else:
+                candidates = [None]
 
             # Save a copy of the contents of the output matrix
             out_np = getattr(out, 'parent', out).get()
 
             best_kern = None
-            for algo in [None, *sidx]:
+            for algo in candidates:
                 try:
                     dt = self._benchmark(lambda s: gemm(s, algo))
                     if best_kern is None or dt < ifac*best_kern[-1]:

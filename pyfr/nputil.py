@@ -1,6 +1,7 @@
 import ctypes as ct
 import functools as ft
 import itertools as it
+from math import erf
 import re
 
 import numpy as np
@@ -135,6 +136,51 @@ def fuzzysort(arr, idx, dim=0, tol=1e-6):
     return srtdidx
 
 
+def _batched_fuzzysort_rec(coords, perm, dim, s, e, ndims, tol):
+    neles = perm.shape[0]
+    group = perm[:, s:e]
+    vals = np.take_along_axis(coords[:, dim, :], group, axis=1)
+
+    sub = np.argsort(vals, axis=1, kind='stable')
+    perm[:, s:e] = np.take_along_axis(group, sub, axis=1)
+
+    if dim + 1 >= ndims:
+        return np.zeros(neles, dtype=bool)
+
+    # Find tolerance-based group boundaries from the first element
+    sorted_vals = np.take_along_axis(vals, sub, axis=1)
+    ref_gaps = np.diff(sorted_vals[0]) >= tol
+
+    # Tag elements that have different group boundaries
+    bad = np.any((np.diff(sorted_vals, axis=1) >= tol) != ref_gaps, axis=1)
+
+    # Recursively sub-sort group by the next dimension
+    prev = 0
+    for b in [*(np.flatnonzero(ref_gaps) + 1), e - s]:
+        if b - prev > 1:
+            bad |= _batched_fuzzysort_rec(coords, perm, dim + 1,
+                                          s + prev, s + b, ndims, tol)
+        prev = b
+
+    return bad
+
+
+def batched_fuzzysort(coords, tol=1e-6):
+    neles, ndims, nfp = coords.shape
+
+    if nfp <= 1:
+        return np.zeros((neles, 1), dtype=int)
+
+    perm = np.tile(np.arange(nfp), (neles, 1))
+    bad = _batched_fuzzysort_rec(coords, perm, 0, 0, nfp, ndims, tol)
+
+    # Handle pathological elements
+    for bi in np.flatnonzero(bad):
+        perm[bi] = fuzzysort(coords[bi], list(range(nfp)), tol=tol)
+
+    return perm
+
+
 def iter_struct(arr, n=1000, axis=0):
     for c in np.array_split(arr, -(arr.shape[axis] // -n) or 1, axis=axis):
         yield from c.tolist()
@@ -164,3 +210,112 @@ def npdtype_to_ctypestype(dtype):
         return None
 
     return _ctypestype_map[np.dtype(dtype).type]
+
+
+class GPOptimiser:
+    _ls_pad = 0.1
+    _base_noise = 0.01
+
+    def __init__(self, wsize, x_bounds):
+        self._X, self._y = np.empty((2, wsize))
+        self._nv = np.full(wsize, self._base_noise)
+        self._seq = np.empty(wsize, dtype=int)
+        self.n = 0
+        self._idx = self._step = 0
+        self.x_lo, self.x_hi = x_bounds
+
+    def reset(self, x_bounds=None):
+        self.n = 0
+        self._idx = self._step = 0
+        if x_bounds is not None:
+            self.x_lo, self.x_hi = x_bounds
+
+    def record(self, x, y, noise_var=None):
+        self._X[self._idx] = x
+        self._y[self._idx] = y
+        nv = self._base_noise if noise_var is None else noise_var
+        self._nv[self._idx] = nv
+        self._seq[self._idx] = self._step
+        self._step += 1
+        self._idx = (self._idx + 1) % len(self._X)
+        self.n = min(self.n + 1, len(self._X))
+
+    def update(self, x, y, noise_var=None, tol=0.05):
+        nearby = np.flatnonzero(np.abs(self._X[:self.n] - x) < tol)
+
+        if len(nearby):
+            newest = nearby[self._seq[nearby].argmax()]
+            self._y[newest] = y
+            if noise_var is not None:
+                self._nv[newest] = noise_var
+            self._seq[newest] = self._step
+            self._step += 1
+        else:
+            self.record(x, y, noise_var)
+
+    def _norm_cdf(self, z):
+        return np.array([0.5*(1.0 + erf(zi*2**-0.5)) for zi in z])
+
+    def _norm_pdf(self, z):
+        return np.exp(-0.5*z**2) / (2*np.pi)**0.5
+
+    def _fit(self):
+        X, y = self._X[:self.n], self._y[:self.n]
+        nv_diag = np.diag(self._nv[:self.n])
+        y_mean = y.mean()
+        y_c = y - y_mean
+
+        ls = 0.5*(np.ptp(X) + self._ls_pad)
+
+        K = np.exp(-0.5*((X[:, None] - X[None, :])/ls)**2)
+        K += nv_diag
+        alpha = np.linalg.solve(K, y_c)
+
+        x_test = np.linspace(self.x_lo, self.x_hi, 50)
+        k = np.exp(-0.5*((x_test[:, None] - X[None, :])/ls)**2)
+        mu = k @ alpha + y_mean
+
+        v = np.linalg.solve(K, k.T)
+        var = np.maximum(1.0 - np.sum(k*v.T, axis=1), 1e-10)
+
+        return x_test, mu, var
+
+    def optimum(self, minimise=True, explore=False):
+        if self.n < 2:
+            return None
+
+        x_test, mu, var = self._fit()
+
+        # Expected Improvement acquisition
+        if explore:
+            ys = self._y[:self.n]
+            f_best = np.min(ys) if minimise else np.max(ys)
+            sigma = var**0.5
+            imp = (f_best - mu) if minimise else (mu - f_best)
+            z = imp / sigma
+            ei = imp*self._norm_cdf(z) + sigma*self._norm_pdf(z)
+            return x_test[np.argmax(ei)]
+        # Pure exploitation; return the GP mean optimum
+        else:
+            idx = np.argmin(mu) if minimise else np.argmax(mu)
+            return x_test[idx]
+
+
+class LogGPOptimiser(GPOptimiser):
+    def __init__(self, wsize, x_bounds):
+        super().__init__(wsize, map(np.log, x_bounds))
+
+    def record(self, x, y, noise_var=None):
+        super().record(np.log(x), y, noise_var)
+
+    def update(self, x, y, noise_var=None, tol=0.05):
+        super().update(np.log(x), y, noise_var, tol)
+
+    def optimum(self, minimise=True, explore=False):
+        opt = super().optimum(minimise, explore)
+        return np.exp(opt) if opt is not None else None
+
+    def reset(self, x_bounds=None):
+        if x_bounds is not None:
+            x_bounds = map(np.log, x_bounds)
+        super().reset(x_bounds)

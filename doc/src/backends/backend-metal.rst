@@ -19,7 +19,9 @@ Parameterises the Metal backend with
 
      *int*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [backend-metal]
     gimmik-max-nnz = 512

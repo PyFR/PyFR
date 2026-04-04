@@ -35,7 +35,7 @@ class OpenCLPackingKernels(OpenCLKernelProvider):
                 def run(self, queue, wait_for=None, ret_evt=False):
                     pevt = kern.exec_async(queue, wait_for, True)
                     return cl.memcpy(queue, xm.hdata, xm.data, xm.nbytes,
-                                     False, None, ret_evt)
+                                     False, [pevt], ret_evt)
         else:
             class PackKernel(OpenCLKernel):
                 def run(self, queue, wait_for=None, ret_evt=False):

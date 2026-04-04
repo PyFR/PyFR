@@ -33,16 +33,12 @@ class MetalPackingKernels(MetalKernelProvider):
             # Obtain the view-packing kernel
             kern, kargs = self._packing_kern('pack', v, xm)
 
-        class PackKernel(MetalKernel):
-            def run(self, cbuf):
-                # If necessary call the packing kernel
-                if v:
+            class PackKernel(MetalKernel):
+                def run(self, cbuf):
                     kern(cbuf, *kargs)
-
-                # Ensure the host buffer is in sync with the device
-                blit = cbuf.blitCommandEncoder()
-                blit.synchronizeResource_((v.basedata, 0))
-                blit.endEncoding()
+        else:
+            class PackKernel(MetalKernel):
+                pass
 
         return PackKernel(mats=[xmv])
 
@@ -55,11 +51,9 @@ class MetalPackingKernels(MetalKernelProvider):
 
             class UnpackKernel(MetalKernel):
                 def run(self, cbuf):
-                    xm.basedata.didModifyRange_((xm.offset, xm.nbytes))
                     kern(cbuf, *kargs)
         else:
             class UnpackKernel(MetalKernel):
-                def run(self, cbuf):
-                    xm.basedata.didModifyRange_((xm.offset, xm.nbytes))
+                pass
 
         return UnpackKernel(mats=[xmv])

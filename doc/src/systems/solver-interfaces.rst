@@ -8,11 +8,6 @@ Parameterises the interfaces with
 
     ``rusanov`` | ``hll`` | ``hllc`` | ``roe`` | ``roem`` | ``exact``
 
-    where
-
-    ``hll`` | ``hllc`` | ``roe`` | ``roem`` | ``exact`` do not work with
-    ``ac-euler`` | ``ac-navier-stokes``
-
 2. ``ldg-beta`` --- beta parameter used for LDG:
 
     *float*
@@ -21,7 +16,9 @@ Parameterises the interfaces with
 
     *float*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-interfaces]
     riemann-solver = rusanov

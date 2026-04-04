@@ -1,5 +1,3 @@
-import numpy as np
-
 from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.base import BaseSolnPlugin, PostactionMixin, RegionMixin
@@ -10,7 +8,6 @@ from pyfr.util import first
 class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
     name = 'writer'
     systems = ['*']
-    formulations = ['dual', 'std']
     dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix=None):
@@ -26,44 +23,63 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         # Decide if gradients should be written or not
         self._write_grads = self.cfg.getbool(cfgsect, 'write-gradients', False)
 
+        # Output field names
+        self.fields = list(first(emap.values()).convars)
+
+        # Build the field groups for the nested dtype
+        field_groups = {'soln': list(self.fields)}
+        if self._write_grads:
+            field_groups['grad'] = list(self.fields)
+
+        # Extract auxiliary field info and getters from elements
+        self._aux_fields, self._aux_getters = {}, {}
+        for etype, eles in emap.items():
+            if etype in erdata and eles.export_fields:
+                self._aux_fields[etype] = [(ef.name, ef.shape, ef.dtype)
+                                           for ef in eles.export_fields]
+                self._aux_getters[etype] = [(ef.name, ef.getter)
+                                            for ef in eles.export_fields]
+
         # Figure out the shape of each element type in our region
-        nvars = self.nvars + self._write_grads*(self.nvars*self.ndims)
-        ershapes = {etype: (nvars, emap[etype].nupts) for etype in erdata}
+        ershapes = {etype: (self.nvars, emap[etype].nupts) for etype in erdata}
 
         # Construct the solution writer
         self._writer = NativeWriter.from_integrator(intg, basedir, basename,
                                                     'soln')
-        self._writer.set_shapes_eidxs(ershapes, erdata)
+        self._writer.set_shapes_eidxs(ershapes, erdata, field_groups,
+                                      self._aux_fields, ndims=self.ndims)
 
         # Asynchronous output options
         self._async_timeout = self.cfg.getfloat(cfgsect, 'async-timeout', 60)
 
-        # Output time step and last output time
-        self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
-        self.tout_last = intg.tcurr
-
-        # Output field names
-        self.fields = list(first(intg.system.ele_map.values()).convars)
-        if self._write_grads:
-            dims = 'xyz'[:self.ndims]
-            self.fields += [f'grad_{f}_{d}' for f in self.fields for d in dims]
-
         # Output data type
         self.fpdtype = intg.backend.fpdtype
 
-        # Register our output times with the integrator
-        intg.call_plugin_dt(intg.tcurr, self.dt_out)
+        # Trigger-only mode: no dt-out when gated by a trigger
+        self._trigger_only = (self.trigger is not None and
+                              self.trigger_action == 'gate' and
+                              not self.cfg.hasopt(cfgsect, 'dt-out'))
 
-        # If we're not restarting then make sure we write out the initial
-        # solution when we are called for the first time
-        if not intg.isrestart:
-            self.tout_last -= self.dt_out
+        if self._trigger_only:
+            self.dt_out = None
+            self.tout_last = None
+        else:
+            # Output time step and last output time
+            self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
+            self.tout_last = intg.tcurr
+
+            # Register our output times with the integrator
+            intg.call_plugin_dt(intg.tcurr, self.dt_out)
+
+            # If we're not restarting then make sure we write out the
+            # initial solution when we are called for the first time
+            if not intg.isrestart:
+                self.tout_last -= self.dt_out
 
     def _prepare_metadata(self, intg):
         comm, rank, root = get_comm_rank_root()
 
         stats = Inifile()
-        stats.set('data', 'fields', ','.join(self.fields))
         stats.set('data', 'prefix', 'soln')
         intg.collect_stats(stats)
 
@@ -82,7 +98,7 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         return metadata
 
     def _prepare_data(self, intg):
-        data = {}
+        data, aux = {}, {}
 
         if self._write_grads:
             soln, grad_soln = intg.soln, intg.grad_soln
@@ -90,39 +106,48 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
             soln, grad_soln = intg.soln, None
 
         for idx, etype, rgn in self._ele_regions:
-            d = soln[idx][..., rgn].T.astype(self.fpdtype)
+            # Solution data: (neles, nvars, nupts)
+            d = {'soln': soln[idx][..., rgn].T.astype(self.fpdtype)}
 
+            # Gradient data: (neles, nvars, ndims, nupts)
             if self._write_grads:
                 g = grad_soln[idx][..., rgn].transpose(3, 2, 0, 1)
-                g = g.reshape(len(g), self.ndims*self.nvars, -1)
-
-                d = np.hstack([d, g], dtype=self.fpdtype)
+                d['grad'] = g.astype(self.fpdtype)
 
             data[etype] = d
 
-        return data
+            # Extract auxiliary field data
+            if etype in self._aux_getters:
+                aux[etype] = {name: getter()[rgn]
+                              for name, getter in self._aux_getters[etype]}
 
-    def __call__(self, intg):
-        self._writer.probe()
+        return data, aux
 
-        if intg.tcurr - self.tout_last < self.dt_out - self.tol:
-            return
-
-        # Prepare the data and metadata
-        data = self._prepare_data(intg)
+    def _do_write(self, intg):
+        data, aux = self._prepare_data(intg)
         metadata = self._prepare_metadata(intg)
 
         # Prepare a callback to kick off any postactions
         callback = lambda fname, t=intg.tcurr: self._invoke_postaction(
-            intg=intg, mesh=intg.system.mesh.fname, soln=fname, t=t
+                intg=intg, mesh=intg.system.mesh.fname, soln=fname, t=t
         )
 
-        # Write out the file
         self._writer.write(data, intg.tcurr, metadata, self._async_timeout,
-                           callback)
+                           callback, aux)
 
-        # Update the last output time
-        self.tout_last = intg.tcurr
+    def __call__(self, intg):
+        self._writer.probe()
+
+        if self._trigger_only:
+            self._do_write(intg)
+        elif intg.tcurr - self.tout_last < self.dt_out - self.tol:
+            return
+        else:
+            self._do_write(intg)
+            self.tout_last = intg.tcurr
+
+    def trigger_write(self, intg):
+        self._do_write(intg)
 
     def finalise(self, intg):
         super().finalise(intg)

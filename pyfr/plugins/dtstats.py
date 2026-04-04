@@ -5,39 +5,43 @@ from pyfr.plugins.base import BaseSolnPlugin, init_csv
 class DtStatsPlugin(BaseSolnPlugin):
     name = 'dtstats'
     systems = ['*']
-    formulations = ['std']
     dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)
 
         self.count = 0
-        self.stats = []
         self.tprev = intg.tcurr
+        self.stage_csv = self.step_csv = None
 
-        # MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # The root rank needs to open the output file
+        # The root rank needs to open the output file(s)
         if rank == root:
-            header = 'n,t,dt,action,error'
-            self.csv = init_csv(self.cfg, cfgsect, header, nflush=500)
-        else:
-            self.csv = None
+            # Step file
+            header = 'n,t,dt,action,wtime,error'
+            self.step_csv = init_csv(self.cfg, cfgsect, header)
+
+            # Stage file; optional, for implicit integrators only
+            if (intg.formulation == 'implicit' and
+                self.cfg.hasopt(cfgsect, 'stage-file')):
+                header = ('n,stage,newton_iters,krylov_iters,precond_apps,'
+                          'init_resid,final_resid,krylov_tol')
+                self.stage_csv = init_csv(self.cfg, cfgsect, header,
+                                          filekey='stage-file')
 
     def __call__(self, intg):
-        # Process the sequence of rejected/accepted steps
-        for i, (dt, act, err) in enumerate(intg.stepinfo, start=self.count):
-            self.stats.append((i, self.tprev, dt, act, err))
+        # Only root rank writes output
+        if self.step_csv:
+            for i, info in enumerate(intg.stepinfo, start=self.count):
+                if self.stage_csv and info.stages:
+                    for s in info.stages:
+                        self.stage_csv(i, *s)
 
-        # Update the total step count and save the current time
+                err = info.err or ''
+                self.step_csv(i, self.tprev, info.dt, info.action, info.wtime,
+                              err)
+
+        # Update step count and time
         self.count += len(intg.stepinfo)
         self.tprev = intg.tcurr
-
-        # If we're the root rank then output
-        if self.csv:
-            for s in self.stats:
-                self.csv(*s)
-
-        # Reset the stats
-        self.stats = []
