@@ -78,7 +78,7 @@ class SharedNodesFinder(AlltoallMixin):
         return self._alltoallcv(comm, rdata, rcounts)[0]
 
     def _build_responses(self, rnodes, rranks):
-        order = np.argsort(rnodes)
+        order = np.argsort(rnodes, kind='stable')
         rnodes, rranks = rnodes[order], rranks[order]
 
         # Find group boundaries where node changes
@@ -99,7 +99,7 @@ class SharedNodesFinder(AlltoallMixin):
 
         # Duplicate and reorder messages by destination rank for Alltoallv
         s2m = np.repeat(np.arange(len(gsizes)), gsizes)
-        order = np.argsort(rranks)
+        order = np.argsort(rranks, kind='stable')
         sdest, smsg = rranks[order], s2m[order]
 
         mlens, sstarts = plens[smsg], pstarts[smsg]

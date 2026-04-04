@@ -192,7 +192,7 @@ class DistributedDirectory(AlltoallMixin):
         ranks = np.repeat(np.arange(comm.size, dtype=np.int32), rcounts)
 
         # Store sorted for searchsorted in lookup
-        sord = np.argsort(recv)
+        sord = np.argsort(recv, kind='stable')
         self.keys = recv[sord]
         self.ranks = ranks[sord]
 
