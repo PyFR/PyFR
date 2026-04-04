@@ -938,7 +938,7 @@ class BaselinePartitioner(BasePartitioner):
         if nv <= nparts or len(etab) == 0:
             return
 
-        if nrefine is None: nrefine = self.opts['nrefine']
+        nrefine = self.opts['nrefine'] if nrefine is None else nrefine
         targets, upper, lower = self._bounds(partwts, vwts)
         ufactor = self.opts['ufactor'] / 1000.0
 

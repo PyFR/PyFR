@@ -50,7 +50,7 @@ class BaseTriggerSource:
         threshold = float(c.get(tstr, tstr))
 
         if red not in valid_reds:
-            raise ValueError(f'Invalid reduction')
+            raise ValueError('Invalid reduction')
 
         return red, expr, cmp, threshold
 
