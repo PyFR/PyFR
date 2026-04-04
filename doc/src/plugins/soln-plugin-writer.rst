@@ -5,7 +5,10 @@
 Periodically write the solution to disk in the pyfrs format.
 Parameterised with
 
-#. ``dt-out`` --- write to disk every ``dt-out`` time units:
+#. ``dt-out`` --- write to disk every ``dt-out`` time units.  This
+   parameter may be omitted when the writer is gated by a trigger
+   (``trigger-action = gate``), in which case the writer outputs
+   whenever the trigger is active:
 
     *float*
 
@@ -38,7 +41,7 @@ Parameterised with
 
 #. ``region`` --- region to be written, specified as either the
    entire domain using ``*``, a combination of the geometric shapes
-   specified in :ref:`regions`, or a sub-region of elements that have
+   specified in :ref:`user_guide:regions`, or a sub-region of elements that have
    faces on a specific domain boundary via the name of the domain
    boundary:
 
@@ -53,7 +56,9 @@ Parameterised with
 
     *int*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-writer]
     dt-out = 0.01

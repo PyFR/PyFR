@@ -1,10 +1,8 @@
-.. highlight:: none
-
 **********
 User Guide
 **********
 
-For information on how to install PyFR see :ref:`installation`.
+For information on how to install PyFR see :ref:`installation:installation`.
 
 .. _running-pyfr:
 
@@ -21,17 +19,21 @@ The following core commands are available from the ``pyfr`` program:
 
 pyfr import
    Convert a `Gmsh <https://gmsh.info/>`_ .msh file into a PyFR
-   .pyfrm file.  Example::
+   .pyfrm file.  Example:
 
-        pyfr import mesh.msh mesh.pyfrm
+   .. code-block:: shell
+
+       pyfr import mesh.msh mesh.pyfrm
 
 pyfr partition
    Handles mesh partitioning.
 
    pyfr partition add
-      Adds a new partitioning to mesh.  Example::
+      Adds a new partitioning to mesh.  Example:
 
-         pyfr partition add mesh.pyfrm 10 ten_parts
+      .. code-block:: shell
+
+          pyfr partition add mesh.pyfrm 10 ten_parts
 
       Here, ``ten_parts`` is the *name* of the partitioning and is an
       arbitrary identifier.  If no name is provided it defaults to the
@@ -43,40 +45,54 @@ pyfr partition
       :ref:`performance guide <perf mixed grids>`.
 
    pyfr partition reconstruct
-      Reconstructs a partitioning from a solution file.  Example::
+      Reconstructs a partitioning from a solution file.  Example:
 
-         pyfr partition reconstruct mesh.pyfrm soln.pyfrm part_name
+      .. code-block:: shell
+
+          pyfr partition reconstruct mesh.pyfrm soln.pyfrm part_name
 
    pyfr partition list
-      Lists partitionings in a mesh.  Example::
+      Lists partitionings in a mesh.  Example:
 
-         pyfr partition list mesh.pyfrm
+      .. code-block:: shell
+
+          pyfr partition list mesh.pyfrm
 
    pyfr partition info
       Shows information about a specific partitioning in a mesh.
-      Example::
+      Example:
 
-         pyfr partition info mesh.pyfrm ten_parts
+      .. code-block:: shell
+
+          pyfr partition info mesh.pyfrm ten_parts
 
    pyfr partition remove
-      Deletes a partitioning from a mesh.  Example::
+      Deletes a partitioning from a mesh.  Example:
 
-         pyfr partition remove mesh.pyfrm ten_parts
+      .. code-block:: shell
+
+          pyfr partition remove mesh.pyfrm ten_parts
 
 pyfr run
-   Start a new PyFR simulation.  Example::
+   Start a new PyFR simulation.  Example:
 
-        pyfr run mesh.pyfrm configuration.ini
+   .. code-block:: shell
+
+       pyfr run mesh.pyfrm configuration.ini
 
 pyfr restart
-   Restart a PyFR simulation from an existing solution file.  Example::
+   Restart a PyFR simulation from an existing solution file.  Example:
 
-        pyfr restart mesh.pyfrm solution.pyfrs
+   .. code-block:: shell
+
+       pyfr restart mesh.pyfrm solution.pyfrs
 
    It is also possible to restart with a different configuration file.
-   Example::
+   Example:
 
-        pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
+   .. code-block:: shell
+
+       pyfr restart mesh.pyfrm solution.pyfrs configuration.ini
 
 pyfr export
    Convert a PyFR ``.pyfrs`` file into an unstructured VTK ``.vtu`` or
@@ -85,15 +101,19 @@ pyfr export
    pyfr export volume
       Exports a volume grid.  If ``--eopt=order:n`` is provided then
       PyFR elements are converted where possible to high-order VTK
-      elements.  Example::
+      elements.  Example:
 
-        pyfr export volume --eopt=order:4 mesh.pyfrm solution.pyfrs solution.vtu
+      .. code-block:: shell
+
+          pyfr export volume --eopt=order:4 mesh.pyfrm solution.pyfrs solution.vtu
 
       If a ``--eopt=divisor:n`` flag is provided with an integer
       argument then elements are subdivided into linear VTK cells.
-      Example::
+      Example:
 
-        pyfr export volume --eopt=divisor:4 mesh.pyfrm solution.pyfrs solution.vtu
+      .. code-block:: shell
+
+          pyfr export volume --eopt=divisor:4 mesh.pyfrm solution.pyfrs solution.vtu
 
       By default elements are converted to high-order VTK cells which
       are exported, where the order of the cells is equal to the order
@@ -105,28 +125,44 @@ pyfr export
       velocity`` will only export   the *density* and *velocity* fields.
 
    pyfr export boundary
-      Exports one of more boundaries.  Example::
+      Exports one of more boundaries.  Example:
 
-        pyfr export boundary mesh.pyfrm solution.pyfrs solution.vtu lower_wall upper_wall
+      .. code-block:: shell
+
+          pyfr export boundary mesh.pyfrm solution.pyfrs solution.vtu lower_wall upper_wall
 
       Note that boundary export is only supported for 3D grids.
 
    pyfr export stl
-      Exports one or more STL surfaces.  Example::
+      Exports one or more STL surfaces.  Example:
 
-        pyfr export stl mesh.pyfrm solution.pyfrs solution.vtu teapot
+      .. code-block:: shell
+
+          pyfr export stl mesh.pyfrm solution.pyfrs solution.vtu teapot
 
       The STL surfaces must have already been added to the mesh with
       ``pyfr region add``.
+
+      If an ``--eopt=subdiv:spherigon`` flag is provided then the STL
+      mesh will be smoothed using C1 spherigon interpolation.  This
+      uses angle-weighted vertex normals to lift subdivided points
+      onto curved tangent planes, yielding a smoother surface.  By
+      default, linear subdivision is used.  Example:
+
+      .. code-block:: shell
+
+          pyfr export stl --eopt=divisor:4 --eopt=subdiv:spherigon mesh.pyfrm solution.pyfrs solution.vtu teapot
 
    All of the export commands also support a *batch* processing mode
    wherein the list of input solution files and output files are read in
    from disk.  This option is activated by passing ``-`` for the
    solution file and output file.  By default, the file is taken to be
    *stdin* although this can be overridden with the ``--batchfile``
-   option.  Example::
+   option.  Example:
 
-        for f in *.pyfrs; do echo "$f ${f%.pyfrs}.vtu"; done | pyfr -p export volume mesh.pyfrm - -
+   .. code-block:: shell
+
+       for f in *.pyfrs; do echo "$f ${f%.pyfrs}.vtu"; done | pyfr -p export volume mesh.pyfrm - -
 
    This command will export each solution file in the current directory
    to a VTU file.
@@ -135,24 +171,208 @@ pyfr region
    Handles STL region processing.
 
    pyfr region add
-      Adds an STL region to the mesh.  Example::
+      Adds an STL region to the mesh.  Example:
 
-         pyfr region add mesh.pyfrm teapot.stl teapot
+      .. code-block:: shell
+
+          pyfr region add mesh.pyfrm teapot.stl teapot
 
    pyfr region list
-      Lists the STL regions in the mesh.  Example::
+      Lists the STL regions in the mesh.  Example:
 
-         pyfr region list mesh.pyfrm
+      .. code-block:: shell
+
+          pyfr region list mesh.pyfrm
 
    pyfr region remove
-      Removes an STL region from the mesh.  Example::
+      Removes an STL region from the mesh.  Example:
 
-         pyfr region remove mesh.pyfrm teapot
+      .. code-block:: shell
 
-The ``run``, ``restart``, and ``export`` commands can be run in
-parallel. To do so prefix ``pyfr`` with ``mpiexec -n <cores/devices>``.
+          pyfr region remove mesh.pyfrm teapot
+
+pyfr upgrade
+   Upgrade a mesh (``.pyfrm``) or solution (``.pyfrs``) file from an
+   older format version to the latest.  Example:
+
+   .. code-block:: shell
+
+       pyfr upgrade old-mesh.pyfrm new-mesh.pyfrm
+
+   If no output file is given the upgrade is performed in-place:
+
+   .. code-block:: shell
+
+       pyfr upgrade mesh.pyfrm
+
+   The upgrade is atomic; a temporary file is written first and only
+   renamed on success.  Currently the following upgrades are supported:
+
+   - **Mesh v1 to v2** --- adds element colouring data.
+   - **Solution v1 to v2** --- converts flat solution arrays to the
+     compound dtype format with field groups and per-element partition
+     IDs.
+
+   If the file is already at the latest version an error is raised.
+
+pyfr resample
+   Resample a solution from one mesh onto another using point cloud
+   interpolation.  This is useful for initialising a simulation on a
+   new mesh from an existing solution, including across different
+   element types and polynomial orders.  Example:
+
+   .. code-block:: shell
+
+       pyfr resample src.pyfrm src.pyfrs tgt.pyfrm tgt.ini tgt.pyfrs
+
+   By default the ``weno`` (point cloud WENO) interpolator is used.
+   The polynomial degree and stencil size are automatically derived
+   from the source solution order: the central degree is set to
+   min(*p*, 3) where *p* is the source polynomial order, and the
+   stencil size is chosen to keep the least-squares system roughly
+   3x overdetermined.  These defaults can be overridden with the
+   ``--iopt`` flag.  For example, to use TENO mode with a quartic
+   central fit:
+
+   .. code-block:: shell
+
+       pyfr resample src.pyfrm src.pyfrs tgt.pyfrm tgt.ini tgt.pyfrs \
+           --iopt mode:teno --iopt degree:4
+
+   The ``-i`` flag selects the interpolation method (default:
+   ``weno``).  The available interpolators are:
+
+   ``idw``
+      Inverse distance weighting.
+
+   ``weno``
+      Point cloud WENO interpolation.  Multiple overlapping polynomial
+      stencils are fitted and combined with nonlinear WENO-Z or TENO
+      weights to suppress oscillations near discontinuities.
+
+   Options for ``idw``:
+
+   ``n``
+      Number of nearest neighbours (default: 2\ :sup:`ndims`).
+
+   ``rho``
+      Distance exponent (default: ndims + 1).
+
+   Options for ``weno``:
+
+   ``degree``
+      Central stencil polynomial degree (default: auto from source
+      order, capped at 3).
+
+   ``sub-degree``
+      Directional sub-stencil polynomial degree (default: degree - 1,
+      minimum 1).
+
+   ``n``
+      Number of nearest neighbours (default: auto, at least
+      3x the number of monomial terms).
+
+   ``nsub``
+      Number of directional sub-stencils (default: 2\ :sup:`ndims`).
+
+   ``mode``
+      Nonlinear weighting scheme; ``wenoz`` (default) or ``teno``.
+
+   ``q``
+      WENO weight exponent (default: 4).
+
+   ``gamma0``
+      Ideal weight for the central stencil (default: 0.85).
+
+   ``ct``
+      TENO cut-off threshold (default: 1.0e-3).
+
+   ``cond``
+      Condition number threshold for rejecting stencils
+      (default: 1.0e8).
+
+   ``dir-bias``
+      Directional bias factor for sub-stencil selection
+      (default: 2.5).
+
+   ``rho``
+      IDW fallback distance exponent (default: ndims + 1).
+
+   If the mesh has been partitioned, a partitioning can be specified
+   with the ``-P`` flag.
+
+pyfr mesh
+   Analyse mesh quality.  Example:
+
+   .. code-block:: shell
+
+       pyfr mesh mesh.pyfrm config.ini
+
+   This outputs statistics on the scaled Jacobian, mesh scale, and
+   aspect ratio for each element type.  The mesh scale is particularly
+   useful for estimating CFL-limited time steps.
+
+   For each element type the number of curved elements is reported.
+   When curved elements are present, a separate *Scaled Jacobian
+   (curved)* section is shown with statistics and a histogram
+   filtered to just the curved population.  The scaled Jacobian is
+   defined as min(J)/max(J) within each element, where J is the
+   Jacobian determinant.  A value of 1 indicates a perfectly uniform
+   mapping, values approaching 0 indicate the element is close to
+   self-intersection, and negative values indicate an invalid
+   (self-intersecting) element.  Uniform curvature that does not
+   distort the mapping---such as a boundary layer where both sides
+   curve together---will retain a scaled Jacobian close to 1.
+
+   The summary section includes the minimum scaled Jacobian among
+   curved elements, which is highlighted when it falls below the
+   threshold.  This makes it straightforward to determine whether
+   curvature is the dominant source of mesh quality issues.
+
+   Optional arguments:
+
+   ``--order``
+      Override the polynomial order from the configuration file.
+
+   ``--worst N``
+      Show the N worst elements by scaled Jacobian and mesh scale.
+
+   ``--export FILE``
+      Export quality fields to a ``.pyfrs`` file for visualisation.
+      The exported fields are *scaled-jacobian*, *mesh-scale*,
+      *aspect-ratio*, and *is-curved* (0 or 1 per element).
+
+   ``--jac-thresh J``
+      Scaled Jacobian threshold for flagging poor elements (default 0.5).
+
+   ``--ar-thresh AR``
+      Aspect ratio threshold for flagging poor elements (default 20).
+
+   ``--json``
+      Output results as JSON for scripting.
+
+The ``run``, ``restart``, ``resample``, and ``export`` commands can be
+run in parallel. To do so prefix ``pyfr`` with ``mpiexec -n <cores/devices>``.
 Note that there must exist a partitioning in the mesh with an
 appropriate number of parts.
+
+MPI Distribution
+----------------
+
+MPICH is the recommended MPI distribution for use with PyFR.
+
+When using OpenMPI the ``-p`` progress flag will not function correctly
+in parallel.  This is because OpenMPI buffers output into complete
+lines before forwarding it, which breaks the ANSI escape sequences
+used by the progress bar.  To work around this, pass the ``--output``
+flag to ``mpiexec`` as:
+
+.. code-block:: shell
+
+    mpiexec --output :raw -n <cores/devices> pyfr -p ...
+
+The ``:raw`` qualifier instructs OpenMPI to forward output as it is
+received, without line buffering.
 
 .. _configuration-file:
 
@@ -195,11 +415,9 @@ well as characteristics of the spatial and temporal schemes to be used.
    systems/constants.rst
    systems/solver.rst
    systems/solver-time-integrator.rst
-   systems/solver-dual-time-integrator-multip.rst
    systems/solver-entropy-filter.rst
    systems/solver-artificial-viscosity.rst
    systems/solver-interfaces.rst
-   systems/soln-filter.rst
 
 Boundary and Initial Conditions
 -------------------------------
@@ -244,7 +462,9 @@ Plugins allow for powerful additional functionality to be swapped in and
 out. There are two classes of plugin available; solution plugins which
 are prefixed by ``soln-`` and solver plugins which are prefixed by
 ``solver-``. It is possible to create multiple instances of the same
-solution plugin by appending a suffix, for example::
+solution plugin by appending a suffix, for example:
+
+.. code-block:: ini
 
     [soln-plugin-writer]
     ...
@@ -285,6 +505,14 @@ Solver Plugins
    plugins/solver-plugin-source.rst
    plugins/solver-plugin-turbulence.rst
 
+Triggers
+^^^^^^^^
+
+.. toctree::
+   :maxdepth: 3
+
+   plugins/triggers.rst
+
 Regions
 ^^^^^^^
 
@@ -321,6 +549,12 @@ Cartesian ellipsoid ``ellipsoid(x0, a, b, c)``
 Sphere ``sphere(x0, r)``
   A sphere centred at *x0* with a radius of *r*. Equivalent to
   ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
+
+Plane ``plane(x0, n)``
+  A plane defined by a point *x0* on the plane and a normal vector *n*.
+  Selects all elements whose shape points straddle the plane.
+  Valid in both 2D and 3D.  To clip to a bounding region *B* use
+  ``A - (A - B)``.
 
 STL ``stl('name')``
   An STL region.  Note that the region *name* must have been already

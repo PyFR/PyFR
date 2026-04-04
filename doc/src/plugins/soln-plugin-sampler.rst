@@ -38,7 +38,9 @@ to a CSV or HDF5 file.  Parameterised with
 
     *boolean*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-sampler]
     nsteps = 10
@@ -51,26 +53,36 @@ This plugin also exposes functionality via a CLI. The following
 functions are available
 
 -  ``pyfr sampler add`` --- preprocesses and adds a set of points to a
-   mesh.  This command can be run under MPI.  Example::
+   mesh.  This command can be run under MPI.  Example:
 
-     pyfr sampler add mesh.pyfrm mypoints.csv
+   .. code-block:: ini
+
+       pyfr sampler add mesh.pyfrm mypoints.csv
 
 -  ``pyfr sampler list`` --- lists the named point sets in a mesh.
-   Example::
+   Example:
 
-     pyfr sampler list mesh.pyfrm
+   .. code-block:: ini
+
+       pyfr sampler list mesh.pyfrm
 
 -  ``pyfr sampler dump`` --- dumps the locations of all points in a
-   named point set.  Example::
+   named point set.  Example:
 
-     pyfr sampler dump mesh.pyfrm mypoints
+   .. code-block:: ini
+
+       pyfr sampler dump mesh.pyfrm mypoints
 
 -  ``pyfr sampler remove`` --- removes a named point set from a mesh.
-   Example::
+   Example:
 
-     pyfr sampler remove mesh.pyfrm mypoints
+   .. code-block:: ini
+
+       pyfr sampler remove mesh.pyfrm mypoints
 
 -  ``pyfr sampler sample`` --- samples a solution file.  This command
-   can be run in parallel using ``mpiexec -np n``.  Example::
+   can be run in parallel using ``mpiexec -np n``.  Example:
 
-     pyfr sampler sample --pts=mypoints.csv mesh.pyfrm soln.pyfrs
+   .. code-block:: ini
+
+       pyfr sampler sample --pts=mypoints.csv mesh.pyfrm soln.pyfrs

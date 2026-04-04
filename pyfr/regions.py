@@ -6,7 +6,6 @@ import numpy as np
 from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.shapes import BaseShape
 from pyfr.util import match_paired_paren, subclass_where
 
 
@@ -19,34 +18,81 @@ def parse_region_expr(expr, rdata=None):
         return BoundaryRegion(expr)
 
 
+class FaceSet:
+    def __init__(self, cidxmap, neles, interior_eles):
+        self._cidxmap = cidxmap
+        self._neles = {et: neles.get(et, 0) for et, _ in cidxmap.values()}
+
+        # Associate each cidx with a set-offset
+        sizes = np.zeros(max(cidxmap) + 1, dtype=int)
+        for cidx, (etype, fidx) in cidxmap.items():
+            sizes[cidx] = self._neles[etype]
+
+        self._off = np.cumsum(sizes) - sizes
+        self._set = np.zeros(np.sum(sizes), dtype=bool)
+
+        # Mark all faces of interior elements as initially in the set
+        for cidx, (etype, fidx) in cidxmap.items():
+            if etype in interior_eles:
+                eidxs = np.asarray(interior_eles[etype])
+                self._set[self._off[cidx] + eidxs] = True
+
+    def _keys(self, cidx, eidx):
+        return self._off[cidx] + eidx
+
+    def eliminate_paired(self, lhs, rhs):
+        lk = self._keys(lhs.cidxs, lhs.eidxs)
+        rk = self._keys(rhs.cidxs, rhs.eidxs)
+        both = self._set[lk] & self._set[rk]
+        self._set[lk[both]] = False
+        self._set[rk[both]] = False
+
+    def remove(self, con):
+        return self.remove_where(con, ...)
+
+    def check(self, con):
+        return self._set[self._keys(con.cidxs, con.eidxs)]
+
+    def remove_where(self, con, mask):
+        k = self._keys(con.cidxs[mask], con.eidxs[mask])
+        self._set[k] = False
+
+    def to_dict(self):
+        out = {}
+        for cidx, (etype, fidx) in self._cidxmap.items():
+            off = self._off[cidx]
+            eidxs = np.flatnonzero(self._set[off:off + self._neles[etype]])
+            if len(eidxs):
+                out[etype, fidx] = eidxs.tolist()
+
+        return out
+
+
 class BaseRegion:
     def interior_eles(self, mesh):
         pass
 
     def surface_faces(self, mesh, exclbcs=[]):
         comm, rank, root = get_comm_rank_root()
-        sfaces = set()
 
-        # Begin by assuming all faces of all elements are on the surface
-        for etype, eidxs in self.interior_eles(mesh).items():
-            nfaces = len(subclass_where(BaseShape, name=etype).faces)
-            sfaces.update((etype, i, j) for i in eidxs for j in range(nfaces))
+        # Build a face set assuming all interior faces are on the surface
+        neles = {et: s.shape[1] for et, s in mesh.spts.items()}
+        fs = FaceSet(mesh.cidxmap, neles, self.interior_eles(mesh))
 
         # Eliminate any faces with internal connectivity
-        for l, r in zip(*mesh.con):
-            if l in sfaces and r in sfaces:
-                sfaces.difference_update([l, r])
+        fs.eliminate_paired(*mesh.con)
 
         # Eliminate faces on specified boundaries
         for b in exclbcs:
-            sfaces.difference_update(mesh.bcon.get(b, set()))
+            if b in mesh.bcon:
+                fs.remove(mesh.bcon[b])
 
         reqs, bufs = [], []
 
         # Next, consider faces on partition boundaries
         for p, con in mesh.con_p.items():
             # See which of these faces are on the surface boundary
-            sb = np.array([c in sfaces for c in con])
+            sb = fs.check(con)
             rb = np.empty_like(sb)
 
             # Exchange this information with our neighbour
@@ -58,64 +104,69 @@ class BaseRegion:
 
         # Use this data to eliminate any shared faces
         for con, sb, rb in bufs:
-            sfaces.difference_update(f for b, f in zip(sb & rb, con) if b)
+            fs.remove_where(con, sb & rb)
 
-        # Group the remaining faces by element type
-        nsfaces = defaultdict(list)
-        for etype, eidx, fidx in sfaces:
-            nsfaces[etype, fidx].append(eidx)
-
-        # Sort and return
-        return {k: sorted(v) for k, v in nsfaces.items()}
+        # Group the remaining faces by (etype, fidx) and return
+        return fs.to_dict()
 
     @staticmethod
     def expand(mesh, eles, nlayers):
         comm, rank, root = get_comm_rank_root()
-        eles = defaultdict(list, eles)
+        # Element type offsets into a flat packed array
+        etypes = sorted(mesh.spts)
+        neles = [mesh.spts[et].shape[1] for et in etypes]
+        eoffs = dict(zip(etypes, np.cumsum([0] + neles[:-1])))
 
-        # Load our internal connectivity array
-        con = [(l[:2], r[:2]) for l, r in zip(*mesh.con)]
+        # Map cidx -> element offset for packed key indexing
+        cidx_eoff = np.zeros(max(mesh.cidxmap) + 1, dtype=int)
+        for cidx, (etype, fidx) in mesh.cidxmap.items():
+            if etype in eoffs:
+                cidx_eoff[cidx] = eoffs[etype]
 
-        # Load our partition boundary connectivity arrays
-        pcon = {}
-        for p, pc in mesh.con_p.items():
-            pc = [(etype, eidx) for etype, eidx, fidx in pc]
-            pcon[p] = (pc, np.empty(len(pc), dtype=bool))
+        pkey = lambda con: cidx_eoff[con.cidxs] + con.eidxs
 
-        # Tag all elements in the set as belonging to the first layer
-        neles = {(k, j): 0 for k, v in eles.items() for j in v}
+        # Element set: -1 = not in set, i = added in layer i
+        eset = np.full(sum(neles), -1)
+        for etype, eidxs in eles.items():
+            eset[eoffs[etype] + eidxs] = 0
+
+        # Packed keys for internal and partition connectivity
+        lkeys, rkeys = map(pkey, mesh.con)
+        pcon = {p: (pkey(pc), np.empty(len(pc), dtype=bool))
+                for p, pc in mesh.con_p.items()}
 
         # Iteratively grow out the element set
         for i in range(nlayers):
             reqs = []
 
             # Exchange information about recent updates to our set
-            for p, (pc, sb) in pcon.items():
-                sb[:] = [neles.get(c, -1) == i for c in pc]
+            for p, (keys, sb) in pcon.items():
+                sb[:] = eset[keys] == i
+                reqs.append(comm.Isendrecv_replace(
+                    sb, dest=p, source=p
+                ))
 
-                # Start the send/recv requests
-                reqs.append(comm.Isendrecv_replace(sb, dest=p, source=p))
-
-            # Grow our element set by considering internal connectivity
-            for l, r in con:
-                if neles.get(l, -1) == i and r not in neles:
-                    neles[r] = i + 1
-                    eles[r[0]].append(r[1])
-                elif neles.get(r, -1) == i and l not in neles:
-                    neles[l] = i + 1
-                    eles[l[0]].append(l[1])
+            # Grow by internal connectivity
+            lt, rt = eset[lkeys], eset[rkeys]
+            eset[rkeys[(lt == i) & (rt == -1)]] = i + 1
+            eset[lkeys[(rt == i) & (lt == -1)]] = i + 1
 
             # Wait for the exchanges to finish
             mpi.Request.Waitall(reqs)
 
-            # Grow our element set by considering adjacent partitions
-            for pc, rb in pcon.values():
-                for l, b in zip(pc, rb):
-                    if b and l not in neles:
-                        neles[l] = i + 1
-                        eles[l[0]].append(l[1])
+            # Grow by adjacent partitions
+            for keys, rb in pcon.values():
+                mask = rb & (eset[keys] == -1)
+                eset[keys[mask]] = i + 1
 
-        return eles
+        # Unpack results
+        result = defaultdict(list)
+        for et, off, n in zip(etypes, eoffs.values(), neles):
+            eidxs = np.flatnonzero(eset[off:off + n] >= 0)
+            if len(eidxs):
+                result[et] = eidxs.tolist()
+
+        return result
 
 
 class BoundaryRegion(BaseRegion):
@@ -134,8 +185,8 @@ class BoundaryRegion(BaseRegion):
 
         # Determine which of our elements are directly on the boundary
         if self.bcname in mesh.bcon:
-            for etype, eidx, fidx in mesh.bcon[self.bcname]:
-                eset[etype].append(eidx)
+            for etype, fidx, eidxs in mesh.bcon[self.bcname].items():
+                eset[etype].extend(eidxs.tolist())
 
         return {k: sorted(v) for k, v in eset.items()}
 
@@ -266,6 +317,28 @@ class SphereRegion(EllipsoidRegion):
 
     def __init__(self, x0, r, **kwargs):
         super().__init__(x0, r, r, r, **kwargs)
+
+
+class PlaneRegion(BaseGeometricRegion):
+    name = 'plane'
+
+    def __init__(self, x0, n, **kwargs):
+        super().__init__(**kwargs)
+
+        self.x0 = np.array(x0)
+        self.n = np.array(n, dtype=float)
+        self.n /= np.linalg.norm(self.n)
+
+    def _pts_in_region(self, pts):
+        dist = (pts - self.x0) @ self.n
+
+        # Shape points: detect straddle points
+        if dist.ndim == 2:
+            straddle = dist.min(axis=0) * dist.max(axis=0) <= 0
+            return np.broadcast_to(straddle, dist.shape).copy()
+
+        # Centroids: return false
+        return np.zeros(dist.shape, dtype=bool)
 
 
 class STLRegion(BaseGeometricRegion):

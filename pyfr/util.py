@@ -5,8 +5,19 @@ import os
 import pickle
 import re
 import shutil
+import sys
 
 from pyfr.ctypesutil import get_libc_function
+
+
+class tty:
+    _active = sys.stdout.isatty()
+    bold = '\033[1m' if _active else ''
+    rev = '\033[7m' if _active else ''
+    green = '\033[32m' if _active else ''
+    red = '\033[31m' if _active else ''
+    cyan = '\033[36m' if _active else ''
+    reset = '\033[0m' if _active else ''
 
 
 class silence:
@@ -82,6 +93,25 @@ def merge_intervals(ivals, tol=1e-5):
     return mivals
 
 
+class DisjointSet:
+    def __init__(self):
+        self._parent = {}
+
+    def find(self, i):
+        p = self._parent
+        while (pi := p.get(i)) is not None and pi != i:
+            p[i] = i = p.get(pi, pi)
+
+        return i
+
+    def union(self, i, j):
+        if (ri := self.find(i)) != (rj := self.find(j)):
+            self._parent[rj] = ri
+
+    def merges(self):
+        return {i: r for i in self._parent if (r := self.find(i)) != i}
+
+
 def first(v):
     return next(iter(v))
 
@@ -126,8 +156,8 @@ def digest(*args, hash='sha256'):
 
 
 def rm(path):
-    if os.path.isfile(path) or os.path.islink(path):
-        os.remove(path)
+    if path.is_file() or path.is_symlink():
+        path.unlink()
     else:
         shutil.rmtree(path)
 
@@ -164,7 +194,7 @@ def file_path_gen(basedir, basename, restore=False):
         t = yield
 
         for n in it.count(ns):
-            t = yield os.path.join(basedir, basename.format(t=t, n=n))
+            t = yield basedir / basename.format(t=t, n=n)
 
     gen = g()
     next(gen)

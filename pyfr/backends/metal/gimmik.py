@@ -96,6 +96,6 @@ class MetalGiMMiKKernels(MetalKernelProvider):
 
         class MulKernel(MetalKernel):
             def run(self, cbuf):
-                return kern(cbuf, grid, tgrp, b.data, out.data)
+                kern(cbuf, grid, tgrp, b.data, out.data)
 
         return MulKernel(mats=[a, b, out], dt=dt)

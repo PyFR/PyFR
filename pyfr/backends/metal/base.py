@@ -7,11 +7,13 @@ from pyfr.backends.metal.util import call_
 class MetalBackend(BaseBackend):
     name = 'metal'
     blocks = False
+    has_double = False
 
     def __init__(self, cfg):
         super().__init__(cfg)
 
-        from Metal import MTLCreateSystemDefaultDevice
+        from Metal import (MTLCommandBufferDescriptor,
+                           MTLCreateSystemDefaultDevice)
 
         # Get the default device
         self.dev = MTLCreateSystemDefaultDevice()
@@ -27,8 +29,11 @@ class MetalBackend(BaseBackend):
         self.soasz = 32
         self.csubsz = self.soasz
 
-        from pyfr.backends.metal import (blasext, gimmik, mps, packing,
-                                         provider, types)
+        from pyfr.backends.metal import (blasext, compiler, gimmik, mps,
+                                         packing, provider, types)
+
+        # Create the compiler
+        self.compiler = compiler.MetalCompiler(self)
 
         # Register our data types and meta kernels
         self.const_matrix_cls = types.MetalConstMatrix
@@ -52,14 +57,24 @@ class MetalBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
-        # Create a command queue
+        # Create a command queue and buffer descriptor
         self.queue = self.dev.newCommandQueue()
 
         # Track the last command buffer to the queue
         self.last_cbuf = None
 
+        self._cbuf_desc = MTLCommandBufferDescriptor.alloc().init()
+        self._cbuf_desc.setRetainedReferences_(False)
+
+    @property
+    def platform_id(self):
+        return str(self.dev.name())
+
+    def new_command_buffer(self):
+        return self.queue.commandBufferWithDescriptor_(self._cbuf_desc)
+
     def run_kernels(self, kernels, wait=False):
-        cbuf = self.queue.commandBuffer()
+        cbuf = self.new_command_buffer()
 
         for k in kernels:
             k.run(cbuf)
@@ -86,9 +101,25 @@ class MetalBackend(BaseBackend):
             self.last_cbuf.waitUntilCompleted()
             self.last_cbuf = None
 
+    def memory_info(self):
+        mi = super().memory_info()
+        total = self.dev.recommendedMaxWorkingSetSize()
+        free = total - self.dev.currentAllocatedSize()
+        return mi._replace(free=free, total=total)
+
     def _malloc_impl(self, nbytes):
-        from Metal import MTLResourceStorageModeManaged
+        from Metal import MTLResourceStorageModeShared, NSMakeRange
 
         # Allocate the device buffer
-        return call_(self.dev, 'newBufferWith', length=nbytes,
-                     options=MTLResourceStorageModeManaged)
+        buf = call_(self.dev, 'newBufferWith', length=nbytes,
+                    options=MTLResourceStorageModeShared)
+
+        # Zero the buffer
+        cbuf = self.new_command_buffer()
+        blit = cbuf.blitCommandEncoder()
+        blit.fillBuffer_range_value_(buf, NSMakeRange(0, nbytes), 0)
+        blit.endEncoding()
+        cbuf.commit()
+        cbuf.waitUntilCompleted()
+
+        return buf

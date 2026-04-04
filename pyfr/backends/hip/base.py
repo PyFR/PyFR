@@ -1,5 +1,7 @@
 import re
 
+import numpy as np
+
 from pyfr.backends.base import BaseBackend
 from pyfr.mpiutil import get_local_rank
 
@@ -85,6 +87,23 @@ class HIPBackend(BaseBackend):
         # Create a stream to run kernels on
         self._stream = self.hip.create_stream()
 
+        # Bounce buffer for device-to-host transfers
+        self._xfer_buf = None
+
+    def xfer_buf(self, shape, dtype):
+        nbytes = np.prod(shape)*np.dtype(dtype).itemsize
+
+        # Reallocate if the current buffer is too small
+        if self._xfer_buf is None or self._xfer_buf.nbytes < nbytes:
+            self._xfer_buf = self.hip.pagelocked_empty((nbytes,), np.uint8)
+
+        # Return a view of the correct shape and dtype
+        return self._xfer_buf[:nbytes].view(dtype).reshape(shape)
+
+    @property
+    def platform_id(self):
+        return self.props['name']
+
     def run_kernels(self, kernels, wait=False):
         # Submit the kernels to the HIP stream
         for k in kernels:
@@ -101,6 +120,11 @@ class HIPBackend(BaseBackend):
 
     def wait(self):
         self._stream.synchronize()
+
+    def memory_info(self):
+        mi = super().memory_info()
+        free, total = self.hip.mem_info()
+        return mi._replace(free=free, total=total)
 
     def _malloc_impl(self, nbytes):
         # Allocate

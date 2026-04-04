@@ -1,9 +1,8 @@
-*************************************
-[solver-elements-tri{-mg-p\ *order*}]
-*************************************
+*********************
+[solver-elements-tri]
+*********************
 
-Parameterises the triangular elements, or if -mg-p\ *order* is suffixed
-the triangular elements at multi-p level *order*, with
+Parameterises the triangular elements, with
 
 #. ``soln-pts`` --- location of the solution points in a triangular
    element:
@@ -25,7 +24,9 @@ the triangular elements at multi-p level *order*, with
 
     ``williams-shunn`` | ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-elements-tri]
     soln-pts = williams-shunn
