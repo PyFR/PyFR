@@ -22,7 +22,9 @@ Parameterises the backend with
 
      *int*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [backend]
     precision = double

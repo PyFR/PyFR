@@ -18,7 +18,7 @@ class OpenMPCompiler:
 
     def __init__(self, cfg):
         # Find GCC (or a compatible alternative)
-        self.cc = cfg.getpath('backend-openmp', 'cc', 'cc')
+        self.cc = str(cfg.getpath('backend-openmp', 'cc', 'cc'))
 
         # User specified compiler flags
         self.cflags = shlex.split(cfg.get('backend-openmp', 'cflags', ''))
@@ -35,7 +35,7 @@ class OpenMPCompiler:
         # Get the cache
         self.cache = ObjectCache('omp')
 
-    def build(self, src):
+    def build(self, src, *, fast_math=True):
         # Compute a digest of the current processor, compiler, and source
         ckey = digest(self.proc, self.version, self.cmd, src)
 
@@ -56,7 +56,10 @@ class OpenMPCompiler:
                 (tmpdir / cname).write_bytes(src.encode())
 
                 # Invoke the compiler
-                call_capture_output(self.cc_cmd(cname, lname), cwd=tmpdir)
+                call_capture_output(
+                    self.cc_cmd(cname, lname, fast_math=fast_math),
+                    cwd=tmpdir
+                )
 
                 # Add it to the cache and load it
                 mod = self._cache_set_and_loadlib(ckey, tmpdir / lname)
@@ -67,18 +70,21 @@ class OpenMPCompiler:
 
         return OpenMPCompilerModule(mod)
 
-    def cc_cmd(self, srcname, libname):
+    def cc_cmd(self, srcname, libname, *, fast_math=True):
         cmd = [
             self.cc,                # Compiler name
             '-shared',              # Create a shared library
             '-std=c11',             # Enable C11 support
-            '-Ofast',               # Optimise, incl. -ffast-math
+            '-O3',                  # Optimise
             '-march=native',        # Use CPU-specific instructions
             '-fopenmp',             # Enable OpenMP support
             '-fPIC',                # Generate position-independent code
             '-o', libname, srcname, # Library and source file names
             '-lm'                   # Link against libm
         ]
+
+        if fast_math:
+            cmd.append('-ffast-math')
 
         # Append any user-provided arguments and return
         return cmd + self.cflags

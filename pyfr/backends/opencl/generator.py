@@ -27,7 +27,9 @@ class OpenCLKernelGenerator(BaseGPUKernelGenerator):
             if va.isview:
                 kargs.append(f'{g} {c} ixdtype_t* {r} {va.name}_vix')
 
-                if va.ncdim == 2:
+                if self.ndim == 2 and not va.isbroadcastc:
+                    kargs.append(f'ixdtype_t {va.name}_vrstri')
+                elif va.ncdim == 2:
                     kargs.append(f'{g} {c} ixdtype_t* {r} {va.name}_vrstri')
             # Arrays
             elif self.needs_ldim(va):

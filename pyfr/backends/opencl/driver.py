@@ -50,6 +50,7 @@ class OpenCLWrappers(LibWrapper):
     BUFFER_CREATE_TYPE_REGION = 0x1220
     DEVICE_AFFINITY_DOMAIN_NEXT_PARTITIONABLE = 0x20
     DEVICE_EXTENSIONS = 0x1030
+    DEVICE_GLOBAL_MEM_SIZE = 0x101f
     DEVICE_LOCAL_MEM_SIZE = 0x1023
     DEVICE_MEM_BASE_ADDR_ALIGN = 0x1019
     DEVICE_NAME = 0x102b
@@ -245,6 +246,7 @@ class OpenCLDevice(_OpenCLBase):
         self.name = self._query_str('name')
         self.vendor = self._query_str('vendor')
 
+        self.global_mem_size = self._query_type(c_ulong, 'global_mem_size')
         self.local_mem_size = self._query_type(c_ulong, 'local_mem_size')
         self.mem_align = self._query_type(c_uint, 'mem_base_addr_align') // 8
 
@@ -548,11 +550,39 @@ class OpenCL(_OpenCLWaitFor):
 
         return np.array(alloc, copy=False)
 
-    def zero(self, dst, off, nbytes):
-        z = c_char(0)
-        self.lib.clEnqueueFillBuffer(self.qdflt, dst, byref(z), 1, off,
-                                     nbytes, 0, None, None)
-        self.qdflt.finish()
+    def _get_zero_kernel(self):
+        try:
+            return self._zero_kernel
+        except AttributeError:
+            src = r'''
+            __kernel void zero_u32(__global uint *buf, ulong nbytes)
+            {
+                ulong gid = get_global_id(0), gsz = get_global_size(0);
+
+                for (ulong i = gid; i < nbytes / 4; i += gsz)
+                    buf[i] = 0;
+            }
+            '''
+
+            self._zero_kernel = kern = self.program(src).get_kernel(
+                'zero_u32', [c_uint64, c_uint64]
+            )
+            return kern
+
+    def zero(self, dst, nbytes, queue=None, wait_for=None, ret_evt=False):
+        ls = 256
+        gs = (min(1 << 20, max(ls, nbytes - nbytes % -ls)),)
+
+        kern = self._get_zero_kernel()
+        kern.set_dims(gs, (ls,))
+        kern.set_args(dst, nbytes)
+
+        queue = queue or self.qdflt
+        evt = kern.exec_async(queue, wait_for, ret_evt)
+        if queue is self.qdflt and not ret_evt:
+            queue.finish()
+        elif ret_evt:
+            return evt
 
     def memcpy(self, queue, dst, src, nbytes, blocking=False, wait_for=None,
                ret_evt=False):

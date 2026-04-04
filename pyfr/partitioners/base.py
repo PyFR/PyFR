@@ -4,6 +4,7 @@ import numpy as np
 
 from pyfr.nputil import iter_struct
 from pyfr.progress import NullProgressSequence
+from pyfr.util import DisjointSet
 
 
 Graph = namedtuple('Graph', ['vtab', 'etab', 'vwts', 'ewts'])
@@ -157,36 +158,10 @@ class BasePartitioner:
     def _partition_graph(self, graph, partwts):
         pass
 
-    @classmethod
-    def _merge_con(cls, pmerge, l, r):
-        if l == r:
-            return
-
-        if l in pmerge and r in pmerge:
-            cls._merge_con(pmerge, pmerge[l], pmerge[r])
-        elif l in pmerge:
-            cls._merge_con(pmerge, pmerge[l], r)
-        elif r in pmerge:
-            cls._merge_con(pmerge, l, pmerge[r])
-        else:
-            pmerge[l] = r
-
     @staticmethod
-    def _resolve_merge(pmerge):
-        nmerge = {}
-
-        for l, r in pmerge.items():
-            while (rr := pmerge.get(r)) is not None:
-                r = rr
-
-            nmerge[l] = r
-
-        return nmerge
-
-    @classmethod
-    def _group_periodic_eles(cls, mesh, con, cdisps, elewts_fn):
+    def _group_periodic_eles(mesh, con, cdisps, elewts_fn):
         cdtype = [('l', np.int64), ('r', np.int64)]
-        pmerge, pidx = {}, []
+        ds, pidx = DisjointSet(), []
 
         # View it as a structured array
         conv = con.view(cdtype).squeeze()
@@ -209,13 +184,11 @@ class BasePartitioner:
             # Locate these entries in the connectivity array
             pidx.append(np.searchsorted(conv, pcon.view(cdtype).squeeze()))
 
-            # Determine which elements require mering
+            # Determine which elements require merging
             for l, r in iter_struct(pcon.reshape(-1, 2)):
-                cls._merge_con(pmerge, l, r)
+                ds.union(l, r)
 
-        if pmerge:
-            pmerge = cls._resolve_merge(pmerge)
-
+        if (pmerge := ds.merges()):
             # Eliminate connectivity entries associated with periodic faces
             con = np.delete(con, np.hstack(pidx), axis=0)
 

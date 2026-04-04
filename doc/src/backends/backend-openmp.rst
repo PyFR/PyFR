@@ -23,7 +23,9 @@ Parameterises the OpenMP backend with
 
     where *n* is a positive integer.
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [backend-openmp]
     cc = gcc

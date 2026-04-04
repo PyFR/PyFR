@@ -4,72 +4,85 @@
 kernel void
 reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
           device const ixdtype_t& ldim, device fpdtype_t* reduced,
-          device const fpdtype_t* rcurr, device const fpdtype_t* rold,
-% if method == 'errest':
-          device const fpdtype_t* rerr,
-          constant fpdtype_t& atol, constant fpdtype_t& rtol,
-% elif method == 'resid' and dt_type == 'matrix':
-          device const fpdtype_t* dt_mat, constant fpdtype_t& dt_fac,
-% elif method == 'resid':
-          constant fpdtype_t& dt_fac,
-% endif
+  % for v in vvars:
+          device const fpdtype_t* ${v},
+  % endfor
+  % for s in svars:
+           constant fpdtype_t& ${s},
+  % endfor
           ushort simdIdx [[thread_index_in_simdgroup]],
           ushort simdNum [[simdgroup_index_in_threadgroup]],
           ushort simdCnt [[simdgroups_per_threadgroup]],
           uint2 threadIdx [[thread_position_in_threadgroup]],
           uint2 blockIdx [[threadgroup_position_in_grid]])
 {
+% if pvars:
+    #define VARIDX blockIdx.y
+% for i, name in enumerate(pvars):
+    const fpdtype_t *_pv_${name} = _pv + ${i*ncola};
+% endfor
+% endif
     int tid = threadIdx.x;
     ixdtype_t i = ixdtype_t(blockIdx.x)*${blocksz} + tid;
-    ixdtype_t nblocks = (ncolb + ${blocksz} - 1) / ${blocksz};
 
-    fpdtype_t r, acc = 0;
-    threadgroup fpdtype_t sdata[${blocksz // 8 - 1}];
+    fpdtype_t acc[${nexprs}] = ${pyfr.array(str(init_val), i=nexprs)};
+    threadgroup fpdtype_t sdata[${nexprs}][${blocksz // 8}];
 
     if (i < ncolb)
     {
         for (ixdtype_t j = 0; j < nrow; j++)
         {
             ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, ${ncola});
-        % if method == 'errest':
-            r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
-        % elif method == 'resid':
-            r = (rcurr[idx] - rold[idx])/(dt_fac${'*dt_mat[idx]' if dt_type == 'matrix' else ''});
-        % endif
-
-        % if norm == 'uniform':
-            acc = max(r*r, acc);
-        % else:
-            acc += r*r;
-        % endif
+        % for i, e in enumerate(exprs):
+          % if rop == 'max':
+            acc[${i}] = max(acc[${i}], ${e});
+          % else:
+            acc[${i}] += ${e};
+          % endif
+        % endfor
         }
     }
 
     // Reduce over SIMD lanes
-    % if norm == 'uniform':
-        acc = simd_max(acc);
-    % else:
-        acc = simd_sum(acc);
-    % endif
+    for (int i = 0; i < ${nexprs}; i++)
+        acc[i] = simd_${rop}(acc[i]);
 
-    if (simdNum > 0 && simdIdx == 0)
-        sdata[simdNum - 1] = acc;
+    // Write SIMD group results to shared memory
+    if (simdIdx == 0)
+    {
+        for (int i = 0; i < ${nexprs}; i++)
+            sdata[i][simdNum] = acc[i];
+    }
 
     threadgroup_barrier(mem_flags::mem_threadgroup);
 
-    // Have the first thread perform the final reduction
-    if (tid == 0)
+    // Final phase: assign each SIMD group to expression(s)
+    if (simdNum < ${nexprs})
     {
-        for (int i = 1; i < simdCnt; i++)
+        for (int e = simdNum; e < ${nexprs}; e += simdCnt)
         {
-        % if norm == 'uniform':
-            acc = max(acc, sdata[i - 1]);
-        % else:
-            acc += sdata[i - 1];
-        % endif
-        }
+            // Each SIMD group's first thread collects and writes its assigned expression
+            if (simdIdx == 0)
+            {
+                // Start with first SIMD group's contribution
+                fpdtype_t acc_e = sdata[e][0];
 
-        // Copy to global memory
-        reduced[ixdtype_t(blockIdx.y)*nblocks + blockIdx.x] = acc;
+                // Collect contributions from all other SIMD groups for expression e
+                for (int j = 1; j < simdCnt; j++)
+                {
+                % if rop == 'max':
+                    acc_e = max(acc_e, sdata[e][j]);
+                % else:
+                    acc_e += sdata[e][j];
+                % endif
+                }
+
+                // Atomically update global result
+                atomic_${rop}_fpdtype(&reduced[e*${ncola} + ixdtype_t(blockIdx.y)], acc_e);
+            }
+        }
     }
+% if pvars:
+    #undef VARIDX
+% endif
 }

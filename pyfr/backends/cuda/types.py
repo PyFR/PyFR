@@ -25,19 +25,19 @@ class CUDAMatrixBase(_CUDAMatrixCommon, base.MatrixBase):
         del self._initval
 
     def _get(self):
-        # Allocate an empty buffer
-        buf = np.empty((self.nrow, self.leaddim), dtype=self.dtype)
+        # Get a pinned bounce buffer from the backend
+        buf = self.backend.xfer_buf((self.nrow, self.leaddim), self.dtype)
 
-        # Copy
+        # Copy from device
         self.backend.cuda.memcpy(buf, self.data, self.nbytes)
 
-        # Unpack
-        return self._unpack(buf)
+        # Unpack and ensure we return owned data (not a view of the buffer)
+        return np.require(self._unpack(buf), requirements='O')
 
     def _set(self, ary):
-        buf = self._pack(ary)
-
-        # Copy
+        # Pack into a pinned bounce buffer and copy to device
+        buf = self.backend.xfer_buf((self.nrow, self.leaddim), self.dtype)
+        self._pack(ary, out=buf)
         self.backend.cuda.memcpy(self.data, buf, self.nbytes)
 
 
@@ -54,11 +54,9 @@ class CUDAXchgView(base.XchgView): pass
 
 
 class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
-    def __init__(self, backend, dtype, ioshape, initval, extent, aliases,
-                 tags):
+    def __init__(self, backend, dtype, ioshape, initval, extent, tags):
         # Call the standard matrix constructor
-        super().__init__(backend, dtype, ioshape, initval, extent, aliases,
-                         tags)
+        super().__init__(backend, dtype, ioshape, initval, extent, tags)
 
         # If MPI is CUDA-aware then we can elide copies to/from a host buffer
         self.elide_copy = backend.mpitype == 'cuda-aware'
@@ -79,8 +77,6 @@ class CUDAXchgMatrix(CUDAMatrix, base.XchgMatrix):
 
 
 class CUDAGraph(base.Graph):
-    needs_pdeps = True
-
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -88,8 +84,8 @@ class CUDAGraph(base.Graph):
         self.stale_kparams = {}
         self.mpi_events = []
 
-    def add_mpi_req(self, req, deps=[]):
-        super().add_mpi_req(req, deps)
+    def _add_mpi_req(self, req, deps):
+        super()._add_mpi_req(req, deps)
 
         if deps:
             event = self.backend.cuda.create_event()
@@ -97,9 +93,7 @@ class CUDAGraph(base.Graph):
 
             self.mpi_events.append((event, req))
 
-    def commit(self):
-        super().commit()
-
+    def _commit(self):
         self.exc_graph = self.graph.instantiate()
 
     def run(self, stream):

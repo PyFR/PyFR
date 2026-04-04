@@ -1,23 +1,28 @@
 import numpy as np
 
+from pyfr.backends.base.blasext import BaseBlasExtKernels
 from pyfr.backends.cuda.provider import (CUDAKernel, CUDAKernelProvider,
                                          get_grid_for_block)
 
 
-class CUDABlasExtKernels(CUDAKernelProvider):
-    def axnpby(self, *arr, subdims=None):
-        if any(arr[0].traits != x.traits for x in arr[1:]):
-            raise ValueError('Incompatible matrix types')
+class CUDABlasExtKernels(BaseBlasExtKernels, CUDAKernelProvider):
+    pvar_idx = 'VARIDX'
 
-        nv = len(arr)
-        ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = arr[0].traits[1:]
-        ncola, ncolb = arr[0].ioshape[1:]
+    def batched_inv(self, m):
+        class BatchedInvKernel(CUDAKernel):
+            def run(self, stream):
+                M = m.get().transpose(2, 0, 1)
+                m.set(np.linalg.inv(M).transpose(1, 2, 0))
+
+        return BatchedInvKernel(mats=[m])
+
+    def _axnpby(self, arr, tplargs):
+        nv, ixdtype = tplargs['nv'], self.backend.ixdtype
+        nrow, _, ldim, fpdtype = arr[0].traits[1:]
+        ncolb = arr[0].ioshape[-1]
 
         # Render the kernel template
-        src = self.backend.lookup.get_template('axnpby').render(
-            subdims=subdims or range(ncola), ncola=ncola, nv=nv
-        )
+        src = self.backend.lookup.get_template('axnpby').render(**tplargs)
 
         # Build the kernel
         kern = self._build_kernel('axnpby', src,
@@ -55,69 +60,75 @@ class CUDABlasExtKernels(CUDAKernelProvider):
 
         return CopyKernel(mats=[dst, src])
 
-    def reduction(self, *rs, method, norm, dt_mat=None):
-        if any(r.traits != rs[0].traits for r in rs[1:]):
-            raise ValueError('Incompatible matrix types')
+    def zero(self, m):
+        cuda = self.backend.cuda
 
+        class ZeroKernel(CUDAKernel):
+            def add_to_graph(self, graph, deps):
+                return graph.graph.add_memset(m, 0, m.nbytes, deps)
+
+            def run(self, stream):
+                cuda.memset(m, 0, m.nbytes, stream)
+
+        return ZeroKernel(mats=[m])
+
+    def _reduction(self, fvvar, vvars, svars, tplargs):
         cuda = self.backend.cuda
         ixdtype = self.backend.ixdtype
-        nrow, ncol, ldim, fpdtype = rs[0].traits[1:]
-        ncola, ncolb = rs[0].ioshape[1:]
+        nrow, _, ldim, fpdtype = fvvar.traits[1:]
+        ncola, ncolb = fvvar.ioshape[-2:]
+        nexprs = tplargs['nexprs']
 
-        # Reduction block dimensions
+        # Reduction block dimensions (use more blocks for atomic approach)
         block = (256, 1, 1)
+        nblocks = min(1024, (ncolb + block[0] - 1) // block[0])
+        grid = (nblocks, ncola, 1)
 
-        # Determine the grid size
-        grid = get_grid_for_block(block, ncolb, ncola)
+        # Result buffer on device (nexprs*ncola, not nexprs*ncola*nblocks)
+        reduced_dev = cuda.mem_alloc(nexprs*ncola*fvvar.itemsize)
 
-        # Empty result buffer on the device
-        reduced_dev = cuda.mem_alloc(ncola*grid[0]*rs[0].itemsize)
+        # Result buffer on host
+        reduced_host = cuda.pagelocked_empty((nexprs, ncola), fpdtype)
 
-        # Empty result buffer on the host
-        reduced_host = cuda.pagelocked_empty((ncola, grid[0]), fpdtype)
+        # Initialisation buffer (0 for sum, -fpdtype_max for max)
+        init_host = cuda.pagelocked_empty((nexprs, ncola), fpdtype)
+        init_host.fill(tplargs['init_val'])
 
-        tplargs = dict(norm=norm, method=method, dt_type=None)
-
-        if method == 'resid':
-            tplargs['dt_type'] = 'matrix' if dt_mat else 'scalar'
+        # Add backend-specific template arguments
+        tplargs['ncola'] = ncola
 
         # Get the kernel template
         src = self.backend.lookup.get_template('reduction').render(**tplargs)
 
-        regs = list(rs) + [dt_mat] if dt_mat else rs
-
-        # Argument types for reduction kernel
-        if method == 'errest':
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]*2
-        elif method == 'resid' and dt_mat:
-            argt = [ixdtype]*3 + [np.uintp]*4 + [fpdtype]
-        else:
-            argt = [ixdtype]*3 + [np.uintp]*3 + [fpdtype]
+        # Argument types for the reduction kernel
+        argt = [ixdtype]*3 + [np.uintp]*(1 + len(vvars)) + [fpdtype]*len(svars)
 
         # Build the reduction kernel
         rkern = self._build_kernel('reduction', src, argt)
 
         # Set the parameters
         params = rkern.make_params(grid, block)
-        params.set_args(nrow, ncolb, ldim, reduced_dev, *regs)
+        params.set_args(nrow, ncolb, ldim, reduced_dev, *vvars.values())
 
         # Runtime argument offset
-        facoff = argt.index(fpdtype)
+        coff = 4 + len(vvars)
 
-        # Norm type
-        reducer = np.max if norm == 'uniform' else np.sum
+        # Host-side reduction over ncola dimension
+        reducer = np.max if tplargs['rop'] == 'max' else np.sum
 
         class ReductionKernel(CUDAKernel):
             @property
             def retval(self):
                 return reducer(reduced_host, axis=1)
 
-            def bind(self, *facs):
-                params.set_args(*facs, start=facoff)
+            if svars:
+                def bind(self, *consts):
+                    params.set_args(*consts, start=coff)
 
             def run(self, stream):
+                cuda.memcpy(reduced_dev, init_host, reduced_dev.nbytes, stream)
                 rkern.exec_async(stream, params)
                 cuda.memcpy(reduced_host, reduced_dev, reduced_dev.nbytes,
                             stream)
 
-        return ReductionKernel(mats=regs)
+        return ReductionKernel(mats=vvars.values())

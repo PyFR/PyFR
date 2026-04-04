@@ -1,5 +1,6 @@
 from ctypes import c_int, c_void_p
 from functools import cached_property
+import platform
 import re
 
 import numpy as np
@@ -57,6 +58,10 @@ class OpenMPBackend(BaseBackend):
 
         # Pointwise kernels
         self.pointwise = self._providers[0]
+
+    @property
+    def platform_id(self):
+        return platform.processor() or 'cpu'
 
     def run_kernels(self, kernels, wait=False):
         for k in kernels:
