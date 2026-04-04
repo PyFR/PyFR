@@ -27,7 +27,9 @@ Parameterises the HIP backend with
 
      *int*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [backend-hip]
     device-id = local-rank

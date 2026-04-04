@@ -1,9 +1,8 @@
-*************************************
-[solver-elements-pyr{-mg-p\ *order*}]
-*************************************
+*********************
+[solver-elements-pyr]
+*********************
 
-Parameterises the pyramidal elements, or if -mg-p\ *order* is suffixed
-the pyramidal elements at multi-p level *order*, with
+Parameterises the pyramidal elements, with
 
 #. ``soln-pts`` --- location of the solution points in a pyramidal
    element:
@@ -25,7 +24,9 @@ the pyramidal elements at multi-p level *order*, with
 
     ``witherden`` | ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-elements-pyr]
     soln-pts = gauss-legendre

@@ -1,9 +1,8 @@
-**************************************
-[solver-elements-quad{-mg-p\ *order*}]
-**************************************
+**********************
+[solver-elements-quad]
+**********************
 
-Parameterises the quadrilateral elements, or if -mg-p\ *order* is
-suffixed the quadrilateral elements at multi-p level *order*, with
+Parameterises the quadrilateral elements, with
 
 #. ``soln-pts`` --- location of the solution points in a quadrilateral
    element:
@@ -26,7 +25,9 @@ suffixed the quadrilateral elements at multi-p level *order*, with
     ``gauss-legendre`` | ``gauss-legendre-lobatto`` |
     ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-elements-quad]
     soln-pts = gauss-legendre

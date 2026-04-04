@@ -60,8 +60,6 @@ class OpenMPView(base.View): pass
 
 
 class OpenMPGraph(base.Graph):
-    needs_pdeps = False
-
     def __init__(self, backend):
         super().__init__(backend)
 
@@ -81,8 +79,8 @@ class OpenMPGraph(base.Graph):
     def _get_nblocks(self, idxs):
         return max(self.klist[i].runargs.b.nblocks for i in idxs)
 
-    def add_mpi_req(self, req, deps=[]):
-        super().add_mpi_req(req, deps)
+    def _add_mpi_req(self, req, deps):
+        super()._add_mpi_req(req, deps)
 
         rra = OpenMPRegularRunArgs(fun=mpi.funcs.Start, args=mpi.addrof(req))
         kra = OpenMPKRunArgs(ktype=OpenMPKRunArgs.KTYPE_REGULAR, r=rra)
@@ -135,9 +133,7 @@ class OpenMPGraph(base.Graph):
 
         return allocsz, argsubs, argmasks
 
-    def group(self, kerns, subs=[]):
-        super().group(kerns, subs)
-
+    def _group(self, kerns, subs):
         kranges = self._get_kranges()
 
         # Handle split kernels
@@ -189,9 +185,7 @@ class OpenMPGraph(base.Graph):
         for k in kerns:
             self.kskip.update(kranges[k])
 
-    def commit(self):
-        super().commit()
-
+    def _commit(self):
         rlist = []
 
         for i, k in enumerate(self.klist):
@@ -200,6 +194,10 @@ class OpenMPGraph(base.Graph):
 
             if i not in self.kskip:
                 rlist.append(k.runargs)
+
+        # Trailing inline actions (MPI starts after the last kernel)
+        if len(self.klist) in self.kins:
+            rlist.extend(self.kins[len(self.klist)])
 
         self._runlist = make_array(rlist)
 

@@ -93,6 +93,17 @@ class CUDAMemcpy3D(Structure):
     ]
 
 
+class CUDAMemsetNodeParams(Structure):
+    _fields_ = [
+        ('dst', c_void_p),
+        ('pitch', c_size_t),
+        ('value', c_uint),
+        ('element_size', c_uint),
+        ('width', c_size_t),
+        ('height', c_size_t)
+    ]
+
+
 class CUDAWrappers(LibWrapper):
     _libname = 'cuda'
 
@@ -134,10 +145,12 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuDeviceGet', POINTER(c_int), c_int),
         (c_int, 'cuDeviceGetCount', POINTER(c_int)),
         (c_int, 'cuDeviceGetAttribute', POINTER(c_int), c_int, c_int),
+        (c_int, 'cuDeviceGetName', c_char_p, c_int, c_int),
         (c_int, 'cuDeviceGetUuid_v2', 16*c_char, c_int),
         (c_int, 'cuDevicePrimaryCtxRetain', POINTER(c_void_p), c_int),
         (c_int, 'cuDevicePrimaryCtxRelease', c_int),
         (c_int, 'cuCtxSetCurrent', c_void_p),
+        (c_int, 'cuMemGetInfo_v2', POINTER(c_size_t), POINTER(c_size_t)),
         (c_int, 'cuMemAlloc_v2', POINTER(c_void_p), c_size_t),
         (c_int, 'cuMemFree_v2', c_void_p),
         (c_int, 'cuMemAllocHost_v2', POINTER(c_void_p), c_size_t),
@@ -145,6 +158,7 @@ class CUDAWrappers(LibWrapper):
         (c_int, 'cuMemcpy', c_void_p, c_void_p, c_size_t),
         (c_int, 'cuMemcpyAsync', c_void_p, c_void_p, c_size_t, c_void_p),
         (c_int, 'cuMemsetD8_v2', c_void_p, c_char, c_size_t),
+        (c_int, 'cuMemsetD8Async', c_void_p, c_char, c_size_t, c_void_p),
         (c_int, 'cuStreamCreate', POINTER(c_void_p), c_uint),
         (c_int, 'cuStreamDestroy_v2', c_void_p),
         (c_int, 'cuStreamBeginCapture', c_void_p, c_uint),
@@ -175,6 +189,8 @@ class CUDAWrappers(LibWrapper):
          POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'cuGraphAddMemcpyNode', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, POINTER(CUDAMemcpy3D), c_void_p),
+        (c_int, 'cuGraphAddMemsetNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, POINTER(CUDAMemsetNodeParams), c_void_p),
         (c_int, 'cuGraphInstantiateWithFlags', POINTER(c_void_p), c_void_p,
          c_ulonglong),
         (c_int, 'cuGraphExecKernelNodeSetParams', c_void_p, c_void_p,
@@ -207,7 +223,8 @@ class _CUDABase:
     def __del__(self):
         if self._destroyfn:
             try:
-                getattr(self.cuda.lib, self._destroyfn)(self)
+                if self.cuda.ctx:
+                    getattr(self.cuda.lib, self._destroyfn)(self)
             except AttributeError:
                 pass
 
@@ -406,6 +423,23 @@ class CUDAGraph(_CUDABase):
 
         return ptr.value
 
+    def add_memset(self, dst, val, nbytes, deps=None):
+        dst = getattr(dst, '_as_parameter_', dst)
+
+        params = CUDAMemsetNodeParams()
+        params.dst = int(dst)
+        params.pitch = 0
+        params.value = val
+        params.element_size = 1
+        params.width = nbytes
+        params.height = 1
+
+        ptr = c_void_p()
+        self.cuda.lib.cuGraphAddMemsetNode(ptr, self, *self._make_deps(deps),
+                                           params, self.cuda.ctx)
+
+        return ptr.value
+
     def add_graph(self, graph, deps=None):
         ptr = c_void_p()
         self.cuda.lib.cuGraphAddChildGraphNode(ptr, self,
@@ -446,6 +480,7 @@ class CUDA:
     def __del__(self):
         if getattr(self, 'ctx', None):
             self.lib.cuDevicePrimaryCtxRelease(self.dev)
+            self.ctx = None
 
     def device_count(self):
         count = c_int()
@@ -472,6 +507,11 @@ class CUDA:
         self.lib.cuCtxSetCurrent(self.ctx)
         self.dev = dev.value
 
+    def device_name(self):
+        buf = create_string_buffer(256)
+        self.lib.cuDeviceGetName(buf, 256, self.dev)
+        return buf.value.decode()
+
     def compute_capability(self):
         dev, lib = self.dev, self.lib
 
@@ -480,6 +520,11 @@ class CUDA:
         lib.cuDeviceGetAttribute(minor, lib.COMPUTE_CAPABILITY_MINOR, dev)
 
         return major.value, minor.value
+
+    def mem_info(self):
+        free, total = c_size_t(), c_size_t()
+        self.lib.cuMemGetInfo(free, total)
+        return free.value, total.value
 
     def mem_alloc(self, nbytes):
         return CUDADevAlloc(self, nbytes)
@@ -509,8 +554,11 @@ class CUDA:
         else:
             self.lib.cuMemcpyAsync(dst, src, nbytes, stream)
 
-    def memset(self, dst, val, nbytes):
-        self.lib.cuMemsetD8(dst, val, nbytes)
+    def memset(self, dst, val, nbytes, stream=None):
+        if stream is None:
+            self.lib.cuMemsetD8(dst, val, nbytes)
+        else:
+            self.lib.cuMemsetD8Async(dst, val, nbytes, stream)
 
     def load_module(self, cucode):
         return CUDAModule(self, cucode)

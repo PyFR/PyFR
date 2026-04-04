@@ -8,7 +8,7 @@ import numpy as np
 from pyfr._version import __version__
 from pyfr.nputil import iter_struct, fuzzysort
 from pyfr.polys import get_polybasis
-from pyfr.progress import NullProgressSequence
+from pyfr.progress import NullProgressSequence, NullProgressSpinner
 from pyfr.shapes import BaseShape
 from pyfr.util import digest, first, subclass_where
 
@@ -301,6 +301,62 @@ class NodalMeshAssembler:
 
                     cconn[lcidx][loff] = cidx, -1
 
+    @staticmethod
+    def compute_element_colouring(eles, codec, spinner=NullProgressSpinner()):
+        # Maximum number of colours
+        max_colours = max(einfo['faces'].shape[-1] for einfo in eles.values()) + 1
+
+        # Build element type displacements
+        edisps, disp = {}, 0
+        for etype in eles:
+            edisps[etype] = disp
+            disp += len(eles[etype])
+
+        # Create a map from cidx element types to their displacements
+        cdisps = [None]*len(codec)
+        for etype, edisp in edisps.items():
+            efaces = eles[etype]['faces']
+            for i in range(efaces.shape[-1]):
+                cdisps[codec.index(f'eles/{etype}/{i}')] = edisp
+
+        spinner()
+
+        # Allocate the colours and counts arrays
+        colours, counts = [None]*disp, [0]*max_colours
+
+        # Iterate through element types
+        for etype, edata in eles.items():
+            einfo, edisp = edata['faces'], edisps[etype]
+
+            # Iterate through elements
+            for gidx, eface in enumerate(iter_struct(einfo), start=edisp):
+                avail = [True]*max_colours
+
+                # Iterate through faces and see what colours are taken
+                for cidx, off in eface:
+                    if off >= 0 and (ngidx := cdisps[cidx] + off) < gidx:
+                        avail[colours[ngidx]] = False
+
+                # Start by assigning the smallest available colour
+                colour = avail.index(True)
+                min_n = counts[colour]
+
+                # Then, see if we can find a less-used colour
+                for c, (a, n) in enumerate(zip(avail, counts)):
+                    if a and n and n < min_n:
+                        colour, min_n = c, n
+
+                # Assign the colour and update the counts
+                colours[gidx] = colour
+                counts[colour] += 1
+
+            spinner()
+
+        # Store colours back into element arrays
+        for etype in eles:
+            n = len(eles[etype])
+            eles[etype]['colour'] = colours[edisps[etype]:edisps[etype] + n]
+
     def get_eles(self, lintol, progress=NullProgressSequence()):
         eles, codec = {}, []
 
@@ -326,7 +382,7 @@ class NodalMeshAssembler:
                 # Elements array data type
                 fdtype = [('cidx', np.int16), ('off', np.int64)]
                 edtype = [('nodes', np.int64, nnodes), ('curved', bool),
-                          ('faces', fdtype, nfaces)]
+                          ('faces', fdtype, nfaces), ('colour', np.uint8)]
 
                 # Allocate the elements array
                 eles[petype] = einfo = np.empty(len(enodes), dtype=edtype)
@@ -340,6 +396,10 @@ class NodalMeshAssembler:
         # Add in connectivity information
         with progress.start_with_spinner('Connecting elements') as spinner:
             pmap = self._connect_eles(eles, codec, spinner)
+
+        # Compute element colouring
+        with progress.start_with_spinner('Colouring elements') as spinner:
+            self.compute_element_colouring(eles, codec, spinner)
 
         # Apply linearisation
         with progress.start_with_spinner('Linearising elements') as spinner:

@@ -24,7 +24,9 @@ Parameterises entropy filter for shock capturing with
 
     ``nonlinear`` | ``linearised``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-entropy-filter]
     d-min = 1e-6
@@ -35,6 +37,6 @@ Example::
 
 Used in the following Examples:
 
-1. :ref:`2D Double Mach Reflection`
+1. :ref:`examples:2d double mach reflection`
 
-2. :ref:`2D Viscous Shock Tube`
+2. :ref:`examples:2d viscous shock tube`

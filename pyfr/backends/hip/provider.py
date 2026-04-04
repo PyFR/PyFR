@@ -41,9 +41,15 @@ class HIPKernelProvider(BaseKernelProvider):
         return mod.get_function(name, argtypes)
 
     def _benchmark(self, kfunc, nbench=4, nwarmup=1):
-        stream = self.backend.hip.create_stream()
-        start_evt = self.backend.hip.create_event()
-        stop_evt = self.backend.hip.create_event()
+        try:
+            stream = self._bench_stream
+            start_evt = self._bench_start_evt
+            stop_evt = self._bench_stop_evt
+        except AttributeError:
+            hip = self.backend.hip
+            self._bench_stream = stream = hip.create_stream()
+            self._bench_start_evt = start_evt = hip.create_event()
+            self._bench_stop_evt = stop_evt = hip.create_event()
 
         for i in range(nbench + nwarmup):
             if i == nwarmup:

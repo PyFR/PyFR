@@ -1,4 +1,4 @@
-from ctypes import POINTER, c_bool, c_double, c_int, c_void_p
+from ctypes import POINTER, c_bool, c_double, c_int, c_int32, c_int64, c_void_p
 
 import numpy as np
 
@@ -9,12 +9,26 @@ from pyfr.partitioners.base import BasePartitioner
 class KaHIPWrappers(LibWrapper):
     _libname = 'kahip'
 
-    # Functions
-    _functions = [
-        (None, 'kaffpa_balance', POINTER(c_int), c_void_p, c_void_p, c_void_p,
-         c_void_p, POINTER(c_int), POINTER(c_double), c_bool, c_bool, c_int,
-         c_int, c_void_p, c_void_p)
-    ]
+    def _load_library(self):
+        lib = super()._load_library()
+
+        if lib.kahip_sizeof_idx() == 4:
+            self.kahip_idx = c_int32
+            self.kahip_idx_np = np.int32
+        else:
+            self.kahip_idx = c_int64
+            self.kahip_idx_np = np.int64
+
+        return lib
+
+    @property
+    def _functions(self):
+        return [
+            (c_int, 'kahip_sizeof_idx'),
+            (None, 'kaffpa_balance', POINTER(c_int), c_void_p, c_void_p,
+             c_void_p, c_void_p, POINTER(c_int), POINTER(c_double), c_bool,
+             c_bool, c_int, c_int, c_void_p, c_void_p)
+        ]
 
 
 class KaHIPPartitioner(BasePartitioner):
@@ -43,15 +57,17 @@ class KaHIPPartitioner(BasePartitioner):
         self._wrappers = KaHIPWrappers()
 
     def _partition_graph(self, graph, partwts):
+        w = self._wrappers
+
         # Type conversion
-        vtab = np.asanyarray(graph.vtab, dtype=np.int32)
-        etab = np.asanyarray(graph.etab, dtype=np.int32)
+        vtab = np.asanyarray(graph.vtab, dtype=w.kahip_idx_np)
+        etab = np.asanyarray(graph.etab, dtype=w.kahip_idx_np)
         vwts = np.asanyarray(graph.vwts, dtype=np.int32)
-        ewts = np.asanyarray(graph.ewts, dtype=np.int32)
+        ewts = np.asanyarray(graph.ewts, dtype=w.kahip_idx_np)
 
         # Output partition array and edge cut array (unused)
         parts = np.empty(len(vtab) - 1, dtype=np.int32)
-        ecuts = np.empty_like(parts)
+        ecuts = np.empty(len(vtab) - 1, dtype=w.kahip_idx_np)
 
         # Permitted imbalance
         imbalance = c_double(self.opts['ufactor'] / 1000)
@@ -60,7 +76,7 @@ class KaHIPPartitioner(BasePartitioner):
         nvert = c_int(len(vtab) - 1)
         nparts = c_int(len(partwts))
 
-        self._wrappers.kaffpa_balance(
+        w.kaffpa_balance(
             nvert, vwts.ctypes, vtab.ctypes, ewts.ctypes, etab.ctypes,
             nparts, imbalance, self.opts['perfect'], True,
             self.opts['seed'], self.opts['mode'], ecuts.ctypes, parts.ctypes

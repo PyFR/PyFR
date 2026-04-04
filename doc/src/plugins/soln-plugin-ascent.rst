@@ -16,7 +16,7 @@ on-the-fly.  The following parameters can then be set:
 
 #. ``region`` --- region to be written, specified as either the
    entire domain using ``*``, a combination of the geometric shapes
-   specified in :ref:`regions`, or a sub-region of elements that have
+   specified in :ref:`user_guide:regions`, or a sub-region of elements that have
    faces on a specific domain boundary via the name of the domain
    boundary:
 
@@ -56,7 +56,9 @@ define field expresions.
 
    *dict* | [*dict*]
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-ascent]
     nsteps = 200
@@ -83,6 +85,8 @@ are available
   specific section name can be provided. In both cases all other
   sections are ignored.
 
-  Example::
+  Example:
 
-    pyfr ascent render mesh.pyfrm solution.pyfrs settings.ini
+  .. code-block:: ini
+
+      pyfr ascent render mesh.pyfrm solution.pyfrs settings.ini

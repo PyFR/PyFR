@@ -1,9 +1,8 @@
-*************************************
-[solver-elements-pri{-mg-p\ *order*}]
-*************************************
+*********************
+[solver-elements-pri]
+*********************
 
-Parameterises the prismatic elements, or if -mg-p\ *order* is suffixed
-the prismatic elements at multi-p level *order*, with
+Parameterises the prismatic elements, with
 
 #. ``soln-pts`` --- location of the solution points in a prismatic
    element:
@@ -28,7 +27,9 @@ the prismatic elements at multi-p level *order*, with
     ``williams-shunn~gauss-legendre`` |
     ``williams-shunn~gauss-legendre-lobatto`` | ``witherden-vincent``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-elements-pri]
     soln-pts = williams-shunn~gauss-legendre

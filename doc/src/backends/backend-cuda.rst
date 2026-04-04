@@ -31,7 +31,9 @@ Parameterises the CUDA backend with
 
     *int*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [backend-cuda]
     device-id = round-robin

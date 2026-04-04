@@ -1,4 +1,6 @@
 from pyfr.mpiutil import mpi, scal_coll
+from pyfr.plugins.solver.nirf import (nirf_bc_params, nirf_origin_tplargs,
+                                       _to_tplkey, _to_extern)
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
@@ -8,25 +10,12 @@ from pyfr.writers.csv import CSVStream
 import numpy as np
 
 
-class FluidIntIntersMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.intcent')
-
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'intcent', tplargs={}, dims=[self.ninters],
-                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
-            )
-
-
 class TplargsMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self.cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
             self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
                                            1e-6)
         else:
@@ -37,21 +26,7 @@ class TplargsMixin:
                              rsolver=rsolver, c=self.c, p_min=self.p_min)
 
 
-class FluidMPIIntersMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicent')
-
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'mpicent', tplargs={}, dims=[self.ninters],
-                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
-            )
-
-
-class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
-                     BaseAdvectionIntInters):
+class EulerIntInters(TplargsMixin, BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -59,12 +34,11 @@ class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
         )
 
 
-class EulerMPIInters(TplargsMixin, FluidMPIIntersMixin,
-                     BaseAdvectionMPIInters):
+class EulerMPIInters(TplargsMixin, BaseAdvectionMPIInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -72,7 +46,7 @@ class EulerMPIInters(TplargsMixin, FluidMPIIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', self._tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
         )
 
 
@@ -86,18 +60,19 @@ class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            extrns=self._external_args, ul=self._scal_lhs, nl=self._pnorm_lhs,
+            extrns=self._external_args, ul=self.scal_lhs, nl=self._pnorm_lhs,
             **self._external_vals
         )
 
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
+    def comm_entropy_kernel(self, entmin_lhs):
+        # Physics-specific callback for entropy filtering
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
 
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
-                extrns=self._external_args, entmin_lhs=self._entmin_lhs,
-                nl=self._pnorm_lhs, ul=self._scal_lhs, **self._external_vals
-            )
+        return lambda: self._be.kernel(
+            'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
+            extrns=self._external_args, entmin_lhs=entmin_lhs,
+            nl=self._pnorm_lhs, ul=self.scal_lhs, **self._external_vals
+        )
 
 
 class EulerSupInflowBCInters(EulerBaseBCInters):
@@ -147,8 +122,8 @@ class MassFlowBCMixin:
         self.set_external('ic', 'scalar fpdtype_t')
         self.set_external('im', 'scalar fpdtype_t')
 
-        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
-        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
+
+        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, lhs)
 
         if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
             fname = cfg.get(cfgsect, 'file')
@@ -188,7 +163,7 @@ class MassFlowBCMixin:
             norms = self.mf_int.norms[etype, fidx]
 
             # Do the quadrature
-            mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
+            mf += np.einsum('i,ihj,hij', qwts, ufpts, norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
 
@@ -235,12 +210,118 @@ class MassFlowBCMixin:
 
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
-        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m,
-                               bciface.mf_avg, bciface.tprev or 0,
-                               bciface.nstep_counter),
-                              dtype='f8,f8,f8,f8,i8')
+        sfn = lambda: np.void(
+            (bciface.interp_c, bciface.interp_m, bciface.mf_avg,
+             bciface.tprev or 0, bciface.nstep_counter),
+            dtype='f8,f8,f8,f8,i8'
+        )
         srl.register(prefix, sfn if bciface else None)
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
     type = 'char-riem-inv-mass-flow'
+
+
+class NIRFBCMixin:
+    """Mixin to transform BC velocities for NIRF rotating reference frame.
+
+    Transforms inertial-frame velocities to body-frame:
+        u_body = R(-θ) · (u_inertial - V₀) - Ω×r_body
+    """
+    nirf_section = 'solver-plugin-nirf'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        sect = self.nirf_section
+        motion = self.cfg.get(sect, 'motion', 'prescribed')
+        subs = self.cfg.items('constants')
+        subs |= dict(abs='fabs', pi='3.141592653589793')
+
+        params = nirf_bc_params(self.ndims)
+
+        self._tplargs |= {
+            _to_tplkey(p): _to_extern(p) if motion == 'free'
+            else self.cfg.getexpr(sect, p, '0.0', subs=subs)
+            for p in params
+        }
+        self._tplargs |= nirf_origin_tplargs(self.cfg, sect, self.ndims)
+
+        if motion == 'free':
+            for p in params:
+                self.set_external(_to_extern(p), 'scalar fpdtype_t')
+
+    def _exp_opts(self, opts, lhs, default={}):
+        exprs = super()._exp_opts(opts, lhs, default)
+
+        if not self.cfg.hasopt(self.nirf_section, 'motion'):
+            return exprs
+
+        sect = self.nirf_section
+        motion = self.cfg.get(sect, 'motion')
+        subs = self.cfg.items('constants')
+        subs |= dict(abs='fabs', pi='3.141592653589793')
+
+        def get_param(name):
+            if motion == 'free':
+                return _to_extern(name)
+            return self.cfg.getexpr(sect, name, '0.0', subs=subs)
+
+        fomega = [get_param(f'frame-omega-{c}') for c in 'xyz']
+        floc = [get_param(f'frame-loc-{c}') for c in 'xyz'[:self.ndims]]
+        fvelo = [get_param(f'frame-velo-{c}') for c in 'xyz'[:self.ndims]]
+        fx0 = self.cfg.getliteral(sect, 'center-of-rot', (0.0,) * self.ndims)
+
+        # Replace x,y,z with inertial locaiton
+        for k in exprs:
+            for i in range(self.ndims):
+                exprs[k] = exprs[k].replace(
+                    f'ploc[{i}]', f'(ploc[{i}] + ({floc[i]}))')
+
+        # Step 1: inertial freestream minus frame translation
+        u_inertial = [exprs.get(c) for c in 'uvw'[:self.ndims]]
+        u_rel = [f'({ui}) - ({vi})' for ui, vi in zip(u_inertial, fvelo)]
+
+        # Step 2: rotate to body frame using R(-θ) matrix
+        u_body = [
+            ' + '.join(f'({u_rel[j]})*nirf_R[{i}][{j}]'
+                       for j in range(self.ndims))
+            for i in range(self.ndims)
+        ]
+
+        # Step 3: subtract Ω×r (body coords)
+        # Position relative to frame origin
+        r = [f'(ploc[{i}] - ({fx0[i]}))' for i in range(self.ndims)]
+
+        if self.ndims == 2:
+            # 2D: -Ω×r = (ωz·ry, -ωz·rx)
+            exprs['u'] = f'(({u_body[0]}) + ({fomega[2]})*{r[1]})'
+            exprs['v'] = f'(({u_body[1]}) - ({fomega[2]})*{r[0]})'
+        else:
+            # 3D: -Ω×r = (-ωy·rz + ωz·ry, -ωz·rx + ωx·rz, -ωx·ry + ωy·rx)
+            exprs['u'] = f'(({u_body[0]}) - ({fomega[1]})*{r[2]} + ({fomega[2]})*{r[1]})'
+            exprs['v'] = f'(({u_body[1]}) - ({fomega[2]})*{r[0]} + ({fomega[0]})*{r[2]})'
+            exprs['w'] = f'(({u_body[2]}) - ({fomega[0]})*{r[1]} + ({fomega[1]})*{r[0]})'
+
+        # Register ploc for Ω×r
+        if 'ploc' not in self._external_args:
+            spec = f'in fpdtype_t[{self.ndims}]'
+            value = self._const_mat(lhs, 'get_ploc_for_inters')
+            self.set_external('ploc', spec, value=value)
+
+        return exprs
+
+
+class EulerCharRiemInvNIRFBCInters(NIRFBCMixin, EulerBaseBCInters):
+    type = 'char-riem-inv-nirf'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        self.c |= self._exp_opts(
+            ['rho', 'p', 'u', 'v', 'w'][:self.ndims + 2], lhs
+        )
+
+
+class EulerSlpAdiaWallNIRFBCInters(NIRFBCMixin, EulerBaseBCInters):
+    type = 'slp-adia-wall-nirf'

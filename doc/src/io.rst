@@ -1,11 +1,9 @@
-.. highlight:: none
-
 ********
 Disk I/O
 ********
 
 Solution File Writing
-^^^^^^^^^^^^^^^^^^^^^
+=====================
 
 Plugins in PyFR which write ``.pyfrs`` solution files support several
 different modes of operation. Specifically, file write operations can
@@ -48,8 +46,8 @@ output file will be corrupted. Given this, it is possible to disable
 asynchronous writing by setting the timeout to be zero. Further
 details can be found in the documentation for the relevant plugins.
 
-VTU export
-^^^^^^^^^^
+VTU Export
+==========
 
 When exporting solution files to ``.vtu`` format, PyFR uses MPI I/O
 for parallel operations. However, this approach can cause problems if
