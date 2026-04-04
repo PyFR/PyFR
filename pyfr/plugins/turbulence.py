@@ -1,4 +1,4 @@
-from collections import defaultdict, namedtuple
+from dataclasses import dataclass
 import math
 
 import numpy as np
@@ -9,8 +9,14 @@ from pyfr.plugins.base import BaseSolverPlugin
 from pyfr.regions import BoxRegion
 
 
-VortStruct = namedtuple('vortstruct',
-                        ['strms', 'strmsid', 'buf', 'tinit', 'state'])
+@dataclass
+class VortexData:
+    strms: dict
+    strmoff: dict
+    buf: object
+    tinit: object
+    state: object
+    trefill: float = 0.0
 
 
 def pcg32rxs_m_xs(seed):
@@ -33,8 +39,7 @@ def pcg32rxs_m_xs(seed):
 
 class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
-    systems = ['ac-navier-stokes', 'navier-stokes']
-    formulations = ['dual', 'std']
+    systems = ['navier-stokes']
     dimensions = [3]
 
     def __init__(self, intg, cfgsect):
@@ -42,10 +47,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         self.fdptype = fdptype = intg.backend.fpdtype
 
-        ac = intg.system.name.startswith('ac')
-
-        self.nmvxinit = 6
-        self.nvmxtol = 0.1
+        self.nvmaxtol = 0.1
 
         self.tstart = intg.tstart
         self.tbegin = intg.tcurr
@@ -66,13 +68,10 @@ class TurbulencePlugin(BaseSolverPlugin):
         beta1 = -0.5/(sigma*ls)**2
         beta3 = 0.01*ti*avgu*(gc/sigma)**3
 
-        if not ac:
-            gamma = self.cfg.getfloat('constants', 'gamma')
-            avgrho = self.cfg.getfloat(cfgsect, 'avg-rho')
-            avgmach = self.cfg.getfloat(cfgsect, 'avg-mach')
-            beta2 = (avgrho/avgu)*(gamma - 1)*avgmach**2
-        else:
-            beta2 = 0
+        gamma = self.cfg.getfloat('constants', 'gamma')
+        avgrho = self.cfg.getfloat(cfgsect, 'avg-rho')
+        avgmach = self.cfg.getfloat(cfgsect, 'avg-mach')
+        beta2 = (avgrho/avgu)*(gamma - 1)*avgmach**2
 
         ydim = self.cfg.getfloat(cfgsect, 'y-dim')
         zdim = self.cfg.getfloat(cfgsect, 'z-dim')
@@ -93,74 +92,93 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         self.macro_params = {
             'ls': ls, 'avgu': avgu, 'yzdim': yzdim, 'beta1': beta1,
-            'beta2': beta2, 'beta3': beta3, 'rot': rot, 'shift': shift,
-            'ac': ac
+            'beta2': beta2, 'beta3': beta3, 'rot': rot, 'shift': shift
         }
 
-        self.trcl = {}
-        self.vortbuf = self.get_vort_buf()
-        self.vortstructs = self.get_vort_structs(intg)
+        self.vortexbuf = self._get_vortex_buf()
+        self.vortexdata = self._get_vortex_data(intg)
 
-        if not bool(self.vortstructs):
+        if not self.vortexdata:
             self.tnext = float('inf')
 
     def __call__(self, intg):
-        if intg.tcurr + intg._dt < self.tnext:
+        if intg.tcurr + intg.dt < self.tnext:
             return
 
-        for etype, vs in self.vortstructs.items():
-            if self.trcl[etype] > self.tnext:
+        for vs in self.vortexdata.values():
+            if vs.trefill > self.tnext:
                 continue
 
-            self.trcl[etype] = self.update_buf(vs.strms, vs.strmsid, vs.buf,
-                                               self.tnext)
+            vs.trefill = self._update_buf(vs.strms, vs.strmoff, vs.buf,
+                                          self.tnext)
             vs.tinit.set(vs.buf.tinit)
             vs.state.set(vs.buf.state)
 
-        self.tnext = min(self.trcl.values())
+        self.tnext = min(vs.trefill for vs in self.vortexdata.values())
 
-    def update_buf(self, strms, strmsid, buf, tnext):
-        trcltmp = float('inf')
+    def _update_buf(self, strms, strmoff, buf, tnext):
+        trefill = float('inf')
         for ele, strm in strms.items():
-            sid = strmsid[ele]
-            if sid >= strm.shape[0]:
+            sid = strmoff[ele]
+            if sid >= len(strm):
                 continue
 
+            # Compact: keep only events that have not yet expired
             tmp = buf[:, ele][buf[:, ele].te > tnext]
-            rem = tmp.shape[0]
-            sft = sid + buf.shape[0] - rem
-            add = rem + strm[sid:sft].shape[0]
-            buf[:rem, ele] = tmp
-            buf[rem:add, ele] = strm[sid:sft]
+            rem = len(tmp)
+
+            # Fill remaining buffer slots from the stream
+            new = strm[sid:sid + len(buf) - rem]
+            sft, add = sid + len(new), rem + len(new)
+            buf[:add, ele] = np.concatenate([tmp, new])
             buf[add:, ele] = 0
 
-            if sft < strm.shape[0] and buf[-1, ele].ts < trcltmp:
-                trcltmp = buf[-1, ele].ts
+            # Once the last buffered event starts all slots are active
+            if sft < len(strm) and buf[-1, ele].ts < trefill:
+                trefill = buf[-1, ele].ts
 
-            strmsid[ele] = sft
+            strmoff[ele] = sft
 
-        return trcltmp
+        return trefill
 
-    def test_nvmx(self, strms, neles, nvmx):
+    def _test_nvmax(self, strms, neles, nvmax):
         tnext = self.tnext
-        strmsid = {ele: 0 for ele in strms}
-        buf = fromrecords(np.zeros((nvmx, neles)), dtype=self.eventdtype)
+        strmoff = {ele: 0 for ele in strms}
+        buf = fromrecords(np.zeros((nvmax, neles)), dtype=self.eventdtype)
 
         while tnext < float('inf'):
-            trcltmp = self.update_buf(strms, strmsid, buf, tnext)
-            if trcltmp < tnext + self.nvmxtol:
+            trcltmp = self._update_buf(strms, strmoff, buf, tnext)
+            if trcltmp < tnext + self.nvmaxtol:
                 return False
 
             tnext = trcltmp
 
         return True
 
-    def get_vort_buf(self):
+    def _find_nvmax(self, strms, neles):
+        # Obtain a lower bound on the number of buffer slots needed
+        lo = 1
+        for strm in strms.values():
+            # Interleave start (+1) and end (-1) times for each vortex
+            ev = np.stack([strm['ts'], strm['te']], axis=1).ravel()
+            sg = np.tile([1, -1], len(strm))
+
+            # Compute the maximum simultaneous overlap
+            lo = max(lo, np.cumsum(sg[np.argsort(ev, kind='stable')]).max())
+
+        # Linear search from this lower bound
+        while not self._test_nvmax(strms, neles, lo):
+            lo += 1
+
+        # Add one to reduce update frequency
+        return lo + 1
+
+    def _get_vortex_buf(self):
         dt = 2*self.ls/self.avgu
         pcg = pcg32rxs_m_xs(self.seed)
 
         tmp = []
-        tinits = [self.tstart + dt*next(pcg)[1] for vid in range(self.nvorts)]
+        tinits = [self.tstart + dt*next(pcg)[1] for _ in range(self.nvorts)]
 
         while any(tinit <= self.tend for tinit in tinits):
             for vid, tinit in enumerate(tinits):
@@ -177,87 +195,106 @@ class TurbulencePlugin(BaseSolverPlugin):
                  ('tinit', self.fdptype), ('state', np.uint32)]
         return fromrecords(tmp, dtype=dtype)
 
-    def get_vort_structs(self, intg):
+    def _get_vortex_data(self, intg):
         ls, avgu = self.ls, self.avgu
         props = Property(dimension=3)
         eventdtype = self.eventdtype
-        vortstructs = {}
+        data = {}
 
         for etype, eles in intg.system.ele_map.items():
-            neles = eles.neles
+            # Transform solution points into the plugin's frame
             pts = eles.ploc_at_np('upts').swapaxes(0, 1)
             ptsr = (self.rot @ (pts.reshape(3, -1) -
                     self.shift[:, None])).reshape(pts.shape)
             ptsr = np.moveaxis(ptsr, 0, -1)
 
+            # Skip element types with no points in the inflow region
             inside = self.bbox.pts_in_region(ptsr)
             if not np.any(inside):
                 continue
 
-            tmp = defaultdict(list)
             strms = {}
-            strmsid = {}
 
-            eids = np.any(inside, axis=0).nonzero()[0]
+            # Restrict to elements with at least one point inside
+            eids = np.flatnonzero(np.any(inside, axis=0))
             ptsri = ptsr[:, eids]
-            insert = [(i, [*p.min(axis=0), *p.max(axis=0)], None)
-                      for i, p in enumerate(ptsri.swapaxes(0, 1))]
-            rtree = Index(insert, properties=props)
+            bmins, bmaxs = ptsri.min(axis=0), ptsri.max(axis=0)
+            rtree = Index((np.arange(len(eids)), bmins, bmaxs),
+                          properties=props)
 
-            for vid, vort in enumerate(self.vortbuf):
-                vbmin = [-2*ls, vort.yinit - ls, vort.zinit - ls]
-                vbmax = [2*ls, vort.yinit + ls, vort.zinit + ls]
+            # Find (vortex, element) pairs whose bounding boxes overlap
+            nvort = len(self.vortexbuf)
+            vy, vz = self.vortexbuf.yinit, self.vortexbuf.zinit
+            vmins = np.column_stack([np.full(nvort, -2*ls), vy - ls, vz - ls])
+            vmaxs = np.column_stack([np.full(nvort, 2*ls), vy + ls, vz + ls])
+            ids, cnts = rtree.intersection_v(vmins, vmaxs)
+            vids = np.repeat(np.arange(nvort), cnts.astype(int))
 
-                # Get candidate points from the R-tree
-                isect = rtree.intersection((*vbmin, *vbmax))
-                cands = np.array(list(set(isect)), dtype=int)
+            # Refine to solution points actually inside each vortex box
+            pp = ptsri[:, ids]
+            bmin, bmax = vmins[vids][None], vmaxs[vids][None]
+            in_box = np.all((pp >= bmin) & (pp <= bmax), axis=-1)
 
-                # Get exact points candidate points
-                boxrgn = BoxRegion(vbmin, vbmax)
-                vinside = boxrgn.pts_in_region(ptsri[:, cands])
+            # x-extent of interior points determines convection window
+            ok = np.any(in_box, axis=0)
+            xm = np.where(in_box, pp[:, :, 0], np.nan)
+            xvmin = np.nanmin(xm[:, ok], axis=0)
+            xvmax = np.nanmax(xm[:, ok], axis=0)
 
-                for vi, c in zip(vinside.swapaxes(0, 1), cands):
-                    if not np.any(vi):
-                        continue
+            # Compute when each vortex enters and exits each element
+            vb = self.vortexbuf[vids[ok]]
+            tinit, state = vb.tinit, vb.state
+            ts = np.maximum(tinit, tinit + xvmin / avgu)
+            tend = np.minimum(ts + (xvmax - xvmin + 2*ls) / avgu,
+                              tinit + 2*ls / avgu)
+            te = np.maximum(ts, tend)
 
-                    xv = ptsri[vi, c, 0]
-                    xvmin, xvmax = xv.min(), xv.max()
+            # Group events by element into sorted stream arrays
+            elarr = eids[ids[ok]]
+            order = np.argsort(elarr, kind='stable')
+            elarr, tinit, state, ts, te = (a[order] for a in
+                                           [elarr, tinit, state, ts, te])
+            ueles, starts = np.unique(elarr, return_index=True)
+            ends = np.append(starts[1:], len(elarr))
+            for ele, s, e in zip(ueles, starts, ends):
+                rec = np.empty(e - s, dtype=eventdtype)
+                rec['tinit'] = tinit[s:e]
+                rec['state'] = state[s:e]
+                rec['ts'] = ts[s:e]
+                rec['te'] = te[s:e]
+                strms[ele] = np.sort(rec, order='ts')
 
-                    ts = max(vort.tinit, vort.tinit + xvmin/avgu)
-                    te = max(ts, min(ts + (xvmax - xvmin + 2*ls)/avgu,
-                                     vort.tinit + 2*ls/avgu))
+            # Register kernel, allocate buffers, and wire up externs
+            data[etype] = self._commit_vortex_data(intg.backend, eles, strms)
 
-                    # Record when a vortex enters and exits an element
-                    tmp[eids[c]].append((self.vortbuf[vid].tinit,
-                                         self.vortbuf[vid].state, ts, te))
+        return data
 
-            for ele, strm in tmp.items():
-                strms[ele] = np.sort(fromrecords(strm, dtype=eventdtype),
-                                     order='ts')
-                strmsid[ele] = 0
+    def _commit_vortex_data(self, backend, eles, strms):
+        neles = eles.neles
 
-            nvmx = self.nmvxinit
-            while not self.test_nvmx(strms, neles, nvmx):
-                nvmx += 1
+        # Find the minimum buffer size that avoids overflow
+        nvmax = self._find_nvmax(strms, neles)
 
-            eles.add_src_macro(
-                'pyfr.plugins.kernels.turbulence', 'turbulence',
-                self.macro_params | {'nvmx': nvmx}, ploc=True, soln=True
-            )
+        # Register the turbulence source macro for this element type
+        eles.add_src_macro(
+            'pyfr.plugins.kernels.turbulence', 'turbulence',
+            self.macro_params | {'nvmax': nvmax}, ploc=True, soln=True
+        )
 
-            buf = fromrecords(np.zeros((nvmx, neles)), dtype=eventdtype)
+        # Allocate host buffer and backend matrices for vortex state
+        buf = fromrecords(np.zeros((nvmax, neles)), dtype=self.eventdtype)
 
-            self.trcl[etype] = 0
-            vortstructs[etype] = vs = VortStruct(
-                strms, strmsid, buf,
-                intg.backend.matrix((nvmx, neles), tags={'align'}),
-                intg.backend.matrix((nvmx, neles), tags={'align'},
-                                    dtype=np.uint32)
-            )
+        strmoff = {ele: 0 for ele in strms}
+        vdata = VortexData(
+            strms, strmoff, buf,
+            backend.matrix((nvmax, neles), tags={'align'}),
+            backend.matrix((nvmax, neles), tags={'align'}, dtype=np.uint32)
+        )
 
-            eles.set_external('tinit', f'in broadcast-col fpdtype_t[{nvmx}]',
-                               value=vs.tinit)
-            eles.set_external('state', f'in broadcast-col uint32_t[{nvmx}]',
-                               value=vs.state)
+        # Wire up tinit and state as broadcast-column externals
+        eles._set_external('tinit', f'in broadcast-col fpdtype_t[{nvmax}]',
+                           value=vdata.tinit)
+        eles._set_external('state', f'in broadcast-col uint32_t[{nvmax}]',
+                           value=vdata.state)
 
-        return vortstructs
+        return vdata

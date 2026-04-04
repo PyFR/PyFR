@@ -8,7 +8,6 @@ from pyfr.util import first
 class SourcePlugin(BaseSolverPlugin):
     name = 'source'
     systems = ['*']
-    formulations = ['dual', 'std']
     dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect):

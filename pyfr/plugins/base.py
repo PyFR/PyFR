@@ -8,8 +8,11 @@ import h5py
 import numpy as np
 from pytools import prefork
 
+from pyfr.inifile import NoOptionError
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.readers.native import Connectivity
 from pyfr.regions import parse_region_expr
+from pyfr.util import first
 from pyfr.writers.csv import CSVStream
 
 
@@ -102,21 +105,41 @@ def surface_data(cfg, cfgsect, mesh):
     if not comm.reduce(bool(eset), op=mpi.LOR, root=root) and rank == root:
         raise ValueError(f'Empty surface {surf}')
 
-    return {etype: np.unique(eidxs).astype(int)
-            for etype, eidxs in sorted(eset.items())
-            if len(eidxs)}
+    if not eset:
+        return None
+
+    # Build a Connectivity from the surface face data
+    cidxmap, cidx_a, eidx_a = {}, [], []
+    for cidx, (k, v) in enumerate(sorted(eset.items())):
+        cidxmap[cidx] = k
+        eidxs = np.unique(v)
+        cidx_a.append(np.broadcast_to(cidx, len(eidxs)))
+        eidx_a.append(eidxs)
+
+    return Connectivity(np.concatenate(cidx_a), np.concatenate(eidx_a),
+                        cidxmap)
 
 
 class BasePlugin:
     name = None
     systems = None
-    formulations = None
+    suffix = None
+    enabled = True
+    nsteps = None
+    trigger = None
+    trigger_comb = None
+    trigger_action = 'activate'
+    trigger_activated = False
+    trigger_write_name = None
+    trigger_fire_name = None
 
     def __init__(self, intg, cfgsect, suffix=None):
         self.cfg = intg.cfg
         self.cfgsect = cfgsect
 
         self.suffix = suffix
+        sfx = f'-{suffix}' if suffix else ''
+        self.sprefix = f'plugins/{self.name}{sfx}'
 
         self.ndims = intg.system.ndims
         self.nvars = intg.system.nvars
@@ -129,34 +152,72 @@ class BasePlugin:
             raise RuntimeError(f'System {intg.system.name} not supported by '
                                f'plugin {self.name}')
 
-        # Check that we support this particular integrator formulation
-        if intg.formulation not in self.formulations:
-            raise RuntimeError(f'Formulation {intg.formulation} not '
-                               f'supported by plugin {self.name}')
-
         # Check that we support dimensionality of simulation
         if intg.system.ndims not in self.dimensions:
             raise RuntimeError(f'Dimensionality of {intg.system.ndims} not '
                                f'supported by plugin {self.name}')
 
+        self.enabled = self.cfg.getbool(cfgsect, 'enabled', True)
+
     def __call__(self, intg):
+        pass
+
+    def trigger_write(self, intg):
         pass
 
     def finalise(self, intg):
         pass
 
-    def setup(self, sdata, serialiser):
+    def setup(self, sdata, prevcfg, serialiser):
         pass
 
-    def get_serialiser_prefix(self):
-        if self.suffix:
-            return f'plugins/{self.name}-{self.suffix}'
-        else:
-            return f'plugins/{self.name}'
+
+class PublishMixin:
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        try:
+            self._pub_name = self.cfg.get(self.cfgsect, 'publish-as')
+        except NoOptionError:
+            self._pub_name = None
+
+    def _publish(self, intg, **values):
+        if self._pub_name is not None:
+            values = {k: float(v) for k, v in values.items()}
+            intg.triggers.publish(self._pub_name, intg.tcurr, values)
 
 
 class BaseSolnPlugin(BasePlugin):
     prefix = 'soln'
+
+    def __init__(self, intg, cfgsect, suffix=None):
+        super().__init__(intg, cfgsect, suffix)
+
+        cfg, s = self.cfg, cfgsect
+        optval = lambda k: cfg.get(s, k) if cfg.hasopt(s, k) else None
+
+        # Trigger configuration
+        self.trigger_action = cfg.get(s, 'trigger-action', 'activate')
+        self.trigger_write_name = optval('trigger-write')
+        self.trigger_fire_name = optval('trigger-set')
+
+        # Parse trigger: & for AND, | for OR, or a single name
+        trig = optval('trigger')
+        if trig is None:
+            self.trigger = None
+            self.trigger_comb = None
+        elif '&' in trig:
+            self.trigger = names = [t.strip() for t in trig.split('&')]
+            self.trigger_comb = lambda tm: all(tm.active(n) for n in names)
+        elif '|' in trig:
+            self.trigger = names = [t.strip() for t in trig.split('|')]
+            self.trigger_comb = lambda tm: any(tm.active(n) for n in names)
+        else:
+            self.trigger = names = [trig.strip()]
+            self.trigger_comb = lambda tm: tm.active(names[0])
+
+        # Step frequency gating
+        self.nsteps = int(v) if (v := optval('nsteps')) else None
 
 
 class BaseSolverPlugin(BasePlugin):
@@ -198,6 +259,22 @@ class BaseCLIPlugin:
         pass
 
 
+class BackendMixin:
+    def _init_backend(self, intg):
+        self.backend = intg.backend
+        self._ele_banks = intg.system.ele_banks
+        self._grad_banks = intg.system.eles_vect_upts
+        self._etype_map = {et: i for i, et in enumerate(intg.system.ele_types)}
+        self._eos_mod = first(intg.system.ele_map.values()).eos_kernel_module
+
+    def _make_view(self, mat, eidxs, vshape):
+        n = len(eidxs)
+        return self.backend.view(
+            np.full(n, mat.mid), np.zeros(n, dtype=np.int32),
+            eidxs, np.ones(n, dtype=np.int32), vshape=vshape
+        )
+
+
 class PostactionMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -207,7 +284,7 @@ class PostactionMixin:
         self.postactmode = None
 
         if self.cfg.hasopt(self.cfgsect, 'post-action'):
-            self.postact = self.cfg.getpath(self.cfgsect, 'post-action')
+            self.postact = str(self.cfg.getpath(self.cfgsect, 'post-action'))
             self.postactmode = self.cfg.get(self.cfgsect, 'post-action-mode',
                                             'blocking')
 
@@ -260,19 +337,15 @@ class RegionMixin:
 
 class SurfaceRegionMixin:
     def _surf_region(self, intg):
-        # Parse the region
-        sidxs = surface_data(intg.cfg, self.cfgsect, intg.system.mesh)
+        con = surface_data(intg.cfg, self.cfgsect, intg.system.mesh)
 
         # Generate the appropriate metadata arrays
-        ele_surface, ele_surface_data = [], {}
-        for (etype, face), eidxs in sidxs.items():
-            doff = intg.system.ele_types.index(etype)
-            ele_surface.append((doff, etype, face, eidxs))
+        ele_surface_data = {}
+        if con is not None:
+            for etype, fidx, eidxs in con.items():
+                ele_surface_data[f'{etype}_f{fidx}_idxs'] = eidxs
 
-            if not isinstance(eidxs, slice):
-                ele_surface_data[f'{etype}_f{face}_idxs'] = eidxs
-
-        return ele_surface, ele_surface_data
+        return con, ele_surface_data
 
 
 class DatasetAppender:

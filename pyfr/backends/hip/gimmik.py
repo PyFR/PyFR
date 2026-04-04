@@ -4,7 +4,8 @@ from gimmik import HIPMatMul
 import numpy as np
 
 from pyfr.backends.base import NotSuitableError
-from pyfr.backends.hip.provider import HIPKernel, HIPKernelProvider
+from pyfr.backends.hip.provider import (HIPKernel, HIPKernelProvider,
+                                        get_grid_for_block)
 
 
 class HIPGiMMiKKernels(HIPKernelProvider):
@@ -38,6 +39,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             raise NotSuitableError('Matrix inappropriate GiMMiK')
 
         # Dimensions
+        n = b.ncol
         ldb, ldc = b.leaddim, out.leaddim
 
         # Alignment
@@ -47,11 +49,11 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             aligne = None
 
         # Cache key
-        ckey = (a.mid, alpha, beta, aligne, ldb, ldc)
+        ckey = (a.mid, alpha, beta, aligne)
 
         # Check the kernel cache
         try:
-            kern, grid, block, dt = self._mul_kerns[ckey]
+            kern, block, dt = self._mul_kerns[ckey]
         except KeyError:
             ifac = self.backend.autotune_ifac
             kname = f'gimmik_mm_{arr.shape[0]}x{arr.shape[1]}'
@@ -61,8 +63,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             # Save a copy of the contents of the output matrix
             out_np = getattr(out, 'parent', out).get()
 
-            mm = HIPMatMul(alpha*arr, beta=beta, aligne=aligne, n=b.ncol,
-                           ldb=ldb, ldc=ldc)
+            mm = HIPMatMul(alpha*arr, beta=beta, aligne=aligne)
             kgen = mm.kernels(a.dtype, kname=kname,
                               gcn_arch=self.backend.props['gcn_arch_name'],
                               warp_size=self.backend.props['warp_size'])
@@ -71,11 +72,11 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             try:
                 for i in range(self.nkerns):
                     src, meta = kgen.send(kdata)
-                    kern = self._build_kernel(kname, src, 'PP')
+                    kern = self._build_kernel(kname, src, 'iPiPi')
 
-                    # Set the parameters
-                    params = kern.make_params(meta['grid'], meta['block'])
-                    params.set_args(b, out)
+                    grid = get_grid_for_block(meta['block'], n)
+                    params = kern.make_params(grid, meta['block'])
+                    params.set_args(n, b, ldb, out, ldc)
 
                     # Obtain the runtime
                     dt = self._benchmark(
@@ -84,7 +85,7 @@ class HIPGiMMiKKernels(HIPKernelProvider):
                     )
 
                     if best_kern is None or dt < ifac*best_kern[-1]:
-                        best_kern = kern, meta['grid'], meta['block'], dt
+                        best_kern = kern, meta['block'], dt
 
                     kdata = {
                         'runtime': dt,
@@ -98,12 +99,13 @@ class HIPGiMMiKKernels(HIPKernelProvider):
             getattr(out, 'parent', out).set(out_np)
 
             # Update the cache
-            self._mul_kerns[ckey] = kern, grid, block, dt = best_kern
+            self._mul_kerns[ckey] = kern, block, dt = best_kern
             finalize(a, lambda: self._mul_kerns.pop(ckey))
 
         # Set the parameters
+        grid = get_grid_for_block(block, n)
         params = kern.make_params(grid, block)
-        params.set_args(b, out)
+        params.set_args(n, b, ldb, out, ldc)
 
         class MulKernel(HIPKernel):
             def add_to_graph(self, graph, deps):

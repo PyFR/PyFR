@@ -48,7 +48,9 @@ Injects synthetic eddies into a region of the domain. Parameterised with
 
     *float*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-plugin-turbulence]
     avg-rho = 1.0

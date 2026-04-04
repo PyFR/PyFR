@@ -60,6 +60,17 @@ class HIPKernelNodeParams(Structure):
             self.set_arg(i, v)
 
 
+class HIPMemsetParams(Structure):
+    _fields_ = [
+        ('dst', c_void_p),
+        ('pitch', c_size_t),
+        ('value', c_uint),
+        ('element_size', c_uint),
+        ('width', c_size_t),
+        ('height', c_size_t)
+    ]
+
+
 class HIPWrappers(LibWrapper):
     _libname = 'amdhip64'
 
@@ -92,6 +103,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipGetDevicePropertiesR0600', c_void_p, c_int),
         (c_int, 'hipSetDevice', c_int),
         (c_int, 'hipDeviceGetUuid', 16*c_char, c_int),
+        (c_int, 'hipMemGetInfo', POINTER(c_size_t), POINTER(c_size_t)),
         (c_int, 'hipMalloc', POINTER(c_void_p), c_size_t),
         (c_int, 'hipFree', c_void_p),
         (c_int, 'hipHostMalloc', POINTER(c_void_p), c_size_t, c_uint),
@@ -100,6 +112,7 @@ class HIPWrappers(LibWrapper):
         (c_int, 'hipMemcpyAsync', c_void_p, c_void_p, c_size_t, c_int,
          c_void_p),
         (c_int, 'hipMemset', c_void_p, c_int, c_size_t),
+        (c_int, 'hipMemsetAsync', c_void_p, c_int, c_size_t, c_void_p),
         (c_int, 'hipStreamCreate', POINTER(c_void_p)),
         (c_int, 'hipStreamDestroy', c_void_p),
         (c_int, 'hipStreamBeginCapture', c_void_p, c_uint),
@@ -129,6 +142,8 @@ class HIPWrappers(LibWrapper):
          POINTER(c_void_p), c_size_t, c_void_p),
         (c_int, 'hipGraphAddMemcpyNode1D', POINTER(c_void_p), c_void_p,
          POINTER(c_void_p), c_size_t, c_void_p, c_void_p, c_size_t, c_int),
+        (c_int, 'hipGraphAddMemsetNode', POINTER(c_void_p), c_void_p,
+         POINTER(c_void_p), c_size_t, POINTER(HIPMemsetParams)),
         (c_int, 'hipGraphInstantiate', POINTER(c_void_p), c_void_p, c_void_p,
          c_char_p, c_size_t),
         (c_int, 'hipGraphExecKernelNodeSetParams', c_void_p, c_void_p,
@@ -337,6 +352,23 @@ class HIPGraph(_HIPBase):
 
         return ptr.value
 
+    def add_memset(self, dst, val, nbytes, deps=None):
+        dst = getattr(dst, '_as_parameter_', dst)
+
+        params = HIPMemsetParams()
+        params.dst = int(dst)
+        params.pitch = 0
+        params.value = val
+        params.element_size = 1
+        params.width = nbytes
+        params.height = 1
+
+        ptr = c_void_p()
+        self.hip.lib.hipGraphAddMemsetNode(ptr, self, *self._make_deps(deps),
+                                           params)
+
+        return ptr.value
+
     def add_graph(self, graph, deps=None):
         ptr = c_void_p()
         self.hip.lib.hipGraphAddChildGraphNode(ptr, self,
@@ -382,6 +414,7 @@ class HIP:
         self.lib.hipGetDeviceProperties(buf, devid)
 
         return {
+            'name': cast(buf, c_char_p).value.decode(),
             'gcn_arch_name': cast(buf[1160:], c_char_p).value.decode(),
             'warp_size': cast(buf[308:], POINTER(c_int)).contents.value
         }
@@ -394,6 +427,11 @@ class HIP:
 
     def set_device(self, devid):
         self.lib.hipSetDevice(devid)
+
+    def mem_info(self):
+        free, total = c_size_t(), c_size_t()
+        self.lib.hipMemGetInfo(free, total)
+        return free.value, total.value
 
     def mem_alloc(self, nbytes):
         return HIPDevAlloc(self, nbytes)
@@ -425,8 +463,11 @@ class HIP:
         else:
             self.lib.hipMemcpyAsync(dst, src, nbytes, kind, stream)
 
-    def memset(self, dst, val, nbytes):
-        self.lib.hipMemset(dst, val, nbytes)
+    def memset(self, dst, val, nbytes, stream=None):
+        if stream is None:
+            self.lib.hipMemset(dst, val, nbytes)
+        else:
+            self.lib.hipMemsetAsync(dst, val, nbytes, stream)
 
     def load_module(self, code):
         return HIPModule(self, code)

@@ -12,10 +12,6 @@ Time average quantities. Parameterised with
 
     *float*
 
-#. ``tstart`` --- time at which to start accumulating average data:
-
-    *float*
-
 #. ``mode`` --- output file accumulation mode:
 
     ``continuous`` | ``windowed``
@@ -56,7 +52,7 @@ Time average quantities. Parameterised with
 
 #. ``region`` --- region to be averaged, specified as either the entire
    domain using ``*``, a combination of the geometric shapes specified
-   in :ref:`regions`, or a sub-region of elements that have faces on a
+   in :ref:`user_guide:regions`, or a sub-region of elements that have faces on a
    specific domain boundary via the name of the domain boundary:
 
     ``*`` | ``shape(args, ...)`` | *string*
@@ -82,7 +78,9 @@ Time average quantities. Parameterised with
 
     *string*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-tavg]
     nsteps = 10
@@ -106,6 +104,8 @@ functions are available
 
 - ``pyfr tavg merge`` --- average together multiple time average files
   into a single time average file. The averaging times are read from the
-  file and do not need to be evenly spaced in time.  Example::
+  file and do not need to be evenly spaced in time.  Example:
 
-    pyfr tavg merge avg-1.00.pyfrs avg-2.00.pyfrs avg-10.00.pyfrs merged_avg.pyfrs
+  .. code-block:: ini
+
+      pyfr tavg merge avg-1.00.pyfrs avg-2.00.pyfrs avg-10.00.pyfrs merged_avg.pyfrs

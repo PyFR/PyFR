@@ -8,25 +8,12 @@ from pyfr.writers.csv import CSVStream
 import numpy as np
 
 
-class FluidIntIntersMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.intcent')
-
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'intcent', tplargs={}, dims=[self.ninters],
-                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
-            )
-
-
 class TplargsMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         rsolver = self.cfg.get('solver-interfaces', 'riemann-solver')
-        if self.cfg.get('solver', 'shock-capturing') == 'entropy-filter':
+        if self.cfg.get('solver', 'shock-capturing', 'none') == 'entropy-filter':
             self.p_min = self.cfg.getfloat('solver-entropy-filter', 'p-min',
                                            1e-6)
         else:
@@ -37,21 +24,7 @@ class TplargsMixin:
                              rsolver=rsolver, c=self.c, p_min=self.p_min)
 
 
-class FluidMPIIntersMixin:
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.mpicent')
-
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'mpicent', tplargs={}, dims=[self.ninters],
-                entmin_lhs=self._entmin_lhs, entmin_rhs=self._entmin_rhs
-            )
-
-
-class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
-                     BaseAdvectionIntInters):
+class EulerIntInters(TplargsMixin, BaseAdvectionIntInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -59,12 +32,11 @@ class EulerIntInters(TplargsMixin, FluidIntIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'intcflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
         )
 
 
-class EulerMPIInters(TplargsMixin, FluidMPIIntersMixin,
-                     BaseAdvectionMPIInters):
+class EulerMPIInters(TplargsMixin, BaseAdvectionMPIInters):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -72,7 +44,7 @@ class EulerMPIInters(TplargsMixin, FluidMPIIntersMixin,
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'mpicflux', self._tplargs, dims=[self.ninterfpts],
-            ul=self._scal_lhs, ur=self._scal_rhs, nl=self._pnorm_lhs
+            ul=self.scal_lhs, ur=self.scal_rhs, nl=self._pnorm_lhs
         )
 
 
@@ -86,18 +58,19 @@ class EulerBaseBCInters(TplargsMixin, BaseAdvectionBCInters):
 
         self.kernels['comm_flux'] = lambda: self._be.kernel(
             'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-            extrns=self._external_args, ul=self._scal_lhs, nl=self._pnorm_lhs,
+            extrns=self._external_args, ul=self.scal_lhs, nl=self._pnorm_lhs,
             **self._external_vals
         )
 
-        if self._ef_enabled:
-            self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
+    def comm_entropy_kernel(self, entmin_lhs):
+        # Physics-specific callback for entropy filtering
+        self._be.pointwise.register('pyfr.solvers.euler.kernels.bccent')
 
-            self.kernels['comm_entropy'] = lambda: self._be.kernel(
-                'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
-                extrns=self._external_args, entmin_lhs=self._entmin_lhs,
-                nl=self._pnorm_lhs, ul=self._scal_lhs, **self._external_vals
-            )
+        return lambda: self._be.kernel(
+            'bccent', tplargs=self._tplargs, dims=[self.ninterfpts],
+            extrns=self._external_args, entmin_lhs=entmin_lhs,
+            nl=self._pnorm_lhs, ul=self.scal_lhs, **self._external_vals
+        )
 
 
 class EulerSupInflowBCInters(EulerBaseBCInters):
@@ -147,8 +120,8 @@ class MassFlowBCMixin:
         self.set_external('ic', 'scalar fpdtype_t')
         self.set_external('im', 'scalar fpdtype_t')
 
-        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
-        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
+
+        self.mf_int = SurfaceIntegrator(cfg, cfgsect, elemap, lhs)
 
         if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
             fname = cfg.get(cfgsect, 'file')
@@ -157,10 +130,14 @@ class MassFlowBCMixin:
         else:
             self.csv = None
 
-    def setup(self, sdata):
-        if sdata is not None and sdata[4] != 0:
-            (self.interp_c, self.interp_m, 
-            self.mf_avg, self.tprev, self.nstep_counter) = sdata
+    def setup(self, sdata, prevcfg):
+        sect_eq = (prevcfg is not None
+                   and self.cfg.sect_eq(prevcfg, self.cfgsect))
+
+        if sdata is not None and sdata[4] != 0 and sect_eq:
+            self.interp_c, self.interp_m = sdata[:2]
+            self.mf_avg, self.tprev = sdata[2:4]
+            self.nstep_counter = sdata[4]
         else:
             self.interp_c = self._eval_opts(['p'])[0]
             self.interp_m = 0.0
@@ -188,7 +165,7 @@ class MassFlowBCMixin:
             norms = self.mf_int.norms[etype, fidx]
 
             # Do the quadrature
-            mf += np.einsum('i,ihj,jih', qwts, ufpts, norms)
+            mf += np.einsum('i,ihj,hij', qwts, ufpts, norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
 
@@ -235,10 +212,11 @@ class MassFlowBCMixin:
 
     @classmethod
     def serialisefn(cls, bciface, prefix, srl):
-        sfn = lambda: np.void((bciface.interp_c, bciface.interp_m,
-                               bciface.mf_avg, bciface.tprev or 0,
-                               bciface.nstep_counter),
-                              dtype='f8,f8,f8,f8,i8')
+        sfn = lambda: np.void(
+            (bciface.interp_c, bciface.interp_m, bciface.mf_avg,
+             bciface.tprev or 0, bciface.nstep_counter),
+            dtype='f8,f8,f8,f8,i8'
+        )
         srl.register(prefix, sfn if bciface else None)
 
 
