@@ -329,32 +329,47 @@ pyfr mesh
    threshold.  This makes it straightforward to determine whether
    curvature is the dominant source of mesh quality issues.
 
+   When enabled (the default), the command also reports the
+   *neighbour size ratio* for each element: the ratio of
+   volume-based characteristic lengths between an element and its
+   worst face-connected neighbour.  A value of 1 means all
+   neighbours are the same size; large values indicate abrupt mesh
+   grading.  This check works under MPI---element sizes are
+   exchanged across partition boundaries so the result is
+   independent of the number of ranks.
+
    Optional arguments:
 
    ``--order``
       Override the polynomial order from the configuration file.
 
    ``--worst N``
-      Show the N worst elements by scaled Jacobian and mesh scale.
+      Show the N worst elements by scaled Jacobian, mesh scale,
+      and neighbour size ratio.
 
    ``--export FILE``
       Export quality fields to a ``.pyfrs`` file for visualisation.
       The exported fields are *scaled-jacobian*, *mesh-scale*,
-      *aspect-ratio*, and *is-curved* (0 or 1 per element).
+      *aspect-ratio*, *is-curved*, and *size-ratio* (when enabled).
 
    ``--jac-thresh J``
-      Scaled Jacobian threshold for flagging poor elements (default 0.5).
+      Scaled Jacobian threshold (default 0.5).
 
    ``--ar-thresh AR``
-      Aspect ratio threshold for flagging poor elements (default 20).
+      Aspect ratio threshold (default 20).
+
+   ``--nsr-thresh NSR``
+      Neighbour size ratio threshold (default 5).  Set to 0 to
+      disable neighbour size ratio checking (avoids building mesh
+      connectivity).
 
    ``--json``
       Output results as JSON for scripting.
 
-The ``run``, ``restart``, ``resample``, and ``export`` commands can be
-run in parallel. To do so prefix ``pyfr`` with ``mpiexec -n <cores/devices>``.
-Note that there must exist a partitioning in the mesh with an
-appropriate number of parts.
+The ``run``, ``restart``, ``resample``, ``mesh``, and ``export`` commands can
+be run in parallel. To do so prefix ``pyfr`` with
+``mpiexec -n <cores/devices>``. Note that there must exist a partitioning
+in the mesh with an appropriate number of parts.
 
 MPI Distribution
 ----------------

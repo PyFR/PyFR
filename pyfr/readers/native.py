@@ -9,6 +9,7 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import (Scatterer, SparseScatterer, autofree,
                           get_comm_rank_root)
 from pyfr.readers.shared_nodes import SharedNodesFinder
+from pyfr.util import first
 
 
 @dataclass
@@ -76,6 +77,12 @@ class Connectivity:
             mask = self.cidxs == cidx
             etype, fidx = self.cidxmap[cidx]
             yield etype, fidx, self.eidxs[mask], np.flatnonzero(mask)
+
+    def map_eles(self, data, dtype=None):
+        result = np.empty(len(self), dtype=dtype or first(data.values()).dtype)
+        for etype, fidx, eidxs, mask in self.foreach():
+            result[mask] = data[etype][eidxs]
+        return result
 
 
 class NativeReader:
