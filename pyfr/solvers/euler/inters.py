@@ -3,6 +3,7 @@ from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionMPIInters,
                                     BaseAdvectionBCInters)
+from pyfr.util import first
 from pyfr.writers.csv import CSVStream
 
 import numpy as np
@@ -112,6 +113,8 @@ class ControlledBCMixin:
             ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs
         )
 
+        self.elementscls = type(first(elemap.values()))
+
         self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
 
@@ -201,9 +204,6 @@ class ControlledBCMixin:
             return None
 
     def prepare(self, system, ubank, t, kerns):
-        if not hasattr(self, 'elementscls'):
-            self.elementscls = system.elementscls
-
         update = self.nstep_counter % self.nsteps == 0
         if (update or not self.tprev) and t >= self.tstart:
             solns = dict(zip(system.ele_types, system.ele_scal_upts(ubank)))
@@ -272,8 +272,8 @@ class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
 
 
 class PressureBCMixin(ControlledBCMixin):
-    _target_opts = ['target-pressure', 'alpha', 'eta']
-    _csv_header = 't,p_avg,p_riem'
+    _target_opts = ['pressure', 'alpha', 'eta']
+    _csv_header = 't,p,pbc'
 
     def _init_extra(self, cfg, cfgsect):
         area = 0.0

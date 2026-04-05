@@ -122,7 +122,7 @@ dependent, boundary condition labelled *name* in the .pyfrm file with
 
            *float* | *string*
 
-        - ``target-pressure`` --- target area-averaged static pressure on the
+        - ``pressure`` --- target area-averaged static pressure on the
           boundary. Also used as the initial Riemann invariant pressure.
 
            *float* | *string*
