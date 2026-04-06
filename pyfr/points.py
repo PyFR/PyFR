@@ -20,9 +20,10 @@ class PointLocator:
 
         # Allocate the location buffer
         dtype = [('dist', float), ('cidx', np.int16), ('eidx', np.int64),
-                 ('tloc', float, self.mesh.ndims)]
+                 ('rank', np.int32), ('tloc', float, self.mesh.ndims)]
         locs = np.zeros(npts, dtype=dtype)
         locs['dist'] = np.inf
+        locs['rank'] = rank
 
         # Reduce over each of our element types
         for etype, eidxs in self.mesh.eidxs.items():
@@ -36,7 +37,7 @@ class PointLocator:
                     l['cidx'], l['eidx'] = cidx, eidxs[eidx]
 
         # Reduce over all ranks
-        self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=3)
+        self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=4)
 
         return locs
 
@@ -72,6 +73,32 @@ class PointLocator:
                 raise ValueError(f'Unable to locate point ({ploc})')
 
         return locs
+
+    def locate_disjoint(self, pts):
+        comm, rank, root = get_comm_rank_root()
+
+        # Determine how many points each rank has to locate
+        npts = np.empty(comm.size, dtype=int)
+        npts[rank] = len(pts)
+        comm.Allgather(mpi.IN_PLACE, npts)
+
+        # Iterate through each rank with points
+        result = None
+        for r in np.flatnonzero(npts):
+            # Broadcast the points from rank r
+            if rank == r:
+                buf = np.ascontiguousarray(pts, dtype=float)
+            else:
+                buf = np.empty((npts[r], self.mesh.ndims), dtype=float)
+            comm.Bcast(buf, root=r)
+
+            # Perform the location
+            locs = self.locate(buf)
+
+            if rank == r:
+                result = locs
+
+        return result
 
     @memoize
     def _get_shape_basis(self, etype, nspts):
