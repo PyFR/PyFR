@@ -75,16 +75,21 @@ class BaseSDIRKStepper(BaseImplicitStepper, NewtonSolver):
                                      u_i_reg):
         c_i, w = self._guess_weights[stage]
 
+        # Damp dt to bound the predictor for large time steps
+        f_ref = self._r_f[-1] if w is None else f_prev_list[0]
+        inc = c_i*dt*self._norm2(f_ref)
+        u_norm = self._norm2(u_n)
+        adt = dt*u_norm / (u_norm + inc) if u_norm + inc else dt
+
         # If we don't have weights then use a forward Euler predictor
         if w is None:
-            self._add(0, u_i_reg, 1, u_n, c_i*dt, self._r_f[-1])
+            self._add(0, u_i_reg, 1, u_n, c_i*adt, self._r_f[-1])
         # Lagrange interpolation: u = u_n + c_i * dt * sum_j(w_j * f_j)
         else:
             coeffs = [0, u_i_reg, 1, u_n]
             for wj, fj in zip(w, f_prev_list):
                 if wj:
-                    coeffs.extend([wj*c_i*dt, fj])
-
+                    coeffs.extend([wj*c_i*adt, fj])
             self._addv(coeffs[::2], coeffs[1::2])
 
     def step(self, t, dt):
