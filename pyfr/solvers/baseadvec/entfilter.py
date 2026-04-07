@@ -9,12 +9,9 @@ class EntropyFilter:
         self._be = backend
 
         # Register pointwise kernel templates
-        backend.pointwise.register(
-            'pyfr.solvers.euler.kernels.entropylocal'
-        )
-        backend.pointwise.register(
-            'pyfr.solvers.euler.kernels.entropyfilter'
-        )
+        kprefix = f'pyfr.solvers.{system.ef_solver}.kernels'
+        backend.pointwise.register(f'{kprefix}.entropylocal')
+        backend.pointwise.register(f'{kprefix}.entropyfilter')
 
         # Per-element-type setup
         self._entmin = {}
@@ -135,11 +132,12 @@ class EntropyFilter:
             return lambda: be.kernel(kname, tplargs={}, dims=[intf.ninters],
                                      entmin_lhs=lhs, entmin_rhs=rhs)
 
-        be.pointwise.register('pyfr.solvers.euler.kernels.intcent')
+        kprefix = 'pyfr.solvers.baseadvec.kernels'
+        be.pointwise.register(f'{kprefix}.intcent')
         for i, (lhs, rhs) in zip(int_inters, iint_v):
             i.kernels['comm_entropy'] = cent_kern('intcent', i, lhs, rhs)
 
-        be.pointwise.register('pyfr.solvers.euler.kernels.mpicent')
+        be.pointwise.register(f'{kprefix}.mpicent')
         for m, (lhs, rhs) in zip(mpi_inters, mpi_v):
             m.kernels['comm_entropy'] = cent_kern('mpicent', m, lhs, rhs)
 

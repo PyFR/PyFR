@@ -6,6 +6,7 @@ from pyfr.solvers.euler.inters import (EulerIntInters, EulerMPIInters,
 
 class EulerSystem(BaseAdvectionSystem):
     name = 'euler'
+    ef_solver = 'euler'
 
     elementscls = EulerElements
     intinterscls = EulerIntInters
