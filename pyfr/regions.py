@@ -10,12 +10,17 @@ from pyfr.util import match_paired_paren, subclass_where
 
 
 def parse_region_expr(expr, rdata=None):
-    # Geometric region
-    if '(' in expr:
-        return ConstructiveRegion(expr, rdata)
+    # Tag region
+    if expr.startswith('tag/'):
+        return TagRegion(expr[4:])
     # Boundary region
+    elif expr.startswith('bc/'):
+        return BoundaryRegion(expr[3:])
+    # Geometric region
+    elif '(' in expr:
+        return ConstructiveRegion(expr, rdata)
     else:
-        return BoundaryRegion(expr)
+        raise ValueError(f'Invalid region expression: {expr}')
 
 
 class FaceSet:
@@ -167,6 +172,19 @@ class BaseRegion:
                 result[et] = eidxs.tolist()
 
         return result
+
+
+class TagRegion(BaseRegion):
+    def __init__(self, tname):
+        self.tname = tname
+
+    def interior_eles(self, mesh):
+        # Determine the bit mask for this tag
+        tags = [c for c in mesh.codec if c.startswith('tag/')]
+        tbit = np.uint64(1 << tags.index(f'tag/{self.tname}'))
+
+        return {et: np.flatnonzero(t & tbit).tolist()
+                for et, t in mesh.tags.items()}
 
 
 class BoundaryRegion(BaseRegion):

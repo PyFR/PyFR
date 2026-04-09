@@ -70,7 +70,7 @@ class BasePartitioner:
         cdisps = np.empty(len(codec), dtype=int)
         for etype, disp in edisps.items():
             for i in range(efaces[etype].shape[-1]):
-                cdisps[codec.index(f'eles/{etype}/{i}')] = disp
+                cdisps[codec.index(f'eles/{etype}/face/{i}')] = disp
 
         # Construct the global element-element connectivity array
         conn = []

@@ -32,6 +32,7 @@ class Mesh:
     spts_nodes: dict = field(default_factory=dict)
     spts_curved: dict = field(default_factory=dict)
     colours: dict = field(default_factory=dict)
+    tags: dict = field(default_factory=dict)
 
     con: tuple = field(default_factory=tuple)
     con_p: dict = field(default_factory=dict)
@@ -381,8 +382,8 @@ class NativeReader:
             self.mesh.spts[etype] = spts
             self.mesh.spts_nodes[etype] = einfo['nodes']
             self.mesh.spts_curved[etype] = einfo['curved']
-            if 'colour' in einfo.dtype.names:
-                self.mesh.colours[etype] = einfo['colour']
+            self.mesh.colours[etype] = einfo['colour']
+            self.mesh.tags[etype] = einfo['tags']
 
     def _parse_codec(self):
         codec = self.mesh.codec
@@ -392,7 +393,7 @@ class NativeReader:
         cetmap = np.full(ncodec, -1, dtype=np.int16)
 
         for cidx, c in enumerate(codec):
-            if (m := re.match(r'eles/(\w+)/(\d+)$', c)):
+            if (m := re.match(r'eles/(\w+)/face/(\d+)$', c)):
                 cidxmap[cidx] = etype, fidx = m[1], int(m[2])
                 cetmap[cidx] = self.mesh.etypes.index(etype)
 
@@ -434,8 +435,8 @@ class NativeReader:
         for etype, einfo in self.eles.items():
             gi = g2l[etype][0]
             for fidx, eface in enumerate(einfo['faces'].T):
-                efcidx = codec.index(f'eles/{etype}/{fidx}')
                 n = len(eface)
+                efcidx = codec.index(f'eles/{etype}/face/{fidx}')
                 parts.append((np.broadcast_to(np.int16(efcidx), n),
                               np.arange(n), gi, eface['cidx'], eface['off']))
 

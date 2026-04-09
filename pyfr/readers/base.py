@@ -81,7 +81,7 @@ class BaseReader:
                 f['codec'] = np.array(codec, dtype='S')
                 f['creator'] = np.array(f'pyfr {__version__}', dtype='S')
                 f['mesh-uuid'] = np.array(str(uuid), dtype='S')
-                f['version'] = 1
+                f['version'] = 2
 
                 # Write out the nodes
                 f['nodes'] = self._get_nodes(nodes, eles)
@@ -123,10 +123,13 @@ class NodalMeshAssembler:
     _petype_focount = {'line': 2, 'tri': 3, 'quad': 4,
                        'tet': 4, 'pyr': 5, 'pri': 6, 'hex': 8}
 
-    def __init__(self, nodepts, elenodes, pents, maps):
+    def __init__(self, nodepts, elenodes, volpent, bfacespents, pfacespents,
+                 maps):
         self._nodepts = nodepts
         self._elenodes = elenodes
-        self._felespent, self._bfacespents, self._pfacespents = pents
+        self._volpent = volpent
+        self._bfacespents = bfacespents
+        self._pfacespents = pfacespents
         self._etype_map, self._petype_fnmap, self._nodemaps = maps
 
     def _check_pyr_parallelogram(self, foeles):
@@ -159,20 +162,21 @@ class NodalMeshAssembler:
 
         return foelemap
 
-    def _split_fluid(self, elemap):
+    def _split_volume(self, elemap):
         selemap = defaultdict(dict)
 
         for (petype, epent), eles in elemap.items():
             selemap[epent][petype] = eles
 
-        return selemap.pop(self._felespent), selemap
+        return selemap.pop(self._volpent), selemap
 
     def _foface_info(self, petype, pftype, codec, foeles):
         # Face numbers of faces of this type on this element
         fnums = np.array(self._petype_fnums[petype][pftype])
 
         # Lookup these faces in the codec
-        cidx = np.array([codec.index(f'eles/{petype}/{f}') for f in fnums])
+        fprefix = f'eles/{petype}/face/'
+        cidx = np.array([codec.index(f'{fprefix}{f}') for f in fnums])
 
         # First-order nodes associated with this face type
         fnmap = self._petype_fnmap[petype][pftype]
@@ -197,7 +201,7 @@ class NodalMeshAssembler:
         cconn = [None]*len(codec)
         for petype, einfo in eles.items():
             for i, fcon in enumerate(einfo['faces'].T):
-                cconn[codec.index(f'eles/{petype}/{i}')] = fcon
+                cconn[codec.index(f'eles/{petype}/face/{i}')] = fcon
 
         return cconn
 
@@ -211,13 +215,13 @@ class NodalMeshAssembler:
 
         return fofaces
 
-    def _pair_fluid_faces(self, ffofaces, codec, eles):
+    def _pair_volume_faces(self, vfofaces, codec, eles):
         # Map from codec numbers to per-element face connectivity arrays
         cconn = self._codec_conn(eles, codec)
 
         resid = {}
 
-        for pftype, faces in ffofaces.items():
+        for faces in vfofaces.values():
             for petype, (cidx, fidx, eidx), nodes in faces:
                 # Pair adjacent elements
                 padj = nodes[:-1] == nodes[1:]
@@ -256,7 +260,7 @@ class NodalMeshAssembler:
 
         return resid, cconn
 
-    def _pair_periodic_fluid_faces(self, bpart, cconn, resid):
+    def _pair_periodic_volume_faces(self, bpart, cconn, resid):
         pmap = {}
         pdtype = [('cidx', np.int16), ('off', np.int64)]
 
@@ -317,7 +321,7 @@ class NodalMeshAssembler:
         for etype, edisp in edisps.items():
             efaces = eles[etype]['faces']
             for i in range(efaces.shape[-1]):
-                cdisps[codec.index(f'eles/{etype}/{i}')] = edisp
+                cdisps[codec.index(f'eles/{etype}/face/{i}')] = edisp
 
         spinner()
 
@@ -362,7 +366,7 @@ class NodalMeshAssembler:
 
         with progress.start('Creating elements'):
             for etype, pent in sorted(self._elenodes):
-                if pent != self._felespent:
+                if pent != self._volpent:
                     continue
 
                 # Elements and type information
@@ -377,12 +381,13 @@ class NodalMeshAssembler:
                 codec.append(f'eles/{petype}')
 
                 # Add the face info to the codec
-                codec.extend(f'eles/{petype}/{i}' for i in range(nfaces))
+                codec.extend(f'eles/{petype}/face/{i}' for i in range(nfaces))
 
                 # Elements array data type
                 fdtype = [('cidx', np.int16), ('off', np.int64)]
                 edtype = [('nodes', np.int64, nnodes), ('curved', bool),
-                          ('faces', fdtype, nfaces), ('colour', np.uint8)]
+                          ('faces', fdtype, nfaces), ('colour', np.uint8),
+                          ('tags', np.uint64)]
 
                 # Allocate the elements array
                 eles[petype] = einfo = np.empty(len(enodes), dtype=edtype)
@@ -412,20 +417,20 @@ class NodalMeshAssembler:
         foeles = self._to_first_order(self._elenodes)
         spinner()
 
-        # Split into fluid and boundary parts
-        fpart, bpart = self._split_fluid(foeles)
+        # Split into volume and boundary parts
+        vpart, bpart = self._split_volume(foeles)
         spinner()
 
-        # Extract the faces of the first-order fluid elements
-        ffofaces = self._extract_faces(fpart, codec)
+        # Extract the faces of the first-order volume elements
+        vfofaces = self._extract_faces(vpart, codec)
         spinner()
 
-        # Pair the fluid-fluid faces
-        resid, cconn = self._pair_fluid_faces(ffofaces, codec, eles)
+        # Pair the volume-volume faces
+        resid, cconn = self._pair_volume_faces(vfofaces, codec, eles)
         spinner()
 
         # Tag and pair periodic boundary faces
-        pmap = self._pair_periodic_fluid_faces(bpart, cconn, resid)
+        pmap = self._pair_periodic_volume_faces(bpart, cconn, resid)
         spinner()
 
         # Identify the fixed boundary faces

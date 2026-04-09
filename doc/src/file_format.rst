@@ -26,7 +26,7 @@ Inspecting the structure of our mesh we find:
 .. code-block:: none
 
     /                        Group
-    /codec                   Dataset {12}
+    /codec                   Dataset {13}
     /creator                 Dataset {SCALAR}
     /eles                    Group
     /eles/quad               Dataset {196}
@@ -73,6 +73,7 @@ Inspecting the structure of the ``/eles/quad`` dataset we find:
              H5T_STD_I64LE "off";
           } } "faces";
           H5T_STD_U8LE "colour";
+          H5T_STD_U64LE "tags";
        }
        DATASPACE  SIMPLE { ( 196 ) / ( 196 ) }
     }
@@ -96,31 +97,52 @@ array for our mesh we find:
 
     DATASET "/codec" {
        DATATYPE  H5T_STRING {
-          STRSIZE 11;
+          STRSIZE 16;
           STRPAD H5T_STR_NULLPAD;
           CSET H5T_CSET_ASCII;
           CTYPE H5T_C_S1;
        }
-       DATASPACE  SIMPLE { ( 12 ) / ( 12 ) }
+       DATASPACE  SIMPLE { ( 13 ) / ( 13 ) }
        DATA {
-       (0): "eles/tri\000\000\000", "eles/tri/0\000", "eles/tri/1\000",
-       (3): "eles/tri/2\000", "eles/quad\000\000", "eles/quad/0", "eles/quad/1",
-       (7): "eles/quad/2", "eles/quad/3", "bc/wall\000\000\000\000",
-       (10): "bc/inlet\000\000\000", "bc/outlet\000\000"
+       (0): "eles/tri", "eles/tri/face/0", "eles/tri/face/1",
+       (3): "eles/tri/face/2", "eles/quad", "eles/quad/face/0",
+       (6): "eles/quad/face/1", "eles/quad/face/2", "eles/quad/face/3",
+       (9): "bc/wall", "bc/inlet", "bc/outlet",
+       (12): "tag/fluid"
        }
     }
 
-This is always an array of null-padded strings. From this we see that
-``/codec[1] = "eles/tri/0"`` and thus a ``cidx`` value of 1 corresponds
-to face 0 of a triangle The element number is given by the ``off``
-member. For example, here ``/eles/quad[98].faces[0] = (3, 334)`` which
-means that face 0 of quad 98 is connected to face 2 of triangle 334.
-Correspondingly, ``/eles/tri[334].faces[2] = (5, 98)`` with
-``/codec[5] = "eles/quad/0"``. When the ``cidx`` is that of a boundary
-the ``off`` field is unnecessary and is guaranteed to be -1. Boundary
-names are, in general, arbitrary. The ``colour`` field is used for
-element colouring in implicit solvers and contains a small integer
-indicating which colour group the element belongs to.
+This is always an array of null-padded strings. The codec contains
+four kinds of entry:
+
+- **Element type entries** of the form ``eles/<type>`` identify a
+  particular element type. These are used by the point locator to
+  associate query points with element types.
+
+- **Face entries** of the form ``eles/<type>/face/<n>`` identify a
+  particular face of an element type. A ``cidx`` pointing to a face
+  entry means the face is connected to another element; the ``off``
+  member gives the element number. For example, here
+  ``/eles/quad[98].faces[0] = (3, 334)`` which means that face 0 of
+  quad 98 is connected to face 2 of triangle 334. Correspondingly,
+  ``/eles/tri[334].faces[2] = (5, 98)`` with
+  ``/codec[5] = "eles/quad/face/0"``.
+
+- **Boundary entries** of the form ``bc/<name>`` identify a boundary.
+  When the ``cidx`` is that of a boundary the ``off`` field is
+  unnecessary and is guaranteed to be -1. Boundary names are, in
+  general, arbitrary.
+
+- **Tag entries** of the form ``tag/<name>`` identify a material or
+  volume region. The per-element ``tags`` field is a bitmask where
+  bit *n* corresponds to the *n*-th ``tag/`` entry in the codec. An
+  element may belong to multiple tags simultaneously. Up to 64 tags
+  are supported. For meshes with a single volume region the only tag
+  is typically ``tag/fluid``.
+
+The ``colour`` field is used for element colouring in implicit solvers
+and contains a small integer indicating which colour group the element
+belongs to.
 
 Inspecting the ``/nodes`` array we have:
 

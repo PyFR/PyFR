@@ -1,5 +1,6 @@
 from collections import defaultdict
 from pathlib import Path
+import re
 
 import numpy as np
 
@@ -15,22 +16,34 @@ def _copy_attrs(src_dset, dst_dset):
 def _upgrade_mesh_v1_to_v2(src, dst):
     codec = [c.decode() for c in src['codec']]
 
-    # Copy everything except eles and version
+    # Build new codec; rename face entries in place, append tag at the end
+    ncodec = []
+    for c in codec:
+        if (m := re.match(r'eles/(\w+)/(\d+)$', c)):
+            ncodec.append(f'eles/{m[1]}/face/{m[2]}')
+        else:
+            ncodec.append(c)
+    ncodec.append('tag/volume')
+
+    # Copy everything except eles, version, and codec
     for k in src:
-        if k not in ('eles', 'version'):
+        if k not in ('eles', 'version', 'codec'):
             src.copy(k, dst)
 
     dst['version'] = 2
+    dst['codec'] = np.array(ncodec, dtype='S')
 
-    # Read element datasets, adding a colour field for the colouring routine
+    # Read element datasets, adding colour and tags fields
     eles = {}
     for etype, edset in src['eles'].items():
-        dtype = np.dtype(edset.dtype.descr + [('colour', np.uint8)])
+        extra = [('colour', np.uint8), ('tags', np.uint64)]
+        dtype = np.dtype(edset.dtype.descr + extra)
         eles[etype] = new = np.empty(len(edset), dtype=dtype)
         new[list(edset.dtype.names)] = edset[:]
+        new['tags'] = 1
 
     # Compute element colouring
-    NodalMeshAssembler.compute_element_colouring(eles, codec)
+    NodalMeshAssembler.compute_element_colouring(eles, ncodec)
 
     # Write upgraded elements
     g = dst.create_group('eles')
