@@ -439,6 +439,36 @@ class BaseElements:
 
         return smats.reshape(ndims, nmpts, -1), djacs
 
+    def _get_scal_upts_for_inter_ele(self, eidx, _):
+        cmap = (eidx,)
+        rmap = (0,)
+        return (self._scal_upts_cpy.mid,), rmap, cmap, (1,)
+
+    def _get_scal_fpts_for_inter_ele(self, eidx, _):
+        cmap = (eidx,)
+        rmap = (0,)
+        return (self._scal_fpts.mid,), rmap, cmap, (1,)
+
+    def _get_grad_upts_for_inter_ele(self, eidx, _):
+        cmap = (eidx,)
+        rmap = (0,)
+        return (self._grad_upts.mid,), rmap, cmap, (1,)
+
+    def _get_vect_fpts_for_inter_ele(self, eidx, _):
+        cmap = (eidx,)
+        rmap = (0,)
+        return (self._vect_fpts.mid,), rmap, cmap, (1,)
+
+    def _get_jacs_facefpts(self, eidx, fidx):
+        fpts_idx = self.basis.facefpts[fidx]
+        jacs = 1.0 / self.rcpdjac_at_np('fpts')[fpts_idx, eidx]
+        return jacs
+
+    def _get_smats_upts(self, eidx, _):
+        smats = self.smat_at_np('upts')[:, :, :, eidx].swapaxes(0, 1)
+        smats = np.reshape(smats, (smats.shape[0],-1))
+        return smats
+
     def get_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
         return self._pnorm_fpts[fpts_idx, eidx]
@@ -467,3 +497,7 @@ class BaseElements:
         fpts_idx = self.srtd_face_fpts[fidx][eidxs]
         ploc = self.plocfpts[fpts_idx, eidxs[:, None]]
         return ploc.reshape(-1, self.ndims),
+
+    def get_ploc_for_facefpts(self, eidx, fidx):
+        fpts_idx = self.basis.facefpts[fidx]
+        return self.plocfpts[fpts_idx, eidx]

@@ -3,6 +3,7 @@ import math
 
 from pyfr.nputil import npeval
 from pyfr.solvers.base import BaseInters
+from pyfr.util import first
 
 
 class BaseAdvectionIntInters(BaseInters):
@@ -112,5 +113,32 @@ class BaseAdvectionBCInters(BaseInters):
             value = self._const_mat(lhs, 'get_ploc_for_inters')
 
             self.set_external('ploc', spec, value=value)
+
+        return exprs
+
+    def _exp_opts_ele(self, opts, lhs, ex_args, ex_vals, default={}):
+        cfg, sect = self.cfg, self.cfgsect
+
+        subs = cfg.items('constants')
+        subs |= dict(x='ploc[fidx][0]', y='ploc[fidx][1]', z='ploc[fidx][2]')
+        subs |= dict(abs='fabs', pi=str(math.pi))
+
+        exprs = {}
+        for k in opts:
+            if k in default:
+                exprs[k] = cfg.getexpr(sect, k, default[k], subs=subs)
+            else:
+                exprs[k] = cfg.getexpr(sect, k, subs=subs)
+
+        if (any('ploc' in ex for ex in exprs.values()) and
+            'ploc' not in self._external_args):
+            basis = first(self.elemap.values()).basis
+            fidx = first(lhs)[2]
+            spec = f'in fpdtype_t[{basis.nfacefpts[fidx]}][{self.ndims}]'
+            value = self._ewise_const_mat(lhs, 'get_ploc_for_facefpts')
+
+            #self._set_external('ploc', spec, value=value)
+            ex_args['ploc'] = spec
+            ex_vals['ploc'] = value
 
         return exprs

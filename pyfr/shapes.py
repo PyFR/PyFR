@@ -152,6 +152,33 @@ class BaseShape:
         return block_diag([self.m8]*self.ndims)
 
     @cached_property
+    @clean
+    def m10(self):
+        ub = self.ubasis
+
+        n = max(sum(dd) for dd in ub.degrees)
+        ncut = self.cfg.getint('soln-filter', 'cutoff')
+        order = self.cfg.getint('soln-filter', 'order')
+        alpha = self.cfg.getfloat('soln-filter', 'alpha')
+
+        A = np.ones(self.nupts)
+        for i, d in enumerate(sum(dd) for dd in ub.degrees):
+            if d >= ncut < n:
+                A[i] = exp(-alpha*((d - ncut)/(n - ncut))**order)
+
+        return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
+
+    @cached_property
+    def m11(self):
+        m = self.gbasis_at(self.fpts)
+        return m
+
+    @cached_property
+    def m12(self):
+        m = np.rollaxis(self.ubasis.jac_nodal_basis_at(self.fpts), 2)
+        return m
+
+    @cached_property
     def nupts(self):
         n = self.order + 1
         return int(np.polyval(self.npts_coeffs, n)) // self.npts_cdenom
