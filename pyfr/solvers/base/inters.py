@@ -3,6 +3,26 @@ import numpy as np
 from pyfr.util import first
 
 
+def _get_inter_objs(interside, meth, elemap):
+    objs = []
+    for etype, fidx, eidxs in interside.items():
+        for eidx in eidxs:
+            objs.append(getattr(elemap[etype], meth)(eidx, fidx))
+    return objs
+
+
+def _get_inter_arrays_ewise(interside, meth, elemap):
+    parts = []
+
+    for etype, fidx, eidxs, idx in interside.foreach():
+        parts.append(getattr(elemap[etype], meth)(eidxs, fidx))
+
+    if not parts:
+        return []
+
+    return [np.concatenate(a) for a in zip(*parts)]
+
+
 def _get_inter_arrays(interside, meth, elemap, perm=Ellipsis):
     parts, reorder = [], []
 
@@ -109,27 +129,23 @@ class BaseInters:
     def _vect_view(self, inter, meth):
         return self._view(inter, meth, (self.ndims, self.nvars))
 
+    def _view_ewise(self, inter, meth, vshape=()):
+        vm = _get_inter_arrays_ewise(inter, meth, self.elemap)
+        return self._be.view(*vm, vshape=vshape)
+
     def _scal_upts_view(self, inter, meth):
         nupts = first(self.elemap.values()).basis.nupts
-        return self._view(inter, meth, (nupts, self.nvars), with_perm=False)
+        return self._view_ewise(inter, meth, (nupts, self.nvars))
 
     def _scal_fpts_view(self, inter, meth):
         basis = first(self.elemap.values()).basis
         vshape = (basis.nfpts, self.nvars)
-        with_perm = False
-        return self._view(inter, meth, vshape=vshape, with_perm=with_perm)
+        return self._view_ewise(inter, meth, vshape=vshape)
 
     def _grad_upts_view(self, inter, meth):
         basis = first(self.elemap.values()).basis
         vshape = (self.ndims*basis.nupts, self.nvars)
-        with_perm = False
-        return self._view(inter, meth, vshape=vshape, with_perm=with_perm)
-
-    def _vect_fpts_view(self, inter, meth):
-        basis = first(self.elemap.values()).basis
-        vshape = (self.ndims*basis.nfpts, self.nvars)
-        with_perm = False
-        return self._view(inter, meth, vshape=vshape, with_perm=with_perm)
+        return self._view_ewise(inter, meth, vshape=vshape)
 
     def _xchg_view(self, inter, meth, vshape=(), with_perm=True):
         perm = self._perm if with_perm else Ellipsis

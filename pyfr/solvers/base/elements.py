@@ -439,25 +439,20 @@ class BaseElements:
 
         return smats.reshape(ndims, nmpts, -1), djacs
 
-    def _get_scal_upts_for_inter_ele(self, eidx, _):
-        cmap = (eidx,)
-        rmap = (0,)
-        return (self._scal_upts_cpy.mid,), rmap, cmap, (1,)
+    def _get_scal_upts_cpy_ewise(self, eidxs, fidx):
+        n = len(eidxs)
+        return (np.full(n, self._scal_upts_cpy.mid),
+                np.zeros(n, dtype=int), eidxs, np.ones(n, dtype=int))
 
-    def _get_scal_fpts_for_inter_ele(self, eidx, _):
-        cmap = (eidx,)
-        rmap = (0,)
-        return (self._scal_fpts.mid,), rmap, cmap, (1,)
+    def _get_scal_fpts_ewise(self, eidxs, fidx):
+        n = len(eidxs)
+        return (np.full(n, self._scal_fpts.mid),
+                np.zeros(n, dtype=int), eidxs, np.ones(n, dtype=int))
 
-    def _get_grad_upts_for_inter_ele(self, eidx, _):
-        cmap = (eidx,)
-        rmap = (0,)
-        return (self._grad_upts.mid,), rmap, cmap, (1,)
-
-    def _get_vect_fpts_for_inter_ele(self, eidx, _):
-        cmap = (eidx,)
-        rmap = (0,)
-        return (self._vect_fpts.mid,), rmap, cmap, (1,)
+    def _get_grad_upts_ewise(self, eidxs, fidx):
+        n = len(eidxs)
+        return (np.full(n, self._grad_upts.mid),
+                np.zeros(n, dtype=int), eidxs, np.ones(n, dtype=int))
 
     def _get_jacs_facefpts(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]

@@ -3,7 +3,6 @@ import math
 
 from pyfr.nputil import npeval
 from pyfr.solvers.base import BaseInters
-from pyfr.util import first
 
 
 class BaseAdvectionIntInters(BaseInters):
@@ -132,12 +131,11 @@ class BaseAdvectionBCInters(BaseInters):
 
         if (any('ploc' in ex for ex in exprs.values()) and
             'ploc' not in self._external_args):
-            basis = first(self.elemap.values()).basis
-            fidx = first(lhs)[2]
+            etype, fidx, _ = next(lhs.items())
+            basis = self.elemap[etype].basis
             spec = f'in fpdtype_t[{basis.nfacefpts[fidx]}][{self.ndims}]'
             value = self._ewise_const_mat(lhs, 'get_ploc_for_facefpts')
 
-            #self._set_external('ploc', spec, value=value)
             ex_args['ploc'] = spec
             ex_vals['ploc'] = value
 
