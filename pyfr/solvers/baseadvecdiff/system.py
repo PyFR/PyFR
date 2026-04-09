@@ -215,8 +215,12 @@ class BaseAdvectionDiffusionSystem(BaseAdvectionSystem):
         for l in k['mpiint/comm_flux']:
             g_mpi_flux.add(l, deps=deps(l, 'mpiint/vect_fpts_unpack'))
 
+        # Execute NSCBC boundary kernels after other interface fluxes complete
+        g_mpi_flux.add_all(k['bcint/nscbc_flux'], deps=k['mpiint/comm_flux'])
+
         # Compute the transformed divergence of the corrected flux
-        g_mpi_flux.add_all(k['eles/tdivtconf'], deps=k['mpiint/comm_flux'])
+        g_mpi_flux.add_all(k['eles/tdivtconf'], deps=k['mpiint/comm_flux'] +
+                                                      k['bcint/nscbc_flux'])
 
         # Obtain the physical divergence of the corrected flux
         for l in k['eles/negdivconf']:
