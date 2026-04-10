@@ -170,10 +170,8 @@ def main():
             '--postproc', dest='pp_plugins', action='append', default=[],
             metavar='PLUGIN', help='postprocessing plugin; may be repeated'
         )
-        ap_export_type.add_argument(
-            '--cfg', dest='pp_cfg',
-            help='config file for postprocessing plugins'
-        )
+        ap_export_type.add_argument('--cfg', dest='pp_cfg',
+                                    help='config file for postproc plugins')
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
         ap_export_type.set_defaults(etype=etype, process=process_export)

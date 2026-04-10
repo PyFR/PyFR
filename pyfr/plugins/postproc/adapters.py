@@ -7,7 +7,7 @@ from pyfr.util import subclass_where
 
 
 class BasePostProcAdapter:
-    def __init__(self, ctx, vsoln, vpts, etype, spts, has_grads=False):
+    def __init__(self, ctx, vsoln, vpts, etype, spts):
         self.cfg = ctx.cfg
         self.soln = ctx.soln
         self.elementscls = ctx.elementscls
@@ -16,15 +16,15 @@ class BasePostProcAdapter:
         self.ploc = vpts.transpose(2, 0, 1)
         self.ndims = ctx.ndims
         self.dtype = ctx.dtype
-        self.has_grads = has_grads
         self.fields = {}
 
-        # Primitive variables and gradients (views into vsoln)
+        # Primitive variables (views into vsoln)
         nvars = len(self.elementscls.privars(self.ndims, self.cfg))
         self.pris = [vsoln[:, i, :] for i in range(nvars)]
 
+        # Gradients, if present in vsoln
         self.grad_pris = None
-        if has_grads:
+        if vsoln.shape[1] > nvars:
             nd = self.ndims
             self.grad_pris = [vsoln[:, j:j + nd, :].transpose(1, 0, 2)
                               for j in range(nvars, nvars + nvars*nd, nd)]
@@ -45,8 +45,8 @@ class STLPostProcAdapter(BasePostProcAdapter):
 
 
 class BoundaryPostProcAdapter(BasePostProcAdapter):
-    def __init__(self, ctx, vsoln, vpts, spts, finfo, has_grads=False):
-        super().__init__(ctx, vsoln, vpts, finfo.etype, spts, has_grads)
+    def __init__(self, ctx, vsoln, vpts, spts, finfo):
+        super().__init__(ctx, vsoln, vpts, finfo.etype, spts)
 
         self._fidx = finfo.fidx
         self._svpts = finfo.svpts

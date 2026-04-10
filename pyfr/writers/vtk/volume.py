@@ -76,8 +76,7 @@ class VTKVolumeWriter(BaseVTKWriter):
 
         # Run postproc plugins
         if self.pp_plugins:
-            adapter = VolumePostProcAdapter(self, vsoln, vpts, etype, spts,
-                                            has_grads=self._gradients)
+            adapter = VolumePostProcAdapter(self, vsoln, vpts, etype, spts)
             for fname, arrs in self._run_postprocs(adapter).items():
                 pointf[fname] = arrs
 

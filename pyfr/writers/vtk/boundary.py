@@ -11,7 +11,7 @@ from pyfr.util import first, subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 
 
-FaceInfo = namedtuple('FaceInfo', ['etype', 'fidx', 'svpts', 'norm'])
+FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts norm')
 
 
 def _search(a, v):
@@ -117,8 +117,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         else:
             cls = BoundaryPostProcAdapter
 
-        return cls(self, face_vsoln, face_vpts, spts, finfo,
-                   has_grads=self._gradients)
+        return cls(self, face_vsoln, face_vpts, spts, finfo)
 
     def _extra_point_shapes(self, key):
         if key in self._surface_info:
