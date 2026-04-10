@@ -22,10 +22,9 @@ class NIRFPostProc(BasePostProcPlugin):
 
     def process(self, data):
         ndims = data.ndims
-        cfg = data.soln.config
-        sect = 'solver-plugin-nirf'
+        soln = data.soln
 
-        sdata = data.soln.state.get('plugins/nirf')
+        sdata = soln.state.get('plugins/nirf')
         if sdata is None:
             return
 
@@ -35,32 +34,33 @@ class NIRFPostProc(BasePostProcPlugin):
         floc = sdata['loc']
 
         fx0 = np.zeros(3)
-        fx0[:ndims] = literal_eval(cfg.get(sect, 'center-of-rot'))
+        fx0[:ndims] = literal_eval(
+            soln.config.get('solver-plugin-nirf', 'center-of-rot')
+        )
 
         R = _quat_to_rotmat(fquat)
 
         # Transform coordinates: x_lab = R*(x_body - x0) + x0 + loc
         ploc = data.ploc
-        for d in range(3):
-            ploc[d] -= fx0[d]
+        ploc -= fx0[:, None, None]
 
         r = np.array(ploc)
 
         rloc = np.einsum('ij,j...->i...', R, ploc)
-        for d in range(3):
-            ploc[d] = rloc[d] + fx0[d] + floc[d]
+        apply_trans = self.cfg.getbool(self.cfgsect,
+                                      'apply-translation', False)
+
+        ploc[:] = rloc + fx0[:, None, None]
+        if apply_trans:
+            ploc += floc[:, None, None]
 
         # Transform velocity: u_lab = R*(u_body + omega x r_body) + V_frame
         vs = data.pris[1:ndims + 1]
+        u_body = np.zeros_like(r)
+        u_body[:ndims] = vs
 
-        # omega x r (always use full 3D cross product)
-        oxr = np.array([fomega[1]*r[2] - fomega[2]*r[1],
-                        fomega[2]*r[0] - fomega[0]*r[2],
-                        fomega[0]*r[1] - fomega[1]*r[0]])
+        oxr = np.cross(fomega, r, axisb=0, axisc=0)
+        u_lab = np.tensordot(R, u_body + oxr, axes=1) + fvelo[:, None, None]
 
-        for d in range(ndims):
-            vs[d][:] += oxr[d]
-
-        u_rot = np.array(vs)
-        for d in range(ndims):
-            vs[d][:] = sum(R[d, k]*u_rot[k] for k in range(ndims)) + fvelo[d]
+        for d, v in enumerate(vs):
+            v[:] = u_lab[d]
