@@ -171,7 +171,7 @@ def main():
             metavar='PLUGIN', help='postprocessing plugin; may be repeated'
         )
         ap_export_type.add_argument(
-            '--cfg', dest='pp_cfg', type=FileType('r'),
+            '--cfg', dest='pp_cfg',
             help='config file for postprocessing plugins'
         )
         ap_export_type.add_argument('-P', '--pname',

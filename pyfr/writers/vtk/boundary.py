@@ -64,7 +64,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
             # Obtain the associated surface info
             for stype, *info in self._get_surface_info(etype, eoff, fidx):
                 ecount[stype] += len(info[-1])
-                self._surface_info[stype].append((etype, *info))
+                self._surface_info[stype].append(info)
 
         self.einfo = list(ecount.items())
 
@@ -96,7 +96,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
         lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
-        return itype, mesh_op, soln_op, lin_op, fidx, svpts, norm
+        finfo = FaceInfo(etype, fidx, svpts, norm)
+
+        return itype, mesh_op, soln_op, lin_op, finfo
 
     def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)
@@ -110,15 +112,17 @@ class VTKBoundaryWriter(BaseVTKWriter):
         return [(*info[f], idxs[f]) for f in info]
 
     def _make_adapter(self, face_vsoln, face_vpts, spts, finfo):
-        AdapterCls = (GradBoundaryPostProcAdapter if self._gradients
-                      else BoundaryPostProcAdapter)
+        if self._gradients:
+            cls = GradBoundaryPostProcAdapter
+        else:
+            cls = BoundaryPostProcAdapter
 
-        return AdapterCls(self, face_vsoln, face_vpts, spts, finfo,
-                          has_grads=self._gradients)
+        return cls(self, face_vsoln, face_vpts, spts, finfo,
+                   has_grads=self._gradients)
 
     def _extra_point_shapes(self, key):
         if key in self._surface_info:
-            etypes = [e for e, *_ in self._surface_info[key]]
+            etypes = [info[-2].etype for info in self._surface_info[key]]
         else:
             etypes = [key]
 
@@ -136,7 +140,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
             key = first(self._surface_info)
 
         if key in self._surface_info:
-            key, *_ = first(self._surface_info[key])
+            key = first(self._surface_info[key])[-2].etype
 
         return key
 
@@ -145,8 +149,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
         cellf, pointf = defaultdict(list), defaultdict(list)
 
         pshapes = self._extra_point_shapes(itype)
-        for etype, mesh_op, soln_op, lin_op, fidx, svpts, norm, idxs \
-                in self._surface_info[itype]:
+        for mesh_op, soln_op, lin_op, finfo, idxs in self._surface_info[itype]:
+            etype = finfo.etype
             spts = self.mesh.spts[etype][:, idxs]
             soln = self.soln.data[etype][..., idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
@@ -159,9 +163,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
             # Run postproc plugins
             if self.pp_plugins:
-                finfo = FaceInfo(etype, fidx, svpts, norm)
-                adapter = self._make_adapter(face_vsoln, face_vpts,
-                                             spts, finfo)
+                adapter = self._make_adapter(face_vsoln, face_vpts, spts, finfo)
                 for fname, arrs in self._run_postprocs(adapter).items():
                     pointf[fname].append(arrs)
 

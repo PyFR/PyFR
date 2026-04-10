@@ -26,10 +26,8 @@ class BasePostProcAdapter:
         self.grad_pris = None
         if has_grads:
             nd = self.ndims
-            self.grad_pris = [
-                vsoln[:, j:j + nd, :].transpose(1, 0, 2)
-                for j in range(nvars, nvars + nvars*nd, nd)
-            ]
+            self.grad_pris = [vsoln[:, j:j + nd, :].transpose(1, 0, 2)
+                              for j in range(nvars, nvars + nvars*nd, nd)]
 
     @cached_property
     def shape(self):

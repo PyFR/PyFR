@@ -16,7 +16,7 @@ class FluidForceIntegrator(SurfaceIntegrator):
 
         if self.locs and morigin is not None:
             self.rfpts = {k: loc - morigin[:, None, None]
-                         for k, loc in self.locs.items()}
+                          for k, loc in self.locs.items()}
 
 
 class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
