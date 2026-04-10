@@ -269,6 +269,8 @@ class BaseSystem:
         bcmap = {b.type: b for b in subclasses(bccls, just_leaf=True)}
         bc_inters, bc_prefns = [], {}
 
+        prevcfg = initsoln.config if initsoln else None
+
         # Iterate over all boundaries in the mesh
         for c in mesh.codec:
             if not c.startswith('bc/'):
@@ -290,7 +292,7 @@ class BaseSystem:
             if localbc:
                 bciface = bcclass(self.backend, mesh.bcon[bname], elemap,
                                   cfgsect, self.cfg, bccomm)
-                bciface.setup(sdata)
+                bciface.setup(sdata, prevcfg)
                 bc_inters.append(bciface)
             else:
                 bciface = None

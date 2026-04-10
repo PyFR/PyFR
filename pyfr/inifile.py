@@ -121,6 +121,27 @@ class Inifile:
     def remove_option(self, section, option):
         self._cp.remove_option(section, option)
 
+    def sect_eq(self, other, section):
+        try:
+            sitems = dict(self._cp.items(section))
+            oitems = dict(other._cp.items(section))
+            return sitems == oitems
+        except NoSectionError:
+            return False
+
+    def sect_diff(self, other, section):
+        sitems = dict(self._cp.items(section))
+
+        # Section missing from other, everything is new
+        try:
+            oitems = dict(other._cp.items(section))
+        except NoSectionError:
+            return {k: (v, None) for k, v in sitems.items()}
+
+        # Return {key: (self_val, other_val)} for options that differ
+        return {k: (sitems.get(k), oitems.get(k))
+                for k, _ in sitems.items() ^ oitems.items()}
+
     def sections(self):
         return self._cp.sections()
 

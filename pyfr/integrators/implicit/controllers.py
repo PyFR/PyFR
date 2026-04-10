@@ -238,6 +238,9 @@ class ImplicitPIController(ThroughputLimitMixin, PIControllerMixin,
         # Initialise dt/errprev from restart or defaults
         if initsoln and (sd := initsoln.state.get('intg/ctrl')):
             self.dt, self._errprev = sd[:2]
+            diff = self.cfg.sect_diff(initsoln.config, 'solver-time-integrator')
+            if any(k.startswith(('atol', 'rtol')) for k in diff):
+                self._errprev = 1.0
         else:
             self._errprev = 1.0
 
