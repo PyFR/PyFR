@@ -1,6 +1,5 @@
 import itertools as it
 from functools import cached_property
-from math import exp
 import re
 
 import numpy as np
@@ -44,11 +43,11 @@ class BaseShape:
         if self.antialias - {'flux', 'surf-flux'}:
             raise ValueError('Invalid anti-alias options')
 
-        self.ubasis = get_polybasis(self.name, self.order + 1, self.upts)
+        self.ubasis = get_polybasis(self.name, self.order, self.upts)
 
         if nspts:
             self.nsptsord = nsptord = self.order_from_npts(nspts)
-            self.sbasis = get_polybasis(self.name, nsptord + 1, self.spts)
+            self.sbasis = get_polybasis(self.name, nsptord, self.spts)
 
             # Basis for free-stream metric
             # We need p-th order pseudo grid points, which includes
@@ -57,7 +56,7 @@ class BaseShape:
             # on the both adjacent cells.
             # Ref. 1 JCP 281, 28-54, Sec 4.2
             # Ref. 2 JSC 26(3), 301-327, Definition 1
-            self.mbasis = get_polybasis(self.name, max(self.order + 1, 2),
+            self.mbasis = get_polybasis(self.name, max(self.order, 1),
                                         self.mpts)
 
     @classmethod
@@ -134,23 +133,6 @@ class BaseShape:
     @property
     def m9(self):
         return block_diag([self.m8]*self.ndims)
-
-    @cached_property
-    @clean
-    def m10(self):
-        ub = self.ubasis
-
-        n = max(sum(dd) for dd in ub.degrees)
-        ncut = self.cfg.getint('soln-filter', 'cutoff')
-        order = self.cfg.getint('soln-filter', 'order')
-        alpha = self.cfg.getfloat('soln-filter', 'alpha')
-
-        A = np.ones(self.nupts)
-        for i, d in enumerate(sum(dd) for dd in ub.degrees):
-            if d >= ncut < n:
-                A[i] = exp(-alpha*((d - ncut)/(n - ncut))**order)
-
-        return np.linalg.solve(ub.vdm, A[:, None]*ub.vdm).T
 
     @cached_property
     def nupts(self):
@@ -303,7 +285,7 @@ class BaseShape:
 
             pts = get_quadrule(kind, rule, npts).pts
 
-            fb[kind] = get_polybasis(kind, self.order + 1, pts)
+            fb[kind] = get_polybasis(kind, self.order, pts)
 
         return fb
 
@@ -383,6 +365,12 @@ class QuadShape(TensorProdShape, BaseShape):
          ' (x[0] - 1)*V[0][1] + (x[0] + 1)*V[3][1])/4']
     ]
 
+    # Interpolation expression for a linear element
+    interp_expr = ('((1 - x[0])*(1 - x[1])*V[0] +'
+                   ' (1 + x[0])*(1 - x[1])*V[1] +'
+                   ' (1 - x[0])*(1 + x[1])*V[2] +'
+                   ' (1 + x[0])*(1 + x[1])*V[3])/4')
+
 
 class HexShape(TensorProdShape, BaseShape):
     name = 'hex'
@@ -433,6 +421,16 @@ class HexShape(TensorProdShape, BaseShape):
          for i in range(3)]
     ]
 
+    # Interpolation expression for a linear element
+    interp_expr = ('((1 - x[0])*(1 - x[1])*(1 - x[2])*V[0] +'
+                   ' (1 + x[0])*(1 - x[1])*(1 - x[2])*V[1] +'
+                   ' (1 - x[0])*(1 + x[1])*(1 - x[2])*V[2] +'
+                   ' (1 + x[0])*(1 + x[1])*(1 - x[2])*V[3] +'
+                   ' (1 - x[0])*(1 - x[1])*(1 + x[2])*V[4] +'
+                   ' (1 + x[0])*(1 - x[1])*(1 + x[2])*V[5] +'
+                   ' (1 - x[0])*(1 + x[1])*(1 + x[2])*V[6] +'
+                   ' (1 + x[0])*(1 + x[1])*(1 + x[2])*V[7])/8')
+
 
 class TriShape(BaseShape):
     name = 'tri'
@@ -454,6 +452,10 @@ class TriShape(BaseShape):
         [f'(V[{i + 1}][{j}] - V[0][{j}])/2' for j in range(2)]
         for i in range(2)
     ]
+
+    # Interpolation expression for a linear element
+    interp_expr = ('(-(x[0] + x[1])*V[0] + (1 + x[0])*V[1] +'
+                   ' (1 + x[1])*V[2])/2')
 
     @classmethod
     def std_ele(cls, sptord):
@@ -492,6 +494,11 @@ class TetShape(BaseShape):
         [f'(V[{i + 1}][{j}] - V[0][{j}])/2' for j in range(3)]
         for i in range(3)
     ]
+
+    # Interpolation expression for a linear element
+    interp_expr = ('(-(1 + x[0] + x[1] + x[2])*V[0] +'
+                   ' (1 + x[0])*V[1] + (1 + x[1])*V[2] +'
+                   ' (1 + x[2])*V[3])/2')
 
     @classmethod
     def std_ele(cls, sptord):
@@ -540,6 +547,14 @@ class PriShape(BaseShape):
                      f' (x[1] + 1)*V[2][{j}] + (x[1] +    1)*V[5][{j}])/4'
                      for j in range(3)]]
     jac_exprs = _jac_exprs_xy + _jac_exprs_z
+
+    # Interpolation expression for a linear element
+    interp_expr = ('(-(x[0] + x[1])*(1 - x[2])*V[0] +'
+                   ' (1 + x[0])*(1 - x[2])*V[1] +'
+                   ' (1 + x[1])*(1 - x[2])*V[2] -'
+                   ' (x[0] + x[1])*(1 + x[2])*V[3] +'
+                   ' (1 + x[0])*(1 + x[2])*V[4] +'
+                   ' (1 + x[1])*(1 + x[2])*V[5])/4')
 
     @classmethod
     def std_ele(cls, sptord):
@@ -590,6 +605,15 @@ class PyrShape(BaseShape):
          '(-V[0][1] - V[1][1] - V[2][1] - V[3][1] + 4*V[4][1])/8',
          '(-V[0][2] - V[1][2] - V[2][2] - V[3][2] + 4*V[4][2])/8']
     ]
+
+    # Interpolation expression for a linear element
+    interp_expr = (
+        '(( 2*x[0]*x[1] - 2*x[0] - 2*x[1] - x[2] + 1)*V[0] +'
+        ' (-2*x[0]*x[1] + 2*x[0] - 2*x[1] - x[2] + 1)*V[1] +'
+        ' (-2*x[0]*x[1] - 2*x[0] + 2*x[1] - x[2] + 1)*V[2] +'
+        ' ( 2*x[0]*x[1] + 2*x[0] + 2*x[1] - x[2] + 1)*V[3] +'
+        ' 4*(1 + x[2])*V[4])/8'
+    )
 
     @classmethod
     def std_ele(cls, sptord):

@@ -97,7 +97,7 @@ class ConduitNode:
                                                            value.ctypes.data,
                                                            value.size)
             case _:
-                ValueError('ConduitNode: __setitem__ type not supported')
+                raise ValueError('ConduitNode: __setitem__ type not supported')
 
     def append(self):
         ptr = self.lib.conduit_node_append(self)
@@ -181,7 +181,7 @@ class _CLIAdapter:
         self._mesh = mesh
         self._soln = soln
 
-        self.scfg = soln['config']
+        self.scfg = soln.config
 
     @property
     def ndims(self):
@@ -227,12 +227,12 @@ class _CLIAdapter:
 
     @property
     def tcurr(self):
-        stats = self._soln['stats']
+        stats = self._soln.stats
         return stats.getfloat('solver-time-integrator', 'tcurr')
 
     @property
     def soln(self):
-        return [self._soln[etype] for etype in self.etypes]
+        return [self._soln.data[etype] for etype in self.etypes]
 
     @property
     def grad_soln(self):
@@ -387,7 +387,7 @@ class _AscentRenderer:
             field = k.removeprefix('field-')
 
             if field in self._fields_write:
-                raise KeyError(f"Field '{field}' already exists")
+                raise KeyError(f'Field {field!r} already exists')
             self._fields_write.add(field)
 
             exprs = adapter.acfg.getexpr(cfgsect, k, subs=cons)
@@ -418,7 +418,7 @@ class _AscentRenderer:
                 for kf, vf in filter.items():
                     if kf == 'output-name':
                         if vf in self._fields_write:
-                            raise KeyError(f"Output name '{vf}' already used")
+                            raise KeyError(f'Output name {vf!r} already used')
                         self._fields_write.add(vf)
                     elif kf == 'field':
                         self._fields_read.add(vf)
@@ -453,7 +453,7 @@ class _AscentRenderer:
 
             # If no render options then throw error
             if not any(kc.startswith('render-') for kc in cfg):
-                raise KeyError(f"No render config given for scene '{sn}'")
+                raise KeyError(f'No render config given for scene {sn!r}')
 
     def _eval_exprs(self, adapter):
         elementscls = adapter.elementscls
@@ -523,7 +523,7 @@ class _AscentRenderer:
 
         # Set file names
         for path, gen in self._image_paths:
-            self._add_scene[path] = gen.send(adapter.tcurr)
+            self._add_scene[path] = str(gen.send(adapter.tcurr))
 
         # Set field expressions
         self._eval_exprs(adapter)
@@ -537,19 +537,16 @@ class _AscentRenderer:
 class AscentPlugin(BaseSolnPlugin):
     name = 'ascent'
     systems = ['*']
-    formulations = ['dual', 'std']
     dimensions = [2, 3]
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        self.nsteps = self.cfg.getint(cfgsect, 'nsteps')
         self._renderer = _AscentRenderer(_IntegratorAdapter(intg, cfgsect),
                                          intg.isrestart)
 
     def __call__(self, intg):
-        if intg.nacptsteps % self.nsteps == 0:
-            self._renderer.render(_IntegratorAdapter(intg, self.cfgsect))
+        self._renderer.render(_IntegratorAdapter(intg, self.cfgsect))
 
 
 class AscentCLIPlugin(BaseCLIPlugin):
@@ -587,9 +584,9 @@ class AscentCLIPlugin(BaseCLIPlugin):
             adapter = _CLIAdapter(mesh, soln, acfg, acfgsect)
 
             # See if we need to create a new Ascent renderer
-            if not renderer or rcfg != soln['config']:
+            if not renderer or rcfg != soln.config:
                 renderer = _AscentRenderer(adapter, isrestart=True)
-                rcfg = soln['config']
+                rcfg = soln.config
 
             # Perform the rendering
             renderer.render(adapter)

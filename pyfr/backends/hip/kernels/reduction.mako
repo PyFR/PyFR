@@ -4,67 +4,92 @@
 __global__ __launch_bounds__(${blocksz}) void
 reduction(ixdtype_t nrow, ixdtype_t ncolb, ixdtype_t ldim,
           fpdtype_t *__restrict__ reduced,
-          fpdtype_t *__restrict__ rcurr, fpdtype_t *__restrict__ rold,
-% if method == 'errest':
-          fpdtype_t *__restrict__ rerr, fpdtype_t atol, fpdtype_t rtol)
-% elif method == 'resid' and dt_type == 'matrix':
-          fpdtype_t *__restrict__ dt_mat, fpdtype_t dt_fac)
-% elif method == 'resid':
-          fpdtype_t dt_fac)
-% endif
+% for v in vvars:
+          fpdtype_t *__restrict__ ${v}${',' if not loop.last or svars else ')'}
+% endfor
+% for s in svars:
+          fpdtype_t ${s}${')' if loop.last else ','}
+% endfor
 {
-    int tid = threadIdx.x;
-    ixdtype_t i = ixdtype_t(blockIdx.x)*blockDim.x + tid;
+% if pvars:
+    #define VARIDX blockIdx.y
+% for i, name in enumerate(pvars):
+    const fpdtype_t *_pv_${name} = _pv + ${i*ncola};
+% endfor
+% endif
+    int tid = threadIdx.x % warpSize, wid = threadIdx.x / warpSize;
+    int nwarps = blockDim.x / warpSize;
+    ixdtype_t i = ixdtype_t(blockIdx.x)*blockDim.x + threadIdx.x;
 
-    __shared__ fpdtype_t sdata[32];
-    fpdtype_t r, acc = 0;
+    __shared__ fpdtype_t sdata[${nexprs}][32];
+    fpdtype_t acc[${nexprs}] = ${pyfr.array(str(init_val), i=nexprs)};
 
     if (i < ncolb)
     {
         for (ixdtype_t j = 0; j < nrow; j++)
         {
             ixdtype_t idx = j*ldim + SOA_IX(i, blockIdx.y, gridDim.y);
-        % if method == 'errest':
-            r = rerr[idx]/(atol + rtol*max(fabs(rcurr[idx]), fabs(rold[idx])));
-        % elif method == 'resid':
-            r = (rcurr[idx] - rold[idx])/(dt_fac${'*dt_mat[idx]' if dt_type == 'matrix' else ''});
-        % endif
-
-        % if norm == 'uniform':
-            acc = max(r*r, acc);
-        % else:
-            acc += r*r;
-        % endif
+            % for i, e in enumerate(exprs):
+            % if rop == 'max':
+            acc[${i}] = max(acc[${i}], ${e});
+            % else:
+            acc[${i}] += ${e};
+            % endif
+            % endfor
         }
     }
 
     // Reduce within each warp
     for (int off = warpSize / 2; off > 0; off >>= 1)
-% if norm == 'uniform':
-        acc = max(__shfl_down(acc, off), acc);
-% else:
-        acc += __shfl_down(acc, off);
-% endif
+    {
+        for (int i = 0; i < ${nexprs}; i++)
+        {
+        % if rop == 'max':
+            acc[i] = max(__shfl_down(acc[i], off), acc[i]);
+        % else:
+            acc[i] += __shfl_down(acc[i], off);
+        % endif
+        }
+    }
 
     // Have the first thread in each warp write out to shared memory
-    if (tid % warpSize == 0)
-        sdata[tid / warpSize] = acc;
+    if (tid == 0)
+    {
+        for (int i = 0; i < ${nexprs}; i++)
+            sdata[i][wid] = acc[i];
+    }
 
     __syncthreads();
 
-    // Have the first warp perform the final reduction
-    if (tid / warpSize == 0)
+    // Final phase: assign each warp to expression(s), only warps with work participate
+    if (wid < ${nexprs})
     {
-        acc = (tid < blockDim.x / warpSize) ? sdata[tid] : 0;
+        for (int e = wid; e < ${nexprs}; e += nwarps)
+        {
+            fpdtype_t acc_e = (tid < nwarps) ? sdata[e][tid] : ${init_val};
 
-        for (int off = warpSize / 2; off > 0; off >>= 1)
-    % if norm == 'uniform':
-            acc = max(__shfl_down(acc, off), acc);
-    % else:
-            acc += __shfl_down(acc, off);
-    % endif
+            // Final warp shuffle
+            for (int off = warpSize / 2; off > 0; off >>= 1)
+            {
+            % if rop == 'max':
+                acc_e = max(__shfl_down(acc_e, off), acc_e);
+            % else:
+                acc_e += __shfl_down(acc_e, off);
+            % endif
+            }
 
-        if (tid == 0)
-            reduced[ixdtype_t(blockIdx.y)*gridDim.x + blockIdx.x] = acc;
+            // Atomic update to global result
+            if (tid == 0)
+            {
+            % if rop == 'max':
+                atomic_max_fpdtype(&reduced[e*gridDim.y + blockIdx.y], acc_e);
+            % else:
+                atomicAdd(&reduced[e*gridDim.y + blockIdx.y], acc_e);
+            % endif
+            }
+        }
     }
+% if pvars:
+    #undef VARIDX
+% endif
 }

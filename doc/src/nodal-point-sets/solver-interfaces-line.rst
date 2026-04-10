@@ -1,9 +1,8 @@
-****************************************
-[solver-interfaces-line{-mg-p\ *order*}]
-****************************************
+************************
+[solver-interfaces-line]
+************************
 
-Parameterises the line interfaces, or if -mg-p\ *order* is suffixed the
-line interfaces at multi-p level *order*, with
+Parameterises the line interfaces, with
 
 #. ``flux-pts`` --- location of the flux points on a line interface:
 
@@ -24,7 +23,9 @@ line interfaces at multi-p level *order*, with
 
     ``gauss-legendre`` | ``gauss-legendre-lobatto``
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-interfaces-line]
     flux-pts = gauss-legendre

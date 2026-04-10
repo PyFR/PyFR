@@ -16,7 +16,9 @@ Parameterises artificial viscosity for shock capturing with
 
     *float*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [solver-artificial-viscosity]
     max-artvisc = 0.01

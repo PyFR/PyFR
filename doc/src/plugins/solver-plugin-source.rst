@@ -5,51 +5,29 @@
 Injects solution, space (x, y, [z]), and time (t) dependent
 source terms with
 
-1. ``rho`` --- density source term for ``euler`` | ``navier-stokes``:
+#. ``rho`` --- density source term:
 
     *string*
 
-2. ``rhou`` --- x-momentum source term for ``euler`` | ``navier-stokes``
-   :
+#. ``rhou`` --- x-momentum source term:
 
     *string*
 
-3. ``rhov`` --- y-momentum source term for ``euler`` | ``navier-stokes``
-   :
+#. ``rhov`` --- y-momentum source term:
 
     *string*
 
-4. ``rhow`` --- z-momentum source term for ``euler`` | ``navier-stokes``
-   :
+#. ``rhow`` --- z-momentum source term:
 
     *string*
 
-5. ``E`` --- energy source term for ``euler`` | ``navier-stokes``
-   :
+#. ``E`` --- energy source term:
 
     *string*
 
-6. ``p`` --- pressure source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
+Example:
 
-    *string*
-
-7. ``u`` --- x-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-8. ``v`` --- y-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-9. ``w`` --- w-velocity source term for ``ac-euler`` |
-   ``ac-navier-stokes``:
-
-    *string*
-
-Example::
+.. code-block:: ini
 
     [solver-plugin-source]
     rho = t

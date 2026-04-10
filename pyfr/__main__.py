@@ -4,6 +4,7 @@ import csv
 import io
 from pathlib import Path
 import re
+import uuid
 
 import h5py
 import mpi4py.rc
@@ -16,10 +17,10 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.partitioners import (BasePartitioner, get_partitioner,
                                reconstruct_partitioning, write_partitioning)
-from pyfr.plugins import BaseCLIPlugin
+from pyfr.plugins import BaseCLIPlugin, BasePlugin
 from pyfr.progress import (NullProgressSequence, ProgressBar,
-                           ProgressSequenceAction)
-from pyfr.readers import BaseReader, get_reader_by_name, get_reader_by_extn
+                           ProgressSequenceAction, format_dofs)
+from pyfr.readers import BaseReader, get_reader_by_extn, get_reader_by_name
 from pyfr.readers.native import NativeReader
 from pyfr.readers.stl import read_stl
 from pyfr.resamplers import (BaseInterpolator, NativeCloudResampler,
@@ -28,6 +29,7 @@ from pyfr.solvers import get_solver
 from pyfr.util import first, subclasses
 from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
 from pyfr.writers.native import NativeWriter
+from pyfr.writers.upgrade import upgrade
 
 
 def main():
@@ -192,6 +194,14 @@ def main():
     ap_region_remove.add_argument('name', help='region name')
     ap_region_remove.set_defaults(process=process_region_remove)
 
+    # Upgrade command
+    ap_upgrade = sp.add_parser('upgrade', help='upgrade --help')
+    ap_upgrade.add_argument('inf', metavar='in', type=Path,
+                            help='input mesh or solution file')
+    ap_upgrade.add_argument('outf', metavar='out', nargs='?', default=None,
+                            type=Path, help='output file (default: in-place)')
+    ap_upgrade.set_defaults(process=process_upgrade)
+
     # Resample command
     ap_resample = sp.add_parser('resample', help='resample --help')
     ap_resample.add_argument('srcmesh', help='source mesh file')
@@ -201,7 +211,7 @@ def main():
     ap_resample.add_argument('tgtsoln', help='target solution file')
     itypes = [i.name for i in subclasses(BaseInterpolator, just_leaf=True)]
     ap_resample.add_argument('-i', '--interpolator', choices=itypes,
-                             required=True, help='interpolator to use')
+                             default='weno', help='interpolator to use')
     ap_resample.add_argument(
         '--iopt', dest='iopts', action='append', default=[],
         metavar='key:value', help='interpolator-specific option'
@@ -254,6 +264,21 @@ def process_import(args):
 
     # Write out the mesh
     reader.write(args.outmesh, args.lintol)
+
+
+def process_upgrade(args):
+    outf = args.outf or args.inf
+
+    with h5py.File(args.inf, 'r') as src:
+        tmp = outf.parent / f'pyfr-{uuid.uuid4()}{outf.suffix}'
+        try:
+            with h5py.File(tmp, 'w', libver='latest') as dst:
+                upgrade(src, dst)
+
+            tmp.rename(outf)
+        except:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 def process_partition_list(args):
@@ -472,9 +497,15 @@ def process_resample(args):
         treader = NativeReader(args.tgtmesh, args.pname, construct_con=False)
         tcfg = Inifile.load(args.tgtcfg)
 
-    # Get the interpolator
+    # Ensure the source is a solution file
+    if ssoln.stats.get('data', 'prefix') != 'soln':
+        raise RuntimeError('Resampling is only supported for solution files')
+
+    # Get the interpolator, auto-configuring from source order
+    order = ssoln.config.getint('solver', 'order')
     opts = dict(s.split(':', 1) for s in args.iopts)
-    interp = get_interpolator(args.interpolator, smesh.ndims, opts)
+    interp = get_interpolator(args.interpolator, smesh.ndims, opts,
+                              order=order)
 
     # Perform the resampling
     resampler = NativeCloudResampler(smesh, ssoln, interp, progress)
@@ -485,16 +516,12 @@ def process_resample(args):
     # Get the output file path
     tpath = Path(args.tgtsoln).absolute()
 
-    # Get the data field prefix
-    prefix = ssoln['stats'].get('data', 'prefix')
-
     # Have the root rank prepare a stats record
     if rank == root:
         stats = Inifile()
-        stats.set('data', 'prefix', prefix)
-        stats.set('data', 'fields', ssoln['stats'].get('data', 'fields'))
+        stats.set('data', 'prefix', 'soln')
         stats.set('solver-time-integrator', 'tcurr',
-                  ssoln['stats'].get('solver-time-integrator', 'tcurr'))
+                  ssoln.stats.get('solver-time-integrator', 'tcurr'))
         metadata = {'config': tcfg.tostr(), 'stats': stats.tostr(),
                     'mesh-uuid': treader.mesh.uuid}
     else:
@@ -503,9 +530,34 @@ def process_resample(args):
     with progress.start('Write target solution'):
         # Write out the new solution
         writer = NativeWriter(treader.mesh, tcfg, fpdtype, tpath.parent,
-                              tpath.name, prefix)
-        writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs)
-        writer.write(tsoln, None, metadata)
+                              tpath.name, 'soln')
+        writer.set_shapes_eidxs(tshapes, treader.mesh.eidxs,
+                                {'soln': ssoln.fields})
+        writer.write({k: {'soln': v} for k, v in tsoln.items()},
+                     None, metadata)
+
+
+class _ProgressBarPlugin(BasePlugin):
+    name = 'progress'
+
+    def __init__(self, pbar, gndofs):
+        self._pbar = pbar
+        self._gndofs = gndofs
+        self._info = None
+        self._last_wtime = 0
+
+    def __call__(self, intg):
+        wtime = self._pbar.walltime
+
+        if wtime - self._last_wtime >= 1.0:
+            if intg.controller_has_variable_dt and int(wtime) // 10 % 2:
+                self._info = f'dt = {intg.dt:.2e}'
+            else:
+                self._info = format_dofs(self._gndofs*intg.nrhsevals / wtime)
+
+            self._last_wtime = wtime
+
+        self._pbar(intg.tcurr, info=self._info)
 
 
 def _process_common(args, soln, cfg):
@@ -524,11 +576,10 @@ def _process_common(args, soln, cfg):
 
     # If we do not have a config file then take it from the solution
     if cfg is None:
-        cfg = soln['config']
-    # Remove stale serialised data from soln
+        cfg = soln.config
+    # Remove stale serialised data from soln if using a different config
     elif soln:
-        soln = {k: v for k, v in soln.items() 
-                if not k.startswith(('plugins', 'bcs', 'intg'))}
+        soln.state.clear()
 
     # Create a backend
     backend = get_backend(args.backend, cfg)
@@ -541,8 +592,8 @@ def _process_common(args, soln, cfg):
         pbar = ProgressBar()
         pbar.start(solver.tend, start=solver.tstart, curr=solver.tcurr)
 
-        # Register a callback to update the bar after each step
-        solver.plugins.append(lambda intg: pbar(intg.tcurr))
+        # Wrap as a lightweight plugin
+        solver.plugins.append(_ProgressBarPlugin(pbar, solver.gndofs))
 
     # Execute!
     solver.run()

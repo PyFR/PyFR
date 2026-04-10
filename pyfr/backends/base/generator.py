@@ -3,7 +3,7 @@ import re
 
 import numpy as np
 
-from pyfr.util import match_paired_paren, ndrange
+from pyfr.util import match_paired_paren
 
 
 class Arg:
@@ -12,8 +12,9 @@ class Arg:
 
         specptn = r'''
             (?:(in|inout|out)\s+)?                            # Intent
-            (?:(broadcast(?:-row|-col)?|mpi|scalar|view)\s+)? # Attrs
-            (?:reduce\((min)\)\s+)?                           # Reduction
+            (?:((?:broadcast-col\s+)?view(?:\(\d+\))?|        # Attrs
+                broadcast(?:-row|-col)?|mpi|scalar)\s+)?
+            (?:reduce\((min|max|sum)\)\s+)?                   # Reduction
             ([A-Za-z_]\w*)                                    # Data type
             ((?:\[\d+\]){0,2})$                               # Dimensions
         '''
@@ -38,19 +39,24 @@ class Arg:
         self.cdims = [int(d) for d in re.findall(dimsptn, g[4])]
         self.ncdim = len(self.cdims)
 
+        # View stride (for multi-indexed views: view(N))
+        m = re.search(r'view\((\d+)\)', self.attrs)
+        self.viewstride = int(m[1]) if m else 1
+
         # Attributes
         self.isbroadcast = self.attrs == 'broadcast'
         self.isbroadcastr = self.attrs == 'broadcast-row'
-        self.isbroadcastc = self.attrs == 'broadcast-col'
+        self.isbroadcastc = 'broadcast-col' in self.attrs
         self.ismpi = self.attrs == 'mpi'
-        self.isview = self.attrs == 'view'
+        self.isview = 'view' in self.attrs
         self.isscalar = self.attrs == 'scalar'
         self.isvector = not self.isscalar
         self.isreduce = bool(self.reduceop)
         self.isused = bool(re.search(usedptn, body))
 
         # Validation
-        if self.attrs.startswith('broadcast') and self.intent != 'in':
+        if (self.attrs.startswith('broadcast') and
+            self.intent != 'in' and not self.isreduce):
             raise ValueError('Broadcast arguments must be of intent in')
         if self.isbroadcast and self.ncdim != 2:
             raise ValueError('Broadcasts must have two dimensions')
@@ -62,8 +68,10 @@ class Arg:
             raise ValueError('Reduction arguments must be of type fpdtype_t')
         if self.isreduce and self.isscalar:
             raise ValueError('Scalar arguments can not be reduced')
-        if self.isscalar and self.dtype != 'fpdtype_t':
-            raise ValueError('Scalar arguments must be of type fpdtype_t')
+        if self.isreduce and self.ncdim and not self.isbroadcastc:
+            raise ValueError('Non-broadcast-col reduction args must be scalar')
+        if self.isscalar and self.dtype not in ('fpdtype_t', 'ixdtype_t'):
+            raise ValueError('Scalar arguments must be fpdtype_t or ixdtype_t')
 
 
 class BaseKernelGenerator:
@@ -72,6 +80,7 @@ class BaseKernelGenerator:
         self.ndim = ndim
         self.fpdtype = fpdtype
         self.ixdtype = ixdtype
+        self.fpdtype_max = float(np.finfo(fpdtype).max)
 
         # Parse and sort our argument list
         sargs = sorted((k, Arg(k, v, body)) for k, v in args.items())
@@ -81,19 +90,18 @@ class BaseKernelGenerator:
 
         # Break arguments into point-scalars and point-vectors
         self.scalargs = [v for v in sargs if v.isscalar]
-        self.vectargs = [v for v in sargs if v.isvector]
+        self.vectargs = vargs = [v for v in sargs if v.isvector]
 
-        # If we are 2D ensure none of our arguments are views
-        if ndim == 2 and any(v.isview for v in self.vectargs):
-            raise ValueError('View arguments are not supported for 2D '
-                             'kernels')
-
-        # Similarly, check for MPI matrices
-        if ndim == 2 and any(v.ismpi for v in self.vectargs):
-            raise ValueError('MPI matrices are not supported for 2D kernels')
+        # Validate 2D argument constraints
+        if ndim == 2:
+            if any(v.isview and v.intent != 'in' for v in vargs):
+                raise ValueError('2D view args must be input-only')
+            if any(v.ismpi for v in vargs):
+                raise ValueError('2D kernels do not support MPI matrices')
 
         # Render the main body of our kernel
-        self.body, self.preamble = self._render_body_preamble(body)
+        body, preamble, epilogue = self._render_body_preamble_epilogue(body)
+        self.body, self.preamble, self.epilogue = body, preamble, epilogue
 
         # Determine the dimensions to be iterated over
         self._dims = ['_nx'] if ndim == 1 else ['_ny', '_nx']
@@ -106,16 +114,26 @@ class BaseKernelGenerator:
         argn += self._dims
         argt += [[self.ixdtype]]*self.ndim
 
-        # Scalar args (always of type fpdtype)
-        argn += [sa.name for sa in self.scalargs]
-        argt += [[self.fpdtype]]*len(self.scalargs)
+        # Scalar args (fpdtype or ixdtype)
+        for sa in self.scalargs:
+            argn.append(sa.name)
+            dtype = self.ixdtype if sa.dtype == 'ixdtype_t' else self.fpdtype
+            argt.append([dtype])
 
         # Vector args
         for va in self.vectargs:
             argn.append(va.name)
 
             if va.isview:
-                argt.append([np.uintp]*(2 + (va.ncdim == 2)))
+                match self.ndim, va.ncdim:
+                    case 2, _ if va.isbroadcastc:
+                        argt.append([np.uintp, np.uintp])
+                    case 2, _:
+                        argt.append([np.uintp, np.uintp, self.ixdtype])
+                    case _, 2:
+                        argt.append([np.uintp]*3)
+                    case _:
+                        argt.append([np.uintp]*2)
             elif self.needs_ldim(va):
                 argt.append([np.uintp, self.ixdtype])
             else:
@@ -135,26 +153,53 @@ class BaseKernelGenerator:
 
     def _match_arg(self, arg):
         bmtch = r'\[({0})\]'.format(match_paired_paren('[]'))
+        ncdim = arg.ncdim + (arg.viewstride > 1)
         ptrns = [r'\b{0}\b', r'\b{0}' + bmtch, r'\b{0}' + 2*bmtch]
 
-        return ptrns[arg.ncdim].format(arg.name)
+        return ptrns[ncdim].format(arg.name)
 
     def _deref_arg(self, arg):
-        if arg.isview:
-            return self._deref_arg_view(arg)
+        if arg.isview and self.ndim == 1:
+            return self._deref_arg_view_1d(arg)
+        elif arg.isview:
+            return self._deref_arg_view_2d(arg)
         elif self.ndim == 1:
             return self._deref_arg_array_1d(arg)
         else:
             return self._deref_arg_array_2d(arg)
 
-    def _deref_arg_view(self, arg):
-        ptns = [
-            '{0}_v[{0}_vix[{1}]]',
-            r'{0}_v[{0}_vix[{1}] + SOA_SZ*(\1)]',
-            r'{0}_v[{0}_vix[{1}] + {0}_vrstri[{1}]*(\1) + SOA_SZ*(\2)]'
-        ]
+    def _deref_arg_view_1d(self, arg):
+        n = arg.name
+        vix = f'{n}_vix[X_IDX]'
+        vs = f'{n}_vrstri'
 
-        return ptns[arg.ncdim].format(arg.name, 'X_IDX')
+        if arg.viewstride > 1:
+            vixs = fr'{n}_vix[X_IDX*{arg.viewstride} + (\1)]'
+            return fr'{n}_v[{vixs}]'
+        elif arg.ncdim == 0:
+            return f'{n}_v[{vix}]'
+        elif arg.ncdim == 1:
+            return fr'{n}_v[{vix} + SOA_SZ*(\1)]'
+        else:
+            return fr'{n}_v[{vix} + {vs}[X_IDX]*(\1) + SOA_SZ*(\2)]'
+
+    def _deref_arg_view_2d(self, arg):
+        n = arg.name
+        vix = f'{n}_vix[X_IDX]'
+        vs = f'{n}_vrstri'
+
+        # Broadcast-col view: no _y dependence
+        if arg.isbroadcastc and arg.viewstride > 1:
+            vixs = fr'{n}_vix[X_IDX*{arg.viewstride} + (\1)]'
+            return fr'{n}_v[{vixs}]'
+        elif arg.isbroadcastc:
+            return f'{n}_v[{vix}]'
+        elif arg.ncdim == 0:
+            return f'{n}_v[{vix} + {vs}*_y]'
+        elif arg.ncdim == 1:
+            return fr'{n}_v[{vix} + {vs}*_y + SOA_SZ*(\1)]'
+        else:
+            return fr'{n}_v[{vix} + {vs}*((\1)*_ny + _y) + SOA_SZ*(\2)]'
 
     def _deref_arg_array_1d(self, arg):
         # Vector:
@@ -236,6 +281,9 @@ class BaseKernelGenerator:
             body = re.sub(r'(?=\d*[.eE])(?=\.?\d)\d*\.?\d*(?:[eE][+-]?\d+)?',
                           r'\g<0>f', body)
 
+        # Track 2D broadcast-col reductions for deferred writeback
+        self._reduce_args = []
+
         # Dereference vector arguments
         for va in self.vectargs:
             subp = self._match_arg(va)
@@ -246,22 +294,63 @@ class BaseKernelGenerator:
                 body = re.sub(subp, darg, body)
             # Reduction
             else:
-                afun = f'atomic_{va.reduceop}_fpdtype'
-                body = f'fpdtype_t {va.name}{va.cdimstr};\n{body}'
-
-                if va.ncdim == 0:
-                    body += f'{afun}(&{darg}, {va.name});\n'
-                else:
-                    for ij in ndrange(*va.cdims):
-                        lval = va.name + ''.join(f'[{i}]' for i in ij)
-                        gval = re.sub(subp, darg, lval)
-
-                        body += f'{afun}(&{gval}, {lval});\n'
+                body = self._render_reduce(va, body, subp, darg)
 
         return body
 
-    def _render_body_preamble(self, body):
-        return self._render_body(body), ''
+    def _reduce_ident(self, reduceop):
+        m = self.fpdtype_max
+        return {'sum': 0, 'min': m, 'max': -m}[reduceop]
+
+    _reduce_fn = {'min': 'fmin', 'max': 'fmax'}
+
+    def _accum_expr(self, reduceop, dst, src):
+        if reduceop == 'sum':
+            return f'{dst} += {src};'
+        else:
+            rfn = self._reduce_fn[reduceop]
+            return f'{dst} = {rfn}({dst}, {src});'
+
+    def _render_reduce(self, va, body, subp, darg):
+        n = prod(va.cdims) if va.cdims else 1
+
+        # 2D broadcast-col: per-iteration local + register accumulator
+        if va.isbroadcastc:
+            rname = f'_ra_{va.name}'
+            ident = self._reduce_ident(va.reduceop)
+            self._reduce_args.append(
+                (rname, darg, ident, va.reduceop, n, va.ncdim)
+            )
+
+            if va.ncdim:
+                decl = f'fpdtype_t {va.name}[{n}];'
+                accum = '\n'.join(
+                    self._accum_expr(va.reduceop, f'{rname}[{j}]',
+                                     f'{va.name}[{j}]')
+                    for j in range(n))
+            else:
+                decl = f'fpdtype_t {va.name};'
+                accum = self._accum_expr(va.reduceop, rname, va.name)
+
+            return f'{decl}\n{body}\n{accum}'
+        # 1D: local variable + immediate atomic writeback
+        else:
+            afun = f'atomic_{va.reduceop}_fpdtype'
+            vs = va.viewstride
+
+            if vs > 1:
+                body = f'fpdtype_t {va.name}[{vs}];\n{body}'
+                for i in range(vs):
+                    gval = re.sub(subp, darg, f'{va.name}[{i}]')
+                    body += f'{afun}(&{gval}, {va.name}[{i}]);\n'
+            else:
+                body = f'fpdtype_t {va.name};\n{body}'
+                body += f'{afun}(&{darg}, {va.name});\n'
+
+            return body
+
+    def _render_body_preamble_epilogue(self, body):
+        return self._render_body(body), '', ''
 
 
 class BaseGPUKernelGenerator(BaseKernelGenerator):
@@ -340,16 +429,16 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
 
         return sname, lcode, nbytes
 
-    def _render_body_preamble(self, body):
-        preamble = []
+    def _render_body_preamble_epilogue(self, body):
+        preamble = ''
 
         # For 2D kernels, preload data from column broadcast arrays
         # into shared memory to guarantee reuse
         if self.ndim == 2:
-            usedb = 0
+            preload, usedb = [], 0
 
             for va in self.vectargs:
-                if va.isbroadcastc and va.ncdim >= 1:
+                if va.isbroadcastc and va.ncdim >= 1 and not va.isreduce:
                     # Preload the argument into shared memory
                     sname, lcode, nbytes = self._preload_arg(va)
 
@@ -357,7 +446,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
                     if usedb + nbytes > 32*1024:
                         continue
 
-                    preamble.append(lcode)
+                    preload.append(lcode)
                     usedb += nbytes
 
                     if va.ncdim == 1:
@@ -368,11 +457,58 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
                     # Substitute all uses of the argument in the body
                     body = re.sub(self._match_arg(va), subs, body)
 
-        # If we performed any preloading then emit a shared memory barrier
-        if preamble:
-            preamble.append(f'{self._shared_sync};')
+            if preload:
+                preload.append(f'{self._shared_sync};')
+                preamble = '\n'.join(preload)
 
-        return self._render_body(body), '\n'.join(preamble)
+        body = self._render_body(body)
+
+        # 2D reduction: accumulator decls + shared-memory epilogue
+        rpre, epilogue = self._render_reduce_2d()
+        preamble += '\n' + rpre
+
+        return body, preamble, epilogue
+
+    def _render_reduce_2d(self):
+        if not self._reduce_args:
+            return '', ''
+
+        bx = self.block2d[0]
+        lx, ly = self._lid
+
+        # Preamble: register accumulators initialised to identity
+        preamble_parts = []
+        for rn, _, ident, _, n, ncdim in self._reduce_args:
+            if ncdim:
+                inits = ' '.join(f'{rn}[{j}] = {ident};' for j in range(n))
+                preamble_parts.append(f'fpdtype_t {rn}[{n}]; {inits}')
+            else:
+                preamble_parts.append(f'fpdtype_t {rn} = {ident};')
+        preamble = '\n'.join(preamble_parts)
+
+        # Epilogue: shared-memory reduce across y-threads, then
+        # write result to global (single shared array, reused)
+        epilogue = f'{self._shared_prfx} fpdtype_t _rs[{bx}];'
+        for rname, darg, ident, reduceop, n, ncdim in self._reduce_args:
+            afn = f'atomic_{reduceop}_fpdtype'
+
+            # Build (register-name, global-name) pairs for each component
+            if ncdim:
+                pairs = [(f'{rname}[{j}]', darg.replace('\\1', str(j)))
+                         for j in range(n)]
+            else:
+                pairs = [(rname, darg)]
+
+            for src, dst in pairs:
+                epilogue += f'''
+                    if ({ly} == 0) _rs[{lx}] = {ident};
+                    {self._shared_sync};
+                    if (_x < _nx) {afn}(&_rs[{lx}], {src});
+                    {self._shared_sync};
+                    if ({ly} == 0 && _x < _nx) {dst} = _rs[{lx}];
+                '''
+
+        return preamble, epilogue
 
     def render(self):
         spec = self._render_spec()
@@ -387,6 +523,7 @@ class BaseGPUKernelGenerator(BaseKernelGenerator):
                 {{
                     {self.body}
                 }}
+                {self.epilogue}
                 #undef X_IDX
                 #undef X_IDX_AOSOA
                 #undef BCAST_BLK

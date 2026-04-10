@@ -7,6 +7,7 @@ from pyfr.solvers.navstokes.inters import (NavierStokesBaseBCInters,
 
 class NavierStokesSystem(BaseAdvectionDiffusionSystem):
     name = 'navier-stokes'
+    ef_solver = 'euler'
 
     elementscls = NavierStokesElements
     intinterscls = NavierStokesIntInters

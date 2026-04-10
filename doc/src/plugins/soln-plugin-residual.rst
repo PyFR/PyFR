@@ -23,7 +23,17 @@ Parameterised with
 
     *float* | ``inf``
 
-Example::
+#. ``publish-as`` --- expose computed residual norms under a name
+   for use by triggers (optional):
+
+    *string*
+
+    Published fields correspond to the conserved variable names
+    (e.g. ``rho``, ``rhou``, ``rhov``, ``E``).
+
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-residual]
     nsteps = 10

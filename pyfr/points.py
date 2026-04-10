@@ -20,9 +20,10 @@ class PointLocator:
 
         # Allocate the location buffer
         dtype = [('dist', float), ('cidx', np.int16), ('eidx', np.int64),
-                 ('tloc', float, self.mesh.ndims)]
+                 ('rank', np.int32), ('tloc', float, self.mesh.ndims)]
         locs = np.zeros(npts, dtype=dtype)
         locs['dist'] = np.inf
+        locs['rank'] = rank
 
         # Reduce over each of our element types
         for etype, eidxs in self.mesh.eidxs.items():
@@ -36,7 +37,7 @@ class PointLocator:
                     l['cidx'], l['eidx'] = cidx, eidxs[eidx]
 
         # Reduce over all ranks
-        self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=3)
+        self._minloc(comm.Allreduce, mpi.IN_PLACE, locs, ndim=4)
 
         return locs
 
@@ -73,11 +74,37 @@ class PointLocator:
 
         return locs
 
+    def locate_disjoint(self, pts):
+        comm, rank, root = get_comm_rank_root()
+
+        # Determine how many points each rank has to locate
+        npts = np.empty(comm.size, dtype=int)
+        npts[rank] = len(pts)
+        comm.Allgather(mpi.IN_PLACE, npts)
+
+        # Iterate through each rank with points
+        result = None
+        for r in np.flatnonzero(npts):
+            # Broadcast the points from rank r
+            if rank == r:
+                buf = np.ascontiguousarray(pts, dtype=float)
+            else:
+                buf = np.empty((npts[r], self.mesh.ndims), dtype=float)
+            comm.Bcast(buf, root=r)
+
+            # Perform the location
+            locs = self.locate(buf)
+
+            if rank == r:
+                result = locs
+
+        return result
+
     @memoize
     def _get_shape_basis(self, etype, nspts):
         shape = subclass_where(BaseShape, name=etype)
         order = shape.order_from_npts(nspts)
-        basis = get_polybasis(etype, order + 1, shape.std_ele(order))
+        basis = get_polybasis(etype, order, shape.std_ele(order))
 
         return shape, basis
 
@@ -334,9 +361,29 @@ class PointSampler:
             # Form the reordering list
             self._ptsinv = np.argsort([i for pr in ptsrank for i in pr])
 
-    def sample(self, solns, process=None):
+    def gather(self, samples):
         comm, rank, root = get_comm_rank_root()
 
+        if rank == root:
+            comm.Gatherv(samples, self._ptsrecv, root=root)
+            return self._ptsbuf[self._ptsinv]
+        else:
+            comm.Gatherv(samples, None, root=root)
+            return None
+
+    def etype_pinfo(self):
+        etype_flat = defaultdict(list)
+        for et, ei, idxs, ops in self.pinfo:
+            if np.ndim(idxs) == 0:
+                etype_flat[et].append((ei, ops[0], idxs))
+            else:
+                for idx, op in zip(idxs, ops):
+                    etype_flat[et].append((ei, op, idx))
+
+        return {et: tuple(map(np.array, zip(*recs)))
+                for et, recs in etype_flat.items()}
+
+    def sample(self, solns, process=None):
         # Perform the sampling
         samples = np.empty((self.pcount, self.nvars))
         for et, ei, idxs, ops in self.pinfo:
@@ -347,9 +394,4 @@ class PointSampler:
             samples = np.ascontiguousarray(process(samples))
 
         # Gather to the root rank and return
-        if rank == root:
-            comm.Gatherv(samples, self._ptsrecv, root=root)
-            return self._ptsbuf[self._ptsinv]
-        else:
-            comm.Gatherv(samples, None, root=root)
-            return None
+        return self.gather(samples)

@@ -6,7 +6,6 @@ from pyfr.backends.base import (BaseKernelProvider, BaseOrderedMetaKernel,
                                 BasePointwiseKernelProvider,
                                 BaseUnorderedMetaKernel, Kernel)
 from pyfr.backends.metal.generator import MetalKernelGenerator
-from pyfr.backends.metal.util import call_
 from pyfr.cache import memoize
 from pyfr.nputil import npdtype_to_ctypestype
 
@@ -32,8 +31,8 @@ class MetalUnorderedMetaKernel(_MetalMetaKernel, BaseUnorderedMetaKernel): pass
 
 class MetalKernelProvider(BaseKernelProvider):
     def _benchmark(self, kfunc, nbench=40, nwarmup=25):
-        cbuf_warmup = self.backend.queue.commandBuffer()
-        cbuf_bench = self.backend.queue.commandBuffer()
+        cbuf_warmup = self.backend.new_command_buffer()
+        cbuf_bench = self.backend.new_command_buffer()
 
         for i in range(nwarmup):
             kfunc(cbuf_warmup)
@@ -48,42 +47,11 @@ class MetalKernelProvider(BaseKernelProvider):
         return (cbuf_bench.GPUEndTime() - cbuf_bench.GPUStartTime()) / nbench
 
     @memoize
-    def _build_program(self, src):
-        from Metal import MTLCompileOptions
-
-        # Set the compiler options
-        opts = MTLCompileOptions.new()
-        opts.setFastMathEnabled_(True)
-
-        # Compile the kernel
-        lib, err = call_(self.backend.dev, 'newLibraryWith', source=src,
-                         options=opts, error=None)
-        if err is not None:
-            raise ValueError(f'Compiler error: {err}')
-
-        return lib
-
     def _build_kernel(self, name, src, argtypes, argn=[]):
-        from Metal import MTLComputePipelineDescriptor, MTLSizeMake
+        from Metal import MTLSizeMake
 
-        # Build the program
-        lib = self._build_program(src)
-
-        # Fetch the function
-        func = call_(lib, 'newFunctionWith', name=name)
-        if func is None:
-            raise KeyError(f'Unable to load function {name}')
-
-        # Create the pipeline descriptor
-        desc = MTLComputePipelineDescriptor.alloc().init()
-        desc.setComputeFunction_(func)
-        desc.setThreadGroupSizeIsMultipleOfThreadExecutionWidth_(True)
-
-        # Obtain the corresponding compute pipeline
-        cpsf, err = call_(self.backend.dev, 'newComputePipelineStateWith',
-                          descriptor=desc, error=None)
-        if err is not None:
-            raise ValueError(f'Pipeline creation error: {err}')
+        # Build the pipeline using the compiler (with disk caching)
+        cpsf, func = self.backend.compiler.build_pipeline(src, name)
 
         # Classify the arguments as either pointers or scalars
         pargs, sargs = [], []

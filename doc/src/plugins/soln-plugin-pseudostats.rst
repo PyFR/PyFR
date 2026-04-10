@@ -18,7 +18,9 @@ with
 
     *boolean*
 
-Example::
+Example:
+
+.. code-block:: ini
 
     [soln-plugin-pseudostats]
     flushsteps = 100
