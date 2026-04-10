@@ -4,7 +4,9 @@ import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.nputil import npeval
-from pyfr.plugins.base import BaseSolnPlugin, SurfaceRegionMixin, init_csv
+from pyfr.plugins.common import init_csv
+from pyfr.plugins.mixins import SurfaceRegionMixin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.util import first
 
@@ -64,8 +66,8 @@ class FWHIntegrator(SurfaceIntegrator):
 
 class FWHPlugin(SurfaceRegionMixin, BaseSolnPlugin):
     name = 'fwh'
-    systems = ['euler', 'navier-stokes']
-    dimensions = [2, 3]
+    systems = 'euler|navier-stokes'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix=None, *args, **kwargs):
         super().__init__(intg, cfgsect, suffix)

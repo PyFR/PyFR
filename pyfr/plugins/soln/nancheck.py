@@ -2,13 +2,13 @@ import math
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi, scal_coll
-from pyfr.plugins.base import BaseSolnPlugin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 
 
 class NaNCheckPlugin(BaseSolnPlugin):
     name = 'nancheck'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)

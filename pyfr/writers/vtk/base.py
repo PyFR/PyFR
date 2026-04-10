@@ -369,11 +369,13 @@ class BaseVTKWriter(BaseWriter):
     }
 
     def __init__(self, meshf, pname=None, *, prec='single', order=None,
-                 divisor=None, fields=[]):
+                 divisor=None, fields=[], pp_plugins=[], pp_cfg=None):
         super().__init__(meshf, pname)
 
         self.dtype = np.dtype(prec).type
         self.fields = fields
+        self._pp_plugin_names = pp_plugins
+        self._pp_cfg = pp_cfg
 
         # Divisor for each type element
         self.etypes_div = defaultdict(lambda: self.divisor)
@@ -389,6 +391,20 @@ class BaseVTKWriter(BaseWriter):
             self.divisor = divisor
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
+
+    def _run_postprocs(self, adapter):
+        for pp in self.pp_plugins:
+            if pp.needs_grads and not self._gradients:
+                raise RuntimeError(f'Postproc {pp.name} requires '
+                                   f'gradient data in the solution')
+
+            pp.process(adapter)
+
+        fields = {}
+        for fname, arrs in adapter.fields.items():
+            fields[fname] = np.dstack(arrs).astype(adapter.dtype)
+
+        return fields
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -480,6 +496,10 @@ class BaseVTKWriter(BaseWriter):
             attrs.append((fname.replace('-', ' ').title(), adtype,
                           str(acomps)))
 
+        # Postproc fields as point data
+        for fname, varnames in self._pp_fields.items():
+            attrs.append((fname.title(), dtype, str(len(varnames))))
+
         if etype and neles:
             npts, ncells, nnodes = self._get_npts_ncells_nnodes(etype, neles)
             nb = npts*dsize
@@ -500,6 +520,9 @@ class BaseVTKWriter(BaseWriter):
             for fname in point_fields:
                 _, asize, _ = self._field_info(fname, etype)
                 sizes.append(asize*npts)
+
+            # Postproc point field sizes
+            sizes.extend(len(v)*nb for v in self._pp_fields.values())
 
             return tuple((*a, s) for a, s in zip(attrs, sizes))
         else:
@@ -557,6 +580,20 @@ class BaseVTKWriter(BaseWriter):
             self._soln_fields = self.soln.fields
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
+
+        # Instantiate postproc plugins
+        from pyfr.plugins import get_plugin
+
+        cfg = self._pp_cfg or self.cfg
+        self.pp_plugins = [
+            get_plugin('postproc', name, self.ndims, cfg, self.type)
+            for name in self._pp_plugin_names
+        ]
+
+        # Collect postproc field info for VTK headers
+        self._pp_fields = {}
+        for pp in self.pp_plugins:
+            self._pp_fields.update(pp.fields())
 
         # Handle field subsetting
         if self.fields:
