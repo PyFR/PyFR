@@ -1,0 +1,63 @@
+From ecc5ad274c0d562dda1c161055b058ff740ca2ec Mon Sep 17 00:00:00 2001
+From: "Kyle A. Schau" <kaschau89@gmail.com>
+Date: Tue, 10 Mar 2026 08:59:59 -0400
+Subject: [PATCH] add plane region
+
+---
+ doc/src/user_guide.rst |  6 ++++++
+ pyfr/regions.py        | 22 ++++++++++++++++++++++
+ 2 files changed, 28 insertions(+)
+
+diff --git a/doc/src/user_guide.rst b/doc/src/user_guide.rst
+index 7bccd241..d29599cb 100644
+--- a/doc/src/user_guide.rst
++++ b/doc/src/user_guide.rst
+@@ -550,6 +550,12 @@ Sphere ``sphere(x0, r)``
+   A sphere centred at *x0* with a radius of *r*. Equivalent to
+   ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
+ 
++Plane ``plane(x0, n)``
++  A plane defined by a point *x0* on the plane and a normal vector *n*.
++  Selects all elements whose shape points straddle the plane.
++  Valid in both 2D and 3D.  To clip to a bounding region *B* use
++  ``A - (A - B)``.
++
+ STL ``stl('name')``
+   An STL region.  Note that the region *name* must have been already
+   added to the mesh file with ``pyfr region add``.  Only valid in 3D.
+diff --git a/pyfr/regions.py b/pyfr/regions.py
+index da3ab61f..72dc9881 100644
+--- a/pyfr/regions.py
++++ b/pyfr/regions.py
+@@ -319,6 +319,28 @@ class SphereRegion(EllipsoidRegion):
+         super().__init__(x0, r, r, r, **kwargs)
+ 
+ 
++class PlaneRegion(BaseGeometricRegion):
++    name = 'plane'
++
++    def __init__(self, x0, n, **kwargs):
++        super().__init__(**kwargs)
++
++        self.x0 = np.array(x0)
++        self.n = np.array(n, dtype=float)
++        self.n /= np.linalg.norm(self.n)
++
++    def _pts_in_region(self, pts):
++        dist = (pts - self.x0) @ self.n
++
++        # Shape points: detect straddle points
++        if dist.ndim == 2:
++            straddle = dist.min(axis=0) * dist.max(axis=0) <= 0
++            return np.broadcast_to(straddle, dist.shape).copy()
++
++        # Centroids: return false
++        return np.zeros(dist.shape, dtype=bool)
++
++
+ class STLRegion(BaseGeometricRegion):
+     name = 'stl'
+ 
+-- 
+2.53.0
+

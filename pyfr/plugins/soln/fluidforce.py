@@ -2,8 +2,9 @@ import numpy as np
 
 from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import (BackendMixin, BaseSolnPlugin, DatasetAppender,
-                               PublishMixin, init_csv, open_hdf5_a)
+from pyfr.plugins.common import DatasetAppender, init_csv, open_hdf5_a
+from pyfr.plugins.mixins import BackendMixin, PublishMixin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.quadrules.surface import SurfaceIntegrator
 
 
@@ -20,8 +21,8 @@ class FluidForceIntegrator(SurfaceIntegrator):
 
 class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
     name = 'fluidforce'
-    systems = ['euler', 'navier-stokes']
-    dimensions = [2, 3]
+    systems = 'euler|navier-stokes'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)
@@ -121,7 +122,7 @@ class FluidForcePlugin(PublishMixin, BackendMixin, BaseSolnPlugin):
         backend = self.backend
 
         # Register our kernel template
-        backend.pointwise.register('pyfr.plugins.kernels.fluidforce')
+        backend.pointwise.register('pyfr.plugins.soln.kernels.fluidforce')
 
         # Precompute per-face data and upload to device
         fi = self.ff_int

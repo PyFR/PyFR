@@ -1,14 +1,16 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.base import BaseSolnPlugin, PublishMixin, init_csv
+from pyfr.plugins.common import init_csv
+from pyfr.plugins.mixins import PublishMixin
+from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.util import first
 
 
 class ResidualPlugin(PublishMixin, BaseSolnPlugin):
     name = 'residual'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix):
         super().__init__(intg, cfgsect, suffix)

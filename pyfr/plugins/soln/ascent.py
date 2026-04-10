@@ -1,4 +1,3 @@
-from argparse import FileType
 from ctypes import (RTLD_GLOBAL, c_char_p, c_double, c_int, c_int32, c_int64,
                     c_void_p)
 import re
@@ -6,12 +5,10 @@ import re
 import numpy as np
 
 from pyfr.ctypesutil import LibWrapper
-from pyfr.inifile import Inifile
-from pyfr.mpiutil import get_comm_rank_root, init_mpi
+from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
-from pyfr.plugins.base import (BaseCLIPlugin, BaseSolnPlugin, cli_external,
-                               region_data)
-from pyfr.readers.native import NativeReader
+from pyfr.plugins.common import region_data
+from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.shapes import BaseShape
 from pyfr.util import file_path_gen, subclass_where
 from pyfr.writers.vtk import get_subdiv
@@ -536,8 +533,8 @@ class _AscentRenderer:
 
 class AscentPlugin(BaseSolnPlugin):
     name = 'ascent'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
@@ -547,46 +544,3 @@ class AscentPlugin(BaseSolnPlugin):
 
     def __call__(self, intg):
         self._renderer.render(_IntegratorAdapter(intg, self.cfgsect))
-
-
-class AscentCLIPlugin(BaseCLIPlugin):
-    name = 'ascent'
-
-    @classmethod
-    def add_cli(cls, parser):
-        sp = parser.add_subparsers()
-
-        # Render command
-        ap_render = sp.add_parser('render', help='ascent render --help')
-        ap_render.set_defaults(process=cls.render_cli)
-        ap_render.add_argument('mesh', help='mesh file')
-        ap_render.add_argument('solns', nargs='*', help='solution files')
-        ap_render.add_argument('cfg', type=FileType('r'),
-                               help='ascent config file')
-        ap_render.add_argument('--cfgsect', help='ascent config file section')
-
-    @cli_external
-    def render_cli(self, args):
-        # Initialise MPI
-        init_mpi()
-
-        reader = NativeReader(args.mesh, construct_con=False)
-        acfg = Inifile.load(args.cfg)
-        acfgsect = args.cfgsect or acfg.sections()[0]
-
-        # Current Ascent render and associated config
-        renderer, rcfg = None, None
-
-        # Iterate over the solutions
-        for s in args.solns:
-            # Open the solution and create an Ascent adapter
-            mesh, soln = reader.load_subset_mesh_soln(s, prefix='soln')
-            adapter = _CLIAdapter(mesh, soln, acfg, acfgsect)
-
-            # See if we need to create a new Ascent renderer
-            if not renderer or rcfg != soln.config:
-                renderer = _AscentRenderer(adapter, isrestart=True)
-                rcfg = soln.config
-
-            # Perform the rendering
-            renderer.render(adapter)
