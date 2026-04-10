@@ -402,8 +402,8 @@ class NativeReader:
 
     @staticmethod
     def _pack_pairs(*pairs):
-        stride = max(o.max() for _, o in pairs) + 1
-        return [c * stride + o for c, o in pairs]
+        stride = max(o.max(initial=-1) for _, o in pairs) + 1
+        return [c*stride + o for c, o in pairs]
 
     @staticmethod
     def _pair_finder(lhs, stride):
