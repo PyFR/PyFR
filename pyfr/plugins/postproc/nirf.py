@@ -40,19 +40,22 @@ class NIRFPostProc(BasePostProcPlugin):
 
         R = _quat_to_rotmat(fquat)
 
+        # r_body (before rotation) for omega x r in velocity transform
+        # Pad to 3D so cross with fomega (always 3D) works in 2D
+        r = np.zeros((3, *data.ploc.shape[1:]))
+        r[:ndims] = data.ploc - fx0[:ndims, None, None]
+
         # Transform coordinates: x_lab = R*(x_body - x0) + x0 + loc
-        ploc = data.ploc
-        ploc -= fx0[:, None, None]
+        # spts shape is (nspts, neles, ndims) — write in-place so ploc picks it up
+        spts = data.spts
+        spts -= fx0[:ndims]
+        spts[:] = np.einsum('ij,...j->...i', R[:ndims, :ndims], spts)
+        spts += fx0[:ndims]
 
-        r = np.array(ploc)
-
-        rloc = np.einsum('ij,j...->i...', R, ploc)
         apply_trans = self.cfg.getbool(self.cfgsect,
                                       'apply-translation', False)
-
-        ploc[:] = rloc + fx0[:, None, None]
         if apply_trans:
-            ploc += floc[:, None, None]
+            spts += floc[:ndims]
 
         # Transform velocity: u_lab = R*(u_body + omega x r_body) + V_frame
         vs = data.pris[1:ndims + 1]
@@ -62,5 +65,12 @@ class NIRFPostProc(BasePostProcPlugin):
         oxr = np.cross(fomega, r, axisb=0, axisc=0)
         u_lab = np.tensordot(R, u_body + oxr, axes=1) + fvelo[:, None, None]
 
-        for d, v in enumerate(vs):
-            v[:] = u_lab[d]
+        # Write back to conservative solution (shape: nupts, nvars, neles)
+        # so the downstream export picks up the lab-frame values
+        cons = soln.data[data.etype]
+        rho = cons[:, 0, :]
+        for d in range(ndims):
+            du = u_lab[d] - u_body[d]
+            cons[:, 1 + d, :] += rho * du
+            # Kinetic energy delta: 0.5*rho*(u_lab^2 - u_body^2)
+            cons[:, -1, :] += 0.5 * rho * (u_lab[d]**2 - u_body[d]**2)
