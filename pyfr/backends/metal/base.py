@@ -66,6 +66,10 @@ class MetalBackend(BaseBackend):
         self._cbuf_desc = MTLCommandBufferDescriptor.alloc().init()
         self._cbuf_desc.setRetainedReferences_(False)
 
+        if cfg.getbool('backend', 'annotate', False):
+            raise ValueError('Annotation is not supported by the '
+                             'Metal backend')
+
     @property
     def platform_id(self):
         return str(self.dev.name())

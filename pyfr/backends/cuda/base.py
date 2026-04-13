@@ -91,6 +91,10 @@ class CUDABackend(BaseBackend):
         # Create a stream to run kernels on
         self._stream = self.cuda.create_stream()
 
+        if cfg.getbool('backend', 'annotate', False):
+            from pyfr.backends.cuda.nvtools import NVTXAnnotator
+            self._annotator = NVTXAnnotator()
+
         # Bounce buffer for host-device transfers
         self._xfer_buf = None
 

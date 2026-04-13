@@ -1,4 +1,5 @@
 from collections import namedtuple
+from contextlib import contextmanager
 from functools import cached_property, wraps
 from itertools import count
 import math
@@ -31,6 +32,7 @@ def recordmat(fn):
 class BaseBackend:
     name = None
     has_double = True
+    _annotator = None
 
     def __init__(self, cfg):
         self.cfg = cfg
@@ -171,29 +173,42 @@ class BaseBackend:
         return self.xchg_view_cls(self, matmap, rmap, cmap, rstridemap,
                                   vshape, tags)
 
+    @contextmanager
+    def region(self, name):
+        if self._annotator:
+            self._annotator.push(name)
+
+        try:
+            yield
+        finally:
+            if self._annotator:
+                self.wait()
+                self._annotator.pop(name)
+
     def kernel(self, name, *args, **kwargs):
-        best_kern = None
+        with self.region('kernel-setup'):
+            best_kern = None
 
-        # Loop through each kernel provider instance
-        for prov in self._providers:
-            # See if it can potentially provide the requested kernel
-            kern_meth = getattr(prov, name, None)
-            if kern_meth:
-                ifac = self.autotune_ifac
+            # Loop through each kernel provider instance
+            for prov in self._providers:
+                # See if it can potentially provide the requested kernel
+                kern_meth = getattr(prov, name, None)
+                if kern_meth:
+                    ifac = self.autotune_ifac
 
-                try:
-                    # Ask the provider for the kernel
-                    kern = kern_meth(*args, **kwargs)
-                except NotSuitableError:
-                    continue
+                    try:
+                        # Ask the provider for the kernel
+                        kern = kern_meth(*args, **kwargs)
+                    except NotSuitableError:
+                        continue
 
-                # Evaluate this kernel compared to the best seen so far
-                if best_kern is None or kern.dt < ifac*best_kern.dt:
-                    best_kern = kern
+                    # Evaluate this kernel compared to the best seen so far
+                    if best_kern is None or kern.dt < ifac*best_kern.dt:
+                        best_kern = kern
 
-                    # If there is no benchmark data then short circut
-                    if np.isnan(best_kern.dt):
-                        return best_kern
+                        # If there is no benchmark data then short circut
+                        if np.isnan(best_kern.dt):
+                            return best_kern
 
         if best_kern is None:
             raise KeyError(f'Kernel {name!r} has no providers')

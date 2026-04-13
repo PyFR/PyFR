@@ -116,20 +116,22 @@ class HIPCompiler:
 
 class HIPCompilerModule:
     def __init__(self, backend, src):
-        # Prepare the source code
-        src = f'extern "C"\n{{\n{src}\n}}'
+        with backend.region('compile'):
+            # Prepare the source code
+            src = f'extern "C"\n{{\n{src}\n}}'
 
-        # Get the compute architecture
-        arch = backend.props['gcn_arch_name']
+            # Get the compute architecture
+            arch = backend.props['gcn_arch_name']
 
-        # Compiler flags
-        flags = [f'--gpu-architecture={arch}', '-munsafe-fp-atomics']
+            # Compiler flags
+            flags = [f'--gpu-architecture={arch}',
+                     '-munsafe-fp-atomics']
 
-        # Compile
-        code = backend.compiler.build('kernel', src, flags)
+            # Compile
+            code = backend.compiler.build('kernel', src, flags)
 
-        # Load it as a module
-        self.mod = backend.hip.load_module(code)
+            # Load it as a module
+            self.mod = backend.hip.load_module(code)
 
     def get_function(self, name, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]

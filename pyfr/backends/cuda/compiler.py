@@ -126,26 +126,31 @@ class CUDACompiler:
 
 class CUDACompilerModule:
     def __init__(self, backend, src):
-        # Prepare the source code
-        src = f'extern "C"\n{{\n{src}\n}}'
+        with backend.region('compile'):
+            # Prepare the source code
+            src = f'extern "C"\n{{\n{src}\n}}'
 
-        # Obtain the compute capability for our device
-        cmajor, cminor = backend.cuda.compute_capability()
+            # Obtain the compute capability for our device
+            cmajor, cminor = backend.cuda.compute_capability()
 
-        # Compiler flags
-        flags = [
-            f'--gpu-architecture=sm_{cmajor}{cminor}',
-            '--ftz=true',
-            '--fmad=true'
-        ]
+            # Determine the family suffix
+            cfam = 'a' if cmajor >= 9 else ''
 
-        flags += shlex.split(backend.cfg.get('backend-cuda', 'cflags', ''))
+            # Compiler flags
+            flags = [
+                f'--gpu-architecture=sm_{cmajor}{cminor}{cfam}',
+                '--ftz=true',
+                '--fmad=true'
+            ]
 
-        # Compile to CUDA code (either PTX or CUBIN depending on arch flag)
-        cucode = backend.compiler.build('kernel', src, flags)
+            cflags = backend.cfg.get('backend-cuda', 'cflags', '')
+            flags += shlex.split(cflags)
 
-        # Load it as a module
-        self.mod = backend.cuda.load_module(cucode)
+            # Compile to CUDA code
+            cucode = backend.compiler.build('kernel', src, flags)
+
+            # Load it as a module
+            self.mod = backend.cuda.load_module(cucode)
 
     def get_function(self, name, argtypes):
         argtypes = [npdtype_to_ctypestype(arg) for arg in argtypes]
