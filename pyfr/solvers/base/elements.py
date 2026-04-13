@@ -95,6 +95,7 @@ class BaseElements:
         upts = self.cfg.get(f'solver-elements-{ename}', 'soln-pts')
         qdeg = (self.cfg.getint('soln-ics', f'quad-deg-{ename}', 0) or
                 self.cfg.getint('soln-ics', 'quad-deg', 0))
+
         # Default to solution points if quad-pts are not specified
         qpts = self.cfg.get('soln-ics', f'quad-pts-{ename}', upts)
 
@@ -120,7 +121,10 @@ class BaseElements:
 
         # Convert from primitive to conservative form
         for i, v in enumerate(self.pri_to_con(ics, self.cfg)):
-            scal_upts[:, i, :] = m8 @ v if m8 is not None else v
+            if m8 is not None:
+                v = m8 @ np.broadcast_to(v, (m8.shape[1], self.neles))
+
+            scal_upts[:, i] = v
 
         return scal_upts
 
