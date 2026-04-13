@@ -136,29 +136,42 @@ class VTKSTLWriter(BaseVTKWriter):
         comm, rank, root = get_comm_rank_root()
         nsoln = len(self._soln_fields)
 
-        # Identify DOF-sized aux fields that can be interpolated
+        # Identify DOF-sized aux fields; record their component counts
         for etype in mesh.eidxs:
             nupts = soln.data[etype].shape[0]
-            anames = [name for name, arr in soln.aux.get(etype, {}).items()
-                      if arr.shape[1:] == (nupts,)]
+            aux_info = []
+            for name, arr in soln.aux.get(etype, {}).items():
+                if arr.shape[1:] == (nupts,):
+                    aux_info.append((name, 1))
+                elif arr.shape[1:-1] == (nupts,):
+                    aux_info.append((name, arr.shape[-1]))
             break
         else:
-            anames = []
+            aux_info = []
 
-        # Extend the solution arrays with DOF-sized aux for sampling
+        naux = sum(n for _, n in aux_info)
+
+        # Stack solution + DOF-sized aux into a single per-element array
         data = []
         for etype in mesh.eidxs:
             nupts, nvars, neles = soln.data[etype].shape
-            arr = np.empty((nupts, nvars + len(anames), neles))
+            arr = np.empty((nupts, nvars + naux, neles))
             arr[:, :nvars] = soln.data[etype]
-            for i, name in enumerate(anames, start=nvars):
-                arr[:, i] = soln.aux[etype][name].T
+
+            off = nvars
+            for name, n in aux_info:
+                a = soln.aux[etype][name]
+                if n == 1:
+                    arr[:, off] = a.T
+                else:
+                    arr[:, off:off + n] = a.transpose(1, 2, 0)
+                off += n
 
             data.append(arr)
 
         # Create and configure a point sampler
         sampler = PointSampler(mesh, spts, slocs)
-        sampler.configure_with_cfg_nvars(soln.config, nsoln + len(anames))
+        sampler.configure_with_cfg_nvars(soln.config, nsoln + naux)
 
         # Perform the sampling
         samps = sampler.sample(data)
@@ -174,15 +187,17 @@ class VTKSTLWriter(BaseVTKWriter):
             svars = svars[:, pinv].reshape(-1, *pts.shape[:2])
             svars = svars.swapaxes(0, 1)
 
-            # Unpack aux fields
+            # Unpack aux (incl. postproc) fields onto STL triangles
             pointf = {}
-            for i, name in enumerate(anames):
-                a = samps[nsoln + i, pinv]
-                pointf[name] = a.reshape(1, *pts.shape[:2]).swapaxes(0, 1)
+            off = nsoln
+            for name, n in aux_info:
+                a = samps[off:off + n, pinv].astype(self.dtype)
+                pointf[name] = a.reshape(n, *pts.shape[:2]).swapaxes(0, 1)
+                off += n
 
             self.einfo = [('tri', pts.shape[1])]
             self._stl_info = pts, svars, pointf
-            self._stl_aux_names = anames
+            self._stl_aux_names = [name for name, _ in aux_info]
         else:
             self.einfo = []
 

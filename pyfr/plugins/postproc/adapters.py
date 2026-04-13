@@ -7,16 +7,16 @@ from pyfr.util import subclass_where
 
 
 class BasePostProcAdapter:
-    def __init__(self, ctx, vsoln, vpts, etype, spts):
+    def __init__(self, ctx, vsoln, etype, spts):
         self.cfg = ctx.cfg
         self.soln = ctx.soln
         self.elementscls = ctx.elementscls
-        self.etype = etype
-        self.spts = spts
-        self.ploc = vpts.transpose(2, 0, 1)
         self.ndims = ctx.ndims
         self.dtype = ctx.dtype
         self.fields = {}
+
+        self.etype = etype
+        self.spts = spts
 
         # Primitive variables (views into vsoln)
         nvars = len(self.elementscls.privars(self.ndims, self.cfg))
@@ -37,20 +37,28 @@ class BasePostProcAdapter:
 
 
 class VolumePostProcAdapter(BasePostProcAdapter):
-    pass
-
-
-class STLPostProcAdapter(BasePostProcAdapter):
-    pass
+    @cached_property
+    def ploc(self):
+        mesh_op = self.shape.sbasis.nodal_basis_at(self.shape.upts)
+        vpts = mesh_op @ self.spts.reshape(len(self.spts), -1)
+        vpts = vpts.reshape(-1, *self.spts.shape[1:])
+        return vpts.transpose(2, 0, 1)
 
 
 class BoundaryPostProcAdapter(BasePostProcAdapter):
-    def __init__(self, ctx, vsoln, vpts, spts, finfo):
-        super().__init__(ctx, vsoln, vpts, finfo.etype, spts)
+    def __init__(self, ctx, vsoln, finfo, spts):
+        super().__init__(ctx, vsoln, finfo.etype, spts)
 
         self._fidx = finfo.fidx
         self._svpts = finfo.svpts
         self._face_norm = finfo.norm
+
+    @cached_property
+    def ploc(self):
+        mesh_op = self.shape.sbasis.nodal_basis_at(self._svpts)
+        vpts = mesh_op @ self.spts.reshape(len(self.spts), -1)
+        vpts = vpts.reshape(-1, *self.spts.shape[1:])
+        return vpts.transpose(2, 0, 1)
 
     @cached_property
     def _eles(self):

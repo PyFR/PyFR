@@ -1,9 +1,11 @@
 from collections import defaultdict
 from pathlib import Path
+import re
 
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.plugins.postproc.adapters import VolumePostProcAdapter
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
@@ -392,19 +394,28 @@ class BaseVTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
-    def _run_postprocs(self, adapter):
-        for pp in self.pp_plugins:
+    def _run_volume_postprocs(self, etype, plugins):
+        # Pre-process the solution at upts to primitives
+        soln = self.soln.data[etype].swapaxes(0, 1).astype(self.dtype)
+        pris = self._pre_proc_fields(soln).swapaxes(0, 1)
+
+        # Run plugins
+        adapter = VolumePostProcAdapter(self, pris, etype,
+                                        self.mesh.spts[etype])
+        for pp in plugins:
             if pp.needs_grads and not self._gradients:
                 raise RuntimeError(f'Postproc {pp.name} requires '
                                    f'gradient data in the solution')
-
             pp.process(adapter)
 
-        fields = {}
+        # Inject into soln.aux with (neles, nupts[, ncomps]) convention
+        aux = self.soln.aux.setdefault(etype, {})
         for fname, arrs in adapter.fields.items():
-            fields[fname] = np.dstack(arrs).astype(adapter.dtype)
-
-        return fields
+            if len(arrs) == 1:
+                aux[fname] = arrs[0].T.astype(self.dtype)
+            else:
+                aux[fname] = np.stack(arrs, axis=-1).transpose(1, 0, 2) \
+                                                    .astype(self.dtype)
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -496,10 +507,6 @@ class BaseVTKWriter(BaseWriter):
             attrs.append((fname.replace('-', ' ').title(), adtype,
                           str(acomps)))
 
-        # Postproc fields as point data
-        for fname, varnames in self._pp_fields.items():
-            attrs.append((fname.title(), dtype, str(len(varnames))))
-
         if etype and neles:
             npts, ncells, nnodes = self._get_npts_ncells_nnodes(etype, neles)
             nb = npts*dsize
@@ -520,9 +527,6 @@ class BaseVTKWriter(BaseWriter):
             for fname in point_fields:
                 _, asize, _ = self._field_info(fname, etype)
                 sizes.append(asize*npts)
-
-            # Postproc point field sizes
-            sizes.extend(len(v)*nb for v in self._pp_fields.values())
 
             return tuple((*a, s) for a, s in zip(attrs, sizes))
         else:
@@ -582,18 +586,27 @@ class BaseVTKWriter(BaseWriter):
             self.tcurr = None
 
         # Instantiate postproc plugins
-        from pyfr.plugins import get_plugin
+        self.pp_plugins = []
+        if self._pp_plugin_names:
+            from pyfr.plugins import get_plugin
 
-        cfg = self._pp_cfg or self.cfg
-        self.pp_plugins = [
-            get_plugin('postproc', name, self.ndims, cfg, self.type)
-            for name in self._pp_plugin_names
-        ]
+            cfg = self._pp_cfg or self.cfg
+            self.pp_plugins = [
+                get_plugin('postproc', name, self.ndims, cfg, self.type)
+                for name in self._pp_plugin_names
+            ]
 
-        # Collect postproc field info for VTK headers
-        self._pp_fields = {}
-        for pp in self.pp_plugins:
-            self._pp_fields.update(pp.fields())
+            # Run volume-capable pp plugins at upts and inject into aux
+            volume_pp = [p for p in self.pp_plugins
+                         if re.fullmatch(p.export_types, 'volume')]
+            if volume_pp:
+                for etype in self.mesh.eidxs:
+                    self._run_volume_postprocs(etype, volume_pp)
+
+            # Rebuild _extra_fields after aux augmentation
+            self._extra_fields = list(
+                self.soln.aux.get(self._extra_etype, {})
+            )
 
         # Handle field subsetting
         if self.fields:
@@ -767,27 +780,29 @@ class BaseVTKWriter(BaseWriter):
     def _resolve_etype(self, etype):
         return etype or self._extra_etype
 
-    def _extra_field_lists(self, etype=None):
-        # Classify aux fields as point data or cell data by shape
-        etype = self._resolve_etype(etype)
-        aux = self.soln.aux.get(etype, {})
+    def _field_kind(self, name, etype):
+        shape = self.soln.aux[etype][name].shape[1:]
         pshapes = self._extra_point_shapes(etype)
-        pfields = [n for n in self._extra_fields
-                   if aux[n].shape[1:] in pshapes]
-        cfields = [n for n in self._extra_fields if n not in pfields]
+        if shape in pshapes:
+            return 'point', 1
+        elif shape[:-1] in pshapes:
+            return 'point', shape[-1]
+        else:
+            return 'cell', int(np.prod(shape))
+
+    def _extra_field_lists(self, etype=None):
+        etype = self._resolve_etype(etype)
+        cfields, pfields = [], []
+        for n in self._extra_fields:
+            kind, _ = self._field_kind(n, etype)
+            (pfields if kind == 'point' else cfields).append(n)
         return cfields, pfields
 
     def _field_info(self, name, etype):
-        # VTK type, byte size, and component count for an aux field
         etype = self._resolve_etype(etype)
-        aux = self.soln.aux[etype]
-        shape = aux[name].shape[1:]
+        _, ncomps = self._field_kind(name, etype)
 
-        # Point fields have one component; cell fields flatten extra dims
-        pshapes = self._extra_point_shapes(etype)
-        ncomps = 1 if shape in pshapes else int(np.prod(shape))
-
-        adtype = aux[name].dtype
+        adtype = np.dtype(self.soln.aux[etype][name].dtype)
         vtype = self._vtk_dtype(adtype)
         return vtype, adtype.itemsize*ncomps, ncomps
 

@@ -1,7 +1,6 @@
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.plugins.postproc.adapters import VolumePostProcAdapter
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
@@ -74,22 +73,21 @@ class VTKVolumeWriter(BaseVTKWriter):
         # Interpolate the solution to the vis points
         vsoln = interpolate_pts(soln_vtu_op, soln)
 
-        # Run postproc plugins
-        if self.pp_plugins:
-            adapter = VolumePostProcAdapter(self, vsoln, vpts, etype, spts)
-            for fname, arrs in self._run_postprocs(adapter).items():
-                pointf[fname] = arrs
-
         # Extract extra fields
+        nupts = soln.shape[0]
+        pshapes = self._extra_point_shapes(etype)
         for fname, data in self.soln.aux.get(etype, {}).items():
             shape = data.shape[1:]
-            if shape == (soln.shape[0],):
-                pointf[fname] = interpolate_pts(soln_vtu_op,
-                                                data.swapaxes(0, 1))
-            elif shape in self._extra_point_shapes(etype):
-                pointf[fname] = interpolate_pts(lin_vtu_op,
-                                                data.swapaxes(0, 1))
+
+            if shape in pshapes:
+                pshape = shape
+            elif shape[:-1] in pshapes:
+                pshape = shape[:-1]
             else:
                 cellf[fname] = data
+                continue
+
+            op = soln_vtu_op if pshape == (nupts,) else lin_vtu_op
+            pointf[fname] = interpolate_pts(op, np.moveaxis(data, 0, 1))
 
         return vpts, vsoln, curved, cellf, pointf

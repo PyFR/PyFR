@@ -1,6 +1,6 @@
-**********************
+***********************
 Post-processing plugins
-**********************
+***********************
 
 Post-processing plugins compute derived fields during ``pyfr export``
 and write them to the output VTK file as additional point data.
