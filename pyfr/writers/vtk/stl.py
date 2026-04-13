@@ -160,11 +160,8 @@ class VTKSTLWriter(BaseVTKWriter):
 
             off = nvars
             for name, n in aux_info:
-                a = soln.aux[etype][name]
-                if n == 1:
-                    arr[:, off] = a.T
-                else:
-                    arr[:, off:off + n] = a.transpose(1, 2, 0)
+                a = np.atleast_3d(soln.aux[etype][name])
+                arr[:, off:off + n] = a.transpose(1, 2, 0)
                 off += n
 
             data.append(arr)

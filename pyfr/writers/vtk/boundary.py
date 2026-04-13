@@ -36,16 +36,12 @@ class VTKBoundaryWriter(BaseVTKWriter):
         super()._load_soln(*args, **kwargs)
 
         # Track boundary-only pp plugins (those that can't run at upts)
-        self._boundary_pp = []
+        self._boundary_pp = [p for p in self.pp_plugins
+                             if not re.fullmatch(p.export_types, 'volume')]
         self._boundary_pp_fields = {}
-        if self.pp_plugins:
-            self._boundary_pp = [
-                p for p in self.pp_plugins
-                if not re.fullmatch(p.export_types, 'volume')
-            ]
-            for pp in self._boundary_pp:
-                self._boundary_pp_fields.update(pp.fields())
-            self._extra_fields.extend(self._boundary_pp_fields)
+        for pp in self._boundary_pp:
+            self._boundary_pp_fields.update(pp.fields())
+        self._extra_fields.extend(self._boundary_pp_fields)
 
         ecount = defaultdict(int)
         self._surface_info = defaultdict(list)
@@ -85,7 +81,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         for pp in self._boundary_pp:
             if pp.needs_grads and not self._gradients:
                 raise RuntimeError(f'Postproc {pp.name} requires '
-                                   f'gradient data in the solution')
+                                    'gradient data in the solution')
             pp.process(adapter)
 
         return {fname: np.dstack(arrs).astype(adapter.dtype)
@@ -94,14 +90,16 @@ class VTKBoundaryWriter(BaseVTKWriter):
     def _field_kind(self, name, etype):
         if name in self._boundary_pp_fields:
             return 'point', len(self._boundary_pp_fields[name])
-        return super()._field_kind(name, etype)
+        else:
+            return super()._field_kind(name, etype)
 
     def _field_info(self, name, etype):
         if name in self._boundary_pp_fields:
             _, ncomps = self._field_kind(name, etype)
             adtype = np.dtype(self.dtype)
             return self._vtk_dtype(adtype), adtype.itemsize*ncomps, ncomps
-        return super()._field_info(name, etype)
+        else:
+            return super()._field_info(name, etype)
 
     @memoize
     def _get_shape(self, etype, cfg):

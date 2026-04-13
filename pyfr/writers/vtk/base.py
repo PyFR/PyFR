@@ -395,6 +395,9 @@ class BaseVTKWriter(BaseWriter):
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
     def _run_volume_postprocs(self, etype, plugins):
+        if not plugins:
+            return
+
         # Pre-process the solution at upts to primitives
         soln = self.soln.data[etype].swapaxes(0, 1).astype(self.dtype)
         pris = self._pre_proc_fields(soln).swapaxes(0, 1)
@@ -405,17 +408,14 @@ class BaseVTKWriter(BaseWriter):
         for pp in plugins:
             if pp.needs_grads and not self._gradients:
                 raise RuntimeError(f'Postproc {pp.name} requires '
-                                   f'gradient data in the solution')
+                                    'gradient data in the solution')
             pp.process(adapter)
 
-        # Inject into soln.aux with (neles, nupts[, ncomps]) convention
+        # Inject into soln.aux with (neles, nupts, ncomps) convention
         aux = self.soln.aux.setdefault(etype, {})
         for fname, arrs in adapter.fields.items():
-            if len(arrs) == 1:
-                aux[fname] = arrs[0].T.astype(self.dtype)
-            else:
-                aux[fname] = np.stack(arrs, axis=-1).transpose(1, 0, 2) \
-                                                    .astype(self.dtype)
+            d = np.stack(arrs, axis=-1).transpose(1, 0, 2)
+            aux[fname] = d.astype(self.dtype)
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -586,27 +586,21 @@ class BaseVTKWriter(BaseWriter):
             self.tcurr = None
 
         # Instantiate postproc plugins
-        self.pp_plugins = []
-        if self._pp_plugin_names:
-            from pyfr.plugins import get_plugin
+        from pyfr.plugins import get_plugin
 
-            cfg = self._pp_cfg or self.cfg
-            self.pp_plugins = [
-                get_plugin('postproc', name, self.ndims, cfg, self.type)
-                for name in self._pp_plugin_names
-            ]
+        cfg = self._pp_cfg or self.cfg
+        self.pp_plugins = [get_plugin('postproc', name, self.ndims, cfg,
+                                      self.type)
+                           for name in self._pp_plugin_names]
 
-            # Run volume-capable pp plugins at upts and inject into aux
-            volume_pp = [p for p in self.pp_plugins
-                         if re.fullmatch(p.export_types, 'volume')]
-            if volume_pp:
-                for etype in self.mesh.eidxs:
-                    self._run_volume_postprocs(etype, volume_pp)
+        # Run volume-capable pp plugins at upts and inject into aux
+        volume_pp = [p for p in self.pp_plugins
+                     if re.fullmatch(p.export_types, 'volume')]
+        for etype in self.mesh.eidxs:
+            self._run_volume_postprocs(etype, volume_pp)
 
-            # Rebuild _extra_fields after aux augmentation
-            self._extra_fields = list(
-                self.soln.aux.get(self._extra_etype, {})
-            )
+        # Rebuild _extra_fields after aux augmentation
+        self._extra_fields = [*self.soln.aux.get(self._extra_etype, {})]
 
         # Handle field subsetting
         if self.fields:
@@ -788,7 +782,7 @@ class BaseVTKWriter(BaseWriter):
         elif shape[:-1] in pshapes:
             return 'point', shape[-1]
         else:
-            return 'cell', int(np.prod(shape))
+            return 'cell', np.prod(shape)
 
     def _extra_field_lists(self, etype=None):
         etype = self._resolve_etype(etype)
@@ -802,7 +796,7 @@ class BaseVTKWriter(BaseWriter):
         etype = self._resolve_etype(etype)
         _, ncomps = self._field_kind(name, etype)
 
-        adtype = np.dtype(self.soln.aux[etype][name].dtype)
+        adtype = self.soln.aux[etype][name].dtype
         vtype = self._vtk_dtype(adtype)
         return vtype, adtype.itemsize*ncomps, ncomps
 
