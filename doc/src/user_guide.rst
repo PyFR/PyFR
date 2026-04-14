@@ -565,6 +565,12 @@ Sphere ``sphere(x0, r)``
   A sphere centred at *x0* with a radius of *r*. Equivalent to
   ``ellipsoid(x0, r, r, r)``. Only valid in 3D.
 
+Plane ``plane(x0, n)``
+  A plane defined by a point *x0* on the plane and a normal vector *n*.
+  Selects all elements whose shape points straddle the plane.
+  Valid in both 2D and 3D.  To clip to a bounding region *B* use
+  ``A - (A - B)``.
+
 STL ``stl('name')``
   An STL region.  Note that the region *name* must have been already
   added to the mesh file with ``pyfr region add``.  Only valid in 3D.
