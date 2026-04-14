@@ -3,9 +3,7 @@ import numpy as np
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
-from pyfr.solvers.euler.inters import (FluidIntIntersMixin,
-                                       FluidMPIIntersMixin,
-                                       MassFlowBCMixin,
+from pyfr.solvers.euler.inters import (MassFlowBCMixin,
                                        PressureBCMixin)
 
 

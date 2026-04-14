@@ -113,7 +113,7 @@ class ControlledBCMixin:
             ['rho', 'u', 'v', 'w'][:self.ndims + 1], lhs
         )
 
-        self.elementscls = type(first(elemap.values()))
+        self.con_to_pri = first(elemap.values()).con_to_pri
 
         self.tstart = cfg.getfloat(cfgsect, 'tstart', 0.0)
         self.nsteps = cfg.getint(cfgsect, 'nsteps', 100)
@@ -124,16 +124,14 @@ class ControlledBCMixin:
         self.set_external('ic', 'scalar fpdtype_t')
         self.set_external('im', 'scalar fpdtype_t')
 
-        surf_list = [(etype, fidx, eidx) for etype, eidx, fidx in lhs]
-        self.surf_int = SurfaceIntegrator(cfg, cfgsect, elemap, surf_list)
+        self.surf_int = SurfaceIntegrator(cfg, cfgsect, elemap, lhs)
 
         self._init_extra(cfg, cfgsect)
 
         if cfg.hasopt(cfgsect, 'file') and bccomm.rank == 0:
             fname = cfg.get(cfgsect, 'file')
             nflush = cfg.getint(cfgsect, 'flushsteps', 10)
-            self.csv = CSVStream(fname, header=self._csv_header,
-                                 nflush=nflush)
+            self.csv = CSVStream(fname, header=self._csv_header, nflush=nflush)
         else:
             self.csv = None
 
@@ -172,30 +170,6 @@ class ControlledBCMixin:
             self.tprev = None
             self.nstep_counter = 0
 
-    def calculate_mass_flow(self, solns):
-        mf = 0.0
-
-        for etype, fidx in self.mf_int.m0:
-            # Get the interpolation operator
-            m0 = self.mf_int.m0[etype, fidx]
-            nfpts, nupts = m0.shape
-
-            # Extract the relevant elements and variables from the solution
-            uupts = solns[etype][:, 1:-1, self.mf_int.eidxs[etype, fidx]]
-
-            # Interpolate to the face
-            ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, self.ndims, -1)
-
-            # Get the quadrature weights and normal vectors
-            qwts = self.mf_int.qwts[etype, fidx]
-            norms = self.mf_int.norms[etype, fidx]
-
-            # Do the quadrature
-            mf += np.einsum('i,ihj,hij', qwts, ufpts, norms)
-
-        return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
-
     @classmethod
     def preparefn(cls, bciface, mesh, elemap):
         if bciface:
@@ -214,7 +188,7 @@ class ControlledBCMixin:
                 self.tprev = t
             else:
                 a = self.alpha
-                self.meas_avg = a*meas + (1 - a)*self.meas_avg
+                self.meas_avg = a * meas + (1 - a) * self.meas_avg
                 dt = t - self.tprev
                 self.tprev = t
 
@@ -259,7 +233,7 @@ class MassFlowBCMixin(ControlledBCMixin):
         mf = 0.0
 
         for ufpts, qwts, norms in self._interp_face(solns):
-            mf += np.einsum('i,hij,jih', qwts, ufpts[1:-1], norms)
+            mf += np.einsum('i,hij,hij', qwts, ufpts[1:-1], norms)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
 
@@ -277,11 +251,15 @@ class PressureBCMixin(ControlledBCMixin):
 
     def _init_extra(self, cfg, cfgsect):
         area = 0.0
-        for etype, fidx in self.surf_int.m0:
-            qwts = self.surf_int.qwts[etype, fidx]
-            norms = self.surf_int.norms[etype, fidx]
-            nmag = np.sqrt(np.einsum('jih,jih->ji', norms, norms))
-            area += np.einsum('i,ji->', qwts, nmag)
+        self._qwts_nmag = []
+
+        for qwts, norms in zip(self.surf_int.qwts.values(), 
+                               self.surf_int.norms.values()):
+            nmag = np.sqrt(np.einsum('hij,hij->ij', norms, norms))
+            qwts_nmag = nmag * qwts[:, np.newaxis]
+            self._qwts_nmag.append(qwts_nmag)
+            area += qwts_nmag.sum()
+
         self.area = scal_coll(self.bccomm.Allreduce, area, op=mpi.SUM)
 
     def _default_interp_c(self):
@@ -290,10 +268,10 @@ class PressureBCMixin(ControlledBCMixin):
     def _measure(self, solns):
         p_num = 0.0
 
-        for ufpts, qwts, norms in self._interp_face(solns):
-            p = self.elementscls.con_to_pri(ufpts, self.cfg)[-1]
-            nmag = np.sqrt(np.einsum('jih,jih->ji', norms, norms))
-            p_num += np.einsum('i,ij,ji', qwts, p, nmag)
+        for (ufpts, *_), qwts_nmag in zip(self._interp_face(solns),
+                                          self._qwts_nmag):
+            p = self.con_to_pri(ufpts, self.cfg)[-1]
+            p_num += np.einsum('ij,ij', p, qwts_nmag)
 
         p_num = scal_coll(self.bccomm.Allreduce, p_num, op=mpi.SUM)
 
