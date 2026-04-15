@@ -159,8 +159,10 @@ class ControlledBCMixin:
                    self.cfg.sect_eq(prevcfg, self.cfgsect))
 
         if sdata is not None and sdata[4] != 0 and sect_eq:
-            self.interp_c, self.interp_m = sdata[:2]
-            self.meas_avg, self.tprev = sdata[2:4]
+            self.interp_c = sdata[0]
+            self.interp_m = sdata[1]
+            self.meas_avg = sdata[2]
+            self.tprev = sdata[3]
             self.nstep_counter = sdata[4]
         else:
             self.interp_c = self._default_interp_c()
