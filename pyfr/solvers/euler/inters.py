@@ -146,9 +146,8 @@ class ControlledBCMixin:
             eidxs = self.surf_int.eidxs[etype, fidx]
             uupts = solns[etype][:, :, eidxs]
 
-            nv = uupts.shape[1]
             ufpts = m0 @ uupts.reshape(nupts, -1)
-            ufpts = ufpts.reshape(nfpts, nv, -1).swapaxes(0, 1)
+            ufpts = ufpts.reshape(nfpts, self.nvars, -1).swapaxes(0, 1)
 
             qwts = self.surf_int.qwts[etype, fidx]
             norms = self.surf_int.norms[etype, fidx]
@@ -276,7 +275,6 @@ class PressureBCMixin(ControlledBCMixin):
 
     def _measure(self, solns):
         p_num = 0.0
-
 
         for (u, *_), qnmag in zip(self._interp_face(solns), self._qwts_nmag):
             p = self.con_to_pri(u, self.cfg)[-1]
