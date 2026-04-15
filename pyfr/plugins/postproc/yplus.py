@@ -8,7 +8,7 @@ class YPlusPostProc(BasePostProcPlugin):
     systems = 'navier-stokes'
     dimensions = '3'
     export_types = 'boundary'
-    needs_grads = True
+    deps = ['_tau_wall', '_mu']
 
     def fields(self):
         return {'yplus': ['y+']}
@@ -16,7 +16,7 @@ class YPlusPostProc(BasePostProcPlugin):
     def _process(self, data):
         rho_wall = data.pris[0]
 
-        u_tau = np.sqrt(data.tau_wall / rho_wall)
-        nu = data.mu / rho_wall
+        u_tau = np.sqrt(data.fields['_tau_wall'] / rho_wall)
+        nu = data.fields['_mu'] / rho_wall
 
         data.fields['yplus'] = data.min_upt_wall_dist_approx * u_tau / nu

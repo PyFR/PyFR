@@ -11,7 +11,7 @@ class PostProcData:
         self.cfg = cfg
         self.soln = soln
         self.nvars = len(soln.fields)
-        self.ndims = ploc.shape[0]
+        self.ndims = len(ploc)
         self._pris = pris
         self.ploc = ploc
         self.fields = {}
@@ -27,24 +27,6 @@ class PostProcData:
     @cached_property
     def grad_pris(self):
         return np.split(self._pris[self.nvars:], self.nvars)
-
-    @cached_property
-    def mu(self):
-        cfg = self.cfg
-        mu_ref = cfg.getfloat('constants', 'mu')
-
-        if cfg.get('solver', 'viscosity-correction', 'none') == 'sutherland':
-            gamma = cfg.getfloat('constants', 'gamma')
-            cpTref = cfg.getfloat('constants', 'cpTref')
-            cpTs = cfg.getfloat('constants', 'cpTs')
-
-            rho, p = self.pris[0], self.pris[-1]
-            cpT = gamma * p / ((gamma - 1) * rho)
-            Trat = cpT / cpTref
-            return (mu_ref * (cpTref + cpTs) * Trat * np.sqrt(Trat)
-                    / (cpT + cpTs))
-        else:
-            return mu_ref
 
 
 class BoundaryPostProcData(PostProcData):
@@ -100,15 +82,3 @@ class BoundaryPostProcData(PostProcData):
         dist = np.linalg.norm(x_upt - x_face, axis=2)
 
         return dist[t != 0].min(axis=0)
-
-    @cached_property
-    def tau_wall(self):
-        normals = self.normals
-
-        grad_vel = np.stack(self.grad_pris[1:self.ndims + 1])
-        sij = grad_vel + grad_vel.swapaxes(0, 1)
-        tau_n = self.mu * np.einsum('ijkl,jkl->ikl', sij, normals)
-
-        nn = (tau_n * normals).sum(axis=0)
-        tau_tang = tau_n - nn * normals
-        return np.linalg.norm(tau_tang, axis=0)

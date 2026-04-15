@@ -6,7 +6,7 @@ class CfPostProc(BasePostProcPlugin):
     systems = 'navier-stokes'
     dimensions = '3'
     export_types = 'boundary'
-    needs_grads = True
+    deps = ['_tau_wall']
 
     def fields(self):
         return {'cf': ['Cf']}
@@ -17,4 +17,4 @@ class CfPostProc(BasePostProcPlugin):
 
         q_inf = 0.5 * rho_inf * u_inf**2
 
-        data.fields['cf'] = data.tau_wall / q_inf
+        data.fields['cf'] = data.fields['_tau_wall'] / q_inf
