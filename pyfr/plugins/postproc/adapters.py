@@ -7,8 +7,6 @@ from pyfr.util import subclass_where
 
 
 class PostProcData:
-    # pris: (nvars*(1+ndims), *pts_shape)
-    # ploc:  (ndims, *pts_shape)
     def __init__(self, cfg, soln, pris, ploc):
         self.cfg = cfg
         self.soln = soln
