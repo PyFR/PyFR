@@ -100,15 +100,3 @@ class BoundaryPostProcData(PostProcData):
         dist = np.linalg.norm(x_upt - x_face, axis=2)
 
         return dist[t != 0].min(axis=0)
-
-    @cached_property
-    def tau_wall(self):
-        normals = self.normals
-
-        grad_vel = np.stack(self.grad_pris[1:self.ndims + 1])
-        sij = grad_vel + grad_vel.swapaxes(0, 1)
-        tau_n = self.mu * np.einsum('ijkl,jkl->ikl', sij, normals)
-
-        nn = (tau_n * normals).sum(axis=0)
-        tau_tang = tau_n - nn * normals
-        return np.linalg.norm(tau_tang, axis=0)

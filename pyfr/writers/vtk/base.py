@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
+from pyfr.plugins.postproc.base import resolve_pp_plugins
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
@@ -402,11 +403,11 @@ class BaseVTKWriter(BaseWriter):
                              'solution files')
 
         self._extra_fields = {}
-        self.pp_plugins = []
 
         # Return empty for idle ranks
         etype = self._extra_etype
         if etype is None:
+            self.pp_plugins = []
             return
 
         # Classify aux fields by shape
@@ -421,18 +422,15 @@ class BaseVTKWriter(BaseWriter):
                 meta = FieldMeta('cell', int(np.prod(shape)), arr.dtype)
             self._extra_fields[name] = meta
 
-        # Instantiate postproc plugins and register their output fields
-        from pyfr.plugins import get_plugin
-
+        # Resolve postproc plugins and register fields
         cfg = self._pp_cfg or self.cfg
-        for name in self._pp_plugin_names:
-            pp = get_plugin('postproc', name, self.ndims, cfg, self.type)
-            self.pp_plugins.append(pp)
-
+        self.pp_plugins = resolve_pp_plugins(self._pp_plugin_names,
+                                             self.ndims, cfg, self.type)
+        for pp in self.pp_plugins:
             for fname, varnames in pp.fields().items():
                 if fname in self._extra_fields:
                     raise ValueError(f'Postproc field {fname!r} collides '
-                                     'with an existing field')
+                                      'with an existing field')
                 meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
                 self._extra_fields[fname] = meta
 

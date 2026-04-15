@@ -12,6 +12,7 @@ from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
 from pyfr.plugins.postproc.adapters import PostProcData
+from pyfr.plugins.postproc.base import resolve_pp_plugins
 from pyfr.points import PointLocator, PointSampler
 from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where
@@ -282,12 +283,10 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 fields.extend(f'grad_{v}_{d}'
                               for v in soln.fields for d in dims)
 
-        # Instantiate postproc plugins
-        from pyfr.plugins import get_plugin
-
+        # Resolve postproc plugins + dependencies in topological order
         pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else soln.config
-        pp_plugins = [get_plugin('postproc', n, mesh.ndims, pp_cfg, 'volume')
-                      for n in args.pp_plugins]
+        pp_plugins = resolve_pp_plugins(args.pp_plugins, mesh.ndims, pp_cfg,
+                                        'volume')
 
         # Construct and configure the point sampler
         sampler = PointSampler(mesh, spts)
@@ -305,7 +304,9 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 pp_field_map.update(pp.fields())
 
             extra_cols = []
-            for name, arr in adapter.fields.items():
+            fitems = adapter.fields.items()
+            visitems = [(n, a) for n, a in fitems if not n.startswith('_')]
+            for name, arr in visitems:
                 fields.extend(pp_field_map[name])
                 extra_cols.append(np.atleast_2d(arr.T).T)
             samps = np.concatenate([samps, *extra_cols], axis=1)
