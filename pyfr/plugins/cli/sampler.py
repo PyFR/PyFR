@@ -7,9 +7,11 @@ import re
 import h5py
 import numpy as np
 
+from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
+from pyfr.plugins.postproc.adapters import PostProcData
 from pyfr.points import PointLocator, PointSampler
 from pyfr.readers.native import NativeReader
 from pyfr.util import subclass_where
@@ -111,6 +113,12 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             '-f', '--format',  choices=['conservative', 'primitive'],
              default='conservative', help='output format'
         )
+        ap_sample.add_argument(
+            '--postproc', dest='pp_plugins', action='append', default=[],
+            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
+        )
+        ap_sample.add_argument('--cfg', dest='pp_cfg',
+                               help='config file for postproc plugins')
         ap_sample.add_argument('-s', '--sep', default='\t', help='separator')
         ap_sample.set_defaults(process=cls.sample_cmd)
 
@@ -242,6 +250,10 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
             sdata.append(d)
 
+        # Postproc plugins require primitive format
+        if args.pp_plugins and args.format != 'primitive':
+            raise ValueError('Postproc plugins require --format primitive')
+
         # Handle conversion from conservative to primitive variables
         if args.format == 'primitive':
             from pyfr.solvers.base import BaseSystem
@@ -270,12 +282,40 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 fields.extend(f'grad_{v}_{d}'
                               for v in soln.fields for d in dims)
 
+        # Instantiate postproc plugins
+        from pyfr.plugins import get_plugin
+
+        pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else soln.config
+        pp_plugins = [get_plugin('postproc', n, mesh.ndims, pp_cfg, 'volume')
+                      for n in args.pp_plugins]
+
         # Construct and configure the point sampler
         sampler = PointSampler(mesh, spts)
         sampler.configure_with_cfg_nvars(soln.config, len(fields))
 
         # Sample the solution
         samps = sampler.sample(sdata, process=process)
+
+        # Run postproc plugins at the sampled points (primitive only)
+        if rank == root and pp_plugins:
+            samps_t = samps.T.astype(np.float64)
+            ploc = pts.T
+            adapter = PostProcData(soln.config, soln, samps_t, ploc)
+            for pp in pp_plugins:
+                if pp.needs_grads and not has_grads:
+                    raise RuntimeError(f'Postproc {pp.name} requires '
+                                       'gradient data in the solution')
+                pp.process(adapter)
+
+            pp_field_map = {}
+            for pp in pp_plugins:
+                pp_field_map.update(pp.fields())
+
+            extra_cols = []
+            for name, arr in adapter.fields.items():
+                fields.extend(pp_field_map[name])
+                extra_cols.append(arr if arr.ndim == 2 else arr[:, None])
+            samps = np.concatenate([samps, *extra_cols], axis=1)
 
         if rank == root:
             print(*dims, *fields, sep=args.sep)
