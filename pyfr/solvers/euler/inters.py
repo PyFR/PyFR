@@ -188,19 +188,19 @@ class ControlledBCMixin:
                 self.tprev = t
             else:
                 a = self.alpha
-                self.meas_avg = a * meas + (1 - a) * self.meas_avg
+                self.meas_avg = a*meas + (1 - a)*self.meas_avg
                 dt = t - self.tprev
                 self.tprev = t
 
                 # Current Riemann invariant pressure
-                p0 = self.interp_m * t + self.interp_c
+                p0 = self.interp_m*t + self.interp_c
 
                 # Compute corrected Riemann pressure
                 p1 = self._correction(p0, dt)
 
                 # Update interpolation coefficients
                 self.interp_m = (p1 - p0) / dt
-                self.interp_c = p0 - self.interp_m * t
+                self.interp_c = p0 - self.interp_m*t
 
                 # Log to CSV
                 if self.csv:
@@ -226,19 +226,27 @@ class MassFlowBCMixin(ControlledBCMixin):
     _target_opts = ['mass-flow-rate', 'alpha', 'eta']
     _csv_header = 't,mf,pbc'
 
+    def _init_extra(self, cfg, cfgsect):
+        self._qwts_norms = []
+
+        for etype, fidx in self.surf_int.m0:
+            qwts = self.surf_int.qwts[etype, fidx]
+            norms = self.surf_int.norms[etype, fidx]
+            self._qwts_norms.append(norms*qwts[:, None])
+
     def _default_interp_c(self):
         return self._eval_opts(['p'])[0]
 
     def _measure(self, solns):
         mf = 0.0
 
-        for ufpts, qwts, norms in self._interp_face(solns):
-            mf += np.einsum('i,hij,hij', qwts, ufpts[1:-1], norms)
+        for (u, *_), qn in zip(self._interp_face(solns), self._qwts_norms):
+            mf += np.einsum('hij,hij', u[1:-1], qn)
 
         return scal_coll(self.bccomm.Allreduce, mf, op=mpi.SUM)
 
     def _correction(self, p0, dt):
-        return p0 + dt * self.eta * (1 - self.target / self.meas_avg)
+        return p0 + dt*self.eta*(1 - self.target / self.meas_avg)
 
 
 class EulerCharRiemInvMassFlowBCInters(MassFlowBCMixin, EulerBaseBCInters):
@@ -253,10 +261,11 @@ class PressureBCMixin(ControlledBCMixin):
         area = 0.0
         self._qwts_nmag = []
 
-        for qwts, norms in zip(self.surf_int.qwts.values(), 
-                               self.surf_int.norms.values()):
+        all_qwts = self.surf_int.qwts.values()
+        all_norms = self.surf_int.norms.values()
+        for qwts, norms in zip(all_qwts, all_norms):
             nmag = np.sqrt(np.einsum('hij,hij->ij', norms, norms))
-            qwts_nmag = nmag * qwts[:, np.newaxis]
+            qwts_nmag = nmag*qwts[:, None]
             self._qwts_nmag.append(qwts_nmag)
             area += qwts_nmag.sum()
 
@@ -268,17 +277,17 @@ class PressureBCMixin(ControlledBCMixin):
     def _measure(self, solns):
         p_num = 0.0
 
-        for (ufpts, *_), qwts_nmag in zip(self._interp_face(solns),
-                                          self._qwts_nmag):
-            p = self.con_to_pri(ufpts, self.cfg)[-1]
-            p_num += np.einsum('ij,ij', p, qwts_nmag)
+
+        for (u, *_), qnmag in zip(self._interp_face(solns), self._qwts_nmag):
+            p = self.con_to_pri(u, self.cfg)[-1]
+            p_num += np.einsum('ij,ij', p, qnmag)
 
         p_num = scal_coll(self.bccomm.Allreduce, p_num, op=mpi.SUM)
 
         return p_num / self.area
 
     def _correction(self, p0, dt):
-        return p0 + dt * self.eta * (self.target - self.meas_avg)
+        return p0 + dt*self.eta*(self.target - self.meas_avg)
 
 
 class EulerCharRiemInvPressureBCInters(PressureBCMixin, EulerBaseBCInters):
