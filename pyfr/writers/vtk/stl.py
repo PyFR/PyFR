@@ -178,10 +178,9 @@ class VTKSTLWriter(BaseVTKWriter):
             svars = self._pre_proc_fields(samps[:nsoln].astype(self.dtype))
 
             # Run postproc plugins at welded sample points
-            pp_fields = {}
-            if self.pp_plugins:
-                adapter = PostProcData(self.cfg, self.soln, svars, spts.T)
-                pp_fields = self._run_postprocs(adapter, self.pp_plugins)
+            adapter = PostProcData(self.cfg, self.soln, svars, spts.T)
+            for pp in self.pp_plugins:
+                pp.run(adapter)
 
             # Rebuild tri vertices from (possibly transformed) welded verts
             pts = spts[pinv].reshape(pts.shape)
@@ -199,7 +198,7 @@ class VTKSTLWriter(BaseVTKWriter):
                 off += n
 
             # Unpack postproc fields onto STL triangles
-            for name, data in pp_fields.items():
+            for name, data in adapter.fields.items():
                 a = data[pinv]
                 if a.ndim == 1:
                     pointf[name] = a.reshape(*pts.shape[:2])

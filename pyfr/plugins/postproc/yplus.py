@@ -13,11 +13,10 @@ class YPlusPostProc(BasePostProcPlugin):
     def fields(self):
         return {'yplus': ['y+']}
 
-    def process(self, data):
-        mu = self.cfg.getfloat('constants', 'mu')
+    def _process(self, data):
         rho_wall = data.pris[0]
 
         u_tau = np.sqrt(data.tau_wall / rho_wall)
-        nu = mu / rho_wall
+        nu = data.mu / rho_wall
 
         data.fields['yplus'] = data.min_upt_wall_dist_approx * u_tau / nu

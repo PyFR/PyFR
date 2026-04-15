@@ -16,7 +16,7 @@ class VorticityPostProc(BasePostProcPlugin):
         else:
             return {'vorticity': ['omega_z']}
 
-    def process(self, data):
+    def _process(self, data):
         du = data.grad_pris[1]
         dv = data.grad_pris[2]
 

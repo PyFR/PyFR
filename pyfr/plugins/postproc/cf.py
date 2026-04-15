@@ -11,7 +11,7 @@ class CfPostProc(BasePostProcPlugin):
     def fields(self):
         return {'cf': ['Cf']}
 
-    def process(self, data):
+    def _process(self, data):
         rho_inf = self.cfg.getfloat(self.cfgsect, 'rho-inf')
         u_inf = self.cfg.getfloat(self.cfgsect, 'u-inf')
 

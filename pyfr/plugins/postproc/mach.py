@@ -12,7 +12,7 @@ class MachPostProc(BasePostProcPlugin):
     def fields(self):
         return {'mach': ['Ma']}
 
-    def process(self, data):
+    def _process(self, data):
         rho, *vs, p = data.pris
 
         gamma = self.cfg.getfloat('constants', 'gamma')

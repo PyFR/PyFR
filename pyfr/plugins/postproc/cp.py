@@ -10,7 +10,7 @@ class CpPostProc(BasePostProcPlugin):
     def fields(self):
         return {'cp': ['Cp']}
 
-    def process(self, data):
+    def _process(self, data):
         p = data.pris[-1]
 
         rho_inf = self.cfg.getfloat(self.cfgsect, 'rho-inf')

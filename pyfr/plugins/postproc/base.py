@@ -20,5 +20,11 @@ class BasePostProcPlugin(BasePlugin):
     def fields(self):
         return {}
 
-    def process(self, data):
+    def run(self, data):
+        if self.needs_grads and not data.has_grads:
+            raise RuntimeError(f'Postproc {self.name} requires gradient '
+                               'data in the solution')
+        self._process(data)
+
+    def _process(self, data):
         pass

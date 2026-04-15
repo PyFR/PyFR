@@ -1,3 +1,6 @@
+import re
+
+
 class BasePlugin:
     name = None
     systems = None
@@ -16,6 +19,17 @@ class BasePlugin:
         self.cfg = cfg
         self.cfgsect = cfgsect
         self.ndims = ndims
+
+        if self.systems and cfg is not None:
+            system = cfg.get('solver', 'system')
+            if not re.fullmatch(self.systems, system):
+                raise RuntimeError(f'System {system} not supported by '
+                                   f'plugin {self.name}')
+
+        if self.dimensions and ndims is not None:
+            if not re.fullmatch(self.dimensions, str(ndims)):
+                raise RuntimeError(f'Dimensionality of {ndims} not '
+                                   f'supported by plugin {self.name}')
 
     def __call__(self, intg):
         pass

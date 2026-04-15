@@ -18,18 +18,34 @@ class PostProcData:
         self.ploc = ploc
         self.fields = {}
 
+    @property
+    def has_grads(self):
+        return len(self._pris) > self.nvars
+
     @cached_property
     def pris(self):
-        return [self._pris[i] for i in range(self.nvars)]
+        return list(self._pris[:self.nvars])
 
     @cached_property
     def grad_pris(self):
-        if len(self._pris) <= self.nvars:
-            return None
+        return np.split(self._pris[self.nvars:], self.nvars)
 
-        nd = self.ndims
-        return [self._pris[self.nvars + i*nd:self.nvars + (i + 1)*nd]
-                for i in range(self.nvars)]
+    @cached_property
+    def mu(self):
+        cfg = self.cfg
+        mu_ref = cfg.getfloat('constants', 'mu')
+
+        if cfg.get('solver', 'viscosity-correction', 'none') != 'sutherland':
+            return mu_ref
+
+        gamma = cfg.getfloat('constants', 'gamma')
+        cpTref = cfg.getfloat('constants', 'cpTref')
+        cpTs = cfg.getfloat('constants', 'cpTs')
+
+        rho, p = self.pris[0], self.pris[-1]
+        cpT = gamma * p / ((gamma - 1) * rho)
+        Trat = cpT / cpTref
+        return mu_ref * (cpTref + cpTs) * Trat * np.sqrt(Trat) / (cpT + cpTs)
 
 
 class BoundaryPostProcData(PostProcData):
@@ -68,7 +84,7 @@ class BoundaryPostProcData(PostProcData):
         _, proj, norm = shape.faces[self._finfo.fidx]
         upts = shape.upts
 
-        norm = norm / np.linalg.norm(norm)
+        norm /= np.linalg.norm(norm)
         face_pt = proj(*([0]*(shape.ndims - 1)))
         t = (face_pt - upts) @ norm
         upts_on_face = upts + t[:, None] * norm
@@ -88,12 +104,11 @@ class BoundaryPostProcData(PostProcData):
 
     @cached_property
     def tau_wall(self):
-        mu = self.cfg.getfloat('constants', 'mu')
         normals = self.normals
 
         grad_vel = np.stack(self.grad_pris[1:self.ndims + 1])
         sij = grad_vel + grad_vel.swapaxes(0, 1)
-        tau_n = mu * np.einsum('ijkl,jkl->ikl', sij, normals)
+        tau_n = self.mu * np.einsum('ijkl,jkl->ikl', sij, normals)
 
         nn = (tau_n * normals).sum(axis=0)
         tau_tang = tau_n - nn * normals

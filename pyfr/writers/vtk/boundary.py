@@ -27,15 +27,12 @@ class VTKBoundaryWriter(BaseVTKWriter):
         super().__init__(meshf, **kwargs)
 
         self.boundaries = boundaries
+        self._surface_info = defaultdict(list)
 
         if self.ndims != 3:
             raise RuntimeError('Boundary export only supported for 3D grids')
 
     def _load_soln(self, *args, **kwargs):
-        # Initialise empty surface_info so super()'s aux classification can
-        # call our _extra_point_shapes override (it falls through to etype)
-        self._surface_info = defaultdict(list)
-
         super()._load_soln(*args, **kwargs)
 
         # Split pp plugins: volume-capable vs. boundary-only
@@ -191,14 +188,16 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
             # Volume-capable pp on the face-interpolated data
             vadapter = PostProcData(self.cfg, self.soln, soln_t, ploc)
-            vfields = self._run_postprocs(vadapter, self._volume_pp)
+            for pp in self._volume_pp:
+                pp.run(vadapter)
 
             # Boundary-only pp (face-specific)
             badapter = BoundaryPostProcData(self.cfg, self.soln, soln_t, ploc,
                                             self.elementscls, spts, finfo)
-            bfields = self._run_postprocs(badapter, self._boundary_pp)
+            for pp in self._boundary_pp:
+                pp.run(badapter)
 
-            for fname, arr in (vfields | bfields).items():
+            for fname, arr in (vadapter.fields | badapter.fields).items():
                 pointf[fname].append(arr)
 
         # Concatenate extra fields

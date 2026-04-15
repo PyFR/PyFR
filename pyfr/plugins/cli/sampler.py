@@ -297,18 +297,11 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         samps = sampler.sample(sdata, process=process)
 
         # Run postproc plugins at the sampled points (primitive only)
-        if rank == root and pp_plugins:
-            samps_t = samps.T.astype(np.float64)
-            ploc = pts.T
-            adapter = PostProcData(soln.config, soln, samps_t, ploc)
-            for pp in pp_plugins:
-                if pp.needs_grads and not has_grads:
-                    raise RuntimeError(f'Postproc {pp.name} requires '
-                                       'gradient data in the solution')
-                pp.process(adapter)
-
+        if rank == root:
+            adapter = PostProcData(soln.config, soln, samps.T, pts.T)
             pp_field_map = {}
             for pp in pp_plugins:
+                pp.run(adapter)
                 pp_field_map.update(pp.fields())
 
             extra_cols = []

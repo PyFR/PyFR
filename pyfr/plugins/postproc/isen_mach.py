@@ -12,7 +12,7 @@ class IsentropicMachPostProc(BasePostProcPlugin):
     def fields(self):
         return {'isen-mach': ['Ma_is']}
 
-    def process(self, data):
+    def _process(self, data):
         p = data.pris[-1]
 
         gamma = self.cfg.getfloat('constants', 'gamma')

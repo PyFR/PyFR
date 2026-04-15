@@ -78,8 +78,9 @@ class VTKVolumeWriter(BaseVTKWriter):
         adapter = PostProcData(self.cfg, self.soln,
                                vsoln.transpose(1, 0, 2),
                                vpts.transpose(2, 0, 1))
-        pp_fields = self._run_postprocs(adapter, self.pp_plugins)
-        for fname, arr in pp_fields.items():
+        for pp in self.pp_plugins:
+            pp.run(adapter)
+        for fname, arr in adapter.fields.items():
             pointf[fname] = arr
 
         # Extract extra fields

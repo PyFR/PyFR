@@ -395,14 +395,41 @@ class BaseVTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
-    def _run_postprocs(self, adapter, plugins):
-        for pp in plugins:
-            if pp.needs_grads and not self._gradients:
-                raise RuntimeError(f'Postproc {pp.name} requires '
-                                    'gradient data in the solution')
-            pp.process(adapter)
+    def _build_extra_fields(self):
+        # Classify aux fields by shape
+        etype = self._extra_etype
+        self._extra_fields = {}
+        pshapes = self._extra_point_shapes(etype)
+        for name, arr in self.soln.aux.get(etype, {}).items():
+            shape = arr.shape[1:]
+            if shape in pshapes:
+                meta = FieldMeta('point', 1, arr.dtype)
+            elif shape[:-1] in pshapes:
+                meta = FieldMeta('point', shape[-1], arr.dtype)
+            else:
+                meta = FieldMeta('cell', int(np.prod(shape)), arr.dtype)
+            self._extra_fields[name] = meta
 
-        return adapter.fields
+        # Only allow post processing of solution files
+        if self._pp_plugin_names and self.dataprefix != 'soln':
+            raise ValueError('Postproc plugins are only supported for '
+                             'solution files')
+
+        # Instantiate postproc plugins and register their output fields
+        from pyfr.plugins import get_plugin
+
+        cfg = self._pp_cfg or self.cfg
+        self.pp_plugins = []
+        for name in self._pp_plugin_names:
+            pp = get_plugin('postproc', name, self.ndims, cfg, self.type)
+            self.pp_plugins.append(pp)
+
+            for fname, varnames in pp.fields().items():
+                if fname in self._extra_fields:
+                    raise ValueError(f'Postproc field {fname!r} collides '
+                                     'with an existing field')
+                meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
+                self._extra_fields[fname] = meta
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -526,20 +553,6 @@ class BaseVTKWriter(BaseWriter):
         etype = next(k for k in self.soln.data if k in self.mesh.eidxs)
         self._extra_etype = etype
 
-        # Extra fields: classify aux by shape, pp appended below
-        self._extra_fields = {}
-        pshapes = self._extra_point_shapes(etype)
-        for name, arr in self.soln.aux.get(etype, {}).items():
-            shape = arr.shape[1:]
-            if shape in pshapes:
-                self._extra_fields[name] = FieldMeta('point', 1, arr.dtype)
-            elif shape[:-1] in pshapes:
-                kind, ncomps = 'point', shape[-1]
-                self._extra_fields[name] = FieldMeta(kind, ncomps, arr.dtype)
-            else:
-                ncomps = int(np.prod(shape))
-                self._extra_fields[name] = FieldMeta('cell', ncomps, arr.dtype)
-
         # Ensure a divisor has been set
         if self.divisor is None:
             self.divisor = self.cfg.getint('solver', 'order')
@@ -584,22 +597,8 @@ class BaseVTKWriter(BaseWriter):
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
 
-        # Instantiate postproc plugins
-        from pyfr.plugins import get_plugin
-
-        cfg = self._pp_cfg or self.cfg
-        self.pp_plugins = [get_plugin('postproc', name, self.ndims, cfg,
-                                      self.type)
-                           for name in self._pp_plugin_names]
-
-        # Append pp fields to extra fields with their metadata
-        for pp in self.pp_plugins:
-            for name, varnames in pp.fields().items():
-                if name in self._extra_fields:
-                    raise ValueError(f'Postproc field {name!r} collides with '
-                                     'an existing field.')
-                meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
-                self._extra_fields[name] = meta
+        # Classify aux + register pp output fields
+        self._build_extra_fields()
 
         # Handle field subsetting
         if self.fields:
