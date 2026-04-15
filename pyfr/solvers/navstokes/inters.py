@@ -3,7 +3,7 @@ import numpy as np
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
-from pyfr.solvers.euler.inters import MassFlowBCMixin
+from pyfr.solvers.euler.inters import MassFlowBCMixin, PressureBCMixin
 
 
 class TplargsMixin:
@@ -210,4 +210,10 @@ class NavierStokesSubOutflowBCInters(NavierStokesBaseBCInters):
 class NavierStokesCharRiemInvMassFlowBCInters(MassFlowBCMixin,
                                               NavierStokesBaseBCInters):
     type = 'char-riem-inv-mass-flow'
+    cflux_state = 'ghost'
+
+
+class NavierStokesCharRiemInvPressureBCInters(PressureBCMixin,
+                                              NavierStokesBaseBCInters):
+    type = 'char-riem-inv-pressure'
     cflux_state = 'ghost'
