@@ -19,4 +19,4 @@ class CpPostProc(BasePostProcPlugin):
 
         q_inf = 0.5 * rho_inf * u_inf**2
 
-        data.fields['cp'] = [(p - p_inf) / q_inf]
+        data.fields['cp'] = (p - p_inf) / q_inf

@@ -17,4 +17,4 @@ class CfPostProc(BasePostProcPlugin):
 
         q_inf = 0.5 * rho_inf * u_inf**2
 
-        data.fields['cf'] = [data.tau_wall / q_inf]
+        data.fields['cf'] = data.tau_wall / q_inf

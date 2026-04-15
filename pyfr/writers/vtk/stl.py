@@ -1,6 +1,7 @@
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root
+from pyfr.plugins.postproc.adapters import PostProcData
 from pyfr.points import PointLocator, PointSampler
 from pyfr.polys import TriPolyBasis
 from pyfr.shapes import TriShape
@@ -136,18 +137,14 @@ class VTKSTLWriter(BaseVTKWriter):
         comm, rank, root = get_comm_rank_root()
         nsoln = len(self._soln_fields)
 
-        # Identify DOF-sized aux fields; record their component counts
-        for etype in mesh.eidxs:
-            nupts = soln.data[etype].shape[0]
-            aux_info = []
-            for name, arr in soln.aux.get(etype, {}).items():
-                if arr.shape[1:] == (nupts,):
-                    aux_info.append((name, 1))
-                elif arr.shape[1:-1] == (nupts,):
-                    aux_info.append((name, arr.shape[-1]))
-            break
-        else:
-            aux_info = []
+        # STL carries no per-element cell data; keep only point fields
+        self._extra_fields = {n: m for n, m in self._extra_fields.items()
+                              if m.kind == 'point'}
+
+        # Aux fields sampled through the pipeline (those also in soln.aux)
+        etype = self._extra_etype
+        aux_info = [(n, m.ncomps) for n, m in self._extra_fields.items()
+                    if n in soln.aux.get(etype, {})]
 
         naux = sum(n for _, n in aux_info)
 
@@ -180,11 +177,20 @@ class VTKSTLWriter(BaseVTKWriter):
             # Pre-process the solution fields only
             svars = self._pre_proc_fields(samps[:nsoln].astype(self.dtype))
 
+            # Run postproc plugins at welded sample points
+            pp_fields = {}
+            if self.pp_plugins:
+                adapter = PostProcData(self.cfg, self.soln, svars, spts.T)
+                pp_fields = self._run_postprocs(adapter, self.pp_plugins)
+
+            # Rebuild tri vertices from (possibly transformed) welded verts
+            pts = spts[pinv].reshape(pts.shape)
+
             # Unpack and reshape solution onto STL triangles
             svars = svars[:, pinv].reshape(-1, *pts.shape[:2])
             svars = svars.swapaxes(0, 1)
 
-            # Unpack aux (incl. postproc) fields onto STL triangles
+            # Unpack aux fields onto STL triangles
             pointf = {}
             off = nsoln
             for name, n in aux_info:
@@ -192,17 +198,18 @@ class VTKSTLWriter(BaseVTKWriter):
                 pointf[name] = a.reshape(n, *pts.shape[:2]).swapaxes(0, 1)
                 off += n
 
+            # Unpack postproc fields onto STL triangles
+            for name, data in pp_fields.items():
+                a = data[pinv]
+                if a.ndim == 1:
+                    pointf[name] = a.reshape(*pts.shape[:2])
+                else:
+                    pointf[name] = a.reshape(*pts.shape[:2], -1).swapaxes(1, 2)
+
             self.einfo = [('tri', pts.shape[1])]
             self._stl_info = pts, svars, pointf
-            self._stl_aux_names = [name for name, _ in aux_info]
         else:
             self.einfo = []
-
-    def _resolve_etype(self, etype):
-        return self._extra_etype
-
-    def _extra_field_lists(self, etype=None):
-        return [], self._stl_aux_names
 
     def _prepare_pts(self, etype):
         pts, svars, pointf = self._stl_info

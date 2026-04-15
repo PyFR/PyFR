@@ -19,4 +19,4 @@ class MachPostProc(BasePostProcPlugin):
         vmag = np.sqrt(sum(v**2 for v in vs))
         c = np.sqrt(gamma * p / rho)
 
-        data.fields['mach'] = [vmag / c]
+        data.fields['mach'] = vmag / c

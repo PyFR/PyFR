@@ -1,14 +1,15 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from pathlib import Path
-import re
 
 import numpy as np
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.postproc.adapters import VolumePostProcAdapter
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
+
+
+FieldMeta = namedtuple('FieldMeta', 'kind ncomps dtype')
 
 
 def interpolate_pts(op, pts):
@@ -394,28 +395,14 @@ class BaseVTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
-    def _run_volume_postprocs(self, etype, plugins):
-        if not plugins:
-            return
-
-        # Pre-process the solution at upts to primitives
-        soln = self.soln.data[etype].swapaxes(0, 1).astype(self.dtype)
-        pris = self._pre_proc_fields(soln).swapaxes(0, 1)
-
-        # Run plugins
-        adapter = VolumePostProcAdapter(self, pris, etype,
-                                        self.mesh.spts[etype])
+    def _run_postprocs(self, adapter, plugins):
         for pp in plugins:
             if pp.needs_grads and not self._gradients:
                 raise RuntimeError(f'Postproc {pp.name} requires '
                                     'gradient data in the solution')
             pp.process(adapter)
 
-        # Inject into soln.aux with (neles, nupts, ncomps) convention
-        aux = self.soln.aux.setdefault(etype, {})
-        for fname, arrs in adapter.fields.items():
-            d = np.stack(arrs, axis=-1).transpose(1, 0, 2)
-            aux[fname] = d.astype(self.dtype)
+        return adapter.fields
 
     def _pre_proc_fields_soln(self, soln):
         ecls = self.elementscls
@@ -490,11 +477,11 @@ class BaseVTKWriter(BaseWriter):
         if self.output_curved:
             attrs.append(('Curved', 'UInt8', '1'))
 
-        cell_fields, point_fields = self._extra_field_lists(etype)
+        cell_fields, point_fields = self._extra_field_lists()
 
         # Extra fields as cell data
         for fname in cell_fields:
-            adtype, _, acomps = self._field_info(fname, etype)
+            adtype, _, acomps = self._field_info(fname)
             attrs.append((fname.replace('-', ' ').title(), adtype,
                           str(acomps)))
 
@@ -503,7 +490,7 @@ class BaseVTKWriter(BaseWriter):
 
         # Extra fields as point data
         for fname in point_fields:
-            adtype, _, acomps = self._field_info(fname, etype)
+            adtype, _, acomps = self._field_info(fname)
             attrs.append((fname.replace('-', ' ').title(), adtype,
                           str(acomps)))
 
@@ -518,14 +505,14 @@ class BaseVTKWriter(BaseWriter):
 
             # Extra cell field sizes
             for fname in cell_fields:
-                _, asize, _ = self._field_info(fname, etype)
+                _, asize, _ = self._field_info(fname)
                 sizes.append(asize*ncells)
 
             sizes.extend(len(varnames)*nb for varnames in vvars.values())
 
             # Extra point field sizes
             for fname in point_fields:
-                _, asize, _ = self._field_info(fname, etype)
+                _, asize, _ = self._field_info(fname)
                 sizes.append(asize*npts)
 
             return tuple((*a, s) for a, s in zip(attrs, sizes))
@@ -539,7 +526,19 @@ class BaseVTKWriter(BaseWriter):
         etype = next(k for k in self.soln.data if k in self.mesh.eidxs)
         self._extra_etype = etype
 
-        self._extra_fields = list(self.soln.aux.get(etype, {}))
+        # Extra fields: classify aux by shape, pp appended below
+        self._extra_fields = {}
+        pshapes = self._extra_point_shapes(etype)
+        for name, arr in self.soln.aux.get(etype, {}).items():
+            shape = arr.shape[1:]
+            if shape in pshapes:
+                self._extra_fields[name] = FieldMeta('point', 1, arr.dtype)
+            elif shape[:-1] in pshapes:
+                kind, ncomps = 'point', shape[-1]
+                self._extra_fields[name] = FieldMeta(kind, ncomps, arr.dtype)
+            else:
+                ncomps = int(np.prod(shape))
+                self._extra_fields[name] = FieldMeta('cell', ncomps, arr.dtype)
 
         # Ensure a divisor has been set
         if self.divisor is None:
@@ -593,14 +592,14 @@ class BaseVTKWriter(BaseWriter):
                                       self.type)
                            for name in self._pp_plugin_names]
 
-        # Run volume-capable pp plugins at upts and inject into aux
-        volume_pp = [p for p in self.pp_plugins
-                     if re.fullmatch(p.export_types, 'volume')]
-        for etype in self.mesh.eidxs:
-            self._run_volume_postprocs(etype, volume_pp)
-
-        # Rebuild _extra_fields after aux augmentation
-        self._extra_fields = [*self.soln.aux.get(self._extra_etype, {})]
+        # Append pp fields to extra fields with their metadata
+        for pp in self.pp_plugins:
+            for name, varnames in pp.fields().items():
+                if name in self._extra_fields:
+                    raise ValueError(f'Postproc field {name!r} collides with '
+                                     'an existing field.')
+                meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
+                self._extra_fields[name] = meta
 
         # Handle field subsetting
         if self.fields:
@@ -771,37 +770,20 @@ class BaseVTKWriter(BaseWriter):
         nupts = self.soln.data[etype].shape[0]
         return {(nupts,)}
 
-    def _resolve_etype(self, etype):
-        return etype or self._extra_etype
-
-    def _field_kind(self, name, etype):
-        shape = self.soln.aux[etype][name].shape[1:]
-        pshapes = self._extra_point_shapes(etype)
-        if shape in pshapes:
-            return 'point', 1
-        elif shape[:-1] in pshapes:
-            return 'point', shape[-1]
-        else:
-            return 'cell', np.prod(shape)
-
-    def _extra_field_lists(self, etype=None):
-        etype = self._resolve_etype(etype)
+    def _extra_field_lists(self):
         cfields, pfields = [], []
-        for n in self._extra_fields:
-            kind, _ = self._field_kind(n, etype)
-            (pfields if kind == 'point' else cfields).append(n)
+        for name, meta in self._extra_fields.items():
+            lst = pfields if meta.kind == 'point' else cfields
+            lst.append(name)
         return cfields, pfields
 
-    def _field_info(self, name, etype):
-        etype = self._resolve_etype(etype)
-        _, ncomps = self._field_kind(name, etype)
-
-        adtype = self.soln.aux[etype][name].dtype
-        vtype = self._vtk_dtype(adtype)
-        return vtype, adtype.itemsize*ncomps, ncomps
+    def _field_info(self, name):
+        meta = self._extra_fields[name]
+        asize = meta.dtype.itemsize * meta.ncomps
+        return self._vtk_dtype(meta.dtype), asize, meta.ncomps
 
     def _write_serial_header(self, write_s, etype, neles, off):
-        cell_fields, _ = self._extra_field_lists(etype)
+        cell_fields, _ = self._extra_field_lists()
         ncelld = self.output_curved + len(cell_fields)
         npts, ncells = self._get_npts_ncells_nnodes(etype, neles)[:2]
 
@@ -898,21 +880,26 @@ class BaseVTKWriter(BaseWriter):
             vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
             self._write_darray(vtu_curved, write, np.uint8)
 
-        # Extra cell fields
+        # Extra cell and point fields (iterate in header order)
+        cfields, pfields = self._extra_field_lists()
+
         ncells_per_ele = len(vtu_typ) // neles
-        for fname, data in cellf.items():
+        for fname in cfields:
+            data = cellf[fname]
             vtu_aux = data.reshape(neles, -1)
             vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
-            self._write_darray(vtu_aux, write, data.dtype)
+            self._write_darray(vtu_aux, write, self._extra_fields[fname].dtype)
 
         # Process and write out the various fields
         for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
             self._write_darray(arr.T, write, self.dtype)
 
-        # Extra point fields
-        for fname, data in pointf.items():
+        # Write extra point fields in header order
+        for fname in pfields:
+            data = pointf[fname]
             vtu_aux = data.reshape(nsvpts, neles, -1)
-            self._write_darray(vtu_aux.swapaxes(0, 1), write, data.dtype)
+            dtype = self._extra_fields[fname].dtype
+            self._write_darray(vtu_aux.swapaxes(0, 1), write, dtype)
 
 
 def get_subdiv(name, n):

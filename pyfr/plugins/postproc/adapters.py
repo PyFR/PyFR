@@ -7,67 +7,58 @@ from pyfr.util import subclass_where
 
 
 class BasePostProcAdapter:
-    def __init__(self, ctx, vsoln, etype, spts):
-        self.cfg = ctx.cfg
-        self.soln = ctx.soln
-        self.elementscls = ctx.elementscls
-        self.ndims = ctx.ndims
-        self.dtype = ctx.dtype
+    pass
+
+
+class PostProcData(BasePostProcAdapter):
+    # pris: (nvars*(1+ndims), *pts_shape)
+    # ploc:  (ndims, *pts_shape)
+    def __init__(self, cfg, soln, pris, ploc):
+        self.cfg = cfg
+        self.soln = soln
+        self.nvars = len(soln.fields)
+        self.ndims = ploc.shape[0]
+        self._pris = pris
+        self.ploc = ploc
         self.fields = {}
 
-        self.etype = etype
-        self.spts = spts
-
-        # Primitive variables (views into vsoln)
-        nvars = len(self.elementscls.privars(self.ndims, self.cfg))
-        self.pris = [vsoln[:, i, :] for i in range(nvars)]
-
-        # Gradients, if present in vsoln
-        self.grad_pris = None
-        if vsoln.shape[1] > nvars:
-            nd = self.ndims
-            self.grad_pris = [vsoln[:, j:j + nd, :].transpose(1, 0, 2)
-                              for j in range(nvars, nvars + nvars*nd, nd)]
+    @cached_property
+    def pris(self):
+        return [self._pris[i] for i in range(self.nvars)]
 
     @cached_property
-    def shape(self):
-        return subclass_where(BaseShape, name=self.etype)(
-            len(self.spts), self.cfg
+    def grad_pris(self):
+        if len(self._pris) <= self.nvars:
+            return None
+
+        nd = self.ndims
+        return [self._pris[self.nvars + i*nd:self.nvars + (i + 1)*nd]
+                for i in range(self.nvars)]
+
+
+class BoundaryPostProcData(PostProcData):
+    def __init__(self, cfg, soln, pris, ploc, elementscls, spts, finfo):
+        super().__init__(cfg, soln, pris, ploc)
+
+        self._elementscls = elementscls
+        self._spts = spts
+        self._finfo = finfo
+
+    @cached_property
+    def _shape(self):
+        return subclass_where(BaseShape, name=self._finfo.etype)(
+            len(self._spts), self.cfg
         )
-
-
-class VolumePostProcAdapter(BasePostProcAdapter):
-    @cached_property
-    def ploc(self):
-        mesh_op = self.shape.sbasis.nodal_basis_at(self.shape.upts)
-        vpts = mesh_op @ self.spts.reshape(len(self.spts), -1)
-        vpts = vpts.reshape(-1, *self.spts.shape[1:])
-        return vpts.transpose(2, 0, 1)
-
-
-class BoundaryPostProcAdapter(BasePostProcAdapter):
-    def __init__(self, ctx, vsoln, finfo, spts):
-        super().__init__(ctx, vsoln, finfo.etype, spts)
-
-        self._fidx = finfo.fidx
-        self._svpts = finfo.svpts
-        self._face_norm = finfo.norm
-
-    @cached_property
-    def ploc(self):
-        mesh_op = self.shape.sbasis.nodal_basis_at(self._svpts)
-        vpts = mesh_op @ self.spts.reshape(len(self.spts), -1)
-        vpts = vpts.reshape(-1, *self.spts.shape[1:])
-        return vpts.transpose(2, 0, 1)
 
     @cached_property
     def _eles(self):
-        return self.elementscls(type(self.shape), self.spts, self.cfg)
+        return self._elementscls(type(self._shape), self._spts, self.cfg)
 
     @cached_property
     def pnorm(self):
-        norm_tiled = np.tile(self._face_norm, (len(self._svpts), 1))
-        pn = self._eles.pnorm_at(self._svpts, norm_tiled)
+        svpts = self._finfo.svpts
+        norm_tiled = np.tile(self._finfo.norm, (len(svpts), 1))
+        pn = self._eles.pnorm_at(svpts, norm_tiled)
 
         return pn.transpose(2, 0, 1)
 
@@ -76,20 +67,21 @@ class BoundaryPostProcAdapter(BasePostProcAdapter):
         return self.pnorm / np.linalg.norm(self.pnorm, axis=0)
 
     @cached_property
-    def _min_upt_wall_dist_approx(self):
-        _, proj, norm = self.shape.faces[self._fidx]
-        upts = self.shape.upts
+    def min_upt_wall_dist_approx(self):
+        shape = self._shape
+        _, proj, norm = shape.faces[self._finfo.fidx]
+        upts = shape.upts
 
         norm = norm / np.linalg.norm(norm)
-        face_pt = proj(*([0]*(self.shape.ndims - 1)))
+        face_pt = proj(*([0]*(shape.ndims - 1)))
         t = (face_pt - upts) @ norm
         upts_on_face = upts + t[:, None] * norm
 
-        sbasis = self.shape.sbasis
+        sbasis = shape.sbasis
 
         def interp(op):
-            r = op @ self.spts.reshape(op.shape[1], -1)
-            return r.reshape(op.shape[0], *self.spts.shape[1:])
+            r = op @ self._spts.reshape(op.shape[1], -1)
+            return r.reshape(op.shape[0], *self._spts.shape[1:])
 
         x_upt = interp(sbasis.nodal_basis_at(upts))
         x_face = interp(sbasis.nodal_basis_at(upts_on_face))
@@ -98,8 +90,6 @@ class BoundaryPostProcAdapter(BasePostProcAdapter):
 
         return dist[t != 0].min(axis=0)
 
-
-class GradBoundaryPostProcAdapter(BoundaryPostProcAdapter):
     @cached_property
     def tau_wall(self):
         mu = self.cfg.getfloat('constants', 'mu')

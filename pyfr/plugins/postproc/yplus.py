@@ -20,4 +20,4 @@ class YPlusPostProc(BasePostProcPlugin):
         u_tau = np.sqrt(data.tau_wall / rho_wall)
         nu = mu / rho_wall
 
-        data.fields['yplus'] = [data._min_upt_wall_dist_approx * u_tau / nu]
+        data.fields['yplus'] = data.min_upt_wall_dist_approx * u_tau / nu

@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.plugins.postproc.base import BasePostProcPlugin
 
 
@@ -25,8 +27,8 @@ class VorticityPostProc(BasePostProcPlugin):
             omega_y = du[2] - dw[0]
             omega_z = dv[0] - du[1]
 
-            data.fields['vorticity'] = [omega_x, omega_y, omega_z]
+            data.fields['vorticity'] = np.stack(
+                [omega_x, omega_y, omega_z], axis=-1
+            )
         else:
-            omega_z = dv[0] - du[1]
-
-            data.fields['vorticity'] = [omega_z]
+            data.fields['vorticity'] = dv[0] - du[1]

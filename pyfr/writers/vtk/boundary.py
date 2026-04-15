@@ -4,8 +4,7 @@ import re
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.plugins.postproc.adapters import (BoundaryPostProcAdapter,
-                                            GradBoundaryPostProcAdapter)
+from pyfr.plugins.postproc.adapters import BoundaryPostProcData, PostProcData
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import first, subclass_where
@@ -33,18 +32,21 @@ class VTKBoundaryWriter(BaseVTKWriter):
             raise RuntimeError('Boundary export only supported for 3D grids')
 
     def _load_soln(self, *args, **kwargs):
+        # Initialise empty surface_info so super()'s aux classification can
+        # call our _extra_point_shapes override (it falls through to etype)
+        self._surface_info = defaultdict(list)
+
         super()._load_soln(*args, **kwargs)
 
-        # Track boundary-only pp plugins (those that can't run at upts)
-        self._boundary_pp = [p for p in self.pp_plugins
-                             if not re.fullmatch(p.export_types, 'volume')]
-        self._boundary_pp_fields = {}
-        for pp in self._boundary_pp:
-            self._boundary_pp_fields.update(pp.fields())
-        self._extra_fields.extend(self._boundary_pp_fields)
+        # Split pp plugins: volume-capable vs. boundary-only
+        self._volume_pp, self._boundary_pp = [], []
+        for p in self.pp_plugins:
+            if re.fullmatch(p.export_types, 'volume'):
+                self._volume_pp.append(p)
+            else:
+                self._boundary_pp.append(p)
 
         ecount = defaultdict(int)
-        self._surface_info = defaultdict(list)
 
         rmesh, smesh = self.reader.mesh, self.mesh
         cidxs = [smesh.codec.index(f'bc/{b}') for b in self.boundaries]
@@ -76,30 +78,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
                 self._surface_info[stype].append(info)
 
         self.einfo = list(ecount.items())
-
-    def _run_postprocs(self, adapter):
-        for pp in self._boundary_pp:
-            if pp.needs_grads and not self._gradients:
-                raise RuntimeError(f'Postproc {pp.name} requires '
-                                    'gradient data in the solution')
-            pp.process(adapter)
-
-        return {fname: np.dstack(arrs).astype(adapter.dtype)
-                for fname, arrs in adapter.fields.items()}
-
-    def _field_kind(self, name, etype):
-        if name in self._boundary_pp_fields:
-            return 'point', len(self._boundary_pp_fields[name])
-        else:
-            return super()._field_kind(name, etype)
-
-    def _field_info(self, name, etype):
-        if name in self._boundary_pp_fields:
-            _, ncomps = self._field_kind(name, etype)
-            adtype = np.dtype(self.dtype)
-            return self._vtk_dtype(adtype), adtype.itemsize*ncomps, ncomps
-        else:
-            return super()._field_info(name, etype)
 
     @memoize
     def _get_shape(self, etype, cfg):
@@ -143,14 +121,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
             idxs[f].append(e)
 
         return [(*info[f], idxs[f]) for f in info]
-
-    def _make_adapter(self, face_vsoln, finfo, spts):
-        if self._gradients:
-            cls = GradBoundaryPostProcAdapter
-        else:
-            cls = BoundaryPostProcAdapter
-
-        return cls(self, face_vsoln, finfo, spts)
 
     def _extra_point_shapes(self, key):
         if key in self._surface_info:
@@ -197,7 +167,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
             vsoln.append(face_vsoln)
             curved.append(self.mesh.spts_curved[etype][idxs])
 
-            # Extract extra fields
+            # Extract aux fields
             nupts = soln.shape[0]
             for fname, arr in self.soln.aux.get(etype, {}).items():
                 data = arr[idxs]
@@ -216,11 +186,20 @@ class VTKBoundaryWriter(BaseVTKWriter):
                     interpolate_pts(op, np.moveaxis(data, 0, 1))
                 )
 
-            # Run per-batch postproc plugins (face-specific)
-            if self._boundary_pp:
-                adapter = self._make_adapter(face_vsoln, finfo, spts)
-                for fname, arrs in self._run_postprocs(adapter).items():
-                    pointf[fname].append(arrs)
+            soln_t = face_vsoln.transpose(1, 0, 2)
+            ploc = face_vpts.transpose(2, 0, 1)
+
+            # Volume-capable pp on the face-interpolated data
+            vadapter = PostProcData(self.cfg, self.soln, soln_t, ploc)
+            vfields = self._run_postprocs(vadapter, self._volume_pp)
+
+            # Boundary-only pp (face-specific)
+            badapter = BoundaryPostProcData(self.cfg, self.soln, soln_t, ploc,
+                                            self.elementscls, spts, finfo)
+            bfields = self._run_postprocs(badapter, self._boundary_pp)
+
+            for fname, arr in (vfields | bfields).items():
+                pointf[fname].append(arr)
 
         # Concatenate extra fields
         cellf = {k: np.hstack(v) for k, v in cellf.items()}
