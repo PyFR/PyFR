@@ -1,12 +1,17 @@
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+import re
 
 import numpy as np
 
 from pyfr.cache import memoize
+from pyfr.plugins.postproc.adapters import BoundaryPostProcData, PostProcData
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import first, subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+
+
+FaceInfo = namedtuple('FaceInfo', 'etype fidx svpts norm')
 
 
 def _search(a, v):
@@ -22,6 +27,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
         super().__init__(meshf, **kwargs)
 
         self.boundaries = boundaries
+        self._surface_info = defaultdict(list)
 
         if self.ndims != 3:
             raise RuntimeError('Boundary export only supported for 3D grids')
@@ -29,8 +35,15 @@ class VTKBoundaryWriter(BaseVTKWriter):
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
 
+        # Split pp plugins: volume-capable vs. boundary-only
+        self._volume_pp, self._boundary_pp = [], []
+        for p in self.pp_plugins:
+            if re.fullmatch(p.export_types, 'volume'):
+                self._volume_pp.append(p)
+            else:
+                self._boundary_pp.append(p)
+
         ecount = defaultdict(int)
-        self._surface_info = defaultdict(list)
 
         rmesh, smesh = self.reader.mesh, self.mesh
         cidxs = [smesh.codec.index(f'bc/{b}') for b in self.boundaries]
@@ -59,7 +72,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
             # Obtain the associated surface info
             for stype, *info in self._get_surface_info(etype, eoff, fidx):
                 ecount[stype] += len(info[-1])
-                self._surface_info[stype].append((etype, *info))
+                self._surface_info[stype].append(info)
 
         self.einfo = list(ecount.items())
 
@@ -91,7 +104,9 @@ class VTKBoundaryWriter(BaseVTKWriter):
         lbasis = get_polybasis(etype, 1, linspts)
         lin_op = lbasis.nodal_basis_at(svpts)
 
-        return itype, mesh_op, soln_op, lin_op
+        finfo = FaceInfo(etype, fidx, svpts, norm)
+
+        return itype, mesh_op, soln_op, lin_op, finfo
 
     def _get_surface_info(self, etype, eoffs, fidxs):
         info, idxs = {}, defaultdict(list)
@@ -106,7 +121,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
     def _extra_point_shapes(self, key):
         if key in self._surface_info:
-            etypes = [e for e, *_ in self._surface_info[key]]
+            etypes = [info[-2].etype for info in self._surface_info[key]]
         else:
             etypes = [key]
 
@@ -124,7 +139,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
             key = first(self._surface_info)
 
         if key in self._surface_info:
-            key, *_ = first(self._surface_info[key])
+            key = first(self._surface_info[key])[-2].etype
 
         return key
 
@@ -133,7 +148,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
         cellf, pointf = defaultdict(list), defaultdict(list)
 
         pshapes = self._extra_point_shapes(itype)
-        for etype, mesh_op, soln_op, lin_op, idxs in self._surface_info[itype]:
+        for mesh_op, soln_op, lin_op, finfo, idxs in self._surface_info[itype]:
+            etype = finfo.etype
             spts = self.mesh.spts[etype][:, idxs]
             soln = self.soln.data[etype][..., idxs]
             soln = soln.swapaxes(0, 1).astype(self.dtype)
@@ -141,24 +157,48 @@ class VTKBoundaryWriter(BaseVTKWriter):
             # Pre-process the solution
             soln = self._pre_proc_fields(soln).swapaxes(0, 1)
 
-            vspts.append(interpolate_pts(mesh_op, spts))
-            vsoln.append(interpolate_pts(soln_op, soln))
+            face_vpts = interpolate_pts(mesh_op, spts)
+            face_vsoln = interpolate_pts(soln_op, soln)
+
+            vspts.append(face_vpts)
+            vsoln.append(face_vsoln)
             curved.append(self.mesh.spts_curved[etype][idxs])
 
-            # Extract extra fields
+            # Extract aux fields
+            nupts = soln.shape[0]
             for fname, arr in self.soln.aux.get(etype, {}).items():
                 data = arr[idxs]
                 shape = data.shape[1:]
-                if shape == (soln.shape[0],):
-                    pointf[fname].append(
-                        interpolate_pts(soln_op, data.swapaxes(0, 1))
-                    )
-                elif shape in pshapes:
-                    pointf[fname].append(
-                        interpolate_pts(lin_op, data.swapaxes(0, 1))
-                    )
+
+                if shape in pshapes:
+                    pshape = shape
+                elif shape[:-1] in pshapes:
+                    pshape = shape[:-1]
                 else:
                     cellf[fname].append(data)
+                    continue
+
+                op = soln_op if pshape == (nupts,) else lin_op
+                pointf[fname].append(
+                    interpolate_pts(op, np.moveaxis(data, 0, 1))
+                )
+
+            soln_t = face_vsoln.transpose(1, 0, 2)
+            ploc = face_vpts.transpose(2, 0, 1)
+
+            # Volume-capable pp on the face-interpolated data
+            vadapter = PostProcData(self.cfg, self.soln, soln_t, ploc)
+            for pp in self._volume_pp:
+                pp.run(vadapter)
+
+            # Boundary-only pp (face-specific)
+            badapter = BoundaryPostProcData(self.cfg, self.soln, soln_t, ploc,
+                                            self.elementscls, spts, finfo)
+            for pp in self._boundary_pp:
+                pp.run(badapter)
+
+            for fname, arr in (vadapter.fields | badapter.fields).items():
+                pointf[fname].append(arr)
 
         # Concatenate extra fields
         cellf = {k: np.hstack(v) for k, v in cellf.items()}

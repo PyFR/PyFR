@@ -1,11 +1,12 @@
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.base import BaseSolnPlugin, init_csv
+from pyfr.plugins.common import init_csv
+from pyfr.plugins.soln.base import BaseSolnPlugin
 
 
 class DtStatsPlugin(BaseSolnPlugin):
     name = 'dtstats'
-    systems = ['*']
-    dimensions = [2, 3]
+    systems = '.*'
+    dimensions = '2|3'
 
     def __init__(self, intg, cfgsect, prefix):
         super().__init__(intg, cfgsect, prefix)

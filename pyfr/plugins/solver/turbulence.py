@@ -5,7 +5,7 @@ import numpy as np
 from numpy.core.records import fromrecords
 from rtree.index import Index, Property
 
-from pyfr.plugins.base import BaseSolverPlugin
+from pyfr.plugins.solver.base import BaseSolverPlugin
 from pyfr.regions import BoxRegion
 
 
@@ -39,8 +39,8 @@ def pcg32rxs_m_xs(seed):
 
 class TurbulencePlugin(BaseSolverPlugin):
     name = 'turbulence'
-    systems = ['navier-stokes']
-    dimensions = [3]
+    systems = 'navier-stokes'
+    dimensions = '3'
 
     def __init__(self, intg, cfgsect):
         super().__init__(intg, cfgsect)
@@ -277,7 +277,7 @@ class TurbulencePlugin(BaseSolverPlugin):
 
         # Register the turbulence source macro for this element type
         eles.add_src_macro(
-            'pyfr.plugins.kernels.turbulence', 'turbulence',
+            'pyfr.plugins.solver.kernels.turbulence', 'turbulence',
             self.macro_params | {'nvmax': nvmax}, ploc=True, soln=True
         )
 

@@ -153,6 +153,15 @@ pyfr export
 
           pyfr export stl --eopt=divisor:4 --eopt=subdiv:spherigon mesh.pyfrm solution.pyfrs solution.vtu teapot
 
+   All export commands accept ``--postproc name`` (which may be
+   repeated) to compute and write derived fields such as Mach number,
+   vorticity, and skin friction.  Some plugins read configuration
+   parameters from sections named ``[postproc-plugin-name]``; by
+   default these are read from the solution file's embedded config,
+   but an alternative INI file may be provided via ``--cfg``.  See
+   :doc:`plugins/postproc-plugins` for the list of available plugins
+   and their parameters.
+
    All of the export commands also support a *batch* processing mode
    wherein the list of input solution files and output files are read in
    from disk.  This option is activated by passing ``-`` for the
@@ -519,6 +528,14 @@ Solver Plugins
 
    plugins/solver-plugin-source.rst
    plugins/solver-plugin-turbulence.rst
+
+Post-processing Plugins
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. toctree::
+   :maxdepth: 3
+
+   plugins/postproc-plugins.rst
 
 Triggers
 ^^^^^^^^
