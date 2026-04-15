@@ -307,7 +307,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             extra_cols = []
             for name, arr in adapter.fields.items():
                 fields.extend(pp_field_map[name])
-                extra_cols.append(arr if arr.ndim == 2 else arr[:, None])
+                extra_cols.append(np.atleast_2d(arr.T).T)
             samps = np.concatenate([samps, *extra_cols], axis=1)
 
         if rank == root:

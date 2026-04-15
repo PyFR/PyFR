@@ -396,9 +396,20 @@ class BaseVTKWriter(BaseWriter):
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
     def _build_extra_fields(self):
-        # Classify aux fields by shape
-        etype = self._extra_etype
+        # Only allow post processing of solution files
+        if self._pp_plugin_names and self.dataprefix != 'soln':
+            raise ValueError('Postproc plugins are only supported for '
+                             'solution files')
+
         self._extra_fields = {}
+        self.pp_plugins = []
+
+        # Return empty for idle ranks
+        etype = self._extra_etype
+        if etype is None:
+            return
+
+        # Classify aux fields by shape
         pshapes = self._extra_point_shapes(etype)
         for name, arr in self.soln.aux.get(etype, {}).items():
             shape = arr.shape[1:]
@@ -410,16 +421,10 @@ class BaseVTKWriter(BaseWriter):
                 meta = FieldMeta('cell', int(np.prod(shape)), arr.dtype)
             self._extra_fields[name] = meta
 
-        # Only allow post processing of solution files
-        if self._pp_plugin_names and self.dataprefix != 'soln':
-            raise ValueError('Postproc plugins are only supported for '
-                             'solution files')
-
         # Instantiate postproc plugins and register their output fields
         from pyfr.plugins import get_plugin
 
         cfg = self._pp_cfg or self.cfg
-        self.pp_plugins = []
         for name in self._pp_plugin_names:
             pp = get_plugin('postproc', name, self.ndims, cfg, self.type)
             self.pp_plugins.append(pp)
@@ -550,7 +555,8 @@ class BaseVTKWriter(BaseWriter):
         super()._load_soln(*args, **kwargs)
 
         # Get extra fields from solution data
-        etype = next(k for k in self.soln.data if k in self.mesh.eidxs)
+        etype = next((k for k in self.soln.data if k in self.mesh.eidxs),
+                     None)
         self._extra_etype = etype
 
         # Ensure a divisor has been set

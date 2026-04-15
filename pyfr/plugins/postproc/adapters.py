@@ -35,17 +35,18 @@ class PostProcData:
         cfg = self.cfg
         mu_ref = cfg.getfloat('constants', 'mu')
 
-        if cfg.get('solver', 'viscosity-correction', 'none') != 'sutherland':
+        if cfg.get('solver', 'viscosity-correction', 'none') == 'sutherland':
+            gamma = cfg.getfloat('constants', 'gamma')
+            cpTref = cfg.getfloat('constants', 'cpTref')
+            cpTs = cfg.getfloat('constants', 'cpTs')
+
+            rho, p = self.pris[0], self.pris[-1]
+            cpT = gamma * p / ((gamma - 1) * rho)
+            Trat = cpT / cpTref
+            return (mu_ref * (cpTref + cpTs) * Trat * np.sqrt(Trat)
+                    / (cpT + cpTs))
+        else:
             return mu_ref
-
-        gamma = cfg.getfloat('constants', 'gamma')
-        cpTref = cfg.getfloat('constants', 'cpTref')
-        cpTs = cfg.getfloat('constants', 'cpTs')
-
-        rho, p = self.pris[0], self.pris[-1]
-        cpT = gamma * p / ((gamma - 1) * rho)
-        Trat = cpT / cpTref
-        return mu_ref * (cpTref + cpTs) * Trat * np.sqrt(Trat) / (cpT + cpTs)
 
 
 class BoundaryPostProcData(PostProcData):
