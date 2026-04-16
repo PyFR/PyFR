@@ -76,7 +76,7 @@ class ExplicitPIController(PIControllerMixin, BaseExplicitController):
         self._pi_beta = f('solver-time-integrator', 'pi-beta', 0.42)
 
         # Initialise dt/errprev from restart or defaults
-        if initsoln and (sd := initsoln.state.get('intg/ctrl')):
+        if initsoln and (sd := initsoln.state.get('intg/ctrl')) is not None:
             self.dt, self._errprev = sd
             diff = self.cfg.sect_diff(initsoln.config, 'solver-time-integrator')
             if any(k.startswith(('atol', 'rtol')) for k in diff):
