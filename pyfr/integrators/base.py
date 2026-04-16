@@ -174,7 +174,7 @@ class BaseIntegrator(metaclass=RegisterMeta):
             return
 
         # Restore activation states from checkpoint
-        if initsoln and (sd := initsoln.state.get('plugins/activated')):
+        if initsoln and (sd := initsoln.state.get('plugins/activated')) is not None:
             lookup = {r['name'].decode(): r['active'] for r in sd}
             for p in aplugins:
                 if (v := lookup.get(p.sprefix)) is not None:
