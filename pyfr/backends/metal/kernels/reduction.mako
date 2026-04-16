@@ -19,7 +19,7 @@ reduction(constant ixdtype_t& nrow, constant ixdtype_t& ncolb,
 % if pvars:
     #define VARIDX blockIdx.y
 % for i, name in enumerate(pvars):
-    const fpdtype_t *_pv_${name} = _pv + ${i*ncola};
+    device const fpdtype_t *_pv_${name} = _pv + ${i*ncola};
 % endfor
 % endif
     int tid = threadIdx.x;
