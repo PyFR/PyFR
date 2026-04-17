@@ -103,6 +103,10 @@ class OpenCLBackend(BaseBackend):
         # Bounce buffer for device-to-host transfers
         self._xfer_buf = None
 
+        if cfg.getbool('backend', 'annotate', False):
+            raise ValueError('Annotation is not supported by the '
+                             'OpenCL backend')
+
     def xfer_buf(self, shape, dtype):
         nbytes = np.prod(shape)*np.dtype(dtype).itemsize
 

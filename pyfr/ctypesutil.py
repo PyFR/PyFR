@@ -21,7 +21,7 @@ class LibWrapper:
             fn.restype = fret
             fn.argtypes = fargs
 
-            if fret == self._errtype:
+            if self._statuses is not None and fret == self._errtype:
                 fn.errcheck = self._errcheck
 
             setattr(self, self._transname(fname), fn)

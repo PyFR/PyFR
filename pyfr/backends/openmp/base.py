@@ -59,6 +59,10 @@ class OpenMPBackend(BaseBackend):
         # Pointwise kernels
         self.pointwise = self._providers[0]
 
+        if cfg.getbool('backend', 'annotate', False):
+            raise ValueError('Annotation is not supported by the '
+                             'OpenMP backend')
+
     @property
     def platform_id(self):
         return platform.processor() or 'cpu'

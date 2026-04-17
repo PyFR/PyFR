@@ -302,8 +302,9 @@ class BaseIntegrator(metaclass=RegisterMeta):
         comm, _, _ = get_comm_rank_root()
         tstart = time.perf_counter()
 
-        idxs = self.step(t, dt)
-        self.backend.wait()
+        with self.backend.region('step'):
+            idxs = self.step(t, dt)
+            self.backend.wait()
 
         # Compute the wall time
         wtime = time.perf_counter() - tstart

@@ -422,10 +422,12 @@ class BaseSystem:
             raise ValueError('Invalid register numbers')
 
         self._rhs_uin_fout.add((uinbank, foutbank))
-        self._prepare_kernels(t, uinbank, foutbank)
 
-        for graph in self._rhs_graphs(uinbank, foutbank):
-            self.backend.run_graph(graph)
+        with self.backend.region('rhs'):
+            self._prepare_kernels(t, uinbank, foutbank)
+
+            for graph in self._rhs_graphs(uinbank, foutbank):
+                self.backend.run_graph(graph)
 
     def _preproc_graphs(self, uinbank):
         return ()

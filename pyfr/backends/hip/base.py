@@ -87,6 +87,10 @@ class HIPBackend(BaseBackend):
         # Create a stream to run kernels on
         self._stream = self.hip.create_stream()
 
+        if cfg.getbool('backend', 'annotate', False):
+            from pyfr.backends.hip.roctx import ROCTXAnnotator
+            self._annotator = ROCTXAnnotator()
+
         # Bounce buffer for device-to-host transfers
         self._xfer_buf = None
 
