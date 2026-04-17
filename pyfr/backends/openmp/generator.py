@@ -69,10 +69,9 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         # Identity-initialise broadcast-col reduce outputs
         lines = []
         for va in self._bcol_reduces:
-            ident = self._reduce_ident(va.reduceop)
             n = prod(va.cdims) if va.cdims else 1
-            sz = f'{{0}}*{n}' if n > 1 else '{0}'
-            lines.append(f'for (int _i = 0; _i < {sz}; _i++) '
+            ident = self._reduce_ident(va.reduceop)
+            lines.append(f'for (int _i = 0; _i < BLK_SZ*{n}; _i++) '
                          f'{va.name}_v[_i] = {ident};')
 
         return '\n'.join(lines)
@@ -85,15 +84,13 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
         if rflush:
             rflush_core = (f'for (int _xj = 0; _xj < SOA_SZ; _xj++) '
                            f'{{ {rflush} }}')
-            rflush_clean = (f'for (int _xj = 0; _xj < _nx % BLK_SZ; _xj++) '
+            rflush_clean = (f'for (int _xj = 0; _xj < _xjn; _xj++) '
                             f'{{ {rflush} }}')
         else:
             rflush_core = rflush_clean = ''
 
         # Broadcast-col reduce identity init
         rinit = self._render_bcol_reduce_init()
-        rinit_core = rinit.format('BLK_SZ')
-        rinit_clean = rinit.format('_nx % BLK_SZ')
 
         if self.ndim == 1:
             core = f'''
@@ -107,16 +104,20 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     {rflush_core}
                 }}'''
             clean = f'''
-                int _xi = 0;
-                #pragma omp simd
-                for (int _xj = 0; _xj < _nx % BLK_SZ; _xj++)
+                int _rem = _nx % BLK_SZ;
+                for (int _xi = 0; _xi < _rem; _xi += SOA_SZ)
                 {{
-                    {self.body}
-                }}
-                {rflush_clean}'''
+                    int _xjn = min(SOA_SZ, _rem - _xi);
+                    #pragma omp simd
+                    for (int _xj = 0; _xj < _xjn; _xj++)
+                    {{
+                        {self.body}
+                    }}
+                    {rflush_clean}
+                }}'''
         else:
             core = f'''
-                {rinit_core}
+                {rinit}
                 for (ixdtype_t _y = 0; _y < _ny; _y++)
                 {{
                     for (int _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
@@ -130,15 +131,20 @@ class OpenMPKernelGenerator(BaseKernelGenerator):
                     }}
                 }}'''
             clean = f'''
-                {rinit_clean}
-                for (ixdtype_t _y = 0, _xi = 0; _y < _ny; _y++)
+                {rinit}
+                int _rem = _nx % BLK_SZ;
+                for (ixdtype_t _y = 0; _y < _ny; _y++)
                 {{
-                    #pragma omp simd
-                    for (int _xj = 0; _xj < _nx % BLK_SZ; _xj++)
+                    for (int _xi = 0; _xi < _rem; _xi += SOA_SZ)
                     {{
-                        {self.body}
+                        int _xjn = min(SOA_SZ, _rem - _xi);
+                        #pragma omp simd
+                        for (int _xj = 0; _xj < _xjn; _xj++)
+                        {{
+                            {self.body}
+                        }}
+                        {rflush_clean}
                     }}
-                    {rflush_clean}
                 }}'''
 
         result = f'''
