@@ -86,3 +86,16 @@ functions are available
    .. code-block:: ini
 
        pyfr sampler sample --pts=mypoints.csv mesh.pyfrm soln.pyfrs
+
+   Derived fields can be appended to the output by passing one or more
+   ``--postproc name`` flags (requires ``-f primitive``).  Plugin
+   parameters are read from the solution file's embedded config, or
+   from an alternative INI file supplied via ``--cfg``.  See
+   :doc:`postproc-plugins` for the list of available plugins.
+   Example:
+
+   .. code-block:: ini
+
+       pyfr sampler sample --pts=mypoints.csv -f primitive \
+           --postproc mach --postproc vorticity \
+           mesh.pyfrm soln.pyfrs
