@@ -29,6 +29,9 @@ class OpenMPCompiler:
         # Get the compiler version string
         self.version = call_capture_output([self.cc, '-v'])[1]
 
+        # Auto-detect the architecture-specific tuning flag
+        self.marchflag = self.cc_option(['-march=native', '-mcpu=native'])
+
         # Get the base compiler command string
         self.cmd = self.cc_cmd(None, None)
 
@@ -76,18 +79,42 @@ class OpenMPCompiler:
             '-shared',              # Create a shared library
             '-std=c11',             # Enable C11 support
             '-O3',                  # Optimise
-            '-march=native',        # Use CPU-specific instructions
             '-fopenmp',             # Enable OpenMP support
             '-fPIC',                # Generate position-independent code
             '-o', libname, srcname, # Library and source file names
             '-lm'                   # Link against libm
         ]
 
+        # Use CPU-specific instructions where available
+        if self.marchflag:
+            cmd.append(self.marchflag)
+
         if fast_math:
             cmd.append('-ffast-math')
 
         # Append any user-provided arguments and return
         return cmd + self.cflags
+
+    def cc_option(self, opts):
+        with tempfile.TemporaryDirectory() as tdir:
+            # Write out a dummy C program
+            sp = Path(tdir, 'probe.c')
+            sp.write_text('int main() { return 0; }\n')
+
+            # Base compiler argments
+            args = [self.cc, '-Werror', '-c', str(sp), '-o', os.devnull]
+
+            # Iterate over the provided options
+            for opt in opts:
+                # Attempt to compile the program
+                ret = call_capture_output(args + [opt], error_on_nonzero=False)
+
+                # If status is 0 and stdout/stderr are empty then return
+                if not any(ret):
+                    return opt
+
+        # All options failed
+        return None
 
     def _cache_loadlib(self, ckey):
         if path := self.cache.get_path(platform_libname(ckey)):
