@@ -3,7 +3,7 @@
 
 struct kargs
 {
-    ixdtype_t nrow, nblocks;
+    ixdtype_t nrow, nblocks, narr;
     fpdtype_t *reduced;
     fpdtype_t ${', '.join(f'*{v}' for v in vvars)};
 % if svars:
@@ -13,7 +13,7 @@ struct kargs
 
 void reduction(const struct kargs *restrict args)
 {
-    ixdtype_t nrow = args->nrow, nblocks = args->nblocks;
+    ixdtype_t nrow = args->nrow, nblocks = args->nblocks, narr = args->narr;
     fpdtype_t *reduced = args->reduced;
     fpdtype_t ${', '.join(f'*{v} = args->{v}' for v in vvars)};
 % for i, name in enumerate(pvars):
@@ -23,7 +23,7 @@ void reduction(const struct kargs *restrict args)
     fpdtype_t ${', '.join(f'{s} = args->{s}' for s in svars)};
 % endif
 
-    // Initalise the reduction array
+    // Initialise the reduction array
     fpdtype_t acc[${nexprs}] = ${pyfr.array(str(init_val), i=nexprs)};
 
     #define X_IDX_AOSOA(v, nv) ((_xi/SOA_SZ*(nv) + (v))*SOA_SZ + _xj)
@@ -35,23 +35,53 @@ void reduction(const struct kargs *restrict args)
 % endif
     for (ixdtype_t ib = 0; ib < nblocks; ib++)
     {
-        for (ixdtype_t _y = 0; _y < nrow; _y++)
+        // Full block
+        if (narr - ib*BLK_SZ >= BLK_SZ)
         {
-            for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
+            for (ixdtype_t _y = 0; _y < nrow; _y++)
             {
-                #pragma omp simd
-                for (ixdtype_t _xj = 0; _xj < SOA_SZ; _xj++)
+                for (ixdtype_t _xi = 0; _xi < BLK_SZ; _xi += SOA_SZ)
                 {
-                    for (ixdtype_t _k = 0; _k < ${ncola}; _k++)
+                    #pragma omp simd
+                    for (ixdtype_t _xj = 0; _xj < SOA_SZ; _xj++)
                     {
-                        ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + X_IDX_AOSOA(_k, ${ncola});
-                    % for j, e in enumerate(exprs):
-                        % if rop == 'max':
-                        acc[${j}] = max(acc[${j}], ${e});
-                        % else:
-                        acc[${j}] += ${e};
-                        % endif
-                    % endfor
+                        for (ixdtype_t _k = 0; _k < ${ncola}; _k++)
+                        {
+                            ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + X_IDX_AOSOA(_k, ${ncola});
+                        % for j, e in enumerate(exprs):
+                            % if rop == 'max':
+                            acc[${j}] = max(acc[${j}], ${e});
+                            % else:
+                            acc[${j}] += ${e};
+                            % endif
+                        % endfor
+                        }
+                    }
+                }
+            }
+        }
+        // Partial block
+        else
+        {
+            for (ixdtype_t _y = 0; _y < nrow; _y++)
+            {
+                ixdtype_t rem = narr % BLK_SZ;
+                for (ixdtype_t _xi = 0; _xi < rem; _xi += SOA_SZ)
+                {
+                    #pragma omp simd
+                    for (ixdtype_t _xj = 0; _xj < min(SOA_SZ, rem - _xi); _xj++)
+                    {
+                        for (ixdtype_t _k = 0; _k < ${ncola}; _k++)
+                        {
+                            ixdtype_t idx = (_y + ib*nrow)*BLK_SZ*${ncola} + X_IDX_AOSOA(_k, ${ncola});
+                        % for j, e in enumerate(exprs):
+                            % if rop == 'max':
+                            acc[${j}] = max(acc[${j}], ${e});
+                            % else:
+                            acc[${j}] += ${e};
+                            % endif
+                        % endfor
+                        }
                     }
                 }
             }
