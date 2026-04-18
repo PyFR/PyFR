@@ -113,7 +113,7 @@ Python dependencies.
 Dependencies
 ------------
 
-PyFR |release| has a hard dependency on Python 3.11+ and the following
+PyFR |release| has a hard dependency on Python 3.12+ and the following
 Python packages:
 
 #. `gimmik <https://github.com/PyFR/GiMMiK>`_ >= 3.2.1
