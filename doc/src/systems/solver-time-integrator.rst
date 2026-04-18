@@ -188,7 +188,7 @@ Scheme Selection
 
 #. ``scheme`` --- implicit time-integration scheme
 
-    ``euler`` | ``trapezium`` | ``trbdf2`` | ``kvaerno43`` | ``esdirk32a``
+    ``euler`` | ``trapezium`` | ``trbdf2`` | ``kvaerno43``
 
     where
 
@@ -197,12 +197,9 @@ Scheme Selection
     - ``trbdf2`` --- second-order TR-BDF2 (L-stable)
     - ``kvaerno43`` --- third-order ESDIRK with embedded second-order
       error estimator (L-stable)
-    - ``esdirk32a`` --- third-order ESDIRK with embedded second-order
-      error estimator (L-stable)
 
-    Schemes with embedded error estimators (``kvaerno43``,
-    ``esdirk32a``) are required for adaptive time-stepping with the
-    ``pi`` controller.
+    Schemes with embedded error estimators (i.e., ``kvaerno43``) are
+    required for adaptive time-stepping with the ``pi`` controller.
 
 Controller Selection
 --------------------

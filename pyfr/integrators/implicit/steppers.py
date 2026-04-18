@@ -172,14 +172,13 @@ class TRBDF2Stepper(BaseSDIRKStepper):
     stepper_name = 'trbdf2'
     stepper_order = 2
 
-    _gamma = 2 - 2**0.5
-    _d = _gamma / 2
+    _gamma = 1 - 2**-0.5
     _w = 2**0.5 / 4
 
     A = [[0, 0, 0],
-         [_d, _d, 0],
-         [_w, _w, _d]]
-    b = [_w, _w, _d]
+         [_gamma, _gamma, 0],
+         [_w, _w, _gamma]]
+    b = [_w, _w, _gamma]
 
 
 class Kvaerno43Stepper(BaseSDIRKStepper):
@@ -196,19 +195,3 @@ class Kvaerno43Stepper(BaseSDIRKStepper):
 
     # 2nd order embedded method for error estimation
     bhat = [0.490563388419108, 0.073570090080892, _gamma, 0]
-
-
-class ESDIRK32aStepper(BaseSDIRKStepper):
-    stepper_name = 'esdirk32a'
-    stepper_order = 3
-
-    _gamma = 0.4358665215084590
-
-    A = [[0, 0, 0, 0],
-         [_gamma, _gamma, 0, 0],
-         [0.1406888706327204, 0.5986277712457818, _gamma, 0],
-         [0.1023994984498115, 0.3694244393719295, 0.0923096091397000, _gamma]]
-
-    b = A[-1]
-    bhat = [0.1571093680257579, 0.3413898519498105, 0.0657341406893316,
-            0.4357666393351000]
