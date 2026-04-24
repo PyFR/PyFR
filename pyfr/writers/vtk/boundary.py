@@ -1,10 +1,9 @@
 from collections import defaultdict, namedtuple
-import re
 
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.plugins.postproc.adapters import BoundaryPostProcData, PostProcData
+from pyfr.plugins.postproc.adapters import BoundaryPostProcData
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
 from pyfr.util import first, subclass_where
@@ -34,14 +33,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
-
-        # Split pp plugins: volume-capable vs. boundary-only
-        self._volume_pp, self._boundary_pp = [], []
-        for p in self.pp_plugins:
-            if re.fullmatch(p.export_types, 'volume'):
-                self._volume_pp.append(p)
-            else:
-                self._boundary_pp.append(p)
 
         ecount = defaultdict(int)
 
@@ -186,18 +177,12 @@ class VTKBoundaryWriter(BaseVTKWriter):
             soln_t = face_vsoln.transpose(1, 0, 2)
             ploc = face_vpts.transpose(2, 0, 1)
 
-            # Volume-capable pp on the face-interpolated data
-            vadapter = PostProcData(self.cfg, self.soln, soln_t, ploc)
-            for pp in self._volume_pp:
-                pp.run(vadapter)
+            adapter = BoundaryPostProcData(self.cfg, self.soln, soln_t, ploc,
+                                           self.elementscls, spts, finfo)
+            for pp in self.pp_plugins:
+                pp.run(adapter)
 
-            # Boundary-only pp (face-specific)
-            badapter = BoundaryPostProcData(self.cfg, self.soln, soln_t, ploc,
-                                            self.elementscls, spts, finfo)
-            for pp in self._boundary_pp:
-                pp.run(badapter)
-
-            for fname, arr in (vadapter.fields | badapter.fields).items():
+            for fname, arr in adapter.fields.items():
                 pointf[fname].append(arr)
 
         # Concatenate extra fields
