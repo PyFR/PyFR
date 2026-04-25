@@ -13,9 +13,9 @@ class CpPostProc(BasePostProcPlugin):
     def _process(self, data):
         p = data.pris[-1]
 
-        rho_inf = self.cfg.getfloat(self.cfgsect, 'rho-inf')
-        u_inf = self.cfg.getfloat(self.cfgsect, 'u-inf')
-        p_inf = self.cfg.getfloat(self.cfgsect, 'p-inf')
+        rho_inf = self.cfg.getfloat('constants', 'rho-inf')
+        u_inf = self.cfg.getfloat('constants', 'u-inf')
+        p_inf = self.cfg.getfloat('constants', 'p-inf')
 
         q_inf = 0.5 * rho_inf * u_inf**2
 

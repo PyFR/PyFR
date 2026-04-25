@@ -16,7 +16,7 @@ class IsentropicMachPostProc(BasePostProcPlugin):
         p = data.pris[-1]
 
         gamma = self.cfg.getfloat('constants', 'gamma')
-        p_t = self.cfg.getfloat(self.cfgsect, 'p-total')
+        p_t = self.cfg.getfloat('constants', 'p-total')
 
         gm1 = gamma - 1
         data.fields['isen-mach'] = np.sqrt(2/gm1*((p_t/p)**(gm1/gamma) - 1))

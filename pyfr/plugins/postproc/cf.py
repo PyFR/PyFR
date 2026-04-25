@@ -12,8 +12,8 @@ class CfPostProc(BasePostProcPlugin):
         return {'cf': ['Cf']}
 
     def _process(self, data):
-        rho_inf = self.cfg.getfloat(self.cfgsect, 'rho-inf')
-        u_inf = self.cfg.getfloat(self.cfgsect, 'u-inf')
+        rho_inf = self.cfg.getfloat('constants', 'rho-inf')
+        u_inf = self.cfg.getfloat('constants', 'u-inf')
 
         q_inf = 0.5 * rho_inf * u_inf**2
 

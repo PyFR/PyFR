@@ -7,10 +7,9 @@ and write them to the output VTK file as additional point data.
 Plugins are activated with the ``--postproc name`` flag, which may be
 repeated to apply multiple plugins.
 
-Plugins that require parameters read them from sections named
-``[postproc-plugin-name]``.  By default these are read from the
-solution file's embedded config; an alternative INI file may be
-provided via ``--cfg``.
+Plugin inputs are read from either the ``[constants]`` section or a
+``[postproc-plugin-name]`` section of the solution config (or a
+``--cfg`` override).
 
 Example:
 
@@ -24,61 +23,40 @@ Plugins that require gradient data only work with solution files that
 were written with ``write-gradients = true`` in the
 ``[soln-plugin-writer]`` section.
 
-[postproc-plugin-mach]
-======================
+mach
+====
 
 Mach number for compressible Euler and Navier-Stokes systems.  No
 parameters required.
 
-[postproc-plugin-isen-mach]
-===========================
+isen-mach
+=========
 
-Isentropic Mach number assuming a known total pressure.
+Isentropic Mach number assuming a known total pressure.  Reads
+``p-total`` from ``[constants]``.
 
-#. ``p-total`` --- total (stagnation) pressure:
-
-    *float*
-
-[postproc-plugin-cp]
-====================
+cp
+==
 
 Pressure coefficient :math:`(p - p_\infty) / (\frac{1}{2}\rho_\infty
-u_\infty^2)`.
+u_\infty^2)`.  Reads ``rho-inf``, ``u-inf``, ``p-inf`` from
+``[constants]``.
 
-#. ``rho-inf`` --- freestream density:
-
-    *float*
-
-#. ``u-inf`` --- freestream velocity magnitude:
-
-    *float*
-
-#. ``p-inf`` --- freestream static pressure:
-
-    *float*
-
-[postproc-plugin-cf]
-====================
+cf
+==
 
 Skin friction coefficient :math:`\tau_w / (\frac{1}{2}\rho_\infty
-u_\infty^2)`.  Boundary export only.  Requires gradient data.
+u_\infty^2)`.  Boundary export only.  Requires gradient data.  Reads
+``rho-inf`` and ``u-inf`` from ``[constants]``.
 
-#. ``rho-inf`` --- freestream density:
-
-    *float*
-
-#. ``u-inf`` --- freestream velocity magnitude:
-
-    *float*
-
-[postproc-plugin-vorticity]
-===========================
+vorticity
+=========
 
 Vorticity vector (3D) or scalar (2D).  Requires gradient data.  No
 parameters required.
 
-[postproc-plugin-yplus]
-=======================
+yplus
+=====
 
 Wall :math:`y^+` based on the distance from the wall to the nearest
 interior solution point.  Boundary export only.  Requires gradient
