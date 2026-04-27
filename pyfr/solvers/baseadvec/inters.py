@@ -1,4 +1,5 @@
 import itertools as it
+import numpy as np
 import math
 
 from pyfr.nputil import npeval
@@ -131,10 +132,12 @@ class BaseAdvectionBCInters(BaseInters):
 
         if (any('ploc' in ex for ex in exprs.values()) and
             'ploc' not in self._external_args):
-            etype, fidx, _ = next(lhs.items())
-            basis = self.elemap[etype].basis
-            spec = f'in fpdtype_t[{basis.nfacefpts[fidx]}][{self.ndims}]'
-            value = self._ewise_const_mat(lhs, 'get_ploc_for_facefpts')
+            etype, fidx, eidxs = next(lhs.items())
+            ele = self.elemap[etype]
+            fpts_idx = ele.basis.facefpts[fidx]
+            spec = f'in fpdtype_t[{len(fpts_idx)}][{self.ndims}]'
+            ploc = ele.plocfpts[np.ix_(fpts_idx, eidxs)]
+            value = self._be.const_matrix(ploc.transpose(0, 2, 1))
 
             ex_args['ploc'] = spec
             ex_vals['ploc'] = value

@@ -454,16 +454,6 @@ class BaseElements:
         return (np.full(n, self._grad_upts.mid),
                 np.zeros(n, dtype=int), eidxs, np.ones(n, dtype=int))
 
-    def _get_jacs_facefpts(self, eidx, fidx):
-        fpts_idx = self.basis.facefpts[fidx]
-        jacs = 1.0 / self.rcpdjac_at_np('fpts')[fpts_idx, eidx]
-        return jacs
-
-    def _get_smats_upts(self, eidx, _):
-        smats = self.smat_at_np('upts')[:, :, :, eidx].swapaxes(0, 1)
-        smats = np.reshape(smats, (smats.shape[0],-1))
-        return smats
-
     def get_pnorms(self, eidx, fidx):
         fpts_idx = self.basis.facefpts[fidx]
         return self._pnorm_fpts[fpts_idx, eidx]
@@ -493,6 +483,3 @@ class BaseElements:
         ploc = self.plocfpts[fpts_idx, eidxs[:, None]]
         return ploc.reshape(-1, self.ndims),
 
-    def get_ploc_for_facefpts(self, eidx, fidx):
-        fpts_idx = self.basis.facefpts[fidx]
-        return self.plocfpts[fpts_idx, eidx]

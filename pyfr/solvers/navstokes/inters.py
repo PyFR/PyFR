@@ -1,12 +1,12 @@
+from collections import defaultdict
+
 import numpy as np
 
+from pyfr.readers.native import Connectivity
 from pyfr.solvers.baseadvecdiff import (BaseAdvectionDiffusionBCInters,
                                         BaseAdvectionDiffusionIntInters,
                                         BaseAdvectionDiffusionMPIInters)
 from pyfr.solvers.euler.inters import MassFlowBCMixin, PressureBCMixin
-from pyfr.readers.native import Connectivity
-from pyfr.util import first
-from collections import defaultdict
 
 
 class TplargsMixin:
@@ -27,130 +27,6 @@ class TplargsMixin:
                              rsolver=rsolver, visc_corr=visc_corr,
                              shock_capturing=shock_capturing, c=self.c,
                              p_min=self.p_min)
-
-class NSCBCMixin:
-
-    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
-        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
-
-        system = self.__class__.__module__.split('.')[2]
-        kname = f'pyfr.solvers.{system}.kernels.bccflux_nscbc'
-        self._be.pointwise.register(kname)
-
-        self._tplargs_efp = defaultdict(dict)
-        self._external_args_efp = defaultdict(dict)
-        self._external_vals_efp = defaultdict(dict)
-
-        self._scal_upts = defaultdict(dict)
-        self._scal_fpts = defaultdict(dict)
-        self._grad_upts = defaultdict(dict)
-        self._smats_upts = defaultdict(dict)
-        self._jacs_facefpts = defaultdict(dict)
-
-        # lhs length
-        self._dim_lhs = defaultdict(dict)
-
-        # Register NSCBC kernel under a different name so it can be scheduled after other BCs
-        self.kernels['nscbc_flux'] = lambda: self.gen_nscbc_kerns()
-
-        # Create sub-Connectivity for each element-face pair
-        self.ef_pairs = []
-        self._lhs_efp = defaultdict(dict)
-        for etype, fidx, eidxs in lhs.items():
-            self.ef_pairs.append((etype, fidx))
-            # Build a sub-Connectivity for this element-face pair
-            cidx = next(c for c, (et, fi) in lhs.cidxmap.items()
-                        if et == etype and fi == fidx)
-            mask = lhs.cidxs == cidx
-            self._lhs_efp[etype][fidx] = Connectivity(
-                lhs.cidxs[mask], lhs.eidxs[mask], lhs.cidxmap
-            )
-
-        for etype, fidx in self.ef_pairs:
-            lhs_efp = self._lhs_efp[etype][fidx]
-            self._dim_lhs[etype][fidx] = len(lhs_efp)
-
-            # Store tplargs for this element-face pair
-            self._tplargs_efp[etype][fidx] = self._tplargs.copy()
-            self._external_args_efp[etype][fidx] = self._external_args.copy()
-            self._external_vals_efp[etype][fidx] = self._external_vals.copy()
-
-            # Basis in regular orientation
-            ele = self.elemap[etype]
-            basis = ele.basis
-            nupts = basis.nupts
-            nfpts = basis.nfpts
-            nfacefpts = basis.nfacefpts[fidx]
-            ndims = self.ndims
-            facefpts = basis.facefpts[fidx]
-            nintfpts = nfpts - nfacefpts
-            fptidx = [i for j in basis.facefpts for i in j]
-            intfpts = [i for i in fptidx if i not in facefpts]
-
-            tplargs_efp = self._tplargs_efp[etype][fidx]
-
-            tplargs_efp['nupts'] = nupts
-            tplargs_efp['nfpts'] = nfpts
-            tplargs_efp['nfacefpts'] = nfacefpts
-            tplargs_efp['nintfacefpts'] = nintfpts
-            tplargs_efp['facefpts'] = facefpts
-            tplargs_efp['fptidx'] = fptidx
-            tplargs_efp['intfpts'] = intfpts
-
-            tplargs_efp['m0'] = basis.m0[facefpts]
-            tplargs_efp['m2'] = basis.m2.reshape(nfpts, ndims, nupts)
-            tplargs_efp['m12'] = basis.m12[facefpts]
-
-            # Reference normal directions for computing physical normals
-            magnl = np.linalg.norm(basis.norm_fpts, axis=-1)
-            norms = basis.norm_fpts[facefpts] / magnl[facefpts, None]
-            if '-in-' in self.type:
-                norms = -norms
-            tplargs_efp['norm_ref'] = norms
-
-            # Correction function matrices for FR inversion
-            # m11[i,j] is the divergence of correction function j at flux point i
-            GB = basis.m11[np.ix_(facefpts, facefpts)]
-            GI = basis.m11[np.ix_(facefpts, intfpts)]
-            GB_inv = np.linalg.inv(GB)
-            tplargs_efp['GB_inv'] = GB_inv
-            tplargs_efp['GB_inv_GI'] = GB_inv @ GI
-
-            # Form of characteristic decomposition
-            tplargs_efp['decomp_type'] = self.decomp_type
-
-            scal_upts = self._scal_upts_view(lhs_efp, '_get_scal_upts_cpy_ewise')
-            self._scal_upts[etype][fidx] = scal_upts
-
-            scal_fpts = self._scal_fpts_view(lhs_efp, '_get_scal_fpts_ewise')
-            self._scal_fpts[etype][fidx] = scal_fpts
-
-            grad_upts = self._grad_upts_view(lhs_efp, '_get_grad_upts_ewise')
-            self._grad_upts[etype][fidx] = grad_upts
-
-            smats_upts = self._ewise_const_mat(lhs_efp, '_get_smats_upts')
-            self._smats_upts[etype][fidx] = smats_upts
-
-            jacs_facefpts = self._ewise_const_mat(lhs_efp, '_get_jacs_facefpts')
-            self._jacs_facefpts[etype][fidx] = jacs_facefpts
-
-    def gen_nscbc_kerns(self):
-        kerns = []
-        for etype, fidx in self.ef_pairs:
-            kerns.append(self._be.kernel(
-                'bccflux_nscbc',
-                tplargs=self._tplargs_efp[etype][fidx],
-                dims=[self._dim_lhs[etype][fidx]],
-                extrns=self._external_args_efp[etype][fidx],
-                u_upts=self._scal_upts[etype][fidx],
-                u_fpts=self._scal_fpts[etype][fidx],
-                gradu_upts=self._grad_upts[etype][fidx],
-                smats_upts=self._smats_upts[etype][fidx],
-                jacs_ffpts=self._jacs_facefpts[etype][fidx],
-                **self._external_vals_efp[etype][fidx]))
-
-        return self._be.unordered_meta_kernel(kerns)
-
 
 class NavierStokesIntInters(TplargsMixin,
                             BaseAdvectionDiffusionIntInters):
@@ -204,20 +80,20 @@ class NavierStokesBaseBCInters(TplargsMixin, BaseAdvectionDiffusionBCInters):
         self._tplargs['bccfluxstate'] = self.cflux_state
 
         self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bcconu')
+        self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
+
         self.kernels['con_u'] = lambda: self._be.kernel(
             'bcconu', tplargs=self._tplargs, dims=[self.ninterfpts],
             extrns=self._external_args, ulin=self.scal_lhs,
             ulout=self._comm_lhs, nlin=self._pnorm_lhs,
             **self._external_vals
         )
-        if 'nscbc' not in self.type:
-            self._be.pointwise.register('pyfr.solvers.navstokes.kernels.bccflux')
-            self.kernels['comm_flux'] = lambda: self._be.kernel(
-                'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
-                extrns=self._external_args, ul=self.scal_lhs,
-                gradul=self._vect_lhs, nl=self._pnorm_lhs,
-                artvisc=self.artvisc, **self._external_vals
-            )
+        self.kernels['comm_flux'] = lambda: self._be.kernel(
+            'bccflux', tplargs=self._tplargs, dims=[self.ninterfpts],
+            extrns=self._external_args, ul=self.scal_lhs,
+            gradul=self._vect_lhs, nl=self._pnorm_lhs,
+            artvisc=self.artvisc, **self._external_vals
+        )
 
     def comm_entropy_kernel(self, entmin_lhs):
         # Physics-specific callback for entropy filtering
@@ -343,6 +219,116 @@ class NavierStokesCharRiemInvPressureBCInters(PressureBCMixin,
                                               NavierStokesBaseBCInters):
     type = 'char-riem-inv-pressure'
     cflux_state = 'ghost'
+
+
+class NSCBCMixin:
+    _nscbc_kern = 'pyfr.solvers.navstokes.kernels.bccflux_nscbc'
+
+    def __init__(self, be, lhs, elemap, cfgsect, cfg, bccomm):
+        super().__init__(be, lhs, elemap, cfgsect, cfg, bccomm)
+
+        # NSCBC replaces the standard comm_flux with nscbc_flux
+        self.kernels.pop('comm_flux', None)
+        self._be.pointwise.register(self._nscbc_kern)
+
+        self._tplargs_efp = defaultdict(dict)
+        self._external_args_efp = defaultdict(dict)
+        self._external_vals_efp = defaultdict(dict)
+        self._scal_upts = defaultdict(dict)
+        self._scal_fpts = defaultdict(dict)
+        self._grad_upts = defaultdict(dict)
+        self._smats_upts = defaultdict(dict)
+        self._jacs_facefpts = defaultdict(dict)
+        self._dim_lhs = defaultdict(dict)
+
+        # Register NSCBC kernel under a different name so it can be scheduled after other BCs
+        self.kernels['nscbc_flux'] = lambda: self.gen_nscbc_kerns()
+
+        # Create sub-Connectivity for each element-face pair
+        self.ef_pairs = []
+        self._lhs_efp = defaultdict(dict)
+        for etype, fidx, eidxs in lhs.items():
+            self.ef_pairs.append((etype, fidx))
+            cidx = next(c for c, (et, fi) in lhs.cidxmap.items()
+                        if et == etype and fi == fidx)
+            mask = lhs.cidxs == cidx
+            self._lhs_efp[etype][fidx] = Connectivity(
+                lhs.cidxs[mask], lhs.eidxs[mask], lhs.cidxmap
+            )
+
+        for etype, fidx in self.ef_pairs:
+            lhs_efp = self._lhs_efp[etype][fidx]
+            self._dim_lhs[etype][fidx] = len(lhs_efp)
+
+            self._external_args_efp[etype][fidx] = self._external_args.copy()
+            self._external_vals_efp[etype][fidx] = self._external_vals.copy()
+
+            ele = self.elemap[etype]
+            basis = ele.basis
+            nupts = basis.nupts
+            nfpts = basis.nfpts
+            nfacefpts = basis.nfacefpts[fidx]
+            ndims = self.ndims
+            facefpts = basis.facefpts[fidx]
+            fptidx = [i for j in basis.facefpts for i in j]
+            intfpts = [i for i in fptidx if i not in facefpts]
+
+            # Reference normal directions for computing physical normals
+            magnl = np.linalg.norm(basis.norm_fpts, axis=-1)
+            norms = basis.norm_fpts[facefpts] / magnl[facefpts, None]
+            if '-in-' in self.type:
+                norms = -norms
+
+            # Correction function matrices for FR inversion
+            # m11[i,j] is the divergence of correction function j at flux point i
+            GB = basis.m11[np.ix_(facefpts, facefpts)]
+            GI = basis.m11[np.ix_(facefpts, intfpts)]
+            GB_inv = np.linalg.inv(GB)
+
+            self._tplargs_efp[etype][fidx] = self._tplargs | dict(
+                nupts=nupts, nfpts=nfpts, nfacefpts=nfacefpts,
+                nintfacefpts=nfpts - nfacefpts, facefpts=facefpts,
+                fptidx=fptidx, intfpts=intfpts,
+                m0=basis.m0[facefpts],
+                m2=basis.m2.reshape(nfpts, ndims, nupts),
+                m12=basis.m12[facefpts], norm_ref=norms,
+                GB_inv=GB_inv, GB_inv_GI=GB_inv @ GI,
+                decomp_type=self.decomp_type,
+            )
+
+            self._scal_upts[etype][fidx] = self._scal_upts_view(
+                lhs_efp, '_get_scal_upts_cpy_ewise')
+            self._scal_fpts[etype][fidx] = self._scal_fpts_view(
+                lhs_efp, '_get_scal_fpts_ewise')
+            self._grad_upts[etype][fidx] = self._grad_upts_view(
+                lhs_efp, '_get_grad_upts_ewise')
+
+            # Collect smats at upts: (ndims, nupts, ndims, neles) -> (nupts, ndims*ndims, neles_efp)
+            _, _, eidxs_efp = next(lhs_efp.items())
+            smats = ele.smat_at_np('upts')[:, :, :, eidxs_efp]
+            smats = smats.transpose(1, 0, 2, 3).reshape(nupts, ndims*ndims, -1)
+            self._smats_upts[etype][fidx] = self._be.const_matrix(smats)
+
+            # Collect jacs at face fpts: (nfacefpts, neles_efp)
+            jacs = 1.0 / ele.rcpdjac_at_np('fpts')[facefpts][:, eidxs_efp]
+            self._jacs_facefpts[etype][fidx] = self._be.const_matrix(jacs)
+
+    def gen_nscbc_kerns(self):
+        kerns = []
+        for etype, fidx in self.ef_pairs:
+            kerns.append(self._be.kernel(
+                'bccflux_nscbc',
+                tplargs=self._tplargs_efp[etype][fidx],
+                dims=[self._dim_lhs[etype][fidx]],
+                extrns=self._external_args_efp[etype][fidx],
+                u_upts=self._scal_upts[etype][fidx],
+                u_fpts=self._scal_fpts[etype][fidx],
+                gradu_upts=self._grad_upts[etype][fidx],
+                smats_upts=self._smats_upts[etype][fidx],
+                jacs_ffpts=self._jacs_facefpts[etype][fidx],
+                **self._external_vals_efp[etype][fidx]))
+
+        return self._be.unordered_meta_kernel(kerns)
 
 
 class NSCBCSubOutFpBCInters(NSCBCMixin, NavierStokesBaseBCInters):

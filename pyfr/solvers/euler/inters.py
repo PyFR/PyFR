@@ -1,3 +1,5 @@
+import numpy as np
+
 from pyfr.mpiutil import mpi, scal_coll
 from pyfr.quadrules.surface import SurfaceIntegrator
 from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
@@ -5,8 +7,6 @@ from pyfr.solvers.baseadvec import (BaseAdvectionIntInters,
                                     BaseAdvectionBCInters)
 from pyfr.util import first
 from pyfr.writers.csv import CSVStream
-
-import numpy as np
 
 
 class TplargsMixin:
