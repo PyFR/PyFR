@@ -3,14 +3,6 @@ import numpy as np
 from pyfr.util import first
 
 
-def _get_inter_objs(interside, meth, elemap):
-    objs = []
-    for etype, fidx, eidxs in interside.items():
-        for eidx in eidxs:
-            objs.append(getattr(elemap[etype], meth)(eidx, fidx))
-    return objs
-
-
 def _get_inter_arrays_ewise(interside, meth, elemap):
     parts = []
 
@@ -81,14 +73,6 @@ class BaseInters:
 
         return self._be.const_matrix(np.atleast_2d(m.T))
 
-    def _ewise_const_mat(self, inter, meth):
-        m = _get_inter_objs(inter, meth, self.elemap)
-
-        # Swizzle the dimensions
-        m = np.array(m)
-        m = np.moveaxis(m, 0, -1)
-
-        return self._be.const_matrix(m)
 
     def _get_perm_for_view(self, inter, meth):
         vm = _get_inter_arrays(inter, meth, self.elemap)
