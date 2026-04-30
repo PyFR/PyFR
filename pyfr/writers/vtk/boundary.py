@@ -176,7 +176,7 @@ class VTKBoundaryWriter(BaseVTKWriter):
             soln_t = face_vsoln.transpose(1, 0, 2)
             ploc = face_vpts.transpose(2, 0, 1)
 
-            adapter = BoundaryPostProcData(self.cfg, self.soln, soln_t, ploc,
+            adapter = BoundaryPostProcData(self.soln, soln_t, ploc,
                                            self.elementscls, spts, finfo)
             for pp in self.pp_plugins:
                 pp.run(adapter)

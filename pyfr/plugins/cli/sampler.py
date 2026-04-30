@@ -297,7 +297,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
         # Run postproc plugins at the sampled points (primitive only)
         if rank == root:
-            adapter = PostProcData(soln.config, soln, samps.T, pts.T)
+            adapter = PostProcData(soln, samps.T, pts.T)
             pp_field_map = {}
             for pp in pp_plugins:
                 pp.run(adapter)

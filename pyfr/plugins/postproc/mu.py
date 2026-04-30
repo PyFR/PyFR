@@ -13,7 +13,7 @@ class MuPostProc(BasePostProcPlugin):
         return {}
 
     def _process(self, data):
-        cfg = data.cfg
+        cfg = data.soln.config
         mu_ref = cfg.getfloat('constants', 'mu')
 
         if cfg.get('solver', 'viscosity-correction', 'none') == 'sutherland':

@@ -7,8 +7,7 @@ from pyfr.util import subclass_where
 
 
 class PostProcData:
-    def __init__(self, cfg, soln, pris, ploc):
-        self.cfg = cfg
+    def __init__(self, soln, pris, ploc):
         self.soln = soln
         self.nvars = len(soln.fields)
         self.ndims = len(ploc)
@@ -30,8 +29,8 @@ class PostProcData:
 
 
 class BoundaryPostProcData(PostProcData):
-    def __init__(self, cfg, soln, pris, ploc, elementscls, spts, finfo):
-        super().__init__(cfg, soln, pris, ploc)
+    def __init__(self, soln, pris, ploc, elementscls, spts, finfo):
+        super().__init__(soln, pris, ploc)
 
         self._elementscls = elementscls
         self._spts = spts
@@ -40,12 +39,13 @@ class BoundaryPostProcData(PostProcData):
     @cached_property
     def _shape(self):
         return subclass_where(BaseShape, name=self._finfo.etype)(
-            len(self._spts), self.cfg
+            len(self._spts), self.soln.config
         )
 
     @cached_property
     def _eles(self):
-        return self._elementscls(type(self._shape), self._spts, self.cfg)
+        return self._elementscls(type(self._shape), self._spts,
+                                 self.soln.config)
 
     @cached_property
     def pnorm(self):

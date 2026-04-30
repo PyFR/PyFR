@@ -178,7 +178,7 @@ class VTKSTLWriter(BaseVTKWriter):
             svars = self._pre_proc_fields(samps[:nsoln].astype(self.dtype))
 
             # Run postproc plugins at welded sample points
-            adapter = PostProcData(self.cfg, self.soln, svars, spts.T)
+            adapter = PostProcData(self.soln, svars, spts.T)
             for pp in self.pp_plugins:
                 pp.run(adapter)
 
