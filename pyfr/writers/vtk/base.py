@@ -425,7 +425,7 @@ class BaseVTKWriter(BaseWriter):
         self.pp_plugins = get_pp_plugins(self._pp_plugin_names,
                                          self.ndims, cfg, self.type)
         for pp in self.pp_plugins:
-            for fname, varnames in pp.fields().items():
+            for fname, varnames in pp.fields.items():
                 meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
                 self._extra_fields[fname] = meta
 

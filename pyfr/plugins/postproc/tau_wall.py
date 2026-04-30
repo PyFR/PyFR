@@ -11,9 +11,6 @@ class TauWallPostProc(BasePostProcPlugin):
     needs_grads = True
     deps = ['_mu']
 
-    def fields(self):
-        return {}
-
     def _process(self, data):
         normals = data.normals
         mu = data.fields['_mu']

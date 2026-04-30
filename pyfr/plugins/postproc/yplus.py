@@ -9,9 +9,7 @@ class YPlusPostProc(BasePostProcPlugin):
     dimensions = '3'
     export_types = 'boundary'
     deps = ['_tau_wall', '_mu']
-
-    def fields(self):
-        return {'yplus': ['y+']}
+    fields = {'yplus': ['y+']}
 
     def _process(self, data):
         rho_wall = data.pris[0]

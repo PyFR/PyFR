@@ -7,9 +7,7 @@ class CfPostProc(BasePostProcPlugin):
     dimensions = '3'
     export_types = 'boundary'
     deps = ['_tau_wall']
-
-    def fields(self):
-        return {'cf': ['Cf']}
+    fields = {'cf': ['Cf']}
 
     def _process(self, data):
         rho_inf = self.cfg.getfloat('constants', 'rho-inf')

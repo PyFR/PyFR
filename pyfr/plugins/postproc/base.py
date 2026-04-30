@@ -10,6 +10,7 @@ class BasePostProcPlugin(BasePlugin):
     export_types = None
     needs_grads = False
     deps = []
+    fields = {}
 
     def __init__(self, ndims, cfg, export_type=None):
         cfgsect = f'postproc-plugin-{self.name}'
@@ -19,9 +20,6 @@ class BasePostProcPlugin(BasePlugin):
             if not re.fullmatch(self.export_types, export_type):
                 raise RuntimeError(f'Postproc {self.name} does not support '
                                    f'{export_type} export')
-
-    def fields(self):
-        return {}
 
     def run(self, data):
         if self.needs_grads and not data.has_grads:

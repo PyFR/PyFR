@@ -10,6 +10,7 @@ class VorticityPostProc(BasePostProcPlugin):
     export_types = '.*'
     needs_grads = True
 
+    @property
     def fields(self):
         if self.ndims == 3:
             return {'vorticity': ['omega_x', 'omega_y', 'omega_z']}

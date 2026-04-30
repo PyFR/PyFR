@@ -8,9 +8,7 @@ class MachPostProc(BasePostProcPlugin):
     systems = 'euler|navier-stokes'
     dimensions = '2|3'
     export_types = '.*'
-
-    def fields(self):
-        return {'mach': ['Ma']}
+    fields = {'mach': ['Ma']}
 
     def _process(self, data):
         rho, *vs, p = data.pris

@@ -301,7 +301,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             pp_field_map = {}
             for pp in pp_plugins:
                 pp.run(adapter)
-                pp_field_map.update(pp.fields())
+                pp_field_map.update(pp.fields)
 
             extra_cols = []
             for name, arr in adapter.fields.items():

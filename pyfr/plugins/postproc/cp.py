@@ -6,9 +6,7 @@ class CpPostProc(BasePostProcPlugin):
     systems = 'euler|navier-stokes'
     dimensions = '2|3'
     export_types = '.*'
-
-    def fields(self):
-        return {'cp': ['Cp']}
+    fields = {'cp': ['Cp']}
 
     def _process(self, data):
         p = data.pris[-1]
