@@ -731,7 +731,7 @@ class NIRFPlugin(BaseSolverPlugin):
         ('tode_last', 'f8')
     ])
 
-    def setup(self, sdata, serialiser):
+    def setup(self, sdata, prevcfg, serialiser):
         if sdata is not None:
             ndims = self.ndims
             self._floc = np.array(sdata['loc'])[:ndims].copy()
