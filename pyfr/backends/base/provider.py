@@ -40,6 +40,7 @@ class BaseMetaKernel(Kernel):
         if bkerns:
             self._bkerns = bkerns
             self.bind = self._bind
+            self.rtnames = tuple({n for k in bkerns for n in k.rtnames})
 
     def _bind(self, **kwargs):
         for k in self._bkerns:
