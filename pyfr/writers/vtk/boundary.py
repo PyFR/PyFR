@@ -26,12 +26,12 @@ class VTKBoundaryWriter(BaseVTKWriter):
         super().__init__(meshf, **kwargs)
 
         self.boundaries = boundaries
-        self._surface_info = defaultdict(list)
 
         if self.ndims != 3:
             raise RuntimeError('Boundary export only supported for 3D grids')
 
     def _load_soln(self, *args, **kwargs):
+        self._surface_info = defaultdict(list)
         super()._load_soln(*args, **kwargs)
 
         ecount = defaultdict(int)
