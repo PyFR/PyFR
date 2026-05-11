@@ -140,7 +140,8 @@ class NativeWriter:
         comm, _, _ = get_comm_rank_root()
 
         # Merge aux_fields across ranks
-        aux_fields = {k: v for a in comm.allgather(aux_fields or {})
+        aux_fields = {k: v
+                      for a in comm.allgather(aux_fields or {})
                       for k, v in a.items()}
 
         # Prepare the element information
