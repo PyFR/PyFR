@@ -118,8 +118,8 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
     def _itype_point_shapes(self, itype):
         shapes = set()
-        for info in self._surface_info[itype]:
-            shapes.update(self._extra_point_shapes(info[-2].etype))
+        for *_, finfo, _ in self._surface_info[itype]:
+            shapes.update(self._extra_point_shapes(finfo.etype))
         return shapes
 
     def _prepare_pts(self, itype):
