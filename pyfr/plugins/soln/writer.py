@@ -35,11 +35,12 @@ class WriterPlugin(PostactionMixin, RegionMixin, BaseSolnPlugin):
         # Extract auxiliary field info and getters from elements
         self._aux_fields, self._aux_getters = {}, {}
         for etype, eles in emap.items():
-            if etype in erdata and eles.export_fields:
+            if eles.export_fields:
                 self._aux_fields[etype] = [(ef.name, ef.shape, ef.dtype)
                                            for ef in eles.export_fields]
-                self._aux_getters[etype] = [(ef.name, ef.getter)
-                                            for ef in eles.export_fields]
+                if etype in erdata:
+                    self._aux_getters[etype] = [(ef.name, ef.getter)
+                                                for ef in eles.export_fields]
 
         # Figure out the shape of each element type in our region
         ershapes = {etype: (self.nvars, emap[etype].nupts) for etype in erdata}

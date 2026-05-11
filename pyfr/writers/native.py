@@ -139,6 +139,13 @@ class NativeWriter:
                          aux_fields=None, *, ndims=0):
         comm, _, _ = get_comm_rank_root()
 
+        # Merge aux_fields across ranks
+        if aux_fields is not None:
+            merged = {}
+            for r_aux in comm.allgather(aux_fields):
+                merged.update(r_aux)
+            aux_fields = merged
+
         # Prepare the element information
         self._einfo = {}
         self._futures = {}
