@@ -6,7 +6,7 @@ from pyfr.cache import memoize
 from pyfr.plugins.postproc.adapters import BoundaryPostProcData
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape
-from pyfr.util import first, subclass_where
+from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 
 
@@ -31,10 +31,10 @@ class VTKBoundaryWriter(BaseVTKWriter):
             raise RuntimeError('Boundary export only supported for 3D grids')
 
     def _load_soln(self, *args, **kwargs):
-        self._surface_info = defaultdict(list)
         super()._load_soln(*args, **kwargs)
 
         ecount = defaultdict(int)
+        self._surface_info = defaultdict(list)
 
         rmesh, smesh = self.reader.mesh, self.mesh
         cidxs = [smesh.codec.index(f'bc/{b}') for b in self.boundaries]
@@ -110,34 +110,23 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
         return [(*info[f], idxs[f]) for f in info]
 
-    def _extra_point_shapes(self, key):
-        if key in self._surface_info:
-            etypes = [info[-2].etype for info in self._surface_info[key]]
-        else:
-            etypes = [key]
-
-        shapes = set()
-        for etype in etypes:
-            shapes.update(super()._extra_point_shapes(etype))
-            shape = self._get_shape(etype, self.cfg)
-            shapes.add((len(shape.linspts),))
-
+    def _extra_point_shapes(self, etype):
+        shapes = super()._extra_point_shapes(etype)
+        shape = self._get_shape(etype, self.cfg)
+        shapes.add((len(shape.linspts),))
         return shapes
 
-    def _resolve_etype(self, key):
-        if key is None:
-            key = first(self._surface_info)
-
-        if key in self._surface_info:
-            key = first(self._surface_info[key])[-2].etype
-
-        return key
+    def _itype_point_shapes(self, itype):
+        shapes = set()
+        for info in self._surface_info[itype]:
+            shapes.update(self._extra_point_shapes(info[-2].etype))
+        return shapes
 
     def _prepare_pts(self, itype):
         vspts, vsoln, curved = [], [], []
         cellf, pointf = defaultdict(list), defaultdict(list)
 
-        pshapes = self._extra_point_shapes(itype)
+        pshapes = self._itype_point_shapes(itype)
         for mesh_op, soln_op, lin_op, finfo, idxs in self._surface_info[itype]:
             etype = finfo.etype
             spts = self.mesh.spts[etype][:, idxs]
