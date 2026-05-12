@@ -68,11 +68,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
         self.einfo = list(ecount.items())
 
     @memoize
-    def _get_shape(self, etype, cfg):
-        nspts = self.reader.f[f'eles/{etype}'].dtype['nodes'].shape[0]
-        return subclass_where(BaseShape, name=etype)(nspts, cfg)
-
-    @memoize
     def _itype_opmats(self, etype, fidx, cfg):
         shape = self._get_shape(etype, cfg)
 
@@ -109,12 +104,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
             idxs[f].append(e)
 
         return [(*info[f], idxs[f]) for f in info]
-
-    def _extra_point_shapes(self, etype):
-        shapes = super()._extra_point_shapes(etype)
-        shape = self._get_shape(etype, self.cfg)
-        shapes.add((len(shape.linspts),))
-        return shapes
 
     def _itype_point_shapes(self, itype):
         shapes = set()

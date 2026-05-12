@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.postproc.base import get_pp_plugins
 from pyfr.shapes import BaseShape
@@ -761,10 +762,16 @@ class BaseVTKWriter(BaseWriter):
     def _vtk_dtype(self, dtype):
         return self._vtk_dtypes[np.dtype(dtype).type]
 
+    @memoize
+    def _get_shape(self, etype, cfg):
+        nspts = self.reader.f[f'eles/{etype}'].dtype['nodes'].shape[0]
+        return subclass_where(BaseShape, name=etype)(nspts, cfg)
+
     def _extra_point_shapes(self, etype):
         dtype = self.soln.dtypes[etype]
         group = next(g for g in dtype.names if g != 'aux')
-        return {dtype[group][0].shape[-1:]}
+        shape = self._get_shape(etype, self.cfg)
+        return {dtype[group][0].shape[-1:], (len(shape.linspts),)}
 
     def _extra_field_lists(self):
         cfields, pfields = [], []

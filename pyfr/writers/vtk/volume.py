@@ -18,13 +18,6 @@ class VTKVolumeWriter(BaseVTKWriter):
         self.einfo = [(etype, self.soln.data[etype].shape[2])
                       for etype in self.mesh.eidxs]
 
-    def _extra_point_shapes(self, etype):
-        shapes = super()._extra_point_shapes(etype)
-        npts = self.reader.f[f'eles/{etype}'].dtype['nodes'].shape[0]
-        shape = subclass_where(BaseShape, name=etype)(npts, self.cfg)
-        shapes.add((len(shape.linspts),))
-        return shapes
-
     @memoize
     def _opmats(self, etype, cfg):
         # Shape

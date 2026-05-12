@@ -129,6 +129,12 @@ class VTKSTLWriter(BaseVTKWriter):
         self._stl_pts = (pts, pinv, ppts, plocs)
         self._stl_aux_names = []
 
+    def _extra_point_shapes(self, etype):
+        # STL override, only sample per-upt point data
+        dtype = self.soln.dtypes[etype]
+        group = next(g for g in dtype.names if g != 'aux')
+        return {dtype[group][0].shape[-1:]}
+
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
 
