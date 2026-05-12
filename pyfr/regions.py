@@ -1,5 +1,6 @@
 from ast import literal_eval
 from collections import defaultdict
+from functools import wraps
 import re
 
 import numpy as np
@@ -7,6 +8,15 @@ from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.util import match_paired_paren, subclass_where
+
+
+def rotated(method):
+    @wraps(method)
+    def wrapper(self, pts):
+        if self.rot is not None:
+            pts = pts @ self.rot
+        return method(self, pts)
+    return wrapper
 
 
 def parse_region_expr(expr, rdata=None):
@@ -75,6 +85,14 @@ class FaceSet:
 
 class BaseRegion:
     def get_region_eles(self, mesh):
+        eset = {}
+        for etype, spts in mesh.spts.items():
+            inside = self._mask(spts, np.mean(spts, axis=0))
+            eset[etype] = inside.nonzero()[0].tolist()
+
+        return {k: sorted(v) for k, v in eset.items()}
+
+    def _mask(self, spts, centroids):
         pass
 
     def surface_faces(self, mesh, exclbcs=[]):
@@ -235,30 +253,18 @@ class BaseGeometricRegion(BaseRegion):
                 c, s = np.cos(theta), np.sin(theta)
                 self.rot = np.array([[c, -s], [s, c]])
 
-    def get_region_eles(self, mesh):
-        eset = {}
-        for etype, spts in mesh.spts.items():
-            mask = self.test_eles(self.rotate(spts))
-            eset[etype] = mask.nonzero()[0].tolist()
-
-        return {k: sorted(v) for k, v in eset.items()}
-
-    def rotate(self, pts):
-        if self.rot is not None:
-            return np.einsum('ij,klj->kli', self.rot.T, pts)
-        return pts
+    def _mask(self, spts, centroids):
+        inside = self.test_pts(centroids)
+        if not inside.all():
+            inside[~inside] = self.test_pts(spts[:, ~inside]).any(axis=0)
+        inside &= self.test_eles(spts)
+        return inside
 
     def test_pts(self, pts):
-        # Default no-op: this region is element-level and provides
-        # test_eles directly.  Pointwise leaves override this.
-        return None
+        return np.ones(pts.shape[:-1], dtype=bool)
 
     def test_eles(self, spts):
-        # Default cascade for pointwise leaves: centroid fast-path then
-        # shape-point fallback.  Element-level leaves override directly.
-        inside = self.test_pts(np.mean(spts, axis=0))
-        inside[~inside] = self.test_pts(spts[:, ~inside]).any(axis=0)
-        return inside
+        return np.ones(spts.shape[1], dtype=bool)
 
 
 class BoxRegion(BaseGeometricRegion):
@@ -270,6 +276,7 @@ class BoxRegion(BaseGeometricRegion):
         self.x0 = x0
         self.x1 = x1
 
+    @rotated
     def test_pts(self, pts):
         pts = np.moveaxis(pts, -1, 0)
 
@@ -295,6 +302,7 @@ class ConicalFrustumRegion(BaseGeometricRegion):
         self.h = (x1 - x0) / np.linalg.norm(x1 - x0)
         self.h_mag = np.linalg.norm(x1 - x0)
 
+    @rotated
     def test_pts(self, pts):
         r0, r1 = self.r0, self.r1
 
@@ -334,6 +342,7 @@ class EllipsoidRegion(BaseGeometricRegion):
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])
 
+    @rotated
     def test_pts(self, pts):
         return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1
 
@@ -355,8 +364,8 @@ class PlaneRegion(BaseGeometricRegion):
         self.n = np.array(n, dtype=float)
         self.n /= np.linalg.norm(self.n)
 
+    @rotated
     def test_eles(self, spts):
-        # shape points span both signs
         dist = (spts - self.x0) @ self.n
         return dist.min(axis=0) * dist.max(axis=0) <= 0
 
@@ -409,6 +418,7 @@ class STLRegion(BaseGeometricRegion):
         self.tri_idx = Index((np.arange(len(faces)), fmins, fmaxs),
                              properties=Property(dimension=3))
 
+    @rotated
     def test_pts(self, pts):
         inside = np.ones(pts.shape[:-1], dtype=bool)
         finside = inside.reshape(-1)
@@ -487,12 +497,7 @@ class ConstructiveRegion(BaseRegion):
         rvars = {k: RegionVar(m) for k, m in masks.items()}
         return eval(self.expr, {'__builtins__': None}, rvars).r
 
-    def get_region_eles(self, mesh):
-        eset = {}
-        for etype, spts in mesh.spts.items():
-            masks = {f'r{i}': r.test_eles(r.rotate(spts))
-                     for i, r in enumerate(self.regions)}
-            inside = self._combine(masks)
-            eset[etype] = inside.nonzero()[0].tolist()
-
-        return {k: sorted(v) for k, v in eset.items()}
+    def _mask(self, spts, centroids):
+        masks = {f'r{i}': r._mask(spts, centroids)
+                 for i, r in enumerate(self.regions)}
+        return self._combine(masks)
