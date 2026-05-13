@@ -1,6 +1,5 @@
 from ast import literal_eval
 from collections import defaultdict
-from functools import wraps
 import re
 
 import numpy as np
@@ -8,15 +7,6 @@ from rtree.index import Index, Property
 
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.util import match_paired_paren, subclass_where
-
-
-def rotated(method):
-    @wraps(method)
-    def wrapper(self, pts):
-        if self.rot is not None:
-            pts = pts @ self.rot
-        return method(self, pts)
-    return wrapper
 
 
 def parse_region_expr(expr, rdata=None):
@@ -253,21 +243,31 @@ class BaseGeometricRegion(BaseRegion):
                 c, s = np.cos(theta), np.sin(theta)
                 self.rot = np.array([[c, -s], [s, c]])
 
+    def _rotate(self, pts):
+        return pts if self.rot is None else pts @ self.rot
+
+
+class PointwiseGeometricRegion(BaseGeometricRegion):
     def _mask(self, spts, centroids):
-        inside = self.test_pts(centroids)
-        if not inside.all():
-            inside[~inside] = self.test_pts(spts[:, ~inside]).any(axis=0)
-        inside &= self.test_eles(spts)
-        return inside
+        # Centroid fast-path; shape-points fallback for failing elements
+        c = self.test(self._rotate(centroids))
+        if not c.all():
+            c[~c] = self.test(self._rotate(spts[:, ~c])).any(axis=0)
+        return c
 
-    def test_pts(self, pts):
-        return np.ones(pts.shape[:-1], dtype=bool)
-
-    def test_eles(self, spts):
-        return np.ones(spts.shape[1], dtype=bool)
+    def test(self, pts):
+        pass
 
 
-class BoxRegion(BaseGeometricRegion):
+class ElementwiseGeometricRegion(BaseGeometricRegion):
+    def _mask(self, spts, centroids):
+        return self.test(self._rotate(spts))
+
+    def test(self, spts):
+        pass
+
+
+class BoxRegion(PointwiseGeometricRegion):
     name = 'box'
 
     def __init__(self, x0, x1, **kwargs):
@@ -276,8 +276,7 @@ class BoxRegion(BaseGeometricRegion):
         self.x0 = x0
         self.x1 = x1
 
-    @rotated
-    def test_pts(self, pts):
+    def test(self, pts):
         pts = np.moveaxis(pts, -1, 0)
 
         inside = np.ones(pts.shape[1:], dtype=bool)
@@ -287,7 +286,7 @@ class BoxRegion(BaseGeometricRegion):
         return inside
 
 
-class ConicalFrustumRegion(BaseGeometricRegion):
+class ConicalFrustumRegion(PointwiseGeometricRegion):
     name = 'conical_frustum'
 
     def __init__(self, x0, x1, r0, r1, **kwargs):
@@ -302,8 +301,7 @@ class ConicalFrustumRegion(BaseGeometricRegion):
         self.h = (x1 - x0) / np.linalg.norm(x1 - x0)
         self.h_mag = np.linalg.norm(x1 - x0)
 
-    @rotated
-    def test_pts(self, pts):
+    def test(self, pts):
         r0, r1 = self.r0, self.r1
 
         # Project the points onto the centre line
@@ -333,7 +331,7 @@ class CylinderRegion(ConicalFrustumRegion):
         super().__init__(x0, x1, r, r, **kwargs)
 
 
-class EllipsoidRegion(BaseGeometricRegion):
+class EllipsoidRegion(PointwiseGeometricRegion):
     name = 'ellipsoid'
 
     def __init__(self, x0, a, b, c, **kwargs):
@@ -342,8 +340,7 @@ class EllipsoidRegion(BaseGeometricRegion):
         self.x0 = np.array(x0)
         self.abc = np.array([a, b, c])
 
-    @rotated
-    def test_pts(self, pts):
+    def test(self, pts):
         return np.sum(((pts - self.x0) / self.abc)**2, axis=-1) <= 1
 
 
@@ -354,7 +351,7 @@ class SphereRegion(EllipsoidRegion):
         super().__init__(x0, r, r, r, **kwargs)
 
 
-class PlaneRegion(BaseGeometricRegion):
+class PlaneRegion(ElementwiseGeometricRegion):
     name = 'plane'
 
     def __init__(self, x0, n, **kwargs):
@@ -364,13 +361,14 @@ class PlaneRegion(BaseGeometricRegion):
         self.n = np.array(n, dtype=float)
         self.n /= np.linalg.norm(self.n)
 
-    @rotated
-    def test_eles(self, spts):
+    def test(self, spts):
+        # An element straddles the plane iff the signed distances of its
+        # shape points span both signs
         dist = (spts - self.x0) @ self.n
         return dist.min(axis=0) * dist.max(axis=0) <= 0
 
 
-class STLRegion(BaseGeometricRegion):
+class STLRegion(PointwiseGeometricRegion):
     name = 'stl'
 
     def __init__(self, name, rdata, **kwargs):
@@ -418,8 +416,7 @@ class STLRegion(BaseGeometricRegion):
         self.tri_idx = Index((np.arange(len(faces)), fmins, fmaxs),
                              properties=Property(dimension=3))
 
-    @rotated
-    def test_pts(self, pts):
+    def test(self, pts):
         inside = np.ones(pts.shape[:-1], dtype=bool)
         finside = inside.reshape(-1)
 
