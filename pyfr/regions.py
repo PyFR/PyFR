@@ -74,7 +74,7 @@ class FaceSet:
 
 
 class BaseRegion:
-    def get_region_eles(self, mesh):
+    def region_eles(self, mesh):
         eset = {}
         for etype, spts in mesh.spts.items():
             inside = self._mask(spts, np.mean(spts, axis=0))
@@ -90,7 +90,7 @@ class BaseRegion:
 
         # Build a face set assuming all interior faces are on the surface
         neles = {et: s.shape[1] for et, s in mesh.spts.items()}
-        fs = FaceSet(mesh.cidxmap, neles, self.get_region_eles(mesh))
+        fs = FaceSet(mesh.cidxmap, neles, self.region_eles(mesh))
 
         # Eliminate any faces with internal connectivity
         fs.eliminate_paired(*mesh.con)
@@ -186,7 +186,7 @@ class TagRegion(BaseRegion):
     def __init__(self, tname):
         self.tname = tname
 
-    def get_region_eles(self, mesh):
+    def region_eles(self, mesh):
         # Determine the bit mask for this tag
         tags = [c for c in mesh.codec if c.startswith('tag/')]
         tbit = np.uint64(1 << tags.index(f'tag/{self.tname}'))
@@ -199,7 +199,7 @@ class BoundaryRegion(BaseRegion):
     def __init__(self, bcname):
         self.bcname = bcname
 
-    def get_region_eles(self, mesh):
+    def region_eles(self, mesh):
         comm, rank, root = get_comm_rank_root()
 
         eset = defaultdict(list)

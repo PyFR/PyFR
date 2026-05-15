@@ -67,7 +67,7 @@ def region_data(cfg, cfgsect, mesh, *, rtype=None):
         # Obtain the element set
         match rtype or cfg.get(cfgsect, 'region-type', 'volume'):
             case 'volume':
-                eset = rgn.get_region_eles(mesh)
+                eset = rgn.region_eles(mesh)
             case 'surface':
                 eset = defaultdict(list)
                 for (etype, fidx), eidxs in rgn.surface_faces(mesh).items():
