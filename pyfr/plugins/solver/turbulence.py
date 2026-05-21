@@ -209,7 +209,7 @@ class TurbulencePlugin(BaseSolverPlugin):
             ptsr = np.moveaxis(ptsr, 0, -1)
 
             # Skip element types with no points in the inflow region
-            inside = self.bbox.pts_in_region(ptsr)
+            inside = self.bbox.test(ptsr)
             if not np.any(inside):
                 continue
 

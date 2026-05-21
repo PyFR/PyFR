@@ -499,3 +499,8 @@ class ConstructiveRegion(BaseRegion):
         masks = {f'r{i}': r._mask(spts, centroids)
                  for i, r in enumerate(self.regions)}
         return self._combine(masks)
+
+    def test(self, pts):
+        masks = {f'r{i}': r.test(r._rotate(pts))
+                 for i, r in enumerate(self.regions)}
+        return self._combine(masks)

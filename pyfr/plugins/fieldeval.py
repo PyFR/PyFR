@@ -49,7 +49,7 @@ class BackendFieldReducer:
             self._make_mask = None
         else:
             crgn = ConstructiveRegion(region)
-            self._make_mask = lambda pts: crgn.pts_in_region(
+            self._make_mask = lambda pts: crgn.test(
                 np.moveaxis(pts, 1, 2)
             )
 
