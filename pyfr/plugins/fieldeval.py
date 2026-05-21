@@ -49,9 +49,7 @@ class BackendFieldReducer:
             self._make_mask = None
         else:
             crgn = ConstructiveRegion(region)
-            self._make_mask = lambda pts: crgn.test(
-                np.moveaxis(pts, 1, 2)
-            )
+            self._make_mask = lambda pts: crgn.test(np.moveaxis(pts, 1, 2))
 
         # Register the fieldeval kernel
         backend.pointwise.register('pyfr.plugins.soln.kernels.fieldeval')
