@@ -519,6 +519,7 @@ class Graph:
             # Insert MPI sends whose deps are now satisfied
             for req, deps in mpi_at.get(i, []):
                 self._add_mpi_req(req, deps)
+                self.depk.update(deps)
 
         # Replay groups (after all kernels are added)
         for kerns, subs in self._pgroups:

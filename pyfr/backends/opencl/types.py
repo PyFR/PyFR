@@ -87,7 +87,7 @@ class OpenCLGraph(base.Graph):
             evtidxs[k] = i
 
             # Resolve the event indices of kernels we depend on
-            wait_evts = [evtidxs[dep] for dep in self._alldeps(k)] or None
+            wait_evts = [evtidxs[dep] for dep in self.kdeps.get(k, [])] or None
 
             klist.append((k, wait_evts, k in self.depk))
 
