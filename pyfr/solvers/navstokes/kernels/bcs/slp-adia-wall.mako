@@ -27,4 +27,11 @@
 % endfor
 </%pyfr:macro>
 
-<%pyfr:alias name='bc_ldg_state' func='bc_rsolve_state'/>
+<%pyfr:macro name='bc_ldg_state' params='ul, nl, ur'>
+    fpdtype_t nor = ${' + '.join(f'ul[{i + 1}]*nl[{i}]' for i in range(ndims))};
+    ur[0] = ul[0];
+% for i in range(ndims):
+    ur[${i + 1}] = ul[${i + 1}] - nor*nl[${i}];
+% endfor
+    ur[${nvars - 1}] = ul[${nvars - 1}] - (0.5/ul[0])*nor*nor;
+</%pyfr:macro>
