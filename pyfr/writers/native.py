@@ -70,6 +70,7 @@ class NativeWriter:
             self._auto_stripe = 'PYFR_DISABLE_LUSTRE_STRIPE' not in os.environ
         else:
             self._get_writefn = self._get_writefn_serial
+            self._auto_stripe = False
 
             # Private communicator for serial writes
             self._scomm = autofree(comm.Dup())
