@@ -6,8 +6,8 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.soln.ascent import (AscentRenderer, con_psolns_pgrads,
-                                      face_shape_ops)
+from pyfr.plugins.soln.ascent import AscentRenderer
+from pyfr.plugins.soln.insitu import con_psolns_pgrads, face_shape_ops
 from pyfr.readers.native import NativeReader
 from pyfr.shapes import BaseShape
 from pyfr.util import subclass_where

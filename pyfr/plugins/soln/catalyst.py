@@ -43,8 +43,42 @@
 # INI Configuration
 # =================
 #      [soln-plugin-catalyst]
-#      dt-out = 1e-4
-#      script = /path/to/pipeline.py
+#      script    = /path/to/pipeline.py
+#      division  = 3                      ; vis subdivision (default = order)
+#      clean     = true                   ; average shared-vertex values
+#      volume    = true                   ; include volume source (default
+#                                         ;   true when no surfaces defined)
+#      surface-walls = bc/wall            ; named surface source (optional)
+#      field-velocity = u, v, w           ; user-defined vector field
+#      field-pressure = p                 ; user-defined scalar field
+#      postproc-mach = volume             ; run mach postproc on volume
+#      postproc-cf = walls                ; run cf postproc on walls surface
+#
+# Output cadence is controlled entirely by the Catalyst script's
+# extractor triggers (TimeStep/TimeValue/Frequency/Python).  PyFR
+# queries them via vtkSMExtractsController each step and only updates
+# the Conduit blueprint when at least one extractor will fire.
+#
+# Field naming in the Conduit blueprint
+# =====================================
+# Every user-defined and postproc field is published namespaced by its
+# source:
+#
+#      field-velocity = u, v, w     ->  'volume_velocity'
+#      postproc-mach  = volume      ->  'volume_mach'
+#      field-pressure on surface-walls -> 'walls_pressure'
+#
+# Each source is published as its own Catalyst channel named after the
+# source ('volume', and one per surface-<name>).  The blueprint nests as:
+#
+#      catalyst/channels/<source>/data/domain_<N>/
+#          coordsets/<source>_coords/values
+#          topologies/<source>/elements
+#          fields/<source>_<field>/values
+#
+# Note: the OFFLINE `pyfr export` writer uses unprefixed Title-Case
+# names ('Velocity', 'Density').  ParaView scripts saved from such a
+# .vtu must be updated to the namespaced names listed above.
 #
 # Creating Pipeline Scripts
 # =========================
@@ -53,22 +87,38 @@
 #
 # The generated script must be modified for in-situ use with PyFR:
 #
-#   1. Replace the file reader with a TrivialProducer.  The
-#      registrationName must be 'mesh' to match the channel name
-#      used by this plugin:
+#   1. Replace each file reader with a TrivialProducer whose
+#      registrationName matches the source channel ('volume' or a
+#      surface name).  One producer per source:
 #
 #        # BEFORE (ParaView-generated):
 #        reader = XMLUnstructuredGridReader(
-#            registrationName='result.vtu',
-#            FileName=['/path/to/result.vtu'])
+#            registrationName='volume.vtu',
+#            FileName=['/path/to/volume.vtu'])
 #
 #        # AFTER (in-situ):
-#        mesh = TrivialProducer(registrationName='mesh')
+#        volume = TrivialProducer(registrationName='volume')
+#        vehicle = TrivialProducer(registrationName='vehicle')
 #
-#   2. Update any downstream filter inputs to reference the new
-#      TrivialProducer instead of the reader:
+#   2. Update any downstream filter inputs to reference the matching
+#      producer instead of the reader:
 #
-#        slice1 = Slice(Input=mesh)    # was: Input=reader
+#        slice1 = Slice(Input=volume)    # was: Input=reader
+#
+#   3. Rename every field reference in the script ('Velocity',
+#      'Density', etc.) to its namespaced form ('volume_velocity',
+#      'volume_density', ...).  The script-side names that need
+#      updating: ColorArrayName, GetColorTransferFunction(),
+#      GetOpacityTransferFunction(), GetScalarBar(), and any
+#      'PointData' / 'CellData' references.
+#
+#   4. Set each extractor's Trigger to control output cadence:
+#
+#        ext.Trigger = 'TimeStep'
+#        ext.Trigger.Frequency = 100         # every 100 PyFR steps
+#
+#        ext.Trigger = 'TimeValue'
+#        ext.Trigger.Length = 0.1            # every 0.1 of sim time
 #
 # VTK MPI Patches
 # ===============
@@ -104,17 +154,15 @@ from pathlib import Path
 
 import numpy as np
 
-from pyfr.conduit import ConduitError, ConduitNode, ConduitWrappers
 from pyfr.ctypesutil import LibWrapper, platform_libdirs, platform_libname
 from pyfr.mpiutil import get_comm_rank_root
-from pyfr.plugins.common import region_data
 from pyfr.plugins.soln.base import BaseSolnPlugin
-from pyfr.shapes import BaseShape
-from pyfr.util import subclass_where
-from pyfr.writers.vtk.shapes import get_vtk_shape
+from pyfr.plugins.soln.insitu import (ConduitNode, ConduitWrappers,
+                                      InSituError, InSituRenderer,
+                                      IntegratorAdapter)
 
 
-class CatalystError(Exception): pass
+class CatalystError(InSituError): pass
 
 
 def _load_catalyst_lib():
@@ -133,10 +181,8 @@ def _load_catalyst_lib():
     return ctypes.PyDLL(lname, mode=RTLD_GLOBAL)
 
 
-class CatalystConduitWrappers(LibWrapper):
+class CatalystConduitWrappers(ConduitWrappers):
     _libname = 'catalyst'
-    _errtype = c_void_p
-    _mode = RTLD_GLOBAL
     _functions = [(ret, f'catalyst_{fn}', *args)
                   for ret, fn, *args in ConduitWrappers._functions]
 
@@ -145,26 +191,6 @@ class CatalystConduitWrappers(LibWrapper):
 
     def _transname(self, fname):
         return fname.removeprefix('catalyst_')
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        if self.conduit_datatype_sizeof_index_t() != 8:
-            raise RuntimeError('Conduit must be compiled with 64-bit index '
-                               'types')
-
-    def _errcheck(self, status, fn, args):
-        if not status:
-            raise ConduitError
-
-        return status
-
-
-def _load_conduit():
-    try:
-        return ConduitWrappers()
-    except OSError:
-        return CatalystConduitWrappers()
 
 
 class CatalystWrappers(LibWrapper):
@@ -186,153 +212,100 @@ class CatalystWrappers(LibWrapper):
         return _load_catalyst_lib()
 
 
-class _CatalystProcessor:
-    bp_emap = {'hex': 'hex', 'pri': 'wedge', 'pyr': 'pyramid', 'quad': 'quad',
-               'tet': 'tet', 'tri': 'tri'}
+class CatalystRenderer(InSituRenderer):
+    error_cls = CatalystError
 
-    def __init__(self, intg, cfgsect):
-        comm, rank, root = get_comm_rank_root()
+    def __init__(self, adapter, isrestart):
+        # External buffers must outlive each catalyst_execute call
+        self._coord_bufs = []
+        self._field_bufs = []
 
-        cfg = intg.cfg
-        system = intg.system
-        sorder = cfg.getint('solver', 'order')
-        divisor = cfg.getint(cfgsect, 'division', sorder)
+        super().__init__(adapter, isrestart)
 
-        self.conduit = _load_conduit()
+    def _load_conduit(self):
+        return CatalystConduitWrappers()
+
+    def _init_host(self):
+        comm, _, _ = get_comm_rank_root()
+
         self.lib = CatalystWrappers()
 
-        self._elementscls = system.elementscls
-        self._pnames = system.elementscls.privars(system.ndims, cfg)
-        self._vvars = system.elementscls.visvars(system.ndims, cfg)
-        self._scfg = cfg
-
-        self.exec_n = ConduitNode(self.conduit)
-        self.exec_n['catalyst/channels/mesh/type'] = 'multimesh'
-
-        rdata = region_data(cfg, cfgsect, system.mesh)
-        doff = comm.exscan(len(rdata)) or 0
-
-        self._ele_regions = []
-        self._coord_bufs = []
-        for i, (etype, eidxs) in enumerate(rdata.items()):
-            self._build_blueprint(intg, doff + i, etype, eidxs,
-                                  divisor)
+        local = {s for s, _ in self.dinfo}
+        for sname in self.sources:
+            self.mesh_n[f'catalyst/channels/{sname}/type'] = 'multimesh'
+            if sname not in local:
+                self.mesh_n.empty_object(f'catalyst/channels/{sname}/data')
 
         init_n = ConduitNode(self.conduit)
         init_n['catalyst/scripts/script0/filename'] = str(
-            cfg.getpath(cfgsect, 'script', abs=True))
+            self.acfg.getpath(self.cfgsect, 'script', abs=True))
         init_n['catalyst/mpi_comm'] = comm.py2f()
         init_n['catalyst_load/implementation'] = 'paraview'
         self.lib.catalyst_initialize(init_n)
+
+    def bootstrap(self, adapter):
+        # Execute once to bring pipeline to life
+        self.execute(adapter)
+        from paraview import servermanager
+        self._trigger_ctrl = servermanager.vtkSMExtractsController()
+
+    def will_fire(self, tcurr, cycle):
+        ctrl = self._trigger_ctrl
+        ctrl.SetTime(float(tcurr))
+        ctrl.SetTimeStep(int(cycle))
+        return bool(ctrl.IsAnyTriggerActivated())
+
+    def _domain_path(self, sname, domid):
+        return f'catalyst/channels/{sname}/data/domain_{domid}'
+
+    def _write_step_state(self, dom, tcurr, cycle):
+        self.mesh_n[f'{dom}/state/time'] = float(tcurr)
+        self.mesh_n[f'{dom}/state/cycle'] = cycle
+
+    def _emit_coords(self, mesh_n, dom, cs, xyz):
+        # AoS — keep buffer alive until the next catalyst_execute call
+        aos = np.ascontiguousarray(np.asarray(xyz).T)
+        self._coord_bufs.append(aos)
+        mesh_n.set_aos(f'{dom}/coordsets/{cs}/values', 'xyz', aos)
+
+    def _emit_field(self, mesh_n, dom, fname, arr):
+        path = f'{dom}/fields/{fname}/values'
+        ncomp = arr.shape[-1]
+
+        if ncomp == 1:
+            # Match Ascent's flat ordering for scalars
+            mesh_n[path] = np.ascontiguousarray(arr.squeeze(-1).T)
+        else:
+            # AoS — direct path is (nsvpts, neles, ncomp); cleaned path
+            # is (npoints, ncomp)
+            if arr.ndim == 3:
+                vbuf = arr.swapaxes(0, 1).reshape(-1, ncomp)
+            else:
+                vbuf = arr.reshape(-1, ncomp)
+            vbuf = np.ascontiguousarray(vbuf)
+            self._field_bufs.append(vbuf)
+            mesh_n.set_aos(path, 'xyz', vbuf)
+
+    def execute(self, adapter):
+        comm, _, _ = get_comm_rank_root()
+
+        self.mesh_n['catalyst/state/timestep'] = adapter.cycle
+        self.mesh_n['catalyst/state/time'] = float(adapter.tcurr)
+
+        # Field arrays from previous execute can now be reused/freed
+        self._field_bufs.clear()
+
+        fields = self._evaluate_exprs(adapter)
+        for sname, source in self.sources.items():
+            source.publish_fields(self.mesh_n, fields.get(sname, {}))
+
+        self.lib.catalyst_execute(self.mesh_n)
+        comm.barrier()
 
     def finalise(self):
         if lib := getattr(self, 'lib', None):
             self.lib = None
             lib.catalyst_finalize(ConduitNode(self.conduit))
-
-    def __del__(self):
-        self.finalise()
-
-    def _build_blueprint(self, intg, domid, etype, rgn, divisor):
-        exec_n = self.exec_n
-        pfx = f'catalyst/channels/mesh/data/domain_{domid}'
-        e_str = f'{pfx}/topologies/mesh/elements'
-        system = intg.system
-
-        eles = system.ele_map[etype]
-        shapecls = subclass_where(BaseShape, name=etype)
-        shape = shapecls(eles.nspts, intg.cfg)
-
-        svpts = shape.std_ele(divisor)
-        soln_op = shape.ubasis.nodal_basis_at(svpts).astype(
-            system.backend.fpdtype)
-        xd = eles.ploc_at_np(svpts)
-
-        self._ele_regions.append(
-            (pfx, system.ele_types.index(etype), rgn, soln_op))
-
-        xd = xd[..., rgn].transpose(1, 2, 0)
-        ndims_d, neles, nsvpts = xd.shape
-
-        exec_n[f'{pfx}/state/domain_id'] = domid
-        exec_n[f'{pfx}/coordsets/coords/type'] = 'explicit'
-        exec_n[f'{pfx}/topologies/mesh/coordset'] = 'coords'
-        exec_n[f'{pfx}/topologies/mesh/type'] = 'unstructured'
-
-        xd_aos = np.ascontiguousarray(xd.reshape(ndims_d, -1).T)
-        self._coord_bufs.append(xd_aos)
-        exec_n.set_aos(f'{pfx}/coordsets/coords/values', 'xyz', xd_aos)
-
-        subdiv = get_vtk_shape(etype, divisor)
-        snodes = subdiv.subnodes
-
-        sconn = np.tile(snodes, (neles, 1))
-        sconn += (np.arange(neles) * nsvpts)[:, None]
-        exec_n[f'{e_str}/connectivity'] = sconn
-
-        if len(scells := set(subdiv.subcells)) > 1:
-            exec_n[f'{e_str}/shape'] = 'mixed'
-
-            for sc in scells:
-                an = self.bp_emap[sc]
-                exec_n[f'{e_str}/shape_map/{an}'] = subdiv.vtk_types[sc]
-
-            exec_n[f'{e_str}/shapes'] = np.tile(subdiv.subcelltypes, neles)
-
-            scell_s = [subdiv.vtk_nodes[sc] for sc in subdiv.subcells]
-            exec_n[f'{e_str}/sizes'] = np.tile(scell_s, neles)
-
-            scell_o = np.tile(subdiv.subcelloffs, (neles, 1))
-            scell_o += (np.arange(neles) * len(snodes))[:, None]
-            scell_o = np.concatenate(([0], scell_o.flat[:-1]))
-            exec_n[f'{e_str}/offsets'] = scell_o
-        else:
-            exec_n[f'{e_str}/shape'] = self.bp_emap[etype]
-
-        for vname in self._vvars:
-            fname = vname.title()
-            exec_n[f'{pfx}/fields/{fname}/association'] = 'vertex'
-            exec_n[f'{pfx}/fields/{fname}/volume_dependent'] = 0
-            exec_n[f'{pfx}/fields/{fname}/topology'] = 'mesh'
-
-    def execute(self, intg):
-        comm = get_comm_rank_root()[0]
-
-        exec_n = self.exec_n
-        soln = intg.soln
-        elementscls = self._elementscls
-
-        exec_n['catalyst/state/timestep'] = intg.nacptsteps
-        exec_n['catalyst/state/time'] = float(intg.tcurr)
-
-        # Keep AoS field arrays alive across all element types until
-        # after catalyst_execute (set_aos uses external pointers)
-        field_bufs = []
-
-        for pfx, eidx, rgn, soln_op in self._ele_regions:
-            exec_n[f'{pfx}/state/time'] = intg.tcurr
-            exec_n[f'{pfx}/state/cycle'] = intg.nacptsteps
-
-            csolns = soln[eidx][..., rgn].swapaxes(0, 1)
-            csolns = soln_op @ csolns
-
-            psolns = elementscls.con_to_pri(csolns, self._scfg)
-            psolns_d = dict(zip(self._pnames, psolns))
-
-            for vname, vcomps in self._vvars.items():
-                fname = vname.title()
-                fpath = f'{pfx}/fields/{fname}/values'
-                if len(vcomps) == 1:
-                    exec_n[fpath] = psolns_d[vcomps[0]].T
-                else:
-                    vbuf = np.ascontiguousarray(
-                        np.stack([psolns_d[c].T for c in vcomps],
-                                 axis=-1).reshape(-1, len(vcomps)))
-                    field_bufs.append(vbuf)
-                    exec_n.set_aos(fpath, 'xyz', vbuf)
-
-        self.lib.catalyst_execute(exec_n)
-        comm.barrier()
 
 
 class CatalystPlugin(BaseSolnPlugin):
@@ -343,23 +316,22 @@ class CatalystPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        self.dt_out = self.cfg.getfloat(cfgsect, 'dt-out')
-        self.tout_last = intg.tcurr
-
-        self._processor = _CatalystProcessor(intg, cfgsect)
-
-        intg.call_plugin_dt(intg.tcurr, self.dt_out)
-
-        if not intg.isrestart:
-            self.tout_last -= self.dt_out
+        self._renderer = CatalystRenderer(
+            IntegratorAdapter(intg, intg.cfg, cfgsect), intg.isrestart)
+        self._bootstrap_done = False
 
     def __call__(self, intg):
-        if intg.tcurr - self.tout_last < self.dt_out - self.tol:
+        adapter = IntegratorAdapter(intg, intg.cfg, self.cfgsect)
+
+        if not self._bootstrap_done:
+            self._renderer.bootstrap(adapter)
+            self._bootstrap_done = True
             return
 
-        self._processor.execute(intg)
-        self.tout_last = intg.tcurr
+        if self._renderer.will_fire(adapter.tcurr, adapter.cycle):
+            self._renderer.execute(adapter)
 
     def finalise(self, intg):
-        self._processor.finalise()
-        del self._processor
+        if r := getattr(self, '_renderer', None):
+            r.finalise()
+            del self._renderer
