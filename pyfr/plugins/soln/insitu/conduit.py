@@ -25,6 +25,8 @@ _conduit_functions = [
     (None, 'conduit_node_set_path_int64_ptr', c_void_p, c_char_p,
      c_void_p, c_int64),
     (None, 'conduit_node_set_path_node', c_void_p, c_char_p, c_void_p),
+    (c_void_p, 'conduit_node_fetch', c_void_p, c_char_p),
+    (None, 'conduit_node_remove_path', c_void_p, c_char_p),
     # Strided external variants for interleaved (AoS) multi-component arrays
     (None, 'conduit_node_set_path_external_float32_ptr_detailed',
      c_void_p, c_char_p, c_void_p, c_int64, c_int64, c_int64, c_int64, c_int64),
@@ -104,6 +106,14 @@ class ConduitNode:
         for i, l in enumerate(labels):
             fn(self, f'{key}/{l}'.encode(), arr2d.ctypes.data,
                npoints, i * itemsize, stride, itemsize, 0)
+
+    def empty_object(self, key):
+        # Make `key` an empty object node (object dtype, zero children).  A
+        # node only becomes an object once it has a child, so add a throwaway
+        # child then remove it — leaving an empty object the blueprint accepts.
+        tmp = f'{key}/_'.encode()
+        self.lib.conduit_node_fetch(self, tmp)
+        self.lib.conduit_node_remove_path(self, tmp)
 
     def append(self):
         ptr = self.lib.conduit_node_append(self)
