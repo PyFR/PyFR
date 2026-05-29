@@ -158,8 +158,7 @@ from pyfr.ctypesutil import LibWrapper, platform_libdirs, platform_libname
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.plugins.soln.insitu import (ConduitNode, ConduitWrappers,
-                                      InSituError, InSituRenderer,
-                                      IntegratorAdapter)
+                                      InSituError, InSituRenderer)
 
 
 class CatalystError(InSituError): pass
@@ -215,12 +214,12 @@ class CatalystWrappers(LibWrapper):
 class CatalystRenderer(InSituRenderer):
     error_cls = CatalystError
 
-    def __init__(self, adapter, isrestart):
+    def __init__(self, intg, acfg, cfgsect, isrestart):
         # External buffers must outlive each catalyst_execute call
         self._coord_bufs = []
         self._field_bufs = []
 
-        super().__init__(adapter, isrestart)
+        super().__init__(intg, acfg, cfgsect, isrestart)
 
     def _load_conduit(self):
         return CatalystConduitWrappers()
@@ -231,7 +230,7 @@ class CatalystRenderer(InSituRenderer):
         self.lib = CatalystWrappers()
 
         local = {s for s, _ in self.dinfo}
-        for sname in self.sources:
+        for sname in self.regions:
             self.mesh_n[f'catalyst/channels/{sname}/type'] = 'multimesh'
             if sname not in local:
                 self.mesh_n.empty_object(f'catalyst/channels/{sname}/data')
@@ -243,9 +242,9 @@ class CatalystRenderer(InSituRenderer):
         init_n['catalyst_load/implementation'] = 'paraview'
         self.lib.catalyst_initialize(init_n)
 
-    def bootstrap(self, adapter):
+    def bootstrap(self, snap):
         # Execute once to bring pipeline to life
-        self.execute(adapter)
+        self.execute(snap)
         from paraview import servermanager
         self._trigger_ctrl = servermanager.vtkSMExtractsController()
 
@@ -273,11 +272,10 @@ class CatalystRenderer(InSituRenderer):
         ncomp = arr.shape[-1]
 
         if ncomp == 1:
-            # Match Ascent's flat ordering for scalars
             mesh_n[path] = np.ascontiguousarray(arr.squeeze(-1).T)
         else:
-            # AoS — direct path is (nsvpts, neles, ncomp); cleaned path
-            # is (npoints, ncomp)
+            # AoS — raw path is (nsvpts, neles, ncomp); cleaned path is
+            # (npoints, ncomp)
             if arr.ndim == 3:
                 vbuf = arr.swapaxes(0, 1).reshape(-1, ncomp)
             else:
@@ -286,18 +284,17 @@ class CatalystRenderer(InSituRenderer):
             self._field_bufs.append(vbuf)
             mesh_n.set_aos(path, 'xyz', vbuf)
 
-    def execute(self, adapter):
+    def execute(self, snap):
         comm, _, _ = get_comm_rank_root()
 
-        self.mesh_n['catalyst/state/timestep'] = adapter.cycle
-        self.mesh_n['catalyst/state/time'] = float(adapter.tcurr)
+        self.mesh_n['catalyst/state/timestep'] = snap.cycle
+        self.mesh_n['catalyst/state/time'] = float(snap.tcurr)
 
         # Field arrays from previous execute can now be reused/freed
         self._field_bufs.clear()
 
-        fields = self._evaluate_exprs(adapter)
-        for sname, source in self.sources.items():
-            source.publish_fields(self.mesh_n, fields.get(sname, {}))
+        fields = self._evaluate_exprs(snap)
+        self.publish(fields)
 
         self.lib.catalyst_execute(self.mesh_n)
         comm.barrier()
@@ -316,20 +313,26 @@ class CatalystPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        self._renderer = CatalystRenderer(
-            IntegratorAdapter(intg, intg.cfg, cfgsect), intg.isrestart)
+        # Transient snap: built to seed the renderer's static metadata + region
+        # geometry; reference dropped at end of __init__.
+        from pyfr.snapshot import IntgSnapshot
+        self._renderer = CatalystRenderer(IntgSnapshot(intg), intg.cfg,
+                                          cfgsect, intg.isrestart)
         self._bootstrap_done = False
 
     def __call__(self, intg):
-        adapter = IntegratorAdapter(intg, intg.cfg, self.cfgsect)
+        # Fresh snap per call; renderer borrows it for the duration of
+        # bootstrap()/execute()
+        from pyfr.snapshot import IntgSnapshot
+        snap = IntgSnapshot(intg)
 
         if not self._bootstrap_done:
-            self._renderer.bootstrap(adapter)
+            self._renderer.bootstrap(snap)
             self._bootstrap_done = True
             return
 
-        if self._renderer.will_fire(adapter.tcurr, adapter.cycle):
-            self._renderer.execute(adapter)
+        if self._renderer.will_fire(intg.tcurr, intg.nacptsteps):
+            self._renderer.execute(snap)
 
     def finalise(self, intg):
         if r := getattr(self, '_renderer', None):

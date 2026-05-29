@@ -4,7 +4,7 @@ from pyfr.ctypesutil import LibWrapper
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.plugins.soln.insitu import (ConduitNode, InSituError, InSituRenderer,
-                                      IntegratorAdapter, bp_key)
+                                      bp_key)
 from pyfr.util import file_path_gen, first
 
 
@@ -27,16 +27,19 @@ class AscentWrappers(LibWrapper):
 class AscentRenderer(InSituRenderer):
     error_cls = AscentError
 
-    def __init__(self, adapter, isrestart):
-        self.basedir = adapter.acfg.getpath(adapter.cfgsect, 'basedir', '.',
-                                            abs=True)
+    def __init__(self, intg, acfg, cfgsect, isrestart):
+        self.basedir = acfg.getpath(cfgsect, 'basedir', '.', abs=True)
         self._image_paths = []
 
-        super().__init__(adapter, isrestart)
+        super().__init__(intg, acfg, cfgsect, isrestart)
 
     def __del__(self):
-        if getattr(self, 'ascent_ptr', None):
+        # Backstop: if finalise() didn't run (unusual shutdown path), close
+        # Ascent here.  finalise() nulls self.lib so the second-call guard
+        # short-circuits in normal shutdown.
+        if getattr(self, 'ascent_ptr', None) and getattr(self, 'lib', None):
             self.lib.ascent_close(self.ascent_ptr)
+            self.ascent_ptr = None
 
     def _init_host_publish(self):
         self._init_scenes()
@@ -125,10 +128,10 @@ class AscentRenderer(InSituRenderer):
     def _init_plot(self, sn, pname, plot):
         # Default to the only source when there is no ambiguity
         if (src := plot.get('source')) is None:
-            if len(self.sources) > 1:
+            if len(self.regions) > 1:
                 raise AscentError(f'Plot {pname!r} of scene {sn!r} needs '
                                   'source= when multiple sources exist')
-            src = first(self.sources)
+            src = first(self.regions)
 
         # Plot field references are auto-namespaced to the plot's source
         if (field := plot.get('field')) is not None:
@@ -162,22 +165,28 @@ class AscentRenderer(InSituRenderer):
             raise KeyError(f'Render at {path!r} needs image-name or '
                            'image-prefix')
 
-    def render(self, adapter):
+    def render(self, snap):
         comm, _, _ = get_comm_rank_root()
 
-        # Set file names
+        # Set file names from the per-call snap's tcurr
         for path, gen in self._image_paths:
-            self._add_scene[path] = str(gen.send(adapter.tcurr))
+            self._add_scene[path] = str(gen.send(snap.tcurr))
 
-        # Set field expressions; publish per source
-        fields = self._evaluate_exprs(adapter)
-        for sname, source in self.sources.items():
-            source.publish_fields(self.mesh_n, fields.get(sname, {}))
+        # Compute + publish field expressions; one call per source/etype.
+        # _evaluate_exprs builds per-region samples internally; we don't keep
+        # any reference to them after render() returns.
+        fields = self._evaluate_exprs(snap)
+        self.publish(fields)
 
         self.lib.ascent_publish(self.ascent_ptr, self.mesh_n)
         self.lib.ascent_execute(self.ascent_ptr, self.actions)
 
         comm.barrier()
+
+    def finalise(self):
+        if lib := getattr(self, 'lib', None):
+            self.lib = None
+            lib.ascent_close(self.ascent_ptr)
 
 
 class AscentPlugin(BaseSolnPlugin):
@@ -188,8 +197,18 @@ class AscentPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        adapter = IntegratorAdapter(intg, intg.cfg, cfgsect)
-        self._renderer = AscentRenderer(adapter, intg.isrestart)
+        # Transient snap: built to seed the renderer's static metadata + region
+        # geometry; reference dropped at end of __init__.
+        from pyfr.snapshot import IntgSnapshot
+        self._renderer = AscentRenderer(IntgSnapshot(intg), intg.cfg, cfgsect,
+                                        intg.isrestart)
 
     def __call__(self, intg):
-        self._renderer.render(IntegratorAdapter(intg, intg.cfg, self.cfgsect))
+        # Fresh snap per call; renderer borrows it for the duration of render()
+        from pyfr.snapshot import IntgSnapshot
+        self._renderer.render(IntgSnapshot(intg))
+
+    def finalise(self, intg):
+        if r := getattr(self, '_renderer', None):
+            r.finalise()
+            del self._renderer

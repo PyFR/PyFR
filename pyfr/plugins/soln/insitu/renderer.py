@@ -7,10 +7,9 @@ from pyfr.inifile import process_expr
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
 from pyfr.plugins.common import region_data
-from pyfr.plugins.postproc.runner import PostProcRunner
-from pyfr.plugins.soln.insitu.conduit import ConduitNode, ConduitWrappers
+from pyfr.plugins.fields.runner import FieldRunner
 from pyfr.plugins.soln.insitu.base import split_components
-from pyfr.plugins.soln.insitu.outputs import BoundaryOutput, VolumeOutput
+from pyfr.plugins.soln.insitu.conduit import ConduitNode, ConduitWrappers
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
@@ -18,29 +17,43 @@ class InSituError(Exception): pass
 
 
 class InSituRenderer:
+    # In-situ renderer: serialise a Snapshot region into a Conduit blueprint
+    # node, run providers + expression evaluation per step, and publish the
+    # results to the host (Catalyst or Ascent).
+    #
+    # Lifetime model — Freddie's rule (plugins don't retain intg):
+    #   * __init__ takes a transient `snap` (IntgSnapshot for soln plugins,
+    #     FileSnapshot for CLI).  We capture static metadata (mesh, config,
+    #     elementscls, dtype, has_grads) into self.X and DO NOT keep the
+    #     snap reference.  Regions also drop their snap reference after
+    #     building geometry.
+    #   * render(snap) is called per step (or per file in CLI batch mode)
+    #     with a fresh snap.  For each region we build a per-call
+    #     SnapshotSample(region, snap); the sample owns pris/grad_pris/fields
+    #     and is dropped at end of render().
+
     # Conduit blueprint element name mapping
     bp_emap = {'hex': 'hex', 'pri': 'wedge', 'pyr': 'pyramid', 'quad': 'quad',
                'tet': 'tet', 'tri': 'tri'}
 
-    # Subclasses can narrow this to their own error type
     error_cls = InSituError
 
-    def __init__(self, adapter, isrestart):
+    def __init__(self, snap, acfg, cfgsect, isrestart):
         comm, _, _ = get_comm_rank_root()
 
-        self.adapter = adapter
-        self.mesh = adapter.mesh
-        self.acfg = acfg = adapter.acfg
-        self.cfgsect = cfgsect = adapter.cfgsect
+        # Static metadata captured from snap; snap reference NOT retained
+        self.mesh = snap.mesh
+        self.scfg = snap.config
+        self.elementscls = snap.elementscls
+        self.dtype = snap.dtype
+        self._snap_has_grads = snap.has_grads
 
-        self.scfg = adapter.scfg
-        self.elementscls = adapter.elementscls
-        self.dtype = adapter.dtype
+        self.acfg = acfg
+        self.cfgsect = cfgsect
+        self.isrestart = isrestart
 
-        # Set order for subdivision
         sorder = self.scfg.getint('solver', 'order')
         self.divisor = acfg.getint(cfgsect, 'division', sorder)
-
         self.clean = acfg.getbool(cfgsect, 'clean', True)
 
         # Named surface sources (one per surface-{name} = <region> entry)
@@ -54,29 +67,28 @@ class InSituRenderer:
         # Load Conduit (subclass may override for host-specific fallbacks)
         self.conduit = self._load_conduit()
 
-        # Setup outputting options
-        self.isrestart = isrestart
-
-        # Region data (per-etype element indices) only needed for volume
+        # Build regions per source.  Each region captures its own static
+        # geometry from snap and drops the snap reference internally.
+        self.regions = {}
+        self._source_kinds = {}
         if self.want_volume:
-            self.rdata = region_data(acfg, cfgsect, self.mesh)
-
-        # Per-source output strategies, keyed by source name (topology)
-        self.sources = {}
-        if self.want_volume:
-            self.sources['volume'] = VolumeOutput(self, clean=self.clean)
+            rdata = region_data(acfg, cfgsect, self.mesh)
+            self.regions['volume'] = snap.vis(
+                spec=list(rdata), divisor=self.divisor, clean=self.clean)
+            self._source_kinds['volume'] = 'volume'
         for sname, sregion in self.surfaces.items():
-            self.sources[sname] = BoundaryOutput(self, sname, sregion,
-                                                 clean=self.clean)
+            self.regions[sname] = snap.surface(
+                sregion, divisor=self.divisor, clean=self.clean)
+            self._source_kinds[sname] = 'boundary'
 
-        # Expressions and field/postproc bookkeeping
+        # Expressions and derived-field bookkeeping
         self._exprs = []
         self._user_fields = set()
         self._source_fields = defaultdict(set)
         self._fields_write = set()
         self._fields_read = set()
         self._init_fields()
-        self._init_postproc()
+        self._init_field_runners()
 
         # Host-specific publishing config (Ascent scenes/pipelines, etc.)
         self._init_host_publish()
@@ -91,21 +103,20 @@ class InSituRenderer:
         # Generate a Conduit node for the mesh
         self.mesh_n = ConduitNode(self.conduit)
 
-        # One Conduit domain per (source, key); topology = sname
-        self.domains = [(src, key) for src in self.sources.values()
-                        for key in src.domain_keys()]
+        # One Conduit domain per (source, etype/itype) pair
+        self.domains = [(sname, et)
+                        for sname, r in self.regions.items() for et in r.etypes]
         doff = comm.exscan(len(self.domains)) or 0
 
-        # Build the Conduit blueprint mesh for the regions
+        # Build the Conduit blueprint mesh for the regions (geometry-only)
         self.dinfo = {}
-        for i, (src, key) in enumerate(self.domains):
-            dom = src.build_blueprint(self, doff + i, key)
-            self.dinfo[src.sname, key] = dom
+        for i, (sname, etype) in enumerate(self.domains):
+            dom = self._domain_path(sname, doff + i)
+            self._build_blueprint(dom, sname, doff + i, etype)
+            self.dinfo[sname, etype] = dom
 
         # Host-specific instance init (open the library, etc.)
         self._init_host()
-
-        self.adapter = None
 
     # --- Host hooks ----------------------------------------------------
 
@@ -113,8 +124,7 @@ class InSituRenderer:
         return ConduitWrappers()
 
     def _init_host_publish(self):
-        # Override to wire in scenes/pipelines/etc.; may add to
-        # self._fields_read and self._fields_write.
+        # Override to wire in scenes/pipelines/etc.
         pass
 
     def _init_host(self):
@@ -122,13 +132,9 @@ class InSituRenderer:
         pass
 
     def _domain_path(self, sname, domid):
-        # Path prefix for the domain inside mesh_n.  Override on hosts that
-        # nest domains (eg. Catalyst's per-source channels).
         return f'domain_{domid}'
 
     def _write_step_state(self, dom, tcurr, cycle):
-        # Per-domain time/cycle state.  Ascent uses keyword/data sub-paths;
-        # override if the host expects a different schema.
         self.mesh_n[f'{dom}/state/time/keyword'] = 'Time'
         self.mesh_n[f'{dom}/state/time/data'] = str(tcurr)
         self.mesh_n[f'{dom}/state/cycle'] = cycle
@@ -158,11 +164,9 @@ class InSituRenderer:
         mesh_n[f'{dom}/state/mesh_uuid/data'] = self.mesh.uuid
 
     def _field_name(self, sname, field):
-        # Ensure user fields are namespaced per source
         if field in self._user_fields:
             return f'{sname}_{field}'
-        else:
-            return field
+        return field
 
     def _write_field_meta(self, mesh_n, dom, sname):
         for field in self._source_fields[sname]:
@@ -171,7 +175,31 @@ class InSituRenderer:
             mesh_n[f'{dom}/fields/{fname}/volume_dependent'] = 'false'
             mesh_n[f'{dom}/fields/{fname}/topology'] = sname
 
-    def _write_domain(self, dom, sname, domid, etype, neles, xyz, conn):
+    def _flatten_coords(self, ploc, clean):
+        # Convert region.ploc[etype] (or sample.ploc[etype]) to per-axis
+        # arrays for _emit_coords.  clean -> (ndims, n_kept).  Raw ->
+        # (ndims, nsvpts, neles); needs an element-major flatten so cell c's
+        # verts land at flat indices [c*nsvpts, ..., (c+1)*nsvpts-1].
+        if clean:
+            return ploc
+        return ploc.transpose(0, 2, 1).reshape(ploc.shape[0], -1)
+
+    def _build_connectivity(self, etype, ploc, region):
+        # Use cleaner.layouts when clean (deduplicated nodal connectivity);
+        # otherwise tile the subnodes pattern per element.
+        subdiv = get_vtk_shape(etype, self.divisor)
+        snodes = subdiv.subnodes
+        if region.clean:
+            conn = region.cleaner.layouts[etype][0][:, snodes]
+        else:
+            neles = ploc.shape[-1]
+            nsvpts = ploc.shape[-2]
+            conn = np.tile(snodes, (neles, 1))
+            conn += (np.arange(neles)*nsvpts)[:, None]
+        return conn, subdiv, snodes
+
+    def _build_blueprint(self, dom, sname, domid, etype):
+        region = self.regions[sname]
         mesh_n = self.mesh_n
         cs = f'{sname}_coords'
         elem = f'{dom}/topologies/{sname}/elements'
@@ -182,12 +210,20 @@ class InSituRenderer:
         mesh_n[f'{dom}/topologies/{sname}/coordset'] = cs
         mesh_n[f'{dom}/topologies/{sname}/type'] = 'unstructured'
 
-        self._emit_coords(mesh_n, dom, cs, xyz)
+        # Coordset from region.ploc (static body-frame geometry).  If a
+        # transformer mutates sample.ploc per step, the publish() path uses
+        # sample.ploc instead — but the blueprint built here uses the region's
+        # static coords as a one-time baseline (Catalyst/Ascent may rebuild
+        # coords per step via _emit_coords).
+        ploc = region.ploc[etype]
+        self._emit_coords(mesh_n, dom, cs, self._flatten_coords(ploc,
+                                                                region.clean))
 
         self._write_field_meta(mesh_n, dom, sname)
 
-        subdiv = get_vtk_shape(etype, self.divisor)
-        snodes = subdiv.subnodes
+        # Connectivity from region (clean: cleaner.layouts; raw: tile)
+        conn, subdiv, snodes = self._build_connectivity(etype, ploc, region)
+        neles = conn.shape[0]
 
         mesh_n[f'{elem}/connectivity'] = conn
 
@@ -202,8 +238,7 @@ class InSituRenderer:
             scell_t = subdiv.subcelltypes
             mesh_n[f'{elem}/shapes'] = np.tile(scell_t, neles)
 
-            scell_s = subdiv.subcells
-            scell_s = [subdiv.vtk_nodes[sc] for sc in scell_s]
+            scell_s = [subdiv.vtk_nodes[sc] for sc in subdiv.subcells]
             mesh_n[f'{elem}/sizes'] = np.tile(scell_s, neles)
 
             scell_o = np.tile(subdiv.subcelloffs, (neles, 1))
@@ -214,7 +249,6 @@ class InSituRenderer:
             mesh_n[f'{elem}/shape'] = self.bp_emap[etype]
 
     def _register_user_field(self, sname, field):
-        # Mark field as user-namespaced and reserve its slot on this source
         self._user_fields.add(field)
         fname = self._field_name(sname, field)
         if fname in self._fields_write:
@@ -229,30 +263,32 @@ class InSituRenderer:
             field = k.removeprefix('field-')
 
             # Each source publishes its own namespaced copy
-            for sname in self.sources:
+            for sname in self.regions:
                 self._register_user_field(sname, field)
 
             raw = self.acfg.get(self.cfgsect, k)
             comps = [process_expr(c, cons) for c in split_components(raw)]
             self._exprs.append((field, comps))
 
-    def _init_postproc(self):
-        # Parse postproc-{name} = <sources>; one runner per source
+    def _init_field_runners(self):
+        # Parse postproc-{name} = <sources>; one FieldRunner per source.  The
+        # cfg key prefix `postproc-` is user-facing (back-compat).
         groups = defaultdict(list)
         for k in self.acfg.items(self.cfgsect, prefix='postproc-'):
             name = k.removeprefix('postproc-')
             for s in self.acfg.get(self.cfgsect, k).split(','):
                 sname = s.strip()
-                if sname not in self.sources:
-                    raise self.error_cls(f'Postproc {name!r}: unknown '
+                if sname not in self.regions:
+                    raise self.error_cls(f'Field provider {name!r}: unknown '
                                          f'source {sname!r}')
                 groups[sname].append(name)
 
-        self._postproc_runners = {}
+        self._field_runners = {}
         for sname, names in groups.items():
-            runner = PostProcRunner(names, self.mesh.ndims, self.scfg,
-                                    export_type=self.sources[sname].kind)
-            self._postproc_runners[sname] = runner
+            export_type = self._source_kinds[sname]
+            runner = FieldRunner(names, self.mesh.ndims, self.scfg,
+                                 export_type=export_type)
+            self._field_runners[sname] = runner
 
             for fname in runner.fields(public_only=True):
                 self._register_user_field(sname, fname)
@@ -266,45 +302,47 @@ class InSituRenderer:
 
         privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
 
-        # Postproc plugins index pgrads positionally; request them all
-        if any(r.needs_grads for r in self._postproc_runners.values()):
+        # Field providers index pgrads positionally; request them all
+        if any(r.needs_grads for r in self._field_runners.values()):
             g_pnames.update(privars)
 
-        if g_pnames and not self.adapter.has_grads:
+        if g_pnames and not self._snap_has_grads:
             raise self.error_cls('Gradients required but not available')
 
         self._gradpinfo = [(pname, privars.index(pname)) for pname in g_pnames]
 
-    def _evaluate_exprs(self, adapter):
+    def _evaluate_exprs(self, snap):
+        # Per-step entry point.  Build a SnapshotSample per region from the
+        # transient `snap`, run providers on each sample, then evaluate user
+        # expressions over sample.pris/grad_pris.  Samples drop at end of
+        # render() — no state is retained between calls.
         elementscls = self.elementscls
-
-        # Get the primitive variable names
         pnames = elementscls.privars(self.mesh.ndims, self.scfg)
 
-        tcurr = adapter.tcurr
-        cycle = adapter.cycle
+        tcurr = snap.tcurr
+        cycle = snap.cycle
 
-        # Obtain the solution (and gradients if needed)
-        soln = adapter.soln
-        grad_soln = adapter.grad_soln if self._gradpinfo else None
+        # Build per-region samples (this is where all the cleaner.average and
+        # MPI collectives fire — every rank, deterministic order).
+        samples = {sname: region.sample(snap)
+                   for sname, region in self.regions.items()}
 
-        # out[sname] = {key: [(field, arr)]} for per-source publish
+        # Run field providers on each sample; results land in sample.fields
+        for sname, runner in self._field_runners.items():
+            runner.run_on_sample(samples[sname], public_only=True)
+
+        # out[sname][etype] = [(field, arr), ...] for per-source publish
         out = defaultdict(dict)
 
-        # Iterate over each (source, key) pair in our blueprint
-        for (sname, key), dom in self.dinfo.items():
+        for (sname, etype), dom in self.dinfo.items():
             self._write_step_state(dom, tcurr, cycle)
 
-            source = self.sources[sname]
-            csolns, cgrads = source.csolns_cgrads(soln, grad_soln, key)
+            sample = samples[sname]
+            psolns = sample.pris[etype]
+            pgrads = (sample.grad_pris[etype] if self._gradpinfo else None)
 
-            # Adapter chooses conservative->primitive vs name-mapped (tavg)
-            psolns, pgrads = adapter.psolns_pgrads(csolns, cgrads)
-
-            # Prepare the substitutions dictionary
+            # Substitutions for expressions (primitives + grads + time)
             subs = dict(zip(pnames, psolns), t=tcurr)
-
-            # Prepare any required gradients; None slots are skipped
             if self._gradpinfo and pgrads is not None:
                 for pname, pidx in self._gradpinfo:
                     if pgrads[pidx] is None:
@@ -314,18 +352,29 @@ class InSituRenderer:
 
             items = []
 
-            # Field expressions
+            # User field expressions
             for field, comps in self._exprs:
                 arr = np.stack([npeval(c, subs) for c in comps], axis=-1)
                 items.append((self._field_name(sname, field), arr))
 
-            # Postproc plugins for this source/key
-            if runner := self._postproc_runners.get(sname):
-                pp_fields = source.run_postproc(runner, key, psolns, pgrads)
-                for field, arr in pp_fields.items():
-                    items.append((self._field_name(sname, field),
-                                  np.atleast_3d(arr)))
+            # Derived-field outputs from this step's runner
+            if runner := self._field_runners.get(sname):
+                for fname in runner.fields(public_only=True):
+                    if (etype, fname) in sample.fields:
+                        arr = sample.fields[(etype, fname)]
+                        items.append((self._field_name(sname, fname),
+                                      np.atleast_3d(arr)))
 
-            out[sname][key] = items
+            out[sname][etype] = items
 
         return out
+
+    def publish(self, fields):
+        # Push the per-step field arrays into the Conduit node.  Each item
+        # is (fname, arr) and arr's shape depends on clean/raw — _emit_field
+        # handles the layout.
+        for sname, by_etype in fields.items():
+            for etype, items in by_etype.items():
+                dom = self.dinfo[sname, etype]
+                for fname, arr in items:
+                    self._emit_field(self.mesh_n, dom, fname, arr)

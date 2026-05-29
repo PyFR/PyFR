@@ -1,9 +1,10 @@
 import re
 from collections import defaultdict, namedtuple
+from pathlib import Path
 
 import numpy as np
 
-from pyfr.cache import memoize
+from pyfr.cache import clear_memoize, memoize
 from pyfr.mpiutil import (AlltoallMixin, get_comm_rank_root, home_rank, mpi,
                           scal_coll)
 from pyfr.nputil import range_offsets, search_unsorted
@@ -12,6 +13,7 @@ from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, proj_pts
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+from pyfr.writers.vtk.output import DirectVTKOutput
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
@@ -428,9 +430,11 @@ class VTKSpanwiseWriter(BaseVTKWriter):
     output_curved = True
     needs_con = True
     dimensions = '3'
+    _output_cls = DirectVTKOutput
 
     def __init__(self, meshf, *, nstations=None, boundary=None, periodic=None,
                  **kwargs):
+        kwargs['discontinuous'] = True
         super().__init__(meshf, **kwargs)
 
         if boundary is None and periodic is None:
@@ -451,6 +455,25 @@ class VTKSpanwiseWriter(BaseVTKWriter):
 
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
+
+        # Legacy pre/post-proc field handling (formerly on BaseVTKWriter,
+        # moved here as spanwise is the only consumer).  Soln-prefix files
+        # also stack grad rows onto self.soln.data so the legacy _prepare_pts
+        # path can read them as a flat (nvars*(1+ndims), nupts, neles) block.
+        if self.dataprefix == 'soln':
+            self._pre_proc_fields = self._pre_proc_fields_soln
+            self._post_proc_fields = self._post_proc_fields_soln
+
+            if self._gradients:
+                for et in list(self.soln.data):
+                    g = self.soln.grad_data[et].transpose(1, 2, 0, 3)
+                    g = g.reshape(g.shape[0], -1, g.shape[3])
+                    self.soln.data[et] = np.concatenate(
+                        [self.soln.data[et], g], axis=1
+                    )
+        else:
+            self._pre_proc_fields = self._pre_proc_fields_scal
+            self._post_proc_fields = self._post_proc_fields_scal
 
         self.order = self.cfg.getint('solver', 'order')
         self._extra_fields = {}
@@ -474,6 +497,34 @@ class VTKSpanwiseWriter(BaseVTKWriter):
     def _extra_field_lists(self):
         return [], []
 
+    # --- Legacy pre/post-proc field handling (spanwise-private) ---
+
+    def _pre_proc_fields_soln(self, soln):
+        ecls = self.elementscls
+        nvars = len(ecls.privars(self.ndims, self.cfg))
+        fields = ecls.con_to_pri(soln[:nvars], self.cfg)
+        if self._gradients:
+            diff_cons = soln[nvars:].reshape(nvars, -1, *soln.shape[1:])
+            diff_pri = ecls.diff_con_to_pri(soln[:nvars], diff_cons, self.cfg)
+            fields += [f for gf in diff_pri for f in gf]
+        return np.array(fields)
+
+    def _pre_proc_fields_scal(self, soln):
+        return soln
+
+    def _post_proc_fields_soln(self, vsoln):
+        fields = []
+        for vnames in self._vtk_vars.values():
+            ix = [self._soln_fields.index(vn) for vn in vnames]
+            fields.append(vsoln[ix])
+        return fields
+
+    def _post_proc_fields_scal(self, vsoln):
+        return [vsoln[self._soln_fields.index(k)] for k in self._vtk_vars]
+
+    # --- Legacy emit path (spanwise-private; volume/boundary/STL all
+    # override these on BaseVTKWriter or set their own) ---
+
     def _prepare_pts(self, itype):
         groups = self._owned[itype]
 
@@ -493,6 +544,78 @@ class VTKSpanwiseWriter(BaseVTKWriter):
 
     def _soln_pre(self, etype):
         return self._pre_proc_fields(self.soln.data[etype].swapaxes(0, 1))
+
+    def process(self, solnf, outfname):
+        # Legacy data path: _load_soln populates self._owned and
+        # self._prepared, then _output (DirectVTKOutput) reads them.
+        clear_memoize(self)
+        self._load_soln(solnf)
+
+        self._prepared = {et: self._prepare_pts(et) for et, _ in self.einfo}
+        self._output = self._output_cls(self)
+
+        if Path(outfname).suffix == '.vtu':
+            self._write_vtu(outfname)
+        else:
+            self._write_pvtu(outfname)
+
+    def _point_field_data(self, etype):
+        _, vsoln, _, _, pointf = self._prepared[etype]
+        nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
+
+        fields = []
+        for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
+            arr = arr[..., None] if arr.ndim == 2 else arr.transpose(1, 2, 0)
+            fields.append((arr, self.dtype))
+
+        for fname in self._extra_field_lists()[1]:
+            arr = pointf[fname].reshape(nsvpts, neles, -1)
+            fields.append((arr, self._extra_fields[fname].dtype))
+
+        return fields
+
+    def _write_data(self, write, etype):
+        vpts, vsoln, curved, cellf, _ = self._prepared[etype]
+        nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
+
+        # Write element node locations
+        out = self._output.points(etype, vpts)
+        self._write_darray(out, write, self.dtype)
+
+        # Subdivide
+        if etype != 'pyr' and self.ho_output:
+            nodes = np.arange(nsvpts)
+            subcellsoff = nsvpts
+            types = get_vtk_shape(etype, self.etypes_div[etype]).vtk_ho_type
+        else:
+            subdiv = get_vtk_shape(etype, self.etypes_div[etype])
+            nodes = subdiv.subnodes
+            subcellsoff = subdiv.subcelloffs
+            types = subdiv.subcelltypes
+
+        vtu_con = self._output.connectivity(etype, nodes, neles, nsvpts)
+        vtu_off = np.tile(subcellsoff, (neles, 1))
+        vtu_off += (np.arange(neles)*len(nodes))[:, None]
+        vtu_typ = np.tile(types, neles)
+
+        self._write_darray(vtu_con, write, np.int64)
+        self._write_darray(vtu_off, write, np.int64)
+        self._write_darray(vtu_typ, write, np.uint8)
+
+        if self.output_curved:
+            vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
+            self._write_darray(vtu_curved, write, np.uint8)
+
+        cfields, _ = self._extra_field_lists()
+        ncells_per_ele = len(vtu_typ) // neles
+        for fname in cfields:
+            data = cellf[fname]
+            vtu_aux = data.reshape(neles, -1)
+            vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
+            self._write_darray(vtu_aux, write, self._extra_fields[fname].dtype)
+
+        for arr, dtype in self._output.point_fields(etype):
+            self._write_darray(arr, write, dtype)
 
 
     @memoize

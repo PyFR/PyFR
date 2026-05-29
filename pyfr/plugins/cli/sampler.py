@@ -11,10 +11,9 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.postproc.runner import PostProcRunner
+from pyfr.plugins.fields.runner import FieldRunner
 from pyfr.points import PointLocator, PointSampler
 from pyfr.readers.native import NativeReader
-from pyfr.util import subclass_where
 
 
 def _read_pts(ptsf, ndims=None, skip=0):
@@ -31,32 +30,6 @@ def _read_pts(ptsf, ndims=None, skip=0):
         raise ValueError('Invalid point set dimensionality')
 
     return pts
-
-
-def _process_con_to_pri(elementscls, ndims, cfg, *, has_grads=False):
-    nvars = len(elementscls.convars(ndims, cfg))
-    con_to_pri = elementscls.con_to_pri
-    diff_con_to_pri = elementscls.diff_con_to_pri
-
-    def process(samps):
-        if samps.size:
-            samps = samps.T
-
-            # Convert the samples to primitive variables
-            psamps = con_to_pri(samps[:nvars], cfg)
-
-            # Also convert any gradient data
-            if has_grads:
-                diff_con = samps[nvars:].reshape(nvars, ndims, -1)
-                diff_pri = diff_con_to_pri(samps[:nvars], diff_con, cfg)
-
-                psamps += [f for gf in diff_pri for f in gf]
-
-            samps = np.array(psamps).T
-
-        return samps
-
-    return process
 
 
 class SamplerCLIPlugin(BaseCLIPlugin):
@@ -209,114 +182,117 @@ class SamplerCLIPlugin(BaseCLIPlugin):
     def sample_cmd(self, args):
         # Initialise MPI
         init_mpi()
-
-        # Get our MPI info
         comm, rank, root = get_comm_rank_root()
 
-        # Read the mesh and solution
-        reader = NativeReader(args.mesh, args.pname, construct_con=False)
-        mesh, soln = reader.load_subset_mesh_soln(args.soln)
-
-        # Dimension and field names
-        dims = 'xyz'[:mesh.ndims]
-        fields = soln.fields
-
-        # Read the sample points from a CSV file
-        if args.pts:
-            if rank == root:
-                pts = _read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
-            else:
-                pts = None
-
-            pts = comm.bcast(pts, root=root)
-            locs = None
-        # Obtain the pre-processed sample points from the mesh
-        else:
-            if rank == root:
-                pdata = mesh.raw[f'plugins/sampler/{args.name}'][:]
-            else:
-                pdata = None
-
-            pdata = comm.bcast(pdata, root=root)
-
-            pts = pdata['ploc']
-            locs = pdata[['cidx', 'eidx', 'tloc']]
-
-        # Determine if gradient data is present
-        has_grads = bool(soln.grad_data)
-
-        # If gradients exist, stack them into the solution data
-        sdata = []
-        for etype in mesh.eidxs:
-            d = soln.data[etype]
-            if has_grads:
-                g = soln.grad_data[etype].transpose(1, 2, 0, 3)
-                g = g.reshape(g.shape[0], -1, g.shape[3])
-                d = np.concatenate([d, g], axis=1)
-
-            sdata.append(d)
-
-        # Postproc plugins require primitive format
+        # Postproc plugins require primitive format (provider deps + fields)
         if args.pp_plugins and args.format != 'primitive':
             raise ValueError('Postproc plugins require --format=primitive')
 
-        # Handle conversion from conservative to primitive variables
-        if args.format == 'primitive':
-            from pyfr.solvers.base import BaseSystem
+        # Soln path goes through snap.at_points (region samples + provides
+        # con->pri + grad->grad-pri + postproc).  Scalar / non-soln files
+        # (tavg, residual) still use the raw PointSampler path below.
+        from pyfr.snapshot import FileSnapshot
 
-            if soln.stats.get('data', 'prefix') != 'soln':
-                raise ValueError('Primitive output only supported for '
-                                 'solution files')
+        snap = FileSnapshot(args.mesh, args.soln, args.pname)
+        mesh = snap.mesh
+        dims = 'xyz'[:mesh.ndims]
+        is_soln = snap.stats.get('data', 'prefix') == 'soln'
 
-            # Obtain the system associated with the solution
-            systemcls = subclass_where(
-                BaseSystem, name=soln.config.get('solver', 'system')
-            )
-            elementscls = systemcls.elementscls
-            vmap = elementscls.privars(mesh.ndims, soln.config)
+        if args.format == 'primitive' and not is_soln:
+            raise ValueError('Primitive output only supported for solution '
+                             'files')
 
-            fields = list(vmap)
-            if has_grads:
-                fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
-
-            process = _process_con_to_pri(elementscls, mesh.ndims,
-                                          soln.config, has_grads=has_grads)
+        # Resolve the points (either from a CSV file or a pre-stored set)
+        if args.pts:
+            pts = (_read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
+                   if rank == root else None)
         else:
-            process = None
+            pdata = (mesh.raw[f'plugins/sampler/{args.name}'][:]
+                     if rank == root else None)
+            pdata = comm.bcast(pdata, root=root)
+            pts = pdata['ploc']
+        pts = comm.bcast(pts, root=root) if args.pts else pts
+
+        if is_soln:
+            # snap.at_points internally builds PointLocator + PointSampler
+            region = snap.at_points(pts)
+            sample = region.sample(snap)
+            has_grads = snap.has_grads
+
+            privars = snap.elementscls.privars(mesh.ndims, snap.config)
+            if args.format == 'primitive':
+                fields = list(privars)
+                if has_grads:
+                    fields.extend(f'grad_{v}_{d}' for v in privars
+                                  for d in dims)
+            else:
+                fields = list(snap.stored_fields)
+                if has_grads:
+                    fields.extend(f'grad_{v}_{d}' for v in snap.stored_fields
+                                  for d in dims)
+
+            # Run postproc on the sample (results land in sample.fields).
+            # pp_cfg overrides snap.config when --cfg is supplied.
+            pp_cfg = (Inifile.load(args.pp_cfg) if args.pp_cfg
+                      else snap.config)
+            if args.pp_plugins:
+                sample.run(args.pp_plugins, public_only=True, cfg=pp_cfg)
+
+            if rank != root:
+                return
+
+            if args.format == 'primitive':
+                # Stack pris + grad_pris components into (npts, nfields)
+                pris_cols = [p[:, None] for p in sample.pris['points']]
+                cols = pris_cols
+                if has_grads and sample.grad_pris['points'] is not None:
+                    for g in sample.grad_pris['points']:
+                        cols.extend(g[d][:, None] for d in range(mesh.ndims))
+                samps = np.hstack(cols)
+            else:
+                samps = sample.samples
+
+            # Append derived fields (resolved via runner.fields() ordering)
+            if args.pp_plugins:
+                runner = FieldRunner(args.pp_plugins, mesh.ndims, pp_cfg,
+                                     'volume')
+                extra = []
+                for name, varnames in runner.fields(public_only=True).items():
+                    fields.extend(varnames)
+                    arr = sample.fields.get(('points', name))
+                    if arr is None:
+                        continue
+                    extra.append(arr[:, None] if arr.ndim == 1 else arr.T)
+                if extra:
+                    samps = np.hstack([samps, *extra])
+        else:
+            # Non-soln (tavg / residual / ...): raw PointSampler path; no
+            # postproc plugins by construction (format != 'primitive' check
+            # above already rejected them).
+            has_grads = snap.has_grads
+            fields = list(snap.stored_fields)
             if has_grads:
-                fields = list(fields)
-                fields.extend(f'grad_{v}_{d}'
-                              for v in soln.fields for d in dims)
+                fields.extend(f'grad_{v}_{d}' for v in snap.stored_fields
+                              for d in dims)
 
-        # Resolve postproc plugins + dependencies in topological order
-        pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else soln.config
-        runner = PostProcRunner(args.pp_plugins, mesh.ndims, pp_cfg, 'volume')
+            sdata = []
+            for etype in mesh.eidxs:
+                d = snap.soln(etype)
+                if has_grads:
+                    g = snap.grad_soln(etype).transpose(1, 2, 0, 3)
+                    g = g.reshape(g.shape[0], -1, g.shape[3])
+                    d = np.concatenate([d, g], axis=1)
+                sdata.append(d)
 
-        # Construct and configure the point sampler
-        sampler = PointSampler(mesh, pts, locs)
-        sampler.configure_with_cfg_nvars(soln.config, len(fields))
+            locs = (pdata[['cidx', 'eidx', 'tloc']]
+                    if not args.pts else None)
+            sampler = PointSampler(mesh, pts, locs)
+            sampler.configure_with_cfg_nvars(snap.config, len(fields))
+            samps = sampler.sample(sdata)
+            if rank != root:
+                return
 
-        # Sample the solution
-        samps = sampler.sample(sdata, process=process)
-
-        # Have the root rank post-process and write the samples
-        if rank == root:
-            # Run any requested post-processing plugins
-            if runner:
-                pp_field_map = runner.fields(public_only=True)
-                public = runner.run_samples(soln.config, samps.T,
-                                            public_only=True)
-
-                extra_cols = []
-                for name, arr in public.items():
-                    fields.extend(pp_field_map[name])
-                    extra_cols.append(np.atleast_2d(arr.T).T)
-
-                samps = np.concatenate([samps, *extra_cols], axis=1)
-
-            # Write out the header
-            print(*dims, *fields, sep=args.sep)
-
-            # Write out the samples
-            for ploc, samp in zip(pts, samps):
-                print(*ploc, *samp, sep=args.sep)
+        # Write header + rows (root only)
+        print(*dims, *fields, sep=args.sep)
+        for ploc, samp in zip(pts, samps):
+            print(*ploc, *samp, sep=args.sep)

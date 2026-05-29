@@ -379,6 +379,35 @@ class BaseElements:
 
         return pnorm
 
+    @memoize
+    def face_dist_at_upts(self, fidx):
+        # Distance from every solution point to face `fidx` -> (nupts, neles),
+        # each foot being the upt projected onto the face along the reference
+        # normal.  Exact for affine elements; approximate where faces curve.
+        shape = self.basis
+        _, proj, norm = shape.faces[fidx]
+        rn = norm / np.linalg.norm(norm)
+
+        upts = shape.upts
+        t = (proj(*([0]*(self.ndims - 1))) - upts) @ rn
+
+        def ploc(pts):
+            op = shape.sbasis.nodal_basis_at(pts)
+            x = op @ self.eles.reshape(self.nspts, -1)
+            return x.reshape(len(pts), self.neles, self.ndims)
+
+        return np.linalg.norm(ploc(upts) - ploc(upts + t[:, None]*rn), axis=2)
+
+    @memoize
+    def min_upt_face_dist_approx(self, fidx):
+        # Min over the off-face solution points (on-face upts sit at distance 0).
+        shape = self.basis
+        _, proj, norm = shape.faces[fidx]
+        t = (proj(*([0]*(self.ndims - 1))) - shape.upts) @ (
+            norm / np.linalg.norm(norm))
+
+        return self.face_dist_at_upts(fidx)[t != 0].min(axis=0)
+
     @cached_property
     def _smats_djacs_mpts(self):
         # Metric basis with grid point (q<=p) or pseudo grid points (q>p)

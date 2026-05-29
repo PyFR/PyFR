@@ -1,11 +1,47 @@
 import numpy as np
 
-from pyfr.mpiutil import mpi
-from pyfr.util import first
-from pyfr.writers.vtk.clean import CleanToGrid
+
+class RegionVTKOutput:
+    # Single VTK output adapter consuming a region + sample pair.  Region
+    # carries the clean-vs-raw choice (clean=True dedups + averages pris/grads
+    # at shared sub-points before providers run); this adapter just reads
+    # whatever the region/sample expose.  Used by VTKVolumeWriter and
+    # VTKBoundaryWriter.
+    pyr_divisor_bump = 0
+
+    def __init__(self, writer):
+        self.writer = writer
+        self.point_data = {et: list(writer._point_field_data(et))
+                           for et, _ in writer.einfo}
+
+    def npts(self, etype, neles, nsvpts):
+        ploc = self.writer._region.ploc[etype]
+        if self.writer._region.clean:
+            return ploc.shape[1]
+        return neles*nsvpts
+
+    def points(self, etype, vpts):
+        if self.writer._region.clean:
+            return np.ascontiguousarray(vpts.T)
+        return np.ascontiguousarray(
+            vpts.transpose(2, 1, 0).reshape(-1, vpts.shape[0]))
+
+    def connectivity(self, etype, nodes, neles, nsvpts):
+        region = self.writer._region
+        if region.clean:
+            return region.cleaner.layouts[etype][0][:, nodes]
+        con = np.tile(nodes, (neles, 1))
+        con += (np.arange(neles)*nsvpts)[:, None]
+        return con
+
+    def point_fields(self, etype):
+        yield from self.point_data[etype]
 
 
 class DirectVTKOutput:
+    # Element-major per-tri/per-cell emission with tile-pattern connectivity.
+    # Used by STL (welded vertices expanded per-triangle) and spanwise (the
+    # specialised averager owns its own output structure).
     pyr_divisor_bump = 2
 
     def __init__(self, writer):
@@ -25,56 +61,3 @@ class DirectVTKOutput:
     def point_fields(self, etype):
         for arr, dtype in self.writer._point_field_data(etype):
             yield arr.swapaxes(0, 1), dtype
-
-
-class CleanToGridVTKOutput(DirectVTKOutput):
-    pyr_divisor_bump = 0
-
-    def __init__(self, writer):
-        super().__init__(writer)
-
-        cnodemap, svptsmap = writer._output_topology()
-        shared = np.fromiter(writer.mesh.shared_nodes.by_node, dtype=int)
-        self.cleaner = CleanToGrid(cnodemap, writer.etypes_div, svptsmap,
-                                   shared)
-        self.point_data = self._compute_fields()
-
-    def _compute_fields(self):
-        # Obtain the field data for each element type
-        fdata = {}
-        for etype in self.writer._prepared:
-            fdata[etype] = self.writer._point_field_data(etype)
-
-        # Agree on field count across ranks
-        nfields = len(first(fdata.values(), ()))
-        nfields = self.cleaner.comm.allreduce(nfields, op=mpi.MAX)
-
-        # Iterate through the fields and average them
-        out = []
-        for i in range(nfields):
-            efields, ncomp = {}, 0
-
-            for etype, fields in fdata.items():
-                arr, dt = fields[i]
-                efields[etype] = arr.astype(dt, copy=False)
-                ncomp = max(ncomp, arr.shape[2])
-
-            ncomp = self.cleaner.comm.allreduce(ncomp, op=mpi.MAX)
-            avg = self.cleaner.average(efields, ncomp, self.writer.dtype)
-            out.append({et: (a, self.writer.dtype) for et, a in avg.items()})
-
-        # Group by element type and return
-        return {etype: [f[etype] for f in out]
-                for etype in self.writer._prepared}
-
-    def npts(self, etype, neles, nsvpts):
-        return len(self.cleaner.layouts[etype][1])
-
-    def points(self, etype, vpts):
-        return self.cleaner.select(etype, vpts)
-
-    def connectivity(self, etype, nodes, neles, nsvpts):
-        return self.cleaner.layouts[etype][0][:, nodes]
-
-    def point_fields(self, etype):
-        yield from self.point_data[etype]

@@ -22,8 +22,8 @@ class NavierStokesElements(BaseFluidElements, BaseAdvectionDiffusionElements):
 
         # Pressure gradient: ∇p = (γ - 1)·[∇E - 1/2*(u⃗·∇(ρu⃗) - ρu⃗·∇u⃗)]
         gamma = cfg.getfloat('constants', 'gamma')
-        grad_p = grad_E - 0.5*(np.einsum('ijk,iljk->ljk', uvw, grad_rhouvw) +
-                               np.einsum('ijk,iljk->ljk', rhouvw, grad_uvw))
+        grad_p = grad_E - 0.5*(np.einsum('i...,il...->l...', uvw, grad_rhouvw) +
+                               np.einsum('i...,il...->l...', rhouvw, grad_uvw))
         grad_p *= (gamma - 1)
 
         return [grad_rho, *grad_uvw, grad_p]
