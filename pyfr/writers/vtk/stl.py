@@ -6,7 +6,7 @@ from pyfr.cache import clear_memoize
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.polys import TriPolyBasis
 from pyfr.shapes import TriShape
-from pyfr.snapshot import SolnSnapshot
+from pyfr.snapshot import FileSnapshot
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 from pyfr.writers.vtk.output import DirectVTKOutput
 from pyfr.writers.vtk.shapes import get_vtk_shape
@@ -115,17 +115,16 @@ class VTKSTLWriter(BaseVTKWriter):
         self._stl_ppts = ppts              # (n_welded, 3)
         self._stl_pinv = pinv              # (n_subdiv*ntri,)
 
-    def _extra_point_shapes(self, etype):
-        # STL aux is point-data only (no linear/vertex variant on facets)
-        dtype = self.soln.dtypes[etype]
-        group = next(g for g in dtype.names if g != 'aux')
-        return {dtype[group][0].shape[-1:]}
+    def _emit_fields(self, kind):
+        # STL emits per-triangle on welded vertices; no per-element cell data
+        # exists on the surface.  Filter cell-kind aux out — base's emit loops
+        # walk this generator uniformly.
+        if kind == 'cell':
+            return
+        yield from super()._emit_fields(kind)
 
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
-        # STL carries no per-element cell data
-        self._extra_fields = {n: m for n, m in self._extra_fields.items()
-                              if m.kind == 'point'}
         _, rank, root = get_comm_rank_root()
         if rank == root:
             self.einfo = [('tri', self._stl_pts_shape[1])]
@@ -138,8 +137,7 @@ class VTKSTLWriter(BaseVTKWriter):
 
         # Sample at welded STL vertices — PointSampler under the hood gathers
         # to root; non-root ranks see empty arrays (their einfo is also empty).
-        self._snap = SolnSnapshot(
-            self.mesh, self.soln, self.cfg, self.elementscls)
+        self._snap = FileSnapshot.from_loaded(self.mesh, self.soln)
         self._region = self._snap.at_points(self._stl_ppts)
         self._sample = self._region.sample(self._snap)
 

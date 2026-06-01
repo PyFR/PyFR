@@ -51,8 +51,8 @@
 #      surface-walls = bc/wall            ; named surface source (optional)
 #      field-velocity = u, v, w           ; user-defined vector field
 #      field-pressure = p                 ; user-defined scalar field
-#      postproc-mach = volume             ; run mach postproc on volume
-#      postproc-cf = walls                ; run cf postproc on walls surface
+#      add-field-mach = volume            ; run mach provider on volume
+#      add-field-cf = walls               ; run cf provider on walls surface
 #
 # Output cadence is controlled entirely by the Catalyst script's
 # extractor triggers (TimeStep/TimeValue/Frequency/Python).  PyFR
@@ -61,11 +61,11 @@
 #
 # Field naming in the Conduit blueprint
 # =====================================
-# Every user-defined and postproc field is published namespaced by its
+# Every user-defined and provider field is published namespaced by its
 # source:
 #
-#      field-velocity = u, v, w     ->  'volume_velocity'
-#      postproc-mach  = volume      ->  'volume_mach'
+#      field-velocity  = u, v, w     ->  'volume_velocity'
+#      add-field-mach  = volume      ->  'volume_mach'
 #      field-pressure on surface-walls -> 'walls_pressure'
 #
 # Each source is published as its own Catalyst channel named after the
@@ -325,14 +325,14 @@ class CatalystPlugin(BaseSolnPlugin):
         # Transient snap: built to seed the renderer's static metadata + region
         # geometry; reference dropped at end of __init__.
         self._renderer = CatalystRenderer(
-            IntgSnapshot(intg, export_fields=self._export_fields),
+            IntgSnapshot(intg=intg, export_fields=self._export_fields),
             intg.cfg, cfgsect, intg.isrestart)
         self._bootstrap_done = False
 
     def __call__(self, intg):
         # Fresh snap per call; renderer borrows it for the duration of
         # bootstrap()/execute()
-        snap = IntgSnapshot(intg, export_fields=self._export_fields)
+        snap = IntgSnapshot(intg=intg, export_fields=self._export_fields)
 
         if not self._bootstrap_done:
             self._renderer.bootstrap(snap)

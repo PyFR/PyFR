@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyfr.cache import memoize
 from pyfr.plugins.fields.base import get_field_providers
 from pyfr.snapshot import FieldInfo
 
@@ -62,6 +63,7 @@ class FieldRunner:
         self.ndims = ndims
         self.plugins = get_field_providers(names, ndims, cfg, export_type)
 
+    @memoize
     def fields(self, public_only=False):
         out = {}
         for p in self.plugins:

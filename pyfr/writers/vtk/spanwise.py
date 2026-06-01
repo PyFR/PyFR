@@ -11,6 +11,7 @@ from pyfr.nputil import range_offsets, search_unsorted
 from pyfr.points import PointLocator
 from pyfr.polys import get_polybasis
 from pyfr.shapes import BaseShape, proj_pts
+from pyfr.snapshot import FieldInfo
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
 from pyfr.writers.vtk.output import DirectVTKOutput
@@ -456,14 +457,27 @@ class VTKSpanwiseWriter(BaseVTKWriter):
     def _load_soln(self, *args, **kwargs):
         super()._load_soln(*args, **kwargs)
 
-        # Legacy pre/post-proc field handling (formerly on BaseVTKWriter,
-        # moved here as spanwise is the only consumer).  Soln-prefix files
-        # also stack grad rows onto self.soln.data so the legacy _prepare_pts
-        # path can read them as a flat (nvars*(1+ndims), nupts, neles) block.
+        # Spanwise has no snap/sample — it operates directly on self.soln via
+        # its legacy averaging pipeline.  Build local _vtk_vars/_soln_fields/
+        # _gradients here (used by _post_proc_fields_* + _emit_fields below).
         if self.dataprefix == 'soln':
+            self._soln_fields = self.elementscls.privars(self.ndims, self.cfg)
+            self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
+            self._gradients = bool(self.soln.grad_data)
+            if self._gradients:
+                self._soln_fields.extend(f'{f}-{d}'
+                                         for f in list(self._soln_fields)
+                                         for d in range(self.ndims))
+                for var, vfields in list(self._vtk_vars.items()):
+                    self._vtk_vars[f'grad {var}'] = nfields = []
+                    for f in vfields:
+                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
+
             self._pre_proc_fields = self._pre_proc_fields_soln
             self._post_proc_fields = self._post_proc_fields_soln
 
+            # Stack grad rows onto self.soln.data so the legacy _prepare_pts
+            # path can read them as a flat (nvars*(1+ndims), nupts, neles) block
             if self._gradients:
                 for et in list(self.soln.data):
                     g = self.soln.grad_data[et].transpose(1, 2, 0, 3)
@@ -472,11 +486,13 @@ class VTKSpanwiseWriter(BaseVTKWriter):
                         [self.soln.data[et], g], axis=1
                     )
         else:
+            self._soln_fields = list(self.soln.fields)
+            self._vtk_vars = {k: [k] for k in self._soln_fields}
+            self._gradients = False
             self._pre_proc_fields = self._pre_proc_fields_scal
             self._post_proc_fields = self._post_proc_fields_scal
 
         self.order = self.cfg.getint('solver', 'order')
-        self._extra_fields = {}
         self.axis = self._derive_axis()
 
         # Construct the averager
@@ -494,8 +510,18 @@ class VTKSpanwiseWriter(BaseVTKWriter):
         self.einfo = [(itype, sum(len(m) for m, *_ in groups))
                       for itype, groups in owned.items()]
 
-    def _extra_field_lists(self):
-        return [], []
+    def _emit_fields(self, kind):
+        # Spanwise has no snap — yield FieldInfo built from its own _vtk_vars
+        # (primitives + grads from the averaged soln).  No cell data on output.
+        if kind == 'cell':
+            return
+
+        dtype = np.dtype(self.dtype)
+        for name, varnames in self._vtk_vars.items():
+            yield name, FieldInfo(name=name, kind='point',
+                                  ncomps=len(varnames), dtype=dtype,
+                                  source='primitive',
+                                  components=tuple(varnames))
 
     # --- Legacy pre/post-proc field handling (spanwise-private) ---
 
@@ -606,14 +632,8 @@ class VTKSpanwiseWriter(BaseVTKWriter):
             vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
             self._write_darray(vtu_curved, write, np.uint8)
 
-        cfields, _ = self._extra_field_lists()
-        ncells_per_ele = len(vtu_typ) // neles
-        for fname in cfields:
-            data = cellf[fname]
-            vtu_aux = data.reshape(neles, -1)
-            vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
-            self._write_darray(vtu_aux, write, self._extra_fields[fname].dtype)
-
+        # Spanwise has no cell-aux fields by construction (_emit_fields skips
+        # 'cell'); point-field arrays come straight from the output adapter.
         for arr, dtype in self._output.point_fields(etype):
             self._write_darray(arr, write, dtype)
 

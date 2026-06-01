@@ -274,11 +274,13 @@ class InSituRenderer:
             self._exprs.append((field, comps))
 
     def _init_field_runners(self):
-        # Parse postproc-{name} = <sources>; one FieldRunner per source.  The
-        # cfg key prefix `postproc-` is user-facing (back-compat).
+        # Parse add-field-{name} = <sources>; one FieldRunner per source.
+        # The `add-field-` cfg prefix mirrors the offline `--add-fields` CLI
+        # flag: register a derived-field provider against one or more named
+        # surface/volume sources.
         groups = defaultdict(list)
-        for k in self.acfg.items(self.cfgsect, prefix='postproc-'):
-            name = k.removeprefix('postproc-')
+        for k in self.acfg.items(self.cfgsect, prefix='add-field-'):
+            name = k.removeprefix('add-field-')
             for s in self.acfg.get(self.cfgsect, k).split(','):
                 sname = s.strip()
                 if sname not in self.regions:
@@ -325,8 +327,15 @@ class InSituRenderer:
         tcurr = snap.tcurr
         cycle = snap.cycle
 
-        # Build per-region samples (this is where all the cleaner.average and
-        # MPI collectives fire — every rank, deterministic order).
+        # If any region's sample-build will need gradient data, fire the
+        # collective gradient computation HERE so every rank participates
+        # uniformly (region.etypes can be empty on a rank, which would
+        # otherwise skip per-etype grad_soln calls and deadlock the MPI).
+        if self._gradpinfo:
+            snap.compute_grads()
+
+        # Build per-region samples (this is where the cleaner.average MPI
+        # collectives fire — every rank, deterministic order).
         samples = {sname: region.sample(snap)
                    for sname, region in self.regions.items()}
 

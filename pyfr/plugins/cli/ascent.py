@@ -37,11 +37,11 @@ class AscentCLIPlugin(BaseCLIPlugin):
             # already consumes (in-situ).  Tavg-prefix solution files have
             # primitives stored by name (not con_to_pri-derived) and need a
             # separate mapping pass — TODO in Step 4c when cli/tavg migrates.
-            snap = FileSnapshot(args.mesh, s)
-            if snap.stats.get('data', 'prefix') != 'soln':
+            snap = FileSnapshot.from_file(args.mesh, s)
+            if snap.name != 'soln':
                 raise NotImplementedError(
-                    'cli/ascent tavg-file rendering is pending Step 4c; for '
-                    'now use a soln-prefix file')
+                    f'cli/ascent does not yet support {snap.name!r} snapshots '
+                    '— renderer expressions assume conservative-form variables')
 
             # Rebuild the renderer when the underlying solver config changes
             if not renderer or rcfg != snap.config:

@@ -204,9 +204,9 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             raise ValueError('Field providers require --format=primitive')
 
         # Soln path goes through snap.at_points (region samples + provides
-        # con->pri + grad->grad-pri + postproc).  Scalar / non-soln files
-        # (tavg, residual) still use the raw PointSampler path below.
-        snap = FileSnapshot(args.mesh, args.soln, args.pname)
+        # con->pri + grad->grad-pri + field providers).  Scalar / non-soln
+        # files (tavg, residual) still use the raw PointSampler path below.
+        snap = FileSnapshot.from_file(args.mesh, args.soln, args.pname)
         mesh = snap.mesh
         dims = 'xyz'[:mesh.ndims]
         is_soln = snap.stats.get('data', 'prefix') == 'soln'
@@ -244,12 +244,14 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                     col_names.extend(f'grad_{v}_{d}' for v in snap.stored_fields
                                      for d in dims)
 
-            # Run field providers on the sample (results land in sample.fields).
-            # field_cfg overrides snap.config when --cfg is supplied.
+            # Build the runner once: used both to populate sample.fields and
+            # to enumerate provider column names below.  field_cfg overrides
+            # snap.config when --cfg is supplied.
             field_cfg = (Inifile.load(args.field_cfg) if args.field_cfg
                          else snap.config)
-            if add_fields:
-                sample.run(add_fields, public_only=True, cfg=field_cfg)
+            runner = FieldRunner(add_fields, mesh.ndims, field_cfg, 'volume')
+            if runner:
+                sample.run(runner, public_only=True)
 
             if rank != root:
                 return
@@ -266,9 +268,7 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 samps = sample.samples
 
             # Append derived fields (resolved via runner.fields() ordering)
-            if add_fields:
-                runner = FieldRunner(add_fields, mesh.ndims, field_cfg,
-                                     'volume')
+            if runner:
                 extra = []
                 for name, varnames in runner.fields(public_only=True).items():
                     col_names.extend(varnames)

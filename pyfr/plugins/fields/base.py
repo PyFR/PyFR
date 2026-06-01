@@ -10,17 +10,16 @@ class BaseFieldProvider(BasePlugin):
     # SampleView and writes a computed field back into view.fields.  Runs
     # anywhere a SnapshotSample is built — on-export (VTU), in-situ
     # (Catalyst/Ascent), live (sampler), offline (cli) — without caring how
-    # the snapshot was sourced.  The cfg section name stays `postproc-plugin-X`
-    # for back-compat with existing input.ini files.
-    prefix = 'postproc'
+    # the snapshot was sourced.  Providers read shared cfg sections directly
+    # (`[constants]`, `[solver]`); no per-provider section exists.
+    prefix = 'field'
     export_types = None
     needs_grads = False
     deps = []
     fields = {}
 
     def __init__(self, ndims, cfg, export_type=None):
-        cfgsect = f'postproc-plugin-{self.name}'
-        super().__init__(cfg=cfg, cfgsect=cfgsect, ndims=ndims)
+        super().__init__(cfg=cfg, ndims=ndims)
 
         if export_type is not None:
             if not re.fullmatch(self.export_types, export_type):

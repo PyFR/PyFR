@@ -209,13 +209,13 @@ class AscentPlugin(BaseSolnPlugin):
         # Transient snap: built to seed the renderer's static metadata + region
         # geometry; reference dropped at end of __init__.
         self._renderer = AscentRenderer(
-            IntgSnapshot(intg, export_fields=self._export_fields),
+            IntgSnapshot(intg=intg, export_fields=self._export_fields),
             intg.cfg, cfgsect, intg.isrestart)
 
     def __call__(self, intg):
         # Fresh snap per call; renderer borrows it for the duration of render()
         self._renderer.render(
-            IntgSnapshot(intg, export_fields=self._export_fields))
+            IntgSnapshot(intg=intg, export_fields=self._export_fields))
 
     def finalise(self, intg):
         if r := getattr(self, '_renderer', None):
