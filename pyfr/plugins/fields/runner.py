@@ -1,4 +1,7 @@
+import numpy as np
+
 from pyfr.plugins.fields.base import get_field_providers
+from pyfr.snapshot import FieldInfo
 
 
 class SampleView:
@@ -85,6 +88,19 @@ class FieldRunner:
                 if public_only and fname.startswith('_'):
                     continue
                 sample.fields[et, fname] = arr
+
+        # Register provider outputs in sample.fields_meta so consumers iterate
+        # one unified registry (alongside snap's primitives + grads + aux).
+        for p in self.plugins:
+            for fname, varnames in p.fields.items():
+                if public_only and fname.startswith('_'):
+                    continue
+                if fname in sample.fields_meta:
+                    continue
+                sample.fields_meta[fname] = FieldInfo(
+                    name=fname, kind='point', ncomps=len(varnames),
+                    dtype=np.dtype(sample.snap.dtype), source='provider',
+                    components=tuple(varnames))
 
         return sample.fields
 

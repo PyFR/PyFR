@@ -1,4 +1,6 @@
 from collections import defaultdict
+from dataclasses import dataclass, field as dc_field
+from functools import cached_property
 
 import numpy as np
 
@@ -14,6 +16,25 @@ def _interp(op, arr):
     # op (m, k); arr (k, ...) -> (m, ...)
     return (op @ arr.reshape(arr.shape[0], -1)).reshape(op.shape[0],
                                                         *arr.shape[1:])
+
+
+@dataclass(frozen=True)
+class FieldInfo:
+    # Metadata describing one emittable field.  Snap owns the base registry
+    # (primitives, gradients, aux); samples extend it with provider outputs.
+    # Consumers (writers, samplers, future sinks) iterate this rather than
+    # rebuilding their own field-shape conventions.
+    name: str                                # public name: 'rho', 'velocity',
+                                             # 'grad rho', 'artvisc-vtx', 'mach'
+    kind: str                                # 'point' or 'cell'
+    ncomps: int                              # 1 = scalar; ndims = vector;
+                                             # ndims² = tensor
+    dtype: object = None                     # np.dtype; None = snap.dtype
+    source: str = 'unknown'                  # 'primitive' / 'gradient' /
+                                             # 'aux' / 'provider'
+    components: tuple = dc_field(default_factory=tuple)
+                                             # ('u','v','w') for velocity;
+                                             # ('Ma',) for mach; etc.
 
 
 class Snapshot:
@@ -86,21 +107,83 @@ class Snapshot:
         # there).  MPI-aware: PointSampler gathers on root.
         return PointsSnapshotRegion(self, ppts)
 
-    def fields(self, names, on=None):
-        # Convenience: build a sample, run the named field providers on it, and
-        # return the populated sample.  Defaults to the full native-point view.
-        region = on if on is not None else self.region()
-        sample = region.sample(self)
-        sample.run(names)
-        return sample
+    # Subclasses implement aux(etype) -> dict[name, ndarray].  Layout: the
+    # array's first axis is `neles`; remaining shape varies per field
+    # (scalar at upts: (neles, nupts); vector at upts: (neles, nupts, ncomp);
+    # cell scalar: (neles,)).
+    def aux(self, etype):
+        return {}
 
+    @cached_property
+    def fields(self):
+        # The full registry of emittable fields exposed by this snap:
+        # primitives (from elementscls.visvars) + gradients (if has_grads) +
+        # aux (per etype, classified by shape).  Sample objects inherit this
+        # at construction time and add provider FieldInfos after the runner
+        # processes them.
+        out = {}
+        dtype = np.dtype(self.dtype)
+
+        # Primitives (vector-grouped via visvars)
+        for name, varnames in self.elementscls.visvars(self.ndims,
+                                                       self.config).items():
+            out[name] = FieldInfo(name=name, kind='point',
+                                  ncomps=len(varnames), dtype=dtype,
+                                  source='primitive',
+                                  components=tuple(varnames))
+
+        # Gradients (one per primitive group, components expanded by axis)
+        if self.has_grads:
+            for name, info in list(out.items()):
+                gname = f'grad {name}'
+                gcomps = tuple(f'{c}-{d}' for c in info.components
+                               for d in range(self.ndims))
+                out[gname] = FieldInfo(name=gname, kind='point',
+                                       ncomps=len(gcomps), dtype=dtype,
+                                       source='gradient',
+                                       components=gcomps)
+
+        # Aux fields — classify by shape (point at upts/verts, cell otherwise)
+        if self.ele_types:
+            et0 = self.ele_types[0]
+            shapecls = subclass_where(BaseShape, name=et0)
+            sh = shapecls(self.mesh.spts[et0].shape[0], self.config)
+            pshapes = {(sh.nupts,), (len(sh.linspts),)}
+        else:
+            pshapes = set()
+
+        for et in self.ele_types:
+            for name, arr in self.aux(et).items():
+                if name in out:
+                    continue
+                # arr shape: (neles, *per_ele_shape); strip the neles axis
+                per_ele = arr.shape[1:]
+                if per_ele in pshapes:
+                    info = FieldInfo(name=name, kind='point', ncomps=1,
+                                     dtype=arr.dtype, source='aux',
+                                     components=(name,))
+                elif len(per_ele) > 1 and per_ele[:-1] in pshapes:
+                    info = FieldInfo(name=name, kind='point',
+                                     ncomps=per_ele[-1], dtype=arr.dtype,
+                                     source='aux',
+                                     components=tuple(f'{name}-{d}'
+                                                      for d in
+                                                      range(per_ele[-1])))
+                else:
+                    ncomps = int(np.prod(per_ele) or 1)
+                    info = FieldInfo(name=name, kind='cell', ncomps=ncomps,
+                                     dtype=arr.dtype, source='aux',
+                                     components=(name,))
+                out[name] = info
+
+        return out
 
 class IntgSnapshot(Snapshot):
     # Wraps a running integrator.  Built transiently — the plugin's
     # __call__(intg) creates a fresh IntgSnapshot per step and drops it.  No
     # intg reference is retained by anything else (renderer/region hold their
     # own static metadata; the snap is passed into render(snap) per step).
-    def __init__(self, intg):
+    def __init__(self, intg, export_fields=None):
         sys = intg.system
 
         # Static surface
@@ -113,6 +196,13 @@ class IntgSnapshot(Snapshot):
 
         # Per-step surface (read fresh from intg each access)
         self._intg = intg
+
+        # Pre-captured export_fields (per-etype list of ExportableField); the
+        # plugin captures these in its __init__ while ele_map is still alive
+        # (system.commit() runs after plugin construction and frees ele_map).
+        # Defaults to empty — snap.aux() returns {} for snaps without a
+        # capturing plugin.
+        self._export_fields = export_fields or {}
 
     @property
     def tcurr(self):
@@ -137,6 +227,13 @@ class IntgSnapshot(Snapshot):
         # intg.grad_soln is already (ndims, nupts, nvars, neles) per etype,
         # matching SolnSnapshot.grad_soln — return directly.
         return self._intg.grad_soln[self.ele_types.index(etype)]
+
+    def aux(self, etype):
+        # Live aux fields: each export_field's getter returns the full
+        # (neles, *shape) array on host.  Reads from the pre-captured registry
+        # (passed in by the plugin at __init__ time, when ele_map was alive).
+        return {ef.name: ef.getter()
+                for ef in self._export_fields.get(etype, ())}
 
 
 class SolnSnapshot(Snapshot):
@@ -174,6 +271,9 @@ class SolnSnapshot(Snapshot):
 
     def grad_soln(self, etype):
         return self._soln.grad_data.get(etype)
+
+    def aux(self, etype):
+        return self._soln.aux.get(etype, {})
 
     def surface(self, name, divisor=None, refpts_fn=None, *, clean=True):
         # Boundary connectivity isn't built for cheap volume access; build it
@@ -427,6 +527,14 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
 
         self._finalize_sample(sample, raw_pris, raw_grad_pris)
 
+        # Aux pass-through, sliced by the region's eidxs subset.  Aux arrays
+        # have neles on axis 0 — slice on axis 0 to match the region's element
+        # subset; remaining axes pass through unchanged.
+        for et in self.etypes:
+            eidxs = self._eidxs[et]
+            for name, arr in snap.aux(et).items():
+                sample.fields[et, name] = arr if eidxs is None else arr[eidxs]
+
 
 class SurfaceSnapshotRegion(BaseSnapshotRegion):
     # A boundary region.  Faces on the named boundary(s), keyed by face element
@@ -627,6 +735,17 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
         raw_grad_pris = self._assemble(gp)
         self._finalize_sample(sample, raw_pris, raw_grad_pris)
 
+        # Aux pass-through, per face-group: slice the volume etype's aux by
+        # the group's eidxs, concat per itype.  Matches the existing boundary
+        # writer's _cell_aux convention (aux array's first axis is neles).
+        aux_pieces = defaultdict(lambda: defaultdict(list))
+        for etype, _, eidxs, itype, *_ in self._groups:
+            for name, arr in snap.aux(etype).items():
+                aux_pieces[itype][name].append(arr[eidxs])
+        for itype, by_name in aux_pieces.items():
+            for name, pieces in by_name.items():
+                sample.fields[itype, name] = np.concatenate(pieces)
+
 
 class PointsSnapshotRegion(BaseSnapshotRegion):
     # A region sampled at user-supplied physical points.  Geometry lives in
@@ -715,7 +834,10 @@ class PointsSnapshotRegion(BaseSnapshotRegion):
 #     call make_ploc_writable() to copy-on-write before mutating, so the
 #     region's static body-frame geometry is never compounded across calls.
 #   - pris, grad_pris: per-call (populated by region._compute_sample(...))
-#   - fields: provider outputs keyed by (etype, fname)
+#   - fields: aux passthrough + provider outputs keyed by (etype, fname)
+#   - fields_meta: dict[name, FieldInfo] — full registry of emittable fields.
+#     Inherits snap.fields (primitives + grads + aux) at construction; provider
+#     entries get added by FieldRunner.run_on_sample as they run.
 # ---------------------------------------------------------------------------
 
 class SnapshotSample:
@@ -723,15 +845,42 @@ class SnapshotSample:
         self.region = region
         self.snap = snap
 
-        # Provider outputs land here, keyed by (etype/itype, field name)
+        # Aux passthrough + provider outputs, keyed by (etype/itype, fname)
         self.fields = {}
+
+        # Field metadata registry — inherit snap's (primitives + grads + aux);
+        # FieldRunner extends with provider entries as they run.
+        self.fields_meta = dict(snap.fields)
 
         # ploc starts aliased to the region's static coords; a transformer
         # provider calls make_ploc_writable() before mutating.
         self.ploc = region.ploc
 
-        # Region populates pris + grad_pris into self via this call.
+        # Region populates pris + grad_pris + aux pass-through into self.
         region._compute_sample(self, snap)
+
+    def field_array(self, etype, info):
+        # Per-key array lookup for a FieldInfo, dispatching on info.source.
+        # Primitives stack their component arrays from sample.pris; gradients
+        # stack from sample.grad_pris (per var, per axis); aux + provider
+        # entries are direct sample.fields lookups (None if absent on this key,
+        # e.g. PointsSnapshotRegion which doesn't pass aux through).
+        privars = self.region.elementscls.privars(
+            self.region.ndims, self.region.config)
+
+        if info.source == 'primitive':
+            return np.stack([self.pris[etype][privars.index(c)]
+                             for c in info.components], axis=-1)
+        elif info.source == 'gradient':
+            cols = []
+            for c in info.components:
+                var, _, d = c.rpartition('-')
+                cols.append(self.grad_pris[etype][privars.index(var)][int(d)])
+            return np.stack(cols, axis=-1)
+        elif info.source in ('aux', 'provider'):
+            return self.fields.get((etype, info.name))
+        else:
+            raise ValueError(f'Unknown field source: {info.source!r}')
 
     def make_ploc_writable(self):
         # Copy-on-write: ensure self.ploc is independent of region.ploc before

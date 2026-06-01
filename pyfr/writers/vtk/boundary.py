@@ -43,14 +43,3 @@ class VTKBoundaryWriter(BaseVTKWriter):
         parts = [self.mesh.spts_curved[g[0]][g[2]]
                  for g in self._region._groups if g[3] == itype]
         return np.concatenate(parts) if parts else np.empty(0, dtype=bool)
-
-    def _cell_aux(self, itype, fname):
-        pieces = []
-        for g in self._region._groups:
-            if g[3] != itype:
-                continue
-            data = self.soln.aux.get(g[0], {}).get(fname)
-            if data is None:
-                continue
-            pieces.append(data[g[2]])
-        return np.concatenate(pieces) if pieces else None

@@ -14,6 +14,7 @@ from pyfr.plugins.common import cli_external
 from pyfr.plugins.fields.runner import FieldRunner
 from pyfr.points import PointLocator, PointSampler
 from pyfr.readers.native import NativeReader
+from pyfr.snapshot import FileSnapshot
 
 
 def _read_pts(ptsf, ndims=None, skip=0):
@@ -205,8 +206,6 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         # Soln path goes through snap.at_points (region samples + provides
         # con->pri + grad->grad-pri + postproc).  Scalar / non-soln files
         # (tavg, residual) still use the raw PointSampler path below.
-        from pyfr.snapshot import FileSnapshot
-
         snap = FileSnapshot(args.mesh, args.soln, args.pname)
         mesh = snap.mesh
         dims = 'xyz'[:mesh.ndims]

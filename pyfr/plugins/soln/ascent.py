@@ -5,6 +5,7 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.plugins.soln.insitu import (ConduitNode, InSituError, InSituRenderer,
                                       bp_key)
+from pyfr.snapshot import IntgSnapshot
 from pyfr.util import file_path_gen, first
 
 
@@ -197,16 +198,24 @@ class AscentPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
+        # Capture export_fields here — ele_map is still alive at plugin
+        # construction time; system.commit() frees it shortly after.  Held on
+        # the plugin (not the system) so configs without aux-consumers don't
+        # pin eles via getter closures.
+        self._export_fields = {et: list(e.export_fields)
+                               for et, e in intg.system.ele_map.items()
+                               if e.export_fields}
+
         # Transient snap: built to seed the renderer's static metadata + region
         # geometry; reference dropped at end of __init__.
-        from pyfr.snapshot import IntgSnapshot
-        self._renderer = AscentRenderer(IntgSnapshot(intg), intg.cfg, cfgsect,
-                                        intg.isrestart)
+        self._renderer = AscentRenderer(
+            IntgSnapshot(intg, export_fields=self._export_fields),
+            intg.cfg, cfgsect, intg.isrestart)
 
     def __call__(self, intg):
         # Fresh snap per call; renderer borrows it for the duration of render()
-        from pyfr.snapshot import IntgSnapshot
-        self._renderer.render(IntgSnapshot(intg))
+        self._renderer.render(
+            IntgSnapshot(intg, export_fields=self._export_fields))
 
     def finalise(self, intg):
         if r := getattr(self, '_renderer', None):

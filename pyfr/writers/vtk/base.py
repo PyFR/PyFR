@@ -270,9 +270,6 @@ class BaseVTKWriter(BaseWriter):
     def _cell_curved(self, etype):
         return self.mesh.spts_curved[etype]
 
-    def _cell_aux(self, etype, fname):
-        return self.soln.aux.get(etype, {}).get(fname)
-
     def _refpts_fn(self, shapecls, _shape=None):
         # Subdivided sample points, permuted to VTK HO node order when emitting
         # HO cells (non-pyr — pyrs always linearise).  Used by both the vis
@@ -284,44 +281,40 @@ class BaseVTKWriter(BaseWriter):
             svpts = svpts[get_vtk_shape(shapecls.name, div).nodemaps[len(svpts)]]
         return svpts
 
-    def _get_field_arr(self, etype, name):
-        # Resolve a field name ('rho' or 'u-2') to its array on the sample.
-        sample = self._sample
-        privars = self.elementscls.privars(self.ndims, self.cfg)
-        if name in privars:
-            return sample.pris[etype][privars.index(name)]
-
-        var, _, dim_s = name.rpartition('-')
-        if var in privars and dim_s.isdigit():
-            return sample.grad_pris[etype][privars.index(var)][int(dim_s)]
-
-        raise KeyError(f'Unknown field {name!r}')
-
     def _point_field_data(self, etype):
+        # Iterate the unified registry; sample.field_array dispatches on
+        # source.  The layout transforms here are VTK-specific (clean → flat,
+        # raw → swapaxes); the lookup is generic and lives on the sample.
         region = self._region
         sample = self._sample
         fields = []
 
-        for vnames in self._vtk_vars.values():
-            arrs = [self._get_field_arr(etype, vn) for vn in vnames]
-            if region.clean:
-                arr = np.stack(arrs, axis=-1)
-            else:
-                arr = np.stack(arrs, axis=-1).swapaxes(0, 1)
-            fields.append((np.ascontiguousarray(arr, dtype=self.dtype),
-                           self.dtype))
-
-        for fname in self._extra_field_lists()[1]:
-            if (etype, fname) not in sample.fields:
+        for name, info in sample.fields_meta.items():
+            if info.kind != 'point':
+                continue
+            if name in self._remove_fields:
                 continue
 
-            arr = sample.fields[(etype, fname)]
-            ftype = self._extra_fields[fname].dtype
-            if region.clean:
-                arr = arr[:, None] if arr.ndim == 1 else arr.T
+            arr = sample.field_array(etype, info)
+            if arr is None:
+                continue
+
+            if info.source in ('primitive', 'gradient'):
+                # field_array stacked components on axis=-1 already.
+                if not region.clean:
+                    arr = arr.swapaxes(0, 1)
+                ftype = self.dtype
             else:
-                arr = (arr.swapaxes(0, 1)[..., None] if arr.ndim == 2
-                       else arr.transpose(2, 1, 0))
+                # Aux / provider arrays come in two layouts: (npts,) for
+                # 1-comp, (npts, ncomp) for multi-comp (clean), or
+                # (ncomp, nsvpts, neles) for raw.
+                ftype = info.dtype
+                if region.clean:
+                    arr = arr[:, None] if arr.ndim == 1 else arr.T
+                else:
+                    arr = (arr.swapaxes(0, 1)[..., None] if arr.ndim == 2
+                           else arr.transpose(2, 1, 0))
+
             fields.append((np.ascontiguousarray(arr, dtype=ftype), ftype))
 
         return fields
@@ -590,7 +583,7 @@ class BaseVTKWriter(BaseWriter):
         cfields, _ = self._extra_field_lists()
         ncells_per_ele = len(vtu_typ) // neles
         for fname in cfields:
-            data = self._cell_aux(etype, fname)
+            data = self._sample.fields.get((etype, fname))
             if data is None:
                 continue
             vtu_aux = data.reshape(neles, -1)

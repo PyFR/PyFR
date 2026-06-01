@@ -159,6 +159,7 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.plugins.soln.insitu import (ConduitNode, ConduitWrappers,
                                       InSituError, InSituRenderer)
+from pyfr.snapshot import IntgSnapshot
 
 
 class CatalystError(InSituError): pass
@@ -313,18 +314,25 @@ class CatalystPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
+        # Capture export_fields here — ele_map is still alive at plugin
+        # construction time; system.commit() frees it shortly after.  Held on
+        # the plugin (not the system) so configs without aux-consumers don't
+        # pin eles via getter closures.
+        self._export_fields = {et: list(e.export_fields)
+                               for et, e in intg.system.ele_map.items()
+                               if e.export_fields}
+
         # Transient snap: built to seed the renderer's static metadata + region
         # geometry; reference dropped at end of __init__.
-        from pyfr.snapshot import IntgSnapshot
-        self._renderer = CatalystRenderer(IntgSnapshot(intg), intg.cfg,
-                                          cfgsect, intg.isrestart)
+        self._renderer = CatalystRenderer(
+            IntgSnapshot(intg, export_fields=self._export_fields),
+            intg.cfg, cfgsect, intg.isrestart)
         self._bootstrap_done = False
 
     def __call__(self, intg):
         # Fresh snap per call; renderer borrows it for the duration of
         # bootstrap()/execute()
-        from pyfr.snapshot import IntgSnapshot
-        snap = IntgSnapshot(intg)
+        snap = IntgSnapshot(intg, export_fields=self._export_fields)
 
         if not self._bootstrap_done:
             self._renderer.bootstrap(snap)

@@ -164,26 +164,30 @@ class VTKSTLWriter(BaseVTKWriter):
         n_subdiv, ntri = self._stl_pts_shape[:2]
         fields = []
 
-        for vnames in self._vtk_vars.values():
-            arrs = [self._get_field_arr('points', vn)[pinv].reshape(n_subdiv,
-                                                                    ntri)
-                    for vn in vnames]
-            arr = np.stack(arrs, axis=-1)         # (n_subdiv, ntri, ncomp)
-            fields.append((np.ascontiguousarray(arr, dtype=self.dtype),
-                           self.dtype))
-
-        for fname in self._extra_field_lists()[1]:
-            if ('points', fname) not in sample.fields:
+        for name, info in sample.fields_meta.items():
+            if info.kind != 'point':
+                continue
+            if name in self._remove_fields:
                 continue
 
-            arr = sample.fields[('points', fname)]
-            ftype = self._extra_fields[fname].dtype
-            if arr.ndim == 1:
-                ex = arr[pinv].reshape(n_subdiv, ntri, 1)
+            arr = sample.field_array('points', info)
+            if arr is None:
+                continue
+
+            if info.source in ('primitive', 'gradient'):
+                # field_array returns (npts, ncomp); fan out via pinv.
+                arr = arr[pinv].reshape(n_subdiv, ntri, arr.shape[-1])
+                ftype = self.dtype
             else:
-                ex = arr[:, pinv].reshape(arr.shape[0], n_subdiv,
-                                          ntri).transpose(1, 2, 0)
-            fields.append((np.ascontiguousarray(ex, dtype=ftype), ftype))
+                # Aux / provider: (npts,) or (ncomp, npts) — expand via pinv.
+                ftype = info.dtype
+                if arr.ndim == 1:
+                    arr = arr[pinv].reshape(n_subdiv, ntri, 1)
+                else:
+                    arr = arr[:, pinv].reshape(arr.shape[0], n_subdiv,
+                                               ntri).transpose(1, 2, 0)
+
+            fields.append((np.ascontiguousarray(arr, dtype=ftype), ftype))
 
         return fields
 
