@@ -87,11 +87,19 @@ class SamplerCLIPlugin(BaseCLIPlugin):
              default='conservative', help='output format'
         )
         ap_sample.add_argument(
-            '--postproc', dest='pp_plugins', action='append', default=[],
-            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
+            '--add-fields', dest='add_fields', action='append', default=[],
+            metavar='NAME[,NAME,...]',
+            help='register derived-field providers (mach, yplus, cf, ...); '
+            'may be repeated, comma lists ok'
         )
-        ap_sample.add_argument('--cfg', dest='pp_cfg',
-                               help='config file for postproc plugins')
+        ap_sample.add_argument(
+            '--remove-fields', dest='remove_fields', action='append',
+            default=[], metavar='NAME[,NAME,...]',
+            help='drop these column names from the CSV; may be repeated, '
+            'comma lists ok'
+        )
+        ap_sample.add_argument('--cfg', dest='field_cfg',
+                               help='config file for field providers')
         ap_sample.add_argument('-s', '--sep', default='\t', help='separator')
         ap_sample.set_defaults(process=cls.sample_cmd)
 
@@ -184,9 +192,15 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         init_mpi()
         comm, rank, root = get_comm_rank_root()
 
-        # Postproc plugins require primitive format (provider deps + fields)
-        if args.pp_plugins and args.format != 'primitive':
-            raise ValueError('Postproc plugins require --format=primitive')
+        # Flatten comma-separated --add-fields / --remove-fields
+        add_fields = [n.strip() for a in args.add_fields
+                      for n in a.split(',') if n.strip()]
+        remove_fields = {n.strip() for a in args.remove_fields
+                         for n in a.split(',') if n.strip()}
+
+        # Field providers require primitive format (provider deps + outputs)
+        if add_fields and args.format != 'primitive':
+            raise ValueError('Field providers require --format=primitive')
 
         # Soln path goes through snap.at_points (region samples + provides
         # con->pri + grad->grad-pri + postproc).  Scalar / non-soln files
@@ -221,22 +235,22 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
             privars = snap.elementscls.privars(mesh.ndims, snap.config)
             if args.format == 'primitive':
-                fields = list(privars)
+                col_names = list(privars)
                 if has_grads:
-                    fields.extend(f'grad_{v}_{d}' for v in privars
-                                  for d in dims)
+                    col_names.extend(f'grad_{v}_{d}' for v in privars
+                                     for d in dims)
             else:
-                fields = list(snap.stored_fields)
+                col_names = list(snap.stored_fields)
                 if has_grads:
-                    fields.extend(f'grad_{v}_{d}' for v in snap.stored_fields
-                                  for d in dims)
+                    col_names.extend(f'grad_{v}_{d}' for v in snap.stored_fields
+                                     for d in dims)
 
-            # Run postproc on the sample (results land in sample.fields).
-            # pp_cfg overrides snap.config when --cfg is supplied.
-            pp_cfg = (Inifile.load(args.pp_cfg) if args.pp_cfg
-                      else snap.config)
-            if args.pp_plugins:
-                sample.run(args.pp_plugins, public_only=True, cfg=pp_cfg)
+            # Run field providers on the sample (results land in sample.fields).
+            # field_cfg overrides snap.config when --cfg is supplied.
+            field_cfg = (Inifile.load(args.field_cfg) if args.field_cfg
+                         else snap.config)
+            if add_fields:
+                sample.run(add_fields, public_only=True, cfg=field_cfg)
 
             if rank != root:
                 return
@@ -253,12 +267,12 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 samps = sample.samples
 
             # Append derived fields (resolved via runner.fields() ordering)
-            if args.pp_plugins:
-                runner = FieldRunner(args.pp_plugins, mesh.ndims, pp_cfg,
+            if add_fields:
+                runner = FieldRunner(add_fields, mesh.ndims, field_cfg,
                                      'volume')
                 extra = []
                 for name, varnames in runner.fields(public_only=True).items():
-                    fields.extend(varnames)
+                    col_names.extend(varnames)
                     arr = sample.fields.get(('points', name))
                     if arr is None:
                         continue
@@ -267,13 +281,13 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                     samps = np.hstack([samps, *extra])
         else:
             # Non-soln (tavg / residual / ...): raw PointSampler path; no
-            # postproc plugins by construction (format != 'primitive' check
+            # field providers by construction (format != 'primitive' check
             # above already rejected them).
             has_grads = snap.has_grads
-            fields = list(snap.stored_fields)
+            col_names = list(snap.stored_fields)
             if has_grads:
-                fields.extend(f'grad_{v}_{d}' for v in snap.stored_fields
-                              for d in dims)
+                col_names.extend(f'grad_{v}_{d}' for v in snap.stored_fields
+                                 for d in dims)
 
             sdata = []
             for etype in mesh.eidxs:
@@ -287,12 +301,26 @@ class SamplerCLIPlugin(BaseCLIPlugin):
             locs = (pdata[['cidx', 'eidx', 'tloc']]
                     if not args.pts else None)
             sampler = PointSampler(mesh, pts, locs)
-            sampler.configure_with_cfg_nvars(snap.config, len(fields))
+            sampler.configure_with_cfg_nvars(snap.config, len(col_names))
             samps = sampler.sample(sdata)
             if rank != root:
                 return
 
+        # Apply --remove-fields trim to columns (after providers + grads have
+        # been appended to col_names).  Catch typos with a strict check.
+        if remove_fields:
+            unknown = remove_fields - set(col_names)
+            if unknown:
+                raise ValueError(
+                    f'--remove-fields names not in output: {sorted(unknown)} '
+                    f'(available: {col_names})'
+                )
+            keep = [i for i, n in enumerate(col_names)
+                    if n not in remove_fields]
+            col_names = [col_names[i] for i in keep]
+            samps = samps[:, keep]
+
         # Write header + rows (root only)
-        print(*dims, *fields, sep=args.sep)
+        print(*dims, *col_names, sep=args.sep)
         for ploc, samp in zip(pts, samps):
             print(*ploc, *samp, sep=args.sep)

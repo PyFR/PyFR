@@ -41,16 +41,16 @@ class BaseVTKWriter(BaseWriter):
     _output_cls = RegionVTKOutput
 
     def __init__(self, meshf, pname=None, *, prec='single', order=None,
-                 divisor=None, fields=[], pp_plugins=[], pp_cfg=None,
-                 discontinuous=False):
+                 divisor=None, add_fields=[], remove_fields=[],
+                 field_cfg=None, discontinuous=False):
         super().__init__(meshf, pname)
 
         self.dtype = np.dtype(prec).type
-        self.fields = fields
-        # Public kwarg name `pp_plugins` retained to match the user-facing
-        # --postproc CLI flag; internally these are field providers.
-        self._field_names = pp_plugins
-        self._field_cfg = pp_cfg
+        # `add_fields` registers derived-field providers (mach, yplus, ...);
+        # `remove_fields` drops names from the default output pool.
+        self._field_names = add_fields
+        self._remove_fields = set(remove_fields)
+        self._field_cfg = field_cfg
 
         # clean=True deduplicates sub-points + averages pris/grad at the
         # shared positions on the region BEFORE field providers run.
@@ -223,16 +223,24 @@ class BaseVTKWriter(BaseWriter):
             self._vtk_vars = {k: [k] for k in self._soln_fields}
             self.tcurr = None
 
-        # Classify aux + register pp output fields
+        # Classify aux + register provider output fields
         self._build_extra_fields()
 
-        # Handle field subsetting
-        if self.fields:
-            self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
-                              if f in self.fields}
-
-            if len(self._vtk_vars) != len(self.fields):
-                raise RuntimeError('Invalid field specification')
+        # Apply --remove-fields trim across both primitives (self._vtk_vars)
+        # and the extra-fields pool (aux + provider outputs).  Catch typos
+        # by checking each requested name appears in at least one pool.
+        if self._remove_fields:
+            available = set(self._vtk_vars) | set(self._extra_fields)
+            unknown = self._remove_fields - available
+            if unknown:
+                raise RuntimeError(
+                    f'--remove-fields names not in output pool: {sorted(unknown)}'
+                    f' (available: {sorted(available)})'
+                )
+            self._vtk_vars = {k: v for k, v in self._vtk_vars.items()
+                              if k not in self._remove_fields}
+            self._extra_fields = {k: v for k, v in self._extra_fields.items()
+                                  if k not in self._remove_fields}
 
     def process(self, solnf, outfname):
         # Region-driven default used by volume + boundary.  STL builds its own
