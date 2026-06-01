@@ -72,9 +72,12 @@ class InSituRenderer:
         self.regions = {}
         self._source_kinds = {}
         if self.want_volume:
+            # region_data returns {etype: eidxs} — passes through snap.vis()
+            # so geometric region expressions (box/sphere/...) actually
+            # subset the rendered volume.
             rdata = region_data(acfg, cfgsect, self.mesh)
             self.regions['volume'] = snap.vis(
-                spec=list(rdata), divisor=self.divisor, clean=self.clean)
+                spec=rdata, divisor=self.divisor, clean=self.clean)
             self._source_kinds['volume'] = 'volume'
         for sname, sregion in self.surfaces.items():
             self.regions[sname] = snap.surface(

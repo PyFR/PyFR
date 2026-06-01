@@ -38,23 +38,39 @@ class Snapshot:
         return self.mesh.ndims
 
     # --- region factories (geometry-only; build a sample from the region) ---
+    #
+    # `spec` accepts three forms:
+    #   '*'                            — all etypes, all elements
+    #   ['hex', 'tet', ...]            — listed etypes, all elements
+    #   {'hex': eidxs_array, ...}      — listed etypes, subset by eidxs
+    # The third form is what `region_data()` (in pyfr.plugins.common) produces
+    # from a geometric region expression (`box(...)`, `sphere(...)`, etc.),
+    # enabling geometric subsetting in vis/render/sample.
+
     def region(self, spec='*', refpts_fn=None):
         # Generic: a region sampled at reference points chosen by refpts_fn.
         # Default refpts_fn returns the element's native solution points.
-        etypes = self.ele_types if spec == '*' else spec
         rfn = refpts_fn or (lambda sc, sh: sh.upts)
-        return VolumeSnapshotRegion(self, etypes, rfn)
+        return VolumeSnapshotRegion(self, self._resolve_spec(spec), rfn)
 
     def vis(self, spec='*', divisor=None, *, clean=True):
         # A vis-derived region: sample points are the subdivision of each
         # element at `divisor`.  clean=True (default) deduplicates coincident
         # sub-points and averages primitives/gradients at shared positions.
-        etypes = self.ele_types if spec == '*' else spec
         div = divisor if divisor is not None else self.config.getint('solver',
                                                                      'order')
         refpts_fn = lambda sc, sh: sc.std_ele(div)
-        return VolumeSnapshotRegion(self, etypes, refpts_fn, divisor=div,
-                                    clean=clean)
+        return VolumeSnapshotRegion(self, self._resolve_spec(spec), refpts_fn,
+                                    divisor=div, clean=clean)
+
+    def _resolve_spec(self, spec):
+        # Normalise spec to {etype: eidxs|None}.  '*' expands to all etypes;
+        # list[str] becomes {et: None}; dict pass-through.
+        if spec == '*':
+            return {et: None for et in self.ele_types}
+        if isinstance(spec, dict):
+            return spec
+        return {et: None for et in spec}
 
     def surface(self, name, divisor=None, refpts_fn=None, *, clean=True):
         # A boundary region: faces on the named boundary, plus geometric
@@ -279,17 +295,60 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
     # The general-purpose region.  A point set sampled from each requested
     # element type at reference points chosen by `refpts_fn(shapecls, shape)`.
     # Produced by Snapshot.region() / Snapshot.vis() / direct construction.
+    #
+    # `spec` is a dict mapping etype -> eidxs (the geometric subset of
+    # elements per etype, as produced by region_data()).  eidxs=None for an
+    # etype means "all elements of that type."  The simpler list-of-etypes
+    # form (`['hex', 'tet']`) is also accepted as shorthand for the all-
+    # elements case.  Snapshot.region() / Snapshot.vis() normalise both to
+    # the dict form before passing in.
 
-    def __init__(self, snap, etypes, refpts_fn, *, divisor=None, clean=False):
+    def __init__(self, snap, spec, refpts_fn, *, divisor=None, clean=False):
         super().__init__(snap)
 
-        # Region parameters
-        self.etypes = list(etypes)
+        # Normalise spec to {etype: eidxs|None}.  region_data() returns
+        # `slice(None)` for the all-elements case (and integer arrays for
+        # real subsets), so map any slice → None (meaning "all elements")
+        # and array-ify the rest.
+        if isinstance(spec, dict):
+            self._eidxs = {et: (None if e is None or isinstance(e, slice)
+                                else np.asarray(e))
+                           for et, e in spec.items()}
+        else:
+            self._eidxs = {et: None for et in spec}
+        self.etypes = list(self._eidxs)
+
         self._refpts_fn = refpts_fn
         self._divisor = divisor
         self.clean = clean
 
         self._build_geometry()
+
+    def _ele_spts(self, et):
+        # mesh.spts[et]: (nspts, neles, ndims) — optionally subset by eidxs.
+        spts = self.mesh.spts[et]
+        eidxs = self._eidxs[et]
+        return spts if eidxs is None else spts[:, eidxs]
+
+    def _ele_spts_nodes(self, et):
+        # mesh.spts_nodes[et]: (neles, nnodes_per_ele) — optionally subset.
+        spts_nodes = self.mesh.spts_nodes[et]
+        eidxs = self._eidxs[et]
+        return spts_nodes if eidxs is None else spts_nodes[eidxs]
+
+    def _ele_soln(self, snap, et):
+        # snap.soln(et): (nupts, nvars, neles) — optionally subset on neles.
+        soln = snap.soln(et)
+        eidxs = self._eidxs[et]
+        return soln if eidxs is None else soln[..., eidxs]
+
+    def _ele_grad_soln(self, snap, et):
+        # snap.grad_soln(et): (ndims, nupts, nvars, neles) | None — subset.
+        g = snap.grad_soln(et)
+        if g is None:
+            return None
+        eidxs = self._eidxs[et]
+        return g if eidxs is None else g[..., eidxs]
 
     def _build_geometry(self):
         # Per-etype interpolation ops keyed by etype: (mesh_op, soln_op).  The
@@ -299,8 +358,8 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         self._refpts_at = {}
         for et in self.etypes:
             shapecls = subclass_where(BaseShape, name=et)
-            spts = self.mesh.spts[et]
-            shape = shapecls(spts.shape[0], self.config)
+            nspts = self.mesh.spts[et].shape[0]
+            shape = shapecls(nspts, self.config)
             pts = self._refpts_fn(shapecls, shape)
             self._refpts_at[et] = pts
             self._ops[et] = (shape.sbasis.nodal_basis_at(pts),
@@ -318,7 +377,7 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         cnodemap, divmap, svptsmap = {}, {}, {}
         for et in self.etypes:
             shapecls = subclass_where(BaseShape, name=et)
-            spts_nodes = mesh.spts_nodes[et]
+            spts_nodes = self._ele_spts_nodes(et)
             cidxs = shapecls.corner_pts_idxs(spts_nodes.shape[1])
             cnodemap[et] = spts_nodes[:, cidxs]
             divmap[et] = self._divisor
@@ -331,7 +390,7 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         out = {}
         for et in self.etypes:
             mesh_op, _ = self._ops[et]
-            xd = _interp(mesh_op, self.mesh.spts[et])    # (nsvpts,neles,ndims)
+            xd = _interp(mesh_op, self._ele_spts(et))   # (nsvpts,neles,ndims)
             if self.clean:
                 out[et] = np.ascontiguousarray(self.cleaner.select(et, xd).T)
             else:
@@ -346,7 +405,8 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         ecls, cfg = self.elementscls, self.config
 
         # Sampled conservative — shared by pris and grad_pris below
-        cons = {et: _interp(self._ops[et][1], snap.soln(et)).swapaxes(0, 1)
+        cons = {et: _interp(self._ops[et][1],
+                            self._ele_soln(snap, et)).swapaxes(0, 1)
                 for et in self.etypes}
 
         # Raw pris + grad_pris (no dedup yet)
@@ -355,7 +415,7 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
 
         raw_grad_pris = {}
         for et in self.etypes:
-            g = snap.grad_soln(et)
+            g = self._ele_grad_soln(snap, et)
             if g is None:
                 raw_grad_pris[et] = None
                 continue
