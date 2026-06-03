@@ -62,12 +62,12 @@ class BaseSnapshotRegion:
     def _compute_sample(self, sample, snap):
         pass
 
-    def npts(self, etype):
-        p = self.ploc[etype]
+    def npts(self, etype, ploc=None):
+        p = self.ploc[etype] if ploc is None else ploc
         return p.shape[1] if p.ndim == 2 else p.shape[1]*p.shape[2]
 
-    def points(self, etype):
-        p = self.ploc[etype]
+    def points(self, etype, ploc=None):
+        p = self.ploc[etype] if ploc is None else ploc
         if p.ndim == 2:
             return np.ascontiguousarray(p.T)
         return np.ascontiguousarray(

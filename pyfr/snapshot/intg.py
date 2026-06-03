@@ -66,3 +66,10 @@ class IntgSnapshot(BaseSnapshot):
     def compute_grads(self):
         if self.has_grads:
             self._intg.compute_grads()
+
+    @cached_property
+    def state(self):
+        from pyfr.mpiutil import get_comm_rank_root
+        comm, _, root = get_comm_rank_root()
+        local = self._intg.serialiser.serialise()
+        return comm.bcast(local, root=root)

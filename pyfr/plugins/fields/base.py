@@ -5,6 +5,7 @@ class BaseFieldProvider:
     name = None
     export_types = None
     needs_grads = False
+    kind = 'producer'
     deps = []
     fields = {}
 

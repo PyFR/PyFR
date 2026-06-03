@@ -411,8 +411,9 @@ class BaseVTKWriter(BaseWriter):
         region = self._region
         neles = dict(self.einfo)[etype]
 
-        # Points come from the region in emission layout.
-        self._write_darray(region.points(etype), write, self.dtype)
+        self._write_darray(region.points(etype,
+                                         self._sample.ploc[etype]),
+                                         write, self.dtype)
 
         # VTK-specific sub-cell layout tables.
         if etype != 'pyr' and self.ho_output:

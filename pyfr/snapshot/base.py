@@ -12,6 +12,7 @@ class BaseSnapshot:
     data = None
     grad_data = None
     prefix = None
+    state = None
 
     _data_field_names = ()
 

@@ -29,4 +29,7 @@ def get_field_providers(names, ndims, cfg, export_type):
         todo.extend(deps)
         added.add(name)
 
-    return [available[n](ndims, cfg, export_type) for n in ts.static_order()]
+    plugins = [available[n](ndims, cfg, export_type) for n in ts.static_order()]
+
+    # Transformers first
+    return sorted(plugins, key=lambda p: p.kind != 'transformer')

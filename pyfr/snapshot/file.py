@@ -31,6 +31,7 @@ class FileSnapshot(BaseSnapshot):
         self.data = soln.data
         self.grad_data = soln.grad_data or None
         self.prefix = stats.get('data', 'prefix')
+        self.state = soln.state or {}
 
     def aux(self, etype):
         return self._soln.aux.get(etype, {})
