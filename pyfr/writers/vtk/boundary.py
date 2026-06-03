@@ -1,8 +1,7 @@
 from collections import defaultdict
 
-import numpy as np
-
 from pyfr.shapes import BaseShape
+from pyfr.snapshot.region import SurfaceSnapshotRegion
 from pyfr.util import subclass_where
 from pyfr.writers.vtk.base import BaseVTKWriter
 
@@ -11,17 +10,15 @@ class VTKBoundaryWriter(BaseVTKWriter):
     type = 'boundary'
     dimensions = '2|3'
     output_curved = True
-    needs_con = True   # snap.surface() reads mesh.bcon
+    needs_con = True
 
-    def __init__(self, meshf, boundaries, **kwargs):
-        super().__init__(meshf, **kwargs)
-        self.boundaries = boundaries
-        if self.ndims != 3:
+    def __init__(self, mesh, cfg, *, boundaries, **kwargs):
+        self.boundaries = list(boundaries or [])
+        super().__init__(mesh, cfg, **kwargs)
+        if mesh.ndims != 3:
             raise RuntimeError('Boundary export only supported for 3D grids')
 
-    def _load_soln(self, *args, **kwargs):
-        super()._load_soln(*args, **kwargs)
-
+    def _init_einfo(self):
         ecount = defaultdict(int)
         for bcname in self.boundaries:
             conn = self.mesh.bcon.get(bcname.removeprefix('bc/'))
@@ -35,11 +32,6 @@ class VTKBoundaryWriter(BaseVTKWriter):
 
     def _build_region(self):
         div = self.etypes_div[self.einfo[0][0]] if self.einfo else None
-        return self._snap.surface(self.boundaries, divisor=div,
-                                  refpts_fn=self._refpts_fn,
-                                  clean=self._clean)
-
-    def _cell_curved(self, itype):
-        parts = [self.mesh.spts_curved[g[0]][g[2]]
-                 for g in self._region._groups if g[3] == itype]
-        return np.concatenate(parts) if parts else np.empty(0, dtype=bool)
+        return SurfaceSnapshotRegion(self.mesh, self.cfg, self.boundaries,
+                                     div, refpts_fn=self._refpts_fn,
+                                     clean=self._clean)

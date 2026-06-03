@@ -1,13 +1,10 @@
-from pathlib import Path
-
 import numpy as np
 
-from pyfr.cache import clear_memoize
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.polys import TriPolyBasis
 from pyfr.shapes import TriShape
-from pyfr.snapshot import FileSnapshot
-from pyfr.writers.vtk.base import BaseVTKWriter, interpolate_pts
+from pyfr.snapshot.region import PointsSnapshotRegion, interp_ops
+from pyfr.writers.vtk.base import BaseVTKWriter
 from pyfr.writers.vtk.output import DirectVTKOutput
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
@@ -88,26 +85,38 @@ class VTKSTLWriter(BaseVTKWriter):
     # what snap.at_points(ppts) (PointsSnapshotRegion) consumes.  Sampling
     # runs once at the welded vertices; emission expands per-triangle via the
     # weld inverse `pinv` so each triangle gets its own VTU cell.
+    #
+    # STL keeps its own _write_data because per-triangle emission needs the
+    # weld-inverse expansion, which doesn't fit the region.connectivity API
+    # (region holds welded points, no per-element layout).  DirectVTKOutput
+    # provides the points/connectivity adapter for that path.
     type = 'stl'
     output_curved = False
     dimensions = '3'
-    _output_cls = DirectVTKOutput
+    pyr_divisor_bump = 2
 
-    def __init__(self, meshf, stlrgns, *, subdiv='linear', **kwargs):
-        # STL: never HO, always discontinuous (per-triangle output)
+    def __init__(self, mesh, cfg, stlrgns, *, subdiv='linear', **kwargs):
+        # STL: never HO, always discontinuous (per-triangle output).
         kwargs['order'] = None
         kwargs['discontinuous'] = True
-        divisor = kwargs.setdefault('divisor', 1)
-
-        super().__init__(meshf, **kwargs)
+        if kwargs.get('divisor') is None:
+            kwargs['divisor'] = 1
 
         if subdiv not in ('linear', 'spherigon'):
             raise ValueError(f'Invalid subdiv type: {subdiv}')
 
-        # Read + merge the STL surfaces from the mesh, subdivide, weld unique
-        stl = np.vstack([self.reader.mesh.raw[f'regions/stl/{s}']
-                         for s in stlrgns])
-        pts = self._subdivide_pts(stl, divisor, subdiv)  # (n_subdiv, ntri, 3)
+        self._stlrgns = stlrgns
+        self._subdiv = subdiv
+        self._init_divisor = kwargs['divisor']
+
+        super().__init__(mesh, cfg, **kwargs)
+
+        self._output = DirectVTKOutput(self)
+
+    def _init_einfo(self):
+        stl = np.vstack([self.mesh.raw[f'regions/stl/{s}']
+                         for s in self._stlrgns])
+        pts = self._subdivide_pts(stl, self._init_divisor, self._subdiv)
         ppts, pinv = np.unique(pts.reshape(-1, 3), axis=0,
                                return_inverse=True)
 
@@ -115,54 +124,31 @@ class VTKSTLWriter(BaseVTKWriter):
         self._stl_ppts = ppts              # (n_welded, 3)
         self._stl_pinv = pinv              # (n_subdiv*ntri,)
 
-    def _emit_fields(self, kind):
-        # STL emits per-triangle on welded vertices; no per-element cell data
-        # exists on the surface.  Filter cell-kind aux out — base's emit loops
-        # walk this generator uniformly.
-        if kind == 'cell':
-            return
-        yield from super()._emit_fields(kind)
-
-    def _load_soln(self, *args, **kwargs):
-        super()._load_soln(*args, **kwargs)
         _, rank, root = get_comm_rank_root()
         if rank == root:
             self.einfo = [('tri', self._stl_pts_shape[1])]
         else:
             self.einfo = []
 
-    def process(self, solnf, outfname):
-        clear_memoize(self)
-        self._load_soln(solnf)
+    def _build_region(self):
+        return PointsSnapshotRegion(self.mesh, self.cfg, self._stl_ppts)
 
-        # Sample at welded STL vertices — PointSampler under the hood gathers
-        # to root; non-root ranks see empty arrays (their einfo is also empty).
-        self._snap = FileSnapshot.from_loaded(self.mesh, self.soln)
-        self._region = self._snap.at_points(self._stl_ppts)
-        self._sample = self._region.sample(self._snap)
+    def _get_npts_ncells_nnodes_lin(self, etype, neles):
+        nsvpts = self._nsvpts(etype)
+        return neles*nsvpts, neles, neles*nsvpts
 
-        if self._field_names:
-            self._sample.run(self.field_runner, public_only=True)
-
-        # _output_cls.npts is the only piece the base machinery actually uses
-        # (for _get_npts_ncells_nnodes_ho); points/connectivity emitted by our
-        # _write_data below.
-        self._output = self._output_cls(self)
-
-        if Path(outfname).suffix == '.vtu':
-            self._write_vtu(outfname)
-        else:
-            self._write_pvtu(outfname)
+    def _emit_fields(self, kind):
+        if kind == 'cell':
+            return
+        yield from super()._emit_fields(kind)
 
     def _point_field_data(self, etype):
-        # Sampled values are on welded vertices; expand back per-triangle
-        # via pinv so emission matches DirectVTKOutput's element-major layout.
         sample = self._sample
         pinv = self._stl_pinv
         n_subdiv, ntri = self._stl_pts_shape[:2]
         fields = []
 
-        for name, info in sample.fields_meta.items():
+        for name, info in sample.fields.items():
             if info.kind != 'point':
                 continue
             if name in self._remove_fields:
@@ -229,7 +215,7 @@ class VTKSTLWriter(BaseVTKWriter):
         basis = TriPolyBasis(1, TriShape.std_ele(1))
         op = basis.nodal_basis_at(TriShape.std_ele(order))
 
-        pts = interpolate_pts(op, stl[:, 1:].swapaxes(0, 1))
+        pts = interp_ops(op, stl[:, 1:].swapaxes(0, 1), cast=True)
 
         if subdiv == 'spherigon' and order > 1:
             fnorms = stl[:, 0].astype(float)

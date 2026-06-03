@@ -8,4 +8,5 @@ from pyfr.plugins.soln.nancheck import NaNCheckPlugin
 from pyfr.plugins.soln.residual import ResidualPlugin
 from pyfr.plugins.soln.sampler import SamplerPlugin
 from pyfr.plugins.soln.tavg import TavgPlugin
+from pyfr.plugins.soln.vtu_writer import VTUWriterPlugin
 from pyfr.plugins.soln.writer import WriterPlugin

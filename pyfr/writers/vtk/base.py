@@ -1,27 +1,18 @@
+import re
 from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
-from pyfr.cache import clear_memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
 from pyfr.plugins.fields.runner import FieldRunner
 from pyfr.shapes import BaseShape
-from pyfr.snapshot import FieldInfo, FileSnapshot
 from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
-from pyfr.writers.vtk.output import RegionVTKOutput
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
-def interpolate_pts(op, pts):
-    # Shared util: nodal-basis-at interpolation used by STL + spanwise.
-    ipts = op.astype(pts.dtype) @ pts.reshape(op.shape[1], -1)
-    return ipts.reshape(op.shape[0], *pts.shape[1:])
-
-
 class BaseVTKWriter(BaseWriter):
-    # Supported file types and extensions
     name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
@@ -31,25 +22,24 @@ class BaseVTKWriter(BaseWriter):
     # If to output curvature data
     output_curved = False
 
-    # Output adapter: chooses how points/connectivity are emitted.  Volume +
-    # boundary go through the region path (RegionVTKOutput).  STL + spanwise
-    # emit per-element via DirectVTKOutput.
-    _output_cls = RegionVTKOutput
+    # Per-etype divisor bump for pyramids
+    pyr_divisor_bump = 0
 
-    def __init__(self, meshf, pname=None, *, prec='single', order=None,
-                 divisor=None, add_fields=[], remove_fields=[],
-                 field_cfg=None, discontinuous=False):
-        super().__init__(meshf, pname)
+    def __init__(self, mesh, cfg, *, prec='single', order=None, divisor=None,
+                 add_fields=[], remove_fields=[], field_cfg=None,
+                 discontinuous=False):
+        self.mesh = mesh
+        self.cfg = cfg
+
+        if not re.fullmatch(self.dimensions, str(mesh.ndims)):
+            raise RuntimeError(f'{mesh.ndims}D grids not supported')
 
         self.dtype = np.dtype(prec).type
-        # `add_fields` registers derived-field providers (mach, yplus, ...);
-        # `remove_fields` drops names from the default output pool.
+
         self._field_names = add_fields
         self._remove_fields = set(remove_fields)
         self._field_cfg = field_cfg
 
-        # clean=True deduplicates sub-points + averages pris/grad at the
-        # shared positions on the region BEFORE field providers run.
         self._clean = not discontinuous
 
         # Choose whether to output subdivided cells or high order VTK cells
@@ -64,12 +54,58 @@ class BaseVTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
+        # Per-etype divisor
+        divisor_default = self.divisor or self.cfg.getint('solver', 'order')
+        self.etypes_div = defaultdict(lambda: divisor_default)
+        self.etypes_div['pyr'] += self.pyr_divisor_bump
+
+        self._init_einfo()
+        self._region = self._build_region()
+
+        self.field_runner = FieldRunner(self._field_names, mesh.ndims,
+                                        self._field_cfg or self.cfg, self.type)
+
+        self.tcurr = None
+
+    def emit(self, snap, outfname):
+        if self._field_names and snap.prefix != 'soln':
+            raise ValueError(
+                f'Field providers are only supported for conservative-form '
+                f'solution files (snap.prefix = {snap.prefix!r})')
+
+        # MPI collective must be in lockstep across ranks
+        snap.compute_grads()
+        self._sample = self._region.sample(snap)
+        self._post_sample(snap)
+        self._sample.run(self.field_runner, public_only=True)
+
+        if unknown := self._remove_fields - set(self._sample.fields):
+            raise RuntimeError(
+                f'--remove-fields names not in output pool: '
+                f'{sorted(unknown)} '
+                f'(available: {sorted(self._sample.fields)})')
+
+        if snap.prefix == 'soln':
+            self.tcurr = getattr(snap, 'tcurr', None)
+        else:
+            self.tcurr = None
+
+        if Path(outfname).suffix == '.vtu':
+            self._write_vtu(outfname)
+        else:
+            self._write_pvtu(outfname)
+
+    def _init_einfo(self):
+        raise NotImplementedError
+
+    def _build_region(self):
+        raise NotImplementedError
+
+    def _post_sample(self, snap):
+        pass
+
     def _emit_fields(self, kind):
-        # Yield (name, FieldInfo) for emittable fields of `kind` ('point' or
-        # 'cell'), filtered by --remove-fields.  Snap-based writers iterate
-        # sample.fields_meta; legacy writers (spanwise) override this to yield
-        # from their own structures.
-        for name, info in self._sample.fields_meta.items():
+        for name, info in self._sample.fields.items():
             if info.kind != kind:
                 continue
             if name in self._remove_fields:
@@ -83,31 +119,22 @@ class BaseVTKWriter(BaseWriter):
     def _get_npts_ncells_nnodes_lin(self, etype, neles):
         div = self.etypes_div[etype]
 
-        # Get the number of points
-        nsvpts = self._nsvpts(etype)
-
         # Get the number of subdivided nodes
         subdv = get_vtk_shape(etype, div)
         ncells = len(subdv.subcells)*neles
         nnodes = len(subdv.subnodes)*neles
 
-        return self._output.npts(etype, neles, nsvpts), ncells, nnodes
+        return self._region.npts(etype), ncells, nnodes
 
     def _get_npts_ncells_nnodes_ho(self, etype, neles):
         # Fallback to subdivision for pyramids
         if etype == 'pyr':
-            counts = self._get_npts_ncells_nnodes_lin(etype, neles)
-        else:
-            nsvpts = self._nsvpts(etype)
-            npts = self._output.npts(etype, neles, nsvpts)
-            counts = npts, neles, neles*nsvpts
+            return self._get_npts_ncells_nnodes_lin(etype, neles)
 
-        return counts
+        nsvpts = self._nsvpts(etype)
+        return self._region.npts(etype), neles, neles*nsvpts
 
     def _array_attrs(self):
-        # Header order: coords + connectivity + (curved) + cell fields + point
-        # fields.  Cell + point come from one unified registry — sample.fields_
-        # meta (or spanwise's _emit_fields override).
         attrs = [('', self._vtk_dtype(self.dtype), '3'),
                  ('connectivity', 'Int64', ''),
                  ('offsets', 'Int64', ''),
@@ -141,70 +168,6 @@ class BaseVTKWriter(BaseWriter):
 
         return sizes
 
-    def _load_soln(self, *args, **kwargs):
-        super()._load_soln(*args, **kwargs)
-
-        # Per-etype divisor.  Pyr falls back to linear sub-cells so it needs
-        # the bump in discontinuous mode (matching DirectVTKOutput); in clean
-        # mode the bump is 0.
-        divisor = self.divisor or self.cfg.getint('solver', 'order')
-        self.etypes_div = defaultdict(lambda: divisor)
-        self.etypes_div['pyr'] += self._output_cls.pyr_divisor_bump
-
-        # tcurr lives in the soln-prefix stats; stored-form files leave it
-        # unset (header skips the TimeValue node).
-        if self.dataprefix == 'soln':
-            self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
-        else:
-            self.tcurr = None
-
-    def process(self, solnf, outfname):
-        # Region-driven default used by volume + boundary.  STL builds its own
-        # PointsSnapshotRegion + welded expansion.  Spanwise has its own
-        # averaged-output path.  Subclasses override _build_region().
-        clear_memoize(self)
-        self._load_soln(solnf)
-
-        # Snap + region + sample build the unified field registry on
-        # sample.fields_meta (primitives + grads + aux).  FieldRunner extends
-        # with provider entries.  --remove-fields validates against the final
-        # registry.
-        self._snap = FileSnapshot.from_loaded(self.mesh, self.soln)
-
-        if self._field_names and not self._snap.supports_providers:
-            raise ValueError('Field providers are only supported for '
-                             'solution files')
-
-        self._region = self._build_region()
-        self._sample = self._region.sample(self._snap)
-
-        self.field_runner = FieldRunner(self._field_names, self.ndims,
-                                        self._field_cfg or self.cfg, self.type)
-        if self.field_runner:
-            self._sample.run(self.field_runner, public_only=True)
-
-        if self._remove_fields:
-            available = set(self._sample.fields_meta)
-            unknown = self._remove_fields - available
-            if unknown:
-                raise RuntimeError(
-                    f'--remove-fields names not in output pool: '
-                    f'{sorted(unknown)} (available: {sorted(available)})'
-                )
-
-        self._output = RegionVTKOutput(self)
-
-        if Path(outfname).suffix == '.vtu':
-            self._write_vtu(outfname)
-        else:
-            self._write_pvtu(outfname)
-
-    def _build_region(self):
-        raise NotImplementedError
-
-    def _cell_curved(self, etype):
-        return self.mesh.spts_curved[etype]
-
     def _refpts_fn(self, shapecls, _shape=None):
         # Subdivided sample points, permuted to VTK HO node order when emitting
         # HO cells (non-pyr — pyrs always linearise).  Used by both the vis
@@ -217,9 +180,6 @@ class BaseVTKWriter(BaseWriter):
         return svpts
 
     def _point_field_data(self, etype):
-        # Iterate the unified registry; sample.field_array dispatches on
-        # source.  The layout transforms here are VTK-specific (clean → flat,
-        # raw → swapaxes); the lookup is generic and lives on the sample.
         region = self._region
         sample = self._sample
         fields = []
@@ -230,13 +190,9 @@ class BaseVTKWriter(BaseWriter):
                 continue
 
             if info.source in ('primitive', 'gradient'):
-                # field_array stacked components on axis=-1 already.
                 if not region.clean:
                     arr = arr.swapaxes(0, 1)
             else:
-                # Aux / provider arrays come in two layouts: (npts,) for
-                # 1-comp, (npts, ncomp) for multi-comp (clean), or
-                # (ncomp, nsvpts, neles) for raw.
                 if region.clean:
                     arr = arr[:, None] if arr.ndim == 1 else arr.T
                 else:
@@ -453,14 +409,14 @@ class BaseVTKWriter(BaseWriter):
 
     def _write_data(self, write, etype):
         region = self._region
-        vpts = region.ploc[etype]
-        nsvpts = self._nsvpts(etype)
         neles = dict(self.einfo)[etype]
 
-        out = self._output.points(etype, vpts)
-        self._write_darray(out, write, self.dtype)
+        # Points come from the region in emission layout.
+        self._write_darray(region.points(etype), write, self.dtype)
 
+        # VTK-specific sub-cell layout tables.
         if etype != 'pyr' and self.ho_output:
+            nsvpts = self._nsvpts(etype)
             nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
             types = get_vtk_shape(etype, self.etypes_div[etype]).vtk_ho_type
@@ -470,7 +426,9 @@ class BaseVTKWriter(BaseWriter):
             subcellsoff = subdiv.subcelloffs
             types = subdiv.subcelltypes
 
-        vtu_con = self._output.connectivity(etype, nodes, neles, nsvpts)
+        # Connectivity: region applies clean / raw layout to the writer's
+        # per-element sub-node template.
+        vtu_con = region.connectivity(etype, nodes)
         vtu_off = np.tile(subcellsoff, (neles, 1))
         vtu_off += (np.arange(neles)*len(nodes))[:, None]
         vtu_typ = np.tile(types, neles)
@@ -480,18 +438,18 @@ class BaseVTKWriter(BaseWriter):
         self._write_darray(vtu_typ, write, np.uint8)
 
         if self.output_curved:
-            curved = self._cell_curved(etype)
+            curved = region.cell_curved(etype)
             vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
             self._write_darray(vtu_curved, write, np.uint8)
 
         ncells_per_ele = len(vtu_typ) // neles
         for name, info in self._emit_fields('cell'):
-            data = self._sample.fields.get((etype, name))
+            data = self._sample.field_arrays.get((etype, name))
             if data is None:
                 continue
             vtu_aux = data.reshape(neles, -1)
             vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
             self._write_darray(vtu_aux, write, info.dtype)
 
-        for arr, dtype in self._output.point_fields(etype):
+        for arr, dtype in self._point_field_data(etype):
             self._write_darray(arr, write, dtype)

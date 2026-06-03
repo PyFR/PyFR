@@ -8,29 +8,32 @@ from pyfr.mpiutil import get_comm_rank_root
 from pyfr.nputil import npeval
 from pyfr.plugins.common import region_data
 from pyfr.plugins.fields.runner import FieldRunner
-from pyfr.plugins.soln.insitu.base import split_components
 from pyfr.plugins.soln.insitu.conduit import ConduitNode, ConduitWrappers
+from pyfr.snapshot.region import (SurfaceSnapshotRegion, VolumeSnapshotRegion)
+from pyfr.util import paren_depths
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
 class InSituError(Exception): pass
 
 
+def split_components(expr):
+    # Split on top-level commas; respect bracket/paren/brace nesting.
+    # Used for parsing `field-X = expr1, expr2, ...` user directives.
+    parts, buf = [], []
+    for c, d in paren_depths(expr):
+        if c == ',' and d == 0:
+            parts.append(''.join(buf).strip())
+            buf = []
+        else:
+            buf.append(c)
+
+    parts.append(''.join(buf).strip())
+
+    return parts
+
+
 class InSituRenderer:
-    # In-situ renderer: serialise a Snapshot region into a Conduit blueprint
-    # node, run providers + expression evaluation per step, and publish the
-    # results to the host (Catalyst or Ascent).
-    #
-    # Lifetime model — Freddie's rule (plugins don't retain intg):
-    #   * __init__ takes a transient `snap` (IntgSnapshot for soln plugins,
-    #     FileSnapshot for CLI).  We capture static metadata (mesh, config,
-    #     elementscls, dtype, has_grads) into self.X and DO NOT keep the
-    #     snap reference.  Regions also drop their snap reference after
-    #     building geometry.
-    #   * render(snap) is called per step (or per file in CLI batch mode)
-    #     with a fresh snap.  For each region we build a per-call
-    #     SnapshotSample(region, snap); the sample owns pris/grad_pris/fields
-    #     and is dropped at end of render().
 
     # Conduit blueprint element name mapping
     bp_emap = {'hex': 'hex', 'pri': 'wedge', 'pyr': 'pyramid', 'quad': 'quad',
@@ -38,50 +41,49 @@ class InSituRenderer:
 
     error_cls = InSituError
 
-    def __init__(self, snap, acfg, cfgsect, isrestart):
+    def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
         comm, _, _ = get_comm_rank_root()
 
-        # Static metadata captured from snap; snap reference NOT retained
-        self.mesh = snap.mesh
-        self.scfg = snap.config
-        self.elementscls = snap.elementscls
-        self.dtype = snap.dtype
-        self._snap_has_grads = snap.has_grads
+        self.mesh = mesh
+        self.scfg = scfg
+        self.acfg = acfg if acfg is not None else scfg
 
-        self.acfg = acfg
         self.cfgsect = cfgsect
         self.isrestart = isrestart
 
-        sorder = self.scfg.getint('solver', 'order')
-        self.divisor = acfg.getint(cfgsect, 'division', sorder)
-        self.clean = acfg.getbool(cfgsect, 'clean', True)
+        sorder = scfg.getint('solver', 'order')
+        self.divisor = self.acfg.getint(cfgsect, 'division', sorder)
+        self.clean = self.acfg.getbool(cfgsect, 'clean', True)
 
         # Named surface sources (one per surface-{name} = <region> entry)
-        self.surfaces = {k.removeprefix('surface-'): acfg.get(cfgsect, k)
-                         for k in acfg.items(cfgsect, prefix='surface-')}
+        self.surfaces = {k.removeprefix('surface-'): self.acfg.get(cfgsect, k)
+                         for k in self.acfg.items(cfgsect, prefix='surface-')}
 
         # Volume source: implicit if no surfaces; opt-in alongside surfaces
         self.want_volume = (not self.surfaces or
-                            acfg.getbool(cfgsect, 'volume', False))
+                            self.acfg.getbool(cfgsect, 'volume', False))
 
         # Load Conduit (subclass may override for host-specific fallbacks)
         self.conduit = self._load_conduit()
 
-        # Build regions per source.  Each region captures its own static
-        # geometry from snap and drops the snap reference internally.
+        # Build regions per source
         self.regions = {}
         self._source_kinds = {}
         if self.want_volume:
-            # region_data returns {etype: eidxs} — passes through snap.vis()
-            # so geometric region expressions (box/sphere/...) actually
-            # subset the rendered volume.
-            rdata = region_data(acfg, cfgsect, self.mesh)
-            self.regions['volume'] = snap.vis(
-                spec=rdata, divisor=self.divisor, clean=self.clean)
+            rdata = region_data(self.acfg, cfgsect, self.mesh)
+            spec = rdata if isinstance(rdata, dict) else {et: None
+                                                          for et in
+                                                          self.mesh.eidxs}
+            div = self.divisor
+            refpts_fn = lambda sc, sh: sc.std_ele(div)
+            self.regions['volume'] = VolumeSnapshotRegion(
+                self.mesh, scfg, spec, refpts_fn,
+                divisor=div, clean=self.clean)
             self._source_kinds['volume'] = 'volume'
         for sname, sregion in self.surfaces.items():
-            self.regions[sname] = snap.surface(
-                sregion, divisor=self.divisor, clean=self.clean)
+            self.regions[sname] = SurfaceSnapshotRegion(
+                self.mesh, scfg, sregion, self.divisor,
+                clean=self.clean)
             self._source_kinds[sname] = 'boundary'
 
         # Expressions and derived-field bookkeeping
@@ -121,7 +123,7 @@ class InSituRenderer:
         # Host-specific instance init (open the library, etc.)
         self._init_host()
 
-    # --- Host hooks ----------------------------------------------------
+    # Host hooks
 
     def _load_conduit(self):
         return ConduitWrappers()
@@ -143,8 +145,6 @@ class InSituRenderer:
         self.mesh_n[f'{dom}/state/cycle'] = cycle
 
     def _emit_field(self, mesh_n, dom, fname, arr):
-        # Scalars publish at values; vectors split into values/x, /y, /z.
-        # Catalyst overrides this to emit interleaved (AoS) arrays.
         path = f'{dom}/fields/{fname}/values'
         if len(comps := arr.T) == 1:
             mesh_n[path] = comps[0]
@@ -153,11 +153,8 @@ class InSituRenderer:
                 mesh_n[f'{path}/{x}'] = sl
 
     def _emit_coords(self, mesh_n, dom, cs, xyz):
-        # Split coords; Catalyst overrides to emit interleaved (AoS).
         for l, x in zip('xyz', xyz):
             mesh_n[f'{dom}/coordsets/{cs}/values/{l}'] = x
-
-    # --- Generic methods ----------------------------------------------
 
     def _write_state_meta(self, mesh_n, dom, domid):
         mesh_n[f'{dom}/state/domain_id'] = domid
@@ -179,26 +176,14 @@ class InSituRenderer:
             mesh_n[f'{dom}/fields/{fname}/topology'] = sname
 
     def _flatten_coords(self, ploc, clean):
-        # Convert region.ploc[etype] (or sample.ploc[etype]) to per-axis
-        # arrays for _emit_coords.  clean -> (ndims, n_kept).  Raw ->
-        # (ndims, nsvpts, neles); needs an element-major flatten so cell c's
-        # verts land at flat indices [c*nsvpts, ..., (c+1)*nsvpts-1].
         if clean:
             return ploc
         return ploc.transpose(0, 2, 1).reshape(ploc.shape[0], -1)
 
-    def _build_connectivity(self, etype, ploc, region):
-        # Use cleaner.layouts when clean (deduplicated nodal connectivity);
-        # otherwise tile the subnodes pattern per element.
+    def _build_connectivity(self, etype, region):
         subdiv = get_vtk_shape(etype, self.divisor)
         snodes = subdiv.subnodes
-        if region.clean:
-            conn = region.cleaner.layouts[etype][0][:, snodes]
-        else:
-            neles = ploc.shape[-1]
-            nsvpts = ploc.shape[-2]
-            conn = np.tile(snodes, (neles, 1))
-            conn += (np.arange(neles)*nsvpts)[:, None]
+        conn = region.connectivity(etype, snodes)
         return conn, subdiv, snodes
 
     def _build_blueprint(self, dom, sname, domid, etype):
@@ -213,19 +198,13 @@ class InSituRenderer:
         mesh_n[f'{dom}/topologies/{sname}/coordset'] = cs
         mesh_n[f'{dom}/topologies/{sname}/type'] = 'unstructured'
 
-        # Coordset from region.ploc (static body-frame geometry).  If a
-        # transformer mutates sample.ploc per step, the publish() path uses
-        # sample.ploc instead — but the blueprint built here uses the region's
-        # static coords as a one-time baseline (Catalyst/Ascent may rebuild
-        # coords per step via _emit_coords).
         ploc = region.ploc[etype]
         self._emit_coords(mesh_n, dom, cs, self._flatten_coords(ploc,
                                                                 region.clean))
 
         self._write_field_meta(mesh_n, dom, sname)
 
-        # Connectivity from region (clean: cleaner.layouts; raw: tile)
-        conn, subdiv, snodes = self._build_connectivity(etype, ploc, region)
+        conn, subdiv, snodes = self._build_connectivity(etype, region)
         neles = conn.shape[0]
 
         mesh_n[f'{elem}/connectivity'] = conn
@@ -274,10 +253,6 @@ class InSituRenderer:
             self._exprs.append((field, comps))
 
     def _init_field_runners(self):
-        # Parse add-field-{name} = <sources>; one FieldRunner per source.
-        # The `add-field-` cfg prefix mirrors the offline `--add-fields` CLI
-        # flag: register a derived-field provider against one or more named
-        # surface/volume sources.
         groups = defaultdict(list)
         for k in self.acfg.items(self.cfgsect, prefix='add-field-'):
             name = k.removeprefix('add-field-')
@@ -299,51 +274,42 @@ class InSituRenderer:
                 self._register_user_field(sname, fname)
 
     def _init_gradients(self):
-        # Determine what gradients, if any, are required
-        g_pnames = set()
+        self._g_pnames_user = set()
         for _, comps in self._exprs:
             for c in comps:
-                g_pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', c))
+                self._g_pnames_user.update(re.findall(r'\bgrad_(.+?)_[xyz]\b',
+                                                      c))
+        self._provider_needs_grads = any(r.needs_grads for r
+                                         in self._field_runners.values())
+        self._gradpinfo = None
 
-        privars = self.elementscls.privars(self.mesh.ndims, self.scfg)
-
-        # Field providers index pgrads positionally; request them all
-        if any(r.needs_grads for r in self._field_runners.values()):
+    def _resolve_gradpinfo(self, snap):
+        privars = snap.pris_names
+        g_pnames = set(self._g_pnames_user)
+        if self._provider_needs_grads:
             g_pnames.update(privars)
-
-        if g_pnames and not self._snap_has_grads:
+        if g_pnames and not snap.has_grads:
             raise self.error_cls('Gradients required but not available')
-
-        self._gradpinfo = [(pname, privars.index(pname)) for pname in g_pnames]
+        self._gradpinfo = [(p, privars.index(p)) for p in g_pnames]
 
     def _evaluate_exprs(self, snap):
-        # Per-step entry point.  Build a SnapshotSample per region from the
-        # transient `snap`, run providers on each sample, then evaluate user
-        # expressions over sample.pris/grad_pris.  Samples drop at end of
-        # render() — no state is retained between calls.
-        elementscls = self.elementscls
-        pnames = elementscls.privars(self.mesh.ndims, self.scfg)
+        if self._gradpinfo is None:
+            self._resolve_gradpinfo(snap)
 
+        pnames = snap.pris_names
         tcurr = snap.tcurr
         cycle = snap.cycle
 
-        # If any region's sample-build will need gradient data, fire the
-        # collective gradient computation HERE so every rank participates
-        # uniformly (region.etypes can be empty on a rank, which would
-        # otherwise skip per-etype grad_soln calls and deadlock the MPI).
         if self._gradpinfo:
             snap.compute_grads()
 
-        # Build per-region samples (this is where the cleaner.average MPI
-        # collectives fire — every rank, deterministic order).
         samples = {sname: region.sample(snap)
                    for sname, region in self.regions.items()}
 
-        # Run field providers on each sample; results land in sample.fields
+        # Run field providers on each sample; results land in sample.field_arrays
         for sname, runner in self._field_runners.items():
             runner.run_on_sample(samples[sname], public_only=True)
 
-        # out[sname][etype] = [(field, arr), ...] for per-source publish
         out = defaultdict(dict)
 
         for (sname, etype), dom in self.dinfo.items():
@@ -372,8 +338,8 @@ class InSituRenderer:
             # Derived-field outputs from this step's runner
             if runner := self._field_runners.get(sname):
                 for fname in runner.fields(public_only=True):
-                    if (etype, fname) in sample.fields:
-                        arr = sample.fields[(etype, fname)]
+                    if (etype, fname) in sample.field_arrays:
+                        arr = sample.field_arrays[(etype, fname)]
                         items.append((self._field_name(sname, fname),
                                       np.atleast_3d(arr)))
 
@@ -382,9 +348,6 @@ class InSituRenderer:
         return out
 
     def publish(self, fields):
-        # Push the per-step field arrays into the Conduit node.  Each item
-        # is (fname, arr) and arr's shape depends on clean/raw — _emit_field
-        # handles the layout.
         for sname, by_etype in fields.items():
             for etype, items in by_etype.items():
                 dom = self.dinfo[sname, etype]

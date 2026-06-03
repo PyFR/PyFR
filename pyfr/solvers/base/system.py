@@ -211,6 +211,10 @@ class BaseSystem:
         self.has_src_macros = any(eles.has_src_macros
                                   for eles in self.ele_map.values())
 
+        self.export_fields = {et: list(e.export_fields)
+                              for et, e in self.ele_map.items()
+                              if e.export_fields}
+
         # Delete the memory-intensive ele_map and interface objects
         del self.ele_map
         del self._int_inters

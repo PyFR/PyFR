@@ -3,7 +3,7 @@ from pyfr.mpiutil import init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
 from pyfr.plugins.soln.ascent import AscentRenderer
-from pyfr.snapshot import FileSnapshot
+from pyfr.snapshot import from_file as snap_from_file
 
 
 class AscentCLIPlugin(BaseCLIPlugin):
@@ -33,19 +33,15 @@ class AscentCLIPlugin(BaseCLIPlugin):
         renderer, rcfg = None, None
 
         for s in args.solns:
-            # File-backed snap; matches the IntgSnapshot surface the renderer
-            # already consumes (in-situ).  Tavg-prefix solution files have
-            # primitives stored by name (not con_to_pri-derived) and need a
-            # separate mapping pass — TODO in Step 4c when cli/tavg migrates.
-            snap = FileSnapshot.from_file(args.mesh, s)
-            if snap.name != 'soln':
+            snap = snap_from_file(args.mesh, s)
+            if snap.prefix != 'soln':
                 raise NotImplementedError(
-                    f'cli/ascent does not yet support {snap.name!r} snapshots '
-                    '— renderer expressions assume conservative-form variables')
+                    f'cli/ascent does not support {snap.prefix!r}-prefix.')
 
             # Rebuild the renderer when the underlying solver config changes
             if not renderer or rcfg != snap.config:
-                renderer = AscentRenderer(snap, acfg, acfgsect, isrestart=True)
+                renderer = AscentRenderer(snap.mesh, snap.config, acfgsect,
+                                          isrestart=True, acfg=acfg)
                 rcfg = snap.config
 
             renderer.render(snap)

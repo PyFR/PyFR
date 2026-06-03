@@ -48,6 +48,15 @@
 #      clean     = true                   ; average shared-vertex values
 #      volume    = true                   ; include volume source (default
 #                                         ;   true when no surfaces defined)
+#      region    = box((-1,-1,-1),(5,5,5)); PRE-CATALYST filter — culls the
+#                                         ;   volume to a geometric region
+#                                         ;   (box/sphere/...) ON THE PyFR
+#                                         ;   SIDE, before publishing to the
+#                                         ;   Catalyst pipeline.  Reduces the
+#                                         ;   data published per step;
+#                                         ;   downstream ParaView filters see
+#                                         ;   only the trimmed mesh.
+#                                         ;   Optional, defaults to all.
 #      surface-walls = bc/wall            ; named surface source (optional)
 #      field-velocity = u, v, w           ; user-defined vector field
 #      field-pressure = p                 ; user-defined scalar field
@@ -98,7 +107,7 @@
 #
 #        # AFTER (in-situ):
 #        volume = TrivialProducer(registrationName='volume')
-#        vehicle = TrivialProducer(registrationName='vehicle')
+#        walls = TrivialProducer(registrationName='walls')
 #
 #   2. Update any downstream filter inputs to reference the matching
 #      producer instead of the reader:
@@ -157,9 +166,9 @@ import numpy as np
 from pyfr.ctypesutil import LibWrapper, platform_libdirs, platform_libname
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
+from pyfr.snapshot import IntgSnapshot
 from pyfr.plugins.soln.insitu import (ConduitNode, ConduitWrappers,
                                       InSituError, InSituRenderer)
-from pyfr.snapshot import IntgSnapshot
 
 
 class CatalystError(InSituError): pass
@@ -215,12 +224,11 @@ class CatalystWrappers(LibWrapper):
 class CatalystRenderer(InSituRenderer):
     error_cls = CatalystError
 
-    def __init__(self, intg, acfg, cfgsect, isrestart):
-        # External buffers must outlive each catalyst_execute call
+    def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
         self._coord_bufs = []
         self._field_bufs = []
 
-        super().__init__(intg, acfg, cfgsect, isrestart)
+        super().__init__(mesh, scfg, cfgsect, isrestart, acfg=acfg)
 
     def _load_conduit(self):
         return CatalystConduitWrappers()
@@ -275,8 +283,7 @@ class CatalystRenderer(InSituRenderer):
         if ncomp == 1:
             mesh_n[path] = np.ascontiguousarray(arr.squeeze(-1).T)
         else:
-            # AoS — raw path is (nsvpts, neles, ncomp); cleaned path is
-            # (npoints, ncomp)
+            # AoS — raw path vs. cleaned path
             if arr.ndim == 3:
                 vbuf = arr.swapaxes(0, 1).reshape(-1, ncomp)
             else:
@@ -314,25 +321,12 @@ class CatalystPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        # Capture export_fields here — ele_map is still alive at plugin
-        # construction time; system.commit() frees it shortly after.  Held on
-        # the plugin (not the system) so configs without aux-consumers don't
-        # pin eles via getter closures.
-        self._export_fields = {et: list(e.export_fields)
-                               for et, e in intg.system.ele_map.items()
-                               if e.export_fields}
-
-        # Transient snap: built to seed the renderer's static metadata + region
-        # geometry; reference dropped at end of __init__.
-        self._renderer = CatalystRenderer(
-            IntgSnapshot(intg=intg, export_fields=self._export_fields),
-            intg.cfg, cfgsect, intg.isrestart)
+        self._renderer = CatalystRenderer(intg.system.mesh, intg.cfg,
+                                          cfgsect, intg.isrestart)
         self._bootstrap_done = False
 
     def __call__(self, intg):
-        # Fresh snap per call; renderer borrows it for the duration of
-        # bootstrap()/execute()
-        snap = IntgSnapshot(intg=intg, export_fields=self._export_fields)
+        snap = IntgSnapshot(intg)
 
         if not self._bootstrap_done:
             self._renderer.bootstrap(snap)

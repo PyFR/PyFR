@@ -3,13 +3,17 @@ from ctypes import c_void_p
 from pyfr.ctypesutil import LibWrapper
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
-from pyfr.plugins.soln.insitu import (ConduitNode, InSituError, InSituRenderer,
-                                      bp_key)
+from pyfr.plugins.soln.insitu import (ConduitNode, InSituError,
+                                      InSituRenderer)
 from pyfr.snapshot import IntgSnapshot
 from pyfr.util import file_path_gen, first
 
 
 class AscentError(InSituError): pass
+
+
+def bp_key(k):
+    return k.replace('_', '/').replace('-', '_')
 
 
 class AscentWrappers(LibWrapper):
@@ -28,21 +32,17 @@ class AscentWrappers(LibWrapper):
 class AscentRenderer(InSituRenderer):
     error_cls = AscentError
 
-    def __init__(self, intg, acfg, cfgsect, isrestart):
-        self.basedir = acfg.getpath(cfgsect, 'basedir', '.', abs=True)
-        self._image_paths = []
-
-        super().__init__(intg, acfg, cfgsect, isrestart)
+    def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
+        super().__init__(mesh, scfg, cfgsect, isrestart, acfg=acfg)
 
     def __del__(self):
-        # Backstop: if finalise() didn't run (unusual shutdown path), close
-        # Ascent here.  finalise() nulls self.lib so the second-call guard
-        # short-circuits in normal shutdown.
         if getattr(self, 'ascent_ptr', None) and getattr(self, 'lib', None):
             self.lib.ascent_close(self.ascent_ptr)
             self.ascent_ptr = None
 
     def _init_host_publish(self):
+        self.basedir = self.acfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
+        self._image_paths = []
         self._init_scenes()
         self._init_pipelines()
 
@@ -173,9 +173,6 @@ class AscentRenderer(InSituRenderer):
         for path, gen in self._image_paths:
             self._add_scene[path] = str(gen.send(snap.tcurr))
 
-        # Compute + publish field expressions; one call per source/etype.
-        # _evaluate_exprs builds per-region samples internally; we don't keep
-        # any reference to them after render() returns.
         fields = self._evaluate_exprs(snap)
         self.publish(fields)
 
@@ -198,24 +195,11 @@ class AscentPlugin(BaseSolnPlugin):
     def __init__(self, intg, cfgsect, suffix=None):
         super().__init__(intg, cfgsect, suffix)
 
-        # Capture export_fields here — ele_map is still alive at plugin
-        # construction time; system.commit() frees it shortly after.  Held on
-        # the plugin (not the system) so configs without aux-consumers don't
-        # pin eles via getter closures.
-        self._export_fields = {et: list(e.export_fields)
-                               for et, e in intg.system.ele_map.items()
-                               if e.export_fields}
-
-        # Transient snap: built to seed the renderer's static metadata + region
-        # geometry; reference dropped at end of __init__.
-        self._renderer = AscentRenderer(
-            IntgSnapshot(intg=intg, export_fields=self._export_fields),
-            intg.cfg, cfgsect, intg.isrestart)
+        self._renderer = AscentRenderer(intg.system.mesh, intg.cfg, cfgsect,
+                                        intg.isrestart)
 
     def __call__(self, intg):
-        # Fresh snap per call; renderer borrows it for the duration of render()
-        self._renderer.render(
-            IntgSnapshot(intg=intg, export_fields=self._export_fields))
+        self._renderer.render(IntgSnapshot(intg))
 
     def finalise(self, intg):
         if r := getattr(self, '_renderer', None):

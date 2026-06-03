@@ -1,7 +1,7 @@
 import numpy as np
 
 from pyfr.cache import memoize
-from pyfr.plugins.fields.base import get_field_providers
+from pyfr.plugins.fields import get_field_providers
 from pyfr.snapshot import FieldInfo
 
 
@@ -40,10 +40,6 @@ class SampleView:
     @property
     def min_upt_wall_dist_approx(self):
         return getattr(self.region, 'wall_dist', {}).get(self.etype)
-
-    @property
-    def state(self):
-        return self.snap.state
 
     @property
     def nvars(self):
@@ -89,22 +85,22 @@ class FieldRunner:
             for fname, arr in view.fields.items():
                 if public_only and fname.startswith('_'):
                     continue
-                sample.fields[et, fname] = arr
+                sample.field_arrays[et, fname] = arr
 
-        # Register provider outputs in sample.fields_meta so consumers iterate
-        # one unified registry (alongside snap's primitives + grads + aux).
+        # Register provider outputs in sample.fields so consumers iterate one
+        # unified registry (alongside snap's data + primitives + grads + aux).
         for p in self.plugins:
             for fname, varnames in p.fields.items():
                 if public_only and fname.startswith('_'):
                     continue
-                if fname in sample.fields_meta:
+                if fname in sample.fields:
                     continue
-                sample.fields_meta[fname] = FieldInfo(
+                sample.fields[fname] = FieldInfo(
                     name=fname, kind='point', ncomps=len(varnames),
                     dtype=np.dtype(sample.snap.dtype), source='provider',
                     components=tuple(varnames))
 
-        return sample.fields
+        return sample.field_arrays
 
     @property
     def needs_grads(self):
