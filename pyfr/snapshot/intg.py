@@ -1,5 +1,6 @@
 from functools import cached_property
 
+from pyfr.mpiutil import get_comm_rank_root
 from pyfr.snapshot.base import BaseSnapshot
 
 
@@ -21,6 +22,9 @@ class IntgSnapshot(BaseSnapshot):
 
         self._export_fields = sys.export_fields
         self._intg = intg
+
+        comm, _, root = get_comm_rank_root()
+        self.state = comm.bcast(intg.serialiser.serialise(), root=root)
 
     @property
     def tcurr(self):
@@ -66,10 +70,3 @@ class IntgSnapshot(BaseSnapshot):
     def compute_grads(self):
         if self.has_grads:
             self._intg.compute_grads()
-
-    @cached_property
-    def state(self):
-        from pyfr.mpiutil import get_comm_rank_root
-        comm, _, root = get_comm_rank_root()
-        local = self._intg.serialiser.serialise()
-        return comm.bcast(local, root=root)
