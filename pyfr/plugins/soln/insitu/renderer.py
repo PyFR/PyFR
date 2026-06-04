@@ -316,6 +316,15 @@ class InSituRenderer:
             self._write_step_state(dom, tcurr, cycle)
 
             sample = samples[sname]
+
+            # Re-emit coords only if transformed
+            region = self.regions[sname]
+            if sample.ploc is not region.ploc:
+                cs = f'{sname}_coords'
+                self._emit_coords(self.mesh_n, dom, cs,
+                                  self._flatten_coords(sample.ploc[etype],
+                                                       region.clean))
+
             psolns = sample.pris[etype]
             pgrads = (sample.grad_pris[etype] if self._gradpinfo else None)
 

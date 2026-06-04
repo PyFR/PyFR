@@ -225,7 +225,7 @@ class CatalystRenderer(InSituRenderer):
     error_cls = CatalystError
 
     def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
-        self._coord_bufs = []
+        self._coord_bufs = {}
         self._field_bufs = []
 
         super().__init__(mesh, scfg, cfgsect, isrestart, acfg=acfg)
@@ -271,9 +271,9 @@ class CatalystRenderer(InSituRenderer):
         self.mesh_n[f'{dom}/state/cycle'] = cycle
 
     def _emit_coords(self, mesh_n, dom, cs, xyz):
-        # AoS — keep buffer alive until the next catalyst_execute call
+        # AoS — keep buffer alive until next overwrite (per (dom, cs) entry).
         aos = np.ascontiguousarray(np.asarray(xyz).T)
-        self._coord_bufs.append(aos)
+        self._coord_bufs[dom, cs] = aos
         mesh_n.set_aos(f'{dom}/coordsets/{cs}/values', 'xyz', aos)
 
     def _emit_field(self, mesh_n, dom, fname, arr):
