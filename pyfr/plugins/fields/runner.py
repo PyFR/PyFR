@@ -3,48 +3,7 @@ import numpy as np
 from pyfr.cache import memoize
 from pyfr.plugins.fields import get_field_providers
 from pyfr.snapshot import FieldInfo
-
-
-class SampleView:
-    def __init__(self, sample, etype, *, layout='soa'):
-        self.sample = sample
-        self.etype = etype
-        self.layout = layout
-        self.cfg = sample.region.cfg
-        self.fields = {}
-
-    @property
-    def ploc(self):
-        p = self.sample.ploc[self.etype]
-        return p.T if self.layout == 'aos' else p
-
-    @property
-    def pris(self):
-        return self.sample.pris[self.etype]
-
-    @property
-    def grad_pris(self):
-        return self.sample.grad_pris[self.etype]
-
-    @property
-    def normals(self):
-        region = self.sample.region
-        return getattr(region, 'normals', {}).get(self.etype)
-
-    @property
-    def min_upt_wall_dist_approx(self):
-        region = self.sample.region
-        return getattr(region, 'wall_dist', {}).get(self.etype)
-
-    @property
-    def has_grads(self):
-        return self.grad_pris is not None
-
-    def field_array(self, info):
-        arr = self.sample.field_array(self.etype, info)
-        if arr is None:
-            return None
-        return arr.T if self.layout == 'soa' else arr
+from pyfr.snapshot.sample import SoASampleView
 
 
 class FieldRunner:
@@ -67,7 +26,7 @@ class FieldRunner:
     def run_on_sample(self, sample, public_only=False):
         clean = sample.region.clean
         for et in sample.region.etypes:
-            view = SampleView(sample, et)
+            view = SoASampleView(sample, et)
             for p in self.plugins:
                 p.run(view)
             for fname, arr in view.fields.items():

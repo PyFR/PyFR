@@ -1,3 +1,59 @@
+from pyfr.util import subclass_where
+
+
+class BaseSampleView:
+    layout = None
+
+    def __init__(self, sample, etype):
+        self.sample = sample
+        self.etype = etype
+        self.cfg = sample.region.cfg
+        self.fields = {}
+
+    @property
+    def pris(self):
+        return self.sample.pris[self.etype]
+
+    @property
+    def grad_pris(self):
+        return self.sample.grad_pris[self.etype]
+
+    @property
+    def normals(self):
+        return getattr(self.sample.region, 'normals', {}).get(self.etype)
+
+    @property
+    def min_upt_wall_dist_approx(self):
+        return getattr(self.sample.region, 'wall_dist', {}).get(self.etype)
+
+    @property
+    def has_grads(self):
+        return self.grad_pris is not None
+
+
+class SoASampleView(BaseSampleView):
+    layout = 'soa'
+
+    @property
+    def ploc(self):
+        return self.sample.ploc[self.etype]
+
+    def field_array(self, info):
+        arr = self.sample.field_array(self.etype, info)
+        return arr.T if arr is not None else None
+
+
+class AoSSampleView(BaseSampleView):
+    layout = 'aos'
+
+    @property
+    def ploc(self):
+        return self.sample.ploc[self.etype].T
+
+    def field_array(self, info):
+        return self.sample.field_array(self.etype, info)
+
+
 class SnapshotSample:
     def __init__(self, region, snap):
         self.region = region
@@ -12,8 +68,7 @@ class SnapshotSample:
         self._register_fields(snap)
 
     def view(self, etype, *, layout='soa'):
-        from pyfr.plugins.fields.runner import SampleView
-        return SampleView(self, etype, layout=layout)
+        return subclass_where(BaseSampleView, layout=layout)(self, etype)
 
     def _register_fields(self, snap):
         for info in snap.iter_fields():
