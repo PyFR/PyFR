@@ -14,9 +14,6 @@ from pyfr.util import paren_depths
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
-class InSituError(Exception): pass
-
-
 def split_components(expr):
     # Split on top-level commas; respect bracket/paren/brace nesting.
     # Used for parsing `field-X = expr1, expr2, ...` user directives.
@@ -34,12 +31,9 @@ def split_components(expr):
 
 
 class InSituRenderer:
-
     # Conduit blueprint element name mapping
     bp_emap = {'hex': 'hex', 'pri': 'wedge', 'pyr': 'pyramid', 'quad': 'quad',
                'tet': 'tet', 'tri': 'tri'}
-
-    error_cls = InSituError
 
     def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
         comm, _, _ = get_comm_rank_root()
@@ -70,20 +64,19 @@ class InSituRenderer:
         self.regions = {}
         self._source_kinds = {}
         if self.want_volume:
-            rdata = region_data(self.acfg, cfgsect, self.mesh)
-            spec = rdata if isinstance(rdata, dict) else {et: None
-                                                          for et in
-                                                          self.mesh.eidxs}
+            spec = region_data(self.acfg, cfgsect, self.mesh)
             div = self.divisor
             refpts_fn = lambda sc, sh: sc.std_ele(div)
             self.regions['volume'] = VolumeSnapshotRegion(
                 self.mesh, scfg, spec, refpts_fn,
-                divisor=div, clean=self.clean)
+                divisor=div, clean=self.clean
+            )
             self._source_kinds['volume'] = 'volume'
         for sname, sregion in self.surfaces.items():
             self.regions[sname] = SurfaceSnapshotRegion(
-                self.mesh, scfg, sregion, self.divisor,
-                clean=self.clean)
+                self.mesh, scfg, [sregion], self.divisor,
+                clean=self.clean
+            )
             self._source_kinds[sname] = 'boundary'
 
         # Expressions and derived-field bookkeeping
@@ -100,7 +93,7 @@ class InSituRenderer:
 
         if not self._fields_read.issubset(self._fields_write):
             missing = self._fields_read - self._fields_write
-            raise self.error_cls(f'Fields used but not defined: {missing}')
+            raise ValueError(f'Fields used but not defined: {missing}')
 
         # Gradient pre-processing
         self._init_gradients()
@@ -120,9 +113,6 @@ class InSituRenderer:
             self._build_blueprint(dom, sname, doff + i, etype)
             self.dinfo[sname, etype] = dom
 
-        # Host-specific instance init (open the library, etc.)
-        self._init_host()
-
     # Host hooks
 
     def _load_conduit(self):
@@ -130,10 +120,6 @@ class InSituRenderer:
 
     def _init_host_publish(self):
         # Override to wire in scenes/pipelines/etc.
-        pass
-
-    def _init_host(self):
-        # Override to open the host instance using self.mesh_n
         pass
 
     def _domain_path(self, sname, domid):
@@ -145,6 +131,7 @@ class InSituRenderer:
         self.mesh_n[f'{dom}/state/cycle'] = cycle
 
     def _emit_field(self, mesh_n, dom, fname, arr):
+        # Scalars publish at values; vectors split into values/x, /y, /z
         path = f'{dom}/fields/{fname}/values'
         if len(comps := arr.T) == 1:
             mesh_n[path] = comps[0]
@@ -175,8 +162,8 @@ class InSituRenderer:
             mesh_n[f'{dom}/fields/{fname}/volume_dependent'] = 'false'
             mesh_n[f'{dom}/fields/{fname}/topology'] = sname
 
-    def _flatten_coords(self, ploc, clean):
-        if clean:
+    def _flatten_coords(self, ploc):
+        if ploc.ndim == 2:
             return ploc
         return ploc.transpose(0, 2, 1).reshape(ploc.shape[0], -1)
 
@@ -199,8 +186,7 @@ class InSituRenderer:
         mesh_n[f'{dom}/topologies/{sname}/type'] = 'unstructured'
 
         ploc = region.ploc[etype]
-        self._emit_coords(mesh_n, dom, cs, self._flatten_coords(ploc,
-                                                                region.clean))
+        self._emit_coords(mesh_n, dom, cs, self._flatten_coords(ploc))
 
         self._write_field_meta(mesh_n, dom, sname)
 
@@ -231,6 +217,7 @@ class InSituRenderer:
             mesh_n[f'{elem}/shape'] = self.bp_emap[etype]
 
     def _register_user_field(self, sname, field):
+        # Mark field as user-namespaced and reserve its slot on this source
         self._user_fields.add(field)
         fname = self._field_name(sname, field)
         if fname in self._fields_write:
@@ -253,55 +240,55 @@ class InSituRenderer:
             self._exprs.append((field, comps))
 
     def _init_field_runners(self):
+        # Parse add-field-{name} = <sources>; one runner per source
         groups = defaultdict(list)
         for k in self.acfg.items(self.cfgsect, prefix='add-field-'):
             name = k.removeprefix('add-field-')
             for s in self.acfg.get(self.cfgsect, k).split(','):
                 sname = s.strip()
                 if sname not in self.regions:
-                    raise self.error_cls(f'Field provider {name!r}: unknown '
-                                         f'source {sname!r}')
+                    raise ValueError(f'Field provider {name!r}: unknown '
+                                     f'source {sname!r}')
                 groups[sname].append(name)
 
-        self._field_runners = {}
+        self._field_runners = runners = {}
         for sname, names in groups.items():
             export_type = self._source_kinds[sname]
-            runner = FieldRunner(names, self.mesh.ndims, self.scfg,
-                                 export_type=export_type)
-            self._field_runners[sname] = runner
+            runners[sname] = FieldRunner(names, self.mesh.ndims, self.scfg,
+                                         export_type=export_type)
 
-            for fname in runner.fields(public_only=True):
+            for fname in runners[sname].fields(public_only=True):
                 self._register_user_field(sname, fname)
 
     def _init_gradients(self):
-        self._g_pnames_user = set()
+        self._g_pnames_user = pnames = set()
         for _, comps in self._exprs:
             for c in comps:
-                self._g_pnames_user.update(re.findall(r'\bgrad_(.+?)_[xyz]\b',
-                                                      c))
-        self._provider_needs_grads = any(r.needs_grads for r
-                                         in self._field_runners.values())
+                pnames.update(re.findall(r'\bgrad_(.+?)_[xyz]\b', c))
+
+        runners = self._field_runners.values()
+        self._provider_needs_grads = any(r.needs_grads for r in runners)
         self._gradpinfo = None
 
     def _resolve_gradpinfo(self, snap):
+        if self._gradpinfo is not None:
+            return
         privars = snap.pris_names
         g_pnames = set(self._g_pnames_user)
+        needs_grads = bool(g_pnames) or self._provider_needs_grads
+        if needs_grads and not snap.has_grads:
+            raise ValueError('Gradients required but not available')
         if self._provider_needs_grads:
             g_pnames.update(privars)
-        if g_pnames and not snap.has_grads:
-            raise self.error_cls('Gradients required but not available')
         self._gradpinfo = [(p, privars.index(p)) for p in g_pnames]
 
     def _evaluate_exprs(self, snap):
-        if self._gradpinfo is None:
-            self._resolve_gradpinfo(snap)
+        self._resolve_gradpinfo(snap)
 
+        # Get the primitive variable names
         pnames = snap.pris_names
         tcurr = snap.tcurr
         cycle = snap.cycle
-
-        if self._gradpinfo:
-            snap.compute_grads()
 
         samples = {sname: region.sample(snap)
                    for sname, region in self.regions.items()}
@@ -310,20 +297,18 @@ class InSituRenderer:
         for sname, runner in self._field_runners.items():
             runner.run_on_sample(samples[sname], public_only=True)
 
+        # out[sname] = {etype: [(field, arr)]} for per-source publish
         out = defaultdict(dict)
 
+        # Iterate over each (source, etype) pair in our blueprint
         for (sname, etype), dom in self.dinfo.items():
             self._write_step_state(dom, tcurr, cycle)
 
             sample = samples[sname]
 
-            # Re-emit coords only if transformed
-            region = self.regions[sname]
-            if sample.ploc is not region.ploc:
-                cs = f'{sname}_coords'
-                self._emit_coords(self.mesh_n, dom, cs,
-                                  self._flatten_coords(sample.ploc[etype],
-                                                       region.clean))
+            cs = f'{sname}_coords'
+            self._emit_coords(self.mesh_n, dom, cs,
+                              self._flatten_coords(sample.ploc[etype]))
 
             psolns = sample.pris[etype]
             pgrads = (sample.grad_pris[etype] if self._gradpinfo else None)
@@ -344,7 +329,7 @@ class InSituRenderer:
                 arr = np.stack([npeval(c, subs) for c in comps], axis=-1)
                 items.append((self._field_name(sname, field), arr))
 
-            # Derived-field outputs from this step's runner
+            # Postproc plugins for this source/etype
             if runner := self._field_runners.get(sname):
                 for fname in runner.fields(public_only=True):
                     if (etype, fname) in sample.field_arrays:

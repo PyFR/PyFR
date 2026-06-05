@@ -450,7 +450,7 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
     def _build_geometry(self):
         self.axis = self._derive_axis()
 
-        order = self.config.getint('solver', 'order')
+        order = self.cfg.getint('solver', 'order')
         if self._refpts_fn is not None:
             self._vis_pts_2d = {
                 it: self._refpts_fn(subclass_where(BaseShape, name=it))
@@ -464,10 +464,10 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
         self._vis_div = order
 
         shapes = {et: subclass_where(BaseShape, name=et)(
-                        self.mesh.spts[et].shape[0], self.config)
+                        self.mesh.spts[et].shape[0], self.cfg)
                   for et in self.mesh.spts}
 
-        kwargs = dict(mesh=self.mesh, cfg=self.config, shapes=shapes,
+        kwargs = dict(mesh=self.mesh, cfg=self.cfg, shapes=shapes,
                       axis=self.axis, nfields=len(self._field_names),
                       vis_pts_2d=self._vis_pts_2d)
 
@@ -481,9 +481,10 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
             except ValueError:
                 pass
 
+        # Otherwise, fall back to sampling
         if self._averager is None:
             eles = self._eles_for_sampled()
-            ns = self._nstations or 4*(self.config.getint('solver', 'order')
+            ns = self._nstations or 4*(self.cfg.getint('solver', 'order')
                                        + 1)
             self._averager = SampledSpanwise(
                 **kwargs, eles=eles, nstations=ns, **{kind: name})
@@ -542,26 +543,26 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
 
     def _compute_sample(self, sample, snap):
         self._ensure_form(snap, lambda: self._configure_form(snap))
-        cfg = self.config
 
+        # Pre-process the solution for each element type
         soln = {}
         for et, data in snap.data.items():
             if et not in self.mesh.spts:
                 continue
             d = data.swapaxes(0, 1)
-            pris = snap.to_pris(d, cfg)
+            pris = snap.to_pris(d)
             stacked = np.array(pris)
 
             if snap.has_grads:
                 g = snap.grad_data[et]
-                grad_pris_list = snap.to_grad_pris(d, g.transpose(2, 0, 1, 3),
-                                                   cfg)
+                grad_pris_list = snap.to_grad_pris(d, g.transpose(2, 0, 1, 3))
                 gflat = np.concatenate(
                     [gp for gp in grad_pris_list], axis=0)
                 stacked = np.concatenate([stacked, gflat], axis=0)
 
             soln[et] = stacked
 
+        # Perform the averaging and group results by output face type
         grouped = defaultdict(list)
         for itype, vsoln, _vpts, _cn in self._averager.average(soln):
             grouped[itype].append(vsoln)

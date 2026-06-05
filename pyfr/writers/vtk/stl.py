@@ -21,6 +21,8 @@ def _vertex_normals_mwa(fnorms, verts, vids):
         e1n = np.linalg.norm(e1, axis=1)
         e2n = np.linalg.norm(e2, axis=1)
         cos_a = np.clip(np.sum(e1*e2, axis=1) / (e1n*e2n), -1, 1)
+
+        # Accumulate angle-weighted face normal onto each vertex
         np.add.at(vnorms, vids[:, ci], fnorms*np.arccos(cos_a)[:, None])
 
     vnorms /= np.linalg.norm(vnorms, axis=1, keepdims=True)
@@ -28,15 +30,20 @@ def _vertex_normals_mwa(fnorms, verts, vids):
 
 
 def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
-    # C1 spherigon (Volino & Magnenat-Thalmann 1998)
+    # C1 spherigon (Volino & Magnenat-Thalmann 1998); lifts flat
+    # subdivision points onto curved tangent planes defined by
+    # per-vertex normals
     ntri = flat_pts.shape[1]
     smoothed = np.empty_like(flat_pts)
     tol = 1e-8
 
+    # Iterate over subdivision points (same bary coords for all tris)
     for s, P, r in zip(smoothed, flat_pts, bary):
+        # Phong-interpolated normal at P
         N = np.einsum('k,knj->nj', r, tri_norms)
         N /= np.linalg.norm(N, axis=1, keepdims=True)
 
+        # Per-vertex C1 target points Q and projections Qp (eqs 2, 3, 8)
         Q, Qp = np.empty((2, 3, ntri, 3))
         for k, (vk, nk) in enumerate(zip(tri_verts, tri_norms)):
             diff = vk - P
@@ -47,6 +54,7 @@ def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
             Q[k] = K + N*t
             Qp[k] = vk - N*ndiff
 
+        # C1 SuperBlend weights (eq 10)
         dist2 = np.sum((Qp - P)**2, axis=2)
         blend = np.zeros((3, ntri))
 
@@ -58,14 +66,17 @@ def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
             wp = dist2[kp] / (dist2[kp] + dist2[k])
             blend[k] = r[k]**2*(r[km]**2*wm + r[kp]**2*wp)
 
+        # Normalise blend weights
         total = blend.sum(axis=0)
         if total.any():
             blend /= total
 
+        # At a vertex the SuperBlend is degenerate; use Q[k] directly
         for k in range(3):
             if r[k] >= 1.0 - tol:
                 blend[k] = 1.0
 
+        # On an edge the C1 blend is ill-conditioned; fall back to C0
         for k in range(3):
             if r[k] > tol:
                 continue
@@ -74,6 +85,7 @@ def _spherigon_smooth(flat_pts, bary, tri_verts, tri_norms):
             blend[kp] = r[kp]**2 / w
             blend[km] = r[km]**2 / w
 
+        # Blend
         s[:] = (Q*blend[:, :, None]).sum(axis=0)
 
     return smoothed
@@ -96,6 +108,9 @@ class VTKSTLWriter(BaseVTKWriter):
     pyr_divisor_bump = 2
 
     def __init__(self, mesh, cfg, stlrgns, *, subdiv='linear', **kwargs):
+        if not stlrgns:
+            raise ValueError('STL export requires at least one region')
+
         # STL: never HO, always discontinuous (per-triangle output).
         kwargs['order'] = None
         kwargs['discontinuous'] = True
@@ -114,9 +129,14 @@ class VTKSTLWriter(BaseVTKWriter):
         self._output = DirectVTKOutput(self)
 
     def _init_einfo(self):
+        # Read and merge the STL surfaces from the mesh
         stl = np.vstack([self.mesh.raw[f'regions/stl/{s}']
                          for s in self._stlrgns])
+
+        # Subdivide the mesh
         pts = self._subdivide_pts(stl, self._init_divisor, self._subdiv)
+
+        # Weld coincident vertices
         ppts, pinv = np.unique(pts.reshape(-1, 3), axis=0,
                                return_inverse=True)
 
@@ -138,6 +158,7 @@ class VTKSTLWriter(BaseVTKWriter):
         return neles*nsvpts, neles, neles*nsvpts
 
     def _emit_fields(self, kind):
+        # STL carries no per-element cell data; keep only point fields
         if kind == 'cell':
             return
         yield from super()._emit_fields(kind)
@@ -168,8 +189,9 @@ class VTKSTLWriter(BaseVTKWriter):
                 if arr.ndim == 1:
                     arr = arr[pinv].reshape(n_subdiv, ntri, 1)
                 else:
-                    arr = arr[:, pinv].reshape(arr.shape[0], n_subdiv,
-                                               ntri).transpose(1, 2, 0)
+                    ncomp = arr.shape[0]
+                    arr = arr[:, pinv].reshape(ncomp, n_subdiv, ntri)
+                    arr = arr.transpose(1, 2, 0)
 
             fields.append((np.ascontiguousarray(arr, dtype=ftype), ftype))
 
@@ -212,6 +234,7 @@ class VTKSTLWriter(BaseVTKWriter):
             self._write_darray(arr, write, dtype)
 
     def _subdivide_pts(self, stl, order, subdiv):
+        # Flat linear subdivision
         basis = TriPolyBasis(1, TriShape.std_ele(1))
         op = basis.nodal_basis_at(TriShape.std_ele(order))
 
@@ -221,16 +244,20 @@ class VTKSTLWriter(BaseVTKWriter):
             fnorms = stl[:, 0].astype(float)
             verts = stl[:, 1:].reshape(-1, 3)
 
+            # Weld coincident vertices
             uverts, vids = np.unique(verts, axis=0, return_inverse=True)
             vids = vids.reshape(-1, 3)
 
+            # Angle-weighted vertex normals
             vnorms = _vertex_normals_mwa(fnorms, uverts, vids)
 
+            # Barycentric coordinates at the subdivision points
             spts = TriShape.std_ele(order)
             bary = np.column_stack([-(spts[:, 0] + spts[:, 1]) / 2,
                                     (1 + spts[:, 0]) / 2,
                                     (1 + spts[:, 1]) / 2])
 
+            # Per-triangle vertex data
             tri_v = uverts[vids].swapaxes(0, 1)
             tri_n = vnorms[vids].swapaxes(0, 1)
 

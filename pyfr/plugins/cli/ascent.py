@@ -29,19 +29,19 @@ class AscentCLIPlugin(BaseCLIPlugin):
         acfg = Inifile.load(args.cfg)
         acfgsect = args.cfgsect or acfg.sections()[0]
 
-        # Current Ascent renderer + its underlying soln config
+        # Current Ascent render and associated config
         renderer, rcfg = None, None
 
+        # Iterate over the solutions
         for s in args.solns:
+            # Open the solution and create an Ascent adapter
             snap = snap_from_file(args.mesh, s)
-            if snap.prefix != 'soln':
-                raise NotImplementedError(
-                    f'cli/ascent does not support {snap.prefix!r}-prefix.')
 
-            # Rebuild the renderer when the underlying solver config changes
-            if not renderer or rcfg != snap.config:
-                renderer = AscentRenderer(snap.mesh, snap.config, acfgsect,
+            # See if we need to create a new Ascent renderer
+            if not renderer or rcfg != snap.cfg:
+                renderer = AscentRenderer(snap.mesh, snap.cfg, acfgsect,
                                           isrestart=True, acfg=acfg)
-                rcfg = snap.config
+                rcfg = snap.cfg
 
+            # Perform the rendering
             renderer.render(snap)

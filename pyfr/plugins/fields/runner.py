@@ -6,19 +6,11 @@ from pyfr.snapshot import FieldInfo
 
 
 class SampleView:
-    # A per-key (etype/itype/'points') lens onto a SnapshotSample, handed to a
-    # field provider.  Provides simple attribute access to pris/grad_pris/
-    # normals/wall_dist/state — backed by sample (mutable per step) and region
-    # (static geometry).  Lives here, with the runner that constructs it,
-    # rather than in snapshot.py (avoids a snapshot↔runner import cycle).
+    # Per-key lens onto a SnapshotSample, handed to a field provider.
     def __init__(self, sample, etype):
         self.sample = sample
-        self.region = sample.region
-        self.snap = sample.snap
-        self.cfg = sample.region.config
-        self.ndims = sample.region.ndims
         self.etype = etype
-        # Per-view write target; FieldRunner collects into sample.fields.
+        self.cfg = sample.region.cfg
         self.fields = {}
 
     @property
@@ -35,15 +27,13 @@ class SampleView:
 
     @property
     def normals(self):
-        return getattr(self.region, 'normals', {}).get(self.etype)
+        region = self.sample.region
+        return getattr(region, 'normals', {}).get(self.etype)
 
     @property
     def min_upt_wall_dist_approx(self):
-        return getattr(self.region, 'wall_dist', {}).get(self.etype)
-
-    @property
-    def nvars(self):
-        return len(self.pris)
+        region = self.sample.region
+        return getattr(region, 'wall_dist', {}).get(self.etype)
 
     @property
     def has_grads(self):
@@ -72,33 +62,24 @@ class FieldRunner:
         return out
 
     def run_on_sample(self, sample, public_only=False):
-        # One pair of loops: per-key (etype/itype/'points') × per-provider.
-        # Providers run in topo order (transformers first via kind, then
-        # producers in dep order) so a transformer's in-place mutation of
-        # sample.ploc / sample.pris is visible to downstream producers.
         for et in sample.region.etypes:
             view = SampleView(sample, et)
             for p in self.plugins:
                 p.run(view)
-            # Collect this view's outputs into the sample's per-(et, fname)
-            # dict so subsequent consumers can index by both.
             for fname, arr in view.fields.items():
                 if public_only and fname.startswith('_'):
                     continue
                 sample.field_arrays[et, fname] = arr
 
-        # Register provider outputs in sample.fields so consumers iterate one
-        # unified registry (alongside snap's data + primitives + grads + aux).
         for p in self.plugins:
             for fname, varnames in p.fields.items():
-                if public_only and fname.startswith('_'):
-                    continue
-                if fname in sample.fields:
+                private = public_only and fname.startswith('_')
+                if private or fname in sample.fields:
                     continue
                 sample.fields[fname] = FieldInfo(
-                    name=fname, kind='point', ncomps=len(varnames),
+                    name=fname, kind='point',
                     dtype=np.dtype(sample.snap.dtype), source='provider',
-                    components=tuple(varnames))
+                    components=varnames)
 
         return sample.field_arrays
 

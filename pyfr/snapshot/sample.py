@@ -6,7 +6,7 @@ class SnapshotSample:
         self.field_arrays = {}
         self.fields = {}
 
-        self.ploc = region.ploc
+        self.ploc = {k: v.copy() for k, v in region.ploc.items()}
 
         region._compute_sample(self, snap)
         self._register_fields(snap)
@@ -30,10 +30,6 @@ class SnapshotSample:
             return None
         else:
             raise ValueError(f'Unknown field source: {info.source!r}')
-
-    def make_ploc_writable(self):
-        if self.ploc is self.region.ploc:
-            self.ploc = {k: v.copy() for k, v in self.ploc.items()}
 
     @property
     def samples(self):

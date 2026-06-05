@@ -13,9 +13,9 @@ class VorticityField(BaseFieldProvider):
     @property
     def fields(self):
         if self.ndims == 3:
-            return {'vorticity': ['omega_x', 'omega_y', 'omega_z']}
+            return {'vorticity': ('omega_x', 'omega_y', 'omega_z')}
         else:
-            return {'vorticity': ['omega_z']}
+            return {'vorticity': ('omega_z',)}
 
     def _process(self, view):
         du = view.grad_pris[1]

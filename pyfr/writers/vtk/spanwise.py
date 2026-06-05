@@ -31,11 +31,11 @@ class VTKSpanwiseWriter(BaseVTKWriter):
         self.einfo = []
 
     def _build_region(self):
-        return SpanwiseSnapshotRegion(self.mesh, self.cfg,
-                                      source=self._source,
-                                      nstations=self._nstations,
-                                      refpts_fn=self._refpts_fn,
-                                      clean=self._clean)
+        return SpanwiseSnapshotRegion(
+            self.mesh, self.cfg, source=self._source,
+            nstations=self._nstations, refpts_fn=self._refpts_fn,
+            clean=self._clean,
+        )
 
     def _post_sample(self, snap):
         if not self.einfo:
@@ -43,6 +43,7 @@ class VTKSpanwiseWriter(BaseVTKWriter):
                           for it in self._region.etypes]
 
     def _emit_fields(self, kind):
+        # Spanwise carries no per-element cell data; keep only point fields
         if kind == 'cell':
             return
         yield from super()._emit_fields(kind)

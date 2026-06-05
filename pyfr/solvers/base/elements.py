@@ -403,8 +403,9 @@ class BaseElements:
         # Min over the off-face solution points (on-face upts sit at distance 0).
         shape = self.basis
         _, proj, norm = shape.faces[fidx]
-        t = (proj(*([0]*(self.ndims - 1))) - shape.upts) @ (
-            norm / np.linalg.norm(norm))
+        face_pt = proj(*([0]*(self.ndims - 1)))
+        unit_norm = norm / np.linalg.norm(norm)
+        t = (face_pt - shape.upts) @ unit_norm
 
         return self.face_dist_at_upts(fidx)[t != 0].min(axis=0)
 

@@ -13,10 +13,10 @@ class BaseFieldProvider:
         self.ndims = ndims
         self.cfg = cfg
 
-        if export_type is not None:
-            if not re.fullmatch(self.export_types, export_type):
-                raise RuntimeError(f'Field provider {self.name} does not '
-                                   f'support {export_type} export')
+        pattern = self.export_types
+        if export_type is not None and not re.fullmatch(pattern, export_type):
+            raise RuntimeError(f'Field provider {self.name} does not '
+                               f'support {export_type} export')
 
     def run(self, view):
         if self.needs_grads and not view.has_grads:

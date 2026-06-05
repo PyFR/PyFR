@@ -199,8 +199,11 @@ class SamplerCLIPlugin(BaseCLIPlugin):
         remove_fields = {n.strip() for a in args.remove_fields
                          for n in a.split(',') if n.strip()}
 
+        # Read the mesh and solution
         snap = snap_from_file(args.mesh, args.soln, args.pname)
         mesh = snap.mesh
+
+        # Dimension and field names
         dims = 'xyz'[:mesh.ndims]
 
         # Soln-form-only flags
@@ -214,25 +217,31 @@ class SamplerCLIPlugin(BaseCLIPlugin):
 
         # Resolve the points (either from a CSV file or a pre-stored set)
         if args.pts:
+            # Read the sample points from a CSV file
             pts = (_read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
                    if rank == root else None)
         else:
+            # Obtain the pre-processed sample points from the mesh
             pdata = (mesh.raw[f'plugins/sampler/{args.name}'][:]
                      if rank == root else None)
             pdata = comm.bcast(pdata, root=root)
             pts = pdata['ploc']
         pts = comm.bcast(pts, root=root) if args.pts else pts
 
-        # Sample snapshot
+        # Construct and configure the point sampler
         region = snap.at_points(pts)
+
+        # Sample the solution
         sample = region.sample(snap)
         has_grads = snap.has_grads
 
+        # Resolve field providers and run them on the sample
         field_cfg = (Inifile.load(args.field_cfg) if args.field_cfg
-                     else snap.config)
+                     else snap.cfg)
         runner = FieldRunner(add_fields, mesh.ndims, field_cfg, 'volume')
         sample.run(runner, public_only=True)
 
+        # Have the root rank post-process and write the samples
         if rank != root:
             return
 
@@ -279,14 +288,12 @@ class SamplerCLIPlugin(BaseCLIPlugin):
                 for i, vn in enumerate(varnames):
                     fields[vn] = arr[:, i] if arr.ndim == 2 else arr[i]
 
-        if extra := remove_fields - set(fields):
-            raise ValueError(
-                f'--remove-fields names not in output: {sorted(extra)} '
-                f'(available: {list(fields)})')
         for n in remove_fields:
             fields.pop(n)
 
-        # Header + rows
+        # Write out the header
         print(*dims, *fields, sep=args.sep)
+
+        # Write out the samples
         for i, ploc in enumerate(pts):
             print(*ploc, *(arr[i] for arr in fields.values()), sep=args.sep)

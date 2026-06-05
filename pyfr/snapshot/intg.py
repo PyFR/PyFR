@@ -1,5 +1,3 @@
-from functools import cached_property
-
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.snapshot.base import BaseSnapshot
 
@@ -11,39 +9,30 @@ class IntgSnapshot(BaseSnapshot):
         sys = intg.system
 
         self.mesh = sys.mesh
-        self.config = intg.cfg
+        self.cfg = intg.cfg
         self.elementscls = sys.elementscls
         self.ele_types = list(sys.ele_types)
         self.dtype = sys.backend.fpdtype
-        self.has_grads = True
+        self.has_grads = sys.eles_vect_upts is not None
 
         self._data_field_names = list(self.elementscls.convars(
-            self.mesh.ndims, self.config))
+            self.mesh.ndims, self.cfg))
 
         self._export_fields = sys.export_fields
-        self._intg = intg
+
+        self.tcurr = intg.tcurr
+        self.cycle = intg.nacptsteps
+
+        self.data = {et: intg.soln[i] for i, et in enumerate(self.ele_types)}
+
+        if self.has_grads:
+            self.grad_data = {et: intg.grad_soln[i]
+                              for i, et in enumerate(self.ele_types)}
+        else:
+            self.grad_data = {}
 
         comm, _, root = get_comm_rank_root()
         self.state = comm.bcast(intg.serialiser.serialise(), root=root)
-
-    @property
-    def tcurr(self):
-        return self._intg.tcurr
-
-    @property
-    def cycle(self):
-        return self._intg.nacptsteps
-
-    @cached_property
-    def data(self):
-        return {et: self._intg.soln[i] for i, et in enumerate(self.ele_types)}
-
-    @cached_property
-    def grad_data(self):
-        if not self.has_grads:
-            return None
-        return {et: self._intg.grad_soln[i]
-                for i, et in enumerate(self.ele_types)}
 
     def aux(self, etype):
         return {ef.name: ef.getter()
@@ -53,20 +42,16 @@ class IntgSnapshot(BaseSnapshot):
         return {ef.name: (ef.shape, ef.dtype or self.dtype)
                 for ef in self._export_fields.get(etype, ())}
 
-    def to_pris(self, interp_data, cfg):
-        return list(self.elementscls.con_to_pri(interp_data, cfg))
+    def to_pris(self, interp_data):
+        return self.elementscls.con_to_pri(interp_data, self.cfg)
 
-    def to_grad_pris(self, interp_data, grad_interp, cfg):
-        return list(self.elementscls.grad_con_to_pri(interp_data, grad_interp,
-                                                     cfg))
+    def to_grad_pris(self, interp_data, grad_interp):
+        return self.elementscls.grad_con_to_pri(interp_data, grad_interp,
+                                                self.cfg)
 
     @property
     def pris_names(self):
-        return list(self.elementscls.privars(self.ndims, self.config))
+        return list(self.elementscls.privars(self.ndims, self.cfg))
 
     def primitive_var_groups(self):
-        return self.elementscls.visvars(self.ndims, self.config)
-
-    def compute_grads(self):
-        if self.has_grads:
-            self._intg.compute_grads()
+        return self.elementscls.visvars(self.ndims, self.cfg)

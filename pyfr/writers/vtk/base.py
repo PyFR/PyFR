@@ -73,8 +73,6 @@ class BaseVTKWriter(BaseWriter):
                 f'Field providers are only supported for conservative-form '
                 f'solution files (snap.prefix = {snap.prefix!r})')
 
-        # MPI collective must be in lockstep across ranks
-        snap.compute_grads()
         self._sample = self._region.sample(snap)
         self._post_sample(snap)
         self._sample.run(self.field_runner, public_only=True)
@@ -106,9 +104,7 @@ class BaseVTKWriter(BaseWriter):
 
     def _emit_fields(self, kind):
         for name, info in self._sample.fields.items():
-            if info.kind != kind:
-                continue
-            if name in self._remove_fields:
+            if info.kind != kind or name in self._remove_fields:
                 continue
             yield name, info
 
@@ -135,6 +131,7 @@ class BaseVTKWriter(BaseWriter):
         return self._region.npts(etype), neles, neles*nsvpts
 
     def _array_attrs(self):
+        # Base array attributes
         attrs = [('', self._vtk_dtype(self.dtype), '3'),
                  ('connectivity', 'Int64', ''),
                  ('offsets', 'Int64', ''),
@@ -143,10 +140,12 @@ class BaseVTKWriter(BaseWriter):
         if self.output_curved:
             attrs.append(('Curved', 'UInt8', '1'))
 
+        # Extra fields as cell data
         for name, info in self._emit_fields('cell'):
             attrs.append((name.replace('-', ' ').title(),
                           self._vtk_dtype(info.dtype), str(info.ncomps)))
 
+        # Extra fields as point data
         for name, info in self._emit_fields('point'):
             attrs.append((name.replace('-', ' ').title(),
                           self._vtk_dtype(info.dtype), str(info.ncomps)))
@@ -160,9 +159,11 @@ class BaseVTKWriter(BaseWriter):
         if self.output_curved:
             sizes.append(ncells)
 
+        # Extra cell field sizes
         for name, info in self._emit_fields('cell'):
             sizes.append(info.dtype.itemsize*info.ncomps*ncells)
 
+        # Extra point field sizes
         for name, info in self._emit_fields('point'):
             sizes.append(info.dtype.itemsize*info.ncomps*npts)
 
@@ -411,11 +412,12 @@ class BaseVTKWriter(BaseWriter):
         region = self._region
         neles = dict(self.einfo)[etype]
 
+        # Write element node locations
         self._write_darray(region.points(etype,
                                          self._sample.ploc[etype]),
                                          write, self.dtype)
 
-        # VTK-specific sub-cell layout tables.
+        # Perform the sub division
         if etype != 'pyr' and self.ho_output:
             nsvpts = self._nsvpts(etype)
             nodes = np.arange(nsvpts)
@@ -427,22 +429,29 @@ class BaseVTKWriter(BaseWriter):
             subcellsoff = subdiv.subcelloffs
             types = subdiv.subcelltypes
 
-        # Connectivity: region applies clean / raw layout to the writer's
-        # per-element sub-node template.
+        # Prepare VTU cell arrays — connectivity, offsets, types.  The region
+        # applies the clean / raw layout to the writer's per-element template.
         vtu_con = region.connectivity(etype, nodes)
+
+        # Generate offset into the connectivity array
         vtu_off = np.tile(subcellsoff, (neles, 1))
         vtu_off += (np.arange(neles)*len(nodes))[:, None]
+
+        # Tile VTU cell type numbers
         vtu_typ = np.tile(types, neles)
 
+        # Write VTU node connectivity, connectivity offsets and cell types
         self._write_darray(vtu_con, write, np.int64)
         self._write_darray(vtu_off, write, np.int64)
         self._write_darray(vtu_typ, write, np.uint8)
 
+        # VTU cell curvature information
         if self.output_curved:
             curved = region.cell_curved(etype)
             vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
             self._write_darray(vtu_curved, write, np.uint8)
 
+        # Extra cell fields (iterate in header order)
         ncells_per_ele = len(vtu_typ) // neles
         for name, info in self._emit_fields('cell'):
             data = self._sample.field_arrays.get((etype, name))
@@ -452,5 +461,6 @@ class BaseVTKWriter(BaseWriter):
             vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
             self._write_darray(vtu_aux, write, info.dtype)
 
+        # Point fields
         for arr, dtype in self._point_field_data(etype):
             self._write_darray(arr, write, dtype)

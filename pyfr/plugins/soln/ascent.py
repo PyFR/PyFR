@@ -3,13 +3,9 @@ from ctypes import c_void_p
 from pyfr.ctypesutil import LibWrapper
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
-from pyfr.plugins.soln.insitu import (ConduitNode, InSituError,
-                                      InSituRenderer)
+from pyfr.plugins.soln.insitu import ConduitNode, InSituRenderer
 from pyfr.snapshot import IntgSnapshot
 from pyfr.util import file_path_gen, first
-
-
-class AscentError(InSituError): pass
 
 
 def bp_key(k):
@@ -30,23 +26,9 @@ class AscentWrappers(LibWrapper):
 
 
 class AscentRenderer(InSituRenderer):
-    error_cls = AscentError
-
     def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
         super().__init__(mesh, scfg, cfgsect, isrestart, acfg=acfg)
 
-    def __del__(self):
-        if getattr(self, 'ascent_ptr', None) and getattr(self, 'lib', None):
-            self.lib.ascent_close(self.ascent_ptr)
-            self.ascent_ptr = None
-
-    def _init_host_publish(self):
-        self.basedir = self.acfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
-        self._image_paths = []
-        self._init_scenes()
-        self._init_pipelines()
-
-    def _init_host(self):
         comm, _, _ = get_comm_rank_root()
 
         self.lib = lib = AscentWrappers()
@@ -73,6 +55,17 @@ class AscentRenderer(InSituRenderer):
         self._add_pipeline = self.actions.append()
         self._add_pipeline['action'] = 'add_pipelines'
         self._add_pipeline['pipelines'] = self.pipelines
+
+    def __del__(self):
+        if getattr(self, 'ascent_ptr', None) and getattr(self, 'lib', None):
+            self.lib.ascent_close(self.ascent_ptr)
+            self.ascent_ptr = None
+
+    def _init_host_publish(self):
+        self.basedir = self.acfg.getpath(self.cfgsect, 'basedir', '.', abs=True)
+        self._image_paths = []
+        self._init_scenes()
+        self._init_pipelines()
 
     def _init_pipelines(self):
         self.pipelines = pl = ConduitNode(self.conduit)
@@ -107,7 +100,7 @@ class AscentRenderer(InSituRenderer):
 
             plots = cfg.get('plots')
             if not isinstance(plots, list) or not plots:
-                raise AscentError(f'Scene {sn!r} must define plots = [...]')
+                raise ValueError(f'Scene {sn!r} must define plots = [...]')
 
             for j, plot in enumerate(plots):
                 self._init_plot(sn, f'p{j}', plot)
@@ -130,7 +123,7 @@ class AscentRenderer(InSituRenderer):
         # Default to the only source when there is no ambiguity
         if (src := plot.get('source')) is None:
             if len(self.regions) > 1:
-                raise AscentError(f'Plot {pname!r} of scene {sn!r} needs '
+                raise ValueError(f'Plot {pname!r} of scene {sn!r} needs '
                                   'source= when multiple sources exist')
             src = first(self.regions)
 
@@ -173,6 +166,7 @@ class AscentRenderer(InSituRenderer):
         for path, gen in self._image_paths:
             self._add_scene[path] = str(gen.send(snap.tcurr))
 
+        # Set field expressions; publish per source
         fields = self._evaluate_exprs(snap)
         self.publish(fields)
 
@@ -182,9 +176,8 @@ class AscentRenderer(InSituRenderer):
         comm.barrier()
 
     def finalise(self):
-        if lib := getattr(self, 'lib', None):
-            self.lib = None
-            lib.ascent_close(self.ascent_ptr)
+        self.lib.ascent_close(self.ascent_ptr)
+        self.lib = None
 
 
 class AscentPlugin(BaseSolnPlugin):
@@ -202,6 +195,4 @@ class AscentPlugin(BaseSolnPlugin):
         self._renderer.render(IntgSnapshot(intg))
 
     def finalise(self, intg):
-        if r := getattr(self, '_renderer', None):
-            r.finalise()
-            del self._renderer
+        self._renderer.finalise()

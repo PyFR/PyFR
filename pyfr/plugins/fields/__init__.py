@@ -31,5 +31,6 @@ def get_field_providers(names, ndims, cfg, export_type):
 
     plugins = [available[n](ndims, cfg, export_type) for n in ts.static_order()]
 
-    # Transformers first
+    # Transformers mutate view.ploc / view.pris in place; run them before
+    # producers so producers see the transformed state.
     return sorted(plugins, key=lambda p: p.kind != 'transformer')

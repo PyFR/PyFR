@@ -1,4 +1,5 @@
 from functools import cached_property
+from math import prod
 
 import numpy as np
 
@@ -10,7 +11,7 @@ from pyfr.util import subclass_where
 
 class BaseSnapshot:
     data = None
-    grad_data = None
+    grad_data = {}
     prefix = None
     state = None
 
@@ -21,7 +22,7 @@ class BaseSnapshot:
         return self.mesh.ndims
 
     def at_points(self, ppts):
-        return PointsSnapshotRegion(self.mesh, self.config, ppts)
+        return PointsSnapshotRegion(self.mesh, self.cfg, ppts)
 
     def aux(self, etype):
         return {}
@@ -29,13 +30,10 @@ class BaseSnapshot:
     def aux_info(self, etype):
         return {}
 
-    def to_pris(self, interp_data, cfg):
+    def to_pris(self, interp_data):
         pass
 
-    def to_grad_pris(self, interp_data, grad_interp, cfg):
-        pass
-
-    def compute_grads(self):
+    def to_grad_pris(self, interp_data, grad_interp):
         pass
 
     @cached_property
@@ -44,20 +42,18 @@ class BaseSnapshot:
         dtype = np.dtype(self.dtype)
 
         for i, name in enumerate(self._data_field_names):
-            out[name] = FieldInfo(name=name, kind='point', ncomps=1,
+            out[name] = FieldInfo(name=name, kind='point',
                                   dtype=dtype, source='data',
                                   components=(name,), data_index=i)
 
         if self.has_grads:
             for i, name in enumerate(self._data_field_names):
                 gname = f'grad {name}'
-                out[gname] = FieldInfo(name=gname, kind='point',
-                                       ncomps=self.ndims, dtype=dtype,
-                                       source='grad_data',
-                                       components=tuple(f'{name}-{d}'
-                                                        for d in
-                                                        range(self.ndims)),
-                                       data_index=i)
+                components = tuple(f'{name}-{d}' for d in range(self.ndims))
+                out[gname] = FieldInfo(
+                    name=gname, kind='point', dtype=dtype,
+                    source='grad_data', components=components, data_index=i
+                )
 
         self._append_aux_fields(out)
         return out
@@ -66,18 +62,16 @@ class BaseSnapshot:
         dtype = np.dtype(self.dtype)
 
         for name, varnames in self.primitive_var_groups().items():
-            yield FieldInfo(name=name, kind='point',
-                            ncomps=len(varnames), dtype=dtype,
+            yield FieldInfo(name=name, kind='point', dtype=dtype,
                             source='primitive',
-                            components=tuple(varnames))
+                            components=varnames)
 
         if self.has_grads:
             for name, varnames in self.primitive_var_groups().items():
                 gname = f'grad {name}'
                 gcomps = tuple(f'{c}-{d}' for c in varnames
                                for d in range(self.ndims))
-                yield FieldInfo(name=gname, kind='point',
-                                ncomps=len(gcomps), dtype=dtype,
+                yield FieldInfo(name=gname, kind='point', dtype=dtype,
                                 source='gradient', components=gcomps)
 
         seen = set()
@@ -113,21 +107,23 @@ class BaseSnapshot:
             return set()
         et0 = self.ele_types[0]
         shapecls = subclass_where(BaseShape, name=et0)
-        sh = shapecls(self.mesh.spts[et0].shape[0], self.config)
+        sh = shapecls(self.mesh.spts[et0].shape[0], self.cfg)
         return {(sh.nupts,), (len(sh.linspts),)}
 
     def _aux_field_info(self, name, per_ele, dtype, pshapes):
         if per_ele in pshapes:
-            return FieldInfo(name=name, kind='point', ncomps=1,
+            return FieldInfo(name=name, kind='point',
                              dtype=dtype, source='aux', components=(name,))
         if len(per_ele) > 1 and per_ele[:-1] in pshapes:
-            return FieldInfo(name=name, kind='point', ncomps=per_ele[-1],
-                             dtype=dtype, source='aux',
-                             components=tuple(f'{name}-{d}'
-                                              for d in range(per_ele[-1])))
-        ncomps = int(np.prod(per_ele) or 1)
-        return FieldInfo(name=name, kind='cell', ncomps=ncomps,
-                         dtype=dtype, source='aux', components=(name,))
+            components = tuple(f'{name}-{d}' for d in range(per_ele[-1]))
+            return FieldInfo(
+                name=name, kind='point', dtype=dtype,
+                source='aux', components=components
+            )
+        ncomps = prod(per_ele)
+        components = tuple(f'{name}-{i}' for i in range(ncomps))
+        return FieldInfo(name=name, kind='cell',
+                         dtype=dtype, source='aux', components=components)
 
     def _append_aux_fields(self, out):
         pshapes = self._aux_pshapes()

@@ -158,45 +158,23 @@
 
 import ctypes
 from ctypes import RTLD_GLOBAL, c_int, c_void_p
-import os
-from pathlib import Path
 
 import numpy as np
 
-from pyfr.ctypesutil import LibWrapper, platform_libdirs, platform_libname
+from pyfr.ctypesutil import LibWrapper
 from pyfr.mpiutil import get_comm_rank_root
 from pyfr.plugins.soln.base import BaseSolnPlugin
 from pyfr.snapshot import IntgSnapshot
 from pyfr.plugins.soln.insitu import (ConduitNode, ConduitWrappers,
-                                      InSituError, InSituRenderer)
-
-
-class CatalystError(InSituError): pass
-
-
-def _load_catalyst_lib():
-    lpath = os.environ.get('PYFR_CATALYST_LIBRARY_PATH')
-    if lpath:
-        return ctypes.PyDLL(lpath, mode=RTLD_GLOBAL)
-
-    lname = platform_libname('catalyst')
-    for sd in platform_libdirs():
-        try:
-            return ctypes.PyDLL(str(Path(sd, lname).absolute()),
-                                mode=RTLD_GLOBAL)
-        except OSError:
-            pass
-
-    return ctypes.PyDLL(lname, mode=RTLD_GLOBAL)
+                                      InSituRenderer)
 
 
 class CatalystConduitWrappers(ConduitWrappers):
     _libname = 'catalyst'
+    _mode = RTLD_GLOBAL
+    _loader = ctypes.PyDLL
     _functions = [(ret, f'catalyst_{fn}', *args)
                   for ret, fn, *args in ConduitWrappers._functions]
-
-    def _load_library(self):
-        return _load_catalyst_lib()
 
     def _transname(self, fname):
         return fname.removeprefix('catalyst_')
@@ -205,6 +183,7 @@ class CatalystConduitWrappers(ConduitWrappers):
 class CatalystWrappers(LibWrapper):
     _libname = 'catalyst'
     _mode = RTLD_GLOBAL
+    _loader = ctypes.PyDLL
 
     _functions = [
         (c_int, 'catalyst_initialize', c_void_p),
@@ -214,26 +193,17 @@ class CatalystWrappers(LibWrapper):
 
     def _errcheck(self, status, fn, _):
         if status:
-            raise CatalystError(f'{fn.__name__} returned error {status}')
+            raise RuntimeError(f'{fn.__name__} returned error {status}')
         return status
-
-    def _load_library(self):
-        return _load_catalyst_lib()
 
 
 class CatalystRenderer(InSituRenderer):
-    error_cls = CatalystError
-
     def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
         self._coord_bufs = {}
         self._field_bufs = []
 
         super().__init__(mesh, scfg, cfgsect, isrestart, acfg=acfg)
 
-    def _load_conduit(self):
-        return CatalystConduitWrappers()
-
-    def _init_host(self):
         comm, _, _ = get_comm_rank_root()
 
         self.lib = CatalystWrappers()
@@ -250,6 +220,9 @@ class CatalystRenderer(InSituRenderer):
         init_n['catalyst/mpi_comm'] = comm.py2f()
         init_n['catalyst_load/implementation'] = 'paraview'
         self.lib.catalyst_initialize(init_n)
+
+    def _load_conduit(self):
+        return CatalystConduitWrappers()
 
     def bootstrap(self, snap):
         # Execute once to bring pipeline to life
@@ -308,9 +281,8 @@ class CatalystRenderer(InSituRenderer):
         comm.barrier()
 
     def finalise(self):
-        if lib := getattr(self, 'lib', None):
-            self.lib = None
-            lib.catalyst_finalize(ConduitNode(self.conduit))
+        self.lib.catalyst_finalize(ConduitNode(self.conduit))
+        self.lib = None
 
 
 class CatalystPlugin(BaseSolnPlugin):
@@ -337,6 +309,4 @@ class CatalystPlugin(BaseSolnPlugin):
             self._renderer.execute(snap)
 
     def finalise(self, intg):
-        if r := getattr(self, '_renderer', None):
-            r.finalise()
-            del self._renderer
+        self._renderer.finalise()

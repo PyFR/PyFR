@@ -12,16 +12,19 @@ class FileSnapshot(BaseSnapshot):
 
         cfg = soln.config
         stats = soln.stats
-        prec = cfg.get('backend', 'precision', 'single')
         syscls = subclass_where(BaseSystem,
                                 name=cfg.get('solver', 'system'))
 
         self.mesh = mesh
-        self.config = cfg
+        self.cfg = cfg
         self.stats = stats
         self.elementscls = syscls.elementscls
         self.ele_types = list(soln.data)
-        self.dtype = np.float32 if prec == 'single' else np.float64
+        if soln.data:
+            self.dtype = next(iter(soln.data.values())).dtype.type
+        else:
+            prec = cfg.get('backend', 'precision', 'single')
+            self.dtype = np.float32 if prec == 'single' else np.float64
         self.tcurr = stats.getfloat('solver-time-integrator', 'tcurr')
         self.cycle = stats.getint('solver-time-integrator', 'nacptsteps', 0)
         self.has_grads = bool(soln.grad_data)
@@ -29,7 +32,7 @@ class FileSnapshot(BaseSnapshot):
         self._data_field_names = list(soln.fields)
 
         self.data = soln.data
-        self.grad_data = soln.grad_data or None
+        self.grad_data = soln.grad_data or {}
         self.prefix = stats.get('data', 'prefix')
         self.state = soln.state or {}
 

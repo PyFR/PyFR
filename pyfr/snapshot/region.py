@@ -11,21 +11,22 @@ from pyfr.util import subclass_where
 
 
 def interp_ops(op, arr, *, cast=False):
-    if cast:
-        op = op.astype(arr.dtype, copy=False)
-    return (op @ arr.reshape(arr.shape[0], -1)).reshape(op.shape[0],
-                                                        *arr.shape[1:])
+    flat = op @ arr.reshape(arr.shape[0], -1)
+    out = flat.reshape(op.shape[0], *arr.shape[1:])
+    return out.astype(arr.dtype, copy=False) if cast else out
 
 
 def _cfg_dtype(cfg):
-    return np.float32 if cfg.get('backend', 'precision', 'single') == 'single' \
-        else np.float64
+    if cfg.get('backend', 'precision', 'single') == 'single':
+        return np.float32
+    else:
+        return np.float64
 
 
 def _cfg_elementscls(cfg):
     from pyfr.solvers.base import BaseSystem
-    return subclass_where(BaseSystem, name=cfg.get('solver', 'system'))\
-        .elementscls
+    syscls = subclass_where(BaseSystem, name=cfg.get('solver', 'system'))
+    return syscls.elementscls
 
 
 class BaseSnapshotRegion:
@@ -33,7 +34,7 @@ class BaseSnapshotRegion:
 
     def __init__(self, mesh, cfg):
         self.mesh = mesh
-        self.config = cfg
+        self.cfg = cfg
         self.ndims = mesh.ndims
         self.dtype = _cfg_dtype(cfg)
         self._snap_form = None
@@ -110,24 +111,29 @@ class BaseSnapshotRegion:
         ndims = self.ndims
         flat = {}
         for k, grads_list in raw.items():
-            stacked = np.stack(grads_list, axis=0)       # (nvars,ndims,...)
-            flat[k] = stacked.reshape(nvars*ndims, *stacked.shape[2:]
-                                      ).transpose(1, 2, 0)
+            stacked = np.stack(grads_list, axis=0)
+            reshaped = stacked.reshape(nvars*ndims, *stacked.shape[2:])
+            flat[k] = reshaped.transpose(1, 2, 0)
 
         avg = self.cleaner.average(flat, nvars*ndims, self.dtype)
-        return {k: [c for c in avg[k].T.reshape(nvars, ndims, -1)] for k in raw}
+
+        out = {}
+        for k in raw:
+            unflat = avg[k].T.reshape(nvars, ndims, -1)
+            out[k] = [c for c in unflat]
+        return out
 
 
 class VolumeSnapshotRegion(BaseSnapshotRegion):
     def __init__(self, mesh, cfg, spec, refpts_fn, *, divisor=None, clean=True):
         super().__init__(mesh, cfg)
 
-        if isinstance(spec, dict):
-            self._eidxs = {et: (None if e is None or isinstance(e, slice)
-                                else np.asarray(e))
-                           for et, e in spec.items()}
-        else:
-            self._eidxs = {et: None for et in spec}
+        self._eidxs = {}
+        for et, e in spec.items():
+            if isinstance(e, slice):
+                self._eidxs[et] = e
+            else:
+                self._eidxs[et] = np.asarray(e)
         self.etypes = list(self._eidxs)
 
         self._refpts_fn = refpts_fn
@@ -137,28 +143,19 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         self._build_geometry()
 
     def _ele_spts(self, et):
-        spts = self.mesh.spts[et]
-        eidxs = self._eidxs[et]
-        return spts if eidxs is None else spts[:, eidxs]
+        return self.mesh.spts[et][:, self._eidxs[et]]
 
     def _ele_spts_nodes(self, et):
-        spts_nodes = self.mesh.spts_nodes[et]
-        eidxs = self._eidxs[et]
-        return spts_nodes if eidxs is None else spts_nodes[eidxs]
+        return self.mesh.spts_nodes[et][self._eidxs[et]]
 
     def _ele_data(self, snap, et):
-        arr = snap.data[et]
-        eidxs = self._eidxs[et]
-        return arr if eidxs is None else arr[..., eidxs]
+        return snap.data[et][..., self._eidxs[et]]
 
     def _ele_grad_data(self, snap, et):
-        if snap.grad_data is None:
-            return None
         g = snap.grad_data.get(et)
         if g is None:
             return None
-        eidxs = self._eidxs[et]
-        return g if eidxs is None else g[..., eidxs]
+        return g[..., self._eidxs[et]]
 
     def _build_geometry(self):
         self._ops = {}
@@ -166,7 +163,7 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         for et in self.etypes:
             shapecls = subclass_where(BaseShape, name=et)
             nspts = self.mesh.spts[et].shape[0]
-            shape = shapecls(nspts, self.config)
+            shape = shapecls(nspts, self.cfg)
             pts = self._refpts_fn(shapecls, shape)
             self._refpts_at[et] = pts
             self._ops[et] = (shape.sbasis.nodal_basis_at(pts),
@@ -202,19 +199,15 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         return out
 
     def cell_curved(self, etype):
-        curved = self.mesh.spts_curved[etype]
-        eidxs = self._eidxs[etype]
-        return curved if eidxs is None else curved[eidxs]
+        return self.mesh.spts_curved[etype][self._eidxs[etype]]
 
     def _compute_sample(self, sample, snap):
-        cfg = self.config
-
         # Interpolate stored data to refpts: (nrefpts, nvars, neles).
         interp_data = {et: interp_ops(self._ops[et][1],
                                    self._ele_data(snap, et)).swapaxes(0, 1)
                        for et in self.etypes}
 
-        raw_pris = {et: snap.to_pris(interp_data[et], cfg)
+        raw_pris = {et: snap.to_pris(interp_data[et])
                     for et in self.etypes}
 
         raw_grad_pris = {}
@@ -227,7 +220,7 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
             _, soln_op = self._ops[et]
             cg = np.einsum('sp,dpvn->dsvn', soln_op, g)
             raw_grad_pris[et] = snap.to_grad_pris(
-                interp_data[et], cg.transpose(2, 0, 1, 3), cfg)
+                interp_data[et], cg.transpose(2, 0, 1, 3))
 
         self._finalize_sample(sample, snap, raw_pris, raw_grad_pris)
 
@@ -235,12 +228,11 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
         for et in self.etypes:
             eidxs = self._eidxs[et]
             for name, arr in snap.aux(et).items():
-                sample.field_arrays[et, name] = (arr if eidxs is None
-                                                 else arr[eidxs])
+                sample.field_arrays[et, name] = arr[eidxs]
 
 
 class SurfaceSnapshotRegion(BaseSnapshotRegion):
-    def __init__(self, mesh, cfg, bcname, divisor, refpts_fn=None, *,
+    def __init__(self, mesh, cfg, bcnames, divisor, refpts_fn=None, *,
                  clean=True):
         super().__init__(mesh, cfg)
 
@@ -248,8 +240,6 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
         self._refpts_fn = (refpts_fn or
                            (lambda sc, _sh=None: sc.std_ele(self._divisor)))
         self.clean = clean
-
-        bcnames = [bcname] if isinstance(bcname, str) else list(bcname)
 
         # Merge the connectivity from each boundary into one map
         merged = {}
@@ -275,7 +265,7 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
         return list(dict.fromkeys(g[3] for g in self._groups))
 
     def _build_groups(self):
-        cfg, mesh = self.config, self.mesh
+        cfg, mesh = self.cfg, self.mesh
         groups = []
         for etype, fidx, eidxs in self._conn:
             shapecls = subclass_where(BaseShape, name=etype)
@@ -296,12 +286,12 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
     def _build_geometry(self):
         self._groups = self._build_groups()
 
-        elementscls = _cfg_elementscls(self.config)
+        elementscls = _cfg_elementscls(self.cfg)
         self._eles = []
         for etype, _, eidxs, *_ in self._groups:
             shapecls = subclass_where(BaseShape, name=etype)
             spts = self.mesh.spts[etype][:, eidxs]
-            self._eles.append(elementscls(shapecls, spts, self.config))
+            self._eles.append(elementscls(shapecls, spts, self.cfg))
 
         self.cleaner = self._build_cleaner() if self.clean else None
 
@@ -358,8 +348,7 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
         if not self.clean:
             return raw
 
-        return {it: np.ascontiguousarray(
-                    self.cleaner.select(it, xd.transpose(1, 2, 0)).T)
+        return {it: self.cleaner.select(it, xd.transpose(1, 2, 0)).T
                 for it, xd in raw.items()}
 
     def _build_normals(self):
@@ -380,8 +369,7 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
         out = {}
         for it in raw:
             n = avg[it].T
-            n = n / np.linalg.norm(n, axis=0, keepdims=True)
-            out[it] = np.ascontiguousarray(n)
+            out[it] = n / np.linalg.norm(n, axis=0, keepdims=True)
         return out
 
     def _build_wall_dist(self):
@@ -402,25 +390,21 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
         return {it: avg[it].squeeze(-1) for it in raw}
 
     def _compute_sample(self, sample, snap):
-        cfg = self.config
-
         cons = []
         for etype, _, eidxs, _, _, soln_op, _ in self._groups:
             c = interp_ops(soln_op, snap.data[etype][:, :, eidxs])
             cons.append(c.swapaxes(0, 1))
 
-        raw_pris = self._assemble(lambda gi, g: snap.to_pris(cons[gi], cfg))
+        raw_pris = self._assemble(lambda gi, g: snap.to_pris(cons[gi]))
 
         def gp(gi, g):
             etype, _, eidxs, _, _, soln_op, _ = g
-            if snap.grad_data is None:
-                return None
             gd = snap.grad_data.get(etype)
             if gd is None:
                 return None
 
             cg = np.einsum('sp,dpvn->dsvn', soln_op, gd[..., eidxs])
-            return snap.to_grad_pris(cons[gi], cg.transpose(2, 0, 1, 3), cfg)
+            return snap.to_grad_pris(cons[gi], cg.transpose(2, 0, 1, 3))
 
         raw_grad_pris = self._assemble(gp)
         self._finalize_sample(sample, snap, raw_pris, raw_grad_pris)
@@ -435,8 +419,10 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
                 sample.field_arrays[itype, name] = np.concatenate(pieces)
 
     def cell_curved(self, itype):
-        parts = [self.mesh.spts_curved[g[0]][g[2]]
-                 for g in self._groups if g[3] == itype]
+        parts = []
+        for etype, _, eidxs, it, *_ in self._groups:
+            if it == itype:
+                parts.append(self.mesh.spts_curved[etype][eidxs])
         return np.concatenate(parts) if parts else np.empty(0, dtype=bool)
 
 
@@ -466,7 +452,7 @@ class PointsSnapshotRegion(BaseSnapshotRegion):
     def _configure_sampler(self, snap):
         nvars = len(snap.pris_names)
         nfields = nvars*(1 + self.ndims) if snap.has_grads else nvars
-        self._sampler.configure_with_cfg_nvars(self.config, nfields)
+        self._sampler.configure_with_cfg_nvars(self.cfg, nfields)
 
     def _compute_sample(self, sample, snap):
         self._ensure_form(snap, lambda: self._configure_sampler(snap))
@@ -486,15 +472,13 @@ class PointsSnapshotRegion(BaseSnapshotRegion):
         samps = self._sampler.sample(data)
         sample._samps = samps.swapaxes(0, 1) if samps.size else samps
 
-        cfg = self.config
         if self._is_root:
             primary = sample._samps[:nvars]
-            sample.pris = {'points': snap.to_pris(primary, cfg)}
+            sample.pris = {'points': snap.to_pris(primary)}
 
             if has_grads:
                 cg = sample._samps[nvars:].reshape(nvars, self.ndims, -1)
-                sample.grad_pris = {'points': snap.to_grad_pris(primary, cg,
-                                                                cfg)}
+                sample.grad_pris = {'points': snap.to_grad_pris(primary, cg)}
             else:
                 sample.grad_pris = {'points': None}
 

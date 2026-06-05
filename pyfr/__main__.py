@@ -526,18 +526,19 @@ def process_export(args):
     reader = NativeReader(args.meshf, args.pname, construct_con=needs_con)
 
     progress = args.progress if rank == root else NullProgressSequence()
-    writer = None
+    writer, wcfg = None, None
     with progress.start_with_bar('Process solutions') as pbar:
         for solnf, outf in pbar.start_with_iter(batch):
             mesh, soln = reader.load_subset_mesh_soln(solnf)
             snap = snap_from_loaded(mesh, soln)
-            if writer is None:
+            if writer is None or wcfg != snap.cfg:
                 if writer_cls.type == 'stl':
-                    writer = writer_cls(snap.mesh, snap.config,
+                    writer = writer_cls(snap.mesh, snap.cfg,
                                         extra['stlrgns'], **kwargs)
                 else:
-                    writer = writer_cls(snap.mesh, snap.config,
+                    writer = writer_cls(snap.mesh, snap.cfg,
                                         **extra, **kwargs)
+                wcfg = snap.cfg
             writer.emit(snap, outf)
 
 
