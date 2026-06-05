@@ -11,6 +11,10 @@ class SnapshotSample:
         region._compute_sample(self, snap)
         self._register_fields(snap)
 
+    def view(self, etype, *, layout='soa'):
+        from pyfr.plugins.fields.runner import SampleView
+        return SampleView(self, etype, layout=layout)
+
     def _register_fields(self, snap):
         for info in snap.iter_fields():
             self.fields[info.name] = info

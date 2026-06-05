@@ -81,10 +81,17 @@ class ConduitNode:
             case float():
                 self.lib.conduit_node_set_path_float64(self, key, value)
             case (np.ndarray() | np.generic()):
-                value = np.ascontiguousarray(value)
-                fn = getattr(self.lib,
-                             f'conduit_node_set_path_{value.dtype}_ptr')
-                fn(self, key, value.ctypes.data, value.size)
+                if value.ndim == 1 and value.strides[0] != value.itemsize:
+                    fn = getattr(self.lib,
+                                 f'conduit_node_set_path_external_'
+                                 f'{value.dtype}_ptr_detailed')
+                    fn(self, key, value.ctypes.data, value.size,
+                       0, value.strides[0], value.itemsize, 0)
+                else:
+                    value = np.ascontiguousarray(value)
+                    fn = getattr(self.lib,
+                                 f'conduit_node_set_path_{value.dtype}_ptr')
+                    fn(self, key, value.ctypes.data, value.size)
             case list():
                 value = np.array(value, dtype=float)
                 self.lib.conduit_node_set_path_float64_ptr(self, key,
@@ -93,24 +100,8 @@ class ConduitNode:
             case _:
                 raise ValueError('ConduitNode: __setitem__ type not supported')
 
-    def set_aos(self, key, labels, arr2d):
-        # Set columns of a C-contiguous (npoints, ncomps) array as interleaved
-        # external references so VTK creates an AoS array (no GetVoidPointer
-        # copy).  The caller must keep arr2d alive until the next
-        # catalyst_execute call.
-        npoints, ncomps = arr2d.shape
-        itemsize = arr2d.itemsize
-        stride = ncomps * itemsize
-        fn = getattr(self.lib,
-                     f'conduit_node_set_path_external_{arr2d.dtype}_ptr_detailed')
-        for i, l in enumerate(labels):
-            fn(self, f'{key}/{l}'.encode(), arr2d.ctypes.data,
-               npoints, i * itemsize, stride, itemsize, 0)
-
     def empty_object(self, key):
-        # Make `key` an empty object node (object dtype, zero children).  A
-        # node only becomes an object once it has a child, so add a throwaway
-        # child then remove it — leaving an empty object the blueprint accepts.
+        # Make `key` an empty object node (object dtype, zero children).
         tmp = f'{key}/_'.encode()
         self.lib.conduit_node_fetch(self, tmp)
         self.lib.conduit_node_remove_path(self, tmp)

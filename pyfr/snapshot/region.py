@@ -65,26 +65,23 @@ class BaseSnapshotRegion:
 
     def npts(self, etype, ploc=None):
         p = self.ploc[etype] if ploc is None else ploc
-        return p.shape[1] if p.ndim == 2 else p.shape[1]*p.shape[2]
+        return p.shape[1]
 
     def points(self, etype, ploc=None):
         p = self.ploc[etype] if ploc is None else ploc
-        if p.ndim == 2:
-            return np.ascontiguousarray(p.T)
-        return np.ascontiguousarray(
-            p.transpose(2, 1, 0).reshape(-1, p.shape[0]))
+        return np.ascontiguousarray(p.T)
 
     def connectivity(self, etype, sub_nodes):
-        p = self.ploc[etype]
-        if p.ndim == 3:
-            nsvpts, neles = p.shape[1], p.shape[2]
-            con = np.tile(sub_nodes, (neles, 1))
-            con += (np.arange(neles)*nsvpts)[:, None]
-            return con
-        if self.cleaner is None:
+        if self.cleaner is not None:
+            return self.cleaner.layouts[etype][0][:, sub_nodes]
+        if etype not in getattr(self, '_nsvpts_at', {}):
             raise NotImplementedError(
                 f'{type(self).__name__} has no per-element cell layout')
-        return self.cleaner.layouts[etype][0][:, sub_nodes]
+        nsvpts = self._nsvpts_at[etype]
+        neles = self.ploc[etype].shape[1] // nsvpts
+        con = np.tile(sub_nodes, (neles, 1))
+        con += (np.arange(neles)*nsvpts)[:, None]
+        return con
 
     def cell_curved(self, etype):
         return None
@@ -160,12 +157,14 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
     def _build_geometry(self):
         self._ops = {}
         self._refpts_at = {}
+        self._nsvpts_at = {}
         for et in self.etypes:
             shapecls = subclass_where(BaseShape, name=et)
             nspts = self.mesh.spts[et].shape[0]
             shape = shapecls(nspts, self.cfg)
             pts = self._refpts_fn(shapecls, shape)
             self._refpts_at[et] = pts
+            self._nsvpts_at[et] = len(pts)
             self._ops[et] = (shape.sbasis.nodal_basis_at(pts),
                              shape.ubasis.nodal_basis_at(pts))
 
@@ -195,7 +194,8 @@ class VolumeSnapshotRegion(BaseSnapshotRegion):
             if self.clean:
                 out[et] = np.ascontiguousarray(self.cleaner.select(et, xd).T)
             else:
-                out[et] = np.ascontiguousarray(xd.transpose(2, 0, 1))
+                out[et] = np.ascontiguousarray(
+                    xd.transpose(2, 1, 0).reshape(xd.shape[2], -1))
         return out
 
     def cell_curved(self, etype):
@@ -267,12 +267,14 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
     def _build_groups(self):
         cfg, mesh = self.cfg, self.mesh
         groups = []
+        self._nsvpts_at = {}
         for etype, fidx, eidxs in self._conn:
             shapecls = subclass_where(BaseShape, name=etype)
             nspts = mesh.spts[etype].shape[0]
             itype, proj, _ = shapecls.faces[fidx]
 
             face_refpts = self._refpts_fn(subclass_where(BaseShape, name=itype))
+            self._nsvpts_at[itype] = len(face_refpts)
             fpts = proj_pts(proj, face_refpts)
 
             shape = shapecls(nspts, cfg)
@@ -345,10 +347,13 @@ class SurfaceSnapshotRegion(BaseSnapshotRegion):
             return xd.transpose(2, 0, 1)
 
         raw = self._assemble(fn)
-        if not self.clean:
-            return raw
+        if self.clean:
+            return {it: np.ascontiguousarray(
+                        self.cleaner.select(it, xd.transpose(1, 2, 0)).T)
+                    for it, xd in raw.items()}
 
-        return {it: self.cleaner.select(it, xd.transpose(1, 2, 0)).T
+        return {it: np.ascontiguousarray(
+                    xd.transpose(0, 2, 1).reshape(xd.shape[0], -1))
                 for it, xd in raw.items()}
 
     def _build_normals(self):

@@ -6,16 +6,17 @@ from pyfr.snapshot import FieldInfo
 
 
 class SampleView:
-    # Per-key lens onto a SnapshotSample, handed to a field provider.
-    def __init__(self, sample, etype):
+    def __init__(self, sample, etype, *, layout='soa'):
         self.sample = sample
         self.etype = etype
+        self.layout = layout
         self.cfg = sample.region.cfg
         self.fields = {}
 
     @property
     def ploc(self):
-        return self.sample.ploc[self.etype]
+        p = self.sample.ploc[self.etype]
+        return p.T if self.layout == 'aos' else p
 
     @property
     def pris(self):
@@ -39,12 +40,14 @@ class SampleView:
     def has_grads(self):
         return self.grad_pris is not None
 
+    def field_array(self, info):
+        arr = self.sample.field_array(self.etype, info)
+        if arr is None:
+            return None
+        return arr.T if self.layout == 'soa' else arr
+
 
 class FieldRunner:
-    # Bundle of dep-resolved field providers + aggregated metadata.  Caches
-    # the topo-sorted provider list and exposes the union of their .fields
-    # dicts, so callers (writers, renderer, sampler) can register the
-    # outputs they're about to publish before any run() is invoked.
     def __init__(self, names, ndims, cfg, export_type):
         self.ndims = ndims
         self.plugins = get_field_providers(names, ndims, cfg, export_type)
@@ -62,6 +65,7 @@ class FieldRunner:
         return out
 
     def run_on_sample(self, sample, public_only=False):
+        clean = sample.region.clean
         for et in sample.region.etypes:
             view = SampleView(sample, et)
             for p in self.plugins:
@@ -69,6 +73,13 @@ class FieldRunner:
             for fname, arr in view.fields.items():
                 if public_only and fname.startswith('_'):
                     continue
+                # Canonical AoS: (flat_npts, ncomps), element-major for raw
+                if clean:
+                    arr = arr[:, None] if arr.ndim == 1 else arr
+                elif arr.ndim == 2:
+                    arr = arr.T.reshape(-1, 1)
+                else:
+                    arr = arr.swapaxes(0, 1).reshape(-1, arr.shape[-1])
                 sample.field_arrays[et, fname] = arr
 
         for p in self.plugins:

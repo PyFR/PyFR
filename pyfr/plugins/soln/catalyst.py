@@ -200,7 +200,6 @@ class CatalystWrappers(LibWrapper):
 class CatalystRenderer(InSituRenderer):
     def __init__(self, mesh, scfg, cfgsect, isrestart, *, acfg=None):
         self._coord_bufs = {}
-        self._field_bufs = []
 
         super().__init__(mesh, scfg, cfgsect, isrestart, acfg=acfg)
 
@@ -244,35 +243,17 @@ class CatalystRenderer(InSituRenderer):
         self.mesh_n[f'{dom}/state/cycle'] = cycle
 
     def _emit_coords(self, mesh_n, dom, cs, xyz):
-        # AoS — keep buffer alive until next overwrite (per (dom, cs) entry).
+        # Coords are long-lived; keepalive in self._coord_bufs so the strided
+        # views into this AoS buffer remain valid across executes.
         aos = np.ascontiguousarray(np.asarray(xyz).T)
         self._coord_bufs[dom, cs] = aos
-        mesh_n.set_aos(f'{dom}/coordsets/{cs}/values', 'xyz', aos)
-
-    def _emit_field(self, mesh_n, dom, fname, arr):
-        path = f'{dom}/fields/{fname}/values'
-        ncomp = arr.shape[-1]
-
-        if ncomp == 1:
-            mesh_n[path] = np.ascontiguousarray(arr.squeeze(-1).T)
-        else:
-            # AoS — raw path vs. cleaned path
-            if arr.ndim == 3:
-                vbuf = arr.swapaxes(0, 1).reshape(-1, ncomp)
-            else:
-                vbuf = arr.reshape(-1, ncomp)
-            vbuf = np.ascontiguousarray(vbuf)
-            self._field_bufs.append(vbuf)
-            mesh_n.set_aos(path, 'xyz', vbuf)
+        super()._emit_coords(mesh_n, dom, cs, aos.T)
 
     def execute(self, snap):
         comm, _, _ = get_comm_rank_root()
 
         self.mesh_n['catalyst/state/timestep'] = snap.cycle
         self.mesh_n['catalyst/state/time'] = float(snap.tcurr)
-
-        # Field arrays from previous execute can now be reused/freed
-        self._field_bufs.clear()
 
         fields = self._evaluate_exprs(snap)
         self.publish(fields)

@@ -532,14 +532,17 @@ class SpanwiseSnapshotRegion(BaseSnapshotRegion):
                 shared)
 
         self.ploc = {}
+        self._nsvpts_at = {}
         for itype, groups in self._owned.items():
             vpts = np.concatenate([v for _, v, _ in groups]).swapaxes(0, 1)
             vpts[..., self.axis] = 0
+            self._nsvpts_at[itype] = vpts.shape[0]
             if self.clean:
                 self.ploc[itype] = np.ascontiguousarray(
                     self.cleaner.select(itype, vpts).T)
             else:
-                self.ploc[itype] = np.ascontiguousarray(vpts.transpose(2, 0, 1))
+                self.ploc[itype] = np.ascontiguousarray(
+                    vpts.transpose(2, 1, 0).reshape(vpts.shape[2], -1))
 
     def _compute_sample(self, sample, snap):
         self._ensure_form(snap, lambda: self._configure_form(snap))

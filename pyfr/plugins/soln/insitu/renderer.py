@@ -162,11 +162,6 @@ class InSituRenderer:
             mesh_n[f'{dom}/fields/{fname}/volume_dependent'] = 'false'
             mesh_n[f'{dom}/fields/{fname}/topology'] = sname
 
-    def _flatten_coords(self, ploc):
-        if ploc.ndim == 2:
-            return ploc
-        return ploc.transpose(0, 2, 1).reshape(ploc.shape[0], -1)
-
     def _build_connectivity(self, etype, region):
         subdiv = get_vtk_shape(etype, self.divisor)
         snodes = subdiv.subnodes
@@ -185,8 +180,7 @@ class InSituRenderer:
         mesh_n[f'{dom}/topologies/{sname}/coordset'] = cs
         mesh_n[f'{dom}/topologies/{sname}/type'] = 'unstructured'
 
-        ploc = region.ploc[etype]
-        self._emit_coords(mesh_n, dom, cs, self._flatten_coords(ploc))
+        self._emit_coords(mesh_n, dom, cs, region.ploc[etype])
 
         self._write_field_meta(mesh_n, dom, sname)
 
@@ -306,9 +300,9 @@ class InSituRenderer:
 
             sample = samples[sname]
 
+            view = sample.view(etype)
             cs = f'{sname}_coords'
-            self._emit_coords(self.mesh_n, dom, cs,
-                              self._flatten_coords(sample.ploc[etype]))
+            self._emit_coords(self.mesh_n, dom, cs, view.ploc)
 
             psolns = sample.pris[etype]
             pgrads = (sample.grad_pris[etype] if self._gradpinfo else None)
@@ -334,8 +328,7 @@ class InSituRenderer:
                 for fname in runner.fields(public_only=True):
                     if (etype, fname) in sample.field_arrays:
                         arr = sample.field_arrays[(etype, fname)]
-                        items.append((self._field_name(sname, fname),
-                                      np.atleast_3d(arr)))
+                        items.append((self._field_name(sname, fname), arr))
 
             out[sname][etype] = items
 

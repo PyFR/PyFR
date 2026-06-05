@@ -182,23 +182,20 @@ class BaseVTKWriter(BaseWriter):
 
     def _point_field_data(self, etype):
         region = self._region
-        sample = self._sample
+        view = self._sample.view(etype, layout='aos')
+        neles = dict(self.einfo)[etype]
         fields = []
 
         for name, info in self._emit_fields('point'):
-            arr = sample.field_array(etype, info)
+            arr = view.field_array(info)
             if arr is None:
                 continue
 
-            if info.source in ('primitive', 'gradient'):
-                if not region.clean:
-                    arr = arr.swapaxes(0, 1)
-            else:
-                if region.clean:
-                    arr = arr[:, None] if arr.ndim == 1 else arr.T
-                else:
-                    arr = (arr.swapaxes(0, 1)[..., None] if arr.ndim == 2
-                           else arr.transpose(2, 1, 0))
+            # Canonical AoS is (flat_npts, ncomps); raw mode wants
+            # (neles, nsvpts, ncomps) for VTU element-major emission.
+            if not region.clean:
+                nsvpts = arr.shape[0] // neles
+                arr = arr.reshape(neles, nsvpts, arr.shape[1])
 
             fields.append((np.ascontiguousarray(arr, dtype=info.dtype),
                            info.dtype))
@@ -413,9 +410,8 @@ class BaseVTKWriter(BaseWriter):
         neles = dict(self.einfo)[etype]
 
         # Write element node locations
-        self._write_darray(region.points(etype,
-                                         self._sample.ploc[etype]),
-                                         write, self.dtype)
+        self._write_darray(region.points(etype, self._sample.ploc[etype]),
+                           write, self.dtype)
 
         # Perform the sub division
         if etype != 'pyr' and self.ho_output:

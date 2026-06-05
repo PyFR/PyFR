@@ -85,8 +85,12 @@ class BaseSnapshot:
 
     def primitive_at(self, etype, info, sample):
         names = self.pris_names
-        return np.stack([sample.pris[etype][names.index(c)]
-                         for c in info.components], axis=-1)
+        arr = np.stack([sample.pris[etype][names.index(c)]
+                        for c in info.components], axis=-1)
+        # Canonical AoS: (flat_npts, ncomps), element-major for raw
+        if arr.ndim == 3:
+            arr = arr.swapaxes(0, 1)
+        return arr.reshape(-1, len(info.components))
 
     def gradient_at(self, etype, info, sample):
         names = self.pris_names
@@ -94,13 +98,23 @@ class BaseSnapshot:
         for c in info.components:
             var, _, d = c.rpartition('-')
             cols.append(sample.grad_pris[etype][names.index(var)][int(d)])
-        return np.stack(cols, axis=-1)
+        arr = np.stack(cols, axis=-1)
+        # Canonical AoS: (flat_npts, ncomps), element-major for raw
+        if arr.ndim == 3:
+            arr = arr.swapaxes(0, 1)
+        return arr.reshape(-1, len(info.components))
 
     def data_at(self, etype, info):
-        return self.data[etype][:, info.data_index]
+        # data[etype][:, info.data_index] is (nsvpts, neles); canonical AoS
+        # is (flat_npts, 1) with element-major flat order.
+        arr = self.data[etype][:, info.data_index]
+        return arr.T.reshape(-1, 1)
 
     def grad_data_at(self, etype, info):
-        return self.grad_data[etype][:, :, info.data_index]
+        # grad_data[etype][:, :, info.data_index] is (ndims, nsvpts, neles);
+        # canonical AoS is (flat_npts, ndims), element-major.
+        arr = self.grad_data[etype][:, :, info.data_index]
+        return arr.transpose(2, 1, 0).reshape(-1, arr.shape[0])
 
     def _aux_pshapes(self):
         if not self.ele_types:
