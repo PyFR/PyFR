@@ -56,7 +56,8 @@ include = ["pyfr*"]
 "pyfr.backends.openmp.kernels" = ["*.mako"]
 "pyfr.integrators.explicit.kernels" = ["*.mako"]
 "pyfr.integrators.implicit.kernels" = ["*.mako"]
-"pyfr.plugins.kernels" = ["*.mako"]
+"pyfr.plugins.soln.kernels" = ["*.mako"]
+"pyfr.plugins.solver.kernels" = ["*.mako"]
 "pyfr.quadrules" = [
     "hex/*.txt",
     "line/*.txt",
