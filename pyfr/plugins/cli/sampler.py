@@ -11,10 +11,10 @@ from pyfr.inifile import Inifile
 from pyfr.mpiutil import get_comm_rank_root, init_mpi
 from pyfr.plugins.base import BaseCLIPlugin
 from pyfr.plugins.common import cli_external
-from pyfr.plugins.postproc.runner import PostProcRunner
-from pyfr.points import PointLocator, PointSampler
+from pyfr.plugins.fields.runner import FieldRunner
+from pyfr.points import PointLocator
 from pyfr.readers.native import NativeReader
-from pyfr.util import subclass_where
+from pyfr.snapshot import from_file as snap_from_file
 
 
 def _read_pts(ptsf, ndims=None, skip=0):
@@ -31,32 +31,6 @@ def _read_pts(ptsf, ndims=None, skip=0):
         raise ValueError('Invalid point set dimensionality')
 
     return pts
-
-
-def _process_con_to_pri(elementscls, ndims, cfg, *, has_grads=False):
-    nvars = len(elementscls.convars(ndims, cfg))
-    con_to_pri = elementscls.con_to_pri
-    diff_con_to_pri = elementscls.diff_con_to_pri
-
-    def process(samps):
-        if samps.size:
-            samps = samps.T
-
-            # Convert the samples to primitive variables
-            psamps = con_to_pri(samps[:nvars], cfg)
-
-            # Also convert any gradient data
-            if has_grads:
-                diff_con = samps[nvars:].reshape(nvars, ndims, -1)
-                diff_pri = diff_con_to_pri(samps[:nvars], diff_con, cfg)
-
-                psamps += [f for gf in diff_pri for f in gf]
-
-            samps = np.array(psamps).T
-
-        return samps
-
-    return process
 
 
 class SamplerCLIPlugin(BaseCLIPlugin):
@@ -114,11 +88,19 @@ class SamplerCLIPlugin(BaseCLIPlugin):
              default='conservative', help='output format'
         )
         ap_sample.add_argument(
-            '--postproc', dest='pp_plugins', action='append', default=[],
-            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
+            '--add-fields', dest='add_fields', action='append', default=[],
+            metavar='NAME[,NAME,...]',
+            help='register derived-field providers (mach, yplus, cf, ...); '
+            'may be repeated, comma lists ok'
         )
-        ap_sample.add_argument('--cfg', dest='pp_cfg',
-                               help='config file for postproc plugins')
+        ap_sample.add_argument(
+            '--remove-fields', dest='remove_fields', action='append',
+            default=[], metavar='NAME[,NAME,...]',
+            help='drop these column names from the CSV; may be repeated, '
+            'comma lists ok'
+        )
+        ap_sample.add_argument('--cfg', dest='field_cfg',
+                               help='config file for field providers')
         ap_sample.add_argument('-s', '--sep', default='\t', help='separator')
         ap_sample.set_defaults(process=cls.sample_cmd)
 
@@ -209,114 +191,109 @@ class SamplerCLIPlugin(BaseCLIPlugin):
     def sample_cmd(self, args):
         # Initialise MPI
         init_mpi()
-
-        # Get our MPI info
         comm, rank, root = get_comm_rank_root()
 
+        # Flatten comma-separated --add-fields / --remove-fields
+        add_fields = [n.strip() for a in args.add_fields
+                      for n in a.split(',') if n.strip()]
+        remove_fields = {n.strip() for a in args.remove_fields
+                         for n in a.split(',') if n.strip()}
+
         # Read the mesh and solution
-        reader = NativeReader(args.mesh, args.pname, construct_con=False)
-        mesh, soln = reader.load_subset_mesh_soln(args.soln)
+        snap = snap_from_file(args.mesh, args.soln, args.pname)
+        mesh = snap.mesh
 
         # Dimension and field names
         dims = 'xyz'[:mesh.ndims]
-        fields = soln.fields
 
-        # Read the sample points from a CSV file
+        # Soln-form-only flags
+        if args.format == 'primitive' and snap.prefix != 'soln':
+            raise ValueError('Primitive output only supported for conservative'
+                             f'-form solution files (snap.prefix = '
+                             f'{snap.prefix!r})')
+        if add_fields and snap.prefix != 'soln':
+            raise ValueError('Field providers require conservative-form '
+                             f'solution data (snap.prefix = {snap.prefix!r})')
+
+        # Resolve the points (either from a CSV file or a pre-stored set)
         if args.pts:
-            if rank == root:
-                pts = _read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
-            else:
-                pts = None
-
-            pts = comm.bcast(pts, root=root)
-            locs = None
-        # Obtain the pre-processed sample points from the mesh
+            # Read the sample points from a CSV file
+            pts = (_read_pts(args.pts, ndims=mesh.ndims, skip=args.skip)
+                   if rank == root else None)
         else:
-            if rank == root:
-                pdata = mesh.raw[f'plugins/sampler/{args.name}'][:]
-            else:
-                pdata = None
-
+            # Obtain the pre-processed sample points from the mesh
+            pdata = (mesh.raw[f'plugins/sampler/{args.name}'][:]
+                     if rank == root else None)
             pdata = comm.bcast(pdata, root=root)
-
             pts = pdata['ploc']
-            locs = pdata[['cidx', 'eidx', 'tloc']]
-
-        # Determine if gradient data is present
-        has_grads = bool(soln.grad_data)
-
-        # If gradients exist, stack them into the solution data
-        sdata = []
-        for etype in mesh.eidxs:
-            d = soln.data[etype]
-            if has_grads:
-                g = soln.grad_data[etype].transpose(1, 2, 0, 3)
-                g = g.reshape(g.shape[0], -1, g.shape[3])
-                d = np.concatenate([d, g], axis=1)
-
-            sdata.append(d)
-
-        # Postproc plugins require primitive format
-        if args.pp_plugins and args.format != 'primitive':
-            raise ValueError('Postproc plugins require --format=primitive')
-
-        # Handle conversion from conservative to primitive variables
-        if args.format == 'primitive':
-            from pyfr.solvers.base import BaseSystem
-
-            if soln.stats.get('data', 'prefix') != 'soln':
-                raise ValueError('Primitive output only supported for '
-                                 'solution files')
-
-            # Obtain the system associated with the solution
-            systemcls = subclass_where(
-                BaseSystem, name=soln.config.get('solver', 'system')
-            )
-            elementscls = systemcls.elementscls
-            vmap = elementscls.privars(mesh.ndims, soln.config)
-
-            fields = list(vmap)
-            if has_grads:
-                fields.extend(f'grad_{v}_{d}' for v in vmap for d in dims)
-
-            process = _process_con_to_pri(elementscls, mesh.ndims,
-                                          soln.config, has_grads=has_grads)
-        else:
-            process = None
-            if has_grads:
-                fields = list(fields)
-                fields.extend(f'grad_{v}_{d}'
-                              for v in soln.fields for d in dims)
-
-        # Resolve postproc plugins + dependencies in topological order
-        pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else soln.config
-        runner = PostProcRunner(args.pp_plugins, mesh.ndims, pp_cfg, 'volume')
+        pts = comm.bcast(pts, root=root) if args.pts else pts
 
         # Construct and configure the point sampler
-        sampler = PointSampler(mesh, pts, locs)
-        sampler.configure_with_cfg_nvars(soln.config, len(fields))
+        region = snap.at_points(pts)
 
         # Sample the solution
-        samps = sampler.sample(sdata, process=process)
+        sample = region.sample(snap)
+        has_grads = snap.has_grads
+
+        # Resolve field providers and run them on the sample
+        field_cfg = (Inifile.load(args.field_cfg) if args.field_cfg
+                     else snap.cfg)
+        runner = FieldRunner(add_fields, mesh.ndims, field_cfg, 'volume')
+        sample.run(runner, public_only=True)
 
         # Have the root rank post-process and write the samples
-        if rank == root:
-            # Run any requested post-processing plugins
-            if runner:
-                pp_field_map = runner.fields(public_only=True)
-                public = runner.run_samples(soln.config, samps.T,
-                                            public_only=True)
+        if rank != root:
+            return
 
-                extra_cols = []
-                for name, arr in public.items():
-                    fields.extend(pp_field_map[name])
-                    extra_cols.append(np.atleast_2d(arr.T).T)
+        # Build the output as an ordered dict
+        fields = {}
 
-                samps = np.concatenate([samps, *extra_cols], axis=1)
+        if args.format == 'primitive':
+            for info in snap.iter_fields():
+                if info.source not in ('primitive', 'gradient'):
+                    continue
+                if info.source == 'gradient' and not has_grads:
+                    continue
+                arr = sample.field_array('points', info)
+                for cname, col in zip(info.components, arr.T):
+                    if info.source == 'primitive':
+                        fields[cname] = col
+                    else:
+                        var, _, d = cname.rpartition('-')
+                        fields[f'grad_{var}_{dims[int(d)]}'] = col
+        else:
+            data_infos = sorted(
+                (f for f in snap.fields.values() if f.source == 'data'),
+                key=lambda f: f.data_index)
+            for info in data_infos:
+                fields[info.name] = sample.field_array('points', info)
+            if has_grads:
+                grad_infos = sorted(
+                    (f for f in snap.fields.values() if f.source == 'grad_data'),
+                    key=lambda f: f.data_index)
+                for info in grad_infos:
+                    var = info.name.removeprefix('grad ')
+                    arr = sample.field_array('points', info)
+                    for d, dim in enumerate(dims):
+                        fields[f'grad_{var}_{dim}'] = arr[:, d]
 
-            # Write out the header
-            print(*dims, *fields, sep=args.sep)
+        # Field provider outputs
+        for fname, varnames in runner.fields(public_only=True).items():
+            arr = sample.field_arrays.get(('points', fname))
+            if arr is None:
+                continue
+            if len(varnames) == 1:
+                fields[varnames[0]] = arr if arr.ndim == 1 else arr.ravel()
+            else:
+                for i, vn in enumerate(varnames):
+                    fields[vn] = arr[:, i] if arr.ndim == 2 else arr[i]
 
-            # Write out the samples
-            for ploc, samp in zip(pts, samps):
-                print(*ploc, *samp, sep=args.sep)
+        for n in remove_fields:
+            fields.pop(n)
+
+        # Write out the header
+        print(*dims, *fields, sep=args.sep)
+
+        # Write out the samples
+        for i, ploc in enumerate(pts):
+            print(*ploc, *(arr[i] for arr in fields.values()), sep=args.sep)

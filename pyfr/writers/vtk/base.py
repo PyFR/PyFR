@@ -1,30 +1,18 @@
-from collections import defaultdict, namedtuple
+import re
+from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
 
-from pyfr.cache import clear_memoize, memoize
 from pyfr.mpiutil import get_comm_rank_root, mpi
-from pyfr.plugins.postproc.runner import PostProcRunner
+from pyfr.plugins.fields.runner import FieldRunner
 from pyfr.shapes import BaseShape
-from pyfr.util import first, subclass_where
+from pyfr.util import subclass_where
 from pyfr.writers import BaseWriter
-from pyfr.writers.vtk.output import CleanToGridVTKOutput, DirectVTKOutput
 from pyfr.writers.vtk.shapes import get_vtk_shape
 
 
-FieldMeta = namedtuple('FieldMeta', 'kind ncomps dtype')
-
-
-def interpolate_pts(op, pts):
-    ipts = op.astype(pts.dtype) @ pts.reshape(op.shape[1], -1)
-    ipts = ipts.reshape(op.shape[0], *pts.shape[1:])
-
-    return ipts
-
-
 class BaseVTKWriter(BaseWriter):
-    # Supported file types and extensions
     name = 'vtk'
     extn = ['.vtu', '.pvtu']
 
@@ -34,21 +22,25 @@ class BaseVTKWriter(BaseWriter):
     # If to output curvature data
     output_curved = False
 
-    def __init__(self, meshf, pname=None, *, prec='single', order=None,
-                 divisor=None, fields=[], pp_plugins=[], pp_cfg=None,
+    # Per-etype divisor bump for pyramids
+    pyr_divisor_bump = 0
+
+    def __init__(self, mesh, cfg, *, prec='single', order=None, divisor=None,
+                 add_fields=[], remove_fields=[], field_cfg=None,
                  discontinuous=False):
-        super().__init__(meshf, pname)
+        self.mesh = mesh
+        self.cfg = cfg
+
+        if not re.fullmatch(self.dimensions, str(mesh.ndims)):
+            raise RuntimeError(f'{mesh.ndims}D grids not supported')
 
         self.dtype = np.dtype(prec).type
-        self.fields = fields
-        self._pp_plugin_names = pp_plugins
-        self._pp_cfg = pp_cfg
 
-        # Determine the output filter
-        if discontinuous:
-            self._output_cls = DirectVTKOutput
-        else:
-            self._output_cls = CleanToGridVTKOutput
+        self._field_names = add_fields
+        self._remove_fields = set(remove_fields)
+        self._field_cfg = field_cfg
+
+        self._clean = not discontinuous
 
         # Choose whether to output subdivided cells or high order VTK cells
         if order or divisor is None:
@@ -62,72 +54,59 @@ class BaseVTKWriter(BaseWriter):
             self.vtkfile_version = '1.0'
             self._get_npts_ncells_nnodes = self._get_npts_ncells_nnodes_lin
 
-    def _build_extra_fields(self):
-        # Only allow post processing of solution files
-        if self._pp_plugin_names and self.dataprefix != 'soln':
-            raise ValueError('Postproc plugins are only supported for '
-                             'solution files')
+        # Per-etype divisor
+        divisor_default = self.divisor or self.cfg.getint('solver', 'order')
+        self.etypes_div = defaultdict(lambda: divisor_default)
+        self.etypes_div['pyr'] += self.pyr_divisor_bump
 
-        self._extra_fields = {}
+        self._init_einfo()
+        self._region = self._build_region()
 
-        # Classify aux fields by shape
-        pshapes = self._extra_point_shapes(self._extra_etype)
-        for dt in self.soln.dtypes.values():
-            if 'aux' not in dt.names:
+        self.field_runner = FieldRunner(self._field_names, mesh.ndims,
+                                        self._field_cfg or self.cfg, self.type)
+
+        self.tcurr = None
+
+    def emit(self, snap, outfname):
+        if self._field_names and snap.prefix != 'soln':
+            raise ValueError(
+                f'Field providers are only supported for conservative-form '
+                f'solution files (snap.prefix = {snap.prefix!r})')
+
+        self._sample = self._region.sample(snap)
+        self._post_sample(snap)
+        self._sample.run(self.field_runner, public_only=True)
+
+        if unknown := self._remove_fields - set(self._sample.fields):
+            raise RuntimeError(
+                f'--remove-fields names not in output pool: '
+                f'{sorted(unknown)} '
+                f'(available: {sorted(self._sample.fields)})')
+
+        if snap.prefix == 'soln':
+            self.tcurr = getattr(snap, 'tcurr', None)
+        else:
+            self.tcurr = None
+
+        if Path(outfname).suffix == '.vtu':
+            self._write_vtu(outfname)
+        else:
+            self._write_pvtu(outfname)
+
+    def _init_einfo(self):
+        raise NotImplementedError
+
+    def _build_region(self):
+        raise NotImplementedError
+
+    def _post_sample(self, snap):
+        pass
+
+    def _emit_fields(self, kind):
+        for name, info in self._sample.fields.items():
+            if info.kind != kind or name in self._remove_fields:
                 continue
-
-            for name in dt['aux'].names:
-                adtype = dt['aux'][name].base
-                shape = dt['aux'][name].shape
-
-                if shape in pshapes:
-                    meta = FieldMeta('point', 1, adtype)
-                elif shape[:-1] in pshapes:
-                    meta = FieldMeta('point', shape[-1], adtype)
-                else:
-                    meta = FieldMeta('cell', int(np.prod(shape) or 1), adtype)
-
-                self._extra_fields[name] = meta
-
-        # Resolve postproc plugins and register fields
-        cfg = self._pp_cfg or self.cfg
-        self.pp_runner = PostProcRunner(self._pp_plugin_names, self.ndims, cfg,
-                                        self.type)
-        for fname, varnames in self.pp_runner.fields().items():
-            meta = FieldMeta('point', len(varnames), np.dtype(self.dtype))
-            self._extra_fields[fname] = meta
-
-    def _pre_proc_fields_soln(self, soln):
-        ecls = self.elementscls
-        nvars = len(ecls.privars(self.ndims, self.cfg))
-
-        # Convert the solution to primitive variables
-        fields = ecls.con_to_pri(soln[:nvars], self.cfg)
-
-        # Convert any solution gradients to primitive variables
-        if self._gradients:
-            diff_cons = soln[nvars:].reshape(nvars, -1, *soln.shape[1:])
-            diff_pri = ecls.diff_con_to_pri(soln[:nvars], diff_cons, self.cfg)
-
-            fields += [f for gf in diff_pri for f in gf]
-
-        return np.array(fields)
-
-    def _pre_proc_fields_scal(self, soln):
-        return soln
-
-    def _post_proc_fields_soln(self, vsoln):
-        # Prepare the fields
-        fields = []
-        for vnames in self._vtk_vars.values():
-            ix = [self._soln_fields.index(vn) for vn in vnames]
-
-            fields.append(vsoln[ix])
-
-        return fields
-
-    def _post_proc_fields_scal(self, vsoln):
-        return [vsoln[self._soln_fields.index(k)] for k in self._vtk_vars]
+            yield name, info
 
     def _nsvpts(self, etype):
         div = self.etypes_div[etype]
@@ -136,171 +115,81 @@ class BaseVTKWriter(BaseWriter):
     def _get_npts_ncells_nnodes_lin(self, etype, neles):
         div = self.etypes_div[etype]
 
-        # Get the number of points
-        nsvpts = self._nsvpts(etype)
-
         # Get the number of subdivided nodes
         subdv = get_vtk_shape(etype, div)
         ncells = len(subdv.subcells)*neles
         nnodes = len(subdv.subnodes)*neles
 
-        return self._output.npts(etype, neles, nsvpts), ncells, nnodes
+        return self._region.npts(etype), ncells, nnodes
 
     def _get_npts_ncells_nnodes_ho(self, etype, neles):
         # Fallback to subdivision for pyramids
         if etype == 'pyr':
-            counts = self._get_npts_ncells_nnodes_lin(etype, neles)
-        else:
-            nsvpts = self._nsvpts(etype)
-            npts = self._output.npts(etype, neles, nsvpts)
-            counts = npts, neles, neles*nsvpts
+            return self._get_npts_ncells_nnodes_lin(etype, neles)
 
-        return counts
+        nsvpts = self._nsvpts(etype)
+        return self._region.npts(etype), neles, neles*nsvpts
 
     def _array_attrs(self):
-        vvars = self._vtk_vars
-
-        # Floating point data type and size
-        dtype = 'Float32' if self.dtype == np.float32 else 'Float64'
-
         # Base array attributes
-        attrs = [('', dtype, '3'), ('connectivity', 'Int64', ''),
-                 ('offsets', 'Int64', ''), ('types', 'UInt8', '')]
+        attrs = [('', self._vtk_dtype(self.dtype), '3'),
+                 ('connectivity', 'Int64', ''),
+                 ('offsets', 'Int64', ''),
+                 ('types', 'UInt8', '')]
 
         if self.output_curved:
             attrs.append(('Curved', 'UInt8', '1'))
 
-        cell_fields, point_fields = self._extra_field_lists()
-
         # Extra fields as cell data
-        for fname in cell_fields:
-            adtype, _, acomps = self._field_info(fname)
-            attrs.append((fname.replace('-', ' ').title(), adtype,
-                          str(acomps)))
-
-        for fname, varnames in vvars.items():
-            attrs.append((fname.title(), dtype, str(len(varnames))))
+        for name, info in self._emit_fields('cell'):
+            attrs.append((name.replace('-', ' ').title(),
+                          self._vtk_dtype(info.dtype), str(info.ncomps)))
 
         # Extra fields as point data
-        for fname in point_fields:
-            adtype, _, acomps = self._field_info(fname)
-            attrs.append((fname.replace('-', ' ').title(), adtype,
-                          str(acomps)))
+        for name, info in self._emit_fields('point'):
+            attrs.append((name.replace('-', ' ').title(),
+                          self._vtk_dtype(info.dtype), str(info.ncomps)))
 
         return attrs
 
     def _array_sizes(self, npts, ncells, nnodes):
-        dsize = np.dtype(self.dtype).itemsize
-        nb = npts*dsize
-
-        sizes = [3*nb, 8*nnodes, 8*ncells, ncells]
+        sizes = [3*npts*np.dtype(self.dtype).itemsize,
+                 8*nnodes, 8*ncells, ncells]
 
         if self.output_curved:
             sizes.append(ncells)
 
-        cell_fields, point_fields = self._extra_field_lists()
-
         # Extra cell field sizes
-        for fname in cell_fields:
-            _, asize, _ = self._field_info(fname)
-            sizes.append(asize*ncells)
-
-        sizes.extend(len(vn)*nb for vn in self._vtk_vars.values())
+        for name, info in self._emit_fields('cell'):
+            sizes.append(info.dtype.itemsize*info.ncomps*ncells)
 
         # Extra point field sizes
-        for fname in point_fields:
-            _, asize, _ = self._field_info(fname)
-            sizes.append(asize*npts)
+        for name, info in self._emit_fields('point'):
+            sizes.append(info.dtype.itemsize*info.ncomps*npts)
 
         return sizes
 
-    def _load_soln(self, *args, **kwargs):
-        super()._load_soln(*args, **kwargs)
-
-        # Pick an arbitrary element type for aux field classification
-        self._extra_etype = first(self.soln.dtypes)
-
-        # Determine the per-etype divisor
-        divisor = self.divisor or self.cfg.getint('solver', 'order')
-        self.etypes_div = defaultdict(lambda: divisor)
-        self.etypes_div['pyr'] += self._output_cls.pyr_divisor_bump
-
-        # Solutions need a separate processing pipeline to other data
-        if self.dataprefix == 'soln':
-            self._pre_proc_fields = self._pre_proc_fields_soln
-            self._post_proc_fields = self._post_proc_fields_soln
-            self._soln_fields = self.elementscls.privars(self.ndims, self.cfg)
-            self._vtk_vars = self.elementscls.visvars(self.ndims, self.cfg)
-            self.tcurr = self.stats.getfloat('solver-time-integrator', 'tcurr')
-
-            # See if our solution contains gradient data
-            self._gradients = bool(self.soln.grad_data)
-            if self._gradients:
-                # Stack gradient data into solution data
-                for et in list(self.soln.data):
-                    g = self.soln.grad_data[et].transpose(1, 2, 0, 3)
-                    g = g.reshape(g.shape[0], -1, g.shape[3])
-                    self.soln.data[et] = np.concatenate(
-                        [self.soln.data[et], g], axis=1
-                    )
-
-                # Update list of solution fields
-                self._soln_fields.extend(f'{f}-{d}'
-                                         for f in list(self._soln_fields)
-                                         for d in range(self.ndims))
-
-                # Update the mapping of VTK variables to solution fields
-                for var, vfields in list(self._vtk_vars.items()):
-                    self._vtk_vars[f'grad {var}'] = nfields = []
-                    for f in vfields:
-                        nfields.extend(f'{f}-{d}' for d in range(self.ndims))
-        # Otherwise we're dealing with simple scalar data (e.g., tavg)
-        else:
-            self._pre_proc_fields = self._pre_proc_fields_scal
-            self._post_proc_fields = self._post_proc_fields_scal
-            self._soln_fields = self.soln.fields
-            self._vtk_vars = {k: [k] for k in self._soln_fields}
-            self.tcurr = None
-
-        # Classify aux + register pp output fields
-        self._build_extra_fields()
-
-        # Handle field subsetting
-        if self.fields:
-            self._vtk_vars = {f: v for f, v in self._vtk_vars.items()
-                              if f in self.fields}
-
-            if len(self._vtk_vars) != len(self.fields):
-                raise RuntimeError('Invalid field specification')
-
-    def process(self, solnf, outfname):
-        # Clear per-solution memoize caches
-        clear_memoize(self)
-
-        # Load the solution
-        self._load_soln(solnf)
-
-        # Prepare element data
-        self._prepared = {et: self._prepare_pts(et) for et, _ in self.einfo}
-        self._output = self._output_cls(self)
-
-        if Path(outfname).suffix == '.vtu':
-            self._write_vtu(outfname)
-        else:
-            self._write_pvtu(outfname)
+    def _refpts_fn(self, shapecls, _shape=None):
+        # Subdivided sample points, permuted to VTK HO node order when emitting
+        # HO cells (non-pyr — pyrs always linearise).  Used by both the vis
+        # SnapshotRegion and the SurfaceSnapshotRegion (face shapecls is quad
+        # or tri, so the pyr guard is a no-op there).
+        div = self.etypes_div[shapecls.name]
+        svpts = shapecls.std_ele(div)
+        if shapecls.name != 'pyr' and self.ho_output:
+            svpts = svpts[get_vtk_shape(shapecls.name, div).nodemaps[len(svpts)]]
+        return svpts
 
     def _point_field_data(self, etype):
-        _, vsoln, _, _, pointf = self._prepared[etype]
-        nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
-
+        view = self._sample.view(etype, layout='aos')
         fields = []
-        for arr in self._post_proc_fields(vsoln.swapaxes(0, 1)):
-            arr = arr[..., None] if arr.ndim == 2 else arr.transpose(1, 2, 0)
-            fields.append((arr, self.dtype))
 
-        for fname in self._extra_field_lists()[1]:
-            arr = pointf[fname].reshape(nsvpts, neles, -1)
-            fields.append((arr, self._extra_fields[fname].dtype))
+        for name, info in self._emit_fields('point'):
+            arr = view.field_array(info)
+            if arr is None:
+                continue
+
+            fields.append((arr, info.dtype))
 
         return fields
 
@@ -450,32 +339,8 @@ class BaseVTKWriter(BaseWriter):
     def _vtk_dtype(self, dtype):
         return self._vtk_dtypes[np.dtype(dtype).type]
 
-    @memoize
-    def _get_shape(self, etype, cfg):
-        nspts = self.reader.f[f'eles/{etype}'].dtype['nodes'].shape[0]
-        return subclass_where(BaseShape, name=etype)(nspts, cfg)
-
-    def _extra_point_shapes(self, etype):
-        dtype = self.soln.dtypes[etype]
-        group = next(g for g in dtype.names if g != 'aux')
-        shape = self._get_shape(etype, self.cfg)
-        return {dtype[group][0].shape[-1:], (len(shape.linspts),)}
-
-    def _extra_field_lists(self):
-        cfields, pfields = [], []
-        for name, meta in self._extra_fields.items():
-            lst = pfields if meta.kind == 'point' else cfields
-            lst.append(name)
-        return cfields, pfields
-
-    def _field_info(self, name):
-        meta = self._extra_fields[name]
-        asize = meta.dtype.itemsize * meta.ncomps
-        return self._vtk_dtype(meta.dtype), asize, meta.ncomps
-
     def _write_serial_header(self, write_s, npts, ncells, nnodes, off):
-        cell_fields, _ = self._extra_field_lists()
-        ncelld = self.output_curved + len(cell_fields)
+        ncelld = self.output_curved + sum(1 for _ in self._emit_fields('cell'))
 
         write_s(f'<Piece NumberOfPoints="{npts}" '
                 f'NumberOfCells="{ncells}">\n<Points>\n')
@@ -505,8 +370,7 @@ class BaseVTKWriter(BaseWriter):
         return off
 
     def _write_parallel_header(self, write_s):
-        cell_fields, _ = self._extra_field_lists()
-        ncelld = self.output_curved + len(cell_fields)
+        ncelld = self.output_curved + sum(1 for _ in self._emit_fields('cell'))
         write_s('<PPoints>\n')
 
         # Write VTK DataArray headers
@@ -533,27 +397,28 @@ class BaseVTKWriter(BaseWriter):
                 '</DataArray>\n</FieldData>\n')
 
     def _write_data(self, write, etype):
-        vpts, vsoln, curved, cellf, _ = self._prepared[etype]
-        nsvpts, neles = vsoln.shape[0], vsoln.shape[2]
+        region = self._region
+        neles = dict(self.einfo)[etype]
 
         # Write element node locations
-        out = self._output.points(etype, vpts)
-        self._write_darray(out, write, self.dtype)
+        self._write_darray(region.points(etype, self._sample.ploc[etype]),
+                           write, self.dtype)
 
         # Perform the sub division
         if etype != 'pyr' and self.ho_output:
+            nsvpts = self._nsvpts(etype)
             nodes = np.arange(nsvpts)
             subcellsoff = nsvpts
             types = get_vtk_shape(etype, self.etypes_div[etype]).vtk_ho_type
         else:
             subdiv = get_vtk_shape(etype, self.etypes_div[etype])
-
             nodes = subdiv.subnodes
             subcellsoff = subdiv.subcelloffs
             types = subdiv.subcelltypes
 
-        # Prepare VTU cell arrays
-        vtu_con = self._output.connectivity(etype, nodes, neles, nsvpts)
+        # Prepare VTU cell arrays — connectivity, offsets, types.  The region
+        # applies the clean / raw layout to the writer's per-element template.
+        vtu_con = region.connectivity(etype, nodes)
 
         # Generate offset into the connectivity array
         vtu_off = np.tile(subcellsoff, (neles, 1))
@@ -569,18 +434,20 @@ class BaseVTKWriter(BaseWriter):
 
         # VTU cell curvature information
         if self.output_curved:
+            curved = region.cell_curved(etype)
             vtu_curved = np.repeat(curved, len(vtu_typ) // neles)
             self._write_darray(vtu_curved, write, np.uint8)
 
         # Extra cell fields (iterate in header order)
-        cfields, _ = self._extra_field_lists()
         ncells_per_ele = len(vtu_typ) // neles
-        for fname in cfields:
-            data = cellf[fname]
+        for name, info in self._emit_fields('cell'):
+            data = self._sample.field_arrays.get((etype, name))
+            if data is None:
+                continue
             vtu_aux = data.reshape(neles, -1)
             vtu_aux = np.repeat(vtu_aux, ncells_per_ele, axis=0)
-            self._write_darray(vtu_aux, write, self._extra_fields[fname].dtype)
+            self._write_darray(vtu_aux, write, info.dtype)
 
         # Point fields
-        for arr, dtype in self._output.point_fields(etype):
+        for arr, dtype in self._point_field_data(etype):
             self._write_darray(arr, write, dtype)

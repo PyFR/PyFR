@@ -1,16 +1,16 @@
 import numpy as np
 
-from pyfr.plugins.postproc.base import BasePostProcPlugin
+from pyfr.plugins.fields.base import BaseFieldProvider
 
 
-class MuPostProc(BasePostProcPlugin):
+class MuField(BaseFieldProvider):
     name = '_mu'
     systems = 'navier-stokes'
     dimensions = '2|3'
     export_types = '.*'
 
-    def _process(self, data):
-        cfg = data.cfg
+    def _process(self, view):
+        cfg = view.cfg
         mu_ref = cfg.getfloat('constants', 'mu')
 
         if cfg.get('solver', 'viscosity-correction', 'none') == 'sutherland':
@@ -18,10 +18,10 @@ class MuPostProc(BasePostProcPlugin):
             cpTref = cfg.getfloat('constants', 'cpTref')
             cpTs = cfg.getfloat('constants', 'cpTs')
 
-            rho, p = data.pris[0], data.pris[-1]
+            rho, p = view.pris[0], view.pris[-1]
             cpT = gamma * p / ((gamma - 1) * rho)
             Trat = cpT / cpTref
-            data.fields['_mu'] = (mu_ref * (cpTref + cpTs) * Trat
+            view.fields['_mu'] = (mu_ref * (cpTref + cpTs) * Trat
                                   * np.sqrt(Trat) / (cpT + cpTs))
         else:
-            data.fields['_mu'] = mu_ref
+            view.fields['_mu'] = mu_ref

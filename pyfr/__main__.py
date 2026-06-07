@@ -25,9 +25,10 @@ from pyfr.readers.native import NativeReader
 from pyfr.readers.stl import read_stl
 from pyfr.resamplers import (BaseInterpolator, NativeCloudResampler,
                              get_interpolator)
+from pyfr.snapshot import from_loaded as snap_from_loaded
 from pyfr.solvers import get_solver
-from pyfr.util import first, subclasses
-from pyfr.writers import BaseWriter, get_writer_by_extn, get_writer_by_name
+from pyfr.util import first, subclass_where, subclasses
+from pyfr.writers import BaseWriter, writer_cls_by_extn, writer_cls_by_name
 from pyfr.writers.native import NativeWriter
 from pyfr.writers.upgrade import upgrade
 
@@ -158,11 +159,6 @@ def main():
             'extension of outf'
         )
         ap_export_type.add_argument(
-            '-f', '--field', dest='fields', action='append', metavar='FIELD',
-            help='what fields should be output; may be repeated, by default '
-            'all fields are output'
-        )
-        ap_export_type.add_argument(
             '-p', '--precision', choices=['single', 'double'],
             default='single', help='output number precision; defaults to '
             'single'
@@ -172,11 +168,20 @@ def main():
             metavar='key:value', help='exporter-specific option'
         )
         ap_export_type.add_argument(
-            '--postproc', dest='pp_plugins', action='append', default=[],
-            metavar='PLUGIN', help='postprocessing plugin; may be repeated'
+            '--add-fields', dest='add_fields', action='append', default=[],
+            metavar='NAME[,NAME,...]',
+            help='register derived-field providers (mach, yplus, cf, ...) '
+            'to emit alongside the defaults; may be repeated, comma lists ok'
         )
-        ap_export_type.add_argument('--cfg', dest='pp_cfg',
-                                    help='config file for postproc plugins')
+        ap_export_type.add_argument(
+            '--remove-fields', dest='remove_fields', action='append',
+            default=[], metavar='NAME[,NAME,...]',
+            help='drop these field names from the output (anything in the '
+            'default pool: rho, velocity, p, grad ..., aux ...); may be '
+            'repeated, comma lists ok'
+        )
+        ap_export_type.add_argument('--cfg', dest='field_cfg',
+                                    help='config file for field providers')
         ap_export_type.add_argument('-P', '--pname',
                                     help='partitioning to use')
         if etype in ('boundary', 'spanwise', 'volume'):
@@ -257,6 +262,7 @@ def main():
         p.add_argument('-P', '--pname', help='partitioning to use')
 
     # Plugin commands
+    from pyfr.plugins import cli  # noqa: F401
     for scls in subclasses(BaseCLIPlugin, just_leaf=True):
         scls.add_cli(sp.add_parser(scls.name, help=f'{scls.name} --help'))
 
@@ -466,13 +472,19 @@ def process_export(args):
     comm, rank, root = get_comm_rank_root()
 
     # Common arguments
-    kargs = [args.eargs] if 'eargs' in args else []
-    pp_cfg = Inifile.load(args.pp_cfg) if args.pp_cfg else None
-    kwargs = {'fields': args.fields, 'prec': args.precision,
-              'pname': args.pname, 'pp_plugins': args.pp_plugins,
-              'pp_cfg': pp_cfg}
+    field_cfg = Inifile.load(args.field_cfg) if args.field_cfg else None
 
-    # Discntinuous output
+    # Flatten comma-separated --add-fields / --remove-fields entries
+    add_fields = [n.strip() for a in args.add_fields
+                  for n in a.split(',') if n.strip()]
+    remove_fields = [n.strip() for a in args.remove_fields
+                     for n in a.split(',') if n.strip()]
+
+    kwargs = {'prec': args.precision,
+              'add_fields': add_fields, 'remove_fields': remove_fields,
+              'field_cfg': field_cfg}
+
+    # Discontinuous output
     if 'discontinuous' in args:
         kwargs['discontinuous'] = args.discontinuous
 
@@ -495,20 +507,39 @@ def process_export(args):
     else:
         batch = [[args.solnf, args.outf]]
 
-    # Get writer instance by specified type or output file extension
+    # Resolve writer class (by --type name or output file extension)
     if args.ftype:
-        writer = get_writer_by_name(args.ftype, args.etype, args.meshf,
-                                    *kargs, **kwargs)
+        writer_cls = writer_cls_by_name(args.ftype, args.etype)
     else:
         extn = Path(batch[0][1]).suffix
-        writer = get_writer_by_extn(extn, args.etype, args.meshf, *kargs,
-                                    **kwargs)
+        writer_cls = writer_cls_by_extn(extn, args.etype)
 
-    # Process the files
+    # Per-writer-type CLI args → constructor args mapping
+    extra = {}
+    eargs = args.eargs if 'eargs' in args else None
+    if writer_cls.type == 'boundary':
+        extra['boundaries'] = eargs
+    elif writer_cls.type == 'stl':
+        extra['stlrgns'] = eargs
+
+    needs_con = getattr(writer_cls, 'needs_con', False)
+    reader = NativeReader(args.meshf, args.pname, construct_con=needs_con)
+
     progress = args.progress if rank == root else NullProgressSequence()
+    writer, wcfg = None, None
     with progress.start_with_bar('Process solutions') as pbar:
         for solnf, outf in pbar.start_with_iter(batch):
-            writer.process(solnf, outf)
+            mesh, soln = reader.load_subset_mesh_soln(solnf)
+            snap = snap_from_loaded(mesh, soln)
+            if writer is None or wcfg != snap.cfg:
+                if writer_cls.type == 'stl':
+                    writer = writer_cls(snap.mesh, snap.cfg,
+                                        extra['stlrgns'], **kwargs)
+                else:
+                    writer = writer_cls(snap.mesh, snap.cfg,
+                                        **extra, **kwargs)
+                wcfg = snap.cfg
+            writer.emit(snap, outf)
 
 
 def process_resample(args):

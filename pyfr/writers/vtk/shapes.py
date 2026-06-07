@@ -1,8 +1,5 @@
 import numpy as np
 
-from pyfr.cache import memoize
-from pyfr.polys import get_polybasis
-from pyfr.shapes import BaseShape, LineShape, QuadShape, TriShape, proj_pts
 from pyfr.util import subclass_where
 
 
@@ -10,127 +7,7 @@ def get_vtk_shape(name, n):
     return subclass_where(BaseVTKShape, name=name)(n)
 
 
-class VTKSubDOFMap:
-    # Quad-face corner positions in the local (i, j) frame
-    _qpos = np.array([[0, 0], [1, 0], [0, 1], [1, 1]])
-
-    # Per-kind packing spec: (nverts, npos)
-    _kind_specs = {'corner': (1, 0), 'edge': (2, 1), 'qface': (4, 2),
-                   'tface': (3, 2)}
-
-    def __init__(self, n, npts, items, body):
-        self.n = n
-        self.npts = npts
-        self.body_idxs = np.array(body, dtype=int)
-
-        # Pack only kinds with entities; absent kinds simply not in the dict
-        self._kinds = {k: self._pack(its, *self._kind_specs[k])
-                       for k, its in items.items() if its}
-
-    @property
-    def kinds(self):
-        return self._kinds.keys()
-
-    @staticmethod
-    def _pack(items, nverts, npos):
-        vdofs = sorted(items)
-        arr = np.empty((len(vdofs), nverts + npos), dtype=int)
-        for i, s in enumerate(vdofs):
-            arr[i] = items[s]
-
-        return np.array(vdofs, dtype=int), arr[:, :nverts], arr[:, nverts:]
-
-    def canonical_vdofs(self, kind, cnodes):
-        # Per-(ele, vdof) canonical content; same-entity vdofs share keys
-        return getattr(self, f'_{kind}_canonical')(cnodes)
-
-    def _fsrc(self, vdofs, neles):
-        eoff = (np.arange(neles)*self.npts)[:, None]
-        return (eoff + vdofs[None, :]).ravel()
-
-    def _corner_canonical(self, cn):
-        vdofs, lin, _ = self._kinds['corner']
-        neles = len(cn)
-
-        # Each corner is its own entity; key is the cnode itself
-        keys = cn[:, lin[:, 0]].reshape(-1, 1)
-        cpos = np.zeros(neles*len(vdofs), dtype=int)
-        return keys, self._fsrc(vdofs, neles), cpos, 1
-
-    def _edge_canonical(self, cn):
-        vdofs, ec, pos = self._kinds['edge']
-        neles = len(cn)
-        nint = self.n - 1
-
-        # Per-vdof edge cnode pair; sort and flip k accordingly
-        c0 = cn[:, ec[:, 0]].ravel()
-        c1 = cn[:, ec[:, 1]].ravel()
-        k = np.tile(pos.ravel(), neles)
-        sw = c0 > c1
-
-        keys = np.column_stack([np.where(sw, c1, c0), np.where(sw, c0, c1)])
-        cpos = np.where(sw, self.n - k, k) - 1
-        return keys, self._fsrc(vdofs, neles), cpos, nint
-
-    def _qface_canonical(self, cn):
-        vdofs, fcn, pos = self._kinds['qface']
-        neles = len(cn)
-        npa = self.n - 1
-        nint = npa*npa
-
-        # Dedup fcn so orientation runs once per (ele, qface) not per vdof
-        fcn_q, qidx = np.unique(fcn, axis=0, return_inverse=True)
-
-        # Lowest-corner origin, lower-cnode neighbour as +i
-        corners_q = cn[:, fcn_q]
-        o = np.argmin(corners_q, axis=-1)
-        na, nb = o ^ 1, o ^ 2
-        ca = np.take_along_axis(corners_q, na[..., None], -1).squeeze(-1)
-        cb = np.take_along_axis(corners_q, nb[..., None], -1).squeeze(-1)
-        sw = ca > cb
-        a, b = np.where(sw, nb, na), np.where(sw, na, nb)
-
-        qpos = self._qpos*self.n
-        po, vi, vj = qpos[o], qpos[a] - qpos[o], qpos[b] - qpos[o]
-
-        # Project per-vdof (i, j) onto each vdof's qface canonical frame
-        # via fused dot-products (no intermediate allocation)
-        d = pos[None] - po[:, qidx]
-        ci = np.einsum('...j,...j->...', d, vi[:, qidx]) // self.n
-        cj = np.einsum('...j,...j->...', d, vj[:, qidx]) // self.n
-
-        keys = np.sort(corners_q, axis=-1)[:, qidx].reshape(-1, 4)
-        cpos = ((ci - 1)*npa + (cj - 1)).ravel()
-        return keys, self._fsrc(vdofs, neles), cpos, nint
-
-    def _tface_canonical(self, cn):
-        vdofs, fcn, bc = self._kinds['tface']
-        neles = len(cn)
-        npa = self.n - 1
-        nint = npa*(npa - 1) // 2
-
-        # Dedup fcn so argsort runs once per (ele, tface) not per vdof
-        fcn_t, tidx = np.unique(fcn, axis=0, return_inverse=True)
-        corners_t = cn[:, fcn_t]
-        perm_t = np.argsort(corners_t, axis=2)
-        keys_t = np.take_along_axis(corners_t, perm_t, axis=2)
-
-        # Per-vdof barycentric, permuted by each vdof's tface sort
-        barys = np.tile(bc, (neles, 1)).reshape(neles, len(vdofs), 2)
-        bary = np.concatenate([self.n - barys.sum(axis=2, keepdims=True),
-                               barys], axis=2)
-        sbary = np.take_along_axis(bary, perm_t[:, tidx], axis=2)
-
-        # Triangular flatten of (sb, sc) into [0, nint)
-        sb, sc = sbary[..., 1], sbary[..., 2]
-        cpos = ((sb - 1)*npa - sb*(sb - 1) // 2 + sc - 1).ravel()
-        keys = keys_t[:, tidx].reshape(-1, 3)
-        return keys, self._fsrc(vdofs, neles), cpos, nint
-
-
 class BaseVTKShape:
-    _face_shapes = {'line': LineShape, 'quad': QuadShape, 'tri': TriShape}
-
     vtk_types = dict(tri=5, quad=9, tet=10, pyr=14, pri=13, hex=12)
     vtk_nodes = dict(tri=3, quad=4, tet=4, pyr=5, pri=6, hex=8)
 
@@ -148,58 +25,6 @@ class BaseVTKShape:
     @property
     def subcelltypes(self):
         return np.array([self.vtk_types[t] for t in self.subcells])
-
-    @staticmethod
-    def _int_lattice(pts, n):
-        return np.rint((pts + 1)*n/2).astype(int)
-
-    @memoize
-    def _kind_info(self, kind):
-        fshape = self._face_shapes[kind]
-        fhpts = fshape.std_ele(self.n)
-        flpts = fshape.std_ele(1)
-
-        # Identify linear vertices on the face
-        basis = get_polybasis(kind, 1, flpts)
-        op = basis.nodal_basis_at(fhpts)
-        supp = [tuple(np.flatnonzero(r)) for r in np.abs(op) > 1e-12]
-
-        return fhpts, flpts, op, supp, self._int_lattice(fhpts, self.n)
-
-    def topology(self, svpts):
-        n = self.n
-        shapecls = subclass_where(BaseShape, name=self.name)
-        cornpos = self._int_lattice(shapecls.std_ele(1), 2*n)
-
-        keys = self._int_lattice(svpts, 2*n).tolist()
-        vdofmap = {tuple(k): i for i, k in enumerate(keys)}
-
-        items = {'corner': {}, 'edge': {}, 'qface': {}, 'tface': {}}
-        touched = set()
-
-        # Classify each face DOF by its linear support footprint
-        for kind, proj, _ in shapecls.faces:
-            fpts, flins, op, supp, pos = self._kind_info(kind)
-            pkeys = self._int_lattice(proj_pts(proj, fpts), 2*n).tolist()
-            fcornpos = self._int_lattice(proj_pts(proj, flins), 2*n)
-            fverts = (fcornpos[:, None] == cornpos).all(-1).argmax(1)
-
-            for pkey, fs, row, fp in zip(pkeys, supp, op, pos):
-                vdof = vdofmap[tuple(pkey)]
-                touched.add(vdof)
-                verts = tuple(fverts[j] for j in fs)
-
-                if len(fs) == 1:
-                    items['corner'][vdof] = verts
-                elif len(fs) == 2:
-                    items['edge'][vdof] = (*verts, int(row[fs[1]]*n + 0.25))
-                elif len(fs) == 3:
-                    items['tface'][vdof] = (*verts, *fp)
-                else:
-                    items['qface'][vdof] = (*verts, *fp)
-
-        body = sorted(set(range(len(svpts))) - touched)
-        return VTKSubDOFMap(self.n, len(svpts), items, body)
 
 
 class TensorProdVTKShape(BaseVTKShape):

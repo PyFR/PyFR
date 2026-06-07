@@ -1,4 +1,5 @@
 from pyfr.plugins.soln.ascent import AscentPlugin
+from pyfr.plugins.soln.catalyst import CatalystPlugin
 from pyfr.plugins.soln.dtstats import DtStatsPlugin
 from pyfr.plugins.soln.fluidforce import FluidForcePlugin
 from pyfr.plugins.soln.fwh import FWHPlugin
@@ -7,4 +8,5 @@ from pyfr.plugins.soln.nancheck import NaNCheckPlugin
 from pyfr.plugins.soln.residual import ResidualPlugin
 from pyfr.plugins.soln.sampler import SamplerPlugin
 from pyfr.plugins.soln.tavg import TavgPlugin
+from pyfr.plugins.soln.vtu import VTUWriterPlugin
 from pyfr.plugins.soln.writer import WriterPlugin

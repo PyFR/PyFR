@@ -13,6 +13,7 @@ class LibWrapper:
     _weak_functions = []
     _errtype = ctypes.c_int
     _mode = ctypes.DEFAULT_MODE
+    _loader = ctypes.CDLL
 
     def __init__(self):
         self._lib = self._load_library()
@@ -27,7 +28,7 @@ class LibWrapper:
                 pass
 
     def _load_library(self):
-        return load_library(self._libname, self._mode)
+        return load_library(self._libname, self._mode, self._loader)
 
     def _transname(self, fname):
         return fname
@@ -59,11 +60,11 @@ def get_libc_function(fn):
     return getattr(libc, fn)
 
 
-def load_library(name, mode=ctypes.DEFAULT_MODE):
+def load_library(name, mode=ctypes.DEFAULT_MODE, loader=ctypes.CDLL):
     # If an explicit override has been given then use it
     lpath = os.environ.get(f'PYFR_{name.upper()}_LIBRARY_PATH')
     if lpath:
-        return ctypes.CDLL(lpath, mode=mode)
+        return loader(lpath, mode=mode)
 
     # Otherwise synthesise the library name and start searching
     lname = platform_libname(name)
@@ -71,12 +72,12 @@ def load_library(name, mode=ctypes.DEFAULT_MODE):
     # Check our search paths
     for sd in platform_libdirs():
         try:
-            return ctypes.CDLL(Path(sd, lname).absolute(), mode=mode)
+            return loader(Path(sd, lname).absolute(), mode=mode)
         except OSError:
             pass
 
     # …and if this fails then defer to the system search path
-    return ctypes.CDLL(lname, mode=mode)
+    return loader(lname, mode=mode)
 
 
 def make_array(vals, type=None):

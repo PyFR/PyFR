@@ -159,3 +159,9 @@ class Inifile:
         buf = io.StringIO()
         self._cp.write(buf)
         return buf.getvalue()
+
+    def __eq__(self, other):
+        return isinstance(other, Inifile) and self.tostr() == other.tostr()
+
+    def __hash__(self):
+        return hash(self.tostr())
