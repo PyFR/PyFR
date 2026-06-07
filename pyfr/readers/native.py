@@ -262,7 +262,33 @@ class NativeReader:
         return replace(self.mesh, subset=True, parent=self.mesh,
                        eidxs=eidxs, spts=spts, spts_nodes=spts_nodes,
                        spts_curved=spts_curved, con=None, con_p=None,
-                       bcon=None)
+                       bcon=self._subset_bcon(subset))
+
+    def _subset_bcon(self, subset):
+        if not self.mesh.bcon:
+            return self.mesh.bcon
+        new_bcon = {}
+        for name, conn in self.mesh.bcon.items():
+            cidx_parts, eidx_parts = [], []
+            for etype, _, eidxs, mask in conn.foreach():
+                if etype not in subset:
+                    cidx_parts.append(conn.cidxs[mask])
+                    eidx_parts.append(eidxs)
+                    continue
+                sidx = subset[etype]
+                if len(sidx) == 0:
+                    continue
+                remap = np.full(self.mesh.eidxs[etype].size, -1, dtype=int)
+                remap[sidx] = np.arange(len(sidx))
+                sub_eidxs = remap[eidxs]
+                valid = sub_eidxs >= 0
+                cidx_parts.append(conn.cidxs[mask][valid])
+                eidx_parts.append(sub_eidxs[valid])
+            if cidx_parts:
+                new_bcon[name] = Connectivity(np.concatenate(cidx_parts),
+                                              np.concatenate(eidx_parts),
+                                              conn.cidxmap)
+        return new_bcon
 
     def _read_metadata(self):
         mesh = self.mesh
