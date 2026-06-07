@@ -28,6 +28,9 @@ class PostProcRunner:
                 if not (public_only and n.startswith('_'))}
 
     def run_samples(self, cfg, samples, *, boundary=None, public_only=False):
+        if not self.plugins:
+            return {}
+
         from pyfr.solvers.base import BaseSystem
         sname = cfg.get('solver', 'system')
         elementscls = subclass_where(BaseSystem, name=sname).elementscls
